@@ -186,6 +186,38 @@ namespace MCPPIE
 		return false;
 	}
 
+	const TArray<FString>& PawnChannelNames()
+	{
+		static const TArray<FString> Names = {
+			TEXT("pos_x"), TEXT("pos_y"), TEXT("pos_z"),
+			TEXT("vel_x"), TEXT("vel_y"), TEXT("vel_z"),
+			TEXT("rot_pitch"), TEXT("rot_yaw"), TEXT("rot_roll"),
+			TEXT("speed2d") };
+		return Names;
+	}
+
+	bool IsPawnChannelName(const FString& Name)
+	{
+		return PawnChannelNames().ContainsByPredicate([&Name](const FString& N) { return N.Equals(Name, ESearchCase::IgnoreCase); });
+	}
+
+	bool ReadPawnChannel(const FCSVRow& Row, const FString& Name, double& OutValue)
+	{
+		const FString N = Name.ToLower();
+		if (N == TEXT("pos_x")) OutValue = Row.PawnLocation.X;
+		else if (N == TEXT("pos_y")) OutValue = Row.PawnLocation.Y;
+		else if (N == TEXT("pos_z")) OutValue = Row.PawnLocation.Z;
+		else if (N == TEXT("vel_x")) OutValue = Row.PawnVelocity.X;
+		else if (N == TEXT("vel_y")) OutValue = Row.PawnVelocity.Y;
+		else if (N == TEXT("vel_z")) OutValue = Row.PawnVelocity.Z;
+		else if (N == TEXT("rot_pitch")) OutValue = Row.PawnRotation.Pitch;
+		else if (N == TEXT("rot_yaw")) OutValue = Row.PawnRotation.Yaw;
+		else if (N == TEXT("rot_roll")) OutValue = Row.PawnRotation.Roll;
+		else if (N == TEXT("speed2d")) OutValue = Row.Speed2D;
+		else return false;
+		return true;
+	}
+
 	bool TrackedValuePathMatches(const FString& Path, const FString& Name)
 	{
 		if (Path.Equals(Name, ESearchCase::IgnoreCase))
@@ -682,7 +714,8 @@ namespace MCPPIE
 	{
 		const FObservationSession* S = FindSession(RunId);
 		if (!S || S->State != EObserverState::Observing || S->FramesSampled == 0) return false;
-		return FindTrackedValueInRow(S->LastRow.TrackedValues, Name, OutValue);
+		if (FindTrackedValueInRow(S->LastRow.TrackedValues, Name, OutValue)) return true;
+		return S->bCapturePawnState && ReadPawnChannel(S->LastRow, Name, OutValue);
 	}
 
 	bool FPIEObserver::ReadActorResolved(const FString& RunId, const FString& ActorId, bool& OutResolved) const

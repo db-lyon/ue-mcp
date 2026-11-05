@@ -217,7 +217,7 @@ void FPIEHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 
 	// Multiplayer acceptance runs
 	Registry.RegisterHandler(TEXT("pie_uat_run"), &PieUatRun, {
-		MCPParam::Optional(TEXT("scenario"), EType::Object, TEXT("Scenario object: {name, map, pie:{players, net_mode, one_process, windowless, client_fps}, join_timeout_s, settle_ms, steps:[{name, do[], expect[], forbid[], window_ms}]}; see docs/pie.md")),
+		MCPParam::Optional(TEXT("scenario"), EType::Object, TEXT("Scenario object: {name, map, pie:{players, net_mode, one_process, windowless, client_fps}, join_timeout_s, settle_ms, steps:[{name, do[], expect[{log host|client:N, pattern (regex), min, max, since step|run}], forbid[], window_ms}]}. A rule reads only lines logged after its step began unless since is run; see docs/pie.md")),
 		MCPParam::Optional(TEXT("path"), EType::String, TEXT("Scenario JSON file, relative to the project directory")),
 	}, MCPSpec::ExactlyOne({ { TEXT("scenario") }, { TEXT("path") } })
 		.ContractExempt(TEXT("Opens the scenario map and starts a multiplayer PIE session")));
@@ -271,6 +271,7 @@ void FPIEHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	}, MCPSpec::ContractExempt(TEXT("Writes a marker into the recording in flight")));
 
 	// Replay. replay_arm and replay_run share one parser, so their params stay identical.
+	const TCHAR* const StartWhenDoc = TEXT("Hold the steps until the player can act, then resume at the matching point of the recording: {pawn_at_rest (default true: speed <= max_speed_cms, default 5, and on the ground), hold_ms (default 500), log_contains, timeout_ms (default 60000)}. Replaces settle_ms");
 	const TArray<FMCPParamSpec> ReplayParams = {
 		MCPParam::Optional(TEXT("recording_id"), EType::String, RecordingIdDoc),
 		MCPParam::Optional(TEXT("sequence_path"), EType::String, TEXT("Explicit sequence.json path")),
@@ -292,6 +293,7 @@ void FPIEHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("client_id"), EType::Integer, ClientIdDoc).Min(0),
 		MCPParam::Optional(TEXT("pie_instance"), EType::Integer, PieInstanceDoc).Min(0),
 		MCPParam::Optional(TEXT("drift_thresholds"), EType::Object, TEXT("{position_cm, rotation_deg, velocity_cms, tracked_default, tracked:{path: threshold}}")),
+		MCPParam::Optional(TEXT("start_when"), EType::Object, StartWhenDoc),
 	};
 	Registry.RegisterHandler(TEXT("pie_replay_arm"), &PieReplayArm, ReplayParams,
 		MCPSpec::ContractExempt(TEXT("Arms the replayer, which drives the next PIE session")));
@@ -305,6 +307,8 @@ void FPIEHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("pie_replay_analyze"), &PieReplayAnalyze, {
 		MCPParam::Optional(TEXT("recording_id"), EType::String, RecordingIdDoc),
 		MCPParam::Optional(TEXT("recording_dir"), EType::String, RecordingDirDoc),
+		MCPParam::Optional(TEXT("limit"), EType::Integer, TEXT("Most frames_over_threshold entries returned (default 50)")).Min(0),
+		MCPParam::Optional(TEXT("offset"), EType::Integer, TEXT("First frames_over_threshold entry returned")).Min(0),
 	});
 	Registry.RegisterHandler(TEXT("pie_replay_state"), &PieReplayState, {
 		MCPParam::Optional(TEXT("recording_id"), EType::String, RecordingIdDoc),
@@ -323,6 +327,7 @@ void FPIEHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("max_velocity_drift_cms"), EType::Number, TEXT("Most velocity drift allowed (default 50)")),
 		MCPParam::Optional(TEXT("max_rotation_drift_deg"), EType::Number, TEXT("Most rotation drift allowed (default 5)")),
 		MCPParam::Optional(TEXT("max_errors"), EType::Integer, TEXT("Most errors logged during the run (default 0)")).Min(0),
+		MCPParam::Optional(TEXT("start_when"), EType::Object, TEXT("Replay gate test_run uses, as replay_run's start_when")),
 	}, MCPSpec::ContractExempt(TEXT("Writes test.json beside the recording")));
 	Registry.RegisterHandler(TEXT("pie_test_run"), &PieTestRun, {
 		MCPParam::Optional(TEXT("test_path"), EType::String, TEXT("Explicit test.json path")),
@@ -461,11 +466,12 @@ void FPIEHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("contains"), EType::String, TEXT("Substring the message must contain")),
 		MCPParam::Optional(TEXT("limit"), EType::Integer, TEXT("Most rows (default 200)")).Min(1),
 		MCPParam::Optional(TEXT("offset"), EType::Integer, TEXT("First row")).Min(0),
+		MCPParam::Optional(TEXT("max_message_chars"), EType::Integer, TEXT("Longest message returned; longer ones are cut and marked truncated (default 500, 0 for no limit)")).Min(0),
 	});
 
 	// Profiling
 	Registry.RegisterHandler(TEXT("pie_perf_summary"), &PiePerfSummary, {
-		MCPParam::Optional(TEXT("recording_id"), EType::String, RecordingIdDoc),
+		MCPParam::Optional(TEXT("recording_id"), EType::String, TEXT("Recording id under the recordings root (default: the newest recording)")),
 		MCPParam::Optional(TEXT("recording_dir"), EType::String, RecordingDirDoc),
 	});
 

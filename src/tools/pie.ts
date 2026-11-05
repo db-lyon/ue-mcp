@@ -22,7 +22,7 @@ export const pieTool: ToolDef = categoryTool(
     record_arm:           specBp("mutate", "Arm the PIE recorder; it starts on BeginPIE and finalizes on EndPIE into Saved/MCPRecordings/<id>. Rolls back with record_disarm.", "pie_record_arm"),
     record_disarm:        specBp("mutate", "Cancel an armed recording.", "pie_record_disarm"),
     record_stop:          specBp("mutate", "Finalize the recording in flight.", "pie_record_stop"),
-    record_status:        specBp("read", "Recorder state, id, frame and elapsed time.", "pie_record_status"),
+    record_status:        specBp("read", "Recorder state, id, frame, elapsed time and pie_active. While waiting_for_pawn: waiting_for (what is missing) and pie_worlds (each PIE world's pie_instance, net_mode, players and pawns).", "pie_record_status"),
     record_list:          specBp("read", "List recordings.", "pie_record_list"),
     record_read:          specBp("read", "Read a recording artifact: manifest, sequence, csv, drift or tracked.", "pie_record_read"),
     record_delete:        { ...specBp("mutate", "Delete a recording folder (confirm=true).", "pie_record_delete"), destructive: true },
@@ -61,7 +61,7 @@ export const pieTool: ToolDef = categoryTool(
     script_read:          specBp("read", "Read a test script.", "pie_script_read"),
     script_update:        specBp("mutate", "Update a test script; steps given replace the stored ones. Checks the result like script_create when steps, profile, map or manual_only change, and saves with its findings as warnings; refuses only what cannot be written.", "pie_script_update"),
     script_validate:      specBp("read", "Check steps the way script_create does without saving anything: valid, and errors [{step, field, message, candidates}] for every finding script_create would return as a warning or refuse.", "pie_script_validate"),
-    script_values:        specBp("read", "What a script can name in the open level: the player pawn's readable value paths with kind and type, level actors, classes the game mode spawns, Widget Blueprints and the profile's tracked values. target adds which actors are of that class and whether it is the player pawn.", "pie_script_values"),
+    script_values:        specBp("read", "What a script can name in the open level: the player pawn's readable value paths with kind and type, pawn_channels read off the sampled pawn with no profile (pos_x, vel_z, rot_yaw, speed2d, ...), level actors, classes the game mode spawns, Widget Blueprints and the profile's tracked values. target adds which actors are of that class and whether it is the player pawn.", "pie_script_values"),
     script_delete:        { ...specBp("mutate", "Delete a test script (confirm=true).", "pie_script_delete"), destructive: true },
     script_list:          specBp("read", "List test scripts, each with map and last_run: its newest run's run_id, state, started_at, ended_at, summary and results_path, or null.", "pie_script_list"),
     script_run: {

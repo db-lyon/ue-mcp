@@ -5,6 +5,7 @@
 #include "HandlerUtils.h"
 #include "Handlers/PIE/PIEInputReplayer.h"
 #include "Handlers/PIE/PIESequenceFormat.h"
+#include "Handlers/PIE/PIEWorldResolver.h"
 #include "Editor.h"
 #include "Editor/EditorEngine.h"
 #include "Misc/Paths.h"
@@ -44,6 +45,14 @@ namespace
 		if (!S.LastError.IsEmpty())
 		{
 			R->SetStringField(TEXT("last_error"), S.LastError);
+		}
+		if (!S.WaitingFor.IsEmpty())
+		{
+			R->SetStringField(TEXT("waiting_for"), S.WaitingFor);
+		}
+		if (S.State == EReplayerState::WaitingForPawn)
+		{
+			R->SetArrayField(TEXT("pie_worlds"), PIEWorldResolver::DescribePlayWorlds());
 		}
 		if (S.bHasLastResult)
 		{
@@ -168,6 +177,63 @@ namespace
 			}
 		}
 
+		const TSharedPtr<FJsonObject>* Gate = nullptr;
+		if (TryGetObjectParam(Params, TEXT("start_when"), Gate) && Gate && Gate->IsValid())
+		{
+			FString GateErr;
+			if (!ParseReplayStartGate(*Gate, Cfg.StartGate, GateErr))
+			{
+				OutErr = MCPError(GateErr);
+				return false;
+			}
+		}
+
+		return true;
+	}
+}
+
+namespace MCPPIE
+{
+	bool ParseReplayStartGate(const TSharedPtr<FJsonObject>& Obj, FReplayStartGate& Out, FString& OutError)
+	{
+		static const TCHAR* const Known[] = {
+			TEXT("pawn_at_rest"), TEXT("max_speed_cms"), TEXT("hold_ms"), TEXT("log_contains"), TEXT("timeout_ms") };
+		for (const TPair<FString, TSharedPtr<FJsonValue>>& KV : Obj->Values)
+		{
+			bool bKnown = false;
+			for (const TCHAR* K : Known) { bKnown |= KV.Key == K; }
+			if (!bKnown)
+			{
+				OutError = FString::Printf(TEXT("start_when.%s is not a field (pawn_at_rest, max_speed_cms, hold_ms, log_contains, timeout_ms)"), *KV.Key);
+				return false;
+			}
+		}
+		FReplayStartGate G;
+		G.bEnabled = true;
+		Obj->TryGetBoolField(TEXT("pawn_at_rest"), G.bPawnAtRest);
+		double D = 0.0;
+		if (Obj->TryGetNumberField(TEXT("max_speed_cms"), D))
+		{
+			if (D < 0.0) { OutError = TEXT("start_when.max_speed_cms must be 0 or more"); return false; }
+			G.MaxSpeedCms = static_cast<float>(D);
+		}
+		if (Obj->TryGetNumberField(TEXT("hold_ms"), D))
+		{
+			if (D < 0.0) { OutError = TEXT("start_when.hold_ms must be 0 or more"); return false; }
+			G.HoldMs = FMath::RoundToInt(D);
+		}
+		if (Obj->TryGetNumberField(TEXT("timeout_ms"), D))
+		{
+			if (D < 1.0) { OutError = TEXT("start_when.timeout_ms must be 1 or more"); return false; }
+			G.TimeoutMs = FMath::RoundToInt(D);
+		}
+		Obj->TryGetStringField(TEXT("log_contains"), G.LogContains);
+		if (!G.bPawnAtRest && G.LogContains.IsEmpty())
+		{
+			OutError = TEXT("start_when needs pawn_at_rest or log_contains to wait on");
+			return false;
+		}
+		Out = G;
 		return true;
 	}
 }
@@ -342,9 +408,31 @@ TSharedPtr<FJsonValue> FPIEHandlers::PieReplayAnalyze(const TSharedPtr<FJsonObje
 		return MCPError(FString::Printf(TEXT("Could not read drift report at %s: %s"), *DriftPath, *Err));
 	}
 
-	// The serialized report already carries the summary block.
+	// The serialized report already carries the summary block. The per-frame
+	// list can run to thousands of entries, so it is paged (#1657).
+	const int32 Limit = FMath::Max(0, OptionalInt(Params, TEXT("limit"), 50));
+	const int32 Offset = FMath::Max(0, OptionalInt(Params, TEXT("offset"), 0));
 	TSharedRef<FJsonObject> Report = DriftToJson(D);
 	Report->SetStringField(TEXT("drift_report_path"), DriftPath);
+	{
+		const TArray<TSharedPtr<FJsonValue>>* All = nullptr;
+		if (Report->TryGetArrayField(TEXT("frames_over_threshold"), All) && All)
+		{
+			const int32 Total = All->Num();
+			TArray<TSharedPtr<FJsonValue>> Page;
+			for (int32 i = Offset; i < Total && Page.Num() < Limit; ++i)
+			{
+				Page.Add((*All)[i]);
+			}
+			Report->SetNumberField(TEXT("frames_over_threshold_total"), Total);
+			Report->SetNumberField(TEXT("frames_over_threshold_offset"), Offset);
+			if (Offset + Page.Num() < Total)
+			{
+				Report->SetNumberField(TEXT("frames_over_threshold_next_offset"), Offset + Page.Num());
+			}
+			Report->SetArrayField(TEXT("frames_over_threshold"), Page);
+		}
+	}
 
 	// Images bracketing the divergence frame, if frames were captured.
 	if (D.Summary.First.bFound)

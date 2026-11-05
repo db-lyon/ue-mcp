@@ -924,6 +924,12 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "number",
         "required": false,
         "description": "0-based player index (default 0)"
+      },
+      {
+        "name": "pieInstance",
+        "type": "number",
+        "required": false,
+        "description": "PIE world to read (default: the primary world, or the first client world when the primary is a dedicated server). See list_pie_instances"
       }
     ]
   },
@@ -3812,7 +3818,7 @@ export const paramsClauses: Readonly<Record<string, string>> = {
   get_open_asset_editors: "Params: none",
   get_output_log: "Params: maxLines?, filter?, category?, cursor?, limit?",
   get_pie_config: "Params: none",
-  get_pie_pawn: "Params: playerIndex?",
+  get_pie_pawn: "Params: playerIndex?, pieInstance?",
   get_property: "Params: objectPath (or path, or assetPath), propertyName",
   get_runtime_value: "Params: actorLabel?, actorPath?, propertyName, world?, pieInstance?",
   get_runtime_values: "Params: classFilter?, componentName?, paths, world?, pieInstance?",
@@ -4067,7 +4073,7 @@ export const schema: Record<string, z.ZodType> = {
   pattern: z.string().optional().describe("Exact pattern of the policy to clear; omit to clear every policy (clear_dialog_policy). Substring matched against every registered console variable. Pass at least one of name, names and pattern (get_cvars). Case-insensitive substring of the library class name (list_function_libraries). Substring matched case-insensitively against the dialog title and message (set_dialog_policy)"),
   paused: z.boolean().optional().describe("true pauses the running trace, false resumes it (default true) (pause_insights_trace). true pauses, false resumes (set_pie_paused)"),
   pieAction: z.string().optional().describe("start | stop | status (default status)"),
-  pieInstance: z.number().optional().describe("PIE world to target: 0 = server/primary, 1..N = clients. See list_pie_instances (capture_scene_png, capture_screenshot, execute_command, find_object, get_object_properties, get_runtime_value, get_runtime_values, invoke_function, invoke_object_function, invoke_object_functions, invoke_static_function, pose_debug_camera, read_bone_transforms, restore_runtime_visibility, set_movement_mode, set_object_property, set_pie_paused, set_pie_view_target, set_runtime_visibility, teleport_runtime_actor). PIE instance index when several clients run (get_sequence_runtime_bindings)"),
+  pieInstance: z.number().optional().describe("PIE world to target: 0 = server/primary, 1..N = clients. See list_pie_instances (capture_scene_png, capture_screenshot, execute_command, find_object, get_object_properties, get_runtime_value, get_runtime_values, invoke_function, invoke_object_function, invoke_object_functions, invoke_static_function, pose_debug_camera, read_bone_transforms, restore_runtime_visibility, set_movement_mode, set_object_property, set_pie_paused, set_pie_view_target, set_runtime_visibility, teleport_runtime_actor). PIE world to read (default: the primary world, or the first client world when the primary is a dedicated server). See list_pie_instances (get_pie_pawn). PIE instance index when several clients run (get_sequence_runtime_bindings)"),
   pitch: z.number().optional().describe("Control-rotation pitch"),
   platform: z.string().optional().describe("Target platform (default Windows)"),
   playerIndex: z.number().optional().describe("Local player whose console runs a PIE command (default 0) (execute_command). Player index for target=playercontroller, playerpawn, or a LocalPlayer subsystem (default 0) (get_object_properties, invoke_object_function, set_object_property). 0-based player index (default 0) (get_pie_pawn). Local player whose debug camera is used (default 0) (pose_debug_camera). Player whose view target is set (default 0) (set_pie_view_target)"),

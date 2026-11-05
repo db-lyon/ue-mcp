@@ -154,8 +154,17 @@ Replay drives the sequence through `UEnhancedInputLocalPlayerSubsystem::InjectIn
 | `encode_gif` | `false` | Also encode an animated GIF |
 | `client_id`, `pie_instance` | `0`, auto | Which player to drive |
 | `drift_thresholds` | `{ position_cm: 5, rotation_deg: 2, velocity_cms: 25 }` | Cutoffs for `frames_over_threshold`; also `tracked_default` and a per-path `tracked` map |
+| `start_when` | none | Hold the steps until the player can act; see below. Replaces `settle_ms` |
 
 Drift is compared by time. Steps fire `settle_ms` after the pawn attaches, so the replayer takes the settle delay off its clock and compares each frame with the source row at the same offset from the start of the recording. `drift.json` records `alignment`, `replay_offset_ms`, and `input_onset` (when the first input step fired on each timeline, and the `offset_ms` between them), so a timing offset is reported apart from drift. Each entry in `frames_over_threshold` has the replay `frame`, the `source_frame` it was compared with, its `time`, and signed `position_delta` and `velocity_delta` (replay minus source). The replay trajectory is written to `replay.csv` beside `drift.json`, on the source's timeline with the same columns as `recording.csv`; `replay_status.last_result.replay_csv_path` names it.
+
+A spawn intro whose length varies between runs (the pawn falls, lands, and ignores input until a cinematic ends) shifts every step that is timed from attach. `start_when` waits for the player instead:
+
+```json
+{ "start_when": { "pawn_at_rest": true, "max_speed_cms": 5, "hold_ms": 500, "log_contains": "Intro finished", "timeout_ms": 60000 } }
+```
+
+The gate opens once the pawn has been at rest (speed at most `max_speed_cms` and, for a Character, on the ground) for `hold_ms`, and a session log line containing `log_contains` has appeared when one is given. Either condition may be dropped, not both. The steps then resume at the matching point of the recording: with `pawn_at_rest`, the moment the source pawn had been at rest for `hold_ms` in the rest that led into its first input, read from `recording.csv`; otherwise the first input itself. Frames before the gate are not compared. `drift.json` reports `alignment: "start_gate"` and `start_gate {passed, anchor (source_rest, first_input or start), source_ms, replay_ms, blocker}`. While the gate is shut, `replay_status.waiting_for` says what it waits on; a gate still shut after `timeout_ms` ends the replay with that reason as `last_error`.
 
 With `capture_frame_every` set, replay saves JPEG frames under `<recording>/frames/` and composes a labelled contact sheet at `<recording>/captures/contact_<timestamp>.jpg`, a grid of keyframes with the frame index on each cell. `replay_status.last_result` returns `frame_dir`, `frame_count` and `contact_sheet_path`. GIF output is opt-in because a vision model cannot read GIF animation. For a frame of the live PIE viewport on demand, use `editor(capture_screenshot, target="pie")` or `editor(capture_scene_png, world="pie")`.
 
@@ -170,16 +179,16 @@ Steps in `sequence.json`:
 { "type": "capture",    "delay_ms": 5000, "name": "boss_intro" }
 ```
 
-`delay_ms` is cumulative from sequence start, scheduled against time since pawn attach plus `settle_ms`. Tape values are `0.5` (Axis1D), `[0.5, 0.3]` (Axis2D) or `[0.1, 0.2, 0.3]` (Axis3D).
+`delay_ms` is cumulative from sequence start, scheduled against time since pawn attach plus `settle_ms`. Tape values are `0.5` (Axis1D), `[0.5, 0.3]` (Axis2D) or `[0.1, 0.2, 0.3]` (Axis3D). Tape entries are spaced `1/sample_hz` apart on the PIE world clock, so a frame rate below `sample_hz` skips entries instead of stretching the tape. The recorder resamples each tape at `sample_hz` from the frames it captured, so the tape keeps the recorded timing at any frame rate.
 
 ### Analysis and comparison
 
 | Action | Purpose |
 |--------|---------|
-| `replay_analyze` | The lead from a finalized `drift.json`: first divergence, top channels, errors, bracketing images |
+| `replay_analyze` | The lead from a finalized `drift.json`: first divergence, top channels, errors, bracketing images. `frames_over_threshold` is paged by `limit` (default 50) and `offset`, with `frames_over_threshold_total` and `frames_over_threshold_next_offset` |
 | `replay_state` | The exact recorded pawn pose at `at_time` or `at_frame`, interpolated; `apply=true` teleports the live pawn to it |
 | `record_diff` | Compare two recordings without running PIE: position, rotation and velocity deltas plus `tracked_value_max_deltas` |
-| `perf_summary` | Frametime avg, p50, p99 and max, game, render and GPU ms, peak memory, and the worst hitches with timestamps |
+| `perf_summary` | Frametime avg, p50, p99 and max, game, render and GPU ms, peak memory, and the worst hitches with timestamps; the newest recording when none is named |
 
 ```text
 pie(action="record_diff", a_id="run-1", b_id="run-2", position_cm=5, rotation_deg=2)
@@ -197,6 +206,8 @@ Unreal Insights traces are `editor(start_trace)` and `editor(stop_trace)`.
 | `assert_eval` | Evaluate predicates over a finished run's series, errors and markers; writes `verdict.json` with a witness per assertion |
 | `scenario_scaffold` | Generate an arrange, act, assert `scenario.json` from a recording |
 | `scenario_validate` | Check a scenario's structure and predicates without running it |
+
+`test_scaffold` takes `start_when`, the replay gate described under Replay, and stores it in `test.json`; `test_run` replays with it. `test_run` judges its predicates against the replay it ran: the replay trajectory (`replay.csv`) and the errors its PIE session logged, named in the result as `predicates_series` and `predicates_errors`. A replay that compared no frame, or whose `start_when` never opened, fails.
 
 A predicate binds a channel or event to an operator under a temporal quantifier: `{name, channel|event, op, value|min+max|tol, hold, from_s, to_s, within_s, after_event, severity}`. Operators are `eq`, `ne`, `lt`, `lte`, `gt`, `gte`, `approx`, `between`, `changed`, `increased`, `decreased` and `crossed`. `hold` is `always`, `never`, `eventually`, `at_end` or `once_then_always`. Channels are series columns (`pos_z`, `speed2d`, `game_ms`), tracked values by path (`t:Boss.Health`) and the pseudo-channels `$errors`, `$warnings`, `$frame` and `$time`. Events are `montage`, `marker` and `error`.
 
@@ -277,9 +288,9 @@ With Run Under One Process off, every client is a separate process the editor ca
 }
 ```
 
-Step actions, each with `client`: `tape {action, values}`, `press {action, frames}`, `hold {action, value, ms}`, `inject {action, value}`, `console "cmd"`, `place {at, offset, face}` or `place {location, yaw}`, and `capture` (a label or `true`); plus `wait_ms`. `place` teleports the player's pawn on the server, to the nearest free spot within 360 units when the exact one is taken, and turns it on its own machine; the step fails if the client never confirms the turn. `capture` saves that player's view as a JPEG, embedded next to its step in `report.md`.
+Step actions, each with `client`: `tape {action, values, hz}` (`hz` default 60, entries spaced `1/hz` apart on the world clock), `press {action, frames}`, `hold {action, value, ms}`, `inject {action, value}`, `console "cmd"`, `place {at, offset, face}` or `place {location, yaw}`, and `capture` (a label or `true`); plus `wait_ms`. `place` teleports the player's pawn on the server, to the nearest free spot within 360 units when the exact one is taken, and turns it on its own machine; the step fails if the client never confirms the turn. `capture` saves that player's view as a JPEG, embedded next to its step in `report.md`.
 
-`expect` rules take `min` and `max` match counts, and `since: "run"` judges every line since PIE started instead of only the step's own lines. A step passes when every expectation is met and no `forbid` pattern matched in its window. It ends early once its expectations are met unless it forbids something, in which case it watches the whole window.
+`expect` rules take `min` and `max` match counts, and `since: "run"` judges every line since PIE started instead of only the step's own lines. By default a rule reads only lines logged after its step began, so a line printed before the step, or one printed every 10 s against a 4 s `window_ms`, is not seen; use `since: "run"` or a longer window. A pattern that is not a valid regex is refused when the scenario is loaded. A missed expectation's detail names how many lines it searched and, when the line was logged earlier in the run, how many times and an example. A step passes when every expectation is met and no `forbid` pattern matched in its window. It ends early once its expectations are met unless it forbids something, in which case it watches the whole window.
 
 `pie.windowless: true` launches separate-process clients with `-RenderOffscreen`: they render every frame as in a window but open no window and never take focus. Their frame rate is pinned to `pie.client_fps` (default 60).
 
@@ -290,7 +301,7 @@ Step actions, each with `client`: `tape {action, values}`, `press {action, frame
 | `anim_state` | A PIE actor's anim instance state: montage and state machines |
 | `anim_properties` | UPROPERTY values on a PIE actor's AnimInstance |
 | `session_errors` | Deduped errors and warnings from the Output Log, Blueprint exceptions included |
-| `session_log` | The paged raw log, filtered by verbosity, category or substring |
+| `session_log` | The paged raw log, filtered by verbosity, category or substring; messages past `max_message_chars` (default 500) are cut and marked `truncated` |
 
 Both session actions default to the live or most recent session; pass `session` to read a finished one from `Saved/MCPSessions/`. Actor and subsystem properties are `editor(get_object_properties, world="pie")` (`target="subsystem"` with `subsystemClass`) and `editor(get_runtime_values)`.
 
@@ -299,6 +310,8 @@ Both session actions default to the live or most recent session; pass `session` 
 Actions that inject, record, replay or observe accept `pie_instance`, the exact `FWorldContext::PIEInstance`. `client_id` is the local player index inside that world. An explicit `pie_instance` fails when the instance is missing, is dedicated-server only, or lacks the requested local player; it never falls back. Values must be non-negative integers within the int32 range.
 
 Without `pie_instance`, the tool prefers an eligible `GEditor->PlayWorld`, then the first PIE or Game world that has the requested local player, which avoids picking a dedicated server first. The selected world and player stay fixed for each recording, replay, observation, hold and tape. Unresolved recorder, replay and observation targets are retried for 10 seconds from BeginPIE, then finalize as failures with `last_error` in their status.
+
+While the recorder or replayer is `waiting_for_pawn`, its status carries `waiting_for` (no PIE world has the player, the controller possesses no pawn yet, or the pawn has no input component yet) and `pie_worlds`: each running world's `pie_instance`, `net_mode` and local players with their controller and pawn. With a dedicated server and two clients, that shows which client instance to pass as `pie_instance`, and that a pawn missing everywhere is the game still holding the player in its intro. `record_status` also reports `pie_active`.
 
 ## Data layout
 

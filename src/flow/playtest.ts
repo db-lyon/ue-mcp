@@ -68,7 +68,7 @@ const SYSTEM = [
   "An auto step carries expect { value, op, target?, within_ms? } and the editor checks it on every frame;",
   "a manual step (judge: \"manual\") has no expect and waits for a person's verdict.",
   "expect.value must be one of the readable paths, actor labels, spawned classes or widgets you are given.",
-  "Ops: decreasing and increasing compare with the value at step start and take no target;",
+  "Ops: decreasing and increasing compare with the value at step start, and an optional number target is the least change;",
   "eq, gt and lt need a number target; a boolean value takes only eq with target true or false;",
   "an enum takes only eq with one of its values; exists takes an actor, visible a widget.",
   "Set resolve_in_pie: true only on a step whose value is created during play.",

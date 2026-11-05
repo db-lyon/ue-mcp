@@ -840,6 +840,7 @@ void FEditorHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	}, MCPSpec::ContractExempt(TEXT("toggles realtime on every level viewport")));
 	Registry.RegisterHandler(TEXT("get_pie_pawn"), &GetPiePawn, {
 		MCPParam::Optional(TEXT("playerIndex"), EType::Number, TEXT("0-based player index (default 0)")),
+		MCPParam::Optional(TEXT("pieInstance"), EType::Number, TEXT("PIE world to read (default: the primary world, or the first client world when the primary is a dedicated server). See list_pie_instances")),
 	});
 	Registry.RegisterHandler(TEXT("invoke_function"), &InvokeFunction, {
 		MCPParam::Required(TEXT("functionName"), EType::String, TEXT("BlueprintCallable or Exec UFUNCTION on the actor, or on component")),

@@ -78,6 +78,11 @@ namespace MCPPIE
 		FString LastError;
 		// Attach-time problems: unmatched actions, unresolved track_values.
 		TArray<FString> Warnings;
+		// While waiting_for_pawn: no player target yet, or the player's pawn
+		// is missing or has no input component.
+		FString WaitingFor;
+		int32 PIEInstance = INDEX_NONE;
+		bool bPIEActive = false;
 	};
 
 	struct FRecorderFinishResult

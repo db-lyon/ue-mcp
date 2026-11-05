@@ -440,10 +440,32 @@ namespace MCPPIE
 				const int32 Count = CountMatches(Lines, Rule.Pattern, &Samples);
 				const bool bOk = Count >= Rule.Min && (Rule.Max < 0 || Count <= Rule.Max);
 				bPass &= bOk;
-				R.Details.Add(FString::Printf(TEXT("%s expect %s /%s/ %s: %d match(es)%s"),
+				// A miss says what was searched, and whether the line exists
+				// before the step began, where only since:"run" looks.
+				FString Why;
+				if (!bOk)
+				{
+					Why = FString::Printf(TEXT(" in %d line(s) %s"), Lines.Num(),
+						Rule.bSinceRun ? TEXT("since the run began") : *FString::Printf(TEXT("since the step began (window_ms %.0f)"), Step.WindowMs));
+					if (!Rule.bSinceRun)
+					{
+						FUatRule Whole = Rule;
+						Whole.bSinceRun = true;
+						TArray<FString> RunLines;
+						LinesSinceMark(Whole, RunLines);
+						TArray<FString> Earlier;
+						const int32 RunCount = CountMatches(RunLines, Rule.Pattern, &Earlier);
+						if (RunCount > Count)
+						{
+							Why += FString::Printf(TEXT("; %d match(es) earlier in the run, which since:\"run\" counts, e.g. %s"),
+								RunCount - Count, *Earlier[0].Left(200));
+						}
+					}
+				}
+				R.Details.Add(FString::Printf(TEXT("%s expect %s /%s/ %s: %d match(es)%s%s"),
 					bOk ? TEXT("ok  ") : TEXT("MISS"), *Rule.Log, *Rule.Pattern,
 					Rule.Max >= 0 ? *FString::Printf(TEXT("[%d..%d]"), Rule.Min, Rule.Max) : *FString::Printf(TEXT("[>=%d]"), Rule.Min),
-					Count, Samples.Num() ? *FString::Printf(TEXT(" e.g. %s"), *Samples[0].Left(200)) : TEXT("")));
+					Count, *Why, Samples.Num() ? *FString::Printf(TEXT(" e.g. %s"), *Samples[0].Left(200)) : TEXT("")));
 			}
 			for (const FUatRule& Rule : Step.Forbid)
 			{

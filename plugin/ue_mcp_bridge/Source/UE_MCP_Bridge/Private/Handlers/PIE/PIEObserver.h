@@ -67,6 +67,13 @@ namespace MCPPIE
 	// Name equals Path, or Path's last dotted segment, ignoring case.
 	bool TrackedValuePathMatches(const FString& Path, const FString& Name);
 
+	// The player pawn's sampled state under its recording.csv column names
+	// (pos_x, vel_z, rot_yaw, speed2d, ...): a script reads them with no
+	// profile or tracked value (#1657).
+	const TArray<FString>& PawnChannelNames();
+	bool IsPawnChannelName(const FString& Name);
+	bool ReadPawnChannel(const FCSVRow& Row, const FString& Name, double& OutValue);
+
 	struct FObserverStatus
 	{
 		EObserverState State = EObserverState::Idle;

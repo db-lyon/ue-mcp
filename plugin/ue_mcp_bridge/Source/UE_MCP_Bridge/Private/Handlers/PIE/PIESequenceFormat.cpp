@@ -615,6 +615,19 @@ namespace MCPPIE
 		{
 			O->SetStringField(TEXT("replay_csv"), D.ReplayCSVFile);
 		}
+		if (D.bHasStartGate)
+		{
+			TSharedRef<FJsonObject> G = MakeShared<FJsonObject>();
+			G->SetBoolField(TEXT("passed"), D.bStartGatePassed);
+			G->SetStringField(TEXT("anchor"), D.StartGateAnchor);
+			G->SetNumberField(TEXT("source_ms"), D.StartGateSourceMs);
+			G->SetNumberField(TEXT("replay_ms"), D.StartGateReplayMs);
+			if (!D.StartGateBlocker.IsEmpty())
+			{
+				G->SetStringField(TEXT("blocker"), D.StartGateBlocker);
+			}
+			O->SetObjectField(TEXT("start_gate"), G);
+		}
 
 		// Synthesised lead (item 1c): first divergence + ranked channels + errors.
 		if (D.Summary.bValid)
@@ -760,6 +773,16 @@ namespace MCPPIE
 			(*OnsetObj)->TryGetNumberField(TEXT("replay_ms"), Out.ReplayInputOnsetMs);
 		}
 		Obj->TryGetStringField(TEXT("replay_csv"), Out.ReplayCSVFile);
+		const TSharedPtr<FJsonObject>* GateObj = nullptr;
+		if (Obj->TryGetObjectField(TEXT("start_gate"), GateObj) && GateObj)
+		{
+			Out.bHasStartGate = true;
+			(*GateObj)->TryGetBoolField(TEXT("passed"), Out.bStartGatePassed);
+			(*GateObj)->TryGetStringField(TEXT("anchor"), Out.StartGateAnchor);
+			(*GateObj)->TryGetNumberField(TEXT("source_ms"), Out.StartGateSourceMs);
+			(*GateObj)->TryGetNumberField(TEXT("replay_ms"), Out.StartGateReplayMs);
+			(*GateObj)->TryGetStringField(TEXT("blocker"), Out.StartGateBlocker);
+		}
 
 		const TSharedPtr<FJsonObject>* SumObj = nullptr;
 		if (Obj->TryGetObjectField(TEXT("summary"), SumObj) && SumObj)

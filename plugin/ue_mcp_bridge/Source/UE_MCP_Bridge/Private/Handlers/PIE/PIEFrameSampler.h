@@ -83,6 +83,9 @@ namespace MCPPIE
 		// One line per problem found at attach: unmatched actions, tracked
 		// values that do not resolve to a numeric leaf. Empty when clean.
 		const TArray<FString>& GetWarnings() const { return Warnings; }
+		// Why the last AttachToPIE did not attach (no controller, no pawn, no
+		// input component yet). Empty once attached.
+		const FString& GetAttachBlocker() const { return AttachBlocker; }
 
 		// Insert a marker label into the next emitted row's EdgeEvents.
 		// Multiple markers in the same frame are concatenated.
@@ -114,6 +117,7 @@ namespace MCPPIE
 		TArray<FTrackedAction> Tracked;
 		TArray<FString> PendingMarkerLabels;
 		TArray<FString> Warnings;
+<<<<<<< HEAD
 		// Actor lookups for actor-qualified tracked values (#1655). A miss is
 		// retried at most once a second so an unresolved path does not walk
 		// every actor in the world each frame.
@@ -123,6 +127,9 @@ namespace MCPPIE
 			double NextRetrySeconds = 0.0;
 		};
 		TMap<FString, FTrackedActorRef> TrackedActorRefs;
+=======
+		FString AttachBlocker;
+>>>>>>> refs/triage/pr1711
 		FVector PrevPawnLocation = FVector::ZeroVector;
 	};
 }

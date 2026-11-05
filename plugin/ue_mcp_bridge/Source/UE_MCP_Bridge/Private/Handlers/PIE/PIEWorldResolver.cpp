@@ -6,6 +6,9 @@
 #include "Engine/LocalPlayer.h"
 #include "Engine/World.h"
 #include "GameFramework/PlayerController.h"
+#include "GameFramework/Pawn.h"
+#include "Dom/JsonObject.h"
+#include "HandlerWorld.h"
 
 namespace MCPPIE
 {
@@ -135,6 +138,50 @@ namespace MCPPIE
 			OutTarget.PlayerController = PlayerController;
 			OutTarget.LocalPlayer = LocalPlayer;
 			return true;
+		}
+
+		TArray<TSharedPtr<FJsonValue>> DescribePlayWorlds()
+		{
+			TArray<TSharedPtr<FJsonValue>> Out;
+			if (!GEngine)
+			{
+				return Out;
+			}
+			for (const FWorldContext& Context : GEngine->GetWorldContexts())
+			{
+				UWorld* World = Context.World();
+				if (!World || (Context.WorldType != EWorldType::PIE && Context.WorldType != EWorldType::Game))
+				{
+					continue;
+				}
+				TSharedPtr<FJsonObject> W = MakeShared<FJsonObject>();
+				W->SetNumberField(TEXT("pie_instance"), Context.PIEInstance);
+				W->SetStringField(TEXT("net_mode"), DescribePIENetMode(World));
+				TArray<TSharedPtr<FJsonValue>> Players;
+				if (UGameInstance* GameInstance = World->GetGameInstance())
+				{
+					const TArray<ULocalPlayer*>& LocalPlayers = GameInstance->GetLocalPlayers();
+					for (int32 Index = 0; Index < LocalPlayers.Num(); ++Index)
+					{
+						const ULocalPlayer* LocalPlayer = LocalPlayers[Index];
+						if (!LocalPlayer)
+						{
+							continue;
+						}
+						TSharedPtr<FJsonObject> P = MakeShared<FJsonObject>();
+						P->SetNumberField(TEXT("local_player"), Index);
+						const APlayerController* PC = LocalPlayer->PlayerController;
+						const APawn* Pawn = PC ? PC->GetPawn() : nullptr;
+						if (PC) P->SetStringField(TEXT("controller"), PC->GetName());
+						if (Pawn) P->SetStringField(TEXT("pawn"), Pawn->GetName());
+						else P->SetField(TEXT("pawn"), MakeShared<FJsonValueNull>());
+						Players.Add(MakeShared<FJsonValueObject>(P));
+					}
+				}
+				W->SetArrayField(TEXT("players"), Players);
+				Out.Add(MakeShared<FJsonValueObject>(W));
+			}
+			return Out;
 		}
 
 		bool ResolvePlayer(int32 RequestedPIEInstance, int32 LocalPlayerIndex,

@@ -22,9 +22,9 @@ Every action on this page is in the `pie` category.
 | `resolve_in_pie` | boolean | Default `false`, and only on a step with `expect`, `arrange` or `act`. `true` means `expect.value`, and the actors `arrange` and `act` name, only exist once PIE is running, such as an actor spawned during play, so `script_create` and `script_update` do not check them against the level. |
 | `arrange` | array | Optional. Run when the step starts: a scenario's arrange entries, `{kind: "spawn", class, at?, rotation?, scale?}`, `{kind: "set", target, path, value}` or `{kind: "call", target, func, args?}`. |
 | `act` | array | Optional. Run after `arrange`: the step actions `uat_run` takes in a step's `do` (see [Arrange and act](#arrange-and-act)). |
-| `expect.value` | string | Required in `expect`. For `decreasing`, `increasing`, `eq`, `gt` and `lt`: a tracked value path, or its last segment. For `exists`: an actor id. For `visible`: a widget class or name. |
+| `expect.value` | string | Required in `expect`. For `decreasing`, `increasing`, `eq`, `gt` and `lt`: a tracked value path, or its last segment, or one of the player pawn's sampled channels, read with no profile: `pos_x`, `pos_y`, `pos_z`, `vel_x`, `vel_y`, `vel_z`, `rot_pitch`, `rot_yaw`, `rot_roll`, `speed2d` (the `recording.csv` column names). A tracked value of the same name wins. For `exists`: an actor id. For `visible`: a widget class or name. |
 | `expect.op` | string | Required in `expect`. One of the ops below. |
-| `expect.target` | number or boolean | Required for `eq`, `gt` and `lt`. Optional for `visible` and `exists`, default `true`; `false` asks for the opposite. Refused for `decreasing` and `increasing`. A boolean given to `eq`, `gt` or `lt` is read as 1 or 0. |
+| `expect.target` | number or boolean | Required for `eq`, `gt` and `lt`. Optional for `visible` and `exists`, default `true`; `false` asks for the opposite. Optional for `decreasing` and `increasing`: a number above 0, the least change from the value at step start. A boolean given to `eq`, `gt` or `lt` is read as 1 or 0. |
 | `expect.within_ms` | integer | How long the step has to meet its expectation, in game milliseconds from the moment it starts, or from the end of its `act` when it has one. 0 or absent uses the run's `default_within_ms`. |
 
 A manual step takes no `expect`, and a step that has one is refused. An auto step without `expect` passes as soon as it starts (once its `act` ends, when it has one), with `evidence.reason` set to `no expectation`.
@@ -37,8 +37,8 @@ An auto step is checked on every observed frame from the frame it starts. It pas
 
 | Op | Holds when |
 |---|---|
-| `decreasing` | The value is lower than the first value observed in the step. |
-| `increasing` | The value is higher than the first value observed in the step. |
+| `decreasing` | The value is lower than the first value observed in the step, by at least `target` when given (`target: 300` on `pos_x`: x dropped by 300 or more). |
+| `increasing` | The value is higher than the first value observed in the step, by at least `target` when given. |
 | `eq` | The value is within 0.0001 of `target`, or within 0.01% of the larger of the two magnitudes when that is more. |
 | `gt` | The value is greater than `target`. |
 | `lt` | The value is less than `target`. |
@@ -65,7 +65,7 @@ A step can set up and drive what it then checks, so a script runs end to end wit
 
 - **Order.** `arrange`, then `act`, then the `expect` window opens. `within_ms` counts from the end of `act`. The run holds at the step until its act ends, so the next step never starts in the middle of one.
 - **arrange** entries are a scenario's, applied by the same code `scenario_validate` checks them with: `spawn` a class (native or a Blueprint path, with or without `_C`), `set` a property on an actor by dotted path, `call` a function on an actor. An actor is named by label, name or class.
-- **act** entries are the step actions `uat_run` runs, through the same executor: `place` (`{at, offset?, face?}` next to an actor, facing it, or `{location, yaw?}`), `press` (`{action, frames?}`), `inject` (`{action, value}`), `hold` (`{action, value, ms}`), `tape` (`{action, values}`), `console`, `capture` (a label or `true`; the file lands under `<output_dir>/captures/`) and `wait_ms`. `client` (default 0, the editor's own player) sends an entry to a remote player. An act ends once every entry ran, every hold and tape on the editor's player played out, and every remote player confirmed what it was sent.
+- **act** entries are the step actions `uat_run` runs, through the same executor: `place` (`{at, offset?, face?}` next to an actor, facing it, or `{location, yaw?}`), `press` (`{action, frames?}`), `inject` (`{action, value}`), `hold` (`{action, value, ms}`), `tape` (`{action, values, hz?}`, `hz` default 60), `console`, `capture` (a label or `true`; the file lands under `<output_dir>/captures/`) and `wait_ms`. `client` (default 0, the editor's own player) sends an entry to a remote player. An act ends once every entry ran, every hold and tape on the editor's player played out, and every remote player confirmed what it was sent.
 - **A manual step may carry `act`**: the engine sets the scene, then the step asks for its verdict. A manual step with `act` starts its own block of manual steps.
 - **An act that fails fails its step**, with the reason in `evidence.reason`, and the run moves on.
 - `script_create`, `script_update` and `script_validate` resolve the actor every `set`, `call` and `place` names, the class every `spawn` names and the Input Action every `press`, `inject`, `hold` and `tape` names, and report one that does not exist with the field at fault, such as `act[1].press.action` or `arrange[0].target`, and candidates. `resolve_in_pie: true` lets an actor that only exists in PIE through; classes and Input Actions are always checked.

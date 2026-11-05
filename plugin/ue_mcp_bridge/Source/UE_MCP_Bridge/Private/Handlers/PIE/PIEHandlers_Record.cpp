@@ -6,6 +6,7 @@
 #include "Handlers/PIE/PIEInputRecorder.h"
 #include "Handlers/PIE/PIESequenceFormat.h"
 #include "Handlers/PIE/PIEFrameSampler.h"
+#include "Handlers/PIE/PIEWorldResolver.h"
 #include "InputAction.h"
 #include "HAL/FileManager.h"
 #include "Misc/FileHelper.h"
@@ -43,9 +44,20 @@ namespace
 		R->SetNumberField(TEXT("current_frame"), S.CurrentFrame);
 		R->SetNumberField(TEXT("elapsed_seconds"), S.ElapsedSeconds);
 		R->SetNumberField(TEXT("tracked_action_count"), S.TrackedActionCount);
+		R->SetBoolField(TEXT("pie_active"), S.bPIEActive);
+		if (S.PIEInstance != INDEX_NONE)
+		{
+			R->SetNumberField(TEXT("pie_instance"), S.PIEInstance);
+		}
 		if (!S.LastError.IsEmpty())
 		{
 			R->SetStringField(TEXT("last_error"), S.LastError);
+		}
+		if (S.State == ERecorderState::WaitingForPawn)
+		{
+			// Which pie_instance has a player with a pawn, to pick one.
+			R->SetStringField(TEXT("waiting_for"), S.WaitingFor);
+			R->SetArrayField(TEXT("pie_worlds"), PIEWorldResolver::DescribePlayWorlds());
 		}
 		WriteWarnings(R, S.Warnings);
 	}
