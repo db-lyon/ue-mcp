@@ -704,7 +704,7 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "world",
         "type": "string",
         "required": false,
-        "description": "World scope: any (default) | editor | pie"
+        "description": "World scope: any (default) | editor | pie. A scoped search includes objects outered to that world's GameInstance or LocalPlayers (UMG widgets, LocalPlayer subsystems)"
       },
       {
         "name": "pieInstance",
@@ -4314,7 +4314,7 @@ export const schema: Record<string, z.ZodType> = {
   width: z.number().optional().describe("Capture width in pixels (default 1280) (capture_scene_png). Viewport width to read x against, when picking from a screenshot of another resolution (hit_test_viewport_pixel). Frame width in pixels (default 1280) (render_sequence_frames)"),
   windowed: z.boolean().optional().describe("Run windowed rather than fullscreen (default true)"),
   windowId: z.number().int().optional().describe("Window to close, by the id list_windows reported (close_window). Describe only this window, by the id list_windows or list_dialogs reported (list_windows). Window to press a button on, by the id list_windows reported (press_window_button)"),
-  world: z.string().optional().describe("World scope: editor (default) | pie (capture_scene_png). editor (default) | pie | auto: pie runs it as a PIE player, through that player's console, cheat manager and world (execute_command). World scope: any (default) | editor | pie (find_object). World scope: editor | pie | auto. Each action names its own default (get_object_properties, get_runtime_value, get_runtime_values, invoke_object_function, invoke_object_functions, pose_debug_camera, read_bone_transforms, restore_runtime_visibility, set_movement_mode, set_object_property, set_pie_paused, set_pie_view_target, set_runtime_visibility, teleport_runtime_actor). auto (default: PIE when running, else editor) | pie | editor (get_sequence_runtime_bindings). editor (default) | pie | auto (invoke_function). editor (default) | pie | game | auto (invoke_static_function)"),
+  world: z.string().optional().describe("World scope: editor (default) | pie (capture_scene_png). editor (default) | pie | auto: pie runs it as a PIE player, through that player's console, cheat manager and world (execute_command). World scope: any (default) | editor | pie. A scoped search includes objects outered to that world's GameInstance or LocalPlayers (UMG widgets, LocalPlayer subsystems) (find_object). World scope: editor | pie | auto. Each action names its own default (get_object_properties, get_runtime_value, get_runtime_values, invoke_object_function, invoke_object_functions, pose_debug_camera, read_bone_transforms, restore_runtime_visibility, set_movement_mode, set_object_property, set_pie_paused, set_pie_view_target, set_runtime_visibility, teleport_runtime_actor). auto (default: PIE when running, else editor) | pie | editor (get_sequence_runtime_bindings). editor (default) | pie | auto (invoke_function). editor (default) | pie | game | auto (invoke_static_function)"),
   worldContextParam: z.string().optional().describe("UObject* parameter to fill with the selected world; detected from WorldContext metadata and for WorldContextObject when omitted"),
   worldPartition: z.boolean().optional().describe("Create a blank World Partition level with one file per actor (default false); a templateLevel decides this itself"),
   worldPath: z.string().optional().describe("Exact PIE UWorld path or name to capture"),

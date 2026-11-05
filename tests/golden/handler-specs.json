@@ -15351,7 +15351,7 @@
           "name": "world",
           "type": "string",
           "required": false,
-          "description": "World scope: any (default) | editor | pie"
+          "description": "World scope: any (default) | editor | pie. A scoped search includes objects outered to that world's GameInstance or LocalPlayers (UMG widgets, LocalPlayer subsystems)"
         },
         {
           "name": "pieInstance",

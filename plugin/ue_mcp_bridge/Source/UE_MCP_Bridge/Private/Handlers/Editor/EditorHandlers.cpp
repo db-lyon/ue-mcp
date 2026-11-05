@@ -692,7 +692,7 @@ void FEditorHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("outerPath"), EType::String, TEXT("Only objects somewhere under this outer, such as one level or world")),
 		MCPParam::Optional(TEXT("exactClass"), EType::Boolean, TEXT("Match className exactly instead of including subclasses (default false)")),
 		MCPParam::Optional(TEXT("includeDefaults"), EType::Boolean, TEXT("Include class default objects and archetypes (default false)")),
-		MCPParam::Optional(TEXT("world"), EType::String, TEXT("World scope: any (default) | editor | pie")),
+		MCPParam::Optional(TEXT("world"), EType::String, TEXT("World scope: any (default) | editor | pie. A scoped search includes objects outered to that world's GameInstance or LocalPlayers (UMG widgets, LocalPlayer subsystems)")),
 		PieInstanceParam(),
 		CursorParam(),
 		LimitParam(TEXT("Objects on this page (default 50, max 1000)")),
