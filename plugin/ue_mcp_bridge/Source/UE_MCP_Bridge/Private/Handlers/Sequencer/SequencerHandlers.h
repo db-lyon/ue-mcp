@@ -33,4 +33,6 @@ private:
 	static TSharedPtr<FJsonValue> ResolveBindings(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> RebindPossessable(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> GetRuntimeBindings(const TSharedPtr<FJsonObject>& Params);
+	// #1640: components and property values of each binding's template or bound actor.
+	static TSharedPtr<FJsonValue> GetBindingComponents(const TSharedPtr<FJsonObject>& Params);
 };

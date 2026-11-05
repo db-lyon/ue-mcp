@@ -243,6 +243,14 @@ void FSequencerHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("sequencePath"), EType::String, TEXT("Report only actors playing this sequence")),
 		MCPParam::Optional(TEXT("actorLabel"), EType::String, TEXT("Report only the LevelSequenceActor with this label or name")),
 	});
+	// #1640: what a binding's components hold, read off the template or the possessed actor.
+	Registry.RegisterHandler(TEXT("get_sequence_binding_components"), &GetBindingComponents, {
+		SequencePathParam(TEXT("Level Sequence asset path"), true),
+		MCPParam::Optional(TEXT("bindingGuid"), EType::String, TEXT("Report only this binding")),
+		MCPParam::Optional(TEXT("bindingName"), EType::String, TEXT("Report only the binding with this name")),
+		MCPParam::Optional(TEXT("componentClass"), EType::String, TEXT("Report only components of this class or a subclass (ImagePlateComponent, CineCameraComponent, PrimitiveComponent)")),
+		MCPParam::Optional(TEXT("propertyNames"), EType::Array, TEXT("Properties or dotted paths to read, in C++ or Python spelling (bHoldout, cast_shadow, LightingChannels.bChannel1); [\"*\"] reads every editable property. Default: the primitive rendering flags (CastShadow, bAffectDynamicIndirectLighting, bVisibleInRayTracing, bHoldout, LightingChannels, custom depth and stencil, visibility)")).Items(EType::String),
+	});
 }
 
 // ─── #548 sequencer authoring helpers ────────────────────────────────
