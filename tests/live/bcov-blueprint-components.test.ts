@@ -200,5 +200,10 @@ describe("class defaults", () => {
     const props = (read.properties ?? {}) as Record<string, string>;
     expect(Number(props.InitialLifeSpan)).toBe(7);
     expect(read.count).toBe(1);
+
+    // The Blueprint asset path, under assetPath, reads the same generated class (#1551).
+    const byAsset = await call("get_cdo_properties", { assetPath: BP, propertyNames: ["InitialLifeSpan"] });
+    expect(byAsset.className).toBe(read.className);
+    expect(Number((byAsset.properties as Record<string, string>).InitialLifeSpan)).toBe(7);
   }, 120_000);
 });

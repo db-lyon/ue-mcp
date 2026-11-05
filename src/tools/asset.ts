@@ -184,7 +184,7 @@ export const assetTool: ToolDef = categoryTool(
     search: {
       kind: "handler",
       effect: "read",
-      description: paged("Search by name/class/path. maxResults is a deprecated spelling of limit and sizes the page when limit is omitted. With extra content roots configured and no directory, this searches each root and pages ONE ROOT AT A TIME, so a cursor has to be passed back together with the directory it came from. Params: query, directory?, maxResults?, searchAll?"),
+      description: paged("Search by name/class/path. maxResults is a deprecated spelling of limit and sizes the page when limit is omitted. With extra content roots configured and no directory, this searches each root and pages ONE ROOT AT A TIME, so a cursor has to be passed back together with the directory it came from. classFilter (alias typeFilter) keeps only assets whose class name contains it, case-insensitive, as list_assets does. Params: query, directory?, classFilter?, maxResults?, searchAll?"),
       handler: async (ctx, p) => {
         const { action: _, maxResults, ...rest } = p;
         // One page size, whichever spelling the caller used. The bridge reads

@@ -107,7 +107,7 @@ void FNiagaraHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	using EType = EMCPParamType;
 	auto SystemPathParam = []()
 	{
-		return MCPParam::Required(TEXT("systemPath"), EType::String, TEXT("NiagaraSystem asset path"));
+		return MCPParam::Required(TEXT("systemPath"), EType::String, TEXT("NiagaraSystem asset path")).Alias(TEXT("assetPath"));
 	};
 	auto EmitterNameParam = []()
 	{
@@ -196,7 +196,7 @@ void FNiagaraHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		OnConflictParam(),
 	}, MCPSpec::ContractExempt(TEXT("Creates and saves a system under the contract values; nothing it reads fails first")));
 	Registry.RegisterHandler(TEXT("get_niagara_info"), &GetNiagaraInfo, {
-		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("NiagaraSystem asset path")).Alias(TEXT("path")),
+		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("NiagaraSystem asset path")).Alias(TEXT("path")).Alias(TEXT("systemPath")),
 	});
 	Registry.RegisterHandler(TEXT("list_emitters_in_system"), &ListEmittersInSystem, {
 		SystemPathParam(),

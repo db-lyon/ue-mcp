@@ -716,7 +716,10 @@
           "name": "systemPath",
           "type": "string",
           "required": true,
-          "description": "NiagaraSystem asset path"
+          "description": "NiagaraSystem asset path",
+          "aliases": [
+            "assetPath"
+          ]
         },
         {
           "name": "rendererType",
@@ -745,7 +748,10 @@
           "name": "systemPath",
           "type": "string",
           "required": true,
-          "description": "NiagaraSystem asset path"
+          "description": "NiagaraSystem asset path",
+          "aliases": [
+            "assetPath"
+          ]
         },
         {
           "name": "emitterPath",
@@ -1693,7 +1699,10 @@
           "name": "systemPath",
           "type": "string",
           "required": true,
-          "description": "NiagaraSystem asset path"
+          "description": "NiagaraSystem asset path",
+          "aliases": [
+            "assetPath"
+          ]
         },
         {
           "name": "eventName",
@@ -1728,7 +1737,10 @@
           "name": "systemPath",
           "type": "string",
           "required": true,
-          "description": "NiagaraSystem asset path"
+          "description": "NiagaraSystem asset path",
+          "aliases": [
+            "assetPath"
+          ]
         },
         {
           "name": "moduleScript",
@@ -1769,7 +1781,10 @@
           "name": "systemPath",
           "type": "string",
           "required": true,
-          "description": "NiagaraSystem asset path"
+          "description": "NiagaraSystem asset path",
+          "aliases": [
+            "assetPath"
+          ]
         },
         {
           "name": "stageName",
@@ -8916,7 +8931,10 @@
           "name": "systemPath",
           "type": "string",
           "required": true,
-          "description": "NiagaraSystem asset path"
+          "description": "NiagaraSystem asset path",
+          "aliases": [
+            "assetPath"
+          ]
         },
         {
           "name": "force",
@@ -16194,14 +16212,20 @@
           "name": "packages",
           "type": "array",
           "required": false,
-          "description": "Package paths to look up",
+          "description": "Package or object paths to look up",
+          "aliases": [
+            "assetPaths"
+          ],
           "items": "string"
         },
         {
           "name": "packagePath",
           "type": "string",
           "required": false,
-          "description": "One package path, used when packages is omitted"
+          "description": "One package or object path, used when packages is omitted",
+          "aliases": [
+            "assetPath"
+          ]
         },
         {
           "name": "hard",
@@ -16274,14 +16298,20 @@
           "name": "packages",
           "type": "array",
           "required": false,
-          "description": "Package paths to look up",
+          "description": "Package or object paths to look up",
+          "aliases": [
+            "assetPaths"
+          ],
           "items": "string"
         },
         {
           "name": "packagePath",
           "type": "string",
           "required": false,
-          "description": "One package path, used when packages is omitted"
+          "description": "One package or object path, used when packages is omitted",
+          "aliases": [
+            "assetPath"
+          ]
         },
         {
           "name": "includeDetails",
@@ -16682,7 +16712,10 @@
           "name": "className",
           "type": "string",
           "required": true,
-          "description": "C++ class name or path"
+          "description": "C++ class name or path, or a Blueprint asset path (reads its generated class)",
+          "aliases": [
+            "assetPath"
+          ]
         },
         {
           "name": "propertyNames",
@@ -17921,7 +17954,10 @@
           "name": "systemPath",
           "type": "string",
           "required": true,
-          "description": "NiagaraSystem asset path"
+          "description": "NiagaraSystem asset path",
+          "aliases": [
+            "assetPath"
+          ]
         },
         {
           "name": "emitterName",
@@ -18000,7 +18036,8 @@
           "required": true,
           "description": "NiagaraSystem asset path",
           "aliases": [
-            "path"
+            "path",
+            "systemPath"
           ]
         }
       ]
@@ -18082,7 +18119,10 @@
           "name": "maxLines",
           "type": "integer",
           "required": false,
-          "description": "How far back into the ring buffer to read (default 100, or the whole 4096-line buffer when filter or category is given)"
+          "description": "How far back into the ring buffer to read (default 100, or the whole 4096-line buffer when filter or category is given)",
+          "aliases": [
+            "lastN"
+          ]
         },
         {
           "name": "filter",
@@ -20452,7 +20492,10 @@
           "name": "systemPath",
           "type": "string",
           "required": true,
-          "description": "NiagaraSystem asset path"
+          "description": "NiagaraSystem asset path",
+          "aliases": [
+            "assetPath"
+          ]
         }
       ]
     },
@@ -21726,7 +21769,10 @@
           "name": "systemPath",
           "type": "string",
           "required": true,
-          "description": "NiagaraSystem asset path"
+          "description": "NiagaraSystem asset path",
+          "aliases": [
+            "assetPath"
+          ]
         },
         {
           "name": "emitterName",
@@ -21749,7 +21795,10 @@
           "name": "systemPath",
           "type": "string",
           "required": true,
-          "description": "NiagaraSystem asset path"
+          "description": "NiagaraSystem asset path",
+          "aliases": [
+            "assetPath"
+          ]
         }
       ]
     },
@@ -22202,7 +22251,10 @@
           "name": "systemPath",
           "type": "string",
           "required": true,
-          "description": "NiagaraSystem asset path"
+          "description": "NiagaraSystem asset path",
+          "aliases": [
+            "assetPath"
+          ]
         },
         {
           "name": "emitterName",
@@ -22237,7 +22289,10 @@
           "name": "systemPath",
           "type": "string",
           "required": true,
-          "description": "NiagaraSystem asset path"
+          "description": "NiagaraSystem asset path",
+          "aliases": [
+            "assetPath"
+          ]
         },
         {
           "name": "emitterName",
@@ -22295,7 +22350,10 @@
           "name": "systemPath",
           "type": "string",
           "required": true,
-          "description": "NiagaraSystem asset path"
+          "description": "NiagaraSystem asset path",
+          "aliases": [
+            "assetPath"
+          ]
         },
         {
           "name": "moduleName",
@@ -22330,7 +22388,10 @@
           "name": "systemPath",
           "type": "string",
           "required": true,
-          "description": "NiagaraSystem asset path"
+          "description": "NiagaraSystem asset path",
+          "aliases": [
+            "assetPath"
+          ]
         }
       ]
     },
@@ -31309,7 +31370,10 @@
           "name": "systemPath",
           "type": "string",
           "required": true,
-          "description": "NiagaraSystem asset path"
+          "description": "NiagaraSystem asset path",
+          "aliases": [
+            "assetPath"
+          ]
         },
         {
           "name": "emitterName",
@@ -31332,7 +31396,10 @@
           "name": "systemPath",
           "type": "string",
           "required": true,
-          "description": "NiagaraSystem asset path"
+          "description": "NiagaraSystem asset path",
+          "aliases": [
+            "assetPath"
+          ]
         },
         {
           "name": "rendererIndex",
@@ -31857,7 +31924,10 @@
           "name": "systemPath",
           "type": "string",
           "required": true,
-          "description": "NiagaraSystem asset path"
+          "description": "NiagaraSystem asset path",
+          "aliases": [
+            "assetPath"
+          ]
         },
         {
           "name": "stackContext",
@@ -31898,7 +31968,10 @@
           "name": "systemPath",
           "type": "string",
           "required": true,
-          "description": "NiagaraSystem asset path"
+          "description": "NiagaraSystem asset path",
+          "aliases": [
+            "assetPath"
+          ]
         },
         {
           "name": "eventName",
@@ -31927,7 +32000,10 @@
           "name": "systemPath",
           "type": "string",
           "required": true,
-          "description": "NiagaraSystem asset path"
+          "description": "NiagaraSystem asset path",
+          "aliases": [
+            "assetPath"
+          ]
         },
         {
           "name": "stackContext",
@@ -31962,7 +32038,10 @@
           "name": "systemPath",
           "type": "string",
           "required": true,
-          "description": "NiagaraSystem asset path"
+          "description": "NiagaraSystem asset path",
+          "aliases": [
+            "assetPath"
+          ]
         },
         {
           "name": "stageName",
@@ -39504,7 +39583,10 @@
           "name": "systemPath",
           "type": "string",
           "required": true,
-          "description": "NiagaraSystem asset path"
+          "description": "NiagaraSystem asset path",
+          "aliases": [
+            "assetPath"
+          ]
         },
         {
           "name": "stackContext",
@@ -39551,7 +39633,10 @@
           "name": "systemPath",
           "type": "string",
           "required": true,
-          "description": "NiagaraSystem asset path"
+          "description": "NiagaraSystem asset path",
+          "aliases": [
+            "assetPath"
+          ]
         },
         {
           "name": "stackContext",
@@ -39592,7 +39677,10 @@
           "name": "systemPath",
           "type": "string",
           "required": true,
-          "description": "NiagaraSystem asset path"
+          "description": "NiagaraSystem asset path",
+          "aliases": [
+            "assetPath"
+          ]
         },
         {
           "name": "moduleName",
@@ -39718,7 +39806,10 @@
           "name": "systemPath",
           "type": "string",
           "required": true,
-          "description": "NiagaraSystem asset path"
+          "description": "NiagaraSystem asset path",
+          "aliases": [
+            "assetPath"
+          ]
         },
         {
           "name": "moduleName",
@@ -40999,7 +41090,10 @@
           "name": "systemPath",
           "type": "string",
           "required": true,
-          "description": "NiagaraSystem asset path"
+          "description": "NiagaraSystem asset path",
+          "aliases": [
+            "assetPath"
+          ]
         },
         {
           "name": "rendererIndex",
@@ -44670,7 +44764,10 @@
           "name": "systemPath",
           "type": "string",
           "required": true,
-          "description": "NiagaraSystem asset path"
+          "description": "NiagaraSystem asset path",
+          "aliases": [
+            "assetPath"
+          ]
         },
         {
           "name": "location",
@@ -44705,7 +44802,10 @@
           "name": "systemPath",
           "type": "string",
           "required": true,
-          "description": "NiagaraSystem asset path"
+          "description": "NiagaraSystem asset path",
+          "aliases": [
+            "assetPath"
+          ]
         },
         {
           "name": "location",
@@ -46018,7 +46118,10 @@
           "name": "systemPath",
           "type": "string",
           "required": true,
-          "description": "NiagaraSystem asset path"
+          "description": "NiagaraSystem asset path",
+          "aliases": [
+            "assetPath"
+          ]
         }
       ]
     },

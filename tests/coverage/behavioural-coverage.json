@@ -8898,6 +8898,11 @@
         {
           "suite": "live",
           "file": "tests/live/bcov-niagara.test.ts",
+          "test": "every system read takes the system under either systemPath or assetPath (#1551)"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/bcov-niagara.test.ts",
           "test": "set_emitter_property disables the emitter, which get_niagara_info and validate_niagara_system both see"
         }
       ]
@@ -11160,6 +11165,11 @@
           "suite": "live",
           "file": "tests/live/bcov-niagara.test.ts",
           "test": "add_emitter_renderer, set_renderer_property and remove_emitter_renderer show up in list_emitter_renderers"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/bcov-niagara.test.ts",
+          "test": "every system read takes the system under either systemPath or assetPath (#1551)"
         }
       ]
     },
@@ -11690,6 +11700,11 @@
       "registeredIn": "NiagaraHandlers.cpp",
       "status": "covered",
       "tests": [
+        {
+          "suite": "live",
+          "file": "tests/live/bcov-niagara.test.ts",
+          "test": "every system read takes the system under either systemPath or assetPath (#1551)"
+        },
         {
           "suite": "live",
           "file": "tests/live/bcov-niagara.test.ts",
@@ -23722,6 +23737,11 @@
       "registeredIn": "NiagaraHandlers.cpp",
       "status": "covered",
       "tests": [
+        {
+          "suite": "live",
+          "file": "tests/live/bcov-niagara.test.ts",
+          "test": "every system read takes the system under either systemPath or assetPath (#1551)"
+        },
         {
           "suite": "live",
           "file": "tests/live/bcov-niagara.test.ts",

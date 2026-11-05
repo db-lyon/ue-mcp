@@ -114,6 +114,18 @@ describe("Niagara systems and emitters", () => {
     expect((await call("validate_niagara_system", { systemPath: SYSTEM })).valid).toBe(true);
   }, 120_000);
 
+  it("every system read takes the system under either systemPath or assetPath (#1551)", async () => {
+    const byAssetPath = await call("validate_niagara_system", { assetPath: SYSTEM });
+    expect(byAssetPath.valid).toBe(true);
+    const infoBySystemPath = await call("get_niagara_info", { systemPath: SYSTEM });
+    const infoByAssetPath = await call("get_niagara_info", { assetPath: SYSTEM });
+    expect(infoBySystemPath.emitters).toEqual(infoByAssetPath.emitters);
+    const renderersByAsset = await call("list_emitter_renderers", { assetPath: SYSTEM, emitterName: EMITTER });
+    expect(renderersByAsset.renderers).toEqual(await renderers());
+    const params = await call("list_niagara_system_parameters", { assetPath: SYSTEM });
+    expect(params.parameters).toEqual((await call("list_niagara_system_parameters", { systemPath: SYSTEM })).parameters);
+  }, 120_000);
+
   it("set_emitter_property renames the emitter, and its rollback renames it back by the new name", async () => {
     const renamed = await call("set_emitter_property", { ...onEmitter, propertyName: "name", value: "BCovRenamed" });
     expect(renamed.newEmitterName).toBe("BCovRenamed");

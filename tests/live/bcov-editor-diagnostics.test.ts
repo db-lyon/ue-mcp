@@ -62,6 +62,10 @@ describe("the output log", () => {
     expect(rows[0].message).toContain(MARKER);
     expect(rows[0].category.toLowerCase()).toContain("python");
 
+    // lastN is the window under its other name (#1551): a one-line window ends at the newest line.
+    const window = await call("get_output_log", { lastN: 1 });
+    expect((window.lines as unknown[]).length).toBe(1);
+
     const found = await call("search_log", { query: MARKER });
     expect(Number(found.matchCount)).toBeGreaterThan(0);
     expect(JSON.stringify(found)).toContain(MARKER);
