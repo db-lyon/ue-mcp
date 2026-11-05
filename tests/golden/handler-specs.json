@@ -1,5 +1,5 @@
 {
-  "handlerCount": 1210,
+  "handlerCount": 1211,
   "handlers": {
     "add_ability_system_component": {
       "category": "gas",
@@ -18149,6 +18149,17 @@
           "type": "string",
           "required": false,
           "description": "Report only the LevelSequenceActor with this label or name"
+        }
+      ]
+    },
+    "get_shader_compile_status": {
+      "category": "editor",
+      "params": [
+        {
+          "name": "waitUntilIdle",
+          "type": "boolean",
+          "required": false,
+          "description": "Poll between game-thread ticks until shaders are idle; timeoutMs is the server routing budget (default 60000)"
         }
       ]
     },

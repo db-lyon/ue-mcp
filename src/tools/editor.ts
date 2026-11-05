@@ -19,6 +19,7 @@ import { PLUGIN_UPGRADE_POINTER } from "../bridge/bridge.js";
 import { actions as epicActions, schema as epicSchema } from "./epic/editor.generated.js";
 import { specBp, schema as specSchema } from "./specs/editor.generated.js";
 import { checkpointActions, checkpointSchema } from "./checkpoints.js";
+import { waitForShaderCompileIdle } from "./editor-shader-wait.js";
 
 /** Whether the addressed editor can run feedback(submit): its category is not disabled. */
 export function feedbackEnabled(ctx: ToolContext): boolean {
@@ -127,6 +128,10 @@ export const editorTool: ToolDef = categoryTool(
   "editor",
   "Editor commands, Python execution, PIE, undo/redo, hot reload, viewport, performance, sequencer, build pipeline, logs, editor control.",
   {
+    get_shader_compile_status: {
+      ...specBp("read", "Read outstanding shader jobs, compiling state, pending material and shader-map counts, and manager availability. waitUntilIdle polls short game-thread snapshots between ticks, leaving the editor free to finish compiling. timeoutMs bounds the wait (default 60000); a timeout returns success=false and state=timed_out with the last counters.", "get_shader_compile_status"),
+      followUp: waitForShaderCompileIdle,
+    },
     start_editor: {
       kind: "handler",
       effect: "mutate",

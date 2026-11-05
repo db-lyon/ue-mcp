@@ -271,6 +271,9 @@ void FEditorHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	// pie_start_ignoring_blueprint_errors have no bridge action of their own,
 	// so they carry no spec.
 	using EType = EMCPParamType;
+	Registry.RegisterHandler(TEXT("get_shader_compile_status"), &GetShaderCompileStatus, {
+		MCPParam::Optional(TEXT("waitUntilIdle"), EType::Boolean, TEXT("Poll between game-thread ticks until shaders are idle; timeoutMs is the server routing budget (default 60000)")),
+	});
 	const TArray<FMCPParamSpec> NoParams;
 	auto ChannelListParam = [](const TCHAR* Name, const TCHAR* Description)
 	{

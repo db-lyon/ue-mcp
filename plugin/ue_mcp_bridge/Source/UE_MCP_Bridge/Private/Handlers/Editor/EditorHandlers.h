@@ -189,6 +189,7 @@ private:
 	static TSharedPtr<FJsonValue> EndProfileRegion(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> AddTraceBookmark(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> GetFrameTiming(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> GetShaderCompileStatus(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> TriggerHitch(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> LaunchStandaloneGame(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> GetStandaloneStatus(const TSharedPtr<FJsonObject>& Params);
