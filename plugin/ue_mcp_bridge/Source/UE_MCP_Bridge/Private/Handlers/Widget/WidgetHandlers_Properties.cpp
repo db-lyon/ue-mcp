@@ -941,6 +941,19 @@ namespace
 		return false;
 	}
 
+	/** Write a property from its text form. An enum resolves its short, full and
+	 *  prefixed names or a number naming an enumerator, and refuses anything else:
+	 *  the engine importer keeps the old value on a name it does not know (#1540). */
+	bool MCPWidgetImportValueText(FProperty* Prop, void* Addr, const FString& Text, UObject* Owner, FString& OutError)
+	{
+		const FByteProperty* ByteProp = CastField<FByteProperty>(Prop);
+		if (Prop->IsA<FEnumProperty>() || (ByteProp && ByteProp->Enum))
+		{
+			return MCPJsonProperty::SetJsonOnPropertyWithOwner(Prop, Addr, MakeShared<FJsonValueString>(Text.TrimStartAndEnd()), Owner, OutError);
+		}
+		return Prop->ImportText_Direct(*Text, Addr, Owner, PPF_None) != nullptr;
+	}
+
 	/** slot.* properties: struct text and nested paths through reflection, the
 	 *  typed canvas and box slot routes, then any other slot UPROPERTY. Returns the
 	 *  refusal for a value the slot property will not take, or nullptr. */
@@ -1004,7 +1017,8 @@ namespace
 						void* LeafAddr = LeafProp->ContainerPtrToValuePtr<void>(CurContainer);
 						FString PreviousText;
 						LeafProp->ExportText_Direct(PreviousText, LeafAddr, LeafAddr, Slot, PPF_None);
-						if (LeafProp->ImportText_Direct(*PropertyValue, LeafAddr, Slot, PPF_None))
+						FString LeafError;
+						if (MCPWidgetImportValueText(LeafProp, LeafAddr, PropertyValue, Slot, LeafError))
 						{
 							bPropertySet = true;
 							PreviousPropertyValue = PreviousText;
@@ -1013,8 +1027,8 @@ namespace
 						else
 						{
 							return MCPError(FString::Printf(
-								TEXT("Value '%s' is not valid for slot property '%s' (type %s). Use UE struct text, e.g. `(Value=1.0,SizeRule=Fill)` for Size or `(Left=8,Top=8,Right=8,Bottom=8)` for Padding."),
-								*PropertyValue, *SlotPropName, *LeafProp->GetCPPType()));
+								TEXT("Value '%s' is not valid for slot property '%s' (type %s)%s%s. Use UE struct text, e.g. `(Value=1.0,SizeRule=Fill)` for Size or `(Left=8,Top=8,Right=8,Bottom=8)` for Padding."),
+								*PropertyValue, *SlotPropName, *LeafProp->GetCPPType(), LeafError.IsEmpty() ? TEXT("") : TEXT(": "), *LeafError));
 						}
 					}
 				}
@@ -1048,13 +1062,8 @@ namespace
 					void* SlotValuePtr = SlotProp->ContainerPtrToValuePtr<void>(Slot);
 					FString PreviousText;
 					SlotProp->ExportText_Direct(PreviousText, SlotValuePtr, SlotValuePtr, Slot, PPF_None);
-					const FByteProperty* ByteProp = CastField<FByteProperty>(SlotProp);
-					const bool bEnum = SlotProp->IsA<FEnumProperty>() || (ByteProp && ByteProp->Enum);
 					FString SetError;
-					const bool bWritten = bEnum
-						? MCPJsonProperty::SetJsonOnPropertyWithOwner(SlotProp, SlotValuePtr, MakeShared<FJsonValueString>(PropertyValue), Slot, SetError)
-						: SlotProp->ImportText_Direct(*PropertyValue, SlotValuePtr, Slot, PPF_None) != nullptr;
-					if (bWritten)
+					if (MCPWidgetImportValueText(SlotProp, SlotValuePtr, PropertyValue, Slot, SetError))
 					{
 						bPropertySet = true;
 						PreviousPropertyValue = PreviousText;
@@ -1113,7 +1122,8 @@ namespace
 			void* ValuePtr = FinalProp->ContainerPtrToValuePtr<void>(CurrentContainer);
 			FString PreviousText;
 			FinalProp->ExportText_Direct(PreviousText, ValuePtr, ValuePtr, FoundWidget, PPF_None);
-			if (FinalProp->ImportText_Direct(*PropertyValue, ValuePtr, FoundWidget, PPF_None))
+			FString SetError;
+			if (MCPWidgetImportValueText(FinalProp, ValuePtr, PropertyValue, FoundWidget, SetError))
 			{
 				FoundWidget->PostEditChange();
 				bPropertySet = true;
@@ -1129,8 +1139,8 @@ namespace
 			else
 			{
 				return MCPError(FString::Printf(
-					TEXT("Value '%s' is not valid for property '%s' (type %s). Use UE's text format (e.g. `(X=64,Y=64)` for FVector2D)."),
-					*PropertyValue, *FinalProp->GetName(), *FinalProp->GetCPPType()));
+					TEXT("Value '%s' is not valid for property '%s' (type %s)%s%s. Use UE's text format (e.g. `(X=64,Y=64)` for FVector2D)."),
+					*PropertyValue, *FinalProp->GetName(), *FinalProp->GetCPPType(), SetError.IsEmpty() ? TEXT("") : TEXT(": "), *SetError));
 			}
 		}
 		return nullptr;
