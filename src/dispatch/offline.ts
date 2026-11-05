@@ -147,6 +147,7 @@ export const EDITOR_BOUND_LOCAL_ACTIONS: Record<string, string> = {
   "asset.search": "Wraps the search_assets bridge method, resolving content roots first.",
   "editor.diff_checkpoint_asset": "Exports two versions from the shadow history and calls checkpoint_diff_asset, which loads them in the editor to diff them.",
   "editor.open_checkpoint_diff": "Exports versions from the shadow history and calls checkpoint_open_native_diff, which opens Unreal's diff window.",
+  "blueprint.open_diff_window": "Opens Unreal's diff window through checkpoint_open_native_diff or source_control_diff, both in the editor.",
   "asset.migrate": "Calls the migrate bridge method from a module-level helper, then rescans the destination editor.",
   "asset.lock": "Calls the acquire_lock bridge method. The lock registry lives in the editor.",
   "asset.unlock": "Calls the release_lock bridge method. The lock registry lives in the editor.",
