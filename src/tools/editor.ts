@@ -21,6 +21,7 @@ import { actions as epicActions, schema as epicSchema } from "./epic/editor.gene
 import { specBp, schema as specSchema } from "./specs/editor.generated.js";
 import { batchAction, batchSchema } from "./editor/batch.js";
 import { checkpointActions, checkpointSchema } from "./checkpoints.js";
+import { journalActions, journalSchema } from "./journal.js";
 import { waitForShaderCompileIdle } from "./editor-shader-wait.js";
 import { waitForMeshStudioRender } from "./mesh-studio-wait.js";
 import { captureScreenshotSequence } from "./editor-capture-sequence.js";
@@ -581,6 +582,7 @@ export const editorTool: ToolDef = categoryTool(
     },
     batch: batchAction,
     ...checkpointActions,
+    ...journalActions,
     ...epicActions,
   },
   {
@@ -617,5 +619,6 @@ export const editorTool: ToolDef = categoryTool(
     intervalMs: z.number().nonnegative().optional().describe("capture_screenshot_sequence: milliseconds between scheduled frames (default 500)"),
     className: z.string().optional().describe("invoke_static_function: reflected class declaring a static UFUNCTION - short name or /Script/Module.Class path. find_object: class to search for, including Blueprint generated classes (#802)"),
     ...checkpointSchema,
+    ...journalSchema,
   },
 );

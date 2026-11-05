@@ -75,6 +75,7 @@ A **plugin system** lets npm packages add actions to the existing categories, so
 - **[PIE testing](pie.md)**: recording, replay and test scripts
 - **[Flows](flows.md)**: YAML workflows, custom tasks, hooks, rollback
 - **[Checkpoints](checkpoints.md)**: keep or revert changes per checkpoint
+- **[Mutation journal](journal.md)**: revert a group of calls, or every group after one
 - **[Plugins](plugins.md)**: npm packages that add actions to existing categories
 - **[Configuration](configuration.md)**: MCP client setup, the daemon and settings
 - **[ue-mcp.yml Reference](config-file.md)**: every key in the project config file

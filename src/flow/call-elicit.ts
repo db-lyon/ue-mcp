@@ -9,12 +9,15 @@
  */
 import { AsyncLocalStorage } from "node:async_hooks";
 import type { ElicitFn } from "../core/types.js";
+import type { SessionAccessMode } from "./session-access.js";
 
 export interface CallAsker {
   /** The caller's elicitation gate, if it has one. */
   readonly elicit?: ElicitFn;
   /** The `category.action` the caller asked for, when known. */
   readonly subject?: string;
+  /** The sending session's access mode, read when a guard asks. Absent is read-write. */
+  readonly access?: () => SessionAccessMode;
 }
 
 const store = new AsyncLocalStorage<CallAsker>();

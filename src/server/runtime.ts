@@ -305,6 +305,7 @@ export async function createRuntime(projectArgs: string[]): Promise<Runtime> {
         : dialogGuardFor,
       elicit: () => opts.elicit,
       client: () => undefined,
+      ...(opts.access ? { access: () => opts.access! } : {}),
       ...(opts.loadView ? { loadView: opts.loadView } : {}),
     };
   };
