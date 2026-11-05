@@ -7,6 +7,7 @@
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
 #include "WidgetGuidMap.h"
+#include "WidgetClassDefaults.h"
 #include "HandlerJsonProperty.h"
 #include "HandlerQuery.h"
 #include "WidgetBlueprint.h"
@@ -1673,6 +1674,23 @@ TSharedPtr<FJsonValue> FWidgetHandlers::BuildTree(const TSharedPtr<FJsonObject>&
 			return MCPError(FString::Printf(TEXT("%s: failed to construct %s. Nothing was kept."), *Nodes[i].Path, *Nodes[i].Class->GetName()));
 		}
 	}
+	// Class defaults as they are at placement, less the keys this call sets.
+	MCPWidgetClassDefaults::FSnapshot ClassDefaults;
+	for (int32 i = 0; i < Nodes.Num(); ++i)
+	{
+		TSet<FName> Explicit;
+		if (Nodes[i].Properties.IsValid())
+		{
+			for (const auto& Pair : Nodes[i].Properties->Values)
+			{
+				FString Head = Pair.Key;
+				int32 Dot = INDEX_NONE;
+				if (Head.FindChar(TEXT('.'), Dot)) Head.LeftInline(Dot);
+				Explicit.Add(FName(*Head));
+			}
+		}
+		MCPWidgetClassDefaults::Capture(Built[i], Explicit, ClassDefaults);
+	}
 	RootWidget = Built[RootIndex];
 	if (bBecomesRoot)
 	{
@@ -1718,6 +1736,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::BuildTree(const TSharedPtr<FJsonObject>&
 	{
 		return MCPWidgetGuidMap::BlockedError(AssetPath, GuidSync);
 	}
+	const TArray<TSharedPtr<FJsonValue>> RestoredDefaults = MCPWidgetClassDefaults::Restore(WidgetBP, ClassDefaults);
 	FString SaveError;
 	const bool bSaved = MCPWidgetGuidMap::SaveIfCompiled(WidgetBP, GuidSync, SaveError);
 
@@ -1743,6 +1762,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::BuildTree(const TSharedPtr<FJsonObject>&
 	Result->SetNumberField(TEXT("widgetCount"), Created.Num());
 	Result->SetNumberField(TEXT("propertiesSet"), PropertiesSet);
 	MCPSetWidgetGuidOutcome(Result, GuidSync, AssetPath);
+	MCPWidgetClassDefaults::Report(Result, RestoredDefaults);
 
 	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
 	Payload->SetStringField(TEXT("assetPath"), AssetPath);
