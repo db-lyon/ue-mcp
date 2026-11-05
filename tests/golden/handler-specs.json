@@ -1,5 +1,5 @@
 {
-  "handlerCount": 1227,
+  "handlerCount": 1228,
   "handlers": {
     "add_ability_system_component": {
       "category": "gas",
@@ -27442,6 +27442,12 @@
           "type": "string",
           "required": false,
           "description": "Collision channel to inspect; omitted lists non-Block responses, capped at 32"
+        },
+        {
+          "name": "includeChildActors",
+          "type": "boolean",
+          "required": false,
+          "description": "Match a ChildActorComponent's child actor by the actor filters of the top-level actor that owns it (default false)"
         }
       ]
     },
@@ -34258,6 +34264,35 @@
         }
       ],
       "contractExempt": "Deselects everything before it selects, so the contract's empty lists would clear the editor selection"
+    },
+    "select_component": {
+      "category": "level",
+      "params": [
+        {
+          "name": "actorLabel",
+          "type": "string",
+          "required": false,
+          "description": "Actor editor label; pass actorLabel or actorPath"
+        },
+        {
+          "name": "actorPath",
+          "type": "string",
+          "required": false,
+          "description": "Full actor object path; the unambiguous selector, and it wins over actorLabel"
+        },
+        {
+          "name": "componentName",
+          "type": "string",
+          "required": true,
+          "description": "Component instance name, on the actor or on one of its child actors"
+        },
+        {
+          "name": "addToSelection",
+          "type": "boolean",
+          "required": false,
+          "description": "Keep the current selection and add to it (default false: replace it)"
+        }
+      ]
     },
     "send_ability_input": {
       "category": "gas",

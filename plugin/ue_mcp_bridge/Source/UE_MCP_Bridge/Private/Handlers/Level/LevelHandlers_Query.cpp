@@ -32,6 +32,7 @@
 
 #include "Components/ActorComponent.h"
 #include "Components/BoxComponent.h"
+#include "Components/ChildActorComponent.h"
 #include "Components/DecalComponent.h"
 #include "Components/HierarchicalInstancedStaticMeshComponent.h"
 #include "Components/InstancedStaticMeshComponent.h"
@@ -237,6 +238,7 @@ namespace
 		FString ActorTag;
 		FString FolderPath;
 		FString FolderPathPrefix;
+		bool bIncludeChildActors = false;
 		FString WhereMode;
 		bool bCountOnly = false;
 		FString GroupBy;
@@ -298,6 +300,7 @@ namespace
 		const FString ActorTag = OptionalString(Params, TEXT("actorTag"));
 		const FString FolderPath = OptionalString(Params, TEXT("folderPath"));
 		const FString FolderPathPrefix = OptionalString(Params, TEXT("folderPathPrefix"));
+		const bool bIncludeChildActors = OptionalBool(Params, TEXT("includeChildActors"), false);
 
 		const FString WhereMode = OptionalString(Params, TEXT("whereMode"), TEXT("all")).ToLower();
 		if (WhereMode != TEXT("all") && WhereMode != TEXT("any"))
@@ -469,6 +472,7 @@ namespace
 		OutRequest.ActorTag = ActorTag;
 		OutRequest.FolderPath = FolderPath;
 		OutRequest.FolderPathPrefix = FolderPathPrefix;
+		OutRequest.bIncludeChildActors = bIncludeChildActors;
 		OutRequest.WhereMode = WhereMode;
 		OutRequest.bCountOnly = bCountOnly;
 		OutRequest.GroupBy = GroupBy;
@@ -564,6 +568,21 @@ namespace
 		Row->SetStringField(TEXT("componentName"), ComponentName);
 		Row->SetStringField(TEXT("componentClass"), Component->GetClass()->GetName());
 		if (Request.bIncludeCollision) MCPTrace::EmitCollision(Row, Primitive, Request.CollisionChannel);
+
+		// #1656: a child actor has no label of its own worth filtering on, so
+		// its row names the actor and ChildActorComponent that spawned it.
+		if (Actor->IsChildActor())
+		{
+			if (const UChildActorComponent* ParentComponent = Actor->GetParentComponent())
+			{
+				Row->SetStringField(TEXT("childActorComponent"), ParentComponent->GetName());
+			}
+			if (const AActor* ParentActor = Actor->GetParentActor())
+			{
+				Row->SetStringField(TEXT("parentActorLabel"), ParentActor->GetActorLabel());
+				Row->SetStringField(TEXT("parentActorPath"), ParentActor->GetPathName());
+			}
+		}
 
 		FVector WorldScale = FVector::OneVector;
 		bool bHasTransform = false;
@@ -830,6 +849,9 @@ namespace
 			TickObject->SetBoolField(TEXT("componentCanEverTick"), Component->PrimaryComponentTick.bCanEverTick);
 			TickObject->SetBoolField(TEXT("componentTickEnabled"), Component->PrimaryComponentTick.IsTickFunctionEnabled());
 			TickObject->SetNumberField(TEXT("componentTickInterval"), Component->PrimaryComponentTick.TickInterval);
+			// bIsActive is transient, so no property read reaches it (#1656).
+			TickObject->SetBoolField(TEXT("componentActive"), Component->IsActive());
+			TickObject->SetBoolField(TEXT("autoActivate"), Component->bAutoActivate);
 			TickObject->SetBoolField(TEXT("actorCanEverTick"), Actor->PrimaryActorTick.bCanEverTick);
 			TickObject->SetBoolField(TEXT("actorTickEnabled"), Actor->PrimaryActorTick.IsTickFunctionEnabled());
 			TickObject->SetNumberField(TEXT("actorTickInterval"), Actor->PrimaryActorTick.TickInterval);
@@ -1155,14 +1177,27 @@ namespace
 				continue;
 			}
 
+			// #1656: with includeChildActors, a child actor is selected by the
+			// top-level actor that owns it, since its own label is generated.
+			AActor* SelectorActor = Actor;
+			if (Request.bIncludeChildActors)
+			{
+				while (AActor* ParentActor = SelectorActor->GetParentActor())
+				{
+					SelectorActor = ParentActor;
+				}
+			}
+
 			const FString ActorLabel = Actor->GetActorLabel();
-			if (!ActorLabelPrefix.IsEmpty() && !ActorLabel.StartsWith(ActorLabelPrefix, ESearchCase::CaseSensitive)) continue;
-			if (!ActorLabelContains.IsEmpty() && !ActorLabel.Contains(ActorLabelContains, ESearchCase::IgnoreCase)) continue;
-			if (!ActorTag.IsEmpty() && !Actor->ActorHasTag(FName(*ActorTag))) continue;
+			const FString SelectorLabel = SelectorActor == Actor ? ActorLabel : SelectorActor->GetActorLabel();
+			if (!ActorLabelPrefix.IsEmpty() && !SelectorLabel.StartsWith(ActorLabelPrefix, ESearchCase::CaseSensitive)) continue;
+			if (!ActorLabelContains.IsEmpty() && !SelectorLabel.Contains(ActorLabelContains, ESearchCase::IgnoreCase)) continue;
+			if (!ActorTag.IsEmpty() && !SelectorActor->ActorHasTag(FName(*ActorTag))) continue;
 
 			const FString ActorFolder = MCPActorFolderPath(Actor);
-			if (!FolderPath.IsEmpty() && !ActorFolder.Equals(FolderPath, ESearchCase::IgnoreCase)) continue;
-			if (!FolderPathPrefix.IsEmpty() && !ActorFolder.StartsWith(FolderPathPrefix, ESearchCase::IgnoreCase)) continue;
+			const FString SelectorFolder = SelectorActor == Actor ? ActorFolder : MCPActorFolderPath(SelectorActor);
+			if (!FolderPath.IsEmpty() && !SelectorFolder.Equals(FolderPath, ESearchCase::IgnoreCase)) continue;
+			if (!FolderPathPrefix.IsEmpty() && !SelectorFolder.StartsWith(FolderPathPrefix, ESearchCase::IgnoreCase)) continue;
 
 			const bool bOwnerHidden = Actor->IsHidden();
 			const APawn* OwnerPawn = Cast<APawn>(Actor);
@@ -1409,7 +1444,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::QueryComponents(const TSharedPtr<FJsonObj
 		TEXT("includeCollision"), TEXT("collisionChannel"),
 		TEXT("componentClass"), TEXT("actorClass"), TEXT("matchSubclasses"), TEXT("componentNameContains"),
 		TEXT("actorLabelPrefix"), TEXT("actorLabelContains"), TEXT("actorTag"), TEXT("folderPath"), TEXT("folderPathPrefix"),
-		TEXT("fields"), TEXT("propertyNames"), TEXT("actorPropertyNames"), TEXT("where"), TEXT("whereMode"),
+		TEXT("includeChildActors"), TEXT("fields"), TEXT("propertyNames"), TEXT("actorPropertyNames"), TEXT("where"), TEXT("whereMode"),
 		TEXT("suspectOnly"), TEXT("groupBy"), TEXT("countBy"), TEXT("sampleLimit"), TEXT("countOnly"), TEXT("limit"),
 		TEXT("startIndex"), TEXT("duplicateTransformTolerance"), TEXT("levelPath"), TEXT("world"), TEXT("pieInstance"),
 	});

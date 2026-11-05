@@ -10,6 +10,7 @@
 #include "Editor.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Components/CapsuleComponent.h"
+#include "Components/ChildActorComponent.h"
 #include "NiagaraComponent.h"
 #include "NiagaraSystem.h"
 #include "NavigationSystem.h"
@@ -234,6 +235,14 @@ void FLevelHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		SpecActorLabels, SpecActorPaths,
 	}, MCPSpec::AtLeastOne({ { TEXT("actorLabels") }, { TEXT("actorPaths") } })
 		.ContractExempt(TEXT("Deselects everything before it selects, so the contract's empty lists would clear the editor selection")));
+	// #1656: component selection, including components that live on the child
+	// actor of a ChildActorComponent. The actor and component are resolved
+	// before the selection changes, so the contract's values change nothing.
+	Registry.RegisterHandler(TEXT("select_component"), &SelectComponent, {
+		SpecActorLabel, SpecActorPath,
+		MCPParam::Required(TEXT("componentName"), EType::String, TEXT("Component instance name, on the actor or on one of its child actors")),
+		MCPParam::Optional(TEXT("addToSelection"), EType::Boolean, TEXT("Keep the current selection and add to it (default false: replace it)")),
+	});
 	Registry.RegisterHandler(TEXT("spawn_light"), &SpawnLight, {
 		MCPParam::Required(TEXT("lightType"), EType::String, TEXT("point | spot | directional | rect | sky")),
 		SpecOnConflict, SpecLabel, SpecLocation, SpecRotation, SpecIntensity, SpecColor, SpecMobility,
@@ -738,6 +747,7 @@ void FLevelHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("actorLabelContains"), EType::String, TEXT("Case-insensitive substring over the actor's editor label")),
 		MCPParam::Optional(TEXT("actorTag"), EType::String, TEXT("Actor must carry this tag")),
 		SpecFolderPath, SpecFolderPathPrefix,
+		MCPParam::Optional(TEXT("includeChildActors"), EType::Boolean, TEXT("Match a ChildActorComponent's child actor by the actor filters of the top-level actor that owns it (default false)")),
 		MCPParam::Optional(TEXT("fields"), EType::Array, TEXT("Field groups: transform, bounds, localBounds, shadow, nanite, navigation, tick, materials, mesh, decal, health, physics, attachment, customPrimitiveData")).Items(EType::String),
 		MCPParam::Optional(TEXT("propertyNames"), EType::Array, TEXT("Component UPROPERTY names projected under props.*, at most 32")).Items(EType::String),
 		MCPParam::Optional(TEXT("actorPropertyNames"), EType::Array, TEXT("Owning actor property names or dotted paths, Blueprint variables included, projected under actorProps.*, at most 32")).Items(EType::String),
@@ -2249,6 +2259,29 @@ TSharedPtr<FJsonValue> FLevelHandlers::NavProjectPoint(const TSharedPtr<FJsonObj
 	return MCPResult(Result);
 }
 
+namespace
+{
+	/** Select Actor the way the level editor can. UUnrealEdEngine::SelectActor
+	 *  ignores a child actor (or any selection child); the editor selects its
+	 *  root selection parent instead. Select that root, record the redirect,
+	 *  and return what was actually selected (#1656). */
+	AActor* MCPSelectActorOrRoot(AActor* Actor, TArray<TSharedPtr<FJsonValue>>& OutRedirected)
+	{
+		AActor* Target = Actor;
+		if (AActor* Root = Actor->GetRootSelectionParent())
+		{
+			Target = Root;
+			TSharedPtr<FJsonObject> Entry = MakeShared<FJsonObject>();
+			Entry->SetStringField(TEXT("requestedPath"), Actor->GetPathName());
+			Entry->SetStringField(TEXT("selectedPath"), Root->GetPathName());
+			Entry->SetStringField(TEXT("reason"), TEXT("The level editor selects a child actor through its root selection parent"));
+			OutRedirected.Add(MakeShared<FJsonValueObject>(Entry));
+		}
+		GEditor->SelectActor(Target, true, true, true);
+		return Target;
+	}
+}
+
 TSharedPtr<FJsonValue> FLevelHandlers::SelectActors(const TSharedPtr<FJsonObject>& Params)
 {
 	static const TArray<TSharedPtr<FJsonValue>> EmptySelection;
@@ -2283,6 +2316,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::SelectActors(const TSharedPtr<FJsonObject
 
 	TArray<TSharedPtr<FJsonValue>> SelectedArray;
 	TArray<TSharedPtr<FJsonValue>> NotFoundArray;
+	TArray<TSharedPtr<FJsonValue>> RedirectedArray;
 
 	// #983: selection is the plural case, so a label naming several actors
 	// selects all of them rather than one at random. selectedPaths reports
@@ -2300,8 +2334,8 @@ TSharedPtr<FJsonValue> FLevelHandlers::SelectActors(const TSharedPtr<FJsonObject
 		}
 		for (AActor* Match : Matches)
 		{
-			GEditor->SelectActor(Match, true, true, true);
-			SelectedPathsArray.Add(MakeShared<FJsonValueString>(Match->GetPathName()));
+			AActor* Selected = MCPSelectActorOrRoot(Match, RedirectedArray);
+			SelectedPathsArray.Add(MakeShared<FJsonValueString>(Selected->GetPathName()));
 		}
 		SelectedArray.Add(MakeShared<FJsonValueString>(Label));
 	}
@@ -2316,8 +2350,8 @@ TSharedPtr<FJsonValue> FLevelHandlers::SelectActors(const TSharedPtr<FJsonObject
 			const FString Path = PathValue->AsString();
 			if (AActor* Match = MCPFindActorByPath(World, Path))
 			{
-				GEditor->SelectActor(Match, true, true, true);
-				SelectedPathsArray.Add(MakeShared<FJsonValueString>(Match->GetPathName()));
+				AActor* Selected = MCPSelectActorOrRoot(Match, RedirectedArray);
+				SelectedPathsArray.Add(MakeShared<FJsonValueString>(Selected->GetPathName()));
 				SelectedArray.Add(MakeShared<FJsonValueString>(Match->GetActorLabel()));
 			}
 			else
@@ -2343,6 +2377,10 @@ TSharedPtr<FJsonValue> FLevelHandlers::SelectActors(const TSharedPtr<FJsonObject
 	Result->SetArrayField(TEXT("notFound"), NotFoundArray);
 	Result->SetNumberField(TEXT("selectedCount"), SelectedPathsArray.Num());
 	Result->SetBoolField(TEXT("unchanged"), bUnchanged);
+	if (RedirectedArray.Num() > 0)
+	{
+		Result->SetArrayField(TEXT("redirected"), RedirectedArray);
+	}
 
 	// select_actors replaces the selection wholesale, so replaying it with the
 	// paths that were selected before restores it exactly.
@@ -2352,6 +2390,147 @@ TSharedPtr<FJsonValue> FLevelHandlers::SelectActors(const TSharedPtr<FJsonObject
 
 	return MCPResult(Result);
 }
+// #1656: select one component in the level editor. The editor never selects
+// anything owned by a child actor; it selects the ChildActorComponent that
+// spawned it, so that is what gets selected and the response says so.
+TSharedPtr<FJsonValue> FLevelHandlers::SelectComponent(const TSharedPtr<FJsonObject>& Params)
+{
+	MCPReadParamsAhead(Params, { TEXT("actorLabel"), TEXT("actorPath"), TEXT("componentName"), TEXT("addToSelection") });
+
+	FString ComponentName;
+	if (auto Err = RequireString(Params, TEXT("componentName"), ComponentName)) return Err;
+	const bool bAddToSelection = OptionalBool(Params, TEXT("addToSelection"), false);
+
+	REQUIRE_EDITOR_WORLD(World);
+
+	TSharedPtr<FJsonValue> ActorErr;
+	AActor* Actor = MCPResolveActor(World, Params, ActorErr);
+	if (!Actor) return ActorErr;
+
+	// The actor's own components first, then those of its child actors.
+	TArray<UActorComponent*> WithChildActors;
+	Actor->GetComponents(WithChildActors, /*bIncludeFromChildActors*/ true);
+	UActorComponent* Component = MCPFindComponentByName(Actor, ComponentName);
+	if (!Component)
+	{
+		TArray<UActorComponent*> Matches;
+		for (UActorComponent* Candidate : WithChildActors)
+		{
+			if (Candidate && Candidate->GetOwner() != Actor && Candidate->GetName().Equals(ComponentName, ESearchCase::IgnoreCase))
+			{
+				Matches.Add(Candidate);
+			}
+		}
+		if (Matches.Num() > 1)
+		{
+			TArray<FString> Paths;
+			for (const UActorComponent* Match : Matches) Paths.Add(Match->GetPathName());
+			return MCPError(FString::Printf(
+				TEXT("'%s' names %d components on the child actors of '%s': [%s]. Pass the child actor's path as actorPath to pick one."),
+				*ComponentName, Matches.Num(), *Actor->GetActorLabel(), *FString::Join(Paths, TEXT(", "))));
+		}
+		if (Matches.Num() == 1) Component = Matches[0];
+	}
+	if (!Component)
+	{
+		TArray<FString> Names;
+		for (const UActorComponent* Candidate : WithChildActors)
+		{
+			if (Candidate) Names.Add(FString::Printf(TEXT("%s (%s)"), *Candidate->GetName(), *Candidate->GetClass()->GetName()));
+		}
+		return MCPError(FString::Printf(TEXT("No component named '%s' on '%s' or its child actors. Components: [%s]"),
+			*ComponentName, *Actor->GetActorLabel(), *FString::Join(Names, TEXT(", "))));
+	}
+
+	// Walk out of child actors to the component the level editor can select.
+	UActorComponent* SelectTarget = Component;
+	AActor* SelectOwner = Component->GetOwner();
+	for (int32 Depth = 0; SelectOwner && SelectOwner->GetRootSelectionParent() && Depth < 32; ++Depth)
+	{
+		if (UChildActorComponent* ParentComponent = SelectOwner->GetParentComponent())
+		{
+			SelectTarget = ParentComponent;
+			SelectOwner = ParentComponent->GetOwner();
+		}
+		else
+		{
+			SelectTarget = nullptr;
+			SelectOwner = SelectOwner->GetRootSelectionParent();
+			break;
+		}
+	}
+	if (!SelectOwner)
+	{
+		return MCPError(FString::Printf(TEXT("Component '%s' has no owning actor to select"), *Component->GetPathName()));
+	}
+
+	TArray<TSharedPtr<FJsonValue>> PreviousPaths;
+	if (USelection* PreviousSelection = GEditor->GetSelectedActors())
+	{
+		for (int32 i = 0; i < PreviousSelection->Num(); i++)
+		{
+			if (AActor* Selected = Cast<AActor>(PreviousSelection->GetSelectedObject(i)))
+			{
+				PreviousPaths.Add(MakeShared<FJsonValueString>(Selected->GetPathName()));
+			}
+		}
+	}
+
+	if (!bAddToSelection)
+	{
+		GEditor->SelectNone(false, true, false);
+	}
+	// A component is selected together with its owner, as the editor does.
+	GEditor->SelectActor(SelectOwner, true, true, true);
+	if (SelectTarget)
+	{
+		GEditor->SelectComponent(SelectTarget, true, true, true);
+	}
+	GEditor->NoteSelectionChange();
+
+	const bool bActorSelected = SelectOwner->IsSelected();
+	bool bComponentSelected = false;
+	if (SelectTarget)
+	{
+		if (USelection* SelectedComponents = GEditor->GetSelectedComponents())
+		{
+			bComponentSelected = SelectedComponents->IsSelected(SelectTarget);
+		}
+	}
+	if (!bActorSelected || (SelectTarget && !bComponentSelected))
+	{
+		return MCPError(FString::Printf(
+			TEXT("The editor did not select '%s' (actorSelected=%s, componentSelected=%s). The actor may be locked or selection may be locked."),
+			*(SelectTarget ? SelectTarget->GetPathName() : SelectOwner->GetPathName()),
+			bActorSelected ? TEXT("true") : TEXT("false"), bComponentSelected ? TEXT("true") : TEXT("false")));
+	}
+
+	auto Result = MCPSuccess();
+	Result->SetStringField(TEXT("requestedComponent"), Component->GetPathName());
+	Result->SetStringField(TEXT("requestedComponentClass"), Component->GetClass()->GetName());
+	Result->SetStringField(TEXT("selectedActorPath"), SelectOwner->GetPathName());
+	Result->SetStringField(TEXT("selectedActorLabel"), SelectOwner->GetActorLabel());
+	if (SelectTarget)
+	{
+		Result->SetStringField(TEXT("selectedComponent"), SelectTarget->GetPathName());
+		Result->SetStringField(TEXT("selectedComponentName"), SelectTarget->GetName());
+	}
+	const bool bRedirected = SelectTarget != Component;
+	Result->SetBoolField(TEXT("redirected"), bRedirected);
+	if (bRedirected)
+	{
+		Result->SetStringField(TEXT("note"), TEXT("The level editor does not select a child actor or its components. It selects the ChildActorComponent that spawned it, on the root actor, which is the selection a click in the viewport makes."));
+	}
+
+	// Replaying select_actors with the previous paths restores the actor
+	// selection; it clears the component selection made here.
+	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+	Payload->SetArrayField(TEXT("actorPaths"), PreviousPaths);
+	MCPSetRollback(Result, TEXT("select_actors"), Payload);
+
+	return MCPResult(Result);
+}
+
 TSharedPtr<FJsonValue> FLevelHandlers::AddComponentToActor(const TSharedPtr<FJsonObject>& Params)
 {
 	MCPReadParamsAhead(Params, {
