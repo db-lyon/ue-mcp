@@ -5228,6 +5228,211 @@ export const handlerSpecs: HandlerSpecs = {
       }
     ]
   },
+  "set_physics_asset_body_material": {
+    "category": "animation",
+    "params": [
+      {
+        "name": "assetPath",
+        "type": "string",
+        "required": true,
+        "description": "PhysicsAsset asset path, or a SkeletalMesh whose assigned PhysicsAsset to edit",
+        "aliases": [
+          "path"
+        ]
+      },
+      {
+        "name": "physicalMaterialPath",
+        "type": "string",
+        "required": false,
+        "description": "PhysicalMaterial to assign; an empty string clears the override"
+      },
+      {
+        "name": "boneNames",
+        "type": "array",
+        "required": false,
+        "description": "Bodies physicalMaterialPath applies to, by bone name; omit for every body",
+        "items": "string"
+      },
+      {
+        "name": "bodies",
+        "type": "array",
+        "required": false,
+        "description": "Per-body materials, applied after physicalMaterialPath; this is how the rollback replays",
+        "items": "object",
+        "fields": [
+          {
+            "name": "boneName",
+            "type": "string",
+            "required": true,
+            "description": "Bone whose body to edit"
+          },
+          {
+            "name": "physicalMaterialPath",
+            "type": "string",
+            "required": true,
+            "description": "PhysicalMaterial to assign; an empty string clears the override"
+          }
+        ]
+      },
+      {
+        "name": "save",
+        "type": "boolean",
+        "required": false,
+        "description": "Save the asset after the edit (default true)"
+      }
+    ],
+    "choices": [
+      {
+        "mode": "atLeastOne",
+        "branches": [
+          [
+            "physicalMaterialPath"
+          ],
+          [
+            "bodies"
+          ]
+        ]
+      }
+    ]
+  },
+  "set_physics_asset_constraint_limits": {
+    "category": "animation",
+    "params": [
+      {
+        "name": "assetPath",
+        "type": "string",
+        "required": true,
+        "description": "PhysicsAsset asset path, or a SkeletalMesh whose assigned PhysicsAsset to edit",
+        "aliases": [
+          "path"
+        ]
+      },
+      {
+        "name": "constraintNames",
+        "type": "array",
+        "required": false,
+        "description": "Constraints the shared values apply to, by constraint (joint) name; omit for every constraint",
+        "items": "string"
+      },
+      {
+        "name": "swing1Motion",
+        "type": "string",
+        "required": false,
+        "description": "Free | Limited | Locked"
+      },
+      {
+        "name": "swing2Motion",
+        "type": "string",
+        "required": false,
+        "description": "Free | Limited | Locked"
+      },
+      {
+        "name": "twistMotion",
+        "type": "string",
+        "required": false,
+        "description": "Free | Limited | Locked"
+      },
+      {
+        "name": "swing1LimitDegrees",
+        "type": "number",
+        "required": false,
+        "description": "Swing1 range, 0 to 180; written only where swing1 is Limited"
+      },
+      {
+        "name": "swing2LimitDegrees",
+        "type": "number",
+        "required": false,
+        "description": "Swing2 range, 0 to 180; written only where swing2 is Limited"
+      },
+      {
+        "name": "twistLimitDegrees",
+        "type": "number",
+        "required": false,
+        "description": "Twist range, 0 to 180; written only where twist is Limited"
+      },
+      {
+        "name": "swingSoft",
+        "type": "boolean",
+        "required": false,
+        "description": "Soft (true) or hard (false) cone limit"
+      },
+      {
+        "name": "twistSoft",
+        "type": "boolean",
+        "required": false,
+        "description": "Soft (true) or hard (false) twist limit"
+      },
+      {
+        "name": "constraints",
+        "type": "array",
+        "required": false,
+        "description": "Per-constraint values, applied after the shared ones; this is how the rollback replays",
+        "items": "object",
+        "fields": [
+          {
+            "name": "constraintName",
+            "type": "string",
+            "required": true,
+            "description": "Constraint (joint) name"
+          },
+          {
+            "name": "swing1Motion",
+            "type": "string",
+            "required": false,
+            "description": "Free | Limited | Locked"
+          },
+          {
+            "name": "swing2Motion",
+            "type": "string",
+            "required": false,
+            "description": "Free | Limited | Locked"
+          },
+          {
+            "name": "twistMotion",
+            "type": "string",
+            "required": false,
+            "description": "Free | Limited | Locked"
+          },
+          {
+            "name": "swing1LimitDegrees",
+            "type": "number",
+            "required": false,
+            "description": "Swing1 range, 0 to 180"
+          },
+          {
+            "name": "swing2LimitDegrees",
+            "type": "number",
+            "required": false,
+            "description": "Swing2 range, 0 to 180"
+          },
+          {
+            "name": "twistLimitDegrees",
+            "type": "number",
+            "required": false,
+            "description": "Twist range, 0 to 180"
+          },
+          {
+            "name": "swingSoft",
+            "type": "boolean",
+            "required": false,
+            "description": "Soft or hard cone limit"
+          },
+          {
+            "name": "twistSoft",
+            "type": "boolean",
+            "required": false,
+            "description": "Soft or hard twist limit"
+          }
+        ]
+      },
+      {
+        "name": "save",
+        "type": "boolean",
+        "required": false,
+        "description": "Save the asset after the edit (default true)"
+      }
+    ]
+  },
   "set_pose_search_clips": {
     "category": "animation",
     "params": [
@@ -5832,6 +6037,8 @@ export const paramsClauses: Readonly<Record<string, string>> = {
   set_montage_sequence: "Params: assetPath (or path), animSequencePath, slotIndex?, segmentIndex?",
   set_montage_slot: "Params: assetPath (or path), slotName, trackIndex?",
   set_motion_matching_chooser: "Params: assetPath (or path), chooserPath (or table), graphName?, contextSource?",
+  set_physics_asset_body_material: "Params: assetPath (or path), at least one of physicalMaterialPath/bodies, boneNames?, save?",
+  set_physics_asset_constraint_limits: "Params: assetPath (or path), constraintNames?, swing1Motion?, swing2Motion?, twistMotion?, swing1LimitDegrees?, swing2LimitDegrees?, twistLimitDegrees?, swingSoft?, twistSoft?, constraints?, save?",
   set_pose_search_clips: "Params: assetPath (or path), clips, clearExisting?",
   set_pose_search_database_settings: "Params: assetPath (or path), continuingPoseCostBias?, baseCostBias?, loopingCostBias?, kdTreeQueryNumNeighbors?, numberOfPrincipalComponents?, poseSearchMode?, normalizationSetPath?",
   set_pose_search_schema: "Params: assetPath (or path), schemaPath",
@@ -5857,7 +6064,7 @@ export const schema: Record<string, z.ZodType> = {
   animPath: z.string().optional().describe("AnimSequence or PoseAsset whose curve names to compare"),
   animPaths: z.array(z.string()).optional().describe("AnimSequences to bake, without duplicates"),
   animSequencePath: z.string().optional().describe("AnimSequence or AnimComposite to append as a segment (add_montage_segment). AnimSequence the montage plays (create_anim_montage). AnimSequence to put in the slot (set_montage_sequence)"),
-  assetPath: z.string().optional().describe("AnimSequence or AnimMontage asset path (add_anim_notify, add_anim_notify_state, remove_anim_notify, remove_anim_notify_state). BlendSpace or BlendSpace1D asset path (add_blend_sample, populate_blendspace, read_blendspace, set_blend_sample). AnimSequence asset path (add_curve, analyze_animation, apply_animation_modifier, bake_keyframes_batch, bake_root_motion_from_bone, list_anim_modifiers, read_anim_curve_keys, read_bone_track, remove_anim_curve, set_anim_curve_keys, set_bone_keyframes, set_root_motion_settings, set_sync_markers). AnimMontage asset path (add_montage_section, add_montage_segment, list_montage_segments, read_anim_montage, remove_montage_section, remove_montage_segment, set_montage_properties, set_montage_sequence, set_montage_slot). AnimBlueprint asset path (add_motion_matching_node, add_pose_history_node, add_sequence_evaluator, add_state, add_transition, bind_anim_node_function, create_state_machine, inspect_anim_nodes, read_anim_blueprint, read_anim_graph, read_state_machine, remove_state, remove_state_machine, remove_transition, set_anim_blueprint_skeleton, set_motion_matching_chooser, set_state_animation, set_state_machine_entry, set_transition_blend, set_transition_condition). Alias for schemaPath (add_pose_search_schema_pose_channel, add_pose_search_schema_trajectory_channel, read_pose_search_schema). PoseSearchDatabase asset path (add_pose_search_sequence, build_pose_search_index, read_pose_search_database, set_pose_search_clips, set_pose_search_database_settings, set_pose_search_schema). Alias for retargeterPath (auto_align_retarget_pose, batch_retarget_animations, remove_retarget_pose, rename_retarget_pose, reset_retarget_pose, set_ik_retargeter_rig). Alias for animPath (compare_curves_to_morph_targets). Alias for skeletonPath (get_bone_transforms). PhysicsAsset asset path, or a SkeletalMesh whose assigned PhysicsAsset to read (get_physics_asset_constraints). SkeletalMesh asset path (get_physics_asset_info, list_animation_sockets). SkeletalMesh, or a Skeleton, asset path (get_skeleton_info). Control Rig Blueprint asset path (list_control_rig_variables, read_control_rig_graph, read_control_rig_hierarchy, set_control_rig_preview_mesh). AnimSequence or BlendSpace asset path (measure_natural_speed). AnimSequence to read; omit when reading a batch (read_anim_sequence). IKRetargeter asset path (read_ik_retargeter). IKRigDefinition asset path (read_ik_rig). MirrorDataTable asset path (read_mirror_data_table). AnimSequence or BlendSpace asset path; a montage is refused (sample_pose). Alias for rigPath (set_ik_rig_mesh)"),
+  assetPath: z.string().optional().describe("AnimSequence or AnimMontage asset path (add_anim_notify, add_anim_notify_state, remove_anim_notify, remove_anim_notify_state). BlendSpace or BlendSpace1D asset path (add_blend_sample, populate_blendspace, read_blendspace, set_blend_sample). AnimSequence asset path (add_curve, analyze_animation, apply_animation_modifier, bake_keyframes_batch, bake_root_motion_from_bone, list_anim_modifiers, read_anim_curve_keys, read_bone_track, remove_anim_curve, set_anim_curve_keys, set_bone_keyframes, set_root_motion_settings, set_sync_markers). AnimMontage asset path (add_montage_section, add_montage_segment, list_montage_segments, read_anim_montage, remove_montage_section, remove_montage_segment, set_montage_properties, set_montage_sequence, set_montage_slot). AnimBlueprint asset path (add_motion_matching_node, add_pose_history_node, add_sequence_evaluator, add_state, add_transition, bind_anim_node_function, create_state_machine, inspect_anim_nodes, read_anim_blueprint, read_anim_graph, read_state_machine, remove_state, remove_state_machine, remove_transition, set_anim_blueprint_skeleton, set_motion_matching_chooser, set_state_animation, set_state_machine_entry, set_transition_blend, set_transition_condition). Alias for schemaPath (add_pose_search_schema_pose_channel, add_pose_search_schema_trajectory_channel, read_pose_search_schema). PoseSearchDatabase asset path (add_pose_search_sequence, build_pose_search_index, read_pose_search_database, set_pose_search_clips, set_pose_search_database_settings, set_pose_search_schema). Alias for retargeterPath (auto_align_retarget_pose, batch_retarget_animations, remove_retarget_pose, rename_retarget_pose, reset_retarget_pose, set_ik_retargeter_rig). Alias for animPath (compare_curves_to_morph_targets). Alias for skeletonPath (get_bone_transforms). PhysicsAsset asset path, or a SkeletalMesh whose assigned PhysicsAsset to read (get_physics_asset_constraints). SkeletalMesh asset path (get_physics_asset_info, list_animation_sockets). SkeletalMesh, or a Skeleton, asset path (get_skeleton_info). Control Rig Blueprint asset path (list_control_rig_variables, read_control_rig_graph, read_control_rig_hierarchy, set_control_rig_preview_mesh). AnimSequence or BlendSpace asset path (measure_natural_speed). AnimSequence to read; omit when reading a batch (read_anim_sequence). IKRetargeter asset path (read_ik_retargeter). IKRigDefinition asset path (read_ik_rig). MirrorDataTable asset path (read_mirror_data_table). AnimSequence or BlendSpace asset path; a montage is refused (sample_pose). Alias for rigPath (set_ik_rig_mesh). PhysicsAsset asset path, or a SkeletalMesh whose assigned PhysicsAsset to edit (set_physics_asset_body_material, set_physics_asset_constraint_limits)"),
   assetPaths: z.array(z.string()).optional().describe("Batch: up to 1000 AnimSequence paths, one row each (read_anim_sequence). Scan exactly these AnimSequences instead of a directory (scan_animation_tracks). AnimSequences to write, or montages when resolveFromMontages is on (set_sequence_properties). AnimSequences to rewrite, at most 500 (transform_bone_tracks)"),
   autoMapChains: z.boolean().optional().describe("Assign the rigs to every op and auto-map chains (default true)"),
   autoMapMode: z.string().optional().describe("Native chain auto-map: exact | fuzzy | clear"),
@@ -5883,10 +6090,11 @@ export const schema: Record<string, z.ZodType> = {
   blendPosition: z.object({ x: z.number().optional().describe("First axis value (default 0)"), y: z.number().optional().describe("Second axis value (default 0)"), z: z.number().optional().describe("Third axis value (default 0)") }).optional().describe("BlendSpace blend input, in the blendspace's own axis units (BlendSpace only)"),
   blendspaceAxes: z.array(z.object({ name: z.string().optional().describe("Axis display name"), min: z.number().optional().describe("Axis minimum"), max: z.number().optional().describe("Axis maximum"), gridNum: z.number().int().optional().describe("Grid divisions") })).optional().describe("Per-axis params, in axis order"),
   blendTime: z.number().optional().describe("Inertial blend time"),
+  bodies: z.array(z.object({ boneName: z.string().describe("Bone whose body to edit"), physicalMaterialPath: z.string().describe("PhysicalMaterial to assign; an empty string clears the override") })).optional().describe("Per-body materials, applied after physicalMaterialPath; this is how the rollback replays"),
   bodyComponent: z.string().optional().describe("Body component every other one follows (default CharacterMesh0, then Mesh)"),
   bone: z.string().optional().describe("A single bone, when bones is omitted"),
   boneName: z.string().optional().describe("Bone or socket to read (get_bone_transform). Only constraints that touch this bone, as child (bone1) or parent (bone2) (get_physics_asset_constraints). Bone whose track to sample (read_bone_track). Bone whose track to replace; a missing track is created (set_bone_keyframes)"),
-  boneNames: z.array(z.string()).optional().describe("Bones to sample (default root, pelvis, head, hands and feet when present) (analyze_animation). Bones to return (default every bone) (get_bone_transforms, sample_pose). Bones to read (default every bone, max 1000) (get_live_bone_transforms)"),
+  boneNames: z.array(z.string()).optional().describe("Bones to sample (default root, pelvis, head, hands and feet when present) (analyze_animation). Bones to return (default every bone) (get_bone_transforms, sample_pose). Bones to read (default every bone, max 1000) (get_live_bone_transforms). Bodies physicalMaterialPath applies to, by bone name; omit for every body (set_physics_asset_body_material)"),
   bones: z.array(z.unknown()).optional().describe("Sampled bones, each a bone name (position only) or {bone, flags?: velocity | position | rotation | phase, weight?} (add_pose_search_schema_pose_channel). Bone names to set (default every bone) (set_bone_retargeting)"),
   branchingPoint: z.boolean().optional().describe("Force the montage notify's tick type. The PlayMontageNotify classes default to true on a montage, everything else to the engine's queued tick (#880) (add_anim_notify). On a montage, tick the window as a branching point (add_anim_notify_state)"),
   chainMappings: z.array(z.object({ targetChain: z.string().describe("Target chain to map"), sourceChain: z.unknown().optional().describe("Source chain name; null or omitted clears the mapping") })).optional().describe("Explicit target-to-source chain overrides, at most 10000"),
@@ -5899,6 +6107,8 @@ export const schema: Record<string, z.ZodType> = {
   compatibleSkeletonPaths: z.array(z.string()).optional().describe("Several skeletons at once; wins over compatibleSkeletonPath"),
   componentName: z.string().optional().describe("SkeletalMeshComponent to read (default CharacterMesh0, then Mesh, then the first one)"),
   connectToOutput: z.boolean().optional().describe("Wire the node to the Output Pose (default true) (add_motion_matching_node). Wire the node to the graph's result pose (default true) (add_sequence_evaluator)"),
+  constraintNames: z.array(z.string()).optional().describe("Constraints the shared values apply to, by constraint (joint) name; omit for every constraint"),
+  constraints: z.array(z.object({ constraintName: z.string().describe("Constraint (joint) name"), swing1Motion: z.string().optional().describe("Free | Limited | Locked"), swing2Motion: z.string().optional().describe("Free | Limited | Locked"), twistMotion: z.string().optional().describe("Free | Limited | Locked"), swing1LimitDegrees: z.number().optional().describe("Swing1 range, 0 to 180"), swing2LimitDegrees: z.number().optional().describe("Swing2 range, 0 to 180"), twistLimitDegrees: z.number().optional().describe("Twist range, 0 to 180"), swingSoft: z.boolean().optional().describe("Soft or hard cone limit"), twistSoft: z.boolean().optional().describe("Soft or hard twist limit") })).optional().describe("Per-constraint values, applied after the shared ones; this is how the rollback replays"),
   contactThreshold: z.number().optional().describe("Height in cm below which a foot counts as planted (default derived from the clip's lowest foot height)"),
   contextSource: z.string().optional().describe("What the chooser reads its columns from: self (default, the anim instance) | pawn (the owning pawn)"),
   continuingPoseCostBias: z.number().optional().describe("Bias to keep playing the current clip"),
@@ -6015,7 +6225,8 @@ export const schema: Record<string, z.ZodType> = {
   overwrite: z.literal(false).optional().describe("Overwriting is not supported; omit or pass false"),
   packagePath: z.string().optional().describe("Destination folder (default the first source's folder) (compose_pose_sequence). Destination folder (default /Game/Animations) (create_anim_blueprint, create_anim_composite, create_anim_montage, create_blendspace, create_blendspace_1d, create_sequence). Destination folder (default the source's folder) (create_control_rig). Destination folder (default /Game) (create_ik_retargeter, create_ik_rig, create_skeleton). Destination folder (default /Game/MotionMatching) (create_mirror_data_table, create_pose_search_database, create_pose_search_normalization_set, create_pose_search_schema). Folder of the reversed copy (default the source's folder) (reverse_sequence)"),
   parentClass: z.string().optional().describe("Parent AnimInstance class name"),
-  path: z.string().optional().describe("Alias for assetPath (add_anim_notify, add_anim_notify_state, add_blend_sample, add_curve, add_montage_section, add_montage_segment, add_motion_matching_node, add_pose_history_node, add_pose_search_sequence, add_sequence_evaluator, add_state, add_transition, analyze_animation, apply_animation_modifier, bake_keyframes_batch, bake_root_motion_from_bone, bind_anim_node_function, build_pose_search_index, create_state_machine, get_physics_asset_constraints, get_physics_asset_info, get_skeleton_info, inspect_anim_nodes, list_anim_modifiers, list_animation_sockets, list_control_rig_variables, list_montage_segments, measure_natural_speed, populate_blendspace, read_anim_blueprint, read_anim_curve_keys, read_anim_graph, read_anim_montage, read_anim_sequence, read_blendspace, read_control_rig_graph, read_control_rig_hierarchy, read_ik_retargeter, read_ik_rig, read_mirror_data_table, read_pose_search_database, read_state_machine, remove_anim_curve, remove_anim_notify, remove_anim_notify_state, remove_montage_section, remove_montage_segment, remove_state, remove_state_machine, remove_transition, sample_pose, set_anim_curve_keys, set_blend_sample, set_bone_keyframes, set_control_rig_preview_mesh, set_montage_properties, set_montage_sequence, set_montage_slot, set_motion_matching_chooser, set_pose_search_clips, set_pose_search_database_settings, set_pose_search_schema, set_root_motion_settings, set_state_animation, set_state_machine_entry, set_sync_markers, set_transition_blend, set_transition_condition). Alias for skeletonPath (get_bone_transforms)"),
+  path: z.string().optional().describe("Alias for assetPath (add_anim_notify, add_anim_notify_state, add_blend_sample, add_curve, add_montage_section, add_montage_segment, add_motion_matching_node, add_pose_history_node, add_pose_search_sequence, add_sequence_evaluator, add_state, add_transition, analyze_animation, apply_animation_modifier, bake_keyframes_batch, bake_root_motion_from_bone, bind_anim_node_function, build_pose_search_index, create_state_machine, get_physics_asset_constraints, get_physics_asset_info, get_skeleton_info, inspect_anim_nodes, list_anim_modifiers, list_animation_sockets, list_control_rig_variables, list_montage_segments, measure_natural_speed, populate_blendspace, read_anim_blueprint, read_anim_curve_keys, read_anim_graph, read_anim_montage, read_anim_sequence, read_blendspace, read_control_rig_graph, read_control_rig_hierarchy, read_ik_retargeter, read_ik_rig, read_mirror_data_table, read_pose_search_database, read_state_machine, remove_anim_curve, remove_anim_notify, remove_anim_notify_state, remove_montage_section, remove_montage_segment, remove_state, remove_state_machine, remove_transition, sample_pose, set_anim_curve_keys, set_blend_sample, set_bone_keyframes, set_control_rig_preview_mesh, set_montage_properties, set_montage_sequence, set_montage_slot, set_motion_matching_chooser, set_physics_asset_body_material, set_physics_asset_constraint_limits, set_pose_search_clips, set_pose_search_database_settings, set_pose_search_schema, set_root_motion_settings, set_state_animation, set_state_machine_entry, set_sync_markers, set_transition_blend, set_transition_condition). Alias for skeletonPath (get_bone_transforms)"),
+  physicalMaterialPath: z.string().optional().describe("PhysicalMaterial to assign; an empty string clears the override"),
   playRate: z.number().optional().describe("Segment play rate; negative plays in reverse (default 1)"),
   pose: z.object({ side: z.string().describe("source | target"), name: z.string().describe("Retarget pose name"), create: z.boolean().optional().describe("Create the pose (default false)"), reset: z.boolean().optional().describe("Reset the pose first, which whole-pose auto-align requires on an existing pose"), autoAlign: z.string().optional().describe("chain_to_chain | mesh_to_mesh | local_axes | global_axes; needs both preview meshes"), bones: z.array(z.string()).optional().describe("Bones to auto-align; omitted aligns every bone, which replaces the pose"), rotationOffsets: z.array(z.record(z.string(), z.unknown())).optional().describe("Offsets as [{bone, rotationQuaternion {x, y, z, w}}], normalized"), rootOffsetZ: z.number().optional().describe("Root height offset; exclusive with snapBoneToGround"), snapBoneToGround: z.string().optional().describe("Bone to snap to the ground; exclusive with rootOffsetZ") }).optional().describe("Named source or target retarget pose to author"),
   poseCount: z.number().optional().describe("History poses to retain"),
@@ -6052,7 +6263,7 @@ export const schema: Record<string, z.ZodType> = {
   samples: z.array(z.record(z.string(), z.unknown())).optional().describe("[{offset, flags?, weight?}]: offset in seconds, negative for history and positive for prediction; flags from position, velocity, facingDirection, velocityDirection and their XY variants (add_pose_search_schema_trajectory_channel). Samples to add as [{animationPath, x, y?}]; an unloadable animation is reported under failed (populate_blendspace)"),
   sampleStart: z.number().optional().describe("Sampling range start in seconds"),
   samplingInterval: z.number().optional().describe("Seconds between history samples"),
-  save: z.boolean().optional().describe("Save the asset after baking (default true) (bake_keyframes_batch). Save each sequence (default true) (transform_bone_tracks)"),
+  save: z.boolean().optional().describe("Save the asset after baking (default true) (bake_keyframes_batch). Save the asset after the edit (default true) (set_physics_asset_body_material, set_physics_asset_constraint_limits). Save each sequence (default true) (transform_bone_tracks)"),
   schemaPath: z.string().optional().describe("PoseSearchSchema to add the channel to (add_pose_search_schema_pose_channel, add_pose_search_schema_trajectory_channel). Existing PoseSearchSchema to use; a schema that cannot index is refused (create_pose_search_database). PoseSearchSchema to read (read_pose_search_schema). PoseSearchSchema to assign; a schema that cannot index is refused (set_pose_search_schema)"),
   sectionName: z.string().optional().describe("Composite section to add (add_montage_section). Composite section to remove (remove_montage_section)"),
   segmentIndex: z.number().optional().describe("Segment to anchor the section to, so it moves with that segment (#826) (add_montage_section). Segment to remove (remove_montage_segment). Replace only this segment; without it every segment in the slot is replaced (#626) (set_montage_sequence)"),
@@ -6082,6 +6293,11 @@ export const schema: Record<string, z.ZodType> = {
   stateMachineName: z.string().optional().describe("State machine to edit (add_state, add_transition, remove_state, remove_state_machine, remove_transition, set_state_animation, set_state_machine_entry, set_transition_blend, set_transition_condition). State machine to read (read_state_machine)"),
   stateName: z.string().optional().describe("State to add (add_state). State to remove, with every transition that touches it (remove_state). State whose animation to set (set_state_animation). State the entry points at; omitted or empty clears the link (set_state_machine_entry)"),
   suffix: z.string().optional().describe("Output name suffix (default _Retargeted)"),
+  swing1LimitDegrees: z.number().optional().describe("Swing1 range, 0 to 180; written only where swing1 is Limited"),
+  swing1Motion: z.string().optional().describe("Free | Limited | Locked"),
+  swing2LimitDegrees: z.number().optional().describe("Swing2 range, 0 to 180; written only where swing2 is Limited"),
+  swing2Motion: z.string().optional().describe("Free | Limited | Locked"),
+  swingSoft: z.boolean().optional().describe("Soft (true) or hard (false) cone limit"),
   table: z.string().optional().describe("Alias for chooserPath"),
   targetBone: z.string().optional().describe("Bone the virtual bone points at"),
   targetMesh: z.string().optional().describe("SkeletalMesh to retarget onto"),
@@ -6100,6 +6316,9 @@ export const schema: Record<string, z.ZodType> = {
   trajectoryPredictionCount: z.number().optional().describe("Generated trajectory prediction samples"),
   transitionGuid: z.string().optional().describe("Transition to remove, from add_transition or read_state_machine (remove_transition). Transition to condition, from add_transition or read_state_machine; wins over fromState and toState (set_transition_condition)"),
   triggerTime: z.number().optional().describe("Trigger time in seconds, clamped to the asset length (add_anim_notify). Window start in seconds (add_anim_notify_state)"),
+  twistLimitDegrees: z.number().optional().describe("Twist range, 0 to 180; written only where twist is Limited"),
+  twistMotion: z.string().optional().describe("Free | Limited | Locked"),
+  twistSoft: z.boolean().optional().describe("Soft (true) or hard (false) twist limit"),
   useNormalizedRootMotionScale: z.boolean().optional().describe("Normalize root motion scale"),
   variableName: z.string().optional().describe("Existing bool variable the condition reads"),
   verticalMax: z.number().optional().describe("Vertical axis maximum (default 180) (create_blendspace). Vertical axis maximum; ignored on a BlendSpace1D (populate_blendspace)"),
