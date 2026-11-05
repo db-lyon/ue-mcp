@@ -171,7 +171,8 @@ namespace MCPPIE
 						TSharedPtr<FJsonObject> P = MakeShared<FJsonObject>();
 						P->SetNumberField(TEXT("local_player"), Index);
 						const APlayerController* PC = LocalPlayer->PlayerController;
-						const APawn* Pawn = PC ? PC->GetPawn() : nullptr;
+						const APawn* Pawn = nullptr;
+						if (PC) Pawn = PC->GetPawn();
 						if (PC) P->SetStringField(TEXT("controller"), PC->GetName());
 						if (Pawn) P->SetStringField(TEXT("pawn"), Pawn->GetName());
 						else P->SetField(TEXT("pawn"), MakeShared<FJsonValueNull>());
