@@ -177,6 +177,39 @@ export const handlerSpecs: HandlerSpecs = {
       }
     ],
     "contractExempt": "writes an INI file under the project's Config folder"
+  },
+  "set_developer_setting": {
+    "category": "project",
+    "params": [
+      {
+        "name": "settingsClass",
+        "type": "string",
+        "required": true,
+        "description": "Config class as a short name (GameMapsSettings) or /Script/<Module>.<Class> path"
+      },
+      {
+        "name": "propertyName",
+        "type": "string",
+        "required": true,
+        "description": "Config property; a dotted or indexed path reaches inside a struct or array"
+      },
+      {
+        "name": "settingValue",
+        "type": "any",
+        "required": true,
+        "description": "New value as structured JSON, the form editor(get_property) returns under value"
+      },
+      {
+        "name": "persist",
+        "type": "string",
+        "required": false,
+        "description": "default writes Default<Config>.ini; user writes the per-user config. Omitted follows the Project Settings dialog: default for a defaultconfig class, user otherwise",
+        "enum": [
+          "default",
+          "user"
+        ]
+      }
+    ]
   }
 };
 
@@ -191,6 +224,7 @@ export const paramsClauses: Readonly<Record<string, string>> = {
   live_coding_compile: "Params: wait?",
   live_coding_status: "Params: none",
   set_config: "Params: configName? (or configFile), section, key, value",
+  set_developer_setting: "Params: settingsClass, propertyName, settingValue, persist?",
 };
 
 /** Every key the spec'd project handlers declare, aliases included. */
@@ -206,10 +240,14 @@ export const schema: Record<string, z.ZodType> = {
   limit: z.number().optional().describe("Rows per page, a whole number (default 200, max 2000)"),
   moduleName: z.string().optional().describe("Project module to add it to (default the first; list_project_modules names them)"),
   parentClass: z.string().optional().describe("Parent class as a short name (Actor) or /Script/<Module>.<Class> path (default UObject)"),
+  persist: z.enum(["default","user"]).optional().describe("default writes Default<Config>.ini; user writes the per-user config. Omitted follows the Project Settings dialog: default for a defaultconfig class, user otherwise"),
   pluginCategory: z.string().optional().describe("Case-insensitive substring of the plugin category"),
   pluginName: z.string().optional().describe("Plugin name as its .uplugin spells it, any case"),
+  propertyName: z.string().optional().describe("Config property; a dotted or indexed path reaches inside a struct or array"),
   removeReference: z.boolean().optional().describe("Delete the .uproject entry instead of writing an explicit disable (default false)"),
   section: z.string().optional().describe("INI section"),
+  settingsClass: z.string().optional().describe("Config class as a short name (GameMapsSettings) or /Script/<Module>.<Class> path"),
+  settingValue: z.unknown().optional().describe("New value as structured JSON, the form editor(get_property) returns under value"),
   subPath: z.string().optional().describe("Folder under the domain folder, e.g. Gameplay/Abilities (default its root)"),
   value: z.string().optional().describe("INI value"),
   wait: z.boolean().optional().describe("Block until the compile finishes (default false returns in_progress)"),
