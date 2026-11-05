@@ -31,7 +31,7 @@ While off, no shadow repository is created and the bridge does not intercept sav
 Recording is lazy. Nothing is copied for paths the agent never touches, so the first checkpoint on a large project costs the same as any other.
 
 - **Package saves.** The bridge binds `UPackage::PreSavePackageWithContextEvent`. Before the first save of a package after a checkpoint, it copies the package's current bytes into a pending folder (`Saved/UE_MCP_Bridge/shadow-pending/`), or records that it did not exist. A handler that saves with a direct `UPackage::SavePackage`, which raises no such event, records the package's file itself before writing. Deletes are recorded from `FEditorDelegates::OnPackageDeleted`, and bridge renames record their source packages first.
-- **Server writes.** `project(write_cpp_file)`, `write_source_file`, `add_module_dependency` and `add_cpp_member` record the file before writing it. `project(set_config)` and `project(set_developer_setting)` record the ini file in the editor before writing it.
+- **Server writes.** `project(write_cpp_file)`, `write_source_file`, `add_module_dependency` and `add_cpp_member` record the file before writing it. `project(set_config)`, `project(set_developer_setting)`, `project(set_maps_settings)` and an `editor(set_property)` write to a settings class record the ini file in the editor before writing it.
 - **A checkpoint** folds the pending copies into the history and commits the current bytes of every path recorded so far. Git stores each version of a file once.
 
 A write outside the bridge and outside package saves (an external editor, a build) is not recorded until the next checkpoint. `list_changes` marks such a path `untracked`, and `restore` refuses it unless the client passes `force`.

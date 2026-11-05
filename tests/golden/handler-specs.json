@@ -1,5 +1,5 @@
 {
-  "handlerCount": 1241,
+  "handlerCount": 1243,
   "handlers": {
     "add_ability_system_component": {
       "category": "gas",
@@ -17634,6 +17634,10 @@
           "description": "auto (default, prefers PIE) | pie | game | editor"
         }
       ]
+    },
+    "get_maps_settings": {
+      "category": "project",
+      "params": []
     },
     "get_material_shader_stats": {
       "category": "material",
@@ -38509,6 +38513,82 @@
           "description": "Persist the asset (default true); false defers the write"
         }
       ]
+    },
+    "set_maps_settings": {
+      "category": "project",
+      "params": [
+        {
+          "name": "globalDefaultGameMode",
+          "type": "string",
+          "required": false,
+          "description": "Default GameMode: a GameModeBase class as a /Script path, short name or Blueprint asset path; empty clears"
+        },
+        {
+          "name": "globalDefaultServerGameMode",
+          "type": "string",
+          "required": false,
+          "description": "Dedicated server GameMode, same forms; empty clears"
+        },
+        {
+          "name": "gameInstanceClass",
+          "type": "string",
+          "required": false,
+          "description": "GameInstance class, same forms; empty clears"
+        },
+        {
+          "name": "gameDefaultMap",
+          "type": "string",
+          "required": false,
+          "description": "Game default map as a world asset path, /Game/Maps/MyMap; empty clears"
+        },
+        {
+          "name": "serverDefaultMap",
+          "type": "string",
+          "required": false,
+          "description": "Dedicated server default map, same form; empty clears"
+        },
+        {
+          "name": "editorStartupMap",
+          "type": "string",
+          "required": false,
+          "description": "Map the editor opens at startup, same form; empty clears"
+        },
+        {
+          "name": "transitionMap",
+          "type": "string",
+          "required": false,
+          "description": "Seamless travel transition map, same form; empty clears"
+        }
+      ],
+      "choices": [
+        {
+          "mode": "atLeastOne",
+          "branches": [
+            [
+              "globalDefaultGameMode"
+            ],
+            [
+              "globalDefaultServerGameMode"
+            ],
+            [
+              "gameInstanceClass"
+            ],
+            [
+              "gameDefaultMap"
+            ],
+            [
+              "serverDefaultMap"
+            ],
+            [
+              "editorStartupMap"
+            ],
+            [
+              "transitionMap"
+            ]
+          ]
+        }
+      ],
+      "contractExempt": "writes DefaultEngine.ini under the project's Config folder"
     },
     "set_material_base_color": {
       "category": "material",

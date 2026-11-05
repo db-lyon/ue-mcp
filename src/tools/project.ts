@@ -46,6 +46,8 @@ const ACTION_ORDER = [
   "list_files",
   "set_config",
   "set_developer_setting",
+  "get_maps_settings",
+  "set_maps_settings",
   "build",
   "generate_project_files",
   "create_cpp_class",
