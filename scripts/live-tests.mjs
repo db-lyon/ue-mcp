@@ -114,6 +114,10 @@ if (!ATTACH) {
   }
 }
 
+// The attached editor shares the developer's per-user layout; close what the run opens in it.
+const { guardUserLayoutsUntilExit } = await import("./user-layout-guard.mjs");
+guardUserLayoutsUntilExit((msg) => console.error(`[live] ${msg}`));
+
 const HOST = process.env.UE_MCP_LIVE_HOST ?? process.env.UE_MCP_TEST_HOST ?? "127.0.0.1";
 const CONNECT_TIMEOUT_MS = 5000;
 const CALL_TIMEOUT_MS = 60_000;
