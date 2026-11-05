@@ -115,6 +115,7 @@ export const REGISTERED_HANDLER_TIMEOUT_SECONDS: Readonly<Record<string, number>
   render_sequence_frames: 600,
   rerun_construction_scripts: 300,
   run_automation_tests: 300,
+  scale_mesh_geometry: 300,
   sculpt_landscape: 120,
   sculpt_landscape_region: 300,
   search_blueprint_call_sites: 600,
