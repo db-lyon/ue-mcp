@@ -1,5 +1,6 @@
 #include "BridgeServer.h"
 #include "BridgeParamEcho.h"
+#include "BridgeSessionToken.h"
 #include "BridgeStateFiles.h"
 #include "UE_MCP_BridgeModule.h"
 #include "MCPEngineStatus.h"
@@ -233,9 +234,10 @@ uint32 FMCPBridgeServer::Run()
 	int32 NoDelay = 1;
 	setsockopt(ServerSocketFD, IPPROTO_TCP, TCP_NODELAY, (char*)&NoDelay, sizeof(NoDelay));
 
-	// Bind socket to loopback only. The bridge has no authentication on the
-	// WebSocket upgrade, so binding to 0.0.0.0 (INADDR_ANY) would expose every
-	// editor-side handler (including execute_python) to any client on the LAN.
+	// Bind socket to loopback only. The session token is a per-user file on
+	// this machine, so a client on another machine has no way to present it,
+	// and binding to 0.0.0.0 (INADDR_ANY) would offer every editor-side handler
+	// (including execute_python) to the LAN for nothing.
 	//
 	// #492: when more than one editor is open locally, the default port is
 	// already taken. Walk up to ServerPort+kMaxPortProbe so a second editor
@@ -315,6 +317,11 @@ uint32 FMCPBridgeServer::Run()
 
 	UE_LOG(LogMCPBridge, Log, TEXT("[UE-MCP] Bridge listening on ws://127.0.0.1:%d (loopback only)"), ServerPort);
 	bIsRunning = true;
+
+	// The token goes out before any record names this port, so a client that
+	// finds the port can also find the token, and before the first accept, so
+	// no connection thread ever reads it half-written.
+	PublishSessionToken();
 
 	// #817: this instance's own record first. It is written before port.json
 	// because port.json may legitimately decline to name this bridge (another
@@ -398,6 +405,47 @@ void FMCPBridgeServer::Exit()
 	// the only thing that will still be on disk to explain why an editor that
 	// is plainly running has no bridge. DeleteOwnInstanceRecord knows that.
 	DeleteOwnInstanceRecord();
+
+	RetractSessionToken();
+}
+
+void FMCPBridgeServer::PublishSessionToken()
+{
+	SessionToken.Reset();
+	SessionTokenDir.Reset();
+
+	FString Token;
+	if (!UEMCPBridgeSessionToken::GenerateToken(Token))
+	{
+		UE_LOG(LogMCPBridge, Error, TEXT("[UE-MCP] Could not read random bytes from the OS for the session token. The bridge will refuse every connection."));
+		return;
+	}
+
+	const FString Dir = UEMCPBridgeSessionToken::TokenDirectory();
+	FString Error;
+	if (!UEMCPBridgeSessionToken::WriteTokenFile(Dir, ServerPort, Token, Error))
+	{
+		UE_LOG(LogMCPBridge, Error, TEXT("[UE-MCP] Could not publish the session token to %s: %s. The bridge will refuse every connection."),
+			*UEMCPBridgeSessionToken::TokenFilePath(Dir, ServerPort), *Error);
+		return;
+	}
+
+	SessionToken = MoveTemp(Token);
+	SessionTokenDir = Dir;
+	UE_LOG(LogMCPBridge, Log, TEXT("[UE-MCP] Session token published to %s"), *UEMCPBridgeSessionToken::TokenFilePath(Dir, ServerPort));
+}
+
+void FMCPBridgeServer::RetractSessionToken()
+{
+	// Exit() runs on the bind-failure path too, where nothing was published.
+	if (SessionToken.IsEmpty())
+	{
+		return;
+	}
+	if (UEMCPBridgeSessionToken::DeleteTokenFileIfOwned(SessionTokenDir, ServerPort, SessionToken))
+	{
+		UE_LOG(LogMCPBridge, Log, TEXT("[UE-MCP] Session token file removed."));
+	}
 }
 
 TSharedPtr<FJsonObject> FMCPBridgeServer::ParseJsonRpcRequest(const FString& Message)
@@ -562,6 +610,9 @@ TSharedPtr<FJsonObject> FMCPBridgeServer::BuildCapabilitiesPayload()
 		TEXT("handler-specs"),
 		// #1339: a frame-level timeoutMs raises the game-thread wait.
 		TEXT("call-timeout"),
+		// Every upgrade carries "Authorization: Bearer <token>" from the
+		// per-user token file (BridgeSessionToken.h).
+		TEXT("session-token"),
 	};
 	TArray<TSharedPtr<FJsonValue>> FeatureValues;
 	for (const TCHAR* Feature : Features)
