@@ -9588,6 +9588,16 @@
           "suite": "live",
           "file": "tests/live/mesh-studio-render.test.ts",
           "test": "returns final PNGs and an outcome manifest through the server with the map unchanged"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/rerun-construction-dirty.test.ts",
+          "test": "a rerun that changes the actor leaves its package dirty and names it"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/rerun-construction-dirty.test.ts",
+          "test": "a rerun that reproduces the saved actor leaves its package clean"
         }
       ]
     },
@@ -17832,6 +17842,16 @@
         },
         {
           "suite": "live",
+          "file": "tests/live/rerun-construction-dirty.test.ts",
+          "test": "a rerun that changes the actor leaves its package dirty and names it"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/rerun-construction-dirty.test.ts",
+          "test": "a rerun that reproduces the saved actor leaves its package clean"
+        },
+        {
+          "suite": "live",
           "file": "tests/live/spline-mark-edited.test.ts",
           "test": "keeps the written points through a construction script rerun"
         },
@@ -18427,6 +18447,11 @@
           "suite": "live",
           "file": "tests/live/checkpoints.test.ts",
           "test": "a turn through the server"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/rerun-construction-dirty.test.ts",
+          "test": "a rerun that changes the actor leaves its package dirty and names it"
         }
       ]
     },
@@ -21088,6 +21113,11 @@
           "suite": "live",
           "file": "tests/live/bcov-level-actors.test.ts",
           "test": "get_spline_info reads the points set_spline_points wrote"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/rerun-construction-dirty.test.ts",
+          "test": "a rerun that changes the actor leaves its package dirty and names it"
         },
         {
           "suite": "live",
