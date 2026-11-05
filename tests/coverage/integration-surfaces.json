@@ -612,6 +612,11 @@
       "summary": "the daemon's /v1/checkpoints routes create, list, diff, restore and clear checkpoints, arm the editor's save recording and publish checkpoint events, without touching the project's .git"
     },
     {
+      "id": "daemon.journal",
+      "group": "daemon",
+      "summary": "the daemon's /v1/journal routes name the group mutating calls are journaled into, list the journal, and revert a group or every later one by replaying rollback descriptors and restoring checkpoint snapshots, after a restart too"
+    },
+    {
       "id": "daemon.skills",
       "group": "daemon",
       "summary": "the daemon lists ue-mcp's packaged skills and the project's own, with owner and location, over /v1/skills and api.skills"

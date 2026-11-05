@@ -76,6 +76,8 @@ const PER_SESSION: Record<string, string> = {
   "daemon/checkpoint-routes.ts": "Resolves the editor session each request names before acting on its checkpoints.",
   "checkpoints/service.ts": "One checkpoint state per editor session: its toggle, its bridge's save recording and its project's history.",
   "checkpoints/shadow-repo.ts": "One project's shadow history, constructed with that project's directory and never another's.",
+  "daemon/journal-routes.ts": "Resolves the editor session each request names before acting on its journal.",
+  "journal/journal.ts": "One mutation journal per editor session, kept in that session's project and restoring through that session's bridge and checkpoints.",
   "daemon/discovery.ts": "Publishes and reads the discovery record of one project root's daemon.",
   "daemon/start-lock.ts": "Holds the start lock of one project root's daemon, so that project gets one daemon.",
   "daemon/supersede-watch.ts": "Watches the discovery record of one project root's daemon, so a superseded daemon for that project stops.",
