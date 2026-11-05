@@ -12,6 +12,7 @@
 #include "Misc/DateTime.h"
 #include "Misc/FeedbackContext.h"
 #include "Misc/FileHelper.h"
+#include "Misc/Guid.h"
 #include "Misc/Paths.h"
 #include "Misc/SlowTask.h"
 #include "Misc/SlowTaskStack.h"
@@ -19,6 +20,10 @@
 #include "Serialization/JsonSerializer.h"
 #include "Serialization/JsonWriter.h"
 #include "Runtime/Launch/Resources/Version.h"
+
+#if PLATFORM_WINDOWS
+#include "Windows/WindowsHWrapper.h"
+#endif
 
 // Same definition as the canonical one in UE_MCP_Bridge/Public/HandlerUtils.h.
 // It is repeated rather than shared because this module loads at
@@ -570,34 +575,52 @@ bool FMCPEngineStatus::ShouldPublishStatus()
 
 bool FMCPEngineStatus::PublishAtomically(const FString& FinalPath, const FString& Contents)
 {
-	// Write then move: a reader polling at the same rate would otherwise catch
-	// a half-written file and report "no snapshot" at the exact moment the
-	// snapshot matters.
-	//
-	// #990: the temp file carries this process's pid, the way
-	// FMCPBridgeStateFiles::PublishJson has always done it. Without that every
-	// process in the project directory wrote and renamed one shared
-	// `status.json.tmp`, so concurrent writers deleted each other's temp file
-	// out from under the rename and each failure was logged at Error severity.
-	const FString TempPath = FString::Printf(TEXT("%s.%u.tmp"), *FinalPath, FPlatformProcess::GetCurrentProcessId());
+	// Each publication owns its sibling temporary file, including concurrent calls in one process (#990).
+	// Windows contention retries are bounded to about 50 ms. A longer non-sharing read skips
+	// this snapshot, preserving the previous one until the next publication.
+	const FString TempPath = FString::Printf(TEXT("%s.%u.%s.tmp"), *FinalPath,
+		FPlatformProcess::GetCurrentProcessId(), *FGuid::NewGuid().ToString(EGuidFormats::Digits));
 	if (!FFileHelper::SaveStringToFile(Contents, *TempPath))
 	{
+		IFileManager::Get().Delete(*TempPath, false, false, true);
 		return false;
 	}
-	// The platform layer, not IFileManager::Move: that logs every failed rename at Error,
-	// and a reader polling this file holds it open for a moment on every read.
-	IPlatformFile& PlatformFile = FPlatformFileManager::Get().GetPlatformFile();
-	for (int32 Attempt = 0; Attempt < 5; ++Attempt)
+	// Avoid IFileManager::Move: it logs failed renames at Error while readers poll the file.
+#if PLATFORM_WINDOWS
+	// Generic Move deletes the destination first, then MoveFileW fails if another writer recreates it.
+	// Replace in one operation instead; a sharing violation leaves the previous snapshot intact.
+	const auto NativePath = [](const FString& Path)
 	{
-		PlatformFile.DeleteFile(*FinalPath);
-		if (PlatformFile.MoveFile(*FinalPath, *TempPath))
-		{
-			return true;
-		}
+		FString Full = FPaths::ConvertRelativePathToFull(Path);
+		const bool bUNC = Full.StartsWith(TEXT("//"));
+		FPaths::RemoveDuplicateSlashes(Full);
+		if (bUNC) Full.InsertAt(0, TEXT('/'));
+		Full.ReplaceInline(TEXT("/"), TEXT("\\"));
+		if (Full.StartsWith(TEXT("\\\\?\\"))) return Full;
+		return Full.StartsWith(TEXT("\\\\")) ? TEXT("\\\\?\\UNC\\") + Full.Mid(2) : TEXT("\\\\?\\") + Full;
+	};
+	const FString NativeTempPath = NativePath(TempPath);
+	const FString NativeFinalPath = NativePath(FinalPath);
+	bool bPublished = false;
+	for (int32 Attempt = 0; Attempt < 10; ++Attempt)
+	{
+		bPublished = !!::MoveFileExW(*NativeTempPath, *NativeFinalPath, MOVEFILE_REPLACE_EXISTING);
+		if (bPublished) break;
+		const DWORD Error = ::GetLastError();
+		// Readers and simultaneous replacements can briefly hold the destination. Retry only that contention.
+		if ((Error != ERROR_SHARING_VIOLATION && Error != ERROR_ACCESS_DENIED) || Attempt == 9) break;
 		FPlatformProcess::Sleep(0.005f);
 	}
-	PlatformFile.DeleteFile(*TempPath);
-	return false;
+#else
+	// Unix/Apple's physical move uses rename(), which already replaces an existing destination.
+	const bool bPublished = IPlatformFile::GetPlatformPhysical().MoveFile(*FinalPath, *TempPath);
+#endif
+	if (!bPublished)
+	{
+		IFileManager::Get().Delete(*TempPath, /*RequireExists*/ false, /*EvenReadOnly*/ false, /*Quiet*/ true);
+		return false;
+	}
+	return true;
 }
 
 void FMCPEngineStatus::RemoveStaleInstanceStatusFiles()
