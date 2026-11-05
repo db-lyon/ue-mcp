@@ -29,7 +29,7 @@ import type { IBridge } from "../bridge/bridge.js";
 import type { DialogPromptFn, ElicitFn, ElicitPrimitiveSchema, ElicitResult } from "../core/types.js";
 import type { DialogMode } from "../config/user-state.js";
 import { readEnv } from "../core/env.js";
-import { elicitationNeedsRelay } from "../dispatch/client-quirks.js";
+import { elicitationNeedsRelay, elicitationUnrenderedNote } from "../dispatch/client-quirks.js";
 import { resolveDialogMode } from "./dialog-mode.js";
 import { readEngineSnapshot, readLogState } from "./engine-observer.js";
 
@@ -355,6 +355,12 @@ export interface GuardDeps {
   ) => Promise<unknown>;
   /** Present only when the connected client advertised elicitation. */
   elicit?: () => ElicitFn | undefined;
+  /**
+   * Why the connected client cannot be shown a form although it advertised
+   * one, or null. Appended to a defer refusal so the person learns why no
+   * form appeared (#1459).
+   */
+  elicitationNote?: () => string | null;
   /**
    * A daemon extension's own prompt, for a call that extension made in
    * process. Preferred over `elicit`, because it belongs to the caller of
@@ -1064,7 +1070,7 @@ export class DialogGuard {
     opts: { canElicit?: boolean } = {},
     phase: DialogPhase = "asking",
   ): Record<string, unknown> {
-    return DialogGuard.describeRefusal(
+    const refusal = DialogGuard.describeRefusal(
       subject,
       dialog,
       this.modeFor(dialog),
@@ -1072,6 +1078,9 @@ export class DialogGuard {
       phase,
       this.isDelegated(dialog),
     );
+    const note = refusal.dialogMode === "defer" ? this.deps.elicitationNote?.() : null;
+    if (note) refusal.error = `${String(refusal.error)} ${note}`;
+    return refusal;
   }
 
   /**
@@ -1403,6 +1412,7 @@ export function sessionGuardDeps(
     press: (buttonLabel: string, items?: Array<{ index: number; checked: boolean }>) =>
       session.guarded.call("respond_to_dialog", { buttonLabel, ...(items ? { items } : {}) }),
     ...(elicit ? { elicit: () => (canElicit ? elicit() : undefined) } : {}),
+    ...(elicit ? { elicitationNote: () => elicitationUnrenderedNote(elicit()?.client?.()) } : {}),
     isConnected: () => session.bridge.isConnected,
     // The instance-aware reader: it prefers status.<pid>.json over the shared
     // file and reports the snapshot's age, so a crashed editor's leftover is
