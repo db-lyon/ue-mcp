@@ -36,14 +36,15 @@
  * Unit, integration and the release gates are not run here: the pull request's
  * CI runs them on the same commit. Each lane logs to release-logs/<lane>.log, the
  * selection goes to release-logs/selection.json, free memory to release-logs/memory.json,
- * and the timing to release-logs/release-timing.json. A run over the 600 s budget says so
- * in its summary.
+ * and the timing is appended to release-logs/release-timing.json, which keeps every run.
+ * A run over the 600 s budget says so in its summary.
  */
 import { spawn, execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { appendTimingRun } from "./lib/release-timing.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const argv = process.argv.slice(2);
@@ -274,7 +275,7 @@ function finish(outcome, code) {
   sampleMemory();
   const totalS = (Date.now() - t0) / 1000;
   fs.writeFileSync(path.join(logDir, "memory.json"), `${JSON.stringify(memory)}\n`);
-  fs.writeFileSync(path.join(logDir, "release-timing.json"), `${JSON.stringify({
+  appendTimingRun(path.join(logDir, "release-timing.json"), {
     recordedAt: new Date().toISOString(),
     version,
     rehearsal,
@@ -300,7 +301,7 @@ function finish(outcome, code) {
     budgetS: BUDGET_S,
     overBudget: totalS > BUDGET_S,
     steps: steps.sort((a, b) => a.startS - b.startS),
-  }, null, 2)}\n`);
+  });
   console.log(`\n${stamp()} ${outcome}`);
   if (totalS > BUDGET_S) {
     console.log(`WARNING: the ${rehearsal ? "rehearsal" : "release"} took ${totalS.toFixed(0)}s, over the ${BUDGET_S}s budget. The steps are in release-logs/release-timing.json.`);
