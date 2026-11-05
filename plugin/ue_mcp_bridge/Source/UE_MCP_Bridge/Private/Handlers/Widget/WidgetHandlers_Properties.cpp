@@ -839,6 +839,7 @@ namespace
 			else if (Val == TEXT("center"))  Align = EHorizontalAlignment::HAlign_Center;
 			else if (Val == TEXT("right"))   Align = EHorizontalAlignment::HAlign_Right;
 			else if (Val == TEXT("fill"))    Align = EHorizontalAlignment::HAlign_Fill;
+			else return false; // enumerator names resolve through reflection (#1541)
 
 			if (UHorizontalBoxSlot* HSlot = Cast<UHorizontalBoxSlot>(BoxSlot))
 				HSlot->SetHorizontalAlignment(Align);
@@ -857,6 +858,7 @@ namespace
 			else if (Val == TEXT("center"))  Align = EVerticalAlignment::VAlign_Center;
 			else if (Val == TEXT("bottom"))  Align = EVerticalAlignment::VAlign_Bottom;
 			else if (Val == TEXT("fill"))    Align = EVerticalAlignment::VAlign_Fill;
+			else return false; // enumerator names resolve through reflection (#1541)
 
 			if (UHorizontalBoxSlot* HSlot = Cast<UHorizontalBoxSlot>(BoxSlot))
 				HSlot->SetVerticalAlignment(Align);
@@ -1031,20 +1033,39 @@ namespace
 				bPropertySet = MCPWidgetSetBoxSlotProperty(Slot, SlotPropName, PropertyValue);
 			}
 
-			// Generic slot reflection fallback
+			// Generic slot reflection fallback. Every other slot class (SizeBox,
+			// WidgetSwitcher, Border, ScrollBox...) lands here, so an enum takes the
+			// same "Center" / "HAlign_Center" spellings the typed box route does
+			// (#1541), and the slot is synchronized so the preview shows the write.
 			if (!bPropertySet)
 			{
-				FProperty* SlotProp = Slot->GetClass()->FindPropertyByName(FName(*SlotPropName));
+				FString ReflectedName = SlotPropName;
+				if (ReflectedName.Equals(TEXT("hAlign"), ESearchCase::IgnoreCase)) ReflectedName = TEXT("HorizontalAlignment");
+				else if (ReflectedName.Equals(TEXT("vAlign"), ESearchCase::IgnoreCase)) ReflectedName = TEXT("VerticalAlignment");
+				FProperty* SlotProp = Slot->GetClass()->FindPropertyByName(FName(*ReflectedName));
 				if (SlotProp)
 				{
 					void* SlotValuePtr = SlotProp->ContainerPtrToValuePtr<void>(Slot);
 					FString PreviousText;
 					SlotProp->ExportText_Direct(PreviousText, SlotValuePtr, SlotValuePtr, Slot, PPF_None);
-					if (SlotProp->ImportText_Direct(*PropertyValue, SlotValuePtr, Slot, PPF_None))
+					const FByteProperty* ByteProp = CastField<FByteProperty>(SlotProp);
+					const bool bEnum = SlotProp->IsA<FEnumProperty>() || (ByteProp && ByteProp->Enum);
+					FString SetError;
+					const bool bWritten = bEnum
+						? MCPJsonProperty::SetJsonOnPropertyWithOwner(SlotProp, SlotValuePtr, MakeShared<FJsonValueString>(PropertyValue), Slot, SetError)
+						: SlotProp->ImportText_Direct(*PropertyValue, SlotValuePtr, Slot, PPF_None) != nullptr;
+					if (bWritten)
 					{
 						bPropertySet = true;
 						PreviousPropertyValue = PreviousText;
 						bCapturedPreviousValue = true;
+						Slot->SynchronizeProperties();
+					}
+					else
+					{
+						return MCPError(FString::Printf(TEXT("Value '%s' is not valid for slot property '%s' on %s (type %s)%s%s"),
+							*PropertyValue, *SlotPropName, *Slot->GetClass()->GetName(), *SlotProp->GetCPPType(),
+							SetError.IsEmpty() ? TEXT("") : TEXT(": "), *SetError));
 					}
 				}
 			}

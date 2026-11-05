@@ -83,6 +83,53 @@ describe("widget build_tree (#1300)", () => {
   }, 180_000);
 });
 
+describe("widget slot alignment on every slot class (#1541)", () => {
+  const slotProps = async (widgetName: string): Promise<Record<string, string>> => {
+    const read = await call("get_widget_properties", { assetPath: WIDGET, widgetName });
+    return (read.widget as { slot: { properties: Record<string, string> } }).slot.properties;
+  };
+
+  it("build_tree and set_widget_property set alignment on SizeBox, WidgetSwitcher and box slots", async () => {
+    const built = await call("build_tree", {
+      assetPath: WIDGET,
+      parentWidgetName: "Root",
+      tree: {
+        widgetClass: "VerticalBox", widgetName: "AlignForm", children: [
+          { widgetClass: "SizeBox", widgetName: "Sized", children: [
+            { widgetClass: "TextBlock", widgetName: "InSize", properties: { "slot.HorizontalAlignment": "Center", "slot.VerticalAlignment": "Bottom" } },
+          ] },
+          { widgetClass: "WidgetSwitcher", widgetName: "Switch", children: [
+            { widgetClass: "TextBlock", widgetName: "InSwitch", properties: { "slot.HorizontalAlignment": "HAlign_Right", "slot.VerticalAlignment": "top" } },
+          ] },
+          { widgetClass: "TextBlock", widgetName: "InVBox", properties: { "slot.HorizontalAlignment": "HAlign_Right" } },
+        ],
+      },
+    });
+
+    const inSize = await slotProps("InSize");
+    expect(inSize.HorizontalAlignment).toBe("HAlign_Center");
+    expect(inSize.VerticalAlignment).toBe("VAlign_Bottom");
+    const inSwitch = await slotProps("InSwitch");
+    expect(inSwitch.HorizontalAlignment).toBe("HAlign_Right");
+    expect(inSwitch.VerticalAlignment).toBe("VAlign_Top");
+    expect((await slotProps("InVBox")).HorizontalAlignment).toBe("HAlign_Right");
+
+    await call("set_widget_property", { assetPath: WIDGET, widgetName: "InSize", propertyName: "slot.hAlign", value: "left" });
+    expect((await slotProps("InSize")).HorizontalAlignment).toBe("HAlign_Left");
+
+    const bad = await callBridge(bridge, "set_widget_property", {
+      assetPath: WIDGET, widgetName: "InSize", propertyName: "slot.HorizontalAlignment", value: "sideways",
+    });
+    expect(succeeded(bad)).toBe(false);
+    expect(JSON.stringify(bad.result ?? bad.error)).toContain("sideways");
+    expect((await slotProps("InSize")).HorizontalAlignment).toBe("HAlign_Left");
+
+    const rollback = built.rollback as { method: string; payload: Json };
+    await call(rollback.method, rollback.payload);
+    expect(await treeNames()).toEqual(["Root"]);
+  }, 180_000);
+});
+
 describe("widget check_structure (#1350)", () => {
   it("passes a healthy Widget Blueprint with each widget's outer reported", async () => {
     const checked = await call("check_widget_structure", { assetPath: WIDGET });

@@ -2478,6 +2478,11 @@
         {
           "suite": "live",
           "file": "tests/live/blueprint-widget-reflection.test.ts",
+          "test": "build_tree and set_widget_property set alignment on SizeBox, WidgetSwitcher and box slots"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/blueprint-widget-reflection.test.ts",
           "test": "builds a nested subtree in one call and removes it with the rollback"
         }
       ]
@@ -9986,6 +9991,11 @@
           "suite": "live",
           "file": "tests/live/bcov-widget-tree.test.ts",
           "test": "set_widget_property writes typed and reflected properties get_widget_details and get_widget_properties read"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/blueprint-widget-reflection.test.ts",
+          "test": "build_tree and set_widget_property set alignment on SizeBox, WidgetSwitcher and box slots"
         }
       ]
     },
@@ -17101,6 +17111,11 @@
         {
           "suite": "live",
           "file": "tests/live/blueprint-widget-reflection.test.ts",
+          "test": "build_tree and set_widget_property set alignment on SizeBox, WidgetSwitcher and box slots"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/blueprint-widget-reflection.test.ts",
           "test": "builds a nested subtree in one call and removes it with the rollback"
         }
       ]
@@ -22757,6 +22772,11 @@
           "suite": "live",
           "file": "tests/live/bcov-widget-tree.test.ts",
           "test": "set_widget_property writes typed and reflected properties get_widget_details and get_widget_properties read"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/blueprint-widget-reflection.test.ts",
+          "test": "build_tree and set_widget_property set alignment on SizeBox, WidgetSwitcher and box slots"
         }
       ]
     },
