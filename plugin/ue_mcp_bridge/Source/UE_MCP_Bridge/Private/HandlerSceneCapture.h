@@ -47,17 +47,6 @@ namespace UEMCP::SceneCapture
 		return Removed;
 	}
 
-	/** Project-relative paths resolve against the project directory. */
-	inline FString ResolveOutputPath(const FString& Path)
-	{
-		FString Abs = Path;
-		if (FPaths::IsRelative(Abs))
-		{
-			Abs = FPaths::Combine(FPaths::ProjectDir(), Abs);
-		}
-		return Abs;
-	}
-
 	/** A capture actor that is transient, outside the outliner and the map,
 	 *  and destroyed with this object, so a capture leaves the level as it
 	 *  found it (#966). Renders RGBA8 LDR, which exports as a real PNG. */

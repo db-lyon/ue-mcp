@@ -25,6 +25,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import WebSocket from "ws";
+import { bridgeSocketOptions, watchUpgradeRefusal } from "./lib/bridge-token.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 
@@ -385,7 +386,13 @@ export async function verifyTestProjectTarget(call) {
  */
 export function askOnce(url, method, params, timeoutMs) {
   return new Promise((resolve, reject) => {
-    const ws = new WebSocket(url);
+    let ws;
+    try {
+      ws = new WebSocket(url, bridgeSocketOptions(url));
+    } catch (err) {
+      reject(err);
+      return;
+    }
     const timer = setTimeout(() => {
       ws.terminate();
       reject(new Error(`${method} on ${url} timed out after ${timeoutMs}ms`));
@@ -399,6 +406,7 @@ export function askOnce(url, method, params, timeoutMs) {
       }
       fn(value);
     };
+    watchUpgradeRefusal(ws, url, (err) => done(reject, err));
     ws.on("error", (err) => done(reject, err));
     ws.on("open", () => ws.send(JSON.stringify({ id: "ask-once", method, params: params ?? {} })));
     ws.on("message", (data) => {
@@ -481,11 +489,18 @@ export async function connectTestBridge(options = {}) {
 
 function openSocket(url, timeoutMs) {
   return new Promise((resolve, reject) => {
-    const ws = new WebSocket(url);
+    let ws;
+    try {
+      ws = new WebSocket(url, bridgeSocketOptions(url));
+    } catch (err) {
+      reject(err);
+      return;
+    }
     const timer = setTimeout(() => {
       ws.terminate();
       reject(new Error(`Connection to ${url} timed out after ${timeoutMs}ms`));
     }, timeoutMs);
+    watchUpgradeRefusal(ws, url, (err) => { clearTimeout(timer); reject(err); });
     ws.on("open", () => { clearTimeout(timer); resolve(ws); });
     ws.on("error", (err) => { clearTimeout(timer); reject(err); });
   });

@@ -1,4 +1,5 @@
-import { execFileSync, execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
+import { PLAIN_SEMVER_RE, runNpmSync } from "../core/safe-spawn.js";
 import * as fs from "node:fs";
 
 import * as path from "node:path";
@@ -18,16 +19,29 @@ import type { CliUsage } from "./cli-main.js";
 
 /** The version behind the `latest` dist-tag, which is the stable line. */
 function getLatestVersion(): string | null {
-  try {
-    return execSync("npm view ue-mcp version", { windowsHide: true, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] }).trim();
-  } catch {
-    return null;
-  }
+  return latestFromNpmView(npmText(["view", "ue-mcp", "version"]));
+}
+
+/** npm's answer, used only when it is a version number, since it becomes an install argument. */
+export function latestFromNpmView(out: string | null): string | null {
+  const v = out?.trim().split(/\r?\n/).pop()?.trim();
+  return v && PLAIN_SEMVER_RE.test(v) ? v : null;
+}
+
+/** npm's stdout, or null when it did not run cleanly. */
+function npmText(args: string[]): string | null {
+  const r = runNpmSync(args, { encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] });
+  return r.status === 0 ? String(r.stdout ?? "").trim() : null;
+}
+
+/** Run npm with the terminal attached; true when it exited cleanly. */
+function npmInherit(args: string[], cwd?: string): boolean {
+  return runNpmSync(args, { stdio: "inherit", cwd }).status === 0;
 }
 
 function npmGlobalRoot(): string | null {
   try {
-    return execSync("npm root -g", { windowsHide: true, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] }).trim();
+    return npmText(["root", "-g"]);
   } catch {
     return null;
   }
@@ -40,8 +54,8 @@ function within(child: string, parent: string): boolean {
 }
 
 export type PackageInstall =
-  | { kind: "global"; command: string }
-  | { kind: "prefix"; command: string; cwd: string }
+  | { kind: "global"; command: string; args: string[] }
+  | { kind: "prefix"; command: string; args: string[]; cwd: string }
   | { kind: "refuse"; reason: string };
 
 /**
@@ -59,7 +73,7 @@ export function resolvePackageInstall(opts: {
   protectedDirs: string[];
 }): PackageInstall {
   const { packageRoot: root, globalRoot, version } = opts;
-  if (globalRoot && within(root, globalRoot)) return { kind: "global", command: `npm install -g ue-mcp@${version}` };
+  if (globalRoot && within(root, globalRoot)) return { kind: "global", command: `npm install -g ue-mcp@${version}`, args: ["install", "-g", `ue-mcp@${version}`] };
   const parent = path.dirname(root);
   if (path.basename(parent).toLowerCase() !== "node_modules") {
     return { kind: "refuse", reason: `ue-mcp runs from ${root}, which npm did not install. Update that checkout yourself.` };
@@ -71,7 +85,7 @@ export function resolvePackageInstall(opts: {
       reason: `ue-mcp runs from a project-local copy (${root}). Remove it with \`npm uninstall ue-mcp\` in ${prefix}, then use \`npm install -g ue-mcp@${version}\` or launch with \`${UE_MCP_LAUNCH}\`.`,
     };
   }
-  return { kind: "prefix", command: `npm install ue-mcp@${version}`, cwd: prefix };
+  return { kind: "prefix", command: `npm install ue-mcp@${version}`, args: ["install", `ue-mcp@${version}`], cwd: prefix };
 }
 
 /** The .uproject an argument names (file or directory), else the one in cwd. */
@@ -227,11 +241,10 @@ async function update(argv: string[]) {
       fail(plan.reason);
       process.exit(1);
     }
-    try {
-      execSync(plan.command, { windowsHide: true, stdio: "inherit", ...(plan.kind === "prefix" ? { cwd: plan.cwd } : {}) });
+    if (npmInherit(plan.args, plan.kind === "prefix" ? plan.cwd : undefined)) {
       console.log("");
       ok(`Updated to ${wanted}`);
-    } catch {
+    } else {
       console.log("");
       fail(`npm install failed. Try manually: ${plan.command}${plan.kind === "prefix" ? ` (in ${plan.cwd})` : ""}`);
       process.exit(1);

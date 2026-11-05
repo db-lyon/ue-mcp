@@ -2228,7 +2228,17 @@ TSharedPtr<FJsonValue> FEditorHandlers::SetConfig(const TSharedPtr<FJsonObject>&
 		ConfigName = FString::Printf(TEXT("Default%s.ini"), *ConfigName);
 	}
 
-	FString ConfigDir = FPaths::ProjectConfigDir();
+	// configName names a file in the project's Config folder, never a path out of it.
+	if (!FPaths::IsRelative(ConfigName))
+	{
+		return MCPError(FString::Printf(TEXT("configName must be a file name inside the project's Config folder, not an absolute path: %s"), *ConfigName));
+	}
+	const FString ConfigDir = FPaths::ProjectConfigDir();
+	{
+		FString Contained;
+		if (auto Err = MCPRequirePathInside(ConfigName, { ConfigDir }, Contained, ConfigDir)) return Err;
+	}
+	// The config cache keys files by this exact string, so it keeps its usual form.
 	FString IniPath = FPaths::Combine(ConfigDir, ConfigName);
 
 	// A file only this call loads is dropped from the config cache again when it
@@ -2852,6 +2862,12 @@ TSharedPtr<FJsonValue> FEditorHandlers::CaptureScreenshot(const TSharedPtr<FJson
 	if (!Filename.EndsWith(TEXT(".png")) && !Filename.EndsWith(TEXT(".jpg")) && !Filename.EndsWith(TEXT(".bmp")))
 	{
 		Filename += TEXT(".png");
+	}
+	// A relative name lands in Saved/Screenshots; the result is absolute from here on.
+	{
+		FString Resolved;
+		if (auto Err = MCPRequireWritablePath(Filename, Resolved, FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("Screenshots")))) return Err;
+		Filename = Resolved;
 	}
 
 	// #64: Force the active level viewport to render even if the editor window is not focused
@@ -5127,7 +5143,8 @@ TSharedPtr<FJsonValue> FEditorHandlers::CaptureScenePng(const TSharedPtr<FJsonOb
 		if (NotDrawn.Num() > 0) RuntimeComponents->SetArrayField(TEXT("notDrawn"), NotDrawn);
 	}
 
-	FString AbsPath = UEMCP::SceneCapture::ResolveOutputPath(OutputPath);
+	FString AbsPath;
+	if (auto Err = MCPRequireWritablePath(OutputPath, AbsPath)) return Err;
 	if (!AbsPath.EndsWith(TEXT(".png"))) AbsPath += TEXT(".png");
 
 	// Asked before the export, because it is the difference between creating a
