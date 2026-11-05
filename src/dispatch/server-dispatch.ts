@@ -11,6 +11,8 @@ import { McpError, ErrorCode } from "../core/errors.js";
 import { debug } from "../core/log.js";
 import { withCallAsker } from "../flow/call-elicit.js";
 import { readOnlyRefusal, type SessionAccessMode } from "../flow/session-access.js";
+import { taskEffect } from "../surface/action-effects.js";
+import { journalFor } from "../journal/journal.js";
 import { unwrapArgsEnvelope, validateCategoryParams } from "../surface/context/call-envelope.js";
 import {
   routeEditorCall,
@@ -340,15 +342,18 @@ export async function dispatchCategoryCall(
     // bridge, so a lock request made while a modal is up is refused as a dialog.
     // Every bridge call the task makes answers to this caller, so a guard that
     // allows overrides asks the person who sent this call and nobody else.
-    const result = await withCallAsker({ elicit: flowCtx.elicit, subject: effectiveTask, access: deps.access }, () => withAssetLocks(
-      session.guarded,
-      deps.lockingCfg,
-      effectiveTask,
-      subject.params,
-      () => task.run(),
-      session.lockOwnerId,
-      loads.dispatchUnion.tools,
-    ));
+    // Journaled when the client named a group and the action may change state (#1481).
+    const effect = taskEffect(effectiveTask, loads.dispatchUnion.tools).effect;
+    const result = await journalFor(session).record(effectiveTask, effect, () =>
+      withCallAsker({ elicit: flowCtx.elicit, subject: effectiveTask, access: deps.access }, () => withAssetLocks(
+        session.guarded,
+        deps.lockingCfg,
+        effectiveTask,
+        subject.params,
+        () => task.run(),
+        session.lockOwnerId,
+        loads.dispatchUnion.tools,
+      )));
 
     // A task that failed for its own reasons reports that, not a dialog. A
     // failure DURING a modal is usually caused by it, and the runner returns
@@ -519,10 +524,16 @@ export async function dispatchFlowCall(
       "action",
     );
     if (!flowCheck.allow) return refusalResult(flowCheck.refusal, attribution(sessions, session));
-    const result = await withCallAsker(
-      { elicit: deps.elicit(), access: deps.access },
-      () => flowTool.handler(sessionContext(baseCtx, session), params),
-    );
+    const flowTask = `${flowTool.name}.${String(params.action ?? "")}`;
+    // A flow's steps are not journaled one by one, so a run is one entry whose files the checkpoints restore (#1481).
+    const journaled = await journalFor(session).record(flowTask, taskEffect(flowTask, deps.loads.dispatchUnion.tools).effect, async () => ({
+      success: true,
+      data: await withCallAsker(
+        { elicit: deps.elicit(), access: deps.access },
+        () => flowTool.handler(sessionContext(baseCtx, session), params),
+      ),
+    }));
+    const result = journaled.data;
     const text = typeof result === "string" ? result : JSON.stringify(result, null, 2);
     return { content: [{ type: "text" as const, text }, ...attribution(sessions, session)] };
   } catch (e) {
