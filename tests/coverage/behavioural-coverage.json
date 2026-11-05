@@ -3572,6 +3572,11 @@
         {
           "suite": "live",
           "file": "tests/live/bcov-editor-diagnostics.test.ts",
+          "test": "configure_pie playMode writes the play mode get_pie_config reads, and its rollback restores it (#1526)"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/bcov-editor-diagnostics.test.ts",
           "test": "configure_pie writes the client count get_pie_config reads, and its rollback restores it"
         }
       ]
@@ -8862,7 +8867,17 @@
         {
           "suite": "live",
           "file": "tests/live/bcov-editor-diagnostics.test.ts",
+          "test": "configure_pie playMode writes the play mode get_pie_config reads, and its rollback restores it (#1526)"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/bcov-editor-diagnostics.test.ts",
           "test": "configure_pie writes the client count get_pie_config reads, and its rollback restores it"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/bcov-editor-pie.test.ts",
+          "test": "a running PIE session"
         }
       ]
     },

@@ -2,6 +2,10 @@
 
 The `pie` tool records, replays and observes Play-In-Editor sessions, drives input on any player, runs multiplayer acceptance scenarios and turns a recording into a test that verifies a fix. It is built into ue-mcp. Starting PIE itself is `editor(play_in_editor)`.
 
+## Where PIE plays
+
+Every PIE launch the bridge makes (`editor(play_in_editor)`, `replay_run`, `test_run`, script runs, acceptance runs and the PIE Studio panel buttons) plays where the editor's Play button would: the play mode last chosen in the Play menu, which is the active level viewport by default. `editor(configure_pie, playMode=viewport|new_window|standalone)` changes it for the Play button and the bridge alike, and `editor(get_pie_config)` reads it. With no visible level viewport the engine opens a new window instead. Standalone runs the game as a separate process with no PIE world in the editor, so actions that drive the PIE world play in the viewport when it is set. Each launch reports `playMode`, `playModeRequested` and, when they differ, `playModeNote`.
+
 For step-by-step test scripts with automatic and manual verdicts, see [Test scripts](pie-scripts.md).
 
 Three systems run independently and can all run in the same PIE session:

@@ -12,6 +12,7 @@
 #include "Dom/JsonValue.h"
 #include "Editor.h"
 #include "HandlerWorld.h"
+#include "HandlerPlaySession.h"
 #include "Engine/Engine.h"
 #include "Engine/World.h"
 #include "Engine/GameViewportClient.h"
@@ -313,8 +314,7 @@ namespace MCPPIE
 				PS->AdditionalLaunchParameters = (LaunchParams + TEXT(" -RenderOffscreen")).TrimStart();
 			}
 
-			FRequestPlaySessionParams Params;
-			GEditor->RequestPlaySession(Params);
+			MCPPlaySession::Request(/*bNeedsEditorWorld=*/true);
 			return true;
 		}
 

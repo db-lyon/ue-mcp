@@ -6,6 +6,7 @@
 #include "Handlers/PIE/PIEInputReplayer.h"
 #include "Handlers/PIE/PIESequenceFormat.h"
 #include "Editor.h"
+#include "HandlerPlaySession.h"
 #include "Editor/EditorEngine.h"
 #include "Misc/Paths.h"
 #include "HAL/FileManager.h"
@@ -230,11 +231,11 @@ TSharedPtr<FJsonValue> FPIEHandlers::PieReplayRun(const TSharedPtr<FJsonObject>&
 
 	// Kick off PIE. RequestPlaySession queues the session for the next editor
 	// tick; the armed replayer attaches from its BeginPIE delegate.
-	FRequestPlaySessionParams PlayParams;
-	GEditor->RequestPlaySession(PlayParams);
+	const MCPPlaySession::FLaunch Launch = MCPPlaySession::Request(/*bNeedsEditorWorld=*/true);
 
 	const FReplayerStatus S = FPIEInputReplayer::Get().GetStatus();
 	auto Result = MCPSuccess();
+	MCPPlaySession::WriteLaunch(Launch, Result);
 	Result->SetBoolField(TEXT("started"), true);
 	Result->SetBoolField(TEXT("auto_stop_pie"), Cfg.bAutoStopPIE);
 	Result->SetStringField(TEXT("message"), Msg);

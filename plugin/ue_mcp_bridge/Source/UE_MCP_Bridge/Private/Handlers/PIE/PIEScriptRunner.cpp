@@ -12,6 +12,7 @@
 #include "MCPPIERemoteControl.h"
 #include "HandlerWorld.h"
 #include "Editor.h"
+#include "HandlerPlaySession.h"
 #include "Editor/EditorEngine.h"
 #include "HAL/FileManager.h"
 #include "Misc/CoreDelegates.h"
@@ -1831,8 +1832,7 @@ namespace MCPPIE
 
 		if (Cfg.bStartPIE && GEditor && !GEditor->PlayWorld)
 		{
-			FRequestPlaySessionParams PlayParams;
-			GEditor->RequestPlaySession(PlayParams);
+			MCPPlaySession::Request(/*bNeedsEditorWorld=*/true);
 			Run.bStartedPIE = true;
 		}
 		BindEndFrame();
@@ -1967,8 +1967,7 @@ namespace MCPPIE
 		D->SetStringField(TEXT("observation_run_id"), Run.ObservationRunId);
 		AddScriptEvent(Run, TEXT("run_started"), -1, D);
 
-		FRequestPlaySessionParams PlayParams;
-		GEditor->RequestPlaySession(PlayParams);
+		MCPPlaySession::Request(/*bNeedsEditorWorld=*/true);
 		Run.bStartedPIE = true;
 		BindEndFrame();
 

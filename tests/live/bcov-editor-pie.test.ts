@@ -77,10 +77,25 @@ afterAll(async () => {
 describe("a running PIE session", () => {
   let playing = false;
 
+  let started: Json = {};
+  let configuredMode: unknown;
+
   beforeAll(async () => {
-    await call("pie_control", { pieAction: "start" });
+    configuredMode = (await call("get_pie_config", {})).playMode;
+    started = await call("pie_control", { pieAction: "start" });
     playing = await waitForPie(true);
   }, 120_000);
+
+  it("pie_control start plays where the editor's play mode says, not in a forced new window (#1526)", () => {
+    expect(started.playModeRequested).toBe(configuredMode);
+    if (configuredMode === "viewport") {
+      // The engine opens a new window only when no level viewport is visible, and says so.
+      expect(["viewport", "new_window"]).toContain(started.playMode);
+      if (started.playMode === "new_window") expect(String(started.playModeNote)).toContain("viewport");
+    } else {
+      expect(started.playMode).toBe(configuredMode);
+    }
+  });
 
   afterAll(async () => {
     try {
