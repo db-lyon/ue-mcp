@@ -1459,6 +1459,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::RenameWidget(const TSharedPtr<FJsonObjec
 	TSharedPtr<FJsonValue> ResolveError;
 	UWidgetBlueprint* WidgetBP = MCPWidget::ResolveWidgetBlueprintOrError(AssetPath, ResolveError);
 	if (!WidgetBP) return ResolveError;
+	const MCPWidgetGuidMap::FCompileBaseline CompileBaseline = MCPWidgetGuidMap::CaptureBaseline(WidgetBP);
 	if (!WidgetBP->WidgetTree) return MCPWidget::MissingWidgetTreeError(AssetPath);
 
 	auto Unchanged = [&](const FString& Current, const FString& Old)
@@ -1659,13 +1660,13 @@ TSharedPtr<FJsonValue> FWidgetHandlers::RenameWidget(const TSharedPtr<FJsonObjec
 	FBlueprintEditorUtils::ReplaceVariableReferences(WidgetBP, OldFName, NewFName);
 
 	WidgetBP->MarkPackageDirty();
-	const MCPWidgetGuidMap::FSyncReport GuidSync = MCPWidgetGuidMap::CompileChecked(WidgetBP);
-	if (!GuidSync.bCompiled)
+	const MCPWidgetGuidMap::FSyncReport GuidSync = MCPWidgetGuidMap::CompileChecked(WidgetBP, CompileBaseline);
+	if (GuidSync.WasRefused())
 	{
 		return MCPWidgetGuidMap::BlockedError(AssetPath, GuidSync);
 	}
 	FString SaveError;
-	const bool bSaved = SaveAssetPackageChecked(WidgetBP, SaveError);
+	const bool bSaved = MCPWidgetGuidMap::SaveIfCompiled(WidgetBP, GuidSync, SaveError);
 
 	auto Result = MCPSuccess();
 	MCPSetUpdated(Result);
@@ -1687,7 +1688,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::RenameWidget(const TSharedPtr<FJsonObjec
 	Result->SetObjectField(TEXT("referencesUpdated"), Refs);
 
 	MCPSetWidgetGuidOutcome(Result, GuidSync, AssetPath);
-	MCPSetWidgetCompileOutcome(Result, WidgetBP, AssetPath,
+	MCPSetWidgetCompileOutcome(Result, WidgetBP, AssetPath, GuidSync,
 		FString::Printf(TEXT("Widget '%s' was renamed to '%s'"), *OldNameStr, *NewName));
 
 	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
