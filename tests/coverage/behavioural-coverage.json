@@ -9144,6 +9144,11 @@
         {
           "suite": "live",
           "file": "tests/live/bcov-editor-sequence.test.ts",
+          "test": "set_sequence_keyframes writes keys get_sequence_channel_keys reads back"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/bcov-editor-sequence.test.ts",
           "test": "set_sequence_playback_range sets the range get_sequence_info reports"
         }
       ]

@@ -18183,7 +18183,7 @@
           "name": "includeSectionDetails",
           "type": "boolean",
           "required": false,
-          "description": "Include attach sockets and first-key transform values per track"
+          "description": "Add each section's blend type, attach socket, first-key transform values and channels with key times. Without it every section still lists its class, range, isActive and rowIndex"
         }
       ]
     },
