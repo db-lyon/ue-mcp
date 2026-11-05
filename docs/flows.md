@@ -353,6 +353,10 @@ The server logs its bearer token to stderr at startup, or uses `UE_MCP_HTTP_TOKE
 
 The daemon serves the same flow routes under `/v1` (for example `GET /v1/flows/<name>/plan`).
 
+### Approving each step
+
+A daemon extension can approve or deny each step as it runs (feature `flows.stepApproval`, on `/v1/health` and the extension API). The extension registers an approver with `api.flows.approveSteps(approver)`. A run that names it in the body, `POST /v1/flows/<name>/run` with `stepApproval: { approver: "<extension name>", token }`, asks it before every task, with the task name, its resolved options, the phase and the token. A denied task fails as that step's error without running, and the run stops unless the step has `ignore_failure`. Rollback tasks are never asked. A run naming an approver that is not registered fails its first step instead of running unapproved.
+
 ```bash
 curl --no-buffer -H "Authorization: Bearer $TOKEN" http://127.0.0.1:7723/flows/events
 ```

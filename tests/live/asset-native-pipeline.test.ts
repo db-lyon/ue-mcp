@@ -2,7 +2,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { getBridge, disconnectBridge, callBridge, TEST_PREFIX } from "../setup.js";
+import { getBridge, disconnectBridge, callBridge, closeEditorTabWindows, TEST_PREFIX } from "../setup.js";
 import type { EditorBridge } from "../../src/bridge/bridge.js";
 import { TEST_PROJECT_DIR } from "../../scripts/bridge-target.mjs";
 
@@ -31,6 +31,7 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  if (bridge) await closeEditorTabWindows(bridge);
   if (created.size) await callBridge(bridge, "delete_asset_batch", { assetPaths: [...created], force: true });
   disconnectBridge();
   if (path.dirname(disk) !== savedDir) throw new Error("Unexpected fixture directory");
