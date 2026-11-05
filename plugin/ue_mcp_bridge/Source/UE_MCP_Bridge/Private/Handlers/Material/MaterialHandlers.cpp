@@ -829,6 +829,63 @@ namespace
 		return ConnectionsObj;
 	}
 
+	FString MaterialCustomOutputTypeName(ECustomMaterialOutputType Type)
+	{
+		switch (Type)
+		{
+		case CMOT_Float1: return TEXT("float1");
+		case CMOT_Float2: return TEXT("float2");
+		case CMOT_Float3: return TEXT("float3");
+		case CMOT_Float4: return TEXT("float4");
+		case CMOT_MaterialAttributes: return TEXT("materialattributes");
+		default: return FString::FromInt(static_cast<int32>(Type));
+		}
+	}
+
+	/** A Custom node's HLSL and declarations, so a graph read can be checked against source in one call (#1645). */
+	TSharedPtr<FJsonObject> MaterialCustomExpressionJson(const UMaterialExpressionCustom* Custom)
+	{
+		TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
+		Obj->SetStringField(TEXT("code"), Custom->Code);
+		Obj->SetStringField(TEXT("description"), Custom->Description);
+		Obj->SetStringField(TEXT("outputType"), MaterialCustomOutputTypeName(Custom->OutputType));
+
+		TArray<TSharedPtr<FJsonValue>> Inputs;
+		for (const FCustomInput& Input : Custom->Inputs)
+		{
+			Inputs.Add(MakeShared<FJsonValueString>(Input.InputName.ToString()));
+		}
+		Obj->SetArrayField(TEXT("inputNames"), Inputs);
+
+		TArray<TSharedPtr<FJsonValue>> Outputs;
+		for (const FCustomOutput& Output : Custom->AdditionalOutputs)
+		{
+			TSharedPtr<FJsonObject> OutputObj = MakeShared<FJsonObject>();
+			OutputObj->SetStringField(TEXT("name"), Output.OutputName.ToString());
+			OutputObj->SetStringField(TEXT("outputType"), MaterialCustomOutputTypeName(Output.OutputType));
+			Outputs.Add(MakeShared<FJsonValueObject>(OutputObj));
+		}
+		Obj->SetArrayField(TEXT("additionalOutputs"), Outputs);
+
+		TArray<TSharedPtr<FJsonValue>> Defines;
+		for (const FCustomDefine& Define : Custom->AdditionalDefines)
+		{
+			TSharedPtr<FJsonObject> DefineObj = MakeShared<FJsonObject>();
+			DefineObj->SetStringField(TEXT("name"), Define.DefineName);
+			DefineObj->SetStringField(TEXT("value"), Define.DefineValue);
+			Defines.Add(MakeShared<FJsonValueObject>(DefineObj));
+		}
+		Obj->SetArrayField(TEXT("additionalDefines"), Defines);
+
+		TArray<TSharedPtr<FJsonValue>> Includes;
+		for (const FString& Include : Custom->IncludeFilePaths)
+		{
+			Includes.Add(MakeShared<FJsonValueString>(Include));
+		}
+		Obj->SetArrayField(TEXT("includeFilePaths"), Includes);
+		return Obj;
+	}
+
 	/** One list_expressions / read_graph row. */
 	TSharedPtr<FJsonObject> MaterialExpressionRowJson(
 		UMaterialExpression* Expression, int32 Index, bool bIncludeInputs,
@@ -854,6 +911,10 @@ namespace
 		if (bIncludeInputs)
 		{
 			ExprObj->SetArrayField(TEXT("inputs"), MaterialExpressionInputsJson(Expression, IndexByExpression));
+			if (const UMaterialExpressionCustom* Custom = Cast<UMaterialExpressionCustom>(Expression))
+			{
+				ExprObj->SetObjectField(TEXT("custom"), MaterialCustomExpressionJson(Custom));
+			}
 		}
 		return ExprObj;
 	}

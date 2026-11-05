@@ -15581,6 +15581,11 @@
         {
           "suite": "automation",
           "file": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Tests/MaterialGraphReadTests.cpp",
+          "test": "UE.MCP.Material.GraphRead.CustomNodeCode"
+        },
+        {
+          "suite": "automation",
+          "file": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Tests/MaterialGraphReadTests.cpp",
           "test": "UE.MCP.Material.GraphRead.WiringPagingAndReadOnly"
         },
         {
