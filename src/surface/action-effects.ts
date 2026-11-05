@@ -93,7 +93,8 @@ export const RAW_BRIDGE_METHODS: Readonly<Record<string, ActionEffect>> = {
   // Starts PIE past the Blueprint-error prompt, after the approval gate.
   // editor(play_in_editor_ignore_blueprint_errors).
   pie_start_ignoring_blueprint_errors: "mutate",
-  // Asks the editor to quit. editor(request_editor_shutdown).
+  // Asks the editor to quit, saving or discarding its dirty packages first
+  // when told to. editor(request_editor_shutdown).
   request_editor_shutdown: "mutate",
   // Resolves content roots and queries the asset registry. asset(search).
   search_assets: "read",

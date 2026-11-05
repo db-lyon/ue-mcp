@@ -98,6 +98,8 @@ UE 5.8 ships an experimental AI Toolset Registry (the plugin behind Unreal's own
 
 A modal dialog blocks Unreal's game thread, so every action is refused until it is answered. Every route to the editor checks for one, including each step of a running flow. This mode decides what happens next. It is a per-machine preference: whether somebody is at the keyboard is not project policy.
 
+The shutdown "Save Content" prompt does not have to be raised at all. `editor(request_editor_shutdown)` takes `dirtyPackages=save` or `dirtyPackages=discard`, optionally with `packages` naming exactly which dirty packages the choice covers, and acts on them before the close so the editor has nothing to ask. The choice is the caller's, stated in the call and reported in the result, rather than a button pressed on someone's behalf. Discard is irreversible.
+
 | Mode | What happens to a blocking dialog |
 |------|-----------------------------------|
 | `interactive` | You get an elicitation form titled "Submission" with the dialog's buttons as choices, plus "leave it open". The button you pick is pressed and the blocked call then runs. A dialog with a checkbox per row (the "Save Content" prompt) shows those rows as one checkbox group titled "Assets", and what you tick is applied with the button. |
