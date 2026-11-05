@@ -17580,7 +17580,10 @@
           "name": "maxLines",
           "type": "integer",
           "required": false,
-          "description": "How far back into the ring buffer to read (default 100, or the whole 4096-line buffer when filter or category is given)"
+          "description": "How far back into the ring buffer to read (default 100, or the whole 4096-line buffer when filter or category is given)",
+          "aliases": [
+            "lastN"
+          ]
         },
         {
           "name": "filter",

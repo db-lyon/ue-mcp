@@ -884,7 +884,10 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "maxLines",
         "type": "integer",
         "required": false,
-        "description": "How far back into the ring buffer to read (default 100, or the whole 4096-line buffer when filter or category is given)"
+        "description": "How far back into the ring buffer to read (default 100, or the whole 4096-line buffer when filter or category is given)",
+        "aliases": [
+          "lastN"
+        ]
       },
       {
         "name": "filter",
@@ -3810,7 +3813,7 @@ export const paramsClauses: Readonly<Record<string, string>> = {
   get_message_log: "Params: logName?, maxLines?, severity?",
   get_object_properties: "Params: objectPath?, target?, subsystemClass?, playerIndex?, propertyPath?, propertyNames?, world?, pieInstance?, limit?, maxValueLength?",
   get_open_asset_editors: "Params: none",
-  get_output_log: "Params: maxLines?, filter?, category?, cursor?, limit?",
+  get_output_log: "Params: maxLines? (or lastN), filter?, category?, cursor?, limit?",
   get_pie_config: "Params: none",
   get_pie_pawn: "Params: playerIndex?",
   get_property: "Params: objectPath (or path, or assetPath), propertyName",
@@ -4017,6 +4020,7 @@ export const schema: Record<string, z.ZodType> = {
   keyframes: z.array(z.record(z.string(), z.unknown())).optional().describe("Keys as [{seconds | frame | tick, value, interpolation?}]; frame is a display frame, value a number or boolean (set_sequence_channel_keys). Keys to add, as [{seconds, value, interpolation?}] (set_sequence_keyframes)"),
   kwargs: z.record(z.string(), z.unknown()).optional().describe("Keyword arguments for the entryPoint call"),
   label: z.string().optional().describe("Alias for description"),
+  lastN: z.number().int().optional().describe("Alias for maxLines"),
   latentTimeoutSeconds: z.number().optional().describe("How long one test's latent command queue may take before it is reported abandoned (default 5, max 120)"),
   launchSeparateServer: z.boolean().optional().describe("Launch a separate dedicated server"),
   level: z.string().optional().describe("Low | Medium | High | Epic | Cinematic (default Epic)"),

@@ -404,7 +404,7 @@ void FEditorHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	});
 	Registry.RegisterHandler(TEXT("get_editor_performance_stats"), &GetEditorPerformanceStats, NoParams);
 	Registry.RegisterHandler(TEXT("get_output_log"), &GetOutputLog, {
-		MCPParam::Optional(TEXT("maxLines"), EType::Integer, TEXT("How far back into the ring buffer to read (default 100, or the whole 4096-line buffer when filter or category is given)")),
+		MCPParam::Optional(TEXT("maxLines"), EType::Integer, TEXT("How far back into the ring buffer to read (default 100, or the whole 4096-line buffer when filter or category is given)")).Alias(TEXT("lastN")),
 		MCPParam::Optional(TEXT("filter"), EType::String, TEXT("Case-insensitive substring the message must contain")),
 		MCPParam::Optional(TEXT("category"), EType::String, TEXT("Case-insensitive substring the log category must contain")),
 		CursorParam(),
