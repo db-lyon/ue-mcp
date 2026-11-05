@@ -1,5 +1,5 @@
 {
-  "handlerCount": 1237,
+  "handlerCount": 1238,
   "handlers": {
     "add_ability_system_component": {
       "category": "gas",
@@ -29584,6 +29584,99 @@
           "required": true,
           "description": "Source MeshDescription vertex IDs to read (1-256)",
           "items": "integer"
+        },
+        {
+          "name": "lodIndex",
+          "type": "integer",
+          "required": false,
+          "description": "Source LOD (default 0); generated LODs without source geometry are refused"
+        },
+        {
+          "name": "profileName",
+          "type": "string",
+          "required": false,
+          "description": "Existing skin-weight profile; omit or pass 'default' for the default profile"
+        }
+      ]
+    },
+    "read_skeletal_mesh_vertices": {
+      "category": "asset",
+      "params": [
+        {
+          "name": "assetPath",
+          "type": "string",
+          "required": true,
+          "description": "SkeletalMesh asset path"
+        },
+        {
+          "name": "boneNames",
+          "type": "array",
+          "required": false,
+          "description": "Keep vertices weighted to any of these bones; omit to keep every vertex",
+          "items": "string"
+        },
+        {
+          "name": "includeChildBones",
+          "type": "boolean",
+          "required": false,
+          "description": "With boneNames, also select every bone below each named bone (default false)"
+        },
+        {
+          "name": "minWeight",
+          "type": "number",
+          "required": false,
+          "description": "With boneNames, keep a vertex only when its summed weight on the selected bones is at least this (0 < minWeight <= 1; default any positive weight)"
+        },
+        {
+          "name": "box",
+          "type": "object",
+          "required": false,
+          "description": "Keep vertices inside this component-space bind-pose box (inclusive)",
+          "fields": [
+            {
+              "name": "min",
+              "type": "vec3",
+              "required": true,
+              "description": "Box minimum (cm)"
+            },
+            {
+              "name": "max",
+              "type": "vec3",
+              "required": true,
+              "description": "Box maximum (cm)"
+            }
+          ]
+        },
+        {
+          "name": "include",
+          "type": "array",
+          "required": false,
+          "description": "Data per vertex: any of positions, weights, triangles (default positions and weights)",
+          "items": "string"
+        },
+        {
+          "name": "offset",
+          "type": "number",
+          "required": false,
+          "description": "First selected vertex to return (default 0); ignored with dumpToFile"
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "description": "Selected vertices to return inline, 1 to 20000 (default 2000); ignored with dumpToFile"
+        },
+        {
+          "name": "dumpToFile",
+          "type": "boolean",
+          "required": false,
+          "description": "Write the whole selection to a JSON file and return only the summary"
+        },
+        {
+          "name": "outputPath",
+          "type": "string",
+          "required": false,
+          "description": "File for dumpToFile; relative paths resolve under Saved/ (default Saved/UE_MCP/SkeletalMeshVertices/)"
         },
         {
           "name": "lodIndex",
