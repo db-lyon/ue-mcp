@@ -10839,6 +10839,11 @@
           "suite": "live",
           "file": "tests/live/bcov-editor-diagnostics.test.ts",
           "test": "list_function_libraries lists KismetMathLibrary with a function invoke_static_function can call"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/bcov-editor-diagnostics.test.ts",
+          "test": "list_function_libraries reports the Python names and matches a pattern against them (#1453)"
         }
       ]
     },

@@ -191,6 +191,20 @@ describe("function libraries", () => {
     const abs = await call("invoke_static_function", { className: "KismetMathLibrary", functionName: "Abs", args: { A: -3.5 } });
     expect(Number((abs.returnValues as Json).ReturnValue)).toBe(3.5);
   }, 60_000);
+
+  it("list_function_libraries reports the Python names and matches a pattern against them (#1453)", async () => {
+    const listed = await call("list_function_libraries", { pattern: "unreal.MathLibrary" });
+    type Lib = { name: string; pythonName: string; functions: Array<{ name: string; pythonName: string; pythonMethod?: string }> };
+    const lib = (listed.libraries as Lib[]).find((l) => l.name === "KismetMathLibrary");
+    expect(lib).toBeDefined();
+    // The pattern matched the Python name: "unreal.mathlibrary" is not in any class name.
+    expect(lib!.pythonName).toBe("unreal.MathLibrary");
+    const fn = (n: string) => lib!.functions.find((f) => f.name === n);
+    expect(fn("Abs")!.pythonName).toBe("abs");
+    expect(fn("RandomUnitVector")!.pythonName).toBe("random_unit_vector");
+    expect(fn("Add_VectorVector")!.pythonName).toBe("add_vector_vector");
+    expect(fn("Add_VectorVector")!.pythonMethod).toBe("add");
+  }, 60_000);
 });
 
 describe("editor tabs", () => {

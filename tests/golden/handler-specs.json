@@ -21140,7 +21140,7 @@
           "name": "pattern",
           "type": "string",
           "required": false,
-          "description": "Case-insensitive substring of the library class name"
+          "description": "Case-insensitive substring of the library class name or its Python name"
         },
         {
           "name": "includeFunctions",

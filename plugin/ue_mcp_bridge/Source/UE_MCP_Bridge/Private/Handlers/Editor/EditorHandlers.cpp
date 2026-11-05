@@ -79,6 +79,7 @@
 #include "Subsystems/EditorActorSubsystem.h"
 #include "Misc/OutputDeviceRedirector.h"
 #include "FileHelpers.h"
+#include "Internationalization/BreakIterator.h"
 #include "Engine/Level.h"
 #include "Settings/LevelEditorPlaySettings.h"
 #include "Misc/DateTime.h"
@@ -906,7 +907,7 @@ void FEditorHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	// Kismet, anything user-defined). Pair with editor.invoke_function to
 	// drive GeometryScript ops from MCP without hand-writing each handler.
 	Registry.RegisterHandler(TEXT("list_function_libraries"), &ListFunctionLibraries, {
-		MCPParam::Optional(TEXT("pattern"), EType::String, TEXT("Case-insensitive substring of the library class name")),
+		MCPParam::Optional(TEXT("pattern"), EType::String, TEXT("Case-insensitive substring of the library class name or its Python name")),
 		MCPParam::Optional(TEXT("includeFunctions"), EType::Boolean, TEXT("Include each library's static BlueprintCallable functions (default true)")),
 	});
 	// #718: close the open Level Sequence editor before destructive actor ops.
@@ -5197,6 +5198,61 @@ TSharedPtr<FJsonValue> FEditorHandlers::CaptureScenePng(const TSharedPtr<FJsonOb
 // without authoring per-op C++ wrappers.
 //
 // Params: pattern? (substring filter), includeFunctions? (default true)
+namespace FunctionLibraryPythonNames
+{
+	// First entry of a ScriptName/ScriptMethod list; later entries are deprecated aliases.
+	FString FirstMetaName(const UField* Field, const TCHAR* Key)
+	{
+		FString Value = Field->GetMetaData(Key);
+		int32 Semi = INDEX_NONE;
+		if (Value.FindChar(TEXT(';'), Semi)) Value.LeftInline(Semi);
+		Value.TrimStartAndEndInline();
+		return Value;
+	}
+
+	// Snake-cases the way the Python plugin's PythonizeName does (camel-case
+	// breaks joined by '_', lowered, keyword-suffixed), so names match unreal.*.
+	FString Pythonize(const FString& Name)
+	{
+		static const TSet<FString> Keywords = {
+			TEXT("and"), TEXT("as"), TEXT("assert"), TEXT("async"), TEXT("break"), TEXT("class"),
+			TEXT("continue"), TEXT("def"), TEXT("del"), TEXT("elif"), TEXT("else"), TEXT("except"),
+			TEXT("finally"), TEXT("for"), TEXT("from"), TEXT("global"), TEXT("if"), TEXT("import"),
+			TEXT("in"), TEXT("is"), TEXT("lambda"), TEXT("nonlocal"), TEXT("not"), TEXT("or"),
+			TEXT("pass"), TEXT("raise"), TEXT("return"), TEXT("try"), TEXT("while"), TEXT("with"),
+			TEXT("yield"), TEXT("property"),
+		};
+		FString Out;
+		Out.Reserve(Name.Len() + 10);
+		TSharedRef<IBreakIterator> Breaks = FBreakIterator::CreateCamelCaseBreakIterator();
+		Breaks->SetStringRef(Name);
+		for (int32 Prev = 0, Break = Breaks->MoveToNext(); Break != INDEX_NONE; Break = Breaks->MoveToNext())
+		{
+			const int32 StartLen = Out.Len();
+			if (StartLen > 0 && Out[StartLen - 1] != TEXT('_')) Out += TEXT('_');
+			Out.AppendChars(&Name[Prev], Break - Prev);
+			while (Out.Len() > StartLen && Out[Out.Len() - 1] == TEXT('_')) Out.LeftChopInline(1);
+			Prev = Break;
+		}
+		Breaks->ClearString();
+		Out.ToLowerInline();
+		if (Keywords.Contains(Out)) Out += TEXT('_');
+		return Out;
+	}
+
+	FString ClassName(const UClass* Class)
+	{
+		const FString Meta = FirstMetaName(Class, TEXT("ScriptName"));
+		return Meta.IsEmpty() ? Class->GetName() : Meta;
+	}
+
+	FString FunctionName(const UFunction* Func)
+	{
+		const FString Meta = FirstMetaName(Func, TEXT("ScriptName"));
+		return Pythonize(Meta.IsEmpty() ? Func->GetName() : Meta);
+	}
+}
+
 TSharedPtr<FJsonValue> FEditorHandlers::ListFunctionLibraries(const TSharedPtr<FJsonObject>& Params)
 {
 	const FString Pattern = OptionalString(Params, TEXT("pattern"), TEXT("")).ToLower();
@@ -5211,10 +5267,14 @@ TSharedPtr<FJsonValue> FEditorHandlers::ListFunctionLibraries(const TSharedPtr<F
 		if (C->HasAnyClassFlags(CLASS_Abstract | CLASS_Deprecated | CLASS_NewerVersionExists)) continue;
 
 		const FString ClassName = C->GetName();
-		if (!Pattern.IsEmpty() && !ClassName.ToLower().Contains(Pattern)) continue;
+		// #1453: the Python name (ScriptName) often differs from the class name,
+		// e.g. GeometryScriptLibrary_ListUtilityFunctions is unreal.GeometryScript_List.
+		const FString PythonName = FString::Printf(TEXT("unreal.%s"), *FunctionLibraryPythonNames::ClassName(C));
+		if (!Pattern.IsEmpty() && !ClassName.ToLower().Contains(Pattern) && !PythonName.ToLower().Contains(Pattern)) continue;
 
 		TSharedPtr<FJsonObject> LibObj = MakeShared<FJsonObject>();
 		LibObj->SetStringField(TEXT("name"), ClassName);
+		LibObj->SetStringField(TEXT("pythonName"), PythonName);
 		LibObj->SetStringField(TEXT("path"), C->GetPathName());
 		if (UPackage* Pkg = C->GetOuterUPackage())
 		{
@@ -5231,6 +5291,15 @@ TSharedPtr<FJsonValue> FEditorHandlers::ListFunctionLibraries(const TSharedPtr<F
 				if (!Func->HasAllFunctionFlags(FUNC_Static | FUNC_BlueprintCallable)) continue;
 				TSharedPtr<FJsonObject> FObj = MakeShared<FJsonObject>();
 				FObj->SetStringField(TEXT("name"), Func->GetName());
+				FObj->SetStringField(TEXT("pythonName"), FunctionLibraryPythonNames::FunctionName(Func));
+				if (Func->HasMetaData(TEXT("ScriptMethod")))
+				{
+					// Also callable as a method on its first parameter's type; an empty value reuses the function name.
+					const FString ScriptMethod = FunctionLibraryPythonNames::FirstMetaName(Func, TEXT("ScriptMethod"));
+					FObj->SetStringField(TEXT("pythonMethod"), ScriptMethod.IsEmpty()
+						? FunctionLibraryPythonNames::FunctionName(Func)
+						: FunctionLibraryPythonNames::Pythonize(ScriptMethod));
+				}
 				const FString Tooltip = Func->GetToolTipText().ToString();
 				if (!Tooltip.IsEmpty()) FObj->SetStringField(TEXT("tooltip"), Tooltip.Left(240));
 				Funcs.Add(MakeShared<FJsonValueObject>(FObj));
