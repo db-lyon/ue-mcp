@@ -5332,6 +5332,11 @@
         },
         {
           "suite": "live",
+          "file": "tests/live/level-ofpa-delete-save.test.ts",
+          "test": "deletes the actor files and the actors stay gone after a reload"
+        },
+        {
+          "suite": "live",
           "file": "tests/live/sequencer-datasmith-metahuman.test.ts",
           "test": "reports a binding stale once its actor is deleted, and rebinds it keeping the guid (#1356)"
         }
@@ -6313,6 +6318,11 @@
           "suite": "live",
           "file": "tests/live/editor-lifecycle.test.ts",
           "test": "stop_editor after a real crash ends the crash reporter, and the build that follows links (#1221)"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/level-ofpa-delete-save.test.ts",
+          "test": "deletes the actor files and the actors stay gone after a reload"
         },
         {
           "suite": "live",
@@ -10125,6 +10135,11 @@
           "suite": "live",
           "file": "tests/live/bcov-level-multilevel.test.ts",
           "test": "list_actor_descs finds the saved actor's descriptor"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/level-ofpa-delete-save.test.ts",
+          "test": "deletes the actor files and the actors stay gone after a reload"
         }
       ]
     },
@@ -11879,6 +11894,11 @@
           "suite": "live",
           "file": "tests/live/editor-lifecycle.test.ts",
           "test": "stop_editor closes the project's editor and its process exits"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/level-ofpa-delete-save.test.ts",
+          "test": "deletes the actor files and the actors stay gone after a reload"
         },
         {
           "suite": "live",
@@ -18427,6 +18447,11 @@
           "suite": "live",
           "file": "tests/live/checkpoints.test.ts",
           "test": "a turn through the server"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/level-ofpa-delete-save.test.ts",
+          "test": "deletes the actor files and the actors stay gone after a reload"
         }
       ]
     },
