@@ -34777,6 +34777,12 @@
           "type": "string",
           "required": false,
           "description": "AnimSequence to swap into the sample"
+        },
+        {
+          "name": "rateScale",
+          "type": "number",
+          "required": false,
+          "description": "Per-sample playback rate, 0.01 to 64 (FBlendSample::RateScale)"
         }
       ],
       "choices": [
@@ -34794,6 +34800,9 @@
             ],
             [
               "animation"
+            ],
+            [
+              "rateScale"
             ]
           ]
         }
@@ -39929,7 +39938,7 @@
           "name": "properties",
           "type": "object",
           "required": true,
-          "description": "{enableRootMotion?, forceRootLock?, useNormalizedRootMotionScale?, rootMotionRootLock?: RefPose|AnimFirstFrame|Zero, additiveAnimType?: None|LocalSpaceBase|RotationOffsetMeshSpace, refPoseType?: None|RefPose|AnimScaled|AnimFrame|LocalAnimFrame, refPoseSeq?, refFrameIndex?}. An unknown key or value refuses the whole call"
+          "description": "{loop?, enableRootMotion?, forceRootLock?, useNormalizedRootMotionScale?, rootMotionRootLock?: RefPose|AnimFirstFrame|Zero, additiveAnimType?: None|LocalSpaceBase|RotationOffsetMeshSpace, refPoseType?: None|RefPose|AnimScaled|AnimFrame|LocalAnimFrame, refPoseSeq?, refFrameIndex?}. An unknown key or value refuses the whole call"
         },
         {
           "name": "resolveFromMontages",
