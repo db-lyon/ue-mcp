@@ -129,6 +129,12 @@ export interface InProcessCallOptions {
    * that wants a person applies as it does for a client without elicitation.
    */
   elicit?: ElicitFn;
+  /**
+   * The access mode this call runs under. `read-only` refuses an action whose
+   * declared effect is `mutate` or `unknown`, and every state-changing bridge
+   * call it would make. Default read-write.
+   */
+  access?: "read-write" | "read-only";
 }
 
 export interface ToolContext {

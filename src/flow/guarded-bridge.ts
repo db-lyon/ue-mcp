@@ -15,6 +15,7 @@ import type { BridgeTarget, IBridge } from "../bridge/bridge.js";
 import type { EditorSession } from "../sessions/session.js";
 import { explainEditorDownWithEvidence } from "../dispatch/offline.js";
 import { GuardRegistry, makeCallContext, type ResolveExistingFile } from "./guard.js";
+import { callIsReadOnly, readOnlyGuard } from "./session-access.js";
 import { DialogGuard, ensureGuard, existingGuard } from "../editor/dialog-guard.js";
 
 export type { ResolveExistingFile } from "./guard.js";
@@ -129,6 +130,16 @@ export class DialogGatedBridge extends ForwardingBridge {
   }
 }
 
+/**
+ * The pipeline a read-only session's call runs through: the session's own
+ * guards with the built-in read-only guard ahead of them. Built per call, and
+ * only for a read-only session, because the mode belongs to the caller while
+ * the registry is shared by every client of the editor.
+ */
+function withReadOnlyGuard(registry: GuardRegistry): GuardRegistry {
+  return new GuardRegistry().registerAll([readOnlyGuard, ...registry.list()]) as GuardRegistry;
+}
+
 export class GuardedBridge extends ForwardingBridge {
   constructor(
     inner: IBridge,
@@ -159,7 +170,8 @@ export class GuardedBridge extends ForwardingBridge {
       // `runGuarded` is already a pass-through on an empty registry, but building
       // the context is not free and every bridge call lands here. Most servers run
       // with no guards at all, so skip the allocation outright.
-      if (this.registry.size === 0) {
+      const readOnly = callIsReadOnly();
+      if (this.registry.size === 0 && !readOnly) {
         const blocked = await this.guardCall(method);
         if (blocked) return blocked;
         return this.observe(method, await this.inner.call(method, params, timeoutMs));
@@ -177,7 +189,7 @@ export class GuardedBridge extends ForwardingBridge {
       if (blocked) return blocked;
       return this.observe(
         method,
-        await runGuarded(ctx, this.registry, () => this.inner.call(method, params, timeoutMs)),
+        await runGuarded(ctx, readOnly ? withReadOnlyGuard(this.registry) : this.registry, () => this.inner.call(method, params, timeoutMs)),
       );
     } catch (e) {
       // Every route into the editor comes through here (an MCP tool call, a
