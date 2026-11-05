@@ -4495,6 +4495,35 @@ export const handlerSpecs: HandlerSpecs = {
       }
     ]
   },
+  "quick_search": {
+    "category": "asset",
+    "params": [
+      {
+        "name": "query",
+        "type": "string",
+        "required": true,
+        "description": "Words matched against names, classes and paths; every word must match. A leading BP_, M_ or DT_ keeps names with that prefix, and actor:, asset: or file: keeps one kind"
+      },
+      {
+        "name": "refreshFiles",
+        "type": "boolean",
+        "required": false,
+        "description": "Re-walk Source/ and Config/ now instead of using the listing cached for 2 seconds (default false)"
+      },
+      {
+        "name": "cursor",
+        "type": "string",
+        "required": false,
+        "description": "Resume a paged read: pass back the nextCursor from the previous page, unmodified"
+      },
+      {
+        "name": "limit",
+        "type": "integer",
+        "required": false,
+        "description": "Rows per page, 1 to 200 (default 20)"
+      }
+    ]
+  },
   "read_asset": {
     "category": "asset",
     "params": [
@@ -6353,6 +6382,7 @@ export const paramsClauses: Readonly<Record<string, string>> = {
   mesh_boolean: "Params: operation, targetPath, toolPath, outputPath?, inPlace?, targetTransform?, toolTransform?, lodType?, lodIndex?, fillHoles?, simplifyOutput?, simplifyPlanarTolerance?, allowEmptyResult?, recomputeNormals?, recomputeTangents?, removeDegenerates?, copyCollisionFromTarget?, copyMaterialsFromTarget?, nanite?, onConflict?, dryRun?, save?",
   move_asset: "Params: sourcePath?, destinationPath?, assetPath?, newName?, force?",
   move_folder: "Params: sourcePath, destinationPath",
+  quick_search: "Params: query, refreshFiles?, cursor?, limit?",
   read_asset: "Params: assetPath (or path)",
   read_asset_graph: "Params: assetPath (or path), graphName?, includePins?, maxNodes?",
   read_asset_properties: "Params: assetPath (or path), propertyName?, includeValues?, valueFormat?, expandDepth?, expandExternal?, maxExpandedObjects?",
@@ -6562,7 +6592,7 @@ export const schema: Record<string, z.ZodType> = {
   keys: z.array(z.record(z.string(), z.unknown())).optional().describe("Replacement keys: [{time, value, interpMode?, arriveTangent?, leaveTangent?}]"),
   keyTimeTolerance: z.number().optional().describe("How close an existing key must be to be updated rather than added"),
   lightmapResolution: z.number().optional().describe("The mesh's lightmap resolution"),
-  limit: z.number().int().optional().describe("Rows to return (default 200, max 2000) (bulk_read_asset_properties). Rows per page, 1 to 5000 (default 500) (list_assets). Bones per page (default every bone) (list_skeleton_bones). Rows per page, 1 to 2000 (default 50) (list_textures, search_assets_fts)"),
+  limit: z.number().int().optional().describe("Rows to return (default 200, max 2000) (bulk_read_asset_properties). Rows per page, 1 to 5000 (default 500) (list_assets). Bones per page (default every bone) (list_skeleton_bones). Rows per page, 1 to 2000 (default 50) (list_textures, search_assets_fts). Rows per page, 1 to 200 (default 20) (quick_search)"),
   loadingPolicy: z.string().optional().describe("LazyLoad (default) | Stream | Inline"),
   lodCount: z.number().int().optional().describe("Total LODs including LOD 0, 1 to 8"),
   lodGroup: z.string().optional().describe("Texture LOD group, applied to the imported texture (import_texture). Texture group, with or without TEXTUREGROUP_: World, Weapon, WeaponNormalMap, WeaponSpecular and the other engine values (set_texture_settings)"),
@@ -6640,13 +6670,14 @@ export const schema: Record<string, z.ZodType> = {
   propertyName: z.string().optional().describe("Path of the TArray property (append_asset_array_elements). Path to a TArray of structs or TMap with struct values (edit_collection_entry). One property to read; dotted and indexed paths walk structs, arrays and instanced subobjects (get_asset_properties, read_asset_properties). Property path; dotted and indexed paths walk structs, arrays and instanced subobjects (set_asset_property)"),
   propertyNames: z.array(z.string()).optional().describe("Property paths to read off every matched asset; dotted paths walk nested structs (max 32)"),
   quarantineFolder: z.string().optional().describe("Where quarantined assets move, keeping their folder shape (default /Game/Quarantine)"),
-  query: z.string().optional().describe("Words scored against each asset's name, class and path"),
+  query: z.string().optional().describe("Words matched against names, classes and paths; every word must match. A leading BP_, M_ or DT_ keeps names with that prefix, and actor:, asset: or file: keeps one kind (quick_search). Words scored against each asset's name, class and path (search_assets_fts)"),
   rasterSize: z.number().optional().describe("Raster resolution for the overlap estimate (default 512) (check_uvs). Raster resolution for the result's overlap estimate (default 512) (generate_lightmap_uvs, unwrap_uvs). Raster resolution for the coverage and overlap estimate (default 512) (read_uv_channels)"),
   recomputeNormals: z.boolean().optional().describe("Recompute normals on the written mesh (default false)"),
   recomputeTangents: z.boolean().optional().describe("Recompute tangents on the written mesh (default false)"),
   reconcile: z.boolean().optional().describe("Force a synchronous rescan first, which evicts pending-kill ghosts"),
   recursive: z.boolean().optional().describe("Include subfolders (default true) (audit_asset_hygiene, diagnose_registry, fix_asset_hygiene, list_assets). Include subfolders of directory (default true) (bulk_read_asset_properties). With directory, include subfolders (default true) (generate_skeletal_mesh_lods)"),
   recursiveClasses: z.boolean().optional().describe("Include subclasses of classPaths (default true)"),
+  refreshFiles: z.boolean().optional().describe("Re-walk Source/ and Config/ now instead of using the listing cached for 2 seconds (default false)"),
   regenerateImported: z.boolean().optional().describe("Also regenerate LODs that were imported rather than generated (default false)"),
   regexIgnoreCase: z.boolean().optional().describe("Case-insensitive nameRegex (default true)"),
   relativeDensity: z.number().optional().describe("-2 to 2, bias toward more or fewer triangles in curved regions (remeshMode adaptive, default 0)"),
