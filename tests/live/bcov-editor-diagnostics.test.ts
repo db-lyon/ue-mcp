@@ -9,7 +9,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { callBridge, disconnectBridge, getBridge, type TestResult } from "../setup.js";
+import { callBridge, closeEditorTabWindows, disconnectBridge, getBridge, type TestResult } from "../setup.js";
 import type { EditorBridge } from "../../src/bridge/bridge.js";
 
 const CRASH_FOLDER = "BCov_Editor_FakeCrash";
@@ -45,7 +45,10 @@ afterAll(async () => {
     if (crashesDir) fs.rmSync(path.join(crashesDir, CRASH_FOLDER), { recursive: true, force: true });
     if (scratch) fs.rmSync(scratch, { recursive: true, force: true });
   } finally {
-    if (bridge) disconnectBridge();
+    if (bridge) {
+      await closeEditorTabWindows(bridge);
+      disconnectBridge();
+    }
   }
 }, 60_000);
 
