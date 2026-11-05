@@ -283,8 +283,7 @@ effective (npx):1.0.64  (behind latest 1.0.76)
 
 With `ue-mcp` in the project's `package.json`, `npx ue-mcp` runs the local copy, so `npm i -g ue-mcp@latest` updates a copy npx never uses. Fixes:
 
-- `npx ue-mcp update` aligns the local copy, or
-- remove `ue-mcp` from the project's `package.json` and delete `node_modules/ue-mcp`, or
+- run `npm uninstall ue-mcp` in the project folder (`ue-mcp update` never installs there), or
 - launch with `npx -y --min-release-age=0 ue-mcp@latest` in the client config, so every launch fetches the current release.
 
 Then quit and relaunch your MCP client.
