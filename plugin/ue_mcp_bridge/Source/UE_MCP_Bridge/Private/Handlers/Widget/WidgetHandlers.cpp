@@ -1086,6 +1086,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::AddWidget(const TSharedPtr<FJsonObject>&
 	TSharedPtr<FJsonValue> ResolveError;
 	UWidgetBlueprint* WidgetBP = MCPWidget::ResolveWidgetBlueprintOrError(AssetPath, ResolveError);
 	if (!WidgetBP) return ResolveError;
+	const MCPWidgetGuidMap::FCompileBaseline CompileBaseline = MCPWidgetGuidMap::CaptureBaseline(WidgetBP);
 
 	if (!WidgetBP->WidgetTree) return MCPWidget::MissingWidgetTreeError(AssetPath);
 
@@ -1201,8 +1202,8 @@ TSharedPtr<FJsonValue> FWidgetHandlers::AddWidget(const TSharedPtr<FJsonObject>&
 	// first, compiles, then writes them again because the compile can rename a
 	// widget whose requested name collided, and refuses to compile at all when
 	// an entry could not be written (#799).
-	const MCPWidgetGuidMap::FSyncReport GuidSync = MCPWidgetGuidMap::CompileChecked(WidgetBP);
-	if (!GuidSync.bCompiled)
+	const MCPWidgetGuidMap::FSyncReport GuidSync = MCPWidgetGuidMap::CompileChecked(WidgetBP, CompileBaseline);
+	if (GuidSync.WasRefused())
 	{
 		return MCPWidgetGuidMap::BlockedError(AssetPath, GuidSync);
 	}
@@ -1213,7 +1214,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::AddWidget(const TSharedPtr<FJsonObject>&
 	}
 
 	FString SaveError;
-	const bool bSaved = SaveAssetPackageChecked(WidgetBP, SaveError);
+	const bool bSaved = MCPWidgetGuidMap::SaveIfCompiled(WidgetBP, GuidSync, SaveError);
 
 	auto Result = MCPSuccess();
 	MCPSetCreated(Result);
@@ -1235,14 +1236,14 @@ TSharedPtr<FJsonValue> FWidgetHandlers::AddWidget(const TSharedPtr<FJsonObject>&
 		Result->SetStringField(TEXT("parentWidgetName"), ParentWidgetName);
 	}
 	MCPSetWidgetGuidOutcome(Result, GuidSync, AssetPath);
-	MCPSetWidgetCompileOutcome(Result, WidgetBP, AssetPath,
-		FString::Printf(TEXT("Widget '%s' was added"), *PersistedName));
 
 	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
 	Payload->SetStringField(TEXT("assetPath"), AssetPath);
 	Payload->SetStringField(TEXT("widgetName"), PersistedName);
 	MCPSetRollback(Result, TEXT("remove_widget"), Payload);
 
+	MCPSetWidgetCompileOutcome(Result, WidgetBP, AssetPath, GuidSync,
+		FString::Printf(TEXT("Widget '%s' was added"), *PersistedName));
 	return MCPResult(Result);
 }
 
@@ -1257,6 +1258,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::RemoveWidget(const TSharedPtr<FJsonObjec
 	TSharedPtr<FJsonValue> ResolveError;
 	UWidgetBlueprint* WidgetBP = MCPWidget::ResolveWidgetBlueprintOrError(AssetPath, ResolveError);
 	if (!WidgetBP) return ResolveError;
+	const MCPWidgetGuidMap::FCompileBaseline CompileBaseline = MCPWidgetGuidMap::CaptureBaseline(WidgetBP);
 
 	if (!WidgetBP->WidgetTree) return MCPWidget::MissingWidgetTreeError(AssetPath);
 
@@ -1358,14 +1360,14 @@ TSharedPtr<FJsonValue> FWidgetHandlers::RemoveWidget(const TSharedPtr<FJsonObjec
 	}
 
 	WidgetBP->MarkPackageDirty();
-	MCPWidgetGuidMap::FSyncReport GuidSync = MCPWidgetGuidMap::CompileChecked(WidgetBP);
-	if (!GuidSync.bCompiled)
+	MCPWidgetGuidMap::FSyncReport GuidSync = MCPWidgetGuidMap::CompileChecked(WidgetBP, CompileBaseline);
+	if (GuidSync.WasRefused())
 	{
 		return MCPWidgetGuidMap::BlockedError(AssetPath, GuidSync);
 	}
 	GuidSync.Evicted = Evicted;
 	FString SaveError;
-	const bool bSaved = SaveAssetPackageChecked(WidgetBP, SaveError);
+	const bool bSaved = MCPWidgetGuidMap::SaveIfCompiled(WidgetBP, GuidSync, SaveError);
 
 	auto Result = MCPSuccess();
 	MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveError);
@@ -1378,8 +1380,6 @@ TSharedPtr<FJsonValue> FWidgetHandlers::RemoveWidget(const TSharedPtr<FJsonObjec
 	Result->SetBoolField(TEXT("wasRoot"), bRemovedWasRoot);
 	Result->SetNumberField(TEXT("removedChildCount"), RemovedChildCount);
 	MCPSetWidgetGuidOutcome(Result, GuidSync, AssetPath);
-	MCPSetWidgetCompileOutcome(Result, WidgetBP, AssetPath,
-		FString::Printf(TEXT("Widget '%s' was removed"), *WidgetName));
 
 	// add_widget puts a widget of the same class back under the same parent and
 	// under the same name: the removal evicted the old object into the transient
@@ -1420,6 +1420,8 @@ TSharedPtr<FJsonValue> FWidgetHandlers::RemoveWidget(const TSharedPtr<FJsonObjec
 		TEXT("Read the subtree with widget(read_tree) or widget(get_properties) before removing if any of it matters."),
 		*RemovedClass, *WidgetName, *Placement, RemovedChildCount));
 
+	MCPSetWidgetCompileOutcome(Result, WidgetBP, AssetPath, GuidSync,
+		FString::Printf(TEXT("Widget '%s' was removed"), *WidgetName));
 	return MCPResult(Result);
 }
 
@@ -1437,6 +1439,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::MoveWidget(const TSharedPtr<FJsonObject>
 	TSharedPtr<FJsonValue> ResolveError;
 	UWidgetBlueprint* WidgetBP = MCPWidget::ResolveWidgetBlueprintOrError(AssetPath, ResolveError);
 	if (!WidgetBP) return ResolveError;
+	const MCPWidgetGuidMap::FCompileBaseline CompileBaseline = MCPWidgetGuidMap::CaptureBaseline(WidgetBP);
 	if (!WidgetBP->WidgetTree) return MCPWidget::MissingWidgetTreeError(AssetPath);
 
 	// Find the widget to move
@@ -1520,13 +1523,13 @@ TSharedPtr<FJsonValue> FWidgetHandlers::MoveWidget(const TSharedPtr<FJsonObject>
 	// variable for without a GUID entry - including one an earlier build left
 	// unregistered. Compiling through CompileChecked repairs that instead of
 	// turning this call into the one that reports the failure (#728).
-	const MCPWidgetGuidMap::FSyncReport GuidSync = MCPWidgetGuidMap::CompileChecked(WidgetBP);
-	if (!GuidSync.bCompiled)
+	const MCPWidgetGuidMap::FSyncReport GuidSync = MCPWidgetGuidMap::CompileChecked(WidgetBP, CompileBaseline);
+	if (GuidSync.WasRefused())
 	{
 		return MCPWidgetGuidMap::BlockedError(AssetPath, GuidSync);
 	}
 	FString SaveError;
-	const bool bSaved = SaveAssetPackageChecked(WidgetBP, SaveError);
+	const bool bSaved = MCPWidgetGuidMap::SaveIfCompiled(WidgetBP, GuidSync, SaveError);
 
 	auto Result = MCPSuccess();
 	MCPSetUpdated(Result);
@@ -1546,6 +1549,8 @@ TSharedPtr<FJsonValue> FWidgetHandlers::MoveWidget(const TSharedPtr<FJsonObject>
 		MCPSetRollback(Result, TEXT("move_widget"), Payload);
 	}
 
+	MCPSetWidgetCompileOutcome(Result, WidgetBP, AssetPath, GuidSync,
+		FString::Printf(TEXT("Widget '%s' was moved under '%s'"), *WidgetName, *NewParentName));
 	return MCPResult(Result);
 }
 
@@ -1564,6 +1569,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::SetRoot(const TSharedPtr<FJsonObject>& P
 	TSharedPtr<FJsonValue> ResolveError;
 	UWidgetBlueprint* WidgetBP = MCPWidget::ResolveWidgetBlueprintOrError(AssetPath, ResolveError);
 	if (!WidgetBP) return ResolveError;
+	const MCPWidgetGuidMap::FCompileBaseline CompileBaseline = MCPWidgetGuidMap::CaptureBaseline(WidgetBP);
 	if (!WidgetBP->WidgetTree) return MCPWidget::MissingWidgetTreeError(AssetPath);
 
 	UWidget* NewRoot = MCPWidget::FindWidgetByName(WidgetBP->WidgetTree, WidgetName);
@@ -1615,14 +1621,14 @@ TSharedPtr<FJsonValue> FWidgetHandlers::SetRoot(const TSharedPtr<FJsonObject>& P
 	}
 
 	WidgetBP->MarkPackageDirty();
-	MCPWidgetGuidMap::FSyncReport GuidSync = MCPWidgetGuidMap::CompileChecked(WidgetBP);
-	if (!GuidSync.bCompiled)
+	MCPWidgetGuidMap::FSyncReport GuidSync = MCPWidgetGuidMap::CompileChecked(WidgetBP, CompileBaseline);
+	if (GuidSync.WasRefused())
 	{
 		return MCPWidgetGuidMap::BlockedError(AssetPath, GuidSync);
 	}
 	GuidSync.Evicted = Evicted;
 	FString SaveError;
-	const bool bSaved = SaveAssetPackageChecked(WidgetBP, SaveError);
+	const bool bSaved = MCPWidgetGuidMap::SaveIfCompiled(WidgetBP, GuidSync, SaveError);
 
 	auto Result = MCPSuccess();
 	MCPSetUpdated(Result);
@@ -1645,6 +1651,8 @@ TSharedPtr<FJsonValue> FWidgetHandlers::SetRoot(const TSharedPtr<FJsonObject>& P
 		TEXT("them again. Read the tree with widget(read_tree) BEFORE a root swap if it has to be recoverable, or use widget(wrap_root) ")
 		TEXT("instead, which keeps the old root as a child and does emit an inverse."),
 		*PreviousRootName, Evicted));
+	MCPSetWidgetCompileOutcome(Result, WidgetBP, AssetPath, GuidSync,
+		FString::Printf(TEXT("'%s' was made the root"), *WidgetName));
 	return MCPResult(Result);
 }
 
@@ -1665,6 +1673,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::WrapRoot(const TSharedPtr<FJsonObject>& 
 	TSharedPtr<FJsonValue> ResolveError;
 	UWidgetBlueprint* WidgetBP = MCPWidget::ResolveWidgetBlueprintOrError(AssetPath, ResolveError);
 	if (!WidgetBP) return ResolveError;
+	const MCPWidgetGuidMap::FCompileBaseline CompileBaseline = MCPWidgetGuidMap::CaptureBaseline(WidgetBP);
 	if (!WidgetBP->WidgetTree) return MCPWidget::MissingWidgetTreeError(AssetPath);
 
 	UWidget* OldRoot = WidgetBP->WidgetTree->RootWidget;
@@ -1751,13 +1760,13 @@ TSharedPtr<FJsonValue> FWidgetHandlers::WrapRoot(const TSharedPtr<FJsonObject>& 
 	// #728: the wrapper is a new widget variable and needs a GUID before the
 	// compile that checks for one. CompileChecked writes it, compiles, then
 	// writes it again under whatever name the compile settled on.
-	const MCPWidgetGuidMap::FSyncReport GuidSync = MCPWidgetGuidMap::CompileChecked(WidgetBP);
-	if (!GuidSync.bCompiled)
+	const MCPWidgetGuidMap::FSyncReport GuidSync = MCPWidgetGuidMap::CompileChecked(WidgetBP, CompileBaseline);
+	if (GuidSync.WasRefused())
 	{
 		return MCPWidgetGuidMap::BlockedError(AssetPath, GuidSync);
 	}
 	FString SaveError;
-	const bool bSaved = SaveAssetPackageChecked(WidgetBP, SaveError);
+	const bool bSaved = MCPWidgetGuidMap::SaveIfCompiled(WidgetBP, GuidSync, SaveError);
 
 	if (WrappedChild.IsValid())
 	{
@@ -1798,6 +1807,8 @@ TSharedPtr<FJsonValue> FWidgetHandlers::WrapRoot(const TSharedPtr<FJsonObject>& 
 			TEXT("the wrapper this call created. Clear them first with widget(remove_widget), or accept the loss."),
 			PreExistingOrphans, PreExistingOrphans));
 	}
+	MCPSetWidgetCompileOutcome(Result, WidgetBP, AssetPath, GuidSync,
+		FString::Printf(TEXT("The root was wrapped in '%s'"), *WrapperName));
 	return MCPResult(Result);
 }
 
