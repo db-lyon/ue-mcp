@@ -62,6 +62,13 @@ bool FMCPPathGuardTest::RunTest(const FString& Parameters)
 	TestTrue(TEXT("Saved is a default writable root"),
 		MCPResolvePathInside(FPaths::ProjectSavedDir() / TEXT("x.json"), MCPDefaultWritableRoots(), Full, Error));
 
+	TestTrue(TEXT("an FPaths directory resolves to the real project folder"),
+		FPaths::IsSamePath(MCPFullPath(FPaths::ProjectSavedDir(), FPaths::ProjectDir()),
+			FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir())));
+	TestTrue(TEXT("a project-relative path still resolves against the project"),
+		FPaths::IsSamePath(MCPFullPath(TEXT("Saved/x.json"), FPaths::ProjectDir()),
+			FPaths::ConvertRelativePathToFull(FPaths::ProjectDir()) / TEXT("Saved/x.json")));
+
 	const TSharedPtr<FJsonValue> Refused = MCPRequirePathInside(TEXT("../x.ini"), Roots, Full);
 	TestTrue(TEXT("the handler form returns an error value"), Refused.IsValid());
 	TestFalse(TEXT("the handler form returns nothing for an allowed path"),

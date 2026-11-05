@@ -10,10 +10,21 @@
 #include "Misc/Paths.h"
 #include "HandlerResult.h"
 
-/** Full, normalised form of Path; a relative Path is taken against BaseDir, itself made full first. */
+/** True for a path built from FPaths::ProjectDir() while that is relative to the engine binaries folder. */
+inline bool MCPIsEngineRelative(const FString& Path)
+{
+	const FString ProjectDir = FPaths::ProjectDir();
+	return FPaths::IsRelative(ProjectDir) && FPaths::IsRelative(Path)
+		&& Path.Replace(TEXT("\\"), TEXT("/")).StartsWith(ProjectDir, ESearchCase::IgnoreCase);
+}
+
+/**
+ * Full, normalised form of Path. A relative Path is taken against BaseDir, itself made full first,
+ * except one built from an FPaths directory, which is relative to the engine binaries folder.
+ */
 inline FString MCPFullPath(const FString& Path, const FString& BaseDir)
 {
-	FString Full = FPaths::IsRelative(Path)
+	FString Full = FPaths::IsRelative(Path) && !MCPIsEngineRelative(Path)
 		? FPaths::ConvertRelativePathToFull(FPaths::ConvertRelativePathToFull(BaseDir), Path)
 		: FPaths::ConvertRelativePathToFull(Path);
 	FPaths::NormalizeFilename(Full);
