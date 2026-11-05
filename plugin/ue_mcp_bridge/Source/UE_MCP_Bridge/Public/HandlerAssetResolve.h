@@ -15,34 +15,6 @@
 #include "HandlerResult.h"
 #include "HandlerWorld.h"
 
-/** Check for an existing asset at `PackagePath/Name`. Returns a fully-formed
- *  "already existed" result on hit (caller can return it directly), or an
- *  unset pointer on miss so the caller proceeds to create. Also honors an
- *  optional `onConflict: "error"` to return an MCPError instead.
- *  On miss, returns a null shared pointer (check with `.IsValid()`). */
-inline TSharedPtr<FJsonValue> MCPCheckAssetExists(
-	const FString& PackagePath,
-	const FString& Name,
-	const FString& OnConflict,
-	const FString& FriendlyType = TEXT("Asset"))
-{
-	const FString ProbePath = PackagePath + TEXT("/") + Name + TEXT(".") + Name;
-	if (UObject* Existing = LoadObject<UObject>(nullptr, *ProbePath))
-	{
-		if (OnConflict == TEXT("error"))
-		{
-			return MCPError(FString::Printf(TEXT("%s '%s' already exists"), *FriendlyType, *ProbePath));
-		}
-		auto Res = MCPSuccess();
-		MCPSetExisted(Res);
-		Res->SetStringField(TEXT("path"), Existing->GetPathName());
-		Res->SetStringField(TEXT("name"), Name);
-		Res->SetStringField(TEXT("packagePath"), PackagePath);
-		return MCPResult(Res);
-	}
-	return TSharedPtr<FJsonValue>();
-}
-
 // -- Asset path forms ---------------------------------------------------------
 
 /** The forms one asset path can take. `/Game/Foo/DT_Thing` names the package
@@ -159,6 +131,43 @@ inline bool MCPAssetExistsWithoutLoading(const FMCPAssetPathForms& Forms)
 	return MCPFindAssetDataForPath(Forms).IsValid();
 }
 
+/** Check for an existing asset at `PackagePath/Name`. Returns a fully-formed
+ *  "already existed" result on hit (caller can return it directly), or an
+ *  unset pointer on miss so the caller proceeds to create. Also honors an
+ *  optional `onConflict: "error"` to return an MCPError instead.
+ *  On miss, returns a null shared pointer (check with `.IsValid()`).
+ *
+ *  The probe never loads a path with nothing behind it: LoadObject on a free
+ *  path logs "Failed to find object", and a clean create must log nothing (#1479). */
+inline TSharedPtr<FJsonValue> MCPCheckAssetExists(
+	const FString& PackagePath,
+	const FString& Name,
+	const FString& OnConflict,
+	const FString& FriendlyType = TEXT("Asset"))
+{
+	const FString ProbePath = PackagePath + TEXT("/") + Name + TEXT(".") + Name;
+	UObject* Existing = FindObject<UObject>(nullptr, *ProbePath);
+	if (!MCPIsLiveAssetObject(Existing)) Existing = nullptr;
+	if (!Existing && MCPAssetExistsWithoutLoading(MCPAssetPathForms(ProbePath)))
+	{
+		Existing = LoadObject<UObject>(nullptr, *ProbePath);
+	}
+	if (Existing)
+	{
+		if (OnConflict == TEXT("error"))
+		{
+			return MCPError(FString::Printf(TEXT("%s '%s' already exists"), *FriendlyType, *ProbePath));
+		}
+		auto Res = MCPSuccess();
+		MCPSetExisted(Res);
+		Res->SetStringField(TEXT("path"), Existing->GetPathName());
+		Res->SetStringField(TEXT("name"), Name);
+		Res->SetStringField(TEXT("packagePath"), PackagePath);
+		return MCPResult(Res);
+	}
+	return TSharedPtr<FJsonValue>();
+}
+
 /** Load the asset at `AssetPath`, the way asset(read) does.
  *
  *  UEditorAssetLibrary::LoadAsset is the usual entry point, but it validates
@@ -192,6 +201,12 @@ inline UObject* MCPLoadAssetObject(const FString& AssetPath)
 		if (MCPIsLiveAssetObject(Loaded)) return Loaded;
 	}
 
+	// Nothing in memory and nothing on disk or in the registry is a miss, and
+	// every loader below logs an error or warning for one. Asking first keeps
+	// the existence probe of a create on a free path silent (#1479), and stops
+	// LoadObject forcing a blocking package search.
+	if (!MCPAssetExistsWithoutLoading(Forms)) return nullptr;
+
 	if (UObject* ViaEditorLibrary = UEditorAssetLibrary::LoadAsset(AssetPath))
 	{
 		if (MCPIsLiveAssetObject(ViaEditorLibrary)) return ViaEditorLibrary;
@@ -203,9 +218,6 @@ inline UObject* MCPLoadAssetObject(const FString& AssetPath)
 	// "Asset not found" for an asset asset(search) had just reported by that
 	// exact string, because the load stopped at a form the loader would not
 	// resolve on its own.
-	// Gated for the same reason as the package load below: LoadObject on a path
-	// with nothing behind it can force a blocking package search.
-	if (!MCPAssetExistsWithoutLoading(Forms)) return nullptr;
 
 	if (UObject* ViaInput = LoadObject<UObject>(nullptr, *AssetPath))
 	{
