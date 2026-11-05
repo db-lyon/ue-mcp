@@ -9,6 +9,7 @@ import type { EditorSession, SessionRegistry } from "../sessions/session.js";
 import type { ElicitFn, ProgressFn, ProgressUpdate, ToolContext, ToolDef } from "../core/types.js";
 import { McpError, ErrorCode } from "../core/errors.js";
 import { debug } from "../core/log.js";
+import { withCallAsker } from "../flow/call-elicit.js";
 import { unwrapArgsEnvelope, validateCategoryParams } from "../surface/context/call-envelope.js";
 import {
   routeEditorCall,
@@ -322,7 +323,9 @@ export async function dispatchCategoryCall(
     const task = await sessionRegistry.create(taskName, flowCtx, taskParams);
     // Locks are taken in the editor the call runs in, through the GUARDED
     // bridge, so a lock request made while a modal is up is refused as a dialog.
-    const result = await withAssetLocks(
+    // Every bridge call the task makes answers to this caller, so a guard that
+    // allows overrides asks the person who sent this call and nobody else.
+    const result = await withCallAsker({ elicit: flowCtx.elicit, subject: effectiveTask }, () => withAssetLocks(
       session.guarded,
       deps.lockingCfg,
       effectiveTask,
@@ -330,7 +333,7 @@ export async function dispatchCategoryCall(
       () => task.run(),
       session.lockOwnerId,
       loads.dispatchUnion.tools,
-    );
+    ));
 
     // A task that failed for its own reasons reports that, not a dialog. A
     // failure DURING a modal is usually caused by it, and the runner returns
@@ -496,7 +499,10 @@ export async function dispatchFlowCall(
       "action",
     );
     if (!flowCheck.allow) return refusalResult(flowCheck.refusal, attribution(sessions, session));
-    const result = await flowTool.handler(sessionContext(baseCtx, session), params);
+    const result = await withCallAsker(
+      { elicit: deps.elicit() },
+      () => flowTool.handler(sessionContext(baseCtx, session), params),
+    );
     const text = typeof result === "string" ? result : JSON.stringify(result, null, 2);
     return { content: [{ type: "text" as const, text }, ...attribution(sessions, session)] };
   } catch (e) {

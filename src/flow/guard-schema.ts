@@ -61,6 +61,12 @@ export const GuardDeclarationSchema = z
     order: z.number().int().default(0),
     /** Runs before the call. Denying here means the call never happens. */
     before: GuardHookSchema.optional(),
+    /**
+     * When the before hook denies, ask the person over elicitation whether to
+     * run the call anyway. No answer, a decline, or a client that cannot be
+     * asked keeps the denial.
+     */
+    allowsOverride: z.boolean().default(false),
     /** Runs after a successful call, and may replace its result. */
     after: GuardHookSchema.optional(),
   })
