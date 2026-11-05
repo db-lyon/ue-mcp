@@ -1,5 +1,5 @@
 {
-  "handlerCount": 1219,
+  "handlerCount": 1220,
   "handlers": {
     "add_ability_system_component": {
       "category": "gas",
@@ -43620,6 +43620,83 @@
           "type": "boolean",
           "required": false,
           "description": "Save each sequence (default true)"
+        }
+      ]
+    },
+    "transform_skinned_part": {
+      "category": "asset",
+      "params": [
+        {
+          "name": "assetPath",
+          "type": "string",
+          "required": true,
+          "description": "SkeletalMesh asset path"
+        },
+        {
+          "name": "boneName",
+          "type": "string",
+          "required": true,
+          "description": "Bone to move; every vertex skinned to it or to a bone below it moves by its weight"
+        },
+        {
+          "name": "translation",
+          "type": "vec3",
+          "required": false,
+          "description": "Offset in space's axes (cm)"
+        },
+        {
+          "name": "rotation",
+          "type": "rotator",
+          "required": false,
+          "description": "Rotation about the bone's origin, in space's axes (degrees)"
+        },
+        {
+          "name": "space",
+          "type": "string",
+          "required": false,
+          "description": "Axes of translation and rotation: the bone's bind-pose frame (default) or the mesh's component space",
+          "enum": [
+            "bone",
+            "component"
+          ]
+        },
+        {
+          "name": "moveBone",
+          "type": "boolean",
+          "required": false,
+          "description": "Move the bone's reference pose with its vertices (default true); false moves only the vertices"
+        },
+        {
+          "name": "lods",
+          "type": "array",
+          "required": false,
+          "description": "LOD indices whose source vertices move (default every LOD); generated LODs follow their base LOD",
+          "items": "integer"
+        },
+        {
+          "name": "dryRun",
+          "type": "boolean",
+          "required": false,
+          "description": "Validate every LOD and report what would move without writing anything"
+        },
+        {
+          "name": "save",
+          "type": "boolean",
+          "required": false,
+          "description": "Save the mesh after the rebuild (default true)"
+        }
+      ],
+      "choices": [
+        {
+          "mode": "atLeastOne",
+          "branches": [
+            [
+              "translation"
+            ],
+            [
+              "rotation"
+            ]
+          ]
         }
       ]
     },

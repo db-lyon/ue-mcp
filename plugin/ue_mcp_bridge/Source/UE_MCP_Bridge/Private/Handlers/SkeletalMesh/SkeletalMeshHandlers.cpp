@@ -731,6 +731,17 @@ void FSkeletalMeshHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		SpecSkinLodIndex, SpecProfileName,
 		MCPParam::Optional(TEXT("restoreRawWeights"), EType::Boolean, TEXT("Rollback payloads only: restore the exact uint16 rawWeight values")),
 	});
+	Registry.RegisterHandlerWithTimeout(TEXT("transform_skinned_part"), &TransformSkinnedPart, 600.0f, {
+		SpecAssetPath,
+		MCPParam::Required(TEXT("boneName"), EType::String, TEXT("Bone to move; every vertex skinned to it or to a bone below it moves by its weight")),
+		MCPParam::Optional(TEXT("translation"), EType::Vec3, TEXT("Offset in space's axes (cm)")),
+		MCPParam::Optional(TEXT("rotation"), EType::Rotator, TEXT("Rotation about the bone's origin, in space's axes (degrees)")),
+		MCPParam::Optional(TEXT("space"), EType::String, TEXT("Axes of translation and rotation: the bone's bind-pose frame (default) or the mesh's component space")).Enum({ TEXT("bone"), TEXT("component") }),
+		MCPParam::Optional(TEXT("moveBone"), EType::Boolean, TEXT("Move the bone's reference pose with its vertices (default true); false moves only the vertices")),
+		MCPParam::Optional(TEXT("lods"), EType::Array, TEXT("LOD indices whose source vertices move (default every LOD); generated LODs follow their base LOD")).Items(EType::Integer),
+		MCPParam::Optional(TEXT("dryRun"), EType::Boolean, TEXT("Validate every LOD and report what would move without writing anything")),
+		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save the mesh after the rebuild (default true)")),
+	}, MCPSpec::AtLeastOne({ { TEXT("translation") }, { TEXT("rotation") } }));
 	Registry.RegisterHandlerWithTimeout(TEXT("generate_skeletal_mesh_lods"), &GenerateSkeletalMeshLods, 600.0f, {
 		MCPParam::Optional(TEXT("assetPath"), EType::String, TEXT("One SkeletalMesh")),
 		MCPParam::Optional(TEXT("assetPaths"), EType::Array, TEXT("SkeletalMeshes, at most 500")).Items(EType::String),
