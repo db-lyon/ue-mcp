@@ -1427,6 +1427,11 @@ TSharedPtr<FJsonValue> FEditorHandlers::GetPiePawn(const TSharedPtr<FJsonObject>
 	RotO->SetNumberField(TEXT("yaw"), R.Yaw);
 	RotO->SetNumberField(TEXT("roll"), R.Roll);
 	Result->SetObjectField(TEXT("rotation"), RotO);
+	// The controller's view and the map the pawn is in now, so a check after a level change reads both (#1565).
+	Result->SetObjectField(TEXT("controlRotation"), MCPRotatorToJsonObject(PC->GetControlRotation()));
+	Result->SetObjectField(TEXT("velocity"), MCPVec3ToJsonObject(Pawn->GetVelocity()));
+	Result->SetStringField(TEXT("map"), UWorld::RemovePIEPrefix(PieWorld->GetOutermost()->GetName()));
+	Result->SetStringField(TEXT("worldPath"), PieWorld->GetPathName());
 	return MCPResult(Result);
 }
 
