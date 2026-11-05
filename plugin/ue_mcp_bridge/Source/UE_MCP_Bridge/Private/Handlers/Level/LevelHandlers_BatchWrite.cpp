@@ -26,6 +26,7 @@
 // would be worse than no batch at all.
 
 #include "LevelHandlers.h"
+#include "LevelSpawnFinalize.h"
 
 #include "Components/ActorComponent.h"
 #include "Components/MeshComponent.h"
@@ -1173,6 +1174,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::SpawnActorsBatch(const TSharedPtr<FJsonOb
 		};
 		ApplyProperties(SharedProperties ? *SharedProperties : nullptr);
 		ApplyProperties(Plan.Properties);
+		MCPSpawnFinalize::FinishEditorSpawn(Actor);
 		if (PropertyRows.Num() > 0)
 		{
 			Row->SetArrayField(TEXT("properties"), PropertyRows);

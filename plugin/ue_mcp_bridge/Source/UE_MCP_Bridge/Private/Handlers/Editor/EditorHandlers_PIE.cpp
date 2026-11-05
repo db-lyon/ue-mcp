@@ -1580,6 +1580,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::InvokeFunction(const TSharedPtr<FJsonObj
 
 	UFunction* Func = CallTarget->FindFunction(FName(*FunctionName));
 	if (!Func) return MCPError(FString::Printf(TEXT("Function '%s' not found on %s"), *FunctionName, *CallTarget->GetClass()->GetName()));
+	if (auto Err = MCPRejectUnknownFunctionArgs(Func, ArgsMap)) return Err;
 
 	TArray<uint8> ParamBuf;
 	ParamBuf.SetNumZeroed(Func->ParmsSize);
@@ -1872,6 +1873,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::InvokeStaticFunction(const TSharedPtr<FJ
 
 	UFunction* Func = LibClass->FindFunctionByName(FName(*FunctionName));
 	if (!Func) return MCPError(FString::Printf(TEXT("Static function '%s' not found on %s"), *FunctionName, *LibClass->GetName()));
+	if (auto Err = MCPRejectUnknownFunctionArgs(Func, ArgsMap)) return Err;
 
 	TArray<uint8> ParamBuf;
 	ParamBuf.SetNumZeroed(Func->ParmsSize);

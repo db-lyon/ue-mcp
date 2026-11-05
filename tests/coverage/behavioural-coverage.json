@@ -5943,6 +5943,16 @@
         },
         {
           "suite": "automation",
+          "file": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Tests/LevelSpawnRenderStateTests.cpp",
+          "test": "UE.MCP.Level.SpawnRenderState.StaticMeshGoesThroughTheSetter"
+        },
+        {
+          "suite": "automation",
+          "file": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Tests/LevelSpawnRenderStateTests.cpp",
+          "test": "UE.MCP.Level.SpawnRenderState.StationaryLightGetsAChannel"
+        },
+        {
+          "suite": "automation",
           "file": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Tests/LevelTransientActorTests.cpp",
           "test": "UE.MCP.Level.TransientActor.CannotBeSavedIntoTheMap"
         }
@@ -10457,6 +10467,11 @@
       "registeredIn": "EditorHandlers.cpp",
       "status": "covered",
       "tests": [
+        {
+          "suite": "automation",
+          "file": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Tests/LevelSpawnRenderStateTests.cpp",
+          "test": "UE.MCP.Level.SpawnRenderState.StaticMeshGoesThroughTheSetter"
+        },
         {
           "suite": "live",
           "file": "tests/live/bcov-editor-world.test.ts",
@@ -20221,6 +20236,11 @@
       "status": "covered",
       "tests": [
         {
+          "suite": "automation",
+          "file": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Tests/LevelSpawnRenderStateTests.cpp",
+          "test": "UE.MCP.Level.SpawnRenderState.StaticMeshGoesThroughTheSetter"
+        },
+        {
           "suite": "live",
           "file": "tests/live/bcov-gameplay-framework.test.ts",
           "test": "add_state_tree_component adds a component get_state_tree_runtime reads its tree from"
@@ -23308,6 +23328,16 @@
           "suite": "automation",
           "file": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Tests/LevelPostProcessOverrideTests.cpp",
           "test": "UE.MCP.Level.PostProcess.SettingWritesTheOverrideBitToo"
+        },
+        {
+          "suite": "automation",
+          "file": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Tests/LevelSpawnRenderStateTests.cpp",
+          "test": "UE.MCP.Level.SpawnRenderState.StaticMeshGoesThroughTheSetter"
+        },
+        {
+          "suite": "automation",
+          "file": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Tests/LevelSpawnRenderStateTests.cpp",
+          "test": "UE.MCP.Level.SpawnRenderState.StationaryLightGetsAChannel"
         },
         {
           "suite": "automation",

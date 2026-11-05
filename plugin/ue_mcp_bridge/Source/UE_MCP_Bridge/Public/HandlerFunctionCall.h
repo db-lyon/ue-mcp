@@ -1067,6 +1067,41 @@ inline TSharedPtr<FJsonValue> MCPReadFunctionArgs(const TSharedPtr<FJsonObject>&
 }
 
 /**
+ * Refuse an argument name that is not an input of Func. The marshalling loops
+ * walk the function's parameters and look each one up, so a misspelt name was
+ * never read and the call ran with that parameter at its default (#1548:
+ * SetStaticMesh ran with no mesh and returned false). Names match without
+ * regard to case, as the lookup does. Returns an error value or nullptr.
+ */
+inline TSharedPtr<FJsonValue> MCPRejectUnknownFunctionArgs(const UFunction* Func, const TSharedPtr<FJsonObject>& Args)
+{
+	if (!Func || !Args.IsValid() || Args->Values.Num() == 0) return nullptr;
+	TArray<FString> Inputs;
+	TArray<FString> Outputs;
+	for (TFieldIterator<FProperty> It(Func); It && (It->PropertyFlags & CPF_Parm); ++It)
+	{
+		const bool bOutputOnly = (It->PropertyFlags & CPF_ReturnParm)
+			|| ((It->PropertyFlags & CPF_OutParm) && !(It->PropertyFlags & CPF_ReferenceParm));
+		(bOutputOnly ? Outputs : Inputs).Add(It->GetName());
+	}
+	for (const auto& Entry : Args->Values)
+	{
+		if (Inputs.Contains(Entry.Key)) continue;
+		const FString Accepted = Inputs.Num() > 0 ? FString::Join(Inputs, TEXT(", ")) : FString(TEXT("none"));
+		if (Outputs.Contains(Entry.Key))
+		{
+			return MCPError(FString::Printf(
+				TEXT("Argument '%s' is an output of %s, not an input, so it cannot be passed. Its inputs: %s"),
+				*Entry.Key, *Func->GetName(), *Accepted));
+		}
+		return MCPError(FString::Printf(
+			TEXT("Argument '%s' is not a parameter of %s, so it would never be read. Its inputs: %s"),
+			*Entry.Key, *Func->GetName(), *Accepted));
+	}
+	return nullptr;
+}
+
+/**
  * Reduce a script `args` value to positional strings. Accepts a list (a
  * non-string entry becomes its compact JSON), a JSON array string, and a lone
  * string as one argument. A map is a function-call shape and is refused, as is
