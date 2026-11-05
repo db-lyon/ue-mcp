@@ -552,6 +552,7 @@ namespace
 		Result->SetBoolField(TEXT("changed"), !bPureFunction);
 		Result->SetBoolField(TEXT("changeDetected"), false);
 		Result->SetBoolField(TEXT("rollbackPossible"), false);
+		if (auto Err = MCPRejectUnknownFunctionArgs(Func, Args)) return Err;
 
 		TArray<uint8> ParamBuf;
 		ParamBuf.SetNumZeroed(Func->ParmsSize);
