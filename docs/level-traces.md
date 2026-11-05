@@ -16,6 +16,26 @@ The default result is the first blocking hit. Like `line_trace`, it includes `su
 
 `multi=true` uses Unreal's channel multi-sweep semantics: overlaps along the sweep through the first blocking hit. Geometry beyond that blocker is not queried. `hits` contains at most 64 entries in engine order, each with the trace fields plus `blockingHit` and `bStartPenetrating`. An overlap has `hit=false` and `blockingHit=false`; the top-level `hit` means a blocker was found. `totalHits` is the engine's hit count and `truncated` indicates omitted entries. A multi miss returns an empty `hits` array. Sweep `location` is the shape's center at impact; `impactPoint` is the contact point.
 
+## Multi-hit line traces
+
+```text
+level(action="line_trace", start={x:0,y:0,z:1100}, end={x:0,y:0,z:-500}, multi=true)
+level(action="bulk_line_trace", traces=[{start:{x:0,y:0,z:1100}, end:{x:0,y:0,z:-500}, multi:true}, {start:{x:100,y:0,z:1100}, end:{x:100,y:0,z:-500}}])
+```
+
+`multi=true` on `line_trace`, or on any `bulk_line_trace` item, returns `hits`, `totalHits` and `truncated` with the same row fields and limits as a multi sweep: overlaps through the first blocker, at most 64. A height or width profile along a line is one `bulk_line_trace` with one item per sample, up to 256.
+
+## Actors in a box region
+
+```text
+level(action="actors_in_box", min={x:-500,y:-500,z:0}, max={x:500,y:500,z:400})
+level(action="actors_in_box", min={x:-500,y:-500,z:0}, max={x:500,y:500,z:400}, mode="contained", classFilter="StaticMeshActor", includeHidden=true)
+```
+
+Lists every actor whose bounds meet the box. `mode="overlap"` (default) keeps intersecting bounds, touching faces included; `mode="contained"` keeps bounds that lie fully inside. Bounds match `get_actor_bounds`; `onlyColliding` restricts them to colliding components. An actor with no primitive component is treated as a point at its location (`bounds.source="location"`) and is dropped under `onlyColliding`. Hidden actors (editor-hidden in the editor world, hidden in game under `world="pie"`) are skipped unless `includeHidden=true`. `world` and `pieInstance` select the world the same way the traces do.
+
+Each row has `label`, `path`, `class`, `folderPath`, `location`, `rotation`, `scale`, `bounds` (`origin`, `extent`, `min`, `max`, `source`), `contained`, `editorHidden` and `hiddenInGame`. Rows are sorted by label. `limit` defaults to 200 (max 2000); `total` counts every match and `truncated` says rows were cut. `max` below `min` on any axis is refused.
+
 ## Component collision
 
 ```text

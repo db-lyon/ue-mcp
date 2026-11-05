@@ -433,6 +433,7 @@ void FLevelHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("traceComplex"), EType::Boolean, TEXT("Trace per-triangle collision (default false)")),
 		MCPParam::Optional(TEXT("channel"), EType::String, TEXT("Collision channel (default Visibility)")),
 		MCPParam::Optional(TEXT("ignoreActors"), EType::Array, TEXT("Actor labels to skip")).Items(EType::String),
+		MCPParam::Optional(TEXT("multi"), EType::Boolean, TEXT("Return overlaps and the first blocking hit, capped at 64 (default false)")),
 		SpecWorld, SpecPieInstance,
 	});
 	Registry.RegisterHandler(TEXT("bulk_line_trace"), &BulkLineTrace, {
@@ -444,7 +445,19 @@ void FLevelHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 			MCPParam::OptionalField(TEXT("traceComplex"), EType::Boolean, TEXT("Trace per-triangle collision (default false)")),
 			MCPParam::OptionalField(TEXT("channel"), EType::String, TEXT("Collision channel (default Visibility)")),
 			MCPParam::OptionalField(TEXT("ignoreActors"), EType::Array, TEXT("Actor labels to skip")).Items(EType::String),
+			MCPParam::OptionalField(TEXT("multi"), EType::Boolean, TEXT("Return overlaps and the first blocking hit, capped at 64 (default false)")),
 		}),
+		SpecWorld, SpecPieInstance,
+	});
+	// #1564: every actor whose bounds meet a world-space box, in one call.
+	Registry.RegisterHandler(TEXT("actors_in_box"), &ActorsInBox, {
+		MCPParam::Required(TEXT("min"), EType::Vec3, TEXT("Box minimum corner, world space")),
+		MCPParam::Required(TEXT("max"), EType::Vec3, TEXT("Box maximum corner, world space; at least min on every axis")),
+		MCPParam::Optional(TEXT("mode"), EType::String, TEXT("overlap (default): bounds intersect the box | contained: bounds lie fully inside it")),
+		MCPParam::Optional(TEXT("includeHidden"), EType::Boolean, TEXT("Include actors hidden in the queried world (default false)")),
+		MCPParam::Optional(TEXT("classFilter"), EType::String, TEXT("Case-insensitive substring over the actor class name")),
+		MCPParam::Optional(TEXT("onlyColliding"), EType::Boolean, TEXT("Only colliding components contribute to the bounds (default false)")),
+		MCPParam::Optional(TEXT("limit"), EType::Integer, TEXT("Rows returned (default 200, max 2000)")),
 		SpecWorld, SpecPieInstance,
 	});
 	// #453: per-actor motion snapshot for telemetry probes. Reads location,
