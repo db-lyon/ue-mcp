@@ -114,6 +114,7 @@ bool FWidgetCompileOutcomeTest::RunTest(const FString& Parameters)
 		AddWidgetParams(PackageName, TEXT("TextBlock"), TEXT("UnrelatedLabel"), TEXT("RootPanel")));
 	if (!TestTrue(TEXT("unrelated add_widget returns an object"), Unrelated.IsValid())) return false;
 	TestTrue(TEXT("pre-existing errors do not block an unrelated edit"), BoolField(Unrelated, TEXT("success")));
+	TestFalse(TEXT("an edit outside play carries no play warning (#1553)"), Unrelated->HasField(TEXT("playSessionWarning")));
 	TestTrue(TEXT("the unrelated edit is saved"), BoolField(Unrelated, TEXT("saved")));
 	TestFalse(TEXT("the blueprint still does not compile"), BoolField(Unrelated, TEXT("compiled")));
 	TestEqual(TEXT("no error is attributed to the unrelated edit"), Unrelated->GetIntegerField(TEXT("introducedCompileErrors")), 0);
@@ -128,6 +129,39 @@ bool FWidgetCompileOutcomeTest::RunTest(const FString& Parameters)
 	TestTrue(TEXT("a report that never compiled reads as refused"), Refused.WasRefused());
 	const FString Refusal = MCPWidgetGuidMap::BlockedError(TEXT("/Game/TestWidget"), Refused)->AsObject()->GetStringField(TEXT("error"));
 	TestTrue(TEXT("GUID refusal keeps its preflight explanation"), Refusal.Contains(TEXT("Nothing was compiled or saved")));
+	return true;
+}
+
+// #1553: a widget compile during play says it reinstanced the live widgets.
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FWidgetCompileDuringPlayTest,
+	"UE.MCP.Widget.CompileDuringPlayWarning",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FWidgetCompileDuringPlayTest::RunTest(const FString& Parameters)
+{
+	MCPWidgetGuidMap::FSyncReport Editing;
+	Editing.bCompileAttempted = true;
+	Editing.bCompiled = true;
+	TSharedPtr<FJsonObject> Quiet = MakeShared<FJsonObject>();
+	MCPSetWidgetGuidOutcome(Quiet, Editing, TEXT("/Game/WBP_Page"));
+	TestFalse(TEXT("no warning outside play"), Quiet->HasField(TEXT("playSessionWarning")));
+	TestFalse(TEXT("no reinstance count outside play"), Quiet->HasField(TEXT("reinstancedPlayWidgets")));
+
+	MCPWidgetGuidMap::FSyncReport Playing = Editing;
+	Playing.bCompiledDuringPlay = true;
+	Playing.LivePlayWidgets = 2;
+	TSharedPtr<FJsonObject> Warned = MakeShared<FJsonObject>();
+	Warned->SetBoolField(TEXT("success"), true);
+	MCPSetWidgetGuidOutcome(Warned, Playing, TEXT("/Game/WBP_Page"));
+	TestEqual(TEXT("reinstanced widgets are counted"), Warned->GetIntegerField(TEXT("reinstancedPlayWidgets")), 2);
+	const FString Warning = Warned->GetStringField(TEXT("playSessionWarning"));
+	TestTrue(TEXT("the warning names the asset"), Warning.Contains(TEXT("/Game/WBP_Page")));
+	TestTrue(TEXT("the warning gives the count"), Warning.Contains(TEXT("2 live widget(s)")));
+	TestTrue(TEXT("the warning names the way to avoid it"), Warning.Contains(TEXT("pieAction=\"stop\"")));
+	TestTrue(TEXT("the warning does not withdraw success"), Warned->GetBoolField(TEXT("success")));
+
+	TestTrue(TEXT("no live widget reads as none found"),
+		MCPWidgetPlaySessionWarning(TEXT("/Game/WBP_Page"), 0).Contains(TEXT("no live widget made from it")));
 	return true;
 }
 

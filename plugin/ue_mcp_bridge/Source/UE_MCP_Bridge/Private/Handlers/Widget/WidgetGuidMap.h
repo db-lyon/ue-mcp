@@ -8,6 +8,7 @@
 #include "WidgetBlueprint.h"
 #include "Blueprint/WidgetTree.h"
 #include "Components/Widget.h"
+#include "Blueprint/UserWidget.h"
 #include "Kismet2/KismetEditorUtilities.h"
 #include "Kismet2/CompilerResultsLog.h"
 
@@ -66,6 +67,10 @@ namespace MCPWidgetGuidMap
 		TArray<FName> Unusable;
 		/** What is actually wrong, one clause per defect, for the message. */
 		TArray<FString> Defects;
+		/** A play session was running when CompileChecked compiled, and how many
+		 *  live widgets made from the blueprint it reinstanced (#1553). */
+		bool bCompiledDuringPlay = false;
+		int32 LivePlayWidgets = 0;
 
 		bool IsClean() const { return Unusable.Num() == 0; }
 
@@ -324,6 +329,23 @@ namespace MCPWidgetGuidMap
 		return Stuck;
 	}
 
+	/** User widgets in a play or simulate world made from WidgetBP's class,
+	 *  nested ones included. The compile reinstances every one of them. */
+	inline int32 CountLivePlayWidgets(const UWidgetBlueprint* WidgetBP)
+	{
+		const UClass* Generated = WidgetBP ? WidgetBP->GeneratedClass.Get() : nullptr;
+		if (!Generated) return 0;
+		int32 Count = 0;
+		for (TObjectIterator<UUserWidget> It; It; ++It)
+		{
+			const UUserWidget* Widget = *It;
+			if (Widget->HasAnyFlags(RF_ClassDefaultObject | RF_ArchetypeObject) || !Widget->IsA(Generated)) continue;
+			const UWorld* World = Widget->GetWorld();
+			if (World && (World->WorldType == EWorldType::PIE || World->WorldType == EWorldType::Game)) ++Count;
+		}
+		return Count;
+	}
+
 	/** Compiler errors a Widget Blueprint already had before a handler edits
 	 *  it, so an unrelated broken graph does not block the edit. */
 	struct FCompileBaseline
@@ -396,6 +418,12 @@ namespace MCPWidgetGuidMap
 		}
 
 		Report.bCompileAttempted = true;
+		if (MCPIsPlayInEditorActive())
+		{
+			// Counted before the compile, which swaps these objects for new ones.
+			Report.bCompiledDuringPlay = true;
+			Report.LivePlayWidgets = CountLivePlayWidgets(WidgetBP);
+		}
 		int32 NumErrors = 0;
 		Report.CompileMessages = CompileForErrors(WidgetBP, NumErrors);
 		Report.CompileErrors = FMath::Max(NumErrors, Report.CompileMessages.Num());
@@ -447,6 +475,22 @@ namespace MCPWidgetGuidMap
 	}
 }
 
+/** The note a widget edit carries when it compiled during play (#1553). The
+ *  engine reinstances live widgets of a recompiled class, and a reinstanced
+ *  widget does not keep what was built into it at runtime. */
+inline FString MCPWidgetPlaySessionWarning(const FString& AssetPath, int32 LivePlayWidgets)
+{
+	const FString Live = LivePlayWidgets > 0
+		? FString::Printf(TEXT("%d live widget(s) made from it in the play world were reinstanced"), LivePlayWidgets)
+		: FString(TEXT("no live widget made from it was found in the play world, but any created later uses the new class"));
+	return FString::Printf(
+		TEXT("A play-in-editor session is running, so compiling '%s' took effect in play at once: %s. A reinstanced ")
+		TEXT("widget is rebuilt from the class, so content added to it at runtime (children added to panels, pages pushed ")
+		TEXT("into a stack, text set by game code) can come back empty until its owner rebuilds it or play restarts. To ")
+		TEXT("avoid it, stop play with editor(action=\"play_in_editor\", pieAction=\"stop\") before editing widgets."),
+		*AssetPath, *Live);
+}
+
 /** Stamp GUID bookkeeping onto a widget mutation result, and withdraw the
  *  success claim when a variable the compiler generates was left with a map
  *  entry the compiler will refuse. Silence there is what turns into an editor
@@ -479,6 +523,11 @@ inline void MCPSetWidgetGuidOutcome(
 	if (Report.Repaired > 0)
 	{
 		Result->SetNumberField(TEXT("repairedGuidEntries"), Report.Repaired);
+	}
+	if (Report.bCompiledDuringPlay)
+	{
+		Result->SetNumberField(TEXT("reinstancedPlayWidgets"), Report.LivePlayWidgets);
+		Result->SetStringField(TEXT("playSessionWarning"), MCPWidgetPlaySessionWarning(AssetPath, Report.LivePlayWidgets));
 	}
 	if (Report.IsClean())
 	{
