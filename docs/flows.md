@@ -77,6 +77,33 @@ tasks:
 
 `class_path: ue-mcp.bridge` calls a bridge method directly. The `method` option names it and the other options are sent as its parameters.
 
+### A project script as a named task
+
+A Python script the project keeps under `Tools/` becomes a named task through `editor.run_python_file`. A relative `filePath` is resolved against the project directory, so the same `ue-mcp.yml` works on every machine. `entryPoint` calls one function in the script without firing its `__main__` guard, and its return value comes back as `result`.
+
+```yaml
+tasks:
+  import_blender_anims:
+    class_path: editor.run_python_file
+    description: Import Blender FBX animations with the project's import script
+    options:
+      filePath: Tools/BlenderMCP/unreal/import_assets.py
+      entryPoint: import_animations
+
+flows:
+  import_blender_anims:
+    description: Import and register the latest Blender animations
+    steps:
+      1:
+        task: import_blender_anims
+```
+
+```
+flow(action="run", flowName="import_blender_anims", params={ kwargs: { skeleton: "/Game/Characters/SK_Hero_Skeleton" } })
+```
+
+`kwargs` are the function's keyword arguments and `args` its positional ones. For a plain FBX animation import, `asset(import_animation)` does it natively: `skeletonPath`, `packagePath`, a batch through `filePaths`, any FBX import setting through `importSettings`, and a readback of every AnimSequence it created.
+
 ## Steps
 
 Step keys are whole numbers and run in numeric order. A step that fails stops the flow.

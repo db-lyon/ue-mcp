@@ -2558,7 +2558,7 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "filePath",
         "type": "string",
         "required": true,
-        "description": "Absolute path to the .py file",
+        "description": "Path to the .py file: absolute, or relative to the project directory, such as Tools/import_assets.py",
         "aliases": [
           "path"
         ]
@@ -3979,7 +3979,7 @@ export const schema: Record<string, z.ZodType> = {
   farClip: z.number().optional().describe("Far clip plane override"),
   file: z.string().optional().describe(".utrace path to write, absolute or relative (default a timestamped file under <Project>/Saved/Profiling)"),
   filename: z.string().optional().describe("Alias for outputPath (capture_scene_png). Image path to write; .png is appended without an image extension (capture_screenshot)"),
-  filePath: z.string().optional().describe("Absolute path to the .py file"),
+  filePath: z.string().optional().describe("Path to the .py file: absolute, or relative to the project directory, such as Tools/import_assets.py"),
   filter: z.string().optional().describe("Case-insensitive substring the message must contain (get_output_log). Case-insensitive substring over channel name and description (list_trace_channels). Substring of the test names to run (run_automation_tests)"),
   fixed: z.boolean().optional().describe("Use a fixed exposure rather than eye adaptation"),
   focusActorLabel: z.string().optional().describe("Frame the camera on this actor's bounds"),

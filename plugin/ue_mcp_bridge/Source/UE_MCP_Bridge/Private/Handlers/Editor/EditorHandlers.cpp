@@ -349,7 +349,7 @@ void FEditorHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 			TEXT("Function arguments: an object mapping parameter name to value (a struct value takes a JSON object such as {X,Y,Z} or export text), an entry list [{name, value}], or a JSON string of either")).OneOfForms(ArgForms);
 	};
 	Registry.RegisterHandler(TEXT("run_python_file"), &RunPythonFile, {
-		MCPParam::Required(TEXT("filePath"), EType::String, TEXT("Absolute path to the .py file")).Alias(TEXT("path")),
+		MCPParam::Required(TEXT("filePath"), EType::String, TEXT("Path to the .py file: absolute, or relative to the project directory, such as Tools/import_assets.py")).Alias(TEXT("path")),
 		MCPParam::Optional(TEXT("entryPoint"), EType::String, TEXT("Function in the file to call after loading it under runName (default ue_mcp_entry, so its main guard does not fire); its return value comes back as result")),
 		MCPParam::Optional(TEXT("runName"), EType::String, TEXT("Module name to run the file under through runpy, with sys.argv set to the file plus args. __main__ makes an if __name__ == '__main__' guard fire")),
 		MCPParam::Optional(TEXT("asMain"), EType::Boolean, TEXT("Shorthand for runName __main__ (default false)")),
@@ -1269,6 +1269,13 @@ TSharedPtr<FJsonValue> FEditorHandlers::RunPythonFile(const TSharedPtr<FJsonObje
 	// arguments. A list, a JSON array string or one string (#811).
 	TArray<FString> ExtraArgs;
 	if (auto Err = MCPReadPythonArgs(Params, TEXT("args"), ExtraArgs)) return Err;
+
+	// A relative path names a file in the project, so a flow checked in beside
+	// the .uproject can point at its own Tools/ script on any machine (#1658).
+	if (FPaths::IsRelative(FilePath))
+	{
+		FilePath = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir(), FilePath);
+	}
 
 	// Accept forward-slashes on Windows; FPlatformFileManager normalises them.
 	if (!FPaths::FileExists(FilePath))
