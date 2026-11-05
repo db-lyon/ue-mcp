@@ -148,3 +148,23 @@ Create each instance with `parentPath` pointing to the master. Assign textures w
 ```
 
 Read the resolved values with `material(read_instance)`. These mutations save their results and return their own rollback descriptors; they do not offer a combined dry run for the entire graph recipe.
+## Inspect mesh shading
+
+`asset(action="read_mesh_materials", assetPath="/Game/Meshes/SM_Wall")`
+reads StaticMesh and SkeletalMesh slots without saving or rebuilding them.
+Each `slots` row has `index`, `slotName`, `importedName`, `materialPath`,
+`twoSided`, `blendMode`, `shadingModel` and `ditherOpacityMask`. Instance base
+property overrides are resolved from the base material through every parent;
+a stored value whose override flag is disabled does not replace the parent.
+Dither opacity mask is inherited from the base material. Empty slots return
+null shading properties and an empty chain.
+
+`chain` runs from the assigned material to the base. Each level reports
+`path`, `class`, `overrideTwoSided`, `twoSided`, `overrideBlendMode` and
+`blendMode`; values are effective at that level. Enum strings use engine names
+such as `BLEND_Masked` and `MSM_DefaultLit`.
+
+`lods` contains each LOD's `lodIndex` and `sections` with `sectionIndex` and
+`slotIndex`, including material remaps. Pass `lodIndex` to restrict the mapping
+to one LOD; all slots still return. Missing render data yields an empty section
+list. `naniteEnabled` reports the mesh's Nanite setting.

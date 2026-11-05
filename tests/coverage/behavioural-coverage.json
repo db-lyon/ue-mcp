@@ -15342,6 +15342,19 @@
       ]
     },
     {
+      "method": "read_mesh_materials",
+      "category": "asset",
+      "registeredIn": "AssetHandlers.cpp",
+      "status": "covered",
+      "tests": [
+        {
+          "suite": "automation",
+          "file": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Tests/MeshMaterialReadTests.cpp",
+          "test": "UE.MCP.Asset.MeshMaterials.EffectiveOverridesAndReadOnly"
+        }
+      ]
+    },
+    {
       "method": "read_mirror_data_table",
       "category": "animation",
       "registeredIn": "AnimationHandlers.cpp",

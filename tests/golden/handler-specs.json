@@ -28335,6 +28335,23 @@
         }
       ]
     },
+    "read_mesh_materials": {
+      "category": "asset",
+      "params": [
+        {
+          "name": "assetPath",
+          "type": "string",
+          "required": true,
+          "description": "StaticMesh or SkeletalMesh asset path"
+        },
+        {
+          "name": "lodIndex",
+          "type": "integer",
+          "required": false,
+          "description": "Only return this LOD mapping; omitted returns every LOD"
+        }
+      ]
+    },
     "read_mirror_data_table": {
       "category": "animation",
       "params": [

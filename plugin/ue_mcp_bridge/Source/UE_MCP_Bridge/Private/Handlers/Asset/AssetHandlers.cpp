@@ -149,6 +149,10 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	// (npm run specs:record, then npm run specs:generate), and each alias is
 	// resolved to its parameter by the registry before the handler runs.
 	using EType = EMCPParamType;
+	Registry.RegisterHandler(TEXT("read_mesh_materials"), &ReadMeshMaterials, {
+		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StaticMesh or SkeletalMesh asset path")),
+		MCPParam::Optional(TEXT("lodIndex"), EType::Integer, TEXT("Only return this LOD mapping; omitted returns every LOD")),
+	});
 	// Shared by the paged reads.
 	const FMCPParamSpec SpecCursor = MCPParam::Optional(TEXT("cursor"), EType::String, TEXT("Resume a paged read: pass back the nextCursor from the previous page, unmodified"));
 	Registry.RegisterHandler(TEXT("list_assets"), &ListAssets, {
