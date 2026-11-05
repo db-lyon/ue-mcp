@@ -105,7 +105,8 @@ export async function runBridge(
   // declares 120s is stating a floor it needs, not a ceiling.
   const sent = await ctx.bridge.call(method, params, pipeline.timeoutMs ?? timeoutMs);
   const followUpParams = pipeline.timeoutMs === undefined ? params : { ...params, timeoutMs: pipeline.timeoutMs };
-  const answered = followUp ? await followUp(ctx, followUpParams, sent) : sent;
+  const followUpCtx = pipeline.timeoutMs === undefined ? ctx : { ...ctx, callTimeoutMs: pipeline.timeoutMs };
+  const answered = followUp ? await followUp(followUpCtx, followUpParams, sent) : sent;
   const raw = finishCall(answered, pipeline);
   if (typeof raw !== "object" || raw === null) {
     return applyHandlerOutcome(ctx, answered, { success: true, data: { result: raw } });

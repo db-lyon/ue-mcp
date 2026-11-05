@@ -194,6 +194,17 @@ export const handlerSpecs: HandlerSpecs = {
     ],
     "contractExempt": "cancels the open undo transaction and restores what it touched"
   },
+  "cancel_mesh_studio_render": {
+    "category": "editor",
+    "params": [
+      {
+        "name": "jobId",
+        "type": "string",
+        "required": true,
+        "description": "Job id returned by render_mesh_studio; already-finished jobs are returned unchanged"
+      }
+    ]
+  },
   "capture_scene_png": {
     "category": "editor",
     "params": [
@@ -737,6 +748,17 @@ export const handlerSpecs: HandlerSpecs = {
   "get_insights_trace_status": {
     "category": "editor",
     "params": []
+  },
+  "get_mesh_studio_render": {
+    "category": "editor",
+    "params": [
+      {
+        "name": "jobId",
+        "type": "string",
+        "required": true,
+        "description": "Job id returned by render_mesh_studio"
+      }
+    ]
   },
   "get_message_log": {
     "category": "editor",
@@ -2113,6 +2135,150 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "Index of the section to remove, as get_sequence_info lists them"
       }
     ]
+  },
+  "render_mesh_studio": {
+    "category": "editor",
+    "params": [
+      {
+        "name": "captures",
+        "type": "array",
+        "required": true,
+        "description": "1-128 mesh captures, with unique filename-safe ids and exactly one of meshPath or parts",
+        "items": "object",
+        "fields": [
+          {
+            "name": "id",
+            "type": "string",
+            "required": true,
+            "description": "Unique filename stem: letters, digits, underscore or hyphen"
+          },
+          {
+            "name": "meshPath",
+            "type": "string",
+            "required": false,
+            "description": "StaticMesh or SkeletalMesh asset path"
+          },
+          {
+            "name": "parts",
+            "type": "array",
+            "required": false,
+            "description": "1-64 meshes forming one assembly",
+            "items": "object",
+            "fields": [
+              {
+                "name": "meshPath",
+                "type": "string",
+                "required": true,
+                "description": "StaticMesh or SkeletalMesh asset path"
+              },
+              {
+                "name": "relativeTransform",
+                "type": "object",
+                "required": false,
+                "description": "Transform relative to the assembly origin",
+                "fields": [
+                  {
+                    "name": "location",
+                    "type": "vec3",
+                    "required": false,
+                    "description": "Translation in centimetres, default zero"
+                  },
+                  {
+                    "name": "rotation",
+                    "type": "rotator",
+                    "required": false,
+                    "description": "Pitch, yaw and roll in degrees, default zero"
+                  },
+                  {
+                    "name": "scale",
+                    "type": "vec3",
+                    "required": false,
+                    "description": "Scale, default one"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "name": "aspect",
+            "type": "object",
+            "required": false,
+            "description": "Inventory aspect ratio; the longer output edge equals resolution",
+            "fields": [
+              {
+                "name": "width",
+                "type": "number",
+                "required": true,
+                "description": "Positive relative width",
+                "minimum": 0.01,
+                "maximum": 100
+              },
+              {
+                "name": "height",
+                "type": "number",
+                "required": true,
+                "description": "Positive relative height",
+                "minimum": 0.01,
+                "maximum": 100
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "outputDir",
+        "type": "string",
+        "required": true,
+        "description": "Absolute or project-relative directory for <id>.png and a job-specific JSON manifest"
+      },
+      {
+        "name": "resolution",
+        "type": "integer",
+        "required": false,
+        "description": "Longest image edge in pixels (default 512); shorter edge at least 32",
+        "minimum": 64,
+        "maximum": 4096
+      },
+      {
+        "name": "viewDirection",
+        "type": "vec3",
+        "required": false,
+        "description": "Direction from subject toward camera (default 1,-1.35,0.9), finite and nonzero"
+      },
+      {
+        "name": "lightingPreset",
+        "type": "string",
+        "required": false,
+        "description": "Studio lighting preset (default studio)",
+        "enum": [
+          "studio"
+        ]
+      },
+      {
+        "name": "cubemapPath",
+        "type": "string",
+        "required": false,
+        "description": "Skylight TextureCube (default /Engine/MapTemplates/Sky/DaylightAmbientCubemap.DaylightAmbientCubemap)"
+      },
+      {
+        "name": "captureMode",
+        "type": "string",
+        "required": false,
+        "description": "beauty: opaque colour; matte: opaque coverage grayscale; both: colour with coverage alpha (default both)",
+        "enum": [
+          "beauty",
+          "matte",
+          "both"
+        ]
+      },
+      {
+        "name": "fullyLoadTextures",
+        "type": "boolean",
+        "required": false,
+        "description": "Wait across real editor frames for requested texture mips (default true); a 60s item timeout reports blocked"
+      }
+    ],
+    "contractExempt": "starts a latent preview-world render job and writes PNGs and a manifest"
   },
   "render_sequence_frames": {
     "category": "editor",
@@ -3591,6 +3757,7 @@ export const paramsClauses: Readonly<Record<string, string>> = {
   build_hlod: "Params: none",
   build_lighting: "Params: quality?",
   cancel_editor_transaction: "Params: index?",
+  cancel_mesh_studio_render: "Params: jobId",
   capture_scene_png: "Params: outputPath (or filename), location?, rotation?, focusActorLabel?, focusActorPath?, focusDirection?, focusMargin?, world?, pieInstance?, width?, height?, fov?, fullyLoadTextures?",
   capture_screenshot: "Params: filename (or outputPath), target?, pieInstance?, worldPath?",
   check_for_crashes: "Params: none",
@@ -3614,6 +3781,7 @@ export const paramsClauses: Readonly<Record<string, string>> = {
   get_editor_performance_stats: "Params: none",
   get_frame_timing: "Params: cpuGpuMarginPercent?",
   get_insights_trace_status: "Params: none",
+  get_mesh_studio_render: "Params: jobId",
   get_message_log: "Params: logName?, maxLines?, severity?",
   get_object_properties: "Params: objectPath?, target?, subsystemClass?, playerIndex?, propertyPath?, propertyNames?, world?, pieInstance?, limit?, maxValueLength?",
   get_open_asset_editors: "Params: none",
@@ -3663,6 +3831,7 @@ export const paramsClauses: Readonly<Record<string, string>> = {
   redraw_viewport: "Params: allViewports?, invalidateHitProxies?, viewportIndex?",
   reload_handlers: "Params: none",
   remove_sequence_section: "Params: sequencePath (or assetPath, or path), trackType?, trackName?, trackIndex?, bindingGuid?, bindingName?, actorLabel?, actorPath?, sectionIndex",
+  render_mesh_studio: "Params: captures, outputDir, resolution?, viewDirection?, lightingPreset?, cubemapPath?, captureMode?, fullyLoadTextures?",
   render_sequence_frames: "Params: sequencePath (or assetPath, or path), startFrame?, endFrame?, startSeconds?, endSeconds?, frameStep?, maxFrames?, width?, height?, outputDir?, format?, cameraActorLabel?, cameraActorPath?, location?, rotation?, fov?, fullyLoadTextures?",
   resolve_sequence_bindings: "Params: sequencePath (or assetPath, or path), bindingGuid?, bindingName?",
   respond_to_dialog: "Params: at least one of buttonLabel/buttonIndex/dialogAction, items?",
@@ -3734,6 +3903,8 @@ export const schema: Record<string, z.ZodType> = {
   cameraActorPath: z.string().optional().describe("Full object path of the camera actor. Wins over cameraActorLabel (add_sequence_section). Full object path of that camera actor. Wins over cameraActorLabel (render_sequence_frames)"),
   cameraSpeed: z.number().optional().describe("Viewport camera speed, greater than 0"),
   captureLog: z.boolean().optional().describe("false drops everything the script logged except its errors (default true)"),
+  captureMode: z.enum(["beauty","matte","both"]).optional().describe("beauty: opaque colour; matte: opaque coverage grayscale; both: colour with coverage alpha (default both)"),
+  captures: z.array(z.object({ id: z.string().describe("Unique filename stem: letters, digits, underscore or hyphen"), meshPath: z.string().optional().describe("StaticMesh or SkeletalMesh asset path"), parts: z.array(z.object({ meshPath: z.string().describe("StaticMesh or SkeletalMesh asset path"), relativeTransform: z.object({ location: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Translation in centimetres, default zero"), rotation: z.object({ pitch: z.number(), yaw: z.number(), roll: z.number() }).optional().describe("Pitch, yaw and roll in degrees, default zero"), scale: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Scale, default one") }).optional().describe("Transform relative to the assembly origin") })).optional().describe("1-64 meshes forming one assembly"), aspect: z.object({ width: z.number().min(0.01).max(100).describe("Positive relative width"), height: z.number().min(0.01).max(100).describe("Positive relative height") }).optional().describe("Inventory aspect ratio; the longer output edge equals resolution") })).optional().describe("1-128 mesh captures, with unique filename-safe ids and exactly one of meshPath or parts"),
   category: z.string().optional().describe("Case-insensitive substring the log category must contain (get_output_log). Settings category, e.g. Engine (open_settings)"),
   centerNewWindow: z.boolean().optional().describe("Center new PIE windows; false places them at newWindowPosition"),
   channel: z.string().optional().describe("Channel name (Location.X, a parameter name such as Intensity or Tint.R); omit for every channel on the section (get_sequence_channel_keys). Channel name: Location.X, a parameter name such as Intensity, or Tint.R for a vector or color parameter (set_sequence_channel_keys). Location.X/Y/Z or Rotation.X/Y/Z (also x/y/z, yaw/pitch/roll) on a Transform track; the float channel on Fade or Float (set_sequence_keyframes)"),
@@ -3754,6 +3925,7 @@ export const schema: Record<string, z.ZodType> = {
   container: z.string().optional().describe("Project (default) | Editor"),
   cpuGpuMarginPercent: z.number().optional().describe("How far ahead one side must be before the frame is called bound by it (default 10)"),
   crashFolder: z.string().optional().describe("Crash folder name, as list_crashes reports it"),
+  cubemapPath: z.string().optional().describe("Skylight TextureCube (default /Engine/MapTemplates/Sky/DaylightAmbientCubemap.DaylightAmbientCubemap)"),
   cursor: z.string().optional().describe("Resume a paged read: pass back the nextCursor from the previous page, unmodified"),
   customMode: z.number().int().optional().describe("0-255, only with mode=custom"),
   cvars: z.union([z.array(z.object({ name: z.string().describe("Console variable name"), value: z.unknown().describe("Value to set; numbers and booleans are written as text") })), z.record(z.string(), z.unknown())]).optional().describe("Console variables to set, as [{name, value}] or a {name: value} object"),
@@ -3793,7 +3965,7 @@ export const schema: Record<string, z.ZodType> = {
   fov: z.number().optional().describe("Capture FOV in degrees, greater than 0 and less than 180 (default 90) (capture_scene_png). Fixed camera FOV in degrees (default 90) (render_sequence_frames). Field of view in degrees, greater than 0 and less than 180 (set_viewport_view)"),
   frame: z.number().optional().describe("Playhead position as a frame number, read in timeUnit"),
   frameStep: z.number().optional().describe("Render every Nth frame (default 1)"),
-  fullyLoadTextures: z.boolean().optional().describe("Stream textures in and flush the render thread before the capture (default true) (capture_scene_png). Stream textures in before each capture (default true) (render_sequence_frames)"),
+  fullyLoadTextures: z.boolean().optional().describe("Stream textures in and flush the render thread before the capture (default true) (capture_scene_png). Wait across real editor frames for requested texture mips (default true); a 60s item timeout reports blocked (render_mesh_studio). Stream textures in before each capture (default true) (render_sequence_frames)"),
   functionName: z.string().optional().describe("BlueprintCallable or Exec UFUNCTION on the actor, or on component (invoke_function). UFUNCTION to call; an unknown name lists the available ones (invoke_object_function). Static UFUNCTION on the class (invoke_static_function)"),
   height: z.number().optional().describe("Capture height in pixels (default 720) (capture_scene_png). Viewport height to read y against, when picking from a screenshot of another resolution (hit_test_viewport_pixel). Frame height in pixels (default 720) (render_sequence_frames)"),
   hidden: z.boolean().optional().describe("true hides the target, false shows it"),
@@ -3815,6 +3987,7 @@ export const schema: Record<string, z.ZodType> = {
   interpolation: z.string().optional().describe("cubic (default) | linear | constant, for keys without their own (set_sequence_channel_keys). cubic (default) | linear | constant; a key's own interpolation wins (set_sequence_keyframes)"),
   invalidateHitProxies: z.boolean().optional().describe("Also invalidate hit proxies, needed before a hit test (default true)"),
   items: z.array(z.object({ index: z.number().describe("Row index from list_dialogs"), checked: z.boolean().describe("Whether the row ends up ticked") })).optional().describe("The dialog's own tickable rows to set before the button is pressed; indices come from list_dialogs, and rows left out keep their state"),
+  jobId: z.string().optional().describe("Job id returned by render_mesh_studio; already-finished jobs are returned unchanged (cancel_mesh_studio_render). Job id returned by render_mesh_studio (get_mesh_studio_render)"),
   keyframes: z.array(z.record(z.string(), z.unknown())).optional().describe("Keys as [{seconds | frame | tick, value, interpolation?}]; frame is a display frame, value a number or boolean (set_sequence_channel_keys). Keys to add, as [{seconds, value, interpolation?}] (set_sequence_keyframes)"),
   kwargs: z.record(z.string(), z.unknown()).optional().describe("Keyword arguments for the entryPoint call"),
   label: z.string().optional().describe("Alias for description"),
@@ -3822,6 +3995,7 @@ export const schema: Record<string, z.ZodType> = {
   launchSeparateServer: z.boolean().optional().describe("Launch a separate dedicated server"),
   level: z.string().optional().describe("Low | Medium | High | Epic | Cinematic (default Epic)"),
   levelPath: z.string().optional().describe("Long package path of the new level, e.g. /Game/Maps/MyLevel. Validated before the engine is asked"),
+  lightingPreset: z.enum(["studio"]).optional().describe("Studio lighting preset (default studio)"),
   limit: z.number().optional().describe("Objects on this page (default 50, max 1000) (find_object). Max rows for a pattern search (default 100, max 1000) (get_cvars). Max properties returned (default 200) (get_object_properties). Lines on this page (default 200, max 4096) (get_output_log). Crash folders on this page (default 50, max 500) (list_crashes). Max bones when bones is omitted (default 200) (read_bone_transforms). Matches on this page (default 100, max 4096) (search_log)"),
   location: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Camera location (capture_scene_png, set_viewport_camera). Camera location; omit to keep the current one (pose_debug_camera). Fixed camera location, when no camera actor is given (render_sequence_frames). Destination; omit to keep the current location (teleport_runtime_actor)"),
   logName: z.string().optional().describe("Listing to read (MapCheck, AssetCheck, PIE, LoadErrors...); omit to list the registered ones"),
@@ -3857,7 +4031,7 @@ export const schema: Record<string, z.ZodType> = {
   onConflict: z.string().optional().describe("skip (default) returns an existing asset untouched, error refuses (create_level_sequence). When the level exists: skip (default) returns it untouched, error refuses (create_new_level)"),
   orthoZoom: z.number().optional().describe("Orthographic zoom, within the engine's own limits"),
   outerPath: z.string().optional().describe("Only objects somewhere under this outer, such as one level or world"),
-  outputDir: z.string().optional().describe("Absolute or project-relative directory for the frames (default Saved/SequenceFrames/<sequence>)"),
+  outputDir: z.string().optional().describe("Absolute or project-relative directory for <id>.png and a job-specific JSON manifest (render_mesh_studio). Absolute or project-relative directory for the frames (default Saved/SequenceFrames/<sequence>) (render_sequence_frames)"),
   outputPath: z.string().optional().describe("Absolute or project-relative PNG path to write, e.g. Saved/Screenshots/cap.png (capture_scene_png). Alias for filename (capture_screenshot)"),
   packagePath: z.string().optional().describe("Destination folder (default /Game/Cinematics)"),
   parameterType: z.string().optional().describe("scalar | bool | vector | vector2d | color: adds a missing parameter to a parameter section. Inferred from the collection on a Material Parameter Collection track"),
@@ -3883,6 +4057,7 @@ export const schema: Record<string, z.ZodType> = {
   regionName: z.string().optional().describe("Name the bracket is keyed by; end_profile_region closes it (begin_profile_region). Name the region was opened under (end_profile_region)"),
   relativeTo: z.string().optional().describe("Bone or socket whose live frame every sample is expressed in; supersedes space"),
   renameBinding: z.boolean().optional().describe("Rename the binding to the new actor's label (default false)"),
+  resolution: z.number().int().min(64).max(4096).optional().describe("Longest image edge in pixels (default 512); shorter edge at least 32"),
   response: z.string().optional().describe("yes | no | ok | cancel | retry | continue | yesall | noall. On a Slate modal it presses whichever button carries that meaning; an unknown keyword is refused"),
   resultVariable: z.string().optional().describe("Top-level Python variable to return as result, separate from the log (default result with entryPoint)"),
   resX: z.number().optional().describe("Window width (default 1280)"),
@@ -3925,6 +4100,7 @@ export const schema: Record<string, z.ZodType> = {
   truncate: z.boolean().optional().describe("Overwrite the target file if it exists (default true)"),
   value: z.unknown().optional().describe("New value as structured JSON, the form get_property returns under value"),
   velocity: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Velocity written to the CharacterMovementComponent"),
+  viewDirection: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Direction from subject toward camera (default 1,-1.35,0.9), finite and nonzero"),
   viewMode: z.string().optional().describe("Lit | Unlit | Wireframe | LightingOnly | DetailLighting | ShaderComplexity | ... get_viewport_state lists what this build supports"),
   viewportIndex: z.number().optional().describe("Level viewport to act on (default the active one)"),
   viewportType: z.string().optional().describe("Perspective | Top | Bottom | Left | Right | Front | Back | OrthoFreelook"),

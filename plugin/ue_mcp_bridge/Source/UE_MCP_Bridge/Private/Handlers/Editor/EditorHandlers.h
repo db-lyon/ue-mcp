@@ -115,6 +115,8 @@ class FEditorHandlers
 public:
 	// Register all editor handlers
 	static void RegisterHandlers(class FMCPHandlerRegistry& Registry);
+	// Release preview worlds and tick callbacks before the module unloads.
+	static void ShutdownMeshStudioRenders();
 
 private:
 	// Handler implementations
@@ -247,6 +249,9 @@ private:
 	static TSharedPtr<FJsonValue> SetPiePaused(const TSharedPtr<FJsonObject>& Params);
 	// #148: Headless SceneCapture2D → PNG (works when editor is unfocused)
 	static TSharedPtr<FJsonValue> CaptureScenePng(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> RenderMeshStudio(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> GetMeshStudioRender(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> CancelMeshStudioRender(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SetRealtime(const TSharedPtr<FJsonObject>& Params);
 	// #228/#229: PIE pawn lookup + UFUNCTION invocation for PIE actors
 	static TSharedPtr<FJsonValue> GetPiePawn(const TSharedPtr<FJsonObject>& Params);

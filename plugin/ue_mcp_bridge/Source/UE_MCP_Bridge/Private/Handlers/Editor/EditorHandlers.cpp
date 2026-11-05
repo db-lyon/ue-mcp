@@ -792,6 +792,37 @@ void FEditorHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("fov"), EType::Number, TEXT("Capture FOV in degrees, greater than 0 and less than 180 (default 90)")),
 		MCPParam::Optional(TEXT("fullyLoadTextures"), EType::Boolean, TEXT("Stream textures in and flush the render thread before the capture (default true)")),
 	}, MCPSpec::ContractExempt(TEXT("spawns a capture actor and writes an image file")));
+	Registry.RegisterHandler(TEXT("render_mesh_studio"), &RenderMeshStudio, {
+		MCPParam::Required(TEXT("captures"), EType::Array, TEXT("1-128 mesh captures, with unique filename-safe ids and exactly one of meshPath or parts")).Items(EType::Object).WithFields({
+			MCPParam::RequiredField(TEXT("id"), EType::String, TEXT("Unique filename stem: letters, digits, underscore or hyphen")),
+			MCPParam::OptionalField(TEXT("meshPath"), EType::String, TEXT("StaticMesh or SkeletalMesh asset path")),
+			MCPParam::OptionalField(TEXT("parts"), EType::Array, TEXT("1-64 meshes forming one assembly")).Items(EType::Object).WithFields({
+				MCPParam::RequiredField(TEXT("meshPath"), EType::String, TEXT("StaticMesh or SkeletalMesh asset path")),
+				MCPParam::OptionalField(TEXT("relativeTransform"), EType::Object, TEXT("Transform relative to the assembly origin")).WithFields({
+					MCPParam::OptionalField(TEXT("location"), EType::Vec3, TEXT("Translation in centimetres, default zero")),
+					MCPParam::OptionalField(TEXT("rotation"), EType::Rotator, TEXT("Pitch, yaw and roll in degrees, default zero")),
+					MCPParam::OptionalField(TEXT("scale"), EType::Vec3, TEXT("Scale, default one")),
+				}),
+			}),
+			MCPParam::OptionalField(TEXT("aspect"), EType::Object, TEXT("Inventory aspect ratio; the longer output edge equals resolution")).WithFields({
+				MCPParam::RequiredField(TEXT("width"), EType::Number, TEXT("Positive relative width")).Range(0.01, 100),
+				MCPParam::RequiredField(TEXT("height"), EType::Number, TEXT("Positive relative height")).Range(0.01, 100),
+			}),
+		}),
+		MCPParam::Required(TEXT("outputDir"), EType::String, TEXT("Absolute or project-relative directory for <id>.png and a job-specific JSON manifest")),
+		MCPParam::Optional(TEXT("resolution"), EType::Integer, TEXT("Longest image edge in pixels (default 512); shorter edge at least 32")).Range(64, 4096),
+		MCPParam::Optional(TEXT("viewDirection"), EType::Vec3, TEXT("Direction from subject toward camera (default 1,-1.35,0.9), finite and nonzero")),
+		MCPParam::Optional(TEXT("lightingPreset"), EType::String, TEXT("Studio lighting preset (default studio)")).Enum({TEXT("studio")}),
+		MCPParam::Optional(TEXT("cubemapPath"), EType::String, TEXT("Skylight TextureCube (default /Engine/MapTemplates/Sky/DaylightAmbientCubemap.DaylightAmbientCubemap)")),
+		MCPParam::Optional(TEXT("captureMode"), EType::String, TEXT("beauty: opaque colour; matte: opaque coverage grayscale; both: colour with coverage alpha (default both)")).Enum({TEXT("beauty"), TEXT("matte"), TEXT("both")}),
+		MCPParam::Optional(TEXT("fullyLoadTextures"), EType::Boolean, TEXT("Wait across real editor frames for requested texture mips (default true); a 60s item timeout reports blocked")),
+	}, MCPSpec::ContractExempt(TEXT("starts a latent preview-world render job and writes PNGs and a manifest")));
+	Registry.RegisterHandler(TEXT("get_mesh_studio_render"), &GetMeshStudioRender, {
+		MCPParam::Required(TEXT("jobId"), EType::String, TEXT("Job id returned by render_mesh_studio")),
+	});
+	Registry.RegisterHandler(TEXT("cancel_mesh_studio_render"), &CancelMeshStudioRender, {
+		MCPParam::Required(TEXT("jobId"), EType::String, TEXT("Job id returned by render_mesh_studio; already-finished jobs are returned unchanged")),
+	});
 	Registry.RegisterHandler(TEXT("set_realtime"), &SetRealtime, {
 		MCPParam::Optional(TEXT("enabled"), EType::Boolean, TEXT("Realtime update on every level viewport (default true)")),
 	}, MCPSpec::ContractExempt(TEXT("toggles realtime on every level viewport")));
