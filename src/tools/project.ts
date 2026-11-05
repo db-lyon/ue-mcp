@@ -45,6 +45,8 @@ const ACTION_ORDER = [
   "execute_python_report",
   "list_files",
   "set_config",
+  "get_maps_settings",
+  "set_maps_settings",
   "build",
   "generate_project_files",
   "create_cpp_class",

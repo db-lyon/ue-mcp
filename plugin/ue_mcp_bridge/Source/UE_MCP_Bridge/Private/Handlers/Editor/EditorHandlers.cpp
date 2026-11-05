@@ -191,11 +191,13 @@ namespace
 	/** Persist the package editor(set_property) wrote into and record the outcome.
 	 *  A native class default has no file, so it is reported unsaved without failing;
 	 *  a map package keeps the editor's own save path behind the write guard. */
-	void EditorSetPropertyPersist(UObject* Asset, const FString& AssetPath, const TSharedPtr<FJsonObject>& Result)
+	void EditorSetPropertyPersist(UObject* Asset, const FString& AssetPath, const FString& PropertyPath, const TSharedPtr<FJsonObject>& Result)
 	{
 		UPackage* Package = Asset ? Asset->GetOutermost() : nullptr;
 		if (Package && Package->HasAnyPackageFlags(PKG_CompiledIn))
 		{
+			// A settings class keeps its defaults in an ini, not a package (#1566).
+			if (FEditorHandlers::PersistConfigProperty(Asset, PropertyPath, Result)) return;
 			Result->SetBoolField(TEXT("saved"), false);
 			Result->SetStringField(TEXT("saveNote"), TEXT("A native class default has no package file; the change lives in memory for this editor session."));
 			return;
@@ -385,6 +387,20 @@ void FEditorHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 			MCPParam::Required(TEXT("key"), EType::String, TEXT("INI key")),
 			MCPParam::Required(TEXT("value"), EType::String, TEXT("INI value")),
 		}, MCPSpec::ContractExempt(TEXT("writes an INI file under the project's Config folder")));
+		// #1566: Maps & Modes, typed and validated, with the stored values read back.
+		Registry.RegisterHandler(TEXT("get_maps_settings"), &GetMapsSettings, NoParams);
+		Registry.RegisterHandler(TEXT("set_maps_settings"), &SetMapsSettings, {
+			MCPParam::Optional(TEXT("globalDefaultGameMode"), EType::String, TEXT("Default GameMode: a GameModeBase class as a /Script path, short name or Blueprint asset path; empty clears")),
+			MCPParam::Optional(TEXT("globalDefaultServerGameMode"), EType::String, TEXT("Dedicated server GameMode, same forms; empty clears")),
+			MCPParam::Optional(TEXT("gameInstanceClass"), EType::String, TEXT("GameInstance class, same forms; empty clears")),
+			MCPParam::Optional(TEXT("gameDefaultMap"), EType::String, TEXT("Game default map as a world asset path, /Game/Maps/MyMap; empty clears")),
+			MCPParam::Optional(TEXT("serverDefaultMap"), EType::String, TEXT("Dedicated server default map, same form; empty clears")),
+			MCPParam::Optional(TEXT("editorStartupMap"), EType::String, TEXT("Map the editor opens at startup, same form; empty clears")),
+			MCPParam::Optional(TEXT("transitionMap"), EType::String, TEXT("Seamless travel transition map, same form; empty clears")),
+		}, MCPSpec::AtLeastOne({
+			{ TEXT("globalDefaultGameMode") }, { TEXT("globalDefaultServerGameMode") }, { TEXT("gameInstanceClass") },
+			{ TEXT("gameDefaultMap") }, { TEXT("serverDefaultMap") }, { TEXT("editorStartupMap") }, { TEXT("transitionMap") },
+		}).ContractExempt(TEXT("writes DefaultEngine.ini under the project's Config folder")));
 	}
 	Registry.RegisterHandler(TEXT("get_viewport_info"), &GetViewportInfo, NoParams);
 	Registry.RegisterHandler(TEXT("hit_test_viewport_pixel"), &HitTestViewportPixel, {
@@ -1829,7 +1845,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::SetProperty(const TSharedPtr<FJsonObject
 		if (PathInfo.bUsedKeySelector) MeshResult->SetStringField(TEXT("indexedPath"), PathInfo.IndexedPath);
 		MeshResult->SetStringField(TEXT("resolvedPropertyName"), PathInfo.IndexedPath);
 		MeshResult->SetStringField(TEXT("type"), Property->GetCPPType());
-		if (bSaveMesh) EditorSetPropertyPersist(Asset, AssetPath, MeshResult);
+		if (bSaveMesh) EditorSetPropertyPersist(Asset, AssetPath, PathInfo.IndexedPath, MeshResult);
 		else MeshResult->SetBoolField(TEXT("saved"), false);
 		MCPSkinnedAsset::Report(MeshResult, SkinnedComp, PreviousMesh);
 		MeshResult->SetBoolField(TEXT("changeDetected"), true);
@@ -1931,7 +1947,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::SetProperty(const TSharedPtr<FJsonObject
 	// prior behavior; pass save=false to leave the package dirty in-memory
 	// (batch many writes, then save_dirty / save_asset once).
 	auto Result = MCPSuccess();
-	if (bSave) EditorSetPropertyPersist(Asset, AssetPath, Result);
+	if (bSave) EditorSetPropertyPersist(Asset, AssetPath, PathInfo.IndexedPath, Result);
 	else Result->SetBoolField(TEXT("saved"), false);
 	Result->SetStringField(TEXT("path"), AssetPath);
 	Result->SetStringField(TEXT("resolvedPath"), Asset->GetPathName());
