@@ -142,6 +142,13 @@ export interface CallActionOptions {
    * content, decline or cancel.
    */
   elicit?: (params: ElicitParams) => Promise<ElicitResult>;
+  /**
+   * The access mode this call runs under (feature "callAction.access").
+   * `read-only` refuses an action whose declared effect is `mutate` or
+   * `unknown`, and every state-changing bridge call it would make. Default
+   * read-write.
+   */
+  access?: "read-write" | "read-only";
 }
 
 /**
@@ -222,6 +229,8 @@ export interface DaemonExtensionApi {
    * What this daemon offers beyond EXTENSION_API_VERSION, for feature detection:
    *   "callAction.dialogPrompt"  callAction takes `opts.dialogPrompt` and `opts.dialogWaitMs`
    *   "callAction.elicit"        callAction takes `opts.elicit` for every other form
+   *   "callAction.access"        callAction and context.call take `opts.access`, and `read-only`
+   *                              refuses every call that may change state
    *   "modes"                    `modes` reads and sets this project's feedback and dialog modes
    *   "modes.playtest"           `modes.get` carries `playtest` and `modes.setPlaytest` sets it
    *   "events.dialog"            dialog.opened, dialog.answered, dialog.delegated and
@@ -450,8 +459,23 @@ export interface DaemonHealth {
    *   "ui.scopedKeys"         a bundle named for a loaded extension is installed and served only
    *                           when signed by a key that extension trusted
    *   "ui.extensions"         GET /ui/ext/<name>/ serves each loaded extension's own bundle, listed
-   *                           in `uiBundles`; `ueMcpExtension.ui.root: false` keeps one off /ui/).
+   *                           in `uiBundles`; `ueMcpExtension.ui.root: false` keeps one off /ui/
+   *   "sessions.access"       GET /v1/sessions lists each MCP session with its access mode, and
+   *                           PUT /v1/sessions/<id>/access sets one to read-only or read-write).
    * Absent on a daemon older than the field.
    */
   features?: readonly string[];
+  /** Open MCP sessions with their access mode (feature "sessions.access"). */
+  sessions?: McpSessionInfo[];
+}
+
+/** One open MCP session on the daemon (feature "sessions.access"). */
+export interface McpSessionInfo {
+  /** Stable for the life of the socket; also sent as `x-ue-mcp-session` on the WebSocket upgrade. */
+  id: string;
+  /** The MCP client's name once it has introduced itself, else what its shim said. */
+  client: string;
+  connectedAt: string;
+  /** `read-only` refuses every call whose declared effect is `mutate` or `unknown`. */
+  access: "read-write" | "read-only";
 }

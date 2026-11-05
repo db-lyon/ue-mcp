@@ -10,6 +10,7 @@ import type { ElicitFn, ProgressFn, ProgressUpdate, ToolContext, ToolDef } from 
 import { McpError, ErrorCode } from "../core/errors.js";
 import { debug } from "../core/log.js";
 import { withCallAsker } from "../flow/call-elicit.js";
+import { readOnlyRefusal, type SessionAccessMode } from "../flow/session-access.js";
 import { unwrapArgsEnvelope, validateCategoryParams } from "../surface/context/call-envelope.js";
 import {
   routeEditorCall,
@@ -170,6 +171,13 @@ export interface DispatchDeps {
    * caller enforces its own rules.
    */
   gatePlaytest?: boolean;
+  /**
+   * The calling session's access mode, read on every call. Absent is
+   * read-write. In read-only mode an action whose declared effect is `mutate`
+   * or `unknown` is refused here, and every bridge call it would make is
+   * refused by the read-only guard (#1484).
+   */
+  access?: () => SessionAccessMode;
 }
 
 /** Window actions that can remove the window the dialog gate is holding (#1231). */
@@ -249,6 +257,13 @@ export async function dispatchCategoryCall(
   const untargeted = refuseUntargetedInRegistry(sessions, effectiveTask, routed.targeted, loads.dispatchUnion.tools);
   if (untargeted) return errorResult("INVALID_PARAMS", untargeted);
 
+  // Before the dialog guard and the task: an action served in this process
+  // never reaches the bridge, so the bridge guard alone cannot refuse it.
+  if (deps.access?.() === "read-only") {
+    const refused = readOnlyRefusal(effectiveTask, loads.dispatchUnion.tools);
+    if (refused) return errorResult(ErrorCode.WRITE_BLOCKED, refused, attribution(sessions, session));
+  }
+
   if (deps.gatePlaytest) {
     const refused = playtestRefusal(effectiveTask, session.project.projectDir);
     if (refused) return refusalResult(refused, attribution(sessions, session));
@@ -325,7 +340,7 @@ export async function dispatchCategoryCall(
     // bridge, so a lock request made while a modal is up is refused as a dialog.
     // Every bridge call the task makes answers to this caller, so a guard that
     // allows overrides asks the person who sent this call and nobody else.
-    const result = await withCallAsker({ elicit: flowCtx.elicit, subject: effectiveTask }, () => withAssetLocks(
+    const result = await withCallAsker({ elicit: flowCtx.elicit, subject: effectiveTask, access: deps.access }, () => withAssetLocks(
       session.guarded,
       deps.lockingCfg,
       effectiveTask,
@@ -490,6 +505,11 @@ export async function dispatchFlowCall(
     );
     if (untargeted) return errorResult("INVALID_PARAMS", untargeted);
 
+    if (deps.access?.() === "read-only") {
+      const refused = readOnlyRefusal(`${flowTool.name}.${String(params.action ?? "")}`, deps.loads.dispatchUnion.tools);
+      if (refused) return errorResult(ErrorCode.WRITE_BLOCKED, refused, attribution(sessions, session));
+    }
+
     // Steps are refused individually at the guarded bridge. This covers a run
     // STARTED while a modal is up, and flow(list)/flow(plan), which never
     // touch the bridge at all.
@@ -500,7 +520,7 @@ export async function dispatchFlowCall(
     );
     if (!flowCheck.allow) return refusalResult(flowCheck.refusal, attribution(sessions, session));
     const result = await withCallAsker(
-      { elicit: deps.elicit() },
+      { elicit: deps.elicit(), access: deps.access },
       () => flowTool.handler(sessionContext(baseCtx, session), params),
     );
     const text = typeof result === "string" ? result : JSON.stringify(result, null, 2);
