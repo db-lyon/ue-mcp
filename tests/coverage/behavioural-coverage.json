@@ -1478,6 +1478,11 @@
       "tests": [
         {
           "suite": "live",
+          "file": "tests/live/bcov-widget-commonui-click.test.ts",
+          "test": "invoke_runtime_function clicks a CommonButtonBase child and toggles its selection"
+        },
+        {
+          "suite": "live",
           "file": "tests/live/bcov-widget-runtime.test.ts",
           "test": "add_to_viewport creates an instance list_runtime_widgets and get_runtime_widget find"
         }
@@ -10005,6 +10010,11 @@
       "registeredIn": "WidgetHandlers.cpp",
       "status": "covered",
       "tests": [
+        {
+          "suite": "live",
+          "file": "tests/live/bcov-widget-commonui-click.test.ts",
+          "test": "invoke_runtime_function clicks a CommonButtonBase child and toggles its selection"
+        },
         {
           "suite": "live",
           "file": "tests/live/bcov-widget-runtime.test.ts",
