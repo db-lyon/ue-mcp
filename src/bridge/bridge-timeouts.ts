@@ -138,6 +138,7 @@ export const REGISTERED_HANDLER_TIMEOUT_SECONDS: Readonly<Record<string, number>
   source_control_sync: 300,
   spawn_actors_batch: 300,
   summarize_static_mesh_usage: 300,
+  transform_skinned_part: 600,
   trigger_hitch: 30,
 };
 
