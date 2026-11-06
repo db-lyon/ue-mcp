@@ -10,6 +10,7 @@
 #include "HandlerSkinnedAsset.h"
 #include "HandlerSceneCapture.h"
 #include "Handlers/Editor/HandlerWindowPick.h"
+#include "Handlers/Editor/HandlerSlateCapture.h"
 #include "Handlers/Level/LevelHandlers.h"
 #include "Handlers/HandlerEditorState.h"
 #include "Misc/PackageName.h"
@@ -64,6 +65,7 @@
 #include "Logging/MessageLog.h"
 #include "HighResScreenshot.h"
 #include "Framework/Application/SlateApplication.h"
+#include "Rendering/SlateRenderer.h"
 #include "Widgets/SViewport.h"
 #include "Widgets/SWindow.h"
 #include "Framework/Notifications/NotificationManager.h"
@@ -2998,13 +3000,54 @@ TSharedPtr<FJsonValue> FEditorHandlers::CaptureScreenshot(const TSharedPtr<FJson
 		const FWorldContext* ReportContext,
 		const FString& CaptureDescription) -> TSharedPtr<FJsonValue>
 	{
-		TArray<FColor> Pixels;
-		FIntVector CaptureSize = FIntVector::ZeroValue;
-		if (!FSlateApplication::Get().TakeScreenshot(CaptureWidget, Pixels, CaptureSize)
-			|| Pixels.Num() == 0)
+		// #1450: a capture of a window Slate does not draw leaves its readback
+		// queued, so refuse it up front, and read back into a buffer that
+		// outlives the call in case the renderer still skips the draw.
+		FSlateRenderer* Renderer = FSlateApplication::Get().GetRenderer();
+		const TSharedPtr<SWindow> CaptureWindow = FSlateApplication::Get().FindWidgetWindow(CaptureWidget);
+		if (!Renderer || !CaptureWindow.IsValid())
 		{
-			return MCPError(TEXT("Slate screenshot failed"));
+			return MCPError(FString::Printf(
+				TEXT("The %s viewport is not being drawn: it is not in any Slate window. Use capture_scene_png, which renders without the window."),
+				*ResultTarget));
 		}
+		const FString NotDrawn = MCPWhySlateWindowNotDrawn(
+			*CaptureWindow,
+			Renderer->GetViewportResource(*CaptureWindow) != nullptr,
+			FVector2f(CaptureWidget->GetTickSpaceGeometry().GetDrawSize()));
+		if (!NotDrawn.IsEmpty())
+		{
+			return MCPError(FString::Printf(
+				TEXT("The %s viewport is not being drawn: %s (window '%s'). Show the window, or use capture_scene_png, which renders without it."),
+				*ResultTarget, *NotDrawn, *CaptureWindow->GetTitle().ToString()));
+		}
+
+		TArray<FColor>& Sink = MCPSlateCaptureSink();
+		if (MCPSlateCaptureMayBePending())
+		{
+			// An earlier failed capture may still have a readback in flight
+			// into the sink; let it land before the sink is reused.
+			FlushRenderingCommands();
+			MCPSlateCaptureMayBePending() = false;
+		}
+		Sink.Reset();
+		FIntVector CaptureSize = FIntVector::ZeroValue;
+		const bool bCaptured = FSlateApplication::Get().TakeScreenshot(CaptureWidget, Sink, CaptureSize);
+		if (!bCaptured
+			|| Sink.Num() == 0
+			|| Sink.Num() != CaptureSize.X * CaptureSize.Y)
+		{
+			// The window was not drawn, so its request is still queued. Shrink
+			// it to one pixel, which is inside the back buffer at any size, so
+			// the draw that finally consumes it reads back nothing harmful.
+			Renderer->PrepareToTakeScreenshot(FIntRect(0, 0, 1, 1), &Sink, CaptureWindow.Get());
+			MCPSlateCaptureMayBePending() = true;
+			return MCPError(FString::Printf(
+				TEXT("The %s viewport is not being drawn: Slate did not draw window '%s' during the capture, so nothing was read back. This happens when the window is off screen or not presented. Bring it on screen, or use capture_scene_png, which renders without it."),
+				*ResultTarget, *CaptureWindow->GetTitle().ToString()));
+		}
+		TArray<FColor> Pixels = MoveTemp(Sink);
+		Sink.Reset();
 		for (FColor& Pixel : Pixels)
 		{
 			Pixel.A = 255;
