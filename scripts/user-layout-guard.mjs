@@ -126,6 +126,10 @@ export function guardUserLayouts(files = userLayoutFiles()) {
  * the layouts now and close what the run opened when this process exits. A tab
  * the editor saves only when it later quits is out of reach; its own
  * open_settings and import cases are the ones that leave tabs behind.
+ *
+ * @param {(message: string) => void} say
+ * @param {{ once(event: "exit", listener: () => void): unknown }} [proc]
+ * @param {string[]} [files]
  */
 export function guardUserLayoutsUntilExit(say, proc = process, files = userLayoutFiles()) {
   const guard = guardUserLayouts(files);
