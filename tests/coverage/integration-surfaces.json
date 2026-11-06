@@ -207,6 +207,11 @@
       "summary": "ue-mcp login exchanges a GitHub token for a registry publish token"
     },
     {
+      "id": "cli.login.email",
+      "group": "cli",
+      "summary": "ue-mcp login --email trades an emailed one-time code for the account token"
+    },
+    {
       "id": "cli.logout",
       "group": "cli",
       "summary": "ue-mcp logout forgets the cached registry token"
