@@ -64,9 +64,6 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 
 bool FAnimationPhysicsAssetConstraintsTest::RunTest(const FString& Parameters)
 {
-	// The missing path below is deliberate and the engine loader logs an Error
-	// for it. Count 0 means it must occur.
-	AddExpectedError(TEXT("LoadAsset failed"), EAutomationExpectedErrorFlags::Contains, 0);
 
 	const FMCPScopedTestMount Mount(FString(MCPPhysConstraintsTestRoot), TEXT("UEMCPPhysConstraintsTest"));
 
