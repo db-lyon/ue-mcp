@@ -192,8 +192,11 @@ TSharedPtr<FJsonValue> FProjectHandlers::SetDeveloperSetting(const TSharedPtr<FJ
 		TargetFile = Settings->GetGlobalUserConfigFilename();
 		TargetKind = TEXT("globalUser");
 	}
-	else if (Class->HasAnyClassFlags(CLASS_ProjectUserConfig))
+	else if (Class->HasAnyClassFlags(CLASS_ProjectUserConfig | CLASS_DefaultConfig))
 	{
+		// The dialog has no user mode for a defaultconfig class, and its Saved
+		// ini keeps only sections listed under [SectionsToSave] (Base.ini lists
+		// none), so the per-user layer is Config/User<Config>.ini.
 		TargetFile = Settings->GetProjectUserConfigFilename();
 		TargetKind = TEXT("projectUser");
 	}
@@ -280,8 +283,6 @@ TSharedPtr<FJsonValue> FProjectHandlers::SetDeveloperSetting(const TSharedPtr<FJ
 	else
 	{
 		Settings->SaveConfig();
-		// SaveConfig updates the config branch; the file on disk is written when the branch is flushed.
-		if (GConfig) GConfig->Flush(/*bRemoveFromCache*/ false, Settings->GetClass()->GetConfigName());
 		SaveMethod = TEXT("SaveConfig");
 	}
 
@@ -308,7 +309,9 @@ TSharedPtr<FJsonValue> FProjectHandlers::SetDeveloperSetting(const TSharedPtr<FJ
 	Result->SetBoolField(TEXT("persisted"), true);
 	if (LinesAfter.Num() == 0)
 	{
-		Result->SetStringField(TEXT("iniNote"), TEXT("The file holds no line for this key: the value equals what the config hierarchy below this file already gives, so the save writes only the difference and that is none."));
+		Result->SetStringField(TEXT("iniNote"), TargetKind == TEXT("saved")
+			? TEXT("The file holds no line for this key. A Saved ini keeps only values that differ from the layers below it, and only sections its hierarchy lists under [SectionsToSave] unless bCanSaveAllSections is set, so the value may hold for this session only.")
+			: TEXT("The file holds no line for this key: the value equals what the config hierarchy below this file already gives, so the save writes only the difference and that is none."));
 	}
 
 	const bool bRestart = TopProp->GetBoolMetaData(TEXT("ConfigRestartRequired"))

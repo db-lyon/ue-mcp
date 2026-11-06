@@ -12,6 +12,7 @@
 #include "Dom/JsonValue.h"
 #include "HAL/FileManager.h"
 #include "Misc/AutomationTest.h"
+#include "Misc/ConfigContext.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 
@@ -195,14 +196,19 @@ bool FMCPSetDeveloperSettingUserTest::RunTest(const FString& Parameters)
 	const TSharedPtr<FJsonObject> Response = CallSetDeveloperSetting(
 		Registry, SettingTestClassPath(), TEXT("Count"), MakeShared<FJsonValueNumber>(9), TEXT("user"));
 	if (!TestTrue(TEXT("persist=user succeeds"), SettingCallSucceeded(Response))) return false;
-	TestEqual(TEXT("user persists through the class config"), Response->GetStringField(TEXT("configKind")), FString(TEXT("saved")));
+	const FString UserIni = FPaths::ConvertRelativePathToFull(
+		GetDefault<UUEMCPDeveloperSettingTestObject>()->GetProjectUserConfigFilename());
+	TestEqual(TEXT("a defaultconfig class persists user values to the project user layer"),
+		Response->GetStringField(TEXT("configKind")), FString(TEXT("projectUser")));
+	TestEqual(TEXT("the project user ini is reported"),
+		FPaths::ConvertRelativePathToFull(Response->GetStringField(TEXT("configFile"))), UserIni);
 	TestFalse(TEXT("user does not write the default ini"), FPaths::FileExists(SettingTestDefaultIni()));
-	const FString UserFile = Response->GetStringField(TEXT("configFile"));
-	TestTrue(TEXT("the user config file holds the value"), ReadFileOrEmpty(UserFile).Contains(TEXT("Count=9")));
+	TestTrue(TEXT("the user config file holds the value"), ReadFileOrEmpty(UserIni).Contains(TEXT("Count=9")));
 
-	// Leave the per-user file holding the class defaults again.
+	// Remove the user layer and reload the branch so later runs start clean.
 	FSettingTestScope::Reset();
-	GetMutableDefault<UUEMCPDeveloperSettingTestObject>()->SaveConfig();
+	IFileManager::Get().Delete(*UserIni, false, true, true);
+	FConfigContext::ForceReloadIntoGConfig().Load(TEXT("UEMCPSettingTest"));
 	return true;
 }
 
