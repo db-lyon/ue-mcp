@@ -218,7 +218,11 @@ namespace MeshStudioRenderTests
 	};
 }
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMeshStudioRenderPngTest, "UE.MCP.Editor.MeshStudio.RenderAndClean",
+// These two advance the render job on real engine frames, so they run from the editor's
+// Automation window. run_automation_tests holds the game thread for the whole run and no frame
+// comes, so they sit outside the UE.MCP. prefix it sweeps; tests/live/mesh-studio-render.test.ts
+// covers the same behaviour through the bridge.
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMeshStudioRenderPngTest, "UEMCPFrames.Editor.MeshStudio.RenderAndClean",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter | EAutomationTestFlags::NonNullRHI)
 
 bool FMeshStudioRenderPngTest::RunTest(const FString& Parameters)
@@ -228,7 +232,7 @@ bool FMeshStudioRenderPngTest::RunTest(const FString& Parameters)
 	return true;
 }
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMeshStudioRenderCancelTest, "UE.MCP.Editor.MeshStudio.CancelAndClean",
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMeshStudioRenderCancelTest, "UEMCPFrames.Editor.MeshStudio.CancelAndClean",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter | EAutomationTestFlags::NonNullRHI)
 
 bool FMeshStudioRenderCancelTest::RunTest(const FString& Parameters)
