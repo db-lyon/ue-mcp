@@ -132,9 +132,6 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 
 bool FMCPAssetPathResolutionTest::RunTest(const FString& Parameters)
 {
-	// The miss below is deliberate, and the engine loader logs an Error for it.
-	// Count 0 means "must occur", so this stays honest if the miss stops.
-	AddExpectedError(TEXT("LoadAsset failed"), EAutomationExpectedErrorFlags::Contains, 0);
 
 	const FScopedAssetPathTestMount Mount;
 
@@ -399,6 +396,7 @@ bool FMCPAssetFreePathProbeIsSilentTest::RunTest(const FString& Parameters)
 	TestNotNull(TEXT("probe asset created"), Held);
 	if (Held)
 	{
+		Held->RowStruct = FTableRowBase::StaticStruct();
 		const TSharedPtr<FJsonValue> Existed = MCPCheckAssetExists(FreePackagePath, HeldName, TEXT("skip"), TEXT("DataTable"));
 		TestTrue(TEXT("an in-memory asset is reported as existing"), Existed.IsValid() && ErrorSucceeded(Existed));
 		TestEqual(TEXT("the existing asset is named by its object path"),

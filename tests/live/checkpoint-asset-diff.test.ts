@@ -144,7 +144,13 @@ afterAll(async () => {
     for (const d of ["shadow.git", "shadow-pending", "shadow-large", "shadow-thumbs", "shadow-diffs"]) {
       fs.rmSync(path.join(projectDir, "Saved", "UE_MCP_Bridge", d), { recursive: true, force: true });
     }
-    fs.rmSync(path.join(projectDir, "Saved", "Diff", "UE_MCP_Checkpoints"), { recursive: true, force: true });
+    // The editor keeps the file of a native diff copy open after the diff window unloads it, until it
+    // exits; the copies live under this shard's own Saved folder, so a locked one is left for the shard.
+    try {
+      fs.rmSync(path.join(projectDir, "Saved", "Diff", "UE_MCP_Checkpoints"), { recursive: true, force: true, maxRetries: 4, retryDelay: 250 });
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code !== "EBUSY") throw e;
+    }
   }
   closeLiveBridges();
 }, 300_000);

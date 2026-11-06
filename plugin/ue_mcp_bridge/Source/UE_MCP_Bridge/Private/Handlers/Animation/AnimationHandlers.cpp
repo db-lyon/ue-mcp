@@ -2154,6 +2154,8 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetPhysicsAssetConstraintLimits(const
 
 	// Every parameter is read before anything can fail (#1057).
 	const TArray<TSharedPtr<FJsonValue>>* NamesArr = nullptr;
+	MCPReadParamsAhead(Params, { TEXT("swing1Motion"), TEXT("swing2Motion"), TEXT("twistMotion"),
+		TEXT("swing1LimitDegrees"), TEXT("swing2LimitDegrees"), TEXT("twistLimitDegrees") });
 	const bool bHasNames = TryGetArrayParam(Params, TEXT("constraintNames"), NamesArr) && NamesArr;
 	const TArray<TSharedPtr<FJsonValue>>* PerArr = nullptr;
 	const bool bHasPer = TryGetArrayParam(Params, TEXT("constraints"), PerArr) && PerArr;

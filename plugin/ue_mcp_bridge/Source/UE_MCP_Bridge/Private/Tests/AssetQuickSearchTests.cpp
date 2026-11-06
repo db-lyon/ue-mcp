@@ -96,8 +96,8 @@ bool FMCPQuickSearchLatencyTest::RunTest(const FString& Parameters)
 	for (int32 i = 0; i < AssetCount; ++i)
 	{
 		const int32 Kind = i % UE_ARRAY_COUNT(Prefixes);
-		const FString Name = FString::Printf(TEXT("%s%s%s_%02d"), Prefixes[Kind],
-			Words[(i / 7) % UE_ARRAY_COUNT(Words)], Words[(i / 131) % UE_ARRAY_COUNT(Words)], i % 100);
+		const FString Name = FString::Printf(TEXT("%s%s%s_%05d"), Prefixes[Kind],
+			Words[(i / 7) % UE_ARRAY_COUNT(Words)], Words[(i / 131) % UE_ARRAY_COUNT(Words)], i);
 		const FString Folder = FString::Printf(TEXT("/Game/%s/Set%03d"), Folders[(i / 3) % UE_ARRAY_COUNT(Folders)], i % 400);
 		const FString Package = Folder / Name;
 		Index.Upsert(MakeDoc(EKind::Asset, Package, Name, Classes[Kind],

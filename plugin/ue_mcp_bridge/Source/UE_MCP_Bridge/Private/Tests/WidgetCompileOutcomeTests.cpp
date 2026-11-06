@@ -14,7 +14,9 @@
 #include "Dom/JsonValue.h"
 #include "EdGraph/EdGraph.h"
 #include "GameFramework/Actor.h"
+#include "EdGraphSchema_K2.h"
 #include "K2Node_CallFunction.h"
+#include "K2Node_CustomEvent.h"
 #include "Kismet2/BlueprintEditorUtils.h"
 #include "Kismet2/KismetEditorUtilities.h"
 #include "Misc/AutomationTest.h"
@@ -56,6 +58,8 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FWidgetCompileOutcomeTest,
 bool FWidgetCompileOutcomeTest::RunTest(const FString& Parameters)
 {
 	using namespace MCPWidgetCompileOutcomeTests;
+	// The deliberately broken call is reported by the compiler as an Error each time the blueprint compiles.
+	AddExpectedError(TEXT("is not a Actor, therefore"), EAutomationExpectedErrorFlags::Contains, 0);
 	FMCPScopedTestMount Mount(
 		TEXT("/UEMCPWidgetCompile_") + FGuid::NewGuid().ToString(EGuidFormats::Digits) + TEXT("/"), TEXT("UEMCPWidgetCompile"));
 	const FString PackageName = Mount.RootPath + TEXT("WBP_CompileProbe");
@@ -83,14 +87,24 @@ bool FWidgetCompileOutcomeTest::RunTest(const FString& Parameters)
 
 	// 2. An edit whose compile fails. The graph gets a call to an Actor function
 	// with its Target pin unconnected, which a widget cannot satisfy as self.
+	// It hangs off a custom event: the compiler prunes a node no event reaches
+	// before it checks it, and that compile would succeed.
 	UEdGraph* EventGraph = FBlueprintEditorUtils::FindEventGraph(Blueprint);
 	if (!TestNotNull(TEXT("fixture has an event graph"), EventGraph)) return false;
 	UFunction* SetLocation = AActor::StaticClass()->FindFunctionByName(GET_FUNCTION_NAME_CHECKED(AActor, K2_SetActorLocation));
 	if (!TestNotNull(TEXT("K2_SetActorLocation exists"), SetLocation)) return false;
+	FGraphNodeCreator<UK2Node_CustomEvent> EventCreator(*EventGraph);
+	UK2Node_CustomEvent* Entry = EventCreator.CreateNode();
+	Entry->CustomFunctionName = FName(TEXT("MCPCompileProbe"));
+	EventCreator.Finalize();
 	FGraphNodeCreator<UK2Node_CallFunction> Creator(*EventGraph);
 	UK2Node_CallFunction* Broken = Creator.CreateNode();
 	Broken->SetFromFunction(SetLocation);
 	Creator.Finalize();
+	UEdGraphPin* EntryThen = Entry->FindPin(UEdGraphSchema_K2::PN_Then);
+	UEdGraphPin* BrokenExec = Broken->GetExecPin();
+	if (!TestTrue(TEXT("probe event and call have exec pins"), EntryThen && BrokenExec)) return false;
+	EntryThen->MakeLinkTo(BrokenExec);
 
 	const TSharedPtr<FJsonObject> Failed = Call(Registry, TEXT("add_widget"),
 		AddWidgetParams(PackageName, TEXT("TextBlock"), TEXT("FailedLabel"), TEXT("RootPanel")));
