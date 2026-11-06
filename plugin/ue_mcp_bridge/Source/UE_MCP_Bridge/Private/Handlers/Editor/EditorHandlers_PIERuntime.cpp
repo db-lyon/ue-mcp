@@ -21,6 +21,7 @@
 #include "HandlerStaticMeshAsset.h"
 #include "JsonSerializer.h"
 
+#include "Components/PrimitiveComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Components/SkinnedMeshComponent.h"
 #include "Editor.h"
@@ -1402,12 +1403,21 @@ TSharedPtr<FJsonValue> FEditorHandlers::TeleportRuntimeActor(const TSharedPtr<FJ
 		Movement->StopMovementImmediately();
 	}
 
-	bool bMoved = Actor->TeleportTo(Location, Rotation, /*bIsATest=*/false, /*bNoCheck=*/!bSweep);
-	if (!bMoved)
+	// sweep moves the root along the way and stops at the first blocking hit, dispatched like any swept
+	// move (#1449). TeleportTo only checks the destination, and its fallback passed through walls.
+	FHitResult SweepHit;
+	bool bMoved = false;
+	if (bSweep)
 	{
-		// TeleportTo refuses when the destination is blocked; fall back to a
-		// direct set so a deliberate test placement is not silently ignored.
-		bMoved = Actor->SetActorLocationAndRotation(Location, Rotation, /*bSweep=*/false);
+		bMoved = Actor->SetActorLocationAndRotation(Location, Rotation, /*bSweep=*/true, &SweepHit, ETeleportType::None);
+	}
+	else
+	{
+		bMoved = Actor->TeleportTo(Location, Rotation, /*bIsATest=*/false, /*bNoCheck=*/true);
+		if (!bMoved)
+		{
+			bMoved = Actor->SetActorLocationAndRotation(Location, Rotation, /*bSweep=*/false);
+		}
 	}
 
 	// Stop again after the move: a character that was mid-fall regains velocity
@@ -1424,6 +1434,27 @@ TSharedPtr<FJsonValue> FEditorHandlers::TeleportRuntimeActor(const TSharedPtr<FJ
 	Result->SetStringField(TEXT("netMode"), DescribePIENetMode(World));
 	Result->SetBoolField(TEXT("teleported"), bMoved);
 	Result->SetBoolField(TEXT("movementStopped"), bStopMovement && Movement != nullptr);
+	if (bSweep)
+	{
+		Result->SetBoolField(TEXT("blocked"), SweepHit.bBlockingHit);
+		if (SweepHit.bBlockingHit)
+		{
+			TSharedPtr<FJsonObject> Hit = MakeShared<FJsonObject>();
+			if (AActor* HitActor = SweepHit.GetActor())
+			{
+				Hit->SetStringField(TEXT("actorLabel"), HitActor->GetActorLabel());
+				Hit->SetStringField(TEXT("actorPath"), HitActor->GetPathName());
+			}
+			if (UPrimitiveComponent* HitComponent = SweepHit.GetComponent())
+			{
+				Hit->SetStringField(TEXT("component"), HitComponent->GetName());
+			}
+			Hit->SetObjectField(TEXT("impactPoint"), MCPVec3ToJsonObject(SweepHit.ImpactPoint));
+			Hit->SetObjectField(TEXT("impactNormal"), MCPVec3ToJsonObject(SweepHit.ImpactNormal));
+			Hit->SetNumberField(TEXT("time"), SweepHit.Time);
+			Result->SetObjectField(TEXT("hit"), Hit);
+		}
+	}
 	Result->SetObjectField(TEXT("requestedLocation"), MCPVec3ToJsonObject(Location));
 	// Read the transform back rather than reporting what was asked for.
 	Result->SetObjectField(TEXT("actualLocation"), MCPVec3ToJsonObject(Actor->GetActorLocation()));

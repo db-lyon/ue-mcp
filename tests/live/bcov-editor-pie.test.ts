@@ -182,6 +182,19 @@ describe("a running PIE session", () => {
     }
     expect(Math.hypot(at.x - dest.x, at.y - dest.y, at.z - dest.z)).toBeLessThan(25);
   }, 60_000);
+
+  it("teleport_runtime_actor with sweep stops the Character on the floor and reports the hit (#1449)", async (ctx) => {
+    if (!playing) ctx.skip("PIE did not start");
+    await call("teleport_runtime_actor", { actorLabel: CHAR, location: { x: HOME.x, y: HOME.y, z: HOME.z + 600 } });
+    const below = { x: HOME.x, y: HOME.y, z: HOME.z - 500 };
+    const swept = await call("teleport_runtime_actor", { actorLabel: CHAR, location: below, sweep: true });
+    expect(swept.blocked).toBe(true);
+    const hit = swept.hit as Json;
+    expect(hit.actorLabel).toBe(FLOOR);
+    // The floor's top is at z 25; the capsule stops resting on it, never through it.
+    expect(vec(swept.actualLocation).z).toBeGreaterThan(HOME.z + 25);
+    expect(Math.abs(vec(hit.impactPoint).z - (HOME.z + 25))).toBeLessThan(2);
+  }, 60_000);
 });
 
 describe("the Blueprint-error bypass start", () => {

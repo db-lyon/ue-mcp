@@ -651,7 +651,7 @@ void FEditorHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("location"), EType::Vec3, TEXT("Destination; omit to keep the current location")),
 		MCPParam::Optional(TEXT("rotation"), EType::Rotator, TEXT("Destination rotation; omit to keep the current one")),
 		MCPParam::Optional(TEXT("stopMovement"), EType::Boolean, TEXT("Stop the movement component so the move is not undone (default true)")),
-		MCPParam::Optional(TEXT("sweep"), EType::Boolean, TEXT("Collide on the way (default false)")),
+		MCPParam::Optional(TEXT("sweep"), EType::Boolean, TEXT("Move along the way and stop at the first blocking hit, returned as blocked and hit (default false)")),
 		WorldParam(),
 		PieInstanceParam(),
 	});

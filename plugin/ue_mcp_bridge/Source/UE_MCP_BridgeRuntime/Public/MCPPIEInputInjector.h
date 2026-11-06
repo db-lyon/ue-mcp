@@ -37,6 +37,20 @@ namespace MCPPIE
 		FInputActionValue CurrentValue;
 		int32 TapeIndex = 0;
 		int32 TapeTotal = 0;
+		double DurationSeconds = 0;
+		double ElapsedSeconds = 0;
+		bool bHasControlRotation = false;
+		FRotator ControlRotation = FRotator::ZeroRotator;
+	};
+
+	// Optional behaviour of a hold beyond its value (#1449).
+	struct UE_MCP_BRIDGERUNTIME_API FHoldOptions
+	{
+		// Game seconds after which the hold releases itself; 0 holds until StopHold or PIE ends.
+		double DurationSeconds = 0;
+		// Pins the player controller's control rotation at the end of every frame while the hold runs.
+		bool bHasControlRotation = false;
+		FRotator ControlRotation = FRotator::ZeroRotator;
 	};
 
 	class UE_MCP_BRIDGERUNTIME_API FPIEInputInjector
@@ -64,11 +78,16 @@ namespace MCPPIE
 
 		static FString StartHold(UInputAction* Action, const FInputActionValue& Value,
 			const FString& DesiredId, FString& OutError, int32 ClientIndex = 0,
-			int32 PIEInstance = INDEX_NONE, ULocalPlayer* ExactLocalPlayer = nullptr);
+			int32 PIEInstance = INDEX_NONE, ULocalPlayer* ExactLocalPlayer = nullptr,
+			const FHoldOptions& Options = FHoldOptions());
 
 		// Replace the value of a running hold. Returns false if no hold
 		// with that id exists.
 		static bool UpdateHold(const FString& Id, const FInputActionValue& Value);
+
+		// Pin (or re-pin) the control rotation a running hold applies every frame.
+		// Returns false if no hold with that id exists.
+		static bool SetHoldControlRotation(const FString& Id, const FRotator& Rotation);
 
 		// Stop a running hold. Returns false if no hold existed for that id.
 		static bool StopHold(const FString& Id);

@@ -10,8 +10,8 @@ export const pieTool: ToolDef = categoryTool(
   {
     view_trace: specBp("read", "Trace the live PIE player viewpoint. Returns viewLocation, viewRotation, viewDirection and line; sweepRadius also returns a sphere sweep. Each hit includes component collision state, channel response, blocksVisibility and owner label/class. Ignores the viewing pawn by default; requires running PIE.", "pie_view_trace"),
     inject_input:         specBp("mutate", "Inject one frame of an Enhanced Input action into a PIE player. client 1..N relays to a remote player.", "pie_inject_input"),
-    inject_input_start:   specBp("mutate", "Start holding an input action; returns injection_id. Rolls back with inject_input_stop.", "pie_inject_input_start"),
-    inject_input_update:  specBp("mutate", "Change the value of a running hold.", "pie_inject_input_update"),
+    inject_input_start:   specBp("mutate", "Start holding an input action every frame until inject_input_stop, PIE end, or duration_seconds of game time; control_rotation pins the controller's aim every frame while it runs. Hold several actions at once with one call each. Returns injection_id. Rolls back with inject_input_stop.", "pie_inject_input_start"),
+    inject_input_update:  specBp("mutate", "Change the value or control_rotation of a running hold.", "pie_inject_input_update"),
     inject_input_stop:    specBp("mutate", "Stop a hold or tape by id; alreadyStopped when it had ended.", "pie_inject_input_stop"),
     inject_input_tape:    specBp("mutate", "Play a per-frame value array through an input action; returns injection_id.", "pie_inject_input_tape"),
     drive_pawn: {

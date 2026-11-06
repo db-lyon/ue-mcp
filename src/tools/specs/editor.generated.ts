@@ -3882,7 +3882,7 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "sweep",
         "type": "boolean",
         "required": false,
-        "description": "Collide on the way (default false)"
+        "description": "Move along the way and stop at the first blocking hit, returned as blocked and hit (default false)"
       },
       {
         "name": "world",
@@ -4323,7 +4323,7 @@ export const schema: Record<string, z.ZodType> = {
   stopMovement: z.boolean().optional().describe("Stop the movement component so the move is not undone (default true)"),
   subsystemClass: z.string().optional().describe("Subsystem class name or /Script path, with target=subsystem: world, game instance, local player (by playerIndex), engine or editor"),
   subText: z.string().optional().describe("Second line under the headline"),
-  sweep: z.boolean().optional().describe("Collide on the way (default false)"),
+  sweep: z.boolean().optional().describe("Move along the way and stop at the first blocking hit, returned as blocked and hit (default false)"),
   tabId: z.string().optional().describe("Registered editor tab id, e.g. ProjectSettings, OutputLog or ContentBrowserTab1"),
   target: z.string().optional().describe("auto (default) | pie | editor | window (capture_screenshot). gameinstance | gamemode | gamestate | playercontroller | playerpawn | subsystem (get_object_properties, invoke_object_function, set_object_property). editor (default) for a level viewport, pie for the running game viewport (set_buffer_visualization)"),
   templateLevel: z.string().optional().describe("Level to copy; omit, Empty or None for a blank level"),

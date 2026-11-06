@@ -253,9 +253,24 @@ Observation output goes to `Saved/MCPObservations/<run_id>/`: `manifest.json`, `
 |--------|---------|
 | `inject_input` | Inject one frame of an input action |
 | `inject_input_start` | Begin a continuous hold; returns `injection_id` |
-| `inject_input_update` | Change the value of a running hold |
+| `inject_input_update` | Change the value or `control_rotation` of a running hold |
 | `inject_input_stop` | Release a hold or stop a tape |
 | `inject_input_tape` | Play a per-frame value array at a given rate |
+
+A hold keeps the action triggered every frame. `duration_seconds` releases it after that many game seconds, and `control_rotation` pins the player controller's aim at the end of every frame while it runs. Start one hold per action to press several at once:
+
+```
+pie(action="inject_input_start", action_path="/Game/Input/Actions/IA_Move", value_x=0, value_y=1, duration_seconds=3, control_rotation={pitch:-15, yaw:0, roll:0})
+pie(action="inject_input_start", action_path="/Game/Input/Actions/IA_Sprint", value_x=1, duration_seconds=3)
+```
+
+To sample the pawn every frame meanwhile, arm an observer while PIE runs: `profile_create` with `capture_pawn_state=true` (and any `tracked_values`), `observe_arm` starts sampling at once at `sample_hz` (default 60), `observe_stop` finalizes, and `observe_read` with `file=series` returns location, velocity and each tracked value per frame.
+
+An `FInputActionValue` argument to `editor(invoke_function)` or `editor(invoke_object_function)` takes `true`/`false` (Boolean), a number (Axis1D), `[x,y]` or `{x,y}` (Axis2D), or `[x,y,z]` or `{x,y,z}` (Axis3D), so the Enhanced Input subsystem's own functions can be called directly:
+
+```
+editor(invoke_object_function, world="pie", target="subsystem", subsystemClass="EnhancedInputLocalPlayerSubsystem", functionName="StartContinuousInputInjectionForAction", args={Action: "/Game/Input/Actions/IA_Move.IA_Move", RawValue: {x: 0, y: 1}})
+```
 
 ### Walking the player
 
