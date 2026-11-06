@@ -950,7 +950,7 @@ async function cmdPublish(args: string[]): Promise<void> {
   const token = await resolvePublishToken(tokenFlag);
   if (!token && !dryRun) {
     fail(
-      "not logged in. Run `ue-mcp login` - it authorizes this machine with GitHub " +
+      "not logged in. Run `ue-mcp login` - it signs in with an email code or GitHub " +
       "and mints your own publish token, no site secret needed. " +
       "For CI, set UE_MCP_PUBLISH_TOKEN (mint one at " + base + "/account).",
     );

@@ -90,6 +90,8 @@ export const ENV_VARS = {
   githubApi: "UE_MCP_GITHUB_API",
   /** Origin of the plugin registry. Unset means https://plugins.ue-mcp.com. */
   registry: "UE_MCP_REGISTRY",
+  /** Origin of the account sign-in endpoints `ue-mcp login` calls. Unset means https://accounts.ue-mcp.com. */
+  authUrl: "UE_MCP_AUTH_URL",
   /** Path of the cached registry catalog. */
   registryCache: "UE_MCP_REGISTRY_CACHE",
   /** Registry publish token for CI, over the one `ue-mcp login` cached. */

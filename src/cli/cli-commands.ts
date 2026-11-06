@@ -29,7 +29,7 @@ export const CLI_COMMANDS: readonly CliCommand[] = [
   { name: "auth", summary: "Authorize feedback issues as your GitHub account", load: () => import("./auth-cli.js") },
   {
     name: "login",
-    summary: "Authorize this machine to publish plugins",
+    summary: "Sign in to your UE-MCP account with email or GitHub",
     load: () => import("./login-cli.js").then((m) => ({ run: m.runLogin })),
     ownHelp: true,
   },
