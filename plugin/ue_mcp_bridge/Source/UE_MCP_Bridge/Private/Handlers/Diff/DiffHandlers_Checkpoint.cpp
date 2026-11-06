@@ -46,6 +46,8 @@
 #include "GameFramework/Actor.h"
 #include "GraphDiffControl.h"
 #include "GraphEditor.h"
+#include "SGraphNode.h"
+#include "SGraphPanel.h"
 #include "HAL/FileManager.h"
 #include "IAssetTools.h"
 #include "IImageWrapper.h"
@@ -1831,12 +1833,53 @@ namespace
 		return Out;
 	}
 
+	/** The view framing Nodes, or every node of Graph when Nodes is empty, in a picture of Size. */
+	TPair<FCkDiffGraphViewVector, float> CkDiffFitGraphView(const TSharedRef<SGraphEditor>& Editor, UEdGraph* Graph,
+		const TArray<UEdGraphNode*>& Nodes, const FVector2D& Size)
+	{
+		TArray<UEdGraphNode*> Framed = Nodes;
+		if (Framed.Num() == 0) for (UEdGraphNode* Node : Graph->Nodes) Framed.Add(Node);
+		SGraphPanel* Panel = Editor->GetGraphPanel();
+		FBox2D Bounds(ForceInit);
+		for (UEdGraphNode* Node : Framed)
+		{
+			if (!Node) continue;
+			const FVector2D Position(Node->NodePosX, Node->NodePosY);
+			FVector2D Extent(240.0, 120.0);
+			TSharedPtr<SGraphNode> Widget;
+			if (Panel) Widget = Panel->GetNodeWidgetFromGuid(Node->NodeGuid);
+			if (Widget.IsValid())
+			{
+				const FVector2D Desired = Widget->GetDesiredSize();
+				if (Desired.X > 1.0 && Desired.Y > 1.0) Extent = Desired;
+			}
+			Bounds += Position;
+			Bounds += Position + Extent;
+		}
+		if (!Bounds.bIsValid) return TPair<FCkDiffGraphViewVector, float>(FCkDiffGraphViewVector(0.f, 0.f), 1.f);
+		const FVector2D Padded = Bounds.GetSize() + FVector2D(96.0, 96.0);
+		const float Fit = FMath::Clamp(static_cast<float>(FMath::Min(Size.X / Padded.X, Size.Y / Padded.Y)), 0.1f, 1.f);
+		// The panel snaps to one of its zoom levels; take one no closer than the fit.
+		float Zoom = Fit;
+		for (float Ask = Fit; Ask >= 0.1f; Ask *= 0.9f)
+		{
+			Editor->SetViewLocation(FCkDiffGraphViewVector(0.f, 0.f), Ask);
+			FCkDiffGraphViewVector Unused;
+			Editor->GetViewLocation(Unused, Zoom);
+			if (Zoom > 0.f && Zoom <= Fit + KINDA_SMALL_NUMBER) break;
+		}
+		if (Zoom <= 0.f) Zoom = Fit;
+		const FVector2D Origin = Bounds.GetCenter() - 0.5 * Size / Zoom;
+		return TPair<FCkDiffGraphViewVector, float>(
+			FCkDiffGraphViewVector(static_cast<float>(Origin.X), static_cast<float>(Origin.Y)), Zoom);
+	}
+
 	/**
 	 * One version of a graph drawn as Unreal's Blueprint diff panel draws it: an SGraphEditor on
 	 * the graph with the engine's diff results, which it highlights, rendered offscreen with
 	 * FWidgetRenderer. Focus nodes are selected, so they are outlined as well. With no view given
-	 * the panel zooms to fit the selection (the whole graph when nothing is selected) and hands
-	 * back the view it settled on, so the other version is drawn from the same camera.
+	 * the view frames the focus nodes (the whole graph when there are none) and is handed back,
+	 * so the other version is drawn from the same camera.
 	 */
 	bool CkDiffRenderGraph(UEdGraph* Graph, const TSharedPtr<TArray<FDiffSingleResult>>& Results, const TArray<UEdGraphNode*>& Focus,
 		TOptional<TPair<FCkDiffGraphViewVector, float>>& View, FObjectThumbnail& Out, FString& OutError)
@@ -1871,25 +1914,15 @@ namespace
 			{
 				for (int32 I = 0; I < Frames; ++I) Renderer->DrawWindow(Target, HitTestGrid, Window, 1.f, Size, 0.5f);
 			};
-			// The first frame builds the node widgets; the selection and the view are set on them.
+			// The panel builds its node widgets and zooms to fit from Slate active timers, which
+			// only fire on a Slate tick and never inside this call, so both are done here.
+			if (SGraphPanel* Panel = Editor->GetGraphPanel()) Panel->Update();
+			// The first frame measures the node widgets; the selection and the view are set on them.
 			Draw(1);
 			for (UEdGraphNode* Node : Focus) Editor->SetNodeSelection(Node, true);
-			if (View.IsSet())
-			{
-				Editor->SetViewLocation(View->Key, View->Value);
-			}
-			else
-			{
-				Editor->ZoomToFit(/*bOnlySelection*/ Focus.Num() > 0);
-			}
+			if (!View.IsSet()) View = CkDiffFitGraphView(Editor, Graph, Focus, Size);
+			Editor->SetViewLocation(View->Key, View->Value);
 			Draw(CkDiffGraphPictureFrames);
-			if (!View.IsSet())
-			{
-				FCkDiffGraphViewVector Location;
-				float Zoom = 1.f;
-				Editor->GetViewLocation(Location, Zoom);
-				View = TPair<FCkDiffGraphViewVector, float>(Location, Zoom);
-			}
 			FlushRenderingCommands();
 			if (FTextureRenderTargetResource* Resource = Target->GameThread_GetRenderTargetResource())
 			{

@@ -396,6 +396,7 @@ bool FMCPAssetFreePathProbeIsSilentTest::RunTest(const FString& Parameters)
 	TestNotNull(TEXT("probe asset created"), Held);
 	if (Held)
 	{
+		Held->RowStruct = FTableRowBase::StaticStruct();
 		const TSharedPtr<FJsonValue> Existed = MCPCheckAssetExists(FreePackagePath, HeldName, TEXT("skip"), TEXT("DataTable"));
 		TestTrue(TEXT("an in-memory asset is reported as existing"), Existed.IsValid() && ErrorSucceeded(Existed));
 		TestEqual(TEXT("the existing asset is named by its object path"),

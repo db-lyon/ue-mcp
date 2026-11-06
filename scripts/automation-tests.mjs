@@ -105,6 +105,8 @@ async function main() {
 
   for (const r of failures) {
     console.log(`${RED}FAIL${RESET}  ${r.test}`);
+    // An abandoned test carries no error messages; the reason is the only text it has.
+    if (r.abandoned && r.abandonedReason) console.log(`${DIM}      ${String(r.abandonedReason).slice(0, 160)}${RESET}`);
     for (const m of (VERBOSE ? (r.errorMessages ?? []) : (r.errorMessages ?? []).slice(0, 1))) {
       console.log(`${DIM}      ${String(m).split("\n")[0].slice(0, 160)}${RESET}`);
     }
