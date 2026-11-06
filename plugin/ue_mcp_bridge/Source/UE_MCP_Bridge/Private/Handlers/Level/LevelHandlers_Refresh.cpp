@@ -33,8 +33,6 @@
 #include "GameFramework/Actor.h"
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
-#include "Serialization/MemoryWriter.h"
-#include "Serialization/ObjectAndNameAsStringProxyArchive.h"
 #include "UObject/Package.h"
 #include "UObject/UObjectHash.h"
 
@@ -189,18 +187,19 @@ namespace
 	}
 
 	/**
-	 * The persistent state of an actor and every subobject it owns, in a form
-	 * that survives the objects being destroyed and rebuilt: object references
-	 * are written as path names, not pointers, and subobjects are visited in
-	 * path order. Two snapshots compare equal when a rerun produced the same
-	 * generated components with the same property values (#1547).
+	 * The saved property values of an actor and every subobject it owns, as
+	 * text, visited in path order, so references read as paths and rebuilt
+	 * components compare by name and value (#1547). Property text rather than
+	 * native serialization: a component loaded from disk and the same component
+	 * built fresh can serialize different native bytes (a SplineComponent does)
+	 * while every saved value is identical.
 	 */
-	TArray<uint8> MCPRefreshSnapshotActor(AActor* Actor)
+	FString MCPRefreshSnapshotActor(AActor* Actor)
 	{
-		TArray<uint8> Bytes;
+		FString Snapshot;
 		if (!IsValid(Actor))
 		{
-			return Bytes;
+			return Snapshot;
 		}
 		TArray<UObject*> Objects;
 		GetObjectsWithOuter(Actor, Objects, /*bIncludeNestedObjects*/ true);
@@ -211,17 +210,30 @@ namespace
 		Objects.Sort([](const UObject& A, const UObject& B) { return A.GetPathName() < B.GetPathName(); });
 		Objects.Insert(Actor, 0);
 
-		FMemoryWriter Writer(Bytes, /*bIsPersistent*/ true);
-		FObjectAndNameAsStringProxyArchive Archive(Writer, /*bInLoadIfFindFails*/ false);
 		for (UObject* Object : Objects)
 		{
-			FString Path = Object->GetPathName();
-			FString ClassPath = Object->GetClass()->GetPathName();
-			Archive << Path;
-			Archive << ClassPath;
-			Object->Serialize(Archive);
+			Snapshot += Object->GetPathName();
+			Snapshot += TEXT("|");
+			Snapshot += Object->GetClass()->GetPathName();
+			Snapshot += TEXT("\n");
+			for (TFieldIterator<FProperty> It(Object->GetClass()); It; ++It)
+			{
+				if (It->HasAnyPropertyFlags(CPF_Transient))
+				{
+					continue;
+				}
+				for (int32 Index = 0; Index < It->ArrayDim; ++Index)
+				{
+					FString Value;
+					It->ExportText_InContainer(Index, Value, Object, nullptr, nullptr, PPF_None);
+					Snapshot += It->GetName();
+					Snapshot += TEXT("=");
+					Snapshot += Value;
+					Snapshot += TEXT("\n");
+				}
+			}
 		}
-		return Bytes;
+		return Snapshot;
 	}
 
 	TSharedPtr<FJsonObject> MCPRefreshDescribeBounds(const FBoxSphereBounds& Bounds)
@@ -381,7 +393,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::RerunConstruction(const TSharedPtr<FJsonO
 		{
 			PackageWasDirty.Add(Package, Package->IsDirty());
 		}
-		const TArray<uint8> Before = MCPRefreshSnapshotActor(Actor);
+		const FString Before = MCPRefreshSnapshotActor(Actor);
 		Actor->Modify();
 		Actor->RerunConstructionScripts();
 		++Reran;

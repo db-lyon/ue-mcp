@@ -16856,7 +16856,7 @@
           "name": "skeletonPath",
           "type": "string",
           "required": true,
-          "description": "USkeleton, or a SkeletalMesh whose skeleton to read",
+          "description": "USkeleton, or a SkeletalMesh whose own bind pose to read",
           "aliases": [
             "assetPath",
             "path"
@@ -28444,6 +28444,12 @@
           "description": "World Outliner folder, matched with every folder nested under it"
         },
         {
+          "name": "includeChildActors",
+          "type": "boolean",
+          "required": false,
+          "description": "Match a ChildActorComponent's child actor by the actor filters of the top-level actor that owns it (default false)"
+        },
+        {
           "name": "fields",
           "type": "array",
           "required": false,
@@ -28575,12 +28581,6 @@
           "type": "string",
           "required": false,
           "description": "Collision channel to inspect; omitted lists non-Block responses, capped at 32"
-        },
-        {
-          "name": "includeChildActors",
-          "type": "boolean",
-          "required": false,
-          "description": "Match a ChildActorComponent's child actor by the actor filters of the top-level actor that owns it (default false)"
         }
       ]
     },
