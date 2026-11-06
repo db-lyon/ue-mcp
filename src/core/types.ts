@@ -411,6 +411,13 @@ export interface BridgeActionSpec extends ActionSpecBase {
    * For work the editor cannot do on its game thread, such as waiting for a PCG generation (#1365).
    */
   followUp?: (ctx: ToolContext, params: Record<string, unknown>, answered: unknown) => Promise<unknown>;
+  /**
+   * Runs before the bridge call, with the parameters that would be sent. A value
+   * other than undefined is the answer, and the bridge is not called; followUp does
+   * not run on it. For a form of a call only this process can answer, such as
+   * blueprint(diff) against a checkpoint in the shadow history (#1487).
+   */
+  intercept?: (ctx: ToolContext, params: Record<string, unknown>) => Promise<unknown>;
   handler?: never;
 }
 

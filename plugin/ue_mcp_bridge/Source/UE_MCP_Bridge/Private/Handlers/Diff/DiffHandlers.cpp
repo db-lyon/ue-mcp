@@ -16,6 +16,13 @@
 #include "HAL/FileManager.h"
 #include "Misc/PackageName.h"
 #include "Misc/PackagePath.h"
+#include "Misc/Paths.h"
+#include "ISourceControlModule.h"
+#include "ISourceControlProvider.h"
+#include "ISourceControlRevision.h"
+#include "ISourceControlState.h"
+#include "SourceControlOperations.h"
+#include "SourceControlHelpers.h"
 
 // ── Structural extraction helpers ────────────────────────────────────────────
 namespace
@@ -154,6 +161,81 @@ namespace
 		if (Bones.IsValidIndex(ParentIndex)) return Bones[ParentIndex].Name;
 		return FName(*FString::Printf(TEXT("<invalid:%d>"), ParentIndex));
 	}
+
+	/**
+	 * Earlier versions of a Blueprint loaded as diff packages, the way the engine
+	 * loads a revision. Each is unloaded when this goes out of scope, so no /Temp
+	 * Blueprint is left for a later compile check to find and the file is released.
+	 */
+	struct FBlueprintDiffSnapshots
+	{
+		TArray<UPackage*> Packages;
+		TArray<FString> FilesToDelete;
+
+		UBlueprint* Load(const FString& File, const FPackagePath& OriginalPath)
+		{
+			if (!IFileManager::Get().FileExists(*File)) return nullptr;
+			UPackage* Package = DiffUtils::LoadPackageForDiff(FPackagePath::FromLocalPath(File), OriginalPath);
+			if (!Package) return nullptr;
+			Packages.AddUnique(Package);
+			return Cast<UBlueprint>(Package->FindAssetInPackage());
+		}
+
+		~FBlueprintDiffSnapshots()
+		{
+			if (Packages.Num() > 0)
+			{
+				for (UPackage* Package : Packages)
+				{
+					ResetLoaders(Package);
+				}
+				FText UnloadError;
+				UPackageTools::UnloadPackages(Packages, UnloadError, /*bUnloadDirtyPackages*/ true);
+				CollectGarbage(GARBAGE_COLLECTION_KEEPFLAGS);
+			}
+			for (const FString& File : FilesToDelete)
+			{
+				IFileManager::Get().Delete(*File, /*RequireExists*/ false, /*EvenReadOnly*/ true, /*Quiet*/ true);
+			}
+		}
+	};
+
+	/**
+	 * The history entry a revision string names: the provider's revision id, a unique
+	 * prefix of 7 or more characters of it (a git hash), its revision number, or head
+	 * for the newest. Empty with OutError set when none or several match.
+	 */
+	TSharedPtr<ISourceControlRevision, ESPMode::ThreadSafe> FindBlueprintDiffRevision(
+		const ISourceControlState& State, const FString& Wanted, FString& OutError)
+	{
+		const int32 Count = State.GetHistorySize();
+		if (Count == 0)
+		{
+			OutError = TEXT("The provider returned no history for the file. A file marked for add has no revision yet.");
+			return nullptr;
+		}
+		if (Wanted.Equals(TEXT("head"), ESearchCase::IgnoreCase) || Wanted.Equals(TEXT("latest"), ESearchCase::IgnoreCase))
+		{
+			return State.GetHistoryItem(0);
+		}
+		const bool bNumeric = Wanted.IsNumeric();
+		const int32 WantedNumber = bNumeric ? FCString::Atoi(*Wanted) : INDEX_NONE;
+		TArray<TSharedPtr<ISourceControlRevision, ESPMode::ThreadSafe>> Prefixed;
+		for (int32 Index = 0; Index < Count; ++Index)
+		{
+			TSharedPtr<ISourceControlRevision, ESPMode::ThreadSafe> Revision = State.GetHistoryItem(Index);
+			if (!Revision.IsValid()) continue;
+			const FString Id = Revision->GetRevision();
+			if (Id.Equals(Wanted, ESearchCase::IgnoreCase)) return Revision;
+			if (bNumeric && Revision->GetRevisionNumber() == WantedNumber) return Revision;
+			if (Wanted.Len() >= 7 && Id.StartsWith(Wanted, ESearchCase::IgnoreCase)) Prefixed.Add(Revision);
+		}
+		if (Prefixed.Num() == 1) return Prefixed[0];
+		OutError = Prefixed.Num() > 1
+			? FString::Printf(TEXT("'%s' matches %d revisions in the file's history; give more of it."), *Wanted, Prefixed.Num())
+			: FString::Printf(TEXT("No revision '%s' in the file's history (%d revisions). source_control(history) lists them."), *Wanted, Count);
+		return nullptr;
+	}
 }
 
 void FDiffHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
@@ -167,10 +249,9 @@ void FDiffHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		using EType = EMCPParamType;
 		Registry.RegisterHandler(TEXT("diff_blueprint"), &FDiffHandlers::DiffBlueprint, {
 			MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("Base Blueprint (A)")).Alias(TEXT("path")),
-			MCPParam::Required(TEXT("otherPath"), EType::String, TEXT("Blueprint to compare against (B)")),
-			MCPParam::Optional(TEXT("fromRevision"), EType::String, TEXT("Reserved for source-control revision diffing, which is not implemented; passing it is refused")),
-			MCPParam::Optional(TEXT("toRevision"), EType::String, TEXT("Reserved for source-control revision diffing, which is not implemented; passing it is refused")),
-		});
+			MCPParam::Optional(TEXT("otherPath"), EType::String, TEXT("Blueprint to compare against (B). Give this or against")),
+			MCPParam::Optional(TEXT("against"), EType::String, TEXT("An earlier state of assetPath to diff from, with assetPath as it is now as the other side: checkpoint:<id> (an editor(checkpoint) id, resolved by the server), revision:<rev>, or a bare id, tried as a checkpoint and then as a source control revision. A revision is the provider's id, a unique prefix of 7 or more characters of it, its number, or head. Give this or otherPath")),
+		}, MCPSpec::ExactlyOne({ { TEXT("otherPath") }, { TEXT("against") } }));
 	}
 	// Internal to editor(list_changes) (#1482): no spec, no category action of its own.
 	Registry.RegisterHandler(TEXT("checkpoint_diff_blueprint"), &FDiffHandlers::DiffCheckpointBlueprint);
@@ -189,26 +270,94 @@ void FDiffHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 
 TSharedPtr<FJsonValue> FDiffHandlers::DiffBlueprint(const TSharedPtr<FJsonObject>& Params)
 {
-	// Both revision keys are read whichever one a call sends (#1057); 'path' is
-	// the spec's alias, renamed to assetPath before this runs.
-	MCPReadParamsAhead(Params, { TEXT("assetPath"), TEXT("otherPath"), TEXT("fromRevision"), TEXT("toRevision") });
+	// 'path' is the spec's alias, renamed to assetPath before this runs.
+	MCPReadParamsAhead(Params, { TEXT("assetPath"), TEXT("otherPath"), TEXT("against") });
 	FString PathA;
 	if (TSharedPtr<FJsonValue> Err = RequireString(Params, TEXT("assetPath"), PathA)) return Err;
+	FString Against;
+	if (TryGetStringParam(Params, TEXT("against"), Against) && !Against.TrimStartAndEnd().IsEmpty())
+	{
+		return DiffBlueprintAgainstRevision(PathA, Against.TrimStartAndEnd());
+	}
 	FString PathB;
 	if (TSharedPtr<FJsonValue> Err = RequireString(Params, TEXT("otherPath"), PathB)) return Err;
-
-	// Revision-based diffing (loading a depot revision into a transient package)
-	// is a documented follow-up; for now both sides are loadable asset paths.
-	if (HasParam(Params, TEXT("fromRevision")) || HasParam(Params, TEXT("toRevision")))
-	{
-		return MCPError(TEXT("Revision-based diffing (fromRevision/toRevision via source control) is not wired yet - pass 'otherPath' to diff two loaded Blueprint assets. Revision loading is a staged follow-up."));
-	}
 
 	UBlueprint* A = LoadAssetByPath<UBlueprint>(PathA);
 	if (!A) return MCPError(FString::Printf(TEXT("Blueprint not found: %s"), *PathA));
 	UBlueprint* B = LoadAssetByPath<UBlueprint>(PathB);
 	if (!B) return MCPError(FString::Printf(TEXT("Blueprint not found: %s"), *PathB));
 	return DiffBlueprintObjects(A, B, PathA, PathB);
+}
+
+TSharedPtr<FJsonValue> FDiffHandlers::DiffBlueprintAgainstRevision(const FString& AssetPath, const FString& InAgainst)
+{
+	FString Wanted = InAgainst;
+	if (Wanted.StartsWith(TEXT("checkpoint:"), ESearchCase::IgnoreCase))
+	{
+		return MCPError(TEXT("Checkpoints live in the ue-mcp server's shadow history, which the editor cannot read. Call blueprint(diff) through the server to diff against a checkpoint."));
+	}
+	if (Wanted.StartsWith(TEXT("revision:"), ESearchCase::IgnoreCase))
+	{
+		Wanted = Wanted.Mid(9).TrimStartAndEnd();
+	}
+	if (Wanted.IsEmpty()) return MCPError(TEXT("against names no revision."));
+
+	UBlueprint* Current = LoadAssetByPath<UBlueprint>(AssetPath);
+	if (!Current) return MCPError(FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
+	const FString File = FPaths::ConvertRelativePathToFull(SourceControlHelpers::PackageFilename(Current->GetPackage()));
+
+	ISourceControlModule& Module = ISourceControlModule::Get();
+	if (!Module.IsEnabled() || !Module.GetProvider().IsAvailable())
+	{
+		TSharedPtr<FJsonObject> Error = MCPErrorObject(TEXT("No source control provider is enabled and available in this editor, so there is no revision to diff against."));
+		Error->SetStringField(TEXT("errorCode"), TEXT("source_control_not_enabled"));
+		return MCPResult(Error);
+	}
+	ISourceControlProvider& Provider = Module.GetProvider();
+	TSharedRef<FUpdateStatus, ESPMode::ThreadSafe> Update = ISourceControlOperation::Create<FUpdateStatus>();
+	Update->SetUpdateHistory(true);
+	if (Provider.Execute(Update, File) != ECommandResult::Succeeded)
+	{
+		return MCPError(FString::Printf(TEXT("The %s provider could not read the history of %s."), *Provider.GetName().ToString(), *File));
+	}
+	const FSourceControlStatePtr State = Provider.GetState(File, EStateCacheUsage::Use);
+	if (!State.IsValid() || !State->IsSourceControlled())
+	{
+		return MCPError(FString::Printf(TEXT("%s is not under source control, so it has no revision to diff against."), *File));
+	}
+	FString FindError;
+	const TSharedPtr<ISourceControlRevision, ESPMode::ThreadSafe> Revision = FindBlueprintDiffRevision(*State, Wanted, FindError);
+	if (!Revision.IsValid()) return MCPError(FindError);
+
+	// The provider writes the revision to a file under Saved/Diff, which maps to /Temp.
+	FString RevisionFile;
+	if (!Revision->Get(RevisionFile) || RevisionFile.IsEmpty())
+	{
+		return MCPError(FString::Printf(TEXT("The %s provider could not fetch revision %s of %s."), *Provider.GetName().ToString(), *Revision->GetRevision(), *File));
+	}
+	FBlueprintDiffSnapshots Snapshots;
+	Snapshots.FilesToDelete.Add(RevisionFile);
+	UBlueprint* Earlier = Snapshots.Load(RevisionFile, FPackagePath::FromLocalPath(File));
+	if (!Earlier)
+	{
+		return MCPError(FString::Printf(TEXT("Revision %s of %s did not load as a Blueprint."), *Revision->GetRevision(), *AssetPath));
+	}
+
+	const FString Label = FString::Printf(TEXT("%s@%s"), *AssetPath, *Revision->GetRevision());
+	TSharedPtr<FJsonValue> Diff = DiffBlueprintObjects(Earlier, Current, Label, AssetPath);
+	if (Diff.IsValid() && Diff->Type == EJson::Object)
+	{
+		TSharedPtr<FJsonObject> Info = MakeShared<FJsonObject>();
+		Info->SetStringField(TEXT("kind"), TEXT("revision"));
+		Info->SetStringField(TEXT("provider"), Provider.GetName().ToString());
+		Info->SetStringField(TEXT("revision"), Revision->GetRevision());
+		Info->SetNumberField(TEXT("revisionNumber"), Revision->GetRevisionNumber());
+		Info->SetStringField(TEXT("user"), Revision->GetUserName());
+		Info->SetStringField(TEXT("date"), Revision->GetDate().ToIso8601());
+		Info->SetStringField(TEXT("description"), Revision->GetDescription());
+		Diff->AsObject()->SetObjectField(TEXT("against"), Info);
+	}
+	return Diff;
 }
 
 TSharedPtr<FJsonValue> FDiffHandlers::DiffBlueprintObjects(UBlueprint* A, UBlueprint* B, const FString& PathA, const FString& PathB)
@@ -627,36 +776,14 @@ TSharedPtr<FJsonValue> FDiffHandlers::DiffCheckpointBlueprint(const TSharedPtr<F
 	const FPackagePath OriginalPath = FPackagePath::FromLocalPath(OriginalFile);
 
 	// A checkpoint's copy under Saved/Diff maps to /Temp and loads as a diff package, the way a revision does.
-	// Every snapshot loaded here is unloaded before returning, so no errored /Temp Blueprint is left
-	// behind for a later compile check to find, and the copy's file is released for the server to delete.
-	TArray<UPackage*> Snapshots;
-	ON_SCOPE_EXIT
-	{
-		if (Snapshots.Num() == 0) return;
-		for (UPackage* Package : Snapshots)
-		{
-			ResetLoaders(Package);
-		}
-		FText UnloadError;
-		UPackageTools::UnloadPackages(Snapshots, UnloadError, /*bUnloadDirtyPackages*/ true);
-		CollectGarbage(GARBAGE_COLLECTION_KEEPFLAGS);
-	};
-	auto LoadSnapshot = [&OriginalPath, &Snapshots](const FString& File) -> UBlueprint*
-	{
-		if (!IFileManager::Get().FileExists(*File)) return nullptr;
-		UPackage* Package = DiffUtils::LoadPackageForDiff(FPackagePath::FromLocalPath(File), OriginalPath);
-		if (!Package) return nullptr;
-		Snapshots.AddUnique(Package);
-		return Cast<UBlueprint>(Package->FindAssetInPackage());
-	};
-
-	UBlueprint* A = LoadSnapshot(FromFile);
+	FBlueprintDiffSnapshots Snapshots;
+	UBlueprint* A = Snapshots.Load(FromFile, OriginalPath);
 	TSharedPtr<FJsonObject> NotBlueprint = MCPSuccess();
 	NotBlueprint->SetBoolField(TEXT("isBlueprint"), false);
 	if (!A) return MCPResult(NotBlueprint);
 
 	const FString AssetPath = PackageName + TEXT(".") + FPackageName::GetShortName(PackageName);
-	UBlueprint* B = ToFile.IsEmpty() ? LoadAssetByPath<UBlueprint>(AssetPath) : LoadSnapshot(ToFile);
+	UBlueprint* B = ToFile.IsEmpty() ? LoadAssetByPath<UBlueprint>(AssetPath) : Snapshots.Load(ToFile, OriginalPath);
 	if (!B) return MCPResult(NotBlueprint);
 
 	TSharedPtr<FJsonValue> Diff = DiffBlueprintObjects(A, B, FromFile, ToFile.IsEmpty() ? AssetPath : ToFile);

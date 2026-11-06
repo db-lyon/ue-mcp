@@ -275,6 +275,13 @@ void FBlueprintHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		SpecNodeId,
 		MCPParam::Optional(TEXT("deferCompile"), EType::Boolean, TEXT("Skip this write's compile (default false) so a sequence of node writes compiles once, with blueprint(compile), at the end")),
 	});
+	// #1487: opens the editor, so the contract test must not call it.
+	Registry.RegisterHandler(TEXT("focus_blueprint_node"), &FocusNode, {
+		SpecAssetPath,
+		MCPParam::Optional(TEXT("graphName"), EType::String, TEXT("Graph name or the selector list_graphs reports; narrows a node name. Default: every graph")),
+		SpecGraphSelector,
+		SpecNodeId,
+	}, MCPSpec::ContractExempt(TEXT("Opens the Blueprint editor and moves editor focus")));
 	Registry.RegisterHandler(TEXT("refresh_node"), &RefreshNode, {
 		SpecAssetPath,
 		SpecGraphName,
