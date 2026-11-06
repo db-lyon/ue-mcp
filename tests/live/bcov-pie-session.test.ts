@@ -166,6 +166,8 @@ describe("a recorded and observed session", () => {
       if (tracked === 0) await sleep(250);
     }
     expect(tracked).toBeGreaterThan(0);
+    // The next case holds the same action, which is refused while this tape still plays.
+    await call("pie_inject_input_stop", { injection_id: String(tape.injection_id) });
   }, 60_000);
 
   it("inject_input_start releases itself after duration_seconds and pins control_rotation every frame (#1449)", async (ctx) => {
