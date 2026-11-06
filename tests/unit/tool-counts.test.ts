@@ -32,6 +32,12 @@ describe("tool counts", () => {
     expect(counts.nativeToolActions).toBe(declared);
   });
 
+  it("takes Epic's per-engine count and the engine range from the newest recorded catalog", () => {
+    expect(counts.nativeEngineToolActions).toBeGreaterThan(0);
+    expect(counts.nativeEngineToolActions).toBeLessThanOrEqual(counts.nativeToolActions);
+    expect(counts.engineRange.max).toBe(counts.nativeEngine);
+  });
+
   it("never publishes a zero for a surface that ships", () => {
     // The read that produced this used to be wrapped in a catch returning 0.
     expect(counts.nativeToolActions).toBeGreaterThan(0);
