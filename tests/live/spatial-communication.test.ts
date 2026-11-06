@@ -80,6 +80,30 @@ describe("capture_scene_png spatial evidence", () => {
     expect(body.captureMetadata.focus).toBeUndefined();
   });
 
+  it("takes the camera pose from captureTransform and refuses it given twice (#1458)", async () => {
+    const location = { x: -321, y: 654, z: 987 };
+    const filename = path.join(folder, "capture-transform.png");
+    const body = resultJson<any>(await server.call("editor", {
+      action: "capture_scene_png", outputPath: filename,
+      captureTransform: { location, rotation: { pitch: 0, yaw: 90, roll: 0 } },
+      width: 64, height: 48, world: "editor", fullyLoadTextures: false, timeoutMs: 120_000,
+    }));
+    expect(body.success, JSON.stringify(body)).toBe(true);
+    expect(body.paramsNotRead).toBeUndefined();
+    expect(body.captureMetadata).toMatchObject({ location });
+    expect(body.captureMetadata.forward.x).toBeCloseTo(0, 5);
+    expect(body.captureMetadata.forward.y).toBeCloseTo(1, 5);
+
+    const bridge = await liveBridge();
+    const twice = path.join(folder, "capture-transform-twice.png");
+    const refused = await bridge.call("capture_scene_png", {
+      outputPath: twice, location, captureTransform: { location }, fullyLoadTextures: false,
+    }) as any;
+    expect(refused.success).toBe(false);
+    expect(refused.error).toMatch(/captureTransform\.location/);
+    expect(fs.existsSync(twice)).toBe(false);
+  });
+
   it("exposes an enclosed, lamp-lit interior instead of rendering it near black (#1549)", async () => {
     const bridge = await liveBridge();
     const prefix = "SpatialCaptureRoom_";

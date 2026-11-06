@@ -2804,6 +2804,11 @@
           "suite": "live",
           "file": "tests/live/spatial-communication.test.ts",
           "test": "rejects reversed or overflowing focus framing before capture"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/spatial-communication.test.ts",
+          "test": "takes the camera pose from captureTransform and refuses it given twice (#1458)"
         }
       ]
     },
