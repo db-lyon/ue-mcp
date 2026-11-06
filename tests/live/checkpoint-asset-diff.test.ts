@@ -144,7 +144,8 @@ afterAll(async () => {
     for (const d of ["shadow.git", "shadow-pending", "shadow-large", "shadow-thumbs", "shadow-diffs"]) {
       fs.rmSync(path.join(projectDir, "Saved", "UE_MCP_Bridge", d), { recursive: true, force: true });
     }
-    fs.rmSync(path.join(projectDir, "Saved", "Diff", "UE_MCP_Checkpoints"), { recursive: true, force: true });
+    // A diff copy the editor just unloaded can hold its file for a moment after the unload returns.
+    fs.rmSync(path.join(projectDir, "Saved", "Diff", "UE_MCP_Checkpoints"), { recursive: true, force: true, maxRetries: 20, retryDelay: 250 });
   }
   closeLiveBridges();
 }, 300_000);
