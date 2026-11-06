@@ -193,7 +193,9 @@ The prompt shows the reply, with **Continue this thread**, which opens the sessi
 
 | Section | What it holds |
 |---|---|
-| **General** | The theme (**ue-mcp**, **Editor orange** or **Editor**) and the **Updates** card. |
+| **General** | Your ue-mcp **Account**, the theme (**ue-mcp**, **Editor orange** or **Editor**) and the **Updates** card. |
+| **Notifications** | Which events notify you, what a notification shows, quiet hours and muted sessions, for this device. |
+| **Remote control** | The switch, pairing codes, paired devices and the PIN lock. See [Remote control](remote-control.md). |
 | **Agents** | The main agent's model and effort, the screenshot size shown to agents, the **Worker**, and **Project agent files**: whether agents read the instructions, subagents and skills in the project and your home folder, with a read-only list of them. |
 | **Models & accounts** | Sign-ins, API keys, custom endpoints and the route order. |
 | **Approvals & review** | **Ask first**, **Starting playtests**, **Feedback reports**, **Editor dialogs** and **Review each turn**. |
@@ -201,6 +203,10 @@ The prompt shows the reply, with **Continue this thread**, which opens the sessi
 | **Diagnostics** | The editor and daemon status, and recent daemon events. |
 
 The **Plugins** tab lists the project's ue-mcp [plugins](plugins.md), with update and remove, and the registry's catalog to install from. Changes load when the daemon restarts.
+
+## Remote control
+
+Remote control lets you use Studio from a phone or another computer, paired with this computer by QR code. It needs the Remote plan. Type `/remote` in a chat to start. See [Remote control](remote-control.md).
 
 ## Updates
 

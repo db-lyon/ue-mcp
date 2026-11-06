@@ -58,6 +58,7 @@ nav:
   - Home: index.md
   - Getting Started: getting-started.md
   - Studio: studio.md
+  - Remote control: remote-control.md
   - Architecture: architecture.md
   - Tool Reference: tool-reference.md
   - Control Rig Animation: control-rig-animation.md
