@@ -214,9 +214,10 @@ TSharedPtr<FJsonValue> FPIEHandlers::PieRecordStatus(const TSharedPtr<FJsonObjec
 TSharedPtr<FJsonValue> FPIEHandlers::PieRecordList(const TSharedPtr<FJsonObject>& Params)
 {
 	MCP_CHECK_GAME_THREAD();
-	const FString Root = OptionalString(Params, TEXT("recording_dir"), DefaultRecordingsRoot());
 	const int32 Limit  = OptionalInt(Params, TEXT("limit"), 200);
 	const int32 Offset = OptionalInt(Params, TEXT("offset"), 0);
+	FString Root;
+	if (auto Err = MCPRequireWritablePath(OptionalString(Params, TEXT("recording_dir"), DefaultRecordingsRoot()), Root)) return Err;
 
 	TArray<FString> Dirs;
 	IFileManager::Get().FindFiles(Dirs, *(Root / TEXT("*")), false, true);

@@ -77,6 +77,16 @@ namespace
 		Cfg.SourceRecordingId = OptionalString(Params, TEXT("recording_id"));
 		Cfg.SequencePath = OptionalString(Params, TEXT("sequence_path"));
 		Cfg.SourceDir = OptionalString(Params, TEXT("recording_dir"));
+		if (!Cfg.SequencePath.IsEmpty())
+		{
+			FString Resolved, PathError;
+			if (!MCPResolvePathInside(Cfg.SequencePath, MCPDefaultWritableRoots(), Resolved, PathError))
+			{
+				OutErr = MCPError(PathError);
+				return false;
+			}
+			Cfg.SequencePath = Resolved;
+		}
 		if (!Cfg.SourceDir.IsEmpty())
 		{
 			FString Resolved, PathError;
