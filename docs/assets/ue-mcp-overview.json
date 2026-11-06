@@ -1,0 +1,10 @@
+{
+  "epicEngine": "5.8",
+  "epicActions": 830,
+  "ownActions": 1333,
+  "engineRange": {
+    "min": "5.4",
+    "max": "5.8"
+  },
+  "template": "7a5fc8f4d4f43f71cd0f8e87e4560e252705515b8e9c7a2a454064a366647ca7"
+}
