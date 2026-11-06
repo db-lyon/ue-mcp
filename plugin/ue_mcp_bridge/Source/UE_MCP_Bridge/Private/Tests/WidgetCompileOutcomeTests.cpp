@@ -58,6 +58,8 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FWidgetCompileOutcomeTest,
 bool FWidgetCompileOutcomeTest::RunTest(const FString& Parameters)
 {
 	using namespace MCPWidgetCompileOutcomeTests;
+	// The deliberately broken call is reported by the compiler as an Error each time the blueprint compiles.
+	AddExpectedError(TEXT("is not a Actor, therefore"), EAutomationExpectedErrorFlags::Contains, 0);
 	FMCPScopedTestMount Mount(
 		TEXT("/UEMCPWidgetCompile_") + FGuid::NewGuid().ToString(EGuidFormats::Digits) + TEXT("/"), TEXT("UEMCPWidgetCompile"));
 	const FString PackageName = Mount.RootPath + TEXT("WBP_CompileProbe");
