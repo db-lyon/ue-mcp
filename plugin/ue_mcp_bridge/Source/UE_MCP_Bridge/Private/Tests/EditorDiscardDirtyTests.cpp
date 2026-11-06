@@ -143,8 +143,8 @@ bool FEditorDiscardDirtyTest::RunTest(const FString& Parameters)
 		EngineMapPackage->SetDirtyFlag(false);
 		TransientMapPackage->SetDirtyFlag(false);
 		ContentPackage->SetDirtyFlag(false);
-		EngineMap->DestroyWorld(/*bInformEngineOfWorld=*/false);
-		TransientMap->DestroyWorld(/*bInformEngineOfWorld=*/false);
+		MCPDestroyDisposableWorld(EngineMap);
+		MCPDestroyDisposableWorld(TransientMap);
 	};
 
 	const TSet<FString> Before = MCPListedDirty(Registry);

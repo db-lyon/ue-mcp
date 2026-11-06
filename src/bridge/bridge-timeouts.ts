@@ -91,6 +91,7 @@ export const REGISTERED_HANDLER_TIMEOUT_SECONDS: Readonly<Record<string, number>
   get_landscape_holes: 120,
   get_landscape_layer_weight_region: 120,
   get_landscape_slope_map: 120,
+  get_static_mesh_geometry: 300,
   import_landscape_heightmap: 600,
   invoke_object_functions: 300,
   live_coding_compile: 300,
@@ -107,6 +108,7 @@ export const REGISTERED_HANDLER_TIMEOUT_SECONDS: Readonly<Record<string, number>
   plan_real_world_landscape: 120,
   query_components: 300,
   read_blueprint_graph: 180,
+  read_skeletal_mesh_vertices: 300,
   rebuild_water_zone: 120,
   recreate_physics_state: 300,
   refresh_landscape_physical_material_collision: 600,
@@ -114,6 +116,7 @@ export const REGISTERED_HANDLER_TIMEOUT_SECONDS: Readonly<Record<string, number>
   render_sequence_frames: 600,
   rerun_construction_scripts: 300,
   run_automation_tests: 300,
+  scale_mesh_geometry: 300,
   sculpt_landscape: 120,
   sculpt_landscape_region: 300,
   search_blueprint_call_sites: 600,
@@ -135,6 +138,7 @@ export const REGISTERED_HANDLER_TIMEOUT_SECONDS: Readonly<Record<string, number>
   source_control_sync: 300,
   spawn_actors_batch: 300,
   summarize_static_mesh_usage: 300,
+  transform_skinned_part: 600,
   trigger_hitch: 30,
 };
 

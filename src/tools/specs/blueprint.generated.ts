@@ -322,6 +322,12 @@ export const handlerSpecs: HandlerSpecs = {
         "required": false,
         "description": "[{time, value}]: value is a number for float and event, {x,y,z} for vector, {r,g,b,a} for color",
         "items": "object"
+      },
+      {
+        "name": "curveAssetPath",
+        "type": "string",
+        "required": false,
+        "description": "Existing curve asset to bind instead of keyframes: CurveFloat for float and event, CurveVector for vector, CurveLinearColor for color"
       }
     ]
   },
@@ -1519,7 +1525,10 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "className",
         "type": "string",
         "required": true,
-        "description": "C++ class name or path"
+        "description": "C++ class name or path, or a Blueprint asset path (reads its generated class)",
+        "aliases": [
+          "assetPath"
+        ]
       },
       {
         "name": "propertyNames",
@@ -2211,6 +2220,26 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "string",
         "required": true,
         "description": "Dispatcher name"
+      }
+    ]
+  },
+  "remove_timeline": {
+    "category": "blueprint",
+    "params": [
+      {
+        "name": "assetPath",
+        "type": "string",
+        "required": true,
+        "description": "Blueprint asset path. Read and graph actions also accept a World/umap path, resolved to that map's level script Blueprint",
+        "aliases": [
+          "path"
+        ]
+      },
+      {
+        "name": "timelineName",
+        "type": "string",
+        "required": true,
+        "description": "Timeline name, as add_timeline_track and the Timeline node show it"
       }
     ]
   },
@@ -3233,7 +3262,7 @@ export const paramsClauses: Readonly<Record<string, string>> = {
   add_function_parameter: "Params: assetPath (or path), functionName, parameterName, parameterType?, isOutput?, isReference?, isConst?",
   add_local_variable: "Params: assetPath (or path), functionName, name, varType? (or type)",
   add_node: "Params: assetPath (or path), graphName?, nodeClass, nodeParams?, deferCompile?",
-  add_timeline_track: "Params: assetPath (or path), timelineName, trackName, trackType?, keyframes?",
+  add_timeline_track: "Params: assetPath (or path), timelineName, trackName, trackType?, keyframes?, curveAssetPath?",
   add_variable: "Params: assetPath (or path), name, varType? (or type), onConflict?, category?, tooltip?, instanceEditable?",
   audit_blueprint_dead_code: "Params: directory?, assetPaths?, recursive?, includeLevelScripts?, scanReferencers?, maxBlueprints?, maxSamples?, limit?, dumpToFile?, outputPath?",
   auto_layout_graph: "Params: assetPath (or path), graphName?, columnGap?, rowGap?, previousPositionsLimit?, capturePreviousPositions?",
@@ -3268,7 +3297,7 @@ export const paramsClauses: Readonly<Record<string, string>> = {
   get_blueprint_execution_flow: "Params: assetPath (or path), graphName?, entryPoint?",
   get_blueprint_variable_default: "Params: assetPath (or path), name, includeChildren?",
   get_blueprint_variable_metadata: "Params: assetPath (or path), name, functionName?",
-  get_cdo_properties: "Params: className, propertyNames?",
+  get_cdo_properties: "Params: className (or assetPath), propertyNames?",
   get_component_collision: "Params: assetPath (or path), componentName, channel?, includeAllChannels?",
   import_nodes_t3d: "Params: assetPath (or path), graphName?, t3d (or text), posX?, posY?",
   list_blueprint_functions: "Params: assetPath (or path), includeInherited?, cursor?, limit?",
@@ -3293,6 +3322,7 @@ export const paramsClauses: Readonly<Record<string, string>> = {
   remove_blueprint_interface: "Params: assetPath (or blueprintPath), interfacePath, preserveFunctions?",
   remove_component: "Params: assetPath (or path), componentName",
   remove_event_dispatcher: "Params: assetPath (or blueprintPath), name",
+  remove_timeline: "Params: assetPath (or path), timelineName",
   rename_blueprint_variable: "Params: assetPath (or path), oldName, newName",
   rename_function: "Params: assetPath (or path), oldName, newName",
   reorder_enum_values: "Params: assetPath (or path), order",
@@ -3326,7 +3356,7 @@ export const paramsClauses: Readonly<Record<string, string>> = {
 /** Every key the spec'd blueprint handlers declare, aliases included. */
 export const schema: Record<string, z.ZodType> = {
   accessSpecifier: z.string().optional().describe("public, protected or private"),
-  assetPath: z.string().optional().describe("Blueprint asset path. Read and graph actions also accept a World/umap path, resolved to that map's level script Blueprint (add_component, add_custom_event, add_function_parameter, add_local_variable, add_node, add_timeline_track, add_variable, auto_layout_graph, cleanup_graph, compile_blueprint, connect_pins, connect_pins_batch, create_function, create_macro, delete_function, delete_graph, delete_macro, delete_node, delete_variable, disconnect_pins, edit_graph_parameters, edit_local_variable, export_nodes_t3d, flush_blueprint_component_templates, flush_inheritable_component_handler, get_blueprint_component_property, get_blueprint_connections, get_blueprint_dependencies, get_blueprint_execution_flow, get_blueprint_variable_default, get_blueprint_variable_metadata, import_nodes_t3d, list_blueprint_functions, list_blueprint_graphs, list_blueprint_interfaces, list_blueprint_variables, list_event_dispatchers, list_graph_parameters, list_local_variables, list_overridable_functions, override_function, read_blueprint, read_blueprint_graph, read_blueprint_graph_summary, read_component_properties, read_node_property, refresh_node, remove_blueprint_interface, remove_component, remove_event_dispatcher, rename_blueprint_variable, rename_function, reparent_blueprint, reparent_component, resolve_blueprint_graph, run_construction_script, search_blueprint_nodes, set_actor_tick_settings, set_blueprint_component_property, set_blueprint_variable_metadata, set_capsule_size, set_class_default, set_component_override_materials, set_function_properties, set_node_position, set_node_property, set_variable_default, set_variable_properties, validate_blueprint). Full destination, e.g. /Game/Blueprints/BP_Example. A .uasset suffix, an object suffix and backslashes are normalized away (create_blueprint). Full destination of the new Blueprint Interface (create_blueprint_interface). Base Blueprint (A) (diff_blueprint). UserDefinedStruct asset path (edit_struct_metadata, read_user_defined_struct, reorder_struct_fields, set_struct_field_default). Blueprint path, or a native class (/Script/MyGame.MyCharacter or MyCharacter) (get_component_collision). UserDefinedEnum asset path (read_user_defined_enum, reorder_enum_values, set_enum_metadata)"),
+  assetPath: z.string().optional().describe("Blueprint asset path. Read and graph actions also accept a World/umap path, resolved to that map's level script Blueprint (add_component, add_custom_event, add_function_parameter, add_local_variable, add_node, add_timeline_track, add_variable, auto_layout_graph, cleanup_graph, compile_blueprint, connect_pins, connect_pins_batch, create_function, create_macro, delete_function, delete_graph, delete_macro, delete_node, delete_variable, disconnect_pins, edit_graph_parameters, edit_local_variable, export_nodes_t3d, flush_blueprint_component_templates, flush_inheritable_component_handler, get_blueprint_component_property, get_blueprint_connections, get_blueprint_dependencies, get_blueprint_execution_flow, get_blueprint_variable_default, get_blueprint_variable_metadata, import_nodes_t3d, list_blueprint_functions, list_blueprint_graphs, list_blueprint_interfaces, list_blueprint_variables, list_event_dispatchers, list_graph_parameters, list_local_variables, list_overridable_functions, override_function, read_blueprint, read_blueprint_graph, read_blueprint_graph_summary, read_component_properties, read_node_property, refresh_node, remove_blueprint_interface, remove_component, remove_event_dispatcher, remove_timeline, rename_blueprint_variable, rename_function, reparent_blueprint, reparent_component, resolve_blueprint_graph, run_construction_script, search_blueprint_nodes, set_actor_tick_settings, set_blueprint_component_property, set_blueprint_variable_metadata, set_capsule_size, set_class_default, set_component_override_materials, set_function_properties, set_node_position, set_node_property, set_variable_default, set_variable_properties, validate_blueprint). Full destination, e.g. /Game/Blueprints/BP_Example. A .uasset suffix, an object suffix and backslashes are normalized away (create_blueprint). Full destination of the new Blueprint Interface (create_blueprint_interface). Base Blueprint (A) (diff_blueprint). UserDefinedStruct asset path (edit_struct_metadata, read_user_defined_struct, reorder_struct_fields, set_struct_field_default). Alias for className (get_cdo_properties). Blueprint path, or a native class (/Script/MyGame.MyCharacter or MyCharacter) (get_component_collision). UserDefinedEnum asset path (read_user_defined_enum, reorder_enum_values, set_enum_metadata)"),
   assetPaths: z.array(z.string()).optional().describe("Blueprint asset paths; a World path resolves to its level script (audit_blueprint_dead_code, export_blueprint_batch). Blueprint asset paths to compile (compile_blueprints)"),
   authoredOnly: z.boolean().optional().describe("Leave out transient and generated compiler graphs (default true)"),
   bCanEverTick: z.boolean().optional().describe("PrimaryActorTick.bCanEverTick"),
@@ -3342,13 +3372,14 @@ export const schema: Record<string, z.ZodType> = {
   channel: z.string().optional().describe("Narrow the answer to one collision channel: its configured name, the C++ enumerator, or the container index"),
   childActorClass: z.string().optional().describe("ChildActorClass for an added ChildActorComponent: a Blueprint path with or without _C, or a C++ class"),
   classFilter: z.string().optional().describe("Case-insensitive substring match on node class name (read_blueprint_graph, read_blueprint_graph_summary). Alias for className (search_node_types). Directory mode: only Blueprints deriving from this actor class (set_blueprint_component_properties_batch)"),
-  className: z.string().optional().describe("First class: native name or path, Blueprint asset path or generated class path (compare_class_defaults). C++ class name or path (get_cdo_properties, set_cdo_property). Base class: a native name or path such as Character, or a Blueprint asset path (list_subclasses). Declaring class to narrow the functions to (search_blueprint_call_sites). Narrow to one owning class, by short name or object path (search_node_types)"),
+  className: z.string().optional().describe("First class: native name or path, Blueprint asset path or generated class path (compare_class_defaults). C++ class name or path, or a Blueprint asset path (reads its generated class) (get_cdo_properties). Base class: a native name or path such as Character, or a Blueprint asset path (list_subclasses). Declaring class to narrow the functions to (search_blueprint_call_sites). Narrow to one owning class, by short name or object path (search_node_types). C++ class name or path (set_cdo_property)"),
   columnGap: z.number().int().optional().describe("Horizontal spacing between columns (default 360)"),
   compactNodeTitle: z.string().optional().describe("Render the node in compact form under this title"),
   componentClass: z.string().optional().describe("Component class: a short name such as ChildActorComponent, or a full path"),
   componentName: z.string().optional().describe("Name of the new component (default: componentClass) (add_component). SCS or inherited component name (get_blueprint_component_property, read_component_properties, remove_component, reparent_component, set_blueprint_component_property, set_capsule_size, set_component_override_materials). Component whose effective collision to read (get_component_collision). Directory mode: component instance name, property name or unambiguous component class (set_blueprint_component_properties_batch)"),
   connections: z.array(z.record(z.string(), z.unknown())).optional().describe("[{sourceNode, sourcePin, targetNode, targetPin}]"),
   cursor: z.string().optional().describe("Resume a paged read: pass back the nextCursor from the previous page, unmodified"),
+  curveAssetPath: z.string().optional().describe("Existing curve asset to bind instead of keyframes: CurveFloat for float and event, CurveVector for vector, CurveLinearColor for color"),
   defaultValue: z.unknown().optional().describe("Default value as Unreal export text; an empty string clears it (edit_graph_parameters, edit_local_variable, set_struct_field_default). Alias for value (set_node_property)"),
   deferCompile: z.boolean().optional().describe("Skip this write's compile (default false) so a sequence of node writes compiles once, with blueprint(compile), at the end"),
   deprecated: z.boolean().optional().describe("Mark the function deprecated so its call sites warn"),
@@ -3476,7 +3507,7 @@ export const schema: Record<string, z.ZodType> = {
   text: z.string().optional().describe("Alias for t3d"),
   threadSafe: z.boolean().optional().describe("Safe to call off the game thread"),
   TickInterval: z.number().optional().describe("PrimaryActorTick.TickInterval in seconds"),
-  timelineName: z.string().optional().describe("Timeline name"),
+  timelineName: z.string().optional().describe("Timeline name (add_timeline_track). Timeline name, as add_timeline_track and the Timeline node show it (remove_timeline)"),
   titleFilter: z.string().optional().describe("Case-insensitive substring match on node title"),
   titles: z.array(z.string()).optional().describe("Case-insensitive substrings matched against each node title"),
   tooltip: z.string().optional().describe("Tooltip"),

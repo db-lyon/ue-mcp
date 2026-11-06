@@ -56,6 +56,8 @@ private:
 	// #585 project a world point onto the navmesh
 	static TSharedPtr<FJsonValue> NavProjectPoint(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SelectActors(const TSharedPtr<FJsonObject>& Params);
+	// #1656 select a component, redirecting out of child actors as the editor does
+	static TSharedPtr<FJsonValue> SelectComponent(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SpawnLight(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SetLightProperties(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SpawnVolume(const TSharedPtr<FJsonObject>& Params);
@@ -103,6 +105,9 @@ private:
 	static TSharedPtr<FJsonValue> DeleteExactLabeledActorsInLevels(const TSharedPtr<FJsonObject>& Params);
 	// #767: bulk-assign World Outliner folder paths in one transaction.
 	static TSharedPtr<FJsonValue> SetActorFolderPath(const TSharedPtr<FJsonObject>& Params);
+	// #1529: create and remove World Outliner folders, each the other's rollback.
+	static TSharedPtr<FJsonValue> CreateOutlinerFolder(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> DeleteOutlinerFolder(const TSharedPtr<FJsonObject>& Params);
 	// #746: World Partition actor descriptors - see unloaded actors and stream
 	// them in, instead of every actor query silently reporting zero for them.
 	static TSharedPtr<FJsonValue> ListActorDescs(const TSharedPtr<FJsonObject>& Params);
@@ -112,6 +117,8 @@ private:
 	static TSharedPtr<FJsonValue> RemoveActorTag(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SetActorTags(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> ListActorTags(const TSharedPtr<FJsonObject>& Params);
+	// #1574: rename an actor's object name, keeping its label
+	static TSharedPtr<FJsonValue> RenameActorObject(const TSharedPtr<FJsonObject>& Params);
 	// #205: actor attach/detach + mobility
 	static TSharedPtr<FJsonValue> AttachActor(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> DetachActor(const TSharedPtr<FJsonObject>& Params);
@@ -137,6 +144,8 @@ private:
 	static TSharedPtr<FJsonValue> ShapeTrace(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> LineTrace(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> BulkLineTrace(const TSharedPtr<FJsonObject>& Params);
+	// #1564: actors whose bounds meet a world-space box
+	static TSharedPtr<FJsonValue> ActorsInBox(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SnapActorToFloor(const TSharedPtr<FJsonObject>& Params);
 	// #453: per-actor motion snapshot for telemetry / driving probes.
 	static TSharedPtr<FJsonValue> ReadActorMotion(const TSharedPtr<FJsonObject>& Params);

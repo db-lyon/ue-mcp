@@ -129,6 +129,8 @@ private:
 	static TSharedPtr<FJsonValue> GetCurveTableKeys(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SetCurveTableKeys(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> AddCurveTableKey(const TSharedPtr<FJsonObject>& Params);
+	// #1687: keys of one channel of a CurveFloat, CurveVector or CurveLinearColor.
+	static TSharedPtr<FJsonValue> SetCurveAssetKeys(const TSharedPtr<FJsonObject>& Params);
 
 	// FBX import handlers
 	static TSharedPtr<FJsonValue> ImportStaticMesh(const TSharedPtr<FJsonObject>& Params);
@@ -196,6 +198,7 @@ private:
 	// Append prevalidated JSON values to a reflected TArray without replacing
 	// existing entries. Supports native and user-defined struct elements.
 	static TSharedPtr<FJsonValue> AppendAssetArrayElements(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> RemoveAssetArrayElements(const TSharedPtr<FJsonObject>& Params);
 	// Batch counterpart to SetAssetProperty. Preflights every asset/property
 	// before mutating any package and emits a replayable rollback payload.
 	static TSharedPtr<FJsonValue> BulkSetAssetProperties(const TSharedPtr<FJsonObject>& Params);
@@ -209,6 +212,7 @@ private:
 	// Ranked asset search over the Asset Registry
 	static TSharedPtr<FJsonValue> SearchAssetsFTS(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> ReindexAssetsFTS(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> QuickSearch(const TSharedPtr<FJsonObject>& Params);
 
 	// v0.7.19 issue #150 - AssetRegistry referencers for a set of packages
 	static TSharedPtr<FJsonValue> GetReferencers(const TSharedPtr<FJsonObject>& Params);

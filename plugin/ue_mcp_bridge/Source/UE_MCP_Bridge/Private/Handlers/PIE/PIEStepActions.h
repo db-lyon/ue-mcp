@@ -9,7 +9,7 @@ class UWorld;
  * The step actions pie(uat_run) drives and a test script step's act runs: input on any player, console,
  * place, capture and wait. One executor for both, so a verb means the same thing wherever it is written.
  *
- *   { client?, tape: {action, values} } | { client?, press: {action, frames?} } | { client?, hold: {action, value, ms} }
+ *   { client?, tape: {action, values, hz?} } | { client?, press: {action, frames?} } | { client?, hold: {action, value, ms} }
  *   | { client?, inject: {action, value} } | { client?, console: "cmd" }
  *   | { client?, place: {at, offset?, face?} | {location, yaw?} } | { client?, capture: "label" | true } | { wait_ms }
  *
@@ -27,6 +27,8 @@ namespace MCPPIE
 		int32 Client = 0;
 		FString ActionPath;
 		TArray<FVector> Values;
+		// Tape playback rate: entries are spaced 1/Hz apart on the world clock.
+		int32 Hz = 60;
 		FVector Value = FVector(1, 0, 0);
 		float Ms = 0.0f;
 		FString Command;

@@ -37,6 +37,7 @@
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
 #include "JsonSerializer.h"
+#include "LevelSpawnFinalize.h"
 
 namespace
 {
@@ -205,6 +206,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::SpawnTransientActor(const TSharedPtr<FJso
 #else
 	InitializeNote = TEXT("Non-editor build: no construction or begin-play cycle was run.");
 #endif
+	MCPSpawnFinalize::FinishEditorSpawn(Actor);
 
 	// Read back after initialization, so the report shows what the actor holds
 	// now rather than what the write returned.

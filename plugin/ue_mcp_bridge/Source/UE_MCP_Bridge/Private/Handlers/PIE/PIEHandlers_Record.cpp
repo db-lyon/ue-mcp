@@ -5,6 +5,9 @@
 #include "HandlerUtils.h"
 #include "Handlers/PIE/PIEInputRecorder.h"
 #include "Handlers/PIE/PIESequenceFormat.h"
+#include "Handlers/PIE/PIEFrameSampler.h"
+#include "Handlers/PIE/PIEWorldResolver.h"
+#include "InputAction.h"
 #include "HAL/FileManager.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
@@ -25,6 +28,14 @@ namespace
 		return TEXT("idle");
 	}
 
+	void WriteWarnings(TSharedPtr<FJsonObject> R, const TArray<FString>& Warnings)
+	{
+		if (Warnings.Num() == 0) return;
+		TArray<TSharedPtr<FJsonValue>> Arr;
+		for (const FString& W : Warnings) Arr.Add(MakeShared<FJsonValueString>(W));
+		R->SetArrayField(TEXT("warnings"), Arr);
+	}
+
 	void WriteStatusFields(TSharedPtr<FJsonObject> R, const FRecorderStatus& S)
 	{
 		R->SetStringField(TEXT("state"), StateToString(S.State));
@@ -33,10 +44,22 @@ namespace
 		R->SetNumberField(TEXT("current_frame"), S.CurrentFrame);
 		R->SetNumberField(TEXT("elapsed_seconds"), S.ElapsedSeconds);
 		R->SetNumberField(TEXT("tracked_action_count"), S.TrackedActionCount);
+		R->SetBoolField(TEXT("pie_active"), S.bPIEActive);
+		if (S.PIEInstance != INDEX_NONE)
+		{
+			R->SetNumberField(TEXT("pie_instance"), S.PIEInstance);
+		}
 		if (!S.LastError.IsEmpty())
 		{
 			R->SetStringField(TEXT("last_error"), S.LastError);
 		}
+		if (S.State == ERecorderState::WaitingForPawn)
+		{
+			// Which pie_instance has a player with a pawn, to pick one.
+			R->SetStringField(TEXT("waiting_for"), S.WaitingFor);
+			R->SetArrayField(TEXT("pie_worlds"), PIEWorldResolver::DescribePlayWorlds());
+		}
+		WriteWarnings(R, S.Warnings);
 	}
 
 	void WriteFinishFields(TSharedPtr<FJsonObject> R, const FRecorderFinishResult& F)
@@ -67,6 +90,7 @@ namespace
 			Marks.Add(MakeShared<FJsonValueObject>(MO));
 		}
 		R->SetArrayField(TEXT("markers"), Marks);
+		WriteWarnings(R, F.Warnings);
 	}
 }
 
@@ -85,6 +109,18 @@ TSharedPtr<FJsonValue> FPIEHandlers::PieRecordArm(const TSharedPtr<FJsonObject>&
 	if (TryGetArrayParam(Params, TEXT("actions"), ActionsArr))
 	{
 		Cfg.ActionPaths = JsonArrayToStringList(ActionsArr);
+	}
+	// Accept the package path inject_input_* takes as well as the object
+	// path, and refuse a path that names no InputAction instead of arming a
+	// recorder that will silently match nothing (#1690).
+	for (FString& P : Cfg.ActionPaths)
+	{
+		const FString Normalized = FPIEFrameSampler::NormalizeActionPath(P);
+		if (!LoadObject<UInputAction>(nullptr, *Normalized))
+		{
+			return MCPError(FString::Printf(TEXT("actions: '%s' is not an InputAction asset"), *P));
+		}
+		P = Normalized;
 	}
 	const TArray<TSharedPtr<FJsonValue>>* TrackedArr = nullptr;
 	if (TryGetArrayParam(Params, TEXT("track_values"), TrackedArr))

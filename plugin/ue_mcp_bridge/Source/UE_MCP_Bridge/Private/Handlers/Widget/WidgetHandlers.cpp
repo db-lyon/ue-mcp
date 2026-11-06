@@ -2,6 +2,7 @@
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
 #include "WidgetGuidMap.h"
+#include "WidgetClassDefaults.h"
 #include "HandlerPagination.h"
 #include "HandlerAssetCreate.h"
 #include <type_traits>
@@ -62,6 +63,15 @@
 #include "EditorUtilityWidgetBlueprint.h"
 #include "EditorUtilityBlueprint.h"
 #include "Kismet2/KismetEditorUtilities.h"
+#include "Kismet2/BlueprintEditorUtils.h"
+#include "Kismet2/Kismet2NameValidators.h"
+#include "K2Node_Variable.h"
+#include "WidgetBlueprintEditorUtils.h"
+#include "WidgetBlueprintExtension.h"
+#include "Blueprint/WidgetNavigation.h"
+#if __has_include("UIComponentWidgetBlueprintExtension.h")
+#include "UIComponentWidgetBlueprintExtension.h"
+#endif
 #include "Engine/Texture2D.h"
 #include "Engine/GameViewportClient.h"
 #include "Materials/MaterialInterface.h"
@@ -401,7 +411,7 @@ void FWidgetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		AssetPath(),
 		WidgetName(),
 		PropertyName(),
-		MCPParam::Required(TEXT("value"), EType::Any, TEXT("New value as UE export text, e.g. (Left=8,Top=8,Right=8,Bottom=8)")).Alias(TEXT("propertyValue")),
+		MCPParam::Required(TEXT("value"), EType::Any, TEXT("New value: UE export text, e.g. (Left=8,Top=8,Right=8,Bottom=8), or a JSON object or array that fills a struct or array field by field. An enum takes its short, full or prefixed name or an enumerator number")).Alias(TEXT("propertyValue")),
 	});
 	Registry.RegisterHandler(TEXT("set_widget_style"), &SetWidgetStyle, {
 		AssetPath(),
@@ -441,6 +451,11 @@ void FWidgetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("remove_widget"), &RemoveWidget, {
 		AssetPath(),
 		WidgetName(),
+	});
+	Registry.RegisterHandler(TEXT("rename_widget"), &RenameWidget, {
+		AssetPath(),
+		WidgetName(),
+		MCPParam::Required(TEXT("newName"), EType::String, TEXT("New widget name; refused when another widget, variable or function already holds it")),
 	});
 	Registry.RegisterHandler(TEXT("move_widget"), &MoveWidget, {
 		AssetPath(),
@@ -1086,6 +1101,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::AddWidget(const TSharedPtr<FJsonObject>&
 	TSharedPtr<FJsonValue> ResolveError;
 	UWidgetBlueprint* WidgetBP = MCPWidget::ResolveWidgetBlueprintOrError(AssetPath, ResolveError);
 	if (!WidgetBP) return ResolveError;
+	const MCPWidgetGuidMap::FCompileBaseline CompileBaseline = MCPWidgetGuidMap::CaptureBaseline(WidgetBP);
 
 	if (!WidgetBP->WidgetTree) return MCPWidget::MissingWidgetTreeError(AssetPath);
 
@@ -1142,6 +1158,8 @@ TSharedPtr<FJsonValue> FWidgetHandlers::AddWidget(const TSharedPtr<FJsonObject>&
 	{
 		return MCPError(FString::Printf(TEXT("Failed to construct widget of class '%s'"), *WidgetClassName));
 	}
+	MCPWidgetClassDefaults::FSnapshot ClassDefaults;
+	MCPWidgetClassDefaults::Capture(NewWidget, {}, ClassDefaults);
 
 	// ── Place in hierarchy ──
 	bool bIsRoot = false;
@@ -1201,8 +1219,8 @@ TSharedPtr<FJsonValue> FWidgetHandlers::AddWidget(const TSharedPtr<FJsonObject>&
 	// first, compiles, then writes them again because the compile can rename a
 	// widget whose requested name collided, and refuses to compile at all when
 	// an entry could not be written (#799).
-	const MCPWidgetGuidMap::FSyncReport GuidSync = MCPWidgetGuidMap::CompileChecked(WidgetBP);
-	if (!GuidSync.bCompiled)
+	const MCPWidgetGuidMap::FSyncReport GuidSync = MCPWidgetGuidMap::CompileChecked(WidgetBP, CompileBaseline);
+	if (GuidSync.WasRefused())
 	{
 		return MCPWidgetGuidMap::BlockedError(AssetPath, GuidSync);
 	}
@@ -1211,9 +1229,10 @@ TSharedPtr<FJsonValue> FWidgetHandlers::AddWidget(const TSharedPtr<FJsonObject>&
 	{
 		PersistedName = AddedWidget->GetName();
 	}
+	const TArray<TSharedPtr<FJsonValue>> RestoredDefaults = MCPWidgetClassDefaults::Restore(WidgetBP, ClassDefaults);
 
 	FString SaveError;
-	const bool bSaved = SaveAssetPackageChecked(WidgetBP, SaveError);
+	const bool bSaved = MCPWidgetGuidMap::SaveIfCompiled(WidgetBP, GuidSync, SaveError);
 
 	auto Result = MCPSuccess();
 	MCPSetCreated(Result);
@@ -1235,14 +1254,15 @@ TSharedPtr<FJsonValue> FWidgetHandlers::AddWidget(const TSharedPtr<FJsonObject>&
 		Result->SetStringField(TEXT("parentWidgetName"), ParentWidgetName);
 	}
 	MCPSetWidgetGuidOutcome(Result, GuidSync, AssetPath);
-	MCPSetWidgetCompileOutcome(Result, WidgetBP, AssetPath,
-		FString::Printf(TEXT("Widget '%s' was added"), *PersistedName));
+	MCPWidgetClassDefaults::Report(Result, RestoredDefaults);
 
 	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
 	Payload->SetStringField(TEXT("assetPath"), AssetPath);
 	Payload->SetStringField(TEXT("widgetName"), PersistedName);
 	MCPSetRollback(Result, TEXT("remove_widget"), Payload);
 
+	MCPSetWidgetCompileOutcome(Result, WidgetBP, AssetPath, GuidSync,
+		FString::Printf(TEXT("Widget '%s' was added"), *PersistedName));
 	return MCPResult(Result);
 }
 
@@ -1257,6 +1277,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::RemoveWidget(const TSharedPtr<FJsonObjec
 	TSharedPtr<FJsonValue> ResolveError;
 	UWidgetBlueprint* WidgetBP = MCPWidget::ResolveWidgetBlueprintOrError(AssetPath, ResolveError);
 	if (!WidgetBP) return ResolveError;
+	const MCPWidgetGuidMap::FCompileBaseline CompileBaseline = MCPWidgetGuidMap::CaptureBaseline(WidgetBP);
 
 	if (!WidgetBP->WidgetTree) return MCPWidget::MissingWidgetTreeError(AssetPath);
 
@@ -1358,14 +1379,14 @@ TSharedPtr<FJsonValue> FWidgetHandlers::RemoveWidget(const TSharedPtr<FJsonObjec
 	}
 
 	WidgetBP->MarkPackageDirty();
-	MCPWidgetGuidMap::FSyncReport GuidSync = MCPWidgetGuidMap::CompileChecked(WidgetBP);
-	if (!GuidSync.bCompiled)
+	MCPWidgetGuidMap::FSyncReport GuidSync = MCPWidgetGuidMap::CompileChecked(WidgetBP, CompileBaseline);
+	if (GuidSync.WasRefused())
 	{
 		return MCPWidgetGuidMap::BlockedError(AssetPath, GuidSync);
 	}
 	GuidSync.Evicted = Evicted;
 	FString SaveError;
-	const bool bSaved = SaveAssetPackageChecked(WidgetBP, SaveError);
+	const bool bSaved = MCPWidgetGuidMap::SaveIfCompiled(WidgetBP, GuidSync, SaveError);
 
 	auto Result = MCPSuccess();
 	MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveError);
@@ -1378,8 +1399,6 @@ TSharedPtr<FJsonValue> FWidgetHandlers::RemoveWidget(const TSharedPtr<FJsonObjec
 	Result->SetBoolField(TEXT("wasRoot"), bRemovedWasRoot);
 	Result->SetNumberField(TEXT("removedChildCount"), RemovedChildCount);
 	MCPSetWidgetGuidOutcome(Result, GuidSync, AssetPath);
-	MCPSetWidgetCompileOutcome(Result, WidgetBP, AssetPath,
-		FString::Printf(TEXT("Widget '%s' was removed"), *WidgetName));
 
 	// add_widget puts a widget of the same class back under the same parent and
 	// under the same name: the removal evicted the old object into the transient
@@ -1420,6 +1439,269 @@ TSharedPtr<FJsonValue> FWidgetHandlers::RemoveWidget(const TSharedPtr<FJsonObjec
 		TEXT("Read the subtree with widget(read_tree) or widget(get_properties) before removing if any of it matters."),
 		*RemovedClass, *WidgetName, *Placement, RemovedChildCount));
 
+	MCPSetWidgetCompileOutcome(Result, WidgetBP, AssetPath, GuidSync,
+		FString::Printf(TEXT("Widget '%s' was removed"), *WidgetName));
+	return MCPResult(Result);
+}
+
+// #1679: rename a widget in place. The widget keeps its object, slot, sibling
+// position and properties; every name-keyed reference the Widget Blueprint
+// holds moves to the new name. The designer's own RenameWidget needs an open
+// editor for its preview, so this applies its steps to the asset alone and the
+// compile rebuilds any open preview.
+TSharedPtr<FJsonValue> FWidgetHandlers::RenameWidget(const TSharedPtr<FJsonObject>& Params)
+{
+	FString AssetPath;
+	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
+
+	FString WidgetName;
+	if (auto Err = RequireString(Params, TEXT("widgetName"), WidgetName)) return Err;
+
+	FString NewName;
+	if (auto Err = RequireString(Params, TEXT("newName"), NewName)) return Err;
+	NewName.TrimStartAndEndInline();
+
+	TSharedPtr<FJsonValue> ResolveError;
+	UWidgetBlueprint* WidgetBP = MCPWidget::ResolveWidgetBlueprintOrError(AssetPath, ResolveError);
+	if (!WidgetBP) return ResolveError;
+	const MCPWidgetGuidMap::FCompileBaseline CompileBaseline = MCPWidgetGuidMap::CaptureBaseline(WidgetBP);
+	if (!WidgetBP->WidgetTree) return MCPWidget::MissingWidgetTreeError(AssetPath);
+
+	auto Unchanged = [&](const FString& Current, const FString& Old)
+	{
+		auto Noop = MCPSuccess();
+		MCPSetExisted(Noop);
+		Noop->SetStringField(TEXT("assetPath"), AssetPath);
+		Noop->SetStringField(TEXT("widgetName"), Current);
+		Noop->SetStringField(TEXT("oldName"), Old);
+		Noop->SetBoolField(TEXT("renamed"), false);
+		return MCPResult(Noop);
+	};
+
+	UWidget* Widget = MCPWidget::FindWidgetByName(WidgetBP->WidgetTree, WidgetName);
+	if (!Widget)
+	{
+		// A retry after a rename that landed finds the new name and not the old.
+		UWidget* Already = MCPWidget::FindWidgetByName(WidgetBP->WidgetTree, NewName);
+		if (Already && Already->GetName().Equals(NewName, ESearchCase::CaseSensitive))
+		{
+			return Unchanged(NewName, WidgetName);
+		}
+		return MCPError(FString::Printf(
+			TEXT("Widget not found: '%s' in '%s'. widget(read_tree) lists the names it holds."), *WidgetName, *AssetPath));
+	}
+
+	const FString OldNameStr = Widget->GetName();
+	const FName OldFName = Widget->GetFName();
+	if (OldNameStr.Equals(NewName, ESearchCase::CaseSensitive))
+	{
+		return Unchanged(OldNameStr, OldNameStr);
+	}
+
+	// Refuse rather than slug, so the caller gets exactly the name it asked for.
+	const FName NewFName(*NewName);
+	if (NewName.IsEmpty() || !NewFName.IsValidXName(INVALID_OBJECTNAME_CHARACTERS))
+	{
+		return MCPError(FString::Printf(
+			TEXT("'%s' is not a valid widget name: it must be non-empty and contain none of the characters %s"),
+			*NewName, INVALID_OBJECTNAME_CHARACTERS));
+	}
+
+	// A case-only rename finds the widget itself, which is not a collision.
+	UWidget* Existing = MCPWidget::FindWidgetByName(WidgetBP->WidgetTree, NewName);
+	if (Existing && Existing != Widget)
+	{
+		return MCPError(FString::Printf(
+			TEXT("Cannot rename '%s' to '%s' in '%s': another widget (%s) already has that name."),
+			*OldNameStr, *NewName, *AssetPath, *Existing->GetClass()->GetName()));
+	}
+	if (!Existing && !Widget->Rename(*NewName, nullptr, REN_Test))
+	{
+		return MCPError(FString::Printf(
+			TEXT("Cannot rename '%s' to '%s' in '%s': an object of that name already lives in the WidgetTree, ")
+			TEXT("usually a widget an older build detached. widget(remove_widget) with that name clears it."),
+			*OldNameStr, *NewName, *AssetPath));
+	}
+
+	// A BindWidget property on the native parent claims the name for a widget
+	// of its class. Any other clash with a variable, function or reserved name
+	// is refused the way the designer's rename box refuses it.
+	bool bBindWidget = false;
+	if (UClass* ParentClass = WidgetBP->ParentClass)
+	{
+		FObjectPropertyBase* Bound = CastField<FObjectPropertyBase>(ParentClass->FindPropertyByName(NewFName));
+		if (Bound && FWidgetBlueprintEditorUtils::IsBindWidgetProperty(Bound))
+		{
+			if (!Widget->IsA(Bound->PropertyClass))
+			{
+				return MCPError(FString::Printf(
+					TEXT("Cannot rename '%s' to '%s': the parent class %s binds that name (BindWidget) to a %s, and '%s' is a %s."),
+					*OldNameStr, *NewName, *ParentClass->GetName(), *Bound->PropertyClass->GetName(),
+					*OldNameStr, *Widget->GetClass()->GetName()));
+			}
+			bBindWidget = true;
+		}
+	}
+	if (!bBindWidget)
+	{
+		FKismetNameValidator Validator(WidgetBP, OldFName);
+		const EValidatorResult Valid = Validator.IsValid(NewFName);
+		if (Valid != EValidatorResult::Ok)
+		{
+			return MCPError(FString::Printf(TEXT("Cannot rename '%s' to '%s' in '%s': %s"),
+				*OldNameStr, *NewName, *AssetPath,
+				*INameValidatorInterface::GetErrorText(NewName, Valid).ToString()));
+		}
+	}
+
+	// Graph nodes that read or write this widget's variable, counted before
+	// ReplaceVariableReferences moves them.
+	int32 GraphReferences = 0;
+	{
+		UClass* SelfClasses[] = { WidgetBP->GeneratedClass, WidgetBP->SkeletonGeneratedClass };
+		TArray<UEdGraph*> Graphs;
+		WidgetBP->GetAllGraphs(Graphs);
+		for (const UEdGraph* Graph : Graphs)
+		{
+			if (!Graph) continue;
+			TArray<UK2Node_Variable*> Nodes;
+			Graph->GetNodesOfClass(Nodes);
+			for (const UK2Node_Variable* Node : Nodes)
+			{
+				if (!Node || Node->GetVarName() != OldFName) continue;
+				const UClass* MemberParent = Node->VariableReference.GetMemberParentClass();
+				bool bSelf = Node->VariableReference.IsSelfContext();
+				for (UClass* SelfClass : SelfClasses)
+				{
+					bSelf = bSelf || (SelfClass && MemberParent == SelfClass);
+				}
+				GraphReferences += bSelf ? 1 : 0;
+			}
+		}
+	}
+
+	const UPanelWidget* Parent = Widget->GetParent();
+	const FString ParentName = Parent ? Parent->GetName() : FString();
+	const int32 SiblingIndex = Parent ? Parent->GetChildIndex(Widget) : INDEX_NONE;
+
+	WidgetBP->Modify();
+	Widget->Modify();
+
+#if UE_MCP_HAS_5_5_API
+	// Moves the variable GUID to the new name, so references held by GUID survive.
+	WidgetBP->OnVariableRenamed(OldFName, NewFName);
+#endif
+
+	Widget->SetDisplayLabel(NewName);
+	Widget->Rename(*NewName);
+
+	bool bDesiredFocusUpdated = false;
+	if (WidgetBP->GeneratedClass)
+	{
+		UUserWidget* CDO = WidgetBP->GeneratedClass->GetDefaultObject<UUserWidget>();
+		if (CDO && CDO->GetDesiredFocusWidgetName() == OldFName)
+		{
+			CDO->Modify();
+			CDO->SetDesiredFocusWidget(NewFName);
+			bDesiredFocusUpdated = true;
+		}
+	}
+
+	int32 PropertyBindings = 0;
+	for (FDelegateEditorBinding& Binding : WidgetBP->Bindings)
+	{
+		if (Binding.ObjectName == OldNameStr)
+		{
+			Binding.ObjectName = NewName;
+			++PropertyBindings;
+		}
+	}
+
+	int32 AnimationBindings = 0;
+	for (UWidgetAnimation* Animation : WidgetBP->Animations)
+	{
+		if (!Animation) continue;
+		for (FWidgetAnimationBinding& AnimBinding : Animation->AnimationBindings)
+		{
+			if (AnimBinding.WidgetName != OldFName) continue;
+			AnimBinding.WidgetName = NewFName;
+			++AnimationBindings;
+			if (AnimBinding.SlotWidgetName == NAME_None && Animation->MovieScene)
+			{
+				Animation->MovieScene->Modify();
+				if (FMovieScenePossessable* Possessable = Animation->MovieScene->FindPossessable(AnimBinding.AnimationGuid))
+				{
+					Possessable->SetName(NewName);
+				}
+			}
+		}
+	}
+
+	// Explicit navigation rules name their target widget.
+	WidgetBP->WidgetTree->ForEachWidget([&](UWidget* Each)
+	{
+		if (Each && Each->Navigation)
+		{
+			Each->Navigation->SetFlags(RF_Transactional);
+			Each->Navigation->Modify();
+			Each->Navigation->TryToRenameBinding(OldFName, NewFName);
+		}
+	});
+
+#if __has_include("UIComponentWidgetBlueprintExtension.h")
+	// UI Components key their targets by widget name. The class is not
+	// exported, so it is found by path; its RenameWidget is exported.
+	if (UClass* ComponentExtensionClass = FindObject<UClass>(nullptr, TEXT("/Script/UMGEditor.UIComponentWidgetBlueprintExtension")))
+	{
+		if (UWidgetBlueprintExtension* Extension = UWidgetBlueprintExtension::GetExtension(WidgetBP, ComponentExtensionClass))
+		{
+			static_cast<UUIComponentWidgetBlueprintExtension*>(Extension)->RenameWidget(OldFName, NewFName);
+		}
+	}
+#endif
+
+	FBlueprintEditorUtils::ValidateBlueprintChildVariables(WidgetBP, NewFName);
+	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(WidgetBP);
+	FBlueprintEditorUtils::ReplaceVariableReferences(WidgetBP, OldFName, NewFName);
+
+	WidgetBP->MarkPackageDirty();
+	const MCPWidgetGuidMap::FSyncReport GuidSync = MCPWidgetGuidMap::CompileChecked(WidgetBP, CompileBaseline);
+	if (GuidSync.WasRefused())
+	{
+		return MCPWidgetGuidMap::BlockedError(AssetPath, GuidSync);
+	}
+	FString SaveError;
+	const bool bSaved = MCPWidgetGuidMap::SaveIfCompiled(WidgetBP, GuidSync, SaveError);
+
+	auto Result = MCPSuccess();
+	MCPSetUpdated(Result);
+	MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveError);
+	Result->SetStringField(TEXT("assetPath"), AssetPath);
+	Result->SetStringField(TEXT("widgetName"), NewName);
+	Result->SetStringField(TEXT("oldName"), OldNameStr);
+	Result->SetBoolField(TEXT("renamed"), true);
+	Result->SetStringField(TEXT("widgetClass"), Widget->GetClass()->GetName());
+	Result->SetStringField(TEXT("parentWidgetName"), ParentName);
+	Result->SetNumberField(TEXT("siblingIndex"), SiblingIndex);
+	Result->SetBoolField(TEXT("boundToParentProperty"), bBindWidget);
+
+	TSharedPtr<FJsonObject> Refs = MakeShared<FJsonObject>();
+	Refs->SetNumberField(TEXT("graphNodes"), GraphReferences);
+	Refs->SetNumberField(TEXT("propertyBindings"), PropertyBindings);
+	Refs->SetNumberField(TEXT("animationBindings"), AnimationBindings);
+	Refs->SetBoolField(TEXT("desiredFocus"), bDesiredFocusUpdated);
+	Result->SetObjectField(TEXT("referencesUpdated"), Refs);
+
+	MCPSetWidgetGuidOutcome(Result, GuidSync, AssetPath);
+	MCPSetWidgetCompileOutcome(Result, WidgetBP, AssetPath, GuidSync,
+		FString::Printf(TEXT("Widget '%s' was renamed to '%s'"), *OldNameStr, *NewName));
+
+	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+	Payload->SetStringField(TEXT("assetPath"), AssetPath);
+	Payload->SetStringField(TEXT("widgetName"), NewName);
+	Payload->SetStringField(TEXT("newName"), OldNameStr);
+	MCPSetRollback(Result, TEXT("rename_widget"), Payload);
+
 	return MCPResult(Result);
 }
 
@@ -1437,6 +1719,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::MoveWidget(const TSharedPtr<FJsonObject>
 	TSharedPtr<FJsonValue> ResolveError;
 	UWidgetBlueprint* WidgetBP = MCPWidget::ResolveWidgetBlueprintOrError(AssetPath, ResolveError);
 	if (!WidgetBP) return ResolveError;
+	const MCPWidgetGuidMap::FCompileBaseline CompileBaseline = MCPWidgetGuidMap::CaptureBaseline(WidgetBP);
 	if (!WidgetBP->WidgetTree) return MCPWidget::MissingWidgetTreeError(AssetPath);
 
 	// Find the widget to move
@@ -1520,13 +1803,13 @@ TSharedPtr<FJsonValue> FWidgetHandlers::MoveWidget(const TSharedPtr<FJsonObject>
 	// variable for without a GUID entry - including one an earlier build left
 	// unregistered. Compiling through CompileChecked repairs that instead of
 	// turning this call into the one that reports the failure (#728).
-	const MCPWidgetGuidMap::FSyncReport GuidSync = MCPWidgetGuidMap::CompileChecked(WidgetBP);
-	if (!GuidSync.bCompiled)
+	const MCPWidgetGuidMap::FSyncReport GuidSync = MCPWidgetGuidMap::CompileChecked(WidgetBP, CompileBaseline);
+	if (GuidSync.WasRefused())
 	{
 		return MCPWidgetGuidMap::BlockedError(AssetPath, GuidSync);
 	}
 	FString SaveError;
-	const bool bSaved = SaveAssetPackageChecked(WidgetBP, SaveError);
+	const bool bSaved = MCPWidgetGuidMap::SaveIfCompiled(WidgetBP, GuidSync, SaveError);
 
 	auto Result = MCPSuccess();
 	MCPSetUpdated(Result);
@@ -1546,6 +1829,8 @@ TSharedPtr<FJsonValue> FWidgetHandlers::MoveWidget(const TSharedPtr<FJsonObject>
 		MCPSetRollback(Result, TEXT("move_widget"), Payload);
 	}
 
+	MCPSetWidgetCompileOutcome(Result, WidgetBP, AssetPath, GuidSync,
+		FString::Printf(TEXT("Widget '%s' was moved under '%s'"), *WidgetName, *NewParentName));
 	return MCPResult(Result);
 }
 
@@ -1564,6 +1849,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::SetRoot(const TSharedPtr<FJsonObject>& P
 	TSharedPtr<FJsonValue> ResolveError;
 	UWidgetBlueprint* WidgetBP = MCPWidget::ResolveWidgetBlueprintOrError(AssetPath, ResolveError);
 	if (!WidgetBP) return ResolveError;
+	const MCPWidgetGuidMap::FCompileBaseline CompileBaseline = MCPWidgetGuidMap::CaptureBaseline(WidgetBP);
 	if (!WidgetBP->WidgetTree) return MCPWidget::MissingWidgetTreeError(AssetPath);
 
 	UWidget* NewRoot = MCPWidget::FindWidgetByName(WidgetBP->WidgetTree, WidgetName);
@@ -1615,14 +1901,14 @@ TSharedPtr<FJsonValue> FWidgetHandlers::SetRoot(const TSharedPtr<FJsonObject>& P
 	}
 
 	WidgetBP->MarkPackageDirty();
-	MCPWidgetGuidMap::FSyncReport GuidSync = MCPWidgetGuidMap::CompileChecked(WidgetBP);
-	if (!GuidSync.bCompiled)
+	MCPWidgetGuidMap::FSyncReport GuidSync = MCPWidgetGuidMap::CompileChecked(WidgetBP, CompileBaseline);
+	if (GuidSync.WasRefused())
 	{
 		return MCPWidgetGuidMap::BlockedError(AssetPath, GuidSync);
 	}
 	GuidSync.Evicted = Evicted;
 	FString SaveError;
-	const bool bSaved = SaveAssetPackageChecked(WidgetBP, SaveError);
+	const bool bSaved = MCPWidgetGuidMap::SaveIfCompiled(WidgetBP, GuidSync, SaveError);
 
 	auto Result = MCPSuccess();
 	MCPSetUpdated(Result);
@@ -1645,6 +1931,8 @@ TSharedPtr<FJsonValue> FWidgetHandlers::SetRoot(const TSharedPtr<FJsonObject>& P
 		TEXT("them again. Read the tree with widget(read_tree) BEFORE a root swap if it has to be recoverable, or use widget(wrap_root) ")
 		TEXT("instead, which keeps the old root as a child and does emit an inverse."),
 		*PreviousRootName, Evicted));
+	MCPSetWidgetCompileOutcome(Result, WidgetBP, AssetPath, GuidSync,
+		FString::Printf(TEXT("'%s' was made the root"), *WidgetName));
 	return MCPResult(Result);
 }
 
@@ -1665,6 +1953,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::WrapRoot(const TSharedPtr<FJsonObject>& 
 	TSharedPtr<FJsonValue> ResolveError;
 	UWidgetBlueprint* WidgetBP = MCPWidget::ResolveWidgetBlueprintOrError(AssetPath, ResolveError);
 	if (!WidgetBP) return ResolveError;
+	const MCPWidgetGuidMap::FCompileBaseline CompileBaseline = MCPWidgetGuidMap::CaptureBaseline(WidgetBP);
 	if (!WidgetBP->WidgetTree) return MCPWidget::MissingWidgetTreeError(AssetPath);
 
 	UWidget* OldRoot = WidgetBP->WidgetTree->RootWidget;
@@ -1751,13 +2040,13 @@ TSharedPtr<FJsonValue> FWidgetHandlers::WrapRoot(const TSharedPtr<FJsonObject>& 
 	// #728: the wrapper is a new widget variable and needs a GUID before the
 	// compile that checks for one. CompileChecked writes it, compiles, then
 	// writes it again under whatever name the compile settled on.
-	const MCPWidgetGuidMap::FSyncReport GuidSync = MCPWidgetGuidMap::CompileChecked(WidgetBP);
-	if (!GuidSync.bCompiled)
+	const MCPWidgetGuidMap::FSyncReport GuidSync = MCPWidgetGuidMap::CompileChecked(WidgetBP, CompileBaseline);
+	if (GuidSync.WasRefused())
 	{
 		return MCPWidgetGuidMap::BlockedError(AssetPath, GuidSync);
 	}
 	FString SaveError;
-	const bool bSaved = SaveAssetPackageChecked(WidgetBP, SaveError);
+	const bool bSaved = MCPWidgetGuidMap::SaveIfCompiled(WidgetBP, GuidSync, SaveError);
 
 	if (WrappedChild.IsValid())
 	{
@@ -1798,6 +2087,8 @@ TSharedPtr<FJsonValue> FWidgetHandlers::WrapRoot(const TSharedPtr<FJsonObject>& 
 			TEXT("the wrapper this call created. Clear them first with widget(remove_widget), or accept the loss."),
 			PreExistingOrphans, PreExistingOrphans));
 	}
+	MCPSetWidgetCompileOutcome(Result, WidgetBP, AssetPath, GuidSync,
+		FString::Printf(TEXT("The root was wrapped in '%s'"), *WrapperName));
 	return MCPResult(Result);
 }
 

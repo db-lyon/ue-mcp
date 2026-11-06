@@ -27,7 +27,7 @@ let armed: string | null = null;
 const prepared: string[][] = [];
 const finished: Json[][] = [];
 /** What the fake editor read from each version it was handed to diff, and the native diffs it was asked to open. */
-const diffed: Array<{ original: string; from: string | null; to: string | null }> = [];
+const diffed: Array<{ original: string; from: string | null; to: string | null; graphPictures: unknown[] }> = [];
 const opened: Json[] = [];
 const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII=", "base64");
 
@@ -36,7 +36,7 @@ function fakeAssetDiff(p: Json): Json {
   const readSide = (f: unknown) => (typeof f === "string" && fs.existsSync(f) ? fs.readFileSync(f, "utf8") : null);
   const from = readSide(p.fromFile);
   const to = readSide(p.toFile);
-  diffed.push({ original: path.basename(String(p.originalFile)), from, to });
+  diffed.push({ original: path.basename(String(p.originalFile)), from, to, graphPictures: [p.fromGraphPicture, p.toGraphPicture] });
   const side = (content: string | null, thumb: unknown) => {
     if (content === null) return null;
     if (typeof thumb === "string") fs.writeFileSync(thumb, PNG);
@@ -225,6 +225,12 @@ describe("checkpoints through the daemon", () => {
     expect(changes.body.assetDiffs).toEqual({ limit: 25, diffed: 2, deferred: [] });
     // The editor was handed each version's bytes, exported from the shadow history.
     expect(diffed.map((x) => [x.original, x.from, x.to]).sort()).toEqual([["BP_Door.uasset", "door v1", "door v2"], ["M_Wall.uasset", "wall v1", "wall v2"]]);
+    // A modified package is handed a place for each side's graph picture, named for the pair (#1569).
+    for (const x of diffed) {
+      expect(x.graphPictures).toHaveLength(2);
+      for (const g of x.graphPictures) expect(path.basename(String(g))).toMatch(/^[0-9a-f]{40}\.v\d+\.png$/);
+      expect(x.graphPictures[0]).not.toBe(x.graphPictures[1]);
+    }
     const door = (changes.body.changes as Json[]).find((c) => c.path === "Content/BP_Door.uasset")!;
     expect(door.assetDiff).toMatchObject({ state: "ready", status: "modified", assetClass: "Blueprint", nativeDiff: { available: true } });
     expect(door.assetDiff.summary).toBe("1 difference: Content door v1 to door v2");

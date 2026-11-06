@@ -9,6 +9,9 @@
 #include "Editor.h"
 #include "Engine/Engine.h"
 #include "Engine/World.h"
+#include "EngineUtils.h"
+#include "UObject/Package.h"
+#include "UObject/UObjectHash.h"
 #include "UnrealEngine.h"
 #include "FileHelpers.h"
 #include "Misc/PackageName.h"
@@ -246,6 +249,86 @@ private:
 	TUniquePtr<FTemporaryPlayInEditorIDOverride> IdOverride;
 	TUniquePtr<FScopedConditionalWorldSwitcher> Switcher;
 };
+
+/**
+ * Tear down a world a test or a handler created for its own use (#1488).
+ *
+ * DestroyWorld leaves the world's package dirty and the world alive, so a
+ * /Temp/Untitled_N package lands on the editor's dirty world list, level(load)
+ * refuses and shutdown prompts to save it. This marks the world garbage and
+ * clears its package and its actors' external packages, as ending PIE does.
+ */
+inline void MCPDestroyDisposableWorld(UWorld* World, bool bInformEngineOfWorld = false)
+{
+	if (!World) return;
+	TArray<TWeakObjectPtr<UPackage>> Packages;
+	Packages.Add(World->GetPackage());
+	for (TActorIterator<AActor> It(World); It; ++It)
+	{
+		if (UPackage* External = It->GetExternalPackage()) Packages.AddUnique(External);
+	}
+	World->DestroyWorld(bInformEngineOfWorld);
+	if (World->IsRooted()) World->RemoveFromRoot();
+	World->MarkObjectsPendingKill();
+	for (const TWeakObjectPtr<UPackage>& Package : Packages)
+	{
+		if (Package.IsValid() && Package.Get() != GetTransientPackage()) Package->SetDirtyFlag(false);
+	}
+}
+
+/** Is World the current world of any engine world context (the editor world, a PIE or preview world)? */
+inline bool MCPIsLiveWorld(const UWorld* World)
+{
+	if (!World || !GEngine) return false;
+	for (const FWorldContext& Context : GEngine->GetWorldContexts())
+	{
+		if (Context.World() == World) return true;
+	}
+	return false;
+}
+
+/** Names of the packages on the editor's dirty world list. */
+inline TSet<FName> MCPDirtyWorldPackageNames()
+{
+	TArray<UPackage*> Dirty;
+	FEditorFileUtils::GetDirtyWorldPackages(Dirty);
+	TSet<FName> Names;
+	for (const UPackage* Package : Dirty)
+	{
+		if (Package) Names.Add(Package->GetFName());
+	}
+	return Names;
+}
+
+/**
+ * Clear the dirty flag on /Temp world packages that became dirty after Before
+ * was taken and whose world no context is using: what a test leaves when it
+ * tears its world down without MCPDestroyDisposableWorld (#1488). Nothing is
+ * saved or deleted. Returns the cleared package names.
+ */
+inline TArray<FString> MCPSweepAbandonedTempWorlds(const TSet<FName>& Before)
+{
+	TArray<FString> Cleared;
+	TArray<UPackage*> Dirty;
+	FEditorFileUtils::GetDirtyWorldPackages(Dirty);
+	for (UPackage* Package : Dirty)
+	{
+		if (!Package || Before.Contains(Package->GetFName())) continue;
+		const FString Name = Package->GetName();
+		if (!Name.StartsWith(TEXT("/Temp/"))) continue;
+		bool bLive = false;
+		ForEachObjectWithPackage(Package, [&bLive](UObject* Object)
+		{
+			const UWorld* Owner = Object ? (Object->IsA<UWorld>() ? Cast<UWorld>(Object) : Object->GetTypedOuter<UWorld>()) : nullptr;
+			if (MCPIsLiveWorld(Owner)) { bLive = true; return false; }
+			return true;
+		});
+		if (bLive) continue;
+		Package->SetDirtyFlag(false);
+		Cleared.Add(Name);
+	}
+	return Cleared;
+}
 
 /** Get the editor world or return an error response. */
 #define REQUIRE_EDITOR_WORLD(WorldVar) \

@@ -201,8 +201,9 @@ namespace MCPQuery
 		TArray<FString> Segments;
 		Path.ParseIntoArray(Segments, TEXT("."), true);
 		TSharedPtr<FJsonValue> Current = MakeShared<FJsonValueObject>(Row);
-		for (const FString& Segment : Segments)
+		for (int32 Index = 0; Index < Segments.Num(); ++Index)
 		{
+			const FString& Segment = Segments[Index];
 			if (!Current.IsValid())
 			{
 				return nullptr;
@@ -229,7 +230,26 @@ namespace MCPQuery
 			// FJsonObject::Values is not keyed by FString on UE 5.8, so Find(FString)
 			// does not resolve. TryGetField takes an FStringView and is the
 			// supported lookup regardless of the map's key type.
-			Current = Current->AsObject()->TryGetField(Segment);
+			const TSharedPtr<FJsonObject> Object = Current->AsObject();
+			TSharedPtr<FJsonValue> Next = Object->TryGetField(Segment);
+			// A projected property path is stored under its whole dotted name
+			// (props["AttachEndTo.ComponentProperty"]), so when one segment is not
+			// a key, the longest run of the remaining segments that is wins (#1530).
+			for (int32 Last = Segments.Num() - 1; !Next.IsValid() && Last > Index; --Last)
+			{
+				FString Joined = Segment;
+				for (int32 Part = Index + 1; Part <= Last; ++Part)
+				{
+					Joined += TEXT(".");
+					Joined += Segments[Part];
+				}
+				Next = Object->TryGetField(Joined);
+				if (Next.IsValid())
+				{
+					Index = Last;
+				}
+			}
+			Current = Next;
 		}
 		return Current;
 	}

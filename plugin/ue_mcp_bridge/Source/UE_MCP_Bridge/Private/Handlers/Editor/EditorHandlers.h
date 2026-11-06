@@ -117,6 +117,10 @@ public:
 	static void RegisterHandlers(class FMCPHandlerRegistry& Registry);
 	// Release preview worlds and tick callbacks before the module unloads.
 	static void ShutdownMeshStudioRenders();
+	// Write one config property of a config class default object to its ini and
+	// read it back from the file (#1566). False when Object is not a config class
+	// default or the property is not a config property; Result is untouched then.
+	static bool PersistConfigProperty(UObject* Object, const FString& PropertyPath, const TSharedPtr<FJsonObject>& Result);
 
 private:
 	// Handler implementations
@@ -136,6 +140,9 @@ private:
 	static TSharedPtr<FJsonValue> GetProperty(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> DescribeObject(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SetConfig(const TSharedPtr<FJsonObject>& Params);
+	// Maps & Modes project settings, typed, in EditorHandlers_ProjectSettings.cpp (#1566).
+	static TSharedPtr<FJsonValue> GetMapsSettings(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> SetMapsSettings(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> GetViewportInfo(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> HitTestViewportPixel(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> GetRuntimeValues(const TSharedPtr<FJsonObject>& Params);
@@ -159,6 +166,7 @@ private:
 	// makes a screenshot comparable between runs.
 	static TSharedPtr<FJsonValue> GetViewportState(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SetViewMode(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> SetBufferVisualization(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SetViewportExposure(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SetViewportView(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SetGameView(const TSharedPtr<FJsonObject>& Params);

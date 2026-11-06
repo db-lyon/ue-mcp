@@ -15,10 +15,10 @@ export const widgetTool: ToolDef = categoryTool(
     get_properties:    specBp("read", "Full reflected property dump for a widget - every UPROPERTY (RenderOpacity, Visibility, ColorAndOpacity, Border padding/colors, Image brush TintColor/ImageSize, fonts, etc.) plus the slot block, for diagnosing visual bugs get_details omits. Pass includeSubtree to also dump children (#547).", "get_widget_properties"),
     list_bindings:     specBp("read", "List designer property bindings on a WidgetBlueprint (the UE 5.7 Python API keeps them protected). Returns {widgetName, propertyName, functionName, bindingType}. Optional filterWidgetName/filterProperty (#530).", "list_widget_bindings"),
     clear_binding:     specBp("mutate", "Remove designer binding(s) matching widgetName (and optional propertyName) from a WidgetBlueprint without opening the editor. Idempotent (#530).", "clear_widget_binding"),
-    set_property:      specBp("mutate", "Set widget property. Slot struct props take UE struct text that persists every field - `Slot.Size`=`(Value=1.0,SizeRule=Fill)`, `Slot.Padding`=`(Left=8,Top=8,Right=8,Bottom=8)` - or a nested field path like `Slot.Size.Value` / `Slot.Padding.Left`; an invalid value errors instead of silently writing 0 (#532).", "set_widget_property"),
+    set_property:      specBp("mutate", "Set widget property. Slot struct props take UE struct text that persists every field - `Slot.Size`=`(Value=1.0,SizeRule=Fill)`, `Slot.Padding`=`(Left=8,Top=8,Right=8,Bottom=8)` - or a nested field path like `Slot.Size.Value` / `Slot.Padding.Left`; an invalid value errors instead of silently writing 0 (#532). value may also be a JSON object or array, filled field by field (`Slot.Padding`={Left:8,Top:8,Right:8,Bottom:8}). An enum takes `Bottom`, `VAlign_Bottom`, `EVerticalAlignment::VAlign_Bottom` or an enumerator number; any other value is refused (#1540).", "set_widget_property"),
     set_style:         specBp("mutate", "Set a full/nested style struct on a widget from JSON (FButtonStyle, FEditableTextBoxStyle, FSlateFontInfo, FSlateColor and their nested brushes) - what set_property's scalar path can't express. value is a JSON object mirroring the struct; propertyName is the struct property, e.g. WidgetStyle (#563).", "set_widget_style"),
     reorder_child:     specBp("mutate", "Reorder a widget among its parent panel's children (move to a sibling index) - e.g. insert a new row BETWEEN two existing children. move_widget only reparents (#635).", "reorder_child"),
-    bulk_set_properties: specBp("mutate", "Apply many {widgetName, propertyName, value} style/property writes to a WidgetBlueprint in one call (single compile+save) - font/color/style stylesheet across many widgets (#563).", "bulk_set_widget_properties"),
+    bulk_set_properties: specBp("mutate", "Apply many {widgetName, propertyName, value} style/property writes to a WidgetBlueprint in one call (single compile+save) - font/color/style stylesheet across many widgets (#563). propertyName takes the same paths as set_widget_property: slot.* (any case) on the widget's slot, dotted paths into structs, and its typed names; value is JSON (an object or array fills a struct or array, a string may be UE struct text). Each entry reports its own ok/error, and the rollback replays the previous values through this action (#1632).", "bulk_set_widget_properties"),
     list:              specBp("read", "List Widget BPs, sorted by object path.", "list_widget_blueprints"),
     read_animations:   specBp("read", "Read UMG animations.", "read_widget_animations"),
 
@@ -72,6 +72,10 @@ export const widgetTool: ToolDef = categoryTool(
     },
     remove_widget: {
       ...specBp("mutate", "Remove widget from tree. Idempotent, and clears the widget's Widget Blueprint GUID metadata so later compiles stop reporting a deleted variable (#799).", "remove_widget"),
+      timeoutMs: 120_000,
+    },
+    rename_widget: {
+      ...specBp("mutate", "Rename a widget in place (#1679). It keeps its object, slot, sibling position and properties; the variable GUID, designer bindings, animation bindings, navigation rules, desired focus and graph get/set nodes move to the new name. Refuses a name another widget, variable or function holds, unless it is a BindWidget name on the native parent for a widget of the bound class, which is how a copied widget is fitted to a BindWidget contract. Reports referencesUpdated; idempotent by the new name; the rollback renames it back.", "rename_widget"),
       timeoutMs: 120_000,
     },
     move_widget:              specBp("mutate", "Reparent widget.", "move_widget"),

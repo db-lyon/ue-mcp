@@ -340,6 +340,12 @@ void FBlueprintHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Required(TEXT("trackName"), EType::String, TEXT("Track name within the timeline")),
 		MCPParam::Optional(TEXT("trackType"), EType::String, TEXT("float (default), vector, color or event")),
 		MCPParam::Optional(TEXT("keyframes"), EType::Array, TEXT("[{time, value}]: value is a number for float and event, {x,y,z} for vector, {r,g,b,a} for color")).Items(EType::Object),
+		MCPParam::Optional(TEXT("curveAssetPath"), EType::String, TEXT("Existing curve asset to bind instead of keyframes: CurveFloat for float and event, CurveVector for vector, CurveLinearColor for color")),
+	});
+	// #1654: the inverse of creating a timeline, as the editor's own removal does it.
+	Registry.RegisterHandler(TEXT("remove_timeline"), &RemoveTimeline, {
+		SpecAssetPath,
+		MCPParam::Required(TEXT("timelineName"), EType::String, TEXT("Timeline name, as add_timeline_track and the Timeline node show it")),
 	});
 	Registry.RegisterHandler(TEXT("set_capsule_size"), &SetCapsuleSize, {
 		SpecAssetPath,
@@ -477,7 +483,7 @@ void FBlueprintHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		SpecValue,
 	});
 	Registry.RegisterHandler(TEXT("get_cdo_properties"), &GetCdoProperties, {
-		MCPParam::Required(TEXT("className"), EType::String, TEXT("C++ class name or path")),
+		MCPParam::Required(TEXT("className"), EType::String, TEXT("C++ class name or path, or a Blueprint asset path (reads its generated class)")).Alias(TEXT("assetPath")),
 		MCPParam::Optional(TEXT("propertyNames"), EType::Array, TEXT("Property names to read (omit for all)")).Items(EType::String),
 	});
 	Registry.RegisterHandler(TEXT("compare_class_defaults"), &CompareClassDefaults, {

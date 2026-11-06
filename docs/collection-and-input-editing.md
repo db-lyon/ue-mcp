@@ -9,6 +9,21 @@ For a single nested field in a struct array, `asset(set_property)` accepts a key
 The selector must match exactly one element. `asset(read_properties)` accepts the same path. See [Property paths](tool-reference.md#property-paths) for the selector rules. Use `asset(bulk_set_properties)` for several keyed field writes with preflight and read-back.
 
 `bulk_read_properties` rows report `resolvedPropertyNames` and `missingReasons` for keyed selectors.
+## Add or remove one array element
+
+`asset(append_array_elements)` adds values to the end of a TArray and leaves the existing elements alone. With `unique=true` a value the array already holds is skipped and listed in `skippedElements`; when every value is already there, nothing is written or saved. To add a map name to an allow-list on several data assets, call it once per asset:
+
+```json
+{"action":"append_array_elements","assetPath":"/Game/Data/DA_BuildList_Spikes","propertyName":"OnlyInMaps","elements":["/Game/Maps/SurvivalArena"],"unique":true}
+```
+
+`asset(remove_array_elements)` takes out elements by `indices` or by value with `elements`, keeping the order of the rest. Every index must exist, or nothing is removed. A value removes every element equal to it; a value that matches nothing removes nothing.
+
+```json
+{"action":"remove_array_elements","assetPath":"/Game/Data/DA_BuildList_Spikes","propertyName":"OnlyInMaps","elements":["/Game/Maps/OldArena"]}
+```
+
+Both actions save by default, return `value` read back from the asset, and carry a rollback that restores the whole array with the same `save` option. Values compare the way the property type compares them, so `FString` and `FName` entries match without regard to case. Replace one element with `asset(set_property)` and an indexed path such as `OnlyInMaps[1]`.
 
 ## Update or clone a collection entry
 
@@ -52,4 +67,4 @@ InputAction-level settings use `inputActionPath` instead of `imcPath` and `mappi
 
 ## Static editor functions
 
-`reflection(reflect_class)` describes a project's reflected functions. Call a static BlueprintCallable function with `editor(invoke_static_function)` using `className`, `functionName` and an `args` object keyed by reflected parameter names. The class can be a component or another reflected class, as well as a function library. Use the reflected C++ function spelling. Return and output parameters appear under `returnValues`. These calls can have arbitrary side effects; persistence and undo depend on the called function.
+`reflection(reflect_class)` describes a project's reflected functions. Call a static BlueprintCallable function with `editor(invoke_static_function)` using `className`, `functionName` and an `args` object keyed by reflected parameter names. The class can be a component or another reflected class, as well as a function library. Use the reflected C++ function spelling. Return and output parameters appear under `returnValues`. These calls can have arbitrary side effects; persistence and undo depend on the called function. The reply reads the target world again after the call: `worldPath` names the world that is current when the call returns, and `worldReplaced` is true (with `previousWorldPath`) when the call loaded another level or otherwise swapped the world.

@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "Handlers/PIE/PIEFrameSampler.h"
 #include "Handlers/PIE/PIESequenceFormat.h"
+#include "Handlers/PIE/PIEMaxFPSPin.h"
 #include "UObject/WeakObjectPtrTemplates.h"
 
 class UWorld;
@@ -26,6 +27,32 @@ namespace MCPPIE
 		Replaying,
 		Completed
 	};
+
+	// replay start_when (#1657): hold the steps until the player can act, so
+	// an intro whose length varies between runs does not shift the input.
+	struct FReplayStartGate
+	{
+		bool bEnabled = false;
+		// Pawn speed at most MaxSpeedCms, and on the ground for a Character.
+		bool bPawnAtRest = true;
+		float MaxSpeedCms = 5.f;
+		// How long the condition must hold before the gate opens.
+		int32 HoldMs = 500;
+		// A line containing this must have been logged in the session.
+		FString LogContains;
+		int32 TimeoutMs = 60000;
+	};
+
+	// Where the source recording's own gate opened, in ms from its first row:
+	// the end of HoldMs at rest in the rest run that leads into the first
+	// input (OnsetMs), capped at OnsetMs. -1 when the pawn was moving at the
+	// onset or no row precedes it. TimesMs and Speeds are per source row.
+	double FindSourceRestAnchorMs(const TArray<double>& TimesMs, const TArray<float>& Speeds,
+		double OnsetMs, float MaxSpeedCms, int32 HoldMs);
+
+	// Parses a start_when object. Unknown fields and a gate with nothing to
+	// wait on are refused.
+	bool ParseReplayStartGate(const TSharedPtr<FJsonObject>& Obj, FReplayStartGate& Out, FString& OutError);
 
 	struct FReplayerArmConfig
 	{
@@ -73,6 +100,7 @@ namespace MCPPIE
 		// runs "more reproducible", never fully deterministic (Chaos/async still
 		// vary). Restored on finish.
 		bool bFixedTimestep = false;
+		FReplayStartGate StartGate;
 	};
 
 	struct FReplayerStatus
@@ -101,6 +129,10 @@ namespace MCPPIE
 		FString LastFrameDir;
 		int32 LastFrameCount = 0;
 		FString LastContactSheetPath;
+		FString LastReplayCSVPath;
+		// While waiting: what the replay is waiting on (no player target, no
+		// pawn, or the start_when gate).
+		FString WaitingFor;
 	};
 
 	struct FLiveReplaySnapshot
@@ -158,6 +190,7 @@ namespace MCPPIE
 		FReplayerFinishResult FinaliseCurrent();
 		void ExecutePendingSteps(double ElapsedMs);
 		void ApplyFPSPin(UWorld* PIEWorld, int32 Hz);
+		bool UpdateStartGate(UWorld* PIEWorld, double Now, FString& OutBlocker);
 
 		// Source recording's per-frame pawn state for drift comparison.
 		// Sparse rows: only fields needed for drift; populated by ReadSourceCSV.
@@ -192,6 +225,7 @@ namespace MCPPIE
 		FString CurrentDriftPath;
 		TArray<FSourceFrame> SourceFrames;
 		FPIEFrameSampler Sampler;
+		FPIEMaxFPSPin FPSPin;
 		TWeakObjectPtr<UWorld> TargetWorld;
 		TWeakObjectPtr<APlayerController> TargetPlayerController;
 		TWeakObjectPtr<ULocalPlayer> TargetLocalPlayer;
@@ -201,6 +235,29 @@ namespace MCPPIE
 		FString TargetResolveError;
 
 		double AttachTime = 0.0;
+		// Time alignment for drift (#1690). Replay steps fire SettleMs after
+		// attach, so replay time minus the settle is compared with the source
+		// row at the same offset from the source's first row.
+		int32 SourceCursor = 0;
+		bool bSourceExhausted = false;
+		uint64 ReplayFrameIndex = 0;
+		double AlignOffsetMs = 0.0;
+		double SourceInputOnsetMs = -1.0;
+		double ReplayInputOnsetMs = -1.0;
+		// Step clock: ms since attach minus StepOffsetMs. Starts after the
+		// settle delay, or when the start gate opens.
+		bool bStepClockStarted = false;
+		double StepOffsetMs = 0.0;
+		// Start gate state.
+		double SourceGateMs = 0.0;
+		FString GateAnchor;
+		double GateRestSince = -1.0;
+		bool bGateLogSeen = false;
+		double GateLogCheckedAt = -1.0;
+		double GateOpenedMs = -1.0;
+		FString GateBlocker;
+		FString GateError;
+		TArray<FCSVRow> ReplayRows;
 		int32 NextStepIndex = 0;
 		int32 ExecutedSteps = 0;
 		FString StartedAt;

@@ -271,7 +271,7 @@ bool FMCPBridgeStateFiles::IsPortAccepting(int32 Port, int32 TimeoutMilliseconds
 	return bAccepting;
 }
 
-bool FMCPBridgeStateFiles::IsInstanceLive(const FMCPInstanceRecord& Record)
+bool FMCPBridgeStateFiles::IsInstanceLive(const FMCPInstanceRecord& Record, int32 OwnBoundPort)
 {
 	if (Record.Pid == 0)
 	{
@@ -287,15 +287,21 @@ bool FMCPBridgeStateFiles::IsInstanceLive(const FMCPInstanceRecord& Record)
 		// is the whole of what this record claims.
 		return true;
 	}
+	if (OwnBoundPort > 0 && Record.Port == OwnBoundPort)
+	{
+		// The pid was recycled and this bridge took the same deterministic port.
+		// Connecting would reach this bridge and prove nothing (#1633).
+		return false;
+	}
 	// The pid could have been recycled onto an unrelated process, in which case
 	// nothing is listening where the record says.
 	return IsPortAccepting(Record.Port, /*TimeoutMilliseconds*/ 250);
 }
 
-int32 FMCPBridgeStateFiles::ReapStaleInstanceRecords(const FString& InInstancesDir, const FString& OwnInstanceId)
+int32 FMCPBridgeStateFiles::ReapStaleInstanceRecords(const FString& InInstancesDir, const FString& OwnInstanceId, int32 OwnBoundPort)
 {
 	return ReapStaleInstanceRecords(InInstancesDir, OwnInstanceId,
-		[](const FMCPInstanceRecord& Record) { return FMCPBridgeStateFiles::IsInstanceLive(Record); });
+		[OwnBoundPort](const FMCPInstanceRecord& Record) { return FMCPBridgeStateFiles::IsInstanceLive(Record, OwnBoundPort); });
 }
 
 int32 FMCPBridgeStateFiles::ReapStaleInstanceRecords(
@@ -418,11 +424,11 @@ namespace
 {
 	/** Is the instance that published this port.json still there? Asked only of a
 	 *  record another instance wrote, before publishing over it. */
-	bool PortLockfileOwnerIsLive(const FString& FilePath)
+	bool PortLockfileOwnerIsLive(const FString& FilePath, int32 OwnBoundPort)
 	{
 		FMCPInstanceRecord Owner;
 		return FMCPBridgeStateFiles::ReadInstanceRecord(FilePath, Owner)
-			&& FMCPBridgeStateFiles::IsInstanceLive(Owner);
+			&& FMCPBridgeStateFiles::IsInstanceLive(Owner, OwnBoundPort);
 	}
 
 	/** Read the instanceId out of a record, or empty when there is not one. */
@@ -454,7 +460,7 @@ void FMCPBridgeServer::WritePortLockfile(int32 PortValue)
 		const TSharedPtr<FJsonObject> Existing = FMCPBridgeStateFiles::LoadJson(FilePath);
 		FString ExistingOwner;
 		if (Existing.IsValid() && Existing->TryGetStringField(TEXT("instanceId"), ExistingOwner)
-			&& !ExistingOwner.IsEmpty() && ExistingOwner != OurId && PortLockfileOwnerIsLive(FilePath))
+			&& !ExistingOwner.IsEmpty() && ExistingOwner != OurId && PortLockfileOwnerIsLive(FilePath, PortValue))
 		{
 			UE_LOG(LogMCPBridge, Warning,
 				TEXT("[UE-MCP] Another editor of this project (instance %s) is still listening and owns %s, so this bridge did not publish over it. This bridge is on port %d and its address is in %s. Clients reading port.json will reach the other editor."),
@@ -560,7 +566,8 @@ void FMCPBridgeServer::ReapStaleInstanceRecords()
 {
 	const int32 Removed = FMCPBridgeStateFiles::ReapStaleInstanceRecords(
 		FMCPBridgeStateFiles::InstancesDir(),
-		InstanceId);
+		InstanceId,
+		ServerPort);
 	if (Removed > 0)
 	{
 		UE_LOG(LogMCPBridge, Log, TEXT("[UE-MCP] Removed %d stale bridge instance record(s)."), Removed);

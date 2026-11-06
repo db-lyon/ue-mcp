@@ -426,8 +426,7 @@ namespace MeshStudioRender
 				for (AActor* Actor : Actors) World->DestroyActor(Actor, false, false);
 				if (GEngine) GEngine->DestroyWorldContext(World);
 				// Release the render scene even on a partially-created item.
-				World->DestroyWorld(false);
-				World->MarkObjectsPendingKill();
+				MCPDestroyDisposableWorld(World);
 				World = nullptr;
 			}
 			Textures.Reset();
@@ -733,7 +732,9 @@ TSharedPtr<FJsonValue> FEditorHandlers::RenderMeshStudio(const TSharedPtr<FJsonO
 	TArray<FItem> Items;
 	FString Error;
 	if (!ParseItems(*ItemValues, static_cast<int32>(ResolutionValue), Items, Error)) return MCPError(Error);
-	Output = FPaths::ConvertRelativePathToFull(UEMCP::SceneCapture::ResolveOutputPath(Output));
+	FString ResolvedOutput;
+	if (auto Err = MCPRequireWritablePath(Output, ResolvedOutput)) return Err;
+	Output = ResolvedOutput;
 	if (!IFileManager::Get().MakeDirectory(*Output, true)) return MCPError(TEXT("Could not create outputDir"));
 	Active = MakeShared<FJob>();
 	Active->Items = MoveTemp(Items);

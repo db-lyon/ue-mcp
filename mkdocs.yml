@@ -68,6 +68,7 @@ nav:
   - Native Asset Pipeline: native-asset-pipeline.md
   - Shader Compilation: shader-compilation.md
   - Studio Mesh Reference Images: mesh-studio-render.md
+  - Material Graph Editing: material-graph-surgery.md
   - Handler Conventions: handler-conventions.md
   - Release Notes Style: release-notes-style.md
   - Widgets:

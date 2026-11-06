@@ -177,6 +177,13 @@ describe("searching", () => {
     expect(rows.find((r) => r.name === "E_BCovB_SearchProbe")?.className).toBe("UserDefinedEnum");
     const none = await call("search_assets", { query: "NoSuchBCovProbe", directory: `${DIR}/Search` });
     expect(none.results).toEqual([]);
+
+    // classFilter (and its alias typeFilter) is applied, not ignored (#1551).
+    const enums = await call("search_assets", { query: "SearchProbe", directory: `${DIR}/Search`, classFilter: "userdefinedenum" });
+    expect((enums.results as Row[]).map((r) => r.name)).toContain("E_BCovB_SearchProbe");
+    expect(enums.paramsNotRead).toBeUndefined();
+    const materials = await call("search_assets", { query: "SearchProbe", directory: `${DIR}/Search`, typeFilter: "Material" });
+    expect(materials.results).toEqual([]);
   }, 120_000);
 
   it("reindex_assets_fts rescans a folder and search_assets_fts ranks its asset", async () => {

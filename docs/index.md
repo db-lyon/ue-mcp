@@ -1,6 +1,6 @@
 # UE-MCP
 
-**Unreal Engine Model Context Protocol Server.** It lets AI assistants drive the Unreal Editor through <!-- count:tools -->30<!-- /count --> category tools covering <!-- count:actions -->2129+<!-- /count --> actions.
+**Unreal Engine Model Context Protocol Server.** It lets AI assistants drive the Unreal Editor through <!-- count:tools -->30<!-- /count --> category tools covering <!-- count:actions -->2160+<!-- /count --> actions.
 
 An MCP client (Claude Code, Claude Desktop, Cursor and others) launches `ue-mcp` for your project. By default that process relays to the project's daemon, a background Node.js process that holds the WebSocket connection to the C++ bridge plugin inside the editor. The daemon outlives editor restarts, serves every MCP client of the project, and serves UE-MCP Studio, the in-editor agent.
 
@@ -46,7 +46,7 @@ Start with **[Getting Started](getting-started.md)**. It assumes no Node.js, MCP
 | `dataflow` | Dataflow graph nodes, pins, variables, templates (UE 5.8+) |
 | `conversation` | Dialogue graph nodes, speakers, entry points (UE 5.8+) |
 | `epic` | The UE 5.8 AI Toolset Registry: discovery and direct calls |
-| `fab` | Fab login, owned-library sync and import |
+| `fab` | Fab login, owned-library sync, import, and opening the fab.com search page at a query |
 | `datasmith` | Inspect, import and reimport Datasmith scenes |
 | `metahuman` | Create, dress and assemble MetaHuman characters |
 | `source_control` | Status, checkout, add, revert, sync, diff and submit through the editor's provider |

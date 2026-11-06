@@ -13,6 +13,7 @@ import type { EditorBridge } from "../../src/bridge/bridge.js";
 const PREFIX = "BCov_Level_";
 const CUBE = "/Engine/BasicShapes/Cube.Cube";
 const GRID_MATERIAL = "/Engine/EngineMaterials/WorldGridMaterial.WorldGridMaterial";
+const PORTAL_BP = "/Game/MCPTest/BCov/Level/BP_BCov_Level_Portal";
 
 type Json = Record<string, unknown>;
 type Vec = { x: number; y: number; z: number };
@@ -50,6 +51,7 @@ async function componentValue(label: string, componentName: string, property: st
 
 async function cleanup(): Promise<void> {
   await callBridge(bridge, "delete_actors", { labelPrefix: PREFIX });
+  await callBridge(bridge, "delete_asset", { assetPath: PORTAL_BP, force: true });
 }
 
 beforeAll(async () => {
@@ -137,6 +139,35 @@ describe("level component properties", () => {
     const removed = await call("remove_component_from_actor", { actorLabel: A, componentName: "BCovArrow" });
     expect(removed.deleted).toBe(true);
     expect((await components(A)).some((c) => c.name === "BCovArrow")).toBe(false);
+  }, 120_000);
+});
+
+describe("level actor property readback (#1566)", () => {
+  const START = `${PREFIX}Start`;
+  const PORTAL = `${PREFIX}Portal`;
+
+  it("set_actor_property sets PlayerStartTag and reports the stored value", async () => {
+    await call("place_actor", { actorClass: "PlayerStart", label: START, location: { x: 0, y: 21000, z: 100 } });
+    const out = await call("set_actor_property", { actorLabel: START, propertyName: "PlayerStartTag", value: "BCovDefaultStart" });
+    expect(out.value).toBe("BCovDefaultStart");
+    expect(out.changed).toBe(true);
+    expect(out.type).toBe("FName");
+    const read = await call("get_property", { objectPath: String(out.actorPath), propertyName: "PlayerStartTag" });
+    expect(read.value).toBe("BCovDefaultStart");
+  }, 120_000);
+
+  it("set_actor_property writes a Blueprint instance variable and reads it back", async () => {
+    await call("create_blueprint", { assetPath: PORTAL_BP, parentClass: "Actor" });
+    await call("add_variable", { assetPath: PORTAL_BP, name: "TargetLevel", varType: "name", instanceEditable: true });
+    await call("compile_blueprint", { assetPath: PORTAL_BP });
+    await call("place_actor", { actorClass: `${PORTAL_BP}.BP_BCov_Level_Portal_C`, label: PORTAL, location: { x: 300, y: 21000, z: 100 } });
+    const target = "/Game/BCov/Maps/LV_Target#GateExit";
+    const out = await call("set_actor_property", { actorLabel: PORTAL, propertyName: "TargetLevel", value: target });
+    expect(out.previousValue).toBe("None");
+    expect(out.value).toBe(target);
+    expect(out.changed).toBe(true);
+    const read = await call("get_property", { objectPath: String(out.actorPath), propertyName: "TargetLevel" });
+    expect(read.value).toBe(target);
   }, 120_000);
 });
 
@@ -285,6 +316,94 @@ describe("level batch placement and deletion", () => {
     const deleted = await call("delete_actors", { labelPrefix: `${prefix}_` });
     expect(deleted.deleted).toBe(4);
     expect((await call("get_actors_by_class", { className: "StaticMeshActor", labelPrefix: `${prefix}_` })).count).toBe(0);
+  }, 120_000);
+});
+
+describe("delete_actors by outliner folder (#1529)", () => {
+  const ROOT = "BCov_DelFolder";
+  const placed: Array<[string, string]> = [
+    [`${PREFIX}FolderKeep`, `${ROOT}/Keep`],
+    [`${PREFIX}FolderGone`, `${ROOT}/Gone`],
+    [`${PREFIX}FolderDeep`, `${ROOT}/Gone/Deep`],
+    [`${PREFIX}FolderSibling`, `${ROOT}Sibling`],
+  ];
+  const exists = async (label: string): Promise<boolean> =>
+    Number((await call("get_actors_by_class", { className: "StaticMeshActor", labelPrefix: label })).count) > 0;
+
+  it("folderPath deletes one folder, folderPathPrefix the folder and its children, never a sibling sharing the string", async () => {
+    for (const [i, [label, folder]] of placed.entries()) {
+      await cube(label, { x: i * 150, y: 29000, z: 0 });
+      await call("set_actor_folder_path", { folderPath: folder, actorLabels: [label] });
+    }
+
+    const preview = await call("delete_actors", { folderPathPrefix: `${ROOT}/Gone`, dryRun: true });
+    expect(preview.matched).toBe(2);
+    expect(preview.deleted).toBe(0);
+    expect((preview.folderPaths as string[]).sort()).toEqual([`${ROOT}/Gone`, `${ROOT}/Gone/Deep`]);
+    expect(await exists(`${PREFIX}FolderGone`)).toBe(true);
+
+    const exact = await call("delete_actors", { folderPath: `${ROOT}/Gone` });
+    expect(exact.deleted).toBe(1);
+    expect(exact.labels).toEqual([`${PREFIX}FolderGone`]);
+    expect(await exists(`${PREFIX}FolderGone`)).toBe(false);
+    expect(await exists(`${PREFIX}FolderDeep`)).toBe(true);
+
+    const tree = await call("delete_actors", { folderPathPrefix: ROOT });
+    expect(tree.deleted).toBe(2);
+    expect(await exists(`${PREFIX}FolderKeep`)).toBe(false);
+    expect(await exists(`${PREFIX}FolderDeep`)).toBe(false);
+    expect(await exists(`${PREFIX}FolderSibling`)).toBe(true);
+
+    const none = await call("delete_actors", { folderPath: `${ROOT}/Missing` });
+    expect(none.matched).toBe(0);
+    expect(none.similarFolders).toEqual(expect.any(Array));
+  }, 120_000);
+});
+
+describe("outliner folders (#1529)", () => {
+  const ROOT = "BCov_OutFolder";
+  type Row = { folderPath: string; status: string; reason?: string; actorCount?: number; folders?: string[] };
+  const rows = (out: Json): Row[] => (out.results ?? []) as Row[];
+  const statusOf = (out: Json, path: string) => rows(out).find((r) => r.folderPath === path)?.status;
+
+  afterAll(async () => {
+    await callBridge(bridge, "delete_actors", { folderPathPrefix: ROOT });
+    await callBridge(bridge, "delete_outliner_folder", { folderPath: ROOT });
+  });
+
+  it("create_outliner_folder makes empty folders and delete_outliner_folder removes them, refusing one that holds an actor", async () => {
+    const made = await call("create_outliner_folder", { folderPaths: [`${ROOT}/Empty/Deep`, `${ROOT}/Other`] });
+    expect(statusOf(made, `${ROOT}/Empty/Deep`)).toBe("created");
+    expect(statusOf(made, `${ROOT}/Other`)).toBe("created");
+    expect((made.rollback as Json).method).toBe("delete_outliner_folder");
+    expect(statusOf(await call("create_outliner_folder", { folderPath: `${ROOT}/Other` }), `${ROOT}/Other`)).toBe("existed");
+
+    const label = `${PREFIX}FolderOccupant`;
+    await cube(label, { x: 0, y: 29500, z: 0 });
+    await call("set_actor_folder_path", { folderPath: `${ROOT}/Occupied`, actorLabels: [label] });
+
+    const refused = await call("delete_outliner_folder", { folderPath: ROOT });
+    const row = rows(refused).find((r) => r.folderPath === ROOT)!;
+    expect(row.status).toBe("failed");
+    expect(row.reason).toBe("not_empty");
+    expect(row.actorCount).toBe(1);
+    expect(refused.deletedCount).toBe(0);
+    expect((await call("get_actors_by_class", { className: "StaticMeshActor", labelPrefix: label })).count).toBe(1);
+
+    const preview = await call("delete_outliner_folder", { folderPath: `${ROOT}/Empty`, dryRun: true });
+    expect(statusOf(preview, `${ROOT}/Empty`)).toBe("would_delete");
+    expect(statusOf(await call("create_outliner_folder", { folderPath: `${ROOT}/Empty/Deep` }), `${ROOT}/Empty/Deep`)).toBe("existed");
+
+    const removed = await call("delete_outliner_folder", { folderPath: `${ROOT}/Empty` });
+    expect(statusOf(removed, `${ROOT}/Empty`)).toBe("deleted");
+    expect(removed.deletedFolders).toEqual(expect.arrayContaining([`${ROOT}/Empty`, `${ROOT}/Empty/Deep`]));
+    expect((removed.rollback as Json).method).toBe("create_outliner_folder");
+    expect(statusOf(await call("create_outliner_folder", { folderPath: `${ROOT}/Empty/Deep` }), `${ROOT}/Empty/Deep`)).toBe("created");
+
+    expect((await call("delete_actors", { folderPathPrefix: ROOT })).deleted).toBe(1);
+    const cleared = await call("delete_outliner_folder", { folderPath: ROOT });
+    expect(statusOf(cleared, ROOT)).toBe("deleted");
+    expect(statusOf(await call("delete_outliner_folder", { folderPath: ROOT }), ROOT)).toBe("absent");
   }, 120_000);
 });
 

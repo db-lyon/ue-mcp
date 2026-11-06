@@ -73,10 +73,14 @@ namespace MCPPIE
 		// Stop a running hold. Returns false if no hold existed for that id.
 		static bool StopHold(const FString& Id);
 
-		// Begin a tape: the first entry starts a continuous injection and each
-		// later entry updates it once per end-of-frame at the given Hz (used to
-		// pin t.MaxFPS during replay). DesiredId / OutError behave as StartHold.
-		// Stores TapeValues by-value and auto-stops after the last frame.
+		// Begin a tape: the first entry starts a continuous injection, and at
+		// each end of frame the entry due at Hz on the player's world clock is
+		// applied, so a frame rate below Hz skips entries instead of slowing the
+		// tape. Hz <= 0 applies one entry per frame. DesiredId / OutError behave
+		// as StartHold. Stores Values by value and stops after the last entry.
+		// The tape entry due ElapsedSeconds after a tape started at Hz.
+		static int32 TapeIndexAt(double ElapsedSeconds, int32 Hz);
+
 		static FString StartTape(UInputAction* Action, const TArray<FVector>& Values,
 			int32 Hz, const FString& DesiredId, FString& OutError, int32 ClientIndex = 0,
 			int32 PIEInstance = INDEX_NONE, ULocalPlayer* ExactLocalPlayer = nullptr);

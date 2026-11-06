@@ -49,13 +49,14 @@ namespace
 	const TArray<FString>& AnimReadSeqFieldNames()
 	{
 		static const TArray<FString> Names = {
-			TEXT("assetPath"), TEXT("name"), TEXT("class"), TEXT("sequenceLength"), TEXT("rateScale"),
+			TEXT("assetPath"), TEXT("name"), TEXT("class"), TEXT("sequenceLength"), TEXT("rateScale"), TEXT("loop"),
 			TEXT("numberOfFrames"), TEXT("samplingFrameRate"), TEXT("skeleton"), TEXT("isAdditive"),
 			TEXT("additiveType"), TEXT("lengthSeconds"), TEXT("numFrames"), TEXT("frameRate"),
 			TEXT("rootMotionEnabled"), TEXT("rootMotionRootLock"), TEXT("forceRootLock"),
 			TEXT("useNormalizedRootMotionScale"), TEXT("targetSkeletonPath"), TEXT("boneCount"),
 			TEXT("hasNotifies"), TEXT("hasCurves"), TEXT("notifyCount"), TEXT("curveCount"),
-			TEXT("notifies"), TEXT("curveNames"),
+			TEXT("notifies"), TEXT("curveNames"), TEXT("interpolation"), TEXT("retargetSource"),
+			TEXT("retargetSourceAsset"),
 		};
 		return Names;
 	}
@@ -78,6 +79,7 @@ namespace
 		Result->SetStringField(TEXT("class"), AnimSeq->GetClass()->GetName());
 		Result->SetNumberField(TEXT("sequenceLength"), AnimSeq->GetPlayLength());
 		Result->SetNumberField(TEXT("rateScale"), AnimSeq->RateScale);
+		Result->SetBoolField(TEXT("loop"), AnimSeq->bLoop);
 		Result->SetNumberField(TEXT("numberOfFrames"), AnimSeq->GetNumberOfSampledKeys());
 		const double SamplingRate = AnimSeq->GetSamplingFrameRate().AsDecimal();
 		Result->SetNumberField(TEXT("samplingFrameRate"), SamplingRate);
@@ -116,6 +118,19 @@ namespace
 		Result->SetBoolField(TEXT("useNormalizedRootMotionScale"), AnimSeq->bUseNormalizedRootMotionScale);
 		Result->SetStringField(TEXT("targetSkeletonPath"), Skeleton ? Skeleton->GetPathName() : FString());
 		Result->SetNumberField(TEXT("boneCount"), Skeleton ? Skeleton->GetReferenceSkeleton().GetNum() : 0);
+		Result->SetStringField(TEXT("interpolation"),
+			AnimSeq->Interpolation == EAnimInterpolationType::Step ? TEXT("step") : TEXT("linear"));
+		// The pose the clip's bone lengths are retargeted from on playback (#1642):
+		// the skeleton's named retargetSource when set, else retargetSourceAsset,
+		// else the skeleton's reference pose when both are empty.
+		Result->SetStringField(TEXT("retargetSource"), AnimSeq->RetargetSource.IsNone() ? FString() : AnimSeq->RetargetSource.ToString());
+#if UE_MCP_HAS_5_5_API
+		const TSoftObjectPtr<USkeletalMesh>& RetargetSourceAsset = AnimSeq->GetRetargetSourceAsset();
+#else
+		const TSoftObjectPtr<USkeletalMesh>& RetargetSourceAsset = AnimSeq->RetargetSourceAsset;
+#endif
+		Result->SetStringField(TEXT("retargetSourceAsset"),
+			RetargetSourceAsset.IsNull() ? FString() : RetargetSourceAsset.ToSoftObjectPath().ToString());
 
 		const TArray<FFloatCurve>& Curves = AnimSeq->GetCurveData().FloatCurves;
 		Result->SetBoolField(TEXT("hasNotifies"), AnimSeq->Notifies.Num() > 0);
@@ -1379,6 +1394,77 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetAnimCurveKeys(const TSharedPtr<FJs
 	return MCPResult(Result);
 }
 
+// read_anim_curve_keys (#1644): every key of one float curve, or of all of
+// them, in the {time, value, interp} shape set_anim_curve_keys takes, so a read
+// can be replayed as a write.
+TSharedPtr<FJsonValue> FAnimationHandlers::ReadAnimCurveKeys(const TSharedPtr<FJsonObject>& Params)
+{
+	FString AssetPath;
+	TSharedPtr<FJsonValue> PathErr = RequireString(Params, TEXT("assetPath"), AssetPath);
+	const bool bHasCurveName = HasParam(Params, TEXT("curveName"));
+	const FString CurveName = OptionalString(Params, TEXT("curveName"));
+	if (PathErr) return PathErr;
+	if (bHasCurveName && CurveName.IsEmpty())
+	{
+		return MCPError(TEXT("'curveName' must be a non-empty string; omit it to read every curve"));
+	}
+
+	UObject* LoadedAsset = MCPLoadAssetObject(AssetPath);
+	UAnimSequence* Seq = Cast<UAnimSequence>(LoadedAsset);
+	if (!Seq)
+	{
+		return LoadedAsset
+			? MCPAssetWrongTypeError(AssetPath, LoadedAsset, TEXT("AnimSequence"))
+			: MCPAssetNotFoundError(AssetPath);
+	}
+	const IAnimationDataModel* Model = Seq->GetDataModel();
+	if (!Model) return MCPError(TEXT("AnimSequence has no animation data model"));
+
+	const TArray<FFloatCurve>& Curves = Model->GetCurveData().FloatCurves;
+	TArray<TSharedPtr<FJsonValue>> CurvesArr;
+	TArray<FString> AllNames;
+	for (const FFloatCurve& Curve : Curves)
+	{
+		const FString Name = Curve.GetName().ToString();
+		AllNames.Add(Name);
+		if (bHasCurveName && !Name.Equals(CurveName, ESearchCase::IgnoreCase)) continue;
+
+		TArray<TSharedPtr<FJsonValue>> KeysArr;
+		for (const FRichCurveKey& Key : Curve.FloatCurve.Keys)
+		{
+			TSharedPtr<FJsonObject> KeyJson = MakeShared<FJsonObject>();
+			KeyJson->SetNumberField(TEXT("time"), Key.Time);
+			KeyJson->SetNumberField(TEXT("value"), Key.Value);
+			KeyJson->SetStringField(TEXT("interp"),
+				Key.InterpMode == RCIM_Constant ? TEXT("constant")
+				: (Key.InterpMode == RCIM_Cubic ? TEXT("cubic") : TEXT("linear")));
+			KeysArr.Add(MakeShared<FJsonValueObject>(KeyJson));
+		}
+
+		TSharedPtr<FJsonObject> CurveJson = MakeShared<FJsonObject>();
+		CurveJson->SetStringField(TEXT("name"), Name);
+		CurveJson->SetNumberField(TEXT("keyCount"), KeysArr.Num());
+		CurveJson->SetArrayField(TEXT("keys"), KeysArr);
+		// The value a keyless curve evaluates to.
+		CurveJson->SetNumberField(TEXT("defaultValue"), Curve.FloatCurve.GetDefaultValue());
+		CurvesArr.Add(MakeShared<FJsonValueObject>(CurveJson));
+	}
+
+	if (bHasCurveName && CurvesArr.Num() == 0)
+	{
+		return MCPError(FString::Printf(
+			TEXT("AnimSequence '%s' has no float curve named '%s'. Curves on it: %s"),
+			*AssetPath, *CurveName, AllNames.Num() > 0 ? *FString::Join(AllNames, TEXT(", ")) : TEXT("(none)")));
+	}
+
+	auto Result = MCPSuccess();
+	Result->SetStringField(TEXT("assetPath"), Seq->GetPathName());
+	Result->SetNumberField(TEXT("sequenceLength"), Seq->GetPlayLength());
+	Result->SetNumberField(TEXT("curveCount"), CurvesArr.Num());
+	Result->SetArrayField(TEXT("curves"), CurvesArr);
+	return MCPResult(Result);
+}
+
 // ─── #712 apply_animation_modifier ──────────────────────────────────
 // Instantiate a UAnimationModifier subclass and run it on an AnimSequence.
 // The headline case is DistanceCurveModifier (bakes a Distance curve from root
@@ -1741,6 +1827,7 @@ namespace
 	// Every field set_sequence_properties can write, as one comparable value.
 	struct FMCPSeqProps
 	{
+		bool bLoop = false;
 		bool bEnableRootMotion = false;
 		bool bForceRootLock = false;
 		bool bUseNormalizedRootMotionScale = false;
@@ -1753,6 +1840,7 @@ namespace
 		static FMCPSeqProps Read(const UAnimSequence* Seq)
 		{
 			FMCPSeqProps P;
+			P.bLoop = Seq->bLoop;
 			P.bEnableRootMotion = Seq->bEnableRootMotion;
 			P.bForceRootLock = Seq->bForceRootLock;
 			P.bUseNormalizedRootMotionScale = Seq->bUseNormalizedRootMotionScale;
@@ -1766,7 +1854,7 @@ namespace
 
 		bool operator==(const FMCPSeqProps& O) const
 		{
-			return bEnableRootMotion == O.bEnableRootMotion && bForceRootLock == O.bForceRootLock
+			return bLoop == O.bLoop && bEnableRootMotion == O.bEnableRootMotion && bForceRootLock == O.bForceRootLock
 				&& bUseNormalizedRootMotionScale == O.bUseNormalizedRootMotionScale && RootLock == O.RootLock
 				&& AdditiveType == O.AdditiveType && BasePoseType == O.BasePoseType
 				&& RefPoseSeq == O.RefPoseSeq && RefFrameIndex == O.RefFrameIndex;
@@ -1775,6 +1863,7 @@ namespace
 		TSharedPtr<FJsonObject> ToJson() const
 		{
 			TSharedPtr<FJsonObject> J = MakeShared<FJsonObject>();
+			J->SetBoolField(TEXT("loop"), bLoop);
 			J->SetBoolField(TEXT("enableRootMotion"), bEnableRootMotion);
 			J->SetBoolField(TEXT("forceRootLock"), bForceRootLock);
 			J->SetBoolField(TEXT("useNormalizedRootMotionScale"), bUseNormalizedRootMotionScale);
@@ -1840,7 +1929,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetSequenceProperties(const TSharedPt
 	}
 
 	static const TArray<FString> Known = {
-		TEXT("enableRootMotion"), TEXT("forceRootLock"), TEXT("useNormalizedRootMotionScale"), TEXT("rootMotionRootLock"),
+		TEXT("loop"), TEXT("enableRootMotion"), TEXT("forceRootLock"), TEXT("useNormalizedRootMotionScale"), TEXT("rootMotionRootLock"),
 		TEXT("additiveAnimType"), TEXT("refPoseType"), TEXT("refPoseSeq"), TEXT("refFrameIndex"),
 	};
 	// Keys match case-insensitively, so AdditiveAnimType and additiveAnimType are the same write.
@@ -1871,8 +1960,8 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetSequenceProperties(const TSharedPt
 		}
 		return FString();
 	};
-	TOptional<bool> EnableRootMotion, ForceRootLock, UseNormalized;
-	for (const FString& Err : { ReadBool(TEXT("enableRootMotion"), EnableRootMotion), ReadBool(TEXT("forceRootLock"), ForceRootLock),
+	TOptional<bool> Loop, EnableRootMotion, ForceRootLock, UseNormalized;
+	for (const FString& Err : { ReadBool(TEXT("loop"), Loop), ReadBool(TEXT("enableRootMotion"), EnableRootMotion), ReadBool(TEXT("forceRootLock"), ForceRootLock),
 		ReadBool(TEXT("useNormalizedRootMotionScale"), UseNormalized) })
 	{
 		if (!Err.IsEmpty()) return MCPError(Err);
@@ -2000,6 +2089,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetSequenceProperties(const TSharedPt
 
 		const FMCPSeqProps Prev = FMCPSeqProps::Read(Seq);
 		Seq->Modify();
+		if (Loop.IsSet()) Seq->bLoop = Loop.GetValue();
 		if (EnableRootMotion.IsSet()) Seq->bEnableRootMotion = EnableRootMotion.GetValue();
 		if (ForceRootLock.IsSet()) Seq->bForceRootLock = ForceRootLock.GetValue();
 		if (UseNormalized.IsSet()) Seq->bUseNormalizedRootMotionScale = UseNormalized.GetValue();

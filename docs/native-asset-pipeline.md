@@ -2,6 +2,9 @@
 
 These workflows use the asset and material categories. Paths such as `/Game/Props/T_Normal.T_Normal` are object paths; imports take a disk `filePath` and a content folder `packagePath`.
 
+For inserting nodes into existing material wires and inspecting large graphs,
+see [Material insertion and filtered inspection](material-graph-surgery.md).
+
 ## Texture batches
 
 `asset(import_texture_batch)` imports 1-500 textures with per-file presets and overrides. `save` defaults true and `packagePath` defaults to `/Game/Textures`.
@@ -60,6 +63,9 @@ Results include every imported asset and `meshes`, whose entries contain bounds,
 
 `asset(get_mesh_info)` summarizes static and skeletal meshes, including `sockets` and `socketCount` with the same details as `asset(list_sockets)`.
 
+For source versus built render geometry, use [static mesh inspection](static-mesh-inspection.md).
+`asset(get_static_mesh_geometry)` captures all standard corner attributes and pages an immutable snapshot, including UV seams, colors and material groups. Set `dumpToFile=true` to export the complete snapshot in one call to a new JSON file.
+
 Assign another skeleton to an existing skeletal mesh with `asset(set_property)`:
 
 ```json
@@ -75,7 +81,7 @@ This assigns the reference; it does not retarget geometry or reconcile bone hier
 
 ## Export for a DCC round-trip
 
-`asset(export)` writes static and skeletal meshes to `.fbx`, DataTables to `json` or `csv`, and MaterialInstance parameters to `.json`: parent lineage, scalar/vector/texture overrides, effective inherited values, layer associations and parameter indexes. `asset(export_texture)` writes a Texture2D to PNG.
+`asset(export)` writes static and skeletal meshes to `.fbx`, DataTables to `json` or `csv`, and MaterialInstance parameters to `.json`: parent lineage, scalar/vector/texture overrides, effective inherited values, layer associations and parameter indexes. `asset(export_texture)` writes a Texture2D to PNG from its source image, and reports that image's width and height, which can differ from the platform size after a size cap.
 
 For example, export `/Game/Props/MI_Prop.MI_Prop` with `outputPath="Saved/Export/MI_Prop.json"` and `format="json"`. Relative paths resolve against the project directory. `replaceExisting` defaults true; false refuses an existing file. `dryRun=true` on `asset(export)` validates the path and asset-specific format rules without writing. Registered exporter availability is checked only when exporting. Results report the output path, class and file size, plus the exported material data in `readBack`. The source asset is unchanged; overwritten disk files need a backup to restore.
 

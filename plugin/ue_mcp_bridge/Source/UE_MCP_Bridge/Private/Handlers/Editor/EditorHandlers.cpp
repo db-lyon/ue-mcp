@@ -191,11 +191,13 @@ namespace
 	/** Persist the package editor(set_property) wrote into and record the outcome.
 	 *  A native class default has no file, so it is reported unsaved without failing;
 	 *  a map package keeps the editor's own save path behind the write guard. */
-	void EditorSetPropertyPersist(UObject* Asset, const FString& AssetPath, const TSharedPtr<FJsonObject>& Result)
+	void EditorSetPropertyPersist(UObject* Asset, const FString& AssetPath, const FString& PropertyPath, const TSharedPtr<FJsonObject>& Result)
 	{
 		UPackage* Package = Asset ? Asset->GetOutermost() : nullptr;
 		if (Package && Package->HasAnyPackageFlags(PKG_CompiledIn))
 		{
+			// A settings class keeps its defaults in an ini, not a package (#1566).
+			if (FEditorHandlers::PersistConfigProperty(Asset, PropertyPath, Result)) return;
 			Result->SetBoolField(TEXT("saved"), false);
 			Result->SetStringField(TEXT("saveNote"), TEXT("A native class default has no package file; the change lives in memory for this editor session."));
 			return;
@@ -349,7 +351,7 @@ void FEditorHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 			TEXT("Function arguments: an object mapping parameter name to value (a struct value takes a JSON object such as {X,Y,Z} or export text), an entry list [{name, value}], or a JSON string of either")).OneOfForms(ArgForms);
 	};
 	Registry.RegisterHandler(TEXT("run_python_file"), &RunPythonFile, {
-		MCPParam::Required(TEXT("filePath"), EType::String, TEXT("Absolute path to the .py file")).Alias(TEXT("path")),
+		MCPParam::Required(TEXT("filePath"), EType::String, TEXT("Path to the .py file: absolute, or relative to the project directory, such as Tools/import_assets.py")).Alias(TEXT("path")),
 		MCPParam::Optional(TEXT("entryPoint"), EType::String, TEXT("Function in the file to call after loading it under runName (default ue_mcp_entry, so its main guard does not fire); its return value comes back as result")),
 		MCPParam::Optional(TEXT("runName"), EType::String, TEXT("Module name to run the file under through runpy, with sys.argv set to the file plus args. __main__ makes an if __name__ == '__main__' guard fire")),
 		MCPParam::Optional(TEXT("asMain"), EType::Boolean, TEXT("Shorthand for runName __main__ (default false)")),
@@ -385,6 +387,20 @@ void FEditorHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 			MCPParam::Required(TEXT("key"), EType::String, TEXT("INI key")),
 			MCPParam::Required(TEXT("value"), EType::String, TEXT("INI value")),
 		}, MCPSpec::ContractExempt(TEXT("writes an INI file under the project's Config folder")));
+		// #1566: Maps & Modes, typed and validated, with the stored values read back.
+		Registry.RegisterHandler(TEXT("get_maps_settings"), &GetMapsSettings, NoParams);
+		Registry.RegisterHandler(TEXT("set_maps_settings"), &SetMapsSettings, {
+			MCPParam::Optional(TEXT("globalDefaultGameMode"), EType::String, TEXT("Default GameMode: a GameModeBase class as a /Script path, short name or Blueprint asset path; empty clears")),
+			MCPParam::Optional(TEXT("globalDefaultServerGameMode"), EType::String, TEXT("Dedicated server GameMode, same forms; empty clears")),
+			MCPParam::Optional(TEXT("gameInstanceClass"), EType::String, TEXT("GameInstance class, same forms; empty clears")),
+			MCPParam::Optional(TEXT("gameDefaultMap"), EType::String, TEXT("Game default map as a world asset path, /Game/Maps/MyMap; empty clears")),
+			MCPParam::Optional(TEXT("serverDefaultMap"), EType::String, TEXT("Dedicated server default map, same form; empty clears")),
+			MCPParam::Optional(TEXT("editorStartupMap"), EType::String, TEXT("Map the editor opens at startup, same form; empty clears")),
+			MCPParam::Optional(TEXT("transitionMap"), EType::String, TEXT("Seamless travel transition map, same form; empty clears")),
+		}, MCPSpec::AtLeastOne({
+			{ TEXT("globalDefaultGameMode") }, { TEXT("globalDefaultServerGameMode") }, { TEXT("gameInstanceClass") },
+			{ TEXT("gameDefaultMap") }, { TEXT("serverDefaultMap") }, { TEXT("editorStartupMap") }, { TEXT("transitionMap") },
+		}).ContractExempt(TEXT("writes DefaultEngine.ini under the project's Config folder")));
 	}
 	Registry.RegisterHandler(TEXT("get_viewport_info"), &GetViewportInfo, NoParams);
 	Registry.RegisterHandler(TEXT("hit_test_viewport_pixel"), &HitTestViewportPixel, {
@@ -404,7 +420,7 @@ void FEditorHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	});
 	Registry.RegisterHandler(TEXT("get_editor_performance_stats"), &GetEditorPerformanceStats, NoParams);
 	Registry.RegisterHandler(TEXT("get_output_log"), &GetOutputLog, {
-		MCPParam::Optional(TEXT("maxLines"), EType::Integer, TEXT("How far back into the ring buffer to read (default 100, or the whole 4096-line buffer when filter or category is given)")),
+		MCPParam::Optional(TEXT("maxLines"), EType::Integer, TEXT("How far back into the ring buffer to read (default 100, or the whole 4096-line buffer when filter or category is given)")).Alias(TEXT("lastN")),
 		MCPParam::Optional(TEXT("filter"), EType::String, TEXT("Case-insensitive substring the message must contain")),
 		MCPParam::Optional(TEXT("category"), EType::String, TEXT("Case-insensitive substring the log category must contain")),
 		CursorParam(),
@@ -451,6 +467,13 @@ void FEditorHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("set_view_mode"), &SetViewMode, {
 		MCPParam::Required(TEXT("viewMode"), EType::String, TEXT("Lit | Unlit | Wireframe | LightingOnly | DetailLighting | ShaderComplexity | ... get_viewport_state lists what this build supports")),
 		ViewportIndexParam(),
+	});
+	Registry.RegisterHandler(TEXT("set_buffer_visualization"), &SetBufferVisualization, {
+		MCPParam::Required(TEXT("buffer"), EType::String, TEXT("Buffer to show full screen: Velocity, SceneDepth, BaseColor, WorldNormal and the rest this engine defines (an unknown name lists them); Overview for the grid of all buffers; off to leave buffer visualization")),
+		MCPParam::Optional(TEXT("target"), EType::String, TEXT("editor (default) for a level viewport, pie for the running game viewport")).Enum({ TEXT("editor"), TEXT("pie") }),
+		MCPParam::Optional(TEXT("viewMode"), EType::String, TEXT("With buffer=off, the view mode to return to (default Lit)")),
+		ViewportIndexParam(),
+		PieInstanceParam(),
 	});
 	Registry.RegisterHandler(TEXT("set_viewport_exposure"), &SetViewportExposure, {
 		MCPParam::Optional(TEXT("ev100"), EType::Number, TEXT("Fixed EV100 to pin the viewport to; implies fixed exposure")),
@@ -669,7 +692,7 @@ void FEditorHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("outerPath"), EType::String, TEXT("Only objects somewhere under this outer, such as one level or world")),
 		MCPParam::Optional(TEXT("exactClass"), EType::Boolean, TEXT("Match className exactly instead of including subclasses (default false)")),
 		MCPParam::Optional(TEXT("includeDefaults"), EType::Boolean, TEXT("Include class default objects and archetypes (default false)")),
-		MCPParam::Optional(TEXT("world"), EType::String, TEXT("World scope: any (default) | editor | pie")),
+		MCPParam::Optional(TEXT("world"), EType::String, TEXT("World scope: any (default) | editor | pie. A scoped search includes objects outered to that world's GameInstance or LocalPlayers (UMG widgets, LocalPlayer subsystems)")),
 		PieInstanceParam(),
 		CursorParam(),
 		LimitParam(TEXT("Objects on this page (default 50, max 1000)")),
@@ -786,7 +809,11 @@ void FEditorHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		PieInstanceParam(),
 	});
 	Registry.RegisterHandler(TEXT("capture_scene_png"), &CaptureScenePng, {
-		MCPParam::Required(TEXT("outputPath"), EType::String, TEXT("Absolute or project-relative PNG path to write, e.g. Saved/Screenshots/cap.png")).Alias(TEXT("filename")),
+		MCPParam::Optional(TEXT("outputPath"), EType::String, TEXT("Absolute or project-relative PNG path to write; required when starting a capture")).Alias(TEXT("filename")),
+		MCPParam::Optional(TEXT("captureId"), EType::String, TEXT("Query the latest warm capture instead of starting one; outputPath must be omitted")),
+		MCPParam::Optional(TEXT("cancel"), EType::Boolean, TEXT("With captureId, cancel an active warm capture and release its transient resources (default false)")),
+		MCPParam::Optional(TEXT("warmupFrames"), EType::Number, TEXT("0 (default) keeps synchronous capture; 1-240 starts a tick-driven normal-streaming capture and returns captureId")),
+		MCPParam::Optional(TEXT("warmupTimeoutSeconds"), EType::Number, TEXT("Warm capture deadline checked between frames and before export, 1-120 seconds (default 60)")),
 		MCPParam::Optional(TEXT("location"), EType::Vec3, TEXT("Camera location")),
 		MCPParam::Optional(TEXT("rotation"), EType::Rotator, TEXT("Camera rotation")),
 		MCPParam::Optional(TEXT("focusActorLabel"), EType::String, TEXT("Frame the camera on this actor's bounds")),
@@ -836,6 +863,7 @@ void FEditorHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	}, MCPSpec::ContractExempt(TEXT("toggles realtime on every level viewport")));
 	Registry.RegisterHandler(TEXT("get_pie_pawn"), &GetPiePawn, {
 		MCPParam::Optional(TEXT("playerIndex"), EType::Number, TEXT("0-based player index (default 0)")),
+		MCPParam::Optional(TEXT("pieInstance"), EType::Number, TEXT("PIE world to read (default: the primary world, or the first client world when the primary is a dedicated server). See list_pie_instances")),
 	});
 	Registry.RegisterHandler(TEXT("invoke_function"), &InvokeFunction, {
 		MCPParam::Required(TEXT("functionName"), EType::String, TEXT("BlueprintCallable or Exec UFUNCTION on the actor, or on component")),
@@ -871,6 +899,7 @@ void FEditorHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 			MCPParam::RequiredField(TEXT("y"), EType::Number, TEXT("Screen Y in pixels")),
 		}),
 		MCPParam::Optional(TEXT("centerNewWindow"), EType::Boolean, TEXT("Center new PIE windows; false places them at newWindowPosition")),
+		MCPParam::Optional(TEXT("playMode"), EType::String, TEXT("viewport | new_window | standalone: where the Play button and every bridge PIE launch play. Actions that drive the PIE world play in the viewport when this is standalone")),
 	}, MCPSpec::ContractExempt(TEXT("writes the editor's Play settings")));
 	Registry.RegisterHandler(TEXT("get_pie_config"), &GetPieConfig, NoParams);
 	Registry.RegisterHandler(TEXT("pie_set_player_view"), &PieSetPlayerView, {
@@ -1265,6 +1294,13 @@ TSharedPtr<FJsonValue> FEditorHandlers::RunPythonFile(const TSharedPtr<FJsonObje
 	// arguments. A list, a JSON array string or one string (#811).
 	TArray<FString> ExtraArgs;
 	if (auto Err = MCPReadPythonArgs(Params, TEXT("args"), ExtraArgs)) return Err;
+
+	// A relative path names a file in the project, so a flow checked in beside
+	// the .uproject can point at its own Tools/ script on any machine (#1658).
+	if (FPaths::IsRelative(FilePath))
+	{
+		FilePath = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir(), FilePath);
+	}
 
 	// Accept forward-slashes on Windows; FPlatformFileManager normalises them.
 	if (!FPaths::FileExists(FilePath))
@@ -1829,7 +1865,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::SetProperty(const TSharedPtr<FJsonObject
 		if (PathInfo.bUsedKeySelector) MeshResult->SetStringField(TEXT("indexedPath"), PathInfo.IndexedPath);
 		MeshResult->SetStringField(TEXT("resolvedPropertyName"), PathInfo.IndexedPath);
 		MeshResult->SetStringField(TEXT("type"), Property->GetCPPType());
-		if (bSaveMesh) EditorSetPropertyPersist(Asset, AssetPath, MeshResult);
+		if (bSaveMesh) EditorSetPropertyPersist(Asset, AssetPath, PathInfo.IndexedPath, MeshResult);
 		else MeshResult->SetBoolField(TEXT("saved"), false);
 		MCPSkinnedAsset::Report(MeshResult, SkinnedComp, PreviousMesh);
 		MeshResult->SetBoolField(TEXT("changeDetected"), true);
@@ -1877,7 +1913,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::SetProperty(const TSharedPtr<FJsonObject
 	// rather than as a false mismatch.
 	const bool bComparable = MCPJsonProperty::PropertyIsComparableByIdentity(Property);
 	FDefaultConstructedPropertyElement PreviousRaw(Property);
-	Property->CopyCompleteValue(PreviousRaw.GetObjAddress(), PropertyValue);
+	Property->CopySingleValue(PreviousRaw.GetObjAddress(), PropertyValue);
 
 	// Prove the round trip rather than asserting it: apply the exact value the
 	// rollback would send to a scratch copy and compare. The two ways this can
@@ -1931,7 +1967,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::SetProperty(const TSharedPtr<FJsonObject
 	// prior behavior; pass save=false to leave the package dirty in-memory
 	// (batch many writes, then save_dirty / save_asset once).
 	auto Result = MCPSuccess();
-	if (bSave) EditorSetPropertyPersist(Asset, AssetPath, Result);
+	if (bSave) EditorSetPropertyPersist(Asset, AssetPath, PathInfo.IndexedPath, Result);
 	else Result->SetBoolField(TEXT("saved"), false);
 	Result->SetStringField(TEXT("path"), AssetPath);
 	Result->SetStringField(TEXT("resolvedPath"), Asset->GetPathName());
@@ -5020,6 +5056,22 @@ TSharedPtr<FJsonValue> FEditorHandlers::CheckForCrashes(const TSharedPtr<FJsonOb
 }
 TSharedPtr<FJsonValue> FEditorHandlers::CaptureScenePng(const TSharedPtr<FJsonObject>& Params)
 {
+	const FString CaptureId = OptionalString(Params, TEXT("captureId"));
+	const bool bCancel = OptionalBool(Params, TEXT("cancel"), false);
+	if (!CaptureId.IsEmpty())
+	{
+		if (!OptionalString(Params, TEXT("outputPath")).IsEmpty()) return MCPError(TEXT("Use either outputPath to start a capture or captureId to query/cancel one"));
+		return UEMCP::SceneCapture::ReadWarmCapture(CaptureId, bCancel);
+	}
+	if (bCancel) return MCPError(TEXT("cancel requires captureId"));
+	const double WarmupFrames = OptionalNumber(Params, TEXT("warmupFrames"), 0);
+	const double WarmupTimeout = OptionalNumber(Params, TEXT("warmupTimeoutSeconds"), 60);
+	if (!FMath::IsFinite(WarmupFrames) || WarmupFrames < 0 || WarmupFrames > 240 || FMath::FloorToDouble(WarmupFrames) != WarmupFrames)
+		return MCPError(TEXT("warmupFrames must be an integer from 0 to 240"));
+	if (!FMath::IsFinite(WarmupTimeout) || WarmupTimeout < 1 || WarmupTimeout > 120)
+		return MCPError(TEXT("warmupTimeoutSeconds must be finite and between 1 and 120"));
+	if (WarmupFrames > 0 && OptionalBool(Params, TEXT("fullyLoadTextures"), false))
+		return MCPError(TEXT("Warm captures use normal camera streaming; omit fullyLoadTextures or set it to false"));
 	// #599: allow capturing the PIE world (not just the editor world) so a
 	// framed shot reflects the running game.
 	const FString WorldScope = OptionalString(Params, TEXT("world"), TEXT("editor"));
@@ -5090,6 +5142,11 @@ TSharedPtr<FJsonValue> FEditorHandlers::CaptureScenePng(const TSharedPtr<FJsonOb
 		FocusMetadata->SetObjectField(TEXT("directionWorld"), MCPVec3ToJsonObject(Dir));
 	}
 	if (Location.ContainsNaN() || Rotation.ContainsNaN()) return MCPError(TEXT("Capture camera location and rotation must be finite"));
+	if (WarmupFrames > 0)
+	{
+		return UEMCP::SceneCapture::StartWarmCapture(World, Location, Rotation, Width, Height, CaptureFov,
+			static_cast<int32>(WarmupFrames), WarmupTimeout, OutputPath, FocusMetadata);
+	}
 
 	// #966: a capture must leave the level exactly as it found it. Sweep any
 	// capture actors earlier builds saved into the map, then capture through a
@@ -5102,10 +5159,12 @@ TSharedPtr<FJsonValue> FEditorHandlers::CaptureScenePng(const TSharedPtr<FJsonOb
 	USceneCaptureComponent2D* Comp = Rig.GetComponent();
 	UTextureRenderTarget2D* RT = Rig.GetTarget();
 
-	// #662: force-stream textures so the capture is a complete, resident frame
-	// rather than the unloaded-texture checker or a stale cached image.
+	// Preserve the legacy streaming drain and double capture. This is not a
+	// guarantee that every visible texture has its highest mip resident.
 	const bool bFullyLoadTextures = OptionalBool(Params, TEXT("fullyLoadTextures"), true);
-	Rig.Capture(bFullyLoadTextures);
+	// #1549: settle Lumen and eye adaptation, or an interior renders near black.
+	constexpr int32 SettlePasses = 6;
+	Rig.CaptureSettled(bFullyLoadTextures, SettlePasses);
 
 	// #1203: components spawned at runtime are flushed to the renderer before
 	// the capture. Name the ones it still cannot show: no render state, or
@@ -5181,6 +5240,12 @@ TSharedPtr<FJsonValue> FEditorHandlers::CaptureScenePng(const TSharedPtr<FJsonOb
 	CaptureMetadata->SetNumberField(TEXT("height"), RT->SizeY);
 	CaptureMetadata->SetNumberField(TEXT("worldTimeSeconds"), World->GetTimeSeconds());
 	CaptureMetadata->SetBoolField(TEXT("fullyLoadTextures"), bFullyLoadTextures);
+	auto ExposureMetadata = MakeShared<FJsonObject>();
+	ExposureMetadata->SetStringField(TEXT("source"), TEXT("captureAutoExposure"));
+	ExposureMetadata->SetNumberField(TEXT("settlePasses"), SettlePasses);
+	const float LastExposure = Rig.GetLastExposure();
+	if (LastExposure > 0.0f) ExposureMetadata->SetNumberField(TEXT("lastEyeAdaptationExposure"), LastExposure);
+	CaptureMetadata->SetObjectField(TEXT("exposure"), ExposureMetadata);
 	if (FocusMetadata) CaptureMetadata->SetObjectField(TEXT("focus"), FocusMetadata);
 	if (RuntimeComponents) CaptureMetadata->SetObjectField(TEXT("runtimeComponents"), RuntimeComponents);
 	Result->SetObjectField(TEXT("captureMetadata"), CaptureMetadata);
@@ -5322,6 +5387,10 @@ TSharedPtr<FJsonValue> FEditorHandlers::RunAutomationTests(const TSharedPtr<FJso
 	TArray<FAutomationTestInfo> AllTests;
 	Framework.GetValidTestNames(AllTests);
 
+	// #1488: a test that tears its world down with DestroyWorld alone leaves a
+	// dirty /Temp world, which blocks level(load) and prompts on shutdown.
+	const TSet<FName> DirtyWorldsBefore = MCPDirtyWorldPackageNames();
+
 	TArray<TSharedPtr<FJsonValue>> Results;
 	int32 Ran = 0, Passed = 0, Failed = 0, Abandoned = 0;
 	for (const FAutomationTestInfo& Info : AllTests)
@@ -5405,9 +5474,14 @@ TSharedPtr<FJsonValue> FEditorHandlers::RunAutomationTests(const TSharedPtr<FJso
 		Results.Add(MakeShared<FJsonValueObject>(R));
 	}
 
+	const TArray<FString> TempWorldsCleared = MCPSweepAbandonedTempWorlds(DirtyWorldsBefore);
+
 	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("filter"), NameFilter);
 	Result->SetNumberField(TEXT("discovered"), AllTests.Num());
+	TArray<TSharedPtr<FJsonValue>> ClearedJson;
+	for (const FString& Name : TempWorldsCleared) ClearedJson.Add(MakeShared<FJsonValueString>(Name));
+	Result->SetArrayField(TEXT("tempWorldsCleared"), ClearedJson);
 	Result->SetNumberField(TEXT("ran"), Ran);
 	Result->SetNumberField(TEXT("passed"), Passed);
 	Result->SetNumberField(TEXT("failed"), Failed);

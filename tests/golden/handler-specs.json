@@ -1,6 +1,65 @@
 {
-  "handlerCount": 1219,
+  "handlerCount": 1250,
   "handlers": {
+    "actors_in_box": {
+      "category": "level",
+      "params": [
+        {
+          "name": "min",
+          "type": "vec3",
+          "required": true,
+          "description": "Box minimum corner, world space"
+        },
+        {
+          "name": "max",
+          "type": "vec3",
+          "required": true,
+          "description": "Box maximum corner, world space; at least min on every axis"
+        },
+        {
+          "name": "mode",
+          "type": "string",
+          "required": false,
+          "description": "overlap (default): bounds intersect the box | contained: bounds lie fully inside it"
+        },
+        {
+          "name": "includeHidden",
+          "type": "boolean",
+          "required": false,
+          "description": "Include actors hidden in the queried world (default false)"
+        },
+        {
+          "name": "classFilter",
+          "type": "string",
+          "required": false,
+          "description": "Case-insensitive substring over the actor class name"
+        },
+        {
+          "name": "onlyColliding",
+          "type": "boolean",
+          "required": false,
+          "description": "Only colliding components contribute to the bounds (default false)"
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "description": "Rows returned (default 200, max 2000)"
+        },
+        {
+          "name": "world",
+          "type": "string",
+          "required": false,
+          "description": "World scope: editor (default) | pie"
+        },
+        {
+          "name": "pieInstance",
+          "type": "integer",
+          "required": false,
+          "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients"
+        }
+      ]
+    },
     "add_ability_system_component": {
       "category": "gas",
       "params": [
@@ -657,7 +716,10 @@
           "name": "systemPath",
           "type": "string",
           "required": true,
-          "description": "NiagaraSystem asset path"
+          "description": "NiagaraSystem asset path",
+          "aliases": [
+            "assetPath"
+          ]
         },
         {
           "name": "rendererType",
@@ -686,7 +748,10 @@
           "name": "systemPath",
           "type": "string",
           "required": true,
-          "description": "NiagaraSystem asset path"
+          "description": "NiagaraSystem asset path",
+          "aliases": [
+            "assetPath"
+          ]
         },
         {
           "name": "emitterPath",
@@ -1634,7 +1699,10 @@
           "name": "systemPath",
           "type": "string",
           "required": true,
-          "description": "NiagaraSystem asset path"
+          "description": "NiagaraSystem asset path",
+          "aliases": [
+            "assetPath"
+          ]
         },
         {
           "name": "eventName",
@@ -1669,7 +1737,10 @@
           "name": "systemPath",
           "type": "string",
           "required": true,
-          "description": "NiagaraSystem asset path"
+          "description": "NiagaraSystem asset path",
+          "aliases": [
+            "assetPath"
+          ]
         },
         {
           "name": "moduleScript",
@@ -1710,7 +1781,10 @@
           "name": "systemPath",
           "type": "string",
           "required": true,
-          "description": "NiagaraSystem asset path"
+          "description": "NiagaraSystem asset path",
+          "aliases": [
+            "assetPath"
+          ]
         },
         {
           "name": "stageName",
@@ -2359,6 +2433,30 @@
           "type": "string",
           "required": false,
           "description": "Material Parameter Collection asset a MaterialParameterCollection track animates (required for that track type)"
+        },
+        {
+          "name": "animation",
+          "type": "string",
+          "required": false,
+          "description": "AnimSequence, AnimComposite or AnimStreamable a SkeletalAnimation section plays. Without endSeconds the section spans the clip after offsets and play rate"
+        },
+        {
+          "name": "startFrameOffset",
+          "type": "integer",
+          "required": false,
+          "description": "SkeletalAnimation only: ticks (the sequence's tick resolution, 24000/s by default) trimmed from the clip's start. Half a display frame samples a Step-interpolated clip inside each key"
+        },
+        {
+          "name": "endFrameOffset",
+          "type": "integer",
+          "required": false,
+          "description": "SkeletalAnimation only: ticks trimmed from the clip's end"
+        },
+        {
+          "name": "playRate",
+          "type": "number",
+          "required": false,
+          "description": "SkeletalAnimation only: clip play rate, above 0 (default 1)"
         }
       ]
     },
@@ -3160,6 +3258,12 @@
           "required": false,
           "description": "[{time, value}]: value is a number for float and event, {x,y,z} for vector, {r,g,b,a} for color",
           "items": "object"
+        },
+        {
+          "name": "curveAssetPath",
+          "type": "string",
+          "required": false,
+          "description": "Existing curve asset to bind instead of keyframes: CurveFloat for float and event, CurveVector for vector, CurveLinearColor for color"
         }
       ]
     },
@@ -3686,6 +3790,12 @@
           "type": "array",
           "required": true,
           "description": "Values to append, validated before any is written"
+        },
+        {
+          "name": "unique",
+          "type": "boolean",
+          "required": false,
+          "description": "Skip values already in the array or earlier in elements (default false)"
         },
         {
           "name": "save",
@@ -5692,6 +5802,135 @@
           "type": "string",
           "required": false,
           "description": "skip returns an existing output, error (default) refuses; it never overwrites"
+        },
+        {
+          "name": "setRetargetSourceAsset",
+          "type": "boolean",
+          "required": false,
+          "description": "Name the bound mesh as the output's retarget source asset (default true). The bake records that mesh's bone lengths, so leaving it unset retargets them a second time on playback when the mesh differs from the skeleton's reference pose"
+        },
+        {
+          "name": "interpolation",
+          "type": "string",
+          "required": false,
+          "description": "Bone key interpolation of the output (default the interpolation of the clip the session began from)",
+          "enum": [
+            "linear",
+            "step"
+          ]
+        },
+        {
+          "name": "curveInterpolation",
+          "type": "string",
+          "required": false,
+          "description": "Interpolation of baked curves (default linear)",
+          "enum": [
+            "linear",
+            "constant",
+            "cubic"
+          ]
+        },
+        {
+          "name": "recordInWorldSpace",
+          "type": "boolean",
+          "required": false,
+          "description": "Record the root in world space (default false)"
+        },
+        {
+          "name": "evaluateAllSkeletalMeshComponents",
+          "type": "boolean",
+          "required": false,
+          "description": "Evaluate every skeletal mesh component on the bound actor, not only the baked one (default true)"
+        },
+        {
+          "name": "exportTransforms",
+          "type": "boolean",
+          "required": false,
+          "description": "Bake bone transforms (default true)"
+        },
+        {
+          "name": "exportMorphTargets",
+          "type": "boolean",
+          "required": false,
+          "description": "Bake morph target curves (default true)"
+        },
+        {
+          "name": "exportAttributeCurves",
+          "type": "boolean",
+          "required": false,
+          "description": "Bake attribute curves (default true)"
+        },
+        {
+          "name": "exportMaterialCurves",
+          "type": "boolean",
+          "required": false,
+          "description": "Bake material curves (default true)"
+        },
+        {
+          "name": "skipCurvesWithZeroValue",
+          "type": "boolean",
+          "required": false,
+          "description": "Leave out curves that stay at zero (default true)"
+        },
+        {
+          "name": "includeAnimationNames",
+          "type": "array",
+          "required": false,
+          "description": "Bake only the bones and curves whose names match these",
+          "items": "string"
+        },
+        {
+          "name": "excludeAnimationNames",
+          "type": "array",
+          "required": false,
+          "description": "Leave out the bones and curves whose names match these",
+          "items": "string"
+        },
+        {
+          "name": "removeExcludedCurves",
+          "type": "boolean",
+          "required": false,
+          "description": "Remove excluded curves that already exist on the output (default false)"
+        },
+        {
+          "name": "warmUpFrames",
+          "type": "integer",
+          "required": false,
+          "description": "Display-rate frames evaluated before the start, after any delay (default 0)",
+          "minimum": 0,
+          "maximum": 100000
+        },
+        {
+          "name": "delayBeforeStart",
+          "type": "integer",
+          "required": false,
+          "description": "Display-rate frames to wait before the bake starts (default 0)",
+          "minimum": 0,
+          "maximum": 100000
+        },
+        {
+          "name": "bakeTimecode",
+          "type": "boolean",
+          "required": false,
+          "description": "Bake timecode attributes onto the root (default false)"
+        },
+        {
+          "name": "timecodeRate",
+          "type": "number",
+          "required": false,
+          "description": "Timecode rate in frames per second for bakeTimecode (default the project timecode rate)"
+        },
+        {
+          "name": "startFrame",
+          "type": "integer",
+          "required": false,
+          "description": "Custom range start in display-rate frames; pass with endFrame (default the playback range)"
+        },
+        {
+          "name": "endFrame",
+          "type": "integer",
+          "required": false,
+          "description": "Custom range end in display-rate frames, sampled as the last key; pass with startFrame"
         }
       ],
       "contractExempt": "5.8 only: before 5.8 the handler is a stub that reads nothing, and on 5.8 it bakes and saves a new AnimSequence"
@@ -5776,6 +6015,203 @@
           "description": "linear (default) | per_frame"
         }
       ]
+    },
+    "bake_sequence_animation": {
+      "category": "animation",
+      "params": [
+        {
+          "name": "sequencePath",
+          "type": "string",
+          "required": true,
+          "description": "LevelSequence to bake from; it is never modified"
+        },
+        {
+          "name": "bindingTag",
+          "type": "string",
+          "required": false,
+          "description": "Binding tag naming the skeletal mesh binding to bake"
+        },
+        {
+          "name": "bindingGuid",
+          "type": "string",
+          "required": false,
+          "description": "GUID of the skeletal mesh binding to bake"
+        },
+        {
+          "name": "bindingName",
+          "type": "string",
+          "required": false,
+          "description": "Display name of the possessable or spawnable binding to bake; must be unique"
+        },
+        {
+          "name": "outputAssetPath",
+          "type": "string",
+          "required": true,
+          "description": "Destination AnimSequence asset path"
+        },
+        {
+          "name": "frameRate",
+          "type": "number",
+          "required": false,
+          "description": "Frames per second of the bake (default the sequence's display rate)"
+        },
+        {
+          "name": "onConflict",
+          "type": "string",
+          "required": false,
+          "description": "skip returns an existing output, error (default) refuses; it never overwrites",
+          "enum": [
+            "skip",
+            "error"
+          ]
+        },
+        {
+          "name": "setRetargetSourceAsset",
+          "type": "boolean",
+          "required": false,
+          "description": "Name the bound mesh as the output's retarget source asset (default true). The bake records that mesh's bone lengths, so leaving it unset retargets them a second time on playback when the mesh differs from the skeleton's reference pose"
+        },
+        {
+          "name": "interpolation",
+          "type": "string",
+          "required": false,
+          "description": "Bone key interpolation of the output (default linear)",
+          "enum": [
+            "linear",
+            "step"
+          ]
+        },
+        {
+          "name": "curveInterpolation",
+          "type": "string",
+          "required": false,
+          "description": "Interpolation of baked curves (default linear)",
+          "enum": [
+            "linear",
+            "constant",
+            "cubic"
+          ]
+        },
+        {
+          "name": "recordInWorldSpace",
+          "type": "boolean",
+          "required": false,
+          "description": "Record the root in world space (default false)"
+        },
+        {
+          "name": "evaluateAllSkeletalMeshComponents",
+          "type": "boolean",
+          "required": false,
+          "description": "Evaluate every skeletal mesh component on the bound actor, not only the baked one (default true)"
+        },
+        {
+          "name": "exportTransforms",
+          "type": "boolean",
+          "required": false,
+          "description": "Bake bone transforms (default true)"
+        },
+        {
+          "name": "exportMorphTargets",
+          "type": "boolean",
+          "required": false,
+          "description": "Bake morph target curves (default true)"
+        },
+        {
+          "name": "exportAttributeCurves",
+          "type": "boolean",
+          "required": false,
+          "description": "Bake attribute curves (default true)"
+        },
+        {
+          "name": "exportMaterialCurves",
+          "type": "boolean",
+          "required": false,
+          "description": "Bake material curves (default true)"
+        },
+        {
+          "name": "skipCurvesWithZeroValue",
+          "type": "boolean",
+          "required": false,
+          "description": "Leave out curves that stay at zero (default true)"
+        },
+        {
+          "name": "includeAnimationNames",
+          "type": "array",
+          "required": false,
+          "description": "Bake only the bones and curves whose names match these",
+          "items": "string"
+        },
+        {
+          "name": "excludeAnimationNames",
+          "type": "array",
+          "required": false,
+          "description": "Leave out the bones and curves whose names match these",
+          "items": "string"
+        },
+        {
+          "name": "removeExcludedCurves",
+          "type": "boolean",
+          "required": false,
+          "description": "Remove excluded curves that already exist on the output (default false)"
+        },
+        {
+          "name": "warmUpFrames",
+          "type": "integer",
+          "required": false,
+          "description": "Display-rate frames evaluated before the start, after any delay (default 0)",
+          "minimum": 0,
+          "maximum": 100000
+        },
+        {
+          "name": "delayBeforeStart",
+          "type": "integer",
+          "required": false,
+          "description": "Display-rate frames to wait before the bake starts (default 0)",
+          "minimum": 0,
+          "maximum": 100000
+        },
+        {
+          "name": "bakeTimecode",
+          "type": "boolean",
+          "required": false,
+          "description": "Bake timecode attributes onto the root (default false)"
+        },
+        {
+          "name": "timecodeRate",
+          "type": "number",
+          "required": false,
+          "description": "Timecode rate in frames per second for bakeTimecode (default the project timecode rate)"
+        },
+        {
+          "name": "startFrame",
+          "type": "integer",
+          "required": false,
+          "description": "Custom range start in display-rate frames; pass with endFrame (default the playback range)"
+        },
+        {
+          "name": "endFrame",
+          "type": "integer",
+          "required": false,
+          "description": "Custom range end in display-rate frames, sampled as the last key; pass with startFrame"
+        }
+      ],
+      "choices": [
+        {
+          "mode": "exactlyOne",
+          "branches": [
+            [
+              "bindingTag"
+            ],
+            [
+              "bindingGuid"
+            ],
+            [
+              "bindingName"
+            ]
+          ]
+        }
+      ],
+      "contractExempt": "5.8 only: before 5.8 the handler is a stub that reads nothing, and on 5.8 it bakes and saves a new AnimSequence"
     },
     "batch_retarget_animations": {
       "category": "animation",
@@ -5891,7 +6327,7 @@
           "name": "folderPathPrefix",
           "type": "string",
           "required": false,
-          "description": "World Outliner folder prefix"
+          "description": "World Outliner folder, matched with every folder nested under it"
         },
         {
           "name": "matchSubclasses",
@@ -6889,6 +7325,12 @@
               "required": false,
               "description": "Actor labels to skip",
               "items": "string"
+            },
+            {
+              "name": "multi",
+              "type": "boolean",
+              "required": false,
+              "description": "Return overlaps and the first blocking hit, capped at 64 (default false)"
             }
           ]
         },
@@ -7187,7 +7629,7 @@
           "name": "folderPathPrefix",
           "type": "string",
           "required": false,
-          "description": "World Outliner folder prefix"
+          "description": "World Outliner folder, matched with every folder nested under it"
         },
         {
           "name": "matchSubclasses",
@@ -7478,11 +7920,35 @@
         {
           "name": "outputPath",
           "type": "string",
-          "required": true,
-          "description": "Absolute or project-relative PNG path to write, e.g. Saved/Screenshots/cap.png",
+          "required": false,
+          "description": "Absolute or project-relative PNG path to write; required when starting a capture",
           "aliases": [
             "filename"
           ]
+        },
+        {
+          "name": "captureId",
+          "type": "string",
+          "required": false,
+          "description": "Query the latest warm capture instead of starting one; outputPath must be omitted"
+        },
+        {
+          "name": "cancel",
+          "type": "boolean",
+          "required": false,
+          "description": "With captureId, cancel an active warm capture and release its transient resources (default false)"
+        },
+        {
+          "name": "warmupFrames",
+          "type": "number",
+          "required": false,
+          "description": "0 (default) keeps synchronous capture; 1-240 starts a tick-driven normal-streaming capture and returns captureId"
+        },
+        {
+          "name": "warmupTimeoutSeconds",
+          "type": "number",
+          "required": false,
+          "description": "Warm capture deadline checked between frames and before export, 1-120 seconds (default 60)"
         },
         {
           "name": "location",
@@ -8465,7 +8931,10 @@
           "name": "systemPath",
           "type": "string",
           "required": true,
-          "description": "NiagaraSystem asset path"
+          "description": "NiagaraSystem asset path",
+          "aliases": [
+            "assetPath"
+          ]
         },
         {
           "name": "force",
@@ -9084,6 +9553,12 @@
           "type": "boolean",
           "required": false,
           "description": "Center new PIE windows; false places them at newWindowPosition"
+        },
+        {
+          "name": "playMode",
+          "type": "string",
+          "required": false,
+          "description": "viewport | new_window | standalone: where the Play button and every bridge PIE launch play. Actions that drive the PIE world play in the viewport when this is standalone"
         }
       ],
       "contractExempt": "writes the editor's Play settings"
@@ -11039,6 +11514,12 @@
           "type": "string",
           "required": false,
           "description": "skip (default) returns an existing asset untouched, error refuses"
+        },
+        {
+          "name": "displayRate",
+          "type": "any",
+          "required": false,
+          "description": "Display rate: frames per second (24, 30, 60; 23.976, 29.97 and 59.94 map to the NTSC rates) or {numerator, denominator}. Bakes and display frames sample at this rate"
         }
       ],
       "contractExempt": "creates a Level Sequence asset"
@@ -11554,6 +12035,38 @@
         }
       ],
       "contractExempt": "Creates and saves a system under the contract values; nothing it reads fails first"
+    },
+    "create_outliner_folder": {
+      "category": "level",
+      "params": [
+        {
+          "name": "folderPath",
+          "type": "string",
+          "required": false,
+          "description": "World Outliner folder to create, such as Props/Lights"
+        },
+        {
+          "name": "folderPaths",
+          "type": "array",
+          "required": false,
+          "description": "World Outliner folders; combined with folderPath",
+          "items": "string"
+        }
+      ],
+      "choices": [
+        {
+          "mode": "atLeastOne",
+          "branches": [
+            [
+              "folderPath"
+            ],
+            [
+              "folderPaths"
+            ]
+          ]
+        }
+      ],
+      "contractExempt": "The contract value is a valid folder name, so the call would create a folder in the editor world"
     },
     "create_pcg_graph": {
       "category": "pcg",
@@ -12700,6 +13213,18 @@
           "items": "string"
         },
         {
+          "name": "folderPath",
+          "type": "string",
+          "required": false,
+          "description": "World Outliner folder, matched exactly"
+        },
+        {
+          "name": "folderPathPrefix",
+          "type": "string",
+          "required": false,
+          "description": "World Outliner folder, matched with every folder nested under it"
+        },
+        {
           "name": "dryRun",
           "type": "boolean",
           "required": false,
@@ -12730,6 +13255,12 @@
             ],
             [
               "classPathContainsAny"
+            ],
+            [
+              "folderPath"
+            ],
+            [
+              "folderPathPrefix"
             ]
           ]
         }
@@ -13035,6 +13566,43 @@
           "type": "boolean",
           "required": false,
           "description": "List the orphans without deleting them (default false)"
+        }
+      ]
+    },
+    "delete_outliner_folder": {
+      "category": "level",
+      "params": [
+        {
+          "name": "folderPath",
+          "type": "string",
+          "required": false,
+          "description": "World Outliner folder to delete, with the empty folders under it"
+        },
+        {
+          "name": "folderPaths",
+          "type": "array",
+          "required": false,
+          "description": "World Outliner folders; combined with folderPath",
+          "items": "string"
+        },
+        {
+          "name": "dryRun",
+          "type": "boolean",
+          "required": false,
+          "description": "Report what would be deleted without deleting (default false)"
+        }
+      ],
+      "choices": [
+        {
+          "mode": "atLeastOne",
+          "branches": [
+            [
+              "folderPath"
+            ],
+            [
+              "folderPaths"
+            ]
+          ]
         }
       ]
     },
@@ -14733,6 +15301,42 @@
       "params": [],
       "contractExempt": "Takes no parameters and clears the stored Fab credentials when called"
     },
+    "fab_open_search": {
+      "category": "fab",
+      "params": [
+        {
+          "name": "query",
+          "type": "string",
+          "required": true,
+          "description": "Search text"
+        },
+        {
+          "name": "listingType",
+          "type": "string",
+          "required": false,
+          "description": "Listing type filter, e.g. 3d-model, material, tool-and-plugin"
+        },
+        {
+          "name": "assetFormat",
+          "type": "string",
+          "required": false,
+          "description": "Asset format filter (default unreal-engine; empty string drops the filter)"
+        },
+        {
+          "name": "free",
+          "type": "boolean",
+          "required": false,
+          "description": "Only free listings (default false)"
+        },
+        {
+          "name": "open",
+          "type": "boolean",
+          "required": false,
+          "description": "Open the page in the default browser (default true); false only returns the URL"
+        }
+      ],
+      "contractExempt": "Opens the fab.com search page in the default browser when called"
+    },
     "fab_status": {
       "category": "fab",
       "params": []
@@ -14818,6 +15422,18 @@
           "type": "string",
           "required": false,
           "description": "Full object path of the pathfinding context actor; alternative to pathfindingContext"
+        },
+        {
+          "name": "world",
+          "type": "string",
+          "required": false,
+          "description": "editor (default) | pie | game | auto; pie queries the running session's navmesh, including after a level change"
+        },
+        {
+          "name": "pieInstance",
+          "type": "number",
+          "required": false,
+          "description": "PIE instance id; omitted selects the active PIE world"
         }
       ]
     },
@@ -14864,7 +15480,7 @@
           "name": "world",
           "type": "string",
           "required": false,
-          "description": "World scope: any (default) | editor | pie"
+          "description": "World scope: any (default) | editor | pie. A scoped search includes objects outered to that world's GameInstance or LocalPlayers (UMG widgets, LocalPlayer subsystems)"
         },
         {
           "name": "pieInstance",
@@ -15164,17 +15780,37 @@
         {
           "name": "assetPath",
           "type": "string",
-          "required": true,
+          "required": false,
           "description": "Asset to reload from disk",
           "aliases": [
             "path"
           ]
         },
         {
+          "name": "assetPaths",
+          "type": "array",
+          "required": false,
+          "description": "Assets to reload from disk together in one pass, 1-500; use instead of assetPath",
+          "items": "string"
+        },
+        {
           "name": "discardUnsaved",
           "type": "boolean",
           "required": false,
-          "description": "Reload even when the package has unsaved changes, discarding them (default false)"
+          "description": "Reload even when a package has unsaved changes, discarding them (default false)"
+        }
+      ],
+      "choices": [
+        {
+          "mode": "exactlyOne",
+          "branches": [
+            [
+              "assetPath"
+            ],
+            [
+              "assetPaths"
+            ]
+          ]
         }
       ]
     },
@@ -15280,7 +15916,7 @@
           "name": "method",
           "type": "string",
           "required": false,
-          "description": "AlignedBoxes | OrientedBoxes | MinimalSpheres | Capsules | ConvexHulls (default) | SweptHulls | MinVolumeShapes | LevelSets"
+          "description": "AlignedBoxes | OrientedBoxes | MinimalSpheres | Capsules | ConvexHulls (default) | SweptHulls | MinVolumeShapes | LevelSets | BoundingBox (one box fitted to the whole mesh)"
         },
         {
           "name": "maxConvexHulls",
@@ -15359,6 +15995,18 @@
           "type": "boolean",
           "required": false,
           "description": "Mark the collision customized so a reimport keeps it (default true)"
+        },
+        {
+          "name": "weldFirst",
+          "type": "boolean",
+          "required": false,
+          "description": "Weld coincident edges before fitting, so unwelded faces fit as one island rather than one shape each (default true)"
+        },
+        {
+          "name": "weldTolerance",
+          "type": "number",
+          "required": false,
+          "description": "How close two edges must be to weld (default 1e-6)"
         },
         {
           "name": "lodType",
@@ -15693,14 +16341,20 @@
           "name": "packages",
           "type": "array",
           "required": false,
-          "description": "Package paths to look up",
+          "description": "Package or object paths to look up",
+          "aliases": [
+            "assetPaths"
+          ],
           "items": "string"
         },
         {
           "name": "packagePath",
           "type": "string",
           "required": false,
-          "description": "One package path, used when packages is omitted"
+          "description": "One package or object path, used when packages is omitted",
+          "aliases": [
+            "assetPath"
+          ]
         },
         {
           "name": "hard",
@@ -15773,14 +16427,20 @@
           "name": "packages",
           "type": "array",
           "required": false,
-          "description": "Package paths to look up",
+          "description": "Package or object paths to look up",
+          "aliases": [
+            "assetPaths"
+          ],
           "items": "string"
         },
         {
           "name": "packagePath",
           "type": "string",
           "required": false,
-          "description": "One package path, used when packages is omitted"
+          "description": "One package or object path, used when packages is omitted",
+          "aliases": [
+            "assetPath"
+          ]
         },
         {
           "name": "includeDetails",
@@ -16181,7 +16841,10 @@
           "name": "className",
           "type": "string",
           "required": true,
-          "description": "C++ class name or path"
+          "description": "C++ class name or path, or a Blueprint asset path (reads its generated class)",
+          "aliases": [
+            "assetPath"
+          ]
         },
         {
           "name": "propertyNames",
@@ -16435,8 +17098,39 @@
         {
           "name": "assetPath",
           "type": "string",
-          "required": true,
-          "description": "NiagaraEmitter asset path"
+          "required": false,
+          "description": "NiagaraEmitter asset path, or a NiagaraSystem asset path to read one of its emitters"
+        },
+        {
+          "name": "systemPath",
+          "type": "string",
+          "required": false,
+          "description": "NiagaraSystem whose emitter to read, picked by emitterName or emitterIndex"
+        },
+        {
+          "name": "emitterName",
+          "type": "string",
+          "required": false,
+          "description": "Emitter handle name. Omit to address the emitter by emitterIndex"
+        },
+        {
+          "name": "emitterIndex",
+          "type": "number",
+          "required": false,
+          "description": "Emitter handle index, used when emitterName is omitted"
+        }
+      ],
+      "choices": [
+        {
+          "mode": "exactlyOne",
+          "branches": [
+            [
+              "assetPath"
+            ],
+            [
+              "systemPath"
+            ]
+          ]
         }
       ]
     },
@@ -17199,6 +17893,10 @@
         }
       ]
     },
+    "get_maps_settings": {
+      "category": "project",
+      "params": []
+    },
     "get_material_shader_stats": {
       "category": "material",
       "params": [
@@ -17385,7 +18083,10 @@
           "name": "systemPath",
           "type": "string",
           "required": true,
-          "description": "NiagaraSystem asset path"
+          "description": "NiagaraSystem asset path",
+          "aliases": [
+            "assetPath"
+          ]
         },
         {
           "name": "emitterName",
@@ -17464,7 +18165,8 @@
           "required": true,
           "description": "NiagaraSystem asset path",
           "aliases": [
-            "path"
+            "path",
+            "systemPath"
           ]
         }
       ]
@@ -17546,7 +18248,10 @@
           "name": "maxLines",
           "type": "integer",
           "required": false,
-          "description": "How far back into the ring buffer to read (default 100, or the whole 4096-line buffer when filter or category is given)"
+          "description": "How far back into the ring buffer to read (default 100, or the whole 4096-line buffer when filter or category is given)",
+          "aliases": [
+            "lastN"
+          ]
         },
         {
           "name": "filter",
@@ -17776,6 +18481,12 @@
           "type": "number",
           "required": false,
           "description": "0-based player index (default 0)"
+        },
+        {
+          "name": "pieInstance",
+          "type": "number",
+          "required": false,
+          "description": "PIE world to read (default: the primary world, or the first client world when the primary is a dedicated server). See list_pie_instances"
         }
       ]
     },
@@ -18080,6 +18791,46 @@
       "category": "level",
       "params": []
     },
+    "get_sequence_binding_components": {
+      "category": "editor",
+      "params": [
+        {
+          "name": "sequencePath",
+          "type": "string",
+          "required": true,
+          "description": "Level Sequence asset path",
+          "aliases": [
+            "assetPath",
+            "path"
+          ]
+        },
+        {
+          "name": "bindingGuid",
+          "type": "string",
+          "required": false,
+          "description": "Report only this binding"
+        },
+        {
+          "name": "bindingName",
+          "type": "string",
+          "required": false,
+          "description": "Report only the binding with this name"
+        },
+        {
+          "name": "componentClass",
+          "type": "string",
+          "required": false,
+          "description": "Report only components of this class or a subclass (ImagePlateComponent, CineCameraComponent, PrimitiveComponent)"
+        },
+        {
+          "name": "propertyNames",
+          "type": "array",
+          "required": false,
+          "description": "Properties or dotted paths to read, in C++ or Python spelling (bHoldout, cast_shadow, LightingChannels.bChannel1); [\"*\"] reads every editable property. Default: the primitive rendering flags (CastShadow, bAffectDynamicIndirectLighting, bVisibleInRayTracing, bHoldout, LightingChannels, custom depth and stencil, visibility)",
+          "items": "string"
+        }
+      ]
+    },
     "get_sequence_channel_keys": {
       "category": "editor",
       "params": [
@@ -18183,7 +18934,7 @@
           "name": "includeSectionDetails",
           "type": "boolean",
           "required": false,
-          "description": "Include attach sockets and first-key transform values per track"
+          "description": "Add each section's blend type, attach socket, first-key transform values and channels with key times. Without it every section still lists its class, range, isActive and rowIndex"
         }
       ]
     },
@@ -18351,6 +19102,81 @@
           "type": "integer",
           "required": false,
           "description": "Source model (LOD) to read (default 0)"
+        }
+      ]
+    },
+    "get_static_mesh_geometry": {
+      "category": "asset",
+      "params": [
+        {
+          "name": "assetPath",
+          "type": "string",
+          "required": true,
+          "description": "StaticMesh asset path; keep the same path on every snapshot page",
+          "aliases": [
+            "path"
+          ]
+        },
+        {
+          "name": "geometrySource",
+          "type": "string",
+          "required": true,
+          "description": "sourceModel reads the authored MeshDescription; renderData reads built LOD buffers, including Nanite fallback geometry",
+          "enum": [
+            "sourceModel",
+            "renderData"
+          ]
+        },
+        {
+          "name": "lodIndex",
+          "type": "integer",
+          "required": false,
+          "description": "Source model or render LOD index (default 0)"
+        },
+        {
+          "name": "elementType",
+          "type": "string",
+          "required": false,
+          "description": "Element table to page (default triangles); read all three tables for a complete capture",
+          "enum": [
+            "vertices",
+            "corners",
+            "triangles"
+          ]
+        },
+        {
+          "name": "elementOffset",
+          "type": "integer",
+          "required": false,
+          "description": "Offset in the selected table, not an element ID (default 0)",
+          "minimum": 0,
+          "maximum": 1000000
+        },
+        {
+          "name": "pageSize",
+          "type": "integer",
+          "required": false,
+          "description": "Maximum elements per page (default 256, maximum 512)",
+          "minimum": 1,
+          "maximum": 512
+        },
+        {
+          "name": "snapshotId",
+          "type": "string",
+          "required": false,
+          "description": "ID from the first response; required for continuation. Omit at offset 0 to capture current data. Cached pages never re-read the asset."
+        },
+        {
+          "name": "dumpToFile",
+          "type": "boolean",
+          "required": false,
+          "description": "Stream the complete snapshot to a JSON file instead of a page (default false); omit elementType, elementOffset and pageSize"
+        },
+        {
+          "name": "outputPath",
+          "type": "string",
+          "required": false,
+          "description": "New .json destination for dumpToFile; relative paths stay under Saved/. Defaults to Saved/UE_MCP/MeshGeometry/<snapshotId>.json. Existing destinations are always refused."
         }
       ]
     },
@@ -18552,7 +19378,7 @@
           "name": "folderPathPrefix",
           "type": "string",
           "required": false,
-          "description": "World Outliner folder prefix"
+          "description": "World Outliner folder, matched with every folder nested under it"
         },
         {
           "name": "editorHidden",
@@ -19702,6 +20528,66 @@
         }
       ]
     },
+    "insert_expression_between": {
+      "category": "material",
+      "params": [
+        {
+          "name": "materialPath",
+          "type": "string",
+          "required": true,
+          "description": "Material asset path"
+        },
+        {
+          "name": "targetExpression",
+          "type": "string",
+          "required": false,
+          "description": "Target expression name; pass this or property"
+        },
+        {
+          "name": "property",
+          "type": "string",
+          "required": false,
+          "description": "Target material property, including MaterialAttributes"
+        },
+        {
+          "name": "targetInput",
+          "type": "string",
+          "required": false,
+          "description": "Target input name or index; default first input"
+        },
+        {
+          "name": "expressionType",
+          "type": "string",
+          "required": true,
+          "description": "New material expression class or short name"
+        },
+        {
+          "name": "inputForUpstream",
+          "type": "string",
+          "required": false,
+          "description": "New node input for the previous source; default first input"
+        },
+        {
+          "name": "properties",
+          "type": "object",
+          "required": false,
+          "description": "Editable reflected properties on the new expression"
+        }
+      ],
+      "choices": [
+        {
+          "mode": "exactlyOne",
+          "branches": [
+            [
+              "targetExpression"
+            ],
+            [
+              "property"
+            ]
+          ]
+        }
+      ]
+    },
     "inspect_anim_nodes": {
       "category": "animation",
       "params": [
@@ -19735,7 +20621,10 @@
           "name": "systemPath",
           "type": "string",
           "required": true,
-          "description": "NiagaraSystem asset path"
+          "description": "NiagaraSystem asset path",
+          "aliases": [
+            "assetPath"
+          ]
         }
       ]
     },
@@ -20336,6 +21225,12 @@
           "required": false,
           "description": "Actor labels to skip",
           "items": "string"
+        },
+        {
+          "name": "multi",
+          "type": "boolean",
+          "required": false,
+          "description": "Return overlaps and the first blocking hit, capped at 64 (default false)"
         },
         {
           "name": "world",
@@ -21003,7 +21898,10 @@
           "name": "systemPath",
           "type": "string",
           "required": true,
-          "description": "NiagaraSystem asset path"
+          "description": "NiagaraSystem asset path",
+          "aliases": [
+            "assetPath"
+          ]
         },
         {
           "name": "emitterName",
@@ -21026,7 +21924,10 @@
           "name": "systemPath",
           "type": "string",
           "required": true,
-          "description": "NiagaraSystem asset path"
+          "description": "NiagaraSystem asset path",
+          "aliases": [
+            "assetPath"
+          ]
         }
       ]
     },
@@ -21479,7 +22380,10 @@
           "name": "systemPath",
           "type": "string",
           "required": true,
-          "description": "NiagaraSystem asset path"
+          "description": "NiagaraSystem asset path",
+          "aliases": [
+            "assetPath"
+          ]
         },
         {
           "name": "emitterName",
@@ -21514,7 +22418,10 @@
           "name": "systemPath",
           "type": "string",
           "required": true,
-          "description": "NiagaraSystem asset path"
+          "description": "NiagaraSystem asset path",
+          "aliases": [
+            "assetPath"
+          ]
         },
         {
           "name": "emitterName",
@@ -21572,7 +22479,10 @@
           "name": "systemPath",
           "type": "string",
           "required": true,
-          "description": "NiagaraSystem asset path"
+          "description": "NiagaraSystem asset path",
+          "aliases": [
+            "assetPath"
+          ]
         },
         {
           "name": "moduleName",
@@ -21607,7 +22517,10 @@
           "name": "systemPath",
           "type": "string",
           "required": true,
-          "description": "NiagaraSystem asset path"
+          "description": "NiagaraSystem asset path",
+          "aliases": [
+            "assetPath"
+          ]
         }
       ]
     },
@@ -24346,6 +25259,149 @@
       ],
       "contractExempt": "starts and stops Play In Editor"
     },
+    "pie_drive_pawn": {
+      "category": "pie",
+      "params": [
+        {
+          "name": "direction",
+          "type": "vec3",
+          "required": false,
+          "description": "World direction to push movement input in every frame"
+        },
+        {
+          "name": "targetLocation",
+          "type": "vec3",
+          "required": false,
+          "description": "World point to steer toward; the drive ends as arrived within acceptanceRadius"
+        },
+        {
+          "name": "mode",
+          "type": "string",
+          "required": false,
+          "description": "input (default): movement input on the pawn; navigate: a navmesh move from the player controller, needs targetLocation",
+          "enum": [
+            "input",
+            "navigate"
+          ]
+        },
+        {
+          "name": "durationSeconds",
+          "type": "number",
+          "required": false,
+          "description": "Real seconds to drive before ending as completed or timeout (default 5, at most 600)",
+          "minimum": 0,
+          "maximum": 600
+        },
+        {
+          "name": "scale",
+          "type": "number",
+          "required": false,
+          "description": "Movement input scale (default 1)",
+          "minimum": -1,
+          "maximum": 1
+        },
+        {
+          "name": "sampleEvery",
+          "type": "number",
+          "required": false,
+          "description": "Seconds between track samples; 0 samples every frame (default 0.1)",
+          "minimum": 0
+        },
+        {
+          "name": "acceptanceRadius",
+          "type": "number",
+          "required": false,
+          "description": "Distance in cm from targetLocation that counts as arrived (default 50)",
+          "minimum": 0
+        },
+        {
+          "name": "planar",
+          "type": "boolean",
+          "required": false,
+          "description": "Steer and measure arrival on the XY plane (default true); false for flying or swimming pawns"
+        },
+        {
+          "name": "stopOnMapChange",
+          "type": "boolean",
+          "required": false,
+          "description": "End the drive as map_changed when the player arrives in another level (default false: keep driving there)"
+        },
+        {
+          "name": "playerIndex",
+          "type": "integer",
+          "required": false,
+          "description": "Local player index in the PIE world (default 0)"
+        },
+        {
+          "name": "pieInstance",
+          "type": "integer",
+          "required": false,
+          "description": "FWorldContext::PIEInstance, a non-negative integer. Omitted picks the active PlayWorld, then the first PIE world with the player; an explicit value never falls back"
+        },
+        {
+          "name": "driveId",
+          "type": "string",
+          "required": false,
+          "description": "Caller-chosen drive id (minted when absent)"
+        },
+        {
+          "name": "wait",
+          "type": "boolean",
+          "required": false,
+          "description": "Return only when the drive ends, with its whole track (default true)"
+        },
+        {
+          "name": "timeoutSeconds",
+          "type": "number",
+          "required": false,
+          "description": "Longest wait=true waits (default durationSeconds + 30)",
+          "minimum": 0
+        }
+      ],
+      "choices": [
+        {
+          "mode": "exactlyOne",
+          "branches": [
+            [
+              "direction"
+            ],
+            [
+              "targetLocation"
+            ]
+          ]
+        }
+      ],
+      "contractExempt": "Drives the PIE player's pawn over later frames; pie(drive_stop) ends it"
+    },
+    "pie_drive_status": {
+      "category": "pie",
+      "params": [
+        {
+          "name": "driveId",
+          "type": "string",
+          "required": false,
+          "description": "Drive id from drive_pawn (default: the most recent drive)"
+        },
+        {
+          "name": "includeSamples",
+          "type": "boolean",
+          "required": false,
+          "description": "Include the sampled track (default true)"
+        }
+      ]
+    },
+    "pie_drive_stop": {
+      "category": "pie",
+      "params": [
+        {
+          "name": "driveId",
+          "type": "string",
+          "required": false,
+          "description": "Drive id from drive_pawn (default: the most recent drive)"
+        }
+      ],
+      "contractExempt": "Ends a running pawn drive"
+    },
     "pie_inject_input": {
       "category": "pie",
       "params": [
@@ -24712,7 +25768,7 @@
           "name": "recording_id",
           "type": "string",
           "required": false,
-          "description": "Recording id under the recordings root"
+          "description": "Recording id under the recordings root (default: the newest recording)"
         },
         {
           "name": "recording_dir",
@@ -25204,6 +26260,20 @@
           "type": "string",
           "required": false,
           "description": "Recordings root, or with no id the recording folder itself (default Saved/MCPRecordings)"
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "description": "Most frames_over_threshold entries returned (default 50)",
+          "minimum": 0
+        },
+        {
+          "name": "offset",
+          "type": "integer",
+          "required": false,
+          "description": "First frames_over_threshold entry returned",
+          "minimum": 0
         }
       ]
     },
@@ -25339,6 +26409,12 @@
           "type": "object",
           "required": false,
           "description": "{position_cm, rotation_deg, velocity_cms, tracked_default, tracked:{path: threshold}}"
+        },
+        {
+          "name": "start_when",
+          "type": "object",
+          "required": false,
+          "description": "Hold the steps until the player can act, then resume at the matching point of the recording: {pawn_at_rest (default true: speed <= max_speed_cms, default 5, and on the ground), hold_ms (default 500), log_contains, timeout_ms (default 60000)}. Replaces settle_ms"
         }
       ],
       "contractExempt": "Arms the replayer, which drives the next PIE session"
@@ -25480,6 +26556,12 @@
           "type": "object",
           "required": false,
           "description": "{position_cm, rotation_deg, velocity_cms, tracked_default, tracked:{path: threshold}}"
+        },
+        {
+          "name": "start_when",
+          "type": "object",
+          "required": false,
+          "description": "Hold the steps until the player can act, then resume at the matching point of the recording: {pawn_at_rest (default true: speed <= max_speed_cms, default 5, and on the ground), hold_ms (default 500), log_contains, timeout_ms (default 60000)}. Replaces settle_ms"
         }
       ],
       "contractExempt": "Arms the replayer and starts PIE"
@@ -25610,7 +26692,7 @@
           "name": "steps",
           "type": "array",
           "required": true,
-          "description": "Steps, run in order: {instruction, judge: auto|manual (default auto), agent_judgeable (manual steps: false means only a person gives the verdict, default true), resolve_in_pie (true: expect.value and the actors arrange and act name only resolve once PIE runs, so script_create and script_update do not check them), arrange: [{kind: spawn, class, at?, rotation?, scale?} | {kind: set, target, path, value} | {kind: call, target, func, args?}] (run when the step starts), act: [{client?, place: {at, offset?, face?} | {location, yaw?}} | {client?, press: {action, frames?}} | {client?, inject: {action, value}} | {client?, hold: {action, value, ms}} | {client?, tape: {action, values}} | {client?, console} | {client?, capture} | {wait_ms}] (run after arrange, as uat_run runs a step's do; within_ms counts from its end), expect: {value (tracked value path or last segment, actor id for exists, widget for visible), op: decreasing|increasing|eq|gt|lt|visible|exists, target (number for eq/gt/lt, boolean for visible/exists, default true), within_ms}}",
+          "description": "Steps, run in order: {instruction, judge: auto|manual (default auto), agent_judgeable (manual steps: false means only a person gives the verdict, default true), resolve_in_pie (true: expect.value and the actors arrange and act name only resolve once PIE runs, so script_create and script_update do not check them), arrange: [{kind: spawn, class, at?, rotation?, scale?} | {kind: set, target, path, value} | {kind: call, target, func, args?}] (run when the step starts), act: [{client?, place: {at, offset?, face?} | {location, yaw?}} | {client?, press: {action, frames?}} | {client?, inject: {action, value}} | {client?, hold: {action, value, ms}} | {client?, tape: {action, values, hz?}} | {client?, console} | {client?, capture} | {wait_ms}] (run after arrange, as uat_run runs a step's do; within_ms counts from its end), expect: {value (tracked value path or last segment, actor id for exists, widget for visible), op: decreasing|increasing|eq|gt|lt|visible|exists, target (number for eq/gt/lt, boolean for visible/exists, default true, optional least change for decreasing/increasing), within_ms}}",
           "items": "object"
         },
         {
@@ -25786,7 +26868,7 @@
           "name": "steps",
           "type": "array",
           "required": false,
-          "description": "Inline steps instead of a script asset: {instruction, judge: auto|manual (default auto), agent_judgeable (manual steps: false means only a person gives the verdict, default true), resolve_in_pie (true: expect.value and the actors arrange and act name only resolve once PIE runs, so script_create and script_update do not check them), arrange: [{kind: spawn, class, at?, rotation?, scale?} | {kind: set, target, path, value} | {kind: call, target, func, args?}] (run when the step starts), act: [{client?, place: {at, offset?, face?} | {location, yaw?}} | {client?, press: {action, frames?}} | {client?, inject: {action, value}} | {client?, hold: {action, value, ms}} | {client?, tape: {action, values}} | {client?, console} | {client?, capture} | {wait_ms}] (run after arrange, as uat_run runs a step's do; within_ms counts from its end), expect: {value (tracked value path or last segment, actor id for exists, widget for visible), op: decreasing|increasing|eq|gt|lt|visible|exists, target (number for eq/gt/lt, boolean for visible/exists, default true), within_ms}}",
+          "description": "Inline steps instead of a script asset: {instruction, judge: auto|manual (default auto), agent_judgeable (manual steps: false means only a person gives the verdict, default true), resolve_in_pie (true: expect.value and the actors arrange and act name only resolve once PIE runs, so script_create and script_update do not check them), arrange: [{kind: spawn, class, at?, rotation?, scale?} | {kind: set, target, path, value} | {kind: call, target, func, args?}] (run when the step starts), act: [{client?, place: {at, offset?, face?} | {location, yaw?}} | {client?, press: {action, frames?}} | {client?, inject: {action, value}} | {client?, hold: {action, value, ms}} | {client?, tape: {action, values, hz?}} | {client?, console} | {client?, capture} | {wait_ms}] (run after arrange, as uat_run runs a step's do; within_ms counts from its end), expect: {value (tracked value path or last segment, actor id for exists, widget for visible), op: decreasing|increasing|eq|gt|lt|visible|exists, target (number for eq/gt/lt, boolean for visible/exists, default true, optional least change for decreasing/increasing), within_ms}}",
           "items": "object"
         },
         {
@@ -25970,7 +27052,7 @@
           "name": "steps",
           "type": "array",
           "required": false,
-          "description": "Replacement steps: {instruction, judge: auto|manual (default auto), agent_judgeable (manual steps: false means only a person gives the verdict, default true), resolve_in_pie (true: expect.value and the actors arrange and act name only resolve once PIE runs, so script_create and script_update do not check them), arrange: [{kind: spawn, class, at?, rotation?, scale?} | {kind: set, target, path, value} | {kind: call, target, func, args?}] (run when the step starts), act: [{client?, place: {at, offset?, face?} | {location, yaw?}} | {client?, press: {action, frames?}} | {client?, inject: {action, value}} | {client?, hold: {action, value, ms}} | {client?, tape: {action, values}} | {client?, console} | {client?, capture} | {wait_ms}] (run after arrange, as uat_run runs a step's do; within_ms counts from its end), expect: {value (tracked value path or last segment, actor id for exists, widget for visible), op: decreasing|increasing|eq|gt|lt|visible|exists, target (number for eq/gt/lt, boolean for visible/exists, default true), within_ms}}",
+          "description": "Replacement steps: {instruction, judge: auto|manual (default auto), agent_judgeable (manual steps: false means only a person gives the verdict, default true), resolve_in_pie (true: expect.value and the actors arrange and act name only resolve once PIE runs, so script_create and script_update do not check them), arrange: [{kind: spawn, class, at?, rotation?, scale?} | {kind: set, target, path, value} | {kind: call, target, func, args?}] (run when the step starts), act: [{client?, place: {at, offset?, face?} | {location, yaw?}} | {client?, press: {action, frames?}} | {client?, inject: {action, value}} | {client?, hold: {action, value, ms}} | {client?, tape: {action, values, hz?}} | {client?, console} | {client?, capture} | {wait_ms}] (run after arrange, as uat_run runs a step's do; within_ms counts from its end), expect: {value (tracked value path or last segment, actor id for exists, widget for visible), op: decreasing|increasing|eq|gt|lt|visible|exists, target (number for eq/gt/lt, boolean for visible/exists, default true, optional least change for decreasing/increasing), within_ms}}",
           "items": "object"
         },
         {
@@ -26013,7 +27095,7 @@
           "name": "steps",
           "type": "array",
           "required": true,
-          "description": "Steps to check, as script_create takes them: {instruction, judge: auto|manual (default auto), agent_judgeable (manual steps: false means only a person gives the verdict, default true), resolve_in_pie (true: expect.value and the actors arrange and act name only resolve once PIE runs, so script_create and script_update do not check them), arrange: [{kind: spawn, class, at?, rotation?, scale?} | {kind: set, target, path, value} | {kind: call, target, func, args?}] (run when the step starts), act: [{client?, place: {at, offset?, face?} | {location, yaw?}} | {client?, press: {action, frames?}} | {client?, inject: {action, value}} | {client?, hold: {action, value, ms}} | {client?, tape: {action, values}} | {client?, console} | {client?, capture} | {wait_ms}] (run after arrange, as uat_run runs a step's do; within_ms counts from its end), expect: {value (tracked value path or last segment, actor id for exists, widget for visible), op: decreasing|increasing|eq|gt|lt|visible|exists, target (number for eq/gt/lt, boolean for visible/exists, default true), within_ms}}",
+          "description": "Steps to check, as script_create takes them: {instruction, judge: auto|manual (default auto), agent_judgeable (manual steps: false means only a person gives the verdict, default true), resolve_in_pie (true: expect.value and the actors arrange and act name only resolve once PIE runs, so script_create and script_update do not check them), arrange: [{kind: spawn, class, at?, rotation?, scale?} | {kind: set, target, path, value} | {kind: call, target, func, args?}] (run when the step starts), act: [{client?, place: {at, offset?, face?} | {location, yaw?}} | {client?, press: {action, frames?}} | {client?, inject: {action, value}} | {client?, hold: {action, value, ms}} | {client?, tape: {action, values, hz?}} | {client?, console} | {client?, capture} | {wait_ms}] (run after arrange, as uat_run runs a step's do; within_ms counts from its end), expect: {value (tracked value path or last segment, actor id for exists, widget for visible), op: decreasing|increasing|eq|gt|lt|visible|exists, target (number for eq/gt/lt, boolean for visible/exists, default true, optional least change for decreasing/increasing), within_ms}}",
           "items": "object"
         },
         {
@@ -26208,6 +27290,13 @@
           "required": false,
           "description": "First row",
           "minimum": 0
+        },
+        {
+          "name": "max_message_chars",
+          "type": "integer",
+          "required": false,
+          "description": "Longest message returned; longer ones are cut and marked truncated (default 500, 0 for no limit)",
+          "minimum": 0
         }
       ]
     },
@@ -26333,6 +27422,12 @@
           "required": false,
           "description": "Most errors logged during the run (default 0)",
           "minimum": 0
+        },
+        {
+          "name": "start_when",
+          "type": "object",
+          "required": false,
+          "description": "Replay gate test_run uses, as replay_run's start_when"
         }
       ],
       "contractExempt": "Writes test.json beside the recording"
@@ -26356,7 +27451,7 @@
           "name": "scenario",
           "type": "object",
           "required": false,
-          "description": "Scenario object: {name, map, pie:{players, net_mode, one_process, windowless, client_fps}, join_timeout_s, settle_ms, steps:[{name, do[], expect[], forbid[], window_ms}]}; see docs/pie.md"
+          "description": "Scenario object: {name, map, pie:{players, net_mode, one_process, windowless, client_fps}, join_timeout_s, settle_ms, steps:[{name, do[], expect[{log host|client:N, pattern (regex), min, max, since step|run}], forbid[], window_ms}]}. A rule reads only lines logged after its step began unless since is run; see docs/pie.md"
         },
         {
           "name": "path",
@@ -27086,7 +28181,7 @@
           "name": "folderPathPrefix",
           "type": "string",
           "required": false,
-          "description": "World Outliner folder prefix"
+          "description": "World Outliner folder, matched with every folder nested under it"
         },
         {
           "name": "fields",
@@ -27099,7 +28194,7 @@
           "name": "propertyNames",
           "type": "array",
           "required": false,
-          "description": "Component UPROPERTY names projected under props.*, at most 32",
+          "description": "Component property names or dotted struct paths (AttachEndTo.ComponentProperty) projected under props.*, at most 32",
           "items": "string"
         },
         {
@@ -27220,6 +28315,12 @@
           "type": "string",
           "required": false,
           "description": "Collision channel to inspect; omitted lists non-Block responses, capped at 32"
+        },
+        {
+          "name": "includeChildActors",
+          "type": "boolean",
+          "required": false,
+          "description": "Match a ChildActorComponent's child actor by the actor filters of the top-level actor that owns it (default false)"
         }
       ]
     },
@@ -27285,6 +28386,35 @@
           "type": "string",
           "required": false,
           "description": "Only this ZoneGraphData actor, by full object path"
+        }
+      ]
+    },
+    "quick_search": {
+      "category": "asset",
+      "params": [
+        {
+          "name": "query",
+          "type": "string",
+          "required": true,
+          "description": "Words matched against names, classes and paths; every word must match. A leading BP_, M_ or DT_ keeps names with that prefix, and actor:, asset: or file: keeps one kind"
+        },
+        {
+          "name": "refreshFiles",
+          "type": "boolean",
+          "required": false,
+          "description": "Re-walk Source/ and Config/ now instead of using the listing cached for 2 seconds (default false)"
+        },
+        {
+          "name": "cursor",
+          "type": "string",
+          "required": false,
+          "description": "Resume a paged read: pass back the nextCursor from the previous page, unmodified"
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "description": "Rows per page, 1 to 200 (default 20)"
         }
       ]
     },
@@ -27372,6 +28502,26 @@
           "aliases": [
             "path"
           ]
+        }
+      ]
+    },
+    "read_anim_curve_keys": {
+      "category": "animation",
+      "params": [
+        {
+          "name": "assetPath",
+          "type": "string",
+          "required": true,
+          "description": "AnimSequence asset path",
+          "aliases": [
+            "path"
+          ]
+        },
+        {
+          "name": "curveName",
+          "type": "string",
+          "required": false,
+          "description": "Float curve to read (case-insensitive); omit for every curve"
         }
       ]
     },
@@ -28465,6 +29615,63 @@
         }
       ]
     },
+    "read_material_summary": {
+      "category": "material",
+      "params": [
+        {
+          "name": "materialPath",
+          "type": "string",
+          "required": true,
+          "description": "Material asset path"
+        },
+        {
+          "name": "classes",
+          "type": "array",
+          "required": false,
+          "description": "Expression classes to include, full or short names",
+          "items": "string"
+        },
+        {
+          "name": "parameterNames",
+          "type": "array",
+          "required": false,
+          "description": "Parameter names to include; intersects classes when both are supplied",
+          "items": "string"
+        },
+        {
+          "name": "propertyChain",
+          "type": "object",
+          "required": false,
+          "description": "One property or named expression input and upstream depth limit",
+          "fields": [
+            {
+              "name": "property",
+              "type": "string",
+              "required": false,
+              "description": "Root material property"
+            },
+            {
+              "name": "targetExpression",
+              "type": "string",
+              "required": false,
+              "description": "Root expression instead of property"
+            },
+            {
+              "name": "targetInput",
+              "type": "string",
+              "required": false,
+              "description": "Root expression input name or index"
+            },
+            {
+              "name": "depthLimit",
+              "type": "integer",
+              "required": false,
+              "description": "Maximum upstream depth from 0 to 64; default 8"
+            }
+          ]
+        }
+      ]
+    },
     "read_mesh_materials": {
       "category": "asset",
       "params": [
@@ -28857,6 +30064,99 @@
           "required": true,
           "description": "Source MeshDescription vertex IDs to read (1-256)",
           "items": "integer"
+        },
+        {
+          "name": "lodIndex",
+          "type": "integer",
+          "required": false,
+          "description": "Source LOD (default 0); generated LODs without source geometry are refused"
+        },
+        {
+          "name": "profileName",
+          "type": "string",
+          "required": false,
+          "description": "Existing skin-weight profile; omit or pass 'default' for the default profile"
+        }
+      ]
+    },
+    "read_skeletal_mesh_vertices": {
+      "category": "asset",
+      "params": [
+        {
+          "name": "assetPath",
+          "type": "string",
+          "required": true,
+          "description": "SkeletalMesh asset path"
+        },
+        {
+          "name": "boneNames",
+          "type": "array",
+          "required": false,
+          "description": "Keep vertices weighted to any of these bones; omit to keep every vertex",
+          "items": "string"
+        },
+        {
+          "name": "includeChildBones",
+          "type": "boolean",
+          "required": false,
+          "description": "With boneNames, also select every bone below each named bone (default false)"
+        },
+        {
+          "name": "minWeight",
+          "type": "number",
+          "required": false,
+          "description": "With boneNames, keep a vertex only when its summed weight on the selected bones is at least this (0 < minWeight <= 1; default any positive weight)"
+        },
+        {
+          "name": "box",
+          "type": "object",
+          "required": false,
+          "description": "Keep vertices inside this component-space bind-pose box (inclusive)",
+          "fields": [
+            {
+              "name": "min",
+              "type": "vec3",
+              "required": true,
+              "description": "Box minimum (cm)"
+            },
+            {
+              "name": "max",
+              "type": "vec3",
+              "required": true,
+              "description": "Box maximum (cm)"
+            }
+          ]
+        },
+        {
+          "name": "include",
+          "type": "array",
+          "required": false,
+          "description": "Data per vertex: any of positions, weights, triangles (default positions and weights)",
+          "items": "string"
+        },
+        {
+          "name": "offset",
+          "type": "number",
+          "required": false,
+          "description": "First selected vertex to return (default 0); ignored with dumpToFile"
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "description": "Selected vertices to return inline, 1 to 20000 (default 2000); ignored with dumpToFile"
+        },
+        {
+          "name": "dumpToFile",
+          "type": "boolean",
+          "required": false,
+          "description": "Write the whole selection to a JSON file and return only the summary"
+        },
+        {
+          "name": "outputPath",
+          "type": "string",
+          "required": false,
+          "description": "File for dumpToFile; relative paths resolve under Saved/ (default Saved/UE_MCP/SkeletalMeshVertices/)"
         },
         {
           "name": "lodIndex",
@@ -29820,6 +31120,58 @@
         }
       ]
     },
+    "remove_asset_array_elements": {
+      "category": "asset",
+      "params": [
+        {
+          "name": "assetPath",
+          "type": "string",
+          "required": true,
+          "description": "Asset path; a Blueprint path writes its generated-class CDO",
+          "aliases": [
+            "path"
+          ]
+        },
+        {
+          "name": "propertyName",
+          "type": "string",
+          "required": true,
+          "description": "Path of the TArray property"
+        },
+        {
+          "name": "indices",
+          "type": "array",
+          "required": false,
+          "description": "Element indices to remove; each must exist",
+          "items": "integer"
+        },
+        {
+          "name": "elements",
+          "type": "array",
+          "required": false,
+          "description": "Values to remove; every element equal to one of them goes"
+        },
+        {
+          "name": "save",
+          "type": "boolean",
+          "required": false,
+          "description": "Save the package after the write (default true)"
+        }
+      ],
+      "choices": [
+        {
+          "mode": "exactlyOne",
+          "branches": [
+            [
+              "indices"
+            ],
+            [
+              "elements"
+            ]
+          ]
+        }
+      ]
+    },
     "remove_blackboard_key": {
       "category": "gameplay",
       "params": [
@@ -29994,7 +31346,7 @@
           "name": "folderPathPrefix",
           "type": "string",
           "required": false,
-          "description": "World Outliner folder prefix"
+          "description": "World Outliner folder, matched with every folder nested under it"
         },
         {
           "name": "matchSubclasses",
@@ -30176,7 +31528,10 @@
           "name": "systemPath",
           "type": "string",
           "required": true,
-          "description": "NiagaraSystem asset path"
+          "description": "NiagaraSystem asset path",
+          "aliases": [
+            "assetPath"
+          ]
         },
         {
           "name": "emitterName",
@@ -30199,7 +31554,10 @@
           "name": "systemPath",
           "type": "string",
           "required": true,
-          "description": "NiagaraSystem asset path"
+          "description": "NiagaraSystem asset path",
+          "aliases": [
+            "assetPath"
+          ]
         },
         {
           "name": "rendererIndex",
@@ -30724,7 +32082,10 @@
           "name": "systemPath",
           "type": "string",
           "required": true,
-          "description": "NiagaraSystem asset path"
+          "description": "NiagaraSystem asset path",
+          "aliases": [
+            "assetPath"
+          ]
         },
         {
           "name": "stackContext",
@@ -30765,7 +32126,10 @@
           "name": "systemPath",
           "type": "string",
           "required": true,
-          "description": "NiagaraSystem asset path"
+          "description": "NiagaraSystem asset path",
+          "aliases": [
+            "assetPath"
+          ]
         },
         {
           "name": "eventName",
@@ -30794,7 +32158,10 @@
           "name": "systemPath",
           "type": "string",
           "required": true,
-          "description": "NiagaraSystem asset path"
+          "description": "NiagaraSystem asset path",
+          "aliases": [
+            "assetPath"
+          ]
         },
         {
           "name": "stackContext",
@@ -30829,7 +32196,10 @@
           "name": "systemPath",
           "type": "string",
           "required": true,
-          "description": "NiagaraSystem asset path"
+          "description": "NiagaraSystem asset path",
+          "aliases": [
+            "assetPath"
+          ]
         },
         {
           "name": "stageName",
@@ -31363,6 +32733,26 @@
         }
       ]
     },
+    "remove_timeline": {
+      "category": "blueprint",
+      "params": [
+        {
+          "name": "assetPath",
+          "type": "string",
+          "required": true,
+          "description": "Blueprint asset path. Read and graph actions also accept a World/umap path, resolved to that map's level script Blueprint",
+          "aliases": [
+            "path"
+          ]
+        },
+        {
+          "name": "timelineName",
+          "type": "string",
+          "required": true,
+          "description": "Timeline name, as add_timeline_track and the Timeline node show it"
+        }
+      ]
+    },
     "remove_transition": {
       "category": "animation",
       "params": [
@@ -31549,6 +32939,78 @@
           "type": "string",
           "required": true,
           "description": "Reflected property name on the widget"
+        }
+      ]
+    },
+    "rename_actor_object": {
+      "category": "level",
+      "params": [
+        {
+          "name": "actorLabel",
+          "type": "string",
+          "required": false,
+          "description": "Actor editor label; pass actorLabel or actorPath"
+        },
+        {
+          "name": "actorPath",
+          "type": "string",
+          "required": false,
+          "description": "Full actor object path; the unambiguous selector, and it wins over actorLabel"
+        },
+        {
+          "name": "newName",
+          "type": "string",
+          "required": false,
+          "description": "New object name; omitted, a unique name is generated from the actor's class"
+        },
+        {
+          "name": "renames",
+          "type": "array",
+          "required": false,
+          "description": "Batch form, at most 512; replaces actorLabel/actorPath/newName",
+          "items": "object",
+          "fields": [
+            {
+              "name": "actorPath",
+              "type": "string",
+              "required": false,
+              "description": "Full actor object path; wins over actorLabel"
+            },
+            {
+              "name": "actorLabel",
+              "type": "string",
+              "required": false,
+              "description": "Actor editor label"
+            },
+            {
+              "name": "newName",
+              "type": "string",
+              "required": false,
+              "description": "New object name; omitted, one is generated from the class"
+            }
+          ]
+        },
+        {
+          "name": "dryRun",
+          "type": "boolean",
+          "required": false,
+          "description": "Report what would change without writing"
+        }
+      ],
+      "choices": [
+        {
+          "mode": "atLeastOne",
+          "branches": [
+            [
+              "actorLabel"
+            ],
+            [
+              "actorPath"
+            ],
+            [
+              "renames"
+            ]
+          ]
         }
       ]
     },
@@ -31771,6 +33233,32 @@
               "fieldGuid"
             ]
           ]
+        }
+      ]
+    },
+    "rename_widget": {
+      "category": "widget",
+      "params": [
+        {
+          "name": "assetPath",
+          "type": "string",
+          "required": true,
+          "description": "Widget Blueprint or Editor Utility asset path, e.g. /Game/UI/WBP_Example (#798)",
+          "aliases": [
+            "path"
+          ]
+        },
+        {
+          "name": "widgetName",
+          "type": "string",
+          "required": true,
+          "description": "Name of a widget inside the tree (#798)"
+        },
+        {
+          "name": "newName",
+          "type": "string",
+          "required": true,
+          "description": "New widget name; refused when another widget, variable or function already holds it"
         }
       ]
     },
@@ -32649,6 +34137,35 @@
         }
       ]
     },
+    "restore_expression_insertion": {
+      "category": "material",
+      "params": [
+        {
+          "name": "materialPath",
+          "type": "string",
+          "required": true,
+          "description": "Material asset path"
+        },
+        {
+          "name": "expressionName",
+          "type": "string",
+          "required": true,
+          "description": "Inserted node name from the rollback record"
+        },
+        {
+          "name": "insertion",
+          "type": "object",
+          "required": true,
+          "description": "Original insertion parameters from the rollback record"
+        },
+        {
+          "name": "previousSource",
+          "type": "object",
+          "required": true,
+          "description": "Original source and channel masks from the rollback record"
+        }
+      ]
+    },
     "restore_runtime_visibility": {
       "category": "editor",
       "params": [
@@ -32951,7 +34468,7 @@
           "name": "filePath",
           "type": "string",
           "required": true,
-          "description": "Absolute path to the .py file",
+          "description": "Path to the .py file: absolute, or relative to the project directory, such as Tools/import_assets.py",
           "aliases": [
             "path"
           ]
@@ -33283,6 +34800,59 @@
         }
       ],
       "contractExempt": "Saves the current level under the contract values; nothing it reads fails first"
+    },
+    "scale_mesh_geometry": {
+      "category": "asset",
+      "params": [
+        {
+          "name": "assetPath",
+          "type": "string",
+          "required": true,
+          "description": "StaticMesh to scale",
+          "aliases": [
+            "path"
+          ]
+        },
+        {
+          "name": "factor",
+          "type": "number",
+          "required": true,
+          "description": "Uniform factor, or {x, y, z} per axis; every component must be above 0",
+          "orTypes": [
+            "vec3"
+          ]
+        },
+        {
+          "name": "pivot",
+          "type": "vec3",
+          "required": false,
+          "description": "Mesh-space point that stays fixed (default the mesh origin)"
+        },
+        {
+          "name": "outputPath",
+          "type": "string",
+          "required": false,
+          "description": "Scale a copy written here and leave assetPath untouched (default: scale assetPath in place)"
+        },
+        {
+          "name": "scaleSockets",
+          "type": "boolean",
+          "required": false,
+          "description": "Move socket locations with the geometry (default true)"
+        },
+        {
+          "name": "scaleCollision",
+          "type": "boolean",
+          "required": false,
+          "description": "Scale the simple collision with the geometry (default true)"
+        },
+        {
+          "name": "save",
+          "type": "boolean",
+          "required": false,
+          "description": "Save the mesh after the rebuild (default true)"
+        }
+      ]
     },
     "scan_animation_tracks": {
       "category": "animation",
@@ -33853,6 +35423,35 @@
       ],
       "contractExempt": "Deselects everything before it selects, so the contract's empty lists would clear the editor selection"
     },
+    "select_component": {
+      "category": "level",
+      "params": [
+        {
+          "name": "actorLabel",
+          "type": "string",
+          "required": false,
+          "description": "Actor editor label; pass actorLabel or actorPath"
+        },
+        {
+          "name": "actorPath",
+          "type": "string",
+          "required": false,
+          "description": "Full actor object path; the unambiguous selector, and it wins over actorLabel"
+        },
+        {
+          "name": "componentName",
+          "type": "string",
+          "required": true,
+          "description": "Component instance name, on the actor or on one of its child actors"
+        },
+        {
+          "name": "addToSelection",
+          "type": "boolean",
+          "required": false,
+          "description": "Keep the current selection and add to it (default false: replace it)"
+        }
+      ]
+    },
     "send_ability_input": {
       "category": "gas",
       "params": [
@@ -34137,7 +35736,7 @@
           "name": "folderPathPrefix",
           "type": "string",
           "required": false,
-          "description": "World Outliner folder prefix"
+          "description": "World Outliner folder, matched with every folder nested under it"
         },
         {
           "name": "matchSubclasses",
@@ -34652,6 +36251,12 @@
           "type": "string",
           "required": false,
           "description": "AnimSequence to swap into the sample"
+        },
+        {
+          "name": "rateScale",
+          "type": "number",
+          "required": false,
+          "description": "Per-sample playback rate, 0.01 to 64 (FBlendSample::RateScale)"
         }
       ],
       "choices": [
@@ -34669,6 +36274,9 @@
             ],
             [
               "animation"
+            ],
+            [
+              "rateScale"
             ]
           ]
         }
@@ -35042,6 +36650,45 @@
         }
       ]
     },
+    "set_buffer_visualization": {
+      "category": "editor",
+      "params": [
+        {
+          "name": "buffer",
+          "type": "string",
+          "required": true,
+          "description": "Buffer to show full screen: Velocity, SceneDepth, BaseColor, WorldNormal and the rest this engine defines (an unknown name lists them); Overview for the grid of all buffers; off to leave buffer visualization"
+        },
+        {
+          "name": "target",
+          "type": "string",
+          "required": false,
+          "description": "editor (default) for a level viewport, pie for the running game viewport",
+          "enum": [
+            "editor",
+            "pie"
+          ]
+        },
+        {
+          "name": "viewMode",
+          "type": "string",
+          "required": false,
+          "description": "With buffer=off, the view mode to return to (default Lit)"
+        },
+        {
+          "name": "viewportIndex",
+          "type": "number",
+          "required": false,
+          "description": "Level viewport to act on (default the active one)"
+        },
+        {
+          "name": "pieInstance",
+          "type": "number",
+          "required": false,
+          "description": "PIE world to target: 0 = server/primary, 1..N = clients. See list_pie_instances"
+        }
+      ]
+    },
     "set_capsule_size": {
       "category": "blueprint",
       "params": [
@@ -35349,7 +36996,7 @@
           "name": "folderPathPrefix",
           "type": "string",
           "required": false,
-          "description": "World Outliner folder prefix"
+          "description": "World Outliner folder, matched with every folder nested under it"
         },
         {
           "name": "matchSubclasses",
@@ -35633,6 +37280,45 @@
         }
       ]
     },
+    "set_curve_keys": {
+      "category": "asset",
+      "params": [
+        {
+          "name": "assetPath",
+          "type": "string",
+          "required": true,
+          "description": "CurveFloat, CurveVector or CurveLinearColor asset path",
+          "aliases": [
+            "path"
+          ]
+        },
+        {
+          "name": "channel",
+          "type": "number",
+          "required": false,
+          "description": "Channel index to replace: 0 on a CurveFloat, 0-2 on a CurveVector, 0-3 on a CurveLinearColor (default 0)"
+        },
+        {
+          "name": "channelName",
+          "type": "string",
+          "required": false,
+          "description": "Channel to replace by name, instead of channel: Value, X/Y/Z or R/G/B/A"
+        },
+        {
+          "name": "keys",
+          "type": "array",
+          "required": true,
+          "description": "Replacement keys, [] to clear: [{time, value, interpMode? (cubic default, linear, constant, none), tangentMode? (auto|smartAuto|user|break|none), tangentWeightMode? (none|arrive|leave|both), arriveTangent?, leaveTangent?, arriveTangentWeight?, leaveTangentWeight?}]. A tangent given without tangentMode is kept as a user tangent",
+          "items": "object"
+        },
+        {
+          "name": "save",
+          "type": "boolean",
+          "required": false,
+          "description": "Save the package (default true); false leaves it dirty"
+        }
+      ]
+    },
     "set_curvetable_keys": {
       "category": "asset",
       "params": [
@@ -35869,6 +37555,39 @@
           "aliases": [
             "fields",
             "data"
+          ]
+        }
+      ]
+    },
+    "set_developer_setting": {
+      "category": "project",
+      "params": [
+        {
+          "name": "settingsClass",
+          "type": "string",
+          "required": true,
+          "description": "Config class as a short name (GameMapsSettings) or /Script/<Module>.<Class> path"
+        },
+        {
+          "name": "propertyName",
+          "type": "string",
+          "required": true,
+          "description": "Config property; a dotted or indexed path reaches inside a struct or array"
+        },
+        {
+          "name": "settingValue",
+          "type": "any",
+          "required": true,
+          "description": "New value as structured JSON, the form editor(get_property) returns under value"
+        },
+        {
+          "name": "persist",
+          "type": "string",
+          "required": false,
+          "description": "default writes Default<Config>.ini; user writes the per-user config. Omitted follows the Project Settings dialog: default for a defaultconfig class, user otherwise",
+          "enum": [
+            "default",
+            "user"
           ]
         }
       ]
@@ -37134,6 +38853,82 @@
         }
       ]
     },
+    "set_maps_settings": {
+      "category": "project",
+      "params": [
+        {
+          "name": "globalDefaultGameMode",
+          "type": "string",
+          "required": false,
+          "description": "Default GameMode: a GameModeBase class as a /Script path, short name or Blueprint asset path; empty clears"
+        },
+        {
+          "name": "globalDefaultServerGameMode",
+          "type": "string",
+          "required": false,
+          "description": "Dedicated server GameMode, same forms; empty clears"
+        },
+        {
+          "name": "gameInstanceClass",
+          "type": "string",
+          "required": false,
+          "description": "GameInstance class, same forms; empty clears"
+        },
+        {
+          "name": "gameDefaultMap",
+          "type": "string",
+          "required": false,
+          "description": "Game default map as a world asset path, /Game/Maps/MyMap; empty clears"
+        },
+        {
+          "name": "serverDefaultMap",
+          "type": "string",
+          "required": false,
+          "description": "Dedicated server default map, same form; empty clears"
+        },
+        {
+          "name": "editorStartupMap",
+          "type": "string",
+          "required": false,
+          "description": "Map the editor opens at startup, same form; empty clears"
+        },
+        {
+          "name": "transitionMap",
+          "type": "string",
+          "required": false,
+          "description": "Seamless travel transition map, same form; empty clears"
+        }
+      ],
+      "choices": [
+        {
+          "mode": "atLeastOne",
+          "branches": [
+            [
+              "globalDefaultGameMode"
+            ],
+            [
+              "globalDefaultServerGameMode"
+            ],
+            [
+              "gameInstanceClass"
+            ],
+            [
+              "gameDefaultMap"
+            ],
+            [
+              "serverDefaultMap"
+            ],
+            [
+              "editorStartupMap"
+            ],
+            [
+              "transitionMap"
+            ]
+          ]
+        }
+      ],
+      "contractExempt": "writes DefaultEngine.ini under the project's Config folder"
+    },
     "set_material_base_color": {
       "category": "material",
       "params": [
@@ -37946,7 +39741,10 @@
           "name": "systemPath",
           "type": "string",
           "required": true,
-          "description": "NiagaraSystem asset path"
+          "description": "NiagaraSystem asset path",
+          "aliases": [
+            "assetPath"
+          ]
         },
         {
           "name": "stackContext",
@@ -37993,7 +39791,10 @@
           "name": "systemPath",
           "type": "string",
           "required": true,
-          "description": "NiagaraSystem asset path"
+          "description": "NiagaraSystem asset path",
+          "aliases": [
+            "assetPath"
+          ]
         },
         {
           "name": "stackContext",
@@ -38034,7 +39835,10 @@
           "name": "systemPath",
           "type": "string",
           "required": true,
-          "description": "NiagaraSystem asset path"
+          "description": "NiagaraSystem asset path",
+          "aliases": [
+            "assetPath"
+          ]
         },
         {
           "name": "moduleName",
@@ -38160,7 +39964,10 @@
           "name": "systemPath",
           "type": "string",
           "required": true,
-          "description": "NiagaraSystem asset path"
+          "description": "NiagaraSystem asset path",
+          "aliases": [
+            "assetPath"
+          ]
         },
         {
           "name": "moduleName",
@@ -38734,6 +40541,211 @@
         }
       ]
     },
+    "set_physics_asset_body_material": {
+      "category": "animation",
+      "params": [
+        {
+          "name": "assetPath",
+          "type": "string",
+          "required": true,
+          "description": "PhysicsAsset asset path, or a SkeletalMesh whose assigned PhysicsAsset to edit",
+          "aliases": [
+            "path"
+          ]
+        },
+        {
+          "name": "physicalMaterialPath",
+          "type": "string",
+          "required": false,
+          "description": "PhysicalMaterial to assign; an empty string clears the override"
+        },
+        {
+          "name": "boneNames",
+          "type": "array",
+          "required": false,
+          "description": "Bodies physicalMaterialPath applies to, by bone name; omit for every body",
+          "items": "string"
+        },
+        {
+          "name": "bodies",
+          "type": "array",
+          "required": false,
+          "description": "Per-body materials, applied after physicalMaterialPath; this is how the rollback replays",
+          "items": "object",
+          "fields": [
+            {
+              "name": "boneName",
+              "type": "string",
+              "required": true,
+              "description": "Bone whose body to edit"
+            },
+            {
+              "name": "physicalMaterialPath",
+              "type": "string",
+              "required": true,
+              "description": "PhysicalMaterial to assign; an empty string clears the override"
+            }
+          ]
+        },
+        {
+          "name": "save",
+          "type": "boolean",
+          "required": false,
+          "description": "Save the asset after the edit (default true)"
+        }
+      ],
+      "choices": [
+        {
+          "mode": "atLeastOne",
+          "branches": [
+            [
+              "physicalMaterialPath"
+            ],
+            [
+              "bodies"
+            ]
+          ]
+        }
+      ]
+    },
+    "set_physics_asset_constraint_limits": {
+      "category": "animation",
+      "params": [
+        {
+          "name": "assetPath",
+          "type": "string",
+          "required": true,
+          "description": "PhysicsAsset asset path, or a SkeletalMesh whose assigned PhysicsAsset to edit",
+          "aliases": [
+            "path"
+          ]
+        },
+        {
+          "name": "constraintNames",
+          "type": "array",
+          "required": false,
+          "description": "Constraints the shared values apply to, by constraint (joint) name; omit for every constraint",
+          "items": "string"
+        },
+        {
+          "name": "swing1Motion",
+          "type": "string",
+          "required": false,
+          "description": "Free | Limited | Locked"
+        },
+        {
+          "name": "swing2Motion",
+          "type": "string",
+          "required": false,
+          "description": "Free | Limited | Locked"
+        },
+        {
+          "name": "twistMotion",
+          "type": "string",
+          "required": false,
+          "description": "Free | Limited | Locked"
+        },
+        {
+          "name": "swing1LimitDegrees",
+          "type": "number",
+          "required": false,
+          "description": "Swing1 range, 0 to 180; written only where swing1 is Limited"
+        },
+        {
+          "name": "swing2LimitDegrees",
+          "type": "number",
+          "required": false,
+          "description": "Swing2 range, 0 to 180; written only where swing2 is Limited"
+        },
+        {
+          "name": "twistLimitDegrees",
+          "type": "number",
+          "required": false,
+          "description": "Twist range, 0 to 180; written only where twist is Limited"
+        },
+        {
+          "name": "swingSoft",
+          "type": "boolean",
+          "required": false,
+          "description": "Soft (true) or hard (false) cone limit"
+        },
+        {
+          "name": "twistSoft",
+          "type": "boolean",
+          "required": false,
+          "description": "Soft (true) or hard (false) twist limit"
+        },
+        {
+          "name": "constraints",
+          "type": "array",
+          "required": false,
+          "description": "Per-constraint values, applied after the shared ones; this is how the rollback replays",
+          "items": "object",
+          "fields": [
+            {
+              "name": "constraintName",
+              "type": "string",
+              "required": true,
+              "description": "Constraint (joint) name"
+            },
+            {
+              "name": "swing1Motion",
+              "type": "string",
+              "required": false,
+              "description": "Free | Limited | Locked"
+            },
+            {
+              "name": "swing2Motion",
+              "type": "string",
+              "required": false,
+              "description": "Free | Limited | Locked"
+            },
+            {
+              "name": "twistMotion",
+              "type": "string",
+              "required": false,
+              "description": "Free | Limited | Locked"
+            },
+            {
+              "name": "swing1LimitDegrees",
+              "type": "number",
+              "required": false,
+              "description": "Swing1 range, 0 to 180"
+            },
+            {
+              "name": "swing2LimitDegrees",
+              "type": "number",
+              "required": false,
+              "description": "Swing2 range, 0 to 180"
+            },
+            {
+              "name": "twistLimitDegrees",
+              "type": "number",
+              "required": false,
+              "description": "Twist range, 0 to 180"
+            },
+            {
+              "name": "swingSoft",
+              "type": "boolean",
+              "required": false,
+              "description": "Soft or hard cone limit"
+            },
+            {
+              "name": "twistSoft",
+              "type": "boolean",
+              "required": false,
+              "description": "Soft or hard twist limit"
+            }
+          ]
+        },
+        {
+          "name": "save",
+          "type": "boolean",
+          "required": false,
+          "description": "Save the asset after the edit (default true)"
+        }
+      ]
+    },
     "set_physics_properties": {
       "category": "physics",
       "params": [
@@ -39236,7 +41248,10 @@
           "name": "systemPath",
           "type": "string",
           "required": true,
-          "description": "NiagaraSystem asset path"
+          "description": "NiagaraSystem asset path",
+          "aliases": [
+            "assetPath"
+          ]
         },
         {
           "name": "rendererIndex",
@@ -39666,6 +41681,27 @@
         }
       ]
     },
+    "set_sequence_display_rate": {
+      "category": "editor",
+      "params": [
+        {
+          "name": "sequencePath",
+          "type": "string",
+          "required": true,
+          "description": "Level Sequence asset path",
+          "aliases": [
+            "assetPath",
+            "path"
+          ]
+        },
+        {
+          "name": "displayRate",
+          "type": "any",
+          "required": true,
+          "description": "Display rate: frames per second (24, 30, 60; 23.976, 29.97 and 59.94 map to the NTSC rates) or {numerator, denominator}. Bakes and display frames sample at this rate"
+        }
+      ]
+    },
     "set_sequence_keyframes": {
       "category": "editor",
       "params": [
@@ -39765,7 +41801,7 @@
           "name": "properties",
           "type": "object",
           "required": true,
-          "description": "{enableRootMotion?, forceRootLock?, useNormalizedRootMotionScale?, rootMotionRootLock?: RefPose|AnimFirstFrame|Zero, additiveAnimType?: None|LocalSpaceBase|RotationOffsetMeshSpace, refPoseType?: None|RefPose|AnimScaled|AnimFrame|LocalAnimFrame, refPoseSeq?, refFrameIndex?}. An unknown key or value refuses the whole call"
+          "description": "{loop?, enableRootMotion?, forceRootLock?, useNormalizedRootMotionScale?, rootMotionRootLock?: RefPose|AnimFirstFrame|Zero, additiveAnimType?: None|LocalSpaceBase|RotationOffsetMeshSpace, refPoseType?: None|RefPose|AnimScaled|AnimFrame|LocalAnimFrame, refPoseSeq?, refFrameIndex?}. An unknown key or value refuses the whole call"
         },
         {
           "name": "resolveFromMontages",
@@ -41596,7 +43632,7 @@
           "name": "value",
           "type": "any",
           "required": true,
-          "description": "New value as UE export text, e.g. (Left=8,Top=8,Right=8,Bottom=8)",
+          "description": "New value: UE export text, e.g. (Left=8,Top=8,Right=8,Bottom=8), or a JSON object or array that fills a struct or array field by field. An enum takes its short, full or prefixed name or an enumerator number",
           "aliases": [
             "propertyValue"
           ]
@@ -42545,7 +44581,7 @@
               "name": "folderPathPrefix",
               "type": "string",
               "required": false,
-              "description": "World Outliner folder prefix"
+              "description": "World Outliner folder, matched with every folder nested under it"
             },
             {
               "name": "matchSubclasses",
@@ -42886,7 +44922,10 @@
           "name": "systemPath",
           "type": "string",
           "required": true,
-          "description": "NiagaraSystem asset path"
+          "description": "NiagaraSystem asset path",
+          "aliases": [
+            "assetPath"
+          ]
         },
         {
           "name": "location",
@@ -42921,7 +44960,10 @@
           "name": "systemPath",
           "type": "string",
           "required": true,
-          "description": "NiagaraSystem asset path"
+          "description": "NiagaraSystem asset path",
+          "aliases": [
+            "assetPath"
+          ]
         },
         {
           "name": "location",
@@ -43623,6 +45665,83 @@
         }
       ]
     },
+    "transform_skinned_part": {
+      "category": "asset",
+      "params": [
+        {
+          "name": "assetPath",
+          "type": "string",
+          "required": true,
+          "description": "SkeletalMesh asset path"
+        },
+        {
+          "name": "boneName",
+          "type": "string",
+          "required": true,
+          "description": "Bone to move; every vertex skinned to it or to a bone below it moves by its weight"
+        },
+        {
+          "name": "translation",
+          "type": "vec3",
+          "required": false,
+          "description": "Offset in space's axes (cm)"
+        },
+        {
+          "name": "rotation",
+          "type": "rotator",
+          "required": false,
+          "description": "Rotation about the bone's origin, in space's axes (degrees)"
+        },
+        {
+          "name": "space",
+          "type": "string",
+          "required": false,
+          "description": "Axes of translation and rotation: the bone's bind-pose frame (default) or the mesh's component space",
+          "enum": [
+            "bone",
+            "component"
+          ]
+        },
+        {
+          "name": "moveBone",
+          "type": "boolean",
+          "required": false,
+          "description": "Move the bone's reference pose with its vertices (default true); false moves only the vertices"
+        },
+        {
+          "name": "lods",
+          "type": "array",
+          "required": false,
+          "description": "LOD indices whose source vertices move (default every LOD); generated LODs follow their base LOD",
+          "items": "integer"
+        },
+        {
+          "name": "dryRun",
+          "type": "boolean",
+          "required": false,
+          "description": "Validate every LOD and report what would move without writing anything"
+        },
+        {
+          "name": "save",
+          "type": "boolean",
+          "required": false,
+          "description": "Save the mesh after the rebuild (default true)"
+        }
+      ],
+      "choices": [
+        {
+          "mode": "atLeastOne",
+          "branches": [
+            [
+              "translation"
+            ],
+            [
+              "rotation"
+            ]
+          ]
+        }
+      ]
+    },
     "transform_uvs": {
       "category": "asset",
       "params": [
@@ -44157,7 +46276,10 @@
           "name": "systemPath",
           "type": "string",
           "required": true,
-          "description": "NiagaraSystem asset path"
+          "description": "NiagaraSystem asset path",
+          "aliases": [
+            "assetPath"
+          ]
         }
       ]
     },
