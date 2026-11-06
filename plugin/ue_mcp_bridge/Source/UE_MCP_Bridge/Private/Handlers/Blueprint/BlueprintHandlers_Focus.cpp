@@ -87,8 +87,16 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::FocusNode(const TSharedPtr<FJsonObjec
 	Editor->JumpToHyperlink(Node, /*bRequestRename*/ false);
 	Editor->FocusWindow(Node);
 
-	UEdGraph* Focused = Editor->GetFocusedGraph();
+	// The hyperlink's selection waits for the graph panel's next tick, which a
+	// panel nobody draws (a headless editor, a tab in the background) never
+	// gets, so the node is selected directly on the editor it is read back from.
 	const TSharedPtr<SGraphEditor> GraphEditor = Editor->OpenGraphAndBringToFront(Graph, /*bSetFocus*/ false);
+	if (GraphEditor.IsValid() && !GraphEditor->GetSelectedNodes().Contains(Node))
+	{
+		GraphEditor->ClearSelectionSet();
+		GraphEditor->SetNodeSelection(Node, /*bSelect*/ true);
+	}
+	UEdGraph* Focused = Editor->GetFocusedGraph();
 	const bool bSelected = GraphEditor.IsValid() && GraphEditor->GetSelectedNodes().Contains(Node);
 
 	TSharedPtr<FJsonObject> Result = MCPSuccess();
