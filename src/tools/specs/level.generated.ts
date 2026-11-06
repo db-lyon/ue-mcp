@@ -2644,6 +2644,12 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "World Outliner folder, matched with every folder nested under it"
       },
       {
+        "name": "includeChildActors",
+        "type": "boolean",
+        "required": false,
+        "description": "Match a ChildActorComponent's child actor by the actor filters of the top-level actor that owns it (default false)"
+      },
+      {
         "name": "fields",
         "type": "array",
         "required": false,
@@ -2775,12 +2781,6 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "string",
         "required": false,
         "description": "Collision channel to inspect; omitted lists non-Block responses, capped at 32"
-      },
-      {
-        "name": "includeChildActors",
-        "type": "boolean",
-        "required": false,
-        "description": "Match a ChildActorComponent's child actor by the actor filters of the top-level actor that owns it (default false)"
       }
     ]
   },
@@ -5590,7 +5590,7 @@ export const paramsClauses: Readonly<Record<string, string>> = {
   nudge_component: "Params: actorLabel OR actorPath, componentName, frame?, translationDelta?, axisRotation?, viewRotation?, scaleMultiplier?, dryRun?, world?, pieInstance?",
   place_actor: "Params: actorClass, label?, onConflict?, location?, rotation?, scale?, staticMesh?, material?, world?, pieInstance?",
   place_actors_batch: "Params: actors",
-  query_components: "Params: componentClass?, actorClass?, matchSubclasses?, componentNameContains?, actorLabelPrefix?, actorLabelContains?, actorTag?, folderPath?, folderPathPrefix?, fields?, propertyNames?, actorPropertyNames?, where?, whereMode?, suspectOnly?, groupBy?, countBy?, sampleLimit?, countOnly?, limit?, startIndex?, duplicateTransformTolerance?, levelPath?, world?, pieInstance?, includeCollision?, collisionChannel?, includeChildActors?",
+  query_components: "Params: componentClass?, actorClass?, matchSubclasses?, componentNameContains?, actorLabelPrefix?, actorLabelContains?, actorTag?, folderPath?, folderPathPrefix?, includeChildActors?, fields?, propertyNames?, actorPropertyNames?, where?, whereMode?, suspectOnly?, groupBy?, countBy?, sampleLimit?, countOnly?, limit?, startIndex?, duplicateTransformTolerance?, levelPath?, world?, pieInstance?, includeCollision?, collisionChannel?",
   read_actor_motion: "Params: actorLabel?, actorLabels?, actorPath?, actorPaths?, world?, pieInstance?",
   rebuild_water_zone: "Params: actorLabel?, actorPath?, zoneExtent?, tileSize?, maxPasses?",
   recreate_physics_state: "Params: at least one of actorLabels/labelPrefix/tag/classFilter/componentClass/componentNameContains, dryRun?, maxComponents?, world?, pieInstance?",
