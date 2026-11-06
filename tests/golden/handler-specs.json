@@ -1529,6 +1529,12 @@
           "description": "ComponentMask channels {r,g,b,a} as bools"
         },
         {
+          "name": "properties",
+          "type": "object",
+          "required": false,
+          "description": "Any other UPROPERTY on the node by name, e.g. {ConstB: 12.92} on Divide, {ConstY: 0.04} on Step, {ConstExponent: 2.4} on Power. A bad name or value adds nothing"
+        },
+        {
           "name": "positionX",
           "type": "number",
           "required": false,
@@ -7230,6 +7236,13 @@
               "description": "Source output index, instead of output"
             }
           ]
+        },
+        {
+          "name": "removeExpressions",
+          "type": "array",
+          "required": false,
+          "description": "Existing expressions to delete once the new nodes are wired, named as delete_expression takes them (description, class, parameter name, index or engine name). Resolved before anything changes; a connection may not use one (#1461)",
+          "items": "string"
         }
       ]
     },
@@ -20121,6 +20134,13 @@
               "description": "Source output index, instead of output"
             }
           ]
+        },
+        {
+          "name": "removeExpressions",
+          "type": "array",
+          "required": false,
+          "description": "Existing expressions to delete once the new nodes are wired, named as delete_expression takes them (description, class, parameter name, index or engine name). Resolved before anything changes; a connection may not use one (#1461)",
+          "items": "string"
         }
       ]
     },
