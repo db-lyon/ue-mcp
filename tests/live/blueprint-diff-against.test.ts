@@ -142,8 +142,9 @@ describe.sequential("blueprint(diff) against a checkpoint, and focus_node (#1487
   }, 300_000);
 
   it("focus_node refuses a node the Blueprint does not have", async () => {
+    // A handler's refusal comes back as a result whose body says success false.
     const r = await server!.call("blueprint", { action: "focus_node", args: { assetPath: BP, nodeId: "00000000000000000000000000000001" } });
-    expect(r.isError, r.text).toBe(true);
+    expect(resultJson<Json>(r).success, r.text).toBe(false);
     expect(r.text).toContain("No node");
   }, 120_000);
 });

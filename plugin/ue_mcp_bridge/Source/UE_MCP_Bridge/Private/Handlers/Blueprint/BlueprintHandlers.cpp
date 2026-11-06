@@ -3532,25 +3532,27 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::RemoveComponent(const TSharedPtr<FJso
 			TArray<FSubobjectDataHandle> ProbeHandles;
 			ParentProbe->K2_GatherSubobjectDataForBlueprint(Blueprint, ProbeHandles);
 			const UObject* ParentTemplate = ParentNode->ComponentTemplate;
-			int32 NameMatches = 0;
+			// The gather can hand back one template under several handles (UE 5.8
+			// lists each SCS component twice), so distinct objects are counted.
+			TSet<const UObject*> NameMatches;
 			bool bFirstMatchIsParent = false;
 			for (const FSubobjectDataHandle& ProbeHandle : ProbeHandles)
 			{
 				const FSubobjectData* ProbeData = ProbeHandle.GetData();
 				if (!ProbeData) continue;
-				UObject* ProbeObject = const_cast<UObject*>(ProbeData->GetObject());
+				const UObject* ProbeObject = ProbeData->GetObject();
 				if (!ProbeObject) continue;
 				const FString ProbeName = ProbeObject->GetName();
 				if (ProbeName == RemovedParentName || ProbeName.StartsWith(RemovedParentName))
 				{
-					if (NameMatches == 0)
+					if (NameMatches.IsEmpty())
 					{
 						bFirstMatchIsParent = (ProbeObject == ParentTemplate);
 					}
-					++NameMatches;
+					NameMatches.Add(ProbeObject);
 				}
 			}
-			bParentAddressable = (NameMatches == 1 && bFirstMatchIsParent);
+			bParentAddressable = (NameMatches.Num() == 1 && bFirstMatchIsParent);
 		}
 	}
 

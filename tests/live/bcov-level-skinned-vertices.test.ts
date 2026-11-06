@@ -62,6 +62,9 @@ beforeAll(async () => {
   await call("add_component_to_actor", { actorLabel: LABEL, componentClass: "SkeletalMeshComponent", componentName: FOLLOWER });
   await call("set_component_skeletal_mesh", { actorLabel: LABEL, componentName: FOLLOWER, skeletalMesh: MESH });
   await call("rebind_leader_pose", { actorLabel: LABEL, bodyComponent: leaderName });
+  // The walk has played for a few ticks. Stopping it holds the last evaluated
+  // frame, so the separate reads below all see one pose.
+  await call("preview_animation", { actorLabel: LABEL, enabled: false });
 }, 120_000);
 
 afterAll(async () => {
@@ -108,6 +111,8 @@ describe("get_skinned_vertices", () => {
     expect(p.map((v) => v.vertexIndex)).toEqual(b.map((v) => v.vertexIndex));
     const ph = (posedHead.bones as Array<{ location: Vec }>)[0].location;
     const bh = (bindHead.bones as Array<{ location: Vec }>)[0].location;
+    // The held frame is a walk pose, not the bind pose.
+    expect(distance(ph, bh)).toBeGreaterThan(0.5);
     for (let i = 0; i < p.length; i += 1) {
       expect(Math.abs(distance(p[i].position!, ph) - distance(b[i].position!, bh))).toBeLessThan(0.05);
       for (let j = i + 1; j < p.length; j += 1) {
