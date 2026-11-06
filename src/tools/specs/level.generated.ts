@@ -1493,6 +1493,152 @@ export const handlerSpecs: HandlerSpecs = {
     "category": "level",
     "params": []
   },
+  "get_skinned_vertices": {
+    "category": "level",
+    "params": [
+      {
+        "name": "actorLabel",
+        "type": "string",
+        "required": false,
+        "description": "Actor label, name or path; pass actorLabel or actorPath"
+      },
+      {
+        "name": "actorPath",
+        "type": "string",
+        "required": false,
+        "description": "Actor object path; preferred when labels repeat"
+      },
+      {
+        "name": "componentName",
+        "type": "string",
+        "required": false,
+        "description": "Skinned mesh component (default: the first on the actor); a leader-pose follower reads as drawn"
+      },
+      {
+        "name": "world",
+        "type": "string",
+        "required": false,
+        "description": "World scope: editor (default) | pie"
+      },
+      {
+        "name": "pieInstance",
+        "type": "integer",
+        "required": false,
+        "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients"
+      },
+      {
+        "name": "lodIndex",
+        "type": "integer",
+        "required": false,
+        "description": "Render LOD to skin (default: the LOD the component draws)"
+      },
+      {
+        "name": "space",
+        "type": "string",
+        "required": false,
+        "description": "Space of positions, box and nearPoint (default component)",
+        "enum": [
+          "component",
+          "world"
+        ]
+      },
+      {
+        "name": "boneNames",
+        "type": "array",
+        "required": false,
+        "description": "Keep vertices weighted to any of these bones; omit to keep every vertex",
+        "items": "string"
+      },
+      {
+        "name": "includeChildBones",
+        "type": "boolean",
+        "required": false,
+        "description": "With boneNames, also select every bone below each named bone (default false)"
+      },
+      {
+        "name": "minWeight",
+        "type": "number",
+        "required": false,
+        "description": "With boneNames, keep a vertex only when its summed weight on the selected bones is at least this (0 < minWeight <= 1; default any positive weight)"
+      },
+      {
+        "name": "box",
+        "type": "object",
+        "required": false,
+        "description": "Keep vertices whose posed position is inside this box (inclusive), in space",
+        "fields": [
+          {
+            "name": "min",
+            "type": "vec3",
+            "required": true,
+            "description": "Box minimum (cm)"
+          },
+          {
+            "name": "max",
+            "type": "vec3",
+            "required": true,
+            "description": "Box maximum (cm)"
+          }
+        ]
+      },
+      {
+        "name": "nearPoint",
+        "type": "vec3",
+        "required": false,
+        "description": "Keep vertices within radius of this point, in space; needs radius"
+      },
+      {
+        "name": "radius",
+        "type": "number",
+        "required": false,
+        "description": "Distance from nearPoint in cm, above 0; needs nearPoint"
+      },
+      {
+        "name": "include",
+        "type": "array",
+        "required": false,
+        "description": "Data per vertex: any of positions, weights, triangles (default positions and weights)",
+        "items": "string"
+      },
+      {
+        "name": "startIndex",
+        "type": "integer",
+        "required": false,
+        "description": "First selected vertex to return (default 0); ignored with dumpToFile"
+      },
+      {
+        "name": "limit",
+        "type": "integer",
+        "required": false,
+        "description": "Selected vertices to return inline, 1 to 20000 (default 2000); ignored with dumpToFile"
+      },
+      {
+        "name": "dumpToFile",
+        "type": "boolean",
+        "required": false,
+        "description": "Write the whole selection to a JSON file and return only the summary"
+      },
+      {
+        "name": "outputPath",
+        "type": "string",
+        "required": false,
+        "description": "File for dumpToFile; relative paths resolve under Saved/ (default Saved/UE_MCP/SkinnedVertices/)"
+      }
+    ],
+    "choices": [
+      {
+        "mode": "atLeastOne",
+        "branches": [
+          [
+            "actorLabel"
+          ],
+          [
+            "actorPath"
+          ]
+        ]
+      }
+    ]
+  },
   "get_spline_info": {
     "category": "level",
     "params": [
@@ -5156,6 +5302,7 @@ export const paramsClauses: Readonly<Record<string, string>> = {
   get_relative_transform: "Params: targetLabel? (or target), targetPath?, referenceLabel? (or reference), referencePath?, world?, pieInstance?",
   get_runtime_virtual_texture_summary: "Params: world?, pieInstance?",
   get_selected_actors: "Params: none",
+  get_skinned_vertices: "Params: at least one of actorLabel/actorPath, componentName?, world?, pieInstance?, lodIndex?, space?, boneNames?, includeChildBones?, minWeight?, box?, nearPoint?, radius?, include?, startIndex?, limit?, dumpToFile?, outputPath?",
   get_spline_info: "Params: actorLabel OR actorPath, componentName?, projectPoint?, world?, pieInstance?",
   get_water_state: "Params: actorLabel?, actorPath?",
   get_world_outliner: "Params: classFilter?, exactClass?, nameFilter?, folderPath?, folderPathPrefix?, editorHidden?, includeStreaming?, world?, pieInstance?, cursor?, limit?",
@@ -5229,13 +5376,13 @@ export const paramsClauses: Readonly<Record<string, string>> = {
 export const schema: Record<string, z.ZodType> = {
   actorClass: z.string().optional().describe("Actor class: short name, /Script path or Blueprint class path (place_actor, spawn_actors_batch, spawn_transient_actor). Owning actor class, resolved as a class or matched as a substring (query_components)"),
   actorClassFilter: z.string().optional().describe("Alias for classFilter"),
-  actorLabel: z.string().optional().describe("Actor editor label; pass actorLabel or actorPath (add_actor_tag, add_component_to_actor, add_hismc_instances, add_instances, add_post_process_blendable, aim_actor_at, delete_actor, export_actor_fbx, get_actor_bounds, get_actor_details, get_component_details, get_component_tree, get_instance_transforms, get_post_process_settings, get_spline_info, get_water_state, list_actor_tags, move_actor, nudge_component, read_actor_motion, rebuild_water_zone, remove_actor_tag, remove_component_from_actor, remove_instance, restore_component_relative_transform, set_actor_material, set_actor_mobility, set_actor_property, set_actor_tags, set_component_property, set_component_skeletal_mesh, set_fixed_exposure, set_fog_properties, set_light_properties, set_post_process_settings, set_spline_points, set_volume_properties, set_water_body_property, snap_actor_to_floor, snap_instances_to_surface, update_instance_transform). Transient actor label (destroy_transient_actor)"),
+  actorLabel: z.string().optional().describe("Actor editor label; pass actorLabel or actorPath (add_actor_tag, add_component_to_actor, add_hismc_instances, add_instances, add_post_process_blendable, aim_actor_at, delete_actor, export_actor_fbx, get_actor_bounds, get_actor_details, get_component_details, get_component_tree, get_instance_transforms, get_post_process_settings, get_spline_info, get_water_state, list_actor_tags, move_actor, nudge_component, read_actor_motion, rebuild_water_zone, remove_actor_tag, remove_component_from_actor, remove_instance, restore_component_relative_transform, set_actor_material, set_actor_mobility, set_actor_property, set_actor_tags, set_component_property, set_component_skeletal_mesh, set_fixed_exposure, set_fog_properties, set_light_properties, set_post_process_settings, set_spline_points, set_volume_properties, set_water_body_property, snap_actor_to_floor, snap_instances_to_surface, update_instance_transform). Transient actor label (destroy_transient_actor). Actor label, name or path; pass actorLabel or actorPath (get_skinned_vertices)"),
   actorLabelA: z.string().optional().describe("First actor label; pass actorLabelA or actorPathA"),
   actorLabelB: z.string().optional().describe("Second actor label; pass actorLabelB or actorPathB"),
   actorLabelContains: z.string().optional().describe("Case-insensitive substring over the actor's editor label"),
   actorLabelPrefix: z.string().optional().describe("Case-sensitive prefix over the actor's editor label"),
   actorLabels: z.array(z.string()).optional().describe("Exact actor editor labels"),
-  actorPath: z.string().optional().describe("Full actor object path; the unambiguous selector, and it wins over actorLabel (add_actor_tag, add_component_to_actor, add_hismc_instances, add_instances, add_post_process_blendable, aim_actor_at, delete_actor, export_actor_fbx, get_actor_bounds, get_actor_details, get_component_details, get_component_tree, get_instance_transforms, get_post_process_settings, get_spline_info, get_water_state, list_actor_tags, move_actor, nudge_component, read_actor_motion, rebuild_water_zone, remove_actor_tag, remove_component_from_actor, remove_instance, restore_component_relative_transform, set_actor_material, set_actor_mobility, set_actor_property, set_actor_tags, set_component_property, set_component_skeletal_mesh, set_fixed_exposure, set_fog_properties, set_light_properties, set_post_process_settings, set_spline_points, set_volume_properties, set_water_body_property, snap_actor_to_floor, snap_instances_to_surface, update_instance_transform). Transient actor object path (destroy_transient_actor)"),
+  actorPath: z.string().optional().describe("Full actor object path; the unambiguous selector, and it wins over actorLabel (add_actor_tag, add_component_to_actor, add_hismc_instances, add_instances, add_post_process_blendable, aim_actor_at, delete_actor, export_actor_fbx, get_actor_bounds, get_actor_details, get_component_details, get_component_tree, get_instance_transforms, get_post_process_settings, get_spline_info, get_water_state, list_actor_tags, move_actor, nudge_component, read_actor_motion, rebuild_water_zone, remove_actor_tag, remove_component_from_actor, remove_instance, restore_component_relative_transform, set_actor_material, set_actor_mobility, set_actor_property, set_actor_tags, set_component_property, set_component_skeletal_mesh, set_fixed_exposure, set_fog_properties, set_light_properties, set_post_process_settings, set_spline_points, set_volume_properties, set_water_body_property, snap_actor_to_floor, snap_instances_to_surface, update_instance_transform). Transient actor object path (destroy_transient_actor). Actor object path; preferred when labels repeat (get_skinned_vertices)"),
   actorPathA: z.string().optional().describe("First actor object path"),
   actorPathB: z.string().optional().describe("Second actor object path"),
   actorPaths: z.array(z.string()).optional().describe("Full actor object paths"),
@@ -5251,7 +5398,9 @@ export const schema: Record<string, z.ZodType> = {
   attenuationRadius: z.number().optional().describe("Point, spot and rect lights only"),
   axisRotation: z.object({ axis: z.string().describe("forward | right | up"), degrees: z.number().describe("Signed rotation in degrees") }).optional().describe("Quaternion rotation about one frame axis; not with viewRotation"),
   bias: z.number().optional().describe("AutoExposureBias (exposure compensation)"),
+  boneNames: z.array(z.string()).optional().describe("Keep vertices weighted to any of these bones; omit to keep every vertex"),
   bounds: z.record(z.string(), z.unknown()).optional().describe("{min:{x,y,z}, max:{x,y,z}} intersection test"),
+  box: z.object({ min: z.object({ x: z.number(), y: z.number(), z: z.number() }).describe("Box minimum (cm)"), max: z.object({ x: z.number(), y: z.number(), z: z.number() }).describe("Box maximum (cm)") }).optional().describe("Keep vertices whose posed position is inside this box (inclusive), in space"),
   brightness: z.number().optional().describe("Alias for exposure"),
   cellSize: z.number().optional().describe("Streaming cell size in world centimetres"),
   channel: z.string().optional().describe("Collision channel (default Visibility)"),
@@ -5268,7 +5417,7 @@ export const schema: Record<string, z.ZodType> = {
   color: z.record(z.string(), z.unknown()).optional().describe("Alias for fogInscatteringColor (set_fog_properties). Colour {r, g, b} in 0-255 (set_light_properties, spawn_light)"),
   commitDeletes: z.boolean().optional().describe("Save through the editor's dirty-package save, which deletes the packages of deleted World Partition actors (default false)"),
   componentClass: z.string().optional().describe("Component class: short name or full path (add_component_to_actor). Component class name, exact or substring (get_actors_by_component_class). Case-insensitive substring over the component class name (get_component_tree). Component class, resolved as a class or matched as a substring (query_components). Primitive component class to rebuild (recreate_physics_state). Component class to remove (remove_components_by_class)"),
-  componentName: z.string().optional().describe("Name of the new component (add_component_to_actor). Component instance name (add_hismc_instances, add_instances, get_component_details, get_instance_transforms, remove_instance, set_component_property, snap_instances_to_surface, update_instance_transform). Component name looked up on every matched actor (bulk_set_component_property). Only this component, by instance name (get_component_tree). Component holding the post-process settings, when the actor is not a PostProcessVolume (get_post_process_settings, set_fixed_exposure, set_post_process_settings). Spline component, when the actor has several (get_spline_info). Exact SceneComponent instance name (nudge_component, restore_component_relative_transform). Component to remove (remove_component_from_actor). Mesh component (default: the actor's first mesh component) (set_component_materials). Skinned mesh component (default: the first on the actor) (set_component_skeletal_mesh). Spline component, when the actor has several; matched exactly (set_spline_points)"),
+  componentName: z.string().optional().describe("Name of the new component (add_component_to_actor). Component instance name (add_hismc_instances, add_instances, get_component_details, get_instance_transforms, remove_instance, set_component_property, snap_instances_to_surface, update_instance_transform). Component name looked up on every matched actor (bulk_set_component_property). Only this component, by instance name (get_component_tree). Component holding the post-process settings, when the actor is not a PostProcessVolume (get_post_process_settings, set_fixed_exposure, set_post_process_settings). Skinned mesh component (default: the first on the actor); a leader-pose follower reads as drawn (get_skinned_vertices). Spline component, when the actor has several (get_spline_info). Exact SceneComponent instance name (nudge_component, restore_component_relative_transform). Component to remove (remove_component_from_actor). Mesh component (default: the actor's first mesh component) (set_component_materials). Skinned mesh component (default: the first on the actor) (set_component_skeletal_mesh). Spline component, when the actor has several; matched exactly (set_spline_points)"),
   componentNameA: z.string().optional().describe("Component on actor A; omitted selects its root"),
   componentNameB: z.string().optional().describe("Component on actor B; omitted selects its root"),
   componentNameContains: z.string().optional().describe("Case-insensitive substring over the component instance name"),
@@ -5284,6 +5433,7 @@ export const schema: Record<string, z.ZodType> = {
   discardUnsaved: z.boolean().optional().describe("Switch even though the open map has unsaved changes, discarding them (default false)"),
   distance: z.number().optional().describe("Ray length when direction is given (default 200000)"),
   dryRun: z.boolean().optional().describe("Report what would change without writing (batch_set_actor_properties, bulk_set_component_property, load_actor_descs, set_actor_hlod_layer, set_component_materials, snap_instances_to_surface). Report what would be removed without removing it (default true) (clear_level_script). Report the verdict per brush without converting (default TRUE) (convert_brushes_to_static_mesh). Report the matches without deleting them (default false) (delete_actors). Preview without deleting (default TRUE) (delete_exact_labeled_actors_in_levels). Inspect and preview the requested transform without writing (default false) (nudge_component). List what would be rebuilt without rebuilding it (default TRUE) (recreate_physics_state). Report what would be removed without removing it (default TRUE) (remove_components_by_class). Report the matches without moving them (default false) (set_actor_folder_path). Return every computed transform without spawning (spawn_actors_batch)"),
+  dumpToFile: z.boolean().optional().describe("Write the whole selection to a JSON file and return only the summary"),
   duplicateTransformTolerance: z.number().optional().describe("Centimetre bucket for duplicate-transform detection"),
   editorHidden: z.boolean().optional().describe("Only editor-hidden (true) or only visible (false) actors"),
   editorVisible: z.boolean().optional().describe("Editor viewport visibility"),
@@ -5320,6 +5470,8 @@ export const schema: Record<string, z.ZodType> = {
   hideFromOutliner: z.boolean().optional().describe("Keep the actor out of the World Outliner (default false)"),
   hlodLayer: z.string().nullable().optional().describe("HLODLayer asset path, or null to clear the per-actor override"),
   ignoreActors: z.array(z.string()).optional().describe("Actor labels to skip"),
+  include: z.array(z.string()).optional().describe("Data per vertex: any of positions, weights, triangles (default positions and weights)"),
+  includeChildBones: z.boolean().optional().describe("With boneNames, also select every bone below each named bone (default false)"),
   includeCollision: z.boolean().optional().describe("Include component collision state (default false)"),
   includeExternalActors: z.boolean().optional().describe("Also save the level's loaded external actor and folder packages (default true)"),
   includeOccurrences: z.boolean().optional().describe("Include example actor and component occurrences per mesh"),
@@ -5346,10 +5498,11 @@ export const schema: Record<string, z.ZodType> = {
   levelPath: z.string().optional().describe("Map package to add as a streaming sub-level (add_streaming_sublevel). Map package to open (load_level). Query another map: opened temporarily, refused while anything is dirty, and the open map restored (query_components). Alias for levelName (remove_streaming_sublevel, set_current_edit_level, set_streaming_sublevel_properties)"),
   levels: z.array(z.object({ levelPath: z.string().describe("Long package name of the .umap, such as /Game/Maps/Arena"), actorLabels: z.array(z.string()).describe("Exact editor labels to delete in that map, at most 256, no duplicates"), expectedClassPath: z.string().optional().describe("Actor class every matched actor must be, such as /Script/Engine.StaticMeshActor") })).optional().describe("Per-map targets, at most 16"),
   lightType: z.string().optional().describe("point | spot | directional | rect | sky"),
-  limit: z.number().int().optional().describe("Rows on this page (get_world_outliner, list_actor_descs, list_actor_tags, list_levels, list_transient_actors, list_volumes). Rows returned (default 200, max 2000) (query_components)"),
+  limit: z.number().int().optional().describe("Selected vertices to return inline, 1 to 20000 (default 2000); ignored with dumpToFile (get_skinned_vertices). Rows on this page (get_world_outliner, list_actor_descs, list_actor_tags, list_levels, list_transient_actors, list_volumes). Rows returned (default 200, max 2000) (query_components)"),
   loadedOnly: z.boolean().optional().describe("Only actors currently streamed in"),
   loadingRange: z.number().optional().describe("Streaming loading range in world centimetres"),
   location: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Sub-level offset (add_streaming_sublevel, set_streaming_sublevel_properties). World location (move_actor, place_actor, spawn_light, spawn_skeletal_mesh_actor, spawn_transient_actor, spawn_volume, update_instance_transform)"),
+  lodIndex: z.number().int().optional().describe("Render LOD to skin (default: the LOD the component draws)"),
   loop: z.boolean().optional().describe("Loop the preview animation (default true)"),
   loopPosition: z.number().optional().describe("Input key a closed loop closes at, with loopPositionOverride"),
   loopPositionOverride: z.boolean().optional().describe("Close at loopPosition rather than after the last key"),
@@ -5371,12 +5524,14 @@ export const schema: Record<string, z.ZodType> = {
   meshPath: z.string().optional().describe("Alias for assetPath (get_nanite_info, set_nanite_settings). The older spelling of skeletalMesh (spawn_skeletal_mesh_actor)"),
   method: z.string().optional().describe("OBB (oriented, default) | AABB (axis-aligned world bounds)"),
   min: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Grid lower bound"),
+  minWeight: z.number().optional().describe("With boneNames, keep a vertex only when its summed weight on the selected bones is at least this (0 < minWeight <= 1; default any positive weight)"),
   mobility: z.string().optional().describe("static | stationary | movable"),
   mode: z.string().optional().describe("pin (make resident, default) | unpin (release)"),
   multi: z.boolean().optional().describe("Return overlaps and the first blocking hit, capped at 64 (default false)"),
   nameContains: z.string().optional().describe("Case-insensitive substring over the actor's internal name (delete_actors). Substring over the setting name (get_post_process_settings)"),
   nameFilter: z.string().optional().describe("Case-sensitive substring over the internal name or the label"),
   names: z.array(z.string()).optional().describe("Exact setting names to return"),
+  nearPoint: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Keep vertices within radius of this point, in space; needs radius"),
   offset: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("World-space offset added to each actor's location"),
   onConflict: z.string().optional().describe("When the label or name is taken: skip (default) | error"),
   onlyColliding: z.boolean().optional().describe("Only colliding components contribute to the bounds"),
@@ -5384,7 +5539,7 @@ export const schema: Record<string, z.ZodType> = {
   onMiss: z.string().optional().describe("error (default, aborts the batch) | skip"),
   onMissing: z.string().optional().describe("error (default) | ignore"),
   outerConeAngle: z.number().optional().describe("Spot light outer cone angle"),
-  outputPath: z.string().optional().describe("Output .fbx path"),
+  outputPath: z.string().optional().describe("Output .fbx path (export_actor_fbx). File for dumpToFile; relative paths resolve under Saved/ (default Saved/UE_MCP/SkinnedVertices/) (get_skinned_vertices)"),
   parentComponentName: z.string().optional().describe("Parent SceneComponent instance name; omitted selects the actor root"),
   parentLabel: z.string().optional().describe("Parent actor label; pass parentLabel or parentPath"),
   parentPath: z.string().optional().describe("Parent actor object path"),
@@ -5397,7 +5552,7 @@ export const schema: Record<string, z.ZodType> = {
   properties: z.record(z.string(), z.unknown()).optional().describe("Property name to value, applied to the new transformer instance (add_runtime_cell_transformer). Property name to value, dotted paths supported (batch_set_actor_properties). Property name to value (set_volume_properties). Property name to value applied to every spawn (spawn_actors_batch). Property name to value, applied before initialisation (spawn_transient_actor)"),
   propertyName: z.string().optional().describe("Property name, dotted paths supported (bulk_set_component_property, set_actor_property, set_component_property, set_water_body_property). Only this property, with includeProperties (get_actor_details). FPostProcessSettings property on that component (get_post_process_settings, set_fixed_exposure, set_post_process_settings)"),
   propertyNames: z.array(z.string()).optional().describe("Restrict includeValues to these properties (get_component_details). Component UPROPERTY names projected under props.*, at most 32 (query_components)"),
-  radius: z.number().optional().describe("Positive sphere or capsule radius in cm"),
+  radius: z.number().optional().describe("Distance from nearPoint in cm, above 0; needs nearPoint (get_skinned_vertices). Positive sphere or capsule radius in cm (shape_trace)"),
   recaptureSky: z.boolean().optional().describe("Recapture a SkyLight after the change"),
   recursiveFolder: z.boolean().optional().describe("Also take brushes in folders nested under folderPath (default true)"),
   reference: z.string().optional().describe("Alias for referenceLabel"),
@@ -5424,9 +5579,10 @@ export const schema: Record<string, z.ZodType> = {
   socketName: z.string().optional().describe("Socket or bone on the resolved parent component"),
   socketNames: z.array(z.string()).optional().describe("Bone or socket names; each component that has sockets reports their component-space transforms"),
   sourceRadius: z.number().optional().describe("Point or spot light source radius"),
+  space: z.enum(["component","world"]).optional().describe("Space of positions, box and nearPoint (default component)"),
   start: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Ray start"),
   startDistance: z.number().optional().describe("Fog start distance"),
-  startIndex: z.number().int().optional().describe("First row index; rows are sorted so the index is stable across calls"),
+  startIndex: z.number().int().optional().describe("First selected vertex to return (default 0); ignored with dumpToFile (get_skinned_vertices). First row index; rows are sorted so the index is stable across calls (query_components)"),
   staticMesh: z.string().optional().describe("Static mesh for a StaticMeshActor (place_actor). Static mesh to place (spawn_grid)"),
   streamingClass: z.string().optional().describe("LevelStreamingDynamic (default) | LevelStreamingAlwaysLoaded"),
   surfaceActorClass: z.string().optional().describe("Only accept hits on actors of this class"),
@@ -5465,7 +5621,7 @@ export const schema: Record<string, z.ZodType> = {
   weldSimulatedBodies: z.boolean().optional().describe("Weld simulated bodies during attachment (default false)"),
   where: z.array(z.object({ field: z.string().describe("Dot path into the row, such as shadow.effectiveCastShadow or props.CullDistance"), op: z.string().optional().describe("eq (default) | ne | lt | lte | gt | gte | contains | notContains | startsWith | endsWith | in | notIn | exists | notExists | isNull | isNotNull | isTrue | isFalse"), value: z.unknown().optional().describe("Value the operator compares against") })).optional().describe("Predicates evaluated in the editor, at most 24"),
   whereMode: z.string().optional().describe("all (default) | any"),
-  world: z.string().optional().describe("World scope: editor (default) | pie (aim_actor_at, bulk_line_trace, count_actors_by_class, destroy_transient_actor, get_actor_bounds, get_actor_details, get_actors_by_class, get_actors_by_component_class, get_component_details, get_relative_transform, get_runtime_virtual_texture_summary, get_spline_info, get_world_outliner, line_trace, list_transient_actors, move_actor, nav_project_point, nudge_component, place_actor, query_components, recreate_physics_state, rerun_construction_scripts, restore_component_relative_transform, set_actor_property, set_component_property, set_component_skeletal_mesh, set_fog_properties, shape_trace, snap_actor_to_floor, spawn_transient_actor, summarize_static_mesh_usage, test_component_overlap). editor (default) | pie | a world object path such as a Blueprint editor preview world (/Engine/Transient.World_N); with world omitted, an actorPath in another world reads that world (get_component_tree). World scope: auto (default, PIE when running) | editor | pie (read_actor_motion)"),
+  world: z.string().optional().describe("World scope: editor (default) | pie (aim_actor_at, bulk_line_trace, count_actors_by_class, destroy_transient_actor, get_actor_bounds, get_actor_details, get_actors_by_class, get_actors_by_component_class, get_component_details, get_relative_transform, get_runtime_virtual_texture_summary, get_skinned_vertices, get_spline_info, get_world_outliner, line_trace, list_transient_actors, move_actor, nav_project_point, nudge_component, place_actor, query_components, recreate_physics_state, rerun_construction_scripts, restore_component_relative_transform, set_actor_property, set_component_property, set_component_skeletal_mesh, set_fog_properties, shape_trace, snap_actor_to_floor, spawn_transient_actor, summarize_static_mesh_usage, test_component_overlap). editor (default) | pie | a world object path such as a Blueprint editor preview world (/Engine/Transient.World_N); with world omitted, an actorPath in another world reads that world (get_component_tree). World scope: auto (default, PIE when running) | editor | pie (read_actor_motion)"),
   worldSpace: z.boolean().optional().describe("Treat transforms as world space (default true)"),
   zoneExtent: z.unknown().optional().describe("New WaterZone ZoneExtent in cm, {x, y} or [x, y]"),
 };

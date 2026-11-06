@@ -720,6 +720,33 @@ void FSkeletalMeshHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("outputPath"), EType::String, TEXT("File for dumpToFile; relative paths resolve under Saved/ (default Saved/UE_MCP/SkeletalMeshVertices/)")),
 		SpecSkinLodIndex, SpecProfileName,
 	});
+	{
+		// A placed component, so the level tool exposes it (#1452).
+		FMCPHandlerRegistry::FCategoryScope LevelScope(Registry, TEXT("level"));
+		Registry.RegisterHandlerWithTimeout(TEXT("get_skinned_vertices"), &GetSkinnedVertices, 300.0f, {
+			MCPParam::Optional(TEXT("actorLabel"), EType::String, TEXT("Actor label, name or path; pass actorLabel or actorPath")),
+			MCPParam::Optional(TEXT("actorPath"), EType::String, TEXT("Actor object path; preferred when labels repeat")),
+			MCPParam::Optional(TEXT("componentName"), EType::String, TEXT("Skinned mesh component (default: the first on the actor); a leader-pose follower reads as drawn")),
+			MCPParam::Optional(TEXT("world"), EType::String, TEXT("World scope: editor (default) | pie")),
+			MCPParam::Optional(TEXT("pieInstance"), EType::Integer, TEXT("Which PIE world when world is pie: 0 = server or primary, 1..N = clients")),
+			MCPParam::Optional(TEXT("lodIndex"), EType::Integer, TEXT("Render LOD to skin (default: the LOD the component draws)")),
+			MCPParam::Optional(TEXT("space"), EType::String, TEXT("Space of positions, box and nearPoint (default component)")).Enum({ TEXT("component"), TEXT("world") }),
+			MCPParam::Optional(TEXT("boneNames"), EType::Array, TEXT("Keep vertices weighted to any of these bones; omit to keep every vertex")).Items(EType::String),
+			MCPParam::Optional(TEXT("includeChildBones"), EType::Boolean, TEXT("With boneNames, also select every bone below each named bone (default false)")),
+			MCPParam::Optional(TEXT("minWeight"), EType::Number, TEXT("With boneNames, keep a vertex only when its summed weight on the selected bones is at least this (0 < minWeight <= 1; default any positive weight)")),
+			MCPParam::Optional(TEXT("box"), EType::Object, TEXT("Keep vertices whose posed position is inside this box (inclusive), in space")).WithFields({
+				MCPParam::RequiredField(TEXT("min"), EType::Vec3, TEXT("Box minimum (cm)")),
+				MCPParam::RequiredField(TEXT("max"), EType::Vec3, TEXT("Box maximum (cm)")),
+			}),
+			MCPParam::Optional(TEXT("nearPoint"), EType::Vec3, TEXT("Keep vertices within radius of this point, in space; needs radius")),
+			MCPParam::Optional(TEXT("radius"), EType::Number, TEXT("Distance from nearPoint in cm, above 0; needs nearPoint")),
+			MCPParam::Optional(TEXT("include"), EType::Array, TEXT("Data per vertex: any of positions, weights, triangles (default positions and weights)")).Items(EType::String),
+			MCPParam::Optional(TEXT("startIndex"), EType::Integer, TEXT("First selected vertex to return (default 0); ignored with dumpToFile")),
+			MCPParam::Optional(TEXT("limit"), EType::Integer, TEXT("Selected vertices to return inline, 1 to 20000 (default 2000); ignored with dumpToFile")),
+			MCPParam::Optional(TEXT("dumpToFile"), EType::Boolean, TEXT("Write the whole selection to a JSON file and return only the summary")),
+			MCPParam::Optional(TEXT("outputPath"), EType::String, TEXT("File for dumpToFile; relative paths resolve under Saved/ (default Saved/UE_MCP/SkinnedVertices/)")),
+		}, MCPSpec::AtLeastOne({ { TEXT("actorLabel") }, { TEXT("actorPath") } }));
+	}
 	Registry.RegisterHandler(TEXT("set_skeletal_mesh_skin_weights"), &SetSkinWeights, {
 		SpecAssetPath,
 		MCPParam::Required(TEXT("edits"), EType::Array, TEXT("Selected source vertices and their complete replacement influences (1-256)")).Items(EType::Object).WithFields({

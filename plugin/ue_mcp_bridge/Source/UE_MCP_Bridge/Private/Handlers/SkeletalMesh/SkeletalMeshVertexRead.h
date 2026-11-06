@@ -1,8 +1,10 @@
 #pragma once
 
-// Selection, paging and dump code for the skinned vertex reads, starting with
-// asset(read_skeletal_mesh_vertices) over source geometry in the bind pose
-// (#1567). Every selector is validated before a vertex is read.
+// Selection, paging and dump code shared by the two skinned vertex reads:
+// asset(read_skeletal_mesh_vertices) over source geometry in the bind pose and
+// level(get_skinned_vertices) over a placed component's render geometry as
+// posed (#1567, #1452). Both validate every selector before reading a vertex,
+// page the same way and write the same dump.
 
 #include "CoreMinimal.h"
 #include "Dom/JsonObject.h"
