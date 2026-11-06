@@ -154,13 +154,15 @@ namespace UEMCP::SceneCapture
 			return MCPError(TEXT("Capture FOV does not produce a finite positive streaming screen size"));
 		if (FMath::Abs(Location.X) >= 1.0e20 || FMath::Abs(Location.Y) >= 1.0e20 || FMath::Abs(Location.Z) >= 1.0e20)
 			return MCPError(TEXT("Capture location is outside the streaming manager's supported coordinate range"));
+		FString ResolvedPath;
+		if (auto Err = MCPRequireWritablePath(OutputPath, ResolvedPath)) return Err;
 		auto NewJob = MakeUnique<FJob>();
 		FString Error;
 		if (!NewJob->Rig.Spawn(World, Location, Rotation, Width, Height, Fov, Error)) return MCPError(Error);
 		NewJob->Rig.GetComponent()->bAlwaysPersistRenderingState = true;
 		NewJob->World = World;
 		NewJob->Id = FGuid::NewGuid().ToString(EGuidFormats::DigitsWithHyphens);
-		NewJob->Path = ResolveOutputPath(OutputPath);
+		NewJob->Path = ResolvedPath;
 		if (!NewJob->Path.EndsWith(TEXT(".png"))) NewJob->Path += TEXT(".png");
 		NewJob->RequestedFrames = WarmupFrames;
 		NewJob->Timeout = TimeoutSeconds;

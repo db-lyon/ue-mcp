@@ -732,7 +732,9 @@ TSharedPtr<FJsonValue> FEditorHandlers::RenderMeshStudio(const TSharedPtr<FJsonO
 	TArray<FItem> Items;
 	FString Error;
 	if (!ParseItems(*ItemValues, static_cast<int32>(ResolutionValue), Items, Error)) return MCPError(Error);
-	Output = FPaths::ConvertRelativePathToFull(UEMCP::SceneCapture::ResolveOutputPath(Output));
+	FString ResolvedOutput;
+	if (auto Err = MCPRequireWritablePath(Output, ResolvedOutput)) return Err;
+	Output = ResolvedOutput;
 	if (!IFileManager::Get().MakeDirectory(*Output, true)) return MCPError(TEXT("Could not create outputDir"));
 	Active = MakeShared<FJob>();
 	Active->Items = MoveTemp(Items);
