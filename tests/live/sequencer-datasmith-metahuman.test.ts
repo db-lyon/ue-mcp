@@ -14,7 +14,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { callBridge, disconnectBridge, getBridge, TEST_PREFIX, type TestResult } from "../setup.js";
+import { callBridge, disconnectBridge, discardDirtyTestPackages, getBridge, TEST_PREFIX, type TestResult } from "../setup.js";
 import type { EditorBridge } from "../../src/bridge/bridge.js";
 
 const DIR = `${TEST_PREFIX}/SeqDsMh`;
@@ -84,6 +84,9 @@ beforeAll(async () => {
 afterAll(async () => {
   if (bridge) {
     for (const label of [ACTOR_A, ACTOR_B, "DsProbe_Root", "DsProbe_Lamp", "Probe"]) await callBridge(bridge, "delete_actor", { actorLabel: label });
+    // The sequences and MPC are never saved; leaving them dirty fails the next file's dirty-refusing actions (#1444).
+    await callBridge(bridge, "delete_folder", { paths: [DIR, "/Game/DatasmithLiveProbe"], force: true });
+    expect(await discardDirtyTestPackages(bridge, [DIR, "/Game/DatasmithLiveProbe"])).toEqual([]);
     disconnectBridge();
   }
   if (scratch) fs.rmSync(scratch, { recursive: true, force: true });

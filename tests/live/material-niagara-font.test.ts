@@ -7,7 +7,7 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import * as fs from "node:fs";
-import { callBridge, disconnectBridge, getBridge, TEST_PREFIX, type TestResult } from "../setup.js";
+import { callBridge, disconnectBridge, discardDirtyTestPackages, getBridge, TEST_PREFIX, type TestResult } from "../setup.js";
 import type { EditorBridge } from "../../src/bridge/bridge.js";
 
 const DIR = `${TEST_PREFIX}/MatNiaFont`;
@@ -40,6 +40,9 @@ beforeAll(async () => {
 afterAll(async () => {
   if (bridge) {
     await callBridge(bridge, "delete_actor", { actorLabel: LABEL });
+    // Unsaved assets left here fail the next file's dirty-refusing actions (#1444).
+    await callBridge(bridge, "delete_folder", { path: DIR, force: true });
+    expect(await discardDirtyTestPackages(bridge, [DIR])).toEqual([]);
     disconnectBridge();
   }
 });
