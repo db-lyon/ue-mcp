@@ -415,6 +415,8 @@ TSharedPtr<FJsonValue> FPIEHandlers::PieReplayStatus(const TSharedPtr<FJsonObjec
 TSharedPtr<FJsonValue> FPIEHandlers::PieReplayAnalyze(const TSharedPtr<FJsonObject>& Params)
 {
 	MCP_CHECK_GAME_THREAD();
+	// limit and offset page the result; read before the recording lookup can fail (#1057).
+	MCPReadParamsAhead(Params, { TEXT("limit"), TEXT("offset") });
 	const FString Id = OptionalString(Params, TEXT("recording_id"));
 	const FString RecDir = OptionalString(Params, TEXT("recording_dir"));
 

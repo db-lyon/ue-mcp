@@ -219,6 +219,8 @@ namespace
 
 TSharedPtr<FJsonValue> FAssetHandlers::SetCurveAssetKeys(const TSharedPtr<FJsonObject>& Params)
 {
+	// Read before anything can fail (#1057).
+	MCPReadParamsAhead(Params, { TEXT("channel"), TEXT("channelName"), TEXT("save") });
 	FString AssetPath;
 	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
 	const TArray<TSharedPtr<FJsonValue>>* KeyValues = nullptr;
