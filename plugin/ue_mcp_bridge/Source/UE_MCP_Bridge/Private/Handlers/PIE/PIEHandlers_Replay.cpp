@@ -87,6 +87,17 @@ namespace
 			}
 			Cfg.SourceDir = Resolved;
 		}
+		// Drift, frames and the contact sheet are written into the recording folder.
+		if (!Cfg.SourceRecordingId.IsEmpty() && Cfg.SourceDir.IsEmpty())
+		{
+			const FString Root = DefaultRecordingsRoot();
+			FString Unused, PathError;
+			if (!MCPResolvePathInside(Root / Cfg.SourceRecordingId, { Root }, Unused, PathError))
+			{
+				OutErr = MCPError(PathError);
+				return false;
+			}
+		}
 
 		// Convenience: `recording_dir` alone (no id, no explicit sequence) names
 		// the recording folder directly - "replay this ./path/to/recording".
