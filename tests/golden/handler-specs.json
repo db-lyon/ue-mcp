@@ -44340,7 +44340,13 @@
           "name": "path",
           "type": "string",
           "required": true,
-          "description": "One asset path or file to diff against its latest repository revision"
+          "description": "One asset path or file to diff against a repository revision"
+        },
+        {
+          "name": "revision",
+          "type": "string",
+          "required": false,
+          "description": "Revision to diff against: the provider's id, a unique prefix of 7 or more characters of it, its number, or head, as source_control(history) lists them (default head)"
         },
         {
           "name": "openEditor",

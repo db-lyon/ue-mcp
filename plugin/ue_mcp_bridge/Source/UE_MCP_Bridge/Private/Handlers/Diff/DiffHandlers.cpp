@@ -17,6 +17,8 @@
 #include "Misc/PackageName.h"
 #include "Misc/PackagePath.h"
 #include "Misc/Paths.h"
+#include "Misc/ScopeExit.h"
+#include "HandlerDiffPackage.h"
 #include "ISourceControlModule.h"
 #include "ISourceControlProvider.h"
 #include "ISourceControlRevision.h"
@@ -199,43 +201,6 @@ namespace
 			}
 		}
 	};
-
-	/**
-	 * The history entry a revision string names: the provider's revision id, a unique
-	 * prefix of 7 or more characters of it (a git hash), its revision number, or head
-	 * for the newest. Empty with OutError set when none or several match.
-	 */
-	TSharedPtr<ISourceControlRevision, ESPMode::ThreadSafe> FindBlueprintDiffRevision(
-		const ISourceControlState& State, const FString& Wanted, FString& OutError)
-	{
-		const int32 Count = State.GetHistorySize();
-		if (Count == 0)
-		{
-			OutError = TEXT("The provider returned no history for the file. A file marked for add has no revision yet.");
-			return nullptr;
-		}
-		if (Wanted.Equals(TEXT("head"), ESearchCase::IgnoreCase) || Wanted.Equals(TEXT("latest"), ESearchCase::IgnoreCase))
-		{
-			return State.GetHistoryItem(0);
-		}
-		const bool bNumeric = Wanted.IsNumeric();
-		const int32 WantedNumber = bNumeric ? FCString::Atoi(*Wanted) : INDEX_NONE;
-		TArray<TSharedPtr<ISourceControlRevision, ESPMode::ThreadSafe>> Prefixed;
-		for (int32 Index = 0; Index < Count; ++Index)
-		{
-			TSharedPtr<ISourceControlRevision, ESPMode::ThreadSafe> Revision = State.GetHistoryItem(Index);
-			if (!Revision.IsValid()) continue;
-			const FString Id = Revision->GetRevision();
-			if (Id.Equals(Wanted, ESearchCase::IgnoreCase)) return Revision;
-			if (bNumeric && Revision->GetRevisionNumber() == WantedNumber) return Revision;
-			if (Wanted.Len() >= 7 && Id.StartsWith(Wanted, ESearchCase::IgnoreCase)) Prefixed.Add(Revision);
-		}
-		if (Prefixed.Num() == 1) return Prefixed[0];
-		OutError = Prefixed.Num() > 1
-			? FString::Printf(TEXT("'%s' matches %d revisions in the file's history; give more of it."), *Wanted, Prefixed.Num())
-			: FString::Printf(TEXT("No revision '%s' in the file's history (%d revisions). source_control(history) lists them."), *Wanted, Count);
-		return nullptr;
-	}
 }
 
 void FDiffHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
@@ -326,18 +291,18 @@ TSharedPtr<FJsonValue> FDiffHandlers::DiffBlueprintAgainstRevision(const FString
 		return MCPError(FString::Printf(TEXT("%s is not under source control, so it has no revision to diff against."), *File));
 	}
 	FString FindError;
-	const TSharedPtr<ISourceControlRevision, ESPMode::ThreadSafe> Revision = FindBlueprintDiffRevision(*State, Wanted, FindError);
+	const TSharedPtr<ISourceControlRevision, ESPMode::ThreadSafe> Revision = MCPDiffPackage::FindRevision(*State, Wanted, FindError);
 	if (!Revision.IsValid()) return MCPError(FindError);
 
-	// The provider writes the revision to a file under Saved/Diff, which maps to /Temp.
-	FString RevisionFile;
-	if (!Revision->Get(RevisionFile) || RevisionFile.IsEmpty())
+	// Loaded as a diff package under /Temp and unloaded before returning, so no /Temp Blueprint is left behind.
+	MCPDiffPackage::FRevisionPackage Loaded = MCPDiffPackage::LoadRevision(Revision.ToSharedRef(), Current->GetPackage()->GetName());
+	ON_SCOPE_EXIT
 	{
-		return MCPError(FString::Printf(TEXT("The %s provider could not fetch revision %s of %s."), *Provider.GetName().ToString(), *Revision->GetRevision(), *File));
-	}
-	FBlueprintDiffSnapshots Snapshots;
-	Snapshots.FilesToDelete.Add(RevisionFile);
-	UBlueprint* Earlier = Snapshots.Load(RevisionFile, FPackagePath::FromLocalPath(File));
+		if (Loaded.Package) MCPDiffPackage::Unload({ Loaded.Package });
+		if (!Loaded.TempFile.IsEmpty()) IFileManager::Get().Delete(*Loaded.TempFile, false, true, true);
+	};
+	if (!Loaded.Error.IsEmpty()) return MCPError(Loaded.Error);
+	UBlueprint* Earlier = Cast<UBlueprint>(Loaded.Asset);
 	if (!Earlier)
 	{
 		return MCPError(FString::Printf(TEXT("Revision %s of %s did not load as a Blueprint."), *Revision->GetRevision(), *AssetPath));

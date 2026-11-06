@@ -98,6 +98,10 @@ export interface NativeDiffResult {
   tool?: string;
   /** The label and ISO 8601 date each side of the diff window shows. */
   revisions?: { before: { label: string; date: string }; after: { label: string; date: string } };
+  /** True when the versions loaded from the history are unloaded once the window or asset editor closes (#1483). */
+  unloadsOnClose?: boolean;
+  /** The /Temp packages those versions were loaded into. */
+  tempPackages?: string[];
 }
 
 export interface RestoreResult {
@@ -426,6 +430,8 @@ export class SessionCheckpoints {
         ...(typeof answer.windowTitle === "string" ? { windowTitle: answer.windowTitle } : {}),
         ...(typeof answer.tool === "string" ? { tool: answer.tool } : {}),
         ...(answer.revisions && typeof answer.revisions === "object" ? { revisions: answer.revisions as NativeDiffResult["revisions"] } : {}),
+        ...(answer.unloadsOnClose === true ? { unloadsOnClose: true } : {}),
+        ...(Array.isArray(answer.tempPackages) ? { tempPackages: answer.tempPackages.map(String) } : {}),
       };
     });
   }
