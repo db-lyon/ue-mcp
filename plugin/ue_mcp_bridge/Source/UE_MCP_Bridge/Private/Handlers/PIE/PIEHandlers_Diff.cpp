@@ -105,7 +105,8 @@ TSharedPtr<FJsonValue> FPIEHandlers::PieRecordDiff(const TSharedPtr<FJsonObject>
 	FString A, B;
 	if (auto E = RequireString(Params, TEXT("a_id"), A)) return E;
 	if (auto E = RequireString(Params, TEXT("b_id"), B)) return E;
-	const FString Root = OptionalString(Params, TEXT("recording_dir"), DefaultRecordingsRoot());
+	FString Root;
+	if (auto Err = MCPRequireWritablePath(OptionalString(Params, TEXT("recording_dir"), DefaultRecordingsRoot()), Root)) return Err;
 	const double ThrPos = OptionalNumber(Params, TEXT("position_cm"), 5.0);
 	const double ThrRot = OptionalNumber(Params, TEXT("rotation_deg"), 2.0);
 	const double ThrVel = OptionalNumber(Params, TEXT("velocity_cms"), 25.0);
@@ -128,8 +129,9 @@ TSharedPtr<FJsonValue> FPIEHandlers::PieRecordDiff(const TSharedPtr<FJsonObject>
 		}
 	}
 
-	const FString CsvA = Root / A / TEXT("recording.csv");
-	const FString CsvB = Root / B / TEXT("recording.csv");
+	FString CsvA, CsvB;
+	if (auto Err = MCPRequirePathInside(Root / A / TEXT("recording.csv"), { Root }, CsvA)) return Err;
+	if (auto Err = MCPRequirePathInside(Root / B / TEXT("recording.csv"), { Root }, CsvB)) return Err;
 	if (!FPaths::FileExists(CsvA)) return MCPError(FString::Printf(TEXT("not found: %s"), *CsvA));
 	if (!FPaths::FileExists(CsvB)) return MCPError(FString::Printf(TEXT("not found: %s"), *CsvB));
 

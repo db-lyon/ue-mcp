@@ -2686,7 +2686,8 @@ TSharedPtr<FJsonValue> FEditorHandlers::GetOutputLog(const TSharedPtr<FJsonObjec
 	}
 
 	// Read from ring-buffer log capture (#82)
-	TArray<FMCPLogCapture::FMCPLogLine> RecentLines = FMCPLogCapture::Get().GetRecentLines(MaxLines * 2); // over-fetch for filtering
+	// The window is exactly maxLines; a filter narrows it, it does not widen it (#1551).
+	TArray<FMCPLogCapture::FMCPLogLine> RecentLines = FMCPLogCapture::Get().GetRecentLines(MaxLines);
 
 	// Chronological, oldest first, exactly as the ring buffer holds them. No
 	// sort: the log stream's own order is the contract here, and the sequence
@@ -3011,9 +3012,12 @@ TSharedPtr<FJsonValue> FEditorHandlers::CaptureScreenshot(const TSharedPtr<FJson
 				TEXT("The %s viewport is not being drawn: it is not in any Slate window. Use capture_scene_png, which renders without the window."),
 				*ResultTarget));
 		}
+		// -RenderOffScreen draws every window without a presentable viewport, so the viewport
+		// lookup says nothing there; the readback check below still catches a window not drawn.
+		const bool bOffScreen = FParse::Param(FCommandLine::Get(), TEXT("RenderOffScreen"));
 		const FString NotDrawn = MCPWhySlateWindowNotDrawn(
 			*CaptureWindow,
-			Renderer->GetViewportResource(*CaptureWindow) != nullptr,
+			bOffScreen || Renderer->GetViewportResource(*CaptureWindow) != nullptr,
 			FVector2f(CaptureWidget->GetTickSpaceGeometry().GetDrawSize()));
 		if (!NotDrawn.IsEmpty())
 		{

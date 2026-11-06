@@ -88,6 +88,16 @@ namespace
 		Cfg.SourceRecordingId = OptionalString(Params, TEXT("recording_id"));
 		Cfg.SequencePath = OptionalString(Params, TEXT("sequence_path"));
 		Cfg.SourceDir = OptionalString(Params, TEXT("recording_dir"));
+		if (!Cfg.SequencePath.IsEmpty())
+		{
+			FString Resolved, PathError;
+			if (!MCPResolvePathInside(Cfg.SequencePath, MCPDefaultWritableRoots(), Resolved, PathError))
+			{
+				OutErr = MCPError(PathError);
+				return false;
+			}
+			Cfg.SequencePath = Resolved;
+		}
 		if (!Cfg.SourceDir.IsEmpty())
 		{
 			FString Resolved, PathError;
@@ -97,6 +107,17 @@ namespace
 				return false;
 			}
 			Cfg.SourceDir = Resolved;
+		}
+		// Drift, frames and the contact sheet are written into the recording folder.
+		if (!Cfg.SourceRecordingId.IsEmpty() && Cfg.SourceDir.IsEmpty())
+		{
+			const FString Root = DefaultRecordingsRoot();
+			FString Unused, PathError;
+			if (!MCPResolvePathInside(Root / Cfg.SourceRecordingId, { Root }, Unused, PathError))
+			{
+				OutErr = MCPError(PathError);
+				return false;
+			}
 		}
 
 		// Convenience: `recording_dir` alone (no id, no explicit sequence) names

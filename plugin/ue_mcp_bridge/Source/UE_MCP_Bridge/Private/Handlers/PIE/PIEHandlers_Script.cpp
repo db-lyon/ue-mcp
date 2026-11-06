@@ -1011,7 +1011,12 @@ TSharedPtr<FJsonValue> FPIEHandlers::PieScriptResults(const TSharedPtr<FJsonObje
 			Live->SetBoolField(TEXT("live"), true);
 			return MCPResult(Live);
 		}
-		ResultsPath = DefaultScriptObservationsRoot() / Id / TEXT("results.json");
+		const FString Root = DefaultScriptObservationsRoot();
+		if (auto Err = MCPRequirePathInside(Root / Id / TEXT("results.json"), { Root }, ResultsPath)) return Err;
+	}
+	else if (auto Err = MCPRequireWritablePath(ResultsPath, ResultsPath))
+	{
+		return Err;
 	}
 
 	TSharedPtr<FJsonObject> Obj = LoadJsonFile(ResultsPath);
@@ -1062,12 +1067,23 @@ TSharedPtr<FJsonValue> FPIEHandlers::PieScriptReplay(const TSharedPtr<FJsonObjec
 	const bool bAutoStop = OptionalBool(Params, TEXT("auto_stop_pie"), true);
 	const int32 ClientId = OptionalInt(Params, TEXT("client_id"), 0);
 	if (!bPIEInstanceOk) return MCPError(PIEInstanceError);
+	FString CheckedResultsPath;
+	if (!ResultsPath.IsEmpty())
+	{
+		if (auto Err = MCPRequireWritablePath(ResultsPath, CheckedResultsPath)) return Err;
+	}
+	else if (!RunId.IsEmpty())
+	{
+		FString Unused;
+		const FString Root = DefaultScriptObservationsRoot();
+		if (auto Err = MCPRequirePathInside(Root / RunId, { Root }, Unused)) return Err;
+	}
 	if (!(TimeScale > 0.0)) return MCPError(TEXT("time_scale must be greater than 0"));
 	if (ClientId < 0) return MCPError(TEXT("client_id must be 0 or more"));
 
 	FScriptReplayConfig Cfg;
 	Cfg.SourceRunId = RunId;
-	Cfg.ResultsPath = ResultsPath;
+	Cfg.ResultsPath = CheckedResultsPath;
 	Cfg.TimeScale = static_cast<float>(TimeScale);
 	Cfg.bAutoStopPIE = bAutoStop;
 	Cfg.ClientId = ClientId;

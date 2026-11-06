@@ -1086,6 +1086,8 @@ namespace
 		UWorld* World = nullptr;
 		UDirectionalLightComponent* Fill = nullptr;
 		FString Error;
+		/** False when the world came already initialized and is reused as it is. */
+		bool bInitializedHere = false;
 
 		explicit FCkDiffLevelScene(UObject* Asset)
 		{
@@ -1097,8 +1099,24 @@ namespace
 				Error = TEXT("a World Partition level keeps its actors in their own packages, so its map package has nothing to draw");
 				return;
 			}
-			if (Loaded->bIsWorldInitialized) { Error = TEXT("the level loaded for diff is already initialized elsewhere"); return; }
+			if (Loaded->bIsWorldInitialized)
+			{
+				// A diff copy of this version initialized earlier in the same call: draw it as it is.
+				const bool bOurDiffCopy = Loaded->GetOutermost()->GetName().StartsWith(TEXT("/Temp/"))
+					&& !GEngine->GetWorldContextFromWorld(Loaded);
+				if (!bOurDiffCopy || !Loaded->Scene)
+				{
+					Error = bOurDiffCopy
+						? TEXT("the level loaded for diff was initialized earlier and has no scene left to draw")
+						: TEXT("the level loaded for diff is already initialized elsewhere");
+					return;
+				}
+				World = Loaded;
+			}
+			else
+			{
 			World = Loaded;
+			bInitializedHere = true;
 			World->WorldType = EWorldType::EditorPreview;
 			GEngine->CreateNewWorldContext(EWorldType::EditorPreview).SetCurrentWorld(World);
 			World->InitWorld(UWorld::InitializationValues()
@@ -1110,6 +1128,7 @@ namespace
 				.ShouldSimulatePhysics(false)
 				.EnableTraceCollision(false)
 				.SetTransactional(false));
+			}
 			World->PersistentLevel->UpdateModelComponents();
 			World->UpdateWorldComponents(/*bRerunConstructionScripts*/ true, /*bCurrentLevelOnly*/ false);
 			if (!World->Scene)
@@ -1146,6 +1165,7 @@ namespace
 				Fill->UnregisterComponent();
 				Fill->MarkAsGarbage();
 			}
+			if (!bInitializedHere) return;
 			World->CleanupWorld();
 			GEngine->DestroyWorldContext(World);
 		}
@@ -2007,10 +2027,14 @@ TSharedPtr<FJsonValue> FDiffHandlers::DiffCheckpointAsset(const TSharedPtr<FJson
 	TArray<TSharedPtr<FJsonValue>> Results;
 	for (const TSharedPtr<FJsonValue>& Item : *Items)
 	{
+		// Each item unloads its own versions: a version two items share would otherwise come back
+		// already loaded, and a level already initialized by the first item's pictures.
+		TArray<UPackage*> ItemLoaded;
 		const TSharedPtr<FJsonObject>* ItemParams = nullptr;
 		TSharedPtr<FJsonValue> One = Item.IsValid() && Item->TryGetObject(ItemParams)
-			? DiffCheckpointAssetOne(*ItemParams, Loaded)
+			? DiffCheckpointAssetOne(*ItemParams, ItemLoaded)
 			: MCPError(TEXT("each item is an object of checkpoint_diff_asset parameters"));
+		CkDiffUnload(ItemLoaded);
 		Results.Add(One.IsValid() ? One : MakeShared<FJsonValueNull>());
 	}
 	TSharedPtr<FJsonObject> Result = MCPSuccess();

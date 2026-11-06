@@ -14264,6 +14264,11 @@
       "status": "covered",
       "tests": [
         {
+          "suite": "automation",
+          "file": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Tests/PIEReadPathGuardTests.cpp",
+          "test": "UE.MCP.PIE.ReadPaths.StayInsideAllowedFolders"
+        },
+        {
           "suite": "live",
           "file": "tests/live/bcov-pie-session.test.ts",
           "test": "record_diff of a recording against itself finds no drift"
@@ -14289,6 +14294,11 @@
       "registeredIn": "PIEHandlers.cpp",
       "status": "covered",
       "tests": [
+        {
+          "suite": "automation",
+          "file": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Tests/PIEReadPathGuardTests.cpp",
+          "test": "UE.MCP.PIE.ReadPaths.StayInsideAllowedFolders"
+        },
         {
           "suite": "live",
           "file": "tests/live/bcov-pie-session.test.ts",
@@ -14393,6 +14403,16 @@
       "status": "covered",
       "tests": [
         {
+          "suite": "automation",
+          "file": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Tests/PIEReadPathGuardTests.cpp",
+          "test": "UE.MCP.PIE.ReadPaths.StayInsideAllowedFolders"
+        },
+        {
+          "suite": "automation",
+          "file": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Tests/PIEReplayStateTests.cpp",
+          "test": "UE.MCP.PIE.Replay.RecordingIdStaysInsideRecordings"
+        },
+        {
           "suite": "live",
           "file": "tests/live/bcov-pie-session.test.ts",
           "test": "replay_arm and replay_disarm move the replayer between armed and idle"
@@ -14405,6 +14425,16 @@
       "registeredIn": "PIEHandlers.cpp",
       "status": "covered",
       "tests": [
+        {
+          "suite": "automation",
+          "file": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Tests/PIEReadPathGuardTests.cpp",
+          "test": "UE.MCP.PIE.ReadPaths.StayInsideAllowedFolders"
+        },
+        {
+          "suite": "automation",
+          "file": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Tests/PIEReplayStateTests.cpp",
+          "test": "UE.MCP.PIE.Replay.RecordingIdStaysInsideRecordings"
+        },
         {
           "suite": "live",
           "file": "tests/live/bcov-pie-session.test.ts",
@@ -14684,6 +14714,11 @@
       "status": "covered",
       "tests": [
         {
+          "suite": "automation",
+          "file": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Tests/PIEReadPathGuardTests.cpp",
+          "test": "UE.MCP.PIE.ReadPaths.StayInsideAllowedFolders"
+        },
+        {
           "suite": "live",
           "file": "tests/live/bcov-pie-script-act.test.ts",
           "test": "script_replay replays the input without running arrange or act again"
@@ -14706,6 +14741,11 @@
       "registeredIn": "PIEHandlers_Script.cpp",
       "status": "covered",
       "tests": [
+        {
+          "suite": "automation",
+          "file": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Tests/PIEReadPathGuardTests.cpp",
+          "test": "UE.MCP.PIE.ReadPaths.StayInsideAllowedFolders"
+        },
         {
           "suite": "live",
           "file": "tests/live/bcov-pie-assets.test.ts",
@@ -23606,6 +23646,11 @@
       "registeredIn": "SourceControlHandlers.cpp",
       "status": "covered",
       "tests": [
+        {
+          "suite": "live",
+          "file": "tests/live/source-control-provider.test.ts",
+          "test": "blueprint diff against a submitted revision reports a node added since, by GUID (#1487)"
+        },
         {
           "suite": "live",
           "file": "tests/live/source-control.test.ts",

@@ -195,6 +195,10 @@ describe("source control with a provider (#1357)", () => {
     const missing = await call("diff_blueprint", { assetPath: bp, against: "revision:no-such-revision" });
     expect(missing.success).toBe(false);
     expect(String(missing.error)).toContain("No revision");
+
+    // add_node saved the Blueprint; the sync case pulls with rebase, which refuses a dirty workspace.
+    const reverted = await call("source_control_revert", { paths: [bp] });
+    expect(reverted.success, String(reverted.error)).toBe(true);
   });
 
   it("sync brings a change made upstream into the workspace file", async (ctx) => {
