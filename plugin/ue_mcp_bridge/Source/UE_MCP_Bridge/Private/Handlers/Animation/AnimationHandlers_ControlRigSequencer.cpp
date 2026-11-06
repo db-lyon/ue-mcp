@@ -21,6 +21,7 @@ namespace
 #include "HandlerControlRigStepSampling.h"
 
 #include "Algo/Reverse.h"
+#include "HAL/IConsoleManager.h"
 #include "AnimPose.h"
 #include "FABRIK.h"
 #include "EulerTransform.h"
@@ -66,6 +67,34 @@ namespace
 namespace
 {
 	constexpr int32 ControlRigSequencerMaxFrames = 100000;
+
+	/** Samples animation from its keys rather than its compressed data while in
+	 *  scope. Sequencer plays a clip from its compressed copy, which the default
+	 *  codecs keep only approximately, so a session or bake read through it puts
+	 *  each bone a fraction of a millimetre off its key (#1642). */
+	struct FControlRigSampleRawAnimation
+	{
+		IConsoleVariable* Variable = nullptr;
+		int32 Previous = 0;
+
+		FControlRigSampleRawAnimation()
+		{
+			Variable = IConsoleManager::Get().FindConsoleVariable(TEXT("a.ForceEvalRawData"));
+			if (Variable)
+			{
+				Previous = Variable->GetInt();
+				Variable->Set(1, ECVF_SetByCode);
+			}
+		}
+
+		~FControlRigSampleRawAnimation()
+		{
+			if (Variable)
+			{
+				Variable->Set(Previous, ECVF_SetByCode);
+			}
+		}
+	};
 
 	struct FControlRigSequenceSession
 	{
@@ -504,6 +533,7 @@ namespace
 		const FGuid& BindingGuid,
 		FString& OutError)
 	{
+		FControlRigSampleRawAnimation SampleRaw;
 		if (!UControlRigSequencerEditorLibrary::ExportAnimSequenceFromSequencer(
 				Output, Options, FMovieSceneBindingProxy(BindingGuid, Sequence), false))
 		{
@@ -2262,6 +2292,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::BeginControlRigEdit(const TSharedPtr<
 						else
 						{
 							UAnimSeqExportOption* ExportOptions = NewObject<UAnimSeqExportOption>();
+							FControlRigSampleRawAnimation SampleRaw;
 							bBakeSucceeded = UControlRigSequencerEditorLibrary::BakeToControlRig(
 								GetEditorWorld(), Sequence, ControlRigClass, ExportOptions,
 								false, 0.001f, FMovieSceneBindingProxy(BindingGuid, Sequence), true);
