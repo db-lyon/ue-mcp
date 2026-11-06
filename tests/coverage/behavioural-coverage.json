@@ -21037,6 +21037,11 @@
           "suite": "live",
           "file": "tests/live/bcov-material-graph.test.ts",
           "test": "set_expression_value changes a Constant's value"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/bcov-material-graph.test.ts",
+          "test": "set_expression_value swaps a TextureSample's texture through the native edit path (#1441)"
         }
       ]
     },
