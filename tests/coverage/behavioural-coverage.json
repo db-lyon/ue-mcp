@@ -1662,6 +1662,11 @@
         {
           "suite": "live",
           "file": "tests/live/bcov-widget-tree.test.ts",
+          "test": "add_widget inserts at childIndex under an Overlay, refuses an index out of range, and remove_widget's rollback restores the index (#1440)"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/bcov-widget-tree.test.ts",
           "test": "add_widget, move_widget, reorder_child and remove_widget reshape the tree read_widget_tree reads"
         }
       ]
@@ -17464,6 +17469,11 @@
         {
           "suite": "live",
           "file": "tests/live/bcov-widget-tree.test.ts",
+          "test": "add_widget inserts at childIndex under an Overlay, refuses an index out of range, and remove_widget's rollback restores the index (#1440)"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/bcov-widget-tree.test.ts",
           "test": "add_widget, move_widget, reorder_child and remove_widget reshape the tree read_widget_tree reads"
         },
         {
@@ -18688,6 +18698,11 @@
       "registeredIn": "WidgetHandlers.cpp",
       "status": "covered",
       "tests": [
+        {
+          "suite": "live",
+          "file": "tests/live/bcov-widget-tree.test.ts",
+          "test": "add_widget inserts at childIndex under an Overlay, refuses an index out of range, and remove_widget's rollback restores the index (#1440)"
+        },
         {
           "suite": "live",
           "file": "tests/live/bcov-widget-tree.test.ts",

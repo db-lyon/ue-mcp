@@ -65,6 +65,12 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "string",
         "required": false,
         "description": "Name of the parent panel widget (#798)"
+      },
+      {
+        "name": "childIndex",
+        "type": "integer",
+        "required": false,
+        "description": "Sibling index to insert at within the parent panel, 0 to its current child count (default: append). Refused when out of range or when the widget becomes the root (#1440)"
       }
     ]
   },
@@ -1629,7 +1635,7 @@ export const handlerSpecs: HandlerSpecs = {
 /** The Params: clause of each spec'd bridge method. */
 export const paramsClauses: Readonly<Record<string, string>> = {
   add_to_viewport: "Params: assetPath (or path, or widgetBlueprintPath), zOrder?",
-  add_widget: "Params: assetPath (or path), widgetClass (or typeName), widgetName? (or name), parentWidgetName?",
+  add_widget: "Params: assetPath (or path), widgetClass (or typeName), widgetName? (or name), parentWidgetName?, childIndex?",
   add_widget_animation_event_key: "Params: assetPath (or path), animationName, functionName, time?, trackName?",
   add_widget_animation_key: "Params: assetPath (or path), animationName, widgetName, propertyName, time, value, channel?, channelIndex?, interpolation?",
   add_widget_animation_track: "Params: assetPath (or path), animationName, widgetName, propertyName",
@@ -1689,6 +1695,7 @@ export const schema: Record<string, z.ZodType> = {
   channel: z.string().optional().describe("Channel by name (R/G/B/A, Left/Top/Right/Bottom, Translation.X); a miss lists the section's real channels"),
   channelIndex: z.number().int().optional().describe("Channel by index, used when channel is not given (default 0)"),
   childClassFilter: z.string().optional().describe("Class substring filter for subtree nodes (implies includeSubtree)"),
+  childIndex: z.number().int().optional().describe("Sibling index to insert at within the parent panel, 0 to its current child count (default: append). Refused when out of range or when the widget becomes the root (#1440)"),
   childName: z.string().optional().describe("Named child inside the UserWidget (#559)"),
   classFilter: z.string().optional().describe("Class name substring filter"),
   className: z.string().optional().describe("Native UserWidget parent whose contract to read: a short name, a class path, or a Widget Blueprint path (get_bind_widget_contract). Widget class name that locates the live host widget (get_runtime_delegates, get_runtime_widget, invoke_runtime_function, set_runtime_focus)"),
