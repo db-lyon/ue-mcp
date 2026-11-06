@@ -491,6 +491,9 @@ TSharedPtr<FJsonValue> ResolveExportPath(const FString& Requested, const FString
 	// Reject alternate data streams. The only allowed colon belongs to an absolute drive prefix.
 	if (Out.Mid(2).Contains(TEXT(":"))) return InspectionError(TEXT("invalid_output_path"), TEXT("outputPath cannot address a Windows alternate data stream."));
 #endif
+	FString Guarded;
+	if (MCPRequireWritablePath(Out, Guarded).IsValid())
+		return InspectionError(TEXT("invalid_output_path"), TEXT("outputPath must be inside the project, its Saved folder or the user temp folder."));
 	if (FPaths::IsRelative(Path) && !FPaths::IsUnderDirectory(Out, FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir())))
 		return InspectionError(TEXT("invalid_output_path"), TEXT("Relative outputPath must remain under Saved/. Use an explicit absolute path for another destination."));
 	if (IFileManager::Get().FileExists(*Out) || IFileManager::Get().DirectoryExists(*Out))
@@ -772,6 +775,7 @@ bool FMCPMeshInspectionExportFailureTest::RunTest(const FString& Parameters)
 	FString Resolved;
 	TestTrue(TEXT("relative traversal refused"), MCPMeshInspection::ResolveExportPath(TEXT("../outside.json"), S.Id, Resolved).IsValid());
 	TestTrue(TEXT("wrong extension refused"), MCPMeshInspection::ResolveExportPath(TEXT("file.uasset"), S.Id, Resolved).IsValid());
+	TestTrue(TEXT("absolute path outside the writable roots refused"), MCPMeshInspection::ResolveExportPath(FPaths::ConvertRelativePathToFull(FPaths::Combine(FPaths::EngineDir(), TEXT("ue-mcp-outside.json"))), S.Id, Resolved).IsValid());
 	TestFalse(TEXT("safe relative path resolves without writing"), MCPMeshInspection::ResolveExportPath(TEXT("UE_MCP/unique-inspection-test.json"), S.Id, Resolved).IsValid());
 	TestTrue(TEXT("relative path confined to Saved"), FPaths::IsUnderDirectory(Resolved, FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir())));
 	return true;
