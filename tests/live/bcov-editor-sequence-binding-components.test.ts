@@ -65,7 +65,9 @@ beforeAll(async () => {
     `seq = unreal.load_asset('${SEQ}')`,
     "eas = unreal.get_editor_subsystem(unreal.EditorActorSubsystem)",
     `actor = [a for a in eas.get_all_level_actors() if a.get_actor_label() == '${SPAWN_SOURCE}'][0]`,
-    "unreal.MovieSceneSequenceExtensions.add_spawnable_from_instance(seq, actor)",
+    "binding = unreal.MovieSceneSequenceExtensions.add_spawnable_from_instance(seq, actor)",
+    // UE 5.8 names the spawnable after the actor's object, not its label.
+    `unreal.MovieSceneBindingExtensions.set_name(binding, '${SPAWN_SOURCE}')`,
   ].join("\n");
   await call("execute_python", { code });
 }, 120_000);
