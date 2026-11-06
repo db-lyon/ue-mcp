@@ -21,6 +21,10 @@ namespace MCPPIE
 			FInputActionValue Value;
 			FString ActionPath;
 			FString ActionName;
+			FHoldOptions Options;
+			// Game seconds the hold has run, summed from world-time deltas so a level change does not reset it.
+			double ElapsedSeconds = 0;
+			double LastWorldTime = -1;
 		};
 
 		struct FTapeEntry
@@ -53,6 +57,31 @@ namespace MCPPIE
 		void StopHoldEntry(const FHoldEntry& Entry)
 		{
 			StopContinuousInjection(Entry.Subsystem.Get(), Entry.Action.Get());
+		}
+
+		ULocalPlayer* LocalPlayerOf(const FHoldEntry& Entry)
+		{
+			UEnhancedInputLocalPlayerSubsystem* Subsystem = Entry.Subsystem.Get();
+			return Subsystem ? Subsystem->GetLocalPlayer<ULocalPlayer>() : nullptr;
+		}
+
+		// Advances the hold's game-time clock and re-applies its control rotation.
+		void TickHoldOptions(FHoldEntry& Entry)
+		{
+			ULocalPlayer* LocalPlayer = LocalPlayerOf(Entry);
+			if (UWorld* World = LocalPlayer ? LocalPlayer->GetWorld() : nullptr)
+			{
+				const double Now = World->GetTimeSeconds();
+				if (Entry.LastWorldTime >= 0)
+				{
+					Entry.ElapsedSeconds += FMath::Max(0.0, Now - Entry.LastWorldTime);
+				}
+				Entry.LastWorldTime = Now;
+			}
+			if (Entry.Options.bHasControlRotation && LocalPlayer && LocalPlayer->PlayerController)
+			{
+				LocalPlayer->PlayerController->SetControlRotation(Entry.Options.ControlRotation);
+			}
 		}
 
 		void StopTapeEntry(const FTapeEntry& Entry)
@@ -184,6 +213,14 @@ namespace MCPPIE
 				{
 					StopHoldEntry(Hold);
 					It.RemoveCurrent();
+					continue;
+				}
+
+				TickHoldOptions(Hold);
+				if (Hold.Options.DurationSeconds > 0 && Hold.ElapsedSeconds >= Hold.Options.DurationSeconds)
+				{
+					StopHoldEntry(Hold);
+					It.RemoveCurrent();
 				}
 			}
 
@@ -261,7 +298,7 @@ namespace MCPPIE
 
 	FString FPIEInputInjector::StartHold(UInputAction* Action, const FInputActionValue& Value,
 		const FString& DesiredId, FString& OutError, int32 ClientIndex, int32 PIEInstance,
-		ULocalPlayer* ExactLocalPlayer)
+		ULocalPlayer* ExactLocalPlayer, const FHoldOptions& Options)
 	{
 		if (!Action)
 		{
@@ -294,6 +331,9 @@ namespace MCPPIE
 		Entry.Value = Value;
 		Entry.ActionPath = Action->GetPathName();
 		Entry.ActionName = Action->GetName();
+		Entry.Options = Options;
+		// Starts the clock and applies the control rotation before the first frame the hold is seen in.
+		TickHoldOptions(Entry);
 		Subsystem->StartContinuousInputInjectionForAction(Action, Value, {}, {});
 		GHolds.Add(Id, Entry);
 		EnsureTickerBound();
@@ -315,6 +355,25 @@ namespace MCPPIE
 		Entry->Value = Value;
 		Entry->Subsystem->UpdateValueOfContinuousInputInjectionForAction(
 			Entry->Action.Get(), Value);
+		return true;
+	}
+
+	bool FPIEInputInjector::SetHoldControlRotation(const FString& Id, const FRotator& Rotation)
+	{
+		FHoldEntry* Entry = GHolds.Find(Id);
+		if (!Entry)
+		{
+			return false;
+		}
+		Entry->Options.bHasControlRotation = true;
+		Entry->Options.ControlRotation = Rotation;
+		if (ULocalPlayer* LocalPlayer = LocalPlayerOf(*Entry))
+		{
+			if (LocalPlayer->PlayerController)
+			{
+				LocalPlayer->PlayerController->SetControlRotation(Rotation);
+			}
+		}
 		return true;
 	}
 
@@ -421,6 +480,10 @@ namespace MCPPIE
 			S.ActionName = KV.Value.ActionName;
 			S.bIsTape = false;
 			S.CurrentValue = KV.Value.Value;
+			S.DurationSeconds = KV.Value.Options.DurationSeconds;
+			S.ElapsedSeconds = KV.Value.ElapsedSeconds;
+			S.bHasControlRotation = KV.Value.Options.bHasControlRotation;
+			S.ControlRotation = KV.Value.Options.ControlRotation;
 			Out.Add(S);
 		}
 		for (const TPair<FString, FTapeEntry>& KV : GTapes)

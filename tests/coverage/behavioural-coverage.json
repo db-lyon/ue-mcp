@@ -9983,6 +9983,11 @@
           "suite": "live",
           "file": "tests/live/bcov-editor-world.test.ts",
           "test": "invoke_object_function, invoke_function and invoke_object_functions change what get_object_properties reads"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/bcov-pie-session.test.ts",
+          "test": "inject_input_start releases itself after duration_seconds and pins control_rotation every frame (#1449)"
         }
       ]
     },
@@ -13028,6 +13033,11 @@
           "suite": "live",
           "file": "tests/live/bcov-pie-session.test.ts",
           "test": "inject_input, inject_input_start, inject_input_update, inject_input_stop and inject_input_tape drive a bound action"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/bcov-pie-session.test.ts",
+          "test": "inject_input_start releases itself after duration_seconds and pins control_rotation every frame (#1449)"
         }
       ]
     },
@@ -13041,6 +13051,11 @@
           "suite": "live",
           "file": "tests/live/bcov-pie-session.test.ts",
           "test": "inject_input, inject_input_start, inject_input_update, inject_input_stop and inject_input_tape drive a bound action"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/bcov-pie-session.test.ts",
+          "test": "inject_input_start releases itself after duration_seconds and pins control_rotation every frame (#1449)"
         }
       ]
     },
@@ -13067,6 +13082,11 @@
           "suite": "live",
           "file": "tests/live/bcov-pie-session.test.ts",
           "test": "inject_input, inject_input_start, inject_input_update, inject_input_stop and inject_input_tape drive a bound action"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/bcov-pie-session.test.ts",
+          "test": "inject_input_start releases itself after duration_seconds and pins control_rotation every frame (#1449)"
         }
       ]
     },

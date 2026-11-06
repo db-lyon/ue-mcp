@@ -182,6 +182,8 @@ void FPIEHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("value_y"), EType::Number, ValueYDoc),
 		MCPParam::Optional(TEXT("value_z"), EType::Number, ValueZDoc),
 		MCPParam::Optional(TEXT("injection_id"), EType::String, TEXT("Caller-chosen hold id (minted when absent)")),
+		MCPParam::Optional(TEXT("duration_seconds"), EType::Number, TEXT("Game seconds after which the hold releases itself (default 0: held until inject_input_stop or PIE ends). Local player only")).Min(0),
+		MCPParam::Optional(TEXT("control_rotation"), EType::Rotator, TEXT("Player controller control rotation, re-applied every frame while the hold runs. Local player only")),
 		MCPParam::Optional(TEXT("client_id"), EType::Integer, ClientIdDoc).Min(0),
 		MCPParam::Optional(TEXT("pie_instance"), EType::Integer, PieInstanceDoc).Min(0),
 		MCPParam::Optional(TEXT("client"), EType::Integer, RemoteClientDoc).Min(0),
@@ -191,6 +193,7 @@ void FPIEHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("value_x"), EType::Number, ValueXDoc),
 		MCPParam::Optional(TEXT("value_y"), EType::Number, ValueYDoc),
 		MCPParam::Optional(TEXT("value_z"), EType::Number, ValueZDoc),
+		MCPParam::Optional(TEXT("control_rotation"), EType::Rotator, TEXT("New control rotation the hold re-applies every frame; sent alone it keeps the hold's value")),
 	}, MCPSpec::ContractExempt(TEXT("Changes the value of a running input hold")));
 	Registry.RegisterHandler(TEXT("pie_inject_input_stop"), &InjectInputStop, {
 		MCPParam::Required(TEXT("injection_id"), EType::String, TEXT("Hold or tape id to stop")),

@@ -24431,6 +24431,19 @@
           "description": "Caller-chosen hold id (minted when absent)"
         },
         {
+          "name": "duration_seconds",
+          "type": "number",
+          "required": false,
+          "description": "Game seconds after which the hold releases itself (default 0: held until inject_input_stop or PIE ends). Local player only",
+          "minimum": 0
+        },
+        {
+          "name": "control_rotation",
+          "type": "rotator",
+          "required": false,
+          "description": "Player controller control rotation, re-applied every frame while the hold runs. Local player only"
+        },
+        {
           "name": "client_id",
           "type": "integer",
           "required": false,
@@ -24543,6 +24556,12 @@
           "type": "number",
           "required": false,
           "description": "Axis value Z (default 0)"
+        },
+        {
+          "name": "control_rotation",
+          "type": "rotator",
+          "required": false,
+          "description": "New control rotation the hold re-applies every frame; sent alone it keeps the hold's value"
         }
       ],
       "contractExempt": "Changes the value of a running input hold"
