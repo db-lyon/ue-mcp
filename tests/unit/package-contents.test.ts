@@ -18,11 +18,13 @@ const PEM_PRIVATE_KEY = /-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z
 
 function packedFiles(): string[] {
   const inv = npmInvocation(["pack", "--dry-run", "--json", "--ignore-scripts"]);
+  // execFileSync's option types omit windowsVerbatimArguments, which spawnSync honours.
+  const verbatim = { windowsVerbatimArguments: inv.windowsVerbatimArguments };
   const out = execFileSync(inv.command, inv.args, {
+    ...verbatim,
     cwd: repoRoot,
     encoding: "utf8",
     windowsHide: true,
-    windowsVerbatimArguments: inv.windowsVerbatimArguments,
     stdio: ["ignore", "pipe", "pipe"],
     maxBuffer: 64 * 1024 * 1024,
   });

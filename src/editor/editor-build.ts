@@ -276,7 +276,8 @@ export function buildInvocation(o: {
   clean?: boolean;
   windows: boolean;
 }): Invocation {
-  const projectName = path.basename(o.projectPath, path.extname(o.projectPath));
+  const paths = o.windows ? path.win32 : path.posix;
+  const projectName = paths.basename(o.projectPath, paths.extname(o.projectPath));
   assertUeIdentifier(projectName, "Project name");
   const target = assertUeIdentifier(`${projectName}Editor`, "Build target");
   const platform = assertPlatform(o.platform);
