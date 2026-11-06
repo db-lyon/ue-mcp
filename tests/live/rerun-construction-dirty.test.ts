@@ -33,6 +33,8 @@ const dirtyPackages = async (): Promise<string[]> => (await call("get_world_stat
 
 beforeAll(async () => {
   bridge = await getBridge();
+  // A saved map: an untitled world's /Temp packages are never listed as dirty.
+  await call("demo_go_home", {});
   await callBridge(bridge, "delete_actor", { actorLabel: LABEL });
   await callBridge(bridge, "delete_asset", { assetPath: BP, force: true });
   await call("create_blueprint", { assetPath: BP, parentClass: "Actor" });
