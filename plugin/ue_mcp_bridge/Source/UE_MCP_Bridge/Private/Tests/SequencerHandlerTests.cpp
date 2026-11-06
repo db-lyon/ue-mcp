@@ -384,7 +384,18 @@ bool FSequencerInfoTimingDetailsTest::RunTest(const FString& Parameters)
 		TestTrue(TEXT("compact response still lists the separate camera cut root"), CompactCamera.IsValid());
 		if (CompactCamera.IsValid())
 		{
-			TestFalse(TEXT("compact root track omits sections"), CompactCamera->HasField(TEXT("sections")));
+			// #1644: without details every section still lists its range and
+			// activity, but not the blend type or channels the detail mode adds.
+			const TSharedPtr<FJsonObject> CompactCut = GetArrayObjectAt(
+				GetArrayField(CompactCamera, TEXT("sections")), 0);
+			TestTrue(TEXT("compact root track lists its section summary"), CompactCut.IsValid());
+			if (CompactCut.IsValid())
+			{
+				ExpectClosedRange(*this, CompactCut, 24000, 48000, 24.0, 48.0, 1.0, 2.0);
+				TestTrue(TEXT("compact section reports activity"), CompactCut->HasField(TEXT("isActive")));
+				TestFalse(TEXT("compact section omits blend type"), CompactCut->HasField(TEXT("blendType")));
+				TestFalse(TEXT("compact section omits channels"), CompactCut->HasField(TEXT("channels")));
+			}
 			TestFalse(TEXT("compact root track omits section truncation"), CompactCamera->HasField(TEXT("sectionsTruncated")));
 		}
 
@@ -395,7 +406,15 @@ bool FSequencerInfoTimingDetailsTest::RunTest(const FString& Parameters)
 		TestTrue(TEXT("compact response still lists binding tracks"), CompactTransform.IsValid());
 		if (CompactTransform.IsValid())
 		{
-			TestFalse(TEXT("compact binding track omits sections"), CompactTransform->HasField(TEXT("sections")));
+			const TSharedPtr<FJsonObject> CompactSection = GetArrayObjectAt(
+				GetArrayField(CompactTransform, TEXT("sections")), 0);
+			TestTrue(TEXT("compact binding track lists its section summary"), CompactSection.IsValid());
+			if (CompactSection.IsValid())
+			{
+				TestFalse(TEXT("compact binding section omits first-key values"), CompactSection->HasField(TEXT("firstKeyValues")));
+				TestFalse(TEXT("compact binding section omits channels"), CompactSection->HasField(TEXT("channels")));
+			}
+			TestFalse(TEXT("compact binding track omits section truncation"), CompactTransform->HasField(TEXT("sectionsTruncated")));
 		}
 	}
 
