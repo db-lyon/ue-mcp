@@ -314,6 +314,32 @@ describe("widget blueprint tree", () => {
     expect(check.compiles).toBe(true);
   }, 120_000);
 
+  it("add_widget inserts at childIndex under an Overlay, refuses an index out of range, and remove_widget's rollback restores the index (#1440)", async () => {
+    await call("add_widget", { assetPath: WBP, widgetClass: "Overlay", widgetName: "Ov", parentWidgetName: "Root" });
+    for (const name of ["Ov_A", "Ov_B", "Ov_C", "Ov_D"]) {
+      await call("add_widget", { assetPath: WBP, widgetClass: "TextBlock", widgetName: name, parentWidgetName: "Ov" });
+    }
+    const inserted = await call("add_widget", { assetPath: WBP, widgetClass: "TextBlock", widgetName: "Ov_New", parentWidgetName: "Ov", childIndex: 1 });
+    expect(inserted.childIndex).toBe(1);
+    expect(inserted.parent).toBe("Ov");
+    expect(childNames(find(await tree(), "Ov"))).toEqual(["Ov_A", "Ov_New", "Ov_B", "Ov_C", "Ov_D"]);
+
+    const outOfRange = await callBridge(bridge, "add_widget", { assetPath: WBP, widgetClass: "TextBlock", widgetName: "Ov_Far", parentWidgetName: "Ov", childIndex: 9 });
+    expect(succeeded(outOfRange)).toBe(false);
+    expect(find(await tree(), "Ov_Far")).toBeUndefined();
+
+    const removed = await call("remove_widget", { assetPath: WBP, widgetName: "Ov_New" });
+    const rollback = removed.rollback as { method: string; payload: Json };
+    expect(rollback.method).toBe("add_widget");
+    expect(rollback.payload.childIndex).toBe(1);
+    expect(childNames(find(await tree(), "Ov"))).toEqual(["Ov_A", "Ov_B", "Ov_C", "Ov_D"]);
+    await call(rollback.method, rollback.payload);
+    expect(childNames(find(await tree(), "Ov"))).toEqual(["Ov_A", "Ov_New", "Ov_B", "Ov_C", "Ov_D"]);
+
+    await call("remove_widget", { assetPath: WBP, widgetName: "Ov" });
+    expect(find(await tree(), "Ov")).toBeUndefined();
+  }, 180_000);
+
   it("audit_commonui reports the plugin state the loaded widget classes agree with", async () => {
     const audit = await call("audit_commonui", { assetPath: WBP });
     const commonClasses = await call("list_widget_classes", { module: "CommonUI", includeAbstract: true, limit: 50 });
