@@ -155,10 +155,10 @@ function crashReportersWatching(editorPid: number): number[] {
   return pids;
 }
 
-/** Visual Studio (devenv.exe) pids, any solution. Windows only. */
+/** Visual Studio (devenv.exe) pids, any solution. Windows only; Windows PowerShell ships with every Windows, pwsh does not. */
 function devenvPids(): number[] {
   const out = execFileSync(
-    "pwsh",
+    "powershell.exe",
     [
       "-NoProfile",
       "-Command",
