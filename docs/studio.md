@@ -202,6 +202,8 @@ The prompt shows the reply, with **Continue this thread**, which opens the sessi
 | **Project** | Whether the project's ue-mcp setup is ready, with what needs attention; the context strategy other MCP clients load; the MCP clients configured; the setup pages; the bridge plugin's version and install; and `ue-mcp.yml` under **Advanced**. |
 | **Diagnostics** | The editor and daemon status, and recent daemon events. |
 
+The **Account** card in **General** signs in to your UE-MCP account. You create the account with an email address, which gets a one-time code by email and has no password, or with GitHub. Either can be linked to the account later from **Settings > General > Account**. The [Remote plan](remote-control.md) belongs to the account.
+
 The **Plugins** tab lists the project's ue-mcp [plugins](plugins.md), with update and remove, and the registry's catalog to install from. Changes load when the daemon restarts.
 
 ## Remote control

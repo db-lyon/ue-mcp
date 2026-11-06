@@ -172,7 +172,7 @@ Files ue-mcp writes for itself. None belong in your project or in version contro
 | `~/.ue-mcp/config.yml` | Your user-global config layer, hand-edited. See [Config layering](config-file.md#config-layering). |
 | `~/.ue-mcp/state.json` | Per project: the Claude Code `settings.json` files holding the feedback hook (`installedHooks`), the feedback, dialog and playtest modes, and the daemon extension version the project loads. Per user (`preferences`): the feedback, dialog and playtest modes. Written by `init`, `uninstall-hooks`, `feedback mode`, `dialog mode`, `playtest mode` and `extension`. `UE_MCP_USER_STATE` moves it. |
 | `~/.ue-mcp/auth.json` | GitHub OAuth token for `feedback(submit)` with `author="user"`. Mode 600. Written by `npx ue-mcp auth`. |
-| `~/.ue-mcp/registry.json` | Plugin registry publish token. Written by `npx ue-mcp login`. |
+| `~/.ue-mcp/registry.json` | Your UE-MCP account token, used by Studio and `ue-mcp plugin publish`. Mode 600. Written by `npx ue-mcp login`. |
 | `~/.ue-mcp/pending-feedback/<id>.json` | Submissions queued while feedback mode is `defer`. |
 | `~/.ue-mcp/daemons/` | One discovery file (`<key>.json`, with the daemon's port and token) and one log (`<key>.log`) per project daemon. |
 | `~/.ue-mcp/extensions/` | Installed daemon extensions, one folder per `<name>@<version>`. |
@@ -442,7 +442,7 @@ Run `npx ue-mcp <command> --help` for a command's flags.
 | `npx ue-mcp feedback mode [<mode>]` | Read or set your feedback approval mode (`interactive`, `auto-approve`, `defer`). See [Feedback modes](feedback.md#feedback-modes). |
 | `npx ue-mcp feedback list \| show \| approve \| discard \| review` | Manage submissions queued under `defer`. `review` (experimental) walks the queue one entry at a time. See [Reviewing deferred submissions](feedback.md#reviewing-deferred-submissions). |
 | `npx ue-mcp auth` | Run the GitHub device flow so `feedback(submit)` can file issues as your account. |
-| `npx ue-mcp login` / `logout` | Cache or forget the registry token `ue-mcp plugin publish` uses. |
+| `npx ue-mcp login` / `logout` | Sign in to your UE-MCP account at `accounts.ue-mcp.com` with an email code (`--email <address>`) or GitHub (`--github`), or forget the cached token. Studio and `ue-mcp plugin publish` use it. |
 | `npx ue-mcp uninstall-hooks` | Remove the feedback hook from every Claude Code settings file recorded for this project. |
 | `npx ue-mcp resolve <issue>` | Fetch a feedback issue, branch, hand it to Claude Code to implement, open a PR. See [Development](development.md#resolving-an-issue-with-claude-code). |
 | `npx ue-mcp plugin <install\|uninstall\|update\|list\|config\|create\|publish\|check-skills\|record-specs>` | Install, configure, create and publish plugins. See [Using plugins](plugins-using.md) and [Plugins](plugins.md). |
@@ -515,3 +515,4 @@ Each wins over the matching config key. The full list, with the ones tests and s
 | `UE_MCP_DAEMON_IDLE_MS` | How long an idle daemon waits before exiting |
 | `UE_MCP_DAEMON_DIR`, `UE_MCP_EXTENSIONS_DIR`, `UE_MCP_PENDING_DIR`, `UE_MCP_AUTH_DIR` | Move the daemon, extension, deferred-feedback and token directories |
 | `UE_MCP_PUBLISH_TOKEN` | Registry publish token for CI, over the one `ue-mcp login` cached |
+| `UE_MCP_AUTH_URL` | Origin `ue-mcp login` signs in through. Unset means `https://accounts.ue-mcp.com`, falling back to the registry when that host cannot be reached |

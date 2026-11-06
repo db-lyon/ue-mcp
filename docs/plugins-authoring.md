@@ -259,7 +259,7 @@ Users then run `ue-mcp plugin install <your-package>`. Check the [validation rul
 
 ### The registry listing
 
-`ue-mcp plugin publish [dir]` creates or updates your listing on [plugins.ue-mcp.com](https://plugins.ue-mcp.com). Log in once with `ue-mcp login`.
+`ue-mcp plugin publish [dir]` creates or updates your listing on [plugins.ue-mcp.com](https://plugins.ue-mcp.com). Log in once with `ue-mcp login`, with an email address (`--email <address>`, a one-time code) or GitHub (`--github`).
 
 - **Slug.** A listing that already names your package keeps its slug. `--slug` sets a new listing's slug; changing an existing one also needs `--rename`.
 - **Derived on every publish.** `provides` from the manifest: `tools` for `inject:`, `provides:` or a native module, `flows` for a non-empty `flows:`, `skills` when `skills/` has one. `ueVersions` from `nativeModule.supportedEngineVersions`.

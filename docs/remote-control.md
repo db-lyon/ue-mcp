@@ -7,7 +7,7 @@ Remote control needs the Remote plan: $5 a month or $50 a year, before tax. Tax 
 ## Requirements
 
 - Studio 0.1.25 or later on the computer running the project. See [Install](studio.md#install).
-- A ue-mcp account, which you sign in to with GitHub.
+- A UE-MCP account. You create it with an email address (a one-time code, no password) or with GitHub.
 - The Remote plan on that account.
 - On the device, a web browser. The Android and iOS apps are a work in progress.
 
@@ -15,7 +15,11 @@ The computer does the work, so it has to be on, with Studio's ue-mcp daemon runn
 
 ## 1. Sign in
 
-Open **Settings > General**. In the **Account** card, choose **Sign in to your ue-mcp account**. The sign-in is with GitHub: approve it in your browser, or enter the code Studio shows on GitHub. The card then shows **Signed in as @your-login**.
+Open **Settings > General**. In the **Account** card, choose **Sign in to your ue-mcp account**. Sign in with an email address: a 6-digit code, valid for 10 minutes, is emailed to it, and you enter the code in Studio. There is no password. Or sign in with GitHub: approve it in your browser, or enter the code Studio shows on GitHub. The first sign-in creates the account.
+
+An account created with one can link the other later, in the same **Account** card. The Remote plan belongs to the account, so it stays with you whichever way you sign in.
+
+From a terminal, `npx ue-mcp login` signs in to the same account (`--email <address>` or `--github`).
 
 **Settings > Remote control** shows the same sign-in while no account is signed in.
 
