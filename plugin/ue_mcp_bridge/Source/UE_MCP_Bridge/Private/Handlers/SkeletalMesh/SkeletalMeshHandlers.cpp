@@ -2,6 +2,7 @@
 
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
+#include "SkeletalMeshVertexRead.h"
 
 #include "Engine/SkeletalMesh.h"
 // FSkeletalMeshLODInfo. 5.5+ reaches it transitively; 5.4 does not.
@@ -146,25 +147,6 @@ namespace
 		UE::AnimationCore::FBoneWeights Desired;
 		UE::AnimationCore::FBoneWeights After;
 	};
-
-	TSharedPtr<FJsonValue> MCPParseFiniteInteger(
-		const TSharedPtr<FJsonObject>& Object,
-		const TCHAR* Field,
-		int32& OutValue,
-		const FString& Context)
-	{
-		double Number = 0.0;
-		if (!Object.IsValid() || !Object->TryGetNumberField(Field, Number)
-			|| !FMath::IsFinite(Number)
-			|| !FMath::IsNearlyEqual(Number, FMath::RoundToDouble(Number))
-			|| Number < static_cast<double>(MIN_int32)
-			|| Number > static_cast<double>(MAX_int32))
-		{
-			return MCPError(FString::Printf(TEXT("%s.%s must be a finite integer"), *Context, Field));
-		}
-		OutValue = static_cast<int32>(Number);
-		return nullptr;
-	}
 
 	TSharedPtr<FJsonValue> MCPResolveSkinWeightTarget(
 		const TSharedPtr<FJsonObject>& Params,
@@ -1035,146 +1017,20 @@ TSharedPtr<FJsonValue> FSkeletalMeshHandlers::ReadSkeletalMeshVertices(const TSh
 #if !(WITH_EDITORONLY_DATA && UE_MCP_HAS_5_4_API)
 	return MCPError(TEXT("read_skeletal_mesh_vertices requires an Unreal Editor build on Unreal Engine 5.4 or newer"));
 #else
-	constexpr int32 DefaultLimit = 2000;
-	constexpr int32 MaxLimit = 20000;
-
 	FMCPSkinWeightTarget Target;
 	if (TSharedPtr<FJsonValue> Error = MCPResolveSkinWeightTarget(Params, Target)) return Error;
 	const FReferenceSkeleton& RefSkeleton = Target.Mesh->GetRefSkeleton();
-	const int32 BoneCount = RefSkeleton.GetNum();
 
-	bool bPositions = true;
-	bool bWeights = true;
-	bool bTriangles = false;
-	if (HasParam(Params, TEXT("include")))
-	{
-		const TArray<TSharedPtr<FJsonValue>>* Values = nullptr;
-		if (!TryGetArrayParam(Params, TEXT("include"), Values) || !Values || Values->IsEmpty())
-		{
-			return MCPError(TEXT("include must be a non-empty array of positions, weights, triangles"));
-		}
-		bPositions = false;
-		bWeights = false;
-		for (int32 Index = 0; Index < Values->Num(); ++Index)
-		{
-			FString Name;
-			if (!(*Values)[Index].IsValid() || !(*Values)[Index]->TryGetString(Name))
-			{
-				return MCPError(FString::Printf(TEXT("include[%d] must be a string"), Index));
-			}
-			if (Name.Equals(TEXT("positions"), ESearchCase::IgnoreCase)) bPositions = true;
-			else if (Name.Equals(TEXT("weights"), ESearchCase::IgnoreCase)) bWeights = true;
-			else if (Name.Equals(TEXT("triangles"), ESearchCase::IgnoreCase)) bTriangles = true;
-			else
-			{
-				return MCPError(FString::Printf(
-					TEXT("include[%d]='%s' is not one of positions, weights, triangles"), Index, *Name));
-			}
-		}
-	}
-
-	// Bone selection: a vertex is kept by its summed weight on the selected bones.
-	TArray<bool> SelectedBones;
-	TArray<FString> SelectedBoneNames;
-	const bool bByBone = HasParam(Params, TEXT("boneNames"));
-	if (bByBone)
-	{
-		const TArray<TSharedPtr<FJsonValue>>* Values = nullptr;
-		if (!TryGetArrayParam(Params, TEXT("boneNames"), Values) || !Values || Values->IsEmpty())
-		{
-			return MCPError(TEXT("boneNames must be a non-empty array of bone names; omit it to keep every vertex"));
-		}
-		SelectedBones.Init(false, BoneCount);
-		for (int32 InputIndex = 0; InputIndex < Values->Num(); ++InputIndex)
-		{
-			FString BoneName;
-			if (!(*Values)[InputIndex].IsValid() || !(*Values)[InputIndex]->TryGetString(BoneName) || BoneName.IsEmpty())
-			{
-				return MCPError(FString::Printf(TEXT("boneNames[%d] must be a non-empty string"), InputIndex));
-			}
-			const int32 BoneIndex = RefSkeleton.FindBoneIndex(FName(*BoneName));
-			if (BoneIndex == INDEX_NONE)
-			{
-				return MCPError(FString::Printf(
-					TEXT("boneNames[%d]='%s' is not a bone of '%s'"), InputIndex, *BoneName, *Target.Mesh->GetPathName()));
-			}
-			SelectedBones[BoneIndex] = true;
-		}
-		if (OptionalBool(Params, TEXT("includeChildBones"), false))
-		{
-			// Parents precede children in a reference skeleton.
-			for (int32 BoneIndex = 0; BoneIndex < BoneCount; ++BoneIndex)
-			{
-				const int32 ParentIndex = RefSkeleton.GetParentIndex(BoneIndex);
-				if (ParentIndex != INDEX_NONE && SelectedBones[ParentIndex]) SelectedBones[BoneIndex] = true;
-			}
-		}
-		for (int32 BoneIndex = 0; BoneIndex < BoneCount; ++BoneIndex)
-		{
-			if (SelectedBones[BoneIndex]) SelectedBoneNames.Add(RefSkeleton.GetBoneName(BoneIndex).ToString());
-		}
-	}
-	else if (HasParam(Params, TEXT("includeChildBones")) || HasParam(Params, TEXT("minWeight")))
-	{
-		return MCPError(TEXT("includeChildBones and minWeight select by bone and need boneNames"));
-	}
-
-	double MinWeight = 0.0;
-	const bool bHasMinWeight = HasParam(Params, TEXT("minWeight"));
-	if (bHasMinWeight)
-	{
-		if (!TryGetNumberParam(Params, TEXT("minWeight"), MinWeight)
-			|| !FMath::IsFinite(MinWeight) || MinWeight <= 0.0 || MinWeight > 1.0)
-		{
-			return MCPError(TEXT("minWeight must be a finite number with 0 < minWeight <= 1"));
-		}
-	}
-
+	// Every selector and the page are checked before any vertex is read.
+	MCPVertexRead::FIncludes Include;
+	MCPVertexRead::FBoneSelection Bones;
 	bool bByBox = false;
 	FBox SelectionBox(ForceInit);
-	if (HasParam(Params, TEXT("box")))
-	{
-		const TSharedPtr<FJsonObject>* BoxObject = nullptr;
-		const TSharedPtr<FJsonObject>* MinObject = nullptr;
-		const TSharedPtr<FJsonObject>* MaxObject = nullptr;
-		FVector Min = FVector::ZeroVector;
-		FVector Max = FVector::ZeroVector;
-		if (!Params->TryGetObjectField(TEXT("box"), BoxObject) || !BoxObject || !(*BoxObject).IsValid()
-			|| !(*BoxObject)->TryGetObjectField(TEXT("min"), MinObject) || !MinObject
-			|| !(*BoxObject)->TryGetObjectField(TEXT("max"), MaxObject) || !MaxObject
-			|| !ReadVec3FieldsStrict(*MinObject, Min) || !ReadVec3FieldsStrict(*MaxObject, Max))
-		{
-			return MCPError(TEXT("box must be {min: {x,y,z}, max: {x,y,z}} with every axis given"));
-		}
-		if (Min.X > Max.X || Min.Y > Max.Y || Min.Z > Max.Z)
-		{
-			return MCPError(TEXT("box.min must not exceed box.max on any axis"));
-		}
-		SelectionBox = FBox(Min, Max);
-		bByBox = true;
-	}
-
-	const bool bDump = OptionalBool(Params, TEXT("dumpToFile"), false);
-	const FString OutputPath = OptionalString(Params, TEXT("outputPath"), TEXT(""));
-	if (!bDump && !OutputPath.IsEmpty())
-	{
-		return MCPError(TEXT("outputPath needs dumpToFile=true"));
-	}
-	int32 Offset = 0;
-	int32 Limit = DefaultLimit;
-	if (HasParam(Params, TEXT("offset")))
-	{
-		if (TSharedPtr<FJsonValue> Error = MCPParseFiniteInteger(Params, TEXT("offset"), Offset, TEXT("params"))) return Error;
-		if (Offset < 0) return MCPError(TEXT("offset must be 0 or more"));
-	}
-	if (HasParam(Params, TEXT("limit")))
-	{
-		if (TSharedPtr<FJsonValue> Error = MCPParseFiniteInteger(Params, TEXT("limit"), Limit, TEXT("params"))) return Error;
-		if (Limit < 1 || Limit > MaxLimit)
-		{
-			return MCPError(FString::Printf(TEXT("limit must be between 1 and %d; use dumpToFile for more"), MaxLimit));
-		}
-	}
+	MCPVertexRead::FPage Page;
+	if (TSharedPtr<FJsonValue> Error = MCPVertexRead::ParseIncludes(Params, Include)) return Error;
+	if (TSharedPtr<FJsonValue> Error = MCPVertexRead::ParseBoneSelection(Params, RefSkeleton, Target.Mesh->GetPathName(), Bones)) return Error;
+	if (TSharedPtr<FJsonValue> Error = MCPVertexRead::ParseBox(Params, bByBox, SelectionBox)) return Error;
+	if (TSharedPtr<FJsonValue> Error = MCPVertexRead::ParsePage(Params, TEXT("offset"), Page)) return Error;
 
 	const FMeshDescription& Description = *Target.Description;
 	const FSkeletalMeshConstAttributes Attributes(Description);
@@ -1198,43 +1054,38 @@ TSharedPtr<FJsonValue> FSkeletalMeshHandlers::ReadSkeletalMeshVertices(const TSh
 		const FVector Position(Positions[VertexID]);
 		if (bByBox && !SelectionBox.IsInsideOrOn(Position)) continue;
 		float BoneWeight = 0.0f;
-		if (bByBone)
+		if (Bones.bActive)
 		{
 			const FVertexBoneWeightsConst Weights = SkinWeights.Get(VertexID);
 			for (int32 InfluenceIndex = 0; InfluenceIndex < Weights.Num(); ++InfluenceIndex)
 			{
 				const UE::AnimationCore::FBoneWeight Weight = Weights[InfluenceIndex];
-				const int32 BoneIndex = static_cast<int32>(Weight.GetBoneIndex());
-				if (SelectedBones.IsValidIndex(BoneIndex) && SelectedBones[BoneIndex]) BoneWeight += Weight.GetWeight();
+				if (Bones.IsSelected(static_cast<int32>(Weight.GetBoneIndex()))) BoneWeight += Weight.GetWeight();
 			}
-			if (BoneWeight <= 0.0f || (bHasMinWeight && BoneWeight < MinWeight)) continue;
+			if (!Bones.Keeps(BoneWeight)) continue;
 		}
 		SelectionOrdinal[VertexID.GetValue()] = Selected.Num();
 		Selected.Add({ VertexID, BoneWeight });
 		SelectedBounds += Position;
 	}
-
-	const int32 First = bDump ? 0 : FMath::Min(Offset, Selected.Num());
-	const int32 End = bDump
-		? Selected.Num()
-		: static_cast<int32>(FMath::Min<int64>(static_cast<int64>(First) + Limit, Selected.Num()));
+	Page.Resolve(Selected.Num());
 
 	TArray<TSharedPtr<FJsonValue>> Vertices;
-	Vertices.Reserve(End - First);
-	for (int32 Ordinal = First; Ordinal < End; ++Ordinal)
+	Vertices.Reserve(Page.End - Page.First);
+	for (int32 Ordinal = Page.First; Ordinal < Page.End; ++Ordinal)
 	{
 		const FSelectedVertex& Entry = Selected[Ordinal];
 		auto Vertex = MakeShared<FJsonObject>();
 		Vertex->SetNumberField(TEXT("vertexIndex"), Entry.ID.GetValue());
-		if (bPositions)
+		if (Include.bPositions)
 		{
 			Vertex->SetObjectField(TEXT("position"), MCPVec3ToJsonObject(FVector(Positions[Entry.ID])));
 		}
-		if (bByBone)
+		if (Bones.bActive)
 		{
 			Vertex->SetNumberField(TEXT("selectedWeight"), Entry.SelectedWeight);
 		}
-		if (bWeights)
+		if (Include.bWeights)
 		{
 			const FVertexBoneWeightsConst Weights = SkinWeights.Get(Entry.ID);
 			TArray<TSharedPtr<FJsonValue>> Influences;
@@ -1256,64 +1107,33 @@ TSharedPtr<FJsonValue> FSkeletalMeshHandlers::ReadSkeletalMeshVertices(const TSh
 		Vertices.Add(MakeShared<FJsonValueObject>(Vertex));
 	}
 
-	// A triangle with every corner selected belongs to the page holding its
-	// earliest corner, so paging returns each triangle exactly once.
 	TArray<TSharedPtr<FJsonValue>> Triangles;
 	int32 SelectedTriangleCount = 0;
-	if (bTriangles)
+	if (Include.bTriangles)
 	{
-		for (const FTriangleID TriangleID : Description.Triangles().GetElementIDs())
-		{
-			const TArrayView<const FVertexID> Corners = Description.GetTriangleVertices(TriangleID);
-			int32 Owner = MAX_int32;
-			bool bAllSelected = Corners.Num() == 3;
-			for (const FVertexID Corner : Corners)
+		SelectedTriangleCount = MCPVertexRead::CollectTriangles(
+			[&Description](auto&& Visit)
 			{
-				const int32 Ordinal = SelectionOrdinal.IsValidIndex(Corner.GetValue())
-					? SelectionOrdinal[Corner.GetValue()]
-					: INDEX_NONE;
-				if (Ordinal == INDEX_NONE)
+				for (const FTriangleID TriangleID : Description.Triangles().GetElementIDs())
 				{
-					bAllSelected = false;
-					break;
+					const TArrayView<const FVertexID> Corners = Description.GetTriangleVertices(TriangleID);
+					if (Corners.Num() != 3) continue;
+					MCPVertexRead::FTriangle Triangle;
+					Triangle.Index = TriangleID.GetValue();
+					for (int32 Corner = 0; Corner < 3; ++Corner) Triangle.Corners[Corner] = Corners[Corner].GetValue();
+					Triangle.Group = Description.GetTrianglePolygonGroup(TriangleID).GetValue();
+					Visit(Triangle);
 				}
-				Owner = FMath::Min(Owner, Ordinal);
-			}
-			if (!bAllSelected) continue;
-			++SelectedTriangleCount;
-			if (Owner < First || Owner >= End) continue;
-			auto Triangle = MakeShared<FJsonObject>();
-			Triangle->SetNumberField(TEXT("triangleIndex"), TriangleID.GetValue());
-			TArray<TSharedPtr<FJsonValue>> CornerValues;
-			for (const FVertexID Corner : Corners) CornerValues.Add(MakeShared<FJsonValueNumber>(Corner.GetValue()));
-			Triangle->SetArrayField(TEXT("vertexIndices"), CornerValues);
-			Triangle->SetNumberField(TEXT("polygonGroup"), Description.GetTrianglePolygonGroup(TriangleID).GetValue());
-			Triangles.Add(MakeShared<FJsonValueObject>(Triangle));
-		}
+			},
+			SelectionOrdinal, Page, TEXT("polygonGroup"), Triangles);
 	}
 
 	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("assetPath"), Target.Mesh->GetPathName());
 	Result->SetNumberField(TEXT("lodIndex"), Target.LodIndex);
 	Result->SetStringField(TEXT("profileName"), Target.DisplayProfileName);
-	Result->SetNumberField(TEXT("vertexCount"), SourceVertexCount);
-	Result->SetNumberField(TEXT("selectedVertexCount"), Selected.Num());
-	if (bByBone)
-	{
-		TArray<TSharedPtr<FJsonValue>> Names;
-		for (const FString& Name : SelectedBoneNames) Names.Add(MakeShared<FJsonValueString>(Name));
-		Result->SetArrayField(TEXT("selectedBones"), Names);
-	}
-	if (Selected.Num() > 0)
-	{
-		auto Bounds = MakeShared<FJsonObject>();
-		Bounds->SetObjectField(TEXT("min"), MCPVec3ToJsonObject(SelectedBounds.Min));
-		Bounds->SetObjectField(TEXT("max"), MCPVec3ToJsonObject(SelectedBounds.Max));
-		Bounds->SetObjectField(TEXT("center"), MCPVec3ToJsonObject(SelectedBounds.GetCenter()));
-		Bounds->SetObjectField(TEXT("extent"), MCPVec3ToJsonObject(SelectedBounds.GetExtent()));
-		Result->SetObjectField(TEXT("selectedBounds"), Bounds);
-	}
-	if (bTriangles)
+	MCPVertexRead::SetSelectionSummary(Result, SourceVertexCount, Selected.Num(), Bones, SelectedBounds);
+	if (Include.bTriangles)
 	{
 		Result->SetNumberField(TEXT("selectedTriangleCount"), SelectedTriangleCount);
 	}
@@ -1321,46 +1141,14 @@ TSharedPtr<FJsonValue> FSkeletalMeshHandlers::ReadSkeletalMeshVertices(const TSh
 		TEXT("coordinateSpace"),
 		TEXT("positions, box and selectedBounds are source MeshDescription positions in the mesh's bind (reference) pose, in cm; vertexIndex and triangleIndex are source IDs, the IDs read_skeletal_mesh_skin_weights and set_skeletal_mesh_skin_weights take"));
 
-	if (bDump)
-	{
-		const TSharedRef<FJsonObject> Dump = MakeShared<FJsonObject>();
-		Dump->Values = Result->Values;
-		Dump->SetArrayField(TEXT("vertices"), Vertices);
-		if (bTriangles) Dump->SetArrayField(TEXT("triangles"), Triangles);
-
-		FString RequestedPath = OutputPath;
-		if (RequestedPath.IsEmpty())
-		{
-			const FString PathHash = FString::Printf(TEXT("%08x"), GetTypeHash(Target.Mesh->GetPathName()));
-			RequestedPath = FPaths::Combine(
-				TEXT("UE_MCP"), TEXT("SkeletalMeshVertices"),
-				FPaths::MakeValidFileName(FString::Printf(
-					TEXT("%s_LOD%d_%s"), *Target.Mesh->GetName(), Target.LodIndex, *PathHash)) + TEXT(".json"));
-		}
-		const FString ResolvedPath = FPaths::ConvertRelativePathToFull(MCPResolveDumpPath(RequestedPath));
-		FString JsonText;
-		const TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&JsonText);
-		if (!FJsonSerializer::Serialize(Dump, Writer))
-		{
-			return MCPError(TEXT("Failed to serialize the skeletal mesh vertex dump"));
-		}
-		FString WriteError;
-		if (!MCPWriteDumpFile(ResolvedPath, JsonText, TEXT("skeletal mesh vertex dump"), WriteError))
-		{
-			return MCPError(WriteError);
-		}
-		Result->SetStringField(TEXT("outputPath"), ResolvedPath);
-		Result->SetNumberField(TEXT("count"), Vertices.Num());
-		return MCPResult(Result);
-	}
-
-	Result->SetNumberField(TEXT("offset"), First);
-	Result->SetNumberField(TEXT("count"), Vertices.Num());
-	Result->SetBoolField(TEXT("hasMore"), End < Selected.Num());
-	if (End < Selected.Num()) Result->SetNumberField(TEXT("nextOffset"), End);
-	Result->SetArrayField(TEXT("vertices"), Vertices);
-	if (bTriangles) Result->SetArrayField(TEXT("triangles"), Triangles);
-	return MCPResult(Result);
+	const FString PathHash = FString::Printf(TEXT("%08x"), GetTypeHash(Target.Mesh->GetPathName()));
+	const FString DefaultDumpPath = FPaths::Combine(
+		TEXT("UE_MCP"), TEXT("SkeletalMeshVertices"),
+		FPaths::MakeValidFileName(FString::Printf(
+			TEXT("%s_LOD%d_%s"), *Target.Mesh->GetName(), Target.LodIndex, *PathHash)) + TEXT(".json"));
+	return MCPVertexRead::Finish(
+		Result, Vertices, Triangles, Include.bTriangles, Page, TEXT("offset"), Selected.Num(),
+		DefaultDumpPath, TEXT("skeletal mesh vertex dump"));
 #endif
 }
 
