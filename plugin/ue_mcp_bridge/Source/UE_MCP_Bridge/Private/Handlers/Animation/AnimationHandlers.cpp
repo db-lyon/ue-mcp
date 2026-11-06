@@ -28,6 +28,8 @@
 // only forward-declares UPhysicsConstraintTemplate.
 #include "PhysicsEngine/PhysicsConstraintTemplate.h"
 #include "PhysicsEngine/ConstraintInstance.h"
+// UPhysicalMaterial, which set_physics_asset_body_material assigns to each body.
+#include "PhysicalMaterials/PhysicalMaterial.h"
 #include "Engine/SkeletalMeshSocket.h"
 // PhysicsEngine/SkeletalBodySetup.h is unavailable as a public include on
 // UE 5.4. USkeletalBodySetup is still defined transitively via PhysicsAsset.h.
@@ -206,6 +208,40 @@ void FAnimationHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("boneName"), EType::String, TEXT("Only constraints that touch this bone, as child (bone1) or parent (bone2)")),
 		Limit(TEXT("Cap on the constraints returned (default all); total still counts every match")),
 	});
+	Registry.RegisterHandler(TEXT("set_physics_asset_constraint_limits"), &SetPhysicsAssetConstraintLimits, {
+		AssetPath(TEXT("PhysicsAsset asset path, or a SkeletalMesh whose assigned PhysicsAsset to edit")),
+		MCPParam::Optional(TEXT("constraintNames"), EType::Array, TEXT("Constraints the shared values apply to, by constraint (joint) name; omit for every constraint")).Items(EType::String),
+		MCPParam::Optional(TEXT("swing1Motion"), EType::String, TEXT("Free | Limited | Locked")),
+		MCPParam::Optional(TEXT("swing2Motion"), EType::String, TEXT("Free | Limited | Locked")),
+		MCPParam::Optional(TEXT("twistMotion"), EType::String, TEXT("Free | Limited | Locked")),
+		MCPParam::Optional(TEXT("swing1LimitDegrees"), EType::Number, TEXT("Swing1 range, 0 to 180; written only where swing1 is Limited")),
+		MCPParam::Optional(TEXT("swing2LimitDegrees"), EType::Number, TEXT("Swing2 range, 0 to 180; written only where swing2 is Limited")),
+		MCPParam::Optional(TEXT("twistLimitDegrees"), EType::Number, TEXT("Twist range, 0 to 180; written only where twist is Limited")),
+		MCPParam::Optional(TEXT("swingSoft"), EType::Boolean, TEXT("Soft (true) or hard (false) cone limit")),
+		MCPParam::Optional(TEXT("twistSoft"), EType::Boolean, TEXT("Soft (true) or hard (false) twist limit")),
+		MCPParam::Optional(TEXT("constraints"), EType::Array, TEXT("Per-constraint values, applied after the shared ones; this is how the rollback replays")).Items(EType::Object).WithFields({
+			MCPParam::RequiredField(TEXT("constraintName"), EType::String, TEXT("Constraint (joint) name")),
+			MCPParam::OptionalField(TEXT("swing1Motion"), EType::String, TEXT("Free | Limited | Locked")),
+			MCPParam::OptionalField(TEXT("swing2Motion"), EType::String, TEXT("Free | Limited | Locked")),
+			MCPParam::OptionalField(TEXT("twistMotion"), EType::String, TEXT("Free | Limited | Locked")),
+			MCPParam::OptionalField(TEXT("swing1LimitDegrees"), EType::Number, TEXT("Swing1 range, 0 to 180")),
+			MCPParam::OptionalField(TEXT("swing2LimitDegrees"), EType::Number, TEXT("Swing2 range, 0 to 180")),
+			MCPParam::OptionalField(TEXT("twistLimitDegrees"), EType::Number, TEXT("Twist range, 0 to 180")),
+			MCPParam::OptionalField(TEXT("swingSoft"), EType::Boolean, TEXT("Soft or hard cone limit")),
+			MCPParam::OptionalField(TEXT("twistSoft"), EType::Boolean, TEXT("Soft or hard twist limit")),
+		}),
+		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save the asset after the edit (default true)")),
+	});
+	Registry.RegisterHandler(TEXT("set_physics_asset_body_material"), &SetPhysicsAssetBodyMaterial, {
+		AssetPath(TEXT("PhysicsAsset asset path, or a SkeletalMesh whose assigned PhysicsAsset to edit")),
+		MCPParam::Optional(TEXT("physicalMaterialPath"), EType::String, TEXT("PhysicalMaterial to assign; an empty string clears the override")),
+		MCPParam::Optional(TEXT("boneNames"), EType::Array, TEXT("Bodies physicalMaterialPath applies to, by bone name; omit for every body")).Items(EType::String),
+		MCPParam::Optional(TEXT("bodies"), EType::Array, TEXT("Per-body materials, applied after physicalMaterialPath; this is how the rollback replays")).Items(EType::Object).WithFields({
+			MCPParam::RequiredField(TEXT("boneName"), EType::String, TEXT("Bone whose body to edit")),
+			MCPParam::RequiredField(TEXT("physicalMaterialPath"), EType::String, TEXT("PhysicalMaterial to assign; an empty string clears the override")),
+		}),
+		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save the asset after the edit (default true)")),
+	}, MCPSpec::AtLeastOne({ { TEXT("physicalMaterialPath") }, { TEXT("bodies") } }));
 	Registry.RegisterHandler(TEXT("read_anim_blueprint"), &ReadAnimBlueprint, {
 		AssetPath(TEXT("AnimBlueprint asset path")),
 	});
@@ -306,7 +342,8 @@ void FAnimationHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("x"), EType::Number, TEXT("New horizontal axis value when position is omitted")),
 		MCPParam::Optional(TEXT("y"), EType::Number, TEXT("New vertical axis value when position is omitted")),
 		MCPParam::Optional(TEXT("animation"), EType::String, TEXT("AnimSequence to swap into the sample")),
-	}, MCPSpec::AtLeastOne({ { TEXT("position") }, { TEXT("x") }, { TEXT("y") }, { TEXT("animation") } }));
+		MCPParam::Optional(TEXT("rateScale"), EType::Number, TEXT("Per-sample playback rate, 0.01 to 64 (FBlendSample::RateScale)")),
+	}, MCPSpec::AtLeastOne({ { TEXT("position") }, { TEXT("x") }, { TEXT("y") }, { TEXT("animation") }, { TEXT("rateScale") } }));
 	Registry.RegisterHandler(TEXT("read_blendspace"), &ReadBlendspace, {
 		AssetPath(TEXT("BlendSpace or BlendSpace1D asset path")),
 	});
@@ -385,7 +422,7 @@ void FAnimationHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		OnConflict(TEXT("skip (default) returns an existing destination untouched, error refuses; it never overwrites")),
 	});
 	Registry.RegisterHandler(TEXT("get_bone_transforms"), &GetBoneTransforms, {
-		MCPParam::Required(TEXT("skeletonPath"), EType::String, TEXT("USkeleton, or a SkeletalMesh whose skeleton to read")).Alias(TEXT("assetPath")).Alias(TEXT("path")),
+		MCPParam::Required(TEXT("skeletonPath"), EType::String, TEXT("USkeleton, or a SkeletalMesh whose own bind pose to read")).Alias(TEXT("assetPath")).Alias(TEXT("path")),
 		MCPParam::Optional(TEXT("boneNames"), EType::Array, TEXT("Bones to return (default every bone)")).Items(EType::String),
 		MCPParam::Optional(TEXT("space"), EType::String, TEXT("local (default) | component, which composes the parent chain")),
 	});
@@ -486,6 +523,10 @@ void FAnimationHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 			MCPParam::OptionalField(TEXT("interp"), EType::String, TEXT("linear | constant | cubic (default the call's interpolation)")),
 		}),
 		MCPParam::Optional(TEXT("interpolation"), EType::String, TEXT("Interpolation of keys without their own interp: linear (default) | constant | cubic")),
+	});
+	Registry.RegisterHandler(TEXT("read_anim_curve_keys"), &ReadAnimCurveKeys, {
+		AssetPath(TEXT("AnimSequence asset path")),
+		MCPParam::Optional(TEXT("curveName"), EType::String, TEXT("Float curve to read (case-insensitive); omit for every curve")),
 	});
 	Registry.RegisterHandler(TEXT("apply_animation_modifier"), &ApplyAnimationModifier, {
 		AssetPath(TEXT("AnimSequence asset path")),
@@ -782,7 +823,32 @@ void FAnimationHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 			}),
 		});
 	}
-	Registry.RegisterHandler(TEXT("bake_control_rig_edit"), &BakeControlRigEdit, {
+	// The Sequencer bake options both AnimSequence bakes accept (#1642).
+	auto AnimExportOptionParams = [](const TCHAR* InterpolationDefault)
+	{
+		return TArray<FMCPParamSpec>{
+			MCPParam::Optional(TEXT("setRetargetSourceAsset"), EType::Boolean, TEXT("Name the bound mesh as the output's retarget source asset (default true). The bake records that mesh's bone lengths, so leaving it unset retargets them a second time on playback when the mesh differs from the skeleton's reference pose")),
+			MCPParam::Optional(TEXT("interpolation"), EType::String, InterpolationDefault).Enum({ TEXT("linear"), TEXT("step") }),
+			MCPParam::Optional(TEXT("curveInterpolation"), EType::String, TEXT("Interpolation of baked curves (default linear)")).Enum({ TEXT("linear"), TEXT("constant"), TEXT("cubic") }),
+			MCPParam::Optional(TEXT("recordInWorldSpace"), EType::Boolean, TEXT("Record the root in world space (default false)")),
+			MCPParam::Optional(TEXT("evaluateAllSkeletalMeshComponents"), EType::Boolean, TEXT("Evaluate every skeletal mesh component on the bound actor, not only the baked one (default true)")),
+			MCPParam::Optional(TEXT("exportTransforms"), EType::Boolean, TEXT("Bake bone transforms (default true)")),
+			MCPParam::Optional(TEXT("exportMorphTargets"), EType::Boolean, TEXT("Bake morph target curves (default true)")),
+			MCPParam::Optional(TEXT("exportAttributeCurves"), EType::Boolean, TEXT("Bake attribute curves (default true)")),
+			MCPParam::Optional(TEXT("exportMaterialCurves"), EType::Boolean, TEXT("Bake material curves (default true)")),
+			MCPParam::Optional(TEXT("skipCurvesWithZeroValue"), EType::Boolean, TEXT("Leave out curves that stay at zero (default true)")),
+			MCPParam::Optional(TEXT("includeAnimationNames"), EType::Array, TEXT("Bake only the bones and curves whose names match these")).Items(EType::String),
+			MCPParam::Optional(TEXT("excludeAnimationNames"), EType::Array, TEXT("Leave out the bones and curves whose names match these")).Items(EType::String),
+			MCPParam::Optional(TEXT("removeExcludedCurves"), EType::Boolean, TEXT("Remove excluded curves that already exist on the output (default false)")),
+			MCPParam::Optional(TEXT("warmUpFrames"), EType::Integer, TEXT("Display-rate frames evaluated before the start, after any delay (default 0)")).Range(0, 100000),
+			MCPParam::Optional(TEXT("delayBeforeStart"), EType::Integer, TEXT("Display-rate frames to wait before the bake starts (default 0)")).Range(0, 100000),
+			MCPParam::Optional(TEXT("bakeTimecode"), EType::Boolean, TEXT("Bake timecode attributes onto the root (default false)")),
+			MCPParam::Optional(TEXT("timecodeRate"), EType::Number, TEXT("Timecode rate in frames per second for bakeTimecode (default the project timecode rate)")),
+			MCPParam::Optional(TEXT("startFrame"), EType::Integer, TEXT("Custom range start in display-rate frames; pass with endFrame (default the playback range)")),
+			MCPParam::Optional(TEXT("endFrame"), EType::Integer, TEXT("Custom range end in display-rate frames, sampled as the last key; pass with startFrame")),
+		};
+	};
+	TArray<FMCPParamSpec> BakeEditParams = {
 		MCPParam::Required(TEXT("sequencePath"), EType::String, TEXT("LevelSequence holding the Control Rig edit session")),
 		MCPParam::Required(TEXT("bindingTag"), EType::String, TEXT("Edit-session natural key from begin_control_rig_edit")),
 		MCPParam::Required(TEXT("outputAssetPath"), EType::String, TEXT("Destination AnimSequence asset path")),
@@ -791,7 +857,23 @@ void FAnimationHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("tolerance"), EType::Number, TEXT("Key-reduction tolerance (default 0.001)")),
 		MCPParam::Optional(TEXT("createLink"), EType::Boolean, TEXT("Sequencer links are not supported yet; omit or pass false")).Literal(false),
 		MCPParam::Optional(TEXT("onConflict"), EType::String, TEXT("skip returns an existing output, error (default) refuses; it never overwrites")),
-	}, MCPSpec::ContractExempt(TEXT("5.8 only: before 5.8 the handler is a stub that reads nothing, and on 5.8 it bakes and saves a new AnimSequence")));
+	};
+	BakeEditParams.Append(AnimExportOptionParams(TEXT("Bone key interpolation of the output (default the interpolation of the clip the session began from)")));
+	Registry.RegisterHandler(TEXT("bake_control_rig_edit"), &BakeControlRigEdit, BakeEditParams,
+		MCPSpec::ContractExempt(TEXT("5.8 only: before 5.8 the handler is a stub that reads nothing, and on 5.8 it bakes and saves a new AnimSequence")));
+	TArray<FMCPParamSpec> BakeSequenceParams = {
+		MCPParam::Required(TEXT("sequencePath"), EType::String, TEXT("LevelSequence to bake from; it is never modified")),
+		MCPParam::Optional(TEXT("bindingTag"), EType::String, TEXT("Binding tag naming the skeletal mesh binding to bake")),
+		MCPParam::Optional(TEXT("bindingGuid"), EType::String, TEXT("GUID of the skeletal mesh binding to bake")),
+		MCPParam::Optional(TEXT("bindingName"), EType::String, TEXT("Display name of the possessable or spawnable binding to bake; must be unique")),
+		MCPParam::Required(TEXT("outputAssetPath"), EType::String, TEXT("Destination AnimSequence asset path")),
+		MCPParam::Optional(TEXT("frameRate"), EType::Number, TEXT("Frames per second of the bake (default the sequence's display rate)")),
+		MCPParam::Optional(TEXT("onConflict"), EType::String, TEXT("skip returns an existing output, error (default) refuses; it never overwrites")).Enum({ TEXT("skip"), TEXT("error") }),
+	};
+	BakeSequenceParams.Append(AnimExportOptionParams(TEXT("Bone key interpolation of the output (default linear)")));
+	Registry.RegisterHandler(TEXT("bake_sequence_animation"), &BakeSequenceAnimation, BakeSequenceParams,
+		MCPSpec::ExactlyOne({ { TEXT("bindingTag") }, { TEXT("bindingGuid") }, { TEXT("bindingName") } })
+			.ContractExempt(TEXT("5.8 only: before 5.8 the handler is a stub that reads nothing, and on 5.8 it bakes and saves a new AnimSequence")));
 	Registry.RegisterHandler(TEXT("analyze_animation"), &AnalyzeAnimation, {
 		AssetPath(TEXT("AnimSequence asset path")),
 		MCPParam::Optional(TEXT("skeletalMeshPath"), EType::String, TEXT("SkeletalMesh whose proportions to sample with; must be compatible with the sequence's skeleton")),
@@ -933,7 +1015,7 @@ void FAnimationHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	// v1.0.0-rc.2 - animation authoring gaps (#153, #154)
 	Registry.RegisterHandler(TEXT("set_sequence_properties"), &SetSequenceProperties, {
 		MCPParam::Required(TEXT("assetPaths"), EType::Array, TEXT("AnimSequences to write, or montages when resolveFromMontages is on")).Items(EType::String),
-		MCPParam::Required(TEXT("properties"), EType::Object, TEXT("{enableRootMotion?, forceRootLock?, useNormalizedRootMotionScale?, rootMotionRootLock?: RefPose|AnimFirstFrame|Zero, additiveAnimType?: None|LocalSpaceBase|RotationOffsetMeshSpace, refPoseType?: None|RefPose|AnimScaled|AnimFrame|LocalAnimFrame, refPoseSeq?, refFrameIndex?}. An unknown key or value refuses the whole call")),
+		MCPParam::Required(TEXT("properties"), EType::Object, TEXT("{loop?, enableRootMotion?, forceRootLock?, useNormalizedRootMotionScale?, rootMotionRootLock?: RefPose|AnimFirstFrame|Zero, additiveAnimType?: None|LocalSpaceBase|RotationOffsetMeshSpace, refPoseType?: None|RefPose|AnimScaled|AnimFrame|LocalAnimFrame, refPoseSeq?, refFrameIndex?}. An unknown key or value refuses the whole call")),
 		MCPParam::Optional(TEXT("resolveFromMontages"), EType::Boolean, TEXT("Resolve a montage to its first AnimSequence (default true)")),
 	});
 	Registry.RegisterHandler(TEXT("bake_root_motion_from_bone"), &BakeRootMotionFromBone, {
@@ -1924,6 +2006,502 @@ TSharedPtr<FJsonValue> FAnimationHandlers::GetPhysicsAssetConstraints(const TSha
 }
 
 // ---------------------------------------------------------------------------
+// Physics asset writes (#1554)
+//
+// A constraint template saves its hidden DefaultProfile over the
+// ProfileInstance the editor panel shows, so every limit write ends with
+// UpdateProfileInstance or it does not survive a save.
+// ---------------------------------------------------------------------------
+namespace MCPPhysicsAssetEdit
+{
+	/** The PhysicsAsset at Path, or the one assigned to the SkeletalMesh there. */
+	TSharedPtr<FJsonValue> Resolve(const FString& Path, UPhysicsAsset*& OutAsset)
+	{
+		OutAsset = nullptr;
+		UObject* Loaded = MCPLoadAssetObject(Path);
+		if (const USkeletalMesh* Mesh = Cast<USkeletalMesh>(Loaded))
+		{
+			OutAsset = Mesh->GetPhysicsAsset();
+			return OutAsset ? nullptr : MCPError(TEXT("SkeletalMesh has no PhysicsAsset"));
+		}
+		OutAsset = Cast<UPhysicsAsset>(Loaded);
+		if (OutAsset) return nullptr;
+		return Loaded
+			? MCPAssetWrongTypeError(Path, Loaded, TEXT("PhysicsAsset or SkeletalMesh"))
+			: MCPAssetNotFoundError(Path);
+	}
+
+	bool ParseMotion(const FString& Text, EAngularConstraintMotion& Out)
+	{
+		if (Text.Equals(TEXT("Free"), ESearchCase::IgnoreCase)) { Out = EAngularConstraintMotion::ACM_Free; return true; }
+		if (Text.Equals(TEXT("Limited"), ESearchCase::IgnoreCase)) { Out = EAngularConstraintMotion::ACM_Limited; return true; }
+		if (Text.Equals(TEXT("Locked"), ESearchCase::IgnoreCase)) { Out = EAngularConstraintMotion::ACM_Locked; return true; }
+		return false;
+	}
+
+	const TCHAR* MotionName(EAngularConstraintMotion Motion)
+	{
+		switch (Motion)
+		{
+		case EAngularConstraintMotion::ACM_Free: return TEXT("Free");
+		case EAngularConstraintMotion::ACM_Limited: return TEXT("Limited");
+		default: return TEXT("Locked");
+		}
+	}
+
+	/** One set of limit values; an unset field leaves the constraint alone. */
+	struct FLimitEdit
+	{
+		TOptional<EAngularConstraintMotion> Swing1Motion, Swing2Motion, TwistMotion;
+		TOptional<float> Swing1Degrees, Swing2Degrees, TwistDegrees;
+		TOptional<bool> SwingSoft, TwistSoft;
+
+		bool IsEmpty() const
+		{
+			return !Swing1Motion.IsSet() && !Swing2Motion.IsSet() && !TwistMotion.IsSet()
+				&& !Swing1Degrees.IsSet() && !Swing2Degrees.IsSet() && !TwistDegrees.IsSet()
+				&& !SwingSoft.IsSet() && !TwistSoft.IsSet();
+		}
+	};
+
+	/** Reads the limit keys off Obj. Returns an error message, empty on success. */
+	FString ParseLimitEdit(const TSharedPtr<FJsonObject>& Obj, const FString& Where, FLimitEdit& Out)
+	{
+		auto Motion = [&Obj, &Where](const TCHAR* Key, TOptional<EAngularConstraintMotion>& Field) -> FString
+		{
+			if (!HasParam(Obj, Key)) return FString();
+			EAngularConstraintMotion Parsed;
+			const FString Text = OptionalString(Obj, Key);
+			if (!ParseMotion(Text, Parsed))
+			{
+				return FString::Printf(TEXT("%s%s is '%s'; use Free, Limited or Locked"), *Where, Key, *Text);
+			}
+			Field = Parsed;
+			return FString();
+		};
+		auto Degrees = [&Obj, &Where](const TCHAR* Key, TOptional<float>& Field) -> FString
+		{
+			if (!HasParam(Obj, Key)) return FString();
+			const double Value = OptionalNumber(Obj, Key, -1.0);
+			if (Value < 0.0 || Value > 180.0)
+			{
+				return FString::Printf(TEXT("%s%s must be a number from 0 to 180"), *Where, Key);
+			}
+			Field = static_cast<float>(Value);
+			return FString();
+		};
+		auto Soft = [&Obj](const TCHAR* Key, TOptional<bool>& Field)
+		{
+			if (HasParam(Obj, Key)) Field = OptionalBool(Obj, Key);
+		};
+
+		FString Error = Motion(TEXT("swing1Motion"), Out.Swing1Motion);
+		if (Error.IsEmpty()) Error = Motion(TEXT("swing2Motion"), Out.Swing2Motion);
+		if (Error.IsEmpty()) Error = Motion(TEXT("twistMotion"), Out.TwistMotion);
+		if (Error.IsEmpty()) Error = Degrees(TEXT("swing1LimitDegrees"), Out.Swing1Degrees);
+		if (Error.IsEmpty()) Error = Degrees(TEXT("swing2LimitDegrees"), Out.Swing2Degrees);
+		if (Error.IsEmpty()) Error = Degrees(TEXT("twistLimitDegrees"), Out.TwistDegrees);
+		Soft(TEXT("swingSoft"), Out.SwingSoft);
+		Soft(TEXT("twistSoft"), Out.TwistSoft);
+		return Error;
+	}
+
+	/** The template whose joint name is Name, or null. */
+	UPhysicsConstraintTemplate* FindConstraint(UPhysicsAsset* Asset, const FName& Name)
+	{
+		for (UPhysicsConstraintTemplate* Constraint : Asset->ConstraintSetup)
+		{
+			if (Constraint && Constraint->DefaultInstance.JointName == Name) return Constraint;
+		}
+		return nullptr;
+	}
+
+	/** The body whose bone is Name, or null. */
+	USkeletalBodySetup* FindBody(UPhysicsAsset* Asset, const FName& Name)
+	{
+		for (USkeletalBodySetup* Body : Asset->SkeletalBodySetups)
+		{
+			if (Body && Body->BoneName == Name) return Body;
+		}
+		return nullptr;
+	}
+
+	/** Saves when asked and anything changed, and records the outcome on Result. */
+	void SaveIfChanged(UPhysicsAsset* Asset, bool bSave, int32 ChangedCount, const TCHAR* What, const TSharedPtr<FJsonObject>& Result)
+	{
+		if (!bSave || ChangedCount == 0)
+		{
+			Result->SetBoolField(TEXT("saved"), false);
+			return;
+		}
+		FString SaveError;
+		const bool bSaved = SaveAssetPackageChecked(Asset, SaveError);
+		Result->SetBoolField(TEXT("saved"), bSaved);
+		if (!bSaved)
+		{
+			Result->SetBoolField(TEXT("success"), false);
+			Result->SetStringField(TEXT("error"), FString::Printf(TEXT("The %s were written but the save failed: %s"), What, *SaveError));
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// set_physics_asset_constraint_limits
+// ---------------------------------------------------------------------------
+TSharedPtr<FJsonValue> FAnimationHandlers::SetPhysicsAssetConstraintLimits(const TSharedPtr<FJsonObject>& Params)
+{
+	using namespace MCPPhysicsAssetEdit;
+
+	// Every parameter is read before anything can fail (#1057).
+	const TArray<TSharedPtr<FJsonValue>>* NamesArr = nullptr;
+	const bool bHasNames = TryGetArrayParam(Params, TEXT("constraintNames"), NamesArr) && NamesArr;
+	const TArray<TSharedPtr<FJsonValue>>* PerArr = nullptr;
+	const bool bHasPer = TryGetArrayParam(Params, TEXT("constraints"), PerArr) && PerArr;
+	const bool bSave = OptionalBool(Params, TEXT("save"), true);
+	FLimitEdit Shared;
+	const FString SharedError = ParseLimitEdit(Params, FString(), Shared);
+	FString AssetPath;
+	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
+	if (!SharedError.IsEmpty()) return MCPError(SharedError);
+	if (Shared.IsEmpty() && (!bHasPer || PerArr->Num() == 0))
+	{
+		return MCPError(TEXT("Nothing to write: pass at least one of swing1Motion, swing2Motion, twistMotion, swing1LimitDegrees, swing2LimitDegrees, twistLimitDegrees, swingSoft, twistSoft, or a non-empty constraints array"));
+	}
+	if (bHasNames && Shared.IsEmpty())
+	{
+		return MCPError(TEXT("constraintNames selects where the shared values go, but no shared value was given"));
+	}
+
+	UPhysicsAsset* PhysicsAsset = nullptr;
+	if (auto Err = Resolve(AssetPath, PhysicsAsset)) return Err;
+
+	// Resolve every target before the first write, so a typo changes nothing.
+	TArray<TPair<UPhysicsConstraintTemplate*, FLimitEdit>> Edits;
+	TArray<FString> Unknown;
+	if (!Shared.IsEmpty())
+	{
+		if (bHasNames)
+		{
+			for (const FString& Name : JsonArrayToStringList(NamesArr))
+			{
+				if (UPhysicsConstraintTemplate* Found = FindConstraint(PhysicsAsset, FName(*Name))) Edits.Add({ Found, Shared });
+				else Unknown.Add(Name);
+			}
+		}
+		else
+		{
+			for (UPhysicsConstraintTemplate* Constraint : PhysicsAsset->ConstraintSetup)
+			{
+				if (Constraint) Edits.Add({ Constraint, Shared });
+			}
+		}
+	}
+	if (bHasPer)
+	{
+		for (int32 Index = 0; Index < PerArr->Num(); ++Index)
+		{
+			const TSharedPtr<FJsonObject>* EntryObj = nullptr;
+			if (!(*PerArr)[Index].IsValid() || !(*PerArr)[Index]->TryGetObject(EntryObj) || !EntryObj)
+			{
+				return MCPError(FString::Printf(TEXT("constraints[%d] must be an object"), Index));
+			}
+			const FString Where = FString::Printf(TEXT("constraints[%d]."), Index);
+			const FString Name = OptionalString(*EntryObj, TEXT("constraintName"));
+			if (Name.IsEmpty())
+			{
+				return MCPError(FString::Printf(TEXT("%sconstraintName is required"), *Where));
+			}
+			FLimitEdit Entry;
+			const FString Error = ParseLimitEdit(*EntryObj, Where, Entry);
+			if (!Error.IsEmpty()) return MCPError(Error);
+			if (UPhysicsConstraintTemplate* Found = FindConstraint(PhysicsAsset, FName(*Name))) Edits.Add({ Found, Entry });
+			else Unknown.Add(Name);
+		}
+	}
+	if (Unknown.Num() > 0)
+	{
+		TArray<FString> Known;
+		for (const UPhysicsConstraintTemplate* Constraint : PhysicsAsset->ConstraintSetup)
+		{
+			if (Constraint) Known.Add(Constraint->DefaultInstance.JointName.ToString());
+		}
+		return MCPError(FString::Printf(TEXT("No constraint named %s on %s. Nothing was changed. Constraints: %s"),
+			*FString::Join(Unknown, TEXT(", ")), *PhysicsAsset->GetName(), *FString::Join(Known, TEXT(", "))));
+	}
+	if (bSave)
+	{
+		if (auto Blocked = MCPAssetWriteBlockedError(PhysicsAsset, PhysicsAsset->GetPathName(), TEXT("edit this physics asset's constraint limits"))) return Blocked;
+	}
+
+	// The state each template was first seen in, for the change test and the rollback.
+	TMap<UPhysicsConstraintTemplate*, FConstraintProfileProperties> Before;
+	TArray<UPhysicsConstraintTemplate*> Order;
+	TMap<UPhysicsConstraintTemplate*, TArray<FString>> Skipped;
+	for (const TPair<UPhysicsConstraintTemplate*, FLimitEdit>& Edit : Edits)
+	{
+		UPhysicsConstraintTemplate* Constraint = Edit.Key;
+		if (!Before.Contains(Constraint))
+		{
+			Before.Add(Constraint, Constraint->DefaultInstance.ProfileInstance);
+			Order.Add(Constraint);
+			Constraint->Modify();
+		}
+		FConstraintProfileProperties& Profile = Constraint->DefaultInstance.ProfileInstance;
+		const FLimitEdit& Values = Edit.Value;
+		if (Values.Swing1Motion.IsSet()) Profile.ConeLimit.Swing1Motion = Values.Swing1Motion.GetValue();
+		if (Values.Swing2Motion.IsSet()) Profile.ConeLimit.Swing2Motion = Values.Swing2Motion.GetValue();
+		if (Values.TwistMotion.IsSet()) Profile.TwistLimit.TwistMotion = Values.TwistMotion.GetValue();
+		if (Values.SwingSoft.IsSet()) Profile.ConeLimit.bSoftConstraint = Values.SwingSoft.GetValue();
+		if (Values.TwistSoft.IsSet()) Profile.TwistLimit.bSoftConstraint = Values.TwistSoft.GetValue();
+
+		// A range only applies to a Limited axis. A Free or Locked axis keeps
+		// its stored degrees and is reported as skipped.
+		auto WriteDegrees = [&Skipped, Constraint](const TOptional<float>& Degrees, EAngularConstraintMotion Motion, float& Target, const TCHAR* Axis)
+		{
+			if (!Degrees.IsSet()) return;
+			if (Motion == EAngularConstraintMotion::ACM_Limited)
+			{
+				Target = Degrees.GetValue();
+			}
+			else
+			{
+				Skipped.FindOrAdd(Constraint).AddUnique(FString::Printf(TEXT("%s is %s"), Axis, MotionName(Motion)));
+			}
+		};
+		WriteDegrees(Values.Swing1Degrees, Profile.ConeLimit.Swing1Motion, Profile.ConeLimit.Swing1LimitDegrees, TEXT("swing1"));
+		WriteDegrees(Values.Swing2Degrees, Profile.ConeLimit.Swing2Motion, Profile.ConeLimit.Swing2LimitDegrees, TEXT("swing2"));
+		WriteDegrees(Values.TwistDegrees, Profile.TwistLimit.TwistMotion, Profile.TwistLimit.TwistLimitDegrees, TEXT("twist"));
+	}
+
+	auto LimitFields = [](const TSharedPtr<FJsonObject>& Obj, const FConstraintProfileProperties& Profile)
+	{
+		Obj->SetStringField(TEXT("swing1Motion"), MotionName(Profile.ConeLimit.Swing1Motion));
+		Obj->SetStringField(TEXT("swing2Motion"), MotionName(Profile.ConeLimit.Swing2Motion));
+		Obj->SetStringField(TEXT("twistMotion"), MotionName(Profile.TwistLimit.TwistMotion));
+		Obj->SetNumberField(TEXT("swing1LimitDegrees"), Profile.ConeLimit.Swing1LimitDegrees);
+		Obj->SetNumberField(TEXT("swing2LimitDegrees"), Profile.ConeLimit.Swing2LimitDegrees);
+		Obj->SetNumberField(TEXT("twistLimitDegrees"), Profile.TwistLimit.TwistLimitDegrees);
+		Obj->SetBoolField(TEXT("swingSoft"), Profile.ConeLimit.bSoftConstraint);
+		Obj->SetBoolField(TEXT("twistSoft"), Profile.TwistLimit.bSoftConstraint);
+	};
+
+	TArray<TSharedPtr<FJsonValue>> Rows;
+	TArray<TSharedPtr<FJsonValue>> RollbackEntries;
+	int32 ChangedCount = 0;
+	for (UPhysicsConstraintTemplate* Constraint : Order)
+	{
+#if WITH_EDITOR
+		// Copies ProfileInstance into the profile the template serializes.
+		Constraint->UpdateProfileInstance();
+#endif
+		const FConstraintProfileProperties& Old = Before[Constraint];
+		const FConstraintProfileProperties& New = Constraint->DefaultInstance.ProfileInstance;
+		const bool bChanged =
+			Old.ConeLimit.Swing1Motion != New.ConeLimit.Swing1Motion
+			|| Old.ConeLimit.Swing2Motion != New.ConeLimit.Swing2Motion
+			|| Old.TwistLimit.TwistMotion != New.TwistLimit.TwistMotion
+			|| Old.ConeLimit.Swing1LimitDegrees != New.ConeLimit.Swing1LimitDegrees
+			|| Old.ConeLimit.Swing2LimitDegrees != New.ConeLimit.Swing2LimitDegrees
+			|| Old.TwistLimit.TwistLimitDegrees != New.TwistLimit.TwistLimitDegrees
+			|| Old.ConeLimit.bSoftConstraint != New.ConeLimit.bSoftConstraint
+			|| Old.TwistLimit.bSoftConstraint != New.TwistLimit.bSoftConstraint;
+		if (bChanged) ++ChangedCount;
+
+		const FString Name = Constraint->DefaultInstance.JointName.ToString();
+		TSharedPtr<FJsonObject> Row = MakeShared<FJsonObject>();
+		Row->SetStringField(TEXT("constraintName"), Name);
+		LimitFields(Row, New);
+		Row->SetBoolField(TEXT("changed"), bChanged);
+		if (const TArray<FString>* Skips = Skipped.Find(Constraint))
+		{
+			TArray<TSharedPtr<FJsonValue>> SkipValues;
+			for (const FString& Skip : *Skips) SkipValues.Add(MakeShared<FJsonValueString>(Skip));
+			Row->SetArrayField(TEXT("skippedLimits"), SkipValues);
+		}
+		Rows.Add(MakeShared<FJsonValueObject>(Row));
+
+		TSharedPtr<FJsonObject> Restore = MakeShared<FJsonObject>();
+		Restore->SetStringField(TEXT("constraintName"), Name);
+		LimitFields(Restore, Old);
+		RollbackEntries.Add(MakeShared<FJsonValueObject>(Restore));
+	}
+
+	auto Result = MCPSuccess();
+	Result->SetStringField(TEXT("physicsAssetPath"), PhysicsAsset->GetPathName());
+	Result->SetArrayField(TEXT("constraints"), Rows);
+	Result->SetNumberField(TEXT("count"), Rows.Num());
+	Result->SetNumberField(TEXT("changedCount"), ChangedCount);
+	Result->SetBoolField(TEXT("unchanged"), ChangedCount == 0);
+	if (ChangedCount > 0)
+	{
+		PhysicsAsset->MarkPackageDirty();
+		MCPSetUpdated(Result);
+		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+		Payload->SetStringField(TEXT("assetPath"), PhysicsAsset->GetPathName());
+		Payload->SetArrayField(TEXT("constraints"), RollbackEntries);
+		Payload->SetBoolField(TEXT("save"), bSave);
+		MCPSetRollback(Result, TEXT("set_physics_asset_constraint_limits"), Payload);
+	}
+	SaveIfChanged(PhysicsAsset, bSave, ChangedCount, TEXT("limits"), Result);
+	return MCPResult(Result);
+}
+
+// ---------------------------------------------------------------------------
+// set_physics_asset_body_material
+// ---------------------------------------------------------------------------
+TSharedPtr<FJsonValue> FAnimationHandlers::SetPhysicsAssetBodyMaterial(const TSharedPtr<FJsonObject>& Params)
+{
+	using namespace MCPPhysicsAssetEdit;
+
+	// Every parameter is read before anything can fail (#1057).
+	const bool bHasShared = HasParam(Params, TEXT("physicalMaterialPath"));
+	const FString SharedPath = OptionalString(Params, TEXT("physicalMaterialPath"));
+	const TArray<TSharedPtr<FJsonValue>>* NamesArr = nullptr;
+	const bool bHasNames = TryGetArrayParam(Params, TEXT("boneNames"), NamesArr) && NamesArr;
+	const TArray<TSharedPtr<FJsonValue>>* PerArr = nullptr;
+	const bool bHasPer = TryGetArrayParam(Params, TEXT("bodies"), PerArr) && PerArr;
+	const bool bSave = OptionalBool(Params, TEXT("save"), true);
+	FString AssetPath;
+	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
+	if (!bHasShared && (!bHasPer || PerArr->Num() == 0))
+	{
+		return MCPError(TEXT("Nothing to write: pass physicalMaterialPath or a non-empty bodies array"));
+	}
+	if (bHasNames && !bHasShared)
+	{
+		return MCPError(TEXT("boneNames selects where physicalMaterialPath goes, but physicalMaterialPath was not given"));
+	}
+
+	UPhysicsAsset* PhysicsAsset = nullptr;
+	if (auto Err = Resolve(AssetPath, PhysicsAsset)) return Err;
+
+	// An empty path clears the override; anything else must be a PhysicalMaterial.
+	auto LoadMaterial = [](const FString& Path, UPhysicalMaterial*& Out) -> TSharedPtr<FJsonValue>
+	{
+		Out = nullptr;
+		if (Path.IsEmpty() || Path.Equals(TEXT("None"), ESearchCase::IgnoreCase)) return nullptr;
+		UObject* Loaded = MCPLoadAssetObject(Path);
+		Out = Cast<UPhysicalMaterial>(Loaded);
+		if (Out) return nullptr;
+		return Loaded ? MCPAssetWrongTypeError(Path, Loaded, TEXT("PhysicalMaterial")) : MCPAssetNotFoundError(Path);
+	};
+
+	TArray<TPair<USkeletalBodySetup*, UPhysicalMaterial*>> Edits;
+	TArray<FString> Unknown;
+	if (bHasShared)
+	{
+		UPhysicalMaterial* Material = nullptr;
+		if (auto Err = LoadMaterial(SharedPath, Material)) return Err;
+		if (bHasNames)
+		{
+			for (const FString& Name : JsonArrayToStringList(NamesArr))
+			{
+				if (USkeletalBodySetup* Body = FindBody(PhysicsAsset, FName(*Name))) Edits.Add({ Body, Material });
+				else Unknown.Add(Name);
+			}
+		}
+		else
+		{
+			for (USkeletalBodySetup* Body : PhysicsAsset->SkeletalBodySetups)
+			{
+				if (Body) Edits.Add({ Body, Material });
+			}
+		}
+	}
+	if (bHasPer)
+	{
+		for (int32 Index = 0; Index < PerArr->Num(); ++Index)
+		{
+			const TSharedPtr<FJsonObject>* EntryObj = nullptr;
+			if (!(*PerArr)[Index].IsValid() || !(*PerArr)[Index]->TryGetObject(EntryObj) || !EntryObj)
+			{
+				return MCPError(FString::Printf(TEXT("bodies[%d] must be an object"), Index));
+			}
+			const FString Name = OptionalString(*EntryObj, TEXT("boneName"));
+			if (Name.IsEmpty() || !HasParam(*EntryObj, TEXT("physicalMaterialPath")))
+			{
+				return MCPError(FString::Printf(TEXT("bodies[%d] needs boneName and physicalMaterialPath"), Index));
+			}
+			UPhysicalMaterial* Material = nullptr;
+			if (auto Err = LoadMaterial(OptionalString(*EntryObj, TEXT("physicalMaterialPath")), Material)) return Err;
+			if (USkeletalBodySetup* Body = FindBody(PhysicsAsset, FName(*Name))) Edits.Add({ Body, Material });
+			else Unknown.Add(Name);
+		}
+	}
+	if (Unknown.Num() > 0)
+	{
+		TArray<FString> Known;
+		for (const USkeletalBodySetup* Body : PhysicsAsset->SkeletalBodySetups)
+		{
+			if (Body) Known.Add(Body->BoneName.ToString());
+		}
+		return MCPError(FString::Printf(TEXT("No body for bone %s on %s. Nothing was changed. Bodies: %s"),
+			*FString::Join(Unknown, TEXT(", ")), *PhysicsAsset->GetName(), *FString::Join(Known, TEXT(", "))));
+	}
+	if (bSave)
+	{
+		if (auto Blocked = MCPAssetWriteBlockedError(PhysicsAsset, PhysicsAsset->GetPathName(), TEXT("set this physics asset's body materials"))) return Blocked;
+	}
+
+	TMap<USkeletalBodySetup*, UPhysicalMaterial*> Before;
+	TArray<USkeletalBodySetup*> Order;
+	for (const TPair<USkeletalBodySetup*, UPhysicalMaterial*>& Edit : Edits)
+	{
+		USkeletalBodySetup* Body = Edit.Key;
+		if (!Before.Contains(Body))
+		{
+			Before.Add(Body, Body->PhysMaterial.Get());
+			Order.Add(Body);
+			Body->Modify();
+		}
+		Body->PhysMaterial = Edit.Value;
+	}
+
+	TArray<TSharedPtr<FJsonValue>> Rows;
+	TArray<TSharedPtr<FJsonValue>> RollbackEntries;
+	int32 ChangedCount = 0;
+	auto PathOf = [](const UPhysicalMaterial* Material) { return Material ? Material->GetPathName() : FString(); };
+	for (USkeletalBodySetup* Body : Order)
+	{
+		const UPhysicalMaterial* Old = Before[Body];
+		const UPhysicalMaterial* New = Body->PhysMaterial.Get();
+		const bool bChanged = Old != New;
+		if (bChanged) ++ChangedCount;
+
+		TSharedPtr<FJsonObject> Row = MakeShared<FJsonObject>();
+		Row->SetStringField(TEXT("boneName"), Body->BoneName.ToString());
+		Row->SetStringField(TEXT("physicalMaterialPath"), PathOf(New));
+		Row->SetStringField(TEXT("previousPhysicalMaterialPath"), PathOf(Old));
+		Row->SetBoolField(TEXT("changed"), bChanged);
+		Rows.Add(MakeShared<FJsonValueObject>(Row));
+
+		TSharedPtr<FJsonObject> Restore = MakeShared<FJsonObject>();
+		Restore->SetStringField(TEXT("boneName"), Body->BoneName.ToString());
+		Restore->SetStringField(TEXT("physicalMaterialPath"), PathOf(Old));
+		RollbackEntries.Add(MakeShared<FJsonValueObject>(Restore));
+	}
+
+	auto Result = MCPSuccess();
+	Result->SetStringField(TEXT("physicsAssetPath"), PhysicsAsset->GetPathName());
+	Result->SetArrayField(TEXT("bodies"), Rows);
+	Result->SetNumberField(TEXT("count"), Rows.Num());
+	Result->SetNumberField(TEXT("changedCount"), ChangedCount);
+	Result->SetBoolField(TEXT("unchanged"), ChangedCount == 0);
+	if (ChangedCount > 0)
+	{
+		PhysicsAsset->MarkPackageDirty();
+		MCPSetUpdated(Result);
+		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+		Payload->SetStringField(TEXT("assetPath"), PhysicsAsset->GetPathName());
+		Payload->SetArrayField(TEXT("bodies"), RollbackEntries);
+		Payload->SetBoolField(TEXT("save"), bSave);
+		MCPSetRollback(Result, TEXT("set_physics_asset_body_material"), Payload);
+	}
+	SaveIfChanged(PhysicsAsset, bSave, ChangedCount, TEXT("materials"), Result);
+	return MCPResult(Result);
+}
+
+// ---------------------------------------------------------------------------
 // read_anim_blueprint
 // ---------------------------------------------------------------------------
 TSharedPtr<FJsonValue> FAnimationHandlers::ReadAnimBlueprint(const TSharedPtr<FJsonObject>& Params)
@@ -2528,6 +3106,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ReadBlendspace(const TSharedPtr<FJson
 		ValueObj->SetNumberField(TEXT("x"), Sample.SampleValue.X);
 		ValueObj->SetNumberField(TEXT("y"), Sample.SampleValue.Y);
 		SampleObj->SetObjectField(TEXT("sampleValue"), ValueObj);
+		SampleObj->SetNumberField(TEXT("rateScale"), Sample.RateScale);
 
 		SamplesArray.Add(MakeShared<FJsonValueObject>(SampleObj));
 	}
@@ -2653,6 +3232,12 @@ TSharedPtr<FJsonValue> FAnimationHandlers::AddAnimNotify(const TSharedPtr<FJsonO
 	// Create the notify event
 	FAnimNotifyEvent& NewEvent = AnimAsset->Notifies.AddDefaulted_GetRef();
 	NewEvent.NotifyName = FName(*NotifyName);
+	// Persona keys a notify node's identity by Guid. Left at the default zero
+	// Guid, every notify added here shares one, so in an editor that already has
+	// the asset open, selecting one selects them all and details-panel edits land
+	// on the wrong notify. PostSerialize repairs it on the next load, which is
+	// why it only shows in the session that added them.
+	NewEvent.Guid = FGuid::NewGuid();
 	NewEvent.Link(AnimAsset, ClampedTime);
 	NewEvent.TriggerTimeOffset = GetTriggerTimeOffsetForType(AnimAsset->CalculateOffsetForNotify(ClampedTime));
 	NewEvent.TrackIndex = 0;
@@ -2660,6 +3245,8 @@ TSharedPtr<FJsonValue> FAnimationHandlers::AddAnimNotify(const TSharedPtr<FJsonO
 	if (NewNotify)
 	{
 		NewEvent.Notify = NewNotify;
+		// What the Persona notify track sets when it places a notify.
+		NewEvent.TriggerWeightThreshold = NewNotify->GetDefaultTriggerWeightThreshold();
 
 		// #528: UAnimNotify_PlayMontageNotify::BranchingPointNotify broadcasts the
 		// NOTIFY OBJECT's own NotifyName, not the FAnimNotifyEvent's. We only set
@@ -3346,7 +3933,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::AddBlendSample(const TSharedPtr<FJson
 TSharedPtr<FJsonValue> FAnimationHandlers::SetBlendSample(const TSharedPtr<FJsonObject>& Params)
 {
 	// The flat x and y are read only without position (#1057).
-	MCPReadParamsAhead(Params, { TEXT("assetPath"), TEXT("sampleIndex"), TEXT("position"), TEXT("x"), TEXT("y"), TEXT("animation") });
+	MCPReadParamsAhead(Params, { TEXT("assetPath"), TEXT("sampleIndex"), TEXT("position"), TEXT("x"), TEXT("y"), TEXT("animation"), TEXT("rateScale") });
 	FString AssetPath;
 	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
 
@@ -3372,6 +3959,15 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetBlendSample(const TSharedPtr<FJson
 	// needs, and this action is its own inverse.
 	const FVector PrevPos = Existing.SampleValue;
 	const FString PrevAnimPath = Existing.Animation ? Existing.Animation->GetPathName() : FString();
+	const float PrevRateScale = Existing.RateScale;
+
+	// Validated before anything is written. The range is the property's clamp.
+	double NewRateScale = 0.0;
+	const bool bHasRateScale = TryGetNumberParam(Params, TEXT("rateScale"), NewRateScale);
+	if (bHasRateScale && (!FMath::IsFinite(NewRateScale) || NewRateScale < 0.01 || NewRateScale > 64.0))
+	{
+		return MCPError(FString::Printf(TEXT("rateScale %g is outside 0.01..64"), NewRateScale));
+	}
 
 	const TSharedPtr<FJsonObject>* PosObj = nullptr;
 	bool bHasPos = false;
@@ -3415,9 +4011,23 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetBlendSample(const TSharedPtr<FJson
 		bUpdated = true;
 	}
 
+	if (bHasRateScale)
+	{
+		// SampleData is protected and UBlendSpace has no rate setter, so the
+		// array is reached through its reflected property (#1663).
+		FArrayProperty* SampleDataProp = FindFProperty<FArrayProperty>(UBlendSpace::StaticClass(), TEXT("SampleData"));
+		if (!SampleDataProp)
+		{
+			return MCPError(TEXT("UBlendSpace::SampleData is not reflected in this engine version"));
+		}
+		TArray<FBlendSample>* SampleData = SampleDataProp->ContainerPtrToValuePtr<TArray<FBlendSample>>(BlendSpace);
+		(*SampleData)[SampleIndex].RateScale = static_cast<float>(NewRateScale);
+		bUpdated = true;
+	}
+
 	if (!bUpdated)
 	{
-		return MCPError(TEXT("Nothing to update - provide position {x,y} and/or animation"));
+		return MCPError(TEXT("Nothing to update - provide position {x,y}, animation and/or rateScale"));
 	}
 
 	// #710: retriangulate so the edited sample interpolates at runtime.
@@ -3440,6 +4050,8 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetBlendSample(const TSharedPtr<FJson
 	Result->SetNumberField(TEXT("previousX"), PrevPos.X);
 	Result->SetNumberField(TEXT("previousY"), PrevPos.Y);
 	Result->SetStringField(TEXT("previousAnimation"), PrevAnimPath);
+	Result->SetNumberField(TEXT("rateScale"), Updated.RateScale);
+	Result->SetNumberField(TEXT("previousRateScale"), PrevRateScale);
 
 	// This action is its own inverse: the same sampleIndex with the position and
 	// animation it held. The index is stable because nothing here adds or removes
@@ -3449,6 +4061,13 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetBlendSample(const TSharedPtr<FJson
 	Rollback->SetNumberField(TEXT("sampleIndex"), SampleIndex);
 	Rollback->SetNumberField(TEXT("x"), PrevPos.X);
 	Rollback->SetNumberField(TEXT("y"), PrevPos.Y);
+	// The replay carries rateScale only when this call wrote it, and only when the
+	// prior value is one the action accepts.
+	const bool bPrevRateReplayable = PrevRateScale >= 0.01f && PrevRateScale <= 64.0f;
+	if (bHasRateScale && bPrevRateReplayable)
+	{
+		Rollback->SetNumberField(TEXT("rateScale"), PrevRateScale);
+	}
 	if (!PrevAnimPath.IsEmpty())
 	{
 		Rollback->SetStringField(TEXT("animation"), PrevAnimPath);
@@ -3459,12 +4078,18 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetBlendSample(const TSharedPtr<FJson
 	// set_blend_sample needs an animation path and has no form that clears one,
 	// so omitting the field leaves whatever this call assigned in place.
 	const bool bAssignedToEmptySample = PrevAnimPath.IsEmpty() && Updated.Animation != nullptr;
-	Result->SetBoolField(TEXT("rollbackLossy"), bAssignedToEmptySample);
+	const bool bRateNotReplayable = bHasRateScale && !bPrevRateReplayable;
+	Result->SetBoolField(TEXT("rollbackLossy"), bAssignedToEmptySample || bRateNotReplayable);
 	if (bAssignedToEmptySample)
 	{
 		Result->SetStringField(TEXT("rollbackNote"),
 			TEXT("The sample held no animation before this call. The replay restores its position, but set_blend_sample requires an animation path and cannot clear one, ")
 			TEXT("so the animation this call assigned stays on the sample."));
+	}
+	else if (bRateNotReplayable)
+	{
+		Result->SetStringField(TEXT("rollbackNote"), FString::Printf(
+			TEXT("The sample's previous rateScale %g is outside 0.01..64, which set_blend_sample refuses, so the replay does not restore it."), PrevRateScale));
 	}
 	return MCPResult(Result);
 }

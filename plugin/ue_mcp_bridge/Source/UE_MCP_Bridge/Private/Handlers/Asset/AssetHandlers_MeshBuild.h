@@ -17,4 +17,5 @@ public:
 private:
 	static TSharedPtr<FJsonValue> GetStaticMeshBuildSettings(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SetStaticMeshBuildSettings(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> ScaleMeshGeometry(const TSharedPtr<FJsonObject>& Params);
 };

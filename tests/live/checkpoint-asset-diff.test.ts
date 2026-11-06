@@ -257,6 +257,14 @@ describe.sequential("a turn's asset diffs", () => {
     expect(actors.some((r) => r.diffType === "OBJECT_ADDED" && r.group === "CkNew")).toBe(true);
     expect(actors.some((r) => r.diffType === "OBJECT_REMOVED" && r.group === "CkDoomed")).toBe(true);
     expect(actors.some((r) => String(r.group).startsWith("CkMover") && /Relative\s*Location/i.test(String(r.path)))).toBe(true);
+    // Both versions drawn from the level itself, one camera framed on the changed actors (#1568).
+    for (const [v, label] of [[d.before, "level before"], [d.after, "level after"]] as const) {
+      expectPicture(v, label);
+      expect(v.thumbnail.source, label).toBe("rendered");
+      expect(v.thumbnail.note, label).toMatch(/^Framed on the changed actors: .*CkNew/);
+    }
+    const thumbs = path.join(projectDir, "Saved", "UE_MCP_Bridge", "shadow-thumbs");
+    expect(fs.readFileSync(thumbnailFile(thumbs, d.before.thumbnail.id)).equals(fs.readFileSync(thumbnailFile(thumbs, d.after.thumbnail.id)))).toBe(false);
   });
 
   it("an added asset has no before and says what it is; a deleted one has no after", () => {
@@ -300,6 +308,33 @@ describe.sequential("a turn's asset diffs", () => {
     expect(win, JSON.stringify(listed.windows?.map((w: Json) => w.title))).toBeTruthy();
     const closed = body(await callBridge(bridge, "close_window", { windowId: win!.windowId }));
     expect(closed.success).not.toBe(false);
+  }, 300_000);
+
+  it("blueprint(open_diff_window) shows the checkpoint's Blueprint against the asset now, and unloads it on close (#1483)", async () => {
+    const opened = await tool("blueprint", "open_diff_window", { assetPath: BP, against: start });
+    expect(opened.against).toEqual({ kind: "checkpoint", id: start });
+    expect(opened.opened).toBe("window");
+    expect(opened.unloadsOnClose).toBe(true);
+    // The checkpoint's version on the left, dated with its checkpoint; the current asset on the right.
+    const revisions = opened.revisions as { before: Json; after: Json };
+    expect(Date.parse(String(revisions.before.date))).toBe(Date.parse(startAt));
+    expect(revisions.after.label).toBe("Current");
+    const temps = opened.tempPackages as string[];
+    expect(temps).toHaveLength(1);
+    expect(temps[0]).toMatch(/^\/Temp\//);
+    expect(body(await callBridge(bridge, "find_object", { objectPath: temps[0] })).found).toBe(true);
+
+    const listed = body(await callBridge(bridge, "list_windows", { maxTexts: 1, maxButtons: 1 }));
+    const win = (listed.windows as Json[]).find((w) => w.title === opened.windowTitle);
+    expect(win, JSON.stringify(listed.windows?.map((w: Json) => w.title))).toBeTruthy();
+    expect(body(await callBridge(bridge, "close_window", { windowId: win!.windowId })).success).not.toBe(false);
+
+    let found = true;
+    for (let i = 0; i < 40 && found; i++) {
+      await new Promise((r) => setTimeout(r, 250));
+      found = body(await callBridge(bridge, "find_object", { objectPath: temps[0] })).found === true;
+    }
+    expect(found, `${temps[0]} still loaded after its window closed`).toBe(false);
   }, 300_000);
 
   it("checkpoint_open_native_diff opens the asset editor on an added asset", async () => {

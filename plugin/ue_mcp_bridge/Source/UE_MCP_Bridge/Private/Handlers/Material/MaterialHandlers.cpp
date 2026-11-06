@@ -65,6 +65,32 @@ void FMaterialHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	// before anything failed, duplicate_material (it makes the destination
 	// folder first) and the transaction pair.
 	using EType = EMCPParamType;
+	Registry.RegisterHandler(TEXT("insert_expression_between"), &InsertExpressionBetween, {
+		MCPParam::Required(TEXT("materialPath"), EType::String, TEXT("Material asset path")),
+		MCPParam::Optional(TEXT("targetExpression"), EType::String, TEXT("Target expression name; pass this or property")),
+		MCPParam::Optional(TEXT("property"), EType::String, TEXT("Target material property, including MaterialAttributes")),
+		MCPParam::Optional(TEXT("targetInput"), EType::String, TEXT("Target input name or index; default first input")),
+		MCPParam::Required(TEXT("expressionType"), EType::String, TEXT("New material expression class or short name")),
+		MCPParam::Optional(TEXT("inputForUpstream"), EType::String, TEXT("New node input for the previous source; default first input")),
+		MCPParam::Optional(TEXT("properties"), EType::Object, TEXT("Editable reflected properties on the new expression")),
+	}, MCPSpec::ExactlyOne({ { TEXT("targetExpression") }, { TEXT("property") } }));
+	Registry.RegisterHandler(TEXT("restore_expression_insertion"), &RestoreExpressionInsertion, {
+		MCPParam::Required(TEXT("materialPath"), EType::String, TEXT("Material asset path")),
+		MCPParam::Required(TEXT("expressionName"), EType::String, TEXT("Inserted node name from the rollback record")),
+		MCPParam::Required(TEXT("insertion"), EType::Object, TEXT("Original insertion parameters from the rollback record")),
+		MCPParam::Required(TEXT("previousSource"), EType::Object, TEXT("Original source and channel masks from the rollback record")),
+	});
+	Registry.RegisterHandler(TEXT("read_material_summary"), &ReadMaterialSummary, {
+		MCPParam::Required(TEXT("materialPath"), EType::String, TEXT("Material asset path")),
+		MCPParam::Optional(TEXT("classes"), EType::Array, TEXT("Expression classes to include, full or short names")).Items(EType::String),
+		MCPParam::Optional(TEXT("parameterNames"), EType::Array, TEXT("Parameter names to include; intersects classes when both are supplied")).Items(EType::String),
+		MCPParam::Optional(TEXT("propertyChain"), EType::Object, TEXT("One property or named expression input and upstream depth limit")).WithFields({
+			MCPParam::OptionalField(TEXT("property"), EType::String, TEXT("Root material property")),
+			MCPParam::OptionalField(TEXT("targetExpression"), EType::String, TEXT("Root expression instead of property")),
+			MCPParam::OptionalField(TEXT("targetInput"), EType::String, TEXT("Root expression input name or index")),
+			MCPParam::OptionalField(TEXT("depthLimit"), EType::Integer, TEXT("Maximum upstream depth from 0 to 64; default 8")),
+		}),
+	});
 	auto SpecAssetPath = [](const TCHAR* Description)
 	{
 		return MCPParam::Required(TEXT("assetPath"), EType::String, Description).Alias(TEXT("path"));
@@ -153,6 +179,10 @@ void FMaterialHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 			MCPParam::OptionalField(TEXT("output"), EType::Any, TEXT("Source output by name or index (default 0)")),
 			MCPParam::OptionalField(TEXT("outputIndex"), EType::Integer, TEXT("Source output index, instead of output")),
 		});
+	};
+	auto SpecRemoveExpressions = []()
+	{
+		return MCPParam::Optional(TEXT("removeExpressions"), EType::Array, TEXT("Existing expressions to delete once the new nodes are wired, named as delete_expression takes them (description, class, parameter name, index or engine name). Resolved before anything changes; a connection may not use one (#1461)")).Items(EType::String);
 	};
 	auto SpecSourceExpression = []()
 	{
@@ -251,6 +281,7 @@ void FMaterialHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("defaultValue"), EType::Number, TEXT("ScalarParameter default (a number) or VectorParameter default ({r,g,b,a})")).Or(EType::Object),
 		MCPParam::Optional(TEXT("value"), EType::Any, TEXT("A number for Constant, {r,g,b} for Constant3Vector, {x,y} for Constant2Vector")),
 		MCPParam::Optional(TEXT("channels"), EType::Object, TEXT("ComponentMask channels {r,g,b,a} as bools")),
+		MCPParam::Optional(TEXT("properties"), EType::Object, TEXT("Any other UPROPERTY on the node by name, e.g. {ConstB: 12.92} on Divide, {ConstY: 0.04} on Step, {ConstExponent: 2.4} on Power. A bad name or value adds nothing")),
 		SpecPositionX(),
 		SpecPositionY(),
 	});
@@ -399,12 +430,14 @@ void FMaterialHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		SpecGraphNodes(),
 		SpecGraphConnections(),
 		SpecPropertyConnections(),
+		SpecRemoveExpressions(),
 	});
 	Registry.RegisterHandler(TEXT("build_material_graph"), &BuildMaterialGraph, {
 		SpecGraphAssetPath(),
 		SpecGraphNodes(),
 		SpecGraphConnections(),
 		SpecPropertyConnections(),
+		SpecRemoveExpressions(),
 	});
 	Registry.RegisterHandler(TEXT("delete_orphan_expressions"), &DeleteOrphanExpressions, {
 		SpecGraphAssetPath(),
@@ -829,6 +862,63 @@ namespace
 		return ConnectionsObj;
 	}
 
+	FString MaterialCustomOutputTypeName(ECustomMaterialOutputType Type)
+	{
+		switch (Type)
+		{
+		case CMOT_Float1: return TEXT("float1");
+		case CMOT_Float2: return TEXT("float2");
+		case CMOT_Float3: return TEXT("float3");
+		case CMOT_Float4: return TEXT("float4");
+		case CMOT_MaterialAttributes: return TEXT("materialattributes");
+		default: return FString::FromInt(static_cast<int32>(Type));
+		}
+	}
+
+	/** A Custom node's HLSL and declarations, so a graph read can be checked against source in one call (#1645). */
+	TSharedPtr<FJsonObject> MaterialCustomExpressionJson(const UMaterialExpressionCustom* Custom)
+	{
+		TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
+		Obj->SetStringField(TEXT("code"), Custom->Code);
+		Obj->SetStringField(TEXT("description"), Custom->Description);
+		Obj->SetStringField(TEXT("outputType"), MaterialCustomOutputTypeName(Custom->OutputType));
+
+		TArray<TSharedPtr<FJsonValue>> Inputs;
+		for (const FCustomInput& Input : Custom->Inputs)
+		{
+			Inputs.Add(MakeShared<FJsonValueString>(Input.InputName.ToString()));
+		}
+		Obj->SetArrayField(TEXT("inputNames"), Inputs);
+
+		TArray<TSharedPtr<FJsonValue>> Outputs;
+		for (const FCustomOutput& Output : Custom->AdditionalOutputs)
+		{
+			TSharedPtr<FJsonObject> OutputObj = MakeShared<FJsonObject>();
+			OutputObj->SetStringField(TEXT("name"), Output.OutputName.ToString());
+			OutputObj->SetStringField(TEXT("outputType"), MaterialCustomOutputTypeName(Output.OutputType));
+			Outputs.Add(MakeShared<FJsonValueObject>(OutputObj));
+		}
+		Obj->SetArrayField(TEXT("additionalOutputs"), Outputs);
+
+		TArray<TSharedPtr<FJsonValue>> Defines;
+		for (const FCustomDefine& Define : Custom->AdditionalDefines)
+		{
+			TSharedPtr<FJsonObject> DefineObj = MakeShared<FJsonObject>();
+			DefineObj->SetStringField(TEXT("name"), Define.DefineName);
+			DefineObj->SetStringField(TEXT("value"), Define.DefineValue);
+			Defines.Add(MakeShared<FJsonValueObject>(DefineObj));
+		}
+		Obj->SetArrayField(TEXT("additionalDefines"), Defines);
+
+		TArray<TSharedPtr<FJsonValue>> Includes;
+		for (const FString& Include : Custom->IncludeFilePaths)
+		{
+			Includes.Add(MakeShared<FJsonValueString>(Include));
+		}
+		Obj->SetArrayField(TEXT("includeFilePaths"), Includes);
+		return Obj;
+	}
+
 	/** One list_expressions / read_graph row. */
 	TSharedPtr<FJsonObject> MaterialExpressionRowJson(
 		UMaterialExpression* Expression, int32 Index, bool bIncludeInputs,
@@ -854,6 +944,10 @@ namespace
 		if (bIncludeInputs)
 		{
 			ExprObj->SetArrayField(TEXT("inputs"), MaterialExpressionInputsJson(Expression, IndexByExpression));
+			if (const UMaterialExpressionCustom* Custom = Cast<UMaterialExpressionCustom>(Expression))
+			{
+				ExprObj->SetObjectField(TEXT("custom"), MaterialCustomExpressionJson(Custom));
+			}
 		}
 		return ExprObj;
 	}
@@ -2083,6 +2177,8 @@ TSharedPtr<FJsonValue> FMaterialHandlers::AddMaterialExpression(const TSharedPtr
 	// Read on the new node, after the load; which ones apply depends on its class.
 	MCPReadParamsAhead(Params, { TEXT("name"), TEXT("parameterName"), TEXT("group"), TEXT("sortPriority"),
 		TEXT("defaultValue"), TEXT("value"), TEXT("channels"), TEXT("positionX"), TEXT("positionY") });
+	const TSharedPtr<FJsonObject>* Properties = nullptr;
+	const bool bHasProperties = TryGetObjectParam(Params, TEXT("properties"), Properties) && Properties;
 
 	UMaterial* Material = LoadMaterialFromPath(MaterialPath);
 	if (!Material)
@@ -2102,6 +2198,18 @@ TSharedPtr<FJsonValue> FMaterialHandlers::AddMaterialExpression(const TSharedPtr
 	Material->GetExpressionCollection().AddExpression(NewExpression);
 
 	ApplyExpressionSpec(NewExpression, Params);
+
+	// #1461: per-node constants in the same call. A bad one removes the node again.
+	if (bHasProperties)
+	{
+		FString PropError;
+		if (!ApplyExpressionProperties(NewExpression, *Properties, PropError))
+		{
+			UMaterialEditingLibrary::DeleteMaterialExpression(Material, NewExpression);
+			Material->PostEditChange();
+			return MCPError(FString::Printf(TEXT("%s. Nothing was added."), *PropError));
+		}
+	}
 
 	// Set position
 	double PosX = 0, PosY = 0;

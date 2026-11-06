@@ -43,6 +43,15 @@ describe("describeProjectHolders (#1150)", () => {
     expect(holders.editors[1].headless).toBeNull();
   });
 
+  it("ignores a record pid the read process table does not list as an editor (#1633)", () => {
+    expect(describeProjectHolders([proc(10, PROJECT)], PROJECT, 10, [10, 30], true)).toBeNull();
+  });
+
+  it("keeps an unlisted record pid when it is the editor this session is connected to", () => {
+    const holders = describeProjectHolders([proc(10, PROJECT)], PROJECT, 30, [10, 30], true)!;
+    expect(holders.editors.map((e) => e.pid)).toEqual([10, 30]);
+  });
+
   it("ignores a record pid now owned by another project's editor", () => {
     expect(describeProjectHolders([proc(10, PROJECT), proc(30, OTHER)], PROJECT, 10, [10, 30])).toBeNull();
   });
@@ -83,6 +92,25 @@ describe("detectProjectHolders (#1150)", () => {
     });
     expect(listProcesses).toHaveBeenCalledOnce();
     expect(result?.editors.find((e) => e.answering)?.pid).toBe(20);
+  });
+
+  it("drops a crashed editor's recycled record pid once the process table is read (#1633)", async () => {
+    const result = await detectProjectHolders("/work/Demo", PROJECT, 10, {
+      readRecordPids: () => [10, 30],
+      listProcesses: async () => [proc(10, PROJECT)],
+    });
+    expect(result).toBeNull();
+    expect(contestedProject(PROJECT)).toBeNull();
+  });
+
+  it("keeps record pids as holders when the process probe fails", async () => {
+    const result = await detectProjectHolders("/work/Demo", PROJECT, 10, {
+      readRecordPids: () => [10, 30],
+      listProcesses: async () => {
+        throw new Error("probe failed");
+      },
+    });
+    expect(result?.editors.map((e) => e.pid)).toEqual([10, 30]);
   });
 
   it("clears the remembered state once only one editor is left", async () => {

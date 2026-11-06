@@ -2,8 +2,19 @@ import * as path from "node:path";
 import { spawnOutsideTree } from "../core/spawn-outside-tree.js";
 import * as net from "net";
 import { bridgeReplyAccepted, callBridgeOnce, type BridgeReply } from "../bridge/bridge.js";
-import { readUeMcpConfig, type ProjectContext } from "../config/project.js";
-import { EngineResolutionError, engineLookupFor, selectEngine, trySelectEngine } from "./engine-root.js";
+import { readUeMcpConfig, ueMcpConfigRejections, type ProjectContext } from "../config/project.js";
+import {
+  buildEditorLaunchArgs,
+  hasNoIdeArg,
+  hasOffscreenSwitch,
+  launchConfigRefusal,
+  renderWindowsCommandLine,
+  resolveIdeMode,
+  resolveWindowMode,
+  type EditorIdeMode,
+  type EditorWindowMode,
+} from "./launch-args.js";
+import { EngineResolutionError, engineLookupFor, resolveEngineRoot, selectEngine, trySelectEngine } from "./engine-root.js";
 import {
   editorOwnsProject,
   findEditorByPid,
@@ -13,6 +24,7 @@ import {
   readEngineState,
   readEngineSnapshot,
   readLogState,
+  readEngineRootFromLog,
   modalBlocksGameThread,
   MISSING_MODULE_PROMPT,
   type EngineState,
@@ -20,6 +32,7 @@ import {
 } from "./engine-observer.js";
 import { findLiveInstanceRecord, isPidAlive, lockfileIsFromThisLaunch, readBridgeInstanceRecords, resolveBridgeTarget } from "../bridge/editor-target.js";
 import { oneLine } from "./dialog-guard.js";
+import { findModuleOwners, type ModuleOwner } from "./module-owner.js";
 import { prepareBridgeForLaunch } from "./bridge-update.js";
 import type { ProgressDisplay, ProgressFn } from "../core/types.js";
 import { findUProject } from "../config/uproject-path.js";
@@ -320,7 +333,13 @@ export async function waitForEditorReady(
     }
     if (logIsCurrent && logState.blocking) {
       const state = await readEngineState(projectPath ?? null, { probeWindows: true });
-      return finish({ ready: false, elapsedSeconds: elapsed(), timeline, reason: blockedStartupReason(logState, state), state });
+      const owners = logState.phase === MISSING_MODULE_PROMPT && logState.missingModules.length > 0
+        ? findModuleOwners(logState.missingModules, {
+            projectDir: projectPath ? path.dirname(projectPath) : projectDir,
+            engineRoot: readEngineRootFromLog(projectPath) ?? resolveEngineRoot(engineLookupFor(projectPath)),
+          })
+        : undefined;
+      return finish({ ready: false, elapsedSeconds: elapsed(), timeline, reason: blockedStartupReason(logState, state, owners, projectPath), state });
     }
     if (logIsCurrent && logState.phase === "editor exited") {
       return finish({ ready: false, elapsedSeconds: elapsed(), timeline, reason: "the editor exited during startup", state: await readEngineState(projectPath ?? null) });
@@ -415,17 +434,53 @@ export async function waitForEditorReady(
  * Why a launch stopped, from a log that ended on a prompt. The engine's rebuild
  * prompt comes before the bridge loads, so nothing can answer it but the person
  * at the editor window; the reason names the modules and the process (#1384).
+ * A module an engine plugin declares cannot come from a project build, so it
+ * gets the fixes that work instead (#1627).
  */
-export function blockedStartupReason(logState: LogState, state?: Pick<EngineState, "processes"> | null): string {
+export function blockedStartupReason(
+  logState: LogState,
+  state?: Pick<EngineState, "processes"> | null,
+  owners?: ReadonlyMap<string, ModuleOwner>,
+  projectPath?: string | null,
+): string {
   if (logState.phase !== MISSING_MODULE_PROMPT) return logState.phase;
-  const modules = logState.missingModules.length > 0 ? logState.missingModules.join(", ") : "a project module";
   const pids = (state?.processes ?? []).map((p) => p.pid);
   const pid = pids.length > 0 ? ` (PID ${pids.join(", ")})` : "";
-  return (
+  const prompt =
     `the editor${pid} is stopped at the engine's "modules are missing or built with a different engine version, `
-    + `rebuild them now?" prompt before the bridge loads. Not built: ${modules}. Build the project with `
-    + "project(build) and fix what it reports, then answer or close that prompt in the editor window, or stop the editor"
+    + "rebuild them now?\" prompt before the bridge loads.";
+
+  const engineOwned = logState.missingModules
+    .map((m) => owners?.get(m))
+    .filter((o): o is ModuleOwner => o?.scope === "engine");
+  const projectModules = logState.missingModules.filter((m) => owners?.get(m)?.scope !== "engine");
+
+  const parts: string[] = [prompt];
+  if (engineOwned.length > 0) {
+    const uproject = projectPath ? path.basename(projectPath) : "the .uproject";
+    const plugins = [...new Set(engineOwned.map((o) => o.plugin))];
+    for (const owner of engineOwned) {
+      parts.push(
+        `Missing: ${owner.module}, a module of the engine plugin ${owner.plugin} (${owner.upluginPath}). `
+        + "It ships with the engine, so a project build cannot produce it.",
+      );
+    }
+    parts.push(
+      "Verify the engine install in the Epic Games Launcher, or disable "
+      + plugins.map((p) => `${p} for this project by adding {"Name": "${p}", "Enabled": false} to the Plugins array of ${uproject}`).join(", and ")
+      + ".",
+    );
+  }
+  if (projectModules.length > 0 || engineOwned.length === 0) {
+    const modules = projectModules.length > 0 ? projectModules.join(", ") : "a project module";
+    parts.push(`Not built: ${modules}. Build the project with project(build) and fix what it reports.`);
+  }
+  parts.push(
+    engineOwned.length > 0 && projectModules.length === 0
+      ? "Then close that prompt in the editor window, or stop the editor, and start it again"
+      : "Then answer or close that prompt in the editor window, or stop the editor",
   );
+  return parts.join(" ");
 }
 
 /**
@@ -512,6 +567,13 @@ export interface StartEditorResult {
   bridgeBuilt?: { version: string; message: string };
   /** Set when that build failed earlier, so this launch opened the previous build. */
   bridgeBuildFailed?: { version: string; message: string };
+  /** The window mode the launched editor runs in, read from its final arguments
+   *  (extraArgs can carry -RenderOffScreen too). Set once something was launched. */
+  window?: EditorWindowMode;
+  /** Whether the launched editor may open an IDE, read from its final
+   *  arguments (launchArgs or extraArgs can carry the no-IDE override too).
+   *  Set once something was launched. */
+  ide?: EditorIdeMode;
 }
 
 export async function startEditor(
@@ -537,6 +599,25 @@ export async function startEditor(
      * leaves the sharpest part of the suite unexercised by default.
      */
     paramEcho?: boolean;
+
+    /**
+     * How the editor's window should behave. Resolved against the project's
+     * `editor.window` in ue-mcp.yml, then `normal`. `offscreen` passes
+     * -RenderOffScreen, so no editor window appears on screen, and keeps the
+     * editor out of the background CPU throttle.
+     */
+    window?: EditorWindowMode;
+
+    /**
+     * Whether the editor may open an IDE. Resolved against the project's
+     * `editor.ide` in ue-mcp.yml, then `none` for an offscreen editor and
+     * `allow` otherwise. `none` passes the NullSourceCodeAccessor ini override.
+     */
+    ide?: EditorIdeMode;
+
+    /** Extra command-line arguments for the editor, appended after the
+     *  project's `editor.launchArgs` from ue-mcp.yml. */
+    extraArgs?: string;
 
     /** Draws the startup in a terminal. Omitted, nothing is drawn. */
     openDisplay?: (title: string) => ProgressDisplay;
@@ -605,6 +686,36 @@ export async function startEditor(
     };
   }
 
+  // Resolve the mode and build argv before anything is built or spawned, so a
+  // bad launch setting or extraArgs string refuses the call rather than
+  // launching half an editor.
+  const configRefusal = launchConfigRefusal(ueMcpConfigRejections(projectDir));
+  if (configRefusal) return { success: false, message: configRefusal };
+
+  // On Windows the pieces keep their quotes and the line is handed over
+  // verbatim, because Unreal reads the raw line and skips quoted text.
+  const onWindows = process.platform === "win32";
+  let launchArgs: string[];
+  try {
+    const windowMode = resolveWindowMode(opts.window, project.config.editor?.window);
+    launchArgs = buildEditorLaunchArgs(project.projectPath, {
+      window: windowMode,
+      ide: resolveIdeMode(opts.ide, project.config.editor?.ide, windowMode),
+      configLaunchArgs: project.config.editor?.launchArgs,
+      extraArgs: opts.extraArgs,
+      keepQuotes: onWindows,
+    });
+  } catch (error) {
+    return {
+      success: false,
+      message: error instanceof Error ? error.message : String(error),
+    };
+  }
+  // The modes the editor will actually run in: launchArgs and extraArgs can
+  // carry either argument on a launch whose modes say otherwise.
+  const window: EditorWindowMode = hasOffscreenSwitch(launchArgs) ? "offscreen" : "normal";
+  const ide: EditorIdeMode = hasNoIdeArg(launchArgs) ? "none" : "allow";
+
   // No editor holds this project now, so a pending bridge update can finish, a binary bridge
   // that would not load is reinstalled before the editor can offer a rebuild it cannot do, and
   // a source bridge deployed while the editor ran is built, since Unreal would load the old DLL.
@@ -627,8 +738,9 @@ export async function startEditor(
     const launchedAtMs = Date.now();
     // Outside this server's process tree, so a client that ends the tree on
     // reconnect does not take the editor with it (#1274).
-    spawnOutsideTree(editorExe, [project.projectPath, ...(project.config.editor?.launchArgs ?? [])], {
+    spawnOutsideTree(editorExe, onWindows ? [renderWindowsCommandLine(launchArgs)] : launchArgs, {
       env: buildEditorLaunchEnv(opts.dialogPolicy, opts.paramEcho),
+      windowsVerbatimArguments: onWindows,
     });
 
     // Hold here until the editor is actually usable, drawing the startup as a
@@ -646,6 +758,8 @@ export async function startEditor(
         message: `Editor launched but did not become ready: ${result.reason}. Startup reached: ${describeTimeline(result.timeline)}.`,
         timeline: result.timeline,
         elapsedSeconds: Number(result.elapsedSeconds.toFixed(1)),
+        window,
+        ide,
         ...(result.state ? { state: result.state } : {}),
         ...built,
       };
@@ -656,12 +770,16 @@ export async function startEditor(
       message: `${builtNote}Editor ready in ${result.elapsedSeconds.toFixed(1)}s (waited through startup: ${describeTimeline(result.timeline)}). No further status polling is needed.`,
       timeline: result.timeline,
       elapsedSeconds: Number(result.elapsedSeconds.toFixed(1)),
+      window,
+      ide,
       ...built,
     };
   } catch (error) {
     return {
       success: false,
       message: `Failed to launch editor: ${error instanceof Error ? error.message : String(error)}`,
+      window,
+      ide,
     };
   }
 }
@@ -725,6 +843,63 @@ async function readDirtyPackages(port: number, host: string): Promise<string[] |
   const reply = await callBridgeOnce(host, port, "list_dirty_packages", {});
   if (!reply.answered || reply.methodError || reply.refused || !reply.result) return null;
   return collectPackageNames(reply.result, LIST_DIRTY_KEYS);
+}
+
+/** What stop_editor's discardTransient did before the quit went out. */
+export interface DiscardTransientReport {
+  /** Transient and engine-map packages whose dirty flag was cleared. */
+  cleared: string[];
+  /** Dirty packages left alone because they are real content; the editor's save prompt still asks about them. */
+  kept: string[];
+  /** Why nothing could be discarded, when that is the case. */
+  note?: string;
+}
+
+/**
+ * Clear the dirty flag on every dirty package that nobody can save (the
+ * transient package, /Engine maps such as the /Engine/Maps/Entry startup map),
+ * and leave real content dirty. The classification is the editor's own: a dry
+ * run of editor(discard_dirty) over everything dirty says which packages it
+ * would clear without allowContent, and only those are then named. Real content
+ * keeps the guarantee that stop_editor never discards it.
+ */
+async function discardTransientPackages(port: number, host: string): Promise<DiscardTransientReport> {
+  const dirty = await readDirtyPackages(port, host);
+  if (dirty === null) {
+    return { cleared: [], kept: [], note: "The editor did not say what is dirty, so nothing was discarded." };
+  }
+  if (dirty.length === 0) return { cleared: [], kept: [] };
+
+  const dry = await callBridgeOnce(host, port, "discard_dirty", { packages: dirty, dryRun: true });
+  if (!dry.answered || dry.methodError || !dry.result) {
+    return {
+      cleared: [],
+      kept: dirty,
+      note: "This editor's plugin build has no discard_dirty, so nothing was discarded.",
+    };
+  }
+  const statusOf = (reply: BridgeReply, wanted: string): string[] => {
+    const items = reply.result?.packages;
+    if (!Array.isArray(items)) return [];
+    return items
+      .filter((i): i is { package: string; status: string } =>
+        !!i && typeof i === "object" && typeof (i as { package?: unknown }).package === "string"
+        && (i as { status?: unknown }).status === wanted)
+      .map((i) => i.package);
+  };
+  const disposable = statusOf(dry, "wouldClear");
+  const kept = dirty.filter((p) => !disposable.includes(p));
+  if (disposable.length === 0) return { cleared: [], kept };
+
+  const applied = await callBridgeOnce(host, port, "discard_dirty", { packages: disposable });
+  const cleared = statusOf(applied, "cleared");
+  return {
+    cleared,
+    kept,
+    ...(bridgeReplyAccepted(applied)
+      ? {}
+      : { note: `discard_dirty did not clear every disposable package: ${String(applied.result?.error ?? "no reply")}` }),
+  };
 }
 
 /**
@@ -998,6 +1173,8 @@ export interface StopEditorResult {
   crashReporters?: CrashReporterCleanup;
   /** The editor this call asked to quit: its project and pid, so a stop that hit the wrong target shows it (#1278). */
   stopped?: { project: string | null; pid: number | null };
+  /** What discardTransient cleared before the quit, when it was asked for. */
+  discarded?: DiscardTransientReport;
 }
 
 /**
@@ -1030,6 +1207,10 @@ export interface RestartEditorResult {
   state?: EngineState;
   timeline?: ReadyPhase[];
   elapsedSeconds?: number;
+  /** The window mode the start half used. */
+  window?: EditorWindowMode;
+  /** Whether the editor the start half launched may open an IDE. */
+  ide?: EditorIdeMode;
 }
 
 
@@ -1085,7 +1266,10 @@ function unsavedWorkRefusal(dirty: string[]): string {
  * not sent in that case, so no save prompt is raised, nothing hangs, and
  * nothing is lost.
  *
- * There is deliberately no flag that discards.
+ * There is deliberately no flag that discards real content. discardTransient
+ * clears only packages nobody can save (the transient package and /Engine maps,
+ * as editor(discard_dirty) judges them); anything else still reaches the
+ * editor's own save prompt.
  *
  * What happens to a blocking dialog is the caller's choice, through the dialog
  * handling mode (resolveDialogMode in dialog-mode.ts):
@@ -1159,25 +1343,55 @@ async function waitForEditorExit(
   return false;
 }
 
-export async function stopEditor(
-  projectDir?: string,
-  opts: {
-    /** The live bridge session, which outranks the lockfile when it names this project's editor. */
-    connected?: ConnectedEditor | null;
+export interface StopEditorOptions {
+  /** The live bridge session, which outranks the lockfile when it names this project's editor. */
+  connected?: ConnectedEditor | null;
 
-    /**
-     * How long each poll of the confirm wait sleeps, in milliseconds.
-     *
-     * Internal, defaulted to a second, and not reachable from the tool schema:
-     * it exists so the waiting paths (the 20 polls for the port to close, and
-     * the 10 after a dialog was answered) can be exercised by a test in
-     * milliseconds instead of half a minute. Production passes nothing.
-     */
-    confirmPollMs?: number;
+  /**
+   * Before the quit, clear the dirty flag on packages nobody can save (the
+   * transient package, /Engine maps such as the /Engine/Maps/Entry startup
+   * map) through editor(discard_dirty). Real content stays dirty and the
+   * editor's save prompt still asks about it.
+   */
+  discardTransient?: boolean;
 
-    /** Seams for the crash reporter cleanup, for tests. Production passes nothing. */
-    crashReporters?: Partial<CrashReporterDeps>;
-  } = {},
+  /**
+   * How long each poll of the confirm wait sleeps, in milliseconds.
+   *
+   * Internal, defaulted to a second, and not reachable from the tool schema:
+   * it exists so the waiting paths (the 20 polls for the port to close, and
+   * the 10 after a dialog was answered) can be exercised by a test in
+   * milliseconds instead of half a minute. Production passes nothing.
+   */
+  confirmPollMs?: number;
+
+  /** Seams for the crash reporter cleanup, for tests. Production passes nothing. */
+  crashReporters?: Partial<CrashReporterDeps>;
+}
+
+/** The stop's result with what discardTransient cleared folded in. */
+function withDiscardReport(result: StopEditorResult, report: DiscardTransientReport): StopEditorResult {
+  const cleared = report.cleared.length === 0
+    ? " discardTransient found no transient or engine-map package to clear."
+    : ` Before the quit, discardTransient cleared the dirty flag on ${report.cleared.length} package${
+        report.cleared.length === 1 ? "" : "s"} nobody can save: ${report.cleared.join(", ")}.`;
+  return {
+    ...result,
+    message: `${result.message}${cleared}${report.note ? ` ${report.note}` : ""}`,
+    discarded: report,
+  };
+}
+
+export async function stopEditor(projectDir?: string, opts: StopEditorOptions = {}): Promise<StopEditorResult> {
+  const discard: { report?: DiscardTransientReport } = {};
+  const result = await stopOwnedEditor(projectDir, opts, discard);
+  return discard.report ? withDiscardReport(result, discard.report) : result;
+}
+
+async function stopOwnedEditor(
+  projectDir: string | undefined,
+  opts: StopEditorOptions,
+  discard: { report?: DiscardTransientReport },
 ): Promise<StopEditorResult> {
   const projectPath = projectDir ? findUProject(projectDir) : null;
   const confirmPollMs = opts.confirmPollMs ?? 1000;
@@ -1279,6 +1493,10 @@ export async function stopEditor(
     const candidates = await findProjectEditors(projectPath).catch(() => []);
     if (candidates.length === 1) exitPid = candidates[0].pid;
   }
+
+  // Only packages nobody can save, and only when asked: real content still
+  // reaches the editor's own save prompt below.
+  if (opts.discardTransient) discard.report = await discardTransientPackages(port, host);
 
   const shutdown = await requestNativeShutdown(port, host, false);
   const dirty = collectPackageNames(shutdown.result, SHUTDOWN_DIRTY_KEYS);
@@ -1397,6 +1615,7 @@ export async function restartEditor(
   project: ProjectContext,
   bridge?: { connect: (timeoutMs?: number) => Promise<void> } & ConnectedEditorSource,
   openDisplay?: (title: string) => ProgressDisplay,
+  opts: { window?: EditorWindowMode; ide?: EditorIdeMode; extraArgs?: string } = {},
 ): Promise<RestartEditorResult> {
   // Same rule as start and stop: without a loaded project there is no editor
   // this is about, and the machine-wide answer is somebody else's editor (#819).
@@ -1414,7 +1633,12 @@ export async function restartEditor(
     return { success: false, message: `Failed to stop editor: ${stopResult.message}` };
   }
 
-  const startResult = await startEditor(project, undefined, undefined, { openDisplay });
+  const startResult = await startEditor(project, undefined, undefined, {
+    openDisplay,
+    window: opts.window,
+    ide: opts.ide,
+    extraArgs: opts.extraArgs,
+  });
   const stopped = stopResult.stopped ? { stopped: stopResult.stopped } : {};
   if (!startResult.success) {
     return { ...startResult, ...stopped };

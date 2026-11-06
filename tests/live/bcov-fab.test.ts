@@ -2,7 +2,8 @@
 /**
  * The Fab actions that work without an account: the local cache readers,
  * cross-checked against each other, and importing a local file into a content
- * folder. Login, logout, library sync and cache clearing are not run. Refs #1223.
+ * folder, and building the fab.com search page URL. Login, logout, library sync
+ * and cache clearing are not run. Refs #1223, #1485.
  */
 import * as fs from "node:fs";
 import * as os from "node:os";
@@ -103,4 +104,29 @@ describe("fab local state", () => {
     expect(assets.length, `nothing landed under ${DIR}`).toBeGreaterThan(0);
     expect(assets.some((a) => a.name.toLowerCase().includes(BASE.toLowerCase())), JSON.stringify(assets)).toBe(true);
   }, 120_000);
+
+  it("fab_open_search builds the fab.com search URL from each filter without opening it", async () => {
+    // open:false only: the live suite runs unattended, so nothing here launches
+    // a browser. The open path is UE.MCP.Fab.OpenSearch.LaunchesTheSearchUrl.
+    const base = "https://www.fab.com/search";
+    const bare = await call("fab_open_search", { query: "stone wall", open: false });
+    expect(bare.url).toBe(`${base}?q=stone%20wall&asset_formats=unreal-engine`);
+    expect(bare.opened).toBe(false);
+
+    const filtered = await call("fab_open_search", {
+      query: "rock & moss/1",
+      listingType: "3d-model",
+      assetFormat: "unreal-engine",
+      free: true,
+      open: false,
+    });
+    expect(filtered.url).toBe(`${base}?q=rock%20%26%20moss%2F1&listing_types=3d-model&asset_formats=unreal-engine&is_free=1`);
+    expect(filtered.opened).toBe(false);
+
+    const unfiltered = await call("fab_open_search", { query: "tree", assetFormat: "", free: false, open: false });
+    expect(unfiltered.url).toBe(`${base}?q=tree`);
+
+    const missing = await callBridge(bridge, "fab_open_search", { open: false });
+    expect(succeeded(missing)).toBe(false);
+  }, 60_000);
 });

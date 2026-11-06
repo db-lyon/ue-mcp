@@ -519,7 +519,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::ExtractWidgetSubtree(const TSharedPtr<FJ
 	// the plan, because the importer renames a widget whose name was already
 	// taken while the plan still holds the name that was asked for.
 	const MCPWidgetGuidMap::FSyncReport GuidSync = MCPWidgetGuidMap::CompileChecked(Destination);
-	if (!GuidSync.bCompiled)
+	if (GuidSync.WasRefused())
 	{
 		if (bCreatedDestination)
 		{
@@ -528,13 +528,17 @@ TSharedPtr<FJsonValue> FWidgetHandlers::ExtractWidgetSubtree(const TSharedPtr<FJ
 		return MCPWidgetGuidMap::BlockedError(DestinationAssetPath, GuidSync);
 	}
 
-	if (Destination->Status == BS_Error)
+	if (!GuidSync.bCompiled)
 	{
 		if (bCreatedDestination)
 		{
 			UEditorAssetLibrary::DeleteAsset(DestinationAssetPath);
 		}
-		return MCPError(TEXT("Destination WidgetBlueprint failed to compile; a newly created destination was removed"));
+		return MCPError(FString::Printf(
+			TEXT("Destination WidgetBlueprint '%s' failed to compile (%d error(s)) and was not saved%s: %s"),
+			*DestinationAssetPath, GuidSync.CompileErrors,
+			bCreatedDestination ? TEXT("; the newly created destination was removed") : TEXT(""),
+			*FString::Join(GuidSync.CompileMessages, TEXT("; "))));
 	}
 
 	FString SaveError;

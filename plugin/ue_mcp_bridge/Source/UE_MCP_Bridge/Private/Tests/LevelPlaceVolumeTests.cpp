@@ -57,7 +57,7 @@ namespace LevelPlaceVolumeTests
 			if (!World) return;
 			GEditor->GetEditorWorldContext().SetCurrentWorld(OriginalWorld);
 			GEditor->SetPivot(OriginalPivot, false, true);
-			World->DestroyWorld(false);
+			MCPDestroyDisposableWorld(World);
 		}
 
 		AActor* Place(const TCHAR* ClassName, const FTransform& Transform, bool bStaticMesh = false)

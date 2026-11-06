@@ -62,6 +62,7 @@ Every route is on `127.0.0.1` and needs `Authorization: Bearer <token>`. The ser
 | `GET /v1/health` | Version, `apiVersion`, editors, clients, calls in flight, extensions, UI bundle, `features` |
 | `GET /v1/events` | Server-sent events, resumable by `Last-Event-ID` |
 | `WS /v1/mcp` | One MCP session per socket |
+| `GET /v1/sessions`, `GET`/`PUT /v1/sessions/<id>/access` | Open MCP sessions and each one's access mode (`read-write` or `read-only`) |
 | `GET /v1/install`, `GET /v1/update`, `POST /v1/update/apply` | Install state and updates |
 | `POST /v1/editor/{start,stop,restart,rebuild}` | Editor operations, announced on the event stream |
 | `/v1/checkpoints` | Checkpoints per editor session (`checkpoint-routes.ts`, see [Checkpoints](checkpoints.md)) |
@@ -186,6 +187,8 @@ A message, the unparsed receive buffer and any single frame's declared length ar
 A close frame gets its status code echoed back and a ping gets a pong with the same payload. When the editor shuts down with a client attached, the bridge closes with `1001`.
 
 The upgrade request is read to its blank line under one deadline and one size bound, and validated before a `101` is sent: `GET`, HTTP/1.1, `Upgrade: websocket`, `Connection: Upgrade`, `Sec-WebSocket-Version: 13`, and a `Sec-WebSocket-Key` that decodes to 16 bytes. A refusal answers with an HTTP status and a sentence. Bytes pipelined behind the request go straight to the frame reader.
+
+**Session token.** The bridge listens on 127.0.0.1 only and refuses any upgrade that carries an `Origin` header, which keeps out other machines and web pages. To keep out other local processes and other accounts on the same machine, it also requires a token. When its port is bound it writes 32 random bytes from the OS (BCryptGenRandom on Windows, `/dev/urandom` elsewhere), as 64 hex digits, to `~/.ue-mcp/bridge/<port>.token`, and every upgrade must carry `Authorization: Bearer <token>`. On Linux and macOS the directory is `0700` and the file `0600`; on Windows both get an access list that grants the editor's user alone. The comparison is constant time, a refusal is a `401` with a sentence saying what to do, and the file is removed on a clean shutdown. `UE_MCP_BRIDGE_TOKEN_DIR` moves the directory for the plugin and the client alike. The client sends the token when the file for its port exists and connects without one when it does not, so it still works with a plugin that predates the token. The `101` and the `401` carry `X-UE-MCP-Bridge-Auth: token-file`, and `get_bridge_capabilities` lists the `session-token` feature.
 
 #### Capability handshake
 
@@ -325,6 +328,7 @@ The plugin runs a raw WebSocket server on a dedicated thread, dispatches each re
 | DatasmithHandlers | Datasmith scene import and query |
 | MetaHumanHandlers | MetaHuman characters |
 | LockHandlers | Per-asset locks for concurrent agents |
+| BatchHandlers | `execute_batch`: several handlers run back to back as one game-thread job in one editor transaction |
 | DiffHandlers | Semantic Blueprint and asset diffing |
 | CheckpointHandlers | Checkpoint arming and restore |
 | SourceControlHandlers | Source control through the editor's provider |

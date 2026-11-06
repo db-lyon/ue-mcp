@@ -58,8 +58,9 @@ function assertRegisteredStructure(next: GuardDeclarations, registered: GuardDec
     const declaration = next[name];
     const original = registered[name];
     if (!original || !declaration || declaration.scope !== original.scope || declaration.order !== original.order
+      || declaration.allowsOverride !== original.allowsOverride
       || (["before", "after"] as const).some((phase) => declaration[phase]?.class_path !== original[phase]?.class_path)) {
-      throw new Error(`Guard '${name}' changed its registration; restart ue-mcp to add or remove guards or hooks, or change class_path, scope or order`);
+      throw new Error(`Guard '${name}' changed its registration; restart ue-mcp to add or remove guards or hooks, or change class_path, scope, order or allowsOverride`);
     }
   }
 }

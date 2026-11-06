@@ -13,6 +13,25 @@ namespace
 {
 	using namespace MCPPIE;
 
+	// The verbosity names session_log.jsonl is written with.
+	ELogVerbosity::Type SessionLogVerbosityFromName(const FString& Name)
+	{
+		if (Name == TEXT("Fatal"))   return ELogVerbosity::Fatal;
+		if (Name == TEXT("Error"))   return ELogVerbosity::Error;
+		if (Name == TEXT("Warning")) return ELogVerbosity::Warning;
+		if (Name == TEXT("Display")) return ELogVerbosity::Display;
+		if (Name == TEXT("Log"))     return ELogVerbosity::Log;
+		if (Name == TEXT("Verbose")) return ELogVerbosity::Verbose;
+		return ELogVerbosity::VeryVerbose;
+	}
+
+	// One huge line (a dumped struct, a stack) can outweigh the page; clip it.
+	FString ClipSessionLogMessage(const FString& Message, int32 MaxChars, bool& bOutClipped)
+	{
+		bOutClipped = MaxChars > 0 && Message.Len() > MaxChars;
+		return bOutClipped ? Message.Left(MaxChars) : Message;
+	}
+
 	ELogVerbosity::Type ParseVerbosityFloor(const TSharedPtr<FJsonObject>& Params, ELogVerbosity::Type Default)
 	{
 		const FString S = OptionalString(Params, TEXT("min_verbosity")).ToLower();
@@ -89,10 +108,12 @@ TSharedPtr<FJsonValue> FPIEHandlers::PieSessionLog(const TSharedPtr<FJsonObject>
 	const FString Contains = OptionalString(Params, TEXT("contains"));
 	const int32 Limit = OptionalInt(Params, TEXT("limit"), 200);
 	const int32 Offset = OptionalInt(Params, TEXT("offset"), 0);
+	const int32 MaxChars = OptionalInt(Params, TEXT("max_message_chars"), 500);
 	const FString Dir = ResolveSessionDir(Params);
 
 	auto Result = MCPSuccess();
 	TArray<TSharedPtr<FJsonValue>> Rows;
+	int32 Clipped = 0;
 
 	if (Dir.IsEmpty())
 	{
@@ -105,9 +126,12 @@ TSharedPtr<FJsonValue> FPIEHandlers::PieSessionLog(const TSharedPtr<FJsonObject>
 			J->SetNumberField(TEXT("time"), L.Time);
 			J->SetNumberField(TEXT("frame"), static_cast<double>(L.Frame));
 			J->SetStringField(TEXT("category"), L.Category.ToString());
-			J->SetStringField(TEXT("message"), L.Message);
+			bool bClipped = false;
+			J->SetStringField(TEXT("message"), ClipSessionLogMessage(L.Message, MaxChars, bClipped));
+			if (bClipped) { J->SetBoolField(TEXT("truncated"), true); ++Clipped; }
 			Rows.Add(MakeShared<FJsonValueObject>(J));
 		}
+		if (Clipped > 0) Result->SetNumberField(TEXT("truncated_messages"), Clipped);
 		Result->SetStringField(TEXT("session_dir"), Log.GetLastDir());
 		Result->SetArrayField(TEXT("rows"), Rows);
 		Result->SetNumberField(TEXT("count"), Rows.Num());
@@ -142,9 +166,22 @@ TSharedPtr<FJsonValue> FPIEHandlers::PieSessionLog(const TSharedPtr<FJsonObject>
 			Row->TryGetStringField(TEXT("category"), Cat);
 			if (Cat != Category.ToString()) continue;
 		}
+		FString VerbosityName;
+		if (Row->TryGetStringField(TEXT("verbosity"), VerbosityName) && SessionLogVerbosityFromName(VerbosityName) > Floor)
+		{
+			continue;
+		}
 		if (Skipped < Offset) { Skipped++; continue; }
+		FString Msg;
+		if (Row->TryGetStringField(TEXT("message"), Msg))
+		{
+			bool bClipped = false;
+			Row->SetStringField(TEXT("message"), ClipSessionLogMessage(Msg, MaxChars, bClipped));
+			if (bClipped) { Row->SetBoolField(TEXT("truncated"), true); ++Clipped; }
+		}
 		Rows.Add(MakeShared<FJsonValueObject>(Row.ToSharedRef()));
 	}
+	if (Clipped > 0) Result->SetNumberField(TEXT("truncated_messages"), Clipped);
 	Result->SetStringField(TEXT("session_dir"), Dir);
 	Result->SetArrayField(TEXT("rows"), Rows);
 	Result->SetNumberField(TEXT("count"), Rows.Num());

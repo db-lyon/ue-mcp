@@ -381,12 +381,12 @@ namespace MCPBlueprintBatch
 			if (!FPaths::IsUnderDirectory(Dir, SavedDir))
 			{
 				OutError = FString::Printf(
-					TEXT("A relative outputDir must stay under the project's Saved folder (%s); '%s' leaves it. Pass an absolute path to write elsewhere."),
+					TEXT("A relative outputDir must stay under the project's Saved folder (%s); '%s' leaves it. Pass an absolute path inside the project or the temp folder to write elsewhere."),
 					*SavedDir, *Requested);
 				return false;
 			}
 		}
-		OutDir = FPaths::ConvertRelativePathToFull(Dir);
+		if (!MCPResolvePathInside(Dir, MCPDefaultWritableRoots(), OutDir, OutError)) return false;
 		FPaths::NormalizeDirectoryName(OutDir);
 		return true;
 	}

@@ -77,6 +77,10 @@ export const handlerSpecs: HandlerSpecs = {
     "params": [],
     "contractExempt": "runs the project file generator"
   },
+  "get_maps_settings": {
+    "category": "project",
+    "params": []
+  },
   "list_available_plugins": {
     "category": "project",
     "params": [
@@ -177,6 +181,115 @@ export const handlerSpecs: HandlerSpecs = {
       }
     ],
     "contractExempt": "writes an INI file under the project's Config folder"
+  },
+  "set_developer_setting": {
+    "category": "project",
+    "params": [
+      {
+        "name": "settingsClass",
+        "type": "string",
+        "required": true,
+        "description": "Config class as a short name (GameMapsSettings) or /Script/<Module>.<Class> path"
+      },
+      {
+        "name": "propertyName",
+        "type": "string",
+        "required": true,
+        "description": "Config property; a dotted or indexed path reaches inside a struct or array"
+      },
+      {
+        "name": "settingValue",
+        "type": "any",
+        "required": true,
+        "description": "New value as structured JSON, the form editor(get_property) returns under value"
+      },
+      {
+        "name": "persist",
+        "type": "string",
+        "required": false,
+        "description": "default writes Default<Config>.ini; user writes the per-user config. Omitted follows the Project Settings dialog: default for a defaultconfig class, user otherwise",
+        "enum": [
+          "default",
+          "user"
+        ]
+      }
+    ]
+  },
+  "set_maps_settings": {
+    "category": "project",
+    "params": [
+      {
+        "name": "globalDefaultGameMode",
+        "type": "string",
+        "required": false,
+        "description": "Default GameMode: a GameModeBase class as a /Script path, short name or Blueprint asset path; empty clears"
+      },
+      {
+        "name": "globalDefaultServerGameMode",
+        "type": "string",
+        "required": false,
+        "description": "Dedicated server GameMode, same forms; empty clears"
+      },
+      {
+        "name": "gameInstanceClass",
+        "type": "string",
+        "required": false,
+        "description": "GameInstance class, same forms; empty clears"
+      },
+      {
+        "name": "gameDefaultMap",
+        "type": "string",
+        "required": false,
+        "description": "Game default map as a world asset path, /Game/Maps/MyMap; empty clears"
+      },
+      {
+        "name": "serverDefaultMap",
+        "type": "string",
+        "required": false,
+        "description": "Dedicated server default map, same form; empty clears"
+      },
+      {
+        "name": "editorStartupMap",
+        "type": "string",
+        "required": false,
+        "description": "Map the editor opens at startup, same form; empty clears"
+      },
+      {
+        "name": "transitionMap",
+        "type": "string",
+        "required": false,
+        "description": "Seamless travel transition map, same form; empty clears"
+      }
+    ],
+    "choices": [
+      {
+        "mode": "atLeastOne",
+        "branches": [
+          [
+            "globalDefaultGameMode"
+          ],
+          [
+            "globalDefaultServerGameMode"
+          ],
+          [
+            "gameInstanceClass"
+          ],
+          [
+            "gameDefaultMap"
+          ],
+          [
+            "serverDefaultMap"
+          ],
+          [
+            "editorStartupMap"
+          ],
+          [
+            "transitionMap"
+          ]
+        ]
+      }
+    ],
+    "contractExempt": "writes DefaultEngine.ini under the project's Config folder"
   }
 };
 
@@ -186,11 +299,14 @@ export const paramsClauses: Readonly<Record<string, string>> = {
   disable_plugin: "Params: pluginName, removeReference?",
   enable_plugin: "Params: pluginName",
   generate_project_files: "Params: none",
+  get_maps_settings: "Params: none",
   list_available_plugins: "Params: filter?, pluginCategory?, enabledOnly?, cursor?, limit?",
   list_project_modules: "Params: cursor?, limit?",
   live_coding_compile: "Params: wait?",
   live_coding_status: "Params: none",
   set_config: "Params: configName? (or configFile), section, key, value",
+  set_developer_setting: "Params: settingsClass, propertyName, settingValue, persist?",
+  set_maps_settings: "Params: at least one of globalDefaultGameMode/globalDefaultServerGameMode/gameInstanceClass/gameDefaultMap/serverDefaultMap/editorStartupMap/transitionMap",
 };
 
 /** Every key the spec'd project handlers declare, aliases included. */
@@ -200,17 +316,28 @@ export const schema: Record<string, z.ZodType> = {
   configFile: z.string().optional().describe("Alias for configName"),
   configName: z.string().optional().describe("Config to write: Engine, Game, Input... or a file name ending .ini (default DefaultEngine.ini)"),
   cursor: z.string().optional().describe("Resume a paged read: the nextCursor from the previous page, unmodified"),
+  editorStartupMap: z.string().optional().describe("Map the editor opens at startup, same form; empty clears"),
   enabledOnly: z.boolean().optional().describe("Only plugins enabled in this editor session (default false)"),
   filter: z.string().optional().describe("Case-insensitive substring of the plugin name or friendly name"),
+  gameDefaultMap: z.string().optional().describe("Game default map as a world asset path, /Game/Maps/MyMap; empty clears"),
+  gameInstanceClass: z.string().optional().describe("GameInstance class, same forms; empty clears"),
+  globalDefaultGameMode: z.string().optional().describe("Default GameMode: a GameModeBase class as a /Script path, short name or Blueprint asset path; empty clears"),
+  globalDefaultServerGameMode: z.string().optional().describe("Dedicated server GameMode, same forms; empty clears"),
   key: z.string().optional().describe("INI key"),
   limit: z.number().optional().describe("Rows per page, a whole number (default 200, max 2000)"),
   moduleName: z.string().optional().describe("Project module to add it to (default the first; list_project_modules names them)"),
   parentClass: z.string().optional().describe("Parent class as a short name (Actor) or /Script/<Module>.<Class> path (default UObject)"),
+  persist: z.enum(["default","user"]).optional().describe("default writes Default<Config>.ini; user writes the per-user config. Omitted follows the Project Settings dialog: default for a defaultconfig class, user otherwise"),
   pluginCategory: z.string().optional().describe("Case-insensitive substring of the plugin category"),
   pluginName: z.string().optional().describe("Plugin name as its .uplugin spells it, any case"),
+  propertyName: z.string().optional().describe("Config property; a dotted or indexed path reaches inside a struct or array"),
   removeReference: z.boolean().optional().describe("Delete the .uproject entry instead of writing an explicit disable (default false)"),
   section: z.string().optional().describe("INI section"),
+  serverDefaultMap: z.string().optional().describe("Dedicated server default map, same form; empty clears"),
+  settingsClass: z.string().optional().describe("Config class as a short name (GameMapsSettings) or /Script/<Module>.<Class> path"),
+  settingValue: z.unknown().optional().describe("New value as structured JSON, the form editor(get_property) returns under value"),
   subPath: z.string().optional().describe("Folder under the domain folder, e.g. Gameplay/Abilities (default its root)"),
+  transitionMap: z.string().optional().describe("Seamless travel transition map, same form; empty clears"),
   value: z.string().optional().describe("INI value"),
   wait: z.boolean().optional().describe("Block until the compile finishes (default false returns in_progress)"),
 };

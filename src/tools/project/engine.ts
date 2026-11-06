@@ -1,4 +1,5 @@
 import * as fs from "node:fs";
+import * as os from "node:os";
 import * as path from "node:path";
 import { selectEngine } from "../../editor/engine-root.js";
 import { parseHeader } from "../../codeintel/cpp-parser.js";
@@ -20,6 +21,12 @@ import {
 import { reflectionTool } from "../reflection.js";
 import { movedAction } from "../../surface/moved-action.js";
 import type { ToolContext, ActionSpec } from "../../core/types.js";
+import { resolveInside } from "../../core/path-guard.js";
+
+/** The folders an engine-source reader may open: the engine tree and the project. */
+function engineReadRoots(ctx: ToolContext, engineRoot: string): string[] {
+  return [engineRoot, ...(ctx.project.projectDir ? [ctx.project.projectDir] : [])];
+}
 
 /**
  * The engine tree the engine-source readers work against.
@@ -82,9 +89,7 @@ export const engineActions: Record<string, ActionSpec> = {
     handler: async (ctx, p) => {
       const engineRoot = requireEngineRoot(ctx);
       const headerPath = p.headerPath as string;
-      const resolved = path.isAbsolute(headerPath)
-        ? headerPath
-        : path.join(engineRoot, "Engine", "Source", headerPath);
+      const resolved = resolveInside(engineReadRoots(ctx, engineRoot), headerPath, { base: path.join(engineRoot, "Engine", "Source") });
       if (!fs.existsSync(resolved)) throw new Error(`Engine header not found: ${resolved}`);
       const content = fs.readFileSync(resolved, "utf-8");
       return { ...parseHeader(content, resolved), engineRoot };
@@ -163,7 +168,7 @@ export const engineActions: Record<string, ActionSpec> = {
       } else {
         const d = path.join(engineSource, tree);
         if (!fs.existsSync(d)) throw new Error(`Engine tree '${tree}' not found: ${d}`);
-        roots.push(subdir ? path.join(d, subdir) : d);
+        roots.push(subdir ? resolveInside([engineRoot], subdir, { base: d }) : d);
       }
       const results: Array<{ file: string; line: number; content: string }> = [];
       function scan(dir: string): boolean {
@@ -260,12 +265,16 @@ export const engineActions: Record<string, ActionSpec> = {
     handler: async (ctx: ToolContext, p: Record<string, unknown>) => {
       const names = nameList(p.names, "names");
       const { index } = requireEngineIndex(ctx);
-      let buildCs = (p.buildCsPath as string | undefined) ?? null;
+      const roots = engineReadRoots(ctx, index.engineRoot);
+      const base = ctx.project.projectDir ?? undefined;
+      let buildCs = typeof p.buildCsPath === "string" && p.buildCsPath ? resolveInside(roots, p.buildCsPath, { base }) : null;
       if (!buildCs && typeof p.modulePath === "string") {
-        const start = fs.existsSync(p.modulePath) && fs.statSync(p.modulePath).isDirectory()
-          ? p.modulePath
-          : path.dirname(p.modulePath);
+        const modulePath = resolveInside(roots, p.modulePath, { base });
+        const start = fs.existsSync(modulePath) && fs.statSync(modulePath).isDirectory()
+          ? modulePath
+          : path.dirname(modulePath);
         buildCs = findBuildCs(start);
+        if (buildCs) buildCs = resolveInside(roots, buildCs);
       }
       return suggestBuildDeps(index, names, buildCs);
     },
@@ -467,12 +476,16 @@ export const engineActions: Record<string, ActionSpec> = {
       ctx.project.ensureLoaded();
       const raw = p.path as string;
       if (!raw) throw new Error("Missing 'path'");
-      const resolved = path.isAbsolute(raw)
-        ? raw
-        : path.join(ctx.project.projectDir ?? "", "Source", raw);
+      // A header to lint may also be a scratch file in the temp folder.
+      const engineRoot = requireEngineRoot(ctx);
+      const roots = [...engineReadRoots(ctx, engineRoot), os.tmpdir()];
+      const resolved = resolveInside(roots, raw, { base: path.join(ctx.project.projectDir ?? "", "Source") });
       if (!fs.existsSync(resolved)) throw new Error(`Header not found: ${resolved}`);
+      const buildCsPath = typeof p.buildCsPath === "string" && p.buildCsPath
+        ? resolveInside(roots, p.buildCsPath, { base: ctx.project.projectDir ?? undefined })
+        : undefined;
       const { index, source } = requireEngineIndex(ctx);
-      const result = lintHeader(index, resolved, { buildCsPath: p.buildCsPath as string | undefined });
+      const result = lintHeader(index, resolved, { buildCsPath });
       return {
         indexSource: source,
         ...result,

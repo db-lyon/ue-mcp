@@ -134,6 +134,65 @@ bool FLevelTransientActorContractTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+// #1480: the default spawn says BeginPlay has not run, and initialize=beginPlay
+// reports every component as initialized and begun, read from the component.
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FLevelTransientActorBeginPlayReportTest,
+	"UE.MCP.Level.TransientActor.BeginPlayReport",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FLevelTransientActorBeginPlayReportTest::RunTest(const FString& Parameters)
+{
+	FMCPHandlerRegistry Registry;
+	FLevelHandlers::RegisterHandlers(Registry);
+
+	auto Spawn = [&Registry](const TCHAR* Initialize)
+	{
+		TSharedPtr<FJsonObject> Request = MakeShared<FJsonObject>();
+		Request->SetStringField(TEXT("actorClass"), TEXT("StaticMeshActor"));
+		Request->SetStringField(TEXT("label"), TEXT("UEMCP_TransientBeginPlayTest"));
+		if (Initialize) Request->SetStringField(TEXT("initialize"), Initialize);
+		return MCPTransientTestRun(Registry, TEXT("spawn_transient_actor"), Request);
+	};
+	auto Destroy = [&Registry](const TSharedPtr<FJsonObject>& SpawnResponse)
+	{
+		TSharedPtr<FJsonObject> Request = MakeShared<FJsonObject>();
+		Request->SetStringField(TEXT("actorPath"),
+			SpawnResponse->GetObjectField(TEXT("actor"))->GetStringField(TEXT("actorPath")));
+		MCPTransientTestRun(Registry, TEXT("destroy_transient_actor"), Request);
+	};
+
+	const TSharedPtr<FJsonObject> Default = Spawn(nullptr);
+	if (!Default.IsValid() || !Default->GetBoolField(TEXT("success")))
+	{
+		// No editor world in this context, and this test may not open a map.
+		return true;
+	}
+	TestFalse(TEXT("default spawn has not begun play"), Default->GetBoolField(TEXT("hasBegunPlay")));
+	TestTrue(TEXT("and warns that BeginPlay has not run"), Default->HasTypedField<EJson::String>(TEXT("beginPlayWarning")));
+	Destroy(Default);
+
+	const TSharedPtr<FJsonObject> Begun = Spawn(TEXT("beginPlay"));
+	if (TestTrue(TEXT("beginPlay spawn succeeds"), Begun.IsValid() && Begun->GetBoolField(TEXT("success"))))
+	{
+		TestTrue(TEXT("the actor has begun play"), Begun->GetBoolField(TEXT("hasBegunPlay")));
+		const TArray<TSharedPtr<FJsonValue>>& Components = Begun->GetArrayField(TEXT("components"));
+		TestTrue(TEXT("components are reported"), Components.Num() > 0);
+		for (const TSharedPtr<FJsonValue>& Value : Components)
+		{
+			const TSharedPtr<FJsonObject> Component = Value->AsObject();
+			if (!Component->GetBoolField(TEXT("registered"))) continue;
+			const FString Name = Component->GetStringField(TEXT("name"));
+			TestTrue(FString::Printf(TEXT("%s is initialized"), *Name), Component->GetBoolField(TEXT("initialized")));
+			TestTrue(FString::Printf(TEXT("%s has begun play"), *Name), Component->GetBoolField(TEXT("hasBegunPlay")));
+		}
+		TestFalse(TEXT("no warning once everything has begun play"), Begun->HasField(TEXT("beginPlayWarning")));
+		Destroy(Begun);
+	}
+
+	return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 	FLevelSetComponentMaterialsContractTest,
 	"UE.MCP.Level.SetComponentMaterials.Contract",

@@ -29,7 +29,7 @@ import type { IBridge } from "../bridge/bridge.js";
 import type { DialogPromptFn, ElicitFn, ElicitPrimitiveSchema, ElicitResult } from "../core/types.js";
 import type { DialogMode } from "../config/user-state.js";
 import { readEnv } from "../core/env.js";
-import { elicitationNeedsRelay } from "../dispatch/client-quirks.js";
+import { elicitationNeedsRelay, elicitationUnrenderedNote } from "../dispatch/client-quirks.js";
 import { resolveDialogMode } from "./dialog-mode.js";
 import { readEngineSnapshot, readLogState } from "./engine-observer.js";
 
@@ -220,6 +220,16 @@ function within<T>(promise: Promise<T>, ms: number): Promise<T | null> {
   return Promise.race([promise, late]).finally(() => clearTimeout(timer));
 }
 
+/**
+ * The first listed dialog the game thread is parked behind. A parented editor
+ * window is listed with blocksGameThread false and holds nothing (#1454); an
+ * older plugin omits the field and is believed, as the watcher does.
+ */
+function firstBlocking(list: unknown[]): unknown {
+  return list.find((d) => typeof d === "object" && d !== null
+    && (d as { blocksGameThread?: boolean }).blocksGameThread !== false);
+}
+
 /** Read a dialog out of whatever shape reported it. */
 function asDialog(v: unknown): BlockingDialog | null {
   if (typeof v !== "object" || v === null) return null;
@@ -355,6 +365,12 @@ export interface GuardDeps {
   ) => Promise<unknown>;
   /** Present only when the connected client advertised elicitation. */
   elicit?: () => ElicitFn | undefined;
+  /**
+   * Why the connected client cannot be shown a form although it advertised
+   * one, or null. Appended to a defer refusal so the person learns why no
+   * form appeared (#1459).
+   */
+  elicitationNote?: () => string | null;
   /**
    * A daemon extension's own prompt, for a call that extension made in
    * process. Preferred over `elicit`, because it belongs to the caller of
@@ -848,9 +864,10 @@ export class DialogGuard {
       // not positive evidence the screen is clear, so keep what we know.
       return this.blocking;
     }
-    const first = list[0];
+    const first = firstBlocking(list);
     if (!first) {
-      // The editor ANSWERED and listed nothing, so the screen really is clear.
+      // The editor ANSWERED and listed nothing that holds the game thread, so
+      // nothing is blocking.
       // That is the only place the asked-once record is reset: clearing after
       // a press must not reset it, or the next check re-prompts for a dialog
       // that press was meant to answer and presses a second button.
@@ -1050,7 +1067,7 @@ export class DialogGuard {
   private async stillShowing(dialog: BlockingDialog): Promise<boolean> {
     try {
       const list = ((await this.deps.probe()) as { dialogs?: unknown })?.dialogs;
-      const current = Array.isArray(list) ? asDialog(list[0]) : null;
+      const current = Array.isArray(list) ? asDialog(firstBlocking(list)) : null;
       return current !== null && dialogIdentity(current) === dialogIdentity(dialog);
     } catch {
       return false;
@@ -1064,7 +1081,7 @@ export class DialogGuard {
     opts: { canElicit?: boolean } = {},
     phase: DialogPhase = "asking",
   ): Record<string, unknown> {
-    return DialogGuard.describeRefusal(
+    const refusal = DialogGuard.describeRefusal(
       subject,
       dialog,
       this.modeFor(dialog),
@@ -1072,6 +1089,9 @@ export class DialogGuard {
       phase,
       this.isDelegated(dialog),
     );
+    const note = refusal.dialogMode === "defer" ? this.deps.elicitationNote?.() : null;
+    if (note) refusal.error = `${String(refusal.error)} ${note}`;
+    return refusal;
   }
 
   /**
@@ -1403,6 +1423,7 @@ export function sessionGuardDeps(
     press: (buttonLabel: string, items?: Array<{ index: number; checked: boolean }>) =>
       session.guarded.call("respond_to_dialog", { buttonLabel, ...(items ? { items } : {}) }),
     ...(elicit ? { elicit: () => (canElicit ? elicit() : undefined) } : {}),
+    ...(elicit ? { elicitationNote: () => elicitationUnrenderedNote(elicit()?.client?.()) } : {}),
     isConnected: () => session.bridge.isConnected,
     // The instance-aware reader: it prefers status.<pid>.json over the shared
     // file and reports the snapshot's age, so a crashed editor's leftover is

@@ -34,6 +34,27 @@ TSharedPtr<FJsonValue> FPIEHandlers::PiePerfSummary(const TSharedPtr<FJsonObject
 	{
 		Folder = RecDir;
 	}
+	else if (Id.IsEmpty())
+	{
+		// No recording named: the newest one under the default root (#1657).
+		const FString Root = FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir()) / TEXT("MCPRecordings");
+		TArray<FString> Dirs;
+		IFileManager::Get().FindFiles(Dirs, *(Root / TEXT("*")), false, true);
+		FDateTime Newest = FDateTime::MinValue();
+		for (const FString& D : Dirs)
+		{
+			const FDateTime Stamp = IFileManager::Get().GetTimeStamp(*(Root / D / TEXT("recording.csv")));
+			if (Stamp != FDateTime::MinValue() && Stamp > Newest)
+			{
+				Newest = Stamp;
+				Folder = Root / D;
+			}
+		}
+		if (Folder.IsEmpty())
+		{
+			return MCPError(FString::Printf(TEXT("No recording with a recording.csv under %s; pass recording_id or recording_dir"), *Root));
+		}
+	}
 	else
 	{
 		const FString Root = RecDir.IsEmpty() ? (FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir()) / TEXT("MCPRecordings")) : RecDir;
@@ -126,6 +147,7 @@ TSharedPtr<FJsonValue> FPIEHandlers::PiePerfSummary(const TSharedPtr<FJsonObject
 
 	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("recording"), CsvPath);
+	Result->SetStringField(TEXT("recording_id"), FPaths::GetCleanFilename(Folder));
 	Result->SetNumberField(TEXT("frames"), Rows.Num());
 
 	TSharedRef<FJsonObject> Ft = MakeShared<FJsonObject>();

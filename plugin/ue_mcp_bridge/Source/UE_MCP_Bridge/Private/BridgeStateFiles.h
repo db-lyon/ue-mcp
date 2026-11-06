@@ -120,8 +120,14 @@ public:
 	 */
 	static void DeleteOwnInstanceRecord(const FString& InInstancesDir, uint32 Pid, const FString& InstanceId);
 
-	/** True when the process and, for a listening record, the port are still there. */
-	static bool IsInstanceLive(const FMCPInstanceRecord& Record);
+	/**
+	 * True when the process and, for a listening record, the port are still there.
+	 *
+	 * OwnBoundPort is the port this bridge holds, or 0. The bind is exclusive, so
+	 * another instance's record naming that port is stale however alive its pid
+	 * looks: the only listener there is this bridge (#1633).
+	 */
+	static bool IsInstanceLive(const FMCPInstanceRecord& Record, int32 OwnBoundPort = 0);
 
 	/**
 	 * Delete every record in the directory that can be proven dead, skipping the
@@ -132,7 +138,7 @@ public:
 	 * connectivity outage; keeping a dead one costs a few hundred bytes until
 	 * the next boot looks again.
 	 */
-	static int32 ReapStaleInstanceRecords(const FString& InInstancesDir, const FString& OwnInstanceId);
+	static int32 ReapStaleInstanceRecords(const FString& InInstancesDir, const FString& OwnInstanceId, int32 OwnBoundPort = 0);
 
 	/** Reap with an injected liveness test, so the sweep can be tested offline. */
 	static int32 ReapStaleInstanceRecords(

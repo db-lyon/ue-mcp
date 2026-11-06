@@ -10,6 +10,7 @@ import { bridgeStateDir, isPidAlive, resolveLiveBridgeAddress } from "./editor-t
 import { syncRequestedPort } from "./requested-port.js";
 import { packageVersion } from "../core/package-root.js";
 import { readEnv } from "../core/env.js";
+import { bridgeAuthHeaders, watchUpgradeRefusal } from "./bridge-token.js";
 
 /**
  * The wire protocol this client speaks. Must match
@@ -192,7 +193,14 @@ export function callBridgeOnce(
 ): Promise<BridgeReply> {
   return new Promise<BridgeReply>((resolve) => {
     let settled = false;
-    const ws = new WebSocket(`ws://${host}:${port}`);
+    let headers: Record<string, string>;
+    try {
+      headers = bridgeAuthHeaders(port);
+    } catch {
+      resolve({ answered: false, methodError: false, refused: false, result: null });
+      return;
+    }
+    const ws = new WebSocket(`ws://${host}:${port}`, { headers });
     const finish = (reply: BridgeReply) => {
       if (settled) return;
       settled = true;
@@ -452,6 +460,8 @@ export class EditorBridge implements IBridge {
   private connectedState = false;
   /** Whether an editor ever answered, so there is one to wait for. */
   private everConnected = false;
+  /** The last refused upgrade's explanation, so a retry loop warns once rather than every tick. */
+  private lastUpgradeRefusal: string | null = null;
   private readonly connectionListeners = new Set<(change: BridgeConnectionChange) => void>();
 
   /** Called when the socket opens or is lost. Returns the unsubscribe. */
@@ -718,6 +728,16 @@ export class EditorBridge implements IBridge {
     const url = `ws://${this.host}:${this.port}`;
     const generation = this.targetGeneration;
 
+    // The session token the editor published for this port, when it did. No
+    // file means a plugin that predates the token, which takes no header.
+    let headers: Record<string, string>;
+    try {
+      headers = bridgeAuthHeaders(this.port);
+    } catch (e) {
+      throw new McpError(ErrorCode.NOT_CONNECTED, e instanceof Error ? e.message : String(e));
+    }
+    const port = this.port;
+
     // #821: an editor whose bridge failed to bind is running and unreachable at
     // the same time. It leaves a record saying so, and quoting it here is the
     // difference between "start the editor" and "the editor is up, its bridge
@@ -733,10 +753,23 @@ export class EditorBridge implements IBridge {
         reject(new McpError(ErrorCode.BRIDGE_TIMEOUT, explainFailure(`Connection to editor bridge timed out (${url})`)));
       }, timeoutMs);
 
-      const ws = new WebSocket(url);
+      const ws = new WebSocket(url, { headers });
+
+      // A refused upgrade says why. Without this the caller sees ws's bare
+      // "Unexpected server response: 401" and the reconnect loop retries it
+      // at debug level forever. Warned once per distinct reason.
+      watchUpgradeRefusal(ws, port, "Authorization" in headers, (message) => {
+        clearTimeout(timer);
+        if (message !== this.lastUpgradeRefusal) {
+          this.lastUpgradeRefusal = message;
+          warn("bridge", message);
+        }
+        reject(new McpError(ErrorCode.NOT_CONNECTED, message));
+      });
 
       ws.on("open", () => {
         clearTimeout(timer);
+        this.lastUpgradeRefusal = null;
         // The target moved while this handshake was in flight. Installing the
         // socket now would put the bridge back on the project we just left.
         if (this.targetGeneration !== generation) {

@@ -92,6 +92,10 @@
 		{
 			"Name": "ZoneGraph",
 			"Enabled": true
+		},
+		{
+			"Name": "CommonUI",
+			"Enabled": true
 		}
 	]
 }

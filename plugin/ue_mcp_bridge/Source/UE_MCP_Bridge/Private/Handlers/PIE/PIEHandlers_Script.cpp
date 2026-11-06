@@ -167,6 +167,8 @@ namespace
 		if (!Run.RecordingId.IsEmpty()) R->SetStringField(TEXT("recording_id"), Run.RecordingId);
 		if (Run.bReplay) R->SetStringField(TEXT("replay_of"), Run.ReplayOf);
 		R->SetNumberField(TEXT("elapsed_ms"), Run.NowMs);
+		if (!Run.WaitingFor.IsEmpty()) R->SetStringField(TEXT("waiting_for"), Run.WaitingFor);
+		if (!Run.StopReason.IsEmpty()) R->SetStringField(TEXT("stop_reason"), Run.StopReason);
 
 		TArray<TSharedPtr<FJsonValue>> Steps;
 		for (int32 I = 0; I < Run.Steps.Num(); ++I)
@@ -281,7 +283,7 @@ void FPIEHandlers::RegisterScriptHandlers(FMCPHandlerRegistry& Registry)
 
 	// One step: {instruction, judge auto|manual, agent_judgeable, resolve_in_pie, arrange, act, expect {value, op, target, within_ms}}.
 	// The shape is validated in the handler, so the replay actions' inline steps and these share one key type.
-	const TCHAR* const StepsShape = TEXT("{instruction, judge: auto|manual (default auto), agent_judgeable (manual steps: false means only a person gives the verdict, default true), resolve_in_pie (true: expect.value and the actors arrange and act name only resolve once PIE runs, so script_create and script_update do not check them), arrange: [{kind: spawn, class, at?, rotation?, scale?} | {kind: set, target, path, value} | {kind: call, target, func, args?}] (run when the step starts), act: [{client?, place: {at, offset?, face?} | {location, yaw?}} | {client?, press: {action, frames?}} | {client?, inject: {action, value}} | {client?, hold: {action, value, ms}} | {client?, tape: {action, values}} | {client?, console} | {client?, capture} | {wait_ms}] (run after arrange, as uat_run runs a step's do; within_ms counts from its end), expect: {value (tracked value path or last segment, actor id for exists, widget for visible), op: decreasing|increasing|eq|gt|lt|visible|exists, target (number for eq/gt/lt, boolean for visible/exists, default true), within_ms}}");
+	const TCHAR* const StepsShape = TEXT("{instruction, judge: auto|manual (default auto), agent_judgeable (manual steps: false means only a person gives the verdict, default true), resolve_in_pie (true: expect.value and the actors arrange and act name only resolve once PIE runs, so script_create and script_update do not check them), arrange: [{kind: spawn, class, at?, rotation?, scale?} | {kind: set, target, path, value} | {kind: call, target, func, args?}] (run when the step starts), act: [{client?, place: {at, offset?, face?} | {location, yaw?}} | {client?, press: {action, frames?}} | {client?, inject: {action, value}} | {client?, hold: {action, value, ms}} | {client?, tape: {action, values, hz?}} | {client?, console} | {client?, capture} | {wait_ms}] (run after arrange, as uat_run runs a step's do; within_ms counts from its end), expect: {value (tracked value path or last segment, actor id for exists, widget for visible), op: decreasing|increasing|eq|gt|lt|visible|exists, target (number for eq/gt/lt, boolean for visible/exists, default true, optional least change for decreasing/increasing), within_ms}}");
 	const TCHAR* const MapDoc = TEXT("Level the script plays in, as a package or object path such as /Game/Maps/L_Arena. A run opens it before PIE and refuses when the open level has unsaved changes; empty plays whatever level is open");
 	const TCHAR* const ManualOnlyDoc = TEXT("Every step is judged by a verdict: allows a script with no auto step that has an expect (default false)");
 

@@ -216,6 +216,13 @@ describe("searchToolGraph", () => {
         "animation.epic_delete_all_marked_frames",
       ]));
     });
+
+    it("ranks the keyed array selector actions first for an array element picked by field value", () => {
+      // An agent needing WeaponProfiles[WeaponId=SGK_Lighter] read a 1.3 MB
+      // array whole, then fell back to execute_python, whose gate shows the top five.
+      expect(ids("find array element by field value in data asset", 5)[0]).toBe("asset.read_properties");
+      expect(ids("set a field on the array element whose X equals Y", 5)[0]).toBe("asset.set_property");
+    });
   });
 
   it("finds level(load) by the words a caller uses to switch maps (#1393)", () => {

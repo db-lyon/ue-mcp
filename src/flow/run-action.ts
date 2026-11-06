@@ -79,10 +79,13 @@ export async function runAction(
   options: Record<string, unknown>,
   prep?: CallPreparation,
 ): Promise<TaskResult> {
-  if (spec.kind === "bridge") return runBridge(ctx, name, spec.bridge, paramMapperOf(spec), spec.timeoutMs, options, prep, spec.followUp);
+  if (spec.kind === "bridge") return runBridge(ctx, name, spec.bridge, paramMapperOf(spec), spec.timeoutMs, options, prep, spec);
   if (spec.kind === "handler") return runHandler(ctx, name, spec.handler, options, prep);
   throw new McpError(ErrorCode.NO_HANDLER, `Action '${name}' has no handler or bridge method`);
 }
+
+/** What a bridge action may run around its call: intercept before it, followUp after it. */
+export type BridgeHooks = Pick<BridgeActionSpec, "followUp" | "intercept">;
 
 export async function runBridge(
   ctx: FlowContext,
@@ -92,7 +95,7 @@ export async function runBridge(
   timeoutMs: number | undefined,
   rawOptions: Record<string, unknown>,
   prep?: CallPreparation,
-  followUp?: BridgeActionSpec["followUp"],
+  hooks?: BridgeHooks,
 ): Promise<TaskResult> {
   // `action` is the dispatcher's, not a bridge parameter. Stripped before the
   // mapper, since a mapper that forwards its input verbatim would carry it.
@@ -103,8 +106,19 @@ export async function runBridge(
   const params = forwardToBridge(pipeline, pipeline.params, mapParams, name);
   // The caller's budget wins over the action's authored one: an action that
   // declares 120s is stating a floor it needs, not a ceiling.
-  const sent = await ctx.bridge.call(method, params, pipeline.timeoutMs ?? timeoutMs);
-  const answered = followUp ? await followUp(ctx, params, sent) : sent;
+  const hookCtx = pipeline.timeoutMs === undefined
+    ? ctx
+    : { ...ctx, callTimeoutMs: pipeline.timeoutMs, bridge: withCallTimeout(ctx.bridge, pipeline.timeoutMs) };
+  const intercepted = hooks?.intercept ? await hooks.intercept(hookCtx, params) : undefined;
+  let answered: unknown;
+  if (intercepted !== undefined) {
+    answered = intercepted;
+  } else {
+    const sent = await ctx.bridge.call(method, params, pipeline.timeoutMs ?? timeoutMs);
+    const followUpParams = pipeline.timeoutMs === undefined ? params : { ...params, timeoutMs: pipeline.timeoutMs };
+    const followUpCtx = pipeline.timeoutMs === undefined ? ctx : { ...ctx, callTimeoutMs: pipeline.timeoutMs };
+    answered = hooks?.followUp ? await hooks.followUp(followUpCtx, followUpParams, sent) : sent;
+  }
   const raw = finishCall(answered, pipeline);
   if (typeof raw !== "object" || raw === null) {
     return applyHandlerOutcome(ctx, answered, { success: true, data: { result: raw } });

@@ -2,7 +2,9 @@
 // package loaded with DiffUtils::LoadPackageForDiff, serialized as JSON, plus a
 // deterministic thumbnail of each version and the engine's diff window on request.
 #include "DiffHandlers.h"
+#include "CheckpointThumbnail.h"
 #include "DiffHandlers_Revision.h"
+#include "HandlerDiffPackage.h"
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
 #include "HandlerLogCapture.h"
@@ -13,8 +15,12 @@
 #include "AssetCompilingManager.h"
 #include "AssetDefinition.h"
 #include "AssetToolsModule.h"
+#include "CanvasTypes.h"
 #include "Components/ActorComponent.h"
+#include "Components/DirectionalLightComponent.h"
+#include "Components/LightComponentBase.h"
 #include "Components/SceneComponent.h"
+#include "ContentStreaming.h"
 #include "DiffResults.h"
 #include "DiffUtils.h"
 #include "EdGraph/EdGraph.h"
@@ -25,10 +31,12 @@
 #include "Engine/DataAsset.h"
 #include "Engine/DataTable.h"
 #include "Engine/Level.h"
+#include "Engine/LevelBounds.h"
 #include "Engine/SCS_Node.h"
 #include "Engine/SimpleConstructionScript.h"
 #include "Engine/SkeletalMesh.h"
 #include "Engine/StaticMesh.h"
+#include "Engine/TextureRenderTarget2D.h"
 #include "Engine/Texture.h"
 #include "Engine/Texture2D.h"
 #include "Engine/World.h"
@@ -37,11 +45,13 @@
 #include "GenericPlatform/GenericWindow.h"
 #include "GameFramework/Actor.h"
 #include "GraphDiffControl.h"
+#include "GraphEditor.h"
 #include "HAL/FileManager.h"
 #include "IAssetTools.h"
 #include "IImageWrapper.h"
 #include "IImageWrapperModule.h"
 #include "Kismet2/BlueprintEditorUtils.h"
+#include "Misc/App.h"
 #include "MaterialGraph/MaterialGraph.h"
 #include "MaterialGraph/MaterialGraphNode.h"
 #include "MaterialGraph/MaterialGraphSchema.h"
@@ -61,6 +71,8 @@
 #include "PackageTools.h"
 #include "PhysicsEngine/BodySetup.h"
 #include "PhysicsEngine/PhysicsAsset.h"
+#include "RenderingThread.h"
+#include "RHIUtilities.h"
 #include "Rendering/SkeletalMeshRenderData.h"
 #include "Rendering/SkeletalMeshLODRenderData.h"
 #if ENGINE_MAJOR_VERSION > 5 || (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 5)
@@ -70,13 +82,22 @@
 #define UE_MCP_CKDIFF_HAS_DETAILS_DIFF 0
 #endif
 #include "Settings/EditorLoadingSavingSettings.h"
+#include "Input/HittestGrid.h"
+#include "Slate/WidgetRenderer.h"
+#include "SceneView.h"
 #include "ShaderCompiler.h"
+#include "ShowFlags.h"
 #include "Sound/SoundWave.h"
 #include "StaticMeshResources.h"
+#include "TextureResource.h"
+#include "ThumbnailHelpers.h"
 #include "Subsystems/AssetEditorSubsystem.h"
+#include "ThumbnailRendering/BlueprintThumbnailRenderer.h"
 #include "ThumbnailRendering/ThumbnailManager.h"
+#include "ThumbnailRendering/ThumbnailRenderer.h"
 #include "UObject/Package.h"
 #include "UObject/UObjectHash.h"
+#include "Widgets/SVirtualWindow.h"
 #include "Widgets/SWindow.h"
 
 namespace
@@ -636,7 +657,12 @@ namespace
 					if (!Actor->IsTemplate()) Out.Add(Actor);
 				}
 				return true;
-			}, false);
+			},
+#if UE_MCP_HAS_5_8_API
+			EGetObjectsFlags::None);
+#else
+			/*bIncludeNestedObjects=*/false);
+#endif
 		}
 		return Out;
 	}
@@ -870,30 +896,6 @@ namespace
 		return Side;
 	}
 
-	/** Most a colour channel may vary across a picture that still counts as one flat colour. */
-	constexpr int32 CkDiffBlankTolerance = 6;
-
-	/**
-	 * Whether a BGRA picture is one flat colour: a renderer that drew nothing leaves the cleared target
-	 * (black), or only its background tile. A picture of nothing is not a picture of the version.
-	 */
-	bool CkDiffIsBlank(const TArray<uint8>& Bytes, int32 Pixels)
-	{
-		uint8 Min[3] = { 255, 255, 255 };
-		uint8 Max[3] = { 0, 0, 0 };
-		for (int32 i = 0; i < Pixels; ++i)
-		{
-			const uint8* P = &Bytes[i * 4];
-			for (int32 c = 0; c < 3; ++c)
-			{
-				Min[c] = FMath::Min(Min[c], P[c]);
-				Max[c] = FMath::Max(Max[c], P[c]);
-			}
-			if (Max[0] - Min[0] > CkDiffBlankTolerance || Max[1] - Min[1] > CkDiffBlankTolerance || Max[2] - Min[2] > CkDiffBlankTolerance) return false;
-		}
-		return true;
-	}
-
 	bool CkDiffWritePng(const FObjectThumbnail& Thumb, const FString& OutFile, FString& OutError)
 	{
 		const int32 W = Thumb.GetImageWidth();
@@ -904,7 +906,7 @@ namespace
 			OutError = TEXT("the thumbnail came back empty");
 			return false;
 		}
-		if (CkDiffIsBlank(Bytes, W * H))
+		if (MCPCkDiffIsBlankImage(Bytes, W, H))
 		{
 			OutError = TEXT("the thumbnail is one flat colour, a picture of nothing");
 			return false;
@@ -925,12 +927,62 @@ namespace
 		return true;
 	}
 
+	/** UThumbnailRenderer's view-family submit, which is protected. Never instantiated. */
+	struct FCkDiffThumbnailRenderAccess : public UThumbnailRenderer
+	{
+		static void Render(FCanvas* Canvas, FSceneViewFamily* Family, FSceneView* View) { RenderViewFamily(Canvas, Family, View); }
+	};
+
+	/**
+	 * An Actor Blueprint loaded for diff, drawn in a thumbnail scene owned here.
+	 * UBlueprintThumbnailRenderer::Draw draws nothing unless bHasBeenRegenerated is set,
+	 * and LoadPackageForDiff loads with compile-on-load disabled, so it never is (#178).
+	 * The scene and its preview actor are gone before the version is unloaded.
+	 */
+	bool CkDiffRenderBlueprint(UBlueprint* Blueprint, int32 Size, FObjectThumbnail& Out)
+	{
+		if (!FApp::CanEverRender() || !GEditor || !Blueprint->GeneratedClass || !Blueprint->GeneratedClass->IsChildOf(AActor::StaticClass())) return false;
+		UTextureRenderTarget2D* Target = GEditor->GetScratchRenderTarget(Size);
+		FTextureRenderTargetResource* Resource = Target ? Target->GameThread_GetRenderTargetResource() : nullptr;
+		if (!Resource) return false;
+		FlushAsyncLoading();
+		UTexture::ForceUpdateTextureStreaming();
+		IStreamingManager::Get().StreamAllResources();
+		{
+			FBlueprintThumbnailScene Scene;
+			Scene.SetBlueprint(Blueprint);
+			FCanvas Canvas(Resource, nullptr, FGameTime::GetTimeSinceAppStart(), GMaxRHIFeatureLevel);
+			Canvas.Clear(FLinearColor::Black);
+			{
+				FSceneViewFamilyContext Family(FSceneViewFamily::ConstructionValues(Resource, Scene.GetScene(), FEngineShowFlags(ESFIM_Game))
+					.SetTime(FGameTime::GetTimeSinceAppStart()));
+				Family.EngineShowFlags.DisableAdvancedFeatures();
+				Family.EngineShowFlags.MotionBlur = 0;
+				FCkDiffThumbnailRenderAccess::Render(&Canvas, &Family, Scene.CreateView(&Family, 0, 0, Size, Size));
+			}
+			Canvas.Flush_GameThread();
+			ENQUEUE_RENDER_COMMAND(UEMCPCkDiffThumbnailResolve)([Resource](FRHICommandListImmediate& RHICmdList)
+			{
+				TransitionAndCopyTexture(RHICmdList, Resource->GetRenderTargetTexture(), Resource->TextureRHI, {});
+			});
+			FlushRenderingCommands();
+			Scene.SetBlueprint(nullptr);
+		}
+		Out.SetImageSize(Size, Size);
+		TArray<uint8>& Data = Out.AccessImageData();
+		Data.SetNumUninitialized(Size * Size * sizeof(FColor));
+		if (Resource->ReadPixelsPtr(reinterpret_cast<FColor*>(Data.GetData()), FReadSurfaceDataFlags(), FIntRect(0, 0, Size, Size))) return true;
+		Data.Reset();
+		return false;
+	}
+
 	/**
 	 * A picture of one version: rendered with ThumbnailTools::RenderThumbnail on
-	 * the object loaded for diff, or, where the class has no renderer or is a level,
-	 * the thumbnail saved inside that version's package.
+	 * the object loaded for diff, or, where the class has no renderer, is a level,
+	 * or the render is one flat colour, the thumbnail saved inside that version's package.
 	 */
-	TSharedPtr<FJsonObject> CkDiffThumbnail(UObject* Asset, const FString& File, const FString& OriginalPackage, const FString& OutFile)
+	TSharedPtr<FJsonObject> CkDiffThumbnail(UObject* Asset, const FString& File, const FString& OriginalPackage, const FString& OutFile,
+		const FString& LevelReason = FString())
 	{
 		TSharedPtr<FJsonObject> T = MakeShared<FJsonObject>();
 		if (OutFile.IsEmpty()) return nullptr;
@@ -949,8 +1001,16 @@ namespace
 			FAssetCompilingManager::Get().FinishAllCompilation();
 			if (GShaderCompilingManager) GShaderCompilingManager->FinishAllCompilation();
 			FObjectThumbnail Thumb;
-			ThumbnailTools::RenderThumbnail(Asset, CkDiffThumbnailSize, CkDiffThumbnailSize,
-				ThumbnailTools::EThumbnailTextureFlushMode::AlwaysFlush, nullptr, &Thumb);
+			UBlueprint* Blueprint = Cast<UBlueprint>(Asset);
+			if (Blueprint && !Blueprint->bHasBeenRegenerated && !Info->bUseClassDefaultObject && Info->Renderer->IsA<UBlueprintThumbnailRenderer>())
+			{
+				CkDiffRenderBlueprint(Blueprint, CkDiffThumbnailSize, Thumb);
+			}
+			else
+			{
+				ThumbnailTools::RenderThumbnail(Asset, CkDiffThumbnailSize, CkDiffThumbnailSize,
+					ThumbnailTools::EThumbnailTextureFlushMode::AlwaysFlush, nullptr, &Thumb);
+			}
 			if (CkDiffWritePng(Thumb, OutFile, Error))
 			{
 				T->SetStringField(TEXT("file"), OutFile);
@@ -958,12 +1018,12 @@ namespace
 				return T;
 			}
 			// The Widget Blueprint renderer draws nothing for a Blueprint loaded for diff: it is not compiled
-			// (LOAD_DisableCompileOnLoad), so it has not been regenerated, and the target stays black.
+			// (LOAD_DisableCompileOnLoad), so it has not been regenerated, and the target stays one flat colour.
 			Error = TEXT("Unreal's thumbnail renderer drew nothing for this version: ") + Error;
 		}
 		else
 		{
-			Error = bLevel ? TEXT("a level loaded for diff has no initialized scene to render")
+			Error = bLevel ? (LevelReason.IsEmpty() ? FString(TEXT("a level loaded for diff has no initialized scene to render")) : LevelReason)
 				: Asset ? FString::Printf(TEXT("Unreal has no thumbnail renderer for %s"), *Asset->GetClass()->GetName())
 				: TEXT("an actor package has no thumbnail renderer");
 		}
@@ -993,18 +1053,276 @@ namespace
 		return T;
 	}
 
-	TSharedPtr<FJsonObject> CkDiffSideJson(const FCkDiffSide& Side, const FString& File, const FString& OriginalPackage, const FString& Thumbnail)
+	TSharedPtr<FJsonObject> CkDiffSideJson(const FCkDiffSide& Side, const FString& File, const FString& OriginalPackage, const FString& Thumbnail,
+		bool bDeferThumbnail = false)
 	{
 		TSharedPtr<FJsonObject> S = MakeShared<FJsonObject>();
 		S->SetStringField(TEXT("class"), Side.Asset ? Side.Asset->GetClass()->GetName()
 			: (CkDiffActors(nullptr, Side.Package).Num() ? CkDiffActors(nullptr, Side.Package)[0]->GetClass()->GetName() : FString()));
 		if (Side.Asset) S->SetStringField(TEXT("objectName"), Side.Asset->GetName());
 		S->SetArrayField(TEXT("facts"), CkDiffFacts(Side.Asset, Side.Package));
+		if (bDeferThumbnail) return S;
 		if (TSharedPtr<FJsonObject> Thumb = CkDiffThumbnail(Side.Asset, File, OriginalPackage, Thumbnail))
 		{
 			S->SetObjectField(TEXT("thumbnail"), Thumb);
 		}
 		return S;
+	}
+
+	// ── Level pictures ──────────────────────────────────────────────────────
+
+	/** Smallest half size of a framed box, so a light or an empty actor still shows what is around it. */
+	constexpr double CkDiffLevelMinHalfSize = 250.0;
+	/** An actor bounds wider than this (a sky sphere) is framed by its location instead. */
+	constexpr double CkDiffLevelMaxHalfSize = 1.0e6;
+
+	/**
+	 * A level loaded for diff, initialized in place as an editor preview world so it has a scene to
+	 * draw (#1568). Not FScopedEditorWorld: that swaps GWorld and clears the editor's undo history.
+	 * Cleaned up before its package is unloaded.
+	 */
+	struct FCkDiffLevelScene
+	{
+		UWorld* World = nullptr;
+		UDirectionalLightComponent* Fill = nullptr;
+		FString Error;
+
+		explicit FCkDiffLevelScene(UObject* Asset)
+		{
+			UWorld* Loaded = Cast<UWorld>(Asset);
+			if (!Loaded || !Loaded->PersistentLevel) { Error = TEXT("this version holds no level"); return; }
+			if (!FApp::CanEverRender() || !GEngine) { Error = TEXT("this editor runs without rendering"); return; }
+			if (Loaded->IsPartitionedWorld())
+			{
+				Error = TEXT("a World Partition level keeps its actors in their own packages, so its map package has nothing to draw");
+				return;
+			}
+			if (Loaded->bIsWorldInitialized) { Error = TEXT("the level loaded for diff is already initialized elsewhere"); return; }
+			World = Loaded;
+			World->WorldType = EWorldType::EditorPreview;
+			GEngine->CreateNewWorldContext(EWorldType::EditorPreview).SetCurrentWorld(World);
+			World->InitWorld(UWorld::InitializationValues()
+				.AllowAudioPlayback(false)
+				.RequiresHitProxies(false)
+				.CreatePhysicsScene(false)
+				.CreateNavigation(false)
+				.CreateAISystem(false)
+				.ShouldSimulatePhysics(false)
+				.EnableTraceCollision(false)
+				.SetTransactional(false));
+			World->PersistentLevel->UpdateModelComponents();
+			World->UpdateWorldComponents(/*bRerunConstructionScripts*/ true, /*bCurrentLevelOnly*/ false);
+			if (!World->Scene)
+			{
+				Error = TEXT("the level loaded for diff got no scene when initialized");
+				return;
+			}
+			// A level with no light of its own would draw black; light it as a thumbnail scene is lit.
+			bool bLit = false;
+			for (AActor* Actor : World->PersistentLevel->Actors)
+			{
+				if (!Actor) continue;
+				for (UActorComponent* Component : Actor->GetComponents())
+				{
+					const ULightComponentBase* Light = Cast<ULightComponentBase>(Component);
+					if (Light && Light->IsRegistered() && Light->IsVisible()) { bLit = true; break; }
+				}
+				if (bLit) break;
+			}
+			if (!bLit)
+			{
+				Fill = NewObject<UDirectionalLightComponent>(GetTransientPackage(), NAME_None, RF_Transient);
+				Fill->Intensity = 3.0f;
+				Fill->SetWorldRotation(FRotator(-45.0, 30.0, 0.0));
+				Fill->RegisterComponentWithWorld(World);
+			}
+		}
+
+		~FCkDiffLevelScene()
+		{
+			if (!World) return;
+			if (Fill)
+			{
+				Fill->UnregisterComponent();
+				Fill->MarkAsGarbage();
+			}
+			World->CleanupWorld();
+			GEngine->DestroyWorldContext(World);
+		}
+
+		FCkDiffLevelScene(const FCkDiffLevelScene&) = delete;
+		FCkDiffLevelScene& operator=(const FCkDiffLevelScene&) = delete;
+
+		AActor* Find(FName Name) const
+		{
+			if (!World) return nullptr;
+			for (AActor* Actor : World->PersistentLevel->Actors)
+			{
+				if (Actor && Actor->GetFName() == Name) return Actor;
+			}
+			return nullptr;
+		}
+	};
+
+	/** The box to frame for one actor: its drawn bounds, or its location when it draws nothing. */
+	bool CkDiffActorBox(const AActor* Actor, FBox& Out)
+	{
+		if (!Actor || !Actor->GetRootComponent()) return false;
+		const FVector Location = Actor->GetActorLocation();
+		FBox Box = Actor->GetComponentsBoundingBox(/*bNonColliding*/ true, /*bIncludeFromChildActors*/ true);
+		if (!Box.IsValid || Box.GetExtent().GetMax() > CkDiffLevelMaxHalfSize) Box = FBox(Location, Location);
+		Out = Box;
+		return true;
+	}
+
+	/** A view of the box from above and to one side, the whole box in frame. */
+	FSceneView* CkDiffLevelView(FSceneViewFamily* Family, const FBox& Focus, int32 Size)
+	{
+		const float FOVDegrees = 50.0f;
+		const float HalfFOV = FMath::DegreesToRadians(FOVDegrees) * 0.5f;
+		const FVector Center = Focus.GetCenter();
+		const double Radius = FMath::Max(Focus.GetExtent().Size(), CkDiffLevelMinHalfSize) * 1.1;
+		const FRotator ViewRotation(-35.0, 45.0, 0.0);
+		const FVector Eye = Center - ViewRotation.Vector() * (Radius / FMath::Tan(HalfFOV));
+
+		FSceneViewInitOptions Options;
+		Options.ViewFamily = Family;
+		Options.SetViewRectangle(FIntRect(0, 0, Size, Size));
+		Options.ViewOrigin = Eye;
+		Options.ViewRotationMatrix = FInverseRotationMatrix(ViewRotation) * FMatrix(
+			FPlane(0, 0, 1, 0),
+			FPlane(1, 0, 0, 0),
+			FPlane(0, 1, 0, 0),
+			FPlane(0, 0, 0, 1));
+		Options.ProjectionMatrix = FReversedZPerspectiveMatrix(HalfFOV, 1.0f, 1.0f, 1.0f);
+		Options.BackgroundColor = FLinearColor::Black;
+		FSceneView* View = new FSceneView(Options);
+		Family->Views.Add(View);
+		View->StartFinalPostprocessSettings(Eye);
+		View->EndFinalPostprocessSettings(Options);
+		IStreamingManager::Get().AddViewInformation(Eye, (float)Size, (float)Size / FMath::Tan(HalfFOV));
+		return View;
+	}
+
+	/** One picture of an initialized level, editor sprites included so a placed light shows. */
+	bool CkDiffRenderLevel(UWorld* World, const FBox& Focus, int32 Size, FObjectThumbnail& Out)
+	{
+		if (!GEditor || !World || !World->Scene) return false;
+		UTextureRenderTarget2D* Target = GEditor->GetScratchRenderTarget(Size);
+		FTextureRenderTargetResource* Resource = Target ? Target->GameThread_GetRenderTargetResource() : nullptr;
+		if (!Resource) return false;
+		FlushAsyncLoading();
+		FAssetCompilingManager::Get().FinishAllCompilation();
+		if (GShaderCompilingManager) GShaderCompilingManager->FinishAllCompilation();
+		UTexture::ForceUpdateTextureStreaming();
+		IStreamingManager::Get().StreamAllResources();
+		// The first frame warms the scene (new primitives, streamed mips); the second is kept.
+		for (int32 Frame = 0; Frame < 2; ++Frame)
+		{
+			FCanvas Canvas(Resource, nullptr, FGameTime::GetTimeSinceAppStart(), GMaxRHIFeatureLevel);
+			Canvas.Clear(FLinearColor::Black);
+			{
+				FSceneViewFamilyContext Family(FSceneViewFamily::ConstructionValues(Resource, World->Scene, FEngineShowFlags(ESFIM_Editor))
+					.SetTime(FGameTime::GetTimeSinceAppStart()));
+				Family.EngineShowFlags.DisableAdvancedFeatures();
+				Family.EngineShowFlags.MotionBlur = 0;
+				FCkDiffThumbnailRenderAccess::Render(&Canvas, &Family, CkDiffLevelView(&Family, Focus, Size));
+			}
+			Canvas.Flush_GameThread();
+			ENQUEUE_RENDER_COMMAND(UEMCPCkDiffLevelResolve)([Resource](FRHICommandListImmediate& RHICmdList)
+			{
+				TransitionAndCopyTexture(RHICmdList, Resource->GetRenderTargetTexture(), Resource->TextureRHI, {});
+			});
+			FlushRenderingCommands();
+		}
+		Out.SetImageSize(Size, Size);
+		TArray<uint8>& Data = Out.AccessImageData();
+		Data.SetNumUninitialized(Size * Size * sizeof(FColor));
+		if (Resource->ReadPixelsPtr(reinterpret_cast<FColor*>(Data.GetData()), FReadSurfaceDataFlags(), FIntRect(0, 0, Size, Size))) return true;
+		Data.Reset();
+		return false;
+	}
+
+	/**
+	 * Both versions of a level drawn from one camera framed on the actors the diff found added, removed
+	 * or changed, each version initialized as a preview world (#1568). With nothing to frame, or one
+	 * version only, the whole level. A version that cannot be drawn falls back to its saved thumbnail
+	 * and says why. Sets "thumbnail" on the result's before and after.
+	 */
+	void CkDiffLevelPictures(const FCkDiffSide& A, const FCkDiffSide& B, const TSet<FName>& Changed,
+		const FString& FromFile, const FString& ToFile, const FString& PackageName,
+		const FString& FromThumbnail, const FString& ToThumbnail, const TSharedPtr<FJsonObject>& Result)
+	{
+		const bool bLevelA = A.Package && Cast<UWorld>(A.Asset) && !FromThumbnail.IsEmpty();
+		const bool bLevelB = B.Package && Cast<UWorld>(B.Asset) && !ToThumbnail.IsEmpty();
+		if (!bLevelA && !bLevelB) return;
+		// Both versions are initialized when there are two, so the camera frames the change in each.
+		TUniquePtr<FCkDiffLevelScene> SceneA;
+		TUniquePtr<FCkDiffLevelScene> SceneB;
+		if (Cast<UWorld>(A.Asset)) SceneA = MakeUnique<FCkDiffLevelScene>(A.Asset);
+		if (Cast<UWorld>(B.Asset)) SceneB = MakeUnique<FCkDiffLevelScene>(B.Asset);
+		FCkDiffLevelScene* Scenes[] = { SceneA.Get(), SceneB.Get() };
+
+		FBox Focus(ForceInit);
+		TArray<FString> Framed;
+		const bool bBoth = A.Package && B.Package;
+		if (bBoth)
+		{
+			for (const FName& Name : Changed)
+			{
+				for (FCkDiffLevelScene* Scene : Scenes)
+				{
+					FBox Box;
+					AActor* Actor = Scene && Scene->Error.IsEmpty() ? Scene->Find(Name) : nullptr;
+					if (CkDiffActorBox(Actor, Box))
+					{
+						Focus += Box;
+						Framed.AddUnique(CkDiffActorLabel(Actor));
+					}
+				}
+			}
+		}
+		FString Framing = TEXT("the changed actors");
+		if (!Focus.IsValid)
+		{
+			for (FCkDiffLevelScene* Scene : Scenes)
+			{
+				if (!Scene || !Scene->Error.IsEmpty()) continue;
+				const FBox Level = ALevelBounds::CalculateLevelBounds(Scene->World->PersistentLevel);
+				if (Level.IsValid) Focus += Level;
+			}
+			Framing = !bBoth ? TEXT("the whole level")
+				: Changed.Num() ? TEXT("the whole level: no changed actor has a place in the level")
+				: TEXT("the whole level: no actor changed");
+		}
+		if (!Focus.IsValid) Focus = FBox(FVector(-1000.0), FVector(1000.0));
+
+		auto Picture = [&](FCkDiffLevelScene* Scene, const FCkDiffSide& Side, const FString& File, const FString& OutFile, const TCHAR* Key)
+		{
+			FString Error = Scene ? Scene->Error : FString(TEXT("this version holds no level"));
+			if (Error.IsEmpty())
+			{
+				FObjectThumbnail Thumb;
+				if (CkDiffRenderLevel(Scene->World, Focus, CkDiffThumbnailSize, Thumb) && CkDiffWritePng(Thumb, OutFile, Error))
+				{
+					TSharedPtr<FJsonObject> T = MakeShared<FJsonObject>();
+					T->SetStringField(TEXT("file"), OutFile);
+					T->SetStringField(TEXT("source"), TEXT("rendered"));
+					T->SetStringField(TEXT("note"), Framed.Num()
+						? FString::Printf(TEXT("Framed on %s: %s."), *Framing, *FString::Join(Framed, TEXT(", ")))
+						: FString::Printf(TEXT("Framed on %s."), *Framing));
+					Result->GetObjectField(Key)->SetObjectField(TEXT("thumbnail"), T);
+					return;
+				}
+				Error = TEXT("the level drew nothing for this version: ") + (Error.IsEmpty() ? FString(TEXT("the picture could not be read back")) : Error);
+			}
+			if (TSharedPtr<FJsonObject> T = CkDiffThumbnail(Side.Asset, File, PackageName, OutFile, Error))
+			{
+				Result->GetObjectField(Key)->SetObjectField(TEXT("thumbnail"), T);
+			}
+		};
+		if (bLevelA) Picture(SceneA.Get(), A, FromFile, FromThumbnail, TEXT("before"));
+		if (bLevelB) Picture(SceneB.Get(), B, ToFile, ToThumbnail, TEXT("after"));
 	}
 
 	/** Which of the engine's diff paths serves an asset of this class. */
@@ -1072,7 +1390,7 @@ namespace
 
 	/** Actors matched by object name, each pair compared with the details diff, components included. */
 	void CkDiffActorsSection(UObject* AssetA, UPackage* PackageA, UObject* AssetB, UPackage* PackageB, const FCkDiffNames& Names,
-		TArray<TSharedPtr<FJsonValue>>& Sections, FCkDiffSink& Sink)
+		TArray<TSharedPtr<FJsonValue>>& Sections, FCkDiffSink& Sink, TSet<FName>* OutChanged = nullptr)
 	{
 		const TArray<AActor*> ActorsA = CkDiffActors(AssetA, PackageA);
 		const TArray<AActor*> ActorsB = CkDiffActors(AssetB, PackageB);
@@ -1085,6 +1403,7 @@ namespace
 		int32 Hidden = 0;
 		auto Presence = [&](AActor* Actor, bool bAdded)
 		{
+			if (OutChanged) OutChanged->Add(Actor->GetFName());
 			if (!Sink.Take()) return;
 			TSharedPtr<FJsonObject> Rec = MakeShared<FJsonObject>();
 			Rec->SetStringField(TEXT("group"), CkDiffActorLabel(Actor));
@@ -1100,6 +1419,7 @@ namespace
 			AActor* const* A = bSingle ? &ActorsA[0] : ByNameA.Find(B->GetFName());
 			if (!A) { Presence(B, true); continue; }
 			const FString Group = CkDiffActorLabel(B);
+			const int32 Seen = Records.Num() + Sink.Dropped;
 			CkDiffObjects(*A, B, Group, Names, Records, Hidden, Sink);
 			TMap<FName, UActorComponent*> CompsA;
 			for (UActorComponent* C : (*A)->GetComponents()) if (C) CompsA.Add(C->GetFName(), C);
@@ -1111,6 +1431,7 @@ namespace
 					CkDiffObjects(*Old, C, Group + TEXT(" > ") + C->GetName(), Names, Records, Hidden, Sink);
 				}
 			}
+			if (OutChanged && Records.Num() + Sink.Dropped > Seen) OutChanged->Add(B->GetFName());
 		}
 		if (!bSingle)
 		{
@@ -1182,12 +1503,9 @@ namespace
 		return true;
 	}
 
-	/** The Blueprint diff, SBlueprintDiff's categories in its order. True when the type's own diff ran (CkDiffBlueprintType). */
-	bool CkDiffBlueprint(UBlueprint* A, UBlueprint* B, const FCkDiffNames& Names, TArray<TSharedPtr<FJsonValue>>& Sections, FCkDiffSink& Sink)
+	/** Each graph of two Blueprint versions, paired by path under the Blueprint as SBlueprintDiff pairs them, in path order. */
+	TMap<FString, TPair<UEdGraph*, UEdGraph*>> CkDiffGraphPairs(UBlueprint* A, UBlueprint* B)
 	{
-		const bool bTypeDiff = CkDiffBlueprintType(A, B, Names, Sections, Sink);
-
-		// Graphs, paired by path under the Blueprint as SBlueprintDiff pairs them.
 		TArray<UEdGraph*> GraphsA, GraphsB;
 		A->GetAllGraphs(GraphsA);
 		B->GetAllGraphs(GraphsB);
@@ -1195,7 +1513,15 @@ namespace
 		for (UEdGraph* G : GraphsA) { FString P; G->GetPathName(A, P); Pairs.FindOrAdd(P).Key = G; }
 		for (UEdGraph* G : GraphsB) { FString P; G->GetPathName(B, P); Pairs.FindOrAdd(P).Value = G; }
 		Pairs.KeySort(TLess<FString>());
-		for (const TPair<FString, TPair<UEdGraph*, UEdGraph*>>& Pair : Pairs)
+		return Pairs;
+	}
+
+	/** The Blueprint diff, SBlueprintDiff's categories in its order. True when the type's own diff ran (CkDiffBlueprintType). */
+	bool CkDiffBlueprint(UBlueprint* A, UBlueprint* B, const FCkDiffNames& Names, TArray<TSharedPtr<FJsonValue>>& Sections, FCkDiffSink& Sink)
+	{
+		const bool bTypeDiff = CkDiffBlueprintType(A, B, Names, Sections, Sink);
+
+		for (const TPair<FString, TPair<UEdGraph*, UEdGraph*>>& Pair : CkDiffGraphPairs(A, B))
 		{
 			UEdGraph* Old = Pair.Value.Key;
 			UEdGraph* New = Pair.Value.Value;
@@ -1398,6 +1724,246 @@ namespace
 		CkDiffAddPropertySection(Sections, TEXT("Properties (against class defaults)"), TEXT("DiffUtils::CompareUnrelatedObjects"), Records, Hidden);
 	}
 
+	/** Graph picture size in pixels: wide, as a graph region is. */
+	constexpr int32 CkDiffGraphPictureWidth = 768;
+	constexpr int32 CkDiffGraphPictureHeight = 432;
+	/** Frames drawn so the panel builds its node widgets, measures them and settles its zoom. */
+	constexpr int32 CkDiffGraphPictureFrames = 12;
+	/** SGraphEditor's view location type: Slate positions are floats from 5.6. */
+#if ENGINE_MAJOR_VERSION > 5 || (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 6)
+	using FCkDiffGraphViewVector = FVector2f;
+#else
+	using FCkDiffGraphViewVector = FVector2D;
+#endif
+
+	/** Whether every section is a graph section, so the Blueprint's class picture cannot show what changed. */
+	bool CkDiffOnlyGraphs(const TArray<TSharedPtr<FJsonValue>>& Sections)
+	{
+		if (Sections.Num() == 0) return false;
+		for (const TSharedPtr<FJsonValue>& S : Sections)
+		{
+			const TSharedPtr<FJsonObject>* O = nullptr;
+			if (!S.IsValid() || !S->TryGetObject(O) || (*O)->GetStringField(TEXT("kind")) != TEXT("graph")) return false;
+		}
+		return true;
+	}
+
+	/** The graph with the most differences between two Blueprint versions, and the engine's diff of it. */
+	struct FCkDiffGraphFocus
+	{
+		UEdGraph* Old = nullptr;
+		UEdGraph* New = nullptr;
+		FString Label;
+		TSharedPtr<TArray<FDiffSingleResult>> Results;
+		int32 Count = 0;
+	};
+
+	FCkDiffGraphFocus CkDiffFocusGraph(UBlueprint* A, UBlueprint* B)
+	{
+		FCkDiffGraphFocus Best;
+		for (const TPair<FString, TPair<UEdGraph*, UEdGraph*>>& Pair : CkDiffGraphPairs(A, B))
+		{
+			UEdGraph* Old = Pair.Value.Key;
+			UEdGraph* New = Pair.Value.Value;
+			if (!CkDiffGraphNeeded(Old ? Old : New)) continue;
+			TSharedPtr<TArray<FDiffSingleResult>> Results = MakeShared<TArray<FDiffSingleResult>>();
+			int32 Count = 0;
+			if (Old && New)
+			{
+				FGraphDiffControl::DiffGraphs(Old, New, *Results);
+				for (const FDiffSingleResult& R : *Results)
+				{
+					if (R.IsRealDifference()) ++Count;
+				}
+			}
+			else
+			{
+				Count = (Old ? Old : New)->Nodes.Num();
+			}
+			if (Count > Best.Count)
+			{
+				Best.Old = Old;
+				Best.New = New;
+				Best.Label = CkDiffGraphLabel(New ? New : Old);
+				Best.Results = Results;
+				Best.Count = Count;
+			}
+		}
+		return Best;
+	}
+
+	/** The nodes of Graph a difference names, directly or through one of its pins. */
+	TArray<UEdGraphNode*> CkDiffChangedNodes(const UEdGraph* Graph, const TArray<FDiffSingleResult>& Results)
+	{
+		TArray<UEdGraphNode*> Out;
+		auto Add = [&Out, Graph](UEdGraphNode* Node)
+		{
+			if (Node && Node->GetGraph() == Graph) Out.AddUnique(Node);
+		};
+		for (const FDiffSingleResult& R : Results)
+		{
+			if (!R.IsRealDifference()) continue;
+			Add(R.Node1);
+			Add(R.Node2);
+			if (R.Pin1) Add(R.Pin1->GetOwningNodeUnchecked());
+			if (R.Pin2) Add(R.Pin2->GetOwningNodeUnchecked());
+		}
+		return Out;
+	}
+
+	/**
+	 * One version of a graph drawn as Unreal's Blueprint diff panel draws it: an SGraphEditor on
+	 * the graph with the engine's diff results, which it highlights, rendered offscreen with
+	 * FWidgetRenderer. Focus nodes are selected, so they are outlined as well. With no view given
+	 * the panel zooms to fit the selection (the whole graph when nothing is selected) and hands
+	 * back the view it settled on, so the other version is drawn from the same camera.
+	 */
+	bool CkDiffRenderGraph(UEdGraph* Graph, const TSharedPtr<TArray<FDiffSingleResult>>& Results, const TArray<UEdGraphNode*>& Focus,
+		TOptional<TPair<FCkDiffGraphViewVector, float>>& View, FObjectThumbnail& Out, FString& OutError)
+	{
+		if (!FApp::CanEverRender() || !FSlateApplication::IsInitialized() || !FSlateApplication::Get().GetRenderer())
+		{
+			OutError = TEXT("the editor runs without rendering, so the graph cannot be drawn");
+			return false;
+		}
+		const FVector2D Size(CkDiffGraphPictureWidth, CkDiffGraphPictureHeight);
+		UTextureRenderTarget2D* Target = FWidgetRenderer::CreateTargetFor(Size, TF_Bilinear, /*bUseGammaCorrection*/ true);
+		if (!Target)
+		{
+			OutError = TEXT("no render target could be made for the graph");
+			return false;
+		}
+		Target->AddToRoot();
+		FWidgetRenderer* Renderer = new FWidgetRenderer(/*bUseGammaCorrection*/ true, /*bInClearTarget*/ true);
+		bool bRead = false;
+		TArray<FColor> Pixels;
+		{
+			TSharedRef<SGraphEditor> Editor = SNew(SGraphEditor)
+				.GraphToEdit(Graph)
+				.DiffResults(Results)
+				.IsEditable(false)
+				.ShowGraphStateOverlay(false);
+			TSharedRef<SVirtualWindow> Window = SNew(SVirtualWindow).Size(Size);
+			Window->SetContent(Editor);
+			Window->Resize(Size);
+			FHittestGrid HitTestGrid;
+			auto Draw = [&](int32 Frames)
+			{
+				for (int32 I = 0; I < Frames; ++I) Renderer->DrawWindow(Target, HitTestGrid, Window, 1.f, Size, 0.5f);
+			};
+			// The first frame builds the node widgets; the selection and the view are set on them.
+			Draw(1);
+			for (UEdGraphNode* Node : Focus) Editor->SetNodeSelection(Node, true);
+			if (View.IsSet())
+			{
+				Editor->SetViewLocation(View->Key, View->Value);
+			}
+			else
+			{
+				Editor->ZoomToFit(/*bOnlySelection*/ Focus.Num() > 0);
+			}
+			Draw(CkDiffGraphPictureFrames);
+			if (!View.IsSet())
+			{
+				FCkDiffGraphViewVector Location;
+				float Zoom = 1.f;
+				Editor->GetViewLocation(Location, Zoom);
+				View = TPair<FCkDiffGraphViewVector, float>(Location, Zoom);
+			}
+			FlushRenderingCommands();
+			if (FTextureRenderTargetResource* Resource = Target->GameThread_GetRenderTargetResource())
+			{
+				bRead = Resource->ReadPixels(Pixels);
+			}
+			Window->SetContent(SNullWidget::NullWidget);
+		}
+		BeginCleanup(Renderer);
+		Target->RemoveFromRoot();
+		if (!bRead || Pixels.Num() != CkDiffGraphPictureWidth * CkDiffGraphPictureHeight)
+		{
+			OutError = TEXT("the graph was drawn but its pixels could not be read back");
+			return false;
+		}
+		// The panel background is opaque; the target's alpha is whatever Slate composited, so it is dropped.
+		for (FColor& P : Pixels) P.A = 255;
+		Out.SetImageSize(CkDiffGraphPictureWidth, CkDiffGraphPictureHeight);
+		TArray<uint8>& Data = Out.AccessImageData();
+		Data.SetNumUninitialized(Pixels.Num() * sizeof(FColor));
+		FMemory::Memcpy(Data.GetData(), Pixels.GetData(), Data.Num());
+		return true;
+	}
+
+	/**
+	 * Pictures of a Blueprint change made only in graphs (#1569): the graph with the most
+	 * differences, drawn for each version from one camera framed on the nodes those differences
+	 * name. Written to before.graphPicture and after.graphPicture, each with its file and graph,
+	 * or the reason there is no picture.
+	 */
+	void CkDiffGraphPictures(UBlueprint* A, UBlueprint* B, const FString& FromFile, const FString& ToFile, const TSharedPtr<FJsonObject>& Result)
+	{
+		const FCkDiffGraphFocus Focus = CkDiffFocusGraph(A, B);
+		if (!Focus.Results.IsValid() || Focus.Count == 0) return;
+
+		// A node keeps its GUID across versions, so a change named on either side frames both.
+		TSet<FGuid> Guids;
+		if (Focus.Old) for (const UEdGraphNode* N : CkDiffChangedNodes(Focus.Old, *Focus.Results)) Guids.Add(N->NodeGuid);
+		if (Focus.New) for (const UEdGraphNode* N : CkDiffChangedNodes(Focus.New, *Focus.Results)) Guids.Add(N->NodeGuid);
+		auto FocusOf = [&Guids](UEdGraph* Graph)
+		{
+			TArray<UEdGraphNode*> Nodes;
+			if (!Graph) return Nodes;
+			for (UEdGraphNode* N : Graph->Nodes)
+			{
+				if (N && Guids.Contains(N->NodeGuid)) Nodes.Add(N);
+			}
+			return Nodes;
+		};
+
+		struct FSide
+		{
+			const TCHAR* Field;
+			UEdGraph* Graph;
+			TArray<UEdGraphNode*> Nodes;
+			FString File;
+		};
+		FSide Before{ TEXT("before"), Focus.Old, FocusOf(Focus.Old), FromFile };
+		FSide After{ TEXT("after"), Focus.New, FocusOf(Focus.New), ToFile };
+		// The camera is set on the version holding more of the changed nodes, then reused for the other.
+		FSide* Order[2] = { &After, &Before };
+		if (!Focus.New || Before.Nodes.Num() > After.Nodes.Num()) Swap(Order[0], Order[1]);
+
+		TOptional<TPair<FCkDiffGraphViewVector, float>> View;
+		for (FSide* Side : Order)
+		{
+			const TSharedPtr<FJsonObject>* SideJson = nullptr;
+			if (Side->File.IsEmpty() || !Result->TryGetObjectField(Side->Field, SideJson)) continue;
+			TSharedPtr<FJsonObject> Pic = MakeShared<FJsonObject>();
+			Pic->SetStringField(TEXT("graph"), Focus.Label);
+			FString Error;
+			if (!Side->Graph)
+			{
+				Error = FString::Printf(TEXT("the version %s has no graph %s: the change %s it"), Side->Field, *Focus.Label,
+					Side == &Before ? TEXT("added") : TEXT("removed"));
+			}
+			else
+			{
+				FObjectThumbnail Thumb;
+				FString Why;
+				if (CkDiffRenderGraph(Side->Graph, Focus.Results, Side->Nodes, View, Thumb, Why) && CkDiffWritePng(Thumb, Side->File, Why))
+				{
+					Pic->SetStringField(TEXT("file"), Side->File);
+					Pic->SetNumberField(TEXT("changedNodes"), Side->Nodes.Num());
+				}
+				else
+				{
+					Error = FString::Printf(TEXT("the graph %s could not be drawn: %s"), *Focus.Label, *Why);
+				}
+			}
+			if (!Error.IsEmpty()) Pic->SetStringField(TEXT("error"), Error);
+			(*SideJson)->SetObjectField(TEXT("graphPicture"), Pic);
+		}
+	}
+
 	void CkDiffUnload(TArray<UPackage*>& Packages)
 	{
 		if (Packages.Num() == 0) return;
@@ -1458,8 +2024,17 @@ TSharedPtr<FJsonValue> FDiffHandlers::DiffCheckpointAssetOne(const TSharedPtr<FJ
 	if (TSharedPtr<FJsonValue> Err = RequireString(Params, TEXT("originalFile"), OriginalFile)) return Err;
 	const FString FromFile = OptionalString(Params, TEXT("fromFile"), FString());
 	const FString ToFile = OptionalString(Params, TEXT("toFile"), FString());
-	const FString FromThumbnail = OptionalString(Params, TEXT("fromThumbnail"), FString());
-	const FString ToThumbnail = OptionalString(Params, TEXT("toThumbnail"), FString());
+	FString FromThumbnail = OptionalString(Params, TEXT("fromThumbnail"), FString());
+	FString ToThumbnail = OptionalString(Params, TEXT("toThumbnail"), FString());
+	FString FromGraphPicture = OptionalString(Params, TEXT("fromGraphPicture"), FString());
+	FString ToGraphPicture = OptionalString(Params, TEXT("toGraphPicture"), FString());
+	for (FString* Picture : { &FromThumbnail, &ToThumbnail, &FromGraphPicture, &ToGraphPicture })
+	{
+		if (Picture->IsEmpty()) continue;
+		FString Resolved;
+		if (auto Err = MCPRequireWritablePath(*Picture, Resolved)) return Err;
+		*Picture = Resolved;
+	}
 	const int32 MaxRecords = FMath::Clamp(OptionalInt(Params, TEXT("maxRecords"), 2000), 1, 20000);
 	if (FromFile.IsEmpty() && ToFile.IsEmpty()) return MCPError(TEXT("fromFile or toFile is required: the versions to compare"));
 
@@ -1529,14 +2104,18 @@ TSharedPtr<FJsonValue> FDiffHandlers::DiffCheckpointAssetOne(const TSharedPtr<FJ
 		if (!NativeReason.IsEmpty()) E->SetStringField(TEXT("nativeReason"), NativeReason);
 		Result->SetObjectField(TEXT("engine"), E);
 	}
-	if (A.Package) Result->SetObjectField(TEXT("before"), CkDiffSideJson(A, FromFile, PackageName, FromThumbnail));
+	// A level's pictures are drawn after the diff, framed on the actors it found changed.
+	const bool bLevelA = Cast<UWorld>(A.Asset) != nullptr;
+	const bool bLevelB = Cast<UWorld>(B.Asset) != nullptr;
+	if (A.Package) Result->SetObjectField(TEXT("before"), CkDiffSideJson(A, FromFile, PackageName, FromThumbnail, bLevelA));
 	else Result->SetField(TEXT("before"), MakeShared<FJsonValueNull>());
-	if (B.Package) Result->SetObjectField(TEXT("after"), CkDiffSideJson(B, ToFile, PackageName, ToThumbnail));
+	if (B.Package) Result->SetObjectField(TEXT("after"), CkDiffSideJson(B, ToFile, PackageName, ToThumbnail, bLevelB));
 	else Result->SetField(TEXT("after"), MakeShared<FJsonValueNull>());
 
 	FCkDiffSink Sink;
 	Sink.Max = MaxRecords;
 	TArray<TSharedPtr<FJsonValue>> Sections;
+	TSet<FName> ChangedActors;
 
 	if (A.Package && B.Package)
 	{
@@ -1552,6 +2131,11 @@ TSharedPtr<FJsonValue> FDiffHandlers::DiffCheckpointAssetOne(const TSharedPtr<FJ
 			// Says the type's own diff (the widget tree of a Widget Blueprint) was compared, so a reader can
 			// tell "no difference" from "not compared".
 			Result->GetObjectField(TEXT("engine"))->SetBoolField(TEXT("blueprintTypeDiff"), bTypeDiff);
+			// A change made only in graphs looks the same in the class picture before and after, so the graph is drawn.
+			if (CkDiffOnlyGraphs(Sections) && (!FromGraphPicture.IsEmpty() || !ToGraphPicture.IsEmpty()))
+			{
+				CkDiffGraphPictures(BPA, BPB, FromGraphPicture, ToGraphPicture, Result);
+			}
 			TSharedPtr<FJsonValue> Semantic = DiffBlueprintObjects(BPA, BPB, PackageName, PackageName);
 			if (Semantic.IsValid() && Semantic->Type == EJson::Object)
 			{
@@ -1587,7 +2171,7 @@ TSharedPtr<FJsonValue> FDiffHandlers::DiffCheckpointAssetOne(const TSharedPtr<FJ
 		}
 		else if (Cast<UWorld>(A.Asset) || Cast<UWorld>(B.Asset) || bActorPackage)
 		{
-			CkDiffActorsSection(A.Asset, A.Package, B.Asset, B.Package, Names, Sections, Sink);
+			CkDiffActorsSection(A.Asset, A.Package, B.Asset, B.Package, Names, Sections, Sink, &ChangedActors);
 		}
 		else
 		{
@@ -1602,6 +2186,11 @@ TSharedPtr<FJsonValue> FDiffHandlers::DiffCheckpointAssetOne(const TSharedPtr<FJ
 		// One version: what it is, through the details diff against its defaults.
 		const FCkDiffSide& Only = A.Package ? A : B;
 		if (Only.Asset && !Only.Asset->IsA<UWorld>()) CkDiffAgainstDefaults(Only.Asset, Names, Sections, Sink);
+	}
+
+	if (bLevelA || bLevelB)
+	{
+		CkDiffLevelPictures(A, B, ChangedActors, FromFile, ToFile, PackageName, FromThumbnail, ToThumbnail, Result);
 	}
 
 	int32 Count = 0;
@@ -1635,12 +2224,17 @@ TSharedPtr<FJsonValue> FDiffHandlers::OpenCheckpointNativeDiff(const TSharedPtr<
 	}
 	const FPackagePath OriginalPath = FPackagePath::FromLocalPath(OriginalFile);
 
-	// The packages stay loaded while the window shows them; their files are released for the caller to delete.
+	// The packages loaded from files stay loaded while the window shows them and are unloaded when it
+	// closes (#1483); their files are released for the caller to delete.
+	TArray<UPackage*> Temp;
+	bool bKeep = false;
+	ON_SCOPE_EXIT { if (!bKeep) MCPDiffPackage::Unload(Temp); };
 	UObject* Old = nullptr;
 	UObject* New = nullptr;
 	if (!FromFile.IsEmpty())
 	{
 		FCkDiffSide Side = CkDiffLoad(FromFile, OriginalPath);
+		if (Side.Package) Temp.Add(Side.Package);
 		if (!Side.Error.IsEmpty()) return MCPError(FString::Printf(TEXT("The version before: %s"), *Side.Error));
 		ResetLoaders(Side.Package);
 		Old = Side.Asset;
@@ -1653,6 +2247,7 @@ TSharedPtr<FJsonValue> FDiffHandlers::OpenCheckpointNativeDiff(const TSharedPtr<
 	else if (!ToFile.IsEmpty())
 	{
 		FCkDiffSide Side = CkDiffLoad(ToFile, OriginalPath);
+		if (Side.Package) Temp.Add(Side.Package);
 		if (!Side.Error.IsEmpty()) return MCPError(FString::Printf(TEXT("The version after: %s"), *Side.Error));
 		ResetLoaders(Side.Package);
 		New = Side.Asset;
@@ -1676,6 +2271,13 @@ TSharedPtr<FJsonValue> FDiffHandlers::OpenCheckpointNativeDiff(const TSharedPtr<
 		}
 		Result->SetStringField(TEXT("opened"), TEXT("editor"));
 		Result->SetStringField(TEXT("version"), Old ? TEXT("before") : TEXT("after"));
+		if (Temp.Contains(Only->GetOutermost()))
+		{
+			MCPDiffPackage::KeepUntilEditorCloses(Only);
+			bKeep = true;
+			Result->SetBoolField(TEXT("unloadsOnClose"), true);
+			Result->SetArrayField(TEXT("tempPackages"), MCPDiffPackage::PackageNames(Temp));
+		}
 	}
 	else
 	{
@@ -1726,6 +2328,13 @@ TSharedPtr<FJsonValue> FDiffHandlers::OpenCheckpointNativeDiff(const TSharedPtr<
 	}
 	if (Window.IsValid())
 	{
+		if (Result->GetStringField(TEXT("opened")) == TEXT("window") && Temp.Num())
+		{
+			MCPDiffPackage::KeepUntilClosed(Window.ToSharedRef(), Temp);
+			bKeep = true;
+			Result->SetBoolField(TEXT("unloadsOnClose"), true);
+			Result->SetArrayField(TEXT("tempPackages"), MCPDiffPackage::PackageNames(Temp));
+		}
 		Window->BringToFront(true);
 		if (TSharedPtr<FGenericWindow> Native = Window->GetNativeWindow()) Native->HACK_ForceToFront();
 		Result->SetStringField(TEXT("windowTitle"), Window->GetTitle().ToString());

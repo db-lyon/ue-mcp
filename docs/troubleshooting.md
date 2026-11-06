@@ -65,6 +65,15 @@ launching 0s -> loading modules and plugins 0.8s -> config init 1.8s
 
 There is no need to poll during or after it.
 
+### start_editor stops at the "modules are missing, rebuild?" prompt
+
+**Symptom:** `editor(start_editor)` returns early saying the editor is stopped at the engine's rebuild prompt, before the bridge loads.
+
+The reason names each missing module and who owns it:
+
+- **A project module or project plugin module** is reported as `Not built: <Module>`. Build with `project(build)`, fix what it reports, then answer the prompt or stop the editor.
+- **A module of an engine plugin** (its `.uplugin` sits under the engine's `Engine/Plugins` folder) is reported with the plugin name and its `.uplugin` path. A project build cannot compile it. Verify the engine install in the Epic Games Launcher, or disable that plugin for the project by adding `{"Name": "<Plugin>", "Enabled": false}` to the `Plugins` array of the `.uproject`, then start the editor again.
+
 ### A call timed out: did it happen or not?
 
 **Symptom:** a mutating call such as `widget(add_widget)` returns `timed out after 30s`, and reading the asset back shows the change is already there and saved.
@@ -283,8 +292,7 @@ effective (npx):1.0.64  (behind latest 1.0.76)
 
 With `ue-mcp` in the project's `package.json`, `npx ue-mcp` runs the local copy, so `npm i -g ue-mcp@latest` updates a copy npx never uses. Fixes:
 
-- `npx ue-mcp update` aligns the local copy, or
-- remove `ue-mcp` from the project's `package.json` and delete `node_modules/ue-mcp`, or
+- run `npm uninstall ue-mcp` in the project folder (`ue-mcp update` never installs there), or
 - launch with `npx -y --min-release-age=0 ue-mcp@latest` in the client config, so every launch fetches the current release.
 
 Then quit and relaunch your MCP client.
@@ -403,3 +411,7 @@ editor(action="search_log", query="error")
 ### Server and daemon logs
 
 The server writes to stderr, which your MCP client stores in its own log. The daemon writes `~/.ue-mcp/daemons/<key>.log`. Set `UE_MCP_LOG_LEVEL=debug` for more.
+
+### Editor refuses to close on the Entry map
+
+A dirty `/Engine/Maps/Entry` package can leave the editor at a Save Content prompt even though that startup map cannot be saved as project content. Use `editor(stop_editor, discardTransient=true)` to preflight and clear transient or engine map dirty flags before shutdown; project content remains protected.

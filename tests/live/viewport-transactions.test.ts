@@ -95,6 +95,39 @@ describe("set_view_mode", () => {
   });
 });
 
+describe("set_buffer_visualization", () => {
+  it("shows the Velocity buffer on a level viewport and returns to Lit", async () => {
+    const shown = resultJson<{ buffer?: string; viewMode?: string; applied?: boolean; availableBuffers?: string[]; rollback?: unknown }>(
+      await call("editor", { action: "set_buffer_visualization", buffer: "velocity" }),
+    );
+    expect(shown.availableBuffers).toContain("Velocity");
+    expect(shown.buffer).toBe("Velocity");
+    expect(shown.applied).toBe(true);
+    expect(shown.viewMode).toBe("VisualizeBuffer");
+    expect((await state()).viewMode).toBe("VisualizeBuffer");
+
+    const again = resultJson<{ unchanged?: boolean }>(
+      await call("editor", { action: "set_buffer_visualization", buffer: "Velocity" }),
+    );
+    expect(again.unchanged).toBe(true);
+
+    const off = resultJson<{ buffer?: string; previousBuffer?: string; viewMode?: string }>(
+      await call("editor", { action: "set_buffer_visualization", buffer: "off" }),
+    );
+    expect(off.previousBuffer).toBe("Velocity");
+    expect(off.buffer).toBe("");
+    expect(off.viewMode).toBe("Lit");
+  });
+
+  it("refuses an unknown buffer by listing the real ones", async () => {
+    const body = resultJson<{ success: boolean; availableBuffers?: string[] }>(
+      await call("editor", { action: "set_buffer_visualization", buffer: "NotABuffer" }),
+    );
+    expect(body.success).toBe(false);
+    expect(body.availableBuffers).toContain("SceneDepth");
+  });
+});
+
 describe("set_viewport_exposure", () => {
   it("pins a fixed EV100, which is what makes two captures comparable", async () => {
     const body = resultJson<{ exposure?: { fixed?: boolean; ev100?: number } }>(

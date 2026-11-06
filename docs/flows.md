@@ -44,7 +44,7 @@ The response carries a `summary` line per step, a `steps` array with what each s
 
 ## Tasks
 
-Every action is a task named `<category>.<action>`: `level.place_actor`, `asset.list`, `project.build`. There are <!-- count:actions -->2114+<!-- /count --> across <!-- count:tools -->30<!-- /count --> categories. A few more are built in:
+Every action is a task named `<category>.<action>`: `level.place_actor`, `asset.list`, `project.build`. There are <!-- count:actions -->2163+<!-- /count --> across <!-- count:tools -->30<!-- /count --> categories. A few more are built in:
 
 | Task | What it does |
 |------|--------------|
@@ -76,6 +76,33 @@ tasks:
 | `options_schema` | Declared options (`type`, `required`, `default`, `enum`, `minimum` and the other JSON Schema keywords). Step options are validated against it before the task runs. |
 
 `class_path: ue-mcp.bridge` calls a bridge method directly. The `method` option names it and the other options are sent as its parameters.
+
+### A project script as a named task
+
+A Python script the project keeps under `Tools/` becomes a named task through `editor.run_python_file`. A relative `filePath` is resolved against the project directory, so the same `ue-mcp.yml` works on every machine. `entryPoint` calls one function in the script without firing its `__main__` guard, and its return value comes back as `result`.
+
+```yaml
+tasks:
+  import_blender_anims:
+    class_path: editor.run_python_file
+    description: Import Blender FBX animations with the project's import script
+    options:
+      filePath: Tools/BlenderMCP/unreal/import_assets.py
+      entryPoint: import_animations
+
+flows:
+  import_blender_anims:
+    description: Import and register the latest Blender animations
+    steps:
+      1:
+        task: import_blender_anims
+```
+
+```
+flow(action="run", flowName="import_blender_anims", params={ kwargs: { skeleton: "/Game/Characters/SK_Hero_Skeleton" } })
+```
+
+`kwargs` are the function's keyword arguments and `args` its positional ones. For a plain FBX animation import, `asset(import_animation)` does it natively: `skeletonPath`, `packagePath`, a batch through `filePaths`, any FBX import setting through `importSettings`, and a readback of every AnimSequence it created.
 
 ## Steps
 
@@ -328,6 +355,26 @@ A parameter is an input when at least one step that reads it leaves it unset. A 
 
 Required inputs come first. A param every step sets can still be overridden at run time; `inputs` lists only what the flow leaves open.
 
+### From a terminal
+
+`ue-mcp flow` runs the flow engine in its own process against the project in the working directory. No server, daemon or HTTP surface is needed.
+
+```bash
+npx ue-mcp flow list                    # every flow this project can run
+npx ue-mcp flow plan setup_scene        # the steps and inputs, nothing runs
+npx ue-mcp flow run setup_scene --param name=Arena --skip 3
+```
+
+| Flag | Meaning |
+|------|---------|
+| `--param key=value` | `run`: a runtime param for every step. Repeatable. A value that parses as JSON is passed as that JSON. |
+| `--skip <step>` | `run`: a step number or task name to skip. Repeatable. |
+| `--rollback-on-failure` | `run`: replay the collected inverses when a step fails. |
+| `--editor <name-or-path>` | Target a registered editor or another project instead of the working directory. |
+| `--json` | Print the flow tool's JSON result and nothing else. |
+
+`run` prints each step as it starts and finishes, then the run summary. It exits 1 when the flow fails or is not found, and 2 for a usage error.
+
 ## HTTP and live events
 
 Turn on the flow HTTP server in `ue-mcp.yml`:
@@ -352,6 +399,10 @@ The server logs its bearer token to stderr at startup, or uses `UE_MCP_HTTP_TOKE
 | `GET /health` | `{ ok, port, host }`. |
 
 The daemon serves the same flow routes under `/v1` (for example `GET /v1/flows/<name>/plan`).
+
+### Approving each step
+
+A daemon extension can approve or deny each step as it runs (feature `flows.stepApproval`, on `/v1/health` and the extension API). The extension registers an approver with `api.flows.approveSteps(approver)`. A run that names it in the body, `POST /v1/flows/<name>/run` with `stepApproval: { approver: "<extension name>", token }`, asks it before every task, with the task name, its resolved options, the phase and the token. A denied task fails as that step's error without running, and the run stops unless the step has `ignore_failure`. Rollback tasks are never asked. A run naming an approver that is not registered fails its first step instead of running unapproved.
 
 ```bash
 curl --no-buffer -H "Authorization: Bearer $TOKEN" http://127.0.0.1:7723/flows/events

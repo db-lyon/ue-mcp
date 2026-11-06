@@ -32,6 +32,11 @@
 #include "Engine/EngineBaseTypes.h"
 #include "LevelEditorViewport.h"
 #include "UnrealClient.h"
+#include "BufferVisualizationData.h"
+#include "Engine/Engine.h"
+#include "Engine/GameViewportClient.h"
+#include "HAL/IConsoleManager.h"
+#include "ShowFlags.h"
 #if UE_MCP_HAS_5_7_API
 // FEditorViewportCameraSpeedSettings and the Get/SetCameraSpeedSettings pair
 // arrived in 5.7; the integer speed-setting + scalar API they replaced is
@@ -527,6 +532,252 @@ TSharedPtr<FJsonValue> FEditorHandlers::SetViewMode(const TSharedPtr<FJsonObject
 		Payload->SetNumberField(TEXT("viewportIndex"), Target.Index);
 	}
 	MCPSetRollback(Result, TEXT("set_view_mode"), Payload);
+	return MCPResult(Result);
+}
+
+// ---------------------------------------------------------------------------
+// set_buffer_visualization -- show one GBuffer or scene buffer (Velocity,
+// SceneDepth, BaseColor, ...) full screen, on a level viewport or the running
+// game's viewport (#1645). set_view_mode could select VisualizeBuffer but not
+// which buffer, so a velocity or motion-vector view was out of reach. A game
+// viewport reads its buffer from r.BufferVisualizationTarget every frame
+// (UGameViewportClient::Draw), so the PIE path writes that variable; a level
+// viewport keeps its own buffer name and never reads it.
+// ---------------------------------------------------------------------------
+namespace
+{
+	/** Every buffer this engine's BufferVisualizationMaterials list defines, sorted. */
+	TArray<FString> MCPViewportCtlBufferNames()
+	{
+		struct FCollector
+		{
+			TArray<FString> Names;
+			void ProcessValue(const FString& InName, UMaterialInterface* /*Material*/, const FText& /*DisplayName*/)
+			{
+				Names.AddUnique(InName);
+			}
+		} Collector;
+		GetBufferVisualizationData().IterateOverAvailableMaterials(Collector);
+		Collector.Names.Sort();
+		return Collector.Names;
+	}
+
+	/** The buffer a level viewport is showing, or empty when it is not in VisualizeBuffer. */
+	FString MCPViewportCtlCurrentBuffer(const FLevelEditorViewportClient* Client)
+	{
+		if (!Client || Client->GetViewMode() != VMI_VisualizeBuffer) return FString();
+		for (const FString& Name : MCPViewportCtlBufferNames())
+		{
+			if (Client->IsBufferVisualizationModeSelected(FName(*Name))) return Name;
+		}
+		return TEXT("Overview");
+	}
+
+	/** Put a game viewport into a view mode the way its viewmode console command does. */
+	void MCPViewportCtlSetGameViewMode(UGameViewportClient* GameViewport, int32 Mode)
+	{
+#if UE_MCP_HAS_5_6_API
+		GameViewport->SetViewMode(static_cast<EViewModeIndex>(Mode));
+#else
+		// UGameViewportClient::SetViewMode arrived in 5.6.
+		GameViewport->ViewModeIndex = Mode;
+		ApplyViewMode(static_cast<EViewModeIndex>(Mode), true, *GameViewport->GetEngineShowFlags());
+#endif
+	}
+}
+
+TSharedPtr<FJsonValue> FEditorHandlers::SetBufferVisualization(const TSharedPtr<FJsonObject>& Params)
+{
+	// Every parameter is read before anything can refuse (#1057).
+	FString Requested;
+	if (TSharedPtr<FJsonValue> Missing = RequireString(Params, TEXT("buffer"), Requested))
+	{
+		return Missing;
+	}
+	const FString TargetKind = OptionalString(Params, TEXT("target"), TEXT("editor")).ToLower();
+	const FString OffViewModeName = OptionalString(Params, TEXT("viewMode"), TEXT("Lit"));
+	int32 PIEInstance = INDEX_NONE;
+	double RawPIEInstance = 0.0;
+	const bool bHasPIEInstance = TryGetNumberParam(Params, TEXT("pieInstance"), RawPIEInstance);
+	if (bHasPIEInstance) PIEInstance = FMath::RoundToInt(RawPIEInstance);
+	const bool bHasViewportIndex = Params.IsValid() && HasParam(Params, TEXT("viewportIndex"));
+	if (bHasViewportIndex) MCPNoteParamRead(Params, TEXT("viewportIndex"));
+
+	if (TargetKind != TEXT("editor") && TargetKind != TEXT("pie"))
+	{
+		return MCPError(FString::Printf(TEXT("Unknown target '%s'. Use editor (a level viewport) or pie (the running game's viewport)."), *TargetKind));
+	}
+
+	Requested.TrimStartAndEndInline();
+	const bool bOff = Requested.Equals(TEXT("off"), ESearchCase::IgnoreCase) || Requested.Equals(TEXT("none"), ESearchCase::IgnoreCase);
+	const bool bOverview = Requested.Equals(TEXT("Overview"), ESearchCase::IgnoreCase);
+	const TArray<FString> Available = MCPViewportCtlBufferNames();
+	FString BufferName;
+	if (!bOff && !bOverview)
+	{
+		for (const FString& Name : Available)
+		{
+			if (Name.Equals(Requested, ESearchCase::IgnoreCase)) { BufferName = Name; break; }
+		}
+		if (BufferName.IsEmpty())
+		{
+			TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
+			Obj->SetBoolField(TEXT("success"), false);
+			Obj->SetStringField(TEXT("error"), FString::Printf(
+				TEXT("Unknown buffer '%s'. This engine defines: %s. Overview shows the grid of all of them; off returns to viewMode (default Lit)."),
+				*Requested, *FString::Join(Available, TEXT(", "))));
+			Obj->SetStringField(TEXT("requested"), Requested);
+			Obj->SetArrayField(TEXT("availableBuffers"), MCPStringListToJson(Available));
+			return MakeShared<FJsonValueObject>(Obj);
+		}
+	}
+	else if (bOverview)
+	{
+		BufferName = TEXT("Overview");
+	}
+
+	int32 OffViewMode = static_cast<int32>(VMI_Lit);
+	if (bOff)
+	{
+		OffViewMode = MCPViewportCtlParseViewMode(OffViewModeName);
+		if (OffViewMode == INDEX_NONE || OffViewMode == static_cast<int32>(VMI_VisualizeBuffer))
+		{
+			return MCPError(FString::Printf(
+				TEXT("viewMode '%s' cannot end a buffer visualization. Pass a view mode get_viewport_state lists, other than VisualizeBuffer."),
+				*OffViewModeName));
+		}
+	}
+
+	TSharedPtr<FJsonObject> Result = MCPSuccess();
+	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+	Payload->SetStringField(TEXT("target"), TargetKind);
+	bool bChanged = false;
+
+	if (TargetKind == TEXT("editor"))
+	{
+		TSharedPtr<FJsonValue> Error;
+		const FMCPViewportCtlTarget Target = MCPViewportCtlResolveTarget(Params, Error);
+		if (!Target.Client) return Error;
+
+		const int32 PreviousMode = static_cast<int32>(Target.Client->GetViewMode());
+		const FString PreviousBuffer = MCPViewportCtlCurrentBuffer(Target.Client);
+		if (bOff)
+		{
+			if (PreviousMode != OffViewMode)
+			{
+				Target.Client->SetViewMode(static_cast<EViewModeIndex>(OffViewMode));
+				bChanged = true;
+			}
+		}
+		else if (PreviousBuffer != BufferName)
+		{
+			Target.Client->ChangeBufferVisualizationMode(bOverview ? NAME_None : FName(*BufferName));
+			bChanged = true;
+		}
+		if (bChanged) Target.Client->Invalidate();
+
+		const FString AppliedBuffer = MCPViewportCtlCurrentBuffer(Target.Client);
+		MCPViewportCtlWriteTargetFields(Target, Result);
+		Result->SetStringField(TEXT("previousViewMode"), MCPViewportCtlViewModeName(PreviousMode));
+		Result->SetStringField(TEXT("previousBuffer"), PreviousBuffer);
+		Result->SetStringField(TEXT("buffer"), AppliedBuffer);
+		Result->SetBoolField(TEXT("applied"), bOff ? AppliedBuffer.IsEmpty() : AppliedBuffer == BufferName);
+		MCPViewportCtlWriteState(Target.Client, Result);
+
+		if (PreviousBuffer.IsEmpty())
+		{
+			Payload->SetStringField(TEXT("buffer"), TEXT("off"));
+			Payload->SetStringField(TEXT("viewMode"), MCPViewportCtlViewModeName(PreviousMode));
+		}
+		else
+		{
+			Payload->SetStringField(TEXT("buffer"), PreviousBuffer);
+		}
+		if (FCString::Strcmp(Target.SelectedBy, TEXT("viewportIndex")) == 0)
+		{
+			Payload->SetNumberField(TEXT("viewportIndex"), Target.Index);
+		}
+	}
+	else
+	{
+		if (!GEngine) return MCPError(TEXT("Engine not available"));
+		TArray<UGameViewportClient*> GameViewports;
+		TArray<TSharedPtr<FJsonValue>> Instances;
+		for (const FWorldContext& Context : GEngine->GetWorldContexts())
+		{
+			if (Context.WorldType != EWorldType::PIE && Context.WorldType != EWorldType::Game) continue;
+			if (bHasPIEInstance && Context.PIEInstance != PIEInstance) continue;
+			UGameViewportClient* GameViewport = Context.GameViewport;
+			if (!GameViewport) continue;
+			GameViewports.Add(GameViewport);
+			Instances.Add(MakeShared<FJsonValueNumber>(Context.PIEInstance));
+		}
+		if (GameViewports.Num() == 0)
+		{
+			return MCPError(bHasPIEInstance
+				? FString::Printf(TEXT("No PIE world with a game viewport matched pieInstance=%d. See editor(list_pie_instances)."), PIEInstance)
+				: FString(TEXT("No PIE session with a game viewport is running. Start one with editor(play_in_editor).")));
+		}
+
+		IConsoleVariable* TargetVar = IConsoleManager::Get().FindConsoleVariable(FBufferVisualizationData::GetVisualizationTargetConsoleCommandName());
+		if (!TargetVar)
+		{
+			return MCPError(TEXT("r.BufferVisualizationTarget is not registered in this engine, so a game viewport cannot be told which buffer to show."));
+		}
+		const FString PreviousTarget = TargetVar->GetString();
+		const int32 PreviousMode = GameViewports[0]->ViewModeIndex;
+		const bool bWasVisualizing = PreviousMode == static_cast<int32>(VMI_VisualizeBuffer);
+		FString PreviousBuffer;
+		if (bWasVisualizing)
+		{
+			PreviousBuffer = (PreviousTarget.IsEmpty() || PreviousTarget.Equals(TEXT("None"), ESearchCase::IgnoreCase)) ? TEXT("Overview") : PreviousTarget;
+		}
+
+		if (!bOff)
+		{
+			const FString NewTarget = bOverview ? TEXT("Overview") : BufferName;
+			if (!PreviousTarget.Equals(NewTarget, ESearchCase::IgnoreCase))
+			{
+				TargetVar->Set(*NewTarget, ECVF_SetByCode);
+				bChanged = true;
+			}
+		}
+		const int32 WantedMode = bOff ? OffViewMode : static_cast<int32>(VMI_VisualizeBuffer);
+		for (UGameViewportClient* GameViewport : GameViewports)
+		{
+			if (GameViewport->ViewModeIndex != WantedMode)
+			{
+				MCPViewportCtlSetGameViewMode(GameViewport, WantedMode);
+				bChanged = true;
+			}
+		}
+
+		Result->SetArrayField(TEXT("pieInstances"), Instances);
+		Result->SetStringField(TEXT("previousViewMode"), MCPViewportCtlViewModeName(PreviousMode));
+		Result->SetStringField(TEXT("previousBuffer"), PreviousBuffer);
+		Result->SetStringField(TEXT("viewMode"), MCPViewportCtlViewModeName(GameViewports[0]->ViewModeIndex));
+		Result->SetStringField(TEXT("buffer"), bOff ? FString() : BufferName);
+		Result->SetStringField(TEXT("bufferVisualizationTarget"), TargetVar->GetString());
+		Result->SetBoolField(TEXT("applied"), GameViewports[0]->ViewModeIndex == WantedMode);
+		Result->SetStringField(TEXT("note"),
+			TEXT("A game viewport reads r.BufferVisualizationTarget each frame, and that console variable is shared by every PIE viewport. Capture the result with editor(capture_screenshot, target=pie)."));
+
+		if (bWasVisualizing)
+		{
+			Payload->SetStringField(TEXT("buffer"), PreviousBuffer);
+		}
+		else
+		{
+			Payload->SetStringField(TEXT("buffer"), TEXT("off"));
+			Payload->SetStringField(TEXT("viewMode"), MCPViewportCtlViewModeName(PreviousMode));
+		}
+		if (bHasPIEInstance) Payload->SetNumberField(TEXT("pieInstance"), PIEInstance);
+	}
+
+	Result->SetArrayField(TEXT("availableBuffers"), MCPStringListToJson(Available));
+	Result->SetBoolField(TEXT("unchanged"), !bChanged);
+	if (bChanged) MCPSetUpdated(Result);
+	MCPSetRollback(Result, TEXT("set_buffer_visualization"), Payload);
 	return MCPResult(Result);
 }
 

@@ -63,6 +63,31 @@ The <!-- count:nativeToolActions -->830<!-- /count --> actions that wrap Unreal'
 
 `before` hooks run in `order`, `after` hooks in reverse order. A denial stops the remaining `before` hooks and the call.
 
+## Letting a person override a denial
+
+`allowsOverride: true` turns a guard's denial into a question. When its `before` hook denies a call, ue-mcp asks the person who made the call through an MCP elicitation form instead of failing it:
+
+> Guard policy blocked blueprint(create): checked out by alice. Allow this call?
+
+```yaml
+guards:
+  policy:
+    scope: writes
+    allowsOverride: true
+    before:
+      class_path: guards/PolicyGuard
+```
+
+- **Allow this call** runs that one call. The next denial asks again.
+- **Allow for this session** runs it and lets the same action through this guard, on this editor, until ue-mcp restarts.
+- **Deny**, a declined or cancelled form, a client that does not advertise elicitation, or a form that fails all return the normal `WRITE_BLOCKED`.
+
+Only a deliberate denial is offered. A `before` hook that throws is still a denial with no question, because it never decided. A call from a daemon extension is put to that extension's own `elicit`, and an HTTP flow run has no person to ask, so it is denied.
+
+The form carries machine-readable fields under `_meta["ue-mcp/guard"]`, so a client can render it as its own card: `guard`, `method` (the bridge method), `subject` (the `category.action` asked for, when known), `call` (the label in the message), `reason` and `paths`. Each override is logged by the server under the `guard` component.
+
+Changing `allowsOverride` needs a restart of ue-mcp, like `scope` and `order`.
+
 ## Writing a guard
 
 Extend `UeMcpGuard` from `ue-mcp/guard` and implement `before`, `after`, or both. `this.config` is the declared `options`. `call` holds `phase`, `method`, `params`, `paths` (the existing files the call would modify, empty for a read) and `session`.
@@ -131,7 +156,7 @@ The `options` of guards declared in YAML reload when a config file changes. The 
 
 - Malformed YAML, an invalid declaration or a file read error keeps the last valid options and logs a warning. A read error is retried after five seconds.
 - Removing a layer, guard or hook keeps the last valid options until restart.
-- Adding or removing guards or hooks, or changing `class_path`, `scope` or `order`, needs a restart of ue-mcp. Until then the previous configuration stays and a warning is logged. Plugin manifest changes also need a restart.
+- Adding or removing guards or hooks, or changing `class_path`, `scope`, `order` or `allowsOverride`, needs a restart of ue-mcp. Until then the previous configuration stays and a warning is logged. Plugin manifest changes also need a restart.
 - At startup, an unreadable or malformed global file is ignored with a warning. An invalid project config stops startup.
 
 ## Source control

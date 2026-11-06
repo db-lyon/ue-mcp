@@ -1,11 +1,11 @@
 // @live-editor headless
 /**
  * Level actions that need a map of their own, run in scratch maps under /Game/MCPTest/BCov/Level: streaming
- * sub-levels and the current edit level, world settings, navmesh projection, exact-label deletes across maps
- * and World Partition actor descriptors. The map open before the file is reopened afterwards. Refs #1223.
+ * sub-levels and the current edit level, world settings, navmesh projection, exact-label deletes across maps,
+ * actor object renames and World Partition actor descriptors. The map open before the file is reopened afterwards. Refs #1223.
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { callBridge, disconnectBridge, getBridge, TEST_PREFIX, type TestResult } from "../setup.js";
+import { callBridge, disconnectBridge, discardDirtyTestPackages, getBridge, listDirtyPackages, TEST_PREFIX, type TestResult } from "../setup.js";
 import type { EditorBridge } from "../../src/bridge/bridge.js";
 
 const HOME = "/Game/MCP_Home";
@@ -15,7 +15,8 @@ const SUB = `${DIR}/${SUB_NAME}`;
 const PERSISTENT = `${DIR}/L_BCovLevel_Persistent`;
 const TARGET = `${DIR}/L_BCovLevel_Target`;
 const WP = `${DIR}/L_BCovLevel_WP`;
-const MAPS = [SUB, PERSISTENT, TARGET, WP];
+const RENAME = `${DIR}/L_BCovLevel_Rename`;
+const MAPS = [SUB, PERSISTENT, TARGET, WP, RENAME];
 const CUBE = "/Engine/BasicShapes/Cube.Cube";
 
 type Json = Record<string, unknown>;
@@ -154,8 +155,12 @@ describe("exact-label deletes across maps", () => {
     await cube("BCov_Level_DelMe", { x: 0, y: 0, z: 100 });
     await cube("BCov_Level_Keep", { x: 300, y: 0, z: 100 });
     await call("save_level");
-    // The action refuses while any package is dirty; earlier files in the run can leave some.
+    // The action refuses while any package is dirty, and this file shares its editor with every file before it.
+    // Their unsaved test assets and abandoned /Temp worlds are discarded rather than written into the project;
+    // anything else is saved. Nothing may be left dirty when the action runs (#1444).
+    await discardDirtyTestPackages(bridge, [TEST_PREFIX, "/Temp"]);
     await call("save_all_dirty", {});
+    expect(await listDirtyPackages(bridge)).toEqual([]);
   }, 300_000);
 
   it("delete_exact_labeled_actors_in_levels previews, then deletes and saves only the named actor", async () => {
@@ -172,6 +177,71 @@ describe("exact-label deletes across maps", () => {
     expect(await countLabelled("BCov_Level_DelMe")).toBe(0);
     expect(await countLabelled("BCov_Level_Keep")).toBe(1);
   }, 300_000);
+});
+
+describe("actor object renames", () => {
+  const A = "BCov_Level_RenameA";
+  const B = "BCov_Level_RenameB";
+  const C = "BCov_Level_RenameC";
+  const nameOf = async (label: string) => String((await call("get_actor_details", { actorLabel: label })).name);
+
+  beforeAll(async () => {
+    await openNewMap(RENAME);
+    await cube(A, { x: 0, y: 0, z: 100 });
+    await cube(B, { x: 300, y: 0, z: 100 });
+    await cube(C, { x: 600, y: 0, z: 100 });
+  }, 300_000);
+
+  it("rename_actor_object changes the object name, keeps the label and dirties the map", async () => {
+    const before = await call("get_actor_details", { actorLabel: A });
+    const preview = await call("rename_actor_object", { actorLabel: A, newName: "BCovRenamed_A", dryRun: true });
+    expect(preview.renamedCount).toBe(0);
+    expect(await nameOf(A)).toBe(before.name);
+
+    const out = await call("rename_actor_object", { actorPath: String(before.path), newName: "BCovRenamed_A" });
+    expect(out.renamedCount).toBe(1);
+    const row = (out.renames as Json[])[0];
+    expect(row.oldName).toBe(before.name);
+    expect(row.newName).toBe("BCovRenamed_A");
+    expect(row.oldPath).toBe(before.path);
+    expect(String(row.newPath).endsWith(".BCovRenamed_A")).toBe(true);
+    expect(out.dirtiedPackages).toContain(RENAME);
+
+    const after = await call("get_actor_details", { actorPath: String(row.newPath) });
+    expect(after.name).toBe("BCovRenamed_A");
+    expect(after.label).toBe(A);
+    const stale = await callBridge(bridge, "get_actor_details", { actorPath: String(before.path) });
+    expect(succeeded(stale)).toBe(false);
+  }, 120_000);
+
+  it("refuses a name another object in the level holds, and renames nothing in that batch", async () => {
+    const bName = await nameOf(B);
+    const cName = await nameOf(C);
+    const refused = await callBridge(bridge, "rename_actor_object", {
+      renames: [{ actorLabel: C, newName: "BCovRenamed_C" }, { actorLabel: B, newName: "BCovRenamed_A" }],
+    });
+    expect(succeeded(refused)).toBe(false);
+    expect(JSON.stringify(refused.result ?? refused.error)).toContain("already taken");
+    expect(await nameOf(B)).toBe(bName);
+    expect(await nameOf(C)).toBe(cName);
+  }, 120_000);
+
+  it("a batch with no newName generates a unique name from the class", async () => {
+    const out = await call("rename_actor_object", { renames: [{ actorLabel: B }, { actorLabel: C, newName: "BCovRenamed_C" }] });
+    expect(out.renamedCount).toBe(2);
+    const [b, c] = out.renames as Json[];
+    expect(b.generatedName).toBe(true);
+    expect(String(b.newName).startsWith("StaticMeshActor")).toBe(true);
+    expect(await nameOf(B)).toBe(b.newName);
+    expect(await nameOf(C)).toBe("BCovRenamed_C");
+    expect(c.actorLabel).toBe(C);
+
+    const rollback = out.rollback as Json;
+    expect(rollback.method).toBe("rename_actor_object");
+    await call("rename_actor_object", rollback.payload as Json);
+    expect(await nameOf(C)).toBe(c.oldName);
+    expect(await nameOf(B)).toBe(b.oldName);
+  }, 120_000);
 });
 
 describe("World Partition actor descriptors", () => {
@@ -207,6 +277,11 @@ describe("World Partition actor descriptors", () => {
     expect(pinned.residentAfter).toBe(1);
     // Pinning again finds it already pinned.
     expect((await call("load_actor_descs", { mode: "pin", guids: [guid] })).pinStateChanged).toBe(0);
+
+    // A World Partition actor lives in a package named from its path, so its object name is not renamed.
+    const renamed = await callBridge(bridge, "rename_actor_object", { actorLabel: LABEL, newName: "BCovWPRenamed" });
+    expect(succeeded(renamed)).toBe(false);
+    expect(JSON.stringify(renamed.result ?? renamed.error)).toContain("external actor package");
 
     const unpinned = await call("load_actor_descs", { mode: "unpin", guids: [guid] });
     expect(unpinned.pinStateChanged).toBe(1);
