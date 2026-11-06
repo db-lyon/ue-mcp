@@ -23,9 +23,10 @@ const M_IMPORT = `${DIR}/M_BCov_Import`;
 const M_DUP = `${DIR}/M_BCov_Dup`;
 const M_BUILT = `${DIR}/M_BCov_Built`;
 const MI_BUILT = `${DIR}/MI_BCov_Built`;
+const M_REPLACE = `${DIR}/M_BCov_Replace`;
 const TEXTURE = "/Engine/EngineResources/DefaultTexture";
 const PREVIEW_FILE = path.join(os.tmpdir(), "bcov-material-preview.png").replace(/\\/g, "/");
-const ALL_ASSETS = [MI_BUILT, M_BUILT, M_DUP, M_IMPORT, M_STATS, M_VALIDATE, M_TEX, M_SIMPLE, M_WIRE, M_PROPS];
+const ALL_ASSETS = [M_REPLACE, MI_BUILT, M_BUILT, M_DUP, M_IMPORT, M_STATS, M_VALIDATE, M_TEX, M_SIMPLE, M_WIRE, M_PROPS];
 
 type Json = Record<string, unknown>;
 type Expr = { index: number; class: string; value?: unknown; texturePath?: string; inputs?: Array<Json> };
@@ -49,7 +50,7 @@ async function readMaterial(assetPath: string): Promise<{ expressions: Expr[]; c
 beforeAll(async () => {
   bridge = await getBridge();
   for (const assetPath of ALL_ASSETS) await callBridge(bridge, "delete_asset", { assetPath, force: true });
-  for (const name of ["M_BCov_Props", "M_BCov_Wire", "M_BCov_Tex", "M_BCov_Validate", "M_BCov_Stats", "M_BCov_Import"]) {
+  for (const name of ["M_BCov_Props", "M_BCov_Wire", "M_BCov_Tex", "M_BCov_Validate", "M_BCov_Stats", "M_BCov_Import", "M_BCov_Replace"]) {
     await call("create_material", { name, packagePath: DIR });
   }
 }, 180_000);
@@ -181,6 +182,83 @@ describe("material graph edits", () => {
     const listed = await call("list_material_expressions", { materialPath: M_WIRE, includeInputs: true, limit: 100 });
     const row = (listed.expressions as Array<{ nodeId: string; inputs: Array<{ inputName: string }> }>).find((e) => e.nodeId === String(index));
     expect(row?.inputs.map((i) => i.inputName)).toEqual(["Alpha", "Beta"]);
+  }, 120_000);
+});
+
+describe("replacing a Custom node with native expressions (#1461)", () => {
+  let customName = "";
+  const expressionProperty = async (expressionName: string, property: string): Promise<number> => {
+    const read = await call("get_object_properties", {
+      objectPath: `${M_REPLACE}.M_BCov_Replace:${expressionName}`, propertyNames: [property],
+    });
+    return Number((read.properties as Json)[property]);
+  };
+
+  it("add_material_expression sets the node's own constants through properties", async () => {
+    const custom = await call("add_material_expression", { materialPath: M_REPLACE, expressionType: "Custom" });
+    customName = String(custom.expressionName);
+    await call("connect_to_material_property", { materialPath: M_REPLACE, expressionName: customName, property: "BaseColor" });
+
+    const divide = await call("add_material_expression", {
+      materialPath: M_REPLACE, expressionType: "Divide", name: "Lo", properties: { ConstB: 12.92 },
+    });
+    expect(await expressionProperty(String(divide.expressionName), "ConstB")).toBeCloseTo(12.92, 3);
+
+    const before = (await readMaterial(M_REPLACE)).expressions.length;
+    const bad = await callBridge(bridge, "add_material_expression", {
+      materialPath: M_REPLACE, expressionType: "Divide", properties: { NoSuchProperty: 1 },
+    });
+    expect(succeeded(bad)).toBe(false);
+    expect((await readMaterial(M_REPLACE)).expressions).toHaveLength(before);
+  }, 120_000);
+
+  it("build_material_graph refuses a wire to an expression it is removing and changes nothing", async () => {
+    const before = await readMaterial(M_REPLACE);
+    const refused = await callBridge(bridge, "build_material_graph", {
+      assetPath: M_REPLACE,
+      nodes: [{ name: "Sat", class: "Saturate" }],
+      connections: [{ from: customName, to: "Sat" }],
+      removeExpressions: [customName],
+    });
+    expect(succeeded(refused)).toBe(false);
+    const after = await readMaterial(M_REPLACE);
+    expect(after.expressions).toHaveLength(before.expressions.length);
+    expect(after.connections.BaseColor?.expressionClass).toBe("MaterialExpressionCustom");
+  }, 120_000);
+
+  it("build_material_graph adds native nodes with constants, rewires BaseColor and deletes the Custom node", async () => {
+    const built = await call("build_material_graph", {
+      assetPath: M_REPLACE,
+      nodes: [
+        { name: "Sat", class: "Saturate" },
+        { name: "Pw", class: "Power", properties: { ConstExponent: 2.4 } },
+        { name: "St", class: "Step", properties: { ConstY: 0.04045 } },
+        { name: "L", class: "LinearInterpolate" },
+      ],
+      connections: [
+        { from: "Sat", to: "Pw", toInput: "Base" },
+        { from: "Sat", to: "St", toInput: "X" },
+        { from: "Lo", to: "L", toInput: "A" },
+        { from: "Pw", to: "L", toInput: "B" },
+        { from: "St", to: "L", toInput: "Alpha" },
+      ],
+      propertyConnections: [{ property: "BaseColor", from: "L" }],
+      removeExpressions: [customName],
+    });
+    expect(built.removedExpressions).toEqual([customName]);
+    const nodes = built.nodes as Array<{ name: string; expressionName: string }>;
+    const named = (name: string) => nodes.find((n) => n.name === name)!.expressionName;
+    expect(await expressionProperty(named("Pw"), "ConstExponent")).toBeCloseTo(2.4, 3);
+    expect(await expressionProperty(named("St"), "ConstY")).toBeCloseTo(0.04045, 4);
+
+    const { expressions, connections } = await readMaterial(M_REPLACE);
+    expect(expressions.some((e) => e.class === "MaterialExpressionCustom")).toBe(false);
+    expect(connections.BaseColor?.expressionClass).toBe("MaterialExpressionLinearInterpolate");
+    const lerp = expressions.find((e) => e.class === "MaterialExpressionLinearInterpolate");
+    const wired = (pin: string) => lerp?.inputs?.find((i) => i.inputName === pin)?.connectedExpressionClass;
+    expect(wired("A")).toBe("MaterialExpressionDivide");
+    expect(wired("B")).toBe("MaterialExpressionPower");
+    expect(wired("Alpha")).toBe("MaterialExpressionStep");
   }, 120_000);
 });
 

@@ -5,7 +5,7 @@
  * actor object renames and World Partition actor descriptors. The map open before the file is reopened afterwards. Refs #1223.
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { callBridge, disconnectBridge, getBridge, TEST_PREFIX, type TestResult } from "../setup.js";
+import { callBridge, disconnectBridge, discardDirtyTestPackages, getBridge, listDirtyPackages, TEST_PREFIX, type TestResult } from "../setup.js";
 import type { EditorBridge } from "../../src/bridge/bridge.js";
 
 const HOME = "/Game/MCP_Home";
@@ -155,8 +155,12 @@ describe("exact-label deletes across maps", () => {
     await cube("BCov_Level_DelMe", { x: 0, y: 0, z: 100 });
     await cube("BCov_Level_Keep", { x: 300, y: 0, z: 100 });
     await call("save_level");
-    // The action refuses while any package is dirty; earlier files in the run can leave some.
+    // The action refuses while any package is dirty, and this file shares its editor with every file before it.
+    // Their unsaved test assets and abandoned /Temp worlds are discarded rather than written into the project;
+    // anything else is saved. Nothing may be left dirty when the action runs (#1444).
+    await discardDirtyTestPackages(bridge, [TEST_PREFIX, "/Temp"]);
     await call("save_all_dirty", {});
+    expect(await listDirtyPackages(bridge)).toEqual([]);
   }, 300_000);
 
   it("delete_exact_labeled_actors_in_levels previews, then deletes and saves only the named actor", async () => {

@@ -1,5 +1,5 @@
 {
-  "handlerCount": 1250,
+  "handlerCount": 1252,
   "handlers": {
     "actors_in_box": {
       "category": "level",
@@ -418,6 +418,12 @@
           "type": "string",
           "required": false,
           "description": "ChildActorClass for an added ChildActorComponent: a Blueprint path with or without _C, or a C++ class"
+        },
+        {
+          "name": "asRoot",
+          "type": "boolean",
+          "required": false,
+          "description": "Make this scene component the Blueprint's root: it replaces DefaultSceneRoot, whose children move under it, or takes the current root as its child. Applies to an existing component of this name too. Not combinable with parentComponent or parentSocket"
         }
       ]
     },
@@ -1521,6 +1527,12 @@
           "type": "object",
           "required": false,
           "description": "ComponentMask channels {r,g,b,a} as bools"
+        },
+        {
+          "name": "properties",
+          "type": "object",
+          "required": false,
+          "description": "Any other UPROPERTY on the node by name, e.g. {ConstB: 12.92} on Divide, {ConstY: 0.04} on Step, {ConstExponent: 2.4} on Power. A bad name or value adds nothing"
         },
         {
           "name": "positionX",
@@ -7224,6 +7236,13 @@
               "description": "Source output index, instead of output"
             }
           ]
+        },
+        {
+          "name": "removeExpressions",
+          "type": "array",
+          "required": false,
+          "description": "Existing expressions to delete once the new nodes are wired, named as delete_expression takes them (description, class, parameter name, index or engine name). Resolved before anything changes; a connection may not use one (#1461)",
+          "items": "string"
         }
       ]
     },
@@ -7961,6 +7980,32 @@
           "type": "rotator",
           "required": false,
           "description": "Camera rotation"
+        },
+        {
+          "name": "captureTransform",
+          "type": "object",
+          "required": false,
+          "description": "Camera pose as one object, the shape epic_capture_viewport takes. Each field conflicts with the matching top-level location or rotation",
+          "fields": [
+            {
+              "name": "location",
+              "type": "vec3",
+              "required": false,
+              "description": "Camera location"
+            },
+            {
+              "name": "rotation",
+              "type": "rotator",
+              "required": false,
+              "description": "Camera rotation"
+            },
+            {
+              "name": "scale",
+              "type": "vec3",
+              "required": false,
+              "description": "Accepted for shape compatibility; a camera has no scale, so it is not applied"
+            }
+          ]
         },
         {
           "name": "focusActorLabel",
@@ -13841,20 +13886,27 @@
         {
           "name": "otherPath",
           "type": "string",
-          "required": true,
-          "description": "Blueprint to compare against (B)"
+          "required": false,
+          "description": "Blueprint to compare against (B). Give this or against"
         },
         {
-          "name": "fromRevision",
+          "name": "against",
           "type": "string",
           "required": false,
-          "description": "Reserved for source-control revision diffing, which is not implemented; passing it is refused"
-        },
+          "description": "An earlier state of assetPath to diff from, with assetPath as it is now as the other side: checkpoint:<id> (an editor(checkpoint) id, resolved by the server), revision:<rev>, or a bare id, tried as a checkpoint and then as a source control revision. A revision is the provider's id, a unique prefix of 7 or more characters of it, its number, or head. Give this or otherPath"
+        }
+      ],
+      "choices": [
         {
-          "name": "toRevision",
-          "type": "string",
-          "required": false,
-          "description": "Reserved for source-control revision diffing, which is not implemented; passing it is refused"
+          "mode": "exactlyOne",
+          "branches": [
+            [
+              "otherPath"
+            ],
+            [
+              "against"
+            ]
+          ]
         }
       ]
     },
@@ -15714,6 +15766,42 @@
           ]
         }
       ]
+    },
+    "focus_blueprint_node": {
+      "category": "blueprint",
+      "params": [
+        {
+          "name": "assetPath",
+          "type": "string",
+          "required": true,
+          "description": "Blueprint asset path. Read and graph actions also accept a World/umap path, resolved to that map's level script Blueprint",
+          "aliases": [
+            "path"
+          ]
+        },
+        {
+          "name": "graphName",
+          "type": "string",
+          "required": false,
+          "description": "Graph name or the selector list_graphs reports; narrows a node name. Default: every graph"
+        },
+        {
+          "name": "graphSelector",
+          "type": "string",
+          "required": false,
+          "description": "The exact selector list_graphs reports, which separates two graphs sharing a name. Wins over graphName"
+        },
+        {
+          "name": "nodeId",
+          "type": "string",
+          "required": true,
+          "description": "Node GUID, as get_connections and find_nodes report it, or the node name",
+          "aliases": [
+            "nodeName"
+          ]
+        }
+      ],
+      "contractExempt": "Opens the Blueprint editor and moves editor focus"
     },
     "focus_viewport_on_actor": {
       "category": "editor",
@@ -18992,6 +19080,152 @@
         }
       ]
     },
+    "get_skinned_vertices": {
+      "category": "level",
+      "params": [
+        {
+          "name": "actorLabel",
+          "type": "string",
+          "required": false,
+          "description": "Actor label, name or path; pass actorLabel or actorPath"
+        },
+        {
+          "name": "actorPath",
+          "type": "string",
+          "required": false,
+          "description": "Actor object path; preferred when labels repeat"
+        },
+        {
+          "name": "componentName",
+          "type": "string",
+          "required": false,
+          "description": "Skinned mesh component (default: the first on the actor); a leader-pose follower reads as drawn"
+        },
+        {
+          "name": "world",
+          "type": "string",
+          "required": false,
+          "description": "World scope: editor (default) | pie"
+        },
+        {
+          "name": "pieInstance",
+          "type": "integer",
+          "required": false,
+          "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients"
+        },
+        {
+          "name": "lodIndex",
+          "type": "integer",
+          "required": false,
+          "description": "Render LOD to skin (default: the LOD the component draws)"
+        },
+        {
+          "name": "space",
+          "type": "string",
+          "required": false,
+          "description": "Space of positions, box and nearPoint (default component)",
+          "enum": [
+            "component",
+            "world"
+          ]
+        },
+        {
+          "name": "boneNames",
+          "type": "array",
+          "required": false,
+          "description": "Keep vertices weighted to any of these bones; omit to keep every vertex",
+          "items": "string"
+        },
+        {
+          "name": "includeChildBones",
+          "type": "boolean",
+          "required": false,
+          "description": "With boneNames, also select every bone below each named bone (default false)"
+        },
+        {
+          "name": "minWeight",
+          "type": "number",
+          "required": false,
+          "description": "With boneNames, keep a vertex only when its summed weight on the selected bones is at least this (0 < minWeight <= 1; default any positive weight)"
+        },
+        {
+          "name": "box",
+          "type": "object",
+          "required": false,
+          "description": "Keep vertices whose posed position is inside this box (inclusive), in space",
+          "fields": [
+            {
+              "name": "min",
+              "type": "vec3",
+              "required": true,
+              "description": "Box minimum (cm)"
+            },
+            {
+              "name": "max",
+              "type": "vec3",
+              "required": true,
+              "description": "Box maximum (cm)"
+            }
+          ]
+        },
+        {
+          "name": "nearPoint",
+          "type": "vec3",
+          "required": false,
+          "description": "Keep vertices within radius of this point, in space; needs radius"
+        },
+        {
+          "name": "radius",
+          "type": "number",
+          "required": false,
+          "description": "Distance from nearPoint in cm, above 0; needs nearPoint"
+        },
+        {
+          "name": "include",
+          "type": "array",
+          "required": false,
+          "description": "Data per vertex: any of positions, weights, triangles (default positions and weights)",
+          "items": "string"
+        },
+        {
+          "name": "startIndex",
+          "type": "integer",
+          "required": false,
+          "description": "First selected vertex to return (default 0); ignored with dumpToFile"
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "description": "Selected vertices to return inline, 1 to 20000 (default 2000); ignored with dumpToFile"
+        },
+        {
+          "name": "dumpToFile",
+          "type": "boolean",
+          "required": false,
+          "description": "Write the whole selection to a JSON file and return only the summary"
+        },
+        {
+          "name": "outputPath",
+          "type": "string",
+          "required": false,
+          "description": "File for dumpToFile; relative paths resolve under Saved/ (default Saved/UE_MCP/SkinnedVertices/)"
+        }
+      ],
+      "choices": [
+        {
+          "mode": "atLeastOne",
+          "branches": [
+            [
+              "actorLabel"
+            ],
+            [
+              "actorPath"
+            ]
+          ]
+        }
+      ]
+    },
     "get_spline_info": {
       "category": "level",
       "params": [
@@ -20072,6 +20306,13 @@
               "description": "Source output index, instead of output"
             }
           ]
+        },
+        {
+          "name": "removeExpressions",
+          "type": "array",
+          "required": false,
+          "description": "Existing expressions to delete once the new nodes are wired, named as delete_expression takes them (description, class, parameter name, index or engine name). Resolved before anything changes; a connection may not use one (#1461)",
+          "items": "string"
         }
       ]
     },
@@ -22041,7 +22282,7 @@
           "name": "pattern",
           "type": "string",
           "required": false,
-          "description": "Case-insensitive substring of the library class name"
+          "description": "Case-insensitive substring of the library class name or its Python name"
         },
         {
           "name": "includeFunctions",
@@ -25487,6 +25728,19 @@
           "description": "Caller-chosen hold id (minted when absent)"
         },
         {
+          "name": "duration_seconds",
+          "type": "number",
+          "required": false,
+          "description": "Game seconds after which the hold releases itself (default 0: held until inject_input_stop or PIE ends). Local player only",
+          "minimum": 0
+        },
+        {
+          "name": "control_rotation",
+          "type": "rotator",
+          "required": false,
+          "description": "Player controller control rotation, re-applied every frame while the hold runs. Local player only"
+        },
+        {
           "name": "client_id",
           "type": "integer",
           "required": false,
@@ -25599,6 +25853,12 @@
           "type": "number",
           "required": false,
           "description": "Axis value Z (default 0)"
+        },
+        {
+          "name": "control_rotation",
+          "type": "rotator",
+          "required": false,
+          "description": "New control rotation the hold re-applies every frame; sent alone it keeps the hold's value"
         }
       ],
       "contractExempt": "Changes the value of a running input hold"
@@ -44297,7 +44557,13 @@
           "name": "path",
           "type": "string",
           "required": true,
-          "description": "One asset path or file to diff against its latest repository revision"
+          "description": "One asset path or file to diff against a repository revision"
+        },
+        {
+          "name": "revision",
+          "type": "string",
+          "required": false,
+          "description": "Revision to diff against: the provider's id, a unique prefix of 7 or more characters of it, its number, or head, as source_control(history) lists them (default head)"
         },
         {
           "name": "openEditor",
@@ -45413,7 +45679,7 @@
           "name": "sweep",
           "type": "boolean",
           "required": false,
-          "description": "Collide on the way (default false)"
+          "description": "Move along the way and stop at the first blocking hit, returned as blocked and hit (default false)"
         },
         {
           "name": "world",

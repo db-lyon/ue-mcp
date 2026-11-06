@@ -310,6 +310,33 @@ describe.sequential("a turn's asset diffs", () => {
     expect(closed.success).not.toBe(false);
   }, 300_000);
 
+  it("blueprint(open_diff_window) shows the checkpoint's Blueprint against the asset now, and unloads it on close (#1483)", async () => {
+    const opened = await tool("blueprint", "open_diff_window", { assetPath: BP, against: start });
+    expect(opened.against).toEqual({ kind: "checkpoint", id: start });
+    expect(opened.opened).toBe("window");
+    expect(opened.unloadsOnClose).toBe(true);
+    // The checkpoint's version on the left, dated with its checkpoint; the current asset on the right.
+    const revisions = opened.revisions as { before: Json; after: Json };
+    expect(Date.parse(String(revisions.before.date))).toBe(Date.parse(startAt));
+    expect(revisions.after.label).toBe("Current");
+    const temps = opened.tempPackages as string[];
+    expect(temps).toHaveLength(1);
+    expect(temps[0]).toMatch(/^\/Temp\//);
+    expect(body(await callBridge(bridge, "find_object", { objectPath: temps[0] })).found).toBe(true);
+
+    const listed = body(await callBridge(bridge, "list_windows", { maxTexts: 1, maxButtons: 1 }));
+    const win = (listed.windows as Json[]).find((w) => w.title === opened.windowTitle);
+    expect(win, JSON.stringify(listed.windows?.map((w: Json) => w.title))).toBeTruthy();
+    expect(body(await callBridge(bridge, "close_window", { windowId: win!.windowId })).success).not.toBe(false);
+
+    let found = true;
+    for (let i = 0; i < 40 && found; i++) {
+      await new Promise((r) => setTimeout(r, 250));
+      found = body(await callBridge(bridge, "find_object", { objectPath: temps[0] })).found === true;
+    }
+    expect(found, `${temps[0]} still loaded after its window closed`).toBe(false);
+  }, 300_000);
+
   it("checkpoint_open_native_diff opens the asset editor on an added asset", async () => {
     const r = await call("checkpoint_open_native_diff", { originalFile: path.join(projectDir, rel(NEW_MAT)), current: true });
     expect(r.opened).toBe("editor");

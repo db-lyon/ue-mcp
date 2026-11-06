@@ -1076,8 +1076,9 @@ TSharedPtr<FJsonValue> FAnimationHandlers::BakeKeyframesBatch(const TSharedPtr<F
 }
 
 // ---------------------------------------------------------------------------
-// get_bone_transforms - Read reference pose transforms for specified bones
-// Params: skeletonPath, boneNames[]? (if omitted, returns all bones)
+// get_bone_transforms - Read reference pose transforms for specified bones.
+// A SkeletalMesh path reads the mesh's own bind pose, a Skeleton path the
+// Skeleton's. Params: skeletonPath, boneNames[]? (if omitted, all bones)
 // ---------------------------------------------------------------------------
 TSharedPtr<FJsonValue> FAnimationHandlers::GetBoneTransforms(const TSharedPtr<FJsonObject>& Params)
 {
@@ -1096,20 +1097,17 @@ TSharedPtr<FJsonValue> FAnimationHandlers::GetBoneTransforms(const TSharedPtr<FJ
 		return MCPError(TEXT("Missing 'skeletonPath' parameter"));
 	}
 
-	// Load skeleton (accept either USkeleton or USkeletalMesh)
+	// A SkeletalMesh carries its own bind pose, which can differ from its
+	// Skeleton's, so a mesh path reads the mesh's reference skeleton (#1451).
 	UObject* LoadedAsset = MCPLoadAssetObject(AssetPath);
-	USkeleton* Skeleton = Cast<USkeleton>(LoadedAsset);
-	if (!Skeleton)
+	USkeletalMesh* SkelMesh = Cast<USkeletalMesh>(LoadedAsset);
+	USkeleton* Skeleton = SkelMesh ? SkelMesh->GetSkeleton() : Cast<USkeleton>(LoadedAsset);
+	if (!SkelMesh && !Skeleton)
 	{
-		USkeletalMesh* SkelMesh = Cast<USkeletalMesh>(LoadedAsset);
-		if (SkelMesh) Skeleton = SkelMesh->GetSkeleton();
-	}
-	if (!Skeleton)
-	{
-		return MCPError(FString::Printf(TEXT("Failed to load Skeleton from '%s'"), *AssetPath));
+		return MCPError(FString::Printf(TEXT("Failed to load a Skeleton or SkeletalMesh from '%s'"), *AssetPath));
 	}
 
-	const FReferenceSkeleton& RefSkeleton = Skeleton->GetReferenceSkeleton();
+	const FReferenceSkeleton& RefSkeleton = SkelMesh ? SkelMesh->GetRefSkeleton() : Skeleton->GetReferenceSkeleton();
 	const TArray<FTransform>& RefPose = RefSkeleton.GetRefBonePose();
 
 	const bool bComponentSpace = (Space == TEXT("component") || Space == TEXT("world"));
@@ -1143,6 +1141,12 @@ TSharedPtr<FJsonValue> FAnimationHandlers::GetBoneTransforms(const TSharedPtr<FJ
 
 	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("space"), bComponentSpace ? TEXT("component") : TEXT("local"));
+	Result->SetStringField(TEXT("poseSource"), SkelMesh ? TEXT("skeletalMesh") : TEXT("skeleton"));
+	Result->SetStringField(TEXT("poseSourcePath"), SkelMesh ? SkelMesh->GetPathName() : Skeleton->GetPathName());
+	if (Skeleton)
+	{
+		Result->SetStringField(TEXT("skeletonPath"), Skeleton->GetPathName());
+	}
 
 	TArray<TSharedPtr<FJsonValue>> BonesArray;
 	for (int32 i = 0; i < RefSkeleton.GetNum(); ++i)

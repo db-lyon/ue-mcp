@@ -19,7 +19,7 @@ describe("the claude run resolve starts", () => {
     const start = args.indexOf("--allowedTools") + 1;
     const end = args.indexOf("--disallowedTools");
     expect(args.slice(start, end)).toEqual([...RESOLVE_ALLOWED_TOOLS]);
-    for (const tool of RESOLVE_ALLOWED_TOOLS) {
+    for (const tool of RESOLVE_ALLOWED_TOOLS as readonly string[]) {
       expect(tool === "Bash" || tool === "Bash(*)").toBe(false);
       if (tool.startsWith("Bash(")) expect(tool).toMatch(/^Bash\((npx tsc --noEmit|git (status|diff:\*|add:\*|commit:\*))\)$/);
     }

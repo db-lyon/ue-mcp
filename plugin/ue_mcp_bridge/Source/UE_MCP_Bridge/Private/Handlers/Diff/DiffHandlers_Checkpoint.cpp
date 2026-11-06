@@ -4,6 +4,7 @@
 #include "DiffHandlers.h"
 #include "CheckpointThumbnail.h"
 #include "DiffHandlers_Revision.h"
+#include "HandlerDiffPackage.h"
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
 #include "HandlerLogCapture.h"
@@ -2223,12 +2224,17 @@ TSharedPtr<FJsonValue> FDiffHandlers::OpenCheckpointNativeDiff(const TSharedPtr<
 	}
 	const FPackagePath OriginalPath = FPackagePath::FromLocalPath(OriginalFile);
 
-	// The packages stay loaded while the window shows them; their files are released for the caller to delete.
+	// The packages loaded from files stay loaded while the window shows them and are unloaded when it
+	// closes (#1483); their files are released for the caller to delete.
+	TArray<UPackage*> Temp;
+	bool bKeep = false;
+	ON_SCOPE_EXIT { if (!bKeep) MCPDiffPackage::Unload(Temp); };
 	UObject* Old = nullptr;
 	UObject* New = nullptr;
 	if (!FromFile.IsEmpty())
 	{
 		FCkDiffSide Side = CkDiffLoad(FromFile, OriginalPath);
+		if (Side.Package) Temp.Add(Side.Package);
 		if (!Side.Error.IsEmpty()) return MCPError(FString::Printf(TEXT("The version before: %s"), *Side.Error));
 		ResetLoaders(Side.Package);
 		Old = Side.Asset;
@@ -2241,6 +2247,7 @@ TSharedPtr<FJsonValue> FDiffHandlers::OpenCheckpointNativeDiff(const TSharedPtr<
 	else if (!ToFile.IsEmpty())
 	{
 		FCkDiffSide Side = CkDiffLoad(ToFile, OriginalPath);
+		if (Side.Package) Temp.Add(Side.Package);
 		if (!Side.Error.IsEmpty()) return MCPError(FString::Printf(TEXT("The version after: %s"), *Side.Error));
 		ResetLoaders(Side.Package);
 		New = Side.Asset;
@@ -2264,6 +2271,13 @@ TSharedPtr<FJsonValue> FDiffHandlers::OpenCheckpointNativeDiff(const TSharedPtr<
 		}
 		Result->SetStringField(TEXT("opened"), TEXT("editor"));
 		Result->SetStringField(TEXT("version"), Old ? TEXT("before") : TEXT("after"));
+		if (Temp.Contains(Only->GetOutermost()))
+		{
+			MCPDiffPackage::KeepUntilEditorCloses(Only);
+			bKeep = true;
+			Result->SetBoolField(TEXT("unloadsOnClose"), true);
+			Result->SetArrayField(TEXT("tempPackages"), MCPDiffPackage::PackageNames(Temp));
+		}
 	}
 	else
 	{
@@ -2314,6 +2328,13 @@ TSharedPtr<FJsonValue> FDiffHandlers::OpenCheckpointNativeDiff(const TSharedPtr<
 	}
 	if (Window.IsValid())
 	{
+		if (Result->GetStringField(TEXT("opened")) == TEXT("window") && Temp.Num())
+		{
+			MCPDiffPackage::KeepUntilClosed(Window.ToSharedRef(), Temp);
+			bKeep = true;
+			Result->SetBoolField(TEXT("unloadsOnClose"), true);
+			Result->SetArrayField(TEXT("tempPackages"), MCPDiffPackage::PackageNames(Temp));
+		}
 		Window->BringToFront(true);
 		if (TSharedPtr<FGenericWindow> Native = Window->GetNativeWindow()) Native->HACK_ForceToFront();
 		Result->SetStringField(TEXT("windowTitle"), Window->GetTitle().ToString());

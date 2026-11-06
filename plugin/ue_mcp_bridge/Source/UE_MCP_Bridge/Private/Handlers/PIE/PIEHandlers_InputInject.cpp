@@ -87,6 +87,41 @@ namespace
 		MCPSetRollback(Result, TEXT("pie_inject_input_stop"), Payload);
 	}
 
+	// duration_seconds and control_rotation of a hold (#1449). False with OutError on a bad duration.
+	bool ReadHoldOptions(const TSharedPtr<FJsonObject>& Params, MCPPIE::FHoldOptions& Out, bool& bOutAny, FString& OutError)
+	{
+		bOutAny = false;
+		if (HasParam(Params, TEXT("duration_seconds")))
+		{
+			bOutAny = true;
+			Out.DurationSeconds = OptionalNumber(Params, TEXT("duration_seconds"), 0.0);
+			if (!FMath::IsFinite(Out.DurationSeconds) || Out.DurationSeconds < 0.0)
+			{
+				OutError = TEXT("duration_seconds must be a finite number of game seconds, 0 or more (0 holds until inject_input_stop)");
+				return false;
+			}
+		}
+		if (HasParam(Params, TEXT("control_rotation")))
+		{
+			bOutAny = true;
+			Out.bHasControlRotation = true;
+			Out.ControlRotation = OptionalRotator(Params, TEXT("control_rotation"));
+		}
+		return true;
+	}
+
+	void WriteHoldOptions(const TSharedPtr<FJsonObject>& Result, const MCPPIE::FHoldOptions& Options)
+	{
+		if (Options.DurationSeconds > 0)
+		{
+			Result->SetNumberField(TEXT("duration_seconds"), Options.DurationSeconds);
+		}
+		if (Options.bHasControlRotation)
+		{
+			Result->SetObjectField(TEXT("control_rotation"), MCPRotatorToJsonObject(Options.ControlRotation));
+		}
+	}
+
 	FString InjectValueTypeName(EInputActionValueType T)
 	{
 		switch (T)
@@ -187,10 +222,18 @@ TSharedPtr<FJsonValue> FPIEHandlers::InjectInputStart(const TSharedPtr<FJsonObje
 	const FInputActionValue Value = BuildValueForAction(Action, Params);
 	const FString DesiredId = OptionalString(Params, TEXT("injection_id"));
 	const int32 ClientIndex = FMath::Max(0, OptionalInt(Params, TEXT("client_id"), 0));
+	MCPPIE::FHoldOptions Options;
+	bool bHasOptions = false;
+	FString OptionsError;
+	if (!ReadHoldOptions(Params, Options, bHasOptions, OptionsError)) return MCPError(OptionsError);
 
 	TSharedPtr<FJsonValue> RemoteErr;
 	if (UMCPPIERemoteControl* Remote = ResolveRemoteClient(Params, RemoteErr))
 	{
+		if (bHasOptions)
+		{
+			return MCPError(TEXT("duration_seconds and control_rotation apply to a local player; a hold relayed to a remote player (client 1..N) runs until inject_input_stop"));
+		}
 		const FString Id = DesiredId.IsEmpty() ? MCPPIE::PIERemotePlayers::NewId(TEXT("hold")) : DesiredId;
 		Remote->SendStartHold(Id, FSoftObjectPath(Action), RawValue(Params));
 		MCPPIE::PIERemotePlayers::RememberId(Id, Remote);
@@ -203,13 +246,14 @@ TSharedPtr<FJsonValue> FPIEHandlers::InjectInputStart(const TSharedPtr<FJsonObje
 
 	FString Err;
 	const FString Id = MCPPIE::FPIEInputInjector::StartHold(
-		Action, Value, DesiredId, Err, ClientIndex, PIEInstance);
+		Action, Value, DesiredId, Err, ClientIndex, PIEInstance, nullptr, Options);
 	if (Id.IsEmpty()) return MCPError(Err);
 
 	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("injection_id"), Id);
 	Result->SetStringField(TEXT("action"), ActionPath);
 	Result->SetStringField(TEXT("value_type"), InjectValueTypeName(Action->ValueType));
+	WriteHoldOptions(Result, Options);
 
 	MCPSetCreated(Result);
 	SetStopRollback(Result, Id);
@@ -222,9 +266,16 @@ TSharedPtr<FJsonValue> FPIEHandlers::InjectInputUpdate(const TSharedPtr<FJsonObj
 	MCP_CHECK_GAME_THREAD();
 	FString Id;
 	if (auto E = RequireString(Params, TEXT("injection_id"), Id)) return E;
+	const bool bHasValue = HasParam(Params, TEXT("value_x")) || HasParam(Params, TEXT("value_y")) || HasParam(Params, TEXT("value_z"));
+	const bool bHasRotation = HasParam(Params, TEXT("control_rotation"));
+	const FRotator ControlRotation = OptionalRotator(Params, TEXT("control_rotation"));
 
 	if (UMCPPIERemoteControl* Remote = MCPPIE::PIERemotePlayers::FindById(Id))
 	{
+		if (bHasRotation)
+		{
+			return MCPError(TEXT("control_rotation applies to a local player's hold; this hold was relayed to a remote player"));
+		}
 		Remote->SendUpdateHold(Id, RawValue(Params));
 		auto Relayed = MCPSuccess();
 		Relayed->SetStringField(TEXT("injection_id"), Id);
@@ -247,14 +298,28 @@ TSharedPtr<FJsonValue> FPIEHandlers::InjectInputUpdate(const TSharedPtr<FJsonObj
 	}
 	if (!Action) return MCPError(FString::Printf(TEXT("No active injection with id '%s'"), *Id));
 
-	const FInputActionValue Value = BuildValueForAction(Action, Params);
-	if (!MCPPIE::FPIEInputInjector::UpdateHold(Id, Value))
+	// control_rotation alone re-aims the hold and keeps its value; any value_* (or neither) sets the value.
+	const bool bUpdateValue = bHasValue || !bHasRotation;
+	if (bUpdateValue)
+	{
+		const FInputActionValue Value = BuildValueForAction(Action, Params);
+		if (!MCPPIE::FPIEInputInjector::UpdateHold(Id, Value))
+		{
+			return MCPError(FString::Printf(TEXT("Injection '%s' is not a hold (try inject_input_stop)"), *Id));
+		}
+	}
+	if (bHasRotation && !MCPPIE::FPIEInputInjector::SetHoldControlRotation(Id, ControlRotation))
 	{
 		return MCPError(FString::Printf(TEXT("Injection '%s' is not a hold (try inject_input_stop)"), *Id));
 	}
 
 	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("injection_id"), Id);
+	Result->SetBoolField(TEXT("valueUpdated"), bUpdateValue);
+	if (bHasRotation)
+	{
+		Result->SetObjectField(TEXT("control_rotation"), MCPRotatorToJsonObject(ControlRotation));
+	}
 	MCPSetUpdated(Result);
 	MCPSetNoRollback(Result, TEXT("The previous hold value is not kept, so it cannot be restored"));
 	return MCPResult(Result);

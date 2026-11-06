@@ -136,6 +136,10 @@ time, the texture-loading setting and the focus target. Keep it beside the image
 SceneCapture2D, so do not use the viewport's pixel hit test to locate a point in
 a headless capture.
 
+Place the capture camera with `location` and `rotation`, or with one
+`captureTransform: {location, rotation}` object, the shape
+`editor(epic_capture_viewport)` takes. Giving a field both ways is refused.
+
 For an offscreen camera that needs streaming and temporal warmup, start a bounded
 capture with `warmupFrames` (1-240). For example:
 

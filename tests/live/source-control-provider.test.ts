@@ -157,6 +157,46 @@ describe("source control with a provider (#1357)", () => {
     expect(fs.readFileSync(probe, "utf8").replace(/\r\n/g, "\n")).toBe(before.replace(/\r\n/g, "\n"));
   });
 
+  it("blueprint diff against a submitted revision reports a node added since, by GUID (#1487)", async (ctx) => {
+    if (!ready) ctx.skip(skipReason);
+    const bp = "/Game/MCPTest/ScmDiff/BP_ScmDiff";
+    await callBridge(bridge, "delete_asset", { assetPath: bp, force: true });
+    const created = await call("create_blueprint", { assetPath: bp, parentClass: "Actor" });
+    expect(created.success, String(created.error)).toBe(true);
+    const saved = await call("save_asset", { assetPath: bp });
+    expect(saved.success, String(saved.error)).toBe(true);
+    const added = await call("source_control_add", { paths: [bp] });
+    expect(added.success, String(added.error)).toBe(true);
+    const description = `ue-mcp live blueprint revision ${Date.now()}`;
+    const submitted = await call("source_control_submit", { paths: [bp], description });
+    expect(submitted.success, String(submitted.error)).toBe(true);
+    const history = await call("source_control_history", { path: bp, limit: 1 });
+    const revision = String((history.revisions as Json[])[0].revision);
+    expect(revision).not.toBe("");
+
+    const node = await call("add_node", { assetPath: bp, graphName: "EventGraph", nodeClass: "Branch" });
+    expect(node.success, String(node.error)).toBe(true);
+    const nodeGuid = String(node.nodeId).replace(/[^0-9a-f]/gi, "").toLowerCase();
+    const nodesAddedIn = (diff: Json): string[] => ((diff.graphs as Json[]) ?? [])
+      .flatMap((g) => (g.nodesAdded as Json[]) ?? [])
+      .map((n) => String(n.id).replace(/[^0-9a-f]/gi, "").toLowerCase());
+
+    const diff = await call("diff_blueprint", { assetPath: bp, against: `revision:${revision}` });
+    expect(diff.success, String(diff.error)).toBe(true);
+    expect((diff.against as Json).kind).toBe("revision");
+    expect((diff.against as Json).revision).toBe(revision);
+    expect(String((diff.against as Json).description)).toContain(description);
+    expect(nodesAddedIn(diff)).toContain(nodeGuid);
+
+    const head = await call("diff_blueprint", { assetPath: bp, against: "head" });
+    expect((head.against as Json).revision).toBe(revision);
+    expect(nodesAddedIn(head)).toContain(nodeGuid);
+
+    const missing = await call("diff_blueprint", { assetPath: bp, against: "revision:no-such-revision" });
+    expect(missing.success).toBe(false);
+    expect(String(missing.error)).toContain("No revision");
+  });
+
   it("sync brings a change made upstream into the workspace file", async (ctx) => {
     if (!ready) ctx.skip(skipReason);
     const content = `upstream change ${Date.now()}\n`;
@@ -171,5 +211,31 @@ describe("source control with a provider (#1357)", () => {
 
     const history = await call("source_control_history", { path: PROBE_REL, limit: 1 });
     expect(String((history.revisions as Json[])[0].description)).toContain("upstream probe change");
+  });
+
+  it("diff compares against a named older revision, by id and by prefix (#1483)", async (ctx) => {
+    if (!ready) ctx.skip(skipReason);
+    const history = await call("source_control_history", { path: PROBE_REL, limit: 5 });
+    const revisions = history.revisions as Json[];
+    if (revisions.length < 2) ctx.skip("the probe has one revision; the sync case stages the second");
+    const older = String(revisions[1].revision);
+    const now = fs.readFileSync(probe, "utf8");
+
+    const latest = await call("source_control_diff", { path: PROBE_REL });
+    expect((latest.against as Json).revision).toBe(String(revisions[0].revision));
+
+    const byId = await call("source_control_diff", { path: PROBE_REL, revision: older });
+    expect(byId.success, String(byId.error)).toBe(true);
+    expect((byId.against as Json).revision).toBe(older);
+    expect(byId.identical).toBe(false);
+    expect(String(byId.diff)).toContain(`+${now.split(/\r?\n/)[0]}`);
+
+    if (older.length > 8) {
+      const byPrefix = await call("source_control_diff", { path: PROBE_REL, revision: older.slice(0, 8) });
+      expect((byPrefix.against as Json).revision).toBe(older);
+    }
+    const missing = await callBridge(bridge, "source_control_diff", { path: PROBE_REL, revision: "zzzzzzzz" });
+    expect(body(missing).success).toBe(false);
+    expect(String(body(missing).error)).toContain("No revision 'zzzzzzzz'");
   });
 });

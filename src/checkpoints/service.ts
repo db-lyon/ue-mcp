@@ -98,6 +98,10 @@ export interface NativeDiffResult {
   tool?: string;
   /** The label and ISO 8601 date each side of the diff window shows. */
   revisions?: { before: { label: string; date: string }; after: { label: string; date: string } };
+  /** True when the versions loaded from the history are unloaded once the window or asset editor closes (#1483). */
+  unloadsOnClose?: boolean;
+  /** The /Temp packages those versions were loaded into. */
+  tempPackages?: string[];
 }
 
 export interface RestoreResult {
@@ -140,6 +144,40 @@ function emit(e: CheckpointEvent): void {
 type Json = Record<string, unknown>;
 
 /** `on`, `true` and the object form's `enabled` read as on; anything else as off. */
+/**
+ * The project-relative .uasset a Blueprint asset path is saved to, the key the
+ * checkpoint history records it under: /Game under Content, a plugin's mount
+ * under that plugin's Content. Null for a mount outside the project.
+ */
+export function blueprintPackageKey(projectDir: string, assetPath: string): string | null {
+  const pkg = assetPath.trim().replace(/\\/g, "/").replace(/:.*$/, "").replace(/\.uasset$/i, "").replace(/\.[^/.]*$/, "");
+  const m = /^\/([^/]+)\/(.+)$/.exec(pkg);
+  if (!m) return null;
+  const [, mount, rest] = m;
+  if (mount === "Game") return `Content/${rest}.uasset`;
+  const plugin = findPluginDir(path.join(projectDir, "Plugins"), mount, 4);
+  if (!plugin) return null;
+  return `${path.relative(projectDir, plugin).split(path.sep).join("/")}/Content/${rest}.uasset`;
+}
+
+/** The folder holding `<name>.uplugin` under `dir`, at most `depth` levels down. */
+function findPluginDir(dir: string, name: string, depth: number): string | null {
+  let entries: fs.Dirent[];
+  try {
+    entries = fs.readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return null;
+  }
+  if (entries.some((e) => e.isFile() && e.name.toLowerCase() === `${name.toLowerCase()}.uplugin`)) return dir;
+  if (depth <= 0) return null;
+  for (const e of entries) {
+    if (!e.isDirectory() || ["binaries", "intermediate", "content", "source"].includes(e.name.toLowerCase())) continue;
+    const found = findPluginDir(path.join(dir, e.name), name, depth - 1);
+    if (found) return found;
+  }
+  return null;
+}
+
 export function configuredCheckpoints(value: unknown): { enabled: boolean; largeFileBytes: number } {
   const on = (v: unknown) => v === true || v === "on";
   if (value && typeof value === "object") {
@@ -392,6 +430,8 @@ export class SessionCheckpoints {
         ...(typeof answer.windowTitle === "string" ? { windowTitle: answer.windowTitle } : {}),
         ...(typeof answer.tool === "string" ? { tool: answer.tool } : {}),
         ...(answer.revisions && typeof answer.revisions === "object" ? { revisions: answer.revisions as NativeDiffResult["revisions"] } : {}),
+        ...(answer.unloadsOnClose === true ? { unloadsOnClose: true } : {}),
+        ...(Array.isArray(answer.tempPackages) ? { tempPackages: answer.tempPackages.map(String) } : {}),
       };
     });
   }
@@ -656,6 +696,54 @@ export class SessionCheckpoints {
         if (toFile) fs.rmSync(toFile, { force: true });
       }
     }
+  }
+
+  /** Whether `id` is a prefix of at least one checkpoint in this project's history. */
+  async hasCheckpoint(id: string): Promise<boolean> {
+    const needle = id.trim().toLowerCase();
+    if (!/^[0-9a-f]{4,40}$/.test(needle) || !this.session.project.projectDir) return false;
+    const repo = this.repo();
+    if (!repo.exists()) return false;
+    return (await repo.list(Number.MAX_SAFE_INTEGER)).some((c) => c.id.startsWith(needle));
+  }
+
+  /**
+   * blueprint(diff, against=checkpoint) (#1487): the Blueprint as checkpoint `checkpoint`
+   * recorded it, loaded as a diff package, against the Blueprint as loaded now, unsaved
+   * edits included. The delta is blueprint(diff)'s, keyed on node GUIDs.
+   */
+  async blueprintDiffAgainst(checkpoint: string, assetPath: string): Promise<Json> {
+    if (!checkpoint.trim()) throw new CheckpointError(400, "against names no checkpoint");
+    if (!this.session.bridge.isConnected) throw new CheckpointError(409, "The editor is not connected, so it cannot load the Blueprint to diff.");
+    const key = blueprintPackageKey(this.projectDir, assetPath);
+    if (!key) {
+      throw new CheckpointError(400, `${assetPath} is not under /Game or the content of one of this project's plugins, so the checkpoint history holds no file for it.`);
+    }
+    const repo = this.repo();
+    return repo.serialize(async () => {
+      const fromFile = path.join(this.diffDir("blueprint"), `${path.basename(key, ".uasset")}-${crypto.randomBytes(4).toString("hex")}.uasset`);
+      try {
+        const out = await repo.exportAsOf(checkpoint, key, fromFile);
+        const short = out.checkpoint.id.slice(0, 10);
+        if (out.state === "unrecorded") {
+          throw new CheckpointError(404, `No checkpoint from ${short} on holds ${key}, and no save since recorded it: it was never written through ue-mcp or saved in the editor while checkpoints were on, so its state at that checkpoint is unknown.`);
+        }
+        if (out.state === "absent") {
+          throw new CheckpointError(409, `${key} did not exist at checkpoint ${short}, so there is no earlier Blueprint to diff from.`);
+        }
+        const answer = await this.callBridge("checkpoint_diff_blueprint", { originalFile: path.join(this.projectDir, key), fromFile });
+        if (!answer) throw new CheckpointError(409, "The editor's bridge plugin predates checkpoint_diff_blueprint; update it.");
+        if (answer.isBlueprint !== true) throw new CheckpointError(400, `${assetPath} at checkpoint ${short} did not load as a Blueprint.`);
+        const { isBlueprint: _b, ...diff } = answer;
+        const label = `${assetPath}@checkpoint:${short}`;
+        diff.from = label;
+        if (typeof diff.summary === "string") diff.summary = diff.summary.split(fromFile).join(label);
+        diff.against = { kind: "checkpoint", ...out.checkpoint };
+        return diff;
+      } finally {
+        fs.rmSync(fromFile, { force: true });
+      }
+    });
   }
 
   restore(checkpoint: string, opts: { paths?: string[]; force?: boolean } = {}): Promise<RestoreResult> {

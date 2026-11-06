@@ -15,6 +15,7 @@
 #include "HandlerUtils.h"
 #include "GameplayTagContainer.h"
 #include "GameplayTagsManager.h"
+#include "InputActionValue.h"
 #include "Engine/Blueprint.h"
 #include "HandlerPropertyText.h"
 #include "HandlerClassResolve.h"
@@ -256,6 +257,82 @@ namespace MCPJsonProperty
 		return true;
 	}
 
+	// An Enhanced Input value from JSON: true/false is Boolean, a number Axis1D, [x,y] or {x,y} Axis2D,
+	// [x,y,z] or {x,y,z} Axis3D. Object keys may be lower or upper case.
+	inline bool SetInputActionValue(FInputActionValue& Out, const TSharedPtr<FJsonValue>& Value, FString& OutError)
+	{
+		const TCHAR* Shapes = TEXT("FInputActionValue takes true/false, a number, [x,y], [x,y,z], {x,y} or {x,y,z}");
+		if (!Value.IsValid())
+		{
+			OutError = Shapes;
+			return false;
+		}
+		if (Value->Type == EJson::Boolean)
+		{
+			Out = FInputActionValue(Value->AsBool());
+			return true;
+		}
+		if (Value->Type == EJson::Number)
+		{
+			Out = FInputActionValue(static_cast<float>(Value->AsNumber()));
+			return true;
+		}
+
+		double Axes[3] = { 0.0, 0.0, 0.0 };
+		int32 Count = 0;
+		const TArray<TSharedPtr<FJsonValue>>* Arr = nullptr;
+		const TSharedPtr<FJsonObject>* Obj = nullptr;
+		if (Value->TryGetArray(Arr) && Arr)
+		{
+			if (Arr->Num() < 1 || Arr->Num() > 3)
+			{
+				OutError = FString::Printf(TEXT("%s; got an array of %d"), Shapes, Arr->Num());
+				return false;
+			}
+			for (int32 i = 0; i < Arr->Num(); ++i)
+			{
+				if (!(*Arr)[i].IsValid() || !(*Arr)[i]->TryGetNumber(Axes[i]))
+				{
+					OutError = FString::Printf(TEXT("%s; element %d is not a number"), Shapes, i);
+					return false;
+				}
+			}
+			Count = Arr->Num();
+		}
+		else if (Value->TryGetObject(Obj) && Obj && Obj->IsValid())
+		{
+			const TCHAR* Lower[3] = { TEXT("x"), TEXT("y"), TEXT("z") };
+			const TCHAR* Upper[3] = { TEXT("X"), TEXT("Y"), TEXT("Z") };
+			for (int32 i = 0; i < 3; ++i)
+			{
+				if ((*Obj)->TryGetNumberField(Lower[i], Axes[i]) || (*Obj)->TryGetNumberField(Upper[i], Axes[i]))
+				{
+					Count = i + 1;
+				}
+			}
+			if (Count == 0)
+			{
+				OutError = FString::Printf(TEXT("%s; the object has no x, y or z"), Shapes);
+				return false;
+			}
+			// {x} alone is a 2D value with y 0, matching how a movement axis is usually written.
+			Count = FMath::Max(Count, 2);
+		}
+		else
+		{
+			OutError = Shapes;
+			return false;
+		}
+
+		switch (Count)
+		{
+		case 1:  Out = FInputActionValue(static_cast<float>(Axes[0])); break;
+		case 2:  Out = FInputActionValue(FVector2D(Axes[0], Axes[1])); break;
+		default: Out = FInputActionValue(FVector(Axes[0], Axes[1], Axes[2])); break;
+		}
+		return true;
+	}
+
 	inline bool SetJsonOnPropertyImpl(FProperty* Prop, void* ValueAddr, const TSharedPtr<FJsonValue>& InValue, FString& OutError)
 	{
 		if (!Prop || !InValue.IsValid() || !ValueAddr) { OutError = TEXT("null property/value/addr"); return false; }
@@ -436,6 +513,12 @@ namespace MCPJsonProperty
 		// Struct: recurse on JSON object fields; otherwise fall through to ImportText
 		if (FStructProperty* StructProp = CastField<FStructProperty>(Prop))
 		{
+			// FInputActionValue keeps its value in an unreflected member, so it has no fields to
+			// fill and ImportText cannot parse it (#1449). The JSON shape picks the value type.
+			if (StructProp->Struct == FInputActionValue::StaticStruct())
+			{
+				return SetInputActionValue(*static_cast<FInputActionValue*>(ValueAddr), Value, OutError);
+			}
 			// #503: FGameplayTag (and FGameplayTagContainer) can't be built
 			// from Python in 5.7 and ImportText("(TagName=\"X\")") is the only
 			// portable path. Coerce a plain string ("X.Y") or array of strings

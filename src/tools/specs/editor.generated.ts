@@ -278,6 +278,32 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "Camera rotation"
       },
       {
+        "name": "captureTransform",
+        "type": "object",
+        "required": false,
+        "description": "Camera pose as one object, the shape epic_capture_viewport takes. Each field conflicts with the matching top-level location or rotation",
+        "fields": [
+          {
+            "name": "location",
+            "type": "vec3",
+            "required": false,
+            "description": "Camera location"
+          },
+          {
+            "name": "rotation",
+            "type": "rotator",
+            "required": false,
+            "description": "Camera rotation"
+          },
+          {
+            "name": "scale",
+            "type": "vec3",
+            "required": false,
+            "description": "Accepted for shape compatibility; a camera has no scale, so it is not applied"
+          }
+        ]
+      },
+      {
         "name": "focusActorLabel",
         "type": "string",
         "required": false,
@@ -1750,7 +1776,7 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "pattern",
         "type": "string",
         "required": false,
-        "description": "Case-insensitive substring of the library class name"
+        "description": "Case-insensitive substring of the library class name or its Python name"
       },
       {
         "name": "includeFunctions",
@@ -3856,7 +3882,7 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "sweep",
         "type": "boolean",
         "required": false,
-        "description": "Collide on the way (default false)"
+        "description": "Move along the way and stop at the first blocking hit, returned as blocked and hit (default false)"
       },
       {
         "name": "world",
@@ -3951,7 +3977,7 @@ export const paramsClauses: Readonly<Record<string, string>> = {
   build_lighting: "Params: quality?",
   cancel_editor_transaction: "Params: index?",
   cancel_mesh_studio_render: "Params: jobId",
-  capture_scene_png: "Params: outputPath? (or filename), captureId?, cancel?, warmupFrames?, warmupTimeoutSeconds?, location?, rotation?, focusActorLabel?, focusActorPath?, focusDirection?, focusMargin?, world?, pieInstance?, width?, height?, fov?, fullyLoadTextures?",
+  capture_scene_png: "Params: outputPath? (or filename), captureId?, cancel?, warmupFrames?, warmupTimeoutSeconds?, location?, rotation?, captureTransform?, focusActorLabel?, focusActorPath?, focusDirection?, focusMargin?, world?, pieInstance?, width?, height?, fov?, fullyLoadTextures?",
   capture_screenshot: "Params: filename (or outputPath), target?, pieInstance?, worldPath?",
   check_for_crashes: "Params: none",
   clear_dialog_policy: "Params: pattern?",
@@ -4107,6 +4133,7 @@ export const schema: Record<string, z.ZodType> = {
   captureLog: z.boolean().optional().describe("false drops everything the script logged except its errors (default true)"),
   captureMode: z.enum(["beauty","matte","both"]).optional().describe("beauty: opaque colour; matte: opaque coverage grayscale; both: colour with coverage alpha (default both)"),
   captures: z.array(z.object({ id: z.string().describe("Unique filename stem: letters, digits, underscore or hyphen"), meshPath: z.string().optional().describe("StaticMesh or SkeletalMesh asset path"), parts: z.array(z.object({ meshPath: z.string().describe("StaticMesh or SkeletalMesh asset path"), relativeTransform: z.object({ location: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Translation in centimetres, default zero"), rotation: z.object({ pitch: z.number(), yaw: z.number(), roll: z.number() }).optional().describe("Pitch, yaw and roll in degrees, default zero"), scale: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Scale, default one") }).optional().describe("Transform relative to the assembly origin") })).optional().describe("1-64 meshes forming one assembly"), aspect: z.object({ width: z.number().min(0.01).max(100).describe("Positive relative width"), height: z.number().min(0.01).max(100).describe("Positive relative height") }).optional().describe("Inventory aspect ratio; the longer output edge equals resolution") })).optional().describe("1-128 mesh captures, with unique filename-safe ids and exactly one of meshPath or parts"),
+  captureTransform: z.object({ location: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Camera location"), rotation: z.object({ pitch: z.number(), yaw: z.number(), roll: z.number() }).optional().describe("Camera rotation"), scale: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Accepted for shape compatibility; a camera has no scale, so it is not applied") }).optional().describe("Camera pose as one object, the shape epic_capture_viewport takes. Each field conflicts with the matching top-level location or rotation"),
   category: z.string().optional().describe("Case-insensitive substring the log category must contain (get_output_log). Settings category, e.g. Engine (open_settings)"),
   centerNewWindow: z.boolean().optional().describe("Center new PIE windows; false places them at newWindowPosition"),
   channel: z.string().optional().describe("Channel name (Location.X, a parameter name such as Intensity or Tint.R); omit for every channel on the section (get_sequence_channel_keys). Channel name: Location.X, a parameter name such as Intensity, or Tint.R for a vector or color parameter (set_sequence_channel_keys). Location.X/Y/Z or Rotation.X/Y/Z (also x/y/z, yaw/pitch/roll) on a Transform track; the float channel on Fade or Float (set_sequence_keyframes)"),
@@ -4244,7 +4271,7 @@ export const schema: Record<string, z.ZodType> = {
   parameterType: z.string().optional().describe("scalar | bool | vector | vector2d | color: adds a missing parameter to a parameter section. Inferred from the collection on a Material Parameter Collection track"),
   path: z.string().optional().describe("Alias for sequencePath (add_sequence_section, get_sequence_binding_components, get_sequence_channel_keys, play_sequence, rebind_possessable, remove_sequence_section, render_sequence_frames, resolve_sequence_bindings, scrub_sequence, set_sequence_channel_keys, set_sequence_display_rate, set_sequence_keyframes, set_sequence_playback_range). Alias for assetPath (add_sequence_track, get_sequence_info, open_asset). Alias for objectPath (describe_object, get_property, set_property). Alias for filePath (run_python_file)"),
   paths: z.array(z.string()).optional().describe("Dotted property or function paths to evaluate per match. A function segment may carry literal arguments, e.g. GetBalance(gold, 2)"),
-  pattern: z.string().optional().describe("Exact pattern of the policy to clear; omit to clear every policy (clear_dialog_policy). Substring matched against every registered console variable. Pass at least one of name, names and pattern (get_cvars). Case-insensitive substring of the library class name (list_function_libraries). Substring matched case-insensitively against the dialog title and message (set_dialog_policy)"),
+  pattern: z.string().optional().describe("Exact pattern of the policy to clear; omit to clear every policy (clear_dialog_policy). Substring matched against every registered console variable. Pass at least one of name, names and pattern (get_cvars). Case-insensitive substring of the library class name or its Python name (list_function_libraries). Substring matched case-insensitively against the dialog title and message (set_dialog_policy)"),
   paused: z.boolean().optional().describe("true pauses the running trace, false resumes it (default true) (pause_insights_trace). true pauses, false resumes (set_pie_paused)"),
   pieAction: z.string().optional().describe("start | stop | status (default status)"),
   pieInstance: z.number().optional().describe("PIE world to target: 0 = server/primary, 1..N = clients. See list_pie_instances (capture_scene_png, capture_screenshot, execute_command, find_object, get_object_properties, get_runtime_value, get_runtime_values, invoke_function, invoke_object_function, invoke_object_functions, invoke_static_function, pose_debug_camera, read_bone_transforms, restore_runtime_visibility, set_buffer_visualization, set_movement_mode, set_object_property, set_pie_paused, set_pie_view_target, set_runtime_visibility, teleport_runtime_actor). PIE world to read (default: the primary world, or the first client world when the primary is a dedicated server). See list_pie_instances (get_pie_pawn). PIE instance index when several clients run (get_sequence_runtime_bindings)"),
@@ -4296,7 +4323,7 @@ export const schema: Record<string, z.ZodType> = {
   stopMovement: z.boolean().optional().describe("Stop the movement component so the move is not undone (default true)"),
   subsystemClass: z.string().optional().describe("Subsystem class name or /Script path, with target=subsystem: world, game instance, local player (by playerIndex), engine or editor"),
   subText: z.string().optional().describe("Second line under the headline"),
-  sweep: z.boolean().optional().describe("Collide on the way (default false)"),
+  sweep: z.boolean().optional().describe("Move along the way and stop at the first blocking hit, returned as blocked and hit (default false)"),
   tabId: z.string().optional().describe("Registered editor tab id, e.g. ProjectSettings, OutputLog or ContentBrowserTab1"),
   target: z.string().optional().describe("auto (default) | pie | editor | window (capture_screenshot). gameinstance | gamemode | gamestate | playercontroller | playerpawn | subsystem (get_object_properties, invoke_object_function, set_object_property). editor (default) for a level viewport, pie for the running game viewport (set_buffer_visualization)"),
   templateLevel: z.string().optional().describe("Level to copy; omit, Empty or None for a blank level"),

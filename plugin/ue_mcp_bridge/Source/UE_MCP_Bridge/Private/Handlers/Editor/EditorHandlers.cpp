@@ -10,6 +10,7 @@
 #include "HandlerSkinnedAsset.h"
 #include "HandlerSceneCapture.h"
 #include "Handlers/Editor/HandlerWindowPick.h"
+#include "Handlers/Editor/HandlerSlateCapture.h"
 #include "Handlers/Level/LevelHandlers.h"
 #include "Handlers/HandlerEditorState.h"
 #include "Misc/PackageName.h"
@@ -64,6 +65,7 @@
 #include "Logging/MessageLog.h"
 #include "HighResScreenshot.h"
 #include "Framework/Application/SlateApplication.h"
+#include "Rendering/SlateRenderer.h"
 #include "Widgets/SViewport.h"
 #include "Widgets/SWindow.h"
 #include "Framework/Notifications/NotificationManager.h"
@@ -79,6 +81,7 @@
 #include "Subsystems/EditorActorSubsystem.h"
 #include "Misc/OutputDeviceRedirector.h"
 #include "FileHelpers.h"
+#include "Internationalization/BreakIterator.h"
 #include "Engine/Level.h"
 #include "Settings/LevelEditorPlaySettings.h"
 #include "Misc/DateTime.h"
@@ -648,7 +651,7 @@ void FEditorHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("location"), EType::Vec3, TEXT("Destination; omit to keep the current location")),
 		MCPParam::Optional(TEXT("rotation"), EType::Rotator, TEXT("Destination rotation; omit to keep the current one")),
 		MCPParam::Optional(TEXT("stopMovement"), EType::Boolean, TEXT("Stop the movement component so the move is not undone (default true)")),
-		MCPParam::Optional(TEXT("sweep"), EType::Boolean, TEXT("Collide on the way (default false)")),
+		MCPParam::Optional(TEXT("sweep"), EType::Boolean, TEXT("Move along the way and stop at the first blocking hit, returned as blocked and hit (default false)")),
 		WorldParam(),
 		PieInstanceParam(),
 	});
@@ -816,6 +819,11 @@ void FEditorHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("warmupTimeoutSeconds"), EType::Number, TEXT("Warm capture deadline checked between frames and before export, 1-120 seconds (default 60)")),
 		MCPParam::Optional(TEXT("location"), EType::Vec3, TEXT("Camera location")),
 		MCPParam::Optional(TEXT("rotation"), EType::Rotator, TEXT("Camera rotation")),
+		MCPParam::Optional(TEXT("captureTransform"), EType::Object, TEXT("Camera pose as one object, the shape epic_capture_viewport takes. Each field conflicts with the matching top-level location or rotation")).WithFields({
+			MCPParam::OptionalField(TEXT("location"), EType::Vec3, TEXT("Camera location")),
+			MCPParam::OptionalField(TEXT("rotation"), EType::Rotator, TEXT("Camera rotation")),
+			MCPParam::OptionalField(TEXT("scale"), EType::Vec3, TEXT("Accepted for shape compatibility; a camera has no scale, so it is not applied")),
+		}),
 		MCPParam::Optional(TEXT("focusActorLabel"), EType::String, TEXT("Frame the camera on this actor's bounds")),
 		MCPParam::Optional(TEXT("focusActorPath"), EType::String, TEXT("Full object path of the actor to frame. Wins over focusActorLabel")),
 		MCPParam::Optional(TEXT("focusDirection"), EType::Vec3, TEXT("Framing direction from the focus actor (default front and above)")),
@@ -935,7 +943,7 @@ void FEditorHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	// Kismet, anything user-defined). Pair with editor.invoke_function to
 	// drive GeometryScript ops from MCP without hand-writing each handler.
 	Registry.RegisterHandler(TEXT("list_function_libraries"), &ListFunctionLibraries, {
-		MCPParam::Optional(TEXT("pattern"), EType::String, TEXT("Case-insensitive substring of the library class name")),
+		MCPParam::Optional(TEXT("pattern"), EType::String, TEXT("Case-insensitive substring of the library class name or its Python name")),
 		MCPParam::Optional(TEXT("includeFunctions"), EType::Boolean, TEXT("Include each library's static BlueprintCallable functions (default true)")),
 	});
 	// #718: close the open Level Sequence editor before destructive actor ops.
@@ -2992,13 +3000,54 @@ TSharedPtr<FJsonValue> FEditorHandlers::CaptureScreenshot(const TSharedPtr<FJson
 		const FWorldContext* ReportContext,
 		const FString& CaptureDescription) -> TSharedPtr<FJsonValue>
 	{
-		TArray<FColor> Pixels;
-		FIntVector CaptureSize = FIntVector::ZeroValue;
-		if (!FSlateApplication::Get().TakeScreenshot(CaptureWidget, Pixels, CaptureSize)
-			|| Pixels.Num() == 0)
+		// #1450: a capture of a window Slate does not draw leaves its readback
+		// queued, so refuse it up front, and read back into a buffer that
+		// outlives the call in case the renderer still skips the draw.
+		FSlateRenderer* Renderer = FSlateApplication::Get().GetRenderer();
+		const TSharedPtr<SWindow> CaptureWindow = FSlateApplication::Get().FindWidgetWindow(CaptureWidget);
+		if (!Renderer || !CaptureWindow.IsValid())
 		{
-			return MCPError(TEXT("Slate screenshot failed"));
+			return MCPError(FString::Printf(
+				TEXT("The %s viewport is not being drawn: it is not in any Slate window. Use capture_scene_png, which renders without the window."),
+				*ResultTarget));
 		}
+		const FString NotDrawn = MCPWhySlateWindowNotDrawn(
+			*CaptureWindow,
+			Renderer->GetViewportResource(*CaptureWindow) != nullptr,
+			FVector2f(CaptureWidget->GetTickSpaceGeometry().GetDrawSize()));
+		if (!NotDrawn.IsEmpty())
+		{
+			return MCPError(FString::Printf(
+				TEXT("The %s viewport is not being drawn: %s (window '%s'). Show the window, or use capture_scene_png, which renders without it."),
+				*ResultTarget, *NotDrawn, *CaptureWindow->GetTitle().ToString()));
+		}
+
+		TArray<FColor>& Sink = MCPSlateCaptureSink();
+		if (MCPSlateCaptureMayBePending())
+		{
+			// An earlier failed capture may still have a readback in flight
+			// into the sink; let it land before the sink is reused.
+			FlushRenderingCommands();
+			MCPSlateCaptureMayBePending() = false;
+		}
+		Sink.Reset();
+		FIntVector CaptureSize = FIntVector::ZeroValue;
+		const bool bCaptured = FSlateApplication::Get().TakeScreenshot(CaptureWidget, Sink, CaptureSize);
+		if (!bCaptured
+			|| Sink.Num() == 0
+			|| Sink.Num() != CaptureSize.X * CaptureSize.Y)
+		{
+			// The window was not drawn, so its request is still queued. Shrink
+			// it to one pixel, which is inside the back buffer at any size, so
+			// the draw that finally consumes it reads back nothing harmful.
+			Renderer->PrepareToTakeScreenshot(FIntRect(0, 0, 1, 1), &Sink, CaptureWindow.Get());
+			MCPSlateCaptureMayBePending() = true;
+			return MCPError(FString::Printf(
+				TEXT("The %s viewport is not being drawn: Slate did not draw window '%s' during the capture, so nothing was read back. This happens when the window is off screen or not presented. Bring it on screen, or use capture_scene_png, which renders without it."),
+				*ResultTarget, *CaptureWindow->GetTitle().ToString()));
+		}
+		TArray<FColor> Pixels = MoveTemp(Sink);
+		Sink.Reset();
 		for (FColor& Pixel : Pixels)
 		{
 			Pixel.A = 255;
@@ -5101,6 +5150,25 @@ TSharedPtr<FJsonValue> FEditorHandlers::CaptureScenePng(const TSharedPtr<FJsonOb
 
 	FVector Location = OptionalVec3(Params, TEXT("location"));
 	FRotator Rotation = OptionalRotator(Params, TEXT("rotation"));
+	// #1458: captureTransform carries the same pose as one object. A field given
+	// both ways is refused rather than one silently winning.
+	const TSharedPtr<FJsonObject>* CaptureTransform = nullptr;
+	if (TryGetObjectParam(Params, TEXT("captureTransform"), CaptureTransform) && CaptureTransform && CaptureTransform->IsValid())
+	{
+		const TSharedPtr<FJsonObject>* Sub = nullptr;
+		if ((*CaptureTransform)->TryGetObjectField(TEXT("location"), Sub) && Sub && Sub->IsValid())
+		{
+			if (HasParam(Params, TEXT("location"))) return MCPError(TEXT("Pass the camera location once: location or captureTransform.location, not both"));
+			Location = FVector::ZeroVector;
+			ReadVec3Fields(*Sub, Location);
+		}
+		if ((*CaptureTransform)->TryGetObjectField(TEXT("rotation"), Sub) && Sub && Sub->IsValid())
+		{
+			if (HasParam(Params, TEXT("rotation"))) return MCPError(TEXT("Pass the camera rotation once: rotation or captureTransform.rotation, not both"));
+			Rotation = FRotator::ZeroRotator;
+			ReadRotatorFields(*Sub, Rotation);
+		}
+	}
 	const double FocusMargin = OptionalNumber(Params, TEXT("focusMargin"), 1.5);
 	if (!FMath::IsFinite(FocusMargin) || FocusMargin <= 0.0)
 	{
@@ -5279,6 +5347,61 @@ TSharedPtr<FJsonValue> FEditorHandlers::CaptureScenePng(const TSharedPtr<FJsonOb
 // without authoring per-op C++ wrappers.
 //
 // Params: pattern? (substring filter), includeFunctions? (default true)
+namespace FunctionLibraryPythonNames
+{
+	// First entry of a ScriptName/ScriptMethod list; later entries are deprecated aliases.
+	FString FirstMetaName(const UField* Field, const TCHAR* Key)
+	{
+		FString Value = Field->GetMetaData(Key);
+		int32 Semi = INDEX_NONE;
+		if (Value.FindChar(TEXT(';'), Semi)) Value.LeftInline(Semi);
+		Value.TrimStartAndEndInline();
+		return Value;
+	}
+
+	// Snake-cases the way the Python plugin's PythonizeName does (camel-case
+	// breaks joined by '_', lowered, keyword-suffixed), so names match unreal.*.
+	FString Pythonize(const FString& Name)
+	{
+		static const TSet<FString> Keywords = {
+			TEXT("and"), TEXT("as"), TEXT("assert"), TEXT("async"), TEXT("break"), TEXT("class"),
+			TEXT("continue"), TEXT("def"), TEXT("del"), TEXT("elif"), TEXT("else"), TEXT("except"),
+			TEXT("finally"), TEXT("for"), TEXT("from"), TEXT("global"), TEXT("if"), TEXT("import"),
+			TEXT("in"), TEXT("is"), TEXT("lambda"), TEXT("nonlocal"), TEXT("not"), TEXT("or"),
+			TEXT("pass"), TEXT("raise"), TEXT("return"), TEXT("try"), TEXT("while"), TEXT("with"),
+			TEXT("yield"), TEXT("property"),
+		};
+		FString Out;
+		Out.Reserve(Name.Len() + 10);
+		TSharedRef<IBreakIterator> Breaks = FBreakIterator::CreateCamelCaseBreakIterator();
+		Breaks->SetStringRef(Name);
+		for (int32 Prev = 0, Break = Breaks->MoveToNext(); Break != INDEX_NONE; Break = Breaks->MoveToNext())
+		{
+			const int32 StartLen = Out.Len();
+			if (StartLen > 0 && Out[StartLen - 1] != TEXT('_')) Out += TEXT('_');
+			Out.AppendChars(&Name[Prev], Break - Prev);
+			while (Out.Len() > StartLen && Out[Out.Len() - 1] == TEXT('_')) Out.LeftChopInline(1);
+			Prev = Break;
+		}
+		Breaks->ClearString();
+		Out.ToLowerInline();
+		if (Keywords.Contains(Out)) Out += TEXT('_');
+		return Out;
+	}
+
+	FString ClassName(const UClass* Class)
+	{
+		const FString Meta = FirstMetaName(Class, TEXT("ScriptName"));
+		return Meta.IsEmpty() ? Class->GetName() : Meta;
+	}
+
+	FString FunctionName(const UFunction* Func)
+	{
+		const FString Meta = FirstMetaName(Func, TEXT("ScriptName"));
+		return Pythonize(Meta.IsEmpty() ? Func->GetName() : Meta);
+	}
+}
+
 TSharedPtr<FJsonValue> FEditorHandlers::ListFunctionLibraries(const TSharedPtr<FJsonObject>& Params)
 {
 	const FString Pattern = OptionalString(Params, TEXT("pattern"), TEXT("")).ToLower();
@@ -5293,10 +5416,14 @@ TSharedPtr<FJsonValue> FEditorHandlers::ListFunctionLibraries(const TSharedPtr<F
 		if (C->HasAnyClassFlags(CLASS_Abstract | CLASS_Deprecated | CLASS_NewerVersionExists)) continue;
 
 		const FString ClassName = C->GetName();
-		if (!Pattern.IsEmpty() && !ClassName.ToLower().Contains(Pattern)) continue;
+		// #1453: the Python name (ScriptName) often differs from the class name,
+		// e.g. GeometryScriptLibrary_ListUtilityFunctions is unreal.GeometryScript_List.
+		const FString PythonName = FString::Printf(TEXT("unreal.%s"), *FunctionLibraryPythonNames::ClassName(C));
+		if (!Pattern.IsEmpty() && !ClassName.ToLower().Contains(Pattern) && !PythonName.ToLower().Contains(Pattern)) continue;
 
 		TSharedPtr<FJsonObject> LibObj = MakeShared<FJsonObject>();
 		LibObj->SetStringField(TEXT("name"), ClassName);
+		LibObj->SetStringField(TEXT("pythonName"), PythonName);
 		LibObj->SetStringField(TEXT("path"), C->GetPathName());
 		if (UPackage* Pkg = C->GetOuterUPackage())
 		{
@@ -5313,6 +5440,15 @@ TSharedPtr<FJsonValue> FEditorHandlers::ListFunctionLibraries(const TSharedPtr<F
 				if (!Func->HasAllFunctionFlags(FUNC_Static | FUNC_BlueprintCallable)) continue;
 				TSharedPtr<FJsonObject> FObj = MakeShared<FJsonObject>();
 				FObj->SetStringField(TEXT("name"), Func->GetName());
+				FObj->SetStringField(TEXT("pythonName"), FunctionLibraryPythonNames::FunctionName(Func));
+				if (Func->HasMetaData(TEXT("ScriptMethod")))
+				{
+					// Also callable as a method on its first parameter's type; an empty value reuses the function name.
+					const FString ScriptMethod = FunctionLibraryPythonNames::FirstMetaName(Func, TEXT("ScriptMethod"));
+					FObj->SetStringField(TEXT("pythonMethod"), ScriptMethod.IsEmpty()
+						? FunctionLibraryPythonNames::FunctionName(Func)
+						: FunctionLibraryPythonNames::Pythonize(ScriptMethod));
+				}
 				const FString Tooltip = Func->GetToolTipText().ToString();
 				if (!Tooltip.IsEmpty()) FObj->SetStringField(TEXT("tooltip"), Tooltip.Left(240));
 				Funcs.Add(MakeShared<FJsonValueObject>(FObj));

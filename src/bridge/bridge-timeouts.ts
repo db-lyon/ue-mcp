@@ -91,6 +91,7 @@ export const REGISTERED_HANDLER_TIMEOUT_SECONDS: Readonly<Record<string, number>
   get_landscape_holes: 120,
   get_landscape_layer_weight_region: 120,
   get_landscape_slope_map: 120,
+  get_skinned_vertices: 300,
   get_static_mesh_geometry: 300,
   import_landscape_heightmap: 600,
   invoke_object_functions: 300,
