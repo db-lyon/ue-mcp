@@ -22374,6 +22374,11 @@
           "suite": "live",
           "file": "tests/live/bcov-editor-pie.test.ts",
           "test": "set_movement_mode makes the Character fly and teleport_runtime_actor moves it where get_runtime_values reads it"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/bcov-editor-pie.test.ts",
+          "test": "teleport_runtime_actor with sweep stops the Character on the floor and reports the hit (#1449)"
         }
       ]
     },

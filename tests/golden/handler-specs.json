@@ -43390,7 +43390,7 @@
           "name": "sweep",
           "type": "boolean",
           "required": false,
-          "description": "Collide on the way (default false)"
+          "description": "Move along the way and stop at the first blocking hit, returned as blocked and hit (default false)"
         },
         {
           "name": "world",
