@@ -422,7 +422,7 @@ void FAnimationHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		OnConflict(TEXT("skip (default) returns an existing destination untouched, error refuses; it never overwrites")),
 	});
 	Registry.RegisterHandler(TEXT("get_bone_transforms"), &GetBoneTransforms, {
-		MCPParam::Required(TEXT("skeletonPath"), EType::String, TEXT("USkeleton, or a SkeletalMesh whose skeleton to read")).Alias(TEXT("assetPath")).Alias(TEXT("path")),
+		MCPParam::Required(TEXT("skeletonPath"), EType::String, TEXT("USkeleton, or a SkeletalMesh whose own bind pose to read")).Alias(TEXT("assetPath")).Alias(TEXT("path")),
 		MCPParam::Optional(TEXT("boneNames"), EType::Array, TEXT("Bones to return (default every bone)")).Items(EType::String),
 		MCPParam::Optional(TEXT("space"), EType::String, TEXT("local (default) | component, which composes the parent chain")),
 	});
