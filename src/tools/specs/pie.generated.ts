@@ -338,6 +338,19 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "Caller-chosen hold id (minted when absent)"
       },
       {
+        "name": "duration_seconds",
+        "type": "number",
+        "required": false,
+        "description": "Game seconds after which the hold releases itself (default 0: held until inject_input_stop or PIE ends). Local player only",
+        "minimum": 0
+      },
+      {
+        "name": "control_rotation",
+        "type": "rotator",
+        "required": false,
+        "description": "Player controller control rotation, re-applied every frame while the hold runs. Local player only"
+      },
+      {
         "name": "client_id",
         "type": "integer",
         "required": false,
@@ -450,6 +463,12 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "number",
         "required": false,
         "description": "Axis value Z (default 0)"
+      },
+      {
+        "name": "control_rotation",
+        "type": "rotator",
+        "required": false,
+        "description": "New control rotation the hold re-applies every frame; sent alone it keeps the hold's value"
       }
     ],
     "contractExempt": "Changes the value of a running input hold"
@@ -2373,10 +2392,10 @@ export const paramsClauses: Readonly<Record<string, string>> = {
   pie_drive_status: "Params: driveId?, includeSamples?",
   pie_drive_stop: "Params: driveId?",
   pie_inject_input: "Params: action_path, value_x?, value_y?, value_z?, client_id?, pie_instance?, client?",
-  pie_inject_input_start: "Params: action_path, value_x?, value_y?, value_z?, injection_id?, client_id?, pie_instance?, client?",
+  pie_inject_input_start: "Params: action_path, value_x?, value_y?, value_z?, injection_id?, duration_seconds?, control_rotation?, client_id?, pie_instance?, client?",
   pie_inject_input_stop: "Params: injection_id",
   pie_inject_input_tape: "Params: action_path, values, hz?, injection_id?, client_id?, pie_instance?, client?",
-  pie_inject_input_update: "Params: injection_id, value_x?, value_y?, value_z?",
+  pie_inject_input_update: "Params: injection_id, value_x?, value_y?, value_z?, control_rotation?",
   pie_mark: "Params: label",
   pie_observe_arm: "Params: profile, output_dir?, sample_hz?, client_id?, pie_instance?, pin_fps?",
   pie_observe_disarm: "Params: none",
@@ -2461,6 +2480,7 @@ export const schema: Record<string, z.ZodType> = {
   command: z.string().optional().describe("Console command"),
   confirm: z.boolean().optional().describe("Must be true to delete"),
   contains: z.string().optional().describe("Substring the message must contain"),
+  control_rotation: z.object({ pitch: z.number(), yaw: z.number(), roll: z.number() }).optional().describe("Player controller control rotation, re-applied every frame while the hold runs. Local player only (pie_inject_input_start). New control rotation the hold re-applies every frame; sent alone it keeps the hold's value (pie_inject_input_update)"),
   csv_path: z.string().optional().describe("Explicit per-frame series CSV"),
   default_within_ms: z.number().int().min(1).optional().describe("Default auto-step window in game ms (default 5000) (pie_script_create). Default auto-step window in game ms; overrides the script's (default 5000) (pie_script_run). Default auto-step window in game ms (pie_script_update)"),
   description: z.string().optional().describe("What the script tests"),
@@ -2469,6 +2489,7 @@ export const schema: Record<string, z.ZodType> = {
   distance: z.number().optional().describe("Positive trace distance in cm (default 1000)"),
   drift_thresholds: z.record(z.string(), z.unknown()).optional().describe("{position_cm, rotation_deg, velocity_cms, tracked_default, tracked:{path: threshold}}"),
   driveId: z.string().optional().describe("Caller-chosen drive id (minted when absent) (pie_drive_pawn). Drive id from drive_pawn (default: the most recent drive) (pie_drive_status, pie_drive_stop)"),
+  duration_seconds: z.number().min(0).optional().describe("Game seconds after which the hold releases itself (default 0: held until inject_input_stop or PIE ends). Local player only"),
   durationSeconds: z.number().min(0).max(600).optional().describe("Real seconds to drive before ending as completed or timeout (default 5, at most 600)"),
   eject: z.boolean().optional().describe("Eject to a spectator camera during replay"),
   encode_gif: z.boolean().optional().describe("Also encode an animated GIF (default false)"),

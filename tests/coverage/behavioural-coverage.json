@@ -10779,6 +10779,11 @@
         },
         {
           "suite": "live",
+          "file": "tests/live/bcov-pie-session.test.ts",
+          "test": "inject_input_start releases itself after duration_seconds and pins control_rotation every frame (#1449)"
+        },
+        {
+          "suite": "live",
           "file": "tests/live/pie-script-running-session.test.ts",
           "test": "ends the run with the reason when the controller possesses no pawn"
         }
@@ -13975,6 +13980,11 @@
           "suite": "live",
           "file": "tests/live/bcov-pie-session.test.ts",
           "test": "inject_input, inject_input_start, inject_input_update, inject_input_stop and inject_input_tape drive a bound action"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/bcov-pie-session.test.ts",
+          "test": "inject_input_start releases itself after duration_seconds and pins control_rotation every frame (#1449)"
         }
       ]
     },
@@ -13988,6 +13998,11 @@
           "suite": "live",
           "file": "tests/live/bcov-pie-session.test.ts",
           "test": "inject_input, inject_input_start, inject_input_update, inject_input_stop and inject_input_tape drive a bound action"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/bcov-pie-session.test.ts",
+          "test": "inject_input_start releases itself after duration_seconds and pins control_rotation every frame (#1449)"
         }
       ]
     },
@@ -14014,6 +14029,11 @@
           "suite": "live",
           "file": "tests/live/bcov-pie-session.test.ts",
           "test": "inject_input, inject_input_start, inject_input_update, inject_input_stop and inject_input_tape drive a bound action"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/bcov-pie-session.test.ts",
+          "test": "inject_input_start releases itself after duration_seconds and pins control_rotation every frame (#1449)"
         }
       ]
     },
@@ -23935,6 +23955,11 @@
           "suite": "live",
           "file": "tests/live/bcov-editor-pie.test.ts",
           "test": "set_movement_mode makes the Character fly and teleport_runtime_actor moves it where get_runtime_values reads it"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/bcov-editor-pie.test.ts",
+          "test": "teleport_runtime_actor with sweep stops the Character on the floor and reports the hit (#1449)"
         },
         {
           "suite": "live",
