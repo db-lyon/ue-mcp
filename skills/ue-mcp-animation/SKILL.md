@@ -51,6 +51,16 @@ component-space `box`, or both. `include` adds `triangles`; page with
 file. Its `vertexIndex` values are the IDs the per-vertex weight read and
 setter take.
 
+To measure a mesh where it is drawn now (a glove against a steering wheel in
+PIE), call
+`level(action="get_skinned_vertices", actorLabel=<actor>, componentName=<component>, world="pie", space="world")`.
+It skins the component's drawn LOD with its current pose and active morph
+targets, and a leader-pose follower reads through its leader. Select with
+`boneNames`, `box`, or `nearPoint` with `radius`; page with
+`startIndex`/`limit` or `dumpToFile`. Its `vertexIndex` values are render
+vertex indices, not source IDs. Cloth simulation and mesh deformers are not
+applied.
+
 ## Required loop
 
 1. Call `project(action="get_status")`; verify the intended project and editor.

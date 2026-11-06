@@ -1,5 +1,5 @@
 {
-  "handlerCount": 1251,
+  "handlerCount": 1252,
   "handlers": {
     "actors_in_box": {
       "category": "level",
@@ -19076,6 +19076,152 @@
           "description": "SkeletalMesh, or a Skeleton, asset path",
           "aliases": [
             "path"
+          ]
+        }
+      ]
+    },
+    "get_skinned_vertices": {
+      "category": "level",
+      "params": [
+        {
+          "name": "actorLabel",
+          "type": "string",
+          "required": false,
+          "description": "Actor label, name or path; pass actorLabel or actorPath"
+        },
+        {
+          "name": "actorPath",
+          "type": "string",
+          "required": false,
+          "description": "Actor object path; preferred when labels repeat"
+        },
+        {
+          "name": "componentName",
+          "type": "string",
+          "required": false,
+          "description": "Skinned mesh component (default: the first on the actor); a leader-pose follower reads as drawn"
+        },
+        {
+          "name": "world",
+          "type": "string",
+          "required": false,
+          "description": "World scope: editor (default) | pie"
+        },
+        {
+          "name": "pieInstance",
+          "type": "integer",
+          "required": false,
+          "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients"
+        },
+        {
+          "name": "lodIndex",
+          "type": "integer",
+          "required": false,
+          "description": "Render LOD to skin (default: the LOD the component draws)"
+        },
+        {
+          "name": "space",
+          "type": "string",
+          "required": false,
+          "description": "Space of positions, box and nearPoint (default component)",
+          "enum": [
+            "component",
+            "world"
+          ]
+        },
+        {
+          "name": "boneNames",
+          "type": "array",
+          "required": false,
+          "description": "Keep vertices weighted to any of these bones; omit to keep every vertex",
+          "items": "string"
+        },
+        {
+          "name": "includeChildBones",
+          "type": "boolean",
+          "required": false,
+          "description": "With boneNames, also select every bone below each named bone (default false)"
+        },
+        {
+          "name": "minWeight",
+          "type": "number",
+          "required": false,
+          "description": "With boneNames, keep a vertex only when its summed weight on the selected bones is at least this (0 < minWeight <= 1; default any positive weight)"
+        },
+        {
+          "name": "box",
+          "type": "object",
+          "required": false,
+          "description": "Keep vertices whose posed position is inside this box (inclusive), in space",
+          "fields": [
+            {
+              "name": "min",
+              "type": "vec3",
+              "required": true,
+              "description": "Box minimum (cm)"
+            },
+            {
+              "name": "max",
+              "type": "vec3",
+              "required": true,
+              "description": "Box maximum (cm)"
+            }
+          ]
+        },
+        {
+          "name": "nearPoint",
+          "type": "vec3",
+          "required": false,
+          "description": "Keep vertices within radius of this point, in space; needs radius"
+        },
+        {
+          "name": "radius",
+          "type": "number",
+          "required": false,
+          "description": "Distance from nearPoint in cm, above 0; needs nearPoint"
+        },
+        {
+          "name": "include",
+          "type": "array",
+          "required": false,
+          "description": "Data per vertex: any of positions, weights, triangles (default positions and weights)",
+          "items": "string"
+        },
+        {
+          "name": "startIndex",
+          "type": "integer",
+          "required": false,
+          "description": "First selected vertex to return (default 0); ignored with dumpToFile"
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "description": "Selected vertices to return inline, 1 to 20000 (default 2000); ignored with dumpToFile"
+        },
+        {
+          "name": "dumpToFile",
+          "type": "boolean",
+          "required": false,
+          "description": "Write the whole selection to a JSON file and return only the summary"
+        },
+        {
+          "name": "outputPath",
+          "type": "string",
+          "required": false,
+          "description": "File for dumpToFile; relative paths resolve under Saved/ (default Saved/UE_MCP/SkinnedVertices/)"
+        }
+      ],
+      "choices": [
+        {
+          "mode": "atLeastOne",
+          "branches": [
+            [
+              "actorLabel"
+            ],
+            [
+              "actorPath"
+            ]
           ]
         }
       ]
