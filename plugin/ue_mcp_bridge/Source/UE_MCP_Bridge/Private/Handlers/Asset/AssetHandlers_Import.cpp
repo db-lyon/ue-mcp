@@ -4385,11 +4385,8 @@ TSharedPtr<FJsonValue> FAssetHandlers::ExportAsset(const TSharedPtr<FJsonObject>
 	// working directory, which is the engine's binaries folder: not somewhere a
 	// caller can predict, and it would put the existence probe below and the
 	// file the exporter actually writes in two different places.
-	FString AbsOutputPath = OutputPath;
-	if (FPaths::IsRelative(AbsOutputPath))
-	{
-		AbsOutputPath = FPaths::Combine(FPaths::ProjectDir(), AbsOutputPath);
-	}
+	FString AbsOutputPath;
+	if (auto Err = MCPRequireWritablePath(OutputPath, AbsOutputPath)) return Err;
 
 	// CompositeDataTable derives from DataTable; its merged rows use the same
 	// serializers. Neither table class needs a registered UExporter.
@@ -4536,8 +4533,8 @@ TSharedPtr<FJsonValue> FAssetHandlers::ExportTexture(const TSharedPtr<FJsonObjec
 	UTexture2D* Texture = LoadAssetByPath<UTexture2D>(AssetPath);
 	if (!Texture) return MCPAssetLoadError(AssetPath, TEXT("Texture2D"));
 
-	FString AbsPath = OutputPath;
-	if (FPaths::IsRelative(AbsPath)) AbsPath = FPaths::Combine(FPaths::ProjectDir(), AbsPath);
+	FString AbsPath;
+	if (auto Err = MCPRequireWritablePath(OutputPath, AbsPath)) return Err;
 	if (!AbsPath.EndsWith(TEXT(".png"))) AbsPath += TEXT(".png");
 	// Same reason as export_asset: bReplaceIdentical is true below, so this
 	// distinguishes writing a new PNG from overwriting one that was there.

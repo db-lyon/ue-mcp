@@ -176,6 +176,18 @@ TSharedPtr<FJsonValue> FPIEHandlers::PieRecordArm(const TSharedPtr<FJsonObject>&
 
 	Cfg.RecordingsRoot = OptionalString(Params, TEXT("recording_dir"));
 	Cfg.Id = OptionalString(Params, TEXT("id"));
+	if (!Cfg.RecordingsRoot.IsEmpty())
+	{
+		FString Resolved;
+		if (auto Err = MCPRequireWritablePath(Cfg.RecordingsRoot, Resolved)) return Err;
+		Cfg.RecordingsRoot = Resolved;
+	}
+	if (!Cfg.Id.IsEmpty())
+	{
+		FString Unused;
+		const FString IdRoot = Cfg.RecordingsRoot.IsEmpty() ? DefaultRecordingsRoot() : Cfg.RecordingsRoot;
+		if (auto Err = MCPRequirePathInside(IdRoot / Cfg.Id, { IdRoot }, Unused)) return Err;
+	}
 
 	FString Err, Msg;
 	if (!FPIEInputRecorder::Get().Arm(Cfg, Err, Msg))
@@ -298,7 +310,8 @@ TSharedPtr<FJsonValue> FPIEHandlers::PieRecordRead(const TSharedPtr<FJsonObject>
 	else if (File == TEXT("tracked"))  Filename = TEXT("tracked.jsonl");
 	else return MCPError(FString::Printf(TEXT("Unknown file '%s' (manifest|sequence|csv|drift|tracked)"), *File));
 
-	const FString Path = Root / Id / Filename;
+	FString Path;
+	if (auto Err = MCPRequireWritablePath(Root / Id / Filename, Path)) return Err;
 	FString Raw;
 	if (!FFileHelper::LoadFileToString(Raw, *Path))
 	{
@@ -345,7 +358,12 @@ TSharedPtr<FJsonValue> FPIEHandlers::PieRecordDelete(const TSharedPtr<FJsonObjec
 	if (auto E = RequireString(Params, TEXT("id"), Id)) return E;
 	const bool bConfirm = OptionalBool(Params, TEXT("confirm"), false);
 	const FString Root = OptionalString(Params, TEXT("recording_dir"), DefaultRecordingsRoot());
-	const FString Dir = Root / Id;
+	// Only a recording folder below the root is deleted, never the root or anything outside it.
+	FString RootFull;
+	if (auto Err = MCPRequireWritablePath(Root, RootFull)) return Err;
+	FString Dir;
+	if (auto Err = MCPRequirePathInside(RootFull / Id, { RootFull }, Dir)) return Err;
+	if (FPaths::IsSamePath(Dir, RootFull)) return MCPError(TEXT("id must name one recording folder, not the recordings root."));
 
 	if (!FPaths::DirectoryExists(Dir))
 	{

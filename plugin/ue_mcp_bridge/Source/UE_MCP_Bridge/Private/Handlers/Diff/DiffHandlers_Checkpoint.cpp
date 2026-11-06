@@ -2023,10 +2023,17 @@ TSharedPtr<FJsonValue> FDiffHandlers::DiffCheckpointAssetOne(const TSharedPtr<FJ
 	if (TSharedPtr<FJsonValue> Err = RequireString(Params, TEXT("originalFile"), OriginalFile)) return Err;
 	const FString FromFile = OptionalString(Params, TEXT("fromFile"), FString());
 	const FString ToFile = OptionalString(Params, TEXT("toFile"), FString());
-	const FString FromThumbnail = OptionalString(Params, TEXT("fromThumbnail"), FString());
-	const FString ToThumbnail = OptionalString(Params, TEXT("toThumbnail"), FString());
-	const FString FromGraphPicture = OptionalString(Params, TEXT("fromGraphPicture"), FString());
-	const FString ToGraphPicture = OptionalString(Params, TEXT("toGraphPicture"), FString());
+	FString FromThumbnail = OptionalString(Params, TEXT("fromThumbnail"), FString());
+	FString ToThumbnail = OptionalString(Params, TEXT("toThumbnail"), FString());
+	FString FromGraphPicture = OptionalString(Params, TEXT("fromGraphPicture"), FString());
+	FString ToGraphPicture = OptionalString(Params, TEXT("toGraphPicture"), FString());
+	for (FString* Picture : { &FromThumbnail, &ToThumbnail, &FromGraphPicture, &ToGraphPicture })
+	{
+		if (Picture->IsEmpty()) continue;
+		FString Resolved;
+		if (auto Err = MCPRequireWritablePath(*Picture, Resolved)) return Err;
+		*Picture = Resolved;
+	}
 	const int32 MaxRecords = FMath::Clamp(OptionalInt(Params, TEXT("maxRecords"), 2000), 1, 20000);
 	if (FromFile.IsEmpty() && ToFile.IsEmpty()) return MCPError(TEXT("fromFile or toFile is required: the versions to compare"));
 

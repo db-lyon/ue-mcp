@@ -106,9 +106,11 @@ TSharedPtr<FJsonValue> FPIEHandlers::PieTestScaffold(const TSharedPtr<FJsonObjec
 	const int32 MaxErrorsInt = static_cast<int32>(OptionalNumber(Params, TEXT("max_errors"), 0.0));
 	Scenario->SetArrayField(TEXT("predicates"), DerivePredicates(ResolveSeriesCsv(Folder), MaxErrorsInt));
 
-	const FString TestsDir = Folder / TEXT("tests");
+	FString TestsDir;
+	if (auto Err = MCPRequireWritablePath(Folder / TEXT("tests"), TestsDir)) return Err;
+	FString Path;
+	if (auto Err = MCPRequirePathInside(TestsDir / (Name + TEXT(".json")), { TestsDir }, Path)) return Err;
 	IFileManager::Get().MakeDirectory(*TestsDir, true);
-	const FString Path = TestsDir / (Name + TEXT(".json"));
 
 	FString Out;
 	TSharedRef<TJsonWriter<>> W = TJsonWriterFactory<>::Create(&Out);
@@ -419,11 +421,15 @@ TSharedPtr<FJsonValue> FPIEHandlers::PieAssertEval(const TSharedPtr<FJsonObject>
 	const FString Sheet = FindContactSheet(RunDir);
 	if (!Sheet.IsEmpty()) Verdict->SetStringField(TEXT("contact_sheet_path"), Sheet);
 
-	// Persist the verdict next to the run for later inspection.
+	// Persist the verdict next to the run for later inspection, when the run is in a writable folder.
 	FString Out;
 	TSharedRef<TJsonWriter<>> W = TJsonWriterFactory<>::Create(&Out);
 	FJsonSerializer::Serialize(Verdict, W);
-	FFileHelper::SaveStringToFile(Out, *(RunDir / TEXT("verdict.json")));
+	FString VerdictPath, VerdictError;
+	if (MCPResolvePathInside(RunDir / TEXT("verdict.json"), MCPDefaultWritableRoots(), VerdictPath, VerdictError))
+	{
+		FFileHelper::SaveStringToFile(Out, *VerdictPath);
+	}
 
 	TSharedPtr<FJsonObject> VerdictResult = Verdict;
 	MCPSetIdempotencyUnobservable(VerdictResult, TEXT("verdict.json is rewritten from the same inputs on every call"));

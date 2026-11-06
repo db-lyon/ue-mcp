@@ -220,6 +220,16 @@ function within<T>(promise: Promise<T>, ms: number): Promise<T | null> {
   return Promise.race([promise, late]).finally(() => clearTimeout(timer));
 }
 
+/**
+ * The first listed dialog the game thread is parked behind. A parented editor
+ * window is listed with blocksGameThread false and holds nothing (#1454); an
+ * older plugin omits the field and is believed, as the watcher does.
+ */
+function firstBlocking(list: unknown[]): unknown {
+  return list.find((d) => typeof d === "object" && d !== null
+    && (d as { blocksGameThread?: boolean }).blocksGameThread !== false);
+}
+
 /** Read a dialog out of whatever shape reported it. */
 function asDialog(v: unknown): BlockingDialog | null {
   if (typeof v !== "object" || v === null) return null;
@@ -854,9 +864,10 @@ export class DialogGuard {
       // not positive evidence the screen is clear, so keep what we know.
       return this.blocking;
     }
-    const first = list[0];
+    const first = firstBlocking(list);
     if (!first) {
-      // The editor ANSWERED and listed nothing, so the screen really is clear.
+      // The editor ANSWERED and listed nothing that holds the game thread, so
+      // nothing is blocking.
       // That is the only place the asked-once record is reset: clearing after
       // a press must not reset it, or the next check re-prompts for a dialog
       // that press was meant to answer and presses a second button.
@@ -1056,7 +1067,7 @@ export class DialogGuard {
   private async stillShowing(dialog: BlockingDialog): Promise<boolean> {
     try {
       const list = ((await this.deps.probe()) as { dialogs?: unknown })?.dialogs;
-      const current = Array.isArray(list) ? asDialog(list[0]) : null;
+      const current = Array.isArray(list) ? asDialog(firstBlocking(list)) : null;
       return current !== null && dialogIdentity(current) === dialogIdentity(dialog);
     } catch {
       return false;

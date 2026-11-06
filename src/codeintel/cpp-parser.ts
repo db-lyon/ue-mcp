@@ -1,5 +1,6 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { requireModuleName } from "../core/path-guard.js";
 
 // Regex-based C++ header inspection. Not a full parser - extracts UCLASS /
 // USTRUCT / UENUM / UPROPERTY / UFUNCTION declarations well enough to feed
@@ -72,6 +73,7 @@ export function findSourceRoots(projectDir: string, projectName: string | null):
 
 /** Find the source root that owns a given moduleName (a subdir holding <module>.Build.cs). */
 export function resolveModuleDir(projectDir: string, projectName: string | null, moduleName: string): string | null {
+  requireModuleName(moduleName);
   for (const root of findSourceRoots(projectDir, projectName)) {
     const modDir = path.join(root, moduleName);
     if (fs.existsSync(path.join(modDir, `${moduleName}.Build.cs`))) return modDir;

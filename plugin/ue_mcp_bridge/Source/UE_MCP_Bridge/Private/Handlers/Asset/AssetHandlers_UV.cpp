@@ -2386,6 +2386,11 @@ TSharedPtr<FJsonValue> FAssetHandlers::ExportUvLayout(const TSharedPtr<FJsonObje
 	{
 		OutputPath += TEXT(".png");
 	}
+	{
+		FString Resolved;
+		if (auto Err = MCPRequireWritablePath(OutputPath, Resolved)) return Err;
+		OutputPath = Resolved;
+	}
 
 	TVertexInstanceAttributesRef<FVector2f> UVs = MCPUvAttributes(*Target.Desc);
 	if (!UVs.IsValid())
