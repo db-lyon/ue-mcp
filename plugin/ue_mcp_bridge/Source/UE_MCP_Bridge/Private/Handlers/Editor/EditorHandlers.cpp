@@ -3012,9 +3012,12 @@ TSharedPtr<FJsonValue> FEditorHandlers::CaptureScreenshot(const TSharedPtr<FJson
 				TEXT("The %s viewport is not being drawn: it is not in any Slate window. Use capture_scene_png, which renders without the window."),
 				*ResultTarget));
 		}
+		// -RenderOffScreen draws every window without a presentable viewport, so the viewport
+		// lookup says nothing there; the readback check below still catches a window not drawn.
+		const bool bOffScreen = FParse::Param(FCommandLine::Get(), TEXT("RenderOffScreen"));
 		const FString NotDrawn = MCPWhySlateWindowNotDrawn(
 			*CaptureWindow,
-			Renderer->GetViewportResource(*CaptureWindow) != nullptr,
+			bOffScreen || Renderer->GetViewportResource(*CaptureWindow) != nullptr,
 			FVector2f(CaptureWidget->GetTickSpaceGeometry().GetDrawSize()));
 		if (!NotDrawn.IsEmpty())
 		{
