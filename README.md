@@ -22,6 +22,8 @@ UE-MCP is a free, open-source [Model Context Protocol](https://modelcontextproto
 
 ### 1. UE-MCP Studio: a chat agent in the editor
 
+https://github.com/user-attachments/assets/24d4fc16-e6b4-4dc7-98ea-eaf4798923b1
+
 [<img width="1600" height="900" alt="UE-MCP Studio docked in the Unreal Editor beside the level, answering a question about the project's materials" src="docs/assets/studio-docked.webp" />](https://ue-mcp.com/#studio)
 
 [**Studio**](https://ue-mcp.com/docs/studio) is a free desktop client with the agent built in. Dock it in the editor or run it in its own window. Sign in with your Claude or ChatGPT account, or use an API key. Every turn is checkpointed so you can review and revert changes, and shell commands and file edits wait for your approval.
