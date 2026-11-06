@@ -280,6 +280,8 @@ TSharedPtr<FJsonValue> FProjectHandlers::SetDeveloperSetting(const TSharedPtr<FJ
 	else
 	{
 		Settings->SaveConfig();
+		// SaveConfig updates the config branch; the file on disk is written when the branch is flushed.
+		if (GConfig) GConfig->Flush(/*bRemoveFromCache*/ false, Settings->GetClass()->GetConfigName());
 		SaveMethod = TEXT("SaveConfig");
 	}
 
