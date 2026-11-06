@@ -13426,6 +13426,11 @@
       "status": "covered",
       "tests": [
         {
+          "suite": "automation",
+          "file": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Tests/PIEReplayStateTests.cpp",
+          "test": "UE.MCP.PIE.Replay.RecordingIdStaysInsideRecordings"
+        },
+        {
           "suite": "live",
           "file": "tests/live/bcov-pie-session.test.ts",
           "test": "replay_arm and replay_disarm move the replayer between armed and idle"
@@ -13438,6 +13443,11 @@
       "registeredIn": "PIEHandlers.cpp",
       "status": "covered",
       "tests": [
+        {
+          "suite": "automation",
+          "file": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Tests/PIEReplayStateTests.cpp",
+          "test": "UE.MCP.PIE.Replay.RecordingIdStaysInsideRecordings"
+        },
         {
           "suite": "live",
           "file": "tests/live/bcov-pie-session.test.ts",
