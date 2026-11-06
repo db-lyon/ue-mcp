@@ -2686,7 +2686,8 @@ TSharedPtr<FJsonValue> FEditorHandlers::GetOutputLog(const TSharedPtr<FJsonObjec
 	}
 
 	// Read from ring-buffer log capture (#82)
-	TArray<FMCPLogCapture::FMCPLogLine> RecentLines = FMCPLogCapture::Get().GetRecentLines(MaxLines * 2); // over-fetch for filtering
+	// The window is exactly maxLines; a filter narrows it, it does not widen it (#1551).
+	TArray<FMCPLogCapture::FMCPLogLine> RecentLines = FMCPLogCapture::Get().GetRecentLines(MaxLines);
 
 	// Chronological, oldest first, exactly as the ring buffer holds them. No
 	// sort: the log stream's own order is the contract here, and the sequence
