@@ -70,7 +70,7 @@ describe("the process project(build) starts", () => {
     try {
       const uproject = path.join(dir, "Victim&calc&.uproject");
       fs.writeFileSync(uproject, "{}");
-      fs.writeFileSync(path.join(dir, "ue-mcp.yml"), "editor:\n  buildToolPath: " + JSON.stringify(path.join(dir, "Build.bat")) + "\n");
+      fs.writeFileSync(path.join(dir, "ue-mcp.yml"), "ue-mcp:\n  editor:\n    buildToolPath: " + JSON.stringify(path.join(dir, "Build.bat")) + "\n");
       fs.writeFileSync(path.join(dir, "Build.bat"), "");
       const r = await buildProject(uproject, { configuration: "Development" });
       expect(r.success).toBe(false);
