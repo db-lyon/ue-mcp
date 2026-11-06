@@ -53,24 +53,31 @@ To see it build a full scene from nothing, run the built-in [Neon Shrine demo](h
 ## FAQ
 
 **What is "MCP"?**
+
 Model Context Protocol is an open standard that lets AI assistants call external tools. UE-MCP is the tool server that gives them the Unreal Editor.
 
 **Does it cost anything?**
+
 No. UE-MCP and Studio are MIT-licensed and free for personal and commercial use. You pay only for your AI model, through your existing plan or API key.
 
 **Which Unreal versions and platforms?**
+
 UE 5.4 to 5.8 on Windows, 5.6+ on macOS and Linux. Studio is Windows-only for now, on UE 5.7 and 5.8. You also need Node.js 20+ and a C++ toolchain, since the bridge plugin compiles in your project.
 
 **Is it safe to let an AI edit my project?**
+
 Write guards can block or require confirmation for changes, source-controlled assets can be protected, and flows roll back on failure. Studio adds per-turn checkpoints and approval prompts. Use source control regardless.
 
 **Does it work without the editor open?**
+
 Partly. Config, C++ headers and asset listings can be read with the editor closed. Anything that changes the project needs the editor running.
 
 **How is this different from Epic's built-in AI tools?**
+
 UE-MCP wraps Epic's native UE 5.8 tools and adds over a thousand of its own, plus flows, guards and plugins. See the [comparison](https://ue-mcp.com/compare) against Epic and other Unreal MCP servers.
 
 **It won't connect / something isn't working.**
+
 Run `npx ue-mcp doctor`, check out the [Troubleshooting Guide](https://ue-mcp.com/docs/troubleshooting), or come give me a shout in the [official ue-mcp discord](https://discord.gg/YdgPrQkUEX)!!!
 
 ## Learn more
