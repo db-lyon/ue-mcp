@@ -23648,6 +23648,11 @@
       "tests": [
         {
           "suite": "live",
+          "file": "tests/live/source-control-provider.test.ts",
+          "test": "blueprint diff against a submitted revision reports a node added since, by GUID (#1487)"
+        },
+        {
+          "suite": "live",
           "file": "tests/live/source-control.test.ts",
           "test": "revert refuses once with source_control_not_enabled"
         }
