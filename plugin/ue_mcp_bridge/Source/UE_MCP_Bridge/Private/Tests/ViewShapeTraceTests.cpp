@@ -395,14 +395,20 @@ bool FActorsInBoxTest::RunTest(const FString& Parameters)
 	TestEqual(TEXT("classFilter narrows"), TraceTestRun(Registry, TEXT("actors_in_box"), Params)->GetArrayField(TEXT("actors")).Num(), 0);
 	Params->RemoveField(TEXT("classFilter"));
 
-	// Only the four fixture boxes carry a primitive, so restrict to colliding bounds
-	// to keep any engine-spawned helper actor out of the count.
+	// The world also holds actors the engine spawns at the origin (the default
+	// physics volume among them), so total is checked against the unlimited query.
 	Params->SetBoolField(TEXT("onlyColliding"), true);
+	const auto Unlimited = TraceTestRun(Registry, TEXT("actors_in_box"), Params);
+	const auto UnlimitedRows = Labels(Unlimited);
+	for (const TCHAR* Expected : { TEXT("MCPBoxInside"), TEXT("MCPBoxStraddling"), TEXT("MCPBoxHidden") })
+		TestTrue(FString::Printf(TEXT("onlyColliding keeps %s"), Expected), UnlimitedRows.Contains(Expected));
+	TestFalse(TEXT("unlimited query is not truncated"), Unlimited->GetBoolField(TEXT("truncated")));
 	Params->SetNumberField(TEXT("limit"), 1);
 	const auto Limited = TraceTestRun(Registry, TEXT("actors_in_box"), Params);
 	TestEqual(TEXT("limit cuts rows"), Limited->GetArrayField(TEXT("actors")).Num(), 1);
 	TestTrue(TEXT("truncation explicit"), Limited->GetBoolField(TEXT("truncated")));
-	TestEqual(TEXT("total counts every match"), static_cast<int32>(Limited->GetNumberField(TEXT("total"))), 3);
+	TestEqual(TEXT("total counts every match"), static_cast<int32>(Limited->GetNumberField(TEXT("total"))),
+		Unlimited->GetArrayField(TEXT("actors")).Num());
 	Params->RemoveField(TEXT("limit"));
 
 	Params->SetObjectField(TEXT("max"), MCPVec3ToJsonObject(FVector(-200, 100, 100)));
