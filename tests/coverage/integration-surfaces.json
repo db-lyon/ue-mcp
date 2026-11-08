@@ -127,6 +127,26 @@
       "summary": "ue-mcp status --json prints one JSON status report"
     },
     {
+      "id": "cli.projects",
+      "group": "cli",
+      "summary": "ue-mcp projects lists this computer's Unreal projects for people, and prints usage for a wrong command line"
+    },
+    {
+      "id": "cli.projects.json",
+      "group": "cli",
+      "summary": "ue-mcp projects --json prints the machine report: recent and added projects with their ue-mcp state, and live daemons"
+    },
+    {
+      "id": "cli.projects.add",
+      "group": "cli",
+      "summary": "ue-mcp projects add puts a project on the machine's list"
+    },
+    {
+      "id": "cli.projects.remove",
+      "group": "cli",
+      "summary": "ue-mcp projects remove forgets an added project and hides a found one"
+    },
+    {
       "id": "cli.daemon.run",
       "group": "cli",
       "summary": "ue-mcp daemon run serves a project in the foreground and publishes a discovery file"

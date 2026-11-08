@@ -143,6 +143,8 @@ const PER_SESSION: Record<string, string> = {
 
 /** No editor concept, or one deliberate answer for the whole process. */
 const SESSION_INDEPENDENT: Record<string, string> = {
+  "machine/projects.ts": "Machine scoped: every project on this computer and every daemon running, read from user state, Unreal's recent lists and the daemons folder.",
+  "cli/projects-cli.ts": "Prints or edits the machine's project list, which no one editor owns.",
   "editor/module-owner.ts": "Finds the .uplugin that declares a module under the project and engine roots it is handed. No editor is involved.",
   "daemon/extension-install.ts": "Installs an extension into the user's extensions directory. No editor is involved.",
   "daemon/install-names.ts": "The short names install resolves, as data. No editor is involved.",

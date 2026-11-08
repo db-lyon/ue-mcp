@@ -433,6 +433,8 @@ Run `npx ue-mcp <command> --help` for a command's flags.
 | `npx ue-mcp update` | Update the package, deploy the plugin source and rebuild the editor target. Skips the build while the editor runs and records it as owed. `--no-build` stops after the deploy, `--no-deploy` updates the package only. A binary install gets verified binaries instead. `--apply-only` installs this package's own bridge into the project and stops. |
 | `npx ue-mcp doctor [--fix]` | Report every version source and install problem. `--fix` removes client entries that point at a project which no longer exists or has no bridge, and adds `--min-release-age=0` to npx launches. |
 | `npx ue-mcp status [--json]` | The project's install and editor state, read-only. |
+| `npx ue-mcp projects [--json]` | This computer's Unreal projects and every daemon running, read-only. Projects come from Unreal's recent-project lists plus the ones you add; copies made by tooling (under the temp folder, or inside a folder whose name starts with a dot, such as `tests/.shards`) are left out. `--json` prints the machine report (`MachineReport` from `ue-mcp/daemon`, versioned by `MACHINE_REPORT_VERSION`). It never contains a daemon's token. |
+| `npx ue-mcp projects add <uproject>` / `remove <uproject>` | Put a project on the list, or take one off: an added project is forgotten, a found one is hidden. |
 | `npx ue-mcp deploy` | Copy the bridge plugin source into the project and refresh installed skills. |
 | `npx ue-mcp build` | Build the project's editor target with UnrealBuildTool. Stop the editor first. |
 | `npx ue-mcp context [full\|lean\|micro]` | Read or set the [context strategy](#context-strategy-full-lean-micro) in `ue-mcp.yml`. |
@@ -513,6 +515,7 @@ Each wins over the matching config key. The full list, with the ones tests and s
 | `UE_MCP_HTTP_TOKEN` | Token for the flow HTTP server, over a generated one |
 | `UE_MCP_BINARIES` | Where prebuilt bridge binaries come from: a plugin directory, a `.zip`, a directory of archives, or a URL base |
 | `UE_MCP_INSTALL_INDEX` | A JSON file of the names `ue-mcp install` knows, `{ "<name>": { "title": "...", "manifest": "<url>" } }`, replacing the built-in list |
+| `UE_MCP_RECENT_PROJECTS_DIR` | The folder `ue-mcp projects` reads Unreal's recent-project lists from. Unset means `%LOCALAPPDATA%\UnrealEngine` on Windows |
 | `UE_MCP_DISABLE_UPDATE_CHECK` | `1` skips the check for a newer release |
 | `UE_MCP_DAEMON_IDLE_MS` | How long an idle daemon waits before exiting |
 | `UE_MCP_DAEMON_DIR`, `UE_MCP_EXTENSIONS_DIR`, `UE_MCP_PENDING_DIR`, `UE_MCP_AUTH_DIR` | Move the daemon, extension, deferred-feedback and token directories |

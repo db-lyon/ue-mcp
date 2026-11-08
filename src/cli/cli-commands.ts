@@ -27,6 +27,7 @@ export const CLI_COMMANDS: readonly CliCommand[] = [
   { name: "doctor", summary: "Report what is installed and running", load: () => import("./doctor.js") },
   { name: "extension", summary: "Install, remove or list daemon extensions", load: () => import("./extension-cli.js") },
   { name: "daemon", summary: "Run, start, stop or inspect a project's daemon", load: () => import("./daemon-cli.js") },
+  { name: "projects", summary: "List this computer's Unreal projects and daemons (--json), add or remove one", load: () => import("./projects-cli.js") },
   { name: "status", summary: "Report one project's install and editor state (--json)", load: () => import("./status.js") },
   { name: "deploy", summary: "Deploy the bridge plugin into a project", load: () => import("./deploy-cli.js") },
   { name: "hook", summary: "Claude Code hook handler", load: () => import("./hook-handler.js") },
