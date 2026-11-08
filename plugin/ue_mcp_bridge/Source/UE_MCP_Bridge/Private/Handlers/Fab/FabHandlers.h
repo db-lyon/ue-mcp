@@ -4,18 +4,9 @@
 #include "Dom/JsonValue.h"
 #include "Dom/JsonObject.h"
 
-// Fab asset importer. Fab is Epic's unified content marketplace; the engine
-// ships an editor plugin (/Engine/Plugins/Fab) whose window is a web frontend
-// (catalog browse, library, purchase, signed-URL resolution all live server
-// side) sitting on top of a thin native download+import layer. This category
-// drives the parts of that native layer that don't need the web frontend:
-// login lifecycle, syncing the user's owned library into the Content Browser,
-// inspecting/clearing the download cache, and importing owned/local source
-// files into the project via the Fab import pipeline.
-//
-// Store catalog browsing and signed-URL resolution are out of scope: Fab
-// publishes no search API, and its terms forbid automated access to fab.com.
-// fab_open_search only hands the user fab.com's own search page (#1485).
+// Native Fab account lifecycle, owned library synchronization, resumable UE
+// asset-pack downloads, cache inspection and Content import. Catalog search
+// and purchases stay in the Fab website; open_search only opens that page.
 class FFabHandlers
 {
 public:
@@ -37,6 +28,15 @@ private:
 	static TSharedPtr<FJsonValue> ClearCache(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> ImportFile(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> OpenSearch(const TSharedPtr<FJsonObject>& Params);
+
+	static TSharedPtr<FJsonValue> ListOwned(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> Download(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> DownloadStatus(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> PauseDownload(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> ResumeDownload(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> CancelDownload(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> InstallPack(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> RemoveInstallation(const TSharedPtr<FJsonObject>& Params);
 
 	static FUrlLauncher UrlLauncherOverride;
 };
