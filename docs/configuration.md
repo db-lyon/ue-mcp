@@ -243,7 +243,8 @@ A client entry launching `ue-mcp@latest` against a project whose binary bridge c
 | `npx ue-mcp daemon start` / `stop` | Start one for the project, or ask it to exit. |
 | `npx ue-mcp daemon run` | Run the daemon in the foreground. |
 | `npx ue-mcp daemon open` | Print the URL of the client UI it serves, if one is installed. `--browser` opens it. |
-| `npx ue-mcp extension install <source> [--sha256 <hex>] [project]` | Install a daemon extension into `~/.ue-mcp/extensions/<name>@<version>/`, record the project at that version, and restart the project's daemon to load it. The source is a zip, a URL with its SHA-256, or a release manifest (`.json` with `url` and `sha256`). Versions sit side by side: each project loads the version it records. `extension use <name> <version> [project]` moves a project to an installed version, `extension list [project]` shows every installed version and the one the project records, and `extension remove <name>` removes every version. A version no project records is removed on the next install. |
+| `npx ue-mcp install <name> [project]` | Install by name, for example `npx ue-mcp install studio` for [Studio](studio.md). It is `extension install` with the name looked up in ue-mcp's list of names, so everything below applies. |
+| `npx ue-mcp extension install <source> [--sha256 <hex>] [project]` | Install a daemon extension into `~/.ue-mcp/extensions/<name>@<version>/`, record the project at that version, and restart the project's daemon to load it. The source is a name `install` knows, a zip, a URL with its SHA-256, or a release manifest (`.json` with `url` and `sha256`). A manifest can also name an editor plugin: `pluginChannel` is the URL of a `plugin.json` listing one build per engine, each with its `url` and `sha256`, and `pluginMin` the oldest version that works. Then a project that is not set up for ue-mcp is set up as `init --yes --install binary` would, and the build for the project's engine is verified and put in its `Plugins/` folder and enabled in its `.uproject`. Versions sit side by side: each project loads the version it records. `extension use <name> <version> [project]` moves a project to an installed version, `extension list [project]` shows every installed version and the one the project records, and `extension remove <name>` removes every version. A version no project records is removed on the next install. |
 
 The daemon listens on 127.0.0.1 only, and every request needs the token in `~/.ue-mcp/daemons/<key>.json`, which only your user can read.
 
@@ -511,6 +512,7 @@ Each wins over the matching config key. The full list, with the ones tests and s
 | `UE_MCP_ELICIT_MIN_HUMAN_MS` | Fastest a person can answer an approval form; `0` disables the check |
 | `UE_MCP_HTTP_TOKEN` | Token for the flow HTTP server, over a generated one |
 | `UE_MCP_BINARIES` | Where prebuilt bridge binaries come from: a plugin directory, a `.zip`, a directory of archives, or a URL base |
+| `UE_MCP_INSTALL_INDEX` | A JSON file of the names `ue-mcp install` knows, `{ "<name>": { "title": "...", "manifest": "<url>" } }`, replacing the built-in list |
 | `UE_MCP_DISABLE_UPDATE_CHECK` | `1` skips the check for a newer release |
 | `UE_MCP_DAEMON_IDLE_MS` | How long an idle daemon waits before exiting |
 | `UE_MCP_DAEMON_DIR`, `UE_MCP_EXTENSIONS_DIR`, `UE_MCP_PENDING_DIR`, `UE_MCP_AUTH_DIR` | Move the daemon, extension, deferred-feedback and token directories |

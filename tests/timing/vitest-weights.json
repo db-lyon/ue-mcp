@@ -1,10 +1,11 @@
 {
-  "recordedAt": "2026-11-05",
+  "recordedAt": "2026-11-08",
   "source": "seconds per test file, from vitest JSON reports. Refresh with scripts/vitest-weights.mjs.",
   "files": {
     "tests/integration/auth.test.ts": 15.3,
     "tests/integration/checkpoints.test.ts": 5.1,
     "tests/integration/cli-basics.test.ts": 26.2,
+    "tests/integration/cli-install-named.test.ts": 11.8,
     "tests/integration/cli-install.test.ts": 40.7,
     "tests/integration/cli-project.test.ts": 28.5,
     "tests/integration/config.test.ts": 0,
@@ -208,6 +209,7 @@
     "tests/unit/hook-installer.test.ts": 0,
     "tests/unit/hook-session.test.ts": 0,
     "tests/unit/imc-persistence-params.test.ts": 0.1,
+    "tests/unit/install-by-name.test.ts": 0.4,
     "tests/unit/install-check.test.ts": 0.1,
     "tests/unit/install-marker.test.ts": 0.2,
     "tests/unit/install-order.test.ts": 0.4,

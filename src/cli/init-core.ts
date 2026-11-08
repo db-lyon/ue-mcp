@@ -528,6 +528,18 @@ export function writeProjectConfig(
   return fs.readFileSync(configPath, "utf-8") !== before;
 }
 
+/**
+ * Set up a project that is not set up yet, as `init --yes` does, with
+ * prebuilt binaries when it has no bridge so nothing has to compile before
+ * the editor opens. Null when it already has a bridge and ue-mcp.yml.
+ */
+export async function ensureSetUp(uproject: string): Promise<InitResult | null> {
+  const projectDir = path.dirname(path.resolve(uproject));
+  const hasBridge = resolvePluginDir(projectDir) !== null;
+  if (hasBridge && fs.existsSync(projectConfigPath(projectDir))) return null;
+  return apply(plan({ project: uproject, pin: true, install: hasBridge ? "auto" : "binary" }));
+}
+
 /** Make the changes a plan describes. Never throws; a failed step ends the run with ok=false. */
 export async function apply(p: InitPlan): Promise<InitResult> {
   const steps: AppliedStep[] = [];

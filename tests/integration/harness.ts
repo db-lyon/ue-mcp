@@ -108,6 +108,7 @@ export class Sandbox {
       UE_MCP_NPM_REGISTRY: DEAD_ORIGIN,
       ANTHROPIC_BASE_URL: DEAD_ORIGIN,
       UE_MCP_BINARIES: path.join(this.root, "no-binaries"),
+      UE_MCP_INSTALL_INDEX: path.join(this.root, "no-install-index.json"),
       UE_MCP_PROTECTED_ENGINE_ROOTS: "",
       NPM_FAKE_LOG: this.npmLog,
       NO_COLOR: "1",

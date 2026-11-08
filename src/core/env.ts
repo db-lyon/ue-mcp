@@ -60,6 +60,8 @@ export const ENV_VARS = {
   daemonIdleMs: "UE_MCP_DAEMON_IDLE_MS",
   /** Directory daemon extensions are loaded from. Unset means ~/.ue-mcp/extensions. */
   extensionsDir: "UE_MCP_EXTENSIONS_DIR",
+  /** JSON file of the names `ue-mcp install <name>` resolves, replacing the built-in list. */
+  installIndex: "UE_MCP_INSTALL_INDEX",
 
   // ── Flow HTTP surface ──────────────────────────────────────────────
   /** Bearer token for the flow HTTP server, over a freshly generated one. */

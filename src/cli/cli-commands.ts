@@ -18,6 +18,11 @@ export interface CliCommand {
 
 export const CLI_COMMANDS: readonly CliCommand[] = [
   { name: "init", summary: "Set up ue-mcp in a project", load: () => import("./init.js") },
+  {
+    name: "install",
+    summary: "Install by name into a project, e.g. ue-mcp install studio",
+    load: () => import("./extension-cli.js").then((m) => ({ run: m.runInstall, usage: m.installUsage })),
+  },
   { name: "update", summary: "Update the deployed bridge and the server", load: () => import("./update.js") },
   { name: "doctor", summary: "Report what is installed and running", load: () => import("./doctor.js") },
   { name: "extension", summary: "Install, remove or list daemon extensions", load: () => import("./extension-cli.js") },

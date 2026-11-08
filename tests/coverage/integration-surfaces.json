@@ -157,6 +157,11 @@
       "summary": "ue-mcp daemon with no or an unknown subcommand prints usage and exits 2"
     },
     {
+      "id": "cli.install",
+      "group": "cli",
+      "summary": "ue-mcp install <name> resolves the name to a release manifest, sets a bare project up for ue-mcp, and installs the extension and the editor plugin build the manifest declares"
+    },
+    {
       "id": "cli.extension.list",
       "group": "cli",
       "summary": "ue-mcp extension list lists installed daemon extensions"
