@@ -34,6 +34,7 @@ public class UE_MCP_Bridge : ModuleRules
 			{
 				"AIModule",
 				"HTTP",
+				"BuildPatchServices",
 				// #889: authoring a BehaviorTree means driving UBehaviorTreeGraph
 				// and its node classes, then calling UpdateAsset to compile the
 				// graph into the runnable UBTCompositeNode tree. That orchestration

@@ -1,5 +1,6 @@
 #include "FabHandlers.h"
 #include "FabLibrary.h"
+#include "FabDownloads.h"
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
 
@@ -182,14 +183,9 @@ TSharedPtr<FJsonValue> FFabHandlers::Login(const TSharedPtr<FJsonObject>& Params
 		return MCPError(TEXT("Failed to invoke Fab.Login console command"));
 	auto Res = MCPSuccess();
 	Res->SetStringField(TEXT("note"), TEXT("Login flow triggered. Complete authentication in the account-portal window if prompted; call fab(status) afterward."));
-	// No idempotency flag, and the reason is stated rather than left as an
-	// absence: the Fab module publishes no authentication or library-sync state
-	// this build can read, so nothing here can measure whether the call changed
-	// anything. A fabricated unchanged=false would be a claim, not a reading.
+	// Opening the portal cannot establish whether authentication will finish.
 	Res->SetBoolField(TEXT("idempotencyObservable"), false);
-	Res->SetStringField(TEXT("idempotencyNote"),
-		TEXT("Whether an account was already signed in, and whether this flow ends in one being signed in, are both decided outside this call. Nothing in the Fab module reports that state back, so this call cannot say whether it changed "
-			 "anything. fab(status) is the closest reading available and does not cover it."));
+	Res->SetStringField(TEXT("idempotencyNote"), TEXT("The portal returns before authentication completes. Poll status.authenticated to observe the resulting native session; this call cannot attribute a later login to itself."));
 
 	// No inverse. This opens the EOS account-portal flow and returns before
 	// anything has authenticated, so it creates no state of its own to undo.
@@ -211,15 +207,9 @@ TSharedPtr<FJsonValue> FFabHandlers::Logout(const TSharedPtr<FJsonObject>& Param
 	MCPFab::ResetLibrary();
 	FString ClearError; MCPFab::PublishLibrary({}, ClearError);
 	auto Res = MCPSuccess();
-	Res->SetStringField(TEXT("note"), TEXT("Persistent Fab auth cleared."));
-	// No idempotency flag, and the reason is stated rather than left as an
-	// absence: the Fab module publishes no authentication or library-sync state
-	// this build can read, so nothing here can measure whether the call changed
-	// anything. A fabricated unchanged=false would be a claim, not a reading.
+	Res->SetStringField(TEXT("note"), TEXT("Native Fab logout requested. Poll status.authenticated for completion."));
 	Res->SetBoolField(TEXT("idempotencyObservable"), false);
-	Res->SetStringField(TEXT("idempotencyNote"),
-		TEXT("Whether a session was there to clear is not readable from here. Nothing in the Fab module reports that state back, so this call cannot say whether it changed "
-			 "anything. fab(status) is the closest reading available and does not cover it."));
+	Res->SetStringField(TEXT("idempotencyNote"), TEXT("EOS finishes logout asynchronously. Poll status.authenticated until false; this call cannot yet measure completion."));
 
 	// No inverse. Logging back in means the user authenticating in the EOS
 	// account portal; fab(login) only opens that window and cannot restore the
@@ -284,6 +274,7 @@ TSharedPtr<FJsonValue> FFabHandlers::CacheInfo(const TSharedPtr<FJsonObject>& Pa
 
 TSharedPtr<FJsonValue> FFabHandlers::ClearCache(const TSharedPtr<FJsonObject>& Params)
 {
+	if (MCPFab::HasActiveDownloads()) return MCPError(TEXT("Pause or cancel active download jobs before clearing their cache."));
 	if (!IsFabModuleLoaded()) return FabUnavailableError();
 
 	// Read the cache size first so the result can say whether this call actually
@@ -474,6 +465,36 @@ void FFabHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("fab_sync_library"), &SyncLibrary, {
 		MCPParam::Optional(TEXT("batchSize"), EType::Integer, TEXT("Library items per request, 1-1000 (default 100)")),
 	}, MCPSpec::ContractExempt(TEXT("Queues a Fab library sync whatever the batch size")));
+	Registry.RegisterHandler(TEXT("fab_list_owned"), &ListOwned, {
+		MCPParam::Optional(TEXT("query"), EType::String, TEXT("Filter owned item titles, no catalog requests")),
+		MCPParam::Optional(TEXT("offset"), EType::Integer, TEXT("Result offset (default 0)")),
+		MCPParam::Optional(TEXT("limit"), EType::Integer, TEXT("Result limit, 1-200 (default 50)")),
+	});
+	Registry.RegisterHandler(TEXT("fab_download"), &Download, {
+		MCPParam::Required(TEXT("listingId"), EType::String, TEXT("Owned Fab listing UUID")),
+		MCPParam::Required(TEXT("engineVersion"), EType::String, TEXT("Exact supported UE version, e.g. 5.8")),
+		MCPParam::Required(TEXT("platform"), EType::String, TEXT("Exact target platform from projectVersions, e.g. Mac or Windows")),
+		MCPParam::Optional(TEXT("outputDirectory"), EType::String, TEXT("Absolute pack output directory (default native Fab cache/UE-MCP/listing/artifact)")),
+		MCPParam::Optional(TEXT("verifyOnly"), EType::Boolean, TEXT("SHA verify existing files without repairing or downloading (default false)")),
+	});
+	Registry.RegisterHandler(TEXT("fab_download_status"), &DownloadStatus, {
+		MCPParam::Optional(TEXT("jobId"), EType::String, TEXT("Job identifier; omit to list all editor-session jobs")),
+	});
+	Registry.RegisterHandler(TEXT("fab_pause_download"), &PauseDownload, {
+		MCPParam::Required(TEXT("jobId"), EType::String, TEXT("Active download job identifier")),
+	});
+	Registry.RegisterHandler(TEXT("fab_resume_download"), &ResumeDownload, {
+		MCPParam::Required(TEXT("jobId"), EType::String, TEXT("Paused, failed or cancelled job identifier; obtains a fresh distribution signature")),
+	});
+	Registry.RegisterHandler(TEXT("fab_cancel_download"), &CancelDownload, {
+		MCPParam::Required(TEXT("jobId"), EType::String, TEXT("Job to cancel; verified files and native staging remain resumable")),
+	});
+	Registry.RegisterHandler(TEXT("fab_install_pack"), &InstallPack, {
+		MCPParam::Required(TEXT("jobId"), EType::String, TEXT("Completed, SHA-verified asset-pack download to copy into project Content, preserving paths")),
+	});
+	Registry.RegisterHandler(TEXT("fab_remove_installation"), &RemoveInstallation, {
+		MCPParam::Required(TEXT("jobId"), EType::String, TEXT("Remove only unchanged, unloaded files that this job created in project Content")),
+	});
 	Registry.RegisterHandler(TEXT("fab_list_cached"), &ListCached, {});
 	Registry.RegisterHandler(TEXT("fab_cache_info"), &CacheInfo, {});
 	Registry.RegisterHandler(TEXT("fab_clear_cache"), &ClearCache, {},
