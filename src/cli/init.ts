@@ -2,7 +2,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import * as readline from "node:readline";
 import { ProjectContext } from "../config/project.js";
-import { BOLD, CYAN, DIM, GREEN, RED, RESET, fail, info, ok, warn } from "./ui/ansi.js";
+import { BOLD, CYAN, DIM, GREEN, RED, RESET, fail, info, ok, redirectConsoleToStderr, warn } from "./ui/ansi.js";
 import { checkboxSelect, singleSelect, type CheckboxItem } from "./ui/select.js";
 import { runFeedbackAuthStep } from "./auth-cli.js";
 import type { CliUsage } from "./cli-main.js";
@@ -154,13 +154,6 @@ async function initNonInteractive(argv: string[], projectPath: string): Promise<
   }
 }
 
-function redirectConsoleToStderr(): () => void {
-  const original = console.log;
-  console.log = (...args: unknown[]) => console.error(...args);
-  return () => {
-    console.log = original;
-  };
-}
 
 /* ------------------------------------------------------------------ */
 /*  Interactive init                                                   */

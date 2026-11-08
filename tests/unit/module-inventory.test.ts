@@ -57,6 +57,7 @@ const PER_SESSION: Record<string, string> = {
   "editor/deployer.ts": "Attaches and deploys the bridge into one project.",
   "editor/install-marker.ts": "Reads and writes one project's plugin install marker and resolves where that project's plugin lives.",
   "editor/bridge-binaries.ts": "Installs prebuilt binaries into one project's plugin directory.",
+  "editor/editor-plugin.ts": "Installs an extension's editor plugin into the one project it is handed.",
   "editor/bridge-update.ts": "Checks for and applies an update to the bridge installed in one project.",
   "editor/pending-build.ts": "Records and clears a bridge build one project owes after a source update, in that project's plugin directory.",
   "editor/bridge-tree.ts": "Checks that one project's installed binary bridge is a tree the editor loads without a rebuild.",
@@ -144,6 +145,7 @@ const PER_SESSION: Record<string, string> = {
 const SESSION_INDEPENDENT: Record<string, string> = {
   "editor/module-owner.ts": "Finds the .uplugin that declares a module under the project and engine roots it is handed. No editor is involved.",
   "daemon/extension-install.ts": "Installs an extension into the user's extensions directory. No editor is involved.",
+  "daemon/install-names.ts": "The short names install resolves, as data. No editor is involved.",
   "daemon/extension-versions.ts": "Lays out installed extension versions and picks the one a project records. No editor is involved.",
   "daemon/plugin-routes.ts": "Lists and changes the plugins of the one project the daemon serves, through the CLI. No editor is involved.",
   "daemon/ui-bundles.ts": "Verifies, stores and resolves signed UI bundles kept per user. No editor is involved.",
@@ -158,6 +160,7 @@ const SESSION_INDEPENDENT: Record<string, string> = {
   "daemon/activity.ts": "Reads an MCP tools/call into a category and action. Pure logic.",
   "extensions/package-paths.ts": "Resolves a manifest path inside the package it is handed. Pure path logic over its arguments.",
   "core/open-url.ts": "Opens a URL in the system browser. No editor is involved.",
+  "core/archive.ts": "Downloads, verifies and unpacks the zip it is handed. Pure plumbing over its arguments.",
   "core/spawn-outside-tree.ts": "Starts a process through a trampoline that exits. Pure process plumbing over its arguments.",
   "bridge/bridge-token.ts": "Reads the session token file for the port it is handed. Pure filesystem plumbing over its arguments.",
   "core/path-guard.ts": "Resolves a path against the folders it is handed and refuses one outside them. Pure logic over its arguments.",

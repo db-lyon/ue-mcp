@@ -16,7 +16,7 @@ Studio's window has three tabs: **Chat**, **Plugins** and **Settings**. **Feedba
 
 - Windows 10 or 11.
 - Unreal Engine 5.7 or 5.8.
-- [Node.js](https://nodejs.org/) 20 or newer. Install the LTS release from the Node.js website with its Windows installer, using the default options. Studio does not install Node.js; when it is missing, the setup page opens the Node.js download page.
+- [Node.js](https://nodejs.org/) 20 or newer. The installer offers to install the LTS release with winget. Otherwise install it from the Node.js website with its Windows installer, using the default options. When it is missing, Studio's setup page opens the Node.js download page.
 - ue-mcp 1.4.11 or later. Studio installs it.
 - The Microsoft Edge WebView2 Runtime, which Windows 11 includes. On Windows 10, if it is not already installed, get the Evergreen Runtime from [Microsoft's WebView2 page](https://developer.microsoft.com/en-us/microsoft-edge/webview2/). Without it, Studio opens in your web browser instead of its own window.
 - An internet connection, and an account or API key for at least one model provider (see [Models and accounts](#models-and-accounts)).
@@ -25,10 +25,22 @@ Studio's own setup does not compile anything: the Studio plugin release is alrea
 
 ## Install
 
-1. Download `UE_MCP_Studio-<version>-UE<engine>-Win64.zip` for your engine from the [latest release](https://github.com/db-lyon/ue-mcp-studio-plugin/releases/latest) of the Studio plugin.
-2. Unzip it into your project's `Plugins/` folder, so that `Plugins/UE_MCP_Studio/UE_MCP_Studio.uplugin` exists.
-3. Open your project.
-4. Open Studio with the **Studio** toolbar button or **Tools > UE-MCP Studio**. The console command `Studio.Open` does the same.
+Close the project in Unreal first. Then either:
+
+- Run the installer, [UE-MCP-Studio-Setup.exe](https://github.com/db-lyon/ue-mcp-studio/releases/latest/download/UE-MCP-Studio-Setup.exe). It checks for Node.js, offers to install it, lets you pick the project, and runs the command below.
+- Or run this in your project folder, the one holding the `.uproject`:
+
+    ```bash
+    npx ue-mcp install studio
+    ```
+
+    Name the `.uproject` after `studio` to run it from anywhere else.
+
+Either way, the project gets the Studio editor plugin for its engine in `Plugins/UE_MCP_Studio`, Studio itself in `%USERPROFILE%\.ue-mcp\extensions`, and, if the project is not set up for ue-mcp yet, the bridge plugin as prebuilt binaries and `ue-mcp.yml` with the same defaults as `npx ue-mcp init --yes`. Every download is checked against its SHA-256.
+
+Then open the project, and open Studio with the **Studio** toolbar button or **Tools > UE-MCP Studio**. The console command `Studio.Open` does the same.
+
+To install by hand instead, download `UE_MCP_Studio-<version>-UE<engine>-Win64.zip` for your engine from the [latest release](https://github.com/db-lyon/ue-mcp-studio-plugin/releases/latest) of the Studio plugin, unzip it into your project's `Plugins/` folder so that `Plugins/UE_MCP_Studio/UE_MCP_Studio.uplugin` exists, and open the project. Studio sets up the rest on first start.
 
 ## First start
 
