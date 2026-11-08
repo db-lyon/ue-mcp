@@ -1,0 +1,65 @@
+<Solution>
+  <Configurations>
+    <BuildType Name="Analyze" />
+    <BuildType Name="Debug" />
+    <BuildType Name="Development" />
+    <BuildType Name="Release" />
+  </Configurations>
+  <Folder Name="/Dependencies/">
+    <Project Path="../../../../../../../Program Files/Epic Games/UE_5.8/Engine/Source/Programs/Shared/EpicGames.Analytics.Telemetry/EpicGames.Analytics.Telemetry.csproj" />
+    <Project Path="../../../../../../../Program Files/Epic Games/UE_5.8/Engine/Source/Programs/Shared/EpicGames.Build/EpicGames.Build.csproj" />
+    <Project Path="../../../../../../../Program Files/Epic Games/UE_5.8/Engine/Source/Programs/Shared/EpicGames.BuildGraph/EpicGames.BuildGraph.csproj" />
+    <Project Path="../../../../../../../Program Files/Epic Games/UE_5.8/Engine/Source/Programs/Shared/EpicGames.Core/EpicGames.Core.csproj" />
+    <Project Path="../../../../../../../Program Files/Epic Games/UE_5.8/Engine/Source/Programs/Shared/EpicGames.Horde/EpicGames.Horde.csproj" />
+    <Project Path="../../../../../../../Program Files/Epic Games/UE_5.8/Engine/Source/Programs/Shared/EpicGames.IoHash/EpicGames.IoHash.csproj" />
+    <Project Path="../../../../../../../Program Files/Epic Games/UE_5.8/Engine/Source/Programs/Shared/EpicGames.LogMatchers/EpicGames.LogMatchers.csproj" />
+    <Project Path="../../../../../../../Program Files/Epic Games/UE_5.8/Engine/Source/Programs/Shared/EpicGames.MsBuild/EpicGames.MsBuild.csproj" />
+    <Project Path="../../../../../../../Program Files/Epic Games/UE_5.8/Engine/Source/Programs/Shared/EpicGames.OIDC/EpicGames.OIDC.csproj" />
+    <Project Path="../../../../../../../Program Files/Epic Games/UE_5.8/Engine/Source/Programs/Shared/EpicGames.Oodle/EpicGames.Oodle.csproj" />
+    <Project Path="../../../../../../../Program Files/Epic Games/UE_5.8/Engine/Source/Programs/Shared/EpicGames.Perforce.Fixture/EpicGames.Perforce.Fixture.csproj" />
+    <Project Path="../../../../../../../Program Files/Epic Games/UE_5.8/Engine/Source/Programs/Shared/EpicGames.Perforce.Managed/EpicGames.Perforce.Managed.csproj" />
+    <Project Path="../../../../../../../Program Files/Epic Games/UE_5.8/Engine/Source/Programs/Shared/EpicGames.Perforce/EpicGames.Perforce.csproj" />
+    <Project Path="../../../../../../../Program Files/Epic Games/UE_5.8/Engine/Source/Programs/Shared/EpicGames.ProjectStore/EpicGames.ProjectStore.csproj" />
+    <Project Path="../../../../../../../Program Files/Epic Games/UE_5.8/Engine/Source/Programs/Shared/EpicGames.Serialization/EpicGames.Serialization.csproj" />
+    <Project Path="../../../../../../../Program Files/Epic Games/UE_5.8/Engine/Source/Programs/Shared/EpicGames.UBA/EpicGames.UBA.csproj" />
+    <Project Path="../../../../../../../Program Files/Epic Games/UE_5.8/Engine/Source/Programs/Shared/EpicGames.UHT/EpicGames.UHT.csproj" />
+    <Project Path="../../../../../../../Program Files/Epic Games/UE_5.8/Engine/Source/Programs/UnrealBuildTool/UnrealBuildTool.csproj" />
+  </Folder>
+  <Folder Name="/Tests/">
+    <Project Path="../../../../../../../Program Files/Epic Games/UE_5.8/Engine/Source/Programs/Shared/EpicGames.Build.Tests/EpicGames.Build.Tests.csproj" />
+    <Project Path="../../../../../../../Program Files/Epic Games/UE_5.8/Engine/Source/Programs/Shared/EpicGames.BuildGraph.Tests/EpicGames.BuildGraph.Tests.csproj" />
+    <Project Path="../../../../../../../Program Files/Epic Games/UE_5.8/Engine/Source/Programs/Shared/EpicGames.Core.Tests/EpicGames.Core.Tests.csproj" />
+    <Project Path="../../../../../../../Program Files/Epic Games/UE_5.8/Engine/Source/Programs/Shared/EpicGames.Horde.Tests/EpicGames.Horde.Tests.csproj" />
+    <Project Path="../../../../../../../Program Files/Epic Games/UE_5.8/Engine/Source/Programs/Shared/EpicGames.IoHash.Tests/EpicGames.IoHash.Tests.csproj" />
+    <Project Path="../../../../../../../Program Files/Epic Games/UE_5.8/Engine/Source/Programs/Shared/EpicGames.LogMatchers.Tests/EpicGames.LogMatchers.Tests.csproj" />
+    <Project Path="../../../../../../../Program Files/Epic Games/UE_5.8/Engine/Source/Programs/Shared/EpicGames.Perforce.Managed.Tests/EpicGames.Perforce.Managed.Tests.csproj" />
+    <Project Path="../../../../../../../Program Files/Epic Games/UE_5.8/Engine/Source/Programs/Shared/EpicGames.Perforce.Tests/EpicGames.Perforce.Tests.csproj" />
+    <Project Path="../../../../../../../Program Files/Epic Games/UE_5.8/Engine/Source/Programs/Shared/EpicGames.Serialization.Tests/EpicGames.Serialization.Tests.csproj" />
+  </Folder>
+  <Project Path="../../../../../../../Program Files/Epic Games/UE_5.8/Engine/Platforms/VisionOS/Source/Programs/AutomationTool/VisionOS.Automation.csproj" />
+  <Project Path="../../../../../../../Program Files/Epic Games/UE_5.8/Engine/Source/Programs/AutomationTool/Android/Android.Automation.csproj" />
+  <Project Path="../../../../../../../Program Files/Epic Games/UE_5.8/Engine/Source/Programs/AutomationTool/Apple/Apple.Automation.csproj" />
+  <Project Path="../../../../../../../Program Files/Epic Games/UE_5.8/Engine/Source/Programs/AutomationTool/AutomationTool.csproj" />
+  <Project Path="../../../../../../../Program Files/Epic Games/UE_5.8/Engine/Source/Programs/AutomationTool/AutomationUtils/AutomationUtils.Automation.csproj" />
+  <Project Path="../../../../../../../Program Files/Epic Games/UE_5.8/Engine/Source/Programs/AutomationTool/BuildGraph/BuildGraph.Automation.csproj" />
+  <Project Path="../../../../../../../Program Files/Epic Games/UE_5.8/Engine/Source/Programs/AutomationTool/CookedEditor/CookedEditor.Automation.csproj" />
+  <Project Path="../../../../../../../Program Files/Epic Games/UE_5.8/Engine/Source/Programs/AutomationTool/CrowdinLocalization/CrowdinLocalization.Automation.csproj" />
+  <Project Path="../../../../../../../Program Files/Epic Games/UE_5.8/Engine/Source/Programs/AutomationTool/Gauntlet/Gauntlet.Automation.csproj" />
+  <Project Path="../../../../../../../Program Files/Epic Games/UE_5.8/Engine/Source/Programs/AutomationTool/Insights/Insights.Automation.csproj" />
+  <Project Path="../../../../../../../Program Files/Epic Games/UE_5.8/Engine/Source/Programs/AutomationTool/IOS/IOS.Automation.csproj" />
+  <Project Path="../../../../../../../Program Files/Epic Games/UE_5.8/Engine/Source/Programs/AutomationTool/Linux/Linux.Automation.csproj" />
+  <Project Path="../../../../../../../Program Files/Epic Games/UE_5.8/Engine/Source/Programs/AutomationTool/LiveLinkHub/LiveLinkHub.Automation.csproj" />
+  <Project Path="../../../../../../../Program Files/Epic Games/UE_5.8/Engine/Source/Programs/AutomationTool/Localization/Localization.Automation.csproj" />
+  <Project Path="../../../../../../../Program Files/Epic Games/UE_5.8/Engine/Source/Programs/AutomationTool/LowLevelTests/LowLevelTests.Automation.csproj" />
+  <Project Path="../../../../../../../Program Files/Epic Games/UE_5.8/Engine/Source/Programs/AutomationTool/Mac/Mac.Automation.csproj" />
+  <Project Path="../../../../../../../Program Files/Epic Games/UE_5.8/Engine/Source/Programs/AutomationTool/Microsoft/Microsoft.Automation.csproj" />
+  <Project Path="../../../../../../../Program Files/Epic Games/UE_5.8/Engine/Source/Programs/AutomationTool/Mutable/Mutable.Automation.csproj" />
+  <Project Path="../../../../../../../Program Files/Epic Games/UE_5.8/Engine/Source/Programs/AutomationTool/OneSkyLocalization/OneSkyLocalization.Automation.csproj" />
+  <Project Path="../../../../../../../Program Files/Epic Games/UE_5.8/Engine/Source/Programs/AutomationTool/Scripts/AutomationScripts.Automation.csproj" />
+  <Project Path="../../../../../../../Program Files/Epic Games/UE_5.8/Engine/Source/Programs/AutomationTool/SmartlingLocalization/SmartlingLocalization.Automation.csproj" />
+  <Project Path="../../../../../../../Program Files/Epic Games/UE_5.8/Engine/Source/Programs/AutomationTool/SteamDeck/SteamDeck.Automation.csproj" />
+  <Project Path="../../../../../../../Program Files/Epic Games/UE_5.8/Engine/Source/Programs/AutomationTool/Turnkey/Turnkey.Automation.csproj" />
+  <Project Path="../../../../../../../Program Files/Epic Games/UE_5.8/Engine/Source/Programs/AutomationTool/TVOS/TVOS.Automation.csproj" />
+  <Project Path="../../../../../../../Program Files/Epic Games/UE_5.8/Engine/Source/Programs/AutomationTool/Win/Win.Automation.csproj" />
+  <Project Path="../../../../../../../Program Files/Epic Games/UE_5.8/Engine/Source/Programs/AutomationTool/XLocLocalization/XLocLocalization.Automation.csproj" />
+</Solution>
