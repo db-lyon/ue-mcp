@@ -102,7 +102,7 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "batchSize",
         "type": "integer",
         "required": false,
-        "description": "Library items to pull per sync request (default the plugin's own)"
+        "description": "Library items per request, 1-1000 (default 100)"
       }
     ],
     "contractExempt": "Queues a Fab library sync whatever the batch size"
@@ -125,7 +125,7 @@ export const paramsClauses: Readonly<Record<string, string>> = {
 /** Every key the spec'd fab handlers declare, aliases included. */
 export const schema: Record<string, z.ZodType> = {
   assetFormat: z.string().optional().describe("Asset format filter (default unreal-engine; empty string drops the filter)"),
-  batchSize: z.number().int().optional().describe("Library items to pull per sync request (default the plugin's own)"),
+  batchSize: z.number().int().optional().describe("Library items per request, 1-1000 (default 100)"),
   destination: z.string().optional().describe("Destination content path, e.g. /Game/Fab/Imported"),
   destPath: z.string().optional().describe("Alias for destination"),
   free: z.boolean().optional().describe("Only free listings (default false)"),
