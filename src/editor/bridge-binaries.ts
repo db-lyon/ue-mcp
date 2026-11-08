@@ -161,6 +161,8 @@ export function updateWorkDir(pluginDir: string): string {
     if (!hasProject) continue;
     const work = path.join(project, "Intermediate", "UE_MCP_Update");
     try {
+      // Plugins/ may not exist yet on a fresh project; without it the stat fails and a spare lands under Plugins/.
+      fs.mkdirSync(parent, { recursive: true });
       fs.mkdirSync(work, { recursive: true });
       if (fs.statSync(work).dev === fs.statSync(parent).dev) return work;
     } catch {
