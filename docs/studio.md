@@ -16,7 +16,7 @@ Studio's window has three tabs: **Chat**, **Plugins** and **Settings**. **Feedba
 
 - Windows 10 or 11.
 - Unreal Engine 5.7 or 5.8.
-- [Node.js](https://nodejs.org/) 20 or newer. The installer offers to install the LTS release with winget. Otherwise install it from the Node.js website with its Windows installer, using the default options. When it is missing, Studio's setup page opens the Node.js download page.
+- [Node.js](https://nodejs.org/) 20 or newer. The UE-MCP app's setup offers to install the LTS release with winget. Otherwise install it from the Node.js website with its Windows installer, using the default options. When it is missing, Studio's setup page opens the Node.js download page.
 - ue-mcp 1.4.11 or later. Studio installs it.
 - The Microsoft Edge WebView2 Runtime, which Windows 11 includes. On Windows 10, if it is not already installed, get the Evergreen Runtime from [Microsoft's WebView2 page](https://developer.microsoft.com/en-us/microsoft-edge/webview2/). Without it, Studio opens in your web browser instead of its own window.
 - An internet connection, and an account or API key for at least one model provider (see [Models and accounts](#models-and-accounts)).
@@ -27,7 +27,7 @@ Studio's own setup does not compile anything: the Studio plugin release is alrea
 
 Close the project in Unreal first. Then either:
 
-- Run the installer, [UE-MCP-Studio-Setup.exe](https://github.com/db-lyon/ue-mcp-studio/releases/latest/download/UE-MCP-Studio-Setup.exe). It checks for Node.js, offers to install it, lets you pick the project, and runs the command below.
+- Install the UE-MCP app with [UE-MCP-Setup.exe](https://github.com/db-lyon/ue-mcp-studio/releases/latest/download/UE-MCP-Setup.exe). It installs for your Windows user without admin rights and checks for Node.js. The app lists your Unreal projects (`npx ue-mcp projects`): pick one and choose **Add Studio**, which runs the command below. The app also launches the editor, opens each project's Studio, shows what has an update, and lists the daemons running with their logs.
 - Or run this in your project folder, the one holding the `.uproject`:
 
     ```bash
