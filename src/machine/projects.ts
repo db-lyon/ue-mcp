@@ -25,7 +25,7 @@ export interface MachineDaemon {
   key: string;
   /** The project root as the daemon recorded it (normalized: lower case, forward slashes). */
   projectRoot: string;
-  /** The project's .uproject, when one is in that folder. */
+  /** The project's .uproject: a listed project's own, else the one in the recorded folder where the file system finds it. */
   uproject: string | null;
   pid: number;
   port: number;
@@ -277,6 +277,8 @@ export function machineReport(opts: { isAlive?: (pid: number) => boolean } = {})
     if (hidden.has(projectKey(path.dirname(r.uproject))) || excludedBecause(r.uproject)) continue;
     add(r.uproject, "recent", r.lastOpened);
   }
+  // A daemon records its root lower case, which only a listed project can turn back into its real path everywhere.
+  for (const p of projects) if (p.daemon.running) p.daemon.running.uproject = p.uproject;
   return { version: MACHINE_REPORT_VERSION, ueMcp: packageVersion(), daemonDir: daemonDir(), projects, daemons };
 }
 
