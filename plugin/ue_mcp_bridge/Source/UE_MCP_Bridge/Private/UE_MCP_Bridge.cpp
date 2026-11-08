@@ -1,4 +1,5 @@
 #include "UE_MCP_BridgeModule.h"
+#include "Handlers/Fab/FabLibrary.h"
 #include "Modules/ModuleManager.h"
 #include "BridgeServer.h"
 #include "EngineStatusHooks.h"
@@ -225,6 +226,7 @@ void FUE_MCP_BridgeModule::StartupModule()
 
 void FUE_MCP_BridgeModule::ShutdownModule()
 {
+	MCPFab::ResetLibrary();
 	FEditorHandlers::ShutdownMeshStudioRenders();
 	UEMCP::SceneCapture::ShutdownWarmCapture();
 	if (G_EditorReadyTicker.IsValid())

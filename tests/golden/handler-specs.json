@@ -17670,7 +17670,7 @@
           "name": "batchSize",
           "type": "integer",
           "required": false,
-          "description": "Library items to pull per sync request (default the plugin's own)"
+          "description": "Library items per request, 1-1000 (default 100)"
         }
       ],
       "contractExempt": "Queues a Fab library sync whatever the batch size"

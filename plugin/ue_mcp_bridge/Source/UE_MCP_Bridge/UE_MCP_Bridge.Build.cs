@@ -33,6 +33,7 @@ public class UE_MCP_Bridge : ModuleRules
 			new string[]
 			{
 				"AIModule",
+				"HTTP",
 				// #889: authoring a BehaviorTree means driving UBehaviorTreeGraph
 				// and its node classes, then calling UpdateAsset to compile the
 				// graph into the runnable UBTCompositeNode tree. That orchestration
@@ -170,6 +171,11 @@ public class UE_MCP_Bridge : ModuleRules
 		if (Target.Version.MajorVersion == 5 && Target.Version.MinorVersion < 5)
 		{
 			PrivateDependencyModuleNames.Add("StructUtils");
+		}
+
+		if (Target.Version.MajorVersion == 5 && Target.Version.MinorVersion >= 8)
+		{
+			PrivateDependencyModuleNames.Add("TypedElementFramework");
 		}
 
 		// pie(uat_run) validates scenario regex patterns with ICU, the engine's regex backend.

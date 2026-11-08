@@ -1,4 +1,5 @@
 #include "FabHandlers.h"
+#include "FabLibrary.h"
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
 
@@ -148,6 +149,9 @@ TSharedPtr<FJsonValue> FFabHandlers::Status(const TSharedPtr<FJsonObject>& Param
 		Res->SetStringField(TEXT("pluginDir"), FPaths::ConvertRelativePathToFull(Plugin->GetBaseDir()));
 		Res->SetStringField(TEXT("pluginVersion"), Plugin->GetDescriptor().VersionName);
 	}
+	Res->SetObjectField(TEXT("librarySync"), MCPFab::Library().Describe());
+	MCPFab::FSession Session; FString AuthError;
+	Res->SetBoolField(TEXT("authenticated"), bLoaded && MCPFab::ReadSession(Session, AuthError));
 
 	if (!bLoaded)
 	{
@@ -204,6 +208,8 @@ TSharedPtr<FJsonValue> FFabHandlers::Logout(const TSharedPtr<FJsonObject>& Param
 	if (!IsFabModuleLoaded()) return FabUnavailableError();
 	if (!RunFabConsoleCommand(TEXT("Fab.Logout")))
 		return MCPError(TEXT("Failed to invoke Fab.Logout console command"));
+	MCPFab::ResetLibrary();
+	FString ClearError; MCPFab::PublishLibrary({}, ClearError);
 	auto Res = MCPSuccess();
 	Res->SetStringField(TEXT("note"), TEXT("Persistent Fab auth cleared."));
 	// No idempotency flag, and the reason is stated rather than left as an
@@ -228,33 +234,16 @@ TSharedPtr<FJsonValue> FFabHandlers::Logout(const TSharedPtr<FJsonObject>& Param
 TSharedPtr<FJsonValue> FFabHandlers::SyncLibrary(const TSharedPtr<FJsonObject>& Params)
 {
 	if (!IsFabModuleLoaded()) return FabUnavailableError();
-	// Loads the user's owned Fab library ("My Folder") into TEDS so it surfaces
-	// in the Content Browser. Optional batch size controls how many items are
-	// pulled per sync request.
-	const int32 BatchSize = OptionalInt(Params, TEXT("batchSize"), 0);
-	const FString Command = BatchSize > 0
-		? FString::Printf(TEXT("Fab.TEDS.MyFolderIntegration %d"), BatchSize)
-		: FString(TEXT("Fab.TEDS.MyFolderIntegration"));
-	if (!RunFabConsoleCommand(Command))
-		return MCPError(TEXT("Failed to invoke Fab.TEDS.MyFolderIntegration console command"));
+	const int32 BatchSize = OptionalInt(Params, TEXT("batchSize"), 100);
+	FString Error;
+	if (!MCPFab::StartLibrarySync(BatchSize, Error)) return MCPError(Error);
 	auto Res = MCPSuccess();
-	Res->SetStringField(TEXT("note"), TEXT("Library sync queued. Owned Fab items load into the Content Browser asynchronously; requires an active Fab login."));
-	// No idempotency flag, and the reason is stated rather than left as an
-	// absence: the Fab module publishes no authentication or library-sync state
-	// this build can read, so nothing here can measure whether the call changed
-	// anything. A fabricated unchanged=false would be a claim, not a reading.
+	Res->SetObjectField(TEXT("librarySync"), MCPFab::Library().Describe());
 	Res->SetBoolField(TEXT("idempotencyObservable"), false);
-	Res->SetStringField(TEXT("idempotencyNote"),
-		TEXT("The sync runs asynchronously and its results land in the Content Browser after this call has returned. Nothing in the Fab module reports that state back, so this call cannot say whether it changed "
-			 "anything. fab(status) is the closest reading available and does not cover it."));
-
-	// No inverse. This loads what the user already owns into the editor's TEDS
-	// index so the Content Browser can show it. Nothing un-lists a library, and
-	// the listing is rebuilt from the account on the next sync anyway.
+	Res->SetStringField(TEXT("idempotencyNote"), TEXT("Completion is observed asynchronously through librarySync; starting does not establish a changed snapshot."));
+	Res->SetStringField(TEXT("note"), TEXT("Sync started. Poll fab(status).librarySync for complete or failed; the previous snapshot is retained on failure."));
 	Res->SetBoolField(TEXT("rollbackPossible"), false);
-	Res->SetStringField(TEXT("rollbackNote"),
-		TEXT("Syncing populates an in-editor index of the library the account already owns. There is no call that "
-			 "un-lists it, and nothing on disk or in the project changed."));
+	Res->SetStringField(TEXT("rollbackNote"), TEXT("Updates an in-editor index of already-owned content; no project files are changed."));
 	return MCPResult(Res);
 }
 
@@ -483,7 +472,7 @@ void FFabHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("fab_logout"), &Logout, {},
 		MCPSpec::ContractExempt(TEXT("Takes no parameters and clears the stored Fab credentials when called")));
 	Registry.RegisterHandler(TEXT("fab_sync_library"), &SyncLibrary, {
-		MCPParam::Optional(TEXT("batchSize"), EType::Integer, TEXT("Library items to pull per sync request (default the plugin's own)")),
+		MCPParam::Optional(TEXT("batchSize"), EType::Integer, TEXT("Library items per request, 1-1000 (default 100)")),
 	}, MCPSpec::ContractExempt(TEXT("Queues a Fab library sync whatever the batch size")));
 	Registry.RegisterHandler(TEXT("fab_list_cached"), &ListCached, {});
 	Registry.RegisterHandler(TEXT("fab_cache_info"), &CacheInfo, {});
