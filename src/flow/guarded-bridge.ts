@@ -11,7 +11,7 @@
  * straight through.
  */
 import { runGuarded } from "@db-lyon/flowkit/guard";
-import type { BridgeTarget, IBridge } from "../bridge/bridge.js";
+import type { BridgeCallOptions, BridgeTarget, IBridge } from "../bridge/bridge.js";
 import type { EditorSession } from "../sessions/session.js";
 import { explainEditorDownWithEvidence } from "../dispatch/offline.js";
 import { GuardRegistry, makeCallContext, type ResolveExistingFile } from "./guard.js";
@@ -99,7 +99,7 @@ abstract class ForwardingBridge implements IBridge {
     return this.inner.getTarget();
   }
 
-  abstract call(method: string, params?: Record<string, unknown>, timeoutMs?: number): Promise<unknown>;
+  abstract call(method: string, params?: Record<string, unknown>, timeoutMs?: number, options?: BridgeCallOptions): Promise<unknown>;
 }
 
 /**
@@ -123,10 +123,11 @@ export class DialogGatedBridge extends ForwardingBridge {
     method: string,
     params?: Record<string, unknown>,
     timeoutMs?: number,
+    options?: BridgeCallOptions,
   ): Promise<unknown> {
     const blocked = await refuseIfBlocked(this.session, method);
     if (blocked) return blocked;
-    return observeReply(this.session, method, await this.inner.call(method, params, timeoutMs));
+    return observeReply(this.session, method, await this.inner.call(method, params, timeoutMs, options));
   }
 }
 
@@ -165,6 +166,7 @@ export class GuardedBridge extends ForwardingBridge {
     method: string,
     params?: Record<string, unknown>,
     timeoutMs?: number,
+    options?: BridgeCallOptions,
   ): Promise<unknown> {
     try {
       // `runGuarded` is already a pass-through on an empty registry, but building
@@ -174,7 +176,7 @@ export class GuardedBridge extends ForwardingBridge {
       if (this.registry.size === 0 && !readOnly) {
         const blocked = await this.guardCall(method);
         if (blocked) return blocked;
-        return this.observe(method, await this.inner.call(method, params, timeoutMs));
+        return this.observe(method, await this.inner.call(method, params, timeoutMs, options));
       }
 
       const ctx = makeCallContext(
@@ -189,7 +191,7 @@ export class GuardedBridge extends ForwardingBridge {
       if (blocked) return blocked;
       return this.observe(
         method,
-        await runGuarded(ctx, readOnly ? withReadOnlyGuard(this.registry) : this.registry, () => this.inner.call(method, params, timeoutMs)),
+        await runGuarded(ctx, readOnly ? withReadOnlyGuard(this.registry) : this.registry, () => this.inner.call(method, params, timeoutMs, options)),
       );
     } catch (e) {
       // Every route into the editor comes through here (an MCP tool call, a

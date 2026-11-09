@@ -194,5 +194,20 @@ public class UE_MCP_Bridge : ModuleRules
 		{
 			PublicDefinitions.Add("WITH_FAB_PLUGIN=0");
 		}
+
+		// Epic's Unreal MCP plugin (5.8+, off by default). Headers only, never
+		// linked: the handlers reach its module through virtual calls once it is
+		// loaded, so this DLL loads whether or not a project enables the plugin.
+		bool bEpicMCPPresent = System.IO.File.Exists(System.IO.Path.Combine(
+			EngineDirectory, "Plugins", "Experimental", "ModelContextProtocol", "Source", "ModelContextProtocol", "Public", "IModelContextProtocolResourceProvider.h"));
+		if (bEpicMCPPresent && Target.bBuildEditor)
+		{
+			PrivateIncludePathModuleNames.Add("ModelContextProtocol");
+			PrivateDefinitions.Add("WITH_UEMCP_EPIC_MCP=1");
+		}
+		else
+		{
+			PrivateDefinitions.Add("WITH_UEMCP_EPIC_MCP=0");
+		}
 	}
 }

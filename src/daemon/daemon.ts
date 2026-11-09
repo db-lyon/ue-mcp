@@ -420,7 +420,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
   // The daemon owns these, so it can say beforehand why the editor is about to
   // go away and the disconnect is classified as that rather than guessed.
   const editorOp = async (op: string): Promise<Record<string, unknown>> => {
-    const text = (r: { content?: Array<{ text?: string }> }) => r.content?.map((c) => c.text ?? "").join("\n") ?? "";
+    const text = (r: { content?: Array<{ type?: string; text?: string }> }) => r.content?.map((c) => c.text ?? "").join("\n") ?? "";
     const step = async (category: string, action: string) => {
       const name = `${category}.${action}`;
       events.publish("editor.operation", { op, step: name, phase: "started" });

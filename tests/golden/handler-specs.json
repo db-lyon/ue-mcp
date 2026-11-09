@@ -1,5 +1,5 @@
 {
-  "handlerCount": 1252,
+  "handlerCount": 1256,
   "handlers": {
     "actors_in_box": {
       "category": "level",
@@ -14724,6 +14724,30 @@
         }
       ]
     },
+    "epic_call_mcp_tool": {
+      "category": "epic",
+      "params": [
+        {
+          "name": "tool",
+          "type": "string",
+          "required": true,
+          "description": "Tool name from epic_list_mcp_tools"
+        },
+        {
+          "name": "input",
+          "type": "object",
+          "required": false,
+          "description": "Tool arguments as a JSON object"
+        },
+        {
+          "name": "inputJson",
+          "type": "string",
+          "required": false,
+          "description": "Tool arguments as a raw JSON string; wins over input"
+        }
+      ],
+      "contractExempt": "runs a registered engine tool"
+    },
     "epic_call_tool": {
       "category": "epic",
       "params": [
@@ -14765,6 +14789,33 @@
         }
       ]
     },
+    "epic_list_mcp_resources": {
+      "category": "epic",
+      "params": []
+    },
+    "epic_list_mcp_tools": {
+      "category": "epic",
+      "params": [
+        {
+          "name": "nameFilter",
+          "type": "string",
+          "required": false,
+          "description": "Case-sensitive substring of the tool name"
+        },
+        {
+          "name": "includeSchemas",
+          "type": "boolean",
+          "required": false,
+          "description": "Return each tool's input and output schemas (default false)"
+        },
+        {
+          "name": "includeRegistryAdapters",
+          "type": "boolean",
+          "required": false,
+          "description": "Also list the tools that only adapt ToolsetRegistry tools, which epic(list_toolsets) already covers (default false)"
+        }
+      ]
+    },
     "epic_list_toolsets": {
       "category": "epic",
       "params": [
@@ -14779,6 +14830,17 @@
           "type": "boolean",
           "required": false,
           "description": "Return each tool with its input and output schemas instead of its name (default false)"
+        }
+      ]
+    },
+    "epic_read_mcp_resource": {
+      "category": "epic",
+      "params": [
+        {
+          "name": "uri",
+          "type": "string",
+          "required": true,
+          "description": "Resource uri from epic_list_mcp_resources"
         }
       ]
     },

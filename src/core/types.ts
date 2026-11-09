@@ -185,6 +185,11 @@ export interface ToolContext {
    */
   onProgress?: ProgressFn;
   /**
+   * Aborted when the client cancels this call (notifications/cancelled). A
+   * bridge call handed it sends cancel_request to the editor and stops waiting.
+   */
+  readonly signal?: AbortSignal;
+  /**
    * Who is on the other end of the transport, from the MCP `initialize`
    * handshake. Used to explain client-specific rendering limits in a result
    * rather than leaving the user staring at a call that looks frozen.

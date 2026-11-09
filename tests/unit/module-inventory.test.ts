@@ -73,6 +73,7 @@ const PER_SESSION: Record<string, string> = {
   "index.ts": "Wires the registry, the per-session loads and the MCP server together.",
   "server/runtime.ts": "Owns the session registry, each session's load, guards and bridge, and the targeting baked into the tool graph.",
   "server/mcp-server.ts": "Dispatches each MCP connection's calls through the runtime's sessions.",
+  "server/editor-resources.ts": "Lists and reads MCP resources through the bridge it is handed, the active session's at call time.",
   "server/context-projection.ts": "Projects the runtime's sessions under another strategy and scope, and dispatches a call to each session through a load built from that session's own surface.",
   "daemon/daemon.ts": "One daemon per project root: it owns that project's runtime and follows each of its editors.",
   "daemon/checkpoint-routes.ts": "Resolves the editor session each request names before acting on its checkpoints.",
