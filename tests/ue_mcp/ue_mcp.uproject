@@ -101,6 +101,41 @@
 		{
 			"Name": "CommonUI",
 			"Enabled": true
+		},
+		{
+			"Name": "KnowledgeBase",
+			"Enabled": true,
+			"Optional": true
+		},
+		{
+			"Name": "KnowledgeBaseToolset",
+			"Enabled": true,
+			"Optional": true
+		},
+		{
+			"Name": "GeometryToolset",
+			"Enabled": true,
+			"Optional": true
+		},
+		{
+			"Name": "AIAssistant",
+			"Enabled": true,
+			"Optional": true
+		},
+		{
+			"Name": "UnrealCanvasAnnotations",
+			"Enabled": true,
+			"Optional": true
+		},
+		{
+			"Name": "GraphDsl",
+			"Enabled": true,
+			"Optional": true
+		},
+		{
+			"Name": "SemanticSearch",
+			"Enabled": true,
+			"Optional": true
 		}
 	]
 }
