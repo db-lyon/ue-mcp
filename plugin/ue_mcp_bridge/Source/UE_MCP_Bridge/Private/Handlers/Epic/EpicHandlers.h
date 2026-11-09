@@ -44,6 +44,15 @@ private:
 	static TSharedPtr<FJsonValue> CallMCPTool(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> ListMCPResources(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> ReadMCPResource(const TSharedPtr<FJsonObject>& Params);
+	// Epic's AI Assistant (UAIAssistantInstance, UE 5.9+), by reflection. Sends
+	// and conversation reads are async: each returns a requestId that
+	// AIAssistantGetRequest polls. EpicHandlers_AIAssistant.cpp.
+	static void RegisterAIAssistantHandlers(class FMCPHandlerRegistry& Registry);
+	static TSharedPtr<FJsonValue> AIAssistantStatus(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> AIAssistantSendMessage(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> AIAssistantGetConversation(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> AIAssistantGetRequest(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> AIAssistantGetEvents(const TSharedPtr<FJsonObject>& Params);
 };
 
 // Shared by the two Epic handler files.
