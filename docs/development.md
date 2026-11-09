@@ -13,6 +13,8 @@ cd ue-mcp
 npm install
 ```
 
+The checked-in `.claude/settings.json` holds the shared Claude Code settings: attribution, a deny list and a few read-only allows. It does not bypass permissions. Keep personal permissions in `.claude/settings.local.json`, which git ignores.
+
 ## Resolving an issue with Claude Code
 
 From inside a `ue-mcp` clone:
@@ -21,7 +23,7 @@ From inside a `ue-mcp` clone:
 npx ue-mcp resolve 16
 ```
 
-This fetches issue #16 from the repository the `origin` remote names, creates a `resolve/16` branch from `origin/main`, and runs `claude --print --dangerously-skip-permissions` with the issue and the repo conventions. Claude implements the fix, runs `npx tsc --noEmit` and commits. The command then pushes the branch and opens a pull request. It needs the `gh` and `claude` CLIs and push access to `origin`, and works on the current checkout.
+This fetches issue #16 from the repository the `origin` remote names, creates a `resolve/16` branch from `origin/main`, and runs `claude --print` with the issue and the repo conventions. Claude runs in `dontAsk` permission mode with a fixed tool list: reading and editing files, `npx tsc --noEmit`, and `git status`, `diff`, `add` and `commit`. Anything else is denied. The issue text goes into the prompt as untrusted data. Claude implements the fix, runs `npx tsc --noEmit` and commits. The command then pushes the branch and opens a pull request. It needs the `gh` and `claude` CLIs and push access to `origin`, and works on the current checkout.
 
 ## Building
 
@@ -34,7 +36,7 @@ npm run up:build         # stop the test editor, build, relaunch
 
 `npm run build` builds only the `ue_mcpEditor` target of `tests/ue_mcp/ue_mcp.uproject` and refuses any other project. The test editor holds the module DLLs, so close it first or use `npm run up:build`. Neither command runs the deployer: run `node scripts/deploy.mjs` after editing `plugin/`.
 
-The build passes `-NoEngineChanges`, so Unreal aborts and prints the offending files if the build would overwrite anything already in the engine tree. Engine selection order is `UE_MCP_TEST_ENGINE_ROOT`, then `UE_BUILD_TOOL_PATH`, then the default install locations. A pinned root with no build tool is an error.
+The build passes `-NoEngineChanges`, so Unreal aborts and prints the offending files if the build would overwrite anything already in the engine tree. Engine selection order is `UE_MCP_TEST_ENGINE_ROOT`, then `UE_ROOT`, then `UE_BUILD_TOOL_PATH`, then the default install locations. `UE_ROOT` is the engine root some build hosts set for a pinned Unreal engine, so a build there needs no ue-mcp-specific variable. A pinned root with no build tool is an error.
 
 ```powershell
 # Roots the build and run scripts must never touch, whatever else is set.
@@ -141,6 +143,8 @@ No environment variable is needed. When nothing answers, the failure names the l
 
 `npm run test:automation -- --filter <prefix>` narrows the C++ suite, for example `--filter UE.MCP.Level.PlaceVolume` (native volume placement) or `--filter UE.MCP.Blueprint.TransactionalNodes` (graph node flags). `--verbose` prints every error line.
 
+`--filter UE.MCP.Landscape.HeightRead` checks that `landscape(get_height_region)` returns the expected heights without dirtying a clean landscape package or clearing an existing dirty flag, for merged and edit-layer reads. The same reader serves the point, normal, slope, analysis, export and geo-projection height queries.
+
 ### Live tests
 
 Each shard of `npm run test:live` is a copy of `tests/ue_mcp` with its own editor and port, launched with the kind its files declare (`// @live-editor headless`, `render`, `interactive`, `base`, `scm`, `none`, `lifecycle`). Files are split by measured time, the shard count follows free memory, and the run fails over 10 minutes or when a test passes its budget. Every shard is checked to have its own project open before anything is sent.
@@ -150,6 +154,8 @@ Each shard of `npm run test:live` is a copy of `tests/ue_mcp` with its own edito
 - The leak assertions need the parameter echo. Shard editors have it; in attach mode, launch the editor with `UE_MCP_PARAM_ECHO=1`.
 - `tests/live/crash-class-inputs.test.ts` drives inputs that have crashed the editor and follows each call with a liveness probe.
 - `tests/live/matrix.ts` records where each case's assertion lives, and `tests/live/coverage.test.ts` checks each reference resolves.
+
+See [batch component properties](blueprint-component-properties-batch.md) for batch template edits and rollback limits.
 
 ## Adding an action or category
 

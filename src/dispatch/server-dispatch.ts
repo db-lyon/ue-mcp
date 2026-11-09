@@ -9,6 +9,10 @@ import type { EditorSession, SessionRegistry } from "../sessions/session.js";
 import type { ElicitFn, ProgressFn, ProgressUpdate, ToolContext, ToolDef } from "../core/types.js";
 import { McpError, ErrorCode } from "../core/errors.js";
 import { debug } from "../core/log.js";
+import { withCallAsker } from "../flow/call-elicit.js";
+import { readOnlyRefusal, type SessionAccessMode } from "../flow/session-access.js";
+import { taskEffect } from "../surface/action-effects.js";
+import { journalFor } from "../journal/journal.js";
 import { unwrapArgsEnvelope, validateCategoryParams } from "../surface/context/call-envelope.js";
 import { microFlowCall } from "../surface/context/micro-context.js";
 import {
@@ -29,6 +33,7 @@ import {
 } from "../editor/dialog-guard.js";
 import { connectedEditorOf } from "../editor/editor-control.js";
 import { clientAdvertisesElicitation } from "../editor/dialog-mode.js";
+import { elicitationUnrenderedNote } from "./client-quirks.js";
 import { playtestRefusal } from "../editor/playtest-mode.js";
 import { contestedProject } from "../editor/project-holders.js";
 import { withAssetLocks, type LockingConfig } from "./locking.js";
@@ -141,12 +146,18 @@ export function buildElicit(mcp: McpServer): ElicitFn {
         "Connected MCP client did not advertise the `elicitation` capability - cannot obtain a deterministic user approval. Upgrade your client (Claude Code >= 2.1.76) or run the action from a client that supports MCP elicitation.",
       );
     }
+    // Advertised but never drawn: the request would wait on a form nobody sees.
+    const unrendered = elicitationUnrenderedNote(mcp.server.getClientVersion());
+    if (unrendered) throw new McpError(ErrorCode.UNKNOWN_ACTION, unrendered);
     const result = await mcp.server.elicitInput(params, { timeout: ELICIT_TIMEOUT_MS });
     return result as Awaited<ReturnType<ElicitFn>>;
   };
   // The function exists whatever the client supports, so its presence proves
-  // nothing. Callers deciding whether the user CAN be asked read this.
-  elicit.clientAdvertisesElicitation = () => !!mcp.server.getClientCapabilities()?.elicitation;
+  // nothing. Callers deciding whether the user CAN be asked read this, and a
+  // client known to drop the forms it advertises cannot be asked (#1459).
+  elicit.clientAdvertisesElicitation = () =>
+    !!mcp.server.getClientCapabilities()?.elicitation &&
+    elicitationUnrenderedNote(mcp.server.getClientVersion()) === null;
   elicit.client = () => mcp.server.getClientVersion();
   return elicit;
 }
@@ -173,6 +184,13 @@ export interface DispatchDeps {
   gatePlaytest?: boolean;
   /** The flow route a micro gateway call to the flow category takes. */
   flow?: { tool: ToolDef; ctx: ToolContext };
+  /**
+   * The calling session's access mode, read on every call. Absent is
+   * read-write. In read-only mode an action whose declared effect is `mutate`
+   * or `unknown` is refused here, and every bridge call it would make is
+   * refused by the read-only guard (#1484).
+   */
+  access?: () => SessionAccessMode;
 }
 
 /** Window actions that can remove the window the dialog gate is holding (#1231). */
@@ -255,6 +273,13 @@ export async function dispatchCategoryCall(
   const untargeted = refuseUntargetedInRegistry(sessions, effectiveTask, routed.targeted, loads.dispatchUnion.tools);
   if (untargeted) return errorResult("INVALID_PARAMS", untargeted);
 
+  // Before the dialog guard and the task: an action served in this process
+  // never reaches the bridge, so the bridge guard alone cannot refuse it.
+  if (deps.access?.() === "read-only") {
+    const refused = readOnlyRefusal(effectiveTask, loads.dispatchUnion.tools);
+    if (refused) return errorResult(ErrorCode.WRITE_BLOCKED, refused, attribution(sessions, session));
+  }
+
   if (deps.gatePlaytest) {
     const refused = playtestRefusal(effectiveTask, session.project.projectDir);
     if (refused) return refusalResult(refused, attribution(sessions, session));
@@ -334,15 +359,20 @@ export async function dispatchCategoryCall(
     const task = await sessionRegistry.create(taskName, flowCtx, taskParams);
     // Locks are taken in the editor the call runs in, through the GUARDED
     // bridge, so a lock request made while a modal is up is refused as a dialog.
-    const result = await withAssetLocks(
-      session.guarded,
-      deps.lockingCfg,
-      effectiveTask,
-      subject.params,
-      () => task.run(),
-      session.lockOwnerId,
-      loads.dispatchUnion.tools,
-    );
+    // Every bridge call the task makes answers to this caller, so a guard that
+    // allows overrides asks the person who sent this call and nobody else.
+    // Journaled when the client named a group and the action may change state (#1481).
+    const effect = taskEffect(effectiveTask, loads.dispatchUnion.tools).effect;
+    const result = await journalFor(session).record(effectiveTask, effect, () =>
+      withCallAsker({ elicit: flowCtx.elicit, subject: effectiveTask, access: deps.access }, () => withAssetLocks(
+        session.guarded,
+        deps.lockingCfg,
+        effectiveTask,
+        subject.params,
+        () => task.run(),
+        session.lockOwnerId,
+        loads.dispatchUnion.tools,
+      )));
 
     // A task that failed for its own reasons reports that, not a dialog. A
     // failure DURING a modal is usually caused by it, and the runner returns
@@ -499,6 +529,11 @@ export async function dispatchFlowCall(
     );
     if (untargeted) return errorResult("INVALID_PARAMS", untargeted);
 
+    if (deps.access?.() === "read-only") {
+      const refused = readOnlyRefusal(`${flowTool.name}.${String(params.action ?? "")}`, deps.loads.dispatchUnion.tools);
+      if (refused) return errorResult(ErrorCode.WRITE_BLOCKED, refused, attribution(sessions, session));
+    }
+
     // Steps are refused individually at the guarded bridge. This covers a run
     // STARTED while a modal is up, and flow(list)/flow(plan), which never
     // touch the bridge at all.
@@ -508,7 +543,16 @@ export async function dispatchFlowCall(
       "action",
     );
     if (!flowCheck.allow) return refusalResult(flowCheck.refusal, attribution(sessions, session));
-    const result = await flowTool.handler(sessionContext(baseCtx, session), params);
+    const flowTask = `${flowTool.name}.${String(params.action ?? "")}`;
+    // A flow's steps are not journaled one by one, so a run is one entry whose files the checkpoints restore (#1481).
+    const journaled = await journalFor(session).record(flowTask, taskEffect(flowTask, deps.loads.dispatchUnion.tools).effect, async () => ({
+      success: true,
+      data: await withCallAsker(
+        { elicit: deps.elicit(), access: deps.access },
+        () => flowTool.handler(sessionContext(baseCtx, session), params),
+      ),
+    }));
+    const result = journaled.data;
     const text = typeof result === "string" ? result : JSON.stringify(result, null, 2);
     return { content: [{ type: "text" as const, text }, ...attribution(sessions, session)] };
   } catch (e) {

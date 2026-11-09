@@ -18,6 +18,11 @@ export interface CliCommand {
 
 export const CLI_COMMANDS: readonly CliCommand[] = [
   { name: "init", summary: "Set up ue-mcp in a project", load: () => import("./init.js") },
+  {
+    name: "install",
+    summary: "Install by name into a project, e.g. ue-mcp install studio",
+    load: () => import("./extension-cli.js").then((m) => ({ run: m.runInstall, usage: m.installUsage })),
+  },
   { name: "update", summary: "Update the deployed bridge and the server", load: () => import("./update.js") },
   { name: "doctor", summary: "Report what is installed and running", load: () => import("./doctor.js") },
   { name: "extension", summary: "Install, remove or list daemon extensions", load: () => import("./extension-cli.js") },
@@ -29,7 +34,7 @@ export const CLI_COMMANDS: readonly CliCommand[] = [
   { name: "auth", summary: "Authorize feedback issues as your GitHub account", load: () => import("./auth-cli.js") },
   {
     name: "login",
-    summary: "Authorize this machine to publish plugins",
+    summary: "Sign in to your UE-MCP account with email or GitHub",
     load: () => import("./login-cli.js").then((m) => ({ run: m.runLogin })),
     ownHelp: true,
   },
@@ -44,6 +49,7 @@ export const CLI_COMMANDS: readonly CliCommand[] = [
   { name: "playtest", summary: "Set who starts playtest runs", load: () => import("./playtest-cli.js"), ownHelp: true },
   { name: "resolve", summary: "Work a GitHub issue into a pull request", load: () => import("./resolve.js") },
   { name: "build", summary: "Build a project's editor target", load: () => import("./build-cli.js") },
+  { name: "flow", summary: "List, plan or run a project's flows", load: () => import("./flow-cli.js") },
   { name: "plugin", summary: "Install, create and publish plugins", load: () => import("./plugin-cli.js") },
   { name: "context", summary: "Read or set the context strategy", load: () => import("./context-cli.js"), ownHelp: true },
   {

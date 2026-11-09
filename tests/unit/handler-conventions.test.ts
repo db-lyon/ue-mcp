@@ -78,7 +78,15 @@ const BASELINE = {
   // replays, observations and script runs, deleted recordings and scripts, written test and scenario files,
   // and recorded verdicts, none of which has an inverse.
   // 169: editor(show_notification) shows a toast that fades by itself (db-lyon/ue-mcp-studio#43).
-  mutationsWithoutRollback: 169,
+  // 171: editor(render_mesh_studio) overwrites PNGs without backups; cancelling
+  // releases its preview scene and cannot resume the job. Both explain this
+  // in their result bodies; neither can supply an inverse that restores it.
+  // 170: editor(discard_dirty) clears named dirty flags; no action restores
+  // those flags, and closing the editor loses the unsaved contents. The
+  // handler reports that limit through MCPSetNoRollback.
+  // 173: pie(drive_stop) ends a pawn drive, which is not resumed; it says so through
+  // MCPSetNoRollback, as every other pie stop does (#1735).
+  mutationsWithoutRollback: 173,
   // Zero, and held there by a flat assertion. Every mutation with no inverse
   // now says so in its own result body with the reason, which is the half a
   // caller can act on.
@@ -111,6 +119,9 @@ const KNOWN_ORPHANS: Record<string, string> = {
   release_lock: "as above.",
   release_session_locks: "called on session teardown, not by a caller.",
   execute_python: "editor(execute_python) wraps this with the workaround tracker and the search gate.",
+  execute_batch:
+    "editor(batch) is a TS handler that prepares every step as a direct call before sending the list, "
+    + "so it calls this from code rather than declaring it as an action's bridge.",
   pie_start_ignoring_blueprint_errors:
     "editor(play_in_editor_ignore_blueprint_errors) calls it only after its approval gate, so no action "
     + "declares it and play_in_editor's pie_control never reads an authorization (#1057).",

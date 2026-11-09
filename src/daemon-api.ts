@@ -19,6 +19,7 @@
  * are additive.
  */
 export { DAEMON_API_VERSION, readDiscovery, readLiveDiscovery, discoveryPath, type DaemonDiscovery } from "./daemon/discovery.js";
+export type { FlowStepApprovalRequest, FlowStepApprover, FlowStepDecision } from "./flow/step-approval.js";
 export {
   EXTENSION_API_VERSION,
   EXTENSION_API_MIN_VERSION,
@@ -32,6 +33,7 @@ export {
   type DaemonExtensionApi,
   type ExtensionServicesApi,
   type DaemonHealth,
+  type McpSessionInfo,
   type EditorStatus,
   type ExtensionHandler,
   type ExtensionRequest,

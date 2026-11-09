@@ -270,8 +270,19 @@ private:
 	/** Case-insensitive, line-scoped header lookup. */
 	static bool FindHeaderValue(const FString& Request, const FString& HeaderName, FString& OutValue);
 
-	/** Refuse an upgrade with an HTTP status the caller can read. */
-	static void SendHttpError(FMCPSocketHandle SocketFD, int32 StatusCode, const FString& StatusText, const FString& Detail);
+	/** Refuse an upgrade with an HTTP status the caller can read. ExtraHeaders
+	 *  is zero or more complete header lines, each ending in CRLF. */
+	static void SendHttpError(FMCPSocketHandle SocketFD, int32 StatusCode, const FString& StatusText, const FString& Detail, const FString& ExtraHeaders = FString());
+
+	/**
+	 * Generate this session's token and publish it to the per-user token file
+	 * for ServerPort. Runs once on the server thread before the first accept.
+	 * On failure SessionToken stays empty and every upgrade is refused.
+	 */
+	void PublishSessionToken();
+
+	/** Remove the token file if it still holds this session's token. */
+	void RetractSessionToken();
 
 	FString CreateWebSocketAcceptKey(const FString& ClientKey);
 
@@ -310,4 +321,11 @@ private:
 	// form any record or payload uses.
 	const FString InstanceId;
 	FDateTime StartedAtUtc;
+
+	// Required as "Authorization: Bearer <token>" on every upgrade. Written on
+	// the server thread before the accept loop starts and read-only after, so
+	// connection threads read it without a lock. Never logged, and never
+	// written into the project's port lockfile or any other record.
+	FString SessionToken;
+	FString SessionTokenDir;
 };

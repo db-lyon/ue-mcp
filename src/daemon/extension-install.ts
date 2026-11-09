@@ -9,33 +9,54 @@
  * others (extension-versions.ts), so installing for one project leaves what
  * every other project loads in place.
  */
-import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { execFileSync } from "node:child_process";
+import { downloadVerified, extractZip, sha256Of } from "../core/archive.js";
 import { extensionsDir } from "./extensions.js";
 import { EXTENSION_API_MIN_VERSION, EXTENSION_API_VERSION, extensionApiSupported } from "./extension-api.js";
 import { installedCopies, isLeftover, migrateLegacy, pruneVersions, recordVersion, versionDir } from "./extension-versions.js";
 import { clearExtensionRecords } from "../config/user-state.js";
+
+/**
+ * A release manifest: the archive and its hash, and optionally the channel of
+ * an editor plugin the extension needs (`pluginChannel`) with the oldest
+ * version of it that works (`pluginMin`). Relative URLs are resolved here.
+ */
+export interface ExtensionManifest {
+  url: string;
+  sha256: string;
+  version?: string;
+  pluginChannel?: string;
+  pluginMin?: string;
+}
+
+export function isManifestUrl(source: string): boolean {
+  return /^https?:\/\/.*\.json(\?.*)?$/i.test(source);
+}
+
+export async function readExtensionManifest(source: string): Promise<ExtensionManifest> {
+  const res = await fetch(source);
+  if (!res.ok) throw new Error(`manifest download failed (${res.status} ${res.statusText}): ${source}`);
+  const m = (await res.json()) as Record<string, unknown>;
+  if (typeof m.url !== "string" || typeof m.sha256 !== "string") {
+    throw new Error(`${source} is not an extension manifest (needs url and sha256)`);
+  }
+  const str = (v: unknown): string | undefined => (typeof v === "string" ? v : undefined);
+  return {
+    url: new URL(m.url, source).href,
+    sha256: m.sha256,
+    version: str(m.version),
+    pluginChannel: typeof m.pluginChannel === "string" ? new URL(m.pluginChannel, source).href : undefined,
+    pluginMin: str(m.pluginMin),
+  };
+}
 
 export interface InstalledExtension {
   name: string;
   version: string;
   dir: string;
   sha256: string;
-}
-
-function extractZip(zip: string, into: string): void {
-  fs.mkdirSync(into, { recursive: true });
-  const tar = process.platform === "win32"
-    ? path.join(process.env.SystemRoot ?? "C:\\Windows", "System32", "tar.exe")
-    : "tar";
-  try {
-    execFileSync(tar, ["-xf", zip, "-C", into], { windowsHide: true, stdio: ["ignore", "ignore", "pipe"] });
-  } catch {
-    execFileSync("unzip", ["-q", "-o", zip, "-d", into], { windowsHide: true, stdio: ["ignore", "ignore", "pipe"] });
-  }
 }
 
 /** The directory holding package.json: the root, or its only folder. */
@@ -58,28 +79,18 @@ export async function installExtension(
   source: string,
   opts: { sha256?: string | null; root?: string; projectDir?: string } = {},
 ): Promise<InstalledExtension> {
-  // A release manifest names the archive and its hash: { "url": "...", "sha256": "..." }.
-  if (/^https?:\/\/.*\.json(\?.*)?$/i.test(source)) {
-    const res = await fetch(source);
-    if (!res.ok) throw new Error(`manifest download failed (${res.status} ${res.statusText}): ${source}`);
-    const manifest = (await res.json()) as { url?: unknown; sha256?: unknown };
-    if (typeof manifest.url !== "string" || typeof manifest.sha256 !== "string") {
-      throw new Error(`${source} is not an extension manifest (needs url and sha256)`);
-    }
-    return installExtension(new URL(manifest.url, source).href, { ...opts, sha256: manifest.sha256 });
+  if (isManifestUrl(source)) {
+    const manifest = await readExtensionManifest(source);
+    return installExtension(manifest.url, { ...opts, sha256: manifest.sha256 });
   }
   const isUrl = /^https?:\/\//i.test(source);
   if (isUrl && !opts.sha256) throw new Error("a URL needs --sha256: an extension runs inside the daemon, so it is never installed unverified");
   const work = fs.mkdtempSync(path.join(os.tmpdir(), "ue-mcp-ext-"));
   try {
     const zip = isUrl ? path.join(work, "extension.zip") : path.resolve(source);
-    if (isUrl) {
-      const res = await fetch(source);
-      if (!res.ok) throw new Error(`download failed (${res.status} ${res.statusText}): ${source}`);
-      fs.writeFileSync(zip, Buffer.from(await res.arrayBuffer()));
-    }
+    if (isUrl) await downloadVerified(source, zip, opts.sha256!);
     if (!fs.existsSync(zip)) throw new Error(`no such file: ${zip}`);
-    const sha256 = crypto.createHash("sha256").update(fs.readFileSync(zip)).digest("hex");
+    const sha256 = sha256Of(zip);
     if (opts.sha256 && sha256 !== opts.sha256.toLowerCase()) {
       throw new Error(`${source} does not match the expected SHA-256 (expected ${opts.sha256}, got ${sha256})`);
     }

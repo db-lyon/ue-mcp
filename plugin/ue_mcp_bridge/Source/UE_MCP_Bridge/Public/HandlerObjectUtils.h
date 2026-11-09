@@ -16,6 +16,7 @@
 #include "Engine/CollisionProfile.h"
 #include "HandlerEngineVersion.h"
 #include "HandlerResult.h"
+#include "HandlerPathGuard.h"
 
 /** Export a property's value as text, honouring C-style fixed arrays.
  *
@@ -165,8 +166,11 @@ inline FString MCPResolveDumpPath(const FString& RequestedPath)
 
 /** Write already-serialized dump text to a path from MCPResolveDumpPath,
  *  creating its directory first. `What` names the content in the error. */
-inline bool MCPWriteDumpFile(const FString& ResolvedPath, const FString& Text, const TCHAR* What, FString& OutError)
+inline bool MCPWriteDumpFile(const FString& RequestedPath, const FString& Text, const TCHAR* What, FString& OutError)
 {
+	// A dump goes only to the project, its Saved folder or the temp folder.
+	FString ResolvedPath;
+	if (!MCPResolvePathInside(RequestedPath, MCPDefaultWritableRoots(), ResolvedPath, OutError, FPaths::ProjectSavedDir())) return false;
 	const FString Directory = FPaths::GetPath(ResolvedPath);
 	if (!Directory.IsEmpty() && !IFileManager::Get().MakeDirectory(*Directory, true))
 	{

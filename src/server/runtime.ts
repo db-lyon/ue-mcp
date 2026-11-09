@@ -306,6 +306,7 @@ export async function createRuntime(projectArgs: string[]): Promise<Runtime> {
       elicit: () => opts.elicit,
       client: () => undefined,
       flow: { tool: flowTool, ctx: baseCtx },
+      ...(opts.access ? { access: () => opts.access! } : {}),
       ...(opts.loadView ? { loadView: opts.loadView } : {}),
     };
   };

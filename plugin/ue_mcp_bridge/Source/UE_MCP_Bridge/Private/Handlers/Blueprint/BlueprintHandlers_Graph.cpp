@@ -2333,6 +2333,37 @@ UActorComponent* ResolveComponentTemplate(
 		}
 	}
 
+	// Class selectors are a fallback after instance and property names. Resolve
+	// the unique candidate by its name again so inherited SCS writes still use
+	// the child's ICH, never the shared parent template.
+	if (UClass* ComponentClass = MCPResolveClassOfType(ComponentName, UActorComponent::StaticClass()))
+	{
+		TArray<FString> Matches;
+		for (UClass* Class = Blueprint->GeneratedClass; Class; Class = Class->GetSuperClass())
+		{
+			UBlueprint* OwnerBP = Cast<UBlueprint>(Class->ClassGeneratedBy);
+			if (!OwnerBP || !OwnerBP->SimpleConstructionScript) continue;
+			for (USCS_Node* Node : OwnerBP->SimpleConstructionScript->GetAllNodes())
+			{
+				if (Node && Node->ComponentTemplate && Node->ComponentTemplate->IsA(ComponentClass))
+					Matches.AddUnique(Node->GetVariableName().ToString());
+			}
+		}
+		if (Blueprint->GeneratedClass)
+		{
+			if (AActor* CDO = Cast<AActor>(Blueprint->GeneratedClass->GetDefaultObject(false)))
+			{
+				TInlineComponentArray<UActorComponent*> Components;
+				CDO->GetComponents(Components);
+				for (UActorComponent* Component : Components)
+				{
+					if (Component && Component->IsA(ComponentClass)) Matches.AddUnique(Component->GetName());
+				}
+			}
+		}
+		if (Matches.Num() == 1)
+			return ResolveComponentTemplate(Blueprint, Matches[0], bForWrite, bOutIsInherited, OutAvailable);
+	}
 	return nullptr;
 }
 

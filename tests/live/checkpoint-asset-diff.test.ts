@@ -16,6 +16,7 @@ import * as path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { callBridge, disconnectBridge, getBridge, type TestResult } from "../setup.js";
 import type { EditorBridge } from "../../src/bridge/bridge.js";
+import { thumbnailFile } from "../../src/checkpoints/asset-diff.js";
 import { LiveServer, resultJson, type LiveCallResult } from "./server.js";
 import { closeLiveBridges, liveTarget } from "./harness.js";
 
@@ -73,8 +74,8 @@ const allProps = (d: Json): Json[] => records(d).flatMap((r) => [r, ...((r.prope
 
 function expectPicture(v: Json | null | undefined, label: string): void {
   expect(v, label).toBeTruthy();
-  expect(v!.thumbnail?.id, `${label}: ${JSON.stringify(v!.thumbnail)}`).toMatch(/^[0-9a-f]{40}$/);
-  const file = path.join(projectDir, "Saved", "UE_MCP_Bridge", "shadow-thumbs", `${v!.thumbnail.id}.png`);
+  expect(String(v!.thumbnail?.id), `${label}: ${JSON.stringify(v!.thumbnail)}`).toMatch(/^[0-9a-f]{40}$/);
+  const file = thumbnailFile(path.join(projectDir, "Saved", "UE_MCP_Bridge", "shadow-thumbs"), v!.thumbnail.id);
   expect(fs.statSync(file).size, file).toBeGreaterThan(100);
   expect(v!.thumbnail.url).toContain(`/v1/checkpoints/thumbnails/${v!.thumbnail.id}.png`);
 }
@@ -143,7 +144,13 @@ afterAll(async () => {
     for (const d of ["shadow.git", "shadow-pending", "shadow-large", "shadow-thumbs", "shadow-diffs"]) {
       fs.rmSync(path.join(projectDir, "Saved", "UE_MCP_Bridge", d), { recursive: true, force: true });
     }
-    fs.rmSync(path.join(projectDir, "Saved", "Diff", "UE_MCP_Checkpoints"), { recursive: true, force: true });
+    // The editor keeps the file of a native diff copy open after the diff window unloads it, until it
+    // exits; the copies live under this shard's own Saved folder, so a locked one is left for the shard.
+    try {
+      fs.rmSync(path.join(projectDir, "Saved", "Diff", "UE_MCP_Checkpoints"), { recursive: true, force: true, maxRetries: 4, retryDelay: 250 });
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code !== "EBUSY") throw e;
+    }
   }
   closeLiveBridges();
 }, 300_000);
@@ -216,8 +223,12 @@ describe.sequential("a turn's asset diffs", () => {
     expect(JSON.stringify(d.blueprint)).toContain("CkHealth");
     const change = changes.find((c) => c.path === rel(BP))!;
     expect(JSON.stringify(change.blueprintDiff)).toContain("CkHealth");
-    expectPicture(d.before, "Blueprint before");
-    expectPicture(d.after, "Blueprint after");
+    // This Blueprint has nothing to draw (a light and a variable), so its thumbnail is one flat colour:
+    // no picture, and the reason, never a blank square.
+    for (const [v, label] of [[d.before, "Blueprint before"], [d.after, "Blueprint after"]] as const) {
+      if (v.thumbnail && "id" in v.thumbnail) expectPicture(v, label);
+      else expect(v.thumbnail?.error, label).toMatch(/drew nothing|no thumbnail renderer/);
+    }
   });
 
   it("a static mesh carries the changed property and its LOD facts", () => {
@@ -252,6 +263,14 @@ describe.sequential("a turn's asset diffs", () => {
     expect(actors.some((r) => r.diffType === "OBJECT_ADDED" && r.group === "CkNew")).toBe(true);
     expect(actors.some((r) => r.diffType === "OBJECT_REMOVED" && r.group === "CkDoomed")).toBe(true);
     expect(actors.some((r) => String(r.group).startsWith("CkMover") && /Relative\s*Location/i.test(String(r.path)))).toBe(true);
+    // Both versions drawn from the level itself, one camera framed on the changed actors (#1568).
+    for (const [v, label] of [[d.before, "level before"], [d.after, "level after"]] as const) {
+      expectPicture(v, label);
+      expect(v.thumbnail.source, label).toBe("rendered");
+      expect(v.thumbnail.note, label).toMatch(/^Framed on the changed actors: .*CkNew/);
+    }
+    const thumbs = path.join(projectDir, "Saved", "UE_MCP_Bridge", "shadow-thumbs");
+    expect(fs.readFileSync(thumbnailFile(thumbs, d.before.thumbnail.id)).equals(fs.readFileSync(thumbnailFile(thumbs, d.after.thumbnail.id)))).toBe(false);
   });
 
   it("an added asset has no before and says what it is; a deleted one has no after", () => {
@@ -295,6 +314,33 @@ describe.sequential("a turn's asset diffs", () => {
     expect(win, JSON.stringify(listed.windows?.map((w: Json) => w.title))).toBeTruthy();
     const closed = body(await callBridge(bridge, "close_window", { windowId: win!.windowId }));
     expect(closed.success).not.toBe(false);
+  }, 300_000);
+
+  it("blueprint(open_diff_window) shows the checkpoint's Blueprint against the asset now, and unloads it on close (#1483)", async () => {
+    const opened = await tool("blueprint", "open_diff_window", { assetPath: BP, against: start });
+    expect(opened.against).toEqual({ kind: "checkpoint", id: start });
+    expect(opened.opened).toBe("window");
+    expect(opened.unloadsOnClose).toBe(true);
+    // The checkpoint's version on the left, dated with its checkpoint; the current asset on the right.
+    const revisions = opened.revisions as { before: Json; after: Json };
+    expect(Date.parse(String(revisions.before.date))).toBe(Date.parse(startAt));
+    expect(revisions.after.label).toBe("Current");
+    const temps = opened.tempPackages as string[];
+    expect(temps).toHaveLength(1);
+    expect(temps[0]).toMatch(/^\/Temp\//);
+    expect(body(await callBridge(bridge, "find_object", { objectPath: temps[0] })).found).toBe(true);
+
+    const listed = body(await callBridge(bridge, "list_windows", { maxTexts: 1, maxButtons: 1 }));
+    const win = (listed.windows as Json[]).find((w) => w.title === opened.windowTitle);
+    expect(win, JSON.stringify(listed.windows?.map((w: Json) => w.title))).toBeTruthy();
+    expect(body(await callBridge(bridge, "close_window", { windowId: win!.windowId })).success).not.toBe(false);
+
+    let found = true;
+    for (let i = 0; i < 40 && found; i++) {
+      await new Promise((r) => setTimeout(r, 250));
+      found = body(await callBridge(bridge, "find_object", { objectPath: temps[0] })).found === true;
+    }
+    expect(found, `${temps[0]} still loaded after its window closed`).toBe(false);
   }, 300_000);
 
   it("checkpoint_open_native_diff opens the asset editor on an added asset", async () => {

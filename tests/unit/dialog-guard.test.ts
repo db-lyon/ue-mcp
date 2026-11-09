@@ -1273,3 +1273,56 @@ describe("the status file of an editor that is exiting (#1384)", () => {
     }
   });
 });
+
+describe("a listed window the game thread is not parked behind is not a dialog (#1454)", () => {
+  // A project's own tool window parented to the main frame is listed by
+  // list_dialogs with blocksGameThread false. The probe took list[0] as the
+  // blocker, so every call was refused for as long as the window stayed open.
+  const toolWindow = { title: "My Tool", message: "", buttons: [], blocksGameThread: false, detectedBy: "parentedWindow" };
+  const saveContent = { title: "Save Content", message: "m", buttons: DIALOG.buttons, choices: DIALOG.choices, blocksGameThread: true };
+
+  it("lets the call run when only a non-blocking window is listed", async () => {
+    const guard = make({ probe: async () => ({ dialogs: [toolWindow] }) });
+    const decision = await guard.check("blueprint.create", "action");
+    expect(decision.allow).toBe(true);
+    expect(guard.current).toBeNull();
+  });
+
+  it("clears a latched dialog once only a non-blocking window remains", async () => {
+    const guard = make({ probe: async () => ({ dialogs: [toolWindow] }) });
+    guard.note(DIALOG);
+    expect((await guard.check("blueprint.create", "action")).allow).toBe(true);
+    expect(guard.current).toBeNull();
+  });
+
+  it("names the real modal behind the window, not the window", async () => {
+    const guard = make({ mode: "defer", probe: async () => ({ dialogs: [toolWindow, saveContent] }) });
+    const decision = await guard.check("blueprint.create", "action");
+    expect(decision.allow).toBe(false);
+    expect(guard.current?.title).toBe("Save Content");
+  });
+
+  it("still refuses on an entry from an older plugin that omits the field", async () => {
+    const guard = make({ probe: async () => ({ dialogs: [{ title: "Save Content", message: "m", buttons: DIALOG.buttons }] }) });
+    expect((await guard.check("blueprint.create", "action")).allow).toBe(false);
+  });
+
+  it("presses the person's choice on the real modal when the window is listed first", async () => {
+    // stillShowing read list[0] too, so it compared against the window and
+    // dropped the press.
+    const press = vi.fn(async () => ({ success: true }));
+    let pressed = false;
+    const guard = make({
+      mode: "interactive",
+      press: async (...a: unknown[]) => {
+        pressed = true;
+        return (press as (...x: unknown[]) => Promise<unknown>)(...a);
+      },
+      elicit: accept("Cancel"),
+      probe: async () => ({ dialogs: pressed ? [toolWindow] : [toolWindow, saveContent] }),
+    });
+    const decision = await guard.check("asset.list", "action");
+    expect(press).toHaveBeenCalledWith("Cancel");
+    expect(decision.allow).toBe(true);
+  });
+});

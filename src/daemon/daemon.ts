@@ -13,9 +13,11 @@
  *   POST /v1/shutdown   exit now
  *   POST /v1/handoff    exit once no call is in flight (a newer daemon is taking over)
  *   /v1/checkpoints     checkpoints per editor session, see checkpoint-routes.ts
+ *   /v1/journal         the mutation journal per editor session, see journal-routes.ts
  *   GET  /v1/skills     every skill a client of this project can load, see skills-list.ts
  *   GET  /v1/context/projection  what a strategy and category scope advertise, see context-projection.ts
  *   GET  /v1/actions    each action's effect and destructive flag, see action-effects.ts
+ *   GET  /v1/sessions   open MCP sessions and their access mode; PUT /v1/sessions/<id>/access sets it
  *   WS   /v1/mcp        one MCP session per socket
  */
 import * as fs from "node:fs";
@@ -35,6 +37,7 @@ import { createMcpServer } from "../server/mcp-server.js";
 import { startFlowHttpServer } from "../flow/http-server.js";
 import {
   DAEMON_API_VERSION,
+  discoveryIsStale,
   newToken,
   projectKey,
   readLiveDiscovery,
@@ -46,6 +49,7 @@ import { EventLog } from "./events.js";
 import { ExpectedDisconnect, settleAndClassify } from "./disconnect.js";
 import { WebSocketServerTransport } from "./ws-transport.js";
 import { watchDir, type DirWatch, type WatchFn } from "./dir-watch.js";
+import { drainInflight, watchSupersede } from "./supersede-watch.js";
 import { describeToolCall, resultError, type CallLabel } from "./activity.js";
 import { openUrl } from "../core/open-url.js";
 import { handleFlowRoute, hostIsAllowed } from "../flow/http-server.js";
@@ -53,14 +57,16 @@ import { userDir } from "../core/user-dir.js";
 import { readRegistryAuth } from "../extensions/registry-auth.js";
 import { getDialogModeScopes, getFeedbackModeScopes, setDialogMode, setFeedbackMode, setPlaytestMode } from "../config/user-state.js";
 import { resolvePlaytestMode } from "../editor/playtest-mode.js";
-import { EXTENSION_API_VERSION, type DaemonExtensionApi, type DaemonHealth, type EditorStatus, type RefusedExtension } from "./extension-api.js";
+import { EXTENSION_API_VERSION, type DaemonExtensionApi, type DaemonHealth, type EditorStatus, type McpSessionInfo, type RefusedExtension } from "./extension-api.js";
+import { randomUUID } from "node:crypto";
+import { SessionAccess, parseSessionAccessMode, SESSION_ACCESS_MODES } from "../flow/session-access.js";
 import { existingGuard, onDialogEvent } from "../editor/dialog-guard.js";
 
 /** What this daemon's extension API offers beyond its version number. */
-export const EXTENSION_FEATURES: readonly string[] = ["callAction.dialogPrompt", "callAction.elicit", "checkpoints", "checkpoints.assetDiff", "events.dialog", "events.script", "models.provider", "modes", "modes.playtest", "skills", "context.projection", "actions.effects", "extension.versions", "ui.scopedKeys", "ui.extensions", "extension.services"];
+export const EXTENSION_FEATURES: readonly string[] = ["callAction.dialogPrompt", "callAction.elicit", "callAction.access", "checkpoints", "checkpoints.assetDiff", "events.dialog", "events.script", "models.provider", "modes", "modes.playtest", "skills", "context.projection", "actions.effects", "extension.versions", "ui.scopedKeys", "ui.extensions", "extension.services", "flows.stepApproval"];
 
 /** What this daemon's HTTP API offers beyond DAEMON_API_VERSION, reported by /v1/health. */
-export const DAEMON_FEATURES: readonly string[] = ["checkpoints", "checkpoints.assetDiff", "skills", "context.projection", "actions.effects", "install.pendingBuild", "editor.rebuild", "ui.scopedKeys", "ui.extensions"];
+export const DAEMON_FEATURES: readonly string[] = ["checkpoints", "checkpoints.assetDiff", "skills", "context.projection", "actions.effects", "install.pendingBuild", "editor.rebuild", "ui.scopedKeys", "ui.extensions", "flows.stepApproval", "sessions.access", "journal"];
 import { extensionsDir, loadExtensions, matchRoute, normalizeResponse, type LoadedExtension } from "./extensions.js";
 import { installedCopies, recordedVersion, versionsOf } from "./extension-versions.js";
 import { UiBundleStore, contentType, type UiBundleOwner } from "./ui-bundles.js";
@@ -71,11 +77,13 @@ import { editorOwnsProject, probeEditorProcessList } from "../editor/engine-obse
 import { applyUpdate, checkForUpdate, readPendingUpdate, repinClientConfigs, settlePendingUpdate } from "../editor/bridge-update.js";
 import { subscribeFlowEvents } from "../flow/events.js";
 import { registerModelProvider } from "../flow/model-provider.js";
+import { registerFlowStepApprover } from "../flow/step-approval.js";
 import { subscribeScriptEvents } from "../pie/script-events.js";
 import { stopAllScriptWatches } from "../pie/script-watch.js";
 import { pluginRoutes } from "./plugin-routes.js";
 import { releaseStartLock, waitForStartTurn } from "./start-lock.js";
 import { checkpointRoute } from "./checkpoint-routes.js";
+import { journalRoute } from "./journal-routes.js";
 import { checkpointsFor, subscribeCheckpointEvents } from "../checkpoints/service.js";
 import { listDaemonSkills } from "../extensions/skills-list.js";
 import { ContextProjectionError, ContextProjector, enabledGraph } from "../server/context-projection.js";
@@ -300,22 +308,37 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
   const wss = new WebSocketServer({ noServer: true });
   let clients = 0;
   const transports = new Set<WebSocketServerTransport>();
+  // Every open MCP session by id, with the access mode its calls run under (#1484).
+  const mcpSessions = new Map<string, { client: () => string; connectedAt: string; access: SessionAccess }>();
+  const sessionIds = new WeakMap<http.IncomingMessage, string>();
+  const listSessions = (): McpSessionInfo[] => [...mcpSessions].map(([id, m]) =>
+    ({ id, client: m.client(), connectedAt: m.connectedAt, access: m.access.mode }));
+  // The id goes back on the upgrade response, so a client on the socket knows which session it is.
+  wss.on("headers", (headers, req) => {
+    const id = randomUUID();
+    sessionIds.set(req, id);
+    headers.push(`x-ue-mcp-session: ${id}`);
+  });
 
   wss.on("connection", (ws, req) => {
     clients += 1;
     const header = String(req.headers["x-ue-mcp-client"] ?? "unknown");
     const transport = new WebSocketServerTransport(ws);
     transports.add(transport);
-    const { server, dispose } = createMcpServer(rt);
+    const sessionId = sessionIds.get(req) ?? randomUUID();
+    // A client can open its session read-only, so no call slips through before it sets the mode.
+    const access = new SessionAccess(parseSessionAccessMode(req.headers["x-ue-mcp-access"]));
+    const { server, dispose } = createMcpServer(rt, { access });
     // The MCP client's own name once it has introduced itself, else what the shim said.
     const client = (): string => server.server.getClientVersion()?.name ?? header;
+    mcpSessions.set(sessionId, { client, connectedAt: new Date().toISOString(), access });
 
     // Every call, attributed by client, for the activity feed.
     const started = new Map<string | number, { at: number; label: CallLabel }>();
     transport.observe = (direction, message) => {
       if (direction === "in" && "method" in message && message.method === "initialize") {
         const info = (message.params as { clientInfo?: { name?: string; version?: string } } | undefined)?.clientInfo;
-        events.publish("client.connected", { client: info?.name ?? header, version: info?.version ?? null, clients });
+        events.publish("client.connected", { client: info?.name ?? header, version: info?.version ?? null, clients, session: sessionId, access: access.mode });
       } else if (direction === "in" && "method" in message && message.method === "tools/call" && "id" in message) {
         const label = describeToolCall(message.params);
         started.set(message.id as string | number, { at: Date.now(), label });
@@ -337,9 +360,10 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
     ws.on("close", () => {
       clients -= 1;
       transports.delete(transport);
+      mcpSessions.delete(sessionId);
       dispose();
       void server.close().catch(() => {});
-      events.publish("client.disconnected", { client: client(), clients });
+      events.publish("client.disconnected", { client: client(), clients, session: sessionId });
       touch();
     });
   });
@@ -386,6 +410,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
     ui: ui.active()?.manifest.version ?? null,
     uiBundles: ui.extensionBundles(),
     features: DAEMON_FEATURES,
+    sessions: listSessions(),
   });
   const editors = (): EditorState[] => rt.sessions.list().map((s) => states.get(s) ?? {
     name: s.name, connected: s.bridge.isConnected, port: s.bridge.port, pid: null, lastDisconnect: null,
@@ -474,6 +499,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
           ...(callOpts?.dialogPrompt ? { dialogPrompt: callOpts.dialogPrompt } : {}),
           ...(callOpts?.dialogWaitMs !== undefined ? { dialogWaitMs: callOpts.dialogWaitMs } : {}),
           ...(callOpts?.elicit ? { elicit: callOpts.elicit } : {}),
+          ...(callOpts?.access ? { access: callOpts.access } : {}),
         });
         return { isError: !!r.isError, content: r.content };
       },
@@ -486,6 +512,9 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
       }),
       models: {
         register: (provider) => registerModelProvider(provider),
+      },
+      flows: {
+        approveSteps: (approver) => registerFlowStepApprover(name, approver),
       },
       skills: {
         list: () => listDaemonSkills(projectDir),
@@ -504,6 +533,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
               ...(callOpts?.dialogPrompt ? { dialogPrompt: callOpts.dialogPrompt } : {}),
               ...(callOpts?.dialogWaitMs !== undefined ? { dialogWaitMs: callOpts.dialogWaitMs } : {}),
               ...(callOpts?.elicit ? { elicit: callOpts.elicit } : {}),
+              ...(callOpts?.access ? { access: callOpts.access } : {}),
             },
           );
           return { isError: !!r.isError, content: r.content };
@@ -608,12 +638,17 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
       return;
     }
     if (req.method === "GET" && url.pathname === "/v1/events") {
-      const last = Number(req.headers["last-event-id"] ?? url.searchParams.get("since") ?? 0) || 0;
+      const asked = Number(req.headers["last-event-id"] ?? url.searchParams.get("since") ?? 0) || 0;
+      // An id past the newest came from an earlier daemon, which numbered its own events: start over, and say events were missed.
+      const restarted = asked > events.lastId;
+      const last = restarted ? 0 : asked;
       res.writeHead(200, { "content-type": "text/event-stream", "cache-control": "no-cache", connection: "keep-alive" });
+      // Headers now, not with the first event: a quiet daemon would otherwise leave the client without a response.
+      res.flushHeaders();
       const write = (e: { id: number; type: string; at: string; data: Record<string, unknown> }) =>
         res.write(`id: ${e.id}\nevent: ${e.type}\ndata: ${JSON.stringify({ at: e.at, ...e.data })}\n\n`);
       const backlog = events.since(last);
-      if (backlog.gap) res.write(`event: gap\ndata: {}\n\n`);
+      if (backlog.gap || restarted) res.write(`event: gap\ndata: {}\n\n`);
       for (const e of backlog.events) write(e);
       const unsubscribe = events.subscribe(write);
       sse.add(res);
@@ -686,6 +721,27 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
       } catch (e) {
         json(res, e instanceof ContextProjectionError ? 400 : 500, { error: e instanceof Error ? e.message : String(e) });
       }
+      return;
+    }
+    if (url.pathname === "/v1/sessions" || url.pathname.startsWith("/v1/sessions/")) {
+      const sub = url.pathname.slice("/v1/sessions".length).replace(/\/+$/, "");
+      if (req.method === "GET" && sub === "") return json(res, 200, { sessions: listSessions() });
+      const hit = /^\/([^/]+)\/access$/.exec(sub);
+      if (!hit) return json(res, 404, { error: "not found" });
+      const id = decodeURIComponent(hit[1]);
+      const session = mcpSessions.get(id);
+      if (!session) return json(res, 404, { error: `no open MCP session '${id}'` });
+      if (req.method === "GET") return json(res, 200, { id, access: session.access.mode });
+      if (req.method !== "PUT" && req.method !== "POST") return json(res, 405, { error: "GET or PUT" });
+      readBody(req).then((body) => {
+        const mode = parseSessionAccessMode((body as { mode?: unknown } | undefined)?.mode);
+        if (!mode) return json(res, 400, { error: `mode is one of ${SESSION_ACCESS_MODES.join(", ")}` });
+        if (session.access.set(mode)) {
+          info("daemon", `session ${id} (${session.client()}) is now ${mode}`);
+          events.publish("session.access", { session: id, client: session.client(), access: mode });
+        }
+        json(res, 200, { id, access: session.access.mode });
+      }, (e) => json(res, 400, { error: e instanceof Error ? e.message : String(e) }));
       return;
     }
     if (req.method === "POST" && url.pathname === "/v1/shutdown") {
@@ -762,6 +818,13 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
         }, (e) => json(res, 500, { error: e instanceof Error ? e.message : String(e) }));
       return;
     }
+    if (url.pathname === "/v1/journal" || url.pathname.startsWith("/v1/journal/")) {
+      const sub = url.pathname.slice("/v1/journal".length).replace(/\/+$/, "");
+      readBody(req)
+        .then((body) => journalRoute(rt.sessions, req.method ?? "GET", sub, url.searchParams, body))
+        .then((r) => (r ? json(res, r.status, r.body) : void res.writeHead(404).end()), (e) => json(res, 500, { error: e instanceof Error ? e.message : String(e) }));
+      return;
+    }
     if (url.pathname === "/v1/flows" || url.pathname.startsWith("/v1/flows/")) {
       const sub = url.pathname.slice("/v1".length).replace(/\/+$/, "");
       handleFlowRoute(rt.flowTool, rt.baseCtx, req, res, sub, url).then(
@@ -808,7 +871,8 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
 
   async function handoff(): Promise<void> {
     info("daemon", "handoff requested; exiting once no call is in flight");
-    while (inflight() > 0) await new Promise((r) => setTimeout(r, 250));
+    // Bounded: a call that never returns would leave this daemon running beside its successor.
+    if (!(await drainInflight(inflight, HANDOFF_DRAIN_MS))) warn("daemon", `${inflight()} call(s) still in flight after ${HANDOFF_DRAIN_MS / 1000}s; handing off anyway`);
     await shutdown("handed off to a newer daemon");
   }
 
@@ -912,7 +976,7 @@ export async function runDaemon(projects: string[]): Promise<number> {
     return 2;
   }
   const projectDir = path.dirname(path.resolve(projects[0]));
-  const turn = await waitForStartTurn(projectDir, (d) => !isOlder(d.version, packageVersion()));
+  const turn = await waitForStartTurn(projectDir, (d) => !isOlder(d.version, packageVersion()), { isStale: discoveryIsStale });
   if (turn.action === "defer") {
     info("daemon", `daemon ${turn.live.version} already running (pid ${turn.live.pid}); not starting another`);
     return 0;
@@ -952,17 +1016,29 @@ export async function runDaemon(projects: string[]): Promise<number> {
 
   // Only now, so a daemon taking over binds the port after the old one let it go.
   daemon.startFlowHttp();
+  // The record is ours from here; once it names another live daemon, this one steps down.
+  const supersede = watchSupersede({
+    projectDir,
+    onSuperseded: (by) => {
+      info("daemon", `daemon ${by.version} (pid ${by.pid}) took over this project; stopping this one`);
+      void daemon.close();
+    },
+  });
   const stop = (): void => void daemon.close().then(() => process.exit(0));
   process.on("SIGINT", stop);
   process.on("SIGTERM", stop);
   daemon.events.subscribe((e) => {
     if (e.type !== "daemon.stopping") return;
+    supersede.stop();
     // A daemon that took over published its record here, not in startDaemon, so it withdraws it here too.
     if (existing) removeDiscovery(projectDir);
     setTimeout(() => process.exit(0), 500).unref();
   });
   return new Promise<number>(() => {});
 }
+
+/** How long a daemon asked to hand off waits for its calls; under the 120 s its successor waits for it. */
+const HANDOFF_DRAIN_MS = 90_000;
 
 /** A live same-or-newer daemon published by another process, other than `ignorePid`. */
 function rivalDaemon(projectDir: string, version: string, ignorePid?: number): DaemonDiscovery | null {

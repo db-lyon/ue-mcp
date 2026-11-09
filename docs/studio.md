@@ -1,10 +1,10 @@
 # UE-MCP Studio
 
-UE-MCP Studio is an agent that works inside Unreal Editor through ue-mcp's actions. You chat with it in a window beside the editor or docked in an editor tab, and it reads and changes your project with the same actions an MCP client gets. Studio is free. Its source is open under the MIT license on GitHub; the copy you get from Fab is licensed under the Fab EULA (Standard License).
+UE-MCP Studio is an agent that works inside Unreal Editor through ue-mcp's actions. You chat with it in a window beside the editor or docked in an editor tab, and it reads and changes your project with the same actions an MCP client gets. Studio is free and open source under the MIT license.
 
 Studio comes in three parts:
 
-- **The UE_MCP_Studio editor plugin**, from Fab. It adds the **Studio** toolbar button, **Tools > UE-MCP Studio**, the **UE-MCP Studio** tab with the setup page and a status view, and the **UE-MCP Docs** tab. It starts the project's ue-mcp daemon.
+- **The UE_MCP_Studio editor plugin**, from GitHub releases. It adds the **Studio** toolbar button, **Tools > UE-MCP Studio**, the **UE-MCP Studio** tab with the setup page and a status view, and the **UE-MCP Docs** tab. It starts the project's ue-mcp daemon.
 - **ue-mcp and its bridge plugin.** The daemon runs the MCP server for the project, and the bridge plugin connects it to the editor.
 - **The Studio extension**: the agent, its UI and `studio-window.exe`, Studio's own window. The ue-mcp daemon loads the extension and serves the UI.
 
@@ -16,19 +16,31 @@ Studio's window has three tabs: **Chat**, **Plugins** and **Settings**. **Feedba
 
 - Windows 10 or 11.
 - Unreal Engine 5.7 or 5.8.
-- [Node.js](https://nodejs.org/) 20 or newer. Install the LTS release from the Node.js website with its Windows installer, using the default options. Studio does not install Node.js; when it is missing, the setup page opens the Node.js download page.
+- [Node.js](https://nodejs.org/) 20 or newer. The installer offers to install the LTS release with winget. Otherwise install it from the Node.js website with its Windows installer, using the default options. When it is missing, Studio's setup page opens the Node.js download page.
 - ue-mcp 1.4.11 or later. Studio installs it.
 - The Microsoft Edge WebView2 Runtime, which Windows 11 includes. On Windows 10, if it is not already installed, get the Evergreen Runtime from [Microsoft's WebView2 page](https://developer.microsoft.com/en-us/microsoft-edge/webview2/). Without it, Studio opens in your web browser instead of its own window.
 - An internet connection, and an account or API key for at least one model provider (see [Models and accounts](#models-and-accounts)).
 
-Studio's own setup does not compile anything: Fab supplies the Studio plugin already built, and Studio installs the bridge as prebuilt binaries for your engine. Visual Studio with the **Desktop development with C++** workload is needed only to build the bridge from source, for example when your project already has a source install of the bridge, which the editor builds when it starts. Get it from the [Visual Studio download page](https://visualstudio.microsoft.com/downloads/) and pick that workload in the Visual Studio Installer.
+Studio's own setup does not compile anything: the Studio plugin release is already built, and Studio installs the bridge as prebuilt binaries for your engine. Visual Studio with the **Desktop development with C++** workload is needed only to build the bridge from source, for example when your project already has a source install of the bridge, which the editor builds when it starts. Get it from the [Visual Studio download page](https://visualstudio.microsoft.com/downloads/) and pick that workload in the Visual Studio Installer.
 
-## Install from Fab
+## Install
 
-1. Add **UE-MCP Studio** to your library on Fab.
-2. In the Epic Games Launcher, install it to your Unreal Engine 5.7 or 5.8 from your Fab Library.
-3. Open your project, then enable **UE-MCP Studio** in **Edit > Plugins** and restart the editor when asked.
-4. Open Studio with the **Studio** toolbar button or **Tools > UE-MCP Studio**. The console command `Studio.Open` does the same.
+Close the project in Unreal first. Then either:
+
+- Run the installer, [UE-MCP-Studio-Setup.exe](https://github.com/db-lyon/ue-mcp-studio/releases/latest/download/UE-MCP-Studio-Setup.exe). It checks for Node.js, offers to install it, lets you pick the project, and runs the command below.
+- Or run this in your project folder, the one holding the `.uproject`:
+
+    ```bash
+    npx ue-mcp install studio
+    ```
+
+    Name the `.uproject` after `studio` to run it from anywhere else.
+
+Either way, the project gets the Studio editor plugin for its engine in `Plugins/UE_MCP_Studio`, Studio itself in `%USERPROFILE%\.ue-mcp\extensions`, and, if the project is not set up for ue-mcp yet, the bridge plugin as prebuilt binaries and `ue-mcp.yml` with the same defaults as `npx ue-mcp init --yes`. Every download is checked against its SHA-256.
+
+Then open the project, and open Studio with the **Studio** toolbar button or **Tools > UE-MCP Studio**. The console command `Studio.Open` does the same.
+
+To install by hand instead, download `UE_MCP_Studio-<version>-UE<engine>-Win64.zip` for your engine from the [latest release](https://github.com/db-lyon/ue-mcp-studio-plugin/releases/latest) of the Studio plugin, unzip it into your project's `Plugins/` folder so that `Plugins/UE_MCP_Studio/UE_MCP_Studio.uplugin` exists, and open the project. Studio sets up the rest on first start.
 
 ## First start
 
@@ -193,19 +205,26 @@ The prompt shows the reply, with **Continue this thread**, which opens the sessi
 
 | Section | What it holds |
 |---|---|
-| **General** | The theme (**ue-mcp**, **Editor orange** or **Editor**) and the **Updates** card. |
+| **General** | Your ue-mcp **Account**, the theme (**ue-mcp**, **Editor orange** or **Editor**) and the **Updates** card. |
+| **Notifications** | Which events notify you, what a notification shows, quiet hours and muted sessions, for this device. |
+| **Remote control** | The switch, pairing codes, paired devices and the PIN lock. See [Remote control](remote-control.md). |
 | **Agents** | The main agent's model and effort, the screenshot size shown to agents, the **Worker**, and **Project agent files**: whether agents read the instructions, subagents and skills in the project and your home folder, with a read-only list of them. |
 | **Models & accounts** | Sign-ins, API keys, custom endpoints and the route order. |
 | **Approvals & review** | **Ask first**, **Starting playtests**, **Feedback reports**, **Editor dialogs** and **Review each turn**. |
 | **Project** | Whether the project's ue-mcp setup is ready, with what needs attention; the context strategy other MCP clients load; the MCP clients configured; the setup pages; the bridge plugin's version and install; and `ue-mcp.yml` under **Advanced**. |
 | **Diagnostics** | The editor and daemon status, and recent daemon events. |
 
+The **Account** card in **General** signs in to your UE-MCP account. You create the account with an email address, which gets a one-time code by email and has no password, or with GitHub. Either can be linked to the account later from **Settings > General > Account**. The [Remote plan](remote-control.md) belongs to the account.
+
 The **Plugins** tab lists the project's ue-mcp [plugins](plugins.md), with update and remove, and the registry's catalog to install from. Changes load when the daemon restarts.
+
+## Remote control
+
+Remote control lets you use Studio from a phone or another computer, paired with this computer by QR code. It needs the Remote plan. Type `/remote` in a chat to start. See [Remote control](remote-control.md).
 
 ## Updates
 
-- **The editor plugin** installed from Fab updates through your Fab Library in the Epic Games Launcher. The plugin records at startup that it is the Fab build, in `<YourProject>/Saved/UE_MCP_Studio/plugin.json`, and Studio never replaces a plugin that reports itself as the Fab build. When a Studio release needs a newer plugin, Studio says so and offers **Open Fab Library**.
-- **Studio, the bridge plugin and ue-mcp** update in the app. The **Updates** card in **Settings > General** says whether an update is available, and **Update** installs everything that is ready. **Details** lists Studio, the editor plugin, the bridge plugin and ue-mcp with the installed and latest versions. The editor plugin also checks for a newer Studio each time the editor starts and hands it to the same updater.
+- **Studio, the editor plugin, the bridge plugin and ue-mcp** update in the app. The **Updates** card in **Settings > General** says whether an update is available, and **Update** installs everything that is ready. **Details** lists Studio, the editor plugin, the bridge plugin and ue-mcp with the installed and latest versions. The editor plugin also checks for a newer Studio each time the editor starts and hands it to the same updater.
 - An update that restarts ue-mcp or the editor waits until no turn is running. **Restart now** installs it at once and stops the turn.
 - **Channel** picks **Stable** or **Beta**. Beta also takes prereleases, for testing. The channel is kept per user.
 
@@ -235,8 +254,8 @@ Turning reports on or off restarts ue-mcp. See [Feedback](feedback.md).
     npx ue-mcp daemon stop
     ```
 
-2. Disable **UE-MCP Studio** in **Edit > Plugins** for each project that uses it, then close the editor. To remove the plugin from your engine, remove it through your Fab Library in the Epic Games Launcher.
-3. Delete `<YourProject>/Plugins/UE_MCP_Bridge` and `<YourProject>/Saved/UE_MCP_Studio`, and remove the `UE_MCP_Bridge` and `UE_MCP_Studio` entries from the `Plugins` list in your `.uproject`. Delete `ue-mcp.yml` from the project folder if you do not use ue-mcp otherwise.
+2. Disable **UE-MCP Studio** in **Edit > Plugins** for each project that uses it, then close the editor.
+3. Delete `<YourProject>/Plugins/UE_MCP_Studio`, `<YourProject>/Plugins/UE_MCP_Bridge` and `<YourProject>/Saved/UE_MCP_Studio`, and remove the `UE_MCP_Bridge` and `UE_MCP_Studio` entries from the `Plugins` list in your `.uproject`. Delete `ue-mcp.yml` from the project folder if you do not use ue-mcp otherwise.
 4. Delete Studio's per-user folders:
     - The `studio` and `studio@<version>` folders in `%USERPROFILE%\.ue-mcp\extensions`: the Studio extension.
     - `%USERPROFILE%\.ue-mcp\studio`: the window app, the Claude runtime, the ChatGPT sign-in, API keys, custom endpoints, the update channel and the consent record.

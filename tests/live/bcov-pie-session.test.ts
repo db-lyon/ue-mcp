@@ -166,6 +166,43 @@ describe("a recorded and observed session", () => {
       if (tracked === 0) await sleep(250);
     }
     expect(tracked).toBeGreaterThan(0);
+    // The next case holds the same action, which is refused while this tape still plays.
+    await call("pie_inject_input_stop", { injection_id: String(tape.injection_id) });
+  }, 60_000);
+
+  it("inject_input_start releases itself after duration_seconds and pins control_rotation every frame (#1449)", async (ctx) => {
+    if (!playing) ctx.skip("PIE did not start");
+    const controlYaw = async (): Promise<number> => {
+      const r = await call("invoke_object_function", { target: "playercontroller", functionName: "GetControlRotation" });
+      const text = String((r.returnValues as Json).ReturnValue);
+      const m = /Yaw=(-?[\d.]+)/.exec(text);
+      expect(m, `control rotation ${text}`).not.toBeNull();
+      return Number(m![1]);
+    };
+    const hold = await call("pie_inject_input_start", {
+      action_path: IA, duration_seconds: 0.5, control_rotation: { pitch: 0, yaw: 90, roll: 0 },
+    });
+    const id = String(hold.injection_id);
+    expect(hold.duration_seconds).toBe(0.5);
+    expect((hold.control_rotation as Json).yaw).toBe(90);
+    // Knock the aim away; the hold puts it back at the end of the next frame.
+    await call("invoke_object_function", {
+      target: "playercontroller", functionName: "SetControlRotation", args: { NewRotation: { Pitch: 0, Yaw: 10, Roll: 0 } },
+    });
+    await sleep(100);
+    expect(await controlYaw()).toBeCloseTo(90, 1);
+    const reaimed = await call("pie_inject_input_update", { injection_id: id, control_rotation: { pitch: 0, yaw: 45, roll: 0 } });
+    expect(reaimed.valueUpdated).toBe(false);
+    await sleep(100);
+    expect(await controlYaw()).toBeCloseTo(45, 1);
+    // Polled through update, which refuses an id that is no longer held, so the poll cannot end the hold itself.
+    let ended = false;
+    for (let i = 0; i < 50 && !ended; i++) {
+      await sleep(100);
+      ended = !succeeded(await callBridge(bridge, "pie_inject_input_update", { injection_id: id, control_rotation: { pitch: 0, yaw: 45, roll: 0 } }));
+    }
+    expect(ended).toBe(true);
+    expect((await call("pie_inject_input_stop", { injection_id: id })).alreadyStopped).toBe(true);
   }, 60_000);
 
   it("mark writes a labelled marker into the recording in flight", async (ctx) => {

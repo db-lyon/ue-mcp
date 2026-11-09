@@ -41,6 +41,11 @@ private:
 	static TSharedPtr<FJsonValue> ListExpressionTypes(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> CreateMaterial(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> ReadMaterial(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> InsertExpressionBetween(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> RestoreExpressionInsertion(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> ReadMaterialSummary(const TSharedPtr<FJsonObject>& Params);
+	static FExpressionInput* ResolveSurgeryInput(UMaterial* Material, const FString& ExpressionName,
+		const FString& PropertyName, const FString& InputName, FString& Error);
 	static TSharedPtr<FJsonValue> SetMaterialShadingModel(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SetMaterialBlendMode(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SetMaterialDomain(const TSharedPtr<FJsonObject>& Params);
@@ -180,6 +185,9 @@ private:
 	// The per-node keys add_material_expression and build_material_graph share:
 	// name, parameterName, group, sortPriority, defaultValue, value, channels.
 	static void ApplyExpressionSpec(UMaterialExpression* Expression, const TSharedPtr<FJsonObject>& Spec);
+	// Any UPROPERTY on the node by name (ConstB, ConstY, ConstExponent), for
+	// add_material_expression and build_material_graph's properties map (#1461).
+	static bool ApplyExpressionProperties(UMaterialExpression* Expression, const TSharedPtr<FJsonObject>& Properties, FString& OutError);
 	static bool ResolveExpressionInputIndex(UMaterialExpression* Expression, const FString& Pin, int32& OutIndex, FString& OutError);
 	static bool ResolveExpressionOutputIndex(UMaterialExpression* Expression, const FString& Pin, int32& OutIndex, FString& OutError);
 

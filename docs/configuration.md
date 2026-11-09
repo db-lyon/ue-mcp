@@ -82,6 +82,35 @@ npx ue-mcp context lean --editor Beta
 
 The name is the one `list_editors` reports, read from the argv in your MCP client configs. Without the flag a subcommand takes the positional path, then the project in the current directory.
 
+### Several Agents On One Editor
+
+Since 1.4 every MCP client of a project talks to one daemon, and the daemon to one editor, so two or three agent sessions on the same project share one bridge. The bridge runs handlers one at a time on the game thread: a single call is never torn. A multi-step edit is several calls, though, and another session's call lands between any two of them. Add a variable, add a node, connect the pins, and a rename from the other session between the second and third step leaves the third aimed at an asset that no longer exists under that name.
+
+Two tools cover this, and they compose.
+
+**`editor(action="batch")`** sends several actions to the editor as ONE bridge call, and the plugin runs every step inside one game-thread job. Nothing from any other connection runs between two steps, because nothing else runs on the game thread until the job returns.
+
+```
+editor(action="batch", args={
+  transactionDescription: "Wire OnOpen",
+  ops: [
+    { category: "blueprint", method: "add_variable", args: { assetPath: "/Game/BP_Door", name: "IsOpen", varType: "bool" } },
+    { category: "blueprint", method: "add_node",     args: { assetPath: "/Game/BP_Door", nodeClass: "VariableSet", nodeParams: { variableName: "IsOpen" } } },
+    { category: "blueprint", method: "connect_pins", args: { assetPath: "/Game/BP_Door", sourceNodeId: "<event node>", sourcePin: "then", targetNodeId: "<set node>", targetPin: "execute" } }
+  ]
+})
+```
+
+- Every step is prepared exactly as a direct call to that action would be, before anything is sent: paths repaired, the category's own parameter folding, the action's declared contract. A batch with one bad step is refused whole, naming the step.
+- A step must be an action the editor runs. An action served by the server process (`start_editor`, `execute_python`, flows, another batch), the asset lock actions, the undo and transaction actions, and the dialog actions are refused with the reason.
+- The steps share one editor transaction, so whatever they changed that is transactional is one Undo entry named by `transactionDescription`.
+- `onError: stop` (the default) ends the batch at the first failing step. `onError: continue` runs every step and reports each verdict.
+- **There is no rollback.** The editor has no reliable inverse for every action, so a failing step leaves the steps before it applied. The result says exactly what ran: `completedCalls`, `failedIndex`, and `results[i].success` with each step's own answer, including any rollback descriptor that step reports for itself.
+- The wait is the sum of what each step would get alone, or the batch's own `timeoutMs`. A batch that outlives the wait keeps running on the game thread, and the error reports how many steps had finished and which one was under way.
+- The batch goes through dispatch as one action: the dialog guard checks it once, a write guard scoped to mutations or to writes sees every step's method and paths, and with locking on the locks taken are the union of every step's asset paths, held for the whole job.
+
+**Per-asset locking** is the complement for calls that cannot be batched, and for a human and an agent on one editor. With `locking.enabled: true` in `ue-mcp.yml` every mutating call leases each asset path it names before it runs and releases it after; a call against an asset another session holds is refused with the retryable `ASSET_LOCKED` error naming the holder and when the lease frees. It is opt-in because it adds two bridge round-trips per mutating call, and it only covers calls that name an asset path. The explicit `asset(lock)`, `asset(unlock)`, `asset(unlock_all)` and `asset(list_locks)` actions work whether or not it is on. See the [`locking` key](config-file.md#ue-mcp-block-reference).
+
 ## Project Configuration (`ue-mcp.yml`)
 
 Project config lives in `ue-mcp.yml` next to your `.uproject`, tracked in git so every collaborator gets the same surface. It is one layer in a deep-merged stack (user-global, project, env overlay, local, environment variables). The **[ue-mcp.yml Reference](config-file.md)** lists every key, the layers and where each setting belongs.
@@ -102,6 +131,8 @@ UE 5.8 and later ship an experimental AI Toolset Registry (the plugin behind Unr
 
 A modal dialog blocks Unreal's game thread, so every action is refused until it is answered. Every route to the editor checks for one, including each step of a running flow. This mode decides what happens next. It is a per-machine preference: whether somebody is at the keyboard is not project policy.
 
+The shutdown "Save Content" prompt does not have to be raised at all. `editor(request_editor_shutdown)` takes `dirtyPackages=save` or `dirtyPackages=discard`, optionally with `packages` naming exactly which dirty packages the choice covers, and acts on them before the close so the editor has nothing to ask. The choice is the caller's, stated in the call and reported in the result, rather than a button pressed on someone's behalf. Discard is irreversible.
+
 | Mode | What happens to a blocking dialog |
 |------|-----------------------------------|
 | `interactive` | You get an elicitation form titled "Submission" with the dialog's buttons as choices, plus "leave it open". The button you pick is pressed and the blocked call then runs. A dialog with a checkbox per row (the "Save Content" prompt) shows those rows as one checkbox group titled "Assets", and what you tick is applied with the button. |
@@ -111,6 +142,8 @@ A modal dialog blocks Unreal's game thread, so every action is refused until it 
 `editor(respond_to_dialog)` is accepted only in `auto`; under `interactive` and `defer` it is refused, because the answer belongs to the person. `editor(list_dialogs)` works in every mode. A dialog matching a pattern armed with `editor(set_dialog_policy)` is answered at once under every mode. Nothing else presses a button on its own, and no policy is armed by default.
 
 Precedence, highest first: `UE_MCP_DIALOG_MODE`, the project's `dialog.mode` in `~/.ue-mcp/state.json`, your user `dialog.mode` in the same file, then the default. **The default is `interactive` when your MCP client supports elicitation and `defer` when it does not. It is never `auto`.** An environment value that names no mode is ignored, and the result says so.
+
+opencode 2.1.4 and later show the form, so they get `interactive`. Earlier opencode builds advertise elicitation but never display the form, so ue-mcp treats them as unable to elicit: dialogs are handled as `defer`, even when `interactive` is set, and the refusal says to upgrade.
 
 Set it with `npx ue-mcp dialog mode <interactive|auto|defer>`. Add `--editor <name>` to scope it to one project; `default` clears it.
 
@@ -143,7 +176,7 @@ Files ue-mcp writes for itself. None belong in your project or in version contro
 | `~/.ue-mcp/config.yml` | Your user-global config layer, hand-edited. See [Config layering](config-file.md#config-layering). |
 | `~/.ue-mcp/state.json` | Per project: the Claude Code `settings.json` files holding the feedback hook (`installedHooks`), the feedback, dialog and playtest modes, and the daemon extension version the project loads. Per user (`preferences`): the feedback, dialog and playtest modes. Written by `init`, `uninstall-hooks`, `feedback mode`, `dialog mode`, `playtest mode` and `extension`. `UE_MCP_USER_STATE` moves it. |
 | `~/.ue-mcp/auth.json` | GitHub OAuth token for `feedback(submit)` with `author="user"`. Mode 600. Written by `npx ue-mcp auth`. |
-| `~/.ue-mcp/registry.json` | Plugin registry publish token. Written by `npx ue-mcp login`. |
+| `~/.ue-mcp/registry.json` | Your UE-MCP account token, used by Studio and `ue-mcp plugin publish`. Mode 600. Written by `npx ue-mcp login`. |
 | `~/.ue-mcp/pending-feedback/<id>.json` | Submissions queued while feedback mode is `defer`. |
 | `~/.ue-mcp/daemons/` | One discovery file (`<key>.json`, with the daemon's port and token) and one log (`<key>.log`) per project daemon. |
 | `~/.ue-mcp/extensions/` | Installed daemon extensions, one folder per `<name>@<version>`. |
@@ -213,7 +246,8 @@ A client entry launching `ue-mcp@latest` against a project whose binary bridge c
 | `npx ue-mcp daemon start` / `stop` | Start one for the project, or ask it to exit. |
 | `npx ue-mcp daemon run` | Run the daemon in the foreground. |
 | `npx ue-mcp daemon open` | Print the URL of the client UI it serves, if one is installed. `--browser` opens it. |
-| `npx ue-mcp extension install <source> [--sha256 <hex>] [project]` | Install a daemon extension into `~/.ue-mcp/extensions/<name>@<version>/`, record the project at that version, and restart the project's daemon to load it. The source is a zip, a URL with its SHA-256, or a release manifest (`.json` with `url` and `sha256`). Versions sit side by side: each project loads the version it records. `extension use <name> <version> [project]` moves a project to an installed version, `extension list [project]` shows every installed version and the one the project records, and `extension remove <name>` removes every version. A version no project records is removed on the next install. |
+| `npx ue-mcp install <name> [project]` | Install by name, for example `npx ue-mcp install studio` for [Studio](studio.md). It is `extension install` with the name looked up in ue-mcp's list of names, so everything below applies. |
+| `npx ue-mcp extension install <source> [--sha256 <hex>] [project]` | Install a daemon extension into `~/.ue-mcp/extensions/<name>@<version>/`, record the project at that version, and restart the project's daemon to load it. The source is a name `install` knows, a zip, a URL with its SHA-256, or a release manifest (`.json` with `url` and `sha256`). A manifest can also name an editor plugin: `pluginChannel` is the URL of a `plugin.json` listing one build per engine, each with its `url` and `sha256`, and `pluginMin` the oldest version that works. Then a project that is not set up for ue-mcp is set up as `init --yes --install binary` would, and the build for the project's engine is verified and put in its `Plugins/` folder and enabled in its `.uproject`. Versions sit side by side: each project loads the version it records. `extension use <name> <version> [project]` moves a project to an installed version, `extension list [project]` shows every installed version and the one the project records, and `extension remove <name>` removes every version. A version no project records is removed on the next install. |
 
 The daemon listens on 127.0.0.1 only, and every request needs the token in `~/.ue-mcp/daemons/<key>.json`, which only your user can read.
 
@@ -251,6 +285,8 @@ One id is listed once. A project copy wins over the packaged one, and `.claude/s
 `api.context.call(tool, input, { strategy?, categories?, dialogPrompt?, dialogWaitMs?, elicit? })` runs one call to a projected tool as the MCP server would: a category, its lean `describe`, `catalog`, micro's `tools` gateway, or `flow`, through the same dispatch as `api.callAction`, so dialogs, forms, effect gates and checkpoints apply the same way. A call to a category outside the scope is refused with an error result and nothing runs.
 
 **Action effects.** `GET /v1/actions?categories=a,b` returns `{ actions }`, one entry per enabled action: `category`, `action`, `effect` (`read`, `mutate` or `unknown`) and `effectSource` (`declared` on the action, `inferred` from the name for a plugin action whose manifest gave none, `undeclared` when nothing claims it), read from the graph the server dispatches, plugin actions included. `destructive` says the action destroys or overwrites something it cannot give back. An action can declare it; otherwise a `mutate` or `unknown` action is destructive when its name leads with `delete`, `remove`, `clear`, `discard`, `revert`, `reset`, `purge`, `wipe`, `destroy`, `drop`, `overwrite`, `replace`, `restore` or `uninstall` (after an `epic_`, `bulk_` or `batch_` prefix), and a read never is. `destructiveSource` says which: `declared`, `lexicon` or `none`. An unknown category answers 400.
+
+**Session access mode.** Each MCP session on the daemon runs in an access mode, `read-write` (the default) or `read-only`. `GET /v1/sessions` returns `{ sessions }`, each with its `id`, `client` name, `connectedAt` and `access`. `GET /v1/sessions/<id>/access` reads one session's mode and `PUT /v1/sessions/<id>/access` with `{ "mode": "read-only" }` sets it; the next call that session sends runs under the new mode, and the change is published as `session.access` on the event stream. A client on the WebSocket learns its id from the `x-ue-mcp-session` header of the upgrade response, and can open in read-only mode by sending `x-ue-mcp-access: read-only` with the upgrade. In `read-only` mode a call whose action is declared `mutate` or `unknown` (as `GET /v1/actions` reports it, so `editor(execute_python)` and `editor(execute_command)` too) is refused with `WRITE_BLOCKED` before it runs, and any state-changing bridge call a read would make is refused by a built-in guard that runs ahead of every declared guard. Other sessions on the same editor keep their own mode. An extension passes `access: "read-only"` to `callAction` or `context.call` for the same rule (feature `callAction.access`); `/v1/health` lists `sessions.access` under `features`.
 
 ### Context measurements
 
@@ -337,6 +373,24 @@ The plugin reads `bridge.port` from the same layered files as the client: `~/.ue
 
 If an editor is killed rather than closed, its lockfile stays behind and `stop_editor` reports the stale PID. Delete `<project>/Saved/UE_MCP_Bridge/port.json` to clear it.
 
+### How the editor is launched
+
+`editor(start_editor)` and `editor(restart_editor)` take three optional parameters, and `ue-mcp.yml` sets defaults for the first two:
+
+| Parameter | `ue-mcp.yml` | What it does |
+|-----------|--------------|--------------|
+| `window` | `editor.window` | `normal` (the default) shows the editor. `offscreen` passes `-RenderOffScreen`, so no editor window or dialog appears on screen, and `-ini:EditorSettings:[/Script/UnrealEd.EditorPerformanceSettings]:bThrottleCPUWhenNotForeground=False`, so the unfocused editor is not throttled to a few frames per second. |
+| `ide` | `editor.ide` | `none` passes `-ini:EditorSettings:[/Script/SourceCodeAccess.SourceCodeAccessSettings]:PreferredAccessor=NullSourceCodeAccessor`, so the editor opens no IDE. Unset, an offscreen editor gets `none` and a normal one `allow`. |
+| `extraArgs` | (`editor.launchArgs`, a list) | A string of further editor arguments, split on whitespace with double quotes grouping. |
+
+The command line is the project, the `window` and `ide` arguments, `editor.launchArgs` item by item, then `extraArgs`, each argument once. On Windows it is passed as written, without quoting it again, because Unreal reads the raw command line and skips quoted text when it looks for a switch. A malformed `editor.window`, `editor.ide` or `editor.launchArgs` refuses the launch and names the key.
+
+The result reports the `window` and `ide` the editor got, read from its final arguments, and `get_engine_state` reports a running editor's `window` from its command line.
+
+An offscreen editor's dialogs are invisible but still block. Read them with `editor(list_dialogs)`, answer with `editor(respond_to_dialog)`, and arm a known startup prompt with `start_editor`'s `dialogPolicy`.
+
+`launch_standalone_game` from an offscreen editor launches the game offscreen too: the bridge adds `-RenderOffScreen` to the game's command line unless `extraArgs` already holds it, and the result reports `renderOffScreen`.
+
 ### Bridge state files
 
 The plugin keeps these under `<project>/Saved/UE_MCP_Bridge/`, each published by rename so a reader never sees a half-written file.
@@ -392,7 +446,7 @@ Run `npx ue-mcp <command> --help` for a command's flags.
 | `npx ue-mcp feedback mode [<mode>]` | Read or set your feedback approval mode (`interactive`, `auto-approve`, `defer`). See [Feedback modes](feedback.md#feedback-modes). |
 | `npx ue-mcp feedback list \| show \| approve \| discard \| review` | Manage submissions queued under `defer`. `review` (experimental) walks the queue one entry at a time. See [Reviewing deferred submissions](feedback.md#reviewing-deferred-submissions). |
 | `npx ue-mcp auth` | Run the GitHub device flow so `feedback(submit)` can file issues as your account. |
-| `npx ue-mcp login` / `logout` | Cache or forget the registry token `ue-mcp plugin publish` uses. |
+| `npx ue-mcp login` / `logout` | Sign in to your UE-MCP account at `accounts.ue-mcp.com` with an email code (`--email <address>`) or GitHub (`--github`), or forget the cached token. Studio and `ue-mcp plugin publish` use it. |
 | `npx ue-mcp uninstall-hooks` | Remove the feedback hook from every Claude Code settings file recorded for this project. |
 | `npx ue-mcp resolve <issue>` | Fetch a feedback issue, branch, hand it to Claude Code to implement, open a PR. See [Development](development.md#resolving-an-issue-with-claude-code). |
 | `npx ue-mcp plugin <install\|uninstall\|update\|list\|config\|create\|publish\|check-skills\|record-specs>` | Install, configure, create and publish plugins. See [Using plugins](plugins-using.md) and [Plugins](plugins.md). |
@@ -445,6 +499,7 @@ Each wins over the matching config key. The full list, with the ones tests and s
 | `UE_MCP_PORT` | Bridge port for every session, over the derived port and `bridge.port` |
 | `UE_MCP_HOST` | Host every bridge is reached on (default `127.0.0.1`) |
 | `UE_MCP_BRIDGE_TIMEOUT_MS` | Floor under every bridge call's timeout, in milliseconds |
+| `UE_MCP_BRIDGE_TOKEN_DIR` | Directory of the bridge's session token files (default `~/.ue-mcp/bridge`). Read by the plugin and the client, so set it for both |
 | `UE_MCP_STRICT_PARAMS` | `1` refuses a call with a parameter the action does not forward, instead of warning |
 | `UE_MCP_ENV` | Selects the `ue-mcp.<env>.yml` overlay |
 | `UE_MCP_GLOBAL_CONFIG` | Path of the user-global config layer |
@@ -460,7 +515,9 @@ Each wins over the matching config key. The full list, with the ones tests and s
 | `UE_MCP_ELICIT_MIN_HUMAN_MS` | Fastest a person can answer an approval form; `0` disables the check |
 | `UE_MCP_HTTP_TOKEN` | Token for the flow HTTP server, over a generated one |
 | `UE_MCP_BINARIES` | Where prebuilt bridge binaries come from: a plugin directory, a `.zip`, a directory of archives, or a URL base |
+| `UE_MCP_INSTALL_INDEX` | A JSON file of the names `ue-mcp install` knows, `{ "<name>": { "title": "...", "manifest": "<url>" } }`, replacing the built-in list |
 | `UE_MCP_DISABLE_UPDATE_CHECK` | `1` skips the check for a newer release |
 | `UE_MCP_DAEMON_IDLE_MS` | How long an idle daemon waits before exiting |
 | `UE_MCP_DAEMON_DIR`, `UE_MCP_EXTENSIONS_DIR`, `UE_MCP_PENDING_DIR`, `UE_MCP_AUTH_DIR` | Move the daemon, extension, deferred-feedback and token directories |
 | `UE_MCP_PUBLISH_TOKEN` | Registry publish token for CI, over the one `ue-mcp login` cached |
+| `UE_MCP_AUTH_URL` | Origin `ue-mcp login` signs in through. Unset means `https://accounts.ue-mcp.com`, falling back to the registry when that host cannot be reached |

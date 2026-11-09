@@ -2,16 +2,24 @@ import type { ToolDef } from "../core/types.js";
 import { categoryTool } from "../surface/category-tool.js";
 import { specBp, schema as specSchema } from "./specs/pie.generated.js";
 import { scriptRunFollowUp, scriptStatusFollowUp } from "../pie/script-watch.js";
+import { driveFollowUp } from "../pie/drive-wait.js";
 
 export const pieTool: ToolDef = categoryTool(
   "pie",
   "PIE testing: record, replay and observe Play-In-Editor sessions, diff runs, inject input, drive remote players, and run test scripts with auto and manual steps. Starting PIE itself is editor(play_in_editor).",
   {
+    view_trace: specBp("read", "Trace the live PIE player viewpoint. Returns viewLocation, viewRotation, viewDirection and line; sweepRadius also returns a sphere sweep. Each hit includes component collision state, channel response, blocksVisibility and owner label/class. Ignores the viewing pawn by default; requires running PIE.", "pie_view_trace"),
     inject_input:         specBp("mutate", "Inject one frame of an Enhanced Input action into a PIE player. client 1..N relays to a remote player.", "pie_inject_input"),
-    inject_input_start:   specBp("mutate", "Start holding an input action; returns injection_id. Rolls back with inject_input_stop.", "pie_inject_input_start"),
-    inject_input_update:  specBp("mutate", "Change the value of a running hold.", "pie_inject_input_update"),
+    inject_input_start:   specBp("mutate", "Start holding an input action every frame until inject_input_stop, PIE end, or duration_seconds of game time; control_rotation pins the controller's aim every frame while it runs. Hold several actions at once with one call each. Returns injection_id. Rolls back with inject_input_stop.", "pie_inject_input_start"),
+    inject_input_update:  specBp("mutate", "Change the value or control_rotation of a running hold.", "pie_inject_input_update"),
     inject_input_stop:    specBp("mutate", "Stop a hold or tape by id; alreadyStopped when it had ended.", "pie_inject_input_stop"),
     inject_input_tape:    specBp("mutate", "Play a per-frame value array through an input action; returns injection_id.", "pie_inject_input_tape"),
+    drive_pawn: {
+      ...specBp("mutate", "Walk the PIE player's pawn: movement input every frame along direction or toward targetLocation, or mode=navigate for a navmesh move to targetLocation. Ends as completed, arrived, timeout, no_path, nav_ended, map_changed (stopOnMapChange), stopped or pie_ended. The pawn is found again every frame, so a drive carries on through a level change. With wait (default true) answers once it ends with a sampled track of location, rotation, controlRotation, velocity and map, plus mapChanges, distanceTravelled and the navPath taken; wait=false returns driveId at once.", "pie_drive_pawn"),
+      followUp: driveFollowUp,
+    },
+    drive_status:         specBp("read", "A pawn drive's state and sampled track; includeSamples=false for the summary only.", "pie_drive_status"),
+    drive_stop:           specBp("mutate", "End a pawn drive now and return its track; alreadyStopped when it had ended.", "pie_drive_stop"),
     clients:              specBp("read", "List a networked PIE session's players: client 0 is the editor's own player, 1..N remote players in join order with ready and log_file.", "pie_clients"),
     console:              specBp("mutate", "Run a console command in a remote player's own process (client 1..N). The editor's own PIE player is editor(execute_command, world=\"pie\").", "pie_console"),
     remote_result:        specBp("read", "Whether a request relayed to a remote player ran: reported, ok, finished, error.", "pie_remote_result"),
@@ -21,7 +29,7 @@ export const pieTool: ToolDef = categoryTool(
     record_arm:           specBp("mutate", "Arm the PIE recorder; it starts on BeginPIE and finalizes on EndPIE into Saved/MCPRecordings/<id>. Rolls back with record_disarm.", "pie_record_arm"),
     record_disarm:        specBp("mutate", "Cancel an armed recording.", "pie_record_disarm"),
     record_stop:          specBp("mutate", "Finalize the recording in flight.", "pie_record_stop"),
-    record_status:        specBp("read", "Recorder state, id, frame and elapsed time.", "pie_record_status"),
+    record_status:        specBp("read", "Recorder state, id, frame, elapsed time and pie_active. While waiting_for_pawn: waiting_for (what is missing) and pie_worlds (each PIE world's pie_instance, net_mode, players and pawns).", "pie_record_status"),
     record_list:          specBp("read", "List recordings.", "pie_record_list"),
     record_read:          specBp("read", "Read a recording artifact: manifest, sequence, csv, drift or tracked.", "pie_record_read"),
     record_delete:        { ...specBp("mutate", "Delete a recording folder (confirm=true).", "pie_record_delete"), destructive: true },
@@ -60,7 +68,7 @@ export const pieTool: ToolDef = categoryTool(
     script_read:          specBp("read", "Read a test script.", "pie_script_read"),
     script_update:        specBp("mutate", "Update a test script; steps given replace the stored ones. Checks the result like script_create when steps, profile, map or manual_only change, and saves with its findings as warnings; refuses only what cannot be written.", "pie_script_update"),
     script_validate:      specBp("read", "Check steps the way script_create does without saving anything: valid, and errors [{step, field, message, candidates}] for every finding script_create would return as a warning or refuse.", "pie_script_validate"),
-    script_values:        specBp("read", "What a script can name in the open level: the player pawn's readable value paths with kind and type, level actors, classes the game mode spawns, Widget Blueprints and the profile's tracked values. target adds which actors are of that class and whether it is the player pawn.", "pie_script_values"),
+    script_values:        specBp("read", "What a script can name in the open level: the player pawn's readable value paths with kind and type, pawn_channels read off the sampled pawn with no profile (pos_x, vel_z, rot_yaw, speed2d, ...), level actors, classes the game mode spawns, Widget Blueprints and the profile's tracked values. target adds which actors are of that class and whether it is the player pawn.", "pie_script_values"),
     script_delete:        { ...specBp("mutate", "Delete a test script (confirm=true).", "pie_script_delete"), destructive: true },
     script_list:          specBp("read", "List test scripts, each with map and last_run: its newest run's run_id, state, started_at, ended_at, summary and results_path, or null.", "pie_script_list"),
     script_run: {

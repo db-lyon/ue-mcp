@@ -8,8 +8,9 @@
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { EditorProcess } from "../../src/editor/engine-observer.js";
+import type { ToolContext } from "../../src/core/types.js";
 import { readHandlerFile } from "../../scripts/lib/cpp-registrations.mjs";
 
 // No unit test may launch a real editor. An unknown EngineAssociation still
@@ -30,6 +31,8 @@ vi.mock("../../src/editor/engine-observer.js", async (importOriginal) => {
     findEditorByPid: vi.fn(async () => null),
     // No crash reporter probe: it would query the real process table.
     listCrashReporterProcesses: vi.fn(async () => []),
+    // Real by default; a case can make the startup wait end at once.
+    readLogState: vi.fn(actual.readLogState),
     readEngineState: vi.fn(async () => ({
       running: true,
       processes: [],
@@ -46,6 +49,8 @@ const observer = await import("../../src/editor/engine-observer.js");
 const { startEditor, stopEditor, restartEditor, resolveOwnedEditor, connectedEditorOf } = await import("../../src/editor/editor-control.js");
 const { bridgeLockfilePath } = await import("../../src/bridge/editor-target.js");
 const { ProjectContext } = await import("../../src/config/project.js");
+const { editorTool } = await import("../../src/tools/editor.js");
+const { NO_BACKGROUND_THROTTLE_ARG, NO_IDE_ARG } = await import("../../src/editor/launch-args.js");
 
 const findInteractiveEditors = vi.mocked(observer.findInteractiveEditors);
 // Stop and ownership also see headless editors; one list stands in for both here.
@@ -434,6 +439,160 @@ describe("pie_control fails a no-op and marks it", () => {
   });
 });
 
+/**
+ * The launch shape a start reaches the spawn with. The editor binary is a
+ * fixed stub path, so the launch is reached on a machine with no engine, and
+ * the spawn is the mock above, so nothing starts.
+ */
+describe("the launch shape start_editor spawns", () => {
+  beforeEach(() => {
+    vi.stubEnv("UE_EDITOR_PATH", path.join(os.tmpdir(), "UnrealEditor-stub.exe"));
+  });
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  /** A loaded project whose ue-mcp.yml holds `yaml`, or none when null. */
+  function configuredProject(yaml: string | null): { project: InstanceType<typeof ProjectContext>; projectPath: string } {
+    const { projectDir, projectPath } = makeProject();
+    fs.writeFileSync(projectPath, JSON.stringify({ EngineAssociation: "9.9" }));
+    if (yaml !== null) fs.writeFileSync(path.join(projectDir, "ue-mcp.yml"), yaml);
+    const project = new ProjectContext();
+    project.setProject(projectPath);
+    return { project, projectPath };
+  }
+
+  /** Makes the readiness wait end at once: a crash in this launch's log. Restart has no timeout of its own to shorten it. */
+  async function withCrashedLog(run: () => Promise<void>): Promise<void> {
+    const actual = await vi.importActual<typeof import("../../src/editor/engine-observer.js")>("../../src/editor/engine-observer.js");
+    vi.mocked(observer.readLogState).mockReturnValue({
+      logPath: null, secondsSinceWrite: 0, phase: "crashed", blocking: false, missingModules: [], exiting: false,
+      lastLine: null, tail: [], errors: [], warnings: [],
+    });
+    try {
+      await run();
+    } finally {
+      vi.mocked(observer.readLogState).mockImplementation(actual.readLogState);
+    }
+  }
+
+  it("refuses editor.window: Offscreen from ue-mcp.yml, naming the file and the key, and spawns nothing", async () => {
+    const { project } = configuredProject("ue-mcp:\n  editor:\n    window: Offscreen\n");
+    const result = await startEditor(project, 1);
+    expect(result.success).toBe(false);
+    expect(result.message).toContain("ue-mcp.yml");
+    expect(result.message).toContain("editor.window");
+    expect(spawnMock).not.toHaveBeenCalled();
+  });
+
+  it("refuses editor.ide: None from ue-mcp.yml, naming the file and the key, and spawns nothing", async () => {
+    const { project } = configuredProject("ue-mcp:\n  editor:\n    ide: None\n");
+    const result = await startEditor(project, 1);
+    expect(result.success).toBe(false);
+    expect(result.message).toContain("ue-mcp.yml");
+    expect(result.message).toContain("editor.ide");
+    expect(spawnMock).not.toHaveBeenCalled();
+  });
+
+  it("refuses editor.launchArgs: 5 from ue-mcp.yml likewise", async () => {
+    const { project } = configuredProject("ue-mcp:\n  editor:\n    launchArgs: 5\n");
+    const result = await startEditor(project, 1);
+    expect(result.success).toBe(false);
+    expect(result.message).toContain("ue-mcp.yml");
+    expect(result.message).toContain("editor.launchArgs");
+    expect(spawnMock).not.toHaveBeenCalled();
+  });
+
+  it("reports offscreen when the switch came in through extraArgs with the default mode", async () => {
+    const { project } = configuredProject(null);
+    const result = await startEditor(project, 1, undefined, { extraArgs: "-RenderOffScreen" });
+    expect(spawnMock).toHaveBeenCalledTimes(1);
+    expect(result.window).toBe("offscreen");
+  });
+
+  /**
+   * The editor was started with the project and then exactly these pieces. On
+   * Windows the spawn is the trampoline, whose payload is the editor's one
+   * verbatim command line; elsewhere it is the editor's argv.
+   */
+  function expectLaunched(projectPath: string, pieces: string[]): void {
+    expect(spawnMock).toHaveBeenCalledTimes(1);
+    const [, args] = spawnMock.mock.calls[0] as unknown as [string, string[]];
+    if (process.platform === "win32") {
+      expect(JSON.parse(args[3])).toEqual([[`"${projectPath}"`, ...pieces].join(" ")]);
+      expect(JSON.parse(args[4])).toEqual({ windowsVerbatimArguments: true });
+    } else {
+      expect(args).toEqual([projectPath, ...pieces]);
+    }
+  }
+
+  /** How `-ExecCmds="stat fps"` reaches the editor: as typed on Windows, unquoted in a POSIX argv. */
+  const EXEC_CMDS = process.platform === "win32" ? '-ExecCmds="stat fps"' : "-ExecCmds=stat fps";
+
+  it("launches config window: offscreen with the call's extras after the mode arguments", async () => {
+    const { project, projectPath } = configuredProject("ue-mcp:\n  editor:\n    window: offscreen\n");
+    const result = await startEditor(project, 1, undefined, { extraArgs: '-log -ExecCmds="stat fps"' });
+    expectLaunched(projectPath, ["-RenderOffScreen", NO_BACKGROUND_THROTTLE_ARG, NO_IDE_ARG, "-log", EXEC_CMDS]);
+    expect(result.window).toBe("offscreen");
+    expect(result.ide).toBe("none");
+  });
+
+  it("passes the configured launchArgs after the mode arguments and before the call's extraArgs", async () => {
+    const { project, projectPath } = configuredProject("ue-mcp:\n  editor:\n    launchArgs:\n      - \"-cfg\"\n");
+    const result = await startEditor(project, 1, undefined, { ide: "none", extraArgs: "-call" });
+    expectLaunched(projectPath, [NO_IDE_ARG, "-cfg", "-call"]);
+    expect(result.ide).toBe("none");
+  });
+
+  it("lets a per-call ide: allow keep the IDE on a configured offscreen editor", async () => {
+    const { project, projectPath } = configuredProject("ue-mcp:\n  editor:\n    window: offscreen\n");
+    const result = await startEditor(project, 1, undefined, { ide: "allow" });
+    expectLaunched(projectPath, ["-RenderOffScreen", NO_BACKGROUND_THROTTLE_ARG]);
+    expect(result.ide).toBe("allow");
+  });
+
+  it("reports ide none when the no-IDE argument came in through extraArgs on a normal editor", async () => {
+    const { project, projectPath } = configuredProject(null);
+    const result = await startEditor(project, 1, undefined, { extraArgs: NO_IDE_ARG });
+    expectLaunched(projectPath, [NO_IDE_ARG]);
+    expect(result.ide).toBe("none");
+  });
+
+  it("lets a per-call window: normal beat a configured offscreen", async () => {
+    const { project, projectPath } = configuredProject("ue-mcp:\n  editor:\n    window: offscreen\n");
+    const result = await startEditor(project, 1, undefined, { window: "normal" });
+    expectLaunched(projectPath, []);
+    expect(result.window).toBe("normal");
+    expect(result.ide).toBe("allow");
+  });
+
+  it("spawns nothing for a per-call extraArgs with an unmatched quote", async () => {
+    const { project } = configuredProject(null);
+    const result = await startEditor(project, 1, undefined, { extraArgs: '-a "b' });
+    expect(result.success).toBe(false);
+    expect(result.message).toMatch(/unmatched/i);
+    expect(spawnMock).not.toHaveBeenCalled();
+  });
+
+  it("restartEditor launches offscreen with the throttle override and no IDE when asked for offscreen", async () => {
+    const { project, projectPath } = configuredProject(null);
+    await withCrashedLog(async () => {
+      await restartEditor(project, undefined, undefined, { window: "offscreen" });
+      expectLaunched(projectPath, ["-RenderOffScreen", NO_BACKGROUND_THROTTLE_ARG, NO_IDE_ARG]);
+    });
+  });
+
+  it("restartEditor passes the no-IDE argument for ide: none and reports it", async () => {
+    const { project, projectPath } = configuredProject(null);
+    await withCrashedLog(async () => {
+      const result = await restartEditor(project, undefined, undefined, { ide: "none" });
+      expectLaunched(projectPath, [NO_IDE_ARG]);
+      expect(result.window).toBe("normal");
+      expect(result.ide).toBe("none");
+    });
+  });
+});
+
 describe("native editor shutdown", () => {
   it("uses MainFrame so standalone asset editors close before subsystem teardown", () => {
     const source = readHandlerFile("EditorHandlers.cpp");
@@ -454,5 +613,67 @@ describe("native editor shutdown", () => {
     expect(shutdownHandler).toContain("FModuleManager::LoadModuleChecked<IMainFrameModule>");
     expect(shutdownHandler).toContain("MainFrameModule.RequestCloseEditor()");
     expect(shutdownHandler).not.toContain("UKismetSystemLibrary::QuitEditor()");
+  });
+});
+
+describe("request_editor_shutdown dirty-package choice", () => {
+  // Under interactive dialog handling an agent may not answer the shutdown
+  // save prompt, so a close that raised it hung until a person clicked it.
+  // The choice is made up front instead, and it only works if it reaches the
+  // editor intact.
+  it("accepts refuse, save and discard and nothing else", () => {
+    for (const choice of ["refuse", "save", "discard"]) {
+      expect(editorTool.schema.dirtyPackages.safeParse(choice).success, choice).toBe(true);
+    }
+    expect(editorTool.schema.dirtyPackages.safeParse("keep").success).toBe(false);
+    expect(editorTool.schema.packages.safeParse(["/Game/Maps/Arena"]).success).toBe(true);
+  });
+
+  it("forwards dirtyPackages and packages to the bridge", async () => {
+    const { projectDir, projectPath } = makeProject();
+    writeLockfile(projectDir, { port: 51999, pid: 4242 });
+    const call = vi.fn().mockResolvedValue({ success: true, scheduled: true });
+    const ctx = {
+      project: { projectDir, projectPath },
+      bridge: {
+        isConnected: true,
+        capabilities: { pid: process.pid, port: 52222 },
+        getTarget: () => ({ projectPath: null, port: 52222 }),
+        call,
+      },
+    } as unknown as ToolContext;
+
+    await editorTool.handler(ctx, {
+      action: "request_editor_shutdown",
+      dirtyPackages: "discard",
+      packages: ["/Game/Maps/Arena"],
+    });
+
+    expect(call).toHaveBeenCalledWith("request_editor_shutdown", {
+      requireClean: undefined,
+      dirtyPackages: "discard",
+      packages: ["/Game/Maps/Arena"],
+      endPIE: undefined,
+    });
+  });
+
+  it("acts before the close is scheduled and re-checks before closing", () => {
+    const source = readHandlerFile("EditorHandlers.cpp");
+    const handler = source.slice(
+      source.indexOf("FEditorHandlers::RequestEditorShutdown"),
+      source.indexOf("FEditorHandlers::FocusViewportOnActor"),
+    );
+    const ticker = handler.indexOf("FTSTicker::GetCoreTicker().AddTicker");
+    // Unnamed dirty work is refused before anything is saved or discarded.
+    expect(handler.indexOf("unexpectedDirtyPackages")).toBeLessThan(handler.indexOf("SaveAssetPackageChecked"));
+    expect(handler.indexOf("unexpectedDirtyPackages")).toBeLessThan(handler.indexOf("SetDirtyFlag(false)"));
+    // Both happen in the call, so the result can name them.
+    expect(handler.indexOf("SaveAssetPackageChecked")).toBeLessThan(ticker);
+    expect(handler.indexOf("SetDirtyFlag(false)")).toBeLessThan(ticker);
+    // Anything dirty again when the close runs calls the close off instead of
+    // raising the prompt.
+    const closing = handler.slice(ticker);
+    expect(closing.indexOf("CollectDirtyEditorPackages()")).toBeGreaterThan(-1);
+    expect(closing.indexOf("CollectDirtyEditorPackages()")).toBeLessThan(closing.indexOf("RequestCloseEditor()"));
   });
 });

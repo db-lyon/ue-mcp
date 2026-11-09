@@ -18,7 +18,9 @@ import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import WebSocket from "ws";
+import { bridgeSocketOptions, watchUpgradeRefusal } from "./lib/bridge-token.mjs";
 import { listRegistrations } from "./lib/cpp-registrations.mjs";
+import { closeEditorTabWindows, guardUserLayoutsUntilExit } from "./user-layout-guard.mjs";
 import {
   assertLoopbackHost,
   bridgePortCandidates,
@@ -75,11 +77,21 @@ function discoverHandlers() {
 // ---------------------------------------------------------------------------
 function connect(url, timeoutMs = TIMEOUT_MS) {
   return new Promise((resolve, reject) => {
-    const ws = new WebSocket(url);
+    let ws;
+    try {
+      ws = new WebSocket(url, bridgeSocketOptions(url));
+    } catch (err) {
+      reject(err);
+      return;
+    }
     const timer = setTimeout(() => {
       ws.terminate();
       reject(new Error(`Connection to ${url} timed out after ${timeoutMs}ms`));
     }, timeoutMs);
+    watchUpgradeRefusal(ws, url, (err) => {
+      clearTimeout(timer);
+      reject(err);
+    });
 
     ws.on("open", () => {
       clearTimeout(timer);
@@ -248,6 +260,8 @@ async function teardown(ws, idGen) {
   await rpcRaw(ws, "save_level", {}, idGen());
   // SCRATCH now unloaded; safe to delete.
   await rpcRaw(ws, "delete_asset", { assetPath: SCRATCH_LEVEL, force: true }, idGen());
+  // open_settings, open_tab and the imports leave floating windows the editor would save as open.
+  await closeEditorTabWindows(async (method, params) => (await rpcRaw(ws, method, params, idGen())).result);
 }
 
 function rpcCall(ws, method, id) {
@@ -298,6 +312,8 @@ function rpcCall(ws, method, id) {
 // 3. Main
 // ---------------------------------------------------------------------------
 async function main() {
+  // The sweep calls open_settings and open_tab on an editor that stays open; keep those tabs out of the shared layout.
+  guardUserLayoutsUntilExit((msg) => console.error(msg));
   // Discover
   const handlers = discoverHandlers();
   if (handlers.length === 0) {

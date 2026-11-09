@@ -1,5 +1,6 @@
 // What a Level Sequence's bindings resolve to: in the editor world, after a
-// retarget (#1356), and per runtime player in a PIE or game world (#1232).
+// retarget (#1356), per runtime player in a PIE or game world (#1232), and the
+// components of each binding's template or possessed actor (#1640).
 
 #include "SequencerHandlers.h"
 #include "SequencerHandlers_Internal.h"
@@ -15,6 +16,12 @@
 #include "MovieSceneSequencePlayer.h"
 #include "UniversalObjectLocatorResolveParams.h"
 #include "Components/SceneComponent.h"
+#include "Components/ActorComponent.h"
+#include "Engine/BlueprintGeneratedClass.h"
+#include "Engine/SimpleConstructionScript.h"
+#include "Engine/SCS_Node.h"
+#include "UObject/UObjectHash.h"
+#include "HandlerQuery.h"
 #include "GameFramework/Actor.h"
 #include "Engine/Level.h"
 #include "EngineUtils.h"
@@ -138,6 +145,164 @@ namespace UEMCP::SequencerBindings
 		}
 #endif
 		return nullptr;
+	}
+
+	// ─── get_sequence_binding_components (#1640) ─────────────────────────
+
+	/** Rendering flags read when the caller names no properties: what decides how a bound primitive lights, shadows and holds out. */
+	const TCHAR* const DefaultBindingComponentProperties[] = {
+		TEXT("CastShadow"), TEXT("bAffectDynamicIndirectLighting"), TEXT("bAffectDistanceFieldLighting"),
+		TEXT("bVisibleInRayTracing"), TEXT("bHoldout"), TEXT("LightingChannels"),
+		TEXT("bRenderCustomDepth"), TEXT("CustomDepthStencilValue"), TEXT("CustomDepthStencilWriteMask"),
+		TEXT("bRenderInMainPass"), TEXT("bRenderInDepthPass"), TEXT("bVisible"), TEXT("bHiddenInGame"),
+	};
+	constexpr int32 MaxPropertiesPerComponent = 400;
+
+	/** Lowercase without underscores, so cast_shadow and CastShadow compare equal. */
+	FString PropertyKey(const FString& Name)
+	{
+		return Name.Replace(TEXT("_"), TEXT("")).ToLower();
+	}
+
+	/** The C++ name of a property named in C++ or Python spelling (b_holdout, affect_dynamic_indirect_lighting), or empty. */
+	FString ResolvePropertyName(const UStruct* Struct, const FString& Requested)
+	{
+		if (const FProperty* Exact = Struct->FindPropertyByName(FName(*Requested))) return Exact->GetName();
+		const FString Wanted = PropertyKey(Requested);
+		for (TFieldIterator<FProperty> It(Struct); It; ++It)
+		{
+			const FString Key = PropertyKey(It->GetName());
+			if (Key == Wanted) return It->GetName();
+			if (CastField<FBoolProperty>(*It) && Key.StartsWith(TEXT("b")) && Key.Mid(1) == Wanted) return It->GetName();
+		}
+		return FString();
+	}
+
+	/** Read one property or dotted path off a component. The head segment may use Python spelling. */
+	bool ReadComponentProperty(UObject* Component, const FString& Requested, FString& OutPath, TSharedPtr<FJsonValue>& OutValue)
+	{
+		int32 Split = INDEX_NONE;
+		for (int32 i = 0; i < Requested.Len(); ++i)
+		{
+			if (Requested[i] == TEXT('.') || Requested[i] == TEXT('[')) { Split = i; break; }
+		}
+		const FString Head = Split == INDEX_NONE ? Requested : Requested.Left(Split);
+		const FString Resolved = ResolvePropertyName(Component->GetClass(), Head);
+		if (Resolved.IsEmpty()) return false;
+		const FString FullPath = Split == INDEX_NONE ? Resolved : Resolved + Requested.Mid(Split);
+		FString Type;
+		FString ResolvedPath;
+		TSharedPtr<FJsonValue> Value = MCPQuery::ReadDottedProperty(Component, FullPath, Type, &ResolvedPath);
+		if (!Value.IsValid()) return false;
+		OutPath = ResolvedPath.IsEmpty() ? FullPath : ResolvedPath;
+		OutValue = Value;
+		return true;
+	}
+
+	/** True when the class or one of its parents is named Filter, with or without the U prefix. */
+	bool ClassMatches(const UClass* Class, const FString& Filter)
+	{
+		for (const UClass* C = Class; C; C = C->GetSuperClass())
+		{
+			const FString Name = C->GetName();
+			if (Name.Equals(Filter, ESearchCase::IgnoreCase) || (TEXT("U") + Name).Equals(Filter, ESearchCase::IgnoreCase)) return true;
+		}
+		return false;
+	}
+
+	struct FBindingComponent
+	{
+		UActorComponent* Component = nullptr;
+		FString Name;
+		FString Source;
+	};
+
+	/**
+	 * The components a bound object carries. A component binds as itself. An actor
+	 * contributes its own components, and for a Blueprint class the construction
+	 * script templates it holds no instance of, since a template only carries the
+	 * components that existed when it was copied.
+	 */
+	void CollectBindingComponents(UObject* Root, TArray<FBindingComponent>& Out)
+	{
+		if (UActorComponent* AsComponent = Cast<UActorComponent>(Root))
+		{
+			Out.Add({ AsComponent, AsComponent->GetName(), TEXT("bound") });
+			return;
+		}
+		AActor* Actor = Cast<AActor>(Root);
+		if (!Actor) return;
+
+		TSet<UObject*> Seen;
+		TSet<FName> Names;
+		auto Add = [&](UActorComponent* Comp, const FName Name, const TCHAR* Source)
+		{
+			if (!Comp || Seen.Contains(Comp) || Names.Contains(Name)) return;
+			Seen.Add(Comp);
+			Names.Add(Name);
+			Out.Add({ Comp, Name.ToString(), Source });
+		};
+		for (UActorComponent* Comp : Actor->GetComponents()) if (Comp) Add(Comp, Comp->GetFName(), TEXT("instance"));
+		TArray<UObject*> Inner;
+		GetObjectsWithOuter(Actor, Inner, false);
+		for (UObject* Obj : Inner)
+		{
+			if (UActorComponent* Comp = Cast<UActorComponent>(Obj)) Add(Comp, Comp->GetFName(), TEXT("instance"));
+		}
+
+		UBlueprintGeneratedClass* ActualClass = Cast<UBlueprintGeneratedClass>(Actor->GetClass());
+		for (UClass* C = Actor->GetClass(); C && ActualClass; C = C->GetSuperClass())
+		{
+			UBlueprintGeneratedClass* BPGC = Cast<UBlueprintGeneratedClass>(C);
+			if (!BPGC || !BPGC->SimpleConstructionScript) continue;
+			for (USCS_Node* Node : BPGC->SimpleConstructionScript->GetAllNodes())
+			{
+				if (!Node) continue;
+				Add(Node->GetActualComponentTemplate(ActualClass), Node->GetVariableName(), TEXT("blueprintClassTemplate"));
+			}
+		}
+	}
+
+	/** One component with the requested property values. Names it does not have go to missingProperties when they were asked for. */
+	TSharedPtr<FJsonObject> DescribeBindingComponent(const FBindingComponent& Entry, const TArray<FString>& Requested, bool bAll, bool bReportMissing)
+	{
+		UActorComponent* Comp = Entry.Component;
+		TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
+		Obj->SetStringField(TEXT("name"), Entry.Name);
+		Obj->SetStringField(TEXT("class"), Comp->GetClass()->GetName());
+		Obj->SetStringField(TEXT("path"), Comp->GetPathName());
+		Obj->SetStringField(TEXT("source"), Entry.Source);
+		if (const USceneComponent* Scene = Cast<USceneComponent>(Comp))
+		{
+			if (const USceneComponent* Parent = Scene->GetAttachParent()) Obj->SetStringField(TEXT("attachParent"), Parent->GetName());
+		}
+
+		TSharedPtr<FJsonObject> Values = MakeShared<FJsonObject>();
+		TArray<TSharedPtr<FJsonValue>> Missing;
+		bool bTruncated = false;
+		if (bAll)
+		{
+			int32 Count = 0;
+			for (TFieldIterator<FProperty> It(Comp->GetClass()); It; ++It)
+			{
+				FProperty* Prop = *It;
+				if (!Prop->HasAnyPropertyFlags(CPF_Edit) || Prop->HasAnyPropertyFlags(CPF_Deprecated)) continue;
+				if (Count >= MaxPropertiesPerComponent) { bTruncated = true; break; }
+				Values->SetField(Prop->GetName(), MCPQuery::PropertyToJson(Prop, Prop->ContainerPtrToValuePtr<void>(Comp)));
+				++Count;
+			}
+		}
+		for (const FString& Name : Requested)
+		{
+			FString Path;
+			TSharedPtr<FJsonValue> Value;
+			if (ReadComponentProperty(Comp, Name, Path, Value)) Values->SetField(Path, Value);
+			else if (bReportMissing) Missing.Add(MakeShared<FJsonValueString>(Name));
+		}
+		Obj->SetObjectField(TEXT("properties"), Values);
+		if (Missing.Num() > 0) Obj->SetArrayField(TEXT("missingProperties"), Missing);
+		if (bTruncated) Obj->SetBoolField(TEXT("propertiesTruncated"), true);
+		return Obj;
 	}
 }
 
@@ -493,5 +658,169 @@ TSharedPtr<FJsonValue> FSequencerHandlers::GetRuntimeBindings(const TSharedPtr<F
 	Result->SetStringField(TEXT("worldType"), World->IsPlayInEditor() ? TEXT("pie") : (World->IsGameWorld() ? TEXT("game") : TEXT("editor")));
 	Result->SetArrayField(TEXT("sequenceActors"), ActorsJson);
 	Result->SetNumberField(TEXT("sequenceActorCount"), ActorsJson.Num());
+	return MCPResult(Result);
+}
+
+// get_sequence_binding_components (#1640): every binding's spawnable template,
+// or the actor or component a possessable resolves to in the editor world, with
+// its components and the requested property values. Nothing is opened or
+// evaluated, so the values are what the sequence will start from.
+TSharedPtr<FJsonValue> FSequencerHandlers::GetBindingComponents(const TSharedPtr<FJsonObject>& Params)
+{
+	using namespace UEMCP::SequencerTracks;
+	using namespace UEMCP::SequencerBindings;
+
+	FString Path;
+	const bool bHasPath = TryGetStringParam(Params, TEXT("sequencePath"), Path);
+	const FString GuidText = OptionalString(Params, TEXT("bindingGuid"));
+	const FString NameText = OptionalString(Params, TEXT("bindingName"));
+	const FString ClassFilter = OptionalString(Params, TEXT("componentClass"));
+	const TArray<TSharedPtr<FJsonValue>>* PropertiesJson = nullptr;
+	TryGetArrayParam(Params, TEXT("propertyNames"), PropertiesJson);
+
+	if (auto PieErr = MCPRefuseDuringPlayInEditor(TEXT("get_sequence_binding_components"))) return PieErr;
+
+	TSharedPtr<FJsonValue> LoadErr;
+	ULevelSequence* Sequence = LoadSequence(Path, bHasPath, LoadErr);
+	if (!Sequence) return LoadErr;
+	UMovieScene* MovieScene = Sequence->GetMovieScene();
+	if (!MovieScene) return MCPError(TEXT("Sequence has no MovieScene"));
+	UWorld* World = GetEditorWorld();
+
+	TArray<FString> Requested;
+	bool bAll = false;
+	const bool bExplicit = PropertiesJson && PropertiesJson->Num() > 0;
+	if (bExplicit)
+	{
+		for (const TSharedPtr<FJsonValue>& Value : *PropertiesJson)
+		{
+			FString Name;
+			if (!Value.IsValid() || !Value->TryGetString(Name) || Name.TrimStartAndEnd().IsEmpty())
+			{
+				return MCPError(TEXT("propertyNames must be an array of property names or dotted paths, or [\"*\"] for every editable property"));
+			}
+			Name.TrimStartAndEndInline();
+			if (Name == TEXT("*")) bAll = true;
+			else Requested.AddUnique(Name);
+		}
+	}
+	else
+	{
+		for (const TCHAR* Name : DefaultBindingComponentProperties) Requested.Add(Name);
+	}
+
+	TArray<FGuid> Guids;
+	TMap<FGuid, FString> Types;
+	CollectBindingGuids(MovieScene, Guids, Types);
+	if (!GuidText.IsEmpty() || !NameText.IsEmpty())
+	{
+		FGuid Only;
+		FString Err;
+		if (!FindBindingByNameOrGuid(MovieScene, GuidText, NameText, Only, Err)) return MCPError(Err);
+		Guids = { Only };
+	}
+
+	int32 ComponentTotal = 0;
+	int32 Unresolved = 0;
+	TArray<TSharedPtr<FJsonValue>> Out;
+	for (const FGuid& Guid : Guids)
+	{
+		TSharedPtr<FJsonObject> B = MakeShared<FJsonObject>();
+		B->SetStringField(TEXT("name"), BindingName(MovieScene, Guid));
+		B->SetStringField(TEXT("guid"), Guid.ToString());
+		FString Type = Types.FindRef(Guid);
+		const FMovieScenePossessable* Possessable = MovieScene->FindPossessable(Guid);
+		if (Possessable && Possessable->GetParent().IsValid()) B->SetStringField(TEXT("parentGuid"), Possessable->GetParent().ToString());
+
+		// Where the components come from: a template for a spawnable, the editor
+		// world for a possessable.
+		TArray<UObject*> Roots;
+		FString Source;
+		if (FMovieSceneSpawnable* Spawnable = MovieScene->FindSpawnable(Guid))
+		{
+			if (UObject* Template = Spawnable->GetObjectTemplate())
+			{
+				Roots.Add(Template);
+				Source = TEXT("spawnableTemplate");
+			}
+		}
+#if UE_MCP_HAS_5_5_API
+		if (Roots.Num() == 0)
+		{
+			const FMovieSceneBindingReferences* Refs = Sequence->GetBindingReferences();
+			if (const UMovieSceneCustomBinding* Custom = Refs ? Refs->GetCustomBinding(Guid, 0) : nullptr)
+			{
+				B->SetStringField(TEXT("customBinding"), Custom->GetClass()->GetName());
+				if (const FObjectProperty* Prop = CastField<FObjectProperty>(Custom->GetClass()->FindPropertyByName(TEXT("ActorTemplate"))))
+				{
+					if (UObject* Template = Prop->GetObjectPropertyValue_InContainer(Custom))
+					{
+						Roots.Add(Template);
+						Source = TEXT("customBindingTemplate");
+						Type = TEXT("spawnable");
+					}
+				}
+			}
+		}
+#endif
+		if (Roots.Num() == 0 && Possessable && World)
+		{
+			Roots = LocateInWorld(Sequence, MovieScene, Guid, World);
+			if (Roots.Num() > 0) Source = TEXT("editorWorld");
+		}
+		B->SetStringField(TEXT("type"), Type);
+
+		if (Roots.Num() == 0)
+		{
+			B->SetBoolField(TEXT("resolved"), false);
+			B->SetArrayField(TEXT("components"), TArray<TSharedPtr<FJsonValue>>());
+			B->SetStringField(TEXT("note"), Possessable
+				? TEXT("This possessable resolves to nothing in the editor world: its actor was deleted or re-created (resolve_sequence_bindings, rebind_possessable), or sits in a level that is not loaded.")
+				: TEXT("This spawnable has no object template."));
+			++Unresolved;
+			Out.Add(MakeShared<FJsonValueObject>(B));
+			continue;
+		}
+
+		B->SetBoolField(TEXT("resolved"), true);
+		B->SetStringField(TEXT("source"), Source);
+		TArray<TSharedPtr<FJsonValue>> ObjectsJson;
+		TArray<TSharedPtr<FJsonValue>> ComponentsJson;
+		for (UObject* Root : Roots)
+		{
+			TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
+			O->SetStringField(TEXT("path"), Root->GetPathName());
+			O->SetStringField(TEXT("class"), Root->GetClass()->GetName());
+			if (const AActor* Actor = Cast<AActor>(Root)) O->SetStringField(TEXT("actorLabel"), Actor->GetActorLabel());
+			ObjectsJson.Add(MakeShared<FJsonValueObject>(O));
+
+			TArray<FBindingComponent> Components;
+			CollectBindingComponents(Root, Components);
+			for (const FBindingComponent& Entry : Components)
+			{
+				if (!ClassFilter.IsEmpty() && !ClassMatches(Entry.Component->GetClass(), ClassFilter)) continue;
+				ComponentsJson.Add(MakeShared<FJsonValueObject>(DescribeBindingComponent(Entry, Requested, bAll, bExplicit)));
+			}
+		}
+		B->SetArrayField(TEXT("objects"), ObjectsJson);
+		B->SetArrayField(TEXT("components"), ComponentsJson);
+		B->SetNumberField(TEXT("componentCount"), ComponentsJson.Num());
+		ComponentTotal += ComponentsJson.Num();
+		Out.Add(MakeShared<FJsonValueObject>(B));
+	}
+
+	auto Result = MCPSuccess();
+	Result->SetStringField(TEXT("sequencePath"), Sequence->GetPathName());
+	if (World) Result->SetStringField(TEXT("world"), World->GetPathName());
+	TArray<TSharedPtr<FJsonValue>> RequestedJson;
+	if (bAll) RequestedJson.Add(MakeShared<FJsonValueString>(TEXT("*")));
+	for (const FString& Name : Requested) RequestedJson.Add(MakeShared<FJsonValueString>(Name));
+	Result->SetArrayField(TEXT("propertyNames"), RequestedJson);
+	Result->SetBoolField(TEXT("defaultProperties"), !bExplicit);
+	if (!ClassFilter.IsEmpty()) Result->SetStringField(TEXT("componentClass"), ClassFilter);
+	Result->SetArrayField(TEXT("bindings"), Out);
+	Result->SetNumberField(TEXT("bindingCount"), Out.Num());
+	Result->SetNumberField(TEXT("componentCount"), ComponentTotal);
+	Result->SetNumberField(TEXT("unresolvedCount"), Unresolved);
 	return MCPResult(Result);
 }

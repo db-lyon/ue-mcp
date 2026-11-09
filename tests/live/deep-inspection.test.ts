@@ -19,7 +19,7 @@
  * Runs only against the dedicated disposable test project.
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { callBridge, disconnectBridge, getBridge, resultArray, TEST_PREFIX } from "../setup.js";
@@ -39,6 +39,7 @@ type CVarRow = { name?: string; value?: string; defaultValue?: string; isDefault
 let bridge: EditorBridge;
 let scriptDir = "";
 let scriptPath = "";
+let relativeScriptDir = "";
 
 /**
  * Shaped like the Tools/ script #995 describes: several independent stages
@@ -55,6 +56,10 @@ const PROBE_SCRIPT = [
   "",
   "def add(a, b, suffix=\"\"):",
   '    return "{}{}{}".format(a, b, suffix)',
+  "",
+  "",
+  "def project_dir():",
+  "    return unreal.Paths.convert_relative_path_to_full(unreal.Paths.project_dir())",
   "",
   "",
   "def noisy():",
@@ -89,6 +94,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   if (scriptDir) rmSync(scriptDir, { recursive: true, force: true });
+  if (relativeScriptDir) rmSync(relativeScriptDir, { recursive: true, force: true });
   if (bridge) {
     await callBridge(bridge, "delete_asset", { assetPath: TEST_MATERIAL, force: true });
     disconnectBridge();
@@ -211,6 +217,28 @@ describe("run_python_file calls one function in a file (#995)", () => {
     });
     expect(run.ok, run.error).toBe(true);
     expect(String((run.result as Record<string, unknown>).result)).toContain("23!");
+  });
+
+  it("resolves a relative filePath against the project directory (#1658)", async () => {
+    // A flow in ue-mcp.yml names its project's Tools/ script by a relative
+    // path, so the call has to find it from the editor's project, not its cwd.
+    const where = await callBridge(bridge, "run_python_file", { filePath: scriptPath, entryPoint: "project_dir" });
+    expect(where.ok, where.error).toBe(true);
+    const projectDir = String((where.result as Record<string, unknown>).result);
+    const relDir = "Saved/MCPTestRelativeScript";
+    relativeScriptDir = join(projectDir, relDir);
+    mkdirSync(relativeScriptDir, { recursive: true });
+    writeFileSync(join(relativeScriptDir, "entry_probe.py"), PROBE_SCRIPT, "utf8");
+
+    const run = await callBridge(bridge, "run_python_file", {
+      filePath: `${relDir}/entry_probe.py`,
+      entryPoint: "add",
+      args: ["4", "5"],
+    });
+    expect(run.ok, run.error).toBe(true);
+    const result = run.result as Record<string, unknown>;
+    expect(String(result.result)).toContain("45");
+    expect(String(result.path).replace(/\\/g, "/")).toContain(`${relDir}/entry_probe.py`);
   });
 
   it("fails loudly when the named function is not there", async () => {

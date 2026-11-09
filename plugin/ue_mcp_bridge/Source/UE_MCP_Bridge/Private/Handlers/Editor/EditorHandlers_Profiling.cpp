@@ -46,6 +46,7 @@
 #include "EditorHandlers.h"
 
 #include "HandlerUtils.h"
+#include "Handlers/Editor/HandlerStandaloneArgs.h"
 
 #include "Editor.h"
 #include "Editor/EditorEngine.h"
@@ -60,6 +61,7 @@
 #include "Misc/App.h"
 #include "Misc/CommandLine.h"
 #include "Misc/DateTime.h"
+#include "Misc/Parse.h"
 #include "Misc/Paths.h"
 #include "Misc/StringBuilder.h"
 #include "ProfilingDebugging/MiscTrace.h"
@@ -631,7 +633,9 @@ TSharedPtr<FJsonValue> FEditorHandlers::StartInsightsTrace(const TSharedPtr<FJso
 		}
 		else
 		{
-			FilePath = FPaths::ConvertRelativePathToFull(FilePath);
+			FString Resolved;
+			if (auto Err = MCPRequireWritablePath(FilePath, Resolved)) return Err;
+			FilePath = Resolved;
 			if (!FilePath.EndsWith(TEXT(".utrace"))) FilePath += TEXT(".utrace");
 			IFileManager::Get().MakeDirectory(*FPaths::GetPath(FilePath), /*Tree=*/true);
 		}
@@ -1541,15 +1545,21 @@ TSharedPtr<FJsonValue> FEditorHandlers::LaunchStandaloneGame(const TSharedPtr<FJ
 		}
 		else
 		{
-			TraceFile = FPaths::ConvertRelativePathToFull(TraceFile);
+			if (TraceFile.Contains(TEXT("\""))) return MCPError(TEXT("traceFile must not contain a quote character."));
+			FString Resolved;
+			if (auto Err = MCPRequireWritablePath(TraceFile, Resolved)) return Err;
+			TraceFile = Resolved;
 			if (!TraceFile.EndsWith(TEXT(".utrace"))) TraceFile += TEXT(".utrace");
 			IFileManager::Get().MakeDirectory(*FPaths::GetPath(TraceFile), /*Tree=*/true);
 		}
 		Args += FString::Printf(TEXT(" -trace=%s -tracefile=\"%s\""), *Channels, *TraceFile);
 	}
 
+	// An offscreen editor has no screen to show a game window on either, so
+	// the game inherits -RenderOffScreen unless the caller already passed it.
 	const FString ExtraArgs = OptionalString(Params, TEXT("extraArgs"));
-	if (!ExtraArgs.IsEmpty()) Args += TEXT(" ") + ExtraArgs;
+	Args = MCPStandaloneGameArgs(Args, ExtraArgs, FParse::Param(FCommandLine::Get(), TEXT("RenderOffScreen")));
+	const bool bGameOffScreen = FParse::Param(*Args, TEXT("RenderOffScreen"));
 
 	uint32 ProcessId = 0;
 	FProcHandle Handle = FPlatformProcess::CreateProc(
@@ -1582,6 +1592,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::LaunchStandaloneGame(const TSharedPtr<FJ
 	Result->SetStringField(TEXT("executablePath"), ExePath);
 	Result->SetStringField(TEXT("commandLine"), State.CommandLine);
 	Result->SetStringField(TEXT("projectPath"), ProjectPath);
+	Result->SetBoolField(TEXT("renderOffScreen"), bGameOffScreen);
 	if (!MapName.IsEmpty()) Result->SetStringField(TEXT("mapName"), MapName);
 	if (!Channels.IsEmpty()) Result->SetStringField(TEXT("channels"), Channels);
 	if (!TraceFile.IsEmpty())

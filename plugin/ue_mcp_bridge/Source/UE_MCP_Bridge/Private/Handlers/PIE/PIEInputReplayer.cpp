@@ -27,6 +27,8 @@
 #include "UObject/UObjectGlobals.h"
 #include "GameFramework/Pawn.h"
 #include "GameFramework/SpectatorPawn.h"
+#include "GameFramework/Character.h"
+#include "GameFramework/CharacterMovementComponent.h"
 #include "Engine/DebugCameraController.h"
 #include "GameFramework/WorldSettings.h"
 #include "Engine/GameViewportClient.h"
@@ -89,6 +91,27 @@ namespace MCPPIE
 		constexpr double ReplayerTargetResolveTimeoutSeconds = 10.0;
 	}
 
+	double FindSourceRestAnchorMs(const TArray<double>& TimesMs, const TArray<float>& Speeds,
+		double OnsetMs, float MaxSpeedCms, int32 HoldMs)
+	{
+		const int32 N = FMath::Min(TimesMs.Num(), Speeds.Num());
+		int32 Last = INDEX_NONE;
+		for (int32 i = 0; i < N && TimesMs[i] < OnsetMs; ++i)
+		{
+			Last = i;
+		}
+		if (Last == INDEX_NONE || Speeds[Last] > MaxSpeedCms)
+		{
+			return -1.0;
+		}
+		int32 First = Last;
+		while (First > 0 && Speeds[First - 1] <= MaxSpeedCms)
+		{
+			--First;
+		}
+		return FMath::Min(TimesMs[First] + FMath::Max(0, HoldMs), OnsetMs);
+	}
+
 	FPIEInputReplayer& FPIEInputReplayer::Get()
 	{
 		static FPIEInputReplayer Instance;
@@ -120,6 +143,8 @@ namespace MCPPIE
 		}
 		OnEndFrameHandle.Reset();
 		bEndFrameBound = false;
+		FPSPin.Restore();
+		RestoreFixedTimestep();
 		State = EReplayerState::Idle;
 		bArmed = false;
 		TargetWorld.Reset();
@@ -329,6 +354,18 @@ namespace MCPPIE
 		CaptureDir.Reset();
 		NextStepIndex = 0;
 		ExecutedSteps = 0;
+		SourceCursor = 0;
+		bSourceExhausted = false;
+		ReplayFrameIndex = 0;
+		AlignOffsetMs = 0.0;
+		SourceInputOnsetMs = -1.0;
+		ReplayInputOnsetMs = -1.0;
+		bStepClockStarted = false;
+		StepOffsetMs = 0.0;
+		SourceGateMs = 0.0;
+		GateAnchor.Reset();
+		GateError.Reset();
+		ReplayRows.Reset();
 		for (const FHoldHandle& H : ActiveHolds)
 		{
 			FPIEInputInjector::StopAny(H.InjectionId);
@@ -403,6 +440,42 @@ namespace MCPPIE
 			return false;
 		}
 
+		if (Cfg.StartGate.bEnabled)
+		{
+			// The source time the gate maps to: the source's own rest before
+			// its first input when pawn_at_rest is on and the recording shows
+			// one, else the first input itself.
+			double OnsetMs = -1.0;
+			for (const FStep& S : ActiveSequence.Steps)
+			{
+				const bool bInput = S.Type == EStepType::Input || S.Type == EStepType::Hold || S.Type == EStepType::InputTape;
+				if (bInput && (OnsetMs < 0.0 || S.DelayMs < OnsetMs))
+				{
+					OnsetMs = S.DelayMs;
+				}
+			}
+			SourceGateMs = FMath::Max(0.0, OnsetMs);
+			GateAnchor = OnsetMs >= 0.0 ? TEXT("first_input") : TEXT("start");
+			if (Cfg.StartGate.bPawnAtRest && OnsetMs >= 0.0 && SourceFrames.Num() > 0)
+			{
+				TArray<double> TimesMs;
+				TArray<float> Speeds;
+				const double Base = SourceFrames[0].Time;
+				for (const FSourceFrame& F : SourceFrames)
+				{
+					TimesMs.Add((F.Time - Base) * 1000.0);
+					Speeds.Add(static_cast<float>(F.PawnVelocity.Size()));
+				}
+				const double Anchor = FindSourceRestAnchorMs(TimesMs, Speeds, OnsetMs,
+					Cfg.StartGate.MaxSpeedCms, Cfg.StartGate.HoldMs);
+				if (Anchor >= 0.0)
+				{
+					SourceGateMs = Anchor;
+					GateAnchor = TEXT("source_rest");
+				}
+			}
+		}
+
 		bArmed = true;
 		State = EReplayerState::Armed;
 		OutMessage = FString::Printf(TEXT("Armed: source=%s steps=%d drift=%s"),
@@ -435,10 +508,11 @@ namespace MCPPIE
 
 	void FPIEInputReplayer::ApplyFPSPin(UWorld* PIEWorld, int32 Hz)
 	{
-		if (!PIEWorld || !GEngine || Hz <= 0) return;
-		const FString Cmd = FString::Printf(TEXT("t.MaxFPS %d"), Hz);
-		GEngine->Exec(PIEWorld, *Cmd);
-		UE_LOG(LogMCPPIE, Log, TEXT("[PIE-REP] %s"), *Cmd);
+		if (!PIEWorld || Hz <= 0) return;
+		if (FPSPin.Apply(Hz))
+		{
+			UE_LOG(LogMCPPIE, Log, TEXT("[PIE-REP] t.MaxFPS pinned to %d"), Hz);
+		}
 
 		// Item X2: opt-in fixed timestep for stronger reproducibility.
 		if (Pending.bFixedTimestep)
@@ -467,6 +541,81 @@ namespace MCPPIE
 		UE_LOG(LogMCPPIE, Log, TEXT("[PIE-REP] Fixed timestep restored"));
 	}
 
+	bool FPIEInputReplayer::UpdateStartGate(UWorld* PIEWorld, double Now, FString& OutBlocker)
+	{
+		const FReplayStartGate& Gate = Pending.StartGate;
+		APlayerController* PC = TargetPlayerController.Get();
+		APawn* Pawn = nullptr;
+		if (bEjected)
+		{
+			Pawn = EjectedPawn.Get();
+		}
+		else if (PC)
+		{
+			Pawn = PC->GetPawn();
+		}
+		if (!Pawn)
+		{
+			GateRestSince = -1.0;
+			OutBlocker = TEXT("the player has no pawn");
+			return false;
+		}
+
+		bool bReady = true;
+		if (Gate.bPawnAtRest)
+		{
+			const float Speed = static_cast<float>(Pawn->GetVelocity().Size());
+			bool bOnGround = true;
+			if (const ACharacter* Character = Cast<ACharacter>(Pawn))
+			{
+				if (const UCharacterMovementComponent* Move = Character->GetCharacterMovement())
+				{
+					bOnGround = Move->IsMovingOnGround();
+				}
+			}
+			bReady = Speed <= Gate.MaxSpeedCms && bOnGround;
+			if (!bReady)
+			{
+				OutBlocker = FString::Printf(TEXT("pawn speed %.1f cm/s (at most %.1f)%s"),
+					Speed, Gate.MaxSpeedCms, bOnGround ? TEXT("") : TEXT(", not on the ground"));
+			}
+		}
+		if (!bReady)
+		{
+			GateRestSince = -1.0;
+			return false;
+		}
+		if (GateRestSince < 0.0)
+		{
+			GateRestSince = Now;
+		}
+		const double HeldMs = (Now - GateRestSince) * 1000.0;
+
+		if (!Gate.LogContains.IsEmpty() && !bGateLogSeen)
+		{
+			// The session log can hold many lines; look at most every 100 ms.
+			const double Wall = FPlatformTime::Seconds();
+			if (GateLogCheckedAt < 0.0 || Wall - GateLogCheckedAt >= 0.1)
+			{
+				GateLogCheckedAt = Wall;
+				bGateLogSeen = FPIESessionLog::Get().QueryLines(
+					ELogVerbosity::VeryVerbose, NAME_None, Gate.LogContains, 0, 1).Num() > 0;
+			}
+			if (!bGateLogSeen)
+			{
+				OutBlocker = FString::Printf(TEXT("no log line containing '%s' yet"), *Gate.LogContains);
+				return false;
+			}
+		}
+
+		if (HeldMs < Gate.HoldMs)
+		{
+			OutBlocker = FString::Printf(TEXT("ready for %.0f of %d ms"), HeldMs, Gate.HoldMs);
+			return false;
+		}
+		return true;
+	}
+
 	void FPIEInputReplayer::OnBeginPIE(bool /*bIsSimulating*/)
 	{
 		if (!bArmed) return;
@@ -491,6 +640,14 @@ namespace MCPPIE
 		State = EReplayerState::WaitingForPawn;
 		AttachTime = 0.0;
 		StartedAt = ISOTimestampNow();
+		bStepClockStarted = false;
+		StepOffsetMs = 0.0;
+		GateRestSince = -1.0;
+		bGateLogSeen = false;
+		GateLogCheckedAt = -1.0;
+		GateOpenedMs = -1.0;
+		GateBlocker.Reset();
+		GateError.Reset();
 
 		if (!bEndFrameBound)
 		{
@@ -517,6 +674,13 @@ namespace MCPPIE
 		{
 			const FStep& S = ActiveSequence.Steps[NextStepIndex];
 			if (S.DelayMs > ElapsedMs) break;
+
+			const bool bInputStep = S.Type == EStepType::Input || S.Type == EStepType::Hold || S.Type == EStepType::InputTape;
+			if (bInputStep && ReplayInputOnsetMs < 0.0)
+			{
+				SourceInputOnsetMs = S.DelayMs;
+				ReplayInputOnsetMs = ElapsedMs;
+			}
 
 			switch (S.Type)
 			{
@@ -601,7 +765,7 @@ namespace MCPPIE
 				// fall back to the step's own sequence index to avoid every
 				// capture collapsing onto the same filename.
 				const uint64 FrameIdx = (SourceFrames.Num() > 0)
-					? static_cast<uint64>(FramesCompared)
+					? ReplayFrameIndex
 					: static_cast<uint64>(NextStepIndex);
 				const FString Safe = SanitizeCaptureName(S.CaptureName);
 				const FString FullPath = Dir / FString::Printf(TEXT("%s_frame%05llu.png"), *Safe, FrameIdx);
@@ -714,12 +878,40 @@ namespace MCPPIE
 		if (State == EReplayerState::Replaying)
 		{
 			const double Now = PIEWorld->GetTimeSeconds();
-			// Settle delay before step processing.
+			// The step clock starts after the settle delay, or with
+			// start_when once the gate opens, at the source time it maps to.
 			const int32 Settle = (Pending.SettleMs >= 0) ? Pending.SettleMs : ActiveSequence.SettleMs;
 			const double ElapsedMs = (Now - AttachTime) * 1000.0;
-			if (ElapsedMs >= Settle && !Pending.bMonitor)
+			if (!bStepClockStarted)
 			{
-				ExecutePendingSteps(ElapsedMs - Settle);
+				if (!Pending.StartGate.bEnabled)
+				{
+					if (ElapsedMs >= Settle)
+					{
+						bStepClockStarted = true;
+						StepOffsetMs = Settle;
+					}
+				}
+				else if (UpdateStartGate(PIEWorld, Now, GateBlocker))
+				{
+					bStepClockStarted = true;
+					StepOffsetMs = ElapsedMs - SourceGateMs;
+					GateOpenedMs = ElapsedMs;
+					GateBlocker.Reset();
+					UE_LOG(LogMCPPIE, Log, TEXT("[PIE-REP] start_when open at %.0f ms; resuming at source %.0f ms (%s)"),
+						ElapsedMs, SourceGateMs, *GateAnchor);
+				}
+				else if (ElapsedMs >= Pending.StartGate.TimeoutMs && GateError.IsEmpty())
+				{
+					GateError = FString::Printf(TEXT("start_when did not open within %d ms: %s"),
+						Pending.StartGate.TimeoutMs, *GateBlocker);
+					UE_LOG(LogMCPPIE, Warning, TEXT("[PIE-REP] %s"), *GateError);
+					State = EReplayerState::Completed;
+				}
+			}
+			if (bStepClockStarted && !Pending.bMonitor)
+			{
+				ExecutePendingSteps(ElapsedMs - StepOffsetMs);
 			}
 
 			// Per-frame viewport capture (off by default). Counted off the
@@ -749,19 +941,53 @@ namespace MCPPIE
 				CaptureFrameCounter++;
 			}
 
-			// Drift sampling: sample current pawn state + compare to source by
-			// frame index since attach.
-			if (SourceFrames.Num() > 0)
+			// Drift sampling: compare with the source row at the same time on
+			// the source timeline. Steps fire Settle ms after attach, so that
+			// much is taken off the replay clock; before it has elapsed the
+			// replay has not started and nothing is compared.
+			const uint64 ReplayFrame = ReplayFrameIndex++;
+			const bool bGated = Pending.StartGate.bEnabled;
+			AlignOffsetMs = bGated ? StepOffsetMs : (Pending.bMonitor ? 0.0 : static_cast<double>(Settle));
+			const double ReplayT = (Now - AttachTime) - AlignOffsetMs / 1000.0;
+			const bool bPreRoll = bGated ? !bStepClockStarted : ReplayT < 0.0;
+			if (SourceFrames.Num() > 0 && bSourceExhausted)
 			{
-				const uint64 ReplayFrame = static_cast<uint64>(FramesCompared);
-				if (ReplayFrame < static_cast<uint64>(SourceFrames.Num()))
+				FramesMissingInReplay++;
+			}
+			else if (SourceFrames.Num() > 0 && bPreRoll)
+			{
+				// Pre-roll: sampled only to keep the sampler's velocity
+				// history current for the first compared frame.
+				Sampler.SampleFrame(PIEWorld, ReplayFrame, Now, PIEWorld->GetDeltaSeconds());
+			}
+			else if (SourceFrames.Num() > 0)
+			{
+				const double SrcBase = SourceFrames[0].Time;
+				const double SrcLast = SourceFrames.Last().Time - SrcBase;
+				const double HalfFrame = 0.5 / FMath::Max(1, ActiveSequence.SampleHz);
+				while (SourceCursor + 1 < SourceFrames.Num()
+					&& FMath::Abs(SourceFrames[SourceCursor + 1].Time - SrcBase - ReplayT)
+						<= FMath::Abs(SourceFrames[SourceCursor].Time - SrcBase - ReplayT))
 				{
-					FCSVRow Row = Sampler.SampleFrame(PIEWorld, ReplayFrame, Now, PIEWorld->GetDeltaSeconds());
-					const FSourceFrame& Src = SourceFrames[static_cast<int32>(ReplayFrame)];
+					++SourceCursor;
+				}
+				if (ReplayT > SrcLast + HalfFrame)
+				{
+					bSourceExhausted = true;
+					FramesMissingInReplay++;
+				}
+				else
+				{
+					FCSVRow Row = Sampler.SampleFrame(PIEWorld, ReplayFrame, SrcBase + ReplayT, PIEWorld->GetDeltaSeconds());
+					const FSourceFrame& Src = SourceFrames[SourceCursor];
 					FDriftFrameEntry E;
 					E.Frame = ReplayFrame;
-					E.PositionDeltaCm = static_cast<float>((Row.PawnLocation - Src.PawnLocation).Size());
-					E.VelocityDeltaCms = static_cast<float>((Row.PawnVelocity - Src.PawnVelocity).Size());
+					E.SourceFrame = Src.Frame;
+					E.Time = ReplayT;
+					E.PositionDelta = Row.PawnLocation - Src.PawnLocation;
+					E.VelocityDelta = Row.PawnVelocity - Src.PawnVelocity;
+					E.PositionDeltaCm = static_cast<float>(E.PositionDelta.Size());
+					E.VelocityDeltaCms = static_cast<float>(E.VelocityDelta.Size());
 					E.RotationDeltaDeg = static_cast<float>(FMath::Abs((Row.PawnRotation - Src.PawnRotation).Euler().Size()));
 					if (E.PositionDeltaCm > MaxPosDriftCm) { MaxPosDriftCm = E.PositionDeltaCm; MaxPosDriftFrame = ReplayFrame; }
 					if (E.VelocityDeltaCms > MaxVelDriftCms) MaxVelDriftCms = E.VelocityDeltaCms;
@@ -807,9 +1033,7 @@ namespace MCPPIE
 							FDriftDivergence& Fd = FirstDivergence;
 							Fd.bFound = true;
 							Fd.Frame = ReplayFrame;
-							Fd.Time = (ActiveSequence.SampleHz > 0)
-								? static_cast<double>(ReplayFrame) / ActiveSequence.SampleHz
-								: 0.0;
+							Fd.Time = ReplayT;
 
 							if (VelR >= PosR && VelR >= RotR && VelR > 0.0)
 							{
@@ -860,12 +1084,11 @@ namespace MCPPIE
 						}
 					}
 
-					// Per-tracked-actor drift: walk the same frame index in
-					// the source tracked.jsonl, re-resolve each id in the
-					// replay world, and accumulate max |delta| per id.
-					if (SourceActorRows.Num() > 0 && static_cast<int32>(ReplayFrame) < SourceActorRows.Num())
+					// Per-tracked-actor drift: tracked.jsonl has one row per
+					// recorded frame, so the source cursor indexes it too.
+					if (SourceActorRows.IsValidIndex(SourceCursor))
 					{
-						const FTrackedActorRow& SrcRow = SourceActorRows[static_cast<int32>(ReplayFrame)];
+						const FTrackedActorRow& SrcRow = SourceActorRows[SourceCursor];
 						for (const TPair<FString, FActorState>& KV : SrcRow.Actors)
 						{
 							FActorDrift& Acc = ActorDriftAccum.FindOrAdd(KV.Key);
@@ -897,11 +1120,8 @@ namespace MCPPIE
 							if (DRot > Acc.MaxRotationDeg) Acc.MaxRotationDeg = DRot;
 						}
 					}
+					ReplayRows.Add(MoveTemp(Row));
 					FramesCompared++;
-				}
-				else
-				{
-					FramesMissingInReplay++;
 				}
 			}
 
@@ -921,7 +1141,7 @@ namespace MCPPIE
 			{
 				// Stay in Replaying for one more sample frame to let drift catch
 				// any straggler frames the source had after the last step.
-				if (SourceFrames.Num() == 0 || FramesCompared >= SourceFrames.Num())
+				if (SourceFrames.Num() == 0 || bSourceExhausted)
 				{
 					State = EReplayerState::Completed;
 				}
@@ -971,10 +1191,14 @@ namespace MCPPIE
 		ActiveTapes.Reset();
 
 		const bool bTargetFailed = !bTargetResolved && !TargetResolveError.IsEmpty();
-		R.bSuccess = !bTargetFailed;
+		R.bSuccess = !bTargetFailed && GateError.IsEmpty();
 		if (bTargetFailed)
 		{
 			R.Error = TargetResolveError;
+		}
+		else if (!GateError.IsEmpty())
+		{
+			R.Error = GateError;
 		}
 		R.ExecutedSteps = ExecutedSteps;
 		R.FramesCaptured = FramesCaptured;
@@ -996,6 +1220,47 @@ namespace MCPPIE
 			D.TrackedValueMaxDeltas = MaxTrackedDeltas;
 			D.ActorDrift = ActorDriftAccum;
 			D.FramesOverThreshold = DriftFrames;
+			D.Alignment = Pending.StartGate.bEnabled ? TEXT("start_gate") : TEXT("time");
+			D.ReplayOffsetMs = AlignOffsetMs;
+			if (Pending.StartGate.bEnabled)
+			{
+				D.bHasStartGate = true;
+				D.bStartGatePassed = bStepClockStarted;
+				D.StartGateAnchor = GateAnchor;
+				D.StartGateSourceMs = SourceGateMs;
+				D.StartGateReplayMs = GateOpenedMs;
+				D.StartGateBlocker = bStepClockStarted ? FString() : GateBlocker;
+			}
+			if (ReplayInputOnsetMs >= 0.0)
+			{
+				D.bHasInputOnset = true;
+				D.SourceInputOnsetMs = SourceInputOnsetMs;
+				D.ReplayInputOnsetMs = ReplayInputOnsetMs;
+			}
+			if (ReplayRows.Num() > 0)
+			{
+				FCSVHeader H;
+				H.RecordingId = D.SourceRecordingId;
+				H.SampleHz = ActiveSequence.SampleHz;
+				H.RngSeed = ActiveSequence.RngSeed;
+				H.Actions = Sampler.GetActions();
+				H.TrackedValues = Sampler.GetTrackedValues();
+				FString Body;
+				for (const FCSVRow& Row : ReplayRows)
+				{
+					AppendCSVRow(Body, Row, H);
+				}
+				FString CsvErr;
+				const FString ReplayCSVPath = FPaths::GetPath(CurrentDriftPath) / TEXT("replay.csv");
+				if (SaveCSV(ReplayCSVPath, BuildCSVHeader(H) + Body, CsvErr))
+				{
+					D.ReplayCSVFile = TEXT("replay.csv");
+				}
+				else
+				{
+					UE_LOG(LogMCPPIE, Warning, TEXT("[PIE-REP] replay.csv write failed: %s"), *CsvErr);
+				}
+			}
 
 			// Item 1c: synthesise the lead the agent reads instead of the CSV.
 			D.Summary.bValid = true;
@@ -1053,6 +1318,7 @@ namespace MCPPIE
 
 		RepossessPlayer();
 		RestoreFixedTimestep();
+		FPSPin.Restore();
 
 		if (ViewportCapture.IsValid())
 		{
@@ -1128,6 +1394,7 @@ namespace MCPPIE
 		bTargetResolved = false;
 		TargetResolveStartSeconds = 0.0;
 		TargetResolveError.Reset();
+		ReplayRows.Reset();
 		State = EReplayerState::Idle;
 		bEndPIERequested = false;
 		// Retain the outcome so a poller (replay_status) can read the drift
@@ -1173,6 +1440,16 @@ namespace MCPPIE
 		}
 		S.bPIEActive = bPIEActive;
 		S.LastError = TargetResolveError;
+		if (State == EReplayerState::WaitingForPawn)
+		{
+			S.WaitingFor = !bTargetResolved
+				? (TargetResolveError.IsEmpty() ? FString(TEXT("a PIE world with the requested player")) : TargetResolveError)
+				: (Sampler.GetAttachBlocker().IsEmpty() ? FString(TEXT("the player's pawn")) : Sampler.GetAttachBlocker());
+		}
+		else if (State == EReplayerState::Replaying && Pending.StartGate.bEnabled && !bStepClockStarted)
+		{
+			S.WaitingFor = FString::Printf(TEXT("start_when: %s"), *GateBlocker);
+		}
 		if (S.LastError.IsEmpty() && State == EReplayerState::Idle && bHasLastFinish)
 		{
 			S.LastError = LastFinish.Error;
@@ -1188,6 +1465,10 @@ namespace MCPPIE
 			S.LastFrameDir = LastFinish.FrameDir;
 			S.LastFrameCount = LastFinish.FrameCount;
 			S.LastContactSheetPath = LastFinish.ContactSheetPath;
+			if (!LastFinish.Drift.ReplayCSVFile.IsEmpty() && !LastFinish.DriftReportPath.IsEmpty())
+			{
+				S.LastReplayCSVPath = FPaths::GetPath(LastFinish.DriftReportPath) / LastFinish.Drift.ReplayCSVFile;
+			}
 		}
 		return S;
 	}

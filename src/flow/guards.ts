@@ -25,7 +25,9 @@ import {
 import { withoutDialogActuation } from "../editor/dialog-guard.js";
 import { DialogGatedBridge } from "./guarded-bridge.js";
 import { McpError, ErrorCode } from "../core/errors.js";
-import { debug } from "../core/log.js";
+import { debug, info } from "../core/log.js";
+import { clientAdvertisesElicitation } from "../editor/dialog-mode.js";
+import { currentCallAsker } from "./call-elicit.js";
 import type { GuardDeclarations, GuardHook } from "./guard-schema.js";
 import {
   GUARD_CALL_KEY,
@@ -150,6 +152,76 @@ function refusalReason(r: HookResult): string {
   return r.error?.message ?? r.message ?? "no reason given";
 }
 
+/** The `_meta` key a guard override form carries its machine-readable fields under. */
+export const GUARD_OVERRIDE_META_KEY = "ue-mcp/guard";
+
+/** The answers an override form offers. */
+const ALLOW_ONCE = "allow";
+const ALLOW_SESSION = "allow_session";
+const DENY = "deny";
+
+/** `blueprint(create)` from `blueprint.create`, or the bridge method when no action is known. */
+function callLabel(subject: string | undefined, method: string): string {
+  const dot = subject ? subject.indexOf(".") : -1;
+  if (!subject || dot <= 0) return method;
+  return `${subject.slice(0, dot)}(${subject.slice(dot + 1)})`;
+}
+
+/**
+ * Put a denial to the person, for a guard declared with `allowsOverride`.
+ *
+ * Returns how the call was allowed, or null to keep the denial. Null covers
+ * every case without a clear yes: no caller to ask, a client that did not
+ * advertise elicitation, a decline, a cancel, or a form that failed.
+ */
+async function askOverride(
+  guardName: string,
+  cc: CallContext,
+  reason: string,
+  files: string[],
+): Promise<"once" | "session" | null> {
+  const asker = currentCallAsker();
+  const elicit = asker?.elicit;
+  if (!elicit || !clientAdvertisesElicitation(elicit)) return null;
+  const label = callLabel(asker?.subject, cc.method);
+  try {
+    const answer = await elicit({
+      message: `Guard ${guardName} blocked ${label}: ${reason}. Allow this call?`,
+      requestedSchema: {
+        type: "object",
+        properties: {
+          decision: {
+            type: "string",
+            title: "Decision",
+            enum: [ALLOW_ONCE, ALLOW_SESSION, DENY],
+            enumNames: ["Allow this call", "Allow for this session", "Deny"],
+            default: DENY,
+          },
+        },
+        required: ["decision"],
+      },
+      _meta: {
+        [GUARD_OVERRIDE_META_KEY]: {
+          guard: guardName,
+          method: cc.method,
+          ...(asker?.subject ? { subject: asker.subject } : {}),
+          call: label,
+          reason,
+          paths: files,
+        },
+      },
+    });
+    if (answer.action !== "accept") return null;
+    const decision = answer.content?.decision;
+    if (decision === ALLOW_ONCE) return "once";
+    if (decision === ALLOW_SESSION) return "session";
+    return null;
+  } catch (e) {
+    debug("guard", `override form for '${guardName}' on ${cc.method} failed: ${e instanceof Error ? e.message : String(e)}`);
+    return null;
+  }
+}
+
 /**
  * Resolve every declared hook up front.
  *
@@ -196,6 +268,10 @@ export async function buildGuards(
     if (decl.before) await assertResolvable(name, "before", decl.before, deps, source);
     if (decl.after) await assertResolvable(name, "after", decl.after, deps, source);
 
+    // Calls a person allowed past this guard for the rest of the session,
+    // keyed by what was asked for and the bridge method it reached.
+    const allowedForSession = new Set<string>();
+
     const guard: BridgeGuard = {
       name,
       order: decl.order,
@@ -224,10 +300,27 @@ export async function buildGuards(
               }
               if (answered?.success === false) {
                 const files = cc.writeFiles();
+                const reason = refusalReason(answered);
+                if (decl.allowsOverride) {
+                  // Only a deliberate denial can be overridden. A hook that
+                  // threw never decided, so there is nothing to put to anyone.
+                  const key = `${currentCallAsker()?.subject ?? ""}|${cc.method}`;
+                  if (allowedForSession.has(key)) return;
+                  const allowed = await askOverride(name, cc, reason, files);
+                  if (allowed) {
+                    if (allowed === "session") allowedForSession.add(key);
+                    info(
+                      "guard",
+                      `override: a person allowed ${cc.method} past guard '${name}'`
+                      + `${allowed === "session" ? " for this session" : ""}: ${reason}`,
+                    );
+                    return;
+                  }
+                }
                 const on = files.length > 0 ? ` on ${files.join(", ")}` : "";
                 throw new McpError(
                   ErrorCode.WRITE_BLOCKED,
-                  `blocked (${cc.method})${on}: ${refusalReason(answered)}`,
+                  `blocked (${cc.method})${on}: ${reason}`,
                 );
               }
             },

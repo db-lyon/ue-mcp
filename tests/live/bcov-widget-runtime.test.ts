@@ -93,6 +93,27 @@ describe("runtime widgets", () => {
     expect(find(t, "Btn_Focus")?.class).toBe("Button");
   }, 120_000);
 
+  it("find_object with world=pie finds the GameInstance-owned widget and the LocalPlayer subsystems (#1543)", async (ctx) => {
+    if (!playing || !instanceName) ctx.skip("no live instance");
+    const byName = await call("find_object", { nameContains: instanceName, world: "pie" });
+    const widget = (byName.matches as Json[]).find((m) => m.name === instanceName);
+    expect(widget?.class).toBe(`${NAME}_C`);
+    expect(String(widget?.outerPath)).toMatch(/GameInstance/);
+    expect(widget?.worldType).toBe("pie");
+    expect(widget?.world).toBe(byName.world);
+
+    const byClass = await call("find_object", { className: `${NAME}_C`, world: "pie" });
+    expect((byClass.matches as Json[]).map((m) => m.name)).toContain(instanceName);
+
+    const players = await call("find_object", { className: "LocalPlayer", world: "pie" });
+    expect(players.totalMatches as number).toBeGreaterThan(0);
+    const input = await call("find_object", { className: "EnhancedInputLocalPlayerSubsystem", world: "pie" });
+    expect(input.totalMatches as number).toBeGreaterThan(0);
+
+    const editorScoped = await call("find_object", { nameContains: instanceName, world: "editor" });
+    expect(editorScoped.totalMatches).toBe(0);
+  }, 60_000);
+
   it("get_runtime_delegates reads the live instance's multicast delegates", async (ctx) => {
     if (!playing || !instanceName) ctx.skip("no live instance");
     const delegates = await call("get_runtime_delegates", { widgetName: instanceName });

@@ -531,6 +531,20 @@ describe.concurrent("project commands", () => {
       expect(fs.existsSync(engine.log)).toBe(false);
     });
 
+    it("never runs npm install in the project folder (#1630)", async () => {
+      covers("cli.update");
+      const uproject = sb.makeProject("UpdateNoLocal");
+      const cwd = path.dirname(uproject);
+      const callsBefore = sb.npmCalls().length;
+      // Not under the global root and not in a node_modules: there is no npm prefix of its own.
+      const r = await cli(["update", "--no-build"], { cwd, env: { FAKE_NPM_LATEST: "99.0.0", FAKE_NPM_ROOT: sb.path("elsewhere") } });
+      expect(r.code).toBe(1);
+      expect(plain(r.stdout)).toContain("which npm did not install");
+      const calls = sb.npmCalls().slice(callsBefore).map((c) => c.args.join(" "));
+      expect(calls.filter((c) => c.startsWith("install"))).toEqual([]);
+      expect(fs.existsSync(path.join(cwd, "node_modules"))).toBe(false);
+    });
+
     it("stops at the deploy with --no-build and leaves the engine alone", async () => {
       covers("cli.update");
       const uproject = sb.makeProject("UpdateNoBuild");

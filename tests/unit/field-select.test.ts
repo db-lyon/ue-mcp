@@ -128,6 +128,16 @@ describe("takeFieldSelection", () => {
     expect(rest).toEqual({ action: "go" });
   });
 
+  it("reads a JSON-encoded list or quoted string as the paths it encodes (#1546)", () => {
+    const { selection } = takeFieldSelection({
+      select: '["components.name", "world"]',
+      omit: ['"actorLabel"', "['a.b']"],
+    });
+    expect(selection.select).toEqual(["components.name", "world"]);
+    expect(selection.omit).toEqual(["actorLabel", "a.b"]);
+    expect(takeFieldSelection({ select: "components[].name" }).selection.select).toEqual(["components[].name"]);
+  });
+
   it("splits a comma-joined string into separate paths (#1335)", () => {
     const { selection } = takeFieldSelection({
       select: "components.name, components.class",
@@ -160,6 +170,12 @@ describe("attachFieldReport", () => {
     expect(attachFieldReport(result, { result, notFound: [], applied: true })).toBe(result);
   });
 
+  it("lists the result's top-level keys beside an unmatched path (#1546)", () => {
+    const projection = projectResult({ saved: true, path: "/Game/Map" }, { select: ["levelPath"] });
+    const out = attachFieldReport(projection.result, projection) as Record<string, unknown>;
+    expect(out.fieldsNotFound).toMatchObject({ paths: ["levelPath"], available: ["saved", "path"] });
+  });
+
   it("names the paths that matched nothing", () => {
     const out = attachFieldReport({ a: 1 }, { result: { a: 1 }, notFound: ["b"], applied: true }) as Record<string, unknown>;
     expect((out.fieldsNotFound as { paths: string[] }).paths).toEqual(["b"]);
@@ -175,6 +191,11 @@ describe("dispatch integration", () => {
 
   it("applies a selection to a handler result", async () => {
     const out = await tool.handler(ctx, { action: "go", select: ["actorLabel"] });
+    expect(out).toEqual({ actorLabel: "BP_Player" });
+  });
+
+  it("applies a JSON-encoded selection the same as an array (#1546)", async () => {
+    const out = await tool.handler(ctx, { action: "go", select: '["actorLabel"]' });
     expect(out).toEqual({ actorLabel: "BP_Player" });
   });
 

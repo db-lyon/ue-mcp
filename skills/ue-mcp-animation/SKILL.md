@@ -42,6 +42,25 @@ bind-pose frame, the frame a physics body on that bone uses; `componentSpace`
 is the same set in the mesh's bind pose. Pass `boneNames` to limit the report,
 or `minWeight` to count a vertex for every bone weighing at least that much.
 
+To read many source vertices at once, for example a part before moving it with
+`transform_skinned_part`, call
+`asset(action="read_skeletal_mesh_vertices", assetPath=<mesh>, boneNames=[<bone>])`.
+Select by `boneNames` (with `includeChildBones` and `minWeight`), by a
+component-space `box`, or both. `include` adds `triangles`; page with
+`offset`/`limit`, or pass `dumpToFile=true` to write the whole selection to a
+file. Its `vertexIndex` values are the IDs the per-vertex weight read and
+setter take.
+
+To measure a mesh where it is drawn now (a glove against a steering wheel in
+PIE), call
+`level(action="get_skinned_vertices", actorLabel=<actor>, componentName=<component>, world="pie", space="world")`.
+It skins the component's drawn LOD with its current pose and active morph
+targets, and a leader-pose follower reads through its leader. Select with
+`boneNames`, `box`, or `nearPoint` with `radius`; page with
+`startIndex`/`limit` or `dumpToFile`. Its `vertexIndex` values are render
+vertex indices, not source IDs. Cloth simulation and mesh deformers are not
+applied.
+
 ## Required loop
 
 1. Call `project(action="get_status")`; verify the intended project and editor.

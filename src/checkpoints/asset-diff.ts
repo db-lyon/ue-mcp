@@ -5,17 +5,57 @@
  * produces them: FSingleObjectDiffEntry from DiffUtils::CompareUnrelatedObjects
  * with both values exported as text, FDiffSingleResult from
  * FGraphDiffControl::DiffGraphs with its DisplayString and ToolTip, and
- * FSCSDiffEntry from DiffUtils::CompareUnrelatedSCS. Facts about each version
+ * FSCSDiffEntry from DiffUtils::CompareUnrelatedSCS, and the Blueprint type's own
+ * FDiffSingleResults from UBlueprint::FindDiffs (a Widget Blueprint's widget
+ * tree, each paired widget compared property by property). Facts about each version
  * (LOD counts, texture size) are context beside them, never a diff of their own.
  *
  * Each version also gets a picture rendered with ThumbnailTools::RenderThumbnail
  * on the object loaded for diff, kept per blob id, so a version always has the
- * same picture.
+ * same picture. A level is drawn from the level itself, framed on the actors
+ * that changed, so its pictures are kept per pair (pictureId). A Blueprint changed only in its
+ * graphs is pictured by the changed graph instead, drawn for the pair.
  */
 import { unifiedDiff } from "./text-diff.js";
+import * as crypto from "node:crypto";
+import * as path from "node:path";
 
-/** Bumped when the bridge's records change shape, so cached diffs are recomputed. */
-export const ASSET_DIFF_FORMAT = 2;
+/** Bumped when the bridge's records or pictures change, so cached diffs are recomputed. */
+export const ASSET_DIFF_FORMAT = 5;
+
+/**
+ * Bumped when the bridge's pictures change, so a picture kept for a version is
+ * rendered again. 2: the bridge no longer writes a blank picture (a Blueprint
+ * loaded for diff is not compiled, so its renderer drew nothing but black).
+ * 3: an Actor Blueprint loaded for diff is drawn, rather than its saved thumbnail.
+ * 4: a level is drawn from the level, framed on the actors that changed.
+ */
+export const THUMBNAIL_FORMAT = 4;
+
+/** Where the picture (png) of a version, or what is known about it (json), is kept. */
+export function thumbnailFile(dir: string, version: string, ext: "png" | "json" = "png"): string {
+  return path.join(dir, `${version}.v${THUMBNAIL_FORMAT}.${ext}`);
+}
+
+/**
+ * The id one side's picture is kept under. Most pictures depend on the version
+ * alone, so they are kept per blob id. A level's picture is framed on the actors
+ * that changed between the two versions, so it is kept per pair and side.
+ */
+export function pictureId(packagePath: string, a: string | null, b: string | null, side: "before" | "after"): string | null {
+  const version = side === "before" ? a : b;
+  if (!version) return null;
+  if (!/\.umap$/i.test(packagePath)) return version;
+  return crypto.createHash("sha1").update(["level", a ?? "-", b ?? "-", side].join("\n")).digest("hex");
+}
+
+/**
+ * The id of a graph picture: one side of one diffed pair, since the region drawn
+ * depends on both versions. Forty hex digits, as the thumbnail route requires.
+ */
+export function graphPictureId(pairKey: string, side: "before" | "after"): string {
+  return crypto.createHash("sha1").update(`graph\n${pairKey}\n${side}`).digest("hex");
+}
 
 /** How many packages one list_changes diffs up front; the rest are diffed on request, per path. */
 export const MAX_ASSET_DIFFS = 25;
@@ -35,6 +75,8 @@ export interface AssetDiffRecord {
   hidden?: boolean;
   /** FPropertySoftPath::ToDisplayName of a property record. */
   path?: string;
+  /** The path as the details panel labels it: "Hide when Full" for bHideWhenFull. */
+  label?: string;
   property?: string;
   /** Both values exported with FProperty::ExportText; null where the path does not exist on that side. */
   before?: string | null;
@@ -99,6 +141,8 @@ export interface AssetDiffSection {
   entries: AssetDiffRecord[];
   /** How many of the records are under properties the details panel does not show (marked hidden). */
   hiddenChanges?: number;
+  /** The engine's INFO_MESSAGE results for the section, such as what a Widget Blueprint diff does not cover. */
+  notes?: string[];
 }
 
 export interface AssetFact {
@@ -107,7 +151,15 @@ export interface AssetFact {
 }
 
 export type AssetThumbnail =
-  | { id: string; url: string; source: "rendered" | "saved"; note?: string }
+  | {
+      id: string;
+      url: string;
+      /** rendered or saved: a picture of the asset. graph: the changed graph of a graph-only Blueprint change. */
+      source: "rendered" | "saved" | "graph";
+      note?: string;
+      /** The graph a graph picture shows. */
+      graph?: string;
+    }
   | { error: string };
 
 /** One version of the package, as the editor loaded it. */
@@ -116,6 +168,8 @@ export interface AssetVersion {
   objectName?: string;
   facts: AssetFact[];
   thumbnail?: AssetThumbnail;
+  /** The asset's own picture, kept here when thumbnail is the changed graph instead. */
+  classThumbnail?: AssetThumbnail;
 }
 
 export interface AssetDiff {
@@ -126,7 +180,15 @@ export interface AssetDiff {
   assetClass?: string;
   status?: "added" | "modified" | "deleted";
   /** Which of Unreal's diffs serves this class, and what these records are. */
-  engine?: { tool: string; note: string; native: "window" | "details" | "text"; nativeAvailable?: boolean; nativeReason?: string };
+  engine?: {
+    tool: string;
+    note: string;
+    native: "window" | "details" | "text";
+    nativeAvailable?: boolean;
+    nativeReason?: string;
+    /** A Blueprint: whether its type's own diff (UBlueprint::FindDiffs, a Widget Blueprint's widget tree) ran. Absent from bridges before it did. */
+    blueprintTypeDiff?: boolean;
+  };
   /** null: the version did not exist. */
   before?: AssetVersion | null;
   after?: AssetVersion | null;
@@ -159,9 +221,15 @@ function plural(n: number, one: string, many = `${one}s`): string {
   return `${n} ${n === 1 ? one : many}`;
 }
 
+/** A property record's name: its group, then the details panel's label for the path. */
+function recordName(r: AssetDiffRecord): string {
+  const name = r.label ?? r.path ?? r.displayString;
+  return r.group && r.group !== r.path && r.group !== name ? `${r.group} > ${name}` : name;
+}
+
 /** The record's own words, with the values when it has them. */
 export function describeRecord(r: AssetDiffRecord): string {
-  const label = r.path ? (r.group && r.group !== r.path ? `${r.group} ${r.path}` : r.path) : r.displayString;
+  const label = r.path ? recordName(r) : r.displayString;
   if (r.path && (r.before !== undefined || r.after !== undefined)) {
     if (r.diffType === "PropertyAddedToB") return `${label} added: ${short(r.after)}`;
     if (r.diffType === "PropertyAddedToA") return `${label} removed: ${short(r.before)}`;
@@ -205,6 +273,15 @@ export function summarizeAssetDiff(d: AssetDiff): string {
   }
   if (records.length === 0) {
     if (d.textDiff?.diff) return `${cls}: the engine's ${d.textDiff.format.toUpperCase()} export changed`;
+    if (!hidden && widgetTreeNotCompared(d)) return `${cls}: the file changed; this bridge does not compare the widget tree, so open Unreal's diff to see it`;
+    // No property differs, but a fact does (a sound's duration, a mesh's triangles): that is the change.
+    const before = new Map((d.before?.facts ?? []).map((f) => [f.name, f.value]));
+    const facts = (d.after?.facts ?? []).filter((f) => before.has(f.name) && before.get(f.name) !== f.value);
+    if (!hidden && facts.length) {
+      const shown = facts.slice(0, 2).map((f) => `${f.name}: ${short(before.get(f.name), 40)} to ${short(f.value, 40)}`);
+      const more = facts.length - shown.length;
+      return `${cls} changed. ${shown.join("; ")}${more > 0 ? `; and ${plural(more, "more fact")}` : ""}`;
+    }
     return hidden
       ? `${cls}: ${plural(hidden, "difference")}, all in properties the details panel does not show`
       : `${cls}: the file changed, and Unreal's diff finds no difference`;
@@ -217,7 +294,7 @@ export function summarizeAssetDiff(d: AssetDiff): string {
   const shown: string[] = [];
   for (const r of ordered) {
     const line = describeRecord(r);
-    const name = r.path ? (r.group && r.group !== r.path ? `${r.group} ${r.path}` : r.path) : line;
+    const name = r.path ? recordName(r) : line;
     if (shown.some((x) => x.startsWith(name))) continue;
     shown.push(line);
     if (shown.length === 2) break;
@@ -227,10 +304,32 @@ export function summarizeAssetDiff(d: AssetDiff): string {
   return `${plural(total, "difference")}: ${shown.join("; ")}${rest > 0 ? `; and ${rest} more` : ""}${hiddenNote}`;
 }
 
+/** A Widget Blueprint diffed by a bridge that does not run UBlueprint::FindDiffs, which is where its widget tree is compared. */
+export function widgetTreeNotCompared(d: Pick<AssetDiff, "assetClass" | "engine">): boolean {
+  return /WidgetBlueprint/.test(d.assetClass ?? "") && d.engine?.blueprintTypeDiff === undefined;
+}
+
 /** Whether Unreal's own diff view can open this item, and why not, as the bridge decided it. */
 export function nativeDiffOf(d: Pick<AssetDiff, "state" | "engine">): AssetDiff["nativeDiff"] {
   if (d.state !== "ready" || !d.engine) return { available: false, reason: "The asset has not been diffed." };
   return d.engine.nativeAvailable === false ? { available: false, reason: d.engine.nativeReason ?? "Unreal cannot open a diff of this type." } : { available: true };
+}
+
+/**
+ * The pictures of one version: the changed graph when the bridge drew one (a
+ * graph-only Blueprint change), with the asset's own picture kept beside it;
+ * otherwise the asset's picture, with the reason the graph could not be drawn.
+ */
+export function versionPictures(
+  thumbnail: AssetThumbnail | undefined,
+  graph: AssetThumbnail | undefined,
+): Pick<AssetVersion, "thumbnail" | "classThumbnail"> {
+  if (graph && "id" in graph) return { thumbnail: graph, ...(thumbnail ? { classThumbnail: thumbnail } : {}) };
+  if (!graph) return thumbnail ? { thumbnail } : {};
+  const why = `${graph.error.replace(/\.$/, "")}. The asset's own picture is shown, and a graph edit does not change it.`;
+  if (!thumbnail) return { thumbnail: { error: why } };
+  if ("error" in thumbnail) return { thumbnail: { error: `${thumbnail.error}; ${why}` } };
+  return { thumbnail: { ...thumbnail, note: thumbnail.note ? `${thumbnail.note}. ${why}` : why } };
 }
 
 /** The bridge's answer as an AssetDiff, with the CSV export turned into a unified diff and the pictures mapped to ids. */
@@ -238,17 +337,19 @@ export function assetDiffFromBridge(
   raw: Json,
   key: string,
   picture: (side: "before" | "after", thumb: Json | undefined) => AssetThumbnail | undefined,
+  graphPicture?: (side: "before" | "after", graph: Json) => AssetThumbnail | undefined,
 ): AssetDiff {
   const version = (side: "before" | "after"): AssetVersion | null => {
     const v = raw[side];
     if (!v || typeof v !== "object") return null;
     const o = v as Json;
     const thumbnail = picture(side, o.thumbnail as Json | undefined);
+    const graph = graphPicture && o.graphPicture && typeof o.graphPicture === "object" ? graphPicture(side, o.graphPicture as Json) : undefined;
     return {
       class: str(o.class) ?? "",
       ...(str(o.objectName) ? { objectName: str(o.objectName) } : {}),
       facts: Array.isArray(o.facts) ? (o.facts as AssetFact[]) : [],
-      ...(thumbnail ? { thumbnail } : {}),
+      ...versionPictures(thumbnail, graph),
     };
   };
   const d: AssetDiff = {

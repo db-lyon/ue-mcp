@@ -121,6 +121,11 @@ describe("classifyWrite", () => {
       sequencePath: "/Game/Edit/LS_A",
       outputAssetPath: "/Game/Edit/A_Result",
     }).contentPaths).toEqual(["/Game/Edit/A_Result"]);
+    expect(classifyWrite("bake_sequence_animation", {
+      sequencePath: "/Game/Edit/LS_A",
+      bindingName: "Hero",
+      outputAssetPath: "/Game/Edit/A_Baked",
+    }).contentPaths).toEqual(["/Game/Edit/A_Baked"]);
   });
 
   it("extracts the edited IK or retargeter asset, not referenced inputs", () => {

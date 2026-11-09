@@ -17,6 +17,7 @@
 #if WITH_DEV_AUTOMATION_TESTS
 
 #include "HandlerUtils.h"
+#include "HandlerLogCapture.h"
 #include "Tests/MCPScopedTestMount.h"
 
 #include "Engine/DataTable.h"
@@ -131,9 +132,6 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 
 bool FMCPAssetPathResolutionTest::RunTest(const FString& Parameters)
 {
-	// The miss below is deliberate, and the engine loader logs an Error for it.
-	// Count 0 means "must occur", so this stays honest if the miss stops.
-	AddExpectedError(TEXT("LoadAsset failed"), EAutomationExpectedErrorFlags::Contains, 0);
 
 	const FScopedAssetPathTestMount Mount;
 
@@ -361,6 +359,53 @@ bool FMCPAssetOnDiskResolutionTest::RunTest(const FString& Parameters)
 	TestNotNull(TEXT("as the DataTable that was written"), Cast<UDataTable>(FromDisk));
 
 	if (UPackage* Reloaded = FindPackage(nullptr, *PackageName)) Reloaded->SetDirtyFlag(false);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FMCPAssetFreePathProbeIsSilentTest,
+	"UE.MCP.Asset.PathResolution.AFreePathProbeLogsNothing",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMCPAssetFreePathProbeIsSilentTest::RunTest(const FString& Parameters)
+{
+	// #1479: a create probes its destination first, and that probe on a free
+	// path was the only error in the log for a clean create.
+	const FScopedAssetPathTestMount Mount;
+	const FString FreeName = TEXT("DA_Free_") + FGuid::NewGuid().ToString(EGuidFormats::Digits);
+	const FString FreePackage = FString(MCPAssetPathTestRoot) + FreeName;
+	const FString FreePackagePath = FString(MCPAssetPathTestRoot).LeftChop(1);
+
+	{
+		FMCPScopedLogCapture Capture(TArray<FString>{});
+		TestNull(TEXT("a free path resolves to nothing"), MCPLoadAssetObject(FreePackage));
+		TestNull(TEXT("a free object path resolves to nothing"),
+			MCPLoadAssetObject(FreePackage + TEXT(".") + FreeName));
+		TestFalse(TEXT("the create probe reports no existing asset"),
+			MCPCheckAssetExists(FreePackagePath, FreeName, TEXT("skip"), TEXT("DataAsset")).IsValid());
+		TestFalse(TEXT("no editor loader error was logged"), Capture.Contains(TEXT("LoadAsset failed")));
+		TestFalse(TEXT("no object loader warning was logged"), Capture.Contains(TEXT("Failed to find object")));
+	}
+
+	// The probe still sees an asset that exists only in memory.
+	const FString HeldName = TEXT("DT_Held_") + FGuid::NewGuid().ToString(EGuidFormats::Digits);
+	UPackage* Package = CreatePackage(*(FString(MCPAssetPathTestRoot) + HeldName));
+	TestNotNull(TEXT("probe package created"), Package);
+	if (!Package) return false;
+	UDataTable* Held = NewObject<UDataTable>(Package, FName(*HeldName), RF_Public | RF_Standalone);
+	TestNotNull(TEXT("probe asset created"), Held);
+	if (Held)
+	{
+		Held->RowStruct = FTableRowBase::StaticStruct();
+		const TSharedPtr<FJsonValue> Existed = MCPCheckAssetExists(FreePackagePath, HeldName, TEXT("skip"), TEXT("DataTable"));
+		TestTrue(TEXT("an in-memory asset is reported as existing"), Existed.IsValid() && ErrorSucceeded(Existed));
+		TestEqual(TEXT("the existing asset is named by its object path"),
+			ErrorField(Existed, TEXT("path")), Held->GetPathName());
+		const TSharedPtr<FJsonValue> Refused = MCPCheckAssetExists(FreePackagePath, HeldName, TEXT("error"), TEXT("DataTable"));
+		TestTrue(TEXT("onConflict=error refuses an in-memory asset"), Refused.IsValid() && !ErrorSucceeded(Refused));
+		Held->ClearFlags(RF_Standalone);
+	}
+	Package->SetDirtyFlag(false);
 	return true;
 }
 

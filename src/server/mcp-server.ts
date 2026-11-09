@@ -24,6 +24,7 @@ import {
   type ToolResult,
 } from "../dispatch/server-dispatch.js";
 import type { Runtime } from "./runtime.js";
+import type { SessionAccess } from "../flow/session-access.js";
 
 export interface RuntimeServer {
   server: McpServer;
@@ -59,7 +60,16 @@ export function advertisesFlowTool(strategy: ContextStrategy): boolean {
   return strategy !== "micro";
 }
 
-export function createMcpServer(rt: Runtime): RuntimeServer {
+export interface McpServerOptions {
+  /**
+   * This client's access mode, read on every call. The daemon holds one per
+   * connection so it can switch a session to read-only (#1484). Absent is
+   * read-write.
+   */
+  access?: SessionAccess;
+}
+
+export function createMcpServer(rt: Runtime, opts: McpServerOptions = {}): RuntimeServer {
   const { sessions, loads, contextStrategy } = rt;
 
   const server = new McpServer({
@@ -92,6 +102,7 @@ export function createMcpServer(rt: Runtime): RuntimeServer {
     // An MCP session's playtest runs follow `ue-mcp playtest mode`.
     gatePlaytest: true,
     flow: { tool: rt.flowTool, ctx: rt.baseCtx },
+    ...(opts.access ? { access: () => opts.access!.mode } : {}),
   };
 
   // The upgrade notice leads this client's first tool response.

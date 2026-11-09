@@ -6,6 +6,7 @@
 #if WITH_DEV_AUTOMATION_TESTS
 
 #include "Handlers/PIE/PIEScriptRunner.h"
+#include "Handlers/PIE/PIEObserver.h"
 #include "Dom/JsonObject.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
@@ -75,6 +76,9 @@ bool FPIEScriptEvaluatorTest::RunTest(const FString& /*Parameters*/)
 	TestFalse(TEXT("decreasing: equal does not hold"), EvaluateScriptCondition(MakeExpect(EScriptExpectOp::Decreasing, TEXT("H")), 100.0, 100.0));
 	TestTrue(TEXT("increasing: higher holds"), EvaluateScriptCondition(MakeExpect(EScriptExpectOp::Increasing, TEXT("H")), 1.0, 2.0));
 	TestFalse(TEXT("increasing: lower does not hold"), EvaluateScriptCondition(MakeExpect(EScriptExpectOp::Increasing, TEXT("H")), 1.0, 0.5));
+	TestTrue(TEXT("decreasing by at least 300: 320 holds"), EvaluateScriptCondition(MakeExpect(EScriptExpectOp::Decreasing, TEXT("X"), true, 300.0), -1000.0, -1320.0));
+	TestFalse(TEXT("decreasing by at least 300: 200 does not"), EvaluateScriptCondition(MakeExpect(EScriptExpectOp::Decreasing, TEXT("X"), true, 300.0), -1000.0, -1200.0));
+	TestTrue(TEXT("increasing by at least 2: exactly 2 holds"), EvaluateScriptCondition(MakeExpect(EScriptExpectOp::Increasing, TEXT("H"), true, 2.0), 1.0, 3.0));
 
 	const FScriptExpect Eq = MakeExpect(EScriptExpectOp::Eq, TEXT("H"), true, 1000.0);
 	TestTrue(TEXT("eq: within relative epsilon"), EvaluateScriptCondition(Eq, 0.0, 1000.05));
@@ -132,7 +136,9 @@ bool FPIEScriptStepParsingTest::RunTest(const FString& /*Parameters*/)
 	TestTrue(TEXT("missing value error"), Err.Contains(TEXT("value")));
 	TestFalse(TEXT("eq needs target"), Parse(TEXT("{\"instruction\":\"x\",\"expect\":{\"value\":\"H\",\"op\":\"eq\"}}"), Def, Err));
 	TestTrue(TEXT("target error"), Err.Contains(TEXT("target")));
-	TestFalse(TEXT("relative op takes no target"), Parse(TEXT("{\"instruction\":\"x\",\"expect\":{\"value\":\"H\",\"op\":\"increasing\",\"target\":1}}"), Def, Err));
+	TestTrue(TEXT("relative op takes a least-change target"), Parse(TEXT("{\"instruction\":\"x\",\"expect\":{\"value\":\"H\",\"op\":\"increasing\",\"target\":1}}"), Def, Err));
+	TestFalse(TEXT("relative op refuses a zero target"), Parse(TEXT("{\"instruction\":\"x\",\"expect\":{\"value\":\"H\",\"op\":\"decreasing\",\"target\":0}}"), Def, Err));
+	TestFalse(TEXT("relative op refuses a boolean target"), Parse(TEXT("{\"instruction\":\"x\",\"expect\":{\"value\":\"H\",\"op\":\"decreasing\",\"target\":true}}"), Def, Err));
 	TestFalse(TEXT("manual with expect refused"), Parse(TEXT("{\"instruction\":\"x\",\"judge\":\"manual\",\"expect\":{\"value\":\"H\",\"op\":\"gt\",\"target\":1}}"), Def, Err));
 	TestFalse(TEXT("bad judge refused"), Parse(TEXT("{\"instruction\":\"x\",\"judge\":\"robot\"}"), Def, Err));
 	TestFalse(TEXT("missing instruction refused"), Parse(TEXT("{\"judge\":\"auto\"}"), Def, Err));
@@ -814,6 +820,33 @@ bool FPIEScriptArrangeActManualTest::RunTest(const FString& /*Parameters*/)
 	SettleUnfinishedScriptSteps(Stopped, TEXT("stopped"));
 	TestTrue(TEXT("act failed on stop"), Stopped.Steps[0].Act.State == EScriptActState::Failed);
 	TestTrue(TEXT("step failed on stop"), Stopped.Steps[0].Status == EScriptStepStatus::Failed);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FPIEScriptPawnChannelTest,
+	"UE.MCP.PIE.Script.PawnChannels",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FPIEScriptPawnChannelTest::RunTest(const FString& /*Parameters*/)
+{
+	using namespace MCPPIE;
+	FCSVRow Row;
+	Row.PawnLocation = FVector(-1326.8, 20.0, 90.0);
+	Row.PawnVelocity = FVector(375.0, 0.0, -10.0);
+	Row.PawnRotation = FRotator(0.0, 45.0, 0.0);
+	Row.Speed2D = 375.f;
+	double V = 0.0;
+	TestTrue(TEXT("pos_x reads"), ReadPawnChannel(Row, TEXT("pos_x"), V));
+	TestEqual(TEXT("pos_x value"), V, -1326.8);
+	TestTrue(TEXT("case-insensitive"), ReadPawnChannel(Row, TEXT("VEL_Z"), V));
+	TestEqual(TEXT("vel_z value"), V, -10.0);
+	TestTrue(TEXT("rot_yaw reads"), ReadPawnChannel(Row, TEXT("rot_yaw"), V));
+	TestEqual(TEXT("rot_yaw value"), V, 45.0);
+	TestTrue(TEXT("speed2d reads"), ReadPawnChannel(Row, TEXT("speed2d"), V));
+	TestFalse(TEXT("an unknown name is not a channel"), ReadPawnChannel(Row, TEXT("Health"), V));
+	TestTrue(TEXT("pos_z is a channel name"), IsPawnChannelName(TEXT("pos_z")));
+	TestFalse(TEXT("x alone is not"), IsPawnChannelName(TEXT("x")));
 	return true;
 }
 

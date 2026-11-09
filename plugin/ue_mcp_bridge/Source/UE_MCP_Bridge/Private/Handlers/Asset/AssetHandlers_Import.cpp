@@ -4385,11 +4385,8 @@ TSharedPtr<FJsonValue> FAssetHandlers::ExportAsset(const TSharedPtr<FJsonObject>
 	// working directory, which is the engine's binaries folder: not somewhere a
 	// caller can predict, and it would put the existence probe below and the
 	// file the exporter actually writes in two different places.
-	FString AbsOutputPath = OutputPath;
-	if (FPaths::IsRelative(AbsOutputPath))
-	{
-		AbsOutputPath = FPaths::Combine(FPaths::ProjectDir(), AbsOutputPath);
-	}
+	FString AbsOutputPath;
+	if (auto Err = MCPRequireWritablePath(OutputPath, AbsOutputPath)) return Err;
 
 	// CompositeDataTable derives from DataTable; its merged rows use the same
 	// serializers. Neither table class needs a registered UExporter.
@@ -4536,8 +4533,8 @@ TSharedPtr<FJsonValue> FAssetHandlers::ExportTexture(const TSharedPtr<FJsonObjec
 	UTexture2D* Texture = LoadAssetByPath<UTexture2D>(AssetPath);
 	if (!Texture) return MCPAssetLoadError(AssetPath, TEXT("Texture2D"));
 
-	FString AbsPath = OutputPath;
-	if (FPaths::IsRelative(AbsPath)) AbsPath = FPaths::Combine(FPaths::ProjectDir(), AbsPath);
+	FString AbsPath;
+	if (auto Err = MCPRequireWritablePath(OutputPath, AbsPath)) return Err;
 	if (!AbsPath.EndsWith(TEXT(".png"))) AbsPath += TEXT(".png");
 	// Same reason as export_asset: bReplaceIdentical is true below, so this
 	// distinguishes writing a new PNG from overwriting one that was there.
@@ -4560,8 +4557,12 @@ TSharedPtr<FJsonValue> FAssetHandlers::ExportTexture(const TSharedPtr<FJsonObjec
 	Result->SetBoolField(TEXT("overwroteExistingFile"), bOutputExisted);
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetStringField(TEXT("path"), AbsPath);
-	Result->SetNumberField(TEXT("width"), Texture->GetSizeX());
-	Result->SetNumberField(TEXT("height"), Texture->GetSizeY());
+	// The exporter writes source mip 0, so report that size. Platform data reads
+	// as the 32 x 32 placeholder while the texture is still compiling (#1550).
+	const bool bFromSource = Texture->Source.IsValid();
+	if (!bFromSource) FTextureCompilingManager::Get().FinishCompilation({ Texture });
+	Result->SetNumberField(TEXT("width"), bFromSource ? Texture->Source.GetSizeX() : Texture->GetSizeX());
+	Result->SetNumberField(TEXT("height"), bFromSource ? Texture->Source.GetSizeY() : Texture->GetSizeY());
 	Result->SetNumberField(TEXT("sizeBytes"), (double)Size);
 	Result->SetBoolField(TEXT("rollbackPossible"), false);
 	Result->SetStringField(TEXT("rollbackNote"),
@@ -4583,6 +4584,8 @@ TSharedPtr<FJsonValue> FAssetHandlers::CompareTextures(const TSharedPtr<FJsonObj
 	UTexture2D* B = LoadAssetByPath<UTexture2D>(PathB);
 	if (!A) return MCPAssetLoadError(PathA, TEXT("Texture2D"));
 	if (!B) return MCPAssetLoadError(PathB, TEXT("Texture2D"));
+	// A texture still compiling reads as the 32 x 32 placeholder (#1550).
+	FTextureCompilingManager::Get().FinishCompilation({ A, B });
 
 	const bool bSameDims = A->GetSizeX() == B->GetSizeX() && A->GetSizeY() == B->GetSizeY();
 	const bool bSameFormat = A->GetPixelFormat() == B->GetPixelFormat();

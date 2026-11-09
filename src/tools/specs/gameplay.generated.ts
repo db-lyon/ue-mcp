@@ -758,6 +758,18 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "string",
         "required": false,
         "description": "Full object path of the pathfinding context actor; alternative to pathfindingContext"
+      },
+      {
+        "name": "world",
+        "type": "string",
+        "required": false,
+        "description": "editor (default) | pie | game | auto; pie queries the running session's navmesh, including after a level change"
+      },
+      {
+        "name": "pieInstance",
+        "type": "number",
+        "required": false,
+        "description": "PIE instance id; omitted selects the active PIE world"
       }
     ]
   },
@@ -2637,7 +2649,7 @@ export const paramsClauses: Readonly<Record<string, string>> = {
   create_player_state: "Params: name, packagePath?, parentClass?",
   create_smart_object_definition: "Params: name, packagePath?, onConflict?, defaultBehaviorClass?, instanceProperties?",
   create_state_tree: "Params: name, packagePath?, onConflict?, schema?",
-  find_nav_path: "Params: start, end, pathfindingContext?, pathfindingContextPath?",
+  find_nav_path: "Params: start, end, pathfindingContext?, pathfindingContextPath?, world?, pieInstance?",
   get_action_value: "Params: inputActionPath?, pieInstance?, playerIndex?",
   get_behavior_tree_info: "Params: assetPath (or path)",
   get_bt_runtime: "Params: actorLabel?, actorPath?, world?, pieInstance?, includeAuxNodes?, includeDebugStrings?",
@@ -2787,7 +2799,7 @@ export const schema: Record<string, z.ZodType> = {
   pathfindingContextPath: z.string().optional().describe("Full object path of the pathfinding context actor; alternative to pathfindingContext"),
   perceiverLabel: z.string().optional().describe("The actor doing the perceiving"),
   perceiverPath: z.string().optional().describe("Full object path of the perceiver"),
-  pieInstance: z.number().optional().describe("PIE world instance (0 = server/primary); omit for the first running one (apply_mapping_context, get_action_value, remove_mapping_context). PIE world instance (0 = server/primary); omit for the primary world (check_perception, get_bt_runtime, get_live_blackboard, get_perceived_actors, list_ai_agents, read_perception, report_noise_event, run_behavior_tree, set_live_blackboard, stop_behavior_tree). PIE world instance (0 = server/primary); omit for every running PIE world (get_input_mapping_contexts). PIE world instance (0 = server/primary) (get_state_tree_runtime). PIE world instance when world is pie or auto (query_zone_graph, run_eqs_query)"),
+  pieInstance: z.number().optional().describe("PIE world instance (0 = server/primary); omit for the first running one (apply_mapping_context, get_action_value, remove_mapping_context). PIE world instance (0 = server/primary); omit for the primary world (check_perception, get_bt_runtime, get_live_blackboard, get_perceived_actors, list_ai_agents, read_perception, report_noise_event, run_behavior_tree, set_live_blackboard, stop_behavior_tree). PIE instance id; omitted selects the active PIE world (find_nav_path). PIE world instance (0 = server/primary); omit for every running PIE world (get_input_mapping_contexts). PIE world instance (0 = server/primary) (get_state_tree_runtime). PIE world instance when world is pie or auto (query_zone_graph, run_eqs_query)"),
   playerIndex: z.number().optional().describe("Local player to act on (default 0) (apply_mapping_context, remove_mapping_context). Local player to read (default 0) (get_action_value). Player index; omit for every player (get_input_mapping_contexts)"),
   playerMappableKeySettings: z.record(z.string(), z.unknown()).nullable().optional().describe("Per-mapping reflected settings fields; null clears the override subobject"),
   priority: z.number().optional().describe("Enhanced Input context priority; higher wins for the same key (default 0)"),
@@ -2827,7 +2839,7 @@ export const schema: Record<string, z.ZodType> = {
   value: z.unknown().optional().describe("Value for property: scalar, object, array, class path, or null to clear a reference (set_bt_node_property, set_bt_task_property). Value to write, typed to the key; required unless clear is true (set_live_blackboard)"),
   valueType: z.string().optional().describe("Boolean (default) | Axis1D | Axis2D | Axis3D; an unrecognised type leaves the default"),
   verbosity: z.string().optional().describe("onlyValue | keyWithValue | detailed (default) | full"),
-  world: z.string().optional().describe("World scope: auto (default) | pie | editor (check_perception, get_bt_runtime, get_live_blackboard, get_perceived_actors, list_ai_agents, read_perception, report_noise_event, run_behavior_tree, set_live_blackboard, stop_behavior_tree). pie (default) | editor | auto (get_state_tree_runtime). editor | pie | auto (default editor) (query_zone_graph). auto | pie | editor (default auto) (run_eqs_query)"),
+  world: z.string().optional().describe("World scope: auto (default) | pie | editor (check_perception, get_bt_runtime, get_live_blackboard, get_perceived_actors, list_ai_agents, read_perception, report_noise_event, run_behavior_tree, set_live_blackboard, stop_behavior_tree). editor (default) | pie | game | auto; pie queries the running session's navmesh, including after a level change (find_nav_path). pie (default) | editor | auto (get_state_tree_runtime). editor | pie | auto (default editor) (query_zone_graph). auto | pie | editor (default auto) (run_eqs_query)"),
 };
 
 /** Declare an action for a spec'd bridge method: effect, summary, method. */

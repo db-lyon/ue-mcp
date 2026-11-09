@@ -77,10 +77,25 @@ afterAll(async () => {
 describe("a running PIE session", () => {
   let playing = false;
 
+  let started: Json = {};
+  let configuredMode: unknown;
+
   beforeAll(async () => {
-    await call("pie_control", { pieAction: "start" });
+    configuredMode = (await call("get_pie_config", {})).playMode;
+    started = await call("pie_control", { pieAction: "start" });
     playing = await waitForPie(true);
   }, 120_000);
+
+  it("pie_control start plays where the editor's play mode says, not in a forced new window (#1526)", () => {
+    expect(started.playModeRequested).toBe(configuredMode);
+    if (configuredMode === "viewport") {
+      // The engine opens a new window only when no level viewport is visible, and says so.
+      expect(["viewport", "new_window"]).toContain(started.playMode);
+      if (started.playMode === "new_window") expect(String(started.playModeNote)).toContain("viewport");
+    } else {
+      expect(started.playMode).toBe(configuredMode);
+    }
+  });
 
   afterAll(async () => {
     try {
@@ -166,6 +181,19 @@ describe("a running PIE session", () => {
       at = vec(((await charRow())!.values as Json).K2_GetActorLocation);
     }
     expect(Math.hypot(at.x - dest.x, at.y - dest.y, at.z - dest.z)).toBeLessThan(25);
+  }, 60_000);
+
+  it("teleport_runtime_actor with sweep stops the Character on the floor and reports the hit (#1449)", async (ctx) => {
+    if (!playing) ctx.skip("PIE did not start");
+    await call("teleport_runtime_actor", { actorLabel: CHAR, location: { x: HOME.x, y: HOME.y, z: HOME.z + 600 } });
+    const below = { x: HOME.x, y: HOME.y, z: HOME.z - 500 };
+    const swept = await call("teleport_runtime_actor", { actorLabel: CHAR, location: below, sweep: true });
+    expect(swept.blocked).toBe(true);
+    const hit = swept.hit as Json;
+    expect(hit.actorLabel).toBe(FLOOR);
+    // The floor's top is at z 25; the capsule stops resting on it, never through it.
+    expect(vec(swept.actualLocation).z).toBeGreaterThan(HOME.z + 25);
+    expect(Math.abs(vec(hit.impactPoint).z - (HOME.z + 25))).toBeLessThan(2);
   }, 60_000);
 });
 

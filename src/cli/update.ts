@@ -1,4 +1,5 @@
-import { execFileSync, execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
+import { PLAIN_SEMVER_RE, runNpmSync } from "../core/safe-spawn.js";
 import * as fs from "node:fs";
 
 import * as path from "node:path";
@@ -13,26 +14,78 @@ import { findUProject, isUProjectPath } from "../config/uproject-path.js";
 import { installKindOf, installedBridge, resolvePluginDir } from "../editor/install-marker.js";
 import { applyUpdate, newerBridgeMessage, repinClientConfigs } from "../editor/bridge-update.js";
 import { recordPendingBuild } from "../editor/pending-build.js";
-import { RESET, BOLD, RED, DIM, CYAN, YELLOW, ok, fail, info as step } from "./ui/ansi.js";
+import { RESET, BOLD, RED, CYAN, YELLOW, ok, fail, info as step } from "./ui/ansi.js";
 import type { CliUsage } from "./cli-main.js";
 
 /** The version behind the `latest` dist-tag, which is the stable line. */
 function getLatestVersion(): string | null {
+  return latestFromNpmView(npmText(["view", "ue-mcp", "version"]));
+}
+
+/** npm's answer, used only when it is a version number, since it becomes an install argument. */
+export function latestFromNpmView(out: string | null): string | null {
+  const v = out?.trim().split(/\r?\n/).pop()?.trim();
+  return v && PLAIN_SEMVER_RE.test(v) ? v : null;
+}
+
+/** npm's stdout, or null when it did not run cleanly. */
+function npmText(args: string[]): string | null {
+  const r = runNpmSync(args, { encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] });
+  return r.status === 0 ? String(r.stdout ?? "").trim() : null;
+}
+
+/** Run npm with the terminal attached; true when it exited cleanly. */
+function npmInherit(args: string[], cwd?: string): boolean {
+  return runNpmSync(args, { stdio: "inherit", cwd }).status === 0;
+}
+
+function npmGlobalRoot(): string | null {
   try {
-    return execSync("npm view ue-mcp version", { windowsHide: true, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] }).trim();
+    return npmText(["root", "-g"]);
   } catch {
     return null;
   }
 }
 
-function isGlobalInstall(): boolean {
-  try {
-    const globalRoot = execSync("npm root -g", { windowsHide: true, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] }).trim();
-    const norm = (p: string) => path.resolve(p).toLowerCase();
-    return norm(packageRoot()).startsWith(norm(globalRoot));
-  } catch {
-    return false;
+/** Whether `child` is `parent` or sits under it, case-insensitively. */
+function within(child: string, parent: string): boolean {
+  const rel = path.relative(path.resolve(parent).toLowerCase(), path.resolve(child).toLowerCase());
+  return rel === "" || (!rel.startsWith("..") && !path.isAbsolute(rel));
+}
+
+export type PackageInstall =
+  | { kind: "global"; command: string; args: string[] }
+  | { kind: "prefix"; command: string; args: string[]; cwd: string }
+  | { kind: "refuse"; reason: string };
+
+/**
+ * How to move the package this CLI runs from to `version`. The install goes to
+ * the place that package already lives: the npm global root, or the npm prefix
+ * that owns it (an npx cache). It never goes into the project or the working
+ * directory, where it would create the node_modules/ue-mcp copy that shadows
+ * every later launch (#1630).
+ */
+export function resolvePackageInstall(opts: {
+  packageRoot: string;
+  globalRoot: string | null;
+  version: string;
+  /** Folders an install must never land in: the cwd and the project's. */
+  protectedDirs: string[];
+}): PackageInstall {
+  const { packageRoot: root, globalRoot, version } = opts;
+  if (globalRoot && within(root, globalRoot)) return { kind: "global", command: `npm install -g ue-mcp@${version}`, args: ["install", "-g", `ue-mcp@${version}`] };
+  const parent = path.dirname(root);
+  if (path.basename(parent).toLowerCase() !== "node_modules") {
+    return { kind: "refuse", reason: `ue-mcp runs from ${root}, which npm did not install. Update that checkout yourself.` };
   }
+  const prefix = path.dirname(parent);
+  if (opts.protectedDirs.some((dir) => within(dir, prefix))) {
+    return {
+      kind: "refuse",
+      reason: `ue-mcp runs from a project-local copy (${root}). Remove it with \`npm uninstall ue-mcp\` in ${prefix}, then use \`npm install -g ue-mcp@${version}\` or launch with \`${UE_MCP_LAUNCH}\`.`,
+    };
+  }
+  return { kind: "prefix", command: `npm install ue-mcp@${version}`, args: ["install", `ue-mcp@${version}`], cwd: prefix };
 }
 
 /** The .uproject an argument names (file or directory), else the one in cwd. */
@@ -178,34 +231,35 @@ async function update(argv: string[]) {
   } else {
     console.log(`  ${YELLOW}Updating ue-mcp ${installed} -> ${wanted}...${RESET}`);
     console.log("");
-    const cmd = isGlobalInstall() ? `npm install -g ue-mcp@${wanted}` : `npm install ue-mcp@${wanted}`;
-    try {
-      execSync(cmd, { windowsHide: true, stdio: "inherit" });
+    const plan = resolvePackageInstall({
+      packageRoot: packageRoot(),
+      globalRoot: npmGlobalRoot(),
+      version: wanted,
+      protectedDirs: [process.cwd(), ...(uproject ? [path.dirname(uproject)] : [])],
+    });
+    if (plan.kind === "refuse") {
+      fail(plan.reason);
+      process.exit(1);
+    }
+    if (npmInherit(plan.args, plan.kind === "prefix" ? plan.cwd : undefined)) {
       console.log("");
       ok(`Updated to ${wanted}`);
-    } catch {
+    } else {
       console.log("");
-      fail(`npm install failed. Try manually: ${cmd}`);
+      fail(`npm install failed. Try manually: ${plan.command}${plan.kind === "prefix" ? ` (in ${plan.cwd})` : ""}`);
       process.exit(1);
     }
   }
 
-  // 2. Detect a project-local node_modules/ue-mcp that would shadow the global
-  //    install (npx prefers it). If it differs, align it to the version this
-  //    install ended on so the server actually runs that version. (#550)
+  // 2. A project-local node_modules/ue-mcp shadows every other install (npx
+  //    prefers it). Say how to remove it; update never installs into the
+  //    project, since that is how the copy got there (#550, #1630).
   const preDoctor = collectDoctor(projectArg);
   if (preDoctor.localShadow && preDoctor.localShadow.version !== aligned) {
     const shadowProjectRoot = path.dirname(path.dirname(preDoctor.localShadow.dir));
     console.log("");
-    console.log(`  ${YELLOW}Local shadow detected: node_modules/ue-mcp@${preDoctor.localShadow.version} (npx runs this, not the global).${RESET}`);
-    step(`Aligning the local copy to ${aligned} in ${shadowProjectRoot}...`);
-    try {
-      execSync(`npm install ue-mcp@${aligned}`, { windowsHide: true, stdio: "inherit", cwd: shadowProjectRoot });
-      ok(`Local copy aligned to ${aligned}`);
-      console.log(`  ${DIM}Cleaner long-term: drop ue-mcp from this project's package.json and pin .mcp.json to \`${UE_MCP_LAUNCH}\`.${RESET}`);
-    } catch {
-      fail(`Could not update the local copy. Remove node_modules/ue-mcp manually, or pin .mcp.json to \`${UE_MCP_LAUNCH}\`.`);
-    }
+    fail(`Local shadow: node_modules/ue-mcp@${preDoctor.localShadow.version} in ${shadowProjectRoot}. npx runs it, not ${aligned}.`);
+    step(`Remove it with \`npm uninstall ue-mcp\` in that folder, and pin .mcp.json to \`${UE_MCP_LAUNCH}\`.`);
   }
 
   // 3. A binary install gets binaries for the new version, never source, and

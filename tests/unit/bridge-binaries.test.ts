@@ -70,6 +70,13 @@ describe("installBinaryPlugin", () => {
     expect(fs.readdirSync(path.dirname(pluginDir))).toEqual(["UE_MCP_Bridge"]);
   });
 
+  it("installs into a fresh project with no Plugins/ folder and leaves only the plugin there", async () => {
+    const uproject = fixture.makeProject("Fresh", { engine: "5.7" });
+    const pluginDir = path.join(path.dirname(uproject), "Plugins", "UE_MCP_Bridge");
+    await installBinaryPlugin(pluginDir, target, { kind: "dir", path: prebuilt(path.join(fixture.root, "src")) });
+    expect(fs.readdirSync(path.dirname(pluginDir))).toEqual(["UE_MCP_Bridge"]);
+  });
+
   it("refuses binaries built for another platform and leaves the target alone", async () => {
     const pluginDir = path.join(fixture.root, "Proj", "Plugins", "UE_MCP_Bridge");
     fs.mkdirSync(pluginDir, { recursive: true });

@@ -36,7 +36,7 @@
  */
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { debug, warn } from "../core/log.js";
 import { readEngineRootFromLog } from "./engine-observer.js";
 import { readEnv } from "../core/env.js";
@@ -612,16 +612,24 @@ function findEngineInstall(
   return findLauncherEngine(normalizedAssociation);
 }
 
+/**
+ * The `reg query` argv that reads a registered engine build, or null for an
+ * association that is not a GUID. It runs without a shell, and only a GUID
+ * ever reaches it.
+ */
+export function registryQueryArgs(guid: string): string[] | null {
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(guid)) return null;
+  return ["query", "HKCU\\SOFTWARE\\Epic Games\\Unreal Engine\\Builds", "/v", guid];
+}
+
 function findEngineByGuid(guid: string): string | null {
-  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(guid)) {
+  const args = registryQueryArgs(guid);
+  if (!args) {
     debug("engine-root", `refusing registry lookup for non-GUID engine association '${guid}'`);
     return null;
   }
   try {
-    const output = execSync(
-      `reg query "HKCU\\SOFTWARE\\Epic Games\\Unreal Engine\\Builds" /v "${guid}"`,
-      { windowsHide: true, stdio: "pipe", encoding: "utf-8" },
-    );
+    const output = execFileSync("reg", args, { windowsHide: true, stdio: "pipe", encoding: "utf-8" });
     const match = output.match(/REG_SZ\s+(.+)/);
     if (match) {
       const p = match[1].trim();

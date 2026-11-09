@@ -2,6 +2,10 @@
 
 The `pie` tool records, replays and observes Play-In-Editor sessions, drives input on any player, runs multiplayer acceptance scenarios and turns a recording into a test that verifies a fix. It is built into ue-mcp. Starting PIE itself is `editor(play_in_editor)`.
 
+## Where PIE plays
+
+Every PIE launch the bridge makes (`editor(play_in_editor)`, `replay_run`, `test_run`, script runs, acceptance runs and the PIE Studio panel buttons) plays where the editor's Play button would: the play mode last chosen in the Play menu, which is the active level viewport by default. `editor(configure_pie, playMode=viewport|new_window|standalone)` changes it for the Play button and the bridge alike, and `editor(get_pie_config)` reads it. With no visible level viewport the engine opens a new window instead. Standalone runs the game as a separate process with no PIE world in the editor, so actions that drive the PIE world play in the viewport when it is set. Each launch reports `playMode`, `playModeRequested` and, when they differ, `playModeNote`.
+
 For step-by-step test scripts with automatic and manual verdicts, see [Test scripts](pie-scripts.md).
 
 Three systems run independently and can all run in the same PIE session:
@@ -19,7 +23,7 @@ Stock Unreal is not deterministic. Chaos physics does not reproduce across runs,
 - The durable reproduction unit is a reproduction test (`test_scaffold`, `test_run`), not a recording.
 - `fixed_timestep=true` on replay uses a fixed `1/pin_fps` delta. Runs become more reproducible, not fully deterministic.
 
-What replay holds constant: the same Enhanced Input values at the same frame numbers, the same `t.MaxFPS` pin, the same `FMath::RandInit(seed)`, and CPU throttling suppressed for the session. What it does not: particles, Niagara, behavior trees, physics, and anything with its own `FRandomStream` or wall-clock time. `drift.json` reports how far a run diverged as numbers.
+What replay holds constant: the same Enhanced Input values at the same times, the same `t.MaxFPS` pin (restored when the session ends), the same `FMath::RandInit(seed)`, and CPU throttling suppressed for the session. What it does not: particles, Niagara, behavior trees, physics, and anything with its own `FRandomStream` or wall-clock time. `drift.json` reports how far a run diverged as numbers.
 
 ## Editor UI
 
@@ -74,6 +78,22 @@ pie(action="record_read", id="some-recording", file="drift")
 
 ## Actions
 
+### Live view and collision
+
+| Action | Purpose |
+|--------|---------|
+| `view_trace` | Read the selected player's live view, line trace from it and optionally sphere sweep; report hit collision settings |
+
+```text
+pie(action="view_trace", distance=3000, channel="Visibility", sweepRadius=20)
+level(action="query_components", world="pie", actorLabelContains="Cable", componentClass="BoxComponent", includeCollision=true, collisionChannel="Visibility")
+```
+
+`view_trace` uses the player controller's `GetPlayerViewPoint`, so it follows the live camera. `playerIndex` defaults to 0 within the selected world; `pieInstance` selects an exact instance, and omitting it prefers the active PIE world with that local player. Missing PIE, instance or player returns an error. `distance` defaults to 1000 cm and must be positive. `channel` defaults to Visibility and accepts project-renamed collision channels. `traceComplex` defaults to false. `ignoreActors` accepts labels or full paths; a label skips every match in that world. `ignorePawn` defaults to true for the viewing player's pawn.
+
+The response contains `viewLocation`, `viewRotation`, `viewDirection`, `playerIndex`, `pieInstance`, and `line`. A positive `sweepRadius` adds `sweep`, a sphere sweep on the same ray. Zero omits the sweep. Each trace uses the [level trace result](level-traces.md) fields. Hit components also report `collisionEnabled`, `objectType`, `responseOnChannel`, `collisionChannel`, `blocksVisibility`, `ownerActorLabel` and `ownerActorClass`. `blocksVisibility` describes the Visibility channel response; `collisionEnabled` separately tells you whether queries are enabled.
+
+
 ### Recording
 
 | Action | Purpose |
@@ -89,14 +109,16 @@ pie(action="record_read", id="some-recording", file="drift")
 
 Recording starts on BeginPIE and finalizes on EndPIE. It discovers Enhanced Input actions from event bindings and active mapping contexts, including actions added after the pawn attaches. Per frame it writes pawn location, rotation, velocity and `speed2d`, the active montage and section, every input action value with `_pressed` and `_released` edges, labelled markers, and per-frame performance (game, render and GPU ms, memory). Velocity comes from `UCharacterMovementComponent` when present, then `GetVelocity()`, physics velocity, and position delta as fallbacks, so any `APawn` works.
 
-`record_arm` can also track reflection paths and subsystem values (`track_values`, with `sub:<Class>.<path>` for a subsystem), actor positions (`track_actors`), and skeletal bone or socket channels: `bone:<BoneOrSocket>.<channel>` in world space or `bonecs:<BoneOrSocket>.<channel>` in component space, with channels `x|y|z`, `pitch|yaw|roll` and `scalex|scaley|scalez`. Component space does not move when the actor does, which is what an animation assertion usually wants. A bone that the mesh does not have is absent from the row rather than sampled as zero.
+`record_arm` can also track reflection paths and subsystem values (`track_values`: a path on the pawn, `<Actor>.<path>` for a level actor named by label, name or class, `sub:<Class>.<path>` for a subsystem), actor positions (`track_actors`), and skeletal bone or socket channels: `bone:<BoneOrSocket>.<channel>` in world space or `bonecs:<BoneOrSocket>.<channel>` in component space, with channels `x|y|z`, `pitch|yaw|roll` and `scalex|scaley|scalez`. Component space does not move when the actor does, which is what an animation assertion usually wants. A bone that the mesh does not have is absent from the row rather than sampled as zero.
+
+Every `track_values` path is checked when the pawn attaches. A path that does not end at a number (a struct such as `Velocity` or `RelativeRotation`, or a name that does not resolve) is still written as a column, but the manifest lists its type as `unresolved` and a warning names the failing segment: name a numeric field instead, such as `Velocity.X`. The same goes for an `actions` entry the player has no binding or mapping for. `record_status`, `record_stop` and the manifest carry these as `warnings`.
 
 | Param | Default | Notes |
 |-------|---------|-------|
-| `actions` | `[]` (all) | Whitelist of `UInputAction` asset paths |
+| `actions` | `[]` (all) | Whitelist of `UInputAction` paths, package (`/Game/Input/IA_Move`) or object form; a path that is not an InputAction fails the arm |
 | `axis_threshold` | `0.15` | Dead zone for edge detection |
 | `sample_hz` | `60` | Sample rate, and the default `pin_fps` |
-| `pin_fps` | `sample_hz` | `t.MaxFPS` pin; `0` skips it |
+| `pin_fps` | `sample_hz` | `t.MaxFPS` pin, restored with its priority when the recording ends; `0` skips it |
 | `capture_pawn_state` | `true` | Per-row location, rotation, velocity, `speed2d` |
 | `capture_montage` | `true` | Per-row `Montage:Section` |
 | `client_id` | `0` | Local player index in the selected world |
@@ -136,6 +158,17 @@ Replay drives the sequence through `UEnhancedInputLocalPlayerSubsystem::InjectIn
 | `encode_gif` | `false` | Also encode an animated GIF |
 | `client_id`, `pie_instance` | `0`, auto | Which player to drive |
 | `drift_thresholds` | `{ position_cm: 5, rotation_deg: 2, velocity_cms: 25 }` | Cutoffs for `frames_over_threshold`; also `tracked_default` and a per-path `tracked` map |
+| `start_when` | none | Hold the steps until the player can act; see below. Replaces `settle_ms` |
+
+Drift is compared by time. Steps fire `settle_ms` after the pawn attaches, so the replayer takes the settle delay off its clock and compares each frame with the source row at the same offset from the start of the recording. `drift.json` records `alignment`, `replay_offset_ms`, and `input_onset` (when the first input step fired on each timeline, and the `offset_ms` between them), so a timing offset is reported apart from drift. Each entry in `frames_over_threshold` has the replay `frame`, the `source_frame` it was compared with, its `time`, and signed `position_delta` and `velocity_delta` (replay minus source). The replay trajectory is written to `replay.csv` beside `drift.json`, on the source's timeline with the same columns as `recording.csv`; `replay_status.last_result.replay_csv_path` names it.
+
+A spawn intro whose length varies between runs (the pawn falls, lands, and ignores input until a cinematic ends) shifts every step that is timed from attach. `start_when` waits for the player instead:
+
+```json
+{ "start_when": { "pawn_at_rest": true, "max_speed_cms": 5, "hold_ms": 500, "log_contains": "Intro finished", "timeout_ms": 60000 } }
+```
+
+The gate opens once the pawn has been at rest (speed at most `max_speed_cms` and, for a Character, on the ground) for `hold_ms`, and a session log line containing `log_contains` has appeared when one is given. Either condition may be dropped, not both. The steps then resume at the matching point of the recording: with `pawn_at_rest`, the moment the source pawn had been at rest for `hold_ms` in the rest that led into its first input, read from `recording.csv`; otherwise the first input itself. Frames before the gate are not compared. `drift.json` reports `alignment: "start_gate"` and `start_gate {passed, anchor (source_rest, first_input or start), source_ms, replay_ms, blocker}`. While the gate is shut, `replay_status.waiting_for` says what it waits on; a gate still shut after `timeout_ms` ends the replay with that reason as `last_error`.
 
 With `capture_frame_every` set, replay saves JPEG frames under `<recording>/frames/` and composes a labelled contact sheet at `<recording>/captures/contact_<timestamp>.jpg`, a grid of keyframes with the frame index on each cell. `replay_status.last_result` returns `frame_dir`, `frame_count` and `contact_sheet_path`. GIF output is opt-in because a vision model cannot read GIF animation. For a frame of the live PIE viewport on demand, use `editor(capture_screenshot, target="pie")` or `editor(capture_scene_png, world="pie")`.
 
@@ -150,16 +183,16 @@ Steps in `sequence.json`:
 { "type": "capture",    "delay_ms": 5000, "name": "boss_intro" }
 ```
 
-`delay_ms` is cumulative from sequence start, scheduled against time since pawn attach plus `settle_ms`. Tape values are `0.5` (Axis1D), `[0.5, 0.3]` (Axis2D) or `[0.1, 0.2, 0.3]` (Axis3D).
+`delay_ms` is cumulative from sequence start, scheduled against time since pawn attach plus `settle_ms`. Tape values are `0.5` (Axis1D), `[0.5, 0.3]` (Axis2D) or `[0.1, 0.2, 0.3]` (Axis3D). Tape entries are spaced `1/sample_hz` apart on the PIE world clock, so a frame rate below `sample_hz` skips entries instead of stretching the tape. The recorder resamples each tape at `sample_hz` from the frames it captured, so the tape keeps the recorded timing at any frame rate.
 
 ### Analysis and comparison
 
 | Action | Purpose |
 |--------|---------|
-| `replay_analyze` | The lead from a finalized `drift.json`: first divergence, top channels, errors, bracketing images |
+| `replay_analyze` | The lead from a finalized `drift.json`: first divergence, top channels, errors, bracketing images. `frames_over_threshold` is paged by `limit` (default 50) and `offset`, with `frames_over_threshold_total` and `frames_over_threshold_next_offset` |
 | `replay_state` | The exact recorded pawn pose at `at_time` or `at_frame`, interpolated; `apply=true` teleports the live pawn to it |
 | `record_diff` | Compare two recordings without running PIE: position, rotation and velocity deltas plus `tracked_value_max_deltas` |
-| `perf_summary` | Frametime avg, p50, p99 and max, game, render and GPU ms, peak memory, and the worst hitches with timestamps |
+| `perf_summary` | Frametime avg, p50, p99 and max, game, render and GPU ms, peak memory, and the worst hitches with timestamps; the newest recording when none is named |
 
 ```text
 pie(action="record_diff", a_id="run-1", b_id="run-2", position_cm=5, rotation_deg=2)
@@ -177,6 +210,8 @@ Unreal Insights traces are `editor(start_trace)` and `editor(stop_trace)`.
 | `assert_eval` | Evaluate predicates over a finished run's series, errors and markers; writes `verdict.json` with a witness per assertion |
 | `scenario_scaffold` | Generate an arrange, act, assert `scenario.json` from a recording |
 | `scenario_validate` | Check a scenario's structure and predicates without running it |
+
+`test_scaffold` takes `start_when`, the replay gate described under Replay, and stores it in `test.json`; `test_run` replays with it. `test_run` judges its predicates against the replay it ran: the replay trajectory (`replay.csv`) and the errors its PIE session logged, named in the result as `predicates_series` and `predicates_errors`. A replay that compared no frame, or whose `start_when` never opened, fails.
 
 A predicate binds a channel or event to an operator under a temporal quantifier: `{name, channel|event, op, value|min+max|tol, hold, from_s, to_s, within_s, after_event, severity}`. Operators are `eq`, `ne`, `lt`, `lte`, `gt`, `gte`, `approx`, `between`, `changed`, `increased`, `decreased` and `crossed`. `hold` is `always`, `never`, `eventually`, `at_end` or `once_then_always`. Channels are series columns (`pos_z`, `speed2d`, `game_ms`), tracked values by path (`t:Boss.Health`) and the pseudo-channels `$errors`, `$warnings`, `$frame` and `$time`. Events are `montage`, `marker` and `error`.
 
@@ -208,6 +243,8 @@ pie(action="profile_create",
     tracked_actors=["BP_Hero_C", "BP_Boss_C"])
 ```
 
+A tracked value path is read from the player pawn first. When the pawn has no such path, the first segment names a level actor in the PIE world, matched by label, name or class the same way `tracked_actors` and `expect {op: exists}` match it, and the rest of the path is read from that actor. `Hero.AbilitySystem.Health` reads the `Health` field of the `AbilitySystem` component on the actor `Hero`.
+
 Observation output goes to `Saved/MCPObservations/<run_id>/`: `manifest.json`, `observation.csv`, and `tracked.jsonl` when actors are tracked. One recording replayed with different profiles investigates different systems.
 
 ### Input injection
@@ -216,9 +253,43 @@ Observation output goes to `Saved/MCPObservations/<run_id>/`: `manifest.json`, `
 |--------|---------|
 | `inject_input` | Inject one frame of an input action |
 | `inject_input_start` | Begin a continuous hold; returns `injection_id` |
-| `inject_input_update` | Change the value of a running hold |
+| `inject_input_update` | Change the value or `control_rotation` of a running hold |
 | `inject_input_stop` | Release a hold or stop a tape |
 | `inject_input_tape` | Play a per-frame value array at a given rate |
+
+A hold keeps the action triggered every frame. `duration_seconds` releases it after that many game seconds, and `control_rotation` pins the player controller's aim at the end of every frame while it runs. Start one hold per action to press several at once:
+
+```
+pie(action="inject_input_start", action_path="/Game/Input/Actions/IA_Move", value_x=0, value_y=1, duration_seconds=3, control_rotation={pitch:-15, yaw:0, roll:0})
+pie(action="inject_input_start", action_path="/Game/Input/Actions/IA_Sprint", value_x=1, duration_seconds=3)
+```
+
+To sample the pawn every frame meanwhile, arm an observer while PIE runs: `profile_create` with `capture_pawn_state=true` (and any `tracked_values`), `observe_arm` starts sampling at once at `sample_hz` (default 60), `observe_stop` finalizes, and `observe_read` with `file=series` returns location, velocity and each tracked value per frame.
+
+An `FInputActionValue` argument to `editor(invoke_function)` or `editor(invoke_object_function)` takes `true`/`false` (Boolean), a number (Axis1D), `[x,y]` or `{x,y}` (Axis2D), or `[x,y,z]` or `{x,y,z}` (Axis3D), so the Enhanced Input subsystem's own functions can be called directly:
+
+```
+editor(invoke_object_function, world="pie", target="subsystem", subsystemClass="EnhancedInputLocalPlayerSubsystem", functionName="StartContinuousInputInjectionForAction", args={Action: "/Game/Input/Actions/IA_Move.IA_Move", RawValue: {x: 0, y: 1}})
+```
+
+### Walking the player
+
+`drive_pawn` moves the player's pawn without an Input Action: movement input every frame along `direction` or toward `targetLocation`, or with `mode=navigate` a navmesh move from the player controller. It samples the pawn every `sampleEvery` seconds (location, rotation, controller rotation, velocity, map) and, with `wait` (the default), answers once the drive ends with the whole track.
+
+```
+pie(action="drive_pawn", direction={x:0, y:1, z:0}, durationSeconds=20)
+pie(action="drive_pawn", targetLocation={x:1200, y:300, z:90}, acceptanceRadius=50)
+pie(action="drive_pawn", targetLocation={x:1200, y:300, z:90}, mode="navigate")
+```
+
+| Field | Meaning |
+|-------|---------|
+| `state` | `completed` (direction ran its duration), `arrived`, `timeout`, `no_path`, `nav_ended`, `map_changed`, `stopped`, `pie_ended` |
+| `samples` | `{t, location, rotation, controlRotation, velocity, map}` per sample |
+| `mapChanges` | `{t, from, to, location, controlRotation}` for each level change during the drive |
+| `navPath` | `{valid, partial, length, points}` for a navigate drive |
+
+The pawn is resolved again every frame, so a drive keeps going after `OpenLevel` and reports the level it arrived in; `stopOnMapChange=true` ends it there instead. `drive_status` reads a drive and `drive_stop` ends one. Related reads: `editor(get_pie_pawn)` for the pawn's location, `controlRotation` and current `map`, `editor(teleport_runtime_actor)` to place it, and `gameplay(find_nav_path, world="pie")` to query the running session's navmesh.
 
 ### Remote players and acceptance runs
 
@@ -233,7 +304,7 @@ Observation output goes to `Saved/MCPObservations/<run_id>/`: `manifest.json`, `
 
 With Run Under One Process off, every client is a separate process the editor cannot reach directly. The tool attaches a replicated control component to each remote player's controller on the server and relays commands over the game connection. `inject_input`, `inject_input_start` and `inject_input_tape` take `client` 1..N; `inject_input_update` and `inject_input_stop` route by the returned id. `console` takes `client` 1..N only. The editor's own player console is `editor(execute_command, world="pie")`.
 
-`uat_run` opens the scenario's map, starts PIE with its players, waits for every remote player to join, and runs each step: drive input or console on any player, then judge the step from the host log and each client's own log file. A dedicated server needs `one_process: true`, its default. When the run ends it stops PIE, restores the play settings and writes `report.md` and `report.json` to `report_dir`.
+`uat_run` opens the scenario's map, starts PIE with its players, waits for every remote player to join, and runs each step: drive input or console on any player, then judge the step from the host log and each client's own log file. A dedicated server needs `one_process: true`, its default. When the run ends it stops PIE, restores the play settings, saves them, and writes `report.md` and `report.json` to `report_dir`. The settings it overrides are first written to `Saved/UE_MCP/pie-uat-play-settings.json`, so a run the editor never finished (a crash or a forced quit) is undone on the next editor start.
 
 ```json
 {
@@ -255,11 +326,11 @@ With Run Under One Process off, every client is a separate process the editor ca
 }
 ```
 
-Step actions, each with `client`: `tape {action, values}`, `press {action, frames}`, `hold {action, value, ms}`, `inject {action, value}`, `console "cmd"`, `place {at, offset, face}` or `place {location, yaw}`, and `capture` (a label or `true`); plus `wait_ms`. `place` teleports the player's pawn on the server, to the nearest free spot within 360 units when the exact one is taken, and turns it on its own machine; the step fails if the client never confirms the turn. `capture` saves that player's view as a JPEG, embedded next to its step in `report.md`.
+Step actions, each with `client`: `tape {action, values, hz}` (`hz` default 60, entries spaced `1/hz` apart on the world clock), `press {action, frames}`, `hold {action, value, ms}`, `inject {action, value}`, `console "cmd"`, `place {at, offset, face}` or `place {location, yaw}`, and `capture` (a label or `true`); plus `wait_ms`. `place` teleports the player's pawn on the server, to the nearest free spot within 360 units when the exact one is taken, and turns it on its own machine; the step fails if the client never confirms the turn. `capture` saves that player's view as a JPEG, embedded next to its step in `report.md`.
 
-`expect` rules take `min` and `max` match counts, and `since: "run"` judges every line since PIE started instead of only the step's own lines. A step passes when every expectation is met and no `forbid` pattern matched in its window. It ends early once its expectations are met unless it forbids something, in which case it watches the whole window.
+`expect` rules take `min` and `max` match counts, and `since: "run"` judges every line since PIE started instead of only the step's own lines. By default a rule reads only lines logged after its step began, so a line printed before the step, or one printed every 10 s against a 4 s `window_ms`, is not seen; use `since: "run"` or a longer window. A pattern that is not a valid regex is refused when the scenario is loaded. A missed expectation's detail names how many lines it searched and, when the line was logged earlier in the run, how many times and an example. A step passes when every expectation is met and no `forbid` pattern matched in its window. It ends early once its expectations are met unless it forbids something, in which case it watches the whole window.
 
-`pie.windowless: true` launches separate-process clients with `-RenderOffscreen`: they render every frame as in a window but open no window and never take focus. Their frame rate is pinned to `pie.client_fps` (default 60).
+`pie.windowless: true` launches separate-process clients with `-RenderOffscreen`: they render every frame as in a window but open no window and never take focus. Their frame rate is pinned to `pie.client_fps` (default 60). Those launch parameters go in for the run only: a value an earlier run left behind is stripped before the next run adds its own, and on editor start.
 
 ### PIE inspection and session log
 
@@ -268,15 +339,31 @@ Step actions, each with `client`: `tape {action, values}`, `press {action, frame
 | `anim_state` | A PIE actor's anim instance state: montage and state machines |
 | `anim_properties` | UPROPERTY values on a PIE actor's AnimInstance |
 | `session_errors` | Deduped errors and warnings from the Output Log, Blueprint exceptions included |
-| `session_log` | The paged raw log, filtered by verbosity, category or substring |
+| `session_log` | The paged raw log, filtered by verbosity, category or substring; messages past `max_message_chars` (default 500) are cut and marked `truncated` |
 
 Both session actions default to the live or most recent session; pass `session` to read a finished one from `Saved/MCPSessions/`. Actor and subsystem properties are `editor(get_object_properties, world="pie")` (`target="subsystem"` with `subsystemClass`) and `editor(get_runtime_values)`.
+
+### Rendering validation in PIE
+
+These are the native routes for a before/after or performance pass on a running game (#1645).
+
+| Task | Call |
+|------|------|
+| Instance counts, cull distances and MinLOD of every instanced mesh component, including ones an actor holds only in a C++ array | `editor(get_runtime_values, world="pie", classFilter="InstancedStaticMeshComponent", paths=["GetInstanceCount", "InstanceStartCullDistance", "InstanceEndCullDistance", "MinLOD"])`. It walks each actor's owned components, so no UPROPERTY path to the component is needed, and returns one row per component. |
+| Switch quality during PIE | `editor(set_scalability, level="Low")`, or a single setting with `editor(set_cvars)`. Both apply to the running game. |
+| CSV profile and GPU profile around a timed window | `editor(execute_command, command="csvprofile start")`, then `csvprofile stop` when the window ends; the CSV lands in `Saved/Profiling/CSV`. `editor(execute_command, command="profilegpu")` captures one frame's GPU timings to the log, read back with `editor(get_log)`. For a trace Unreal Insights can open, use `editor(start_trace)` and `editor(stop_trace)`. |
+| Fixed-interval frame sequence | `editor(capture_screenshot_sequence, filename="Validation/run", frameCount=20, intervalMs=250)` captures the PIE viewport on a fixed schedule and reports each frame's lateness. |
+| Velocity, depth or any other buffer on the game viewport | `editor(set_buffer_visualization, target="pie", buffer="Velocity")`, then `capture_screenshot(target="pie")`. `buffer="off"` returns to Lit; an unknown name lists the buffers this engine defines. |
+| Pose a pawn while paused | `editor(set_pie_paused, paused=true)`, then `editor(teleport_runtime_actor)` with `location` and `rotation`. |
+| Override a material scalar at runtime | `editor(invoke_object_function, world="pie", target="playerpawn", propertyPath="Mesh", functionName="CreateDynamicMaterialInstance", args={ElementIndex: 0})` returns the dynamic instance's path under `returnValues`; call `SetScalarParameterValue` on that `objectPath` with `{ParameterName, Value}`. |
 
 ## Multiplayer targeting
 
 Actions that inject, record, replay or observe accept `pie_instance`, the exact `FWorldContext::PIEInstance`. `client_id` is the local player index inside that world. An explicit `pie_instance` fails when the instance is missing, is dedicated-server only, or lacks the requested local player; it never falls back. Values must be non-negative integers within the int32 range.
 
 Without `pie_instance`, the tool prefers an eligible `GEditor->PlayWorld`, then the first PIE or Game world that has the requested local player, which avoids picking a dedicated server first. The selected world and player stay fixed for each recording, replay, observation, hold and tape. Unresolved recorder, replay and observation targets are retried for 10 seconds from BeginPIE, then finalize as failures with `last_error` in their status.
+
+While the recorder or replayer is `waiting_for_pawn`, its status carries `waiting_for` (no PIE world has the player, the controller possesses no pawn yet, or the pawn has no input component yet) and `pie_worlds`: each running world's `pie_instance`, `net_mode` and local players with their controller and pawn. With a dedicated server and two clients, that shows which client instance to pass as `pie_instance`, and that a pawn missing everywhere is the game still holding the player in its intro. `record_status` also reports `pie_active`.
 
 ## Data layout
 
@@ -286,6 +373,7 @@ Without `pie_instance`, the tool prefers an eligible `GEditor->PlayWorld`, then 
   sequence.json        input sequence
   recording.csv        per-frame state
   drift.json           replay drift report
+  replay.csv           replay trajectory, same columns as recording.csv
   test.json            reproduction test, after test_scaffold
   frames/              per-frame viewport JPEGs
   captures/            contact sheets, and GIFs when encode_gif=true

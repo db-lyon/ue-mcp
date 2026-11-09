@@ -139,6 +139,10 @@ function engineRootCandidates(env = process.env, platform = process.platform) {
     candidates.push({ source: 'UE_MCP_TEST_ENGINE_ROOT', engineRoot: env.UE_MCP_TEST_ENGINE_ROOT });
   }
 
+  if (env.UE_ROOT) {
+    candidates.push({ source: 'UE_ROOT', engineRoot: env.UE_ROOT });
+  }
+
   if (env.UE_BUILD_TOOL_PATH) {
     const derived = engineRootFromEnginePath(env.UE_BUILD_TOOL_PATH, platform);
     if (derived) {
@@ -280,7 +284,7 @@ function resolveTestEngine(env = process.env, platform = process.platform) {
   }
 
   throw new Error(
-    'Unreal Engine build tool not found. Set UE_MCP_TEST_ENGINE_ROOT to a dedicated engine root ' +
+    'Unreal Engine build tool not found. Set UE_MCP_TEST_ENGINE_ROOT (or UE_ROOT) to a dedicated engine root ' +
     '(or UE_BUILD_TOOL_PATH to a Build.bat / Build.sh), or install UE 5.3+ to a default location. Tried:\n  ' +
     (tried.join('\n  ') || '(no candidate locations)')
   );
@@ -308,6 +312,12 @@ function createTestBuildPlan(env = process.env, platform = process.platform) {
 
   if (!engine.allowEngineChanges) {
     buildArgs.push('-NoEngineChanges');
+  }
+
+  // The same cap build_project honours, for a machine already short of memory.
+  const parallel = Number(env.UE_MCP_MAX_PARALLEL_ACTIONS);
+  if (Number.isInteger(parallel) && parallel > 0) {
+    buildArgs.push(`-MaxParallelActions=${parallel}`);
   }
 
   return { ...engine, projectRoot, projectFile, buildArgs };

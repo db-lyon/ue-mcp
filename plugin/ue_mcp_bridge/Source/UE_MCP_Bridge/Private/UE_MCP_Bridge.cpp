@@ -2,10 +2,14 @@
 #include "Modules/ModuleManager.h"
 #include "BridgeServer.h"
 #include "EngineStatusHooks.h"
+#include "DeletedActorPackages.h"
+#include "HandlerSceneCaptureJob.h"
 #include "MCPEngineStatus.h"
 #include "Handlers/Dialog/DialogHandlers.h"
 #include "Handlers/PIE/PIEHandlers.h"
 #include "Handlers/Checkpoint/CheckpointHandlers.h"
+#include "Handlers/Editor/EditorHandlers.h"
+#include "Handlers/Asset/AssetQuickSearch.h"
 #include "Editor.h"
 #include "Editor/EditorEngine.h"
 #include "HAL/PlatformMisc.h"
@@ -143,6 +147,9 @@ void FUE_MCP_BridgeModule::StartupModule()
 
 	FDialogHandlers::InstallDialogHook();
 
+	// Deleted actors' emptied packages stay loaded until a save commits them (#1545).
+	FMCPDeletedActorPackages::Install();
+
 	// Recorder, replayer, observer, script runner, the PIE Studio panel and its Record button.
 	FPIEHandlers::StartupSystems();
 
@@ -218,14 +225,19 @@ void FUE_MCP_BridgeModule::StartupModule()
 
 void FUE_MCP_BridgeModule::ShutdownModule()
 {
+	FEditorHandlers::ShutdownMeshStudioRenders();
+	UEMCP::SceneCapture::ShutdownWarmCapture();
 	if (G_EditorReadyTicker.IsValid())
 	{
 		FTSTicker::GetCoreTicker().RemoveTicker(G_EditorReadyTicker);
 		G_EditorReadyTicker.Reset();
 	}
 	FDialogHandlers::RemoveDialogHook();
+	FMCPDeletedActorPackages::Remove();
 	FPIEHandlers::ShutdownSystems();
 	FCheckpointHandlers::Shutdown();
+	// Unbinds the quick_search index from the Asset Registry while it is still loaded.
+	MCPQuickSearch::FAssetIndex::Shutdown();
 	// The snapshot itself outlives this module (its own module owns it and
 	// keeps publishing until PostConfigInit teardown); only the Slate and
 	// Engine sensors go away with us.

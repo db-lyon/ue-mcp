@@ -100,6 +100,8 @@ public class UE_MCP_Bridge : ModuleRules
 				"PCG",
 				// UPCGLevelToAsset, which pcg(export_level_to_asset) drives.
 				"PCGEditor",
+				// UBodySetupCore::GetCollisionTraceFlag resolves the project default trace flag.
+				"PhysicsCore",
 				"PoseSearch",
 				"PoseSearchEditor",
 				"PropertyBindingUtils",
