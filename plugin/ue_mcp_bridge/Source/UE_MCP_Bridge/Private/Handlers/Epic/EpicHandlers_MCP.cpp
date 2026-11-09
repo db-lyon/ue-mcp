@@ -9,6 +9,7 @@
 #include "HandlerUtils.h"
 #include "HandlerDeferred.h"
 
+#include "HAL/PlatformProcess.h"
 #include "Misc/Guid.h"
 #include "Modules/ModuleManager.h"
 #include "UObject/UObjectIterator.h"
@@ -27,6 +28,54 @@ namespace UEMCPEpicMCP
 	static const TCHAR* const PluginUnavailable =
 		TEXT("Epic's Unreal MCP plugin (ModelContextProtocol) is not loaded. It ships with UE 5.8+ and is off by default: "
 		     "enable it in the project's plugins, then restart the editor.");
+
+#if WITH_UEMCP_EPIC_MCP
+	// A request id for one tool call. Through 5.8 its constructor is inline. In
+	// 5.9 it is exported from the plugin's DLL, which this module never links
+	// (see the file header), so the export is looked up in the loaded module.
+	// Where it cannot be found, the id is default-constructed and told apart by
+	// a fresh InvocationId. That id runs the tool the same way, but reports
+	// IsValid() false, and a tool that checks it before cancelling (Epic's
+	// Blueprint async-action tools do) ignores the cancel. bOutCancelReaches
+	// says which of the two the caller got.
+	static FModelContextProtocolToolRequestId MakeRequestId(bool& bOutCancelReaches)
+	{
+		const TSharedPtr<FJsonValue> Id = MakeShared<FJsonValueString>(FGuid::NewGuid().ToString(EGuidFormats::DigitsWithHyphensLower));
+#if !UE_MCP_HAS_5_9_API
+		bOutCancelReaches = true;
+		return FModelContextProtocolToolRequestId(Id);
+#else
+		const FGuid InvocationId = FGuid::NewGuid();
+#if PLATFORM_WINDOWS && PLATFORM_64BITS && defined(_MSC_VER)
+		// FModelContextProtocolToolRequestId(const TSharedPtr<FJsonValue>&, const FGuid&), as the DLL exports it.
+		using FCtor = void* (*)(void* This, const TSharedPtr<FJsonValue>& InRequestId, const FGuid& InInvocationId);
+		static FCtor Ctor = nullptr;
+		if (!Ctor)
+		{
+			const FString File = FModuleManager::Get().GetModuleFilename(TEXT("ModelContextProtocol"));
+			if (void* Handle = File.IsEmpty() ? nullptr : FPlatformProcess::GetDllHandle(*File))
+			{
+				Ctor = reinterpret_cast<FCtor>(FPlatformProcess::GetDllExport(Handle,
+					TEXT("??0FModelContextProtocolToolRequestId@@QEAA@AEBV?$TSharedPtr@VFJsonValue@@$00@@AEBUFGuid@@@Z")));
+			}
+		}
+		if (Ctor)
+		{
+			TTypeCompatibleBytes<FModelContextProtocolToolRequestId> Storage;
+			Ctor(&Storage, Id, InvocationId);
+			FModelContextProtocolToolRequestId Out = *Storage.GetTypedPtr();
+			Storage.GetTypedPtr()->~FModelContextProtocolToolRequestId();
+			bOutCancelReaches = true;
+			return Out;
+		}
+#endif
+		FModelContextProtocolToolRequestId Fallback;
+		Fallback.InvocationId = InvocationId;
+		bOutCancelReaches = false;
+		return Fallback;
+#endif
+	}
+#endif
 
 	static FString ReadInputJson(const TSharedPtr<FJsonObject>& Params)
 	{
@@ -247,13 +296,16 @@ TSharedPtr<FJsonValue> FEpicHandlers::CallMCPTool(const TSharedPtr<FJsonObject>&
 	struct FSyncAnswer { TSharedPtr<FJsonValue> Value; };
 	const TSharedRef<FSyncAnswer, ESPMode::ThreadSafe> Sync = MakeShared<FSyncAnswer, ESPMode::ThreadSafe>();
 	const FMCPDeferredCallPtr Deferred = MCPDeferRequest();
-	const FModelContextProtocolToolRequestId RequestId(MakeShared<FJsonValueString>(FGuid::NewGuid().ToString(EGuidFormats::DigitsWithHyphensLower)));
+	bool bCancelReaches = true;
+	const FModelContextProtocolToolRequestId RequestId = UEMCPEpicMCP::MakeRequestId(bCancelReaches);
 	const FString Name = Tool->GetName();
 	if (Deferred)
 	{
 		// A cancel that landed while this handler was queued: the tool never starts.
 		if (Deferred->IsCancelled()) return MCPDeferredMarker();
-		Deferred->SetCancelNote(TEXT("Forwarded to the tool's CancelAsync, the same call Epic's server makes on notifications/cancelled."));
+		Deferred->SetCancelNote(bCancelReaches
+			? TEXT("Forwarded to the tool's CancelAsync, the same call Epic's server makes on notifications/cancelled.")
+			: TEXT("Forwarded to the tool's CancelAsync without a valid request id, because this engine's request-id constructor could not be resolved; a tool that checks the id ignores it."));
 		Deferred->OnCancel([Tool, RequestId](const FString&) { Tool->CancelAsync(RequestId); });
 	}
 	Tool->RunAsync(RequestId, Arguments, [Deferred, Sync, Name](const FModelContextProtocolToolResult& Result)

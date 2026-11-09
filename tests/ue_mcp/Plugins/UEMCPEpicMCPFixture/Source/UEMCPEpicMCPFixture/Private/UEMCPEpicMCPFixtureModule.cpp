@@ -11,10 +11,21 @@
 #include "ModelContextProtocolResources.h"
 #include "ModelContextProtocolSession.h"
 #include "ModelContextProtocolToolResults.h"
+#include "Misc/EngineVersionComparison.h"
 #include "Modules/ModuleManager.h"
 
 namespace UEMCPFixture
 {
+	// The JSON-RPC id a request id wraps: a public field through 5.8, behind GetRequestId() from 5.9.
+	static const TSharedPtr<FJsonValue>& WrappedId(const FModelContextProtocolToolRequestId& Id)
+	{
+#if UE_VERSION_NEWER_THAN_OR_EQUAL(5, 9, 0)
+		return Id.GetRequestId();
+#else
+		return Id.RequestId;
+#endif
+	}
+
 	// A 1x1 PNG.
 	static const TCHAR* const PixelPng = TEXT("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==");
 
@@ -124,8 +135,9 @@ namespace UEMCPFixture
 			// FModelContextProtocolToolRequestId's operator== is not exported, so compare the ids it wraps.
 			const int32 Removed = Pending.RemoveAll([&RequestId](const FPending& P)
 			{
-				return P.RequestId.RequestId.IsValid() && RequestId.RequestId.IsValid()
-					&& FJsonValue::CompareEqual(*P.RequestId.RequestId, *RequestId.RequestId);
+				const TSharedPtr<FJsonValue>& Mine = WrappedId(P.RequestId);
+				const TSharedPtr<FJsonValue>& Theirs = WrappedId(RequestId);
+				return Mine.IsValid() && Theirs.IsValid() && FJsonValue::CompareEqual(*Mine, *Theirs);
 			});
 			Cancellations += Removed;
 		}
