@@ -4,6 +4,7 @@
 #include "Handlers/PIE/PIEFrameSampler.h"
 #include "Handlers/PIE/PIESequenceFormat.h"
 #include "Handlers/PIE/PIEMaxFPSPin.h"
+#include "Handlers/PIE/PIEUIPointer.h"
 #include "UObject/WeakObjectPtrTemplates.h"
 
 class UWorld;
@@ -189,6 +190,9 @@ namespace MCPPIE
 		void OnEndFrame();
 		FReplayerFinishResult FinaliseCurrent();
 		void ExecutePendingSteps(double ElapsedMs);
+		// ui_input steps run on their own cursor and clock (real time, so a
+		// paused game still plays its menu input).
+		void ExecutePendingUISteps(double UIElapsedMs);
 		void ApplyFPSPin(UWorld* PIEWorld, int32 Hz);
 		bool UpdateStartGate(UWorld* PIEWorld, double Now, FString& OutBlocker);
 
@@ -260,6 +264,13 @@ namespace MCPPIE
 		TArray<FCSVRow> ReplayRows;
 		int32 NextStepIndex = 0;
 		int32 ExecutedSteps = 0;
+		// ui_input playback (#1822).
+		FPIEUIPointerPlayer UIPlayer;
+		int32 NextUIStepIndex = 0;
+		int32 UIStepErrors = 0;
+		double AttachRealTime = 0.0;
+		double UIClockStartRealMs = 0.0;
+		double UIClockStartStepMs = 0.0;
 		FString StartedAt;
 
 		// Active hold lifecycles: maps "step <i> stop time ms" -> injection id.

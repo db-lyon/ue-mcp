@@ -275,6 +275,7 @@ void FPIEHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("pie_instance"), EType::Integer, PieInstanceDoc).Min(0),
 		MCPParam::Optional(TEXT("rng_seed"), EType::Number, TEXT("Seed the stream RNG for reproducible runs")),
 		MCPParam::Optional(TEXT("run_gap_frames"), EType::Integer, TEXT("Idle frames that split input runs (default 6)")),
+		MCPParam::Optional(TEXT("capture_ui_pointer"), EType::Boolean, TEXT("Also record the mouse through Slate (cursor, UMG hover, click, drag, wheel) while the cursor is shown, as ui_input steps (default false)")),
 		MCPParam::Optional(TEXT("recording_dir"), EType::String, TEXT("Recordings root (default Saved/MCPRecordings)")),
 		MCPParam::Optional(TEXT("id"), EType::String, TEXT("Recording id (default: a timestamp)")),
 	}, MCPSpec::ContractExempt(TEXT("Arms the recorder, which starts on the next PIE session")));

@@ -928,6 +928,12 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "Idle frames that split input runs (default 6)"
       },
       {
+        "name": "capture_ui_pointer",
+        "type": "boolean",
+        "required": false,
+        "description": "Also record the mouse through Slate (cursor, UMG hover, click, drag, wheel) while the cursor is shown, as ui_input steps (default false)"
+      },
+      {
         "name": "recording_dir",
         "type": "string",
         "required": false,
@@ -2409,7 +2415,7 @@ export const paramsClauses: Readonly<Record<string, string>> = {
   pie_profile_list: "Params: directory?",
   pie_profile_read: "Params: path",
   pie_profile_update: "Params: path, tracked_values?, tracked_actors?, tracked_widgets?, capture_pawn_state?, capture_montage?, position_threshold_cm?, rotation_threshold_deg?, velocity_threshold_cms?, tracked_value_default_threshold?",
-  pie_record_arm: "Params: actions?, track_values?, track_actors?, axis_threshold?, sample_hz?, pin_fps?, capture_pawn_state?, capture_montage?, take_record?, client_id?, pie_instance?, rng_seed?, run_gap_frames?, recording_dir?, id?",
+  pie_record_arm: "Params: actions?, track_values?, track_actors?, axis_threshold?, sample_hz?, pin_fps?, capture_pawn_state?, capture_montage?, take_record?, client_id?, pie_instance?, rng_seed?, run_gap_frames?, capture_ui_pointer?, recording_dir?, id?",
   pie_record_delete: "Params: id, confirm?, recording_dir?",
   pie_record_diff: "Params: a_id, b_id, recording_dir?, position_cm?, rotation_deg?, velocity_cms?, tracked_default?, tracked_thresholds?",
   pie_record_disarm: "Params: none",
@@ -2472,6 +2478,7 @@ export const schema: Record<string, z.ZodType> = {
   capture_frame_every: z.number().int().min(0).optional().describe("Capture a viewport JPEG every N steps and build a contact sheet"),
   capture_montage: z.boolean().optional().describe("Sample the active montage (pie_profile_create, pie_profile_update). Sample the active montage (default true) (pie_record_arm)"),
   capture_pawn_state: z.boolean().optional().describe("Sample the pawn transform and movement (pie_profile_create, pie_profile_update). Sample the pawn transform and movement (default true) (pie_record_arm)"),
+  capture_ui_pointer: z.boolean().optional().describe("Also record the mouse through Slate (cursor, UMG hover, click, drag, wheel) while the cursor is shown, as ui_input steps (default false)"),
   category: z.string().optional().describe("Exact log category, such as LogTemp"),
   channel: z.string().optional().describe("Collision channel, including project-renamed channels (default Visibility)"),
   channels: z.string().optional().describe("series: comma-separated columns (default: every t:* plus speed2d, gpu_ms, game_ms)"),

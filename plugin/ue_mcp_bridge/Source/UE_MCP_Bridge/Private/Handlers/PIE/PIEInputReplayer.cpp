@@ -164,6 +164,8 @@ namespace MCPPIE
 		}
 		ActiveHolds.Reset();
 		ActiveTapes.Reset();
+		UIPlayer.ReleaseAll(nullptr);
+		UIPlayer.Reset();
 	}
 
 	bool FPIEInputReplayer::LoadSourceFrames(const FString& CSVPath, FString& OutError)
@@ -354,6 +356,12 @@ namespace MCPPIE
 		CaptureDir.Reset();
 		NextStepIndex = 0;
 		ExecutedSteps = 0;
+		UIPlayer.Reset();
+		NextUIStepIndex = 0;
+		UIStepErrors = 0;
+		AttachRealTime = 0.0;
+		UIClockStartRealMs = 0.0;
+		UIClockStartStepMs = 0.0;
 		SourceCursor = 0;
 		bSourceExhausted = false;
 		ReplayFrameIndex = 0;
@@ -673,6 +681,12 @@ namespace MCPPIE
 		while (NextStepIndex < ActiveSequence.Steps.Num())
 		{
 			const FStep& S = ActiveSequence.Steps[NextStepIndex];
+			if (S.Type == EStepType::UIInput)
+			{
+				// Played by ExecutePendingUISteps on the real-time clock.
+				NextStepIndex++;
+				continue;
+			}
 			if (S.DelayMs > ElapsedMs) break;
 
 			const bool bInputStep = S.Type == EStepType::Input || S.Type == EStepType::Hold || S.Type == EStepType::InputTape;
@@ -790,6 +804,32 @@ namespace MCPPIE
 		}
 	}
 
+	void FPIEInputReplayer::ExecutePendingUISteps(double UIElapsedMs)
+	{
+		UWorld* PIEWorld = TargetWorld.Get();
+		while (NextUIStepIndex < ActiveSequence.Steps.Num())
+		{
+			const FStep& S = ActiveSequence.Steps[NextUIStepIndex];
+			if (S.Type != EStepType::UIInput)
+			{
+				NextUIStepIndex++;
+				continue;
+			}
+			if (S.DelayMs > UIElapsedMs) break;
+			FString Err;
+			if (!UIPlayer.Play(S, PIEWorld, Err))
+			{
+				// Log the first few; a missing viewport fails every step.
+				if (UIStepErrors++ < 5)
+				{
+					UE_LOG(LogMCPPIE, Warning, TEXT("[PIE-REP] %s"), *Err);
+				}
+			}
+			NextUIStepIndex++;
+			ExecutedSteps++;
+		}
+	}
+
 	void FPIEInputReplayer::OnEndFrame()
 	{
 		if (State == EReplayerState::Idle || State == EReplayerState::Completed) return;
@@ -870,6 +910,7 @@ namespace MCPPIE
 				}
 
 				AttachTime = PIEWorld->GetTimeSeconds();
+				AttachRealTime = PIEWorld->GetRealTimeSeconds();
 				State = EReplayerState::Replaying;
 			}
 			return;
@@ -890,6 +931,8 @@ namespace MCPPIE
 					{
 						bStepClockStarted = true;
 						StepOffsetMs = Settle;
+						UIClockStartRealMs = (PIEWorld->GetRealTimeSeconds() - AttachRealTime) * 1000.0;
+						UIClockStartStepMs = ElapsedMs - StepOffsetMs;
 					}
 				}
 				else if (UpdateStartGate(PIEWorld, Now, GateBlocker))
@@ -897,6 +940,8 @@ namespace MCPPIE
 					bStepClockStarted = true;
 					StepOffsetMs = ElapsedMs - SourceGateMs;
 					GateOpenedMs = ElapsedMs;
+					UIClockStartRealMs = (PIEWorld->GetRealTimeSeconds() - AttachRealTime) * 1000.0;
+					UIClockStartStepMs = ElapsedMs - StepOffsetMs;
 					GateBlocker.Reset();
 					UE_LOG(LogMCPPIE, Log, TEXT("[PIE-REP] start_when open at %.0f ms; resuming at source %.0f ms (%s)"),
 						ElapsedMs, SourceGateMs, *GateAnchor);
@@ -912,6 +957,11 @@ namespace MCPPIE
 			if (bStepClockStarted && !Pending.bMonitor)
 			{
 				ExecutePendingSteps(ElapsedMs - StepOffsetMs);
+				// Real time is undilated, so time_scale is applied to it here
+				// to keep the menu input in step with a slowed replay.
+				const double RealMs = (PIEWorld->GetRealTimeSeconds() - AttachRealTime) * 1000.0;
+				const double Scale = Pending.TimeScale > 0.f ? static_cast<double>(Pending.TimeScale) : 1.0;
+				ExecutePendingUISteps(UIClockStartStepMs + (RealMs - UIClockStartRealMs) * Scale);
 			}
 
 			// Per-frame viewport capture (off by default). Counted off the
@@ -1136,7 +1186,8 @@ namespace MCPPIE
 			// Auto-stop when all steps consumed and all holds released. In
 			// monitor mode the steps were never executed so we drive completion
 			// purely off frame count against the source recording.
-			const bool bStepsDone = Pending.bMonitor ? true : (NextStepIndex >= ActiveSequence.Steps.Num() && ActiveHolds.Num() == 0 && ActiveTapes.Num() == 0);
+			const bool bStepsDone = Pending.bMonitor ? true : (NextStepIndex >= ActiveSequence.Steps.Num() && NextUIStepIndex >= ActiveSequence.Steps.Num()
+				&& ActiveHolds.Num() == 0 && ActiveTapes.Num() == 0);
 			if (bStepsDone)
 			{
 				// Stay in Replaying for one more sample frame to let drift catch
@@ -1189,6 +1240,8 @@ namespace MCPPIE
 			FPIEInputInjector::StopAny(Id);
 		}
 		ActiveTapes.Reset();
+		// A replay stopped mid-drag must not leave a mouse button down.
+		UIPlayer.ReleaseAll(TargetWorld.Get());
 
 		const bool bTargetFailed = !bTargetResolved && !TargetResolveError.IsEmpty();
 		R.bSuccess = !bTargetFailed && GateError.IsEmpty();

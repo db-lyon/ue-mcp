@@ -26318,6 +26318,12 @@
           "description": "Idle frames that split input runs (default 6)"
         },
         {
+          "name": "capture_ui_pointer",
+          "type": "boolean",
+          "required": false,
+          "description": "Also record the mouse through Slate (cursor, UMG hover, click, drag, wheel) while the cursor is shown, as ui_input steps (default false)"
+        },
+        {
           "name": "recording_dir",
           "type": "string",
           "required": false,

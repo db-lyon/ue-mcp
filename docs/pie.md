@@ -126,6 +126,7 @@ Every `track_values` path is checked when the pawn attaches. A path that does no
 | `take_record` | `false` | Drive Take Recorder in lockstep |
 | `rng_seed` | auto | Applied with `FMath::RandInit` after the pawn attaches |
 | `run_gap_frames` | `6` | Gap tolerance for axis run extraction |
+| `capture_ui_pointer` | `false` | Also record the mouse through Slate as `ui_input` steps; see [Cursor and UI input](#cursor-and-ui-input) |
 | `recording_dir` | `Saved/MCPRecordings/` | Recordings root |
 | `id` | auto | Recording id |
 
@@ -181,9 +182,22 @@ Steps in `sequence.json`:
 { "type": "mark",       "delay_ms": 1500, "label": "enemy spawned" }
 { "type": "console",    "delay_ms": 6000, "command": "stat fps" }
 { "type": "capture",    "delay_ms": 5000, "name": "boss_intro" }
+{ "type": "ui_input",   "delay_ms": 7200, "event": "mouse_down", "x": 0.4213, "y": 0.6012, "button": "LeftMouseButton" }
 ```
 
 `delay_ms` is cumulative from sequence start, scheduled against time since pawn attach plus `settle_ms`. Tape values are `0.5` (Axis1D), `[0.5, 0.3]` (Axis2D) or `[0.1, 0.2, 0.3]` (Axis3D). Tape entries are spaced `1/sample_hz` apart on the PIE world clock, so a frame rate below `sample_hz` skips entries instead of stretching the tape. The recorder resamples each tape at `sample_hz` from the frames it captured, so the tape keeps the recorded timing at any frame rate.
+
+### Cursor and UI input
+
+Enhanced Input never sees the cursor, so clicking or hovering a UMG button, navigating an inventory and dragging an item into a slot are invisible to the action sampler. `record_arm(capture_ui_pointer=true)` also records the mouse at the Slate layer: cursor moves, button presses and releases, double clicks and the wheel, as `ui_input` steps. Replay feeds them back through `FSlateApplication` and moves the cursor with them, so hover, press and drag-and-drop go through the same path a real mouse takes.
+
+- **When it records.** Only while the recorded player shows its mouse cursor, and only inside the PIE viewport. With the cursor hidden the mouse is driving gameplay, which Enhanced Input already records. A button pressed inside the viewport keeps reporting moves and its release until it comes up, so a drag that leaves the viewport is still whole.
+- **Positions** are `x` and `y` from 0 to 1 across the PIE viewport, so a recording stays valid at another window size.
+- **Timing.** `ui_input` delays run on the world's real-time clock, which ignores time dilation and keeps running while the game is paused, since menus are often opened paused. `time_scale` still scales them on replay. Moves are kept at most once per frame.
+- **Events** are `mouse_move`, `mouse_down`, `mouse_up`, `mouse_double_click` (each press and release event names a `button` FKey) and `mouse_wheel` (`wheel_delta`). `modifiers` lists any of `shift`, `control`, `alt`, `command` held at the time.
+- **Overlap with Enhanced Input.** A click that is also bound to an Enhanced Input action is recorded twice, once as each, and fires twice on replay. That is why capture is off by default; leave it off for recordings of mouse-driven gameplay.
+- A replay that stops with a button still down releases it. Moving the real mouse over the viewport during a replay interferes with the replayed cursor.
+- `ui_input` steps can also be written by hand in `replay_arm(steps=[...])`. An unknown `event`, or a press or release with no `button`, is refused.
 
 ### Analysis and comparison
 
