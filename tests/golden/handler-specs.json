@@ -1,5 +1,5 @@
 {
-  "handlerCount": 1261,
+  "handlerCount": 1294,
   "handlers": {
     "actors_in_box": {
       "category": "level",
@@ -8148,6 +8148,41 @@
         }
       ]
     },
+    "check_state_tree_binding": {
+      "category": "statetree",
+      "params": [
+        {
+          "name": "assetPath",
+          "type": "string",
+          "required": true,
+          "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+        },
+        {
+          "name": "targetStructId",
+          "type": "string",
+          "required": true,
+          "description": "Target struct GUID"
+        },
+        {
+          "name": "targetPath",
+          "type": "string",
+          "required": false,
+          "description": "Target property path"
+        },
+        {
+          "name": "sourceStructId",
+          "type": "string",
+          "required": false,
+          "description": "Source struct GUID. Omit to resolve the target alone"
+        },
+        {
+          "name": "sourcePath",
+          "type": "string",
+          "required": false,
+          "description": "Source property path"
+        }
+      ]
+    },
     "check_uvs": {
       "category": "asset",
       "params": [
@@ -8235,6 +8270,50 @@
           "type": "string",
           "required": false,
           "description": "Enum asset path for an EnumColumn"
+        },
+        {
+          "name": "nested",
+          "type": "string",
+          "required": false,
+          "description": "Name or object path of a nested chooser inside the table's asset to work on instead of the table itself (chooser(list_nested) lists them)"
+        },
+        {
+          "name": "insertIndex",
+          "type": "integer",
+          "required": false,
+          "description": "Column position (default where the editor places a new column: last, but before a trailing randomize column)"
+        }
+      ]
+    },
+    "chooser_add_parameter": {
+      "category": "chooser",
+      "params": [
+        {
+          "name": "table",
+          "type": "string",
+          "required": true,
+          "description": "ChooserTable or ChooserSignature asset path. A nested chooser uses its root table's signature",
+          "aliases": [
+            "assetPath"
+          ]
+        },
+        {
+          "name": "nested",
+          "type": "string",
+          "required": false,
+          "description": "Name or object path of a nested chooser inside the table's asset to work on instead of the table itself (chooser(list_nested) lists them)"
+        },
+        {
+          "name": "parameterType",
+          "type": "string",
+          "required": true,
+          "description": "Parameter struct type, e.g. ContextObjectTypeClass or ContextObjectTypeStruct (chooser(list_types, kind='parameter') lists them)"
+        },
+        {
+          "name": "properties",
+          "type": "object",
+          "required": false,
+          "description": "Property path to value text to set on the new parameter, e.g. {\"Class\": \"/Script/Engine.Character\", \"Direction\": \"ReadWrite\"}"
         }
       ]
     },
@@ -8273,6 +8352,158 @@
           "type": "object",
           "required": false,
           "description": "Cell values keyed by column index (as string) or column name; same value format as cells"
+        },
+        {
+          "name": "nested",
+          "type": "string",
+          "required": false,
+          "description": "Name or object path of a nested chooser inside the table's asset to work on instead of the table itself (chooser(list_nested) lists them)"
+        },
+        {
+          "name": "resultType",
+          "type": "string",
+          "required": false,
+          "description": "Result struct type for a default result (AssetChooser, SoftAssetChooser, EvaluateChooser, ClassChooser and so on; chooser(list_types, kind='result') lists them). Fill it in with chooser(set_property)"
+        },
+        {
+          "name": "insertIndex",
+          "type": "integer",
+          "required": false,
+          "description": "Insert the row before this row index (default append)"
+        }
+      ]
+    },
+    "chooser_auto_populate": {
+      "category": "chooser",
+      "params": [
+        {
+          "name": "table",
+          "type": "string",
+          "required": true,
+          "description": "ChooserTable asset path, e.g. /Game/Path/CT_Locomotion",
+          "aliases": [
+            "assetPath"
+          ]
+        },
+        {
+          "name": "nested",
+          "type": "string",
+          "required": false,
+          "description": "Name or object path of a nested chooser inside the table's asset to work on instead of the table itself (chooser(list_nested) lists them)"
+        },
+        {
+          "name": "column",
+          "type": "integer",
+          "required": false,
+          "description": "Fill only this column, for every row and the fallback"
+        },
+        {
+          "name": "rows",
+          "type": "array",
+          "required": false,
+          "description": "Fill only these rows, in every auto populating column",
+          "items": "integer"
+        },
+        {
+          "name": "includeFallback",
+          "type": "boolean",
+          "required": false,
+          "description": "With rows, also fill the fallback"
+        }
+      ]
+    },
+    "chooser_copy_column": {
+      "category": "chooser",
+      "params": [
+        {
+          "name": "table",
+          "type": "string",
+          "required": true,
+          "description": "ChooserTable asset path, e.g. /Game/Path/CT_Locomotion",
+          "aliases": [
+            "assetPath"
+          ]
+        },
+        {
+          "name": "nested",
+          "type": "string",
+          "required": false,
+          "description": "Name or object path of a nested chooser inside the table's asset to work on instead of the table itself (chooser(list_nested) lists them)"
+        },
+        {
+          "name": "column",
+          "type": "integer",
+          "required": true,
+          "description": "Column index, 0-based"
+        },
+        {
+          "name": "targetTable",
+          "type": "string",
+          "required": false,
+          "description": "Destination ChooserTable asset path (default the source table)"
+        },
+        {
+          "name": "targetNested",
+          "type": "string",
+          "required": false,
+          "description": "Nested chooser inside targetTable's asset to copy into"
+        },
+        {
+          "name": "insertIndex",
+          "type": "integer",
+          "required": false,
+          "description": "Insert the copy before this column of the target (default last, before a randomize column)"
+        }
+      ]
+    },
+    "chooser_copy_rows": {
+      "category": "chooser",
+      "params": [
+        {
+          "name": "table",
+          "type": "string",
+          "required": true,
+          "description": "ChooserTable asset path, e.g. /Game/Path/CT_Locomotion",
+          "aliases": [
+            "assetPath"
+          ]
+        },
+        {
+          "name": "nested",
+          "type": "string",
+          "required": false,
+          "description": "Name or object path of a nested chooser inside the table's asset to work on instead of the table itself (chooser(list_nested) lists them)"
+        },
+        {
+          "name": "rows",
+          "type": "array",
+          "required": true,
+          "description": "Row indices, 0-based; duplicates are ignored",
+          "items": "integer"
+        },
+        {
+          "name": "targetTable",
+          "type": "string",
+          "required": false,
+          "description": "Destination ChooserTable asset path (default the source table)"
+        },
+        {
+          "name": "targetNested",
+          "type": "string",
+          "required": false,
+          "description": "Nested chooser inside targetTable's asset to copy into"
+        },
+        {
+          "name": "insertIndex",
+          "type": "integer",
+          "required": false,
+          "description": "Insert the copies before this row of the target (default append)"
+        },
+        {
+          "name": "includeFallback",
+          "type": "boolean",
+          "required": false,
+          "description": "Also copy the fallback result and fallback cells, replacing the target's (default false)"
         }
       ]
     },
@@ -8300,6 +8531,84 @@
       ],
       "contractExempt": "Creates and saves a ChooserTable under the contract values; nothing it reads fails first"
     },
+    "chooser_create_nested": {
+      "category": "chooser",
+      "params": [
+        {
+          "name": "table",
+          "type": "string",
+          "required": true,
+          "description": "ChooserTable asset path, e.g. /Game/Path/CT_Locomotion",
+          "aliases": [
+            "assetPath"
+          ]
+        },
+        {
+          "name": "nested",
+          "type": "string",
+          "required": false,
+          "description": "Name or object path of a nested chooser inside the table's asset to work on instead of the table itself (chooser(list_nested) lists them)"
+        },
+        {
+          "name": "row",
+          "type": "integer",
+          "required": false,
+          "description": "Row whose result becomes the new nested chooser (default: add a new row for it)"
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "required": false,
+          "description": "Name for the nested chooser (default NestedChooser, made unique)"
+        }
+      ]
+    },
+    "chooser_delete_column": {
+      "category": "chooser",
+      "params": [
+        {
+          "name": "table",
+          "type": "string",
+          "required": true,
+          "description": "ChooserTable asset path, e.g. /Game/Path/CT_Locomotion",
+          "aliases": [
+            "assetPath"
+          ]
+        },
+        {
+          "name": "nested",
+          "type": "string",
+          "required": false,
+          "description": "Name or object path of a nested chooser inside the table's asset to work on instead of the table itself (chooser(list_nested) lists them)"
+        },
+        {
+          "name": "column",
+          "type": "integer",
+          "required": true,
+          "description": "Column index, 0-based"
+        }
+      ]
+    },
+    "chooser_delete_nested": {
+      "category": "chooser",
+      "params": [
+        {
+          "name": "table",
+          "type": "string",
+          "required": true,
+          "description": "ChooserTable asset path, e.g. /Game/Path/CT_Locomotion",
+          "aliases": [
+            "assetPath"
+          ]
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "required": true,
+          "description": "Nested object name or object path (chooser(list_nested) lists them)"
+        }
+      ]
+    },
     "chooser_delete_row": {
       "category": "chooser",
       "params": [
@@ -8317,10 +8626,218 @@
           "type": "integer",
           "required": true,
           "description": "Row index, 0-based"
+        },
+        {
+          "name": "nested",
+          "type": "string",
+          "required": false,
+          "description": "Name or object path of a nested chooser inside the table's asset to work on instead of the table itself (chooser(list_nested) lists them)"
+        }
+      ]
+    },
+    "chooser_delete_rows": {
+      "category": "chooser",
+      "params": [
+        {
+          "name": "table",
+          "type": "string",
+          "required": true,
+          "description": "ChooserTable asset path, e.g. /Game/Path/CT_Locomotion",
+          "aliases": [
+            "assetPath"
+          ]
+        },
+        {
+          "name": "nested",
+          "type": "string",
+          "required": false,
+          "description": "Name or object path of a nested chooser inside the table's asset to work on instead of the table itself (chooser(list_nested) lists them)"
+        },
+        {
+          "name": "rows",
+          "type": "array",
+          "required": true,
+          "description": "Row indices, 0-based; duplicates are ignored",
+          "items": "integer"
         }
       ]
     },
     "chooser_describe": {
+      "category": "chooser",
+      "params": [
+        {
+          "name": "table",
+          "type": "string",
+          "required": true,
+          "description": "ChooserTable asset path, e.g. /Game/Path/CT_Locomotion",
+          "aliases": [
+            "assetPath"
+          ]
+        },
+        {
+          "name": "nested",
+          "type": "string",
+          "required": false,
+          "description": "Name or object path of a nested chooser inside the table's asset to work on instead of the table itself (chooser(list_nested) lists them)"
+        }
+      ]
+    },
+    "chooser_duplicate_column": {
+      "category": "chooser",
+      "params": [
+        {
+          "name": "table",
+          "type": "string",
+          "required": true,
+          "description": "ChooserTable asset path, e.g. /Game/Path/CT_Locomotion",
+          "aliases": [
+            "assetPath"
+          ]
+        },
+        {
+          "name": "nested",
+          "type": "string",
+          "required": false,
+          "description": "Name or object path of a nested chooser inside the table's asset to work on instead of the table itself (chooser(list_nested) lists them)"
+        },
+        {
+          "name": "column",
+          "type": "integer",
+          "required": true,
+          "description": "Column index, 0-based"
+        }
+      ]
+    },
+    "chooser_duplicate_rows": {
+      "category": "chooser",
+      "params": [
+        {
+          "name": "table",
+          "type": "string",
+          "required": true,
+          "description": "ChooserTable asset path, e.g. /Game/Path/CT_Locomotion",
+          "aliases": [
+            "assetPath"
+          ]
+        },
+        {
+          "name": "nested",
+          "type": "string",
+          "required": false,
+          "description": "Name or object path of a nested chooser inside the table's asset to work on instead of the table itself (chooser(list_nested) lists them)"
+        },
+        {
+          "name": "rows",
+          "type": "array",
+          "required": true,
+          "description": "Row indices, 0-based; duplicates are ignored",
+          "items": "integer"
+        }
+      ]
+    },
+    "chooser_get_cell": {
+      "category": "chooser",
+      "params": [
+        {
+          "name": "table",
+          "type": "string",
+          "required": true,
+          "description": "ChooserTable asset path, e.g. /Game/Path/CT_Locomotion",
+          "aliases": [
+            "assetPath"
+          ]
+        },
+        {
+          "name": "nested",
+          "type": "string",
+          "required": false,
+          "description": "Name or object path of a nested chooser inside the table's asset to work on instead of the table itself (chooser(list_nested) lists them)"
+        },
+        {
+          "name": "column",
+          "type": "integer",
+          "required": true,
+          "description": "Column index, 0-based"
+        },
+        {
+          "name": "row",
+          "type": "integer",
+          "required": false,
+          "description": "Row index, 0-based (omit with fallback=true)"
+        },
+        {
+          "name": "fallback",
+          "type": "boolean",
+          "required": false,
+          "description": "Address the column's fallback cell instead of a row (output columns only)"
+        }
+      ]
+    },
+    "chooser_get_property": {
+      "category": "chooser",
+      "params": [
+        {
+          "name": "table",
+          "type": "string",
+          "required": true,
+          "description": "ChooserTable asset path, e.g. /Game/Path/CT_Locomotion",
+          "aliases": [
+            "assetPath"
+          ]
+        },
+        {
+          "name": "nested",
+          "type": "string",
+          "required": false,
+          "description": "Name or object path of a nested chooser inside the table's asset to work on instead of the table itself (chooser(list_nested) lists them)"
+        },
+        {
+          "name": "target",
+          "type": "string",
+          "required": true,
+          "description": "What the path is read from: a column, a row's result, the fallback result, or a parameter",
+          "enum": [
+            "column",
+            "row",
+            "fallback",
+            "parameter"
+          ]
+        },
+        {
+          "name": "index",
+          "type": "integer",
+          "required": false,
+          "description": "Column, row or parameter index (not used for fallback)"
+        },
+        {
+          "name": "propertyPath",
+          "type": "string",
+          "required": false,
+          "description": "'.' separated property names with [index] for array elements, stepping into instanced structs, e.g. 'InputValue.Binding.DisplayName', 'Asset', 'DefaultRowValue'. Empty addresses the whole struct"
+        }
+      ]
+    },
+    "chooser_get_signature": {
+      "category": "chooser",
+      "params": [
+        {
+          "name": "table",
+          "type": "string",
+          "required": true,
+          "description": "ChooserTable or ChooserSignature asset path. A nested chooser uses its root table's signature",
+          "aliases": [
+            "assetPath"
+          ]
+        },
+        {
+          "name": "nested",
+          "type": "string",
+          "required": false,
+          "description": "Name or object path of a nested chooser inside the table's asset to work on instead of the table itself (chooser(list_nested) lists them)"
+        }
+      ]
+    },
+    "chooser_list_nested": {
       "category": "chooser",
       "params": [
         {
@@ -8371,6 +8888,112 @@
           "aliases": [
             "assetPath"
           ]
+        },
+        {
+          "name": "nested",
+          "type": "string",
+          "required": false,
+          "description": "Name or object path of a nested chooser inside the table's asset to work on instead of the table itself (chooser(list_nested) lists them)"
+        }
+      ]
+    },
+    "chooser_list_types": {
+      "category": "chooser",
+      "params": [
+        {
+          "name": "kind",
+          "type": "string",
+          "required": true,
+          "description": "Which types: column, result (row result), parameter, or input (the input types one column accepts; needs table and column)",
+          "enum": [
+            "column",
+            "result",
+            "parameter",
+            "input"
+          ]
+        },
+        {
+          "name": "table",
+          "type": "string",
+          "required": false,
+          "description": "ChooserTable asset path, for kind 'input'"
+        },
+        {
+          "name": "nested",
+          "type": "string",
+          "required": false,
+          "description": "Name or object path of a nested chooser inside the table's asset to work on instead of the table itself (chooser(list_nested) lists them)"
+        },
+        {
+          "name": "column",
+          "type": "integer",
+          "required": false,
+          "description": "Column index, for kind 'input'"
+        }
+      ]
+    },
+    "chooser_move_column": {
+      "category": "chooser",
+      "params": [
+        {
+          "name": "table",
+          "type": "string",
+          "required": true,
+          "description": "ChooserTable asset path, e.g. /Game/Path/CT_Locomotion",
+          "aliases": [
+            "assetPath"
+          ]
+        },
+        {
+          "name": "nested",
+          "type": "string",
+          "required": false,
+          "description": "Name or object path of a nested chooser inside the table's asset to work on instead of the table itself (chooser(list_nested) lists them)"
+        },
+        {
+          "name": "column",
+          "type": "integer",
+          "required": true,
+          "description": "Column index, 0-based"
+        },
+        {
+          "name": "newIndex",
+          "type": "integer",
+          "required": true,
+          "description": "Index the column ends up at. A randomize column stays last and cannot be moved"
+        }
+      ]
+    },
+    "chooser_move_rows": {
+      "category": "chooser",
+      "params": [
+        {
+          "name": "table",
+          "type": "string",
+          "required": true,
+          "description": "ChooserTable asset path, e.g. /Game/Path/CT_Locomotion",
+          "aliases": [
+            "assetPath"
+          ]
+        },
+        {
+          "name": "nested",
+          "type": "string",
+          "required": false,
+          "description": "Name or object path of a nested chooser inside the table's asset to work on instead of the table itself (chooser(list_nested) lists them)"
+        },
+        {
+          "name": "rows",
+          "type": "array",
+          "required": true,
+          "description": "Row indices, 0-based; duplicates are ignored",
+          "items": "integer"
+        },
+        {
+          "name": "targetIndex",
+          "type": "integer",
+          "required": true,
+          "description": "Insert the rows, in their current order, before this row index as it is before the move; rowCount moves them to the end. To move row r to final index n, pass n+1 when n > r, else n"
         }
       ]
     },
@@ -8424,6 +9047,287 @@
         }
       ]
     },
+    "chooser_remove_disabled": {
+      "category": "chooser",
+      "params": [
+        {
+          "name": "table",
+          "type": "string",
+          "required": true,
+          "description": "ChooserTable asset path, e.g. /Game/Path/CT_Locomotion",
+          "aliases": [
+            "assetPath"
+          ]
+        },
+        {
+          "name": "nested",
+          "type": "string",
+          "required": false,
+          "description": "Name or object path of a nested chooser inside the table's asset to work on instead of the table itself (chooser(list_nested) lists them)"
+        }
+      ]
+    },
+    "chooser_remove_parameter": {
+      "category": "chooser",
+      "params": [
+        {
+          "name": "table",
+          "type": "string",
+          "required": true,
+          "description": "ChooserTable or ChooserSignature asset path. A nested chooser uses its root table's signature",
+          "aliases": [
+            "assetPath"
+          ]
+        },
+        {
+          "name": "nested",
+          "type": "string",
+          "required": false,
+          "description": "Name or object path of a nested chooser inside the table's asset to work on instead of the table itself (chooser(list_nested) lists them)"
+        },
+        {
+          "name": "index",
+          "type": "integer",
+          "required": true,
+          "description": "Parameter index, 0-based"
+        }
+      ]
+    },
+    "chooser_rename_nested": {
+      "category": "chooser",
+      "params": [
+        {
+          "name": "table",
+          "type": "string",
+          "required": true,
+          "description": "ChooserTable asset path, e.g. /Game/Path/CT_Locomotion",
+          "aliases": [
+            "assetPath"
+          ]
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "required": true,
+          "description": "Nested object name or object path (chooser(list_nested) lists them)"
+        },
+        {
+          "name": "newName",
+          "type": "string",
+          "required": true,
+          "description": "New object name, unique among the asset's nested objects"
+        }
+      ]
+    },
+    "chooser_restore_snapshot": {
+      "category": "chooser",
+      "params": [
+        {
+          "name": "table",
+          "type": "string",
+          "required": true,
+          "description": "ChooserTable asset path, e.g. /Game/Path/CT_Locomotion",
+          "aliases": [
+            "assetPath"
+          ]
+        },
+        {
+          "name": "snapshot",
+          "type": "object",
+          "required": true,
+          "description": "Snapshot of the asset's chooser tables, as the rollback of delete_column, delete_rows, move_rows, auto_populate, delete_nested and remove_disabled carries it"
+        }
+      ]
+    },
+    "chooser_set_cell": {
+      "category": "chooser",
+      "params": [
+        {
+          "name": "table",
+          "type": "string",
+          "required": true,
+          "description": "ChooserTable asset path, e.g. /Game/Path/CT_Locomotion",
+          "aliases": [
+            "assetPath"
+          ]
+        },
+        {
+          "name": "nested",
+          "type": "string",
+          "required": false,
+          "description": "Name or object path of a nested chooser inside the table's asset to work on instead of the table itself (chooser(list_nested) lists them)"
+        },
+        {
+          "name": "column",
+          "type": "integer",
+          "required": true,
+          "description": "Column index, 0-based"
+        },
+        {
+          "name": "row",
+          "type": "integer",
+          "required": false,
+          "description": "Row index, 0-based (omit with fallback=true)"
+        },
+        {
+          "name": "fallback",
+          "type": "boolean",
+          "required": false,
+          "description": "Address the column's fallback cell instead of a row (output columns only)"
+        },
+        {
+          "name": "value",
+          "type": "string",
+          "required": true,
+          "description": "Cell value as struct text, e.g. '(Min=0,Max=100)', or a bare number or boolean for a scalar cell"
+        }
+      ]
+    },
+    "chooser_set_column": {
+      "category": "chooser",
+      "params": [
+        {
+          "name": "table",
+          "type": "string",
+          "required": true,
+          "description": "ChooserTable asset path, e.g. /Game/Path/CT_Locomotion",
+          "aliases": [
+            "assetPath"
+          ]
+        },
+        {
+          "name": "nested",
+          "type": "string",
+          "required": false,
+          "description": "Name or object path of a nested chooser inside the table's asset to work on instead of the table itself (chooser(list_nested) lists them)"
+        },
+        {
+          "name": "column",
+          "type": "integer",
+          "required": true,
+          "description": "Column index, 0-based"
+        },
+        {
+          "name": "disabled",
+          "type": "boolean",
+          "required": false,
+          "description": "Disable or enable the column"
+        },
+        {
+          "name": "inputType",
+          "type": "string",
+          "required": false,
+          "description": "Change the column's input type (chooser(list_types, kind='input') lists the ones it accepts)"
+        },
+        {
+          "name": "parameterIndex",
+          "type": "integer",
+          "required": false,
+          "description": "Bind the input to this class or struct parameter (with propertyChain)"
+        },
+        {
+          "name": "propertyChain",
+          "type": "array",
+          "required": false,
+          "description": "Property names to follow from the parameter, e.g. [\"Speed\"] or [\"MyStruct\", \"MyFloat\"]; empty binds the parameter itself",
+          "items": "string"
+        }
+      ]
+    },
+    "chooser_set_fallback": {
+      "category": "chooser",
+      "params": [
+        {
+          "name": "table",
+          "type": "string",
+          "required": true,
+          "description": "ChooserTable asset path, e.g. /Game/Path/CT_Locomotion",
+          "aliases": [
+            "assetPath"
+          ]
+        },
+        {
+          "name": "nested",
+          "type": "string",
+          "required": false,
+          "description": "Name or object path of a nested chooser inside the table's asset to work on instead of the table itself (chooser(list_nested) lists them)"
+        },
+        {
+          "name": "resultType",
+          "type": "string",
+          "required": false,
+          "description": "Result struct type for a default result (AssetChooser, SoftAssetChooser, EvaluateChooser, ClassChooser and so on; chooser(list_types, kind='result') lists them). Fill it in with chooser(set_property)"
+        },
+        {
+          "name": "output",
+          "type": "string",
+          "required": false,
+          "description": "Output asset path for the row (a PoseSearchDatabase, a nested ChooserTable, etc.)"
+        },
+        {
+          "name": "outputType",
+          "type": "string",
+          "required": false,
+          "description": "Output wrapper: 'asset' (hard ref, default) | 'soft_asset' | 'evaluate' (nested ChooserTable reference)"
+        },
+        {
+          "name": "remove",
+          "type": "boolean",
+          "required": false,
+          "description": "Remove the fallback result; output columns keep their fallback cells"
+        }
+      ]
+    },
+    "chooser_set_property": {
+      "category": "chooser",
+      "params": [
+        {
+          "name": "table",
+          "type": "string",
+          "required": true,
+          "description": "ChooserTable asset path, e.g. /Game/Path/CT_Locomotion",
+          "aliases": [
+            "assetPath"
+          ]
+        },
+        {
+          "name": "nested",
+          "type": "string",
+          "required": false,
+          "description": "Name or object path of a nested chooser inside the table's asset to work on instead of the table itself (chooser(list_nested) lists them)"
+        },
+        {
+          "name": "target",
+          "type": "string",
+          "required": true,
+          "description": "What the path is read from: a column, a row's result, the fallback result, or a parameter",
+          "enum": [
+            "column",
+            "row",
+            "fallback",
+            "parameter"
+          ]
+        },
+        {
+          "name": "index",
+          "type": "integer",
+          "required": false,
+          "description": "Column, row or parameter index (not used for fallback)"
+        },
+        {
+          "name": "propertyPath",
+          "type": "string",
+          "required": false,
+          "description": "'.' separated property names with [index] for array elements, stepping into instanced structs, e.g. 'InputValue.Binding.DisplayName', 'Asset', 'DefaultRowValue'. Empty addresses the whole struct"
+        },
+        {
+          "name": "value",
+          "type": "string",
+          "required": true,
+          "description": "Value in Unreal text format, the form copy and paste use in the details panel, e.g. '0.5', '/Game/Anims/Run.Run', '(Min=0,Max=100)'"
+        }
+      ]
+    },
     "chooser_set_row": {
       "category": "chooser",
       "params": [
@@ -8471,6 +9375,61 @@
           "type": "object",
           "required": false,
           "description": "Cell values keyed by column index (as string) or column name; same value format as cells"
+        },
+        {
+          "name": "nested",
+          "type": "string",
+          "required": false,
+          "description": "Name or object path of a nested chooser inside the table's asset to work on instead of the table itself (chooser(list_nested) lists them)"
+        },
+        {
+          "name": "resultType",
+          "type": "string",
+          "required": false,
+          "description": "Result struct type for a default result (AssetChooser, SoftAssetChooser, EvaluateChooser, ClassChooser and so on; chooser(list_types, kind='result') lists them). Fill it in with chooser(set_property)"
+        }
+      ]
+    },
+    "chooser_set_signature": {
+      "category": "chooser",
+      "params": [
+        {
+          "name": "table",
+          "type": "string",
+          "required": true,
+          "description": "ChooserTable or ChooserSignature asset path. A nested chooser uses its root table's signature",
+          "aliases": [
+            "assetPath"
+          ]
+        },
+        {
+          "name": "nested",
+          "type": "string",
+          "required": false,
+          "description": "Name or object path of a nested chooser inside the table's asset to work on instead of the table itself (chooser(list_nested) lists them)"
+        },
+        {
+          "name": "resultType",
+          "type": "string",
+          "required": false,
+          "description": "What the chooser returns",
+          "enum": [
+            "ObjectResult",
+            "ClassResult",
+            "NoPrimaryResult"
+          ]
+        },
+        {
+          "name": "resultClass",
+          "type": "string",
+          "required": false,
+          "description": "Result Class: the class of object returned, or the parent class of the classes returned. Empty clears it"
+        },
+        {
+          "name": "signatureAsset",
+          "type": "string",
+          "required": false,
+          "description": "ChooserSignature asset to inherit the result type, result class and parameters from (UE 5.9). Empty clears the reference and restores the local values"
         }
       ]
     },
@@ -23179,6 +24138,41 @@
         }
       ]
     },
+    "list_state_tree_bindable_properties": {
+      "category": "statetree",
+      "params": [
+        {
+          "name": "assetPath",
+          "type": "string",
+          "required": true,
+          "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+        },
+        {
+          "name": "structId",
+          "type": "string",
+          "required": true,
+          "description": "Bindable struct GUID, as list_bindable_sources reports it"
+        },
+        {
+          "name": "targetPath",
+          "type": "string",
+          "required": false,
+          "description": "A property of that struct: list the compatible sources in its scope instead of the struct's properties"
+        },
+        {
+          "name": "exactOnly",
+          "type": "boolean",
+          "required": false,
+          "description": "With targetPath: leave out sources that need a numeric promotion"
+        },
+        {
+          "name": "maxDepth",
+          "type": "integer",
+          "required": false,
+          "description": "How deep to descend into value structs: 1 is top level only, 0 is unlimited (default 3)"
+        }
+      ]
+    },
     "list_state_tree_bindable_sources": {
       "category": "statetree",
       "params": [
@@ -25106,6 +26100,29 @@
           "type": "string",
           "required": true,
           "description": "Content folder to move it to"
+        }
+      ]
+    },
+    "move_state_tree_node": {
+      "category": "statetree",
+      "params": [
+        {
+          "name": "assetPath",
+          "type": "string",
+          "required": true,
+          "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+        },
+        {
+          "name": "nodeId",
+          "type": "string",
+          "required": true,
+          "description": "GUID of the task, condition, consideration, evaluator or global task, as the add_* actions return it"
+        },
+        {
+          "name": "newIndex",
+          "type": "integer",
+          "required": true,
+          "description": "Position the node ends up at within the list it is in, 0-based"
         }
       ]
     },
@@ -28534,6 +29551,47 @@
         }
       ]
     },
+    "promote_state_tree_property_to_parameter": {
+      "category": "statetree",
+      "params": [
+        {
+          "name": "assetPath",
+          "type": "string",
+          "required": true,
+          "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+        },
+        {
+          "name": "targetStructId",
+          "type": "string",
+          "required": true,
+          "description": "Struct GUID of the property to promote"
+        },
+        {
+          "name": "targetPath",
+          "type": "string",
+          "required": true,
+          "description": "Property path to promote"
+        },
+        {
+          "name": "parameterName",
+          "type": "string",
+          "required": false,
+          "description": "Name for the new parameter (default: the property name, made unique)"
+        },
+        {
+          "name": "stateId",
+          "type": "string",
+          "required": false,
+          "description": "State to hold the parameter: the target's state or an ancestor. Omit both for a tree parameter"
+        },
+        {
+          "name": "statePath",
+          "type": "string",
+          "required": false,
+          "description": "Dot-path of that state, as an alternative to stateId"
+        }
+      ]
+    },
     "purge_python_modules": {
       "category": "editor",
       "params": [
@@ -30634,6 +31692,23 @@
           "type": "string",
           "required": true,
           "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+        }
+      ]
+    },
+    "read_state_tree_node": {
+      "category": "statetree",
+      "params": [
+        {
+          "name": "assetPath",
+          "type": "string",
+          "required": true,
+          "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+        },
+        {
+          "name": "nodeId",
+          "type": "string",
+          "required": true,
+          "description": "GUID of any node in the tree, as the add_* actions return it"
         }
       ]
     },
@@ -42882,6 +43957,76 @@
           "type": "string",
           "required": true,
           "description": "The Blueprint class this node runs, as a class path or a loaded class name"
+        }
+      ]
+    },
+    "set_state_tree_node_data": {
+      "category": "statetree",
+      "params": [
+        {
+          "name": "assetPath",
+          "type": "string",
+          "required": true,
+          "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+        },
+        {
+          "name": "nodeId",
+          "type": "string",
+          "required": true,
+          "description": "GUID of the node, as the add_* actions return it"
+        },
+        {
+          "name": "target",
+          "type": "string",
+          "required": false,
+          "description": "node (the node struct), instance (default) or executionRuntime"
+        },
+        {
+          "name": "propertyName",
+          "type": "string",
+          "required": false,
+          "description": "Property to write. Omit to replace the whole struct with value"
+        },
+        {
+          "name": "value",
+          "type": "string",
+          "required": true,
+          "description": "Value in Unreal text format, e.g. 2.5, true, (X=1,Y=2)"
+        }
+      ]
+    },
+    "set_state_tree_node_flags": {
+      "category": "statetree",
+      "params": [
+        {
+          "name": "assetPath",
+          "type": "string",
+          "required": true,
+          "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+        },
+        {
+          "name": "nodeId",
+          "type": "string",
+          "required": true,
+          "description": "GUID of the node, as the add_* actions return it"
+        },
+        {
+          "name": "taskEnabled",
+          "type": "boolean",
+          "required": false,
+          "description": "Tasks: enable or disable the task"
+        },
+        {
+          "name": "consideredForCompletion",
+          "type": "boolean",
+          "required": false,
+          "description": "Tasks: whether the task counts toward the state completing. The task must be enabled and allow the edit"
+        },
+        {
+          "name": "evaluationMode",
+          "type": "string",
+          "required": false,
+          "description": "Conditions: Evaluated, ForcedTrue or ForcedFalse"
         }
       ]
     },
