@@ -463,6 +463,89 @@ export const handlerSpecs: HandlerSpecs = {
       }
     ]
   },
+  "audit_level_performance": {
+    "category": "level",
+    "params": [
+      {
+        "name": "world",
+        "type": "string",
+        "required": false,
+        "description": "World scope: editor (default) | pie"
+      },
+      {
+        "name": "pieInstance",
+        "type": "integer",
+        "required": false,
+        "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients"
+      },
+      {
+        "name": "regionMin",
+        "type": "vec3",
+        "required": false,
+        "description": "Audit only primitives and lights whose bounds meet this box; minimum corner, world space"
+      },
+      {
+        "name": "regionMax",
+        "type": "vec3",
+        "required": false,
+        "description": "Maximum corner of the box; pass with regionMin"
+      },
+      {
+        "name": "gridSize",
+        "type": "number",
+        "required": false,
+        "description": "Side of the X/Y cells regions are reported in, in cm (default 5000, min 100)"
+      },
+      {
+        "name": "maxResults",
+        "type": "integer",
+        "required": false,
+        "description": "Rows per list (default 20, max 200); totals cover everything"
+      },
+      {
+        "name": "instancingMinCount",
+        "type": "integer",
+        "required": false,
+        "description": "Separate components of one mesh before it is an instancing candidate (default 10)"
+      },
+      {
+        "name": "heavyTriangleThreshold",
+        "type": "number",
+        "required": false,
+        "description": "LOD0 triangles at which a non-Nanite static mesh is a Nanite candidate (default 50000)"
+      },
+      {
+        "name": "outlierFactor",
+        "type": "number",
+        "required": false,
+        "description": "How many times above or below the median a texel or lightmap density must be to be an outlier (default 4)"
+      },
+      {
+        "name": "translucentAreaM2",
+        "type": "number",
+        "required": false,
+        "description": "Largest bounds face, in square metres, at which a translucent primitive is an overdraw candidate (default 100)"
+      },
+      {
+        "name": "stackedTranslucentCount",
+        "type": "integer",
+        "required": false,
+        "description": "Overlapping translucent primitives, itself included, that make a stack (default 3)"
+      },
+      {
+        "name": "dumpToFile",
+        "type": "boolean",
+        "required": false,
+        "description": "Write every row to a JSON file and return the totals with its path (default false)"
+      },
+      {
+        "name": "outputPath",
+        "type": "string",
+        "required": false,
+        "description": "File for dumpToFile; relative paths resolve under Saved/ (default Saved/UE_MCP/PerfAudit/<world>_<time>.json)"
+      }
+    ]
+  },
   "batch_set_actor_properties": {
     "category": "level",
     "params": [
@@ -5540,6 +5623,7 @@ export const paramsClauses: Readonly<Record<string, string>> = {
   aim_actor_at: "Params: actorLabel?, actorPath?, targetPoint?, targetActor?, targetActorPath?, roll?, world?, pieInstance?",
   attach_actor: "Params: childLabel?, childPath?, parentLabel?, parentPath?, attachRule?, socketName?",
   attach_component: "Params: childLabel?, childPath?, parentLabel?, parentPath?, childComponentName?, parentComponentName?, attachRule?, weldSimulatedBodies?, socketName?, relativeLocation?, relativeRotation?",
+  audit_level_performance: "Params: world?, pieInstance?, regionMin?, regionMax?, gridSize?, maxResults?, instancingMinCount?, heavyTriangleThreshold?, outlierFactor?, translucentAreaM2?, stackedTranslucentCount?, dumpToFile?, outputPath?",
   batch_set_actor_properties: "Params: properties, actorLabels?, labelPrefix?, labelContains?, tag?, classFilter?, folderPath?, folderPathPrefix?, matchSubclasses?, dryRun?, force?, transactionLabel?",
   batch_translate: "Params: offset, at least one of actorLabels/actorPaths/tag",
   bulk_line_trace: "Params: traces, world?, pieInstance?",
@@ -5704,7 +5788,7 @@ export const schema: Record<string, z.ZodType> = {
   discardUnsaved: z.boolean().optional().describe("Switch even though the open map has unsaved changes, discarding them (default false)"),
   distance: z.number().optional().describe("Ray length when direction is given (default 200000)"),
   dryRun: z.boolean().optional().describe("Report what would change without writing (batch_set_actor_properties, bulk_set_component_property, load_actor_descs, rename_actor_object, set_actor_hlod_layer, set_component_materials, snap_instances_to_surface). Report what would be removed without removing it (default true) (clear_level_script). Report the verdict per brush without converting (default TRUE) (convert_brushes_to_static_mesh). Report the matches without deleting them (default false) (delete_actors). Preview without deleting (default TRUE) (delete_exact_labeled_actors_in_levels). Report what would be deleted without deleting (default false) (delete_outliner_folder). Inspect and preview the requested transform without writing (default false) (nudge_component). List what would be rebuilt without rebuilding it (default TRUE) (recreate_physics_state). Report what would be removed without removing it (default TRUE) (remove_components_by_class). Report the matches without moving them (default false) (set_actor_folder_path). Return every computed transform without spawning (spawn_actors_batch)"),
-  dumpToFile: z.boolean().optional().describe("Write the whole selection to a JSON file and return only the summary"),
+  dumpToFile: z.boolean().optional().describe("Write every row to a JSON file and return the totals with its path (default false) (audit_level_performance). Write the whole selection to a JSON file and return only the summary (get_skinned_vertices)"),
   duplicateTransformTolerance: z.number().optional().describe("Centimetre bucket for duplicate-transform detection"),
   editorHidden: z.boolean().optional().describe("Only editor-hidden (true) or only visible (false) actors"),
   editorVisible: z.boolean().optional().describe("Editor viewport visibility"),
@@ -5734,10 +5818,12 @@ export const schema: Record<string, z.ZodType> = {
   graphPath: z.string().optional().describe("PCG graph for a PCGVolume"),
   grid: z.string().optional().describe("Streaming grid for cellSize and loadingRange, by name; needed when the map has several"),
   gridPath: z.string().optional().describe("Streaming grid for cellSize and loadingRange, by the dotted path get_world_partition_settings reports"),
+  gridSize: z.number().optional().describe("Side of the X/Y cells regions are reported in, in cm (default 5000, min 100)"),
   groupBy: z.string().optional().describe("Dot path to group matches by; counts components, not instances"),
   guids: z.array(z.string()).optional().describe("Exact actor GUIDs"),
   halfExtent: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Positive box half extents in cm; axis aligned"),
   halfHeight: z.number().optional().describe("Capsule half height in cm, including caps; at least radius"),
+  heavyTriangleThreshold: z.number().optional().describe("LOD0 triangles at which a non-Nanite static mesh is a Nanite candidate (default 50000)"),
   hidden: z.boolean().optional().describe("true hides the actors in the editor, false shows them"),
   hideFromOutliner: z.boolean().optional().describe("Keep the actor out of the World Outliner (default false)"),
   hlodLayer: z.string().nullable().optional().describe("HLODLayer asset path, or null to clear the per-actor override"),
@@ -5761,6 +5847,7 @@ export const schema: Record<string, z.ZodType> = {
   innerConeAngle: z.number().optional().describe("Spot light inner cone angle"),
   instanceIndices: z.array(z.number().int()).optional().describe("Instance indices to project; omit for every instance"),
   instances: z.array(z.object({ location: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("World location"), rotation: z.object({ pitch: z.number(), yaw: z.number(), roll: z.number() }).optional().describe("World rotation"), scale: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Actor scale"), label: z.string().optional().describe("Actor label"), properties: z.record(z.string(), z.unknown()).optional().describe("Property name to value for this spawn; wins over the shared properties") })).optional().describe("Explicit spawns"),
+  instancingMinCount: z.number().int().optional().describe("Separate components of one mesh before it is an instancing candidate (default 10)"),
   intensity: z.number().optional().describe("Light intensity"),
   internalName: z.string().optional().describe("Internal UObject name, such as StaticMeshActor_141"),
   jitter: z.number().optional().describe("Per-axis location jitter"),
@@ -5793,7 +5880,7 @@ export const schema: Record<string, z.ZodType> = {
   maxInstances: z.number().int().optional().describe("Cap on instances processed in one call"),
   maxOccurrences: z.number().int().optional().describe("Cap on occurrence examples per mesh"),
   maxPasses: z.number().int().optional().describe("Rebuild passes before giving up on a stable QuadTreeResolution, 2..8 (default 4)"),
-  maxResults: z.number().int().optional().describe("Cap on result rows; full-scan totals are still reported"),
+  maxResults: z.number().int().optional().describe("Rows per list (default 20, max 200); totals cover everything (audit_level_performance). Cap on result rows; full-scan totals are still reported (summarize_static_mesh_usage)"),
   maxSpawn: z.number().int().optional().describe("Refuse a plan larger than this (default 500, max 5000)"),
   meshPath: z.string().optional().describe("Alias for assetPath (get_nanite_info, set_nanite_settings). The older spelling of skeletalMesh (spawn_skeletal_mesh_actor)"),
   method: z.string().optional().describe("OBB (oriented, default) | AABB (axis-aligned world bounds)"),
@@ -5814,7 +5901,8 @@ export const schema: Record<string, z.ZodType> = {
   onMiss: z.string().optional().describe("error (default, aborts the batch) | skip"),
   onMissing: z.string().optional().describe("error (default) | ignore"),
   outerConeAngle: z.number().optional().describe("Spot light outer cone angle"),
-  outputPath: z.string().optional().describe("Output .fbx path (export_actor_fbx). File for dumpToFile; relative paths resolve under Saved/ (default Saved/UE_MCP/SkinnedVertices/) (get_skinned_vertices)"),
+  outlierFactor: z.number().optional().describe("How many times above or below the median a texel or lightmap density must be to be an outlier (default 4)"),
+  outputPath: z.string().optional().describe("File for dumpToFile; relative paths resolve under Saved/ (default Saved/UE_MCP/PerfAudit/<world>_<time>.json) (audit_level_performance). Output .fbx path (export_actor_fbx). File for dumpToFile; relative paths resolve under Saved/ (default Saved/UE_MCP/SkinnedVertices/) (get_skinned_vertices)"),
   parentComponentName: z.string().optional().describe("Parent SceneComponent instance name; omitted selects the actor root"),
   parentLabel: z.string().optional().describe("Parent actor label; pass parentLabel or parentPath"),
   parentPath: z.string().optional().describe("Parent actor object path"),
@@ -5833,6 +5921,8 @@ export const schema: Record<string, z.ZodType> = {
   reference: z.string().optional().describe("Alias for referenceLabel"),
   referenceLabel: z.string().optional().describe("Reference actor label; pass referenceLabel or referencePath"),
   referencePath: z.string().optional().describe("Reference actor object path"),
+  regionMax: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Maximum corner of the box; pass with regionMin"),
+  regionMin: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Audit only primitives and lights whose bounds meet this box; minimum corner, world space"),
   relativeLocation: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Relative location set after the attach, in the parent component or socket frame"),
   relativeRotation: z.object({ pitch: z.number(), yaw: z.number(), roll: z.number() }).optional().describe("Relative rotation set after the attach, in the parent component or socket frame"),
   relativeTo: z.string().optional().describe("Scene component on the same actor (instance name); every scene component and socket row also reports its transform in that component's space"),
@@ -5856,6 +5946,7 @@ export const schema: Record<string, z.ZodType> = {
   socketNames: z.array(z.string()).optional().describe("Bone or socket names; each component that has sockets reports their component-space transforms"),
   sourceRadius: z.number().optional().describe("Point or spot light source radius"),
   space: z.enum(["component","world"]).optional().describe("Space of positions, box and nearPoint (default component)"),
+  stackedTranslucentCount: z.number().int().optional().describe("Overlapping translucent primitives, itself included, that make a stack (default 3)"),
   start: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Ray start"),
   startDistance: z.number().optional().describe("Fog start distance"),
   startIndex: z.number().int().optional().describe("First selected vertex to return (default 0); ignored with dumpToFile (get_skinned_vertices). First row index; rows are sorted so the index is stable across calls (query_components)"),
@@ -5884,6 +5975,7 @@ export const schema: Record<string, z.ZodType> = {
   transformerClass: z.string().optional().describe("WorldPartitionRuntimeCellTransformer subclass: short name, Module.Class or /Script path"),
   transforms: z.array(z.record(z.string(), z.unknown())).optional().describe("Transforms {location, rotation?, scale?} to add"),
   translationDelta: z.object({ forwardCm: z.number().optional().describe("Along the frame's forward axis"), rightCm: z.number().optional().describe("Along the frame's right axis"), upCm: z.number().optional().describe("Along the frame's up axis") }).optional().describe("Frame-relative translation in centimetres"),
+  translucentAreaM2: z.number().optional().describe("Largest bounds face, in square metres, at which a translucent primitive is an overdraw candidate (default 100)"),
   unloadedOnly: z.boolean().optional().describe("Only actors on disk that are not streamed in"),
   value: z.unknown().optional().describe("Value to write; null clears an object reference (bulk_set_component_property, set_component_property). Value to write (set_actor_property). Value to write: string, number or boolean (set_water_body_property)"),
   viewRotation: z.object({ viewFrom: z.string().describe("front | back | right | left | above | below"), direction: z.string().describe("clockwise | counterclockwise"), degrees: z.number().describe("Rotation in degrees, greater than zero") }).optional().describe("Observer-relative rotation in the selected frame; not with axisRotation"),
@@ -5897,7 +5989,7 @@ export const schema: Record<string, z.ZodType> = {
   weldSimulatedBodies: z.boolean().optional().describe("Weld simulated bodies during attachment (default false)"),
   where: z.array(z.object({ field: z.string().describe("Dot path into the row, such as shadow.effectiveCastShadow or props.CullDistance"), op: z.string().optional().describe("eq (default) | ne | lt | lte | gt | gte | contains | notContains | startsWith | endsWith | in | notIn | exists | notExists | isNull | isNotNull | isTrue | isFalse"), value: z.unknown().optional().describe("Value the operator compares against") })).optional().describe("Predicates evaluated in the editor, at most 24"),
   whereMode: z.string().optional().describe("all (default) | any"),
-  world: z.string().optional().describe("World scope: editor (default) | pie (actors_in_box, aim_actor_at, bulk_line_trace, count_actors_by_class, destroy_transient_actor, get_actor_bounds, get_actor_details, get_actors_by_class, get_actors_by_component_class, get_component_details, get_relative_transform, get_runtime_virtual_texture_summary, get_skinned_vertices, get_spline_info, get_world_outliner, line_trace, list_transient_actors, move_actor, nav_project_point, nudge_component, place_actor, query_components, recreate_physics_state, rerun_construction_scripts, restore_component_relative_transform, set_actor_property, set_component_property, set_component_skeletal_mesh, set_fog_properties, shape_trace, snap_actor_to_floor, spawn_transient_actor, summarize_static_mesh_usage, test_component_overlap). editor (default) | pie | a world object path such as a Blueprint editor preview world (/Engine/Transient.World_N); with world omitted, an actorPath in another world reads that world (get_component_tree). World scope: auto (default, PIE when running) | editor | pie (read_actor_motion)"),
+  world: z.string().optional().describe("World scope: editor (default) | pie (actors_in_box, aim_actor_at, audit_level_performance, bulk_line_trace, count_actors_by_class, destroy_transient_actor, get_actor_bounds, get_actor_details, get_actors_by_class, get_actors_by_component_class, get_component_details, get_relative_transform, get_runtime_virtual_texture_summary, get_skinned_vertices, get_spline_info, get_world_outliner, line_trace, list_transient_actors, move_actor, nav_project_point, nudge_component, place_actor, query_components, recreate_physics_state, rerun_construction_scripts, restore_component_relative_transform, set_actor_property, set_component_property, set_component_skeletal_mesh, set_fog_properties, shape_trace, snap_actor_to_floor, spawn_transient_actor, summarize_static_mesh_usage, test_component_overlap). editor (default) | pie | a world object path such as a Blueprint editor preview world (/Engine/Transient.World_N); with world omitted, an actorPath in another world reads that world (get_component_tree). World scope: auto (default, PIE when running) | editor | pie (read_actor_motion)"),
   worldSpace: z.boolean().optional().describe("Treat transforms as world space (default true)"),
   zoneExtent: z.unknown().optional().describe("New WaterZone ZoneExtent in cm, {x, y} or [x, y]"),
 };

@@ -54,6 +54,7 @@ export const TIMEOUT_ENV_VAR = ENV_VARS.bridgeTimeoutMs;
  * come from plugins this repo does not build.
  */
 export const REGISTERED_HANDLER_TIMEOUT_SECONDS: Readonly<Record<string, number>> = {
+  analyze_insights_trace: 600,
   analyze_landscape_terrain: 120,
   apply_landscape_erosion: 600,
   apply_mesh_fracture: 600,
@@ -63,6 +64,7 @@ export const REGISTERED_HANDLER_TIMEOUT_SECONDS: Readonly<Record<string, number>
   apply_mesh_simplify: 300,
   audit_asset_hygiene: 300,
   audit_blueprint_dead_code: 600,
+  audit_level_performance: 300,
   batch_retarget_animations: 300,
   batch_set_actor_properties: 300,
   batch_set_foliage_settings_where: 300,
@@ -143,6 +145,8 @@ export const REGISTERED_HANDLER_TIMEOUT_SECONDS: Readonly<Record<string, number>
   source_control_submit: 120,
   source_control_sync: 300,
   spawn_actors_batch: 300,
+  start_csv_profile: 30,
+  stop_csv_profile: 90,
   summarize_static_mesh_usage: 300,
   transform_skinned_part: 600,
   trigger_hitch: 30,
