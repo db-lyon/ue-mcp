@@ -1,0 +1,17 @@
+{
+  "success": true,
+  "path": "/Game/Blueprints/BP_Door",
+  "graphName": "Open Door",
+  "graphType": "Other",
+  "nodes": [
+    { "id": "Tn1aB2cD3eF4gH5iJ6kL7w", "class": "K2Node_Tunnel", "title": "Inputs" },
+    { "id": "Tl8mN9oP0qR1sT2uV3wX4w", "class": "K2Node_CallFunction", "title": "Set Relative Rotation" },
+    { "id": "To5yZ6aB7cD8eF9gH0iJ1w", "class": "K2Node_Tunnel", "title": "Outputs" }
+  ],
+  "execEdges": [
+    { "from": "Tn1aB2cD3eF4gH5iJ6kL7w", "fromPin": "execute", "to": "Tl8mN9oP0qR1sT2uV3wX4w", "toPin": "execute" },
+    { "from": "Tl8mN9oP0qR1sT2uV3wX4w", "fromPin": "then", "to": "To5yZ6aB7cD8eF9gH0iJ1w", "toPin": "Finished" }
+  ],
+  "dataEdges": [],
+  "nodeCount": 3
+}

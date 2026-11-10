@@ -1,0 +1,33 @@
+{
+  "success": true,
+  "assetPath": "/Game/AI/BT_Enemy",
+  "name": "BT_Enemy",
+  "blackboardAsset": "/Game/AI/BB_Enemy.BB_Enemy",
+  "blackboardKeys": [{ "name": "TargetActor", "type": "Object" }],
+  "rootDecorators": [],
+  "root": {
+    "path": "Root", "parentPath": "", "kind": "composite", "class": "BTComposite_Selector", "name": "BTComposite_Selector_0", "nodeName": "Selector", "staticDescription": "",
+    "services": [{ "path": "Root.Services[0]", "kind": "service", "class": "BTService_DefaultFocus", "nodeName": "Set Default Focus", "staticDescription": "Set default focus to TargetActor" }],
+    "children": [
+      {
+        "path": "Root.Children[0]",
+        "decorators": [{ "path": "Root.Children[0].Decorators[0]", "kind": "decorator", "class": "BTDecorator_Blackboard", "nodeName": "Has Target", "staticDescription": "Blackboard: TargetActor is Set" }],
+        "child": {
+          "path": "Root.Children[0]", "parentPath": "Root", "kind": "composite", "class": "BTComposite_Sequence", "nodeName": "Sequence", "staticDescription": "",
+          "services": [],
+          "children": [
+            { "path": "Root.Children[0].Children[0]", "decorators": [], "child": { "path": "Root.Children[0].Children[0]", "parentPath": "Root.Children[0]", "kind": "task", "class": "BTTask_MoveTo", "nodeName": "Move To", "staticDescription": "MoveTo: TargetActor", "services": [] } },
+            { "path": "Root.Children[0].Children[1]", "decorators": [], "child": { "path": "Root.Children[0].Children[1]", "parentPath": "Root.Children[0]", "kind": "task", "class": "BTT_Attack_C", "nodeName": "Attack", "staticDescription": "", "services": [] } }
+          ]
+        }
+      },
+      {
+        "path": "Root.Children[1]",
+        "decorators": [],
+        "child": { "path": "Root.Children[1]", "parentPath": "Root", "kind": "task", "class": "BTTask_Wait", "nodeName": "Wait", "staticDescription": "Wait: 5.0s", "services": [] }
+      }
+    ]
+  },
+  "decoratorCount": 1,
+  "serviceCount": 1
+}
