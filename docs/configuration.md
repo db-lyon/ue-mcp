@@ -359,6 +359,7 @@ The plugin reads `bridge.port` from the same layered files as the client: `~/.ue
 
 - **A pin is a request.** If something already holds the port, the plugin moves upward, logs a warning naming the port asked for and the one taken, and publishes the port it bound. The client follows `port.json`.
 - **A value the plugin cannot use is announced, not applied.** A `bridge.port` that is not a whole number in `1-65535` is logged as a warning and the derived port is used. The plugin reads this key with a small reader rather than a YAML parser: write it as plain nested keys, as above. A flow mapping (`bridge: { port: 50123 }`) or an anchor is not read by the plugin, and the editor log says so.
+- **Unreal Canvas keeps 9877 and 9880.** In a project that enables the Unreal Canvas Bridge (UE 5.9, `UnrealCanvasBridge`), its webcam server listens on `127.0.0.1:9877` and its viewport stream falls back to `9880`. There, a pin on either port is not used: both halves take the derived port instead and log why, and the plugin's upward walk steps over both. `ue-mcp doctor` reports a pin or a running editor on one of them.
 
 ### Which editor lifecycle actions act on
 

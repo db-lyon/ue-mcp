@@ -58,6 +58,7 @@ import {
   ueMcpAssistantDescriptor,
   type UnrealAssistantStatus,
 } from "../integrations/epic/unreal-assistant.js";
+import { canvasPortReplacement } from "../integrations/epic/unreal-canvas.js";
 import { epicIntegrations, projectEngineRoot, type EpicIntegrations } from "../integrations/epic/project-status.js";
 import { packageVersion } from "../core/package-root.js";
 import { warn as logWarn } from "../core/log.js";
@@ -180,15 +181,23 @@ export interface BridgePort {
   derivedPort: number;
   /** "env" for UE_MCP_PORT, "config" for ue-mcp.bridge.port, null when derived. */
   pinnedBy: "env" | "config" | null;
+  /**
+   * A pinned port this project's Unreal Canvas Bridge claims, which the bridge
+   * does not use; `port` is then the derived one (unreal-canvas.ts).
+   */
+  avoided?: { port: number; reason: string };
 }
 
 export function bridgePort(project: ProjectContext): BridgePort {
   const derivedPort = deriveProjectPort(project.projectDir!);
   const envPort = Number.parseInt(readEnv("port") ?? "", 10);
-  if (Number.isFinite(envPort) && envPort > 0) return { port: envPort, derivedPort, pinnedBy: "env" };
   const configPort = project.config.bridge?.port;
-  if (configPort) return { port: configPort, derivedPort, pinnedBy: "config" };
-  return { port: derivedPort, derivedPort, pinnedBy: null };
+  const pinnedBy = Number.isFinite(envPort) && envPort > 0 ? "env" : configPort ? "config" : null;
+  if (!pinnedBy) return { port: derivedPort, derivedPort, pinnedBy: null };
+  const pinned = pinnedBy === "env" ? envPort : configPort!;
+  const swap = canvasPortReplacement(project.projectPath, pinned, derivedPort);
+  if (swap) return { port: swap.port, derivedPort, pinnedBy, avoided: { port: pinned, reason: swap.reason } };
+  return { port: pinned, derivedPort, pinnedBy };
 }
 
 export const FEEDBACK_MODES: readonly FeedbackMode[] = ["interactive", "auto-approve", "defer"];
@@ -237,7 +246,8 @@ export function engineConfigRoot(project: ProjectContext): string | null {
 
 /** Epic's Unreal MCP server and Unreal Assistant for a project, counting the bridge port init gives it. */
 export function projectEpicIntegrations(project: ProjectContext, engineRoot?: string | null): EpicIntegrations {
-  return epicIntegrations(project, bridgePort(project).port, engineRoot === undefined ? projectEngineRoot(project) : engineRoot);
+  const bridge = bridgePort(project);
+  return epicIntegrations(project, bridge.port, engineRoot === undefined ? projectEngineRoot(project) : engineRoot, bridge.avoided?.port);
 }
 
 function insideDir(child: string, dir: string): boolean {

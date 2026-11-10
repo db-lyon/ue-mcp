@@ -225,7 +225,9 @@ async function init(argv: string[]): Promise<number | void> {
   // The port this worktree will use, so checkouts on one machine are visibly distinct.
   const port = bridgePort(project);
   info(
-    port.pinnedBy
+    port.avoided
+      ? `Bridge port for this worktree: ${DIM}${port.port}${RESET} (${port.pinnedBy === "env" ? "UE_MCP_PORT" : "ue-mcp.bridge.port"} pins ${port.avoided.port}, but ${port.avoided.reason})`
+      : port.pinnedBy
       ? `Bridge port for this worktree: ${DIM}${port.port}${RESET} (${port.pinnedBy === "env" ? "pinned by UE_MCP_PORT" : "pinned by ue-mcp.bridge.port"}; ${port.derivedPort} is what the project path derives)`
       : `Bridge port for this worktree: ${DIM}${port.port}${RESET} (derived from the project path; pin with ue-mcp.bridge.port if needed)`,
   );

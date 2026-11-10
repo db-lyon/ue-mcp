@@ -9,6 +9,7 @@ import { debug, warn } from "../core/log.js";
 import { DEFAULT_BRIDGE_PORT, deriveProjectPort } from "./port.js";
 import { bridgeStateDir, isPidAlive, resolveLiveBridgeAddress } from "./editor-target.js";
 import { syncRequestedPort } from "./requested-port.js";
+import { canvasPortReplacement } from "../integrations/epic/unreal-canvas.js";
 import { packageVersion } from "../core/package-root.js";
 import { readEnv } from "../core/env.js";
 import { bridgeAuthHeaders, watchUpgradeRefusal } from "./bridge-token.js";
@@ -609,6 +610,30 @@ export class EditorBridge implements IBridge {
     }
   }
 
+  /**
+   * Why the last project's pinned port was not used, or null. Set when the
+   * project enables the Unreal Canvas Bridge and the pin is a port it claims.
+   */
+  public canvasPortAvoided: { port: number; reason: string } | null = null;
+
+  /**
+   * Keep a pin off the ports a project's Unreal Canvas Bridge claims (9877 for
+   * its webcam server, 9880 for its viewport stream). The C++ bridge applies
+   * the same rule when it resolves the port, so both halves land on the
+   * derived port. A lockfile port is what an editor bound, so it is left alone.
+   */
+  private avoidCanvasPorts(uprojectPath: string | null): void {
+    this.canvasPortAvoided = null;
+    if (!uprojectPath || (this.portSource !== "explicit" && this.portSource !== "env" && this.portSource !== "config")) return;
+    const swap = canvasPortReplacement(uprojectPath, this.port, deriveProjectPort(path.dirname(uprojectPath)));
+    if (!swap) return;
+    warn("bridge", `Not using the pinned bridge port: ${swap.reason}.`);
+    this.canvasPortAvoided = { port: this.port, reason: swap.reason };
+    this.port = swap.port;
+    this.portSource = "derived";
+    this.unverifiedPin = false;
+  }
+
   get isConnected(): boolean {
     return this.ws?.readyState === WebSocket.OPEN;
   }
@@ -646,6 +671,7 @@ export class EditorBridge implements IBridge {
       this.portSource = "derived";
       debug("bridge", `derived per-project bridge port ${this.port} from ${path.dirname(uprojectPath)}`);
     }
+    this.avoidCanvasPorts(uprojectPath);
     // #817: hand the pin to the editor. An editor launched from Explorer
     // cannot see UE_MCP_PORT or the config merge that produced this number, so
     // without this file a pinned project has its two halves on different ports.
@@ -695,6 +721,7 @@ export class EditorBridge implements IBridge {
       this.port = deriveProjectPort(path.dirname(resolved));
       this.portSource = "derived";
     }
+    this.avoidCanvasPorts(resolved);
 
     // #817: publish the new target's pin, and only its own. An unverified pin
     // was chosen for the project we just left, so writing it into this one
