@@ -209,6 +209,7 @@ const SESSION_INDEPENDENT: Record<string, string> = {
   "feedback/secret-scrub.ts": "Pure redaction with no context to scope.",
   "dispatch/client-quirks.ts": "About the connected MCP client, not about any editor.",
   "codeintel/ue-ini.ts": "Pure ini utility over whatever directory it is handed.",
+  "codeintel/config-hierarchy.ts": "Reads the config layers of the engine and project directories it is handed. Pure logic over its arguments.",
   "codeintel/cpp-parser.ts": "Pure header inspection over whatever file it is handed.",
   "core/errors.ts": "Shared error codes and the McpError shape.",
   "core/directive.ts": "The directive envelope a handler wraps its result in. A leaf with no imports and no state.",

@@ -490,6 +490,25 @@ The engine is resolved once, and the same answer drives the build tool, the edit
 
 When nothing resolves, the error lists every path probed and where each came from.
 
+## Reading the project's ini settings
+
+`project(read_config)` shows one file. The editor reads a config category (Engine, Game, Input, DeviceProfiles, ...) through a stack of files, each applied on top of the last, and three local actions answer from that stack without an editor:
+
+- `project(resolve_setting, configName, section, key, platform?)`: the final value and the layer, file and line that set it.
+- `project(explain_setting, configName, section, key, platform?)`: every layer that touches the key, lowest first, with its lines and the value after each.
+- `project(diff_config_from_default, configName, platform?, includeUser?)`: every key the project changes from the engine's own value, with both values and the layer that changed it.
+
+The layers, lowest first, for a category `C` and platform `P` (default this machine's: Windows, Mac or Linux; `Win64` is read as Windows):
+
+1. `Engine/Config/Base.ini`
+2. `Engine/Config/BaseC.ini`
+3. `Engine/Config/P/BasePC.ini` (or `Engine/Platforms/P/Config/BasePC.ini`)
+4. `Config/DefaultC.ini` in the project
+5. `Config/P/PC.ini` (or `Platforms/P/Config/PC.ini`) in the project
+6. `Saved/Config/PEditor/C.ini`, the per-user copy the editor writes (`includeUser=false` leaves it out of the diff)
+
+Each line applies Unreal's array operations: `Key=Value` replaces every value, `+Key=Value` adds a value the key does not hold yet, `.Key=Value` adds it even when it does, `-Key=Value` removes that value and `!Key` clears the key. Lines starting with `;` are comments, and section names compare without case. A key with several values answers with a list, and one nobody sets with `null`. The engine is the one [Which Engine A Project Uses](#which-engine-a-project-uses) finds; without one the engine layers are skipped and the answer says so.
+
 ## Environment variables
 
 Each wins over the matching config key. The full list, with the ones tests and services use, is in `src/core/env.ts`.
