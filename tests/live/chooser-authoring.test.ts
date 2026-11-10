@@ -257,6 +257,15 @@ describe("chooser authoring (#1828)", () => {
     expect(deleted.deletedColumnType).toBe("FloatRangeColumn");
     expect(await columns()).toHaveLength(before.length);
 
+    // The inverse is a snapshot; restoring it brings the column back with its cells.
+    const undo = deleted.rollback as Json;
+    expect(undo.method).toBe("chooser_restore_snapshot");
+    await call("chooser_restore_snapshot", undo.payload as Json);
+    expect(await columns()).toHaveLength(before.length + 1);
+    expect(String((await call("chooser_get_cell", { table: TABLE, column: after.length - 1, row: 2 })).value)).toMatch(/Min=25(\.0+)?\b/);
+    await call("chooser_delete_column", { table: TABLE, column: after.length - 1 });
+    expect(await columns()).toHaveLength(before.length);
+
     await call("chooser_add_row", { table: OTHER, output: CUBE });
     await call("chooser_add_row", { table: OTHER, output: SPHERE });
     const copied = await call("chooser_copy_column", { table: TABLE, column: 0, targetTable: OTHER });
@@ -328,9 +337,16 @@ describe("chooser authoring (#1828)", () => {
     expect((nested.nestedObjects as Json[]).map((o) => o.name)).toEqual(["Inner2"]);
     expect(await refused("chooser_list_rows", { table: TABLE, nested: "Inner" })).toMatch(/no nested chooser named 'Inner'/);
 
-    await call("chooser_delete_nested", { table: TABLE, name: "Inner2" });
+    const deleted = await call("chooser_delete_nested", { table: TABLE, name: "Inner2" });
     nested = await call("chooser_list_nested", { table: TABLE });
     expect(nested.count).toBe(0);
+
+    // Restoring the snapshot recreates the nested chooser with its row.
+    const restored = await call("chooser_restore_snapshot", (deleted.rollback as Json).payload as Json);
+    expect(restored.recreatedNested).toBe(1);
+    expect(outputs(await rows(TABLE, "Inner2"))).toEqual([CUBE]);
+    await call("chooser_delete_nested", { table: TABLE, name: "Inner2" });
+    expect((await call("chooser_list_nested", { table: TABLE })).count).toBe(0);
     await call("chooser_delete_row", { table: TABLE, index: rowIndex });
     expect(await rows()).toHaveLength(3);
   }, 60_000);

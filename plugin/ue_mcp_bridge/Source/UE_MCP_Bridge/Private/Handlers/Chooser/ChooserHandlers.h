@@ -55,4 +55,5 @@ private:
 	static TSharedPtr<FJsonValue> DeleteNested(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> RenameNested(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> RemoveDisabled(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> RestoreSnapshot(const TSharedPtr<FJsonObject>& Params);
 };

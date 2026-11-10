@@ -1015,4 +1015,8 @@ void FChooserHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		TableParam,
 		NestedParam,
 	});
+	Registry.RegisterHandler(TEXT("chooser_restore_snapshot"), &RestoreSnapshot, {
+		TableParam,
+		MCPParam::Required(TEXT("snapshot"), EType::Object, TEXT("Snapshot of the asset's chooser tables, as the rollback of delete_column, delete_rows, move_rows, auto_populate, delete_nested and remove_disabled carries it")),
+	});
 }

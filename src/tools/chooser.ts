@@ -60,6 +60,7 @@ export const chooserTool: ToolDef = categoryTool(
     list_nested:      specBp("read", "List the nested objects of a chooser's asset (nested choosers and column-owned objects) with name, path, class and parent.", "chooser_list_nested"),
     delete_nested:    specBp("mutate", "Delete a nested chooser or other nested object from the asset, clearing every row's reference to it.", "chooser_delete_nested"),
     rename_nested:    specBp("mutate", "Rename a nested chooser or other nested object; the name must be unique among the asset's nested objects.", "chooser_rename_nested"),
+    restore_snapshot: specBp("mutate", "Put a chooser asset back as a snapshot records it: every table's columns, rows, disabled flags and fallback, recreating nested choosers that were deleted. The snapshot is the rollback payload of the edits that drop data no other action restores (delete_column, delete_rows, a scattered move_rows, auto_populate, delete_nested, remove_disabled).", "chooser_restore_snapshot"),
     remove_disabled:  specBp("mutate", "Delete every disabled row and column (and any column whose type is not loaded), as the editor's Remove Disabled Data does.", "chooser_remove_disabled"),
   },
   {

@@ -325,6 +325,126 @@ namespace
 		return nullptr;
 	}
 
+	// ─── Snapshots ────────────────────────────────────────────────────────
+	//
+	// The inverse of an edit that drops data no other action can put back
+	// (deleting a column, several rows, a nested chooser, disabled data, or an
+	// auto populate across many cells) is the asset as it was: every table's
+	// columns, results, disabled flags and fallback, as export text, for the
+	// root and each nested chooser. chooser_restore_snapshot writes it back.
+
+	const TCHAR* const MCPChooserAuthSnapshotFields[] = { TEXT("ColumnsStructs"), TEXT("ResultsStructs"), TEXT("DisabledRows"), TEXT("FallbackResult") };
+
+	int32 MCPChooserAuthDepth(const UObject* Obj, const UObject* Root)
+	{
+		int32 Depth = 0;
+		for (const UObject* It = Obj; It && It != Root; It = It->GetOuter()) ++Depth;
+		return Depth;
+	}
+
+	TSharedPtr<FJsonObject> MCPChooserAuthSnapshot(UChooserTable* Root)
+	{
+		TArray<UChooserTable*> Tables = { Root };
+		for (UObject* Obj : MCPChooserNestedObjects(Root))
+		{
+			if (UChooserTable* NestedTable = Cast<UChooserTable>(Obj)) Tables.Add(NestedTable);
+		}
+		// Parents before the choosers nested inside them, so a restore can recreate in order.
+		Tables.StableSort([Root](const UChooserTable& A, const UChooserTable& B) { return MCPChooserAuthDepth(&A, Root) < MCPChooserAuthDepth(&B, Root); });
+		TArray<TSharedPtr<FJsonValue>> Entries;
+		for (UChooserTable* Table : Tables)
+		{
+			TSharedPtr<FJsonObject> Entry = MakeShared<FJsonObject>();
+			Entry->SetStringField(TEXT("path"), Table->GetPathName());
+			Entry->SetStringField(TEXT("name"), Table->GetName());
+			Entry->SetStringField(TEXT("outer"), Table->GetOuter() ? Table->GetOuter()->GetPathName() : FString());
+			TSharedPtr<FJsonObject> Fields = MakeShared<FJsonObject>();
+			for (const TCHAR* Field : MCPChooserAuthSnapshotFields)
+			{
+				if (FProperty* Prop = FindFProperty<FProperty>(UChooserTable::StaticClass(), Field))
+				{
+					FString Text;
+					Prop->ExportTextItem_Direct(Text, Prop->ContainerPtrToValuePtr<void>(Table), nullptr, Table, PPF_None);
+					Fields->SetStringField(Field, Text);
+				}
+			}
+			Entry->SetObjectField(TEXT("fields"), Fields);
+			Entries.Add(MakeShared<FJsonValueObject>(Entry));
+		}
+		TSharedPtr<FJsonObject> Snapshot = MakeShared<FJsonObject>();
+		Snapshot->SetStringField(TEXT("root"), Root->GetPathName());
+		Snapshot->SetArrayField(TEXT("tables"), Entries);
+		return Snapshot;
+	}
+
+	/** Write a snapshot back: recreate any nested chooser it names that is gone, then every table's fields. */
+	bool MCPChooserAuthRestore(UChooserTable* Root, const TSharedPtr<FJsonObject>& Snapshot, int32& OutRecreated, FString& OutError)
+	{
+		OutRecreated = 0;
+		const TArray<TSharedPtr<FJsonValue>>* Entries = nullptr;
+		if (!Snapshot.IsValid() || !Snapshot->TryGetArrayField(TEXT("tables"), Entries) || !Entries)
+		{
+			OutError = TEXT("snapshot has no tables array; pass the snapshot a chooser action's rollback carries");
+			return false;
+		}
+		FString SnapshotRoot;
+		if (!Snapshot->TryGetStringField(TEXT("root"), SnapshotRoot) || SnapshotRoot != Root->GetPathName())
+		{
+			OutError = FString::Printf(TEXT("the snapshot is of '%s', not '%s'"), *SnapshotRoot, *Root->GetPathName());
+			return false;
+		}
+		TArray<TPair<UChooserTable*, TSharedPtr<FJsonObject>>> Targets;
+		for (const TSharedPtr<FJsonValue>& Value : *Entries)
+		{
+			const TSharedPtr<FJsonObject>* Entry = nullptr;
+			if (!Value.IsValid() || !Value->TryGetObject(Entry)) { OutError = TEXT("snapshot tables must be objects"); return false; }
+			const FString Path = (*Entry)->GetStringField(TEXT("path"));
+			UChooserTable* Table = Path == Root->GetPathName() ? Root : FindObject<UChooserTable>(nullptr, *Path);
+			if (!IsValid(Table))
+			{
+				UObject* Outer = FindObject<UObject>(nullptr, *(*Entry)->GetStringField(TEXT("outer")));
+				if (!Outer) { OutError = FString::Printf(TEXT("cannot recreate '%s': its outer is gone"), *Path); return false; }
+				Table = NewObject<UChooserTable>(Outer, UChooserTable::StaticClass(), FName(*(*Entry)->GetStringField(TEXT("name"))), RF_Transactional);
+				++OutRecreated;
+			}
+			Table->Modify();
+			if (Table != Root)
+			{
+				MCPChooserSetRoot(Table, Root);
+				MCPChooserAddNestedObject(Root, Table);
+			}
+			const TSharedPtr<FJsonObject>* Fields = nullptr;
+			if (!(*Entry)->TryGetObjectField(TEXT("fields"), Fields)) { OutError = FString::Printf(TEXT("'%s' has no fields"), *Path); return false; }
+			Targets.Add({ Table, *Fields });
+		}
+		// Fields after every table exists, since results name nested choosers by path.
+		for (const TPair<UChooserTable*, TSharedPtr<FJsonObject>>& Target : Targets)
+		{
+			for (const auto& Pair : Target.Value->Values)
+			{
+				FProperty* Prop = FindFProperty<FProperty>(UChooserTable::StaticClass(), *Pair.Key);
+				FString Text;
+				if (!Prop || !Pair.Value.IsValid() || !Pair.Value->TryGetString(Text)) continue;
+				if (!MCPChooserImportValidated(Prop, Prop->ContainerPtrToValuePtr<void>(Target.Key), Text, Target.Key, OutError))
+				{
+					OutError = FString::Printf(TEXT("%s.%s: %s"), *Target.Key->GetPathName(), *Pair.Key, *OutError);
+					return false;
+				}
+			}
+			Target.Key->Compile(true);
+		}
+		return true;
+	}
+
+	/** Record the asset as it was as this edit's inverse. */
+	void MCPChooserAuthSnapshotRollback(const TSharedPtr<FJsonObject>& Res, UChooserTable* Root, const TSharedPtr<FJsonObject>& Snapshot)
+	{
+		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+		Payload->SetStringField(TEXT("table"), Root->GetPathName());
+		Payload->SetObjectField(TEXT("snapshot"), Snapshot);
+		MCPSetRollback(Res, TEXT("chooser_restore_snapshot"), Payload);
+	}
+
 	/** Validate a binding chain under the editor's rules: each step is a blueprint
 	 *  visible property, stepping through struct and object properties, or a
 	 *  blueprint callable function with no parameters that returns an object.
@@ -876,6 +996,7 @@ TSharedPtr<FJsonValue> FChooserHandlers::DeleteColumn(const TSharedPtr<FJsonObje
 	const UScriptStruct* SS = Table->ColumnsStructs[ColumnIndex].GetScriptStruct();
 	const FString DeletedType = SS ? SS->GetName() : FString();
 	const FString DeletedName = MCPChooserColumnName(Table->ColumnsStructs[ColumnIndex], ColumnIndex);
+	const TSharedPtr<FJsonObject> Snapshot = MCPChooserAuthSnapshot(MCPChooserRoot(Table));
 	Table->Modify();
 	Table->ColumnsStructs.RemoveAt(ColumnIndex);
 
@@ -884,9 +1005,8 @@ TSharedPtr<FJsonValue> FChooserHandlers::DeleteColumn(const TSharedPtr<FJsonObje
 	Res->SetStringField(TEXT("deletedColumnType"), DeletedType);
 	Res->SetStringField(TEXT("deletedColumnName"), DeletedName);
 	Res->SetNumberField(TEXT("columnCount"), Table->ColumnsStructs.Num());
-	MCPSetNoRollback(Res, FString::Printf(
-		TEXT("Column %d (%s) took its cell for every row with it. chooser(add_column) adds an empty column of that type, so restoring it means re-adding it and setting each cell again, or reverting the saved asset in source control."),
-		ColumnIndex, *DeletedType));
+	// The column took its cell for every row with it, so the inverse is the asset as it was.
+	MCPChooserAuthSnapshotRollback(Res, MCPChooserRoot(Table), Snapshot);
 	return MCPChooserAuthFinish(Table, Res);
 }
 
@@ -1190,6 +1310,7 @@ TSharedPtr<FJsonValue> FChooserHandlers::DeleteRows(const TSharedPtr<FJsonObject
 	TArray<int32> Rows; FString Err;
 	if (!MCPChooserAuthRows(RowsJson, Table, Rows, Err)) return MCPError(Err);
 
+	const TSharedPtr<FJsonObject> Snapshot = MCPChooserAuthSnapshot(MCPChooserRoot(Table));
 	Table->Modify();
 	MCPChooserSyncRowCounts(Table);
 	for (FInstancedStruct& ColumnData : Table->ColumnsStructs)
@@ -1205,9 +1326,7 @@ TSharedPtr<FJsonValue> FChooserHandlers::DeleteRows(const TSharedPtr<FJsonObject
 	TSharedPtr<FJsonObject> Res = MCPSuccess();
 	Res->SetArrayField(TEXT("deletedRows"), MCPChooserAuthInts(Rows));
 	Res->SetNumberField(TEXT("rowCount"), Table->ResultsStructs.Num());
-	MCPSetNoRollback(Res, FString::Printf(
-		TEXT("%d row(s) were deleted together, and the inverse takes one call per row: chooser(add_row, insertIndex) puts back one row at a time. chooser(delete_row) deletes a single row and records that call as its inverse."),
-		Rows.Num()));
+	MCPChooserAuthSnapshotRollback(Res, MCPChooserRoot(Table), Snapshot);
 	return MCPChooserAuthFinish(Table, Res);
 }
 
@@ -1244,6 +1363,8 @@ TSharedPtr<FJsonValue> FChooserHandlers::MoveRows(const TSharedPtr<FJsonObject>&
 	NewOrder.Append(Rows);
 	for (int32 i = TargetIndex; i < NumRows; ++i) if (!Rows.Contains(i)) NewOrder.Add(i);
 
+	const bool bContiguous = Rows.Last() - Rows[0] + 1 == Rows.Num();
+	const TSharedPtr<FJsonObject> Snapshot = bContiguous ? nullptr : MCPChooserAuthSnapshot(MCPChooserRoot(Table));
 	Table->Modify();
 	MCPChooserSyncRowCounts(Table);
 	// Applied as single-row moves front to back, so every column moves its cells
@@ -1278,7 +1399,6 @@ TSharedPtr<FJsonValue> FChooserHandlers::MoveRows(const TSharedPtr<FJsonObject>&
 	Res->SetNumberField(TEXT("firstRow"), FirstNewIndex);
 	Res->SetNumberField(TEXT("movedCount"), Rows.Num());
 	// A contiguous block moves back as one block: before the row that followed it.
-	const bool bContiguous = Rows.Last() - Rows[0] + 1 == Rows.Num();
 	if (bContiguous)
 	{
 		const int32 Follower = Rows.Last() + 1;
@@ -1293,7 +1413,8 @@ TSharedPtr<FJsonValue> FChooserHandlers::MoveRows(const TSharedPtr<FJsonObject>&
 	}
 	else
 	{
-		MCPSetNoRollback(Res, TEXT("The moved rows were not adjacent, and they now sit together, so no single chooser(move_rows) call scatters them back. Move them back one row at a time."));
+		// Rows that were not adjacent now sit together, and no single move scatters them back.
+		MCPChooserAuthSnapshotRollback(Res, MCPChooserRoot(Table), Snapshot);
 	}
 	return MCPChooserAuthFinish(Table, Res);
 }
@@ -1713,6 +1834,7 @@ TSharedPtr<FJsonValue> FChooserHandlers::AutoPopulate(const TSharedPtr<FJsonObje
 		if ((!bHasColumn || c == ColumnIndex) && MCPChooserColumnAutoPopulates(Table->ColumnsStructs[c])) Populating.Add(c);
 	}
 
+	const TSharedPtr<FJsonObject> Snapshot = MCPChooserAuthSnapshot(MCPChooserRoot(Table));
 	Table->Modify();
 	if (bHasColumn)
 	{
@@ -1731,7 +1853,7 @@ TSharedPtr<FJsonValue> FChooserHandlers::AutoPopulate(const TSharedPtr<FJsonObje
 	TSharedPtr<FJsonObject> Res = MCPSuccess();
 	Res->SetArrayField(TEXT("columns"), MCPChooserAuthInts(Populating));
 	if (bHasRows) Res->SetArrayField(TEXT("rows"), MCPChooserAuthInts(Rows));
-	MCPSetNoRollback(Res, TEXT("Auto populate rewrites the cells of auto populating columns from each row's result, across many cells at once. Each previous value can be put back with chooser(set_cell); chooser(get_cell) reads them first."));
+	MCPChooserAuthSnapshotRollback(Res, MCPChooserRoot(Table), Snapshot);
 	return MCPChooserAuthFinish(Table, Res);
 }
 
@@ -1864,6 +1986,7 @@ TSharedPtr<FJsonValue> FChooserHandlers::DeleteNested(const TSharedPtr<FJsonObje
 	if (!Doomed) return MCPError(FString::Printf(TEXT("'%s' is not a nested object of %s (chooser(list_nested) lists them)"), *Name, *Root->GetPathName()));
 	const FString DoomedPath = Doomed->GetPathName();
 	const FString DoomedClass = Doomed->GetClass()->GetName();
+	const TSharedPtr<FJsonObject> Snapshot = MCPChooserAuthSnapshot(Root);
 
 	Root->Modify();
 #if UE_MCP_HAS_5_9_API
@@ -1913,9 +2036,13 @@ TSharedPtr<FJsonValue> FChooserHandlers::DeleteNested(const TSharedPtr<FJsonObje
 	Res->SetStringField(TEXT("deleted"), DoomedPath);
 	Res->SetStringField(TEXT("deletedClass"), DoomedClass);
 	Res->SetNumberField(TEXT("nestedObjectCount"), MCPChooserNestedObjects(Root).Num());
-	MCPSetNoRollback(Res, FString::Printf(
-		TEXT("'%s' was deleted with its rows and columns, and every reference to it was cleared. chooser(create_nested) makes an empty nested chooser; there is no action that recreates one with its contents, so a restore is a revert of the saved asset."),
-		*DoomedPath));
+	// The inverse recreates the nested chooser from the snapshot, contents and references included.
+	MCPChooserAuthSnapshotRollback(Res, Root, Snapshot);
+	if (!Doomed->IsA<UChooserTable>())
+	{
+		Res->SetBoolField(TEXT("rollbackLossy"), true);
+		Res->SetStringField(TEXT("rollbackNote"), TEXT("A snapshot carries the asset's chooser tables, so the inverse restores the tables as they were but does not recreate this non-chooser nested object."));
+	}
 	return MCPChooserAuthFinish(Root, Res);
 }
 
@@ -1979,6 +2106,7 @@ TSharedPtr<FJsonValue> FChooserHandlers::RemoveDisabled(const TSharedPtr<FJsonOb
 	UChooserTable* Table = MCPChooserResolve(TablePath, Nested, ResolveError);
 	if (!Table) return ResolveError;
 
+	const TSharedPtr<FJsonObject> Snapshot = MCPChooserAuthSnapshot(MCPChooserRoot(Table));
 	Table->Modify();
 	MCPChooserSyncRowCounts(Table);
 	const int32 RowsBefore = Table->ResultsStructs.Num();
@@ -2011,6 +2139,40 @@ TSharedPtr<FJsonValue> FChooserHandlers::RemoveDisabled(const TSharedPtr<FJsonOb
 	Res->SetNumberField(TEXT("removedColumns"), ColumnsBefore - Table->ColumnsStructs.Num());
 	Res->SetNumberField(TEXT("rowCount"), Table->ResultsStructs.Num());
 	Res->SetNumberField(TEXT("columnCount"), Table->ColumnsStructs.Num());
-	MCPSetNoRollback(Res, TEXT("The disabled rows and columns were deleted with their cells. Nothing re-adds them with their contents, so a restore is a revert of the saved asset."));
+	MCPChooserAuthSnapshotRollback(Res, MCPChooserRoot(Table), Snapshot);
 	return MCPChooserAuthFinish(Table, Res);
+}
+
+TSharedPtr<FJsonValue> FChooserHandlers::RestoreSnapshot(const TSharedPtr<FJsonObject>& Params)
+{
+	FString TablePath;
+	const TSharedPtr<FJsonValue> TableErr = RequireString(Params, TEXT("table"), TablePath);
+	const TSharedPtr<FJsonObject>* SnapshotParam = nullptr;
+	const TSharedPtr<FJsonValue> SnapshotErr = RequireObject(Params, TEXT("snapshot"), SnapshotParam);
+	if (TableErr) return TableErr;
+	if (SnapshotErr) return SnapshotErr;
+
+	TSharedPtr<FJsonValue> ResolveError;
+	UChooserTable* Table = MCPChooserResolve(TablePath, FString(), ResolveError);
+	if (!Table) return ResolveError;
+	UChooserTable* Root = MCPChooserRoot(Table);
+
+	const TSharedPtr<FJsonObject> Prior = MCPChooserAuthSnapshot(Root);
+	Root->Modify();
+	int32 Recreated = 0;
+	FString Err;
+	if (!MCPChooserAuthRestore(Root, *SnapshotParam, Recreated, Err))
+	{
+		// A failure part way through is put back to the state the call found.
+		int32 Ignored = 0; FString RevertError;
+		MCPChooserAuthRestore(Root, Prior, Ignored, RevertError);
+		return MCPError(FString::Printf(TEXT("Could not restore the snapshot: %s"), *Err));
+	}
+
+	TSharedPtr<FJsonObject> Res = MCPSuccess();
+	Res->SetNumberField(TEXT("rowCount"), Root->ResultsStructs.Num());
+	Res->SetNumberField(TEXT("columnCount"), Root->ColumnsStructs.Num());
+	Res->SetNumberField(TEXT("recreatedNested"), Recreated);
+	MCPChooserAuthSnapshotRollback(Res, Root, Prior);
+	return MCPChooserAuthFinish(Root, Res);
 }
