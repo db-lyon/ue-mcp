@@ -9,15 +9,12 @@
 //
 // What is deliberately NOT here, said plainly rather than faked:
 //
-// * READING A .utrace FILE. The engine ships TraceServices and TraceAnalysis
-//   (Engine/Source/Developer/TraceServices, TraceAnalysis) and Unreal Insights
-//   is built on them, so it is not impossible in principle. It is out of reach
-//   for this plugin: both are Developer modules the bridge does not link, and
-//   consuming one means standing up an analysis session with per-provider
-//   readers, which is an application rather than a handler. Every action below
-//   that produces a trace therefore reports the absolute file path, its size
-//   on disk, and the exact UnrealInsights command line that opens it. That is
-//   the handoff, and it is stated instead of implied.
+// * READING A .utrace FILE. That lives in EditorHandlers_TraceAnalysis.cpp
+//   (editor(analyze_trace)), which opens the file through TraceServices, the
+//   module Unreal Insights is built on. Every action below that produces a
+//   trace reports the absolute file path, its size on disk, and the exact
+//   UnrealInsights command line that opens it, for the views a summary does
+//   not cover.
 //
 // * A BACKGROUND-THROTTLE SETTER. UEditorPerformanceSettings::
 //   bThrottleCPUWhenNotForeground and bAllowThrottling are ordinary
@@ -289,8 +286,8 @@ namespace
 	}
 
 	/** Describe a .utrace on disk: whether it exists, how big it is, and the
-	 *  command that opens it. This is the whole of the "read the trace"
-	 *  answer, and it is deliberate rather than a placeholder. */
+	 *  command that opens it in Unreal Insights. editor(analyze_trace) reads
+	 *  the same file back as a summary. */
 	void MCPProfilingDescribeTraceFile(TSharedPtr<FJsonObject> Result, const FString& FilePath)
 	{
 		if (FilePath.IsEmpty()) return;
@@ -313,11 +310,9 @@ namespace
 				FString::Printf(TEXT("\"%s\" -OpenTraceFile=\"%s\""), *Insights, *Absolute));
 		}
 		Result->SetStringField(TEXT("analysisNote"),
-			TEXT("The bridge writes .utrace files and reports where they landed; it does not read them back. ")
-			TEXT("Trace analysis lives in the engine's TraceServices/TraceAnalysis Developer modules, which this ")
-			TEXT("plugin does not link, so open the file with the reported openCommand. For numbers inside the ")
-			TEXT("editor without leaving it, use editor(get_frame_timing) and editor(begin_profile_region) / ")
-			TEXT("editor(end_profile_region)."));
+			TEXT("editor(analyze_trace) reads this file back once the trace is stopped: frame-time percentiles, hitches, ")
+			TEXT("worst frames with their timers, top timers, GPU busy time and bookmarks. For every other view, open it ")
+			TEXT("with the reported openCommand."));
 	}
 
 	/** Default destination for a file trace: an absolute, deterministic path

@@ -10,6 +10,7 @@ import { sourceActions } from "./project/source.js";
 import { engineActions } from "./project/engine.js";
 import { surfaceActions } from "./project/surface.js";
 import { installActions } from "./project/install.js";
+import { localizationActions } from "./project/localization.js";
 import { categoryActions, categorySchema } from "./project/categories.js";
 import { leaseActions, leaseSchema } from "./project/leases.js";
 
@@ -87,6 +88,12 @@ const ACTION_ORDER = [
   "lint_cpp_header",
   "add_module_dependency",
   "add_cpp_member",
+  "list_localization_cultures",
+  "list_localization_targets",
+  "set_localization_target",
+  "remove_localization_target",
+  "gather_localization_target",
+  "compile_localization_target",
 ] as const;
 
 function inAdvertisedOrder(...groups: Record<string, ActionSpec>[]): Record<string, ActionSpec> {
@@ -105,7 +112,7 @@ export const projectTool: ToolDef = categoryTool(
   "project",
   "Project status and editor connection: get_status (is the editor connected?), set_project (switch/redirect the bridge to another .uproject), get_info. Also config INI files, module load state, and C++ source inspection. Call project(get_status) first in any session.",
   {
-    ...inAdvertisedOrder(sessionActions, configActions, sourceActions, engineActions, surfaceActions, installActions, categoryActions, leaseActions),
+    ...inAdvertisedOrder(sessionActions, configActions, sourceActions, engineActions, surfaceActions, installActions, localizationActions, categoryActions, leaseActions),
     ...epicActions,
   },
   {

@@ -34,6 +34,7 @@ import { ProjectContext } from "../config/project.js";
 import { projectEpicIntegrations } from "./init-core.js";
 import { describeUnrealMcpServer, type UnrealMcpServerStatus } from "../integrations/epic/unreal-mcp-server.js";
 import type { UnrealAssistantStatus } from "../integrations/epic/unreal-assistant.js";
+import { UNREAL_CANVAS_BRIDGE_PLUGIN, type UnrealCanvasStatus } from "../integrations/epic/unreal-canvas.js";
 
 export interface DoctorReport {
   selfVersion: string;            // the ue-mcp currently executing this command
@@ -68,18 +69,23 @@ export interface DoctorReport {
   unrealMcpServer?: UnrealMcpServerStatus | null;
   /** Epic's Unreal Assistant for the target project, and whether ue-mcp is attached to it. */
   unrealAssistant?: UnrealAssistantStatus | null;
+  /** Unreal Canvas for the target project: whether its Bridge is enabled and which ue-mcp ports clash with its own. */
+  unrealCanvas?: UnrealCanvasStatus | null;
 }
 
-/** Epic's Unreal MCP server and Unreal Assistant for a project, or nulls when it cannot be read. */
-function epicStatus(uproject: string | null): Pick<DoctorReport, "unrealMcpServer" | "unrealAssistant"> {
-  if (!uproject) return { unrealMcpServer: null, unrealAssistant: null };
+type EpicStatusFields = Pick<DoctorReport, "unrealMcpServer" | "unrealAssistant" | "unrealCanvas">;
+
+/** Epic's Unreal MCP server, Unreal Assistant and Unreal Canvas for a project, or nulls when it cannot be read. */
+function epicStatus(uproject: string | null): EpicStatusFields {
+  const none: EpicStatusFields = { unrealMcpServer: null, unrealAssistant: null, unrealCanvas: null };
+  if (!uproject) return none;
   try {
     const project = new ProjectContext();
     project.setProject(uproject);
     const epic = projectEpicIntegrations(project);
-    return { unrealMcpServer: epic.unrealMcp, unrealAssistant: epic.unrealAssistant };
+    return { unrealMcpServer: epic.unrealMcp, unrealAssistant: epic.unrealAssistant, unrealCanvas: epic.unrealCanvas };
   } catch {
-    return { unrealMcpServer: null, unrealAssistant: null };
+    return none;
   }
 }
 
@@ -562,6 +568,15 @@ export function formatDoctor(d: DoctorReport): string {
       : `${DIM}ue-mcp not attached (ue-mcp init --unreal-assistant)${RESET}`));
   }
 
+  const canvas = d.unrealCanvas;
+  if (canvas?.bridgeEnabled) {
+    const ports = canvas.reservedPorts.map((r) => r.port).join(" and ");
+    const by = canvas.enabledBy && canvas.enabledBy !== "uproject" ? ` (through ${canvas.enabledBy})` : "";
+    lines.push(row("epic canvas:", canvas.portConflicts.length > 0
+      ? `${YELLOW}${UNREAL_CANVAS_BRIDGE_PLUGIN} enabled${by}; it claims ${ports}${RESET}`
+      : `${DIM}${UNREAL_CANVAS_BRIDGE_PLUGIN} enabled${by}; it claims ${ports}, which ue-mcp keeps off${RESET}`));
+  }
+
   lines.push("");
 
   // Facts worth knowing that are not wrong, so they do not spoil the verdict.
@@ -619,6 +634,13 @@ export function formatDoctor(d: DoctorReport): string {
   }
   for (const conflict of epicMcp?.portConflicts ?? []) {
     problems.push(`Epic's Unreal MCP server listens on ${epicMcp!.port}, and ${conflict}. Move it with \`ue-mcp init --yes --unreal-mcp-port <n>\`.`);
+  }
+  for (const conflict of canvas?.portConflicts ?? []) {
+    problems.push(
+      `This project enables ${UNREAL_CANVAS_BRIDGE_PLUGIN}, and ${conflict}. The two cannot share a port: ` +
+      `remove the bridge.port pin or UE_MCP_PORT (ue-mcp then uses the port derived from the project path), ` +
+      `and restart the editor so the bridge binds again.`,
+    );
   }
   if (ua?.available && ua.attached && ua.shadowedBy) {
     problems.push(`The Unreal Assistant reads ${ua.shadowedBy} first and ignores ${ua.configPath}, where ue-mcp is attached. Add the ue-mcp entry there, or remove that file.`);

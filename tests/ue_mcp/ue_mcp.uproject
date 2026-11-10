@@ -103,6 +103,10 @@
 			"Enabled": true
 		},
 		{
+			"Name": "ModelViewViewModel",
+			"Enabled": true
+		},
+		{
 			"Name": "KnowledgeBase",
 			"Enabled": true,
 			"Optional": true
@@ -128,12 +132,39 @@
 			"Optional": true
 		},
 		{
+			"Name": "UnrealCanvasGraph",
+			"Enabled": true,
+			"Optional": true
+		},
+		{
+			"Name": "UnrealCanvasBridge",
+			"Enabled": true,
+			"Optional": true
+		},
+		{
 			"Name": "GraphDsl",
 			"Enabled": true,
 			"Optional": true
 		},
 		{
 			"Name": "SemanticSearch",
+			"Enabled": true,
+			"Optional": true
+		},
+		{
+			"Name": "MovieRenderPipeline",
+			"Enabled": true
+		},
+		{
+			"Name": "LearningAgents",
+			"Enabled": true
+		},
+		{
+			"Name": "NNERuntimeORT",
+			"Enabled": true
+		},
+		{
+			"Name": "NNERuntimeLiteRT",
 			"Enabled": true,
 			"Optional": true
 		}

@@ -52,8 +52,24 @@ async function listedNames(): Promise<string[]> {
 
 const exact = (name: string): string => `/^\\Q${name}\\E$/`;
 
+/** Set when this editor cannot drive toggles; every case then asserts that refusal instead of skipping. */
+let unavailable: Json | null = null;
+const REFUSALS = ["unsupported_engine_version", "PLUGIN_NOT_AVAILABLE", "unsupported_platform"];
+
+async function expectRefused(): Promise<void> {
+  const r = body(await callBridge(bridge, "epic_set_toolset_enabled", { toolsets: ["AnyToolset"], enabled: false }));
+  expect(r.success).toBe(false);
+  expect(r.errorCode).toBe(unavailable!.errorCode);
+  expect(String(r.error)).toBe(String(unavailable!.error));
+}
+
 beforeAll(async () => {
   bridge = await getBridge();
+  const probe = body(await callBridge(bridge, "epic_get_toolset_states", {}));
+  if (probe.success === false && REFUSALS.includes(String(probe.errorCode))) {
+    unavailable = probe;
+    return;
+  }
   const listed = await call("epic_list_toolsets", {});
   const toolsets = (listed.toolsets as ListedToolset[]).filter((t) => t.toolCount > 0);
   // A toolset no other pattern touches, so turning it off and on is ours alone.
@@ -79,6 +95,7 @@ afterAll(async () => {
 
 describe("epic toolset toggles", () => {
   it("epic_get_toolset_states lists every registered toolset with its enabled state and the patterns that match it", async () => {
+    if (unavailable) return expectRefused();
     const all = await call("epic_get_toolset_states", {});
     const byName = new Map((all.toolsets as ToolsetState[]).map((t) => [t.name, t]));
     expect(target, "no enabled toolset with tools that no pattern blocks").toBeTruthy();
@@ -95,6 +112,7 @@ describe("epic toolset toggles", () => {
   }, 60_000);
 
   it("epic_set_toolset_enabled turns a toolset off in the live registry and the config, and back on", async () => {
+    if (unavailable) return expectRefused();
     const tool = target.tools[0];
 
     const off = await call("epic_set_toolset_enabled", { toolsets: [target.name], enabled: false });
@@ -139,6 +157,7 @@ describe("epic toolset toggles", () => {
   }, 120_000);
 
   it("epic_set_toolset_enabled refuses a name that is not a registered toolset and changes nothing", async () => {
+    if (unavailable) return expectRefused();
     const missing = `${target.name}DoesNotExist`;
     const r = await callBridge(bridge, "epic_set_toolset_enabled", { toolsets: [target.name, missing], enabled: false });
     const refused = body(r);

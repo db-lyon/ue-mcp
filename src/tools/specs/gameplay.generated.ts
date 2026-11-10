@@ -1003,6 +1003,81 @@ export const handlerSpecs: HandlerSpecs = {
       }
     ]
   },
+  "learning_agents_add_observation": {
+    "category": "gameplay",
+    "params": [
+      {
+        "name": "blueprintPath",
+        "type": "string",
+        "required": true,
+        "description": "Learning Agents interactor Blueprint"
+      },
+      {
+        "name": "observationType",
+        "type": "string",
+        "required": true,
+        "description": "Observation type: Float, Location, Set, ... or the Specify function name"
+      },
+      {
+        "name": "settings",
+        "type": "object",
+        "required": false,
+        "description": "Input pin defaults by parameter name, e.g. {\"Tag\": \"Speed\", \"MaxNum\": 8}"
+      },
+      {
+        "name": "connectTo",
+        "type": "string",
+        "required": false,
+        "description": "result to return this observation from SpecifyAgentObservation, or the nodeId of an observation to feed"
+      },
+      {
+        "name": "connectPin",
+        "type": "string",
+        "required": false,
+        "description": "Input of the connectTo node to feed, e.g. Element or QueryElement"
+      },
+      {
+        "name": "posX",
+        "type": "integer",
+        "required": false,
+        "description": "Node X position (default 0)"
+      },
+      {
+        "name": "posY",
+        "type": "integer",
+        "required": false,
+        "description": "Node Y position (default below the existing nodes)"
+      }
+    ]
+  },
+  "learning_agents_list_observation_types": {
+    "category": "gameplay",
+    "params": [
+      {
+        "name": "nameFilter",
+        "type": "string",
+        "required": false,
+        "description": "Case-sensitive substring of the Specify function name"
+      },
+      {
+        "name": "includeParameters",
+        "type": "boolean",
+        "required": false,
+        "description": "Include each function's parameters with types and defaults (default true)"
+      }
+    ]
+  },
+  "learning_agents_read_observations": {
+    "category": "gameplay",
+    "params": [
+      {
+        "name": "blueprintPath",
+        "type": "string",
+        "required": true,
+        "description": "Learning Agents interactor Blueprint"
+      }
+    ]
+  },
   "list_ai_agents": {
     "category": "gameplay",
     "params": [
@@ -1305,6 +1380,82 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "number",
         "required": false,
         "description": "Position among the parent's children, which is the execution order. For a decorator or service, its position in the parent's subnode list; on a SimpleParallel, the output pin (0 = main task, 1 = background)"
+      }
+    ]
+  },
+  "nne_import_model": {
+    "category": "gameplay",
+    "params": [
+      {
+        "name": "sourceFile",
+        "type": "string",
+        "required": true,
+        "description": "Absolute path of the model file (.onnx, .tflite, ...)"
+      },
+      {
+        "name": "assetPath",
+        "type": "string",
+        "required": true,
+        "description": "NNEModelData asset to create, e.g. /Game/ML/NNE_Model"
+      },
+      {
+        "name": "fileType",
+        "type": "string",
+        "required": false,
+        "description": "Model file type the runtimes read (default the file's extension)"
+      },
+      {
+        "name": "targetRuntimes",
+        "type": "array",
+        "required": false,
+        "description": "Runtimes to cook the model for, e.g. NNERuntimeORTCpu or NNERuntimeLiteRT (default every runtime)",
+        "items": "string"
+      },
+      {
+        "name": "onConflict",
+        "type": "string",
+        "required": false,
+        "description": "skip (default) reports an existing asset, error refuses it"
+      }
+    ]
+  },
+  "nne_list_runtimes": {
+    "category": "gameplay",
+    "params": []
+  },
+  "nne_run_inference": {
+    "category": "gameplay",
+    "params": [
+      {
+        "name": "assetPath",
+        "type": "string",
+        "required": true,
+        "description": "NNEModelData asset"
+      },
+      {
+        "name": "runtime",
+        "type": "string",
+        "required": false,
+        "description": "CPU runtime to run on (default the first registered CPU runtime that accepts the model)"
+      },
+      {
+        "name": "inputs",
+        "type": "array",
+        "required": false,
+        "description": "One entry per model input, in order: {values: number[], shape?: int[]}; shape is needed only for dynamic dimensions",
+        "items": "object"
+      },
+      {
+        "name": "iterations",
+        "type": "integer",
+        "required": false,
+        "description": "Timed runs (default 1, max 1000)"
+      },
+      {
+        "name": "maxOutputValues",
+        "type": "integer",
+        "required": false,
+        "description": "Values returned per output (default 256, max 65536)"
       }
     ]
   },
@@ -2660,6 +2811,9 @@ export const paramsClauses: Readonly<Record<string, string>> = {
   get_navmesh_info: "Params: none",
   get_perceived_actors: "Params: actorLabel?, actorPath?, world?, pieInstance?, senseType?",
   get_state_tree_runtime: "Params: actorLabel?, actorPath?, world?, pieInstance?, componentName?",
+  learning_agents_add_observation: "Params: blueprintPath, observationType, settings?, connectTo?, connectPin?, posX?, posY?",
+  learning_agents_list_observation_types: "Params: nameFilter?, includeParameters?",
+  learning_agents_read_observations: "Params: blueprintPath",
   list_ai_agents: "Params: world?, pieInstance?, runningOnly?, behaviorTreeOnly?, classFilter?, limit?",
   list_behavior_trees: "Params: cursor?, limit?",
   list_bt_graph_nodes: "Params: assetPath (or path)",
@@ -2674,6 +2828,9 @@ export const paramsClauses: Readonly<Record<string, string>> = {
   list_smart_object_slots: "Params: assetPath",
   list_state_trees: "Params: cursor?, limit?",
   move_bt_node: "Params: assetPath (or path), node (or nodePath), parent?, index?",
+  nne_import_model: "Params: sourceFile, assetPath, fileType?, targetRuntimes?, onConflict?",
+  nne_list_runtimes: "Params: none",
+  nne_run_inference: "Params: assetPath, runtime?, inputs?, iterations?, maxOutputValues?",
   project_point_to_navigation: "Params: location",
   query_zone_graph: "Params: queryMode?, laneIndex?, location?, radius?, tags?, limit?, world?, pieInstance?, actorLabel?, actorPath?",
   read_behavior_tree_graph: "Params: assetPath (or path), includeProperties?, includeInherited?, propertyNames?",
@@ -2722,7 +2879,7 @@ export const schema: Record<string, z.ZodType> = {
   actorPath: z.string().optional().describe("Full actor object path; wins over actorLabel (get_bt_runtime, get_live_blackboard, get_perceived_actors, read_perception, run_behavior_tree, set_live_blackboard, stop_behavior_tree). Full actor object path; the unambiguous selector (get_state_tree_runtime). Only this ZoneGraphData actor, by full object path (query_zone_graph)"),
   amount: z.number().optional().describe("Damage amount (damage only, required there)"),
   areaClass: z.string().optional().describe("UNavArea subclass: NavArea_Null (default, cuts a hole), NavArea_Obstacle, or a /Script path"),
-  assetPath: z.string().optional().describe("BehaviorTree asset path (add_bt_node, get_behavior_tree_info, list_bt_graph_nodes, move_bt_node, read_behavior_tree_graph, read_bt_node_properties, remove_bt_node, set_bt_node_property, set_bt_task_property). Alias for imcPath (add_imc_mapping, read_imc, remove_imc_mapping). SmartObjectDefinition asset path (add_smart_object_default_behavior, add_smart_object_slot, add_smart_object_slot_behavior, list_smart_object_slots, remove_smart_object_slot, set_smart_object_slot). BehaviorTree asset path; omit to sweep directory (list_bt_tasks). Alias for blackboardPath (read_blackboard). MassEntityConfigAsset path (remove_mass_trait, reorder_mass_traits, validate_mass_entity_config). BehaviorTree asset to run (run_behavior_tree)"),
+  assetPath: z.string().optional().describe("BehaviorTree asset path (add_bt_node, get_behavior_tree_info, list_bt_graph_nodes, move_bt_node, read_behavior_tree_graph, read_bt_node_properties, remove_bt_node, set_bt_node_property, set_bt_task_property). Alias for imcPath (add_imc_mapping, read_imc, remove_imc_mapping). SmartObjectDefinition asset path (add_smart_object_default_behavior, add_smart_object_slot, add_smart_object_slot_behavior, list_smart_object_slots, remove_smart_object_slot, set_smart_object_slot). BehaviorTree asset path; omit to sweep directory (list_bt_tasks). NNEModelData asset to create, e.g. /Game/ML/NNE_Model (nne_import_model). NNEModelData asset (nne_run_inference). Alias for blackboardPath (read_blackboard). MassEntityConfigAsset path (remove_mass_trait, reorder_mass_traits, validate_mass_entity_config). BehaviorTree asset to run (run_behavior_tree)"),
   autoPruneDuplicateKeys: z.boolean().optional().describe("Remove own keys the parent chain already defines (default true)"),
   baseClass: z.string().optional().describe("Base class for an Object/Class key (e.g. /Script/Engine.Actor); for an Enum key, the enum when enumType is absent"),
   behaviorClass: z.string().optional().describe("Behavior definition asset path or class path (add_smart_object_default_behavior, add_smart_object_slot_behavior). Behavior definition class or asset path to give the slot (add_smart_object_slot)"),
@@ -2730,11 +2887,13 @@ export const schema: Record<string, z.ZodType> = {
   behaviorTreePath: z.string().optional().describe("Alias for assetPath (run_behavior_tree). BehaviorTree asset path (set_behavior_tree_blackboard)"),
   blackboardKeys: z.record(z.string(), z.unknown()).optional().describe("Map of FBlackboardKeySelector property to blackboard key name, e.g. {BlackboardKey: 'TargetActor'}; resolved against the tree's blackboard"),
   blackboardPath: z.string().optional().describe("BlackboardData asset path (add_blackboard_key, read_blackboard, remove_blackboard_key). BlackboardData assigned before the first save; an unknown path creates nothing (create_behavior_tree). BlackboardData asset to bind (set_behavior_tree_blackboard). Child BlackboardData asset path (set_blackboard_parent)"),
-  blueprintPath: z.string().optional().describe("Blueprint asset path (add_perception_component, add_smart_object_component, add_state_tree_component, configure_ai_perception_sense). Blueprint whose AIPerceptionComponent template to read; or pass actorLabel/actorPath (read_perception). Blueprint carrying the AIPerceptionComponent template (remove_sense)"),
+  blueprintPath: z.string().optional().describe("Blueprint asset path (add_perception_component, add_smart_object_component, add_state_tree_component, configure_ai_perception_sense). Learning Agents interactor Blueprint (learning_agents_add_observation, learning_agents_read_observations). Blueprint whose AIPerceptionComponent template to read; or pass actorLabel/actorPath (read_perception). Blueprint carrying the AIPerceptionComponent template (remove_sense)"),
   classFilter: z.string().optional().describe("Case-insensitive substring over the agent's class name"),
   clear: z.boolean().optional().describe("Empty both arrays; an omitted array then means empty rather than left alone (set_action_triggers). Clear the key instead of writing a value (set_live_blackboard)"),
   completeRestart: z.boolean().optional().describe("With mode=restart, restart from the root rather than resuming"),
   componentName: z.string().optional().describe("Target AIPerceptionComponent name (default: first found) (configure_ai_perception_sense, read_perception, remove_sense). StateTree component to read (default: first found) (get_state_tree_runtime)"),
+  connectPin: z.string().optional().describe("Input of the connectTo node to feed, e.g. Element or QueryElement"),
+  connectTo: z.string().optional().describe("result to return this observation from SpecifyAgentObservation, or the nodeId of an observation to feed"),
   cursor: z.string().optional().describe("nextCursor from the previous page, passed back unmodified. Omit for the first page"),
   defaultBehaviorClass: z.string().optional().describe("Behavior definition asset path or class path added to DefaultBehaviorDefinitions"),
   directory: z.string().optional().describe("Content folder to sweep when assetPath is omitted (default: every BehaviorTree) (list_bt_tasks). Content root the InputMappingContext sweep covers (default /Game) (validate_input)"),
@@ -2745,6 +2904,7 @@ export const schema: Record<string, z.ZodType> = {
   enumType: z.string().optional().describe("Enum name or path for keyType=Enum"),
   executionMode: z.string().optional().describe("looped (default) | singleRun"),
   extent: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Half-size in world units, positive on every axis (default 100)"),
+  fileType: z.string().optional().describe("Model file type the runtimes read (default the file's extension)"),
   filter: z.string().optional().describe("Case-insensitive substring over the class names"),
   filterClassOnly: z.boolean().optional().describe("Keep only tasks that declare a FilterClass"),
   gameModeClass: z.string().optional().describe("GameMode class or Blueprint path"),
@@ -2756,13 +2916,16 @@ export const schema: Record<string, z.ZodType> = {
   includeAuxNodes: z.boolean().optional().describe("Include the decorators and services currently active (default true)"),
   includeDebugStrings: z.boolean().optional().describe("Include the engine's DescribeActiveTasks / DescribeActiveTrees dumps (default true)"),
   includeInherited: z.boolean().optional().describe("Keep the properties UBTNode itself declares (TreeAsset, ParentNode, NodeName), omitted by default"),
+  includeParameters: z.boolean().optional().describe("Include each function's parameters with types and defaults (default true)"),
   includeProperties: z.boolean().optional().describe("Include each node's own UPROPERTY values"),
   index: z.number().optional().describe("Position among the parent's children, which is the execution order. For a decorator or service, its position in the parent's subnode list; on a SimpleParallel, the output pin (0 = main task, 1 = background) (add_bt_node, move_bt_node). Positional index into Config.Traits, as read_mass_entity_config reports it (remove_mass_trait). Index of the sense config to remove, as read_perception reports it (remove_sense)"),
   inputAction: z.string().optional().describe("Alias for inputActionPath"),
   inputActionPath: z.string().optional().describe("InputAction asset path to map (add_imc_mapping). InputAction to read; omit for every action the player has bound (get_action_value). InputAction asset path (read_input_action, set_action_triggers). Select the mapping by InputAction (with key) (remove_imc_mapping). Select the mapping by its current InputAction (set_imc_mapping_action). Select the mapping by its InputAction (set_imc_mapping_key). InputAction asset path; use this or imcPath plus mappingIndex (set_player_mappable_settings)"),
+  inputs: z.array(z.record(z.string(), z.unknown())).optional().describe("One entry per model input, in order: {values: number[], shape?: int[]}; shape is needed only for dynamic dimensions"),
   instanceProperties: z.record(z.string(), z.unknown()).optional().describe("Property writes applied to a freshly-spawned behavior instance"),
   instigatorLabel: z.string().optional().describe("The actor that caused the event"),
   instigatorPath: z.string().optional().describe("Full object path of the instigator"),
+  iterations: z.number().int().optional().describe("Timed runs (default 1, max 1000)"),
   key: z.string().optional().describe("FKey name to bind (add_imc_mapping). Report this one blackboard key; a miss lists every real key name (get_live_blackboard). Select the mapping by key (with inputActionPath) (remove_imc_mapping). Select the mapping by its key (set_imc_mapping_action). Select the mapping by its current key (set_imc_mapping_key). Blackboard key to write (set_live_blackboard)"),
   keyName: z.string().optional().describe("Key name to add (add_blackboard_key). Key name to remove (remove_blackboard_key)"),
   keyType: z.string().optional().describe("Bool (default) | Int | Float | String | Name | Vector | Rotator | Object | Class | Enum"),
@@ -2775,10 +2938,12 @@ export const schema: Record<string, z.ZodType> = {
   mappingContext: z.string().optional().describe("Alias for imcPath (add_imc_mapping, read_imc, remove_imc_mapping). InputMappingContext asset path to apply to the live player (apply_mapping_context). Name or path of one context to answer yes/no about (get_input_mapping_contexts). InputMappingContext asset path to remove from the live player (remove_mapping_context)"),
   mappingIndex: z.number().optional().describe("Index of the mapping to remove (remove_imc_mapping). Index of the mapping to retarget (set_imc_mapping_action). Index of the mapping to rebind (set_imc_mapping_key). Index of the mapping in the IMC (default 0) (set_mapping_modifiers). Mapping row index, required with imcPath; must be a non-negative integer (set_player_mappable_settings)"),
   mappingName: z.string().optional().describe("Stable non-empty FName; required for InputAction edits, optional for existing mapping overrides"),
+  maxOutputValues: z.number().int().optional().describe("Values returned per output (default 256, max 65536)"),
   maxRange: z.number().optional().describe("Maximum range the noise carries (0 = unlimited)"),
   mode: z.string().optional().describe("stop (default) | forced | restart | pause | resume"),
   modifiers: z.array(z.record(z.string(), z.unknown())).optional().describe("Modifier specs that replace the action's own Modifiers array (set_action_triggers). Modifier objects: {type, ...props} or {class, properties}. Replaces the mapping's list (set_mapping_modifiers)"),
   name: z.string().optional().describe("Slot name (add_smart_object_slot, set_smart_object_slot). Asset name (create_behavior_tree, create_blackboard, create_eqs_query, create_input_action, create_input_mapping_context, create_smart_object_definition, create_state_tree). Blueprint name (create_game_mode, create_game_state, create_hud, create_player_controller, create_player_state)"),
+  nameFilter: z.string().optional().describe("Case-sensitive substring of the Specify function name"),
   newInputActionPath: z.string().optional().describe("InputAction the mapping should use"),
   newKey: z.string().optional().describe("New FKey name"),
   node: z.string().optional().describe("Node to move: a guid, a runtime address, or a unique node name (move_bt_node). Node to remove: a guid, a runtime address, or a unique node name (remove_bt_node)"),
@@ -2786,8 +2951,9 @@ export const schema: Record<string, z.ZodType> = {
   nodeClass: z.string().optional().describe("Concrete BT node class to place, e.g. BTComposite_Selector or BTTask_MoveTo; list_bt_node_classes enumerates them (add_bt_node). BT node selector: class name, /Script path or partial name; a resolved class matches its whole subtree (list_bt_tasks, read_bt_node_properties, set_bt_node_property, set_bt_task_property)"),
   nodeName: z.string().optional().describe("Display name for the new node (add_bt_node). BT node selector: the node's object name or its NodeName display text (list_bt_tasks, read_bt_node_properties, set_bt_node_property, set_bt_task_property)"),
   nodePath: z.string().optional().describe("BT node address from read_behavior_tree_graph, e.g. 'Root.Children[0].Decorators[1]' (list_bt_tasks, read_bt_node_properties, set_bt_node_property, set_bt_task_property). Alias for node (move_bt_node, remove_bt_node)"),
+  observationType: z.string().optional().describe("Observation type: Float, Location, Set, ... or the Specify function name"),
   offset: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Slot offset {x,y,z}"),
-  onConflict: z.string().optional().describe("skip (default, returns the existing asset) or error when the asset already exists (create_behavior_tree, create_blackboard, create_eqs_query, create_input_action, create_input_mapping_context, create_smart_object_definition, create_state_tree). skip (default, returns the actor already carrying label) or error when one does (spawn_nav_modifier_volume)"),
+  onConflict: z.string().optional().describe("skip (default, returns the existing asset) or error when the asset already exists (create_behavior_tree, create_blackboard, create_eqs_query, create_input_action, create_input_mapping_context, create_smart_object_definition, create_state_tree). skip (default) reports an existing asset, error refuses it (nne_import_model). skip (default, returns the actor already carrying label) or error when one does (spawn_nav_modifier_volume)"),
   optionIndex: z.number().optional().describe("Option to add the test to (default 0) (add_eqs_test). Option to remove, as read_eqs_query reports it (remove_eqs_option). Option the test belongs to (default 0) (remove_eqs_test). Option whose tests to reorder (default 0) (reorder_eqs_tests)"),
   order: z.array(z.number()).optional().describe("Current test indices in the order wanted; must be a full permutation (reorder_eqs_tests). Current trait indices in the order wanted; must be a full permutation (reorder_mass_traits)"),
   packagePath: z.string().optional().describe("Content folder (default /Game/AI) (create_behavior_tree, create_blackboard, create_state_tree). Content folder (default /Game/AI/EQS) (create_eqs_query). Content folder (default /Game/Blueprints/GameFramework) (create_game_mode, create_game_state, create_hud, create_player_controller, create_player_state). Content folder (default /Game/Input) (create_input_action, create_input_mapping_context). Content folder (default /Game/AI/SmartObjects) (create_smart_object_definition)"),
@@ -2802,6 +2968,8 @@ export const schema: Record<string, z.ZodType> = {
   pieInstance: z.number().optional().describe("PIE world instance (0 = server/primary); omit for the first running one (apply_mapping_context, get_action_value, remove_mapping_context). PIE world instance (0 = server/primary); omit for the primary world (check_perception, get_bt_runtime, get_live_blackboard, get_perceived_actors, list_ai_agents, read_perception, report_noise_event, run_behavior_tree, set_live_blackboard, stop_behavior_tree). PIE instance id; omitted selects the active PIE world (find_nav_path). PIE world instance (0 = server/primary); omit for every running PIE world (get_input_mapping_contexts). PIE world instance (0 = server/primary) (get_state_tree_runtime). PIE world instance when world is pie or auto (query_zone_graph, run_eqs_query)"),
   playerIndex: z.number().optional().describe("Local player to act on (default 0) (apply_mapping_context, remove_mapping_context). Local player to read (default 0) (get_action_value). Player index; omit for every player (get_input_mapping_contexts)"),
   playerMappableKeySettings: z.record(z.string(), z.unknown()).nullable().optional().describe("Per-mapping reflected settings fields; null clears the override subobject"),
+  posX: z.number().int().optional().describe("Node X position (default 0)"),
+  posY: z.number().int().optional().describe("Node Y position (default below the existing nodes)"),
   priority: z.number().optional().describe("Enhanced Input context priority; higher wins for the same key (default 0)"),
   properties: z.record(z.string(), z.unknown()).optional().describe("UPROPERTY writes on the new node, as a map of property path to value (add_bt_node). Several writes at once, as a map of property path to value. Applied as one batch: a rejected write puts the others back (set_bt_node_property, set_bt_task_property)"),
   property: z.string().optional().describe("Dotted, indexed property path on the node, e.g. 'FilterClass' or 'Lines[1].Text'"),
@@ -2818,19 +2986,22 @@ export const schema: Record<string, z.ZodType> = {
   rotation: z.object({ pitch: z.number(), yaw: z.number(), roll: z.number() }).optional().describe("Slot rotation {pitch,yaw,roll}"),
   runMode: z.string().optional().describe("all | best | random (default all)"),
   runningOnly: z.boolean().optional().describe("Only agents whose brain is currently running"),
+  runtime: z.string().optional().describe("CPU runtime to run on (default the first registered CPU runtime that accepts the model)"),
   save: z.boolean().optional().describe("Persist the asset (default true); false defers the write"),
   scale: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Actor scale, applied after the brush is built"),
   schema: z.string().optional().describe("StateTree schema class path; omit to take the gameplay default (StateTreeComponentSchema, then StateTreeAIComponentSchema, then any concrete schema)"),
   senses: z.array(z.string()).optional().describe("Sense names (Sight, Hearing, Damage, Touch, Team, Prediction), AISenseConfig_* names or class paths"),
   senseType: z.string().optional().describe("Sight (default) | Hearing | Damage | Touch | Team | Prediction | Blueprint (configure_ai_perception_sense). Only report this sense: Sight | Hearing | Damage | Touch | Team | Prediction (get_perceived_actors). Sense to remove when index is omitted: Sight | Hearing | Damage | Touch | Team | Prediction | Blueprint (remove_sense). hearing (default) | damage (report_noise_event)"),
   settingBehavior: z.enum(["InheritSettingsFromAction","OverrideSettings","IgnoreSettings"]).optional().describe("Per-mapping behavior: InheritSettingsFromAction, OverrideSettings or IgnoreSettings"),
-  settings: z.record(z.string(), z.unknown()).optional().describe("Per-sense property writes, e.g. {SightRadius: 1500}"),
+  settings: z.record(z.string(), z.unknown()).optional().describe("Per-sense property writes, e.g. {SightRadius: 1500} (configure_ai_perception_sense). Input pin defaults by parameter name, e.g. {\"Tag\": \"Speed\", \"MaxNum\": 8} (learning_agents_add_observation)"),
   slotIndex: z.number().optional().describe("Slot index (add_smart_object_slot_behavior, set_smart_object_slot). Slot index to remove (remove_smart_object_slot)"),
+  sourceFile: z.string().optional().describe("Absolute path of the model file (.onnx, .tflite, ...)"),
   start: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Query start (world point)"),
   tag: z.string().optional().describe("Tag recorded on the stimulus"),
   tags: z.array(z.unknown()).optional().describe("Slot runtime tags (gameplay tag strings or struct shapes) (add_smart_object_slot, set_smart_object_slot). Zone Graph tag names to keep, as the project settings name them (query_zone_graph)"),
   targetLabel: z.string().optional().describe("The actor being perceived (check_perception). Damaged actor (damage only) (report_noise_event)"),
   targetPath: z.string().optional().describe("Full object path of the target (check_perception). Full object path of the damaged actor (damage only) (report_noise_event)"),
+  targetRuntimes: z.array(z.string()).optional().describe("Runtimes to cook the model for, e.g. NNERuntimeORTCpu or NNERuntimeLiteRT (default every runtime)"),
   taskClass: z.string().optional().describe("Keep only tasks of this class or its subclasses, e.g. BTTask_MoveTo"),
   testClass: z.string().optional().describe("Test class, short name (Distance) or full path"),
   testIndex: z.number().optional().describe("Test to remove, as read_eqs_query reports it"),

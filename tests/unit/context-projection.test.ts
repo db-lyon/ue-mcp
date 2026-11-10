@@ -15,6 +15,7 @@ import { createRuntime, type Runtime } from "../../src/server/runtime.js";
 import { createMcpServer } from "../../src/server/mcp-server.js";
 import { ContextProjector, ContextProjectionError, CONTEXT_STRATEGIES } from "../../src/server/context-projection.js";
 import type { ContextStrategy } from "../../src/surface/context/lean-context.js";
+import { resultText } from "../helpers/content-text.js";
 
 let tmp: string;
 let uproject: string;
@@ -129,7 +130,7 @@ describe("a scoped projection", () => {
 });
 
 describe("a projected call", () => {
-  const text = (r: { content: Array<{ text?: string }> }) => r.content.map((c) => c.text ?? "").join("\n");
+  const text = resultText;
 
   it("runs micro's gateway discovery over only the projected categories", async () => {
     const projector = new ContextProjector(runtimes.full);

@@ -271,6 +271,13 @@ uint32 FMCPBridgeServer::Run()
 	bool bBound = false;
 	for (int32 Offset = 0; Offset <= kMaxPortProbe; ++Offset)
 	{
+		// A port the project's Unreal Canvas Bridge claims stays free for it,
+		// even when it is free now: its servers start after this one.
+		if (IsCanvasReservedPort(RequestedPort + Offset))
+		{
+			continue;
+		}
+
 		sockaddr_in ServerAddr;
 		FMemory::Memset(&ServerAddr, 0, sizeof(ServerAddr));
 		ServerAddr.sin_family = AF_INET;
