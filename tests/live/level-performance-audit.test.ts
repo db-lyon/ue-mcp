@@ -39,6 +39,11 @@ const rows = (v: unknown): Json[] => (Array.isArray(v) ? (v as Json[]) : []);
 
 let bridge: EditorBridge;
 let scratch = "";
+// Primitives whose bounds span the whole map (the default map's sky sphere)
+// fall in every box; measured before the fixture is placed and added back.
+const FAR = { regionMin: { x: -990000, y: -990000, z: -990000 }, regionMax: { x: -980000, y: -980000, z: -980000 } };
+let ambient = { primitives: 0, triangles: 0 };
+let ambientFar = 0;
 
 async function call(method: string, params: Json = {}): Promise<Json> {
   const r = await callBridge(bridge, method, params);
@@ -55,6 +60,10 @@ beforeAll(async () => {
   bridge = await getBridge();
   scratch = fs.mkdtempSync(path.join(os.tmpdir(), "perf-audit-"));
   await wipe();
+
+  const before = obj((await call("audit_level_performance", { ...REGION })).totals);
+  ambient = { primitives: Number(before.primitives), triangles: Number(before.lod0Triangles) };
+  ambientFar = Number(obj((await call("audit_level_performance", FAR)).totals).primitives);
 
   await call("create_material", { name: "M_PerfAudit_Translucent", packagePath: DIR });
   await call("set_material_blend_mode", { assetPath: MATERIAL, blendMode: "Translucent" });
@@ -98,14 +107,16 @@ afterAll(async () => {
 describe("level(audit_performance)", () => {
   it("ranks triangles, instancing, shadow casters, Nanite candidates and lights inside the box", async () => {
     const audit = await call("audit_level_performance", { ...REGION, gridSize: 2000, heavyTriangleThreshold: 10 });
-    expect(obj(audit.totals).primitives).toBe(CUBE_COMPONENTS);
+    expect(obj(audit.totals).primitives).toBe(ambient.primitives + CUBE_COMPONENTS);
 
     const cube = rows(obj(audit.trianglesByMesh).rows).find((r) => String(r.mesh).startsWith(CUBE));
     expect(cube, JSON.stringify(audit.trianglesByMesh)).toBeDefined();
     expect(cube!.placements).toBe(CUBE_COMPONENTS);
-    expect(Number(cube!.lod0Triangles)).toBe(12);
-    expect(cube!.totalTriangles).toBe(12 * CUBE_COMPONENTS);
-    expect(obj(audit.totals).lod0Triangles).toBe(12 * CUBE_COMPONENTS);
+    // The engine cube's LOD0 triangle count is not fixed across engine versions (48 on 5.9).
+    const cubeTriangles = Number(cube!.lod0Triangles);
+    expect(cubeTriangles).toBeGreaterThanOrEqual(12);
+    expect(cube!.totalTriangles).toBe(cubeTriangles * CUBE_COMPONENTS);
+    expect(obj(audit.totals).lod0Triangles).toBe(ambient.triangles + cubeTriangles * CUBE_COMPONENTS);
 
     const instancing = rows(obj(audit.instancingCandidates).rows).find((r) => String(r.mesh).startsWith(CUBE));
     expect(instancing).toBeDefined();
@@ -162,10 +173,9 @@ describe("level(audit_performance)", () => {
     expect(obj(capped.dynamicShadowCasters).truncated).toBe(true);
     expect(rows(obj(capped.lights).rows)).toHaveLength(1);
 
-    const empty = await call("audit_level_performance", {
-      regionMin: { x: -990000, y: -990000, z: -990000 }, regionMax: { x: -980000, y: -980000, z: -980000 },
-    });
-    expect(obj(empty.totals).primitives).toBe(0);
+    const empty = await call("audit_level_performance", FAR);
+    expect(obj(empty.totals).primitives).toBe(ambientFar);
+    expect(rows(obj(empty.trianglesByMesh).rows).some((r) => String(r.mesh).startsWith(CUBE))).toBe(false);
     expect(obj(empty.lights).shadowedLocalLights).toBe(0);
   }, 120_000);
 
@@ -175,7 +185,7 @@ describe("level(audit_performance)", () => {
     expect(dumped.dumpedToFile).toBe(true);
     expect(path.resolve(String(dumped.outputPath))).toBe(path.resolve(out));
     const onDisk = JSON.parse(fs.readFileSync(out, "utf8")) as Json;
-    expect(obj(onDisk.totals).primitives).toBe(CUBE_COMPONENTS);
+    expect(obj(onDisk.totals).primitives).toBe(ambient.primitives + CUBE_COMPONENTS);
     expect(rows(obj(onDisk.trianglesByMesh).rows).length).toBeGreaterThan(0);
   }, 120_000);
 
