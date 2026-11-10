@@ -34,6 +34,14 @@ const succeeded = (r: TestResult): boolean => r.ok && body(r).success !== false;
 
 let bridge: EditorBridge;
 
+/** The engine writes its manifests as UTF-16 with a byte order mark. */
+function readEngineText(file: string): string {
+  const bytes = fs.readFileSync(file);
+  if (bytes[0] === 0xff && bytes[1] === 0xfe) return bytes.subarray(2).toString("utf16le");
+  if (bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf) return bytes.subarray(3).toString("utf8");
+  return bytes.toString("utf8");
+}
+
 // Adding and removing a target saves ULocalizationSettings into the tracked
 // DefaultEditor.ini; the file is put back byte for byte afterwards.
 const EDITOR_INI = path.join(TEST_PROJECT_DIR, "Config", "DefaultEditor.ini");
@@ -178,7 +186,7 @@ describe("localization", () => {
     expect(gathered.exitCode).toBe(0);
     const afterGather = gathered.targetState as TargetState;
     expect(afterGather.files.manifest.exists).toBe(true);
-    const manifest = fs.readFileSync(afterGather.files.manifest.path, "utf8");
+    const manifest = readEngineText(afterGather.files.manifest.path);
     expect(manifest).toContain("Hello from the MCP localization test");
     expect(afterGather.files.archives.every((a) => a.exists)).toBe(true);
 

@@ -90,7 +90,9 @@ describe("widget viewmodels", () => {
 
     const listed = await viewModels();
     expect(listed).toHaveLength(1);
-    expect(listed[0]).toMatchObject({ viewModelName: "ScoreVM", creationType: "CreateInstance", bindingCount: 0 });
+    // The engine picks the first creation type the class allows, as the editor's own Add does.
+    expect(listed[0]).toMatchObject({ viewModelName: "ScoreVM", creationType: added.creationType, bindingCount: 0 });
+    expect(["Manual", "CreateInstance"]).toContain(listed[0].creationType);
   }, 120_000);
 
   it("adds a plain binding and one through a conversion function, and reads both back", async () => {
