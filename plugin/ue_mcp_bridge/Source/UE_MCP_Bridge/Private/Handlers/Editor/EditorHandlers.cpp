@@ -572,6 +572,25 @@ void FEditorHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("get_standalone_status"), &GetStandaloneStatus, NoParams);
 	Registry.RegisterHandler(TEXT("stop_standalone_game"), &StopStandaloneGame, NoParams,
 		MCPSpec::ContractExempt(TEXT("terminates the standalone game process")));
+	// Analysis runs on worker threads behind a deferred answer, and a long
+	// trace takes minutes, so the wait is far past the default budget.
+	// Mirrored in src/bridge/bridge-timeouts.ts.
+	Registry.RegisterHandlerWithTimeout(TEXT("analyze_insights_trace"), &AnalyzeInsightsTrace, 600.0f, {
+		MCPParam::Optional(TEXT("file"), EType::String, TEXT(".utrace to analyse, absolute or relative to Saved/Profiling (default the newest .utrace there)")),
+		MCPParam::Optional(TEXT("startSeconds"), EType::Number, TEXT("Window start, seconds from the start of the trace (default 0)")),
+		MCPParam::Optional(TEXT("endSeconds"), EType::Number, TEXT("Window end, seconds from the start of the trace (default the end)")),
+		MCPParam::Optional(TEXT("hitchThresholdMs"), EType::Number, TEXT("A frame at or over this many milliseconds is a hitch (default 50)")),
+		MCPParam::Optional(TEXT("worstFrames"), EType::Integer, TEXT("Slowest frames to list with their top timers (default 10, max 50)")),
+		MCPParam::Optional(TEXT("topTimers"), EType::Integer, TEXT("Timers to list over the window (default 20, max 200)")),
+		MCPParam::Optional(TEXT("timersPerFrame"), EType::Integer, TEXT("Timers listed per worst frame, by exclusive time (default 5, max 20)")),
+		MCPParam::Optional(TEXT("maxHitches"), EType::Integer, TEXT("Hitch rows returned; count covers them all (default 50, max 500)")),
+		MCPParam::Optional(TEXT("maxBookmarks"), EType::Integer, TEXT("Bookmark rows returned; count covers them all (default 100, max 1000)")),
+		MCPParam::Optional(TEXT("threads"), EType::String, TEXT("game (default): timers on the game thread only | all: every CPU thread")).Enum({ TEXT("game"), TEXT("all") }),
+		MCPParam::Optional(TEXT("timerSort"), EType::String, TEXT("Order of topTimers: inclusive (default) or exclusive time")).Enum({ TEXT("inclusive"), TEXT("exclusive") }),
+		MCPParam::Optional(TEXT("frameType"), EType::String, TEXT("Frames to measure: game (default) or rendering")).Enum({ TEXT("game"), TEXT("rendering") }),
+		MCPParam::Optional(TEXT("dumpToFile"), EType::Boolean, TEXT("Write the full analysis to a JSON file and return the headline numbers with its path (default false)")),
+		MCPParam::Optional(TEXT("outputPath"), EType::String, TEXT("File for dumpToFile; relative paths resolve under Saved/ (default Saved/UE_MCP/TraceAnalysis/<trace>.analysis.json)")),
+	});
 	Registry.RegisterHandler(TEXT("reload_handlers"), &ReloadHandlers, NoParams,
 		MCPSpec::ContractExempt(TEXT("reloads the Python bridge handlers from disk")));
 	// save_asset is owned by FAssetHandlers (#768: adds force, file size, mtime).

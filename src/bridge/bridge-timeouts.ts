@@ -54,6 +54,7 @@ export const TIMEOUT_ENV_VAR = ENV_VARS.bridgeTimeoutMs;
  * come from plugins this repo does not build.
  */
 export const REGISTERED_HANDLER_TIMEOUT_SECONDS: Readonly<Record<string, number>> = {
+  analyze_insights_trace: 600,
   analyze_landscape_terrain: 120,
   apply_landscape_erosion: 600,
   apply_mesh_fracture: 600,

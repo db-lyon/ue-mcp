@@ -1,5 +1,5 @@
 {
-  "handlerCount": 1261,
+  "handlerCount": 1262,
   "handlers": {
     "actors_in_box": {
       "category": "level",
@@ -3717,6 +3717,107 @@
           "type": "string",
           "required": false,
           "description": "Directory under Project/Saved/Codex/AnimationQA for analysis artifacts; must not already contain them"
+        }
+      ]
+    },
+    "analyze_insights_trace": {
+      "category": "editor",
+      "params": [
+        {
+          "name": "file",
+          "type": "string",
+          "required": false,
+          "description": ".utrace to analyse, absolute or relative to Saved/Profiling (default the newest .utrace there)"
+        },
+        {
+          "name": "startSeconds",
+          "type": "number",
+          "required": false,
+          "description": "Window start, seconds from the start of the trace (default 0)"
+        },
+        {
+          "name": "endSeconds",
+          "type": "number",
+          "required": false,
+          "description": "Window end, seconds from the start of the trace (default the end)"
+        },
+        {
+          "name": "hitchThresholdMs",
+          "type": "number",
+          "required": false,
+          "description": "A frame at or over this many milliseconds is a hitch (default 50)"
+        },
+        {
+          "name": "worstFrames",
+          "type": "integer",
+          "required": false,
+          "description": "Slowest frames to list with their top timers (default 10, max 50)"
+        },
+        {
+          "name": "topTimers",
+          "type": "integer",
+          "required": false,
+          "description": "Timers to list over the window (default 20, max 200)"
+        },
+        {
+          "name": "timersPerFrame",
+          "type": "integer",
+          "required": false,
+          "description": "Timers listed per worst frame, by exclusive time (default 5, max 20)"
+        },
+        {
+          "name": "maxHitches",
+          "type": "integer",
+          "required": false,
+          "description": "Hitch rows returned; count covers them all (default 50, max 500)"
+        },
+        {
+          "name": "maxBookmarks",
+          "type": "integer",
+          "required": false,
+          "description": "Bookmark rows returned; count covers them all (default 100, max 1000)"
+        },
+        {
+          "name": "threads",
+          "type": "string",
+          "required": false,
+          "description": "game (default): timers on the game thread only | all: every CPU thread",
+          "enum": [
+            "game",
+            "all"
+          ]
+        },
+        {
+          "name": "timerSort",
+          "type": "string",
+          "required": false,
+          "description": "Order of topTimers: inclusive (default) or exclusive time",
+          "enum": [
+            "inclusive",
+            "exclusive"
+          ]
+        },
+        {
+          "name": "frameType",
+          "type": "string",
+          "required": false,
+          "description": "Frames to measure: game (default) or rendering",
+          "enum": [
+            "game",
+            "rendering"
+          ]
+        },
+        {
+          "name": "dumpToFile",
+          "type": "boolean",
+          "required": false,
+          "description": "Write the full analysis to a JSON file and return the headline numbers with its path (default false)"
+        },
+        {
+          "name": "outputPath",
+          "type": "string",
+          "required": false,
+          "description": "File for dumpToFile; relative paths resolve under Saved/ (default Saved/UE_MCP/TraceAnalysis/<trace>.analysis.json)"
         }
       ]
     },

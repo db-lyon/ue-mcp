@@ -127,6 +127,11 @@ public class UE_MCP_Bridge : ModuleRules
 				// GetStatistics, which editor(start_trace) and its channel actions
 				// call. Core includes the header but does not re-export these.
 				"TraceLog",
+				// ITraceServicesModule and its analysis providers (frames,
+				// timers, threads, bookmarks), which editor(analyze_trace)
+				// reads a recorded .utrace through. A Developer module, as the
+				// editor modules above are; Unreal Insights is built on it.
+				"TraceServices",
 				// The engine-status snapshot, in its own module so it can load
 				// at PostConfigInit and cover the startup window that exists
 				// before this module does.
