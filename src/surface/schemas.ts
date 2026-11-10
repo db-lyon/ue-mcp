@@ -24,9 +24,9 @@ export const UeMcpConfigSchema = z
   .object({
     contentRoots: z.array(z.string()).optional(),
     disable: z.array(z.string()).optional(),
-    // Native (UE 5.8+ ToolsetRegistry) tool surfacing. Enabled by default;
-    // `exclude` names ue-mcp categories that should NOT be enriched with Epic
-    // tools (they stay reachable via the `epic` gateway). See scripts/generate-epic-actions.mjs.
+    // Native (UE 5.8+ ToolsetRegistry) tool surfacing. Enabled by default.
+    // `exclude` is deprecated for one release: it is read as `disable:
+    // [<category>:epic]` with a warning (see category-state.ts).
     nativeTools: z
       .object({
         enabled: z.boolean().optional(),

@@ -140,7 +140,12 @@ export function createMcpServer(rt: Runtime, opts: McpServerOptions = {}): Runti
   }
 
   // ── Category tools, dispatched through each session's task registry ──
-  for (const tool of rt.advertisedTools) {
+  // A call reaches the category as it is advertised NOW: turning a category
+  // on or off at runtime can replace the object (the micro gateway, a lean
+  // view), and the registration has to follow it by name.
+  const currentTool = (name: string, fallback: ToolDef): ToolDef =>
+    rt.advertisedTools.find((t) => t.name === name) ?? fallback;
+  function registerCategory(tool: ToolDef): void {
     const shape: Record<string, z.ZodType> = { ...tool.schema };
     // Advertised as `action` + `args` (#1172); the flat shape stays the
     // validation contract, applied in dispatch instead of by the SDK.
@@ -149,13 +154,14 @@ export function createMcpServer(rt: Runtime, opts: McpServerOptions = {}): Runti
     const description = descriptionFor(tool);
     const callback = (callArgs: Record<string, unknown>, extra: CallExtra) => {
       claimElicit();
-      return withNotice(dispatchCategoryCall(deps, tool, envelope, callArgs, extra));
+      return withNotice(dispatchCategoryCall(deps, currentTool(tool.name, tool), envelope, callArgs, extra));
     };
     const registration = envelope
       ? server.registerTool(tool.name, { description, inputSchema: envelopeInputSchema(tool) }, callback as never)
       : server.registerTool(tool.name, { description, inputSchema: flatInputSchema(tool, shape) }, callback as never);
     registeredTools.set(tool.name, registration);
   }
+  for (const tool of rt.advertisedTools) registerCategory(tool);
 
   // ── Flow tool ────────────────────────────────────────────────────
   // In micro mode flow is a gateway category (deps.flow), not a second tool.
@@ -179,6 +185,13 @@ export function createMcpServer(rt: Runtime, opts: McpServerOptions = {}): Runti
     const key = have ? [...have].sort().join(",") : "";
     if (!force && key === parityKey) return;
     parityKey = key;
+    // A category turned on at runtime that was off at startup was never
+    // registered; one turned off is still registered and is hidden.
+    for (const tool of rt.advertisedTools) if (!registeredTools.has(tool.name)) registerCategory(tool);
+    const live = new Set(rt.targetable.map((t) => t.name));
+    for (const [name, registration] of registeredTools) {
+      if (!live.has(name) && registration.enabled) registration.disable();
+    }
     for (const tool of rt.targetable) advertise(tool, have);
   };
   sync(true);

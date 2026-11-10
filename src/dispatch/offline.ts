@@ -112,6 +112,9 @@ export const LOCAL_ACTIONS: Record<string, string> = {
   "project.execute_python_report": "Reads this session's own recorded calls.",
   "project.list_available_actions": "Classifies the tool graph this server holds in memory.",
   "project.check_install": "Inspects the project, the engine tree and the deployed plugin on disk.",
+  "project.list_categories": "Reads the tool graph this server holds and the engine's setting file; asks the editor for toolset states only when one is attached.",
+  "project.set_category_enabled": "Writes ue-mcp.yml and rebuilds the surface in this process; with no editor running, the engine's setting file is written instead of calling it.",
+  "project.set_toolset_enabled": "With no editor running, writes the engine's setting file; reaches the editor only when one is attached.",
 
   // Process lifecycle. Starting an editor is the one thing that must work
   // without one, and building requires the editor to be stopped.

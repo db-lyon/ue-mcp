@@ -41,6 +41,7 @@ import { unknownActionMessage } from "../surface/action-schema.js";
 import { withheldTarget, wrapsEpicTool } from "../surface/registered-surface.js";
 import { epicEngineRefusalFor } from "../surface/epic-engines.js";
 import { explainMissingAction } from "../sessions/session-surface.js";
+import { disabledActionRefusal } from "../surface/category-state.js";
 import type { FlowContext } from "../flow/context.js";
 import type { SessionLoad, SessionLoads } from "../sessions/session-load.js";
 
@@ -347,6 +348,10 @@ export async function dispatchCategoryCall(
         `${e instanceof Error ? e.message : String(e)}`,
     );
   }
+  // Turned off by this project's `disable:`, named with the command that turns it back on.
+  const turnedOff = disabledActionRefusal(sessionLoad.pristine, sessionLoad.categories, effectiveTask);
+  if (turnedOff) return errorResult(ErrorCode.CATEGORY_DISABLED, turnedOff, attribution(sessions, session));
+
   const sessionRegistry = sessionLoad.registry ?? loads.loadFor(undefined).registry!;
   const refusal = sessions.size > 1
     ? explainMissingAction(
@@ -382,6 +387,7 @@ export async function dispatchCategoryCall(
   if (withheld) return errorResult("NOT_FOUND", withheld);
 
   const served = attribution(sessions, session);
+
   try {
     const task = await sessionRegistry.create(taskName, flowCtx, taskParams);
     // Locks are taken in the editor the call runs in, through the GUARDED

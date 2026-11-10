@@ -28,6 +28,7 @@ import { makeResolveExistingFile } from "../flow/guard.js";
 import { normalizeProjectRoot } from "../bridge/port.js";
 import { McpError, ErrorCode } from "../core/errors.js";
 import { warn } from "../core/log.js";
+import type { CategoryControl } from "../surface/category-state.js";
 import { newLockOwnerId } from "../dispatch/lock-owner.js";
 import { withoutDialogActuation } from "../editor/dialog-guard.js";
 import { projectDirOf } from "../config/uproject-path.js";
@@ -166,6 +167,11 @@ export class SessionRegistry {
    * the daemon; absent in process.
    */
   editorOperation?: (op: "restart" | "rebuild") => Promise<{ steps: Array<{ step: string; ok: boolean; result: string }> }>;
+  /**
+   * Turn categories on and off in a session without a restart. Installed by
+   * the session loads, which own each session's graph (#1827).
+   */
+  categories?: CategoryControl;
   /** Held while a compound edit is mid-flight, so observers see one change. */
   private suppressNotify = false;
 

@@ -189,9 +189,12 @@ export async function createRuntime(projectArgs: string[]): Promise<Runtime> {
   // At one editor, that editor's list. Beyond one, the union, so an action only
   // one project has is still addressable; dispatch to a session that lacks it
   // is refused by name.
-  const advertisedTools: ToolDef[] = sessions.size > 1
+  const computeAdvertised = (): ToolDef[] => sessions.size > 1
     ? unionSurface(loads.all().map((l) => ({ ...l.surface, tools: l.advertisedTools }))).tools
     : primaryLoad.advertisedTools;
+  // One array for the life of the runtime, refilled when a category is turned
+  // on or off, so every reader holding it sees the new surface.
+  const advertisedTools: ToolDef[] = [...computeAdvertised()];
   if (contextStrategy !== "full") {
     info("context", `Context strategy: ${contextStrategy}`);
   }
@@ -277,6 +280,19 @@ export async function createRuntime(projectArgs: string[]): Promise<Runtime> {
 
   sessions.onCountChanged = () => {
     for (const s of sessions.list()) watchParity(s);
+    syncEditorTargeting();
+    notify();
+  };
+
+  // A category turned on or off at runtime (project(set_category_enabled)):
+  // the advertised list is rebuilt from every session's load, targeting is put
+  // back on any category object the rebuild created, and each MCP server
+  // re-advertises, which is what sends tools/list_changed.
+  loads.onSurfaceRebuilt = () => {
+    const next = computeAdvertised();
+    advertisedTools.splice(0, advertisedTools.length, ...next);
+    targetable.splice(0, targetable.length, ...next, flowTool);
+    targetingSignature = "\u0000";
     syncEditorTargeting();
     notify();
   };
