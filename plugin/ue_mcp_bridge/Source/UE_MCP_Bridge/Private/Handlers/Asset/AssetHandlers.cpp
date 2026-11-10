@@ -3065,7 +3065,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::DeleteAsset(const TSharedPtr<FJsonObject>
 	// they go first: deleting the map loads it to check its references, and the
 	// actor packages that load touches keep their files open for the rest of the
 	// call. An open map's packages are dealt with after it, as before.
-	const bExternalsFirst = bIsMap && ExternalPackages.Num() > 0 && FindPackage(nullptr, *PackageName) == nullptr;
+	const bool bExternalsFirst = bIsMap && ExternalPackages.Num() > 0 && FindPackage(nullptr, *PackageName) == nullptr;
 	MCPMapExternalPackages::FResult External = bExternalsFirst
 		? MCPMapExternalPackages::Delete(PackageName, ExternalPackages)
 		: MCPMapExternalPackages::FResult();
