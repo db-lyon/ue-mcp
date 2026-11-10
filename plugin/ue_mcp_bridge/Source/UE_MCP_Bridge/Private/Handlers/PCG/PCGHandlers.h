@@ -16,6 +16,11 @@ private:
 	static TSharedPtr<FJsonValue> ReadPCGGraph(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> AddPCGNode(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> ConnectPCGNodes(const TSharedPtr<FJsonObject>& Params);
+	// #1828: Custom HLSL node source and edge validation. PCGHandlers_CustomHLSL.cpp.
+	static void RegisterCustomHLSLHandlers(class FMCPHandlerRegistry& Registry);
+	static TSharedPtr<FJsonValue> GetPCGCustomHLSL(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> SetPCGCustomHLSL(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> ValidatePCGEdge(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> DisconnectPCGNodes(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> RemovePCGNode(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SetPCGNodeSettings(const TSharedPtr<FJsonObject>& Params);

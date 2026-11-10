@@ -440,6 +440,9 @@ void FEditorHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("maxLines"), EType::Integer, TEXT("Messages to return (default 200)")),
 		MCPParam::Optional(TEXT("severity"), EType::String, TEXT("Severity-name substring: Error | Warning | PerformanceWarning | Info")),
 	});
+	// #1828: Map Check runs and UMapCheckSubsystem logging, and Python's additional sys.path entries.
+	RegisterMapCheckHandlers(Registry);
+	RegisterPythonPathHandlers(Registry);
 	Registry.RegisterHandler(TEXT("get_build_status"), &GetBuildStatus, NoParams);
 	Registry.RegisterHandler(TEXT("pie_control"), &PieControl, {
 		MCPParam::Optional(TEXT("pieAction"), EType::String, TEXT("start | stop | status (default status)")),

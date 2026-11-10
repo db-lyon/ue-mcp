@@ -2768,6 +2768,12 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "boolean",
         "required": false,
         "description": "Permit a path naming a whole content root (default false)"
+      },
+      {
+        "name": "deleteRedirectors",
+        "type": "boolean",
+        "required": false,
+        "description": "Delete each redirector once nothing references it (default true); false keeps the stubs"
       }
     ]
   },
@@ -6958,7 +6964,7 @@ export const paramsClauses: Readonly<Record<string, string>> = {
   export_uv_layout: "Params: assetPath (or path), lodIndex?, channel?, outputPath?, imageSize?, showIslands?, showOverlaps?, showGrid?",
   fill_datatable_from_json: "Params: assetPath (or path), rows?, jsonString?",
   fix_asset_hygiene: "Params: fix, assetPaths?, directory?, directories?, recursive?, maxAssets?, classNames?, excludePaths?, keepPaths?, namingRules?, namingRuleMode?, unreferencedAction?, quarantineFolder?, ignoreRedirectorReferencers?, maxFixes?, continueOnError?, save?, dryRun?",
-  fixup_redirectors: "Params: paths, dryRun?, save?, allowProjectWide?",
+  fixup_redirectors: "Params: paths, dryRun?, save?, allowProjectWide?, deleteRedirectors?",
   force_reload_asset: "Params: assetPath (or path) OR assetPaths, discardUnsaved?",
   generate_lightmap_uvs: "Params: assetPath (or path), lodIndex?, enable?, sourceChannel?, destinationChannel?, minLightmapResolution?, lightmapResolution?, setLightmapCoordinateIndex?, force?, save?, dryRun?, rasterSize?",
   generate_mesh_collision: "Params: assetPath (or path), op?, method?, maxConvexHulls?, hullTargetFaceCount?, maxShapeCount?, minThickness?, autoDetectSpheres?, autoDetectBoxes?, autoDetectCapsules?, simplifyHulls?, removeFullyContainedShapes?, decompositionErrorTolerance?, decompositionSearchFactor?, sweptHullAxis?, markAsCustomized?, weldFirst?, weldTolerance?, lodType?, lodIndex?, save?, dryRun?",
@@ -7136,6 +7142,7 @@ export const schema: Record<string, z.ZodType> = {
   decompositionErrorTolerance: z.number().optional().describe("Volume error the decomposition may accept before splitting further (default 0)"),
   decompositionSearchFactor: z.number().optional().describe("0 to 1, how hard the decomposition searches for a better split (default 0.5)"),
   deleteIsolatedTriangles: z.boolean().optional().describe("Delete floating disconnected triangles, whose holes no fill can close (default true)"),
+  deleteRedirectors: z.boolean().optional().describe("Delete each redirector once nothing references it (default true); false keeps the stubs"),
   destinationChannel: z.number().optional().describe("Channel it writes (default: the current setting, or the next free channel)"),
   destinationPath: z.string().optional().describe("Object path of the copy (duplicate_asset). Alias for packagePath (import_animation, import_file, import_font, import_skeletal_mesh, import_static_mesh, import_texture). New object path, together with sourcePath (move_asset, rename_asset). Content folder to move it to (move_folder)"),
   directories: z.array(z.string()).optional().describe("Content paths to sweep, mount-rooted such as /Game/Characters (default /Game)"),

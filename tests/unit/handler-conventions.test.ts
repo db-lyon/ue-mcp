@@ -93,7 +93,12 @@ const BASELINE = {
   // 177: widget(compile_viewmodels) regenerates the class from the view; the previous class is not kept.
   // 179: project(gather_localization_target) and compile_localization_target rewrite the manifest,
   // archives and LocRes in place; the previous files are not kept.
-  mutationsWithoutRollback: 179,
+  // 187: level(build_hlod_actors, build_world_partition_hlods, delete_world_partition_hlods,
+  // build_world_partition_minimap) regenerate or delete derived HLOD and minimap data and keep no copy;
+  // level(repair_world_partition_errors) saves and moves actors, which the engine documents as not
+  // undoable; level(replace_actors_with_class, replace_actors_with_asset) delete the replaced actors;
+  // editor(log_map_check_message) adds a Message Log entry no call removes (#1828).
+  mutationsWithoutRollback: 187,
   // Zero, and held there by a flat assertion. Every mutation with no inverse
   // now says so in its own result body with the reason, which is the half a
   // caller can act on.
