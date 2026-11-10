@@ -227,5 +227,21 @@ public class UE_MCP_Bridge : ModuleRules
 		{
 			PrivateDefinitions.Add("WITH_UEMCP_TOOLSET_REGISTRY_SUBSYSTEM=0");
 		}
+
+		// Epic's Semantic Search plugin (5.8+, experimental, off by default).
+		// Headers only, never linked: asset(semantic_search) reaches it through
+		// virtual calls on its module interface and embedding provider, so this
+		// DLL loads whether or not a project enables the plugin.
+		bool bSemanticSearchPresent = System.IO.File.Exists(System.IO.Path.Combine(
+			EngineDirectory, "Plugins", "Experimental", "SemanticSearch", "Source", "SemanticSearch", "Public", "ISemanticSearchModule.h"));
+		if (bSemanticSearchPresent && Target.bBuildEditor)
+		{
+			PrivateIncludePathModuleNames.Add("SemanticSearch");
+			PrivateDefinitions.Add("WITH_UEMCP_SEMANTIC_SEARCH=1");
+		}
+		else
+		{
+			PrivateDefinitions.Add("WITH_UEMCP_SEMANTIC_SEARCH=0");
+		}
 	}
 }
