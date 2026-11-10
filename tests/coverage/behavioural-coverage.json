@@ -6559,6 +6559,11 @@
         {
           "suite": "live",
           "file": "tests/live/bcov-level-world-partition-subsystem.test.ts",
+          "test": "build_hlod_actors builds nothing in a map without HLOD actors and refuses an actor that is not one"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/bcov-level-world-partition-subsystem.test.ts",
           "test": "create_world_partition_minimap spawns the minimap actor once and get_world_partition_minimap reads it"
         },
         {
@@ -7660,6 +7665,11 @@
         {
           "suite": "live",
           "file": "tests/live/canvas.test.ts",
+          "test": "lists the render, stream, stencil, splat and cutout tools as plugin tools"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/canvas.test.ts",
           "test": "render returns image paths matching the preset's branches, written as PNGs"
         },
         {
@@ -7866,6 +7876,11 @@
       "registeredIn": "EpicHandlers_Toolsets.cpp",
       "status": "covered",
       "tests": [
+        {
+          "suite": "live",
+          "file": "tests/live/epic-toolset-toggle.test.ts",
+          "test": "epic_get_toolset_states lists every registered toolset with its enabled state and the patterns that match it"
+        },
         {
           "suite": "live",
           "file": "tests/live/epic-toolset-toggle.test.ts",
@@ -10564,6 +10579,11 @@
           "suite": "live",
           "file": "tests/live/bcov-pie-script-act.test.ts",
           "test": "script_run applies arrange, runs act, then judges the expectation from the end of act"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/canvas.test.ts",
+          "test": "assigns and clears a stencil on a placed actor, and applies the capture setters"
         },
         {
           "suite": "live",
@@ -15444,7 +15464,7 @@
         {
           "suite": "live",
           "file": "tests/live/bcov-gameplay-nne.test.ts",
-          "test": "reports NNERuntimeLiteRT registered with a CPU interface on an engine that ships it"
+          "test": "reports NNERuntimeLiteRT's plugin state, and its runtime exactly when the registry has it"
         }
       ]
     },
@@ -17427,6 +17447,11 @@
           "suite": "live",
           "file": "tests/live/bcov-level-replace-actors.test.ts",
           "test": "replace_actors_with_class replaces two cubes with point lights at their locations"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/bcov-level-world-partition-subsystem.test.ts",
+          "test": "build_hlod_actors builds nothing in a map without HLOD actors and refuses an actor that is not one"
         },
         {
           "suite": "live",
