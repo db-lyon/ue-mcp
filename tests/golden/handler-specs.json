@@ -1,5 +1,5 @@
 {
-  "handlerCount": 1282,
+  "handlerCount": 1285,
   "handlers": {
     "actors_in_box": {
       "category": "level",
@@ -31034,6 +31034,54 @@
         }
       ]
     },
+    "rebuild_brush": {
+      "category": "level",
+      "params": [
+        {
+          "name": "actorLabel",
+          "type": "string",
+          "required": false,
+          "description": "Brush or volume to rebuild"
+        },
+        {
+          "name": "actorPath",
+          "type": "string",
+          "required": false,
+          "description": "Object path of the brush; preferred over actorLabel when known"
+        },
+        {
+          "name": "builderClass",
+          "type": "string",
+          "required": false,
+          "description": "Brush builder class to rebuild with (default: the brush's current builder)"
+        },
+        {
+          "name": "builderProperties",
+          "type": "object",
+          "required": false,
+          "description": "Builder property name -> value, such as {X: 400, Y: 200, Z: 100} for a CubeBuilder"
+        },
+        {
+          "name": "deferBsp",
+          "type": "boolean",
+          "required": false,
+          "description": "Defer the BSP rebuild for batching; a later call without it processes the pending BSP (default false)"
+        }
+      ],
+      "choices": [
+        {
+          "mode": "atLeastOne",
+          "branches": [
+            [
+              "actorLabel"
+            ],
+            [
+              "actorPath"
+            ]
+          ]
+        }
+      ]
+    },
     "rebuild_navigation": {
       "category": "gameplay",
       "params": [],
@@ -34303,6 +34351,48 @@
           "type": "string",
           "required": true,
           "description": "New parent component name"
+        }
+      ]
+    },
+    "replace_actors_with_asset": {
+      "category": "level",
+      "params": [
+        {
+          "name": "actorLabels",
+          "type": "array",
+          "required": true,
+          "description": "Labels (or names or paths) of the actors to replace",
+          "items": "string"
+        },
+        {
+          "name": "assetPath",
+          "type": "string",
+          "required": true,
+          "description": "Asset to create the new actors from: a static mesh, Blueprint, particle system..."
+        },
+        {
+          "name": "copySourceProperties",
+          "type": "boolean",
+          "required": false,
+          "description": "When the asset is a Blueprint sharing a native parent with a replaced actor, copy that actor's property values (default true)"
+        }
+      ]
+    },
+    "replace_actors_with_class": {
+      "category": "level",
+      "params": [
+        {
+          "name": "actorLabels",
+          "type": "array",
+          "required": true,
+          "description": "Labels (or names or paths) of the actors to replace",
+          "items": "string"
+        },
+        {
+          "name": "className",
+          "type": "string",
+          "required": true,
+          "description": "Actor class to create in their place; it needs an actor factory that works without an asset (lights, empty actors, volumes)"
         }
       ]
     },

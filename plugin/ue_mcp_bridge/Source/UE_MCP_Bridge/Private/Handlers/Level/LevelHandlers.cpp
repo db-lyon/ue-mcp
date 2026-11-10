@@ -664,6 +664,7 @@ void FLevelHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	// #1828: UWorldPartitionSubsystem setup, HLOD and minimap calls, and the
 	// UEditorActorSubsystem replace and brush rebuild calls.
 	RegisterWorldPartitionSubsystemHandlers(Registry);
+	RegisterActorReplaceHandlers(Registry);
 	// #985: bulk HLOD layer assignment. A whole-map selector, so it takes the
 	// same 300 second budget as the other batch writes. Mirrored in
 	// src/bridge-timeouts.ts, which a parity test checks.

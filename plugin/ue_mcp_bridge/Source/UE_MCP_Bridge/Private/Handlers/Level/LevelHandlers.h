@@ -237,4 +237,9 @@ private:
 	static TSharedPtr<FJsonValue> CheckWorldPartitionErrors(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> RepairWorldPartitionErrors(const TSharedPtr<FJsonObject>& Params);
 
+	// #1828: actor replacement and brush rebuilds through UEditorActorSubsystem. LevelHandlers_ReplaceActors.cpp.
+	static void RegisterActorReplaceHandlers(class FMCPHandlerRegistry& Registry);
+	static TSharedPtr<FJsonValue> ReplaceActorsWithClass(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> ReplaceActorsWithAsset(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> RebuildBrush(const TSharedPtr<FJsonObject>& Params);
 };
