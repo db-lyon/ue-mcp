@@ -76,7 +76,7 @@ function writeScene(lampZ: number): string {
 beforeAll(async () => {
   bridge = await getBridge();
   scratch = fs.mkdtempSync(path.join(os.tmpdir(), "ue-mcp-datasmith-"));
-  await callBridge(bridge, "demo_go_home", {});
+  await callBridge(bridge, "demo_go_home", { discardUnsaved: true });
   for (const label of [ACTOR_A, ACTOR_B, "DsProbe_Root", "DsProbe_Lamp", "Probe"]) await callBridge(bridge, "delete_actor", { actorLabel: label });
   for (const p of [MPC_SEQ, BIND_SEQ, MPC, CHARACTER, "/Game/DatasmithLiveProbe"]) await callBridge(bridge, "delete_asset", { assetPath: p, force: true });
 }, 180_000);

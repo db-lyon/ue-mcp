@@ -19,7 +19,7 @@ let bridge: EditorBridge;
 beforeAll(async () => {
   bridge = await getBridge();
   // MCP_Home is not checked in; demo_go_home creates and saves it on a fresh project.
-  const home = await callBridge(bridge, "demo_go_home", {});
+  const home = await callBridge(bridge, "demo_go_home", { discardUnsaved: true });
   expect(home.ok, home.error).toBe(true);
 });
 

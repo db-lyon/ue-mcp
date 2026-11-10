@@ -63,7 +63,7 @@ async function cleanup(): Promise<void> {
 
 beforeAll(async () => {
   bridge = await getBridge();
-  await call("demo_go_home");
+  await call("demo_go_home", { discardUnsaved: true });
   await cleanup();
   await callBridge(bridge, "delete_folder", { path: DIR, force: true });
   await call("create_blueprint", { assetPath: BP, parentClass: "Actor" });
