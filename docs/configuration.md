@@ -232,6 +232,19 @@ npx ue-mcp context           # show the current strategy
 
 The `init` wizard has the same choice, or set `context.strategy` in `ue-mcp.yml`. `UE_MCP_CONTEXT_STRATEGY` wins over the file for one launch; anything other than `full` or `lean` resolves to `micro`. Restart your MCP client (`/mcp` in Claude Code) after changing it.
 
+### Images in a result
+
+The actions that write an image take `inline`: `editor(capture_screenshot)`, `editor(capture_scene_png)`, `editor(capture_screenshot_sequence)`, `editor(render_mesh_studio)`, `editor(render_sequence_frames)`, `material(render_preview)`, `asset(export_texture)` and `asset(export_uv_layout)`. With `inline=true` the server reads the file the editor wrote and returns it as MCP image content beside the JSON result, scaled down to 1024 pixels on the longer edge when it is larger. A number instead of `true` sets that edge (16 to 4096). The file on disk is written and left exactly as without `inline`, and the editor never receives the key.
+
+```
+tools(action="call", category="editor", method="capture_scene_png",
+      args={outputPath: "Saved/Shots/hero.png", focusActorLabel: "Hero", inline: 512})
+```
+
+The result keeps its usual fields and adds `inlineImages` (`inlined`, `maxEdge`, and `notInlined` with a reason per file that was not returned). Each image is listed under `media` with its `path`, its size as sent and its original size, and names the content block that carries it. Actions that write several files return the first 8.
+
+Nothing here fails the call. The server reads the path the editor reported, so when the editor runs on another machine (`UE_MCP_HOST` or `bridge.host` pointing elsewhere) the file is on that machine and `notInlined` says so. A viewport screenshot (`target=editor`) is written by the renderer after the editor answers, so the server waits up to 3 seconds for the file. A warm `capture_scene_png` has no file until it completes: pass `inline` again on the query that reports `complete=true`. PNG is scaled; a JPEG is returned whole when it already fits, and otherwise reported, since only PNG is decoded here.
+
 ## The daemon
 
 With one project, `npx ue-mcp <uproject>` is a stdio shim that relays to that project's daemon: one background process per project that holds the editor connection. Your MCP client stays connected through an editor restart, a crash or a rebuild, and calls made while the editor is down get the offline actions or wait for it to return. The daemon starts on first use, reattaches within a second of the editor coming back, and exits after 30 minutes with no editor, client or UI attached. Its log is `~/.ue-mcp/daemons/<key>.log`.

@@ -199,6 +199,8 @@ const SESSION_INDEPENDENT: Record<string, string> = {
   "surface/param-forwarding.ts": "Pure read tracking over one mapper call; nothing per editor.",
   "surface/handler-spec.ts": "Validates and compares the recorded handler specs it is handed; holds nothing per editor.",
   "dispatch/call-pipeline.ts": "Composes those two over one call's parameters and result; holds nothing per editor.",
+  "dispatch/inline-image.ts": "Reads the image files a result names and adds them to it; the paths and project folder come from the call's own context.",
+  "core/png.ts": "Decodes, scales and encodes the PNG bytes it is handed. Pure logic over its arguments.",
   "surface/pagination.ts": "Declares the cursor/limit parameters; the editor holds the collection and the C++ half holds the cursor.",
   "codeintel/engine-index.ts": "Indexes an ENGINE tree, which projects share; keyed by engine root, not by editor.",
   "codeintel/cpp-correctness.ts": "Views over that index plus a Build.cs read; takes its paths as arguments.",

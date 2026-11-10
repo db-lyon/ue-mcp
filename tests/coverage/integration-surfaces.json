@@ -467,6 +467,11 @@
       "summary": "an image or audio a bridge result carries in media comes back as MCP image or audio content, not base64 inside the JSON text"
     },
     {
+      "id": "server.inline-image",
+      "group": "server",
+      "summary": "inline on an image-writing action reads the file the editor wrote, scales it to the size asked for and returns it as MCP image content, never sends the key to the editor, and reports a file this machine cannot read"
+    },
+    {
       "id": "server.skill-prompts",
       "group": "server",
       "summary": "prompts/list and prompts/get serve every shipped skill as a prompt, and resources/list and resources/read serve it as a markdown resource at skill://ue-mcp/<name>, with or without an editor"

@@ -43,6 +43,7 @@ import { McpError, ErrorCode } from "../core/errors.js";
 import { contractViolation, liveContract, type ParamContract } from "../surface/handler-spec.js";
 import { ROUTING_PARAMS, undeclaredMessage, type ActionAccepts } from "../surface/action-schema.js";
 import type { EpicToolRef } from "../surface/epic-input.js";
+import { INLINE_PARAM, inlineRequestOf, type InlineRequest } from "./inline-image.js";
 
 /**
  * Separate the per-call timeout budget from the action's own parameters.
@@ -107,6 +108,8 @@ export interface CallPreparation {
   contractNote?: string;
   /** The engine tool a generated `epic_*` action wraps, whose engines gate the call. */
   epicTool?: EpicToolRef;
+  /** Result paths naming the images the action writes; `inline` is consumed when set. */
+  imageOutputs?: readonly string[];
 }
 
 /** What the inbound half decided, carried to the outbound half. */
@@ -130,6 +133,8 @@ export interface CallPipeline {
   paramGroups?: readonly (readonly string[])[];
   /** Keys actually sent to the bridge. Set by `forwardToBridge`. */
   sentKeys?: string[];
+  /** What the caller's `inline` asked for, on an action that writes images. */
+  inline?: InlineRequest;
 }
 
 function isParamBag(value: unknown): value is Record<string, unknown> {
@@ -206,7 +211,16 @@ export function prepareCall(
     };
   }
 
-  const repaired = normalizePathParams(outerSelection.rest);
+  // `inline` is the server's to act on: it reads the written image back, so
+  // the key never reaches the editor.
+  let inline: InlineRequest | undefined;
+  let own = outerSelection.rest;
+  if (prep.imageOutputs && INLINE_PARAM in own) {
+    const { [INLINE_PARAM]: asked, ...rest } = own;
+    inline = inlineRequestOf(asked);
+    own = rest;
+  }
+  const repaired = normalizePathParams(own);
   const folded = applyCategoryFolding(repaired.params, prep);
   if (prep.paramContract) {
     const violation = contractViolation(prep.paramContract, folded);
@@ -225,8 +239,9 @@ export function prepareCall(
     repairs: repaired.repairs,
     selection: outerSelection.selection,
     timeoutMs: outerTimeout.timeoutMs,
-    supplied: Object.keys(outerSelection.rest),
+    supplied: Object.keys(own),
     paramGroups: prep.paramGroups,
+    ...(inline ? { inline } : {}),
   };
 }
 

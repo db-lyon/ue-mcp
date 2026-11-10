@@ -29,6 +29,7 @@
     "tests/integration/gateway.test.ts": 5,
     "tests/integration/guards.test.ts": 0.2,
     "tests/integration/init-interactive.test.ts": 27.5,
+    "tests/integration/inline-image.test.ts": 5.8,
     "tests/integration/journal.test.ts": 29.7,
     "tests/integration/npx-age-gate.test.ts": 25.5,
     "tests/integration/package-exports.test.ts": 10.8,
