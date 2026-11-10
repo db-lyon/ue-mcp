@@ -1,4 +1,5 @@
 #include "LevelHandlers.h"
+#include "LevelHandlers_SplineGen.h"
 #include "FileHelpers.h"
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
@@ -962,6 +963,9 @@ void FLevelHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("list_transient_actors"), &ListTransientActors, {
 		SpecWorld, SpecPieInstance, SpecCursor, SpecLimit,
 	});
+
+	// Spline generators, in LevelHandlers_SplineGen.cpp.
+	FLevelSplineGenHandlers::RegisterHandlers(Registry);
 }
 
 TSharedPtr<FJsonValue> FLevelHandlers::GetOutliner(const TSharedPtr<FJsonObject>& Params)

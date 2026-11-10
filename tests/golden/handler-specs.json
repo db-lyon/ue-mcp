@@ -1,5 +1,5 @@
 {
-  "handlerCount": 1269,
+  "handlerCount": 1273,
   "handlers": {
     "actors_in_box": {
       "category": "level",
@@ -7301,6 +7301,108 @@
         }
       ]
     },
+    "build_spline_meshes": {
+      "category": "level",
+      "params": [
+        {
+          "name": "actorLabel",
+          "type": "string",
+          "required": false,
+          "description": "Label of the actor that owns the spline; pass actorLabel or actorPath"
+        },
+        {
+          "name": "actorPath",
+          "type": "string",
+          "required": false,
+          "description": "Full path of the actor that owns the spline; wins over actorLabel"
+        },
+        {
+          "name": "componentName",
+          "type": "string",
+          "required": false,
+          "description": "Spline component, when the actor has several (default the first)"
+        },
+        {
+          "name": "generatorName",
+          "type": "string",
+          "required": false,
+          "description": "Names this output so a later run replaces it (default SplineMeshes)"
+        },
+        {
+          "name": "staticMesh",
+          "type": "string",
+          "required": false,
+          "description": "Mesh laid along the spline; required unless rebuild is set"
+        },
+        {
+          "name": "spacing",
+          "type": "number",
+          "required": false,
+          "description": "Length of each piece in centimetres (default the mesh length along forwardAxis times its scale)"
+        },
+        {
+          "name": "forwardAxis",
+          "type": "string",
+          "required": false,
+          "description": "X (default) | Y | Z: the mesh axis laid along the spline"
+        },
+        {
+          "name": "scale",
+          "type": "vec3",
+          "required": false,
+          "description": "Mesh scale; the forwardAxis component scales the default spacing, the other two the cross-section"
+        },
+        {
+          "name": "roll",
+          "type": "number",
+          "required": false,
+          "description": "Roll of every piece around the spline, in degrees"
+        },
+        {
+          "name": "startOffset",
+          "type": "number",
+          "required": false,
+          "description": "Distance along the spline to leave empty at its start, in centimetres"
+        },
+        {
+          "name": "endOffset",
+          "type": "number",
+          "required": false,
+          "description": "Distance along the spline to leave empty at its end, in centimetres"
+        },
+        {
+          "name": "stretchToFit",
+          "type": "boolean",
+          "required": false,
+          "description": "Stretch the pieces so a whole number of them fills the spline exactly (default true)"
+        },
+        {
+          "name": "collisionProfile",
+          "type": "string",
+          "required": false,
+          "description": "Collision profile for the pieces, e.g. BlockAll or NoCollision"
+        },
+        {
+          "name": "rebuild",
+          "type": "boolean",
+          "required": false,
+          "description": "Reuse the parameters stored by the last run of this generator; passed parameters override them"
+        }
+      ],
+      "choices": [
+        {
+          "mode": "exactlyOne",
+          "branches": [
+            [
+              "actorLabel"
+            ],
+            [
+              "actorPath"
+            ]
+          ]
+        }
+      ]
+    },
     "build_tree": {
       "category": "widget",
       "params": [
@@ -8658,6 +8760,42 @@
           "type": "string",
           "required": false,
           "description": "Clear every volume in the open level bound to this ProceduralFoliageSpawner"
+        }
+      ]
+    },
+    "clear_spline_generated": {
+      "category": "level",
+      "params": [
+        {
+          "name": "actorLabel",
+          "type": "string",
+          "required": false,
+          "description": "Label of the actor that owns the spline; pass actorLabel or actorPath"
+        },
+        {
+          "name": "actorPath",
+          "type": "string",
+          "required": false,
+          "description": "Full path of the actor that owns the spline; wins over actorLabel"
+        },
+        {
+          "name": "generatorName",
+          "type": "string",
+          "required": true,
+          "description": "The generator whose output and stored parameters to remove"
+        }
+      ],
+      "choices": [
+        {
+          "mode": "exactlyOne",
+          "branches": [
+            [
+              "actorLabel"
+            ],
+            [
+              "actorPath"
+            ]
+          ]
         }
       ]
     },
@@ -12969,6 +13107,81 @@
         }
       ],
       "contractExempt": "Creates and saves a SoundMix asset named by the contract values"
+    },
+    "create_spline_actor": {
+      "category": "level",
+      "params": [
+        {
+          "name": "splinePoints",
+          "type": "array",
+          "required": true,
+          "description": "At least two positions, world space unless coordinateSpace is local",
+          "items": "object",
+          "fields": [
+            {
+              "name": "x",
+              "type": "number",
+              "required": true,
+              "description": "X"
+            },
+            {
+              "name": "y",
+              "type": "number",
+              "required": true,
+              "description": "Y"
+            },
+            {
+              "name": "z",
+              "type": "number",
+              "required": true,
+              "description": "Z"
+            }
+          ]
+        },
+        {
+          "name": "label",
+          "type": "string",
+          "required": false,
+          "description": "Actor label (default SplineActor); an existing actor with this label is reported rather than duplicated"
+        },
+        {
+          "name": "location",
+          "type": "vec3",
+          "required": false,
+          "description": "Actor location (default the first point)"
+        },
+        {
+          "name": "closedLoop",
+          "type": "boolean",
+          "required": false,
+          "description": "Close the spline (default false)"
+        },
+        {
+          "name": "pointType",
+          "type": "string",
+          "required": false,
+          "description": "Curve (default) | Linear | CurveClamped | Constant, for every point"
+        },
+        {
+          "name": "coordinateSpace",
+          "type": "string",
+          "required": false,
+          "description": "world (default) | local: whether points are relative to the actor location"
+        },
+        {
+          "name": "tags",
+          "type": "array",
+          "required": false,
+          "description": "Actor tags to add",
+          "items": "string"
+        },
+        {
+          "name": "onConflict",
+          "type": "string",
+          "required": false,
+          "description": "When the label is taken: skip (default) | update (rewrite its spline points) | error"
+        }
+      ]
     },
     "create_state_machine": {
       "category": "animation",
@@ -35582,6 +35795,146 @@
           "type": "boolean",
           "required": false,
           "description": "Include each sequence's bone track names"
+        }
+      ]
+    },
+    "scatter_along_spline": {
+      "category": "level",
+      "params": [
+        {
+          "name": "actorLabel",
+          "type": "string",
+          "required": false,
+          "description": "Label of the actor that owns the spline; pass actorLabel or actorPath"
+        },
+        {
+          "name": "actorPath",
+          "type": "string",
+          "required": false,
+          "description": "Full path of the actor that owns the spline; wins over actorLabel"
+        },
+        {
+          "name": "componentName",
+          "type": "string",
+          "required": false,
+          "description": "Spline component, when the actor has several (default the first)"
+        },
+        {
+          "name": "generatorName",
+          "type": "string",
+          "required": false,
+          "description": "Names this output so a later run replaces it (default SplineScatter)"
+        },
+        {
+          "name": "meshes",
+          "type": "array",
+          "required": false,
+          "description": "StaticMesh paths to scatter; required unless rebuild is set",
+          "items": "string"
+        },
+        {
+          "name": "weights",
+          "type": "array",
+          "required": false,
+          "description": "Relative pick weight per mesh (default equal)",
+          "items": "number"
+        },
+        {
+          "name": "mode",
+          "type": "string",
+          "required": false,
+          "description": "instances (default, one HierarchicalInstancedStaticMeshComponent per mesh on the spline actor) | actors (StaticMeshActors)"
+        },
+        {
+          "name": "interval",
+          "type": "number",
+          "required": false,
+          "description": "Distance between placements in centimetres (default 200); ignored when count is given"
+        },
+        {
+          "name": "count",
+          "type": "integer",
+          "required": false,
+          "description": "Number of placements spread evenly over the spline"
+        },
+        {
+          "name": "startOffset",
+          "type": "number",
+          "required": false,
+          "description": "Distance along the spline to leave empty at its start, in centimetres"
+        },
+        {
+          "name": "endOffset",
+          "type": "number",
+          "required": false,
+          "description": "Distance along the spline to leave empty at its end, in centimetres"
+        },
+        {
+          "name": "offset",
+          "type": "vec3",
+          "required": false,
+          "description": "Constant offset in the spline's frame: x along it, y to its right, z up"
+        },
+        {
+          "name": "positionJitter",
+          "type": "vec3",
+          "required": false,
+          "description": "Random offset range per axis in the spline's frame, in centimetres"
+        },
+        {
+          "name": "yawJitter",
+          "type": "number",
+          "required": false,
+          "description": "Random yaw range in degrees, either way"
+        },
+        {
+          "name": "scaleMin",
+          "type": "number",
+          "required": false,
+          "description": "Smallest uniform scale (default 1)"
+        },
+        {
+          "name": "scaleMax",
+          "type": "number",
+          "required": false,
+          "description": "Largest uniform scale (default scaleMin)"
+        },
+        {
+          "name": "alignToSpline",
+          "type": "boolean",
+          "required": false,
+          "description": "Rotate each placement to the spline's direction (default true)"
+        },
+        {
+          "name": "seed",
+          "type": "integer",
+          "required": false,
+          "description": "Random seed; the same seed and parameters place the same result (default 0)"
+        },
+        {
+          "name": "maxCount",
+          "type": "integer",
+          "required": false,
+          "description": "Refuse more placements than this (default 10000)"
+        },
+        {
+          "name": "rebuild",
+          "type": "boolean",
+          "required": false,
+          "description": "Reuse the parameters stored by the last run of this generator; passed parameters override them"
+        }
+      ],
+      "choices": [
+        {
+          "mode": "exactlyOne",
+          "branches": [
+            [
+              "actorLabel"
+            ],
+            [
+              "actorPath"
+            ]
+          ]
         }
       ]
     },
