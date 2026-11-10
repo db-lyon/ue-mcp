@@ -209,5 +209,23 @@ public class UE_MCP_Bridge : ModuleRules
 		{
 			PrivateDefinitions.Add("WITH_UEMCP_EPIC_MCP=0");
 		}
+
+		// Epic's ToolsetRegistry in 5.8 keeps its process-wide registry as a
+		// member of UToolsetRegistrySubsystem, declared in this module's public
+		// headers. Headers only, never linked: epic(set_toolset_enabled) reads the
+		// member's address from the layout and calls the registry's exported
+		// methods by name. 5.9 moved the subsystem to an editor module and added
+		// FToolsetRegistry::Get(), so the header is not needed there.
+		bool bToolsetRegistrySubsystemHeader = System.IO.File.Exists(System.IO.Path.Combine(
+			EngineDirectory, "Plugins", "Experimental", "ToolsetRegistry", "Source", "ToolsetRegistry", "Public", "ToolsetRegistry", "ToolsetRegistrySubsystem.h"));
+		if (bToolsetRegistrySubsystemHeader && Target.bBuildEditor)
+		{
+			PrivateIncludePathModuleNames.Add("ToolsetRegistry");
+			PrivateDefinitions.Add("WITH_UEMCP_TOOLSET_REGISTRY_SUBSYSTEM=1");
+		}
+		else
+		{
+			PrivateDefinitions.Add("WITH_UEMCP_TOOLSET_REGISTRY_SUBSYSTEM=0");
+		}
 	}
 }
