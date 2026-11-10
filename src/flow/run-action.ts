@@ -1,7 +1,7 @@
 import type { TaskResult } from "@db-lyon/flowkit";
 import type { ActionSpec, BridgeActionSpec, CategoryOptions } from "../core/types.js";
 import { stripAction } from "../surface/routing-params.js";
-import { prepareCall, finishCall, forwardToBridge, withLiveContract, type CallPreparation } from "../dispatch/call-pipeline.js";
+import { prepareCall, finishCall, forwardToBridge, withLiveContract, type CallPreparation, type CallPipeline } from "../dispatch/call-pipeline.js";
 import { McpError, ErrorCode } from "../core/errors.js";
 import type { FlowContext } from "./context.js";
 import { liftRollback } from "./rollback.js";
@@ -11,6 +11,7 @@ import { epicSuccessorFor, paramMapperOf } from "../surface/epic-input.js";
 import { epicEngineRefusal } from "../surface/epic-engines.js";
 import { actionAccepts } from "../surface/action-schema.js";
 import type { BridgeCallOptions, IBridge } from "../bridge/bridge.js";
+import { attachInlineImages } from "../dispatch/inline-image.js";
 
 /**
  * Refuse a handler-backed call while a modal is up, through the one guard.
@@ -62,6 +63,7 @@ export function actionPreparation(
       : undefined,
     accepts: actionAccepts(spec),
     epicTool: spec.kind === "bridge" ? spec.epicTool : undefined,
+    imageOutputs: spec.imageOutputs,
   };
 }
 
@@ -132,7 +134,7 @@ export async function runBridge(
     const followUpCtx = pipeline.timeoutMs === undefined ? ctx : { ...ctx, callTimeoutMs: pipeline.timeoutMs };
     answered = hooks?.followUp ? await hooks.followUp(followUpCtx, followUpParams, sent) : sent;
   }
-  const raw = finishCall(answered, pipeline);
+  const raw = await withInlineImages(ctx, finishCall(answered, pipeline), answered, pipeline, prep);
   if (typeof raw !== "object" || raw === null) {
     return applyHandlerOutcome(ctx, answered, { success: true, data: { result: raw } });
   }
@@ -152,6 +154,27 @@ export async function runBridge(
   // leaves no `success` key to read, and the bridge resolves a
   // `success: false` body normally.
   return applyHandlerOutcome(ctx, answered, result);
+}
+
+/**
+ * The images an action wrote, added to its projected result when the caller
+ * passed `inline`. Read off the unprojected answer, so a narrow `select`
+ * does not hide the path, and added after the projection, so it does not
+ * filter the images away.
+ */
+async function withInlineImages(
+  ctx: FlowContext,
+  shown: unknown,
+  answered: unknown,
+  pipeline: CallPipeline,
+  prep: CallPreparation | undefined,
+): Promise<unknown> {
+  if (!pipeline.inline || !prep?.imageOutputs) return shown;
+  const host = (ctx.bridge as { host?: unknown } | undefined)?.host;
+  return attachInlineImages(shown, answered, prep.imageOutputs, pipeline.inline, {
+    projectDir: ctx.project?.projectDir,
+    bridgeHost: typeof host === "string" ? host : undefined,
+  });
 }
 
 /**
@@ -192,7 +215,7 @@ export async function runHandler(
     return { success: false, data: refusal, error: refusalError(name, refusal) };
   }
   const answered = await fn(callCtx, pipeline.params);
-  const data = finishCall(answered, pipeline);
+  const data = await withInlineImages(ctx, finishCall(answered, pipeline), answered, pipeline, prep);
   // A handler reports a refusal by RETURNING `{ success: false }`, so the
   // verdict is read off `answered`, where a `select` cannot hide it.
   return applyHandlerOutcome(ctx, answered, {

@@ -1,0 +1,30 @@
+{
+  "success": true,
+  "path": "/Game/Blueprints/BP_Door",
+  "blueprintPath": "/Game/Blueprints/BP_Door.BP_Door",
+  "isLevelScript": false,
+  "graphName": "EventGraph",
+  "schemaClass": "EdGraphSchema_K2",
+  "graphType": "Ubergraph",
+  "nodes": [
+    { "id": "Fq3kWm8xQkW2b1yZt0aJcg", "class": "K2Node_Event", "title": "Event BeginPlay" },
+    { "id": "Kd8-pLq2Z0uX_9vB3nYwRA", "class": "K2Node_IfThenElse", "title": "Branch" },
+    { "id": "Hh2mN4cV1EaT7sQ0xJ5uKw", "class": "K2Node_VariableGet", "title": "Is Locked" },
+    { "id": "Pp0aZ9yX8wV7uT6sR5qQ4w", "class": "K2Node_CallFunction", "title": "Print String" },
+    { "id": "Mm1bY2xW3vU4tS5rQ6pO7w", "class": "K2Node_Composite", "title": "Open Door" },
+    { "id": "Ll9cX8wV7uT6sR5qP4oN3w", "class": "K2Node_CallFunction", "title": "Play Sound 2D\nTarget is Gameplay Statics" },
+    { "id": "Zz7dW6vU5tS4rQ3pO2nM1w", "class": "K2Node_CustomEvent", "title": "On \"Knock\" <Door>; #1 | test" }
+  ],
+  "execEdges": [
+    { "from": "Fq3kWm8xQkW2b1yZt0aJcg", "fromPin": "then", "to": "Kd8-pLq2Z0uX_9vB3nYwRA", "toPin": "execute" },
+    { "from": "Kd8-pLq2Z0uX_9vB3nYwRA", "fromPin": "True", "to": "Pp0aZ9yX8wV7uT6sR5qQ4w", "toPin": "execute" },
+    { "from": "Kd8-pLq2Z0uX_9vB3nYwRA", "fromPin": "False", "to": "Mm1bY2xW3vU4tS5rQ6pO7w", "toPin": "execute" },
+    { "from": "Mm1bY2xW3vU4tS5rQ6pO7w", "fromPin": "Finished", "to": "Ll9cX8wV7uT6sR5qP4oN3w", "toPin": "execute" },
+    { "from": "Zz7dW6vU5tS4rQ3pO2nM1w", "fromPin": "then", "to": "Pp0aZ9yX8wV7uT6sR5qQ4w", "toPin": "execute" }
+  ],
+  "dataEdges": [
+    { "from": "Hh2mN4cV1EaT7sQ0xJ5uKw", "fromPin": "IsLocked", "to": "Kd8-pLq2Z0uX_9vB3nYwRA", "toPin": "Condition" },
+    { "from": "Hh2mN4cV1EaT7sQ0xJ5uKw", "fromPin": "IsLocked", "to": "Pp0aZ9yX8wV7uT6sR5qQ4w", "toPin": "InString" }
+  ],
+  "nodeCount": 7
+}

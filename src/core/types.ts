@@ -399,6 +399,13 @@ interface ActionSpecBase {
    * the canonical address. Built by `movedAction`.
    */
   movedTo?: { category: string; action: string };
+  /**
+   * Result paths (dotted, arrays traversed) that name an image file this
+   * action wrote. Set by `withInlineImage`, which also adds the `inline`
+   * parameter: with it, dispatch reads those files and returns them as image
+   * content.
+   */
+  imageOutputs?: readonly string[];
 }
 
 /** Forwards to a C++ bridge method over the WebSocket. Built by `bp`. */
