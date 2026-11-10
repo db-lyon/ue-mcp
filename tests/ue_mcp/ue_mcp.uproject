@@ -103,6 +103,10 @@
 			"Enabled": true
 		},
 		{
+			"Name": "ModelViewViewModel",
+			"Enabled": true
+		},
+		{
 			"Name": "KnowledgeBase",
 			"Enabled": true,
 			"Optional": true

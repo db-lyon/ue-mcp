@@ -30,6 +30,11 @@
 			"Name": "UE_MCP_Bridge",
 			"Type": "Editor",
 			"LoadingPhase": "PostEngineInit"
+		},
+		{
+			"Name": "UE_MCP_BridgeMVVM",
+			"Type": "Editor",
+			"LoadingPhase": "None"
 		}
 	],
 	"Plugins": [

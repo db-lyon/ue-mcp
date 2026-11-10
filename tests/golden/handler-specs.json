@@ -1,5 +1,5 @@
 {
-  "handlerCount": 1261,
+  "handlerCount": 1269,
   "handlers": {
     "actors_in_box": {
       "category": "level",
@@ -3605,6 +3605,167 @@
           "type": "string",
           "required": true,
           "description": "Reflected property name on the widget"
+        }
+      ]
+    },
+    "add_widget_viewmodel": {
+      "category": "widget",
+      "params": [
+        {
+          "name": "assetPath",
+          "type": "string",
+          "required": true,
+          "description": "Widget Blueprint asset path, e.g. /Game/UI/WBP_Example",
+          "aliases": [
+            "path"
+          ]
+        },
+        {
+          "name": "viewModelClass",
+          "type": "string",
+          "required": true,
+          "description": "Viewmodel class: a native MVVMViewModelBase subclass name or path, or a Blueprint viewmodel asset path"
+        },
+        {
+          "name": "viewModelName",
+          "type": "string",
+          "required": false,
+          "description": "Name of the generated viewmodel property (default the class name)"
+        },
+        {
+          "name": "creationType",
+          "type": "string",
+          "required": false,
+          "description": "How the widget gets its instance (default the first type the class allows, usually CreateInstance). Context is UE 5.8+",
+          "enum": [
+            "Manual",
+            "CreateInstance",
+            "GlobalViewModelCollection",
+            "PropertyPath",
+            "Resolver",
+            "Context"
+          ]
+        },
+        {
+          "name": "globalViewModelIdentifier",
+          "type": "string",
+          "required": false,
+          "description": "Identifier in the global viewmodel collection, for creationType GlobalViewModelCollection"
+        },
+        {
+          "name": "viewModelPropertyPath",
+          "type": "string",
+          "required": false,
+          "description": "Property or function path that returns the instance, for creationType PropertyPath"
+        },
+        {
+          "name": "optional",
+          "type": "boolean",
+          "required": false,
+          "description": "Do not warn when the instance is not set or found"
+        },
+        {
+          "name": "createSetter",
+          "type": "boolean",
+          "required": false,
+          "description": "Generate a public setter for the viewmodel"
+        },
+        {
+          "name": "createGetter",
+          "type": "boolean",
+          "required": false,
+          "description": "Generate a public getter for the viewmodel (default true)"
+        },
+        {
+          "name": "viewModelId",
+          "type": "string",
+          "required": false,
+          "description": "Reuse this viewmodel id; the rollback of remove_widget_viewmodel passes the removed one so its bindings resolve again"
+        }
+      ]
+    },
+    "add_widget_viewmodel_binding": {
+      "category": "widget",
+      "params": [
+        {
+          "name": "assetPath",
+          "type": "string",
+          "required": true,
+          "description": "Widget Blueprint asset path, e.g. /Game/UI/WBP_Example",
+          "aliases": [
+            "path"
+          ]
+        },
+        {
+          "name": "sourcePath",
+          "type": "string",
+          "required": false,
+          "description": "Source of the value: a viewmodel name, a widget name or Self, then its fields, e.g. PlayerVM.Health"
+        },
+        {
+          "name": "destinationPath",
+          "type": "string",
+          "required": false,
+          "description": "Where the value goes, same form, e.g. HealthBar.Percent. Required unless a destinationToSource conversion binds the widget through conversionArguments"
+        },
+        {
+          "name": "bindingMode",
+          "type": "string",
+          "required": false,
+          "description": "Direction and frequency (default OneWayToDestination)",
+          "enum": [
+            "OneTimeToDestination",
+            "OneWayToDestination",
+            "TwoWay",
+            "OneWayToSource"
+          ]
+        },
+        {
+          "name": "executionMode",
+          "type": "string",
+          "required": false,
+          "description": "When the binding runs; Default uses the project setting",
+          "enum": [
+            "Default",
+            "Immediate",
+            "Delayed",
+            "Tick",
+            "Auto"
+          ]
+        },
+        {
+          "name": "conversionFunction",
+          "type": "string",
+          "required": false,
+          "description": "Pure function converting the value: Class.Function (KismetTextLibrary.Conv_IntToText), /Script/Module.Class:Function, or a function on this widget blueprint"
+        },
+        {
+          "name": "conversionArguments",
+          "type": "object",
+          "required": false,
+          "description": "Conversion inputs by pin name: a literal (string, number, boolean or {literal}) or {path} bound to a field. The input sourcePath is not given to goes to the first free input"
+        },
+        {
+          "name": "conversionDirection",
+          "type": "string",
+          "required": false,
+          "description": "Which way the conversion runs (default sourceToDestination, destinationToSource for OneWayToSource)",
+          "enum": [
+            "sourceToDestination",
+            "destinationToSource"
+          ]
+        },
+        {
+          "name": "enabled",
+          "type": "boolean",
+          "required": false,
+          "description": "Whether the binding runs by default (default true)"
+        },
+        {
+          "name": "includeInCompile",
+          "type": "boolean",
+          "required": false,
+          "description": "False keeps the binding in the editor but out of the compiled class (default true)"
         }
       ]
     },
@@ -9003,6 +9164,20 @@
           "type": "string",
           "required": true,
           "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+        }
+      ]
+    },
+    "compile_widget_viewmodels": {
+      "category": "widget",
+      "params": [
+        {
+          "name": "assetPath",
+          "type": "string",
+          "required": true,
+          "description": "Widget Blueprint asset path, e.g. /Game/UI/WBP_Example",
+          "aliases": [
+            "path"
+          ]
         }
       ]
     },
@@ -23609,6 +23784,34 @@
         }
       ]
     },
+    "list_widget_viewmodel_bindings": {
+      "category": "widget",
+      "params": [
+        {
+          "name": "assetPath",
+          "type": "string",
+          "required": true,
+          "description": "Widget Blueprint asset path, e.g. /Game/UI/WBP_Example",
+          "aliases": [
+            "path"
+          ]
+        }
+      ]
+    },
+    "list_widget_viewmodels": {
+      "category": "widget",
+      "params": [
+        {
+          "name": "assetPath",
+          "type": "string",
+          "required": true,
+          "description": "Widget Blueprint asset path, e.g. /Game/UI/WBP_Example",
+          "aliases": [
+            "path"
+          ]
+        }
+      ]
+    },
     "list_windows": {
       "category": "editor",
       "params": [
@@ -33359,6 +33562,46 @@
           "type": "string",
           "required": true,
           "description": "Reflected property name on the widget"
+        }
+      ]
+    },
+    "remove_widget_viewmodel": {
+      "category": "widget",
+      "params": [
+        {
+          "name": "assetPath",
+          "type": "string",
+          "required": true,
+          "description": "Widget Blueprint asset path, e.g. /Game/UI/WBP_Example",
+          "aliases": [
+            "path"
+          ]
+        },
+        {
+          "name": "viewModelName",
+          "type": "string",
+          "required": true,
+          "description": "Name of the viewmodel to remove"
+        }
+      ]
+    },
+    "remove_widget_viewmodel_binding": {
+      "category": "widget",
+      "params": [
+        {
+          "name": "assetPath",
+          "type": "string",
+          "required": true,
+          "description": "Widget Blueprint asset path, e.g. /Game/UI/WBP_Example",
+          "aliases": [
+            "path"
+          ]
+        },
+        {
+          "name": "bindingId",
+          "type": "string",
+          "required": true,
+          "description": "Binding id, as list_widget_viewmodel_bindings reports it"
         }
       ]
     },
@@ -46574,6 +46817,97 @@
           "type": "boolean",
           "required": false,
           "description": "Save the assets after export (default true)"
+        }
+      ]
+    },
+    "update_widget_viewmodel_binding": {
+      "category": "widget",
+      "params": [
+        {
+          "name": "assetPath",
+          "type": "string",
+          "required": true,
+          "description": "Widget Blueprint asset path, e.g. /Game/UI/WBP_Example",
+          "aliases": [
+            "path"
+          ]
+        },
+        {
+          "name": "bindingId",
+          "type": "string",
+          "required": true,
+          "description": "Binding id, as list_widget_viewmodel_bindings reports it"
+        },
+        {
+          "name": "sourcePath",
+          "type": "string",
+          "required": false,
+          "description": "Source of the value: a viewmodel name, a widget name or Self, then its fields, e.g. PlayerVM.Health"
+        },
+        {
+          "name": "destinationPath",
+          "type": "string",
+          "required": false,
+          "description": "Where the value goes, same form, e.g. HealthBar.Percent"
+        },
+        {
+          "name": "bindingMode",
+          "type": "string",
+          "required": false,
+          "description": "Direction and frequency",
+          "enum": [
+            "OneTimeToDestination",
+            "OneWayToDestination",
+            "TwoWay",
+            "OneWayToSource"
+          ]
+        },
+        {
+          "name": "executionMode",
+          "type": "string",
+          "required": false,
+          "description": "When the binding runs; Default uses the project setting",
+          "enum": [
+            "Default",
+            "Immediate",
+            "Delayed",
+            "Tick",
+            "Auto"
+          ]
+        },
+        {
+          "name": "conversionFunction",
+          "type": "string",
+          "required": false,
+          "description": "Pure function converting the value, as for add; an empty string removes the conversion"
+        },
+        {
+          "name": "conversionArguments",
+          "type": "object",
+          "required": false,
+          "description": "Conversion inputs by pin name: a literal (string, number, boolean or {literal}) or {path} bound to a field. The input sourcePath is not given to goes to the first free input"
+        },
+        {
+          "name": "conversionDirection",
+          "type": "string",
+          "required": false,
+          "description": "Which way the conversion runs (default sourceToDestination, destinationToSource for OneWayToSource)",
+          "enum": [
+            "sourceToDestination",
+            "destinationToSource"
+          ]
+        },
+        {
+          "name": "enabled",
+          "type": "boolean",
+          "required": false,
+          "description": "Whether the binding runs by default (default true)"
+        },
+        {
+          "name": "includeInCompile",
+          "type": "boolean",
+          "required": false,
+          "description": "False keeps the binding in the editor but out of the compiled class (default true)"
         }
       ]
     },
