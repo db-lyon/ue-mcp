@@ -755,7 +755,7 @@ namespace UEMCPMVVM
 		}
 
 		UMVVMBlueprintViewConversionFunction* Conversion = Binding()->Conversion.GetConversionFunction(bForward);
-		TSharedPtr<FJsonObject> Arguments = Request.Arguments.IsValid() ? MakeShared<FJsonObject>(*Request.Arguments) : MakeShared<FJsonObject>();
+		TSharedRef<FJsonObject> Arguments = Request.Arguments.IsValid() ? MakeShared<FJsonObject>(*Request.Arguments) : MakeShared<FJsonObject>();
 
 		if (Request.bHasDestination && !(Request.bHasConversion && bForward))
 		{
@@ -1190,7 +1190,8 @@ namespace UEMCPMVVM
 
 			const FMVVMBlueprintViewBinding* After = View->GetBinding(BindingId);
 			FMCPMVVMOutcome Out;
-			Out.Data = After ? DescribeBinding(WidgetBlueprint, View, *After) : MakeShared<FJsonObject>();
+			Out.Data = MakeShared<FJsonObject>();
+			if (After) Out.Data = DescribeBinding(WidgetBlueprint, View, *After);
 			if (After && SameJson(BindingToAddParams(WidgetBlueprint, View, *After), Before))
 			{
 				Out.Change = FMCPMVVMOutcome::EChange::Existed;

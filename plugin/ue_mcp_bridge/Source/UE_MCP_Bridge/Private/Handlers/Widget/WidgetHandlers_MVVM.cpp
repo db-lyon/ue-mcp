@@ -182,7 +182,8 @@ static TSharedPtr<FJsonValue> MCPMVVMRun(const TCHAR* Operation, const TSharedPt
 
 	if (!Outcome.RollbackMethod.IsEmpty())
 	{
-		TSharedPtr<FJsonObject> Payload = Outcome.RollbackPayload.IsValid() ? Outcome.RollbackPayload : MakeShared<FJsonObject>();
+		TSharedPtr<FJsonObject> Payload = Outcome.RollbackPayload;
+		if (!Payload.IsValid()) Payload = MakeShared<FJsonObject>();
 		Payload->SetStringField(TEXT("assetPath"), AssetPath);
 		MCPSetRollback(Result, Outcome.RollbackMethod, Payload);
 	}
