@@ -16011,6 +16011,12 @@
           "type": "boolean",
           "required": false,
           "description": "Permit a path naming a whole content root (default false)"
+        },
+        {
+          "name": "deleteRedirectors",
+          "type": "boolean",
+          "required": false,
+          "description": "Delete each redirector once nothing references it (default true); false keeps the stubs"
         }
       ]
     },
