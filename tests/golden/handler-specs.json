@@ -1,5 +1,5 @@
 {
-  "handlerCount": 1261,
+  "handlerCount": 1269,
   "handlers": {
     "actors_in_box": {
       "category": "level",
@@ -4354,6 +4354,41 @@
           "type": "integer",
           "required": false,
           "description": "Carry the previous data as a rollback record only up to this many vertices (default 262144 for heights, 524288 for weights)"
+        }
+      ]
+    },
+    "apply_landscape_splines": {
+      "category": "landscape",
+      "params": [
+        {
+          "name": "actorLabel",
+          "type": "string",
+          "required": false,
+          "description": "Landscape actor label, when the level has more than one"
+        },
+        {
+          "name": "actorPath",
+          "type": "string",
+          "required": false,
+          "description": "Landscape actor path; wins over actorLabel"
+        },
+        {
+          "name": "editLayer",
+          "type": "string",
+          "required": false,
+          "description": "Edit layer to write into when the landscape has no reserved splines layer"
+        },
+        {
+          "name": "editLayerIndex",
+          "type": "integer",
+          "required": false,
+          "description": "Edit layer index when editLayer is not given (default 0)"
+        },
+        {
+          "name": "updateNow",
+          "type": "boolean",
+          "required": false,
+          "description": "Merge the edit layers now rather than on the next editor tick (default true)"
         }
       ]
     },
@@ -9720,6 +9755,129 @@
         }
       ]
     },
+    "connect_landscape_spline_points": {
+      "category": "landscape",
+      "params": [
+        {
+          "name": "startPoint",
+          "type": "string",
+          "required": true,
+          "description": "Control point the segment starts at, by name or path"
+        },
+        {
+          "name": "endPoint",
+          "type": "string",
+          "required": true,
+          "description": "Control point the segment ends at; must share the start point's spline owner"
+        },
+        {
+          "name": "startTangentLength",
+          "type": "number",
+          "required": false,
+          "description": "Tangent length at the start point (default the distance between the points)"
+        },
+        {
+          "name": "endTangentLength",
+          "type": "number",
+          "required": false,
+          "description": "Tangent length at the end point (default the distance between the points)"
+        },
+        {
+          "name": "layerName",
+          "type": "string",
+          "required": false,
+          "description": "Paint layer the segment paints when applied; empty clears it"
+        },
+        {
+          "name": "raiseTerrain",
+          "type": "boolean",
+          "required": false,
+          "description": "Raise terrain below the spline up to it when applied (engine default true)"
+        },
+        {
+          "name": "lowerTerrain",
+          "type": "boolean",
+          "required": false,
+          "description": "Lower terrain above the spline down to it when applied (engine default true)"
+        },
+        {
+          "name": "meshes",
+          "type": "array",
+          "required": false,
+          "description": "Meshes deformed along the segment, replacing the current list; an empty list clears it",
+          "items": "object",
+          "fields": [
+            {
+              "name": "mesh",
+              "type": "string",
+              "required": true,
+              "description": "StaticMesh asset path"
+            },
+            {
+              "name": "scale",
+              "type": "vec3",
+              "required": false,
+              "description": "Mesh scale (default 1, 1, 1)"
+            },
+            {
+              "name": "forwardAxis",
+              "type": "string",
+              "required": false,
+              "description": "X (default) | Y | Z: the mesh axis laid along the spline"
+            },
+            {
+              "name": "upAxis",
+              "type": "string",
+              "required": false,
+              "description": "X | Y | Z (default): the mesh axis kept up"
+            },
+            {
+              "name": "materialOverrides",
+              "type": "array",
+              "required": false,
+              "description": "Material per slot; an empty string keeps the mesh's own",
+              "items": "string"
+            },
+            {
+              "name": "centerH",
+              "type": "boolean",
+              "required": false,
+              "description": "Centre the mesh horizontally on the spline (default true)"
+            },
+            {
+              "name": "scaleToWidth",
+              "type": "boolean",
+              "required": false,
+              "description": "Scale the mesh to the spline width (default true)"
+            }
+          ]
+        },
+        {
+          "name": "collisionProfile",
+          "type": "string",
+          "required": false,
+          "description": "Collision profile of the segment's mesh components, e.g. BlockAll or NoCollision"
+        },
+        {
+          "name": "castShadow",
+          "type": "boolean",
+          "required": false,
+          "description": "Whether the segment's meshes cast shadows"
+        },
+        {
+          "name": "autoRotate",
+          "type": "boolean",
+          "required": false,
+          "description": "Rotate both points to follow the new segment (default true)"
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "required": false,
+          "description": "Object name for the segment"
+        }
+      ]
+    },
     "connect_material_expressions": {
       "category": "material",
       "params": [
@@ -11538,6 +11696,95 @@
         }
       ],
       "contractExempt": "Contract values reach CreatePackage before anything is loaded"
+    },
+    "create_landscape_spline_point": {
+      "category": "landscape",
+      "params": [
+        {
+          "name": "location",
+          "type": "vec3",
+          "required": true,
+          "description": "World location of the control point"
+        },
+        {
+          "name": "rotation",
+          "type": "rotator",
+          "required": false,
+          "description": "World rotation of the tangent at the point"
+        },
+        {
+          "name": "halfWidth",
+          "type": "number",
+          "required": false,
+          "description": "Half-width of the spline at the point, in centimetres (engine default 1000)"
+        },
+        {
+          "name": "sideFalloff",
+          "type": "number",
+          "required": false,
+          "description": "Falloff beyond each side, in centimetres (engine default 1000)"
+        },
+        {
+          "name": "endFalloff",
+          "type": "number",
+          "required": false,
+          "description": "Falloff past an end point, in centimetres (engine default 2000)"
+        },
+        {
+          "name": "layerName",
+          "type": "string",
+          "required": false,
+          "description": "Paint layer applying the spline paints; empty clears it"
+        },
+        {
+          "name": "raiseTerrain",
+          "type": "boolean",
+          "required": false,
+          "description": "Raise terrain below the spline up to it when applied (engine default true)"
+        },
+        {
+          "name": "lowerTerrain",
+          "type": "boolean",
+          "required": false,
+          "description": "Lower terrain above the spline down to it when applied (engine default true)"
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "required": false,
+          "description": "Object name for the point; an existing point of this name is reported rather than duplicated"
+        },
+        {
+          "name": "ownerPath",
+          "type": "string",
+          "required": false,
+          "description": "Existing spline owner to add the point to: a Landscape, LandscapeStreamingProxy or LandscapeSplineActor, by label or path"
+        },
+        {
+          "name": "newSplineActor",
+          "type": "boolean",
+          "required": false,
+          "description": "World Partition: put the point in a new LandscapeSplineActor (the default when ownerPath is not given)"
+        },
+        {
+          "name": "onConflict",
+          "type": "string",
+          "required": false,
+          "description": "When name is taken: skip (default) | error"
+        },
+        {
+          "name": "actorLabel",
+          "type": "string",
+          "required": false,
+          "description": "Landscape actor label, when the level has more than one"
+        },
+        {
+          "name": "actorPath",
+          "type": "string",
+          "required": false,
+          "description": "Landscape actor path; wins over actorLabel"
+        }
+      ]
     },
     "create_level_sequence": {
       "category": "editor",
@@ -13487,6 +13734,28 @@
           "type": "boolean",
           "required": false,
           "description": "Remove a graph still owned by a live node, or an event graph; both are refused without it"
+        }
+      ]
+    },
+    "delete_landscape_spline_point": {
+      "category": "landscape",
+      "params": [
+        {
+          "name": "controlPoint",
+          "type": "string",
+          "required": true,
+          "description": "Control point object name or full path, as list_splines reports it"
+        }
+      ]
+    },
+    "delete_landscape_spline_segment": {
+      "category": "landscape",
+      "params": [
+        {
+          "name": "segment",
+          "type": "string",
+          "required": true,
+          "description": "Segment object name or full path, as list_splines reports it"
         }
       ]
     },
@@ -39024,6 +39293,81 @@
         }
       ]
     },
+    "set_landscape_spline_segment_meshes": {
+      "category": "landscape",
+      "params": [
+        {
+          "name": "segment",
+          "type": "string",
+          "required": true,
+          "description": "Segment object name or full path, as list_splines reports it"
+        },
+        {
+          "name": "meshes",
+          "type": "array",
+          "required": false,
+          "description": "Meshes deformed along the segment, replacing the current list; an empty list clears it",
+          "items": "object",
+          "fields": [
+            {
+              "name": "mesh",
+              "type": "string",
+              "required": true,
+              "description": "StaticMesh asset path"
+            },
+            {
+              "name": "scale",
+              "type": "vec3",
+              "required": false,
+              "description": "Mesh scale (default 1, 1, 1)"
+            },
+            {
+              "name": "forwardAxis",
+              "type": "string",
+              "required": false,
+              "description": "X (default) | Y | Z: the mesh axis laid along the spline"
+            },
+            {
+              "name": "upAxis",
+              "type": "string",
+              "required": false,
+              "description": "X | Y | Z (default): the mesh axis kept up"
+            },
+            {
+              "name": "materialOverrides",
+              "type": "array",
+              "required": false,
+              "description": "Material per slot; an empty string keeps the mesh's own",
+              "items": "string"
+            },
+            {
+              "name": "centerH",
+              "type": "boolean",
+              "required": false,
+              "description": "Centre the mesh horizontally on the spline (default true)"
+            },
+            {
+              "name": "scaleToWidth",
+              "type": "boolean",
+              "required": false,
+              "description": "Scale the mesh to the spline width (default true)"
+            }
+          ]
+        },
+        {
+          "name": "collisionProfile",
+          "type": "string",
+          "required": false,
+          "description": "Collision profile of the segment's mesh components, e.g. BlockAll or NoCollision"
+        },
+        {
+          "name": "castShadow",
+          "type": "boolean",
+          "required": false,
+          "description": "Whether the segment's meshes cast shadows"
+        }
+      ]
+    },
     "set_light_properties": {
       "category": "level",
       "params": [
@@ -46556,6 +46900,112 @@
           "type": "vec3",
           "required": false,
           "description": "Actor scale"
+        }
+      ]
+    },
+    "update_landscape_spline_point": {
+      "category": "landscape",
+      "params": [
+        {
+          "name": "controlPoint",
+          "type": "string",
+          "required": true,
+          "description": "Control point object name or full path, as list_splines reports it"
+        },
+        {
+          "name": "location",
+          "type": "vec3",
+          "required": false,
+          "description": "World location of the control point"
+        },
+        {
+          "name": "rotation",
+          "type": "rotator",
+          "required": false,
+          "description": "World rotation of the tangent at the point"
+        },
+        {
+          "name": "halfWidth",
+          "type": "number",
+          "required": false,
+          "description": "Half-width of the spline at the point, in centimetres (engine default 1000)"
+        },
+        {
+          "name": "sideFalloff",
+          "type": "number",
+          "required": false,
+          "description": "Falloff beyond each side, in centimetres (engine default 1000)"
+        },
+        {
+          "name": "endFalloff",
+          "type": "number",
+          "required": false,
+          "description": "Falloff past an end point, in centimetres (engine default 2000)"
+        },
+        {
+          "name": "layerName",
+          "type": "string",
+          "required": false,
+          "description": "Paint layer applying the spline paints; empty clears it"
+        },
+        {
+          "name": "raiseTerrain",
+          "type": "boolean",
+          "required": false,
+          "description": "Raise terrain below the spline up to it when applied (engine default true)"
+        },
+        {
+          "name": "lowerTerrain",
+          "type": "boolean",
+          "required": false,
+          "description": "Lower terrain above the spline down to it when applied (engine default true)"
+        },
+        {
+          "name": "autoRotate",
+          "type": "boolean",
+          "required": false,
+          "description": "Recompute the rotation from the connected segments when rotation is not given (default true when location moves)"
+        }
+      ]
+    },
+    "update_landscape_spline_segment": {
+      "category": "landscape",
+      "params": [
+        {
+          "name": "segment",
+          "type": "string",
+          "required": true,
+          "description": "Segment object name or full path, as list_splines reports it"
+        },
+        {
+          "name": "startTangentLength",
+          "type": "number",
+          "required": false,
+          "description": "Tangent length at the start point (default the distance between the points)"
+        },
+        {
+          "name": "endTangentLength",
+          "type": "number",
+          "required": false,
+          "description": "Tangent length at the end point (default the distance between the points)"
+        },
+        {
+          "name": "layerName",
+          "type": "string",
+          "required": false,
+          "description": "Paint layer the segment paints when applied; empty clears it"
+        },
+        {
+          "name": "raiseTerrain",
+          "type": "boolean",
+          "required": false,
+          "description": "Raise terrain below the spline up to it when applied (engine default true)"
+        },
+        {
+          "name": "lowerTerrain",
+          "type": "boolean",
+          "required": false,
+          "description": "Lower terrain above the spline down to it when applied (engine default true)"
         }
       ]
     },

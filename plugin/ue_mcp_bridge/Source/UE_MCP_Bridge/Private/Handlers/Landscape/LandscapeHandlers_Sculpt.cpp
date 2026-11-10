@@ -299,6 +299,13 @@ namespace
 	}
 }
 
+// Shared with the landscape spline handlers, which apply splines into an edit
+// layer chosen the same way the sculpt and paint writes choose theirs.
+bool MCPLandscape::ResolveEditLayer(ALandscape* Landscape, const TSharedPtr<FJsonObject>& Params, FGuid& OutGuid, FString& OutName, FString& OutError)
+{
+	return ResolveEditLayerGuid(Landscape, Params, OutGuid, OutName, OutError);
+}
+
 // landscape(sculpt): raise, lower or flatten a circular brush footprint.
 TSharedPtr<FJsonValue> FLandscapeHandlers::Sculpt(const TSharedPtr<FJsonObject>& Params)
 {
