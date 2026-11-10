@@ -1,5 +1,5 @@
 {
-  "handlerCount": 1261,
+  "handlerCount": 1282,
   "handlers": {
     "actors_in_box": {
       "category": "level",
@@ -1118,6 +1118,23 @@
         }
       ]
     },
+    "add_hlod_setup": {
+      "category": "level",
+      "params": [
+        {
+          "name": "partitionName",
+          "type": "string",
+          "required": true,
+          "description": "Runtime partition name, as list_runtime_partitions reports it"
+        },
+        {
+          "name": "setupName",
+          "type": "string",
+          "required": true,
+          "description": "Name of the spatially loaded HLOD setup to add"
+        }
+      ]
+    },
     "add_imc_mapping": {
       "category": "gameplay",
       "params": [
@@ -2208,6 +2225,24 @@
           "description": "Report an existing transformer of this class instead of adding a duplicate (default true)"
         }
       ]
+    },
+    "add_runtime_partition": {
+      "category": "level",
+      "params": [
+        {
+          "name": "partitionName",
+          "type": "string",
+          "required": true,
+          "description": "Name of the runtime partition to add"
+        },
+        {
+          "name": "partitionClass",
+          "type": "string",
+          "required": false,
+          "description": "RuntimePartition class (default /Script/Engine.RuntimePartitionLHGrid)"
+        }
+      ],
+      "contractExempt": "The contract name and the default class are valid, so on a runtime hash set map the call would add a partition"
     },
     "add_rvt_output": {
       "category": "material",
@@ -6798,6 +6833,25 @@
       "params": [],
       "contractExempt": "builds HLODs"
     },
+    "build_hlod_actors": {
+      "category": "level",
+      "params": [
+        {
+          "name": "actorLabels",
+          "type": "array",
+          "required": false,
+          "description": "HLOD actors to build (default: every loaded HLOD actor)",
+          "items": "string"
+        },
+        {
+          "name": "force",
+          "type": "boolean",
+          "required": false,
+          "description": "Rebuild actors that are up to date (default false)"
+        }
+      ],
+      "contractExempt": "Without actorLabels the call builds every loaded HLOD actor"
+    },
     "build_lighting": {
       "category": "editor",
       "params": [
@@ -7291,6 +7345,30 @@
           "description": "Panel to build under (default: the root panel, or the tree root when there is none)"
         }
       ]
+    },
+    "build_world_partition_hlods": {
+      "category": "level",
+      "params": [
+        {
+          "name": "hlodLayer",
+          "type": "string",
+          "required": false,
+          "description": "Build only the HLODs of this HLODLayer asset; omitted or null builds every layer",
+          "nullable": true
+        },
+        {
+          "name": "force",
+          "type": "boolean",
+          "required": false,
+          "description": "Rebuild HLODs that are up to date (default false)"
+        }
+      ],
+      "contractExempt": "Without hlodLayer the call builds every HLOD of the open world"
+    },
+    "build_world_partition_minimap": {
+      "category": "level",
+      "params": [],
+      "contractExempt": "Takes no parameters and builds the open world's minimap in an external process"
     },
     "bulk_line_trace": {
       "category": "level",
@@ -8199,6 +8277,10 @@
           ]
         }
       ]
+    },
+    "check_world_partition_errors": {
+      "category": "level",
+      "params": []
     },
     "chooser_add_column": {
       "category": "chooser",
@@ -13073,6 +13155,11 @@
       ],
       "contractExempt": "Creates and saves a Widget Blueprint under the contract values; nothing it reads fails first"
     },
+    "create_world_partition_minimap": {
+      "category": "level",
+      "params": [],
+      "contractExempt": "Takes no parameters and spawns the minimap actor when the world has none"
+    },
     "datasmith_import": {
       "category": "datasmith",
       "params": [
@@ -13690,6 +13777,11 @@
           "description": "The UWidgetAnimation's object name or display label"
         }
       ]
+    },
+    "delete_world_partition_hlods": {
+      "category": "level",
+      "params": [],
+      "contractExempt": "Takes no parameters and deletes every HLOD of the open world"
     },
     "demo_cleanup": {
       "category": "demo",
@@ -17463,6 +17555,10 @@
         }
       ]
     },
+    "get_hlod_stats": {
+      "category": "level",
+      "params": []
+    },
     "get_input_mapping_contexts": {
       "category": "gameplay",
       "params": [
@@ -18899,6 +18995,23 @@
         }
       ]
     },
+    "get_runtime_partition": {
+      "category": "level",
+      "params": [
+        {
+          "name": "partitionName",
+          "type": "string",
+          "required": true,
+          "description": "Runtime partition name, as list_runtime_partitions reports it"
+        },
+        {
+          "name": "setupName",
+          "type": "string",
+          "required": false,
+          "description": "Read this HLOD setup's partition instead of the main partition"
+        }
+      ]
+    },
     "get_runtime_value": {
       "category": "editor",
       "params": [
@@ -19811,6 +19924,10 @@
           "description": "Rows on this page"
         }
       ]
+    },
+    "get_world_partition_minimap": {
+      "category": "level",
+      "params": []
     },
     "get_world_partition_settings": {
       "category": "level",
@@ -22524,6 +22641,17 @@
         }
       ]
     },
+    "list_hlod_setups": {
+      "category": "level",
+      "params": [
+        {
+          "name": "partitionName",
+          "type": "string",
+          "required": true,
+          "description": "Runtime partition name, as list_runtime_partitions reports it"
+        }
+      ]
+    },
     "list_imc_mappings": {
       "category": "gameplay",
       "params": [
@@ -23016,6 +23144,10 @@
           "description": "Rows per page, a whole number (default 200, max 2000)"
         }
       ]
+    },
+    "list_runtime_partitions": {
+      "category": "level",
+      "params": []
     },
     "list_runtime_widgets": {
       "category": "widget",
@@ -32169,6 +32301,23 @@
         }
       ]
     },
+    "remove_hlod_setup": {
+      "category": "level",
+      "params": [
+        {
+          "name": "partitionName",
+          "type": "string",
+          "required": true,
+          "description": "Runtime partition name, as list_runtime_partitions reports it"
+        },
+        {
+          "name": "setupName",
+          "type": "string",
+          "required": true,
+          "description": "HLOD setup name, as list_hlod_setups reports it"
+        }
+      ]
+    },
     "remove_imc_mapping": {
       "category": "gameplay",
       "params": [
@@ -32684,6 +32833,17 @@
           "type": "string",
           "required": false,
           "description": "source | target (default target)"
+        }
+      ]
+    },
+    "remove_runtime_partition": {
+      "category": "level",
+      "params": [
+        {
+          "name": "partitionName",
+          "type": "string",
+          "required": true,
+          "description": "Runtime partition name, as list_runtime_partitions reports it"
         }
       ]
     },
@@ -33611,6 +33771,23 @@
         }
       ]
     },
+    "rename_runtime_partition": {
+      "category": "level",
+      "params": [
+        {
+          "name": "partitionName",
+          "type": "string",
+          "required": true,
+          "description": "Runtime partition name, as list_runtime_partitions reports it"
+        },
+        {
+          "name": "newName",
+          "type": "string",
+          "required": true,
+          "description": "New runtime partition name"
+        }
+      ]
+    },
     "rename_struct_field": {
       "category": "asset",
       "params": [
@@ -34077,6 +34254,11 @@
           "description": "The COMPLETE desired order, never a partial list"
         }
       ]
+    },
+    "repair_world_partition_errors": {
+      "category": "level",
+      "params": [],
+      "contractExempt": "Takes no parameters and repairs, saving the world, when there is something to repair"
     },
     "reparent_blueprint": {
       "category": "blueprint",
@@ -38563,6 +38745,30 @@
       ],
       "contractExempt": "toggles game view on a live level viewport"
     },
+    "set_hlod_setup_layers": {
+      "category": "level",
+      "params": [
+        {
+          "name": "partitionName",
+          "type": "string",
+          "required": true,
+          "description": "Runtime partition name, as list_runtime_partitions reports it"
+        },
+        {
+          "name": "setupName",
+          "type": "string",
+          "required": true,
+          "description": "HLOD setup name, as list_hlod_setups reports it"
+        },
+        {
+          "name": "hlodLayers",
+          "type": "array",
+          "required": true,
+          "description": "HLODLayer asset paths to assign; empty leaves the setup without layers",
+          "items": "string"
+        }
+      ]
+    },
     "set_ik_retargeter_rig": {
       "category": "animation",
       "params": [
@@ -41820,6 +42026,40 @@
         }
       ]
     },
+    "set_runtime_hash_class": {
+      "category": "level",
+      "params": [
+        {
+          "name": "runtimeHashClass",
+          "type": "string",
+          "required": true,
+          "description": "Runtime hash class: WorldPartitionRuntimeHashSet, WorldPartitionRuntimeSpatialHash, or a /Script path"
+        }
+      ]
+    },
+    "set_runtime_partition_properties": {
+      "category": "level",
+      "params": [
+        {
+          "name": "partitionName",
+          "type": "string",
+          "required": true,
+          "description": "Runtime partition name, as list_runtime_partitions reports it"
+        },
+        {
+          "name": "setupName",
+          "type": "string",
+          "required": false,
+          "description": "Write this HLOD setup's partition instead of the main partition"
+        },
+        {
+          "name": "properties",
+          "type": "object",
+          "required": true,
+          "description": "Property name -> value, as get_runtime_partition lists them"
+        }
+      ]
+    },
     "set_runtime_visibility": {
       "category": "editor",
       "params": [
@@ -44155,6 +44395,18 @@
           ]
         }
       ]
+    },
+    "set_world_partition_streaming": {
+      "category": "level",
+      "params": [
+        {
+          "name": "enabled",
+          "type": "boolean",
+          "required": true,
+          "description": "true streams the world; false keeps every actor loaded"
+        }
+      ],
+      "contractExempt": "The contract boolean is a valid value, so on a partitioned map the call would change its streaming"
     },
     "set_world_settings": {
       "category": "level",
