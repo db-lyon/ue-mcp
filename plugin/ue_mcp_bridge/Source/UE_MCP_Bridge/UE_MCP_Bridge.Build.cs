@@ -83,6 +83,11 @@ public class UE_MCP_Bridge : ModuleRules
 				"InputCore",
 				"Landscape",
 				"LevelEditor",
+				// Localization targets and their gather/compile configs
+				// (LocalizationSettings, LocalizationConfigurationScript), and the
+				// GatherText commandlet runner the Localization Dashboard uses.
+				"Localization",
+				"LocalizationCommandletExecution",
 				"LevelSequence",
 				"LevelSequenceEditor",
 				"MainFrame",
@@ -127,6 +132,11 @@ public class UE_MCP_Bridge : ModuleRules
 				// GetStatistics, which editor(start_trace) and its channel actions
 				// call. Core includes the header but does not re-export these.
 				"TraceLog",
+				// ITraceServicesModule and its analysis providers (frames,
+				// timers, threads, bookmarks), which editor(analyze_trace)
+				// reads a recorded .utrace through. A Developer module, as the
+				// editor modules above are; Unreal Insights is built on it.
+				"TraceServices",
 				// The engine-status snapshot, in its own module so it can load
 				// at PostConfigInit and cover the startup window that exists
 				// before this module does.
@@ -242,6 +252,22 @@ public class UE_MCP_Bridge : ModuleRules
 		else
 		{
 			PrivateDefinitions.Add("WITH_UEMCP_SEMANTIC_SEARCH=0");
+		}
+
+		// The Neural Network Engine core is an engine module, not a plugin, so it
+		// links like any other runtime module where the engine has it. The
+		// runtimes (NNERuntimeORT, NNERuntimeLiteRT, ...) are plugins that
+		// register with it at load and are never linked.
+		bool bNNEPresent = System.IO.File.Exists(System.IO.Path.Combine(
+			EngineDirectory, "Source", "Runtime", "NNE", "Public", "NNERuntimeCPU.h"));
+		if (bNNEPresent)
+		{
+			PrivateDependencyModuleNames.Add("NNE");
+			PrivateDefinitions.Add("WITH_UEMCP_NNE=1");
+		}
+		else
+		{
+			PrivateDefinitions.Add("WITH_UEMCP_NNE=0");
 		}
 	}
 }

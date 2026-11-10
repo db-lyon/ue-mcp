@@ -158,6 +158,10 @@ const EXPLICIT: Record<string, Extractor> = {
     }
     return out;
   },
+  // A chooser copy writes the destination table and only reads the source;
+  // with no targetTable the destination is the source table itself.
+  chooser_copy_rows: (p) => strArray([str(p.targetTable) ?? str(p.table) ?? p.assetPath]),
+  chooser_copy_column: (p) => strArray([str(p.targetTable) ?? str(p.table) ?? p.assetPath]),
 };
 
 /** A parameter's name and every alias the registry renames to it. */

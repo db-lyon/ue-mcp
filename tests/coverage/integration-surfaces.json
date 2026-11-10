@@ -137,6 +137,11 @@
       "summary": "ue-mcp doctor reports Epic's Unreal MCP server for the project (plugin enabled in the .uproject, auto-start from the project user ini over the engine Base ini, port and URL), notes when it runs beside ue-mcp, and reports whether ue-mcp is attached to the Unreal Assistant"
     },
     {
+      "id": "cli.doctor.unreal-canvas",
+      "group": "cli",
+      "summary": "ue-mcp doctor reports a project that enables the Unreal Canvas Bridge and the ports it claims (9877, 9880), and fails the verdict when a bridge.port or UE_MCP_PORT pin lands on one"
+    },
+    {
       "id": "cli.doctor.age-gate",
       "group": "cli",
       "summary": "ue-mcp doctor reports an npx launch npm's release-age gate would refuse, and --fix lifts the gate in that entry"
@@ -395,6 +400,11 @@
       "id": "server.status.unreal-mcp",
       "group": "server",
       "summary": "project(get_status) carries unrealMcpServer (URL, where auto-start and port came from) while Epic's Unreal MCP server is set to start with the project's editor, and leaves it out otherwise"
+    },
+    {
+      "id": "server.bridge-port.unreal-canvas",
+      "group": "server",
+      "summary": "a server started on a project that enables the Unreal Canvas Bridge never targets 9877 or 9880: a pin on either falls back to the derived per-project port, and no requested.json asks the editor to bind it"
     },
     {
       "id": "server.startup.micro.in-process",

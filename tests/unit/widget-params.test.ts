@@ -49,6 +49,9 @@ const ASSET_ACTIONS = [
   "get_bind_widget_contract", "audit_commonui",
   // Subtree authoring and the ownership check, each on one Widget Blueprint.
   "build_tree", "check_structure",
+  // Viewmodel authoring, each on one Widget Blueprint.
+  "list_viewmodels", "add_viewmodel", "remove_viewmodel", "list_viewmodel_bindings",
+  "add_viewmodel_binding", "update_viewmodel_binding", "remove_viewmodel_binding", "compile_viewmodels",
 ];
 
 /**
