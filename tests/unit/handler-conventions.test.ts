@@ -88,7 +88,12 @@ const BASELINE = {
   // MCPSetNoRollback, as every other pie stop does (#1735).
   // 170: epic(call_mcp_tool) runs a tool Epic's MCP plugin registered; like call_tool, the effect is the tool's.
   // 170: epic(ai_assistant_send_message) sends a message UAIAssistantInstance has no call to delete.
-  mutationsWithoutRollback: 175,
+  // 183: level(build_hlod_actors, build_world_partition_hlods, delete_world_partition_hlods,
+  // build_world_partition_minimap) regenerate or delete derived HLOD and minimap data and keep no copy;
+  // level(repair_world_partition_errors) saves and moves actors, which the engine documents as not
+  // undoable; level(replace_actors_with_class, replace_actors_with_asset) delete the replaced actors;
+  // editor(log_map_check_message) adds a Message Log entry no call removes (#1828).
+  mutationsWithoutRollback: 183,
   // Zero, and held there by a flat assertion. Every mutation with no inverse
   // now says so in its own result body with the reason, which is the half a
   // caller can act on.
