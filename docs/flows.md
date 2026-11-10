@@ -428,6 +428,7 @@ Each event is one JSON object per `data:` line:
 |------|-------|--------------|
 | `niagara_fire` | 7 | Builds a fire Niagara system (spawn rate, upward velocity, HDR orange colour) at `/Game/VFX/Fire/NS_Fire` and ends with `niagara(action="validate")` to confirm it emits. Override `name` and `packagePath` with params. |
 | `texture_bomb` | 14 | Builds `/Game/Materials/Functions/MF_TextureBomb`, a MaterialFunction that rotates and offsets UVs per cell so a tiled texture stops looking tiled. |
+| `blockout_to_assets` | 4 | Replaces every blockout actor carrying `tag` (default `Blockout`) with the best-fitting StaticMesh under `candidateFolder`: `level(list_blockout)`, `level(match_asset_to_blockout)`, `level(replace_blockout)`, then `level(list_blockout)` with the replacements. Each replacement keeps a record that `level(restore_blockout)` puts the blockout back from, so `rollback_on_failure` undoes the swap. |
 | `beacon` | 56 | Builds a shrine scene from individual actions: level, four materials, geometry, lights and camera, under `/Game/Flows/Beacon`. A reference for a long flow. |
 | `neon_shrine` | 19 | The [Neon Shrine demo](neon-shrine-demo.md), one `demo(action="step", stepIndex=N)` per step. Leaves the editor on `/Game/Demo/DemoLevel`. |
 | `neon_shrine_cleanup` | 1 | Removes the Neon Shrine content and switches the editor to `/Game/MCP_Home`. |
