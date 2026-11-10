@@ -51,9 +51,8 @@ beforeAll(async () => {
   bridge = await getBridge();
   const listed = await raw("epic_list_mcp_tools", { nameFilter: "MRG" });
   canvasLoaded = (listed.tools as Json[] | undefined)?.some((t) => t.name === "TriggerMRGRender") ?? false;
-  if (!canvasLoaded) return;
-  await callBridge(bridge, "delete_folder", { path: DIR, force: true });
   server = await LiveServer.start({ projects: [(await liveTarget()).uproject] });
+  if (canvasLoaded) await callBridge(bridge, "delete_folder", { path: DIR, force: true });
 }, 300_000);
 
 afterAll(async () => {
@@ -72,9 +71,22 @@ afterAll(async () => {
   if (!canvasContentExisted) fs.rmSync(CANVAS_CONTENT, { recursive: true, force: true });
 });
 
+/**
+ * Where the editor has no Canvas Bridge (any engine before 5.9, or the plugin off), every
+ * case asserts the refusal instead of skipping: the server withholds the canvas actions and
+ * names the plugin, and the bridge refuses the tool itself.
+ */
+async function expectCanvasAbsent(): Promise<void> {
+  const r = await server!.call("canvas", { action: "status" });
+  expect(r.text).toContain("withheld from this server's surface");
+  expect(r.text).toContain("UnrealCanvasBridge");
+  const direct = await callBridge(bridge, "epic_call_mcp_tool", { tool: "TriggerMRGRender", input: {} });
+  expect(direct.ok && body(direct).success !== false).toBe(false);
+}
+
 describe("the Canvas Bridge's tools through epic(call_mcp_tool)", () => {
-  it("lists the render, stream, stencil, splat and cutout tools as plugin tools", async (t) => {
-    if (!canvasLoaded) t.skip();
+  it("lists the render, stream, stencil, splat and cutout tools as plugin tools", async () => {
+    if (!canvasLoaded) return expectCanvasAbsent();
     const { tools } = await raw("epic_list_mcp_tools");
     const names = new Set((tools as Json[]).filter((x) => x.source === "plugin").map((x) => x.name));
     for (const tool of ["GetStatus", "GetMRGPasses", "TriggerMRGRender", "TriggerSequenceRender", "BuildAndRenderRepositionSequence",
@@ -84,8 +96,8 @@ describe("the Canvas Bridge's tools through epic(call_mcp_tool)", () => {
     }
   }, 60_000);
 
-  it("TriggerMRGRender returns one PNG path per capture, each on disk", async (t) => {
-    if (!canvasLoaded) t.skip();
+  it("TriggerMRGRender returns one PNG path per capture, each on disk", async () => {
+    if (!canvasLoaded) return expectCanvasAbsent();
     const r = await raw("epic_call_mcp_tool", { tool: "TriggerMRGRender", input: { ExecutionMode: "EditorWorld", Resolution: SMALL } });
     const pngs = (r.content as Json[]).filter((b) => b.type === "text" && /\.png$/i.test(b.text));
     expect(pngs.length).toBeGreaterThan(0);
@@ -97,8 +109,8 @@ describe("the Canvas Bridge's tools through epic(call_mcp_tool)", () => {
 });
 
 describe("canvas category", () => {
-  it("status and list_passes read the configured preset", async (t) => {
-    if (!canvasLoaded) t.skip();
+  it("status and list_passes read the configured preset", async () => {
+    if (!canvasLoaded) return expectCanvasAbsent();
     const status = await canvas("status");
     expect(status.ready).toBe(true);
     expect(status.presetConfigured).toBe(true);
@@ -108,8 +120,8 @@ describe("canvas category", () => {
     expect(Array.isArray(vars.variables)).toBe(true);
   }, 120_000);
 
-  it("render returns image paths matching the preset's branches, written as PNGs", async (t) => {
-    if (!canvasLoaded) t.skip();
+  it("render returns image paths matching the preset's branches, written as PNGs", async () => {
+    if (!canvasLoaded) return expectCanvasAbsent();
     const branches = new Set((await canvas("list_passes")).passes as string[]);
     const r = await canvas("render", { executionMode: "EditorWorld", resolution: SMALL });
     expect(r.images.length).toBeGreaterThan(0);
@@ -122,8 +134,8 @@ describe("canvas category", () => {
     expect(r.content).toBeUndefined();
   }, 300_000);
 
-  it("render with captureSceneState hands back a blob save_scene_snapshot turns into an asset", async (t) => {
-    if (!canvasLoaded) t.skip();
+  it("render with captureSceneState hands back a blob save_scene_snapshot turns into an asset", async () => {
+    if (!canvasLoaded) return expectCanvasAbsent();
     const r = await canvas("render", { executionMode: "EditorWorld", resolution: SMALL, captureSceneState: true });
     expect(typeof r.sceneStateBlobPath).toBe("string");
     expect(fs.existsSync(r.sceneStateBlobPath)).toBe(true);
@@ -133,8 +145,8 @@ describe("canvas category", () => {
     expect((listed.assets as Json[]).map((a) => a.name)).toContain("SceneState_Live");
   }, 300_000);
 
-  it("render_sequence returns one frame directory per capture, with its frames on disk", async (t) => {
-    if (!canvasLoaded) t.skip();
+  it("render_sequence returns one frame directory per capture, with its frames on disk", async () => {
+    if (!canvasLoaded) return expectCanvasAbsent();
     await raw("create_level_sequence", { name: "LS_CanvasRender", packagePath: DIR });
     await raw("set_sequence_playback_range", { sequencePath: SEQ, startSeconds: 0, endSeconds: 0.2 });
     const r = await canvas("render_sequence", { sequencePath: SEQ, resolution: SMALL, cameraSource: { mode: "viewport" } });
@@ -147,8 +159,8 @@ describe("canvas category", () => {
     }
   }, 900_000);
 
-  it("a cancelled render leaves the render queue free for the next one", async (t) => {
-    if (!canvasLoaded) t.skip();
+  it("a cancelled render leaves the render queue free for the next one", async () => {
+    if (!canvasLoaded) return expectCanvasAbsent();
     // The Bridge's tools do not implement CancelAsync, so a cancel cannot stop a
     // render; what it must not do is wedge the serial queue behind it.
     // A 50 ms budget gives up on the call, and the bridge forwards the cancel to the tool.
@@ -157,8 +169,8 @@ describe("canvas category", () => {
     expect(next.images.length).toBeGreaterThan(0);
   }, 600_000);
 
-  it("starts, retimes and stops the viewport stream", async (t) => {
-    if (!canvasLoaded) t.skip();
+  it("starts, retimes and stops the viewport stream", async () => {
+    if (!canvasLoaded) return expectCanvasAbsent();
     const started = await canvas("start_viewport_stream", { width: 128, height: 128, fps: 10, depth: false, normal: false });
     expect(started.streaming).toBe(true);
     expect(typeof started.port).toBe("number");
@@ -170,8 +182,8 @@ describe("canvas category", () => {
     expect(again.text).toContain("No viewport stream is running");
   }, 120_000);
 
-  it("assigns and clears a stencil on a placed actor, and applies the capture setters", async (t) => {
-    if (!canvasLoaded) t.skip();
+  it("assigns and clears a stencil on a placed actor, and applies the capture setters", async () => {
+    if (!canvasLoaded) return expectCanvasAbsent();
     await raw("place_actor", { actorClass: "StaticMeshActor", label: "CanvasStencilCube", location: { x: 0, y: 0, z: 0 } });
     const actorPath = String((await raw("get_actor_details", { actorLabel: "CanvasStencilCube" })).actorPath);
     // The stencil lives on the mesh component, not the actor.
@@ -192,8 +204,8 @@ describe("canvas category", () => {
     expect((await canvas("set_capture_stage", { stage: "post_tonemap" })).success).not.toBe(false);
   }, 120_000);
 
-  it("spawns a cutout from a PNG, adds and switches a variant, lists and removes it", async (t) => {
-    if (!canvasLoaded) t.skip();
+  it("spawns a cutout from a PNG, adds and switches a variant, lists and removes it", async () => {
+    if (!canvasLoaded) return expectCanvasAbsent();
     // A 1x1 opaque PNG.
     const png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==";
     const spawned = await canvas("spawn_cutout_from_png", { pngBase64: png, location: { x: 0, y: 0, z: 100 }, label: "first" });
