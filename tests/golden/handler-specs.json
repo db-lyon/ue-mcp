@@ -1,5 +1,5 @@
 {
-  "handlerCount": 1269,
+  "handlerCount": 1275,
   "handlers": {
     "actors_in_box": {
       "category": "level",
@@ -21652,6 +21652,81 @@
       ],
       "contractExempt": "launches a game process"
     },
+    "learning_agents_add_observation": {
+      "category": "gameplay",
+      "params": [
+        {
+          "name": "blueprintPath",
+          "type": "string",
+          "required": true,
+          "description": "Learning Agents interactor Blueprint"
+        },
+        {
+          "name": "observationType",
+          "type": "string",
+          "required": true,
+          "description": "Observation type: Float, Location, Set, ... or the Specify function name"
+        },
+        {
+          "name": "settings",
+          "type": "object",
+          "required": false,
+          "description": "Input pin defaults by parameter name, e.g. {\"Tag\": \"Speed\", \"MaxNum\": 8}"
+        },
+        {
+          "name": "connectTo",
+          "type": "string",
+          "required": false,
+          "description": "result to return this observation from SpecifyAgentObservation, or the nodeId of an observation to feed"
+        },
+        {
+          "name": "connectPin",
+          "type": "string",
+          "required": false,
+          "description": "Input of the connectTo node to feed, e.g. Element or QueryElement"
+        },
+        {
+          "name": "posX",
+          "type": "integer",
+          "required": false,
+          "description": "Node X position (default 0)"
+        },
+        {
+          "name": "posY",
+          "type": "integer",
+          "required": false,
+          "description": "Node Y position (default below the existing nodes)"
+        }
+      ]
+    },
+    "learning_agents_list_observation_types": {
+      "category": "gameplay",
+      "params": [
+        {
+          "name": "nameFilter",
+          "type": "string",
+          "required": false,
+          "description": "Case-sensitive substring of the Specify function name"
+        },
+        {
+          "name": "includeParameters",
+          "type": "boolean",
+          "required": false,
+          "description": "Include each function's parameters with types and defaults (default true)"
+        }
+      ]
+    },
+    "learning_agents_read_observations": {
+      "category": "gameplay",
+      "params": [
+        {
+          "name": "blueprintPath",
+          "type": "string",
+          "required": true,
+          "description": "Learning Agents interactor Blueprint"
+        }
+      ]
+    },
     "line_trace": {
       "category": "level",
       "params": [
@@ -25430,6 +25505,82 @@
           "type": "integer",
           "required": false,
           "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients"
+        }
+      ]
+    },
+    "nne_import_model": {
+      "category": "gameplay",
+      "params": [
+        {
+          "name": "sourceFile",
+          "type": "string",
+          "required": true,
+          "description": "Absolute path of the model file (.onnx, .tflite, ...)"
+        },
+        {
+          "name": "assetPath",
+          "type": "string",
+          "required": true,
+          "description": "NNEModelData asset to create, e.g. /Game/ML/NNE_Model"
+        },
+        {
+          "name": "fileType",
+          "type": "string",
+          "required": false,
+          "description": "Model file type the runtimes read (default the file's extension)"
+        },
+        {
+          "name": "targetRuntimes",
+          "type": "array",
+          "required": false,
+          "description": "Runtimes to cook the model for, e.g. NNERuntimeORTCpu or NNERuntimeLiteRT (default every runtime)",
+          "items": "string"
+        },
+        {
+          "name": "onConflict",
+          "type": "string",
+          "required": false,
+          "description": "skip (default) reports an existing asset, error refuses it"
+        }
+      ]
+    },
+    "nne_list_runtimes": {
+      "category": "gameplay",
+      "params": []
+    },
+    "nne_run_inference": {
+      "category": "gameplay",
+      "params": [
+        {
+          "name": "assetPath",
+          "type": "string",
+          "required": true,
+          "description": "NNEModelData asset"
+        },
+        {
+          "name": "runtime",
+          "type": "string",
+          "required": false,
+          "description": "CPU runtime to run on (default the first registered CPU runtime that accepts the model)"
+        },
+        {
+          "name": "inputs",
+          "type": "array",
+          "required": false,
+          "description": "One entry per model input, in order: {values: number[], shape?: int[]}; shape is needed only for dynamic dimensions",
+          "items": "object"
+        },
+        {
+          "name": "iterations",
+          "type": "integer",
+          "required": false,
+          "description": "Timed runs (default 1, max 1000)"
+        },
+        {
+          "name": "maxOutputValues",
+          "type": "integer",
+          "required": false,
+          "description": "Values returned per output (default 256, max 65536)"
         }
       ]
     },

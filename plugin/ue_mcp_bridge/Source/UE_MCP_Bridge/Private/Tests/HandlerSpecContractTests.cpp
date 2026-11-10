@@ -41,6 +41,7 @@
 #include "Handlers/Editor/EditorHandlers.h"
 #include "Handlers/Sequencer/SequencerHandlers.h"
 #include "Handlers/Sequencer/MovieRenderQueueHandlers.h"
+#include "Handlers/MachineLearning/MachineLearningHandlers.h"
 #include "Handlers/PCG/PCGHandlers.h"
 #include "Handlers/Niagara/NiagaraHandlers.h"
 #include "Handlers/Material/MaterialHandlers.h"
@@ -212,6 +213,7 @@ bool FMCPHandlerSpecContractTest::RunTest(const FString& Parameters)
 	FEditorHandlers::RegisterHandlers(Registry);
 	FSequencerHandlers::RegisterHandlers(Registry);
 	FMovieRenderQueueHandlers::RegisterHandlers(Registry);
+	FMachineLearningHandlers::RegisterHandlers(Registry);
 	FDialogHandlers::RegisterHandlers(Registry);
 	FPCGHandlers::RegisterHandlers(Registry);
 	FNiagaraHandlers::RegisterHandlers(Registry);

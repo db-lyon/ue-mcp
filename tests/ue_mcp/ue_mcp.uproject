@@ -140,6 +140,19 @@
 		{
 			"Name": "MovieRenderPipeline",
 			"Enabled": true
+		},
+		{
+			"Name": "LearningAgents",
+			"Enabled": true
+		},
+		{
+			"Name": "NNERuntimeORT",
+			"Enabled": true
+		},
+		{
+			"Name": "NNERuntimeLiteRT",
+			"Enabled": true,
+			"Optional": true
 		}
 	]
 }

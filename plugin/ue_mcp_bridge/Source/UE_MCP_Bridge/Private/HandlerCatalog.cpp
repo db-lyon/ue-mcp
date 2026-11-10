@@ -26,6 +26,7 @@
 #include "Handlers/PCG/PCGHandlers.h"
 #include "Handlers/Sequencer/SequencerHandlers.h"
 #include "Handlers/Sequencer/MovieRenderQueueHandlers.h"
+#include "Handlers/MachineLearning/MachineLearningHandlers.h"
 #include "Handlers/Spline/SplineHandlers.h"
 #include "Handlers/Physics/PhysicsHandlers.h"
 #include "Handlers/Demo/DemoHandlers.h"
@@ -71,6 +72,7 @@ void MCPHandlerCatalog::RegisterAllHandlers(FMCPHandlerRegistry& Registry)
 	FPCGHandlers::RegisterHandlers(Registry);
 	FSequencerHandlers::RegisterHandlers(Registry);
 	FMovieRenderQueueHandlers::RegisterHandlers(Registry);
+	FMachineLearningHandlers::RegisterHandlers(Registry);
 	FSplineHandlers::RegisterHandlers(Registry);
 	FPhysicsHandlers::RegisterHandlers(Registry);
 	FDemoHandlers::RegisterHandlers(Registry);

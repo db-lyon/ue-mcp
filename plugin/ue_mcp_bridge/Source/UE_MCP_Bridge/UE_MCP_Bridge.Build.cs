@@ -209,5 +209,21 @@ public class UE_MCP_Bridge : ModuleRules
 		{
 			PrivateDefinitions.Add("WITH_UEMCP_EPIC_MCP=0");
 		}
+
+		// The Neural Network Engine core is an engine module, not a plugin, so it
+		// links like any other runtime module where the engine has it. The
+		// runtimes (NNERuntimeORT, NNERuntimeLiteRT, ...) are plugins that
+		// register with it at load and are never linked.
+		bool bNNEPresent = System.IO.File.Exists(System.IO.Path.Combine(
+			EngineDirectory, "Source", "Runtime", "NNE", "Public", "NNERuntimeCPU.h"));
+		if (bNNEPresent)
+		{
+			PrivateDependencyModuleNames.Add("NNE");
+			PrivateDefinitions.Add("WITH_UEMCP_NNE=1");
+		}
+		else
+		{
+			PrivateDefinitions.Add("WITH_UEMCP_NNE=0");
+		}
 	}
 }
