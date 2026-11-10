@@ -186,7 +186,7 @@ describe("the committed modules match their inputs", () => {
     const read = (f: string) => fs.readFileSync(path.join(GEN_DIR, f), "utf8").replace(/\r\n/g, "\n");
     const before = new Map<string, string>();
     for (const f of fs.readdirSync(GEN_DIR)) {
-      if (f.endsWith(".generated.ts") || f === "index.ts" || f === "catalog-engines.ts") before.set(f, read(f));
+      if (f.endsWith(".generated.ts") || f === "index.ts" || f === "catalog-engines.ts" || f === "toolset-routes.ts") before.set(f, read(f));
     }
 
     // Under tsx: the generator imports ROUTING_PARAMS from source rather than
@@ -207,4 +207,24 @@ describe("the committed modules match their inputs", () => {
       + "do not hand-edit a generated file.",
     ).toEqual([]);
   }, 60_000);
+});
+
+describe("the emitted toolset routing", () => {
+  it("places every generated action's toolset in the category that declares it", async () => {
+    const { routeEpicToolset, EPIC_TOOLSETS_BY_CATEGORY } = await import("../../src/tools/epic/toolset-routes.js");
+    for (const { tool, action, spec } of epicActions()) {
+      const epicTool = (spec as { epicTool?: { toolset: string; successors?: Array<{ toolset: string }> } }).epicTool;
+      if (!epicTool) continue;
+      for (const toolset of [epicTool.toolset, ...(epicTool.successors ?? []).map((s) => s.toolset)]) {
+        expect(routeEpicToolset(toolset), `${tool}.${action} (${toolset})`).toBe(tool);
+        expect(EPIC_TOOLSETS_BY_CATEGORY[tool], `${tool} lists ${toolset}`).toContain(toolset);
+      }
+    }
+  });
+
+  it("routes a toolset no catalog recorded by the same patterns", async () => {
+    const { routeEpicToolset } = await import("../../src/tools/epic/toolset-routes.js");
+    expect(routeEpicToolset("SomePlugin.NiagaraFutureToolset")).toBe("niagara");
+    expect(routeEpicToolset("Unheard.Of")).toBe("epic");
+  });
 });
