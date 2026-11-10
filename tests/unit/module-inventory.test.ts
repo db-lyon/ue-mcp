@@ -55,6 +55,7 @@ const PER_SESSION: Record<string, string> = {
   "bridge/port.ts": "Derives a bridge port from one project's root path.",
   "bridge/requested-port.ts": "Publishes one project's resolved port pin into that project's own Saved directory.",
   "editor/deployer.ts": "Attaches and deploys the bridge into one project.",
+  "integrations/epic/unreal-mcp-server.ts": "Reads and writes Epic's Unreal MCP server settings for the one project it is handed.",
   "editor/install-marker.ts": "Reads and writes one project's plugin install marker and resolves where that project's plugin lives.",
   "editor/bridge-binaries.ts": "Installs prebuilt binaries into one project's plugin directory.",
   "editor/editor-plugin.ts": "Installs an extension's editor plugin into the one project it is handed.",
