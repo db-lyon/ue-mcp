@@ -49,12 +49,15 @@ afterAll(async () => {
   sb.cleanup();
 });
 
+/** The editor's resources, without the shipped skills this process lists itself. */
+const editorOnly = <T extends { uri: string }>(resources: T[]): T[] => resources.filter((r) => !r.uri.startsWith("skill://"));
+
 describe("resources", () => {
   it("lists and reads the editor's resources", async () => {
     covers("server.resources");
     // The list is empty until the bridge has connected, which the server does at startup.
-    await expect.poll(async () => (await server.client.listResources()).resources.length, { timeout: 15_000 }).toBe(2);
-    const { resources } = await server.client.listResources();
+    await expect.poll(async () => editorOnly((await server.client.listResources()).resources).length, { timeout: 15_000 }).toBe(2);
+    const resources = editorOnly((await server.client.listResources()).resources);
     expect(resources[0]).toMatchObject({ uri: "fixture://notes/readme", name: "readme", title: "Readme", mimeType: "text/plain" });
     // A provider that gave no name is listed under its uri, since MCP requires one.
     expect(resources[1]).toMatchObject({ uri: "fixture://data/blob", name: "fixture://data/blob" });
@@ -70,7 +73,7 @@ describe("resources", () => {
     covers("server.resources");
     const down = await McpServer.start(sb, { projects: [sb.makeProject("Down")] });
     try {
-      expect((await down.client.listResources()).resources).toEqual([]);
+      expect(editorOnly((await down.client.listResources()).resources)).toEqual([]);
     } finally {
       await down.close();
     }

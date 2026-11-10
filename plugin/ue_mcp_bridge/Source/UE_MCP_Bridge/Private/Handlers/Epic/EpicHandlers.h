@@ -37,6 +37,12 @@ private:
 	// input? (object) | inputJson? (string). Returns the tool's JSON result.
 	static TSharedPtr<FJsonValue> CallTool(const TSharedPtr<FJsonObject>& Params);
 
+	// Toolset on/off through the registry's block and allow lists, live and in
+	// the settings (#1827). EpicHandlers_Toolsets.cpp.
+	static void RegisterToolsetStateHandlers(class FMCPHandlerRegistry& Registry);
+	static TSharedPtr<FJsonValue> GetToolsetStates(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> SetToolsetEnabled(const TSharedPtr<FJsonObject>& Params);
+
 	// Epic's Unreal MCP plugin keeps a tool list of its own beside the registry:
 	// legacy Tool Library Blueprints, tools other plugins register, and its
 	// adapters onto the registry. EpicHandlers_MCP.cpp; 5.8+ with the plugin enabled.
