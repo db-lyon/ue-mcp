@@ -4,7 +4,6 @@
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
 #include "HandlerAssetDelete.h"
-#include "HandlerMapExternalPackages.h"
 #include "EdGraph/EdGraphNode.h"
 #include "HandlerPagination.h"
 #include "HandlerJsonProperty.h"
@@ -3004,44 +3003,14 @@ TSharedPtr<FJsonValue> FAssetHandlers::DeleteAsset(const TSharedPtr<FJsonObject>
 	if (MCPIsProtectedAssetPath(AssetPath)) return MCPProtectedPathError(AssetPath);
 	if (MCPIsPlayInEditorActive()) return DeleteDuringPlayError();
 
-	const FString PackageName = FPackageName::ObjectPathToPackageName(FPackageName::ExportTextPathToObjectPath(AssetPath).TrimStartAndEnd());
-
 	// Idempotent: if the asset doesn't exist, treat as already-deleted.
 	if (!UEditorAssetLibrary::DoesAssetExist(AssetPath))
 	{
 		auto Result = MCPSuccess();
 		Result->SetStringField(TEXT("path"), AssetPath);
 		Result->SetBoolField(TEXT("alreadyDeleted"), true);
-		// A map deleted before #1851, or one whose external packages could not
-		// all go on the first call, leaves them behind with no map to own them.
-		// Repeating the delete is the documented retry, so it finishes the job.
-		// Not for a folder path, whose external folder also holds the packages of every map inside it.
-		if (!PackageName.IsEmpty() && !FPackageName::DoesPackageExist(PackageName) && !UEditorAssetLibrary::DoesDirectoryExist(PackageName))
-		{
-			const TArray<FString> Orphans = MCPMapExternalPackages::Find(PackageName);
-			if (Orphans.Num() > 0)
-			{
-				const MCPMapExternalPackages::FResult External = MCPMapExternalPackages::Delete(PackageName, Orphans);
-				MCPMapExternalPackages::Describe(Result, External);
-				Result->SetBoolField(TEXT("alreadyDeleted"), false);
-				Result->SetBoolField(TEXT("mapAlreadyDeleted"), true);
-				if (!External.IsComplete())
-				{
-					Result->SetBoolField(TEXT("success"), false);
-					Result->SetStringField(TEXT("error"), FString::Printf(
-						TEXT("The map '%s' was already gone, and some of its external packages are still on disk; externalPackagesRemaining lists them."), *AssetPath));
-				}
-				MCPSetNoRollback(Result, TEXT("The external packages are gone from disk and the bridge holds no copy of them."));
-				return MCPResult(Result);
-			}
-		}
 		return MCPResult(Result);
 	}
-
-	// A World Partition map's actors live outside the map package (#1851).
-	// Listed before the delete, while the map still says what it is.
-	const bool bIsMap = IsWorldAsset(AssetPath);
-	const TArray<FString> ExternalPackages = bIsMap ? MCPMapExternalPackages::Find(PackageName) : TArray<FString>();
 
 	// #976: the delete below is a force delete, so the reference check has to
 	// happen here rather than being left to an API that does not do one.
@@ -3063,22 +3032,11 @@ TSharedPtr<FJsonValue> FAssetHandlers::DeleteAsset(const TSharedPtr<FJsonObject>
 
 	bool bRemovedOrphanFile = false;
 	const bool bSuccess = MCPDeleteAssetFromDisk(AssetPath, bRemovedOrphanFile);
-	const MCPMapExternalPackages::FResult External = bSuccess
-		? MCPMapExternalPackages::Delete(PackageName, ExternalPackages)
-		: MCPMapExternalPackages::FResult();
 
 	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("path"), AssetPath);
 	Result->SetBoolField(TEXT("deleted"), bSuccess);
 	Result->SetBoolField(TEXT("forced"), bForce);
-	MCPMapExternalPackages::Describe(Result, External);
-	if (bSuccess && !External.IsComplete())
-	{
-		// The map is gone but part of it is still on disk, which is not the delete that was asked for.
-		Result->SetBoolField(TEXT("success"), false);
-		Result->SetStringField(TEXT("error"), FString::Printf(
-			TEXT("'%s' was deleted, but some of its external packages are still on disk; externalPackagesRemaining lists them and externalPackagesNote says how to finish."), *AssetPath));
-	}
 	if (bRemovedOrphanFile)
 	{
 		Result->SetBoolField(TEXT("removedOrphanFile"), true);
@@ -3176,13 +3134,9 @@ TSharedPtr<FJsonValue> FAssetHandlers::DeleteAssetBatch(const TSharedPtr<FJsonOb
 				if (bClosed) ClosedEditors++;
 			}
 			bool bRemovedOrphanFile = false;
-			const FString PackageName = FPackageName::ObjectPathToPackageName(FPackageName::ExportTextPathToObjectPath(Path).TrimStartAndEnd());
-			const TArray<FString> ExternalPackages = IsWorldAsset(Path) ? MCPMapExternalPackages::Find(PackageName) : TArray<FString>();
 			if (MCPDeleteAssetFromDisk(Path, bRemovedOrphanFile))
 			{
 				Entry->SetStringField(TEXT("status"), TEXT("deleted"));
-				// #1851: a World Partition map's external packages go with it.
-				MCPMapExternalPackages::Describe(Entry, MCPMapExternalPackages::Delete(PackageName, ExternalPackages));
 				if (bRemovedOrphanFile) Entry->SetBoolField(TEXT("removedOrphanFile"), true);
 				if (bClosed) Entry->SetBoolField(TEXT("closedOpenEditor"), true);
 				Deleted++;
