@@ -77,6 +77,11 @@
       "summary": "running ue-mcp init a second time is idempotent"
     },
     {
+      "id": "cli.init.agent-guides",
+      "group": "cli",
+      "summary": "init writes a delimited ue-mcp block into AGENTS.md, GEMINI.md or .github/copilot-instructions.md for the clients it configures, keeps the user's own text, reruns unchanged, and removes the block when a client is dropped or --no-agent-guides is passed"
+    },
+    {
       "id": "cli.init.interactive",
       "group": "cli",
       "summary": "ue-mcp init without --yes walks the interactive prompts on a terminal"
@@ -460,6 +465,11 @@
       "id": "server.media-content",
       "group": "server",
       "summary": "an image or audio a bridge result carries in media comes back as MCP image or audio content, not base64 inside the JSON text"
+    },
+    {
+      "id": "server.skill-prompts",
+      "group": "server",
+      "summary": "prompts/list and prompts/get serve every shipped skill as a prompt, and resources/list and resources/read serve it as a markdown resource at skill://ue-mcp/<name>, with or without an editor"
     },
     {
       "id": "gateway.list_categories",
