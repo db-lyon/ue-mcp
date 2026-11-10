@@ -133,7 +133,6 @@ TSharedPtr<FJsonValue> FMachineLearningHandlers::NNEListRuntimes(const TSharedPt
 
 	// LiteRT is the 5.9 addition; say whether it is there, enabled and registered.
 	TSharedPtr<FJsonObject> LiteRT = NNEPluginState(TEXT("NNERuntimeLiteRT"));
-	LiteRT->SetBoolField(TEXT("expectedOnThisEngine"), UE_MCP_HAS_5_9_API != 0);
 	LiteRT->SetStringField(TEXT("runtimeName"), TEXT("NNERuntimeLiteRT"));
 	LiteRT->SetStringField(TEXT("modelFileType"), TEXT("tflite"));
 
@@ -161,6 +160,13 @@ TSharedPtr<FJsonValue> FMachineLearningHandlers::NNEListRuntimes(const TSharedPt
 	const bool bLiteRTRegistered = NNERuntimeRegistered(TEXT("NNERuntimeLiteRT"));
 	LiteRT->SetBoolField(TEXT("runtimeRegistered"), bLiteRTRegistered);
 	LiteRT->SetBoolField(TEXT("cpu"), bLiteRTRegistered && UE::NNE::GetRuntime<INNERuntimeCPU>(TEXT("NNERuntimeLiteRT")).IsValid());
+	bool bLiteRTEnabled = false;
+	if (!bLiteRTRegistered && LiteRT->TryGetBoolField(TEXT("enabled"), bLiteRTEnabled) && bLiteRTEnabled)
+	{
+		// The 5.9 launcher build loads the plugin's module with the LiteRT library compiled out
+		// (WITH_NNE_RUNTIME_LITERT=0 in its Build.cs), so it registers no runtime.
+		LiteRT->SetStringField(TEXT("note"), TEXT("The NNERuntimeLiteRT plugin is enabled but registered no runtime. Engine builds that compile it without the LiteRT library (WITH_NNE_RUNTIME_LITERT=0) load the module and offer nothing; use NNERuntimeORT, or an engine built with LiteRT."));
+	}
 #else
 	Result->SetArrayField(TEXT("runtimes"), TArray<TSharedPtr<FJsonValue>>());
 	Result->SetNumberField(TEXT("count"), 0);

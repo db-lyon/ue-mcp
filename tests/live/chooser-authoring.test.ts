@@ -41,14 +41,28 @@ const message = (r: TestResult): string => `${r.error ?? ""} ${JSON.stringify(r.
 
 let bridge: EditorBridge;
 
+/**
+ * Saving a chooser runs data validation, whose progress window can still be up
+ * when the next call lands; the dialog gate refuses calls while it is. Wait it
+ * out (it closes on its own) rather than fail on the timing.
+ */
+async function callPastValidation(method: string, params: Json): Promise<TestResult> {
+  for (let attempt = 0; ; attempt++) {
+    const r = await callBridge(bridge, method, params);
+    const b = body(r);
+    if (!(b.dialogBlocking === true && String(b.dialogMessage).startsWith("Validating Assets")) || attempt >= 40) return r;
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+}
+
 async function call(method: string, params: Json): Promise<Json> {
-  const r = await callBridge(bridge, method, params);
+  const r = await callPastValidation(method, params);
   expect(succeeded(r), `${method}: ${message(r)}`).toBe(true);
   return body(r);
 }
 
 async function refused(method: string, params: Json): Promise<string> {
-  const r = await callBridge(bridge, method, params);
+  const r = await callPastValidation(method, params);
   expect(succeeded(r), `${method} should have been refused: ${message(r)}`).toBe(false);
   return message(r);
 }
