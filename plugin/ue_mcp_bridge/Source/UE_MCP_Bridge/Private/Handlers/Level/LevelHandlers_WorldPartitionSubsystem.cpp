@@ -518,14 +518,15 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetRuntimePartitionProperties(const TShar
 
 	// Resolve every name before writing any of them, so a typo writes nothing.
 	TArray<TPair<FProperty*, TSharedPtr<FJsonValue>>> Writes;
-	for (const TPair<FString, TSharedPtr<FJsonValue>>& Pair : (*PropertiesField)->Values)
+	for (const auto& Pair : (*PropertiesField)->Values)
 	{
-		FProperty* Prop = MCPJsonProperty::FindMemberProperty(Partition->GetClass(), Pair.Key);
+		const FString Key(Pair.Key);
+		FProperty* Prop = MCPJsonProperty::FindMemberProperty(Partition->GetClass(), Key);
 		if (!Prop || !Prop->HasAnyPropertyFlags(CPF_Edit))
 		{
 			return MCPError(FString::Printf(
 				TEXT("'%s' is not an editable property of %s. level(get_runtime_partition) lists the ones it has; nothing was written."),
-				*Pair.Key, *Partition->GetClass()->GetName()));
+				*Key, *Partition->GetClass()->GetName()));
 		}
 		Writes.Add(TPair<FProperty*, TSharedPtr<FJsonValue>>(Prop, Pair.Value));
 	}

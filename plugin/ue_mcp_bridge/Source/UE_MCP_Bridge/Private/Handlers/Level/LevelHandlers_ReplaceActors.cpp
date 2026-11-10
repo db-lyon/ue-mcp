@@ -264,12 +264,13 @@ TSharedPtr<FJsonValue> FLevelHandlers::RebuildBrush(const TSharedPtr<FJsonObject
 	TArray<TPair<FProperty*, TSharedPtr<FJsonValue>>> Writes;
 	if (bHasBuilderProps)
 	{
-		for (const TPair<FString, TSharedPtr<FJsonValue>>& Pair : (*BuilderPropsField)->Values)
+		for (const auto& Pair : (*BuilderPropsField)->Values)
 		{
-			FProperty* Prop = MCPJsonProperty::FindMemberProperty(TargetClass, Pair.Key);
+			const FString Key(Pair.Key);
+			FProperty* Prop = MCPJsonProperty::FindMemberProperty(TargetClass, Key);
 			if (!Prop || !Prop->HasAnyPropertyFlags(CPF_Edit))
 			{
-				return MCPError(FString::Printf(TEXT("'%s' is not an editable property of %s; nothing was rebuilt."), *Pair.Key, *TargetClass->GetName()));
+				return MCPError(FString::Printf(TEXT("'%s' is not an editable property of %s; nothing was rebuilt."), *Key, *TargetClass->GetName()));
 			}
 			Writes.Add(TPair<FProperty*, TSharedPtr<FJsonValue>>(Prop, Pair.Value));
 		}
