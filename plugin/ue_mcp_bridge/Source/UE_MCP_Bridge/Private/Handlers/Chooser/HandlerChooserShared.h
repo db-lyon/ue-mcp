@@ -16,6 +16,9 @@
 #include "ObjectChooser_Class.h"
 #include "MCPEngineCompat.h"
 #include "UObject/UnrealType.h"
+#include "UObject/UObjectIterator.h"
+#include "Algo/Reverse.h"
+#include "HandlerPropertyText.h"
 #if UE_MCP_HAS_5_5_API
 #include "Misc/StringOutputDevice.h"
 #else
@@ -268,12 +271,735 @@ inline UScriptStruct* MCPChooserResolveStruct(const FString& TypeName)
 	return nullptr;
 }
 
+// ─── Version-tolerant access to UChooserTable members ─────────────────────
+//
+// The members below moved or arrived between UE 5.4 and 5.9 (RootChooser
+// replaced ParentTable, NestedObjects replaced NestedChoosers, UChooserSignature
+// took over ResultType, OutputObjectType and ContextData). They are reached
+// through the property system by name so one code path builds on every engine
+// and a member an engine lacks is a runtime answer, not a compile break.
+
+/** The table that owns a nested chooser's asset, or the table itself. */
+inline UChooserTable* MCPChooserRoot(UChooserTable* Table)
+{
+	UChooserTable* Current = Table;
+	for (int32 Depth = 0; Current && Depth < 32; ++Depth)
+	{
+		UChooserTable* Next = nullptr;
+		for (const TCHAR* Field : { TEXT("RootChooser"), TEXT("ParentTable") })
+		{
+			if (FObjectPropertyBase* Prop = FindFProperty<FObjectPropertyBase>(UChooserTable::StaticClass(), Field))
+			{
+				Next = Cast<UChooserTable>(Prop->GetObjectPropertyValue_InContainer(Current));
+				if (Next) break;
+			}
+		}
+		if (!Next || Next == Current) return Current;
+		Current = Next;
+	}
+	return Current;
+}
+
+/** The array property the root table lists its nested objects in. */
+inline FArrayProperty* MCPChooserNestedArrayProperty()
+{
+	for (const TCHAR* Field : { TEXT("NestedObjects"), TEXT("NestedChoosers") })
+	{
+		FArrayProperty* Arr = FindFProperty<FArrayProperty>(UChooserTable::StaticClass(), Field);
+		if (Arr && CastField<FObjectPropertyBase>(Arr->Inner)) return Arr;
+	}
+	return nullptr;
+}
+
+/** Every nested object (nested choosers and column-owned objects) in a root table's asset. */
+inline TArray<UObject*> MCPChooserNestedObjects(UChooserTable* Root)
+{
+	TArray<UObject*> Out;
+	FArrayProperty* Arr = Root ? MCPChooserNestedArrayProperty() : nullptr;
+	if (!Arr) return Out;
+	FObjectPropertyBase* Inner = CastField<FObjectPropertyBase>(Arr->Inner);
+	FScriptArrayHelper Helper(Arr, Arr->ContainerPtrToValuePtr<void>(Root));
+	for (int32 i = 0; i < Helper.Num(); ++i)
+	{
+		if (UObject* Obj = Inner->GetObjectPropertyValue(Helper.GetRawPtr(i))) Out.AddUnique(Obj);
+	}
+	return Out;
+}
+
+/** Register an object in the root table's nested-object list. */
+inline bool MCPChooserAddNestedObject(UChooserTable* Root, UObject* Obj)
+{
+	FArrayProperty* Arr = (Root && Obj) ? MCPChooserNestedArrayProperty() : nullptr;
+	if (!Arr) return false;
+	FObjectPropertyBase* Inner = CastField<FObjectPropertyBase>(Arr->Inner);
+	FScriptArrayHelper Helper(Arr, Arr->ContainerPtrToValuePtr<void>(Root));
+	for (int32 i = 0; i < Helper.Num(); ++i)
+	{
+		if (Inner->GetObjectPropertyValue(Helper.GetRawPtr(i)) == Obj) return true;
+	}
+	const int32 NewIndex = Helper.AddValue();
+	Inner->SetObjectPropertyValue(Helper.GetRawPtr(NewIndex), Obj);
+	return true;
+}
+
+/** Drop an object from the root table's nested-object list. */
+inline void MCPChooserRemoveNestedObject(UChooserTable* Root, UObject* Obj)
+{
+	FArrayProperty* Arr = (Root && Obj) ? MCPChooserNestedArrayProperty() : nullptr;
+	if (!Arr) return;
+	FObjectPropertyBase* Inner = CastField<FObjectPropertyBase>(Arr->Inner);
+	FScriptArrayHelper Helper(Arr, Arr->ContainerPtrToValuePtr<void>(Root));
+	for (int32 i = Helper.Num() - 1; i >= 0; --i)
+	{
+		if (Inner->GetObjectPropertyValue(Helper.GetRawPtr(i)) == Obj) Helper.RemoveValues(i, 1);
+	}
+}
+
+/** Point a nested chooser at its root table, under whichever field this engine has. */
+inline void MCPChooserSetRoot(UChooserTable* Nested, UChooserTable* Root)
+{
+	if (!Nested) return;
+	if (FObjectPropertyBase* Prop = FindFProperty<FObjectPropertyBase>(UChooserTable::StaticClass(), TEXT("RootChooser")))
+	{
+		Prop->SetObjectPropertyValue_InContainer(Nested, Root);
+	}
+	else if (FObjectPropertyBase* Parent = FindFProperty<FObjectPropertyBase>(UChooserTable::StaticClass(), TEXT("ParentTable")))
+	{
+		Parent->SetObjectPropertyValue_InContainer(Nested, Root);
+	}
+}
+
+/** Load the table a request names: `table` is the asset (or a nested chooser's
+ *  object path) and `nested`, when given, picks a nested chooser in that asset
+ *  by name or path. Returns null with OutError set on a miss. */
+inline UChooserTable* MCPChooserResolve(const FString& TablePath, const FString& Nested, TSharedPtr<FJsonValue>& OutError)
+{
+	UChooserTable* Table = MCPChooserLoadTable(TablePath);
+	if (!Table && TablePath.Contains(TEXT(":")))
+	{
+		Table = FindObject<UChooserTable>(nullptr, *TablePath);
+		if (!Table)
+		{
+			// A nested chooser's path is "<asset>:<name>"; load the asset, then look it up.
+			FString AssetPart, NestedPart;
+			TablePath.Split(TEXT(":"), &AssetPart, &NestedPart, ESearchCase::IgnoreCase, ESearchDir::FromEnd);
+			if (UChooserTable* Owner = MCPChooserLoadTable(AssetPart))
+			{
+				for (UObject* Obj : MCPChooserNestedObjects(MCPChooserRoot(Owner)))
+				{
+					if (UChooserTable* Candidate = Cast<UChooserTable>(Obj))
+					{
+						if (Candidate->GetPathName() == TablePath || Candidate->GetName() == NestedPart) { Table = Candidate; break; }
+					}
+				}
+			}
+		}
+	}
+	if (!Table)
+	{
+		OutError = MCPAssetLoadError(TablePath, TEXT("ChooserTable"));
+		return nullptr;
+	}
+	if (Nested.IsEmpty()) return Table;
+
+	TArray<FString> Names;
+	for (UObject* Obj : MCPChooserNestedObjects(MCPChooserRoot(Table)))
+	{
+		if (UChooserTable* Candidate = Cast<UChooserTable>(Obj))
+		{
+			if (Candidate->GetName() == Nested || Candidate->GetPathName() == Nested) return Candidate;
+			Names.Add(Candidate->GetName());
+		}
+	}
+	OutError = MCPError(FString::Printf(TEXT("'%s' has no nested chooser named '%s'. Nested choosers: %s"),
+		*Table->GetPathName(), *Nested, Names.Num() ? *FString::Join(Names, TEXT(", ")) : TEXT("(none)")));
+	return nullptr;
+}
+
+/** The row index a column uses for its fallback cell (ChooserColumn_SpecialIndex_Fallback). */
+inline constexpr int32 MCPChooserFallbackIndex = -2;
+
+// ─── Columns ──────────────────────────────────────────────────────────────
+
+/** A column's base pointer, or null with OutError set. */
+inline FChooserColumnBase* MCPChooserColumn(UChooserTable* Table, int32 ColumnIndex, FString& OutError)
+{
+	if (!Table->ColumnsStructs.IsValidIndex(ColumnIndex))
+	{
+		OutError = FString::Printf(TEXT("column index %d out of range (columnCount=%d)"), ColumnIndex, Table->ColumnsStructs.Num());
+		return nullptr;
+	}
+	FChooserColumnBase* Column = Table->ColumnsStructs[ColumnIndex].GetMutablePtr<FChooserColumnBase>();
+	if (!Column)
+	{
+		OutError = FString::Printf(TEXT("column %d has no valid type (it may be defined in a plugin which is not loaded)"), ColumnIndex);
+	}
+	return Column;
+}
+
+/** Randomize columns must stay last, and a table holds at most one. */
+inline bool MCPChooserIsRandomizeColumn(const FInstancedStruct& ColumnData)
+{
+#if UE_MCP_HAS_5_7_API
+	const FChooserColumnBase* Column = ColumnData.GetPtr<FChooserColumnBase>();
+	return Column && Column->IsRandomizeColumn();
+#else
+	const UScriptStruct* SS = ColumnData.GetScriptStruct();
+	return SS && SS->GetName().Contains(TEXT("Randomize"));
+#endif
+}
+
+inline bool MCPChooserHasRandomizeColumn(const UChooserTable* Table)
+{
+	return Table->ColumnsStructs.Num() > 0 && MCPChooserIsRandomizeColumn(Table->ColumnsStructs.Last());
+}
+
+/** The column's editor-only disabled flag (FChooserColumnBase::bDisabled), or null. */
+inline bool* MCPChooserColumnDisabledPtr(FInstancedStruct& ColumnData)
+{
+	const UScriptStruct* SS = ColumnData.GetScriptStruct();
+	FBoolProperty* Prop = SS ? FindFProperty<FBoolProperty>(SS, TEXT("bDisabled")) : nullptr;
+	if (!Prop) return nullptr;
+	return Prop->ContainerPtrToValuePtr<bool>(ColumnData.GetMutableMemory());
+}
+
+/** The FInstancedStruct holding a column's input parameter, or null. */
+inline FInstancedStruct* MCPChooserColumnInput(FInstancedStruct& ColumnData)
+{
+#if UE_MCP_HAS_5_8_API
+	if (FChooserColumnBase* Column = ColumnData.GetMutablePtr<FChooserColumnBase>())
+	{
+		if (FInstancedStruct* Input = Column->GetInputValuePtr()) return Input;
+	}
+#endif
+	const UScriptStruct* SS = ColumnData.GetScriptStruct();
+	FStructProperty* Prop = SS ? FindFProperty<FStructProperty>(SS, TEXT("InputValue")) : nullptr;
+	if (!Prop || Prop->Struct != FInstancedStruct::StaticStruct()) return nullptr;
+	return Prop->ContainerPtrToValuePtr<FInstancedStruct>(ColumnData.GetMutableMemory());
+}
+
+/** Tell a column its input changed (FChooserColumnBase::InputValueChanged, 5.8+). */
+inline void MCPChooserInputChanged(FChooserColumnBase* Column)
+{
+#if UE_MCP_HAS_5_8_API
+	if (Column) Column->InputValueChanged();
+#endif
+}
+
+/** The property binding inside a column input struct (an FChooserPropertyBinding member), or null. */
+inline void* MCPChooserFindBinding(FInstancedStruct& Input, const FStructProperty** OutProp = nullptr)
+{
+	const UScriptStruct* InputType = Input.GetScriptStruct();
+	if (!InputType || !Input.GetMutableMemory()) return nullptr;
+	const UScriptStruct* BindingBase = FindObject<UScriptStruct>(nullptr, TEXT("/Script/Chooser.ChooserPropertyBinding"));
+	for (TFieldIterator<FStructProperty> It(InputType); It; ++It)
+	{
+		const bool bIsBinding = BindingBase ? It->Struct->IsChildOf(BindingBase) : It->Struct->GetName().EndsWith(TEXT("PropertyBinding"));
+		if (bIsBinding)
+		{
+			if (OutProp) *OutProp = *It;
+			return It->ContainerPtrToValuePtr<void>(Input.GetMutableMemory());
+		}
+	}
+	return nullptr;
+}
+
+/** Read a binding's parameter index and property chain. */
+inline bool MCPChooserReadBinding(const FStructProperty* BindingProp, const void* Binding, int32& OutContextIndex, TArray<FName>& OutChain, FString& OutDisplayName)
+{
+	OutContextIndex = INDEX_NONE;
+	OutChain.Reset();
+	OutDisplayName.Reset();
+	if (!BindingProp || !Binding) return false;
+	const UStruct* BS = BindingProp->Struct;
+	if (FIntProperty* IndexProp = FindFProperty<FIntProperty>(BS, TEXT("ContextIndex")))
+	{
+		OutContextIndex = IndexProp->GetPropertyValue_InContainer(Binding);
+	}
+	if (FArrayProperty* ChainProp = FindFProperty<FArrayProperty>(BS, TEXT("PropertyBindingChain")))
+	{
+		if (FNameProperty* NameInner = CastField<FNameProperty>(ChainProp->Inner))
+		{
+			FScriptArrayHelper Helper(ChainProp, ChainProp->ContainerPtrToValuePtr<void>(const_cast<void*>(Binding)));
+			for (int32 i = 0; i < Helper.Num(); ++i) OutChain.Add(NameInner->GetPropertyValue(Helper.GetRawPtr(i)));
+		}
+	}
+	if (FStrProperty* NameProp = FindFProperty<FStrProperty>(BS, TEXT("DisplayName")))
+	{
+		OutDisplayName = NameProp->GetPropertyValue_InContainer(Binding);
+	}
+	return true;
+}
+
+/** Write a binding the way the editor's binding menu does: the parameter index,
+ *  the chain of property names below it, IsBoundToRoot when the chain is empty
+ *  (bound to the parameter itself), and a display name. */
+inline void MCPChooserWriteBinding(const FStructProperty* BindingProp, void* Binding, int32 ContextIndex, const TArray<FName>& Chain, const FString& DisplayName)
+{
+	const UStruct* BS = BindingProp->Struct;
+	if (FIntProperty* IndexProp = FindFProperty<FIntProperty>(BS, TEXT("ContextIndex")))
+	{
+		IndexProp->SetPropertyValue_InContainer(Binding, ContextIndex);
+	}
+	if (FArrayProperty* ChainProp = FindFProperty<FArrayProperty>(BS, TEXT("PropertyBindingChain")))
+	{
+		if (FNameProperty* NameInner = CastField<FNameProperty>(ChainProp->Inner))
+		{
+			FScriptArrayHelper Helper(ChainProp, ChainProp->ContainerPtrToValuePtr<void>(Binding));
+			Helper.EmptyValues();
+			for (const FName& Name : Chain)
+			{
+				const int32 i = Helper.AddValue();
+				NameInner->SetPropertyValue(Helper.GetRawPtr(i), Name);
+			}
+		}
+	}
+	if (FBoolProperty* RootProp = FindFProperty<FBoolProperty>(BS, TEXT("IsBoundToRoot")))
+	{
+		RootProp->SetPropertyValue_InContainer(Binding, Chain.Num() == 0);
+	}
+	if (FStrProperty* NameProp = FindFProperty<FStrProperty>(BS, TEXT("DisplayName")))
+	{
+		NameProp->SetPropertyValue_InContainer(Binding, DisplayName);
+	}
+}
+
+// Per-row cell storage. The column virtuals are used where every engine this
+// was checked against (5.7 to 5.9) declares them; below that the same edit is
+// made on the column's row-values array through the property system, which is
+// where the boilerplate columns keep their cells.
+
+inline void MCPChooserColumnInsertRows(FInstancedStruct& ColumnData, int32 Index, int32 Count)
+{
+	FChooserColumnBase* Column = ColumnData.GetMutablePtr<FChooserColumnBase>();
+	if (!Column || Count <= 0) return;
+#if UE_MCP_HAS_5_7_API
+	Column->InsertRows(Index, Count);
+#else
+	FArrayProperty* Arr = nullptr; void* Data = nullptr; FString Ignored;
+	if (!MCPChooserRowValuesArray(ColumnData, Arr, Data, Ignored)) return;
+	FScriptArrayHelper Helper(Arr, Arr->ContainerPtrToValuePtr<void>(Data));
+	Index = FMath::Clamp(Index, 0, Helper.Num());
+	Helper.InsertValues(Index, Count);
+	if (FProperty* Default = ColumnData.GetScriptStruct()->FindPropertyByName(TEXT("DefaultRowValue")))
+	{
+		if (Default->SameType(Arr->Inner))
+		{
+			for (int32 i = 0; i < Count; ++i)
+			{
+				Arr->Inner->CopyCompleteValue(Helper.GetRawPtr(Index + i), Default->ContainerPtrToValuePtr<void>(Data));
+			}
+		}
+	}
+#endif
+}
+
+/** Move one row's cell so it lands before TargetIndex, an index from before the move. */
+inline void MCPChooserColumnMoveRow(FInstancedStruct& ColumnData, int32 SourceIndex, int32 TargetIndex)
+{
+	FChooserColumnBase* Column = ColumnData.GetMutablePtr<FChooserColumnBase>();
+	if (!Column) return;
+#if UE_MCP_HAS_5_7_API
+	Column->MoveRow(SourceIndex, TargetIndex);
+#else
+	FArrayProperty* Arr = nullptr; void* Data = nullptr; FString Ignored;
+	if (!MCPChooserRowValuesArray(ColumnData, Arr, Data, Ignored)) return;
+	FScriptArrayHelper Helper(Arr, Arr->ContainerPtrToValuePtr<void>(Data));
+	if (!Helper.IsValidIndex(SourceIndex)) return;
+	if (SourceIndex < TargetIndex) --TargetIndex;
+	TargetIndex = FMath::Clamp(TargetIndex, 0, Helper.Num() - 1);
+	while (SourceIndex < TargetIndex) { Helper.SwapValues(SourceIndex, SourceIndex + 1); ++SourceIndex; }
+	while (SourceIndex > TargetIndex) { Helper.SwapValues(SourceIndex, SourceIndex - 1); --SourceIndex; }
+#endif
+}
+
+/** Copy one cell from Source (a column of the same type) into Target. */
+inline void MCPChooserColumnCopyRow(FInstancedStruct& Target, FInstancedStruct& Source, int32 SourceIndex, int32 TargetIndex)
+{
+	if (Target.GetScriptStruct() != Source.GetScriptStruct()) return;
+	FChooserColumnBase* TargetColumn = Target.GetMutablePtr<FChooserColumnBase>();
+	FChooserColumnBase* SourceColumn = Source.GetMutablePtr<FChooserColumnBase>();
+	if (!TargetColumn || !SourceColumn) return;
+#if UE_MCP_HAS_5_7_API
+	TargetColumn->CopyRow(*SourceColumn, SourceIndex, TargetIndex);
+#else
+	FArrayProperty* Arr = nullptr; void* TargetData = nullptr; void* SourceData = nullptr; FString Ignored;
+	if (!MCPChooserRowValuesArray(Target, Arr, TargetData, Ignored)) return;
+	SourceData = Source.GetMutableMemory();
+	FScriptArrayHelper TargetRows(Arr, Arr->ContainerPtrToValuePtr<void>(TargetData));
+	FScriptArrayHelper SourceRows(Arr, Arr->ContainerPtrToValuePtr<void>(SourceData));
+	if (!TargetRows.IsValidIndex(TargetIndex) || !SourceRows.IsValidIndex(SourceIndex)) return;
+	Arr->Inner->CopyCompleteValue(TargetRows.GetRawPtr(TargetIndex), SourceRows.GetRawPtr(SourceIndex));
+#endif
+}
+
+/** The property an output column keeps its fallback cell in, or null when it has none. */
+inline FProperty* MCPChooserFallbackValueProperty(const FInstancedStruct& ColumnData)
+{
+	const UScriptStruct* SS = ColumnData.GetScriptStruct();
+	if (!SS) return nullptr;
+	for (const TCHAR* Field : { TEXT("FallbackValue"), TEXT("bFallbackValue") })
+	{
+		if (FProperty* Prop = SS->FindPropertyByName(Field)) return Prop;
+	}
+	return nullptr;
+}
+
+inline void MCPChooserColumnCopyFallback(FInstancedStruct& Target, FInstancedStruct& Source)
+{
+	if (Target.GetScriptStruct() != Source.GetScriptStruct()) return;
+	FProperty* Prop = MCPChooserFallbackValueProperty(Target);
+	if (!Prop) return;
+	Prop->CopyCompleteValue(Prop->ContainerPtrToValuePtr<void>(Target.GetMutableMemory()), Prop->ContainerPtrToValuePtr<void>(Source.GetMutableMemory()));
+}
+
+/** Delete rows' cells from one column. Rows must be sorted ascending; they are removed from the end. */
+inline void MCPChooserColumnDeleteRows(FInstancedStruct& ColumnData, const TArray<int32>& SortedRows)
+{
+	FChooserColumnBase* Column = ColumnData.GetMutablePtr<FChooserColumnBase>();
+	if (!Column) return;
+	// The column removes in the order given, so the highest index goes first
+	// and every earlier index still names the row it named before.
+#if UE_MCP_HAS_5_8_API
+	TArray<int32> Descending = SortedRows;
+	Algo::Reverse(Descending);
+	Column->DeleteRows(TArrayView<int32>(Descending));
+#else
+	TArray<uint32> Descending;
+	for (int32 i = SortedRows.Num() - 1; i >= 0; --i) Descending.Add(static_cast<uint32>(SortedRows[i]));
+	Column->DeleteRows(Descending);
+#endif
+}
+
+/** Size every column's cells and the disabled flags to the row count, as the editor does before an edit. */
+inline void MCPChooserSyncRowCounts(UChooserTable* Table)
+{
+	MCPChooserGrowDisabledRows(Table);
+#if UE_MCP_HAS_5_5_API
+	if (Table->DisabledRows.Num() > Table->ResultsStructs.Num()) Table->DisabledRows.SetNum(Table->ResultsStructs.Num());
+#endif
+	for (FInstancedStruct& ColumnData : Table->ColumnsStructs)
+	{
+		if (FChooserColumnBase* Column = ColumnData.GetMutablePtr<FChooserColumnBase>())
+		{
+			Column->SetNumRows(Table->ResultsStructs.Num());
+		}
+	}
+}
+
+/** Insert a column where the editor would: before a trailing randomize column,
+ *  unless it is itself the randomize column. InsertIndex INDEX_NONE means the
+ *  editor's placement; otherwise it is clamped so it never lands after a randomize column. */
+inline int32 MCPChooserColumnInsertPosition(const UChooserTable* Table, const FInstancedStruct& NewColumn, int32 InsertIndex)
+{
+	const int32 Num = Table->ColumnsStructs.Num();
+	const bool bHasRandomize = MCPChooserHasRandomizeColumn(Table);
+	if (MCPChooserIsRandomizeColumn(NewColumn)) return Num;
+	const int32 Limit = bHasRandomize ? Num - 1 : Num;
+	if (InsertIndex == INDEX_NONE) return Limit;
+	return FMath::Clamp(InsertIndex, 0, Limit);
+}
+
+// ─── Auto populate (FChooserColumnBase::AutoPopulate, 5.7+) ───────────────
+
+inline constexpr bool MCPChooserAutoPopulateSupported()
+{
+#if UE_MCP_HAS_5_7_API
+	return true;
+#else
+	return false;
+#endif
+}
+
+/** The object a row's result references (null for none). */
+inline UObject* MCPChooserReferencedObject(const FInstancedStruct& Result)
+{
+#if UE_MCP_HAS_5_5_API && WITH_EDITOR
+	if (const FObjectChooserBase* Base = Result.GetPtr<FObjectChooserBase>()) return Base->GetReferencedObject();
+#endif
+	return nullptr;
+}
+
+inline bool MCPChooserColumnAutoPopulates(const FInstancedStruct& ColumnData)
+{
+#if UE_MCP_HAS_5_7_API
+	const FChooserColumnBase* Column = ColumnData.GetPtr<FChooserColumnBase>();
+	return Column && Column->AutoPopulates();
+#else
+	return false;
+#endif
+}
+
+/** Fill every auto populating column's cell for one row (or MCPChooserFallbackIndex) from the row's result. */
+inline void MCPChooserAutoPopulateRow(UChooserTable* Table, int32 RowIndex)
+{
+#if UE_MCP_HAS_5_7_API
+	MCPChooserSyncRowCounts(Table);
+	if (RowIndex != MCPChooserFallbackIndex && !Table->ResultsStructs.IsValidIndex(RowIndex)) return;
+	const FInstancedStruct& Result = RowIndex == MCPChooserFallbackIndex ? Table->FallbackResult : Table->ResultsStructs[RowIndex];
+	if (!Result.GetPtr<FObjectChooserBase>()) return;
+	UObject* Referenced = MCPChooserReferencedObject(Result);
+	for (FInstancedStruct& ColumnData : Table->ColumnsStructs)
+	{
+		if (FChooserColumnBase* Column = ColumnData.GetMutablePtr<FChooserColumnBase>())
+		{
+			if (Column->AutoPopulates()) Column->AutoPopulate(RowIndex, Referenced);
+		}
+	}
+#endif
+}
+
+/** Fill one auto populating column's cells for every row and the fallback. */
+inline void MCPChooserAutoPopulateColumn(UChooserTable* Table, FInstancedStruct& ColumnData)
+{
+#if UE_MCP_HAS_5_7_API
+	MCPChooserSyncRowCounts(Table);
+	FChooserColumnBase* Column = ColumnData.GetMutablePtr<FChooserColumnBase>();
+	if (!Column || !Column->AutoPopulates()) return;
+	for (int32 Row = 0; Row < Table->ResultsStructs.Num(); ++Row)
+	{
+		Column->AutoPopulate(Row, MCPChooserReferencedObject(Table->ResultsStructs[Row]));
+	}
+	Column->AutoPopulate(MCPChooserFallbackIndex, MCPChooserReferencedObject(Table->FallbackResult));
+#endif
+}
+
+// ─── Signature (result type, result class, parameters) ────────────────────
+
+/** The object whose ResultType, OutputObjectType and ContextData a chooser uses:
+ *  the root table for a nested chooser, the asset itself otherwise. */
+inline UObject* MCPChooserSignatureOwner(UObject* Asset)
+{
+	if (UChooserTable* Table = Cast<UChooserTable>(Asset)) return MCPChooserRoot(Table);
+	return Asset;
+}
+
+/** The signature asset Owner inherits from (UChooserSignature::Signature, 5.9), or null. */
+inline UObject* MCPChooserInheritedSignature(UObject* Owner)
+{
+	FObjectPropertyBase* Prop = Owner ? FindFProperty<FObjectPropertyBase>(Owner->GetClass(), TEXT("Signature")) : nullptr;
+	return Prop ? Prop->GetObjectPropertyValue_InContainer(Owner) : nullptr;
+}
+
+/** Owner's locally authored ContextData (the parameter list), or null when the class has none. */
+inline TArray<FInstancedStruct>* MCPChooserContextData(UObject* Owner)
+{
+	FArrayProperty* Arr = Owner ? FindFProperty<FArrayProperty>(Owner->GetClass(), TEXT("ContextData")) : nullptr;
+	FStructProperty* Inner = Arr ? CastField<FStructProperty>(Arr->Inner) : nullptr;
+	if (!Inner || Inner->Struct != FInstancedStruct::StaticStruct()) return nullptr;
+	return Arr->ContainerPtrToValuePtr<TArray<FInstancedStruct>>(Owner);
+}
+
+/** The parameters a chooser actually evaluates with: the inherited signature's when one is set. */
+inline TArray<FInstancedStruct>* MCPChooserResolvedContextData(UObject* Owner)
+{
+	UObject* Current = Owner;
+	for (int32 Depth = 0; Depth < 8; ++Depth)
+	{
+		UObject* Next = MCPChooserInheritedSignature(Current);
+		if (!Next || Next == Owner) break;
+		Current = Next;
+	}
+	return MCPChooserContextData(Current);
+}
+
+/** The enum-valued ResultType property and its enum. */
+inline bool MCPChooserResultTypeProperty(UObject* Owner, FProperty*& OutProp, UEnum*& OutEnum)
+{
+	OutProp = Owner ? FindFProperty<FProperty>(Owner->GetClass(), TEXT("ResultType")) : nullptr;
+	OutEnum = nullptr;
+	if (FEnumProperty* EnumProp = CastField<FEnumProperty>(OutProp)) OutEnum = EnumProp->GetEnum();
+	else if (FByteProperty* ByteProp = CastField<FByteProperty>(OutProp)) OutEnum = ByteProp->Enum;
+	return OutProp && OutEnum;
+}
+
+/** ResultType as its enum name: ObjectResult, ClassResult or NoPrimaryResult. */
+inline FString MCPChooserGetResultTypeName(UObject* Owner)
+{
+	FProperty* Prop = nullptr; UEnum* Enum = nullptr;
+	if (!MCPChooserResultTypeProperty(Owner, Prop, Enum)) return FString();
+	const void* Addr = Prop->ContainerPtrToValuePtr<void>(Owner);
+	int64 Value = 0;
+	if (FEnumProperty* EnumProp = CastField<FEnumProperty>(Prop)) Value = EnumProp->GetUnderlyingProperty()->GetSignedIntPropertyValue(Addr);
+	else Value = CastField<FByteProperty>(Prop)->GetPropertyValue(Addr);
+	return Enum->GetNameStringByValue(Value);
+}
+
+inline bool MCPChooserSetResultTypeName(UObject* Owner, const FString& Name, FString& OutError)
+{
+	FProperty* Prop = nullptr; UEnum* Enum = nullptr;
+	if (!MCPChooserResultTypeProperty(Owner, Prop, Enum)) { OutError = TEXT("this asset has no ResultType"); return false; }
+	const int64 Value = Enum->GetValueByNameString(Name);
+	if (Value == INDEX_NONE)
+	{
+		OutError = FString::Printf(TEXT("invalid result type '%s', must be ObjectResult, ClassResult or NoPrimaryResult"), *Name);
+		return false;
+	}
+	void* Addr = Prop->ContainerPtrToValuePtr<void>(Owner);
+	if (FEnumProperty* EnumProp = CastField<FEnumProperty>(Prop)) EnumProp->GetUnderlyingProperty()->SetIntPropertyValue(Addr, Value);
+	else CastField<FByteProperty>(Prop)->SetPropertyValue(Addr, static_cast<uint8>(Value));
+	return true;
+}
+
+inline FObjectPropertyBase* MCPChooserResultClassProperty(UObject* Owner)
+{
+	return Owner ? FindFProperty<FObjectPropertyBase>(Owner->GetClass(), TEXT("OutputObjectType")) : nullptr;
+}
+
+// ─── Types ────────────────────────────────────────────────────────────────
+
+/** Base struct of a parameter (FContextObjectTypeBase), looked up by name. */
+inline const UScriptStruct* MCPChooserParameterBaseStruct()
+{
+	return FindObject<UScriptStruct>(nullptr, TEXT("/Script/Chooser.ContextObjectTypeBase"));
+}
+
+/** Every loaded struct deriving from Base (Base itself and Hidden ones excluded), by path, sorted. */
+inline TArray<FString> MCPChooserAvailableTypes(const UScriptStruct* Base)
+{
+	TArray<FString> Out;
+	if (!Base) return Out;
+	for (TObjectIterator<UScriptStruct> It; It; ++It)
+	{
+		if (*It == Base || !It->IsChildOf(Base)) continue;
+#if WITH_EDITORONLY_DATA
+		if (It->HasMetaData(TEXT("Hidden"))) continue;
+#endif
+		Out.Add(It->GetPathName());
+	}
+	Out.Sort();
+	return Out;
+}
+
+/** Resolve a type name deriving from RequiredBase: a full path, a short name
+ *  (with or without the C++ F prefix) or a display name. */
+inline const UScriptStruct* MCPChooserFindType(const FString& InTypeName, const UScriptStruct* RequiredBase, FString& OutError)
+{
+	const FString TypeName = InTypeName.TrimStartAndEnd();
+	if (TypeName.IsEmpty()) { OutError = TEXT("empty type name"); return nullptr; }
+	if (!RequiredBase) { OutError = TEXT("the base type is not loaded"); return nullptr; }
+	const UScriptStruct* Found = nullptr;
+	if (TypeName.StartsWith(TEXT("/")))
+	{
+		Found = FindObject<UScriptStruct>(nullptr, *TypeName);
+		if (!Found && !TypeName.StartsWith(TEXT("/Script/")))
+		{
+			Found = LoadObject<UScriptStruct>(nullptr, *TypeName, nullptr, LOAD_NoWarn | LOAD_Quiet);
+		}
+	}
+	else
+	{
+		const FString Bare = (TypeName.Len() > 1 && TypeName[0] == TEXT('F') && FChar::IsUpper(TypeName[1])) ? TypeName.RightChop(1) : TypeName;
+		TArray<const UScriptStruct*> ByName, ByDisplay;
+		for (TObjectIterator<UScriptStruct> It; It; ++It)
+		{
+			if (*It == RequiredBase || !It->IsChildOf(RequiredBase)) continue;
+			if (It->GetName().Equals(TypeName, ESearchCase::IgnoreCase) || It->GetName().Equals(Bare, ESearchCase::IgnoreCase)) ByName.Add(*It);
+#if WITH_EDITOR
+			else if (It->GetDisplayNameText().ToString().Equals(TypeName, ESearchCase::IgnoreCase)) ByDisplay.Add(*It);
+#endif
+		}
+		const TArray<const UScriptStruct*>& Matches = ByName.Num() ? ByName : ByDisplay;
+		if (Matches.Num() > 1)
+		{
+			TArray<FString> Paths;
+			for (const UScriptStruct* M : Matches) Paths.Add(M->GetPathName());
+			OutError = FString::Printf(TEXT("'%s' is ambiguous: %s. Pass the full path"), *TypeName, *FString::Join(Paths, TEXT(", ")));
+			return nullptr;
+		}
+		Found = Matches.Num() ? Matches[0] : nullptr;
+	}
+	if (!Found)
+	{
+		OutError = FString::Printf(TEXT("no type named '%s' derives from %s (chooser(list_types) lists them)"), *TypeName, *RequiredBase->GetName());
+		return nullptr;
+	}
+	if (Found == RequiredBase || !Found->IsChildOf(RequiredBase))
+	{
+		OutError = FString::Printf(TEXT("%s does not derive from %s"), *Found->GetPathName(), *RequiredBase->GetName());
+		return nullptr;
+	}
+	return Found;
+}
+
+/** Build a default result of ResultType for a row or the fallback, under the
+ *  editor's rules: empty is allowed only on a chooser with no primary result,
+ *  and a type tagged ResultType=Class or Object must match the chooser. */
+inline bool MCPChooserMakeResult(UChooserTable* Table, const FString& ResultType, FInstancedStruct& Out, FString& OutError)
+{
+	const FString ChooserResultType = MCPChooserGetResultTypeName(MCPChooserSignatureOwner(Table));
+	if (ResultType.TrimStartAndEnd().IsEmpty())
+	{
+		if (ChooserResultType != TEXT("NoPrimaryResult"))
+		{
+			OutError = TEXT("a resultType is required (chooser(list_types, kind='result') lists them); it may be empty only on a chooser whose result type is NoPrimaryResult");
+			return false;
+		}
+		// Every row needs a valid result, or it does not apply its outputs.
+		Out.InitializeAs(FClassChooser::StaticStruct());
+		if (FObjectPropertyBase* ClassProp = FindFProperty<FObjectPropertyBase>(FClassChooser::StaticStruct(), TEXT("Class")))
+		{
+			ClassProp->SetObjectPropertyValue_InContainer(Out.GetMutableMemory(), UClass::StaticClass());
+		}
+		return true;
+	}
+	const UScriptStruct* Type = MCPChooserFindType(ResultType, FObjectChooserBase::StaticStruct(), OutError);
+	if (!Type) return false;
+#if WITH_EDITORONLY_DATA
+	if (Type->HasMetaData(TEXT("ResultType")))
+	{
+		const FString Meta = Type->GetMetaData(TEXT("ResultType"));
+		if ((Meta == TEXT("Class") && ChooserResultType == TEXT("ObjectResult")) || (Meta == TEXT("Object") && ChooserResultType == TEXT("ClassResult")))
+		{
+			OutError = FString::Printf(TEXT("result type '%s' can only be used in choosers which return a %s"), *Type->GetName(), *Meta);
+			return false;
+		}
+	}
+#endif
+	Out.InitializeAs(Type);
+	return true;
+}
+
+// ─── Property paths ───────────────────────────────────────────────────────
+
+/** Import Text into a property value only if all of it parses: the value is
+ *  written to a scratch copy first, so a rejected write leaves nothing changed. */
+inline bool MCPChooserImportValidated(FProperty* Prop, void* Addr, const FString& Text, UObject* Owner, FString& OutError)
+{
+	void* Scratch = FMemory::Malloc(Prop->GetSize(), Prop->GetMinAlignment());
+	Prop->InitializeValue(Scratch);
+	Prop->CopyCompleteValue(Scratch, Addr);
+	const bool bOk = MCPPropertyText::ImportTextIntoProperty(Prop, Scratch, Text, Owner, OutError);
+	if (bOk) Prop->CopyCompleteValue(Addr, Scratch);
+	Prop->DestroyValue(Scratch);
+	FMemory::Free(Scratch);
+	return bOk;
+}
+
+// ─── Persist ──────────────────────────────────────────────────────────────
+
 // Persist a chooser after structural edits: recompile cooked data, notify, save.
-// Returns whether the package reached disk, with the reason when it did not.
+// A nested chooser is compiled with its root and saved through the root's
+// package, which is the asset on disk. Returns whether the package reached
+// disk, with the reason when it did not.
 inline bool MCPChooserFinalize(UChooserTable* Table, FString& OutSaveError)
 {
+	UChooserTable* Root = MCPChooserRoot(Table);
 	Table->Compile(true);
 	Table->PostEditChange();
-	return SaveAssetPackageChecked(Table, OutSaveError);
+	if (Root && Root != Table)
+	{
+		Root->Compile(true);
+		Root->PostEditChange();
+	}
+#if UE_MCP_HAS_5_9_API && WITH_EDITOR
+	// An open Chooser Table editor redraws on these, as it does after its own edits.
+	if (Root)
+	{
+		Root->ColumnsChanged.Broadcast();
+		Root->RowsChanged.Broadcast();
+	}
+#endif
+	return SaveAssetPackageChecked(Root ? Root : Table, OutSaveError);
 }
 

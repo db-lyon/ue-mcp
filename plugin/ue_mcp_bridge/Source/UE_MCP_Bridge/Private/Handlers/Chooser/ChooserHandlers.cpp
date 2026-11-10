@@ -164,13 +164,19 @@ TSharedPtr<FJsonValue> FChooserHandlers::Describe(const TSharedPtr<FJsonObject>&
 {
 	FString TablePath;
 	if (auto Err = RequireString(Params, TEXT("table"), TablePath)) return Err;
-	UChooserTable* Table = MCPChooserLoadTable(TablePath);
-	if (!Table) return MCPAssetLoadError(TablePath, TEXT("ChooserTable"));
+	const FString Nested = OptionalString(Params, TEXT("nested"));
+	TSharedPtr<FJsonValue> ResolveError;
+	UChooserTable* Table = MCPChooserResolve(TablePath, Nested, ResolveError);
+	if (!Table) return ResolveError;
 
 	TSharedPtr<FJsonObject> Res = MCPSuccess();
 	Res->SetStringField(TEXT("path"), Table->GetPathName());
 	Res->SetStringField(TEXT("name"), Table->GetName());
 	Res->SetNumberField(TEXT("rowCount"), MCPChooserRowCount(Table));
+	UChooserTable* Root = MCPChooserRoot(Table);
+	Res->SetBoolField(TEXT("isNested"), Root != Table);
+	Res->SetStringField(TEXT("rootChooser"), Root ? Root->GetPathName() : FString());
+	Res->SetStringField(TEXT("resultType"), MCPChooserGetResultTypeName(MCPChooserSignatureOwner(Table)));
 
 	TArray<TSharedPtr<FJsonValue>> Columns;
 	for (int32 c = 0; c < Table->ColumnsStructs.Num(); ++c)
@@ -180,6 +186,31 @@ TSharedPtr<FJsonValue> FChooserHandlers::Describe(const TSharedPtr<FJsonObject>&
 		Col->SetStringField(TEXT("name"), MCPChooserColumnName(Table->ColumnsStructs[c], c));
 		const UScriptStruct* SS = Table->ColumnsStructs[c].GetScriptStruct();
 		Col->SetStringField(TEXT("columnType"), SS ? SS->GetName() : FString());
+		if (const bool* Disabled = MCPChooserColumnDisabledPtr(Table->ColumnsStructs[c]))
+		{
+			Col->SetBoolField(TEXT("disabled"), *Disabled);
+		}
+		Col->SetBoolField(TEXT("randomize"), MCPChooserIsRandomizeColumn(Table->ColumnsStructs[c]));
+		Col->SetBoolField(TEXT("autoPopulates"), MCPChooserColumnAutoPopulates(Table->ColumnsStructs[c]));
+		Col->SetBoolField(TEXT("hasFallbackValue"), MCPChooserFallbackValueProperty(Table->ColumnsStructs[c]) != nullptr);
+		if (FInstancedStruct* Input = MCPChooserColumnInput(Table->ColumnsStructs[c]))
+		{
+			const UScriptStruct* InputType = Input->GetScriptStruct();
+			Col->SetStringField(TEXT("inputType"), InputType ? InputType->GetPathName() : FString());
+			const FStructProperty* BindingProp = nullptr;
+			if (void* Binding = MCPChooserFindBinding(*Input, &BindingProp))
+			{
+				int32 ContextIndex = INDEX_NONE; TArray<FName> Chain; FString DisplayName;
+				MCPChooserReadBinding(BindingProp, Binding, ContextIndex, Chain, DisplayName);
+				TSharedPtr<FJsonObject> BindingJson = MakeShared<FJsonObject>();
+				BindingJson->SetNumberField(TEXT("parameterIndex"), ContextIndex);
+				TArray<TSharedPtr<FJsonValue>> ChainJson;
+				for (const FName& Name : Chain) ChainJson.Add(MakeShared<FJsonValueString>(Name.ToString()));
+				BindingJson->SetArrayField(TEXT("propertyChain"), ChainJson);
+				BindingJson->SetStringField(TEXT("displayName"), DisplayName);
+				Col->SetObjectField(TEXT("binding"), BindingJson);
+			}
+		}
 #if WITH_EDITOR
 		// Expose the cell struct type so callers know the text format to author.
 		FArrayProperty* ArrProp = nullptr; void* ColData = nullptr; FString Ignored;
@@ -200,6 +231,7 @@ TSharedPtr<FJsonValue> FChooserHandlers::Describe(const TSharedPtr<FJsonObject>&
 	Res->SetArrayField(TEXT("columns"), Columns);
 
 	// Fallback result (used when no row matches).
+	Res->SetBoolField(TEXT("hasFallback"), Table->FallbackResult.IsValid());
 #if WITH_EDITORONLY_DATA
 	if (Table->FallbackResult.IsValid())
 	{
@@ -220,9 +252,12 @@ TSharedPtr<FJsonValue> FChooserHandlers::AddColumn(const TSharedPtr<FJsonObject>
 	const FString InputStruct = OptionalString(Params, TEXT("inputStruct"));
 	const FString BoundProperty = OptionalString(Params, TEXT("boundProperty"));
 	const FString EnumPath = OptionalString(Params, TEXT("enumPath"));
+	const FString Nested = OptionalString(Params, TEXT("nested"));
+	const int32 RequestedIndex = OptionalInt(Params, TEXT("insertIndex"), INDEX_NONE);
 
-	UChooserTable* Table = MCPChooserLoadTable(TablePath);
-	if (!Table) return MCPAssetLoadError(TablePath, TEXT("ChooserTable"));
+	TSharedPtr<FJsonValue> ResolveError;
+	UChooserTable* Table = MCPChooserResolve(TablePath, Nested, ResolveError);
+	if (!Table) return ResolveError;
 
 	UScriptStruct* ColStruct = MCPChooserResolveStruct(ColumnType);
 	if (!ColStruct)
@@ -233,18 +268,29 @@ TSharedPtr<FJsonValue> FChooserHandlers::AddColumn(const TSharedPtr<FJsonObject>
 	{
 		return MCPError(FString::Printf(TEXT("%s is not a ChooserColumn"), *ColStruct->GetName()));
 	}
+	if (RequestedIndex != INDEX_NONE && (RequestedIndex < 0 || RequestedIndex > Table->ColumnsStructs.Num()))
+	{
+		return MCPError(FString::Printf(TEXT("insertIndex %d out of range (columnCount=%d)"), RequestedIndex, Table->ColumnsStructs.Num()));
+	}
 
-	Table->Modify();
 	FInstancedStruct NewColumn;
 	NewColumn.InitializeAs(ColStruct);
+	if (MCPChooserIsRandomizeColumn(NewColumn) && MCPChooserHasRandomizeColumn(Table))
+	{
+		return MCPError(TEXT("The chooser already has a randomize column, and a table holds at most one"));
+	}
+
+	Table->Modify();
 	if (FChooserColumnBase* Col = NewColumn.GetMutablePtr<FChooserColumnBase>())
 	{
 		ConfigureColumnInput(Col, InputStruct, BoundProperty, EnumPath);
 		// Size the new column's per-row cell array to the existing row count.
 		Col->SetNumRows(MCPChooserRowCount(Table));
 	}
-	const int32 NewIndex = Table->ColumnsStructs.Num();
-	Table->ColumnsStructs.Add(MoveTemp(NewColumn));
+	// Placed where the editor places a column: a randomize column goes last and
+	// every other column goes before it, at insertIndex when one is given.
+	const int32 NewIndex = MCPChooserColumnInsertPosition(Table, NewColumn, RequestedIndex);
+	Table->ColumnsStructs.Insert(MoveTemp(NewColumn), NewIndex);
 
 	FString SaveError;
 	const bool bSaved = MCPChooserFinalize(Table, SaveError);
@@ -255,12 +301,15 @@ TSharedPtr<FJsonValue> FChooserHandlers::AddColumn(const TSharedPtr<FJsonObject>
 	Res->SetNumberField(TEXT("columnIndex"), NewIndex);
 	Res->SetStringField(TEXT("columnType"), ColStruct->GetName());
 	Res->SetStringField(TEXT("name"), MCPChooserColumnName(Table->ColumnsStructs[NewIndex], NewIndex));
-	// The bridge has no action that removes a chooser column, so there is no
-	// inverse to emit and inventing one would name a handler that is not there.
-	Res->SetBoolField(TEXT("rollbackPossible"), false);
-	Res->SetStringField(TEXT("rollbackNote"),
-		FString::Printf(TEXT("There is no chooser column removal action, so this column cannot be taken back out. It is sized to the current %d row(s) and every row now carries a cell for it."),
-			MCPChooserRowCount(Table)));
+	{
+		TSharedPtr<FJsonObject> RbPayload = MakeShared<FJsonObject>();
+		RbPayload->SetStringField(TEXT("table"), Table->GetPathName());
+		RbPayload->SetNumberField(TEXT("column"), NewIndex);
+		MCPSetRollback(Res, TEXT("chooser_delete_column"), RbPayload);
+		Res->SetStringField(TEXT("rollbackNote"), FString::Printf(
+			TEXT("The inverse deletes column %d by INDEX, which names this column only while no column is inserted, moved or deleted before it."),
+			NewIndex));
+	}
 	FArrayProperty* ArrProp = nullptr; void* ColData = nullptr; FString Ignored;
 	if (MCPChooserRowValuesArray(Table->ColumnsStructs[NewIndex], ArrProp, ColData, Ignored))
 	{
@@ -284,8 +333,10 @@ TSharedPtr<FJsonValue> FChooserHandlers::ListRows(const TSharedPtr<FJsonObject>&
 {
 	FString TablePath;
 	if (auto Err = RequireString(Params, TEXT("table"), TablePath)) return Err;
-	UChooserTable* Table = MCPChooserLoadTable(TablePath);
-	if (!Table) return MCPAssetLoadError(TablePath, TEXT("ChooserTable"));
+	const FString Nested = OptionalString(Params, TEXT("nested"));
+	TSharedPtr<FJsonValue> ResolveError;
+	UChooserTable* Table = MCPChooserResolve(TablePath, Nested, ResolveError);
+	if (!Table) return ResolveError;
 
 	TSharedPtr<FJsonObject> Res = MCPSuccess();
 	Res->SetStringField(TEXT("path"), Table->GetPathName());
@@ -335,9 +386,22 @@ TSharedPtr<FJsonValue> FChooserHandlers::AddRow(const TSharedPtr<FJsonObject>& P
 	TryGetArrayParam(Params, TEXT("cells"), Cells);
 	const TSharedPtr<FJsonObject>* Inputs = nullptr;
 	TryGetObjectParam(Params, TEXT("inputs"), Inputs);
+	const FString Nested = OptionalString(Params, TEXT("nested"));
+	const FString ResultType = OptionalString(Params, TEXT("resultType"));
+	const int32 RequestedIndex = OptionalInt(Params, TEXT("insertIndex"), INDEX_NONE);
 
-	UChooserTable* Table = MCPChooserLoadTable(TablePath);
-	if (!Table) return MCPAssetLoadError(TablePath, TEXT("ChooserTable"));
+	TSharedPtr<FJsonValue> ResolveError;
+	UChooserTable* Table = MCPChooserResolve(TablePath, Nested, ResolveError);
+	if (!Table) return ResolveError;
+
+	if (!OutputPath.IsEmpty() && !ResultType.IsEmpty())
+	{
+		return MCPError(TEXT("Pass output (an asset, wrapped per outputType) or resultType (a default result of that type, filled in with chooser(set_property, target='row')), not both"));
+	}
+	if (RequestedIndex != INDEX_NONE && (RequestedIndex < 0 || RequestedIndex > Table->ResultsStructs.Num()))
+	{
+		return MCPError(FString::Printf(TEXT("insertIndex %d out of range (rowCount=%d)"), RequestedIndex, Table->ResultsStructs.Num()));
+	}
 
 	// Build the output struct (optional - a row can start with no output).
 	FInstancedStruct OutputStruct;
@@ -350,20 +414,32 @@ TSharedPtr<FJsonValue> FChooserHandlers::AddRow(const TSharedPtr<FJsonObject>& P
 			return MCPError(BuildErr);
 		}
 	}
-
-	Table->Modify();
-	const int32 NewRow = Table->ResultsStructs.Num();
-	Table->ResultsStructs.Add(OutputStruct);
-	MCPChooserGrowDisabledRows(Table);
-
-	// Grow every column's per-row array to match the new row count.
-	for (FInstancedStruct& ColStruct : Table->ColumnsStructs)
+	else if (!ResultType.IsEmpty())
 	{
-		if (FChooserColumnBase* Col = ColStruct.GetMutablePtr<FChooserColumnBase>())
+		FString BuildErr;
+		if (!MCPChooserMakeResult(Table, ResultType, OutputStruct, BuildErr))
 		{
-			Col->SetNumRows(Table->ResultsStructs.Num());
+			return MCPError(BuildErr);
 		}
 	}
+
+	Table->Modify();
+	// Cells and disabled flags are brought to the row count first, so the
+	// insert below lands every column's new cell at the same index.
+	MCPChooserSyncRowCounts(Table);
+	const int32 NewRow = RequestedIndex == INDEX_NONE ? Table->ResultsStructs.Num() : RequestedIndex;
+	Table->ResultsStructs.Insert(OutputStruct, NewRow);
+#if UE_MCP_HAS_5_5_API
+	Table->DisabledRows.Insert(false, NewRow);
+#endif
+	for (FInstancedStruct& ColStruct : Table->ColumnsStructs)
+	{
+		MCPChooserColumnInsertRows(ColStruct, NewRow, 1);
+	}
+	// A column whose cells are not in one row-values array is sized here instead.
+	MCPChooserSyncRowCounts(Table);
+	// The editor fills auto populating columns from a new row's result.
+	MCPChooserAutoPopulateRow(Table, NewRow);
 
 	// Apply provided cell values.
 	TMap<int32, FString> Assignments = CollectCellAssignments(Cells, Inputs, Table);
@@ -401,9 +477,8 @@ TSharedPtr<FJsonValue> FChooserHandlers::AddRow(const TSharedPtr<FJsonObject>& P
 	// chooser_delete_row addresses a row by position and the table has no row id,
 	// so there is no identity to address it by instead.
 	Res->SetStringField(TEXT("rollbackNote"), FString::Printf(
-		TEXT("The inverse deletes row %d by INDEX, and that index names this row only while the table's rows are unchanged. ")
-		TEXT("A later step that deletes a row below it shifts it down, and chooser(delete_row)'s own rollback re-adds by APPENDING rather than reinserting, ")
-		TEXT("so in a flow mixing the two this index can end up naming a different row and delete the wrong one. A chooser row has no id to address it by instead."),
+		TEXT("The inverse deletes row %d by INDEX, and that index names this row only while no row is inserted, moved or deleted before it. ")
+		TEXT("Run in reverse order, as a flow rolls back, every later row edit has been undone first, so the index holds. A chooser row has no id to address it by instead."),
 		NewRow));
 	MCPNoteSaveOutcome(Res, Table->GetPathName(), bSaved, SaveError);
 	return MCPResult(Res);
@@ -428,14 +503,29 @@ TSharedPtr<FJsonValue> FChooserHandlers::SetRow(const TSharedPtr<FJsonObject>& P
 	TryGetArrayParam(Params, TEXT("cells"), Cells);
 	const TSharedPtr<FJsonObject>* Inputs = nullptr;
 	TryGetObjectParam(Params, TEXT("inputs"), Inputs);
+	const FString Nested = OptionalString(Params, TEXT("nested"));
+	const FString ResultType = OptionalString(Params, TEXT("resultType"));
 	if (IndexErr) return IndexErr;
 
-	UChooserTable* Table = MCPChooserLoadTable(TablePath);
-	if (!Table) return MCPAssetLoadError(TablePath, TEXT("ChooserTable"));
+	TSharedPtr<FJsonValue> ResolveError;
+	UChooserTable* Table = MCPChooserResolve(TablePath, Nested, ResolveError);
+	if (!Table) return ResolveError;
 
 	if (!Table->ResultsStructs.IsValidIndex(RowIndex))
 	{
 		return MCPError(FString::Printf(TEXT("row index %d out of range (rowCount=%d)"), RowIndex, Table->ResultsStructs.Num()));
+	}
+	if (!OutputPath.IsEmpty() && !ResultType.IsEmpty())
+	{
+		return MCPError(TEXT("Pass output (an asset, wrapped per outputType) or resultType (a default result of that type), not both"));
+	}
+	// A new result type replaces the row's result with a default of that type,
+	// keeping its cells, as the editor's result type picker does.
+	FInstancedStruct NewTypedResult;
+	if (!ResultType.IsEmpty())
+	{
+		FString BuildErr;
+		if (!MCPChooserMakeResult(Table, ResultType, NewTypedResult, BuildErr)) return MCPError(BuildErr);
 	}
 
 	// Read the row as it stands, before any of it is overwritten: chooser_set_row
@@ -476,6 +566,15 @@ TSharedPtr<FJsonValue> FChooserHandlers::SetRow(const TSharedPtr<FJsonObject>& P
 			return MCPError(BuildErr);
 		}
 		Table->ResultsStructs[RowIndex] = OutputStruct;
+	}
+	else if (NewTypedResult.IsValid())
+	{
+		Table->ResultsStructs[RowIndex] = MoveTemp(NewTypedResult);
+	}
+	if (!OutputPath.IsEmpty() || !ResultType.IsEmpty())
+	{
+		// The editor fills auto populating columns when a row's result changes.
+		MCPChooserAutoPopulateRow(Table, RowIndex);
 	}
 
 	// Optional: toggle disabled.
@@ -557,10 +656,13 @@ TSharedPtr<FJsonValue> FChooserHandlers::DeleteRow(const TSharedPtr<FJsonObject>
 	FString TablePath;
 	if (auto Err = RequireString(Params, TEXT("table"), TablePath)) return Err;
 	int32 RowIndex = INDEX_NONE;
-	if (auto IndexErr = RequireNumber(Params, TEXT("index"), RowIndex)) return IndexErr;
+	const TSharedPtr<FJsonValue> IndexErr = RequireNumber(Params, TEXT("index"), RowIndex);
+	const FString Nested = OptionalString(Params, TEXT("nested"));
+	if (IndexErr) return IndexErr;
 
-	UChooserTable* Table = MCPChooserLoadTable(TablePath);
-	if (!Table) return MCPAssetLoadError(TablePath, TEXT("ChooserTable"));
+	TSharedPtr<FJsonValue> ResolveError;
+	UChooserTable* Table = MCPChooserResolve(TablePath, Nested, ResolveError);
+	if (!Table) return ResolveError;
 
 	if (!Table->ResultsStructs.IsValidIndex(RowIndex))
 	{
@@ -594,21 +696,9 @@ TSharedPtr<FJsonValue> FChooserHandlers::DeleteRow(const TSharedPtr<FJsonObject>
 	Table->Modify();
 
 	// Drop the per-row cell from every column, then the result + disabled flag.
-	// FChooserColumnBase::DeleteRows takes a TArrayView<int32> on UE 5.8+ and a
-	// TArray<uint32> on 5.7.
-#if UE_MCP_HAS_5_8_API
-	int32 RowToDelete = RowIndex;
-	TArrayView<int32> RowView(&RowToDelete, 1);
-#else
-	TArray<uint32> RowView;
-	RowView.Add(static_cast<uint32>(RowIndex));
-#endif
 	for (FInstancedStruct& ColStruct : Table->ColumnsStructs)
 	{
-		if (FChooserColumnBase* Col = ColStruct.GetMutablePtr<FChooserColumnBase>())
-		{
-			Col->DeleteRows(RowView);
-		}
+		MCPChooserColumnDeleteRows(ColStruct, { RowIndex });
 	}
 	Table->ResultsStructs.RemoveAt(RowIndex);
 	MCPChooserRemoveDisabledRow(Table, RowIndex);
@@ -627,6 +717,7 @@ TSharedPtr<FJsonValue> FChooserHandlers::DeleteRow(const TSharedPtr<FJsonObject>
 		TSharedPtr<FJsonObject> RbPayload = MakeShared<FJsonObject>();
 		RbPayload->SetStringField(TEXT("table"), Table->GetPathName());
 		RbPayload->SetArrayField(TEXT("cells"), DoomedCells);
+		RbPayload->SetNumberField(TEXT("insertIndex"), RowIndex);
 		if (!DoomedOutputPath.IsEmpty())
 		{
 			RbPayload->SetStringField(TEXT("output"), DoomedOutputPath);
@@ -637,7 +728,7 @@ TSharedPtr<FJsonValue> FChooserHandlers::DeleteRow(const TSharedPtr<FJsonObject>
 	Res->SetBoolField(TEXT("rollbackLossy"), true);
 	{
 		FString DeleteNote = FString::Printf(
-			TEXT("chooser(add_row) APPENDS the row rather than putting it back at index %d, and a chooser resolves rows in order, so the restored row is evaluated last. "),
+			TEXT("chooser(add_row) puts the row back at index %d, so it keeps its place in evaluation order. "),
 			RowIndex);
 		if (DoomedOutputPath.IsEmpty())
 		{
@@ -657,7 +748,7 @@ TSharedPtr<FJsonValue> FChooserHandlers::DeleteRow(const TSharedPtr<FJsonObject>
 		}
 		if (bDoomedDisabled)
 		{
-			DeleteNote += TEXT("It also comes back enabled: this row was disabled, so follow the rollback with chooser(set_row, index=<new index>, disabled=true).");
+			DeleteNote += FString::Printf(TEXT("It also comes back enabled: this row was disabled, so follow the rollback with chooser(set_row, index=%d, disabled=true)."), RowIndex);
 		}
 		Res->SetStringField(TEXT("rollbackNote"), DeleteNote.TrimStartAndEnd());
 	}
@@ -683,6 +774,15 @@ void FChooserHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	const FMCPParamSpec InputsParam = MCPParam::Optional(TEXT("inputs"), EType::Object, TEXT("Cell values keyed by column index (as string) or column name; same value format as cells"));
 	const FMCPParamSpec ChooserPathParam = MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("ChooserTable asset path")).Alias(TEXT("path"));
 
+	const FMCPParamSpec NestedParam = MCPParam::Optional(TEXT("nested"), EType::String, TEXT("Name or object path of a nested chooser inside the table's asset to work on instead of the table itself (chooser(list_nested) lists them)"));
+	const FMCPParamSpec ColumnParam = MCPParam::Required(TEXT("column"), EType::Integer, TEXT("Column index, 0-based"));
+	const FMCPParamSpec RowsParam = MCPParam::Required(TEXT("rows"), EType::Array, TEXT("Row indices, 0-based; duplicates are ignored")).Items(EType::Integer);
+	const FMCPParamSpec ResultTypeParam = MCPParam::Optional(TEXT("resultType"), EType::String, TEXT("Result struct type for a default result (AssetChooser, SoftAssetChooser, EvaluateChooser, ClassChooser and so on; chooser(list_types, kind='result') lists them). Fill it in with chooser(set_property)"));
+	const FMCPParamSpec TargetTableParam = MCPParam::Optional(TEXT("targetTable"), EType::String, TEXT("Destination ChooserTable asset path (default the source table)"));
+	const FMCPParamSpec TargetNestedParam = MCPParam::Optional(TEXT("targetNested"), EType::String, TEXT("Nested chooser inside targetTable's asset to copy into"));
+	const FMCPParamSpec SignatureTableParam = MCPParam::Required(TEXT("table"), EType::String, TEXT("ChooserTable or ChooserSignature asset path. A nested chooser uses its root table's signature")).Alias(TEXT("assetPath"));
+	const FMCPParamSpec NestedObjectParam = MCPParam::Required(TEXT("name"), EType::String, TEXT("Nested object name or object path (chooser(list_nested) lists them)"));
+
 	Registry.RegisterHandler(TEXT("chooser_create"), &Create, {
 		MCPParam::Required(TEXT("name"), EType::String, TEXT("New ChooserTable asset name")),
 		MCPParam::Optional(TEXT("packagePath"), EType::String, TEXT("Destination folder (default /Game)")),
@@ -690,6 +790,7 @@ void FChooserHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	}, MCPSpec::ContractExempt(TEXT("Creates and saves a ChooserTable under the contract values; nothing it reads fails first")));
 	Registry.RegisterHandler(TEXT("chooser_describe"), &Describe, {
 		TableParam,
+		NestedParam,
 	});
 	Registry.RegisterHandler(TEXT("chooser_add_column"), &AddColumn, {
 		TableParam,
@@ -697,9 +798,12 @@ void FChooserHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("inputStruct"), EType::String, TEXT("Parameter struct to bind the column input (e.g. EnumContextProperty, BoolContextProperty)")),
 		MCPParam::Optional(TEXT("boundProperty"), EType::String, TEXT("Context property name the column reads at evaluation time")),
 		MCPParam::Optional(TEXT("enumPath"), EType::String, TEXT("Enum asset path for an EnumColumn")),
+		NestedParam,
+		MCPParam::Optional(TEXT("insertIndex"), EType::Integer, TEXT("Column position (default where the editor places a new column: last, but before a trailing randomize column)")),
 	});
 	Registry.RegisterHandler(TEXT("chooser_list_rows"), &ListRows, {
 		TableParam,
+		NestedParam,
 	});
 	Registry.RegisterHandler(TEXT("chooser_add_row"), &AddRow, {
 		TableParam,
@@ -707,6 +811,9 @@ void FChooserHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		OutputTypeParam,
 		CellsParam,
 		InputsParam,
+		NestedParam,
+		ResultTypeParam,
+		MCPParam::Optional(TEXT("insertIndex"), EType::Integer, TEXT("Insert the row before this row index (default append)")),
 	});
 	Registry.RegisterHandler(TEXT("chooser_set_row"), &SetRow, {
 		TableParam,
@@ -716,10 +823,13 @@ void FChooserHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("disabled"), EType::Boolean, TEXT("Enable or disable the row without deleting it")),
 		CellsParam,
 		InputsParam,
+		NestedParam,
+		ResultTypeParam,
 	});
 	Registry.RegisterHandler(TEXT("chooser_delete_row"), &DeleteRow, {
 		TableParam,
 		MCPParam::Required(TEXT("index"), EType::Integer, TEXT("Row index, 0-based")),
+		NestedParam,
 	});
 	Registry.RegisterHandler(TEXT("chooser_list_object_references"), &ListObjectReferences, {
 		ChooserPathParam,
@@ -734,5 +844,175 @@ void FChooserHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("toPrefix"), EType::String, TEXT("Replacement prefix, e.g. /Game/MyProject/ (with fromPrefix)")),
 		MCPParam::Optional(TEXT("dryRun"), EType::Boolean, TEXT("Preview without writing (default true)")),
 		MCPParam::Optional(TEXT("allowMissing"), EType::Boolean, TEXT("Write a soft reference even when the target does not exist yet (default false)")),
+	});
+
+	// Type discovery and signature.
+	Registry.RegisterHandler(TEXT("chooser_list_types"), &ListTypes, {
+		MCPParam::Required(TEXT("kind"), EType::String, TEXT("Which types: column, result (row result), parameter, or input (the input types one column accepts; needs table and column)")).Enum({ TEXT("column"), TEXT("result"), TEXT("parameter"), TEXT("input") }),
+		MCPParam::Optional(TEXT("table"), EType::String, TEXT("ChooserTable asset path, for kind 'input'")),
+		NestedParam,
+		MCPParam::Optional(TEXT("column"), EType::Integer, TEXT("Column index, for kind 'input'")),
+	});
+	Registry.RegisterHandler(TEXT("chooser_get_signature"), &GetSignature, {
+		SignatureTableParam,
+		NestedParam,
+	});
+	Registry.RegisterHandler(TEXT("chooser_set_signature"), &SetSignature, {
+		SignatureTableParam,
+		NestedParam,
+		MCPParam::Optional(TEXT("resultType"), EType::String, TEXT("What the chooser returns")).Enum({ TEXT("ObjectResult"), TEXT("ClassResult"), TEXT("NoPrimaryResult") }),
+		MCPParam::Optional(TEXT("resultClass"), EType::String, TEXT("Result Class: the class of object returned, or the parent class of the classes returned. Empty clears it")),
+		MCPParam::Optional(TEXT("signatureAsset"), EType::String, TEXT("ChooserSignature asset to inherit the result type, result class and parameters from (UE 5.9). Empty clears the reference and restores the local values")),
+	});
+	Registry.RegisterHandler(TEXT("chooser_add_parameter"), &AddParameter, {
+		SignatureTableParam,
+		NestedParam,
+		MCPParam::Required(TEXT("parameterType"), EType::String, TEXT("Parameter struct type, e.g. ContextObjectTypeClass or ContextObjectTypeStruct (chooser(list_types, kind='parameter') lists them)")),
+		MCPParam::Optional(TEXT("properties"), EType::Object, TEXT("Property path to value text to set on the new parameter, e.g. {\"Class\": \"/Script/Engine.Character\", \"Direction\": \"ReadWrite\"}")),
+	});
+	Registry.RegisterHandler(TEXT("chooser_remove_parameter"), &RemoveParameter, {
+		SignatureTableParam,
+		NestedParam,
+		MCPParam::Required(TEXT("index"), EType::Integer, TEXT("Parameter index, 0-based")),
+	});
+
+	// Property paths on columns, row results, the fallback result and parameters.
+	const FMCPParamSpec PropertyTargetParam = MCPParam::Required(TEXT("target"), EType::String, TEXT("What the path is read from: a column, a row's result, the fallback result, or a parameter")).Enum({ TEXT("column"), TEXT("row"), TEXT("fallback"), TEXT("parameter") });
+	const FMCPParamSpec PropertyIndexParam = MCPParam::Optional(TEXT("index"), EType::Integer, TEXT("Column, row or parameter index (not used for fallback)"));
+	const FMCPParamSpec PropertyPathParam = MCPParam::Optional(TEXT("propertyPath"), EType::String, TEXT("'.' separated property names with [index] for array elements, stepping into instanced structs, e.g. 'InputValue.Binding.DisplayName', 'Asset', 'DefaultRowValue'. Empty addresses the whole struct"));
+	Registry.RegisterHandler(TEXT("chooser_get_property"), &GetProperty, {
+		TableParam,
+		NestedParam,
+		PropertyTargetParam,
+		PropertyIndexParam,
+		PropertyPathParam,
+	});
+	Registry.RegisterHandler(TEXT("chooser_set_property"), &SetProperty, {
+		TableParam,
+		NestedParam,
+		PropertyTargetParam,
+		PropertyIndexParam,
+		PropertyPathParam,
+		MCPParam::Required(TEXT("value"), EType::String, TEXT("Value in Unreal text format, the form copy and paste use in the details panel, e.g. '0.5', '/Game/Anims/Run.Run', '(Min=0,Max=100)'")),
+	});
+
+	// Columns.
+	Registry.RegisterHandler(TEXT("chooser_delete_column"), &DeleteColumn, {
+		TableParam,
+		NestedParam,
+		ColumnParam,
+	});
+	Registry.RegisterHandler(TEXT("chooser_move_column"), &MoveColumn, {
+		TableParam,
+		NestedParam,
+		ColumnParam,
+		MCPParam::Required(TEXT("newIndex"), EType::Integer, TEXT("Index the column ends up at. A randomize column stays last and cannot be moved")),
+	});
+	Registry.RegisterHandler(TEXT("chooser_duplicate_column"), &DuplicateColumn, {
+		TableParam,
+		NestedParam,
+		ColumnParam,
+	});
+	Registry.RegisterHandler(TEXT("chooser_copy_column"), &CopyColumn, {
+		TableParam,
+		NestedParam,
+		ColumnParam,
+		TargetTableParam,
+		TargetNestedParam,
+		MCPParam::Optional(TEXT("insertIndex"), EType::Integer, TEXT("Insert the copy before this column of the target (default last, before a randomize column)")),
+	});
+	Registry.RegisterHandler(TEXT("chooser_set_column"), &SetColumn, {
+		TableParam,
+		NestedParam,
+		ColumnParam,
+		MCPParam::Optional(TEXT("disabled"), EType::Boolean, TEXT("Disable or enable the column")),
+		MCPParam::Optional(TEXT("inputType"), EType::String, TEXT("Change the column's input type (chooser(list_types, kind='input') lists the ones it accepts)")),
+		MCPParam::Optional(TEXT("parameterIndex"), EType::Integer, TEXT("Bind the input to this class or struct parameter (with propertyChain)")),
+		MCPParam::Optional(TEXT("propertyChain"), EType::Array, TEXT("Property names to follow from the parameter, e.g. [\"Speed\"] or [\"MyStruct\", \"MyFloat\"]; empty binds the parameter itself")).Items(EType::String),
+	});
+
+	// Rows.
+	Registry.RegisterHandler(TEXT("chooser_delete_rows"), &DeleteRows, {
+		TableParam,
+		NestedParam,
+		RowsParam,
+	});
+	Registry.RegisterHandler(TEXT("chooser_move_rows"), &MoveRows, {
+		TableParam,
+		NestedParam,
+		RowsParam,
+		MCPParam::Required(TEXT("targetIndex"), EType::Integer, TEXT("Insert the rows, in their current order, before this row index as it is before the move; rowCount moves them to the end. To move row r to final index n, pass n+1 when n > r, else n")),
+	});
+	Registry.RegisterHandler(TEXT("chooser_duplicate_rows"), &DuplicateRows, {
+		TableParam,
+		NestedParam,
+		RowsParam,
+	});
+	Registry.RegisterHandler(TEXT("chooser_copy_rows"), &CopyRows, {
+		TableParam,
+		NestedParam,
+		RowsParam,
+		TargetTableParam,
+		TargetNestedParam,
+		MCPParam::Optional(TEXT("insertIndex"), EType::Integer, TEXT("Insert the copies before this row of the target (default append)")),
+		MCPParam::Optional(TEXT("includeFallback"), EType::Boolean, TEXT("Also copy the fallback result and fallback cells, replacing the target's (default false)")),
+	});
+
+	// Cells and the fallback.
+	const FMCPParamSpec CellRowParam = MCPParam::Optional(TEXT("row"), EType::Integer, TEXT("Row index, 0-based (omit with fallback=true)"));
+	const FMCPParamSpec CellFallbackParam = MCPParam::Optional(TEXT("fallback"), EType::Boolean, TEXT("Address the column's fallback cell instead of a row (output columns only)"));
+	Registry.RegisterHandler(TEXT("chooser_get_cell"), &GetCell, {
+		TableParam,
+		NestedParam,
+		ColumnParam,
+		CellRowParam,
+		CellFallbackParam,
+	});
+	Registry.RegisterHandler(TEXT("chooser_set_cell"), &SetCell, {
+		TableParam,
+		NestedParam,
+		ColumnParam,
+		CellRowParam,
+		CellFallbackParam,
+		MCPParam::Required(TEXT("value"), EType::String, TEXT("Cell value as struct text, e.g. '(Min=0,Max=100)', or a bare number or boolean for a scalar cell")),
+	});
+	Registry.RegisterHandler(TEXT("chooser_set_fallback"), &SetFallback, {
+		TableParam,
+		NestedParam,
+		ResultTypeParam,
+		OutputParam,
+		OutputTypeParam,
+		MCPParam::Optional(TEXT("remove"), EType::Boolean, TEXT("Remove the fallback result; output columns keep their fallback cells")),
+	});
+	Registry.RegisterHandler(TEXT("chooser_auto_populate"), &AutoPopulate, {
+		TableParam,
+		NestedParam,
+		MCPParam::Optional(TEXT("column"), EType::Integer, TEXT("Fill only this column, for every row and the fallback")),
+		MCPParam::Optional(TEXT("rows"), EType::Array, TEXT("Fill only these rows, in every auto populating column")).Items(EType::Integer),
+		MCPParam::Optional(TEXT("includeFallback"), EType::Boolean, TEXT("With rows, also fill the fallback")),
+	});
+
+	// Nested choosers and objects.
+	Registry.RegisterHandler(TEXT("chooser_create_nested"), &CreateNested, {
+		TableParam,
+		NestedParam,
+		MCPParam::Optional(TEXT("row"), EType::Integer, TEXT("Row whose result becomes the new nested chooser (default: add a new row for it)")),
+		MCPParam::Optional(TEXT("name"), EType::String, TEXT("Name for the nested chooser (default NestedChooser, made unique)")),
+	});
+	Registry.RegisterHandler(TEXT("chooser_list_nested"), &ListNested, {
+		TableParam,
+	});
+	Registry.RegisterHandler(TEXT("chooser_delete_nested"), &DeleteNested, {
+		TableParam,
+		NestedObjectParam,
+	});
+	Registry.RegisterHandler(TEXT("chooser_rename_nested"), &RenameNested, {
+		TableParam,
+		NestedObjectParam,
+		MCPParam::Required(TEXT("newName"), EType::String, TEXT("New object name, unique among the asset's nested objects")),
+	});
+	Registry.RegisterHandler(TEXT("chooser_remove_disabled"), &RemoveDisabled, {
+		TableParam,
+		NestedParam,
 	});
 }
