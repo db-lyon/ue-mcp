@@ -162,6 +162,23 @@ export const handlerSpecs: HandlerSpecs = {
       }
     ]
   },
+  "add_hlod_setup": {
+    "category": "level",
+    "params": [
+      {
+        "name": "partitionName",
+        "type": "string",
+        "required": true,
+        "description": "Runtime partition name, as list_runtime_partitions reports it"
+      },
+      {
+        "name": "setupName",
+        "type": "string",
+        "required": true,
+        "description": "Name of the spatially loaded HLOD setup to add"
+      }
+    ]
+  },
   "add_instances": {
     "category": "level",
     "params": [
@@ -261,6 +278,24 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "Report an existing transformer of this class instead of adding a duplicate (default true)"
       }
     ]
+  },
+  "add_runtime_partition": {
+    "category": "level",
+    "params": [
+      {
+        "name": "partitionName",
+        "type": "string",
+        "required": true,
+        "description": "Name of the runtime partition to add"
+      },
+      {
+        "name": "partitionClass",
+        "type": "string",
+        "required": false,
+        "description": "RuntimePartition class (default /Script/Engine.RuntimePartitionLHGrid)"
+      }
+    ],
+    "contractExempt": "The contract name and the default class are valid, so on a runtime hash set map the call would add a partition"
   },
   "add_streaming_sublevel": {
     "category": "level",
@@ -588,6 +623,49 @@ export const handlerSpecs: HandlerSpecs = {
       }
     ]
   },
+  "build_hlod_actors": {
+    "category": "level",
+    "params": [
+      {
+        "name": "actorLabels",
+        "type": "array",
+        "required": false,
+        "description": "HLOD actors to build (default: every loaded HLOD actor)",
+        "items": "string"
+      },
+      {
+        "name": "force",
+        "type": "boolean",
+        "required": false,
+        "description": "Rebuild actors that are up to date (default false)"
+      }
+    ],
+    "contractExempt": "Without actorLabels the call builds every loaded HLOD actor"
+  },
+  "build_world_partition_hlods": {
+    "category": "level",
+    "params": [
+      {
+        "name": "hlodLayer",
+        "type": "string",
+        "required": false,
+        "description": "Build only the HLODs of this HLODLayer asset; omitted or null builds every layer",
+        "nullable": true
+      },
+      {
+        "name": "force",
+        "type": "boolean",
+        "required": false,
+        "description": "Rebuild HLODs that are up to date (default false)"
+      }
+    ],
+    "contractExempt": "Without hlodLayer the call builds every HLOD of the open world"
+  },
+  "build_world_partition_minimap": {
+    "category": "level",
+    "params": [],
+    "contractExempt": "Takes no parameters and builds the open world's minimap in an external process"
+  },
   "bulk_line_trace": {
     "category": "level",
     "params": [
@@ -775,6 +853,10 @@ export const handlerSpecs: HandlerSpecs = {
       }
     ]
   },
+  "check_world_partition_errors": {
+    "category": "level",
+    "params": []
+  },
   "clear_level_script": {
     "category": "level",
     "params": [
@@ -920,6 +1002,11 @@ export const handlerSpecs: HandlerSpecs = {
       }
     ],
     "contractExempt": "The contract value is a valid folder name, so the call would create a folder in the editor world"
+  },
+  "create_world_partition_minimap": {
+    "category": "level",
+    "params": [],
+    "contractExempt": "Takes no parameters and spawns the minimap actor when the world has none"
   },
   "delete_actor": {
     "category": "level",
@@ -1125,6 +1212,11 @@ export const handlerSpecs: HandlerSpecs = {
         ]
       }
     ]
+  },
+  "delete_world_partition_hlods": {
+    "category": "level",
+    "params": [],
+    "contractExempt": "Takes no parameters and deletes every HLOD of the open world"
   },
   "destroy_transient_actor": {
     "category": "level",
@@ -1486,6 +1578,10 @@ export const handlerSpecs: HandlerSpecs = {
     "category": "level",
     "params": []
   },
+  "get_hlod_stats": {
+    "category": "level",
+    "params": []
+  },
   "get_instance_transforms": {
     "category": "level",
     "params": [
@@ -1621,6 +1717,23 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "integer",
         "required": false,
         "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients"
+      }
+    ]
+  },
+  "get_runtime_partition": {
+    "category": "level",
+    "params": [
+      {
+        "name": "partitionName",
+        "type": "string",
+        "required": true,
+        "description": "Runtime partition name, as list_runtime_partitions reports it"
+      },
+      {
+        "name": "setupName",
+        "type": "string",
+        "required": false,
+        "description": "Read this HLOD setup's partition instead of the main partition"
       }
     ]
   },
@@ -1933,6 +2046,10 @@ export const handlerSpecs: HandlerSpecs = {
       }
     ]
   },
+  "get_world_partition_minimap": {
+    "category": "level",
+    "params": []
+  },
   "get_world_partition_settings": {
     "category": "level",
     "params": []
@@ -2090,6 +2207,17 @@ export const handlerSpecs: HandlerSpecs = {
       }
     ]
   },
+  "list_hlod_setups": {
+    "category": "level",
+    "params": [
+      {
+        "name": "partitionName",
+        "type": "string",
+        "required": true,
+        "description": "Runtime partition name, as list_runtime_partitions reports it"
+      }
+    ]
+  },
   "list_levels": {
     "category": "level",
     "params": [
@@ -2106,6 +2234,10 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "Rows on this page"
       }
     ]
+  },
+  "list_runtime_partitions": {
+    "category": "level",
+    "params": []
   },
   "list_streaming_sublevels": {
     "category": "level",
@@ -2827,6 +2959,54 @@ export const handlerSpecs: HandlerSpecs = {
       }
     ]
   },
+  "rebuild_brush": {
+    "category": "level",
+    "params": [
+      {
+        "name": "actorLabel",
+        "type": "string",
+        "required": false,
+        "description": "Brush or volume to rebuild"
+      },
+      {
+        "name": "actorPath",
+        "type": "string",
+        "required": false,
+        "description": "Object path of the brush; preferred over actorLabel when known"
+      },
+      {
+        "name": "builderClass",
+        "type": "string",
+        "required": false,
+        "description": "Brush builder class to rebuild with (default: the brush's current builder)"
+      },
+      {
+        "name": "builderProperties",
+        "type": "object",
+        "required": false,
+        "description": "Builder property name -> value, such as {X: 400, Y: 200, Z: 100} for a CubeBuilder"
+      },
+      {
+        "name": "deferBsp",
+        "type": "boolean",
+        "required": false,
+        "description": "Defer the BSP rebuild for batching; a later call without it processes the pending BSP (default false)"
+      }
+    ],
+    "choices": [
+      {
+        "mode": "atLeastOne",
+        "branches": [
+          [
+            "actorLabel"
+          ],
+          [
+            "actorPath"
+          ]
+        ]
+      }
+    ]
+  },
   "rebuild_water_zone": {
     "category": "level",
     "params": [
@@ -3092,6 +3272,23 @@ export const handlerSpecs: HandlerSpecs = {
       }
     ]
   },
+  "remove_hlod_setup": {
+    "category": "level",
+    "params": [
+      {
+        "name": "partitionName",
+        "type": "string",
+        "required": true,
+        "description": "Runtime partition name, as list_runtime_partitions reports it"
+      },
+      {
+        "name": "setupName",
+        "type": "string",
+        "required": true,
+        "description": "HLOD setup name, as list_hlod_setups reports it"
+      }
+    ]
+  },
   "remove_instance": {
     "category": "level",
     "params": [
@@ -3118,6 +3315,17 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "integer",
         "required": true,
         "description": "Instance index"
+      }
+    ]
+  },
+  "remove_runtime_partition": {
+    "category": "level",
+    "params": [
+      {
+        "name": "partitionName",
+        "type": "string",
+        "required": true,
+        "description": "Runtime partition name, as list_runtime_partitions reports it"
       }
     ]
   },
@@ -3204,6 +3412,70 @@ export const handlerSpecs: HandlerSpecs = {
             "renames"
           ]
         ]
+      }
+    ]
+  },
+  "rename_runtime_partition": {
+    "category": "level",
+    "params": [
+      {
+        "name": "partitionName",
+        "type": "string",
+        "required": true,
+        "description": "Runtime partition name, as list_runtime_partitions reports it"
+      },
+      {
+        "name": "newName",
+        "type": "string",
+        "required": true,
+        "description": "New runtime partition name"
+      }
+    ]
+  },
+  "repair_world_partition_errors": {
+    "category": "level",
+    "params": [],
+    "contractExempt": "Takes no parameters and repairs, saving the world, when there is something to repair"
+  },
+  "replace_actors_with_asset": {
+    "category": "level",
+    "params": [
+      {
+        "name": "actorLabels",
+        "type": "array",
+        "required": true,
+        "description": "Labels (or names or paths) of the actors to replace",
+        "items": "string"
+      },
+      {
+        "name": "assetPath",
+        "type": "string",
+        "required": true,
+        "description": "Asset to create the new actors from: a static mesh, Blueprint, particle system..."
+      },
+      {
+        "name": "copySourceProperties",
+        "type": "boolean",
+        "required": false,
+        "description": "When the asset is a Blueprint sharing a native parent with a replaced actor, copy that actor's property values (default true)"
+      }
+    ]
+  },
+  "replace_actors_with_class": {
+    "category": "level",
+    "params": [
+      {
+        "name": "actorLabels",
+        "type": "array",
+        "required": true,
+        "description": "Labels (or names or paths) of the actors to replace",
+        "items": "string"
+      },
+      {
+        "name": "className",
+        "type": "string",
+        "required": true,
+        "description": "Actor class to create in their place; it needs an actor factory that works without an asset (lights, empty actors, volumes)"
       }
     ]
   },
@@ -4133,6 +4405,30 @@ export const handlerSpecs: HandlerSpecs = {
       }
     ]
   },
+  "set_hlod_setup_layers": {
+    "category": "level",
+    "params": [
+      {
+        "name": "partitionName",
+        "type": "string",
+        "required": true,
+        "description": "Runtime partition name, as list_runtime_partitions reports it"
+      },
+      {
+        "name": "setupName",
+        "type": "string",
+        "required": true,
+        "description": "HLOD setup name, as list_hlod_setups reports it"
+      },
+      {
+        "name": "hlodLayers",
+        "type": "array",
+        "required": true,
+        "description": "HLODLayer asset paths to assign; empty leaves the setup without layers",
+        "items": "string"
+      }
+    ]
+  },
   "set_light_properties": {
     "category": "level",
     "params": [
@@ -4268,6 +4564,40 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "boolean",
         "required": false,
         "description": "Enable each written setting's bOverride flag (default true)"
+      }
+    ]
+  },
+  "set_runtime_hash_class": {
+    "category": "level",
+    "params": [
+      {
+        "name": "runtimeHashClass",
+        "type": "string",
+        "required": true,
+        "description": "Runtime hash class: WorldPartitionRuntimeHashSet, WorldPartitionRuntimeSpatialHash, or a /Script path"
+      }
+    ]
+  },
+  "set_runtime_partition_properties": {
+    "category": "level",
+    "params": [
+      {
+        "name": "partitionName",
+        "type": "string",
+        "required": true,
+        "description": "Runtime partition name, as list_runtime_partitions reports it"
+      },
+      {
+        "name": "setupName",
+        "type": "string",
+        "required": false,
+        "description": "Write this HLOD setup's partition instead of the main partition"
+      },
+      {
+        "name": "properties",
+        "type": "object",
+        "required": true,
+        "description": "Property name -> value, as get_runtime_partition lists them"
       }
     ]
   },
@@ -4552,6 +4882,18 @@ export const handlerSpecs: HandlerSpecs = {
         ]
       }
     ]
+  },
+  "set_world_partition_streaming": {
+    "category": "level",
+    "params": [
+      {
+        "name": "enabled",
+        "type": "boolean",
+        "required": true,
+        "description": "true streams the world; false keeps every actor loaded"
+      }
+    ],
+    "contractExempt": "The contract boolean is a valid value, so on a partitioned map the call would change its streaming"
   },
   "set_world_settings": {
     "category": "level",
@@ -5533,25 +5875,33 @@ export const paramsClauses: Readonly<Record<string, string>> = {
   add_actor_tag: "Params: actorLabel?, actorPath?, tag",
   add_component_to_actor: "Params: actorLabel?, actorPath?, componentClass, componentName, onConflict?",
   add_hismc_instances: "Params: actorLabel?, actorPath?, componentName?, transforms, worldSpace?",
+  add_hlod_setup: "Params: partitionName, setupName",
   add_instances: "Params: actorLabel?, actorPath?, componentName?, transforms, worldSpace?",
   add_post_process_blendable: "Params: actorLabel?, actorPath?, materialPath (or material), weight?",
   add_runtime_cell_transformer: "Params: transformerClass (or className), properties?, position?, skipIfPresent?",
+  add_runtime_partition: "Params: partitionName, partitionClass?",
   add_streaming_sublevel: "Params: levelPath, streamingClass?, location?, initiallyLoaded?, initiallyVisible?",
   aim_actor_at: "Params: actorLabel?, actorPath?, targetPoint?, targetActor?, targetActorPath?, roll?, world?, pieInstance?",
   attach_actor: "Params: childLabel?, childPath?, parentLabel?, parentPath?, attachRule?, socketName?",
   attach_component: "Params: childLabel?, childPath?, parentLabel?, parentPath?, childComponentName?, parentComponentName?, attachRule?, weldSimulatedBodies?, socketName?, relativeLocation?, relativeRotation?",
   batch_set_actor_properties: "Params: properties, actorLabels?, labelPrefix?, labelContains?, tag?, classFilter?, folderPath?, folderPathPrefix?, matchSubclasses?, dryRun?, force?, transactionLabel?",
   batch_translate: "Params: offset, at least one of actorLabels/actorPaths/tag",
+  build_hlod_actors: "Params: actorLabels?, force?",
+  build_world_partition_hlods: "Params: hlodLayer?, force?",
+  build_world_partition_minimap: "Params: none",
   bulk_line_trace: "Params: traces, world?, pieInstance?",
   bulk_set_component_property: "Params: componentName, propertyName, value, at least one of actorLabels/labelPrefix/labelContains/tag/classFilter/folderPath/folderPathPrefix, matchSubclasses?, dryRun?, transactionLabel?",
+  check_world_partition_errors: "Params: none",
   clear_level_script: "Params: dryRun?, save?",
   convert_brushes_to_static_mesh: "Params: at least one of actorLabels/folderPath, recursiveFolder?, classFilter?, exactClass?, destinationPath?, dryRun?, allowSubtractive?, includeVolumes?",
   count_actors_by_class: "Params: world?, pieInstance?, topN?",
   create_outliner_folder: "Params: at least one of folderPath/folderPaths",
+  create_world_partition_minimap: "Params: none",
   delete_actor: "Params: actorLabel?, actorPath?",
   delete_actors: "Params: at least one of labelPrefix/labelContains/nameContains/className/tag/classPathContains/classPathContainsAny/folderPath/folderPathPrefix, dryRun?",
   delete_exact_labeled_actors_in_levels: "Params: levels, dryRun?, onMissing?, restoreOriginalLevel?",
   delete_outliner_folder: "Params: at least one of folderPath/folderPaths, dryRun?",
+  delete_world_partition_hlods: "Params: none",
   destroy_transient_actor: "Params: world?, pieInstance?, actorPath?, actorLabel?, all?",
   detach_actor: "Params: childLabel?, childPath?",
   detach_component: "Params: childLabel?, childPath?, childComponentName?",
@@ -5564,22 +5914,27 @@ export const paramsClauses: Readonly<Record<string, string>> = {
   get_component_tree: "Params: actorLabel?, actorPath?, includeProperties?, componentClass?, componentName?, relativeTo?, socketNames?, world?, pieInstance?",
   get_current_edit_level: "Params: none",
   get_current_level: "Params: none",
+  get_hlod_stats: "Params: none",
   get_instance_transforms: "Params: actorLabel?, actorPath?, componentName?, worldSpace?",
   get_nanite_info: "Params: assetPath (or meshPath)",
   get_post_process_settings: "Params: actorLabel?, actorPath?, componentName?, propertyName?, onlyOverridden?, nameContains?, names?",
   get_relative_transform: "Params: targetLabel? (or target), targetPath?, referenceLabel? (or reference), referencePath?, world?, pieInstance?",
+  get_runtime_partition: "Params: partitionName, setupName?",
   get_runtime_virtual_texture_summary: "Params: world?, pieInstance?",
   get_selected_actors: "Params: none",
   get_skinned_vertices: "Params: at least one of actorLabel/actorPath, componentName?, world?, pieInstance?, lodIndex?, space?, boneNames?, includeChildBones?, minWeight?, box?, nearPoint?, radius?, include?, startIndex?, limit?, dumpToFile?, outputPath?",
   get_spline_info: "Params: actorLabel OR actorPath, componentName?, projectPoint?, world?, pieInstance?",
   get_water_state: "Params: actorLabel?, actorPath?",
   get_world_outliner: "Params: classFilter?, exactClass?, nameFilter?, folderPath?, folderPathPrefix?, editorHidden?, includeStreaming?, world?, pieInstance?, cursor?, limit?",
+  get_world_partition_minimap: "Params: none",
   get_world_partition_settings: "Params: none",
   get_world_settings: "Params: none",
   line_trace: "Params: start?, end?, direction?, distance?, traceComplex?, channel?, ignoreActors?, multi?, world?, pieInstance?",
   list_actor_descs: "Params: filter?, className?, guids?, bounds?, loadedOnly?, unloadedOnly?, cursor?, limit?",
   list_actor_tags: "Params: actorLabel?, actorPath?, cursor?, limit?",
+  list_hlod_setups: "Params: partitionName",
   list_levels: "Params: cursor?, limit?",
+  list_runtime_partitions: "Params: none",
   list_streaming_sublevels: "Params: none",
   list_transient_actors: "Params: world?, pieInstance?, cursor?, limit?",
   list_volumes: "Params: volumeType?, cursor?, limit?",
@@ -5592,14 +5947,21 @@ export const paramsClauses: Readonly<Record<string, string>> = {
   place_actors_batch: "Params: actors",
   query_components: "Params: componentClass?, actorClass?, matchSubclasses?, componentNameContains?, actorLabelPrefix?, actorLabelContains?, actorTag?, folderPath?, folderPathPrefix?, includeChildActors?, fields?, propertyNames?, actorPropertyNames?, where?, whereMode?, suspectOnly?, groupBy?, countBy?, sampleLimit?, countOnly?, limit?, startIndex?, duplicateTransformTolerance?, levelPath?, world?, pieInstance?, includeCollision?, collisionChannel?",
   read_actor_motion: "Params: actorLabel?, actorLabels?, actorPath?, actorPaths?, world?, pieInstance?",
+  rebuild_brush: "Params: at least one of actorLabel/actorPath, builderClass?, builderProperties?, deferBsp?",
   rebuild_water_zone: "Params: actorLabel?, actorPath?, zoneExtent?, tileSize?, maxPasses?",
   recreate_physics_state: "Params: at least one of actorLabels/labelPrefix/tag/classFilter/componentClass/componentNameContains, dryRun?, maxComponents?, world?, pieInstance?",
   remove_actor_tag: "Params: actorLabel?, actorPath?, tag",
   remove_component_from_actor: "Params: actorLabel?, actorPath?, componentName",
   remove_components_by_class: "Params: componentClass, matchComponentSubclasses?, componentNameContains?, actorLabels?, labelPrefix?, labelContains?, tag?, classFilter? (or actorClassFilter), folderPath?, folderPathPrefix?, matchSubclasses?, dryRun?, save?, transactionLabel?",
+  remove_hlod_setup: "Params: partitionName, setupName",
   remove_instance: "Params: actorLabel?, actorPath?, componentName?, index",
+  remove_runtime_partition: "Params: partitionName",
   remove_streaming_sublevel: "Params: levelName (or levelPath)",
   rename_actor_object: "Params: at least one of actorLabel/actorPath/renames, newName?, dryRun?",
+  rename_runtime_partition: "Params: partitionName, newName",
+  repair_world_partition_errors: "Params: none",
+  replace_actors_with_asset: "Params: actorLabels, assetPath, copySourceProperties?",
+  replace_actors_with_class: "Params: actorLabels, className",
   rerun_construction_scripts: "Params: at least one of actorLabels/className, matchSubclasses?, world?, pieInstance?",
   resolve_actor: "Params: internalName",
   restore_component_relative_transform: "Params: actorLabel OR actorPath, componentName, relativeTransform, world?, pieInstance?",
@@ -5619,14 +5981,18 @@ export const paramsClauses: Readonly<Record<string, string>> = {
   set_editor_visibility: "Params: hidden, actorLabels?, all?",
   set_fixed_exposure: "Params: actorLabel?, actorPath?, componentName?, propertyName?, exposure (or brightness), bias?",
   set_fog_properties: "Params: actorLabel?, actorPath?, world?, pieInstance?, fogDensity?, fogHeightFalloff?, startDistance?, fogInscatteringColor? (or color), enableVolumetricFog?, volumetricFogScatteringDistribution?, volumetricFogExtinctionScale?, volumetricFogDistance?, volumetricFogAlbedo?",
+  set_hlod_setup_layers: "Params: partitionName, setupName, hlodLayers",
   set_light_properties: "Params: actorLabel?, actorPath?, intensity?, color?, rotation?, mobility?, recaptureSky?, volumetricScatteringIntensity?, sourceRadius?, innerConeAngle?, outerConeAngle?",
   set_nanite_settings: "Params: assetPath (or meshPath), enabled?, positionPrecision?",
   set_post_process_settings: "Params: actorLabel?, actorPath?, componentName?, propertyName?, settings, enableOverrides?",
+  set_runtime_hash_class: "Params: runtimeHashClass",
+  set_runtime_partition_properties: "Params: partitionName, setupName?, properties",
   set_spline_points: "Params: actorLabel OR actorPath, points, componentName?, closedLoop?, loopPosition?, loopPositionOverride?, markEdited?",
   set_streaming_sublevel_properties: "Params: levelName (or levelPath), initiallyLoaded?, initiallyVisible?, location?, editorVisible?",
   set_volume_properties: "Params: actorLabel?, actorPath?, properties",
   set_water_body_property: "Params: actorLabel?, actorPath?, propertyName, value",
   set_world_partition_settings: "Params: at least one of cellSize/loadingRange/settings, grid?, gridPath?",
+  set_world_partition_streaming: "Params: enabled",
   set_world_settings: "Params: defaultGameMode?, killZ?, globalGravityZ?, enableWorldBoundsChecks?",
   shape_trace: "Params: shape, radius?, halfExtent?, halfHeight?, start?, end?, direction?, distance?, traceComplex?, channel?, ignoreActors?, world?, pieInstance?, multi?",
   snap_actor_to_floor: "Params: actorLabel?, actorPath?, floorOffset?, maxDistance?, world?, pieInstance?",
@@ -5646,13 +6012,13 @@ export const paramsClauses: Readonly<Record<string, string>> = {
 export const schema: Record<string, z.ZodType> = {
   actorClass: z.string().optional().describe("Actor class: short name, /Script path or Blueprint class path (place_actor, spawn_actors_batch, spawn_transient_actor). Owning actor class, resolved as a class or matched as a substring (query_components)"),
   actorClassFilter: z.string().optional().describe("Alias for classFilter"),
-  actorLabel: z.string().optional().describe("Actor editor label; pass actorLabel or actorPath (add_actor_tag, add_component_to_actor, add_hismc_instances, add_instances, add_post_process_blendable, aim_actor_at, delete_actor, export_actor_fbx, get_actor_bounds, get_actor_details, get_component_details, get_component_tree, get_instance_transforms, get_post_process_settings, get_spline_info, get_water_state, list_actor_tags, move_actor, nudge_component, read_actor_motion, rebuild_water_zone, remove_actor_tag, remove_component_from_actor, remove_instance, rename_actor_object, restore_component_relative_transform, select_component, set_actor_material, set_actor_mobility, set_actor_property, set_actor_tags, set_component_property, set_component_skeletal_mesh, set_fixed_exposure, set_fog_properties, set_light_properties, set_post_process_settings, set_spline_points, set_volume_properties, set_water_body_property, snap_actor_to_floor, snap_instances_to_surface, update_instance_transform). Transient actor label (destroy_transient_actor). Actor label, name or path; pass actorLabel or actorPath (get_skinned_vertices)"),
+  actorLabel: z.string().optional().describe("Actor editor label; pass actorLabel or actorPath (add_actor_tag, add_component_to_actor, add_hismc_instances, add_instances, add_post_process_blendable, aim_actor_at, delete_actor, export_actor_fbx, get_actor_bounds, get_actor_details, get_component_details, get_component_tree, get_instance_transforms, get_post_process_settings, get_spline_info, get_water_state, list_actor_tags, move_actor, nudge_component, read_actor_motion, rebuild_water_zone, remove_actor_tag, remove_component_from_actor, remove_instance, rename_actor_object, restore_component_relative_transform, select_component, set_actor_material, set_actor_mobility, set_actor_property, set_actor_tags, set_component_property, set_component_skeletal_mesh, set_fixed_exposure, set_fog_properties, set_light_properties, set_post_process_settings, set_spline_points, set_volume_properties, set_water_body_property, snap_actor_to_floor, snap_instances_to_surface, update_instance_transform). Transient actor label (destroy_transient_actor). Actor label, name or path; pass actorLabel or actorPath (get_skinned_vertices). Brush or volume to rebuild (rebuild_brush)"),
   actorLabelA: z.string().optional().describe("First actor label; pass actorLabelA or actorPathA"),
   actorLabelB: z.string().optional().describe("Second actor label; pass actorLabelB or actorPathB"),
   actorLabelContains: z.string().optional().describe("Case-insensitive substring over the actor's editor label"),
   actorLabelPrefix: z.string().optional().describe("Case-sensitive prefix over the actor's editor label"),
-  actorLabels: z.array(z.string()).optional().describe("Exact actor editor labels"),
-  actorPath: z.string().optional().describe("Full actor object path; the unambiguous selector, and it wins over actorLabel (add_actor_tag, add_component_to_actor, add_hismc_instances, add_instances, add_post_process_blendable, aim_actor_at, delete_actor, export_actor_fbx, get_actor_bounds, get_actor_details, get_component_details, get_component_tree, get_instance_transforms, get_post_process_settings, get_spline_info, get_water_state, list_actor_tags, move_actor, nudge_component, read_actor_motion, rebuild_water_zone, remove_actor_tag, remove_component_from_actor, remove_instance, rename_actor_object, restore_component_relative_transform, select_component, set_actor_material, set_actor_mobility, set_actor_property, set_actor_tags, set_component_property, set_component_skeletal_mesh, set_fixed_exposure, set_fog_properties, set_light_properties, set_post_process_settings, set_spline_points, set_volume_properties, set_water_body_property, snap_actor_to_floor, snap_instances_to_surface, update_instance_transform). Transient actor object path (destroy_transient_actor). Actor object path; preferred when labels repeat (get_skinned_vertices)"),
+  actorLabels: z.array(z.string()).optional().describe("Exact actor editor labels (batch_set_actor_properties, batch_translate, bulk_set_component_property, convert_brushes_to_static_mesh, read_actor_motion, recreate_physics_state, remove_components_by_class, rerun_construction_scripts, select_actors, set_actor_folder_path, set_actor_hlod_layer, set_component_materials, set_editor_visibility). HLOD actors to build (default: every loaded HLOD actor) (build_hlod_actors). Labels (or names or paths) of the actors to replace (replace_actors_with_asset, replace_actors_with_class)"),
+  actorPath: z.string().optional().describe("Full actor object path; the unambiguous selector, and it wins over actorLabel (add_actor_tag, add_component_to_actor, add_hismc_instances, add_instances, add_post_process_blendable, aim_actor_at, delete_actor, export_actor_fbx, get_actor_bounds, get_actor_details, get_component_details, get_component_tree, get_instance_transforms, get_post_process_settings, get_spline_info, get_water_state, list_actor_tags, move_actor, nudge_component, read_actor_motion, rebuild_water_zone, remove_actor_tag, remove_component_from_actor, remove_instance, rename_actor_object, restore_component_relative_transform, select_component, set_actor_material, set_actor_mobility, set_actor_property, set_actor_tags, set_component_property, set_component_skeletal_mesh, set_fixed_exposure, set_fog_properties, set_light_properties, set_post_process_settings, set_spline_points, set_volume_properties, set_water_body_property, snap_actor_to_floor, snap_instances_to_surface, update_instance_transform). Transient actor object path (destroy_transient_actor). Actor object path; preferred when labels repeat (get_skinned_vertices). Object path of the brush; preferred over actorLabel when known (rebuild_brush)"),
   actorPathA: z.string().optional().describe("First actor object path"),
   actorPathB: z.string().optional().describe("Second actor object path"),
   actorPaths: z.array(z.string()).optional().describe("Full actor object paths"),
@@ -5664,7 +6030,7 @@ export const schema: Record<string, z.ZodType> = {
   allowSubtractive: z.boolean().optional().describe("Also convert subtractive brushes, which have no surface of their own"),
   alongSpline: z.object({ actorLabel: z.string().optional().describe("Spline actor label; pass actorLabel or actorPath"), actorPath: z.string().optional().describe("Spline actor object path"), componentName: z.string().optional().describe("Spline component, when the actor has several"), spacing: z.number().describe("Distance between spawns in cm, at least 1"), startDistance: z.number().optional().describe("Distance along the spline to start at (default 0)"), endDistance: z.number().optional().describe("Distance along the spline to stop at (default its length)"), offset: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Offset, in the spline's frame when aligning to it"), alignToTangent: z.boolean().optional().describe("Rotate each spawn to the spline (default true)") }).optional().describe("Spawns scattered along a spline by distance"),
   animSequence: z.string().optional().describe("Single-node preview animation"),
-  assetPath: z.string().optional().describe("StaticMesh asset path"),
+  assetPath: z.string().optional().describe("StaticMesh asset path (get_nanite_info, set_nanite_settings). Asset to create the new actors from: a static mesh, Blueprint, particle system... (replace_actors_with_asset)"),
   attachRule: z.string().optional().describe("KeepWorld | KeepRelative | SnapToTarget"),
   attenuationRadius: z.number().optional().describe("Point, spot and rect lights only"),
   axisRotation: z.object({ axis: z.string().describe("forward | right | up"), degrees: z.number().describe("Signed rotation in degrees") }).optional().describe("Quaternion rotation about one frame axis; not with viewRotation"),
@@ -5673,13 +6039,15 @@ export const schema: Record<string, z.ZodType> = {
   bounds: z.record(z.string(), z.unknown()).optional().describe("{min:{x,y,z}, max:{x,y,z}} intersection test"),
   box: z.object({ min: z.object({ x: z.number(), y: z.number(), z: z.number() }).describe("Box minimum (cm)"), max: z.object({ x: z.number(), y: z.number(), z: z.number() }).describe("Box maximum (cm)") }).optional().describe("Keep vertices whose posed position is inside this box (inclusive), in space"),
   brightness: z.number().optional().describe("Alias for exposure"),
+  builderClass: z.string().optional().describe("Brush builder class to rebuild with (default: the brush's current builder)"),
+  builderProperties: z.record(z.string(), z.unknown()).optional().describe("Builder property name -> value, such as {X: 400, Y: 200, Z: 100} for a CubeBuilder"),
   cellSize: z.number().optional().describe("Streaming cell size in world centimetres"),
   channel: z.string().optional().describe("Collision channel (default Visibility)"),
   childComponentName: z.string().optional().describe("Child SceneComponent instance name; omitted selects the actor root"),
   childLabel: z.string().optional().describe("Child actor label; pass childLabel or childPath"),
   childPath: z.string().optional().describe("Child actor object path"),
   classFilter: z.string().optional().describe("Case-insensitive substring over the actor class name (actors_in_box). Actor class, resolved as a class or matched as a substring (batch_set_actor_properties, bulk_set_component_property, set_actor_hlod_layer, set_component_materials). Brush class to convert (convert_brushes_to_static_mesh). Case-sensitive substring over the class name (get_world_outliner). Actor class the owners must be (recreate_physics_state). Restrict to actors of this class (remove_components_by_class)"),
-  className: z.string().optional().describe("Alias for transformerClass (add_runtime_cell_transformer). Case-sensitive substring over the class name (delete_actors, set_actor_folder_path). Class name, /Script path or Blueprint class path; required without labelPrefix (get_actors_by_class). Alias for componentClass (get_actors_by_component_class). Actor class filter (list_actor_descs, load_actor_descs). Blueprint or native class, resolved as a class or matched as a substring (rerun_construction_scripts)"),
+  className: z.string().optional().describe("Alias for transformerClass (add_runtime_cell_transformer). Case-sensitive substring over the class name (delete_actors, set_actor_folder_path). Class name, /Script path or Blueprint class path; required without labelPrefix (get_actors_by_class). Alias for componentClass (get_actors_by_component_class). Actor class filter (list_actor_descs, load_actor_descs). Actor class to create in their place; it needs an actor factory that works without an asset (lights, empty actors, volumes) (replace_actors_with_class). Blueprint or native class, resolved as a class or matched as a substring (rerun_construction_scripts)"),
   classPathContains: z.string().optional().describe("Case-insensitive substring of the generated class path"),
   classPathContainsAny: z.array(z.string()).optional().describe("Match when the class path contains any of these case-insensitive substrings"),
   clearOverrides: z.boolean().optional().describe("true drops every component override so the mesh asset's own slots show through"),
@@ -5692,6 +6060,7 @@ export const schema: Record<string, z.ZodType> = {
   componentNameA: z.string().optional().describe("Component on actor A; omitted selects its root"),
   componentNameB: z.string().optional().describe("Component on actor B; omitted selects its root"),
   componentNameContains: z.string().optional().describe("Case-insensitive substring over the component instance name"),
+  copySourceProperties: z.boolean().optional().describe("When the asset is a Blueprint sharing a native parent with a replaced actor, copy that actor's property values (default true)"),
   countBy: z.array(z.string()).optional().describe("Dot paths to build value histograms for, at most 8"),
   countOnly: z.boolean().optional().describe("Return the aggregates without rows"),
   countX: z.number().int().optional().describe("Actors along X (default 4)"),
@@ -5699,6 +6068,7 @@ export const schema: Record<string, z.ZodType> = {
   countZ: z.number().int().optional().describe("Actors along Z (default 1)"),
   cursor: z.string().optional().describe("Resume a paged read: pass back the nextCursor from the previous page, unmodified"),
   defaultGameMode: z.string().optional().describe("GameMode class path or short name; None clears it"),
+  deferBsp: z.boolean().optional().describe("Defer the BSP rebuild for batching; a later call without it processes the pending BSP (default false)"),
   destinationPath: z.string().optional().describe("Content path the generated static meshes are written to (default /Game/Meshes/Converted)"),
   direction: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Ray direction, normalised internally (line_trace, shape_trace). Trace direction (default straight down) (snap_instances_to_surface)"),
   discardUnsaved: z.boolean().optional().describe("Switch even though the open map has unsaved changes, discarding them (default false)"),
@@ -5709,7 +6079,7 @@ export const schema: Record<string, z.ZodType> = {
   editorHidden: z.boolean().optional().describe("Only editor-hidden (true) or only visible (false) actors"),
   editorVisible: z.boolean().optional().describe("Editor viewport visibility"),
   enableAutoLODGeneration: z.boolean().optional().describe("Also set bEnableAutoLODGeneration on each matched actor"),
-  enabled: z.boolean().optional().describe("Enable Nanite (default true)"),
+  enabled: z.boolean().optional().describe("Enable Nanite (default true) (set_nanite_settings). true streams the world; false keeps every actor loaded (set_world_partition_streaming)"),
   enableOverrides: z.boolean().optional().describe("Enable each written setting's bOverride flag (default true)"),
   enableVolumetricFog: z.boolean().optional().describe("Enable volumetric fog"),
   enableWorldBoundsChecks: z.boolean().optional().describe("Enable world bounds checks"),
@@ -5727,7 +6097,7 @@ export const schema: Record<string, z.ZodType> = {
   folderPath: z.string().optional().describe("World Outliner folder, matched exactly (batch_set_actor_properties, bulk_set_component_property, delete_actors, get_world_outliner, query_components, remove_components_by_class, set_actor_hlod_layer, set_component_materials). World Outliner folder whose brushes are converted (convert_brushes_to_static_mesh). World Outliner folder to create, such as Props/Lights (create_outliner_folder). World Outliner folder to delete, with the empty folders under it (delete_outliner_folder). World Outliner folder; an empty string moves the actors to the root (set_actor_folder_path)"),
   folderPathPrefix: z.string().optional().describe("World Outliner folder, matched with every folder nested under it"),
   folderPaths: z.array(z.string()).optional().describe("World Outliner folders; combined with folderPath"),
-  force: z.boolean().optional().describe("Bypass EditDefaultsOnly to write per-instance overrides (batch_set_actor_properties). Write a package even when it is already clean (default false) (save_level). Bypass EditDefaultsOnly to write a per-instance override (set_actor_property)"),
+  force: z.boolean().optional().describe("Bypass EditDefaultsOnly to write per-instance overrides (batch_set_actor_properties). Rebuild actors that are up to date (default false) (build_hlod_actors). Rebuild HLODs that are up to date (default false) (build_world_partition_hlods). Write a package even when it is already clean (default false) (save_level). Bypass EditDefaultsOnly to write a per-instance override (set_actor_property)"),
   frame: z.string().optional().describe("Frame for translation and axis rotation: world | actor (default) | parent | component"),
   fromComponents: z.object({ componentClass: z.string().optional().describe("Component class the components must be"), componentNameContains: z.string().optional().describe("Case-insensitive substring over the component name"), actorLabels: z.array(z.string()).optional().describe("Exact actor editor labels"), labelPrefix: z.string().optional().describe("Case-sensitive prefix over the actor's editor label"), labelContains: z.string().optional().describe("Case-insensitive substring over the actor's editor label"), tag: z.string().optional().describe("Actor must carry this tag"), classFilter: z.string().optional().describe("Actor class, resolved as a class or matched as a substring"), folderPath: z.string().optional().describe("World Outliner folder, matched exactly"), folderPathPrefix: z.string().optional().describe("World Outliner folder, matched with every folder nested under it"), matchSubclasses: z.boolean().optional().describe("Match subclasses of classFilter (default true)"), space: z.string().optional().describe("local (default, the component's own orientation) | world (axis-aligned bounds)"), offset: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Offset added to the computed point"), extentFraction: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Fraction of the box extent added per axis, such as {z: 0.72}"), inheritRotation: z.boolean().optional().describe("Spawn with the component's rotation (default false)") }).optional().describe("One spawn per matched component, placed from its bounds"),
   globalGravityZ: z.number().optional().describe("Global gravity Z"),
@@ -5740,7 +6110,8 @@ export const schema: Record<string, z.ZodType> = {
   halfHeight: z.number().optional().describe("Capsule half height in cm, including caps; at least radius"),
   hidden: z.boolean().optional().describe("true hides the actors in the editor, false shows them"),
   hideFromOutliner: z.boolean().optional().describe("Keep the actor out of the World Outliner (default false)"),
-  hlodLayer: z.string().nullable().optional().describe("HLODLayer asset path, or null to clear the per-actor override"),
+  hlodLayer: z.string().nullable().optional().describe("Build only the HLODs of this HLODLayer asset; omitted or null builds every layer (build_world_partition_hlods). HLODLayer asset path, or null to clear the per-actor override (set_actor_hlod_layer)"),
+  hlodLayers: z.array(z.string()).optional().describe("HLODLayer asset paths to assign; empty leaves the setup without layers"),
   ignoreActors: z.array(z.string()).optional().describe("Actor labels to skip"),
   include: z.array(z.string()).optional().describe("Data per vertex: any of positions, weights, triangles (default positions and weights)"),
   includeChildActors: z.boolean().optional().describe("Match a ChildActorComponent's child actor by the actor filters of the top-level actor that owns it (default false)"),
@@ -5806,7 +6177,7 @@ export const schema: Record<string, z.ZodType> = {
   nameFilter: z.string().optional().describe("Case-sensitive substring over the internal name or the label"),
   names: z.array(z.string()).optional().describe("Exact setting names to return"),
   nearPoint: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Keep vertices within radius of this point, in space; needs radius"),
-  newName: z.string().optional().describe("New object name; omitted, a unique name is generated from the actor's class"),
+  newName: z.string().optional().describe("New object name; omitted, a unique name is generated from the actor's class (rename_actor_object). New runtime partition name (rename_runtime_partition)"),
   offset: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("World-space offset added to each actor's location"),
   onConflict: z.string().optional().describe("When the label or name is taken: skip (default) | error"),
   onlyColliding: z.boolean().optional().describe("Only colliding components contribute to the bounds (default false) (actors_in_box). Only colliding components contribute to the bounds (get_actor_bounds)"),
@@ -5818,13 +6189,15 @@ export const schema: Record<string, z.ZodType> = {
   parentComponentName: z.string().optional().describe("Parent SceneComponent instance name; omitted selects the actor root"),
   parentLabel: z.string().optional().describe("Parent actor label; pass parentLabel or parentPath"),
   parentPath: z.string().optional().describe("Parent actor object path"),
+  partitionClass: z.string().optional().describe("RuntimePartition class (default /Script/Engine.RuntimePartitionLHGrid)"),
+  partitionName: z.string().optional().describe("Runtime partition name, as list_runtime_partitions reports it (add_hlod_setup, get_runtime_partition, list_hlod_setups, remove_hlod_setup, remove_runtime_partition, rename_runtime_partition, set_hlod_setup_layers, set_runtime_partition_properties). Name of the runtime partition to add (add_runtime_partition)"),
   pieInstance: z.number().int().optional().describe("Which PIE world when world is pie: 0 = server or primary, 1..N = clients"),
   point: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("World point to project onto the navmesh"),
   points: z.array(z.object({ x: z.number().optional().describe("World X, with y and z"), y: z.number().optional().describe("World Y"), z: z.number().optional().describe("World Z"), location: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("World position, instead of x, y, z"), position: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("World position, instead of x, y, z"), worldLocation: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("World position, instead of x, y, z"), pointType: z.string().optional().describe("Linear | Curve (default) | Constant | CurveClamped | CurveCustomTangent"), arriveTangent: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("World arrive tangent; pass both tangents or neither"), leaveTangent: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("World leave tangent; pass both tangents or neither"), rotation: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("World rotation as {x: pitch, y: yaw, z: roll} in degrees"), scale: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Point scale"), inputKey: z.number().optional().describe("Input key; keys must strictly increase (default the point's index)") })).optional().describe("Points in world space: a bare {x, y, z} or the typed form; validated as a batch before anything is cleared"),
   position: z.number().int().optional().describe("Stack index to insert at; -1 (default) appends"),
   positionPrecision: z.number().int().optional().describe("Nanite position precision"),
   projectPoint: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("World point to project onto the spline"),
-  properties: z.record(z.string(), z.unknown()).optional().describe("Property name to value, applied to the new transformer instance (add_runtime_cell_transformer). Property name to value, dotted paths supported (batch_set_actor_properties). Property name to value (set_volume_properties). Property name to value applied to every spawn (spawn_actors_batch). Property name to value, applied before initialisation (spawn_transient_actor)"),
+  properties: z.record(z.string(), z.unknown()).optional().describe("Property name to value, applied to the new transformer instance (add_runtime_cell_transformer). Property name to value, dotted paths supported (batch_set_actor_properties). Property name -> value, as get_runtime_partition lists them (set_runtime_partition_properties). Property name to value (set_volume_properties). Property name to value applied to every spawn (spawn_actors_batch). Property name to value, applied before initialisation (spawn_transient_actor)"),
   propertyName: z.string().optional().describe("Property name, dotted paths supported (bulk_set_component_property, set_actor_property, set_component_property, set_water_body_property). Only this property, with includeProperties (get_actor_details). FPostProcessSettings property on that component (get_post_process_settings, set_fixed_exposure, set_post_process_settings)"),
   propertyNames: z.array(z.string()).optional().describe("Restrict includeValues to these properties (get_component_details). Component property names or dotted struct paths (AttachEndTo.ComponentProperty) projected under props.*, at most 32 (query_components)"),
   radius: z.number().optional().describe("Distance from nearPoint in cm, above 0; needs nearPoint (get_skinned_vertices). Positive sphere or capsule radius in cm (shape_trace)"),
@@ -5841,6 +6214,7 @@ export const schema: Record<string, z.ZodType> = {
   restoreOriginalLevel: z.boolean().optional().describe("Reopen the map that was open before the call (default true)"),
   roll: z.number().optional().describe("Roll in degrees (default 0)"),
   rotation: z.object({ pitch: z.number(), yaw: z.number(), roll: z.number() }).optional().describe("World rotation (move_actor, place_actor, spawn_light, spawn_skeletal_mesh_actor, spawn_transient_actor, update_instance_transform). DirectionalLight sun angle (set_light_properties)"),
+  runtimeHashClass: z.string().optional().describe("Runtime hash class: WorldPartitionRuntimeHashSet, WorldPartitionRuntimeSpatialHash, or a /Script path"),
   sampleLimit: z.number().int().optional().describe("Sample labels per group (default 5, max 25)"),
   save: z.boolean().optional().describe("Save only the current level after a successful clear and compile (default false) (clear_level_script). Save the level after a committed removal (default false) (remove_components_by_class)"),
   saveCurrent: z.boolean().optional().describe("Alias for saveFirst"),
@@ -5848,6 +6222,7 @@ export const schema: Record<string, z.ZodType> = {
   scale: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Actor scale"),
   scaleMultiplier: z.number().optional().describe("Uniform relative-scale multiplier, greater than zero"),
   settings: z.record(z.string(), z.unknown()).optional().describe("Setting name to value; each setting's bOverride flag is enabled too (set_post_process_settings). Dotted path rooted at the world partition to value (set_world_partition_settings)"),
+  setupName: z.string().optional().describe("Name of the spatially loaded HLOD setup to add (add_hlod_setup). Read this HLOD setup's partition instead of the main partition (get_runtime_partition). HLOD setup name, as list_hlod_setups reports it (remove_hlod_setup, set_hlod_setup_layers). Write this HLOD setup's partition instead of the main partition (set_runtime_partition_properties)"),
   shape: z.string().optional().describe("sphere | box | capsule"),
   skeletalMesh: z.string().nullable().optional().describe("SkeletalMesh asset path, or null to clear the mesh (set_component_skeletal_mesh). SkeletalMesh asset path to spawn; null is refused here (spawn_skeletal_mesh_actor)"),
   skipIfPresent: z.boolean().optional().describe("Report an existing transformer of this class instead of adding a duplicate (default true)"),

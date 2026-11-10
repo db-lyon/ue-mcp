@@ -9,6 +9,29 @@ import { makeSpecBp, type HandlerSpecs } from "../../surface/handler-spec.js";
 
 /** The recorded contract of every spec'd editor handler. */
 export const handlerSpecs: HandlerSpecs = {
+  "add_python_path": {
+    "category": "editor",
+    "params": [
+      {
+        "name": "path",
+        "type": "string",
+        "required": true,
+        "description": "Absolute path of an existing folder to put on sys.path"
+      },
+      {
+        "name": "owner",
+        "type": "string",
+        "required": false,
+        "description": "Name of what owns the path; remove_python_path with only owner removes all of its paths"
+      },
+      {
+        "name": "mountPointRoot",
+        "type": "string",
+        "required": false,
+        "description": "Package root, such as /MyPlugin/Python/Extra, that gives Python types generated from this path stable names"
+      }
+    ]
+  },
   "add_sequence_section": {
     "category": "editor",
     "params": [
@@ -1790,6 +1813,17 @@ export const handlerSpecs: HandlerSpecs = {
     "category": "editor",
     "params": []
   },
+  "list_python_paths": {
+    "category": "editor",
+    "params": [
+      {
+        "name": "owner",
+        "type": "string",
+        "required": false,
+        "description": "Only the paths of this owner (default: every owner)"
+      }
+    ]
+  },
   "list_trace_channels": {
     "category": "editor",
     "params": [
@@ -1833,6 +1867,35 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "integer",
         "required": false,
         "description": "Buttons reported per window (default 200)"
+      }
+    ]
+  },
+  "log_map_check_message": {
+    "category": "editor",
+    "params": [
+      {
+        "name": "severity",
+        "type": "string",
+        "required": true,
+        "description": "error | warning | info"
+      },
+      {
+        "name": "message",
+        "type": "string",
+        "required": true,
+        "description": "Message text"
+      },
+      {
+        "name": "actorLabel",
+        "type": "string",
+        "required": false,
+        "description": "Actor the message is about; the Message Log links to it"
+      },
+      {
+        "name": "actorPath",
+        "type": "string",
+        "required": false,
+        "description": "Object path of that actor; preferred over actorLabel when known"
       }
     ]
   },
@@ -2231,6 +2294,36 @@ export const handlerSpecs: HandlerSpecs = {
     "category": "editor",
     "params": [],
     "contractExempt": "reloads the Python bridge handlers from disk"
+  },
+  "remove_python_path": {
+    "category": "editor",
+    "params": [
+      {
+        "name": "path",
+        "type": "string",
+        "required": false,
+        "description": "Path to remove, as it was added"
+      },
+      {
+        "name": "owner",
+        "type": "string",
+        "required": false,
+        "description": "Owner it was added under; alone, removes every path of that owner"
+      }
+    ],
+    "choices": [
+      {
+        "mode": "atLeastOne",
+        "branches": [
+          [
+            "path"
+          ],
+          [
+            "owner"
+          ]
+        ]
+      }
+    ]
   },
   "remove_sequence_section": {
     "category": "editor",
@@ -2685,6 +2778,23 @@ export const handlerSpecs: HandlerSpecs = {
       }
     ],
     "contractExempt": "runs automation tests"
+  },
+  "run_map_check": {
+    "category": "editor",
+    "params": [
+      {
+        "name": "maxMessages",
+        "type": "integer",
+        "required": false,
+        "description": "Messages to return (default 500, max 5000)"
+      },
+      {
+        "name": "severity",
+        "type": "string",
+        "required": false,
+        "description": "Severity-name substring: Error | Warning | PerformanceWarning | Info"
+      }
+    ]
   },
   "run_python_file": {
     "category": "editor",
@@ -3966,6 +4076,7 @@ export const handlerSpecs: HandlerSpecs = {
 
 /** The Params: clause of each spec'd bridge method. */
 export const paramsClauses: Readonly<Record<string, string>> = {
+  add_python_path: "Params: path, owner?, mountPointRoot?",
   add_sequence_section: "Params: sequencePath (or assetPath, or path), trackType, actorLabel?, actorPath?, startSeconds?, endSeconds?, cameraActorLabel?, cameraActorPath?, materialParameterCollection?, animation?, startFrameOffset?, endFrameOffset?, playRate?",
   add_sequence_track: "Params: assetPath (or path), trackType, actorLabel?, actorPath?, materialParameterCollection?",
   add_trace_bookmark: "Params: bookmarkName",
@@ -4034,8 +4145,10 @@ export const paramsClauses: Readonly<Record<string, string>> = {
   list_dirty_packages: "Params: none",
   list_function_libraries: "Params: pattern?, includeFunctions?",
   list_pie_instances: "Params: none",
+  list_python_paths: "Params: owner?",
   list_trace_channels: "Params: filter?, enabledOnly?",
   list_windows: "Params: windowId?, maxTexts?, maxTextChars?, maxButtons?",
+  log_map_check_message: "Params: severity, message, actorLabel?, actorPath?",
   open_asset: "Params: assetPath (or path), saveFirst?, discardUnsaved?",
   open_settings: "Params: container?, category?, section?",
   open_tab: "Params: tabId",
@@ -4051,6 +4164,7 @@ export const paramsClauses: Readonly<Record<string, string>> = {
   redo: "Params: none",
   redraw_viewport: "Params: allViewports?, invalidateHitProxies?, viewportIndex?",
   reload_handlers: "Params: none",
+  remove_python_path: "Params: at least one of path/owner",
   remove_sequence_section: "Params: sequencePath (or assetPath, or path), trackType?, trackName?, trackIndex?, bindingGuid?, bindingName?, actorLabel?, actorPath?, sectionIndex",
   render_mesh_studio: "Params: captures, outputDir, resolution?, viewDirection?, lightingPreset?, cubemapPath?, captureMode?, fullyLoadTextures?",
   render_sequence_frames: "Params: sequencePath (or assetPath, or path), startFrame?, endFrame?, startSeconds?, endSeconds?, frameStep?, maxFrames?, width?, height?, outputDir?, format?, cameraActorLabel?, cameraActorPath?, location?, rotation?, fov?, fullyLoadTextures?",
@@ -4058,6 +4172,7 @@ export const paramsClauses: Readonly<Record<string, string>> = {
   respond_to_dialog: "Params: at least one of buttonLabel/buttonIndex/dialogAction, items?",
   restore_runtime_visibility: "Params: rollbackToken, world?, pieInstance?",
   run_automation_tests: "Params: filter?, maxTests?, latentTimeoutSeconds?",
+  run_map_check: "Params: maxMessages?, severity?",
   run_python_file: "Params: filePath (or path), entryPoint?, runName?, asMain?, args?, kwargs?, resultVariable?, captureLog?, maxLogChars?",
   run_stat_command: "Params: command?, name?",
   save_dirty: "Params: includeMaps?, includeContent?, commitDeletes?",
@@ -4101,9 +4216,9 @@ export const paramsClauses: Readonly<Record<string, string>> = {
 export const schema: Record<string, z.ZodType> = {
   actorArgs: z.record(z.string(), z.unknown()).optional().describe("UObject* parameter name -> actor label, resolved against live actors in the selected world"),
   actorClass: z.string().optional().describe("Every actor of this class in the PIE world, bounded by maxTargets"),
-  actorLabel: z.string().optional().describe("Actor label. Editor labels are not unique, so a label naming several actors is refused (add_sequence_section, add_sequence_track, focus_viewport_on_actor, get_runtime_value, get_sequence_channel_keys, invoke_function, read_bone_transforms, rebind_possessable, remove_sequence_section, set_movement_mode, set_pie_view_target, set_sequence_channel_keys, set_sequence_keyframes, teleport_runtime_actor). Report only the LevelSequenceActor with this label or name (get_sequence_runtime_bindings)"),
+  actorLabel: z.string().optional().describe("Actor label. Editor labels are not unique, so a label naming several actors is refused (add_sequence_section, add_sequence_track, focus_viewport_on_actor, get_runtime_value, get_sequence_channel_keys, invoke_function, read_bone_transforms, rebind_possessable, remove_sequence_section, set_movement_mode, set_pie_view_target, set_sequence_channel_keys, set_sequence_keyframes, teleport_runtime_actor). Report only the LevelSequenceActor with this label or name (get_sequence_runtime_bindings). Actor the message is about; the Message Log links to it (log_map_check_message)"),
   actorLabels: z.array(z.string()).optional().describe("Explicit actor labels; a label matching several actors is refused"),
-  actorPath: z.string().optional().describe("Full actor object path, the unambiguous selector. Wins over actorLabel"),
+  actorPath: z.string().optional().describe("Full actor object path, the unambiguous selector. Wins over actorLabel (add_sequence_section, add_sequence_track, focus_viewport_on_actor, get_runtime_value, get_sequence_channel_keys, invoke_function, read_bone_transforms, rebind_possessable, remove_sequence_section, set_movement_mode, set_pie_view_target, set_sequence_channel_keys, set_sequence_keyframes, teleport_runtime_actor). Object path of that actor; preferred over actorLabel when known (log_map_check_message)"),
   actorPaths: z.array(z.string()).optional().describe("Explicit actor object paths, the unambiguous selector"),
   affectActor: z.boolean().optional().describe("Hide or show the actor itself (default true only without a component filter)"),
   affectComponents: z.boolean().optional().describe("Hide or show matched components (default true with a component filter)"),
@@ -4243,14 +4358,17 @@ export const schema: Record<string, z.ZodType> = {
   maxFrames: z.number().optional().describe("Refuse a range with more frames than this (default 300, max 5000)"),
   maxLines: z.number().int().optional().describe("Messages to return (default 200) (get_message_log). How far back into the ring buffer to read (default 100, or the whole 4096-line buffer when filter or category is given) (get_output_log)"),
   maxLogChars: z.number().optional().describe("Keep only the last N characters of logged output"),
+  maxMessages: z.number().int().optional().describe("Messages to return (default 500, max 5000)"),
   maxResults: z.number().int().optional().describe("Cap on matching lines collected out of the 4096-line ring buffer (default 4096)"),
   maxTargets: z.number().int().optional().describe("Upper bound on resolved actor and component targets; a larger set is refused rather than truncated"),
   maxTests: z.number().optional().describe("Cap on tests to run (default 50)"),
   maxTextChars: z.number().int().optional().describe("Characters kept per text (default 2000)"),
   maxTexts: z.number().int().optional().describe("Texts reported per window (default 200)"),
   maxValueLength: z.number().optional().describe("Truncate each exported value past this many characters (default 2000)"),
+  message: z.string().optional().describe("Message text"),
   mode: z.string().optional().describe("none | walking | navwalking | falling | swimming | flying | custom (set_movement_mode). game (default): the game's own pause, as SetGamePaused | debug: the editor's Pause/Resume play buttons, for every PIE world (set_pie_paused). fixed | auto (set_viewport_exposure)"),
   modify: z.object({ argument: z.string().describe("Struct parameter of functionName to fill"), getter: z.string().describe("Zero-argument UFUNCTION on the same object that returns that struct"), patch: z.record(z.string(), z.unknown()).optional().describe("Field name or dotted path to structured JSON value, applied to the struct the getter returned") }).optional().describe("Read-modify-write of a struct argument: the zero-argument getter's struct, with patch applied, is passed as that argument"),
+  mountPointRoot: z.string().optional().describe("Package root, such as /MyPlugin/Python/Extra, that gives Python types generated from this path stable names"),
   name: z.string().optional().describe("Name of the new Level Sequence asset (create_level_sequence). Console variable to read (get_cvars). Bare stat name such as unit, fps, game or gpu, prefixed with 'stat ' (default fps) (run_stat_command)"),
   nameContains: z.string().optional().describe("Case-insensitive substring of the object name"),
   names: z.array(z.string()).optional().describe("Console variables to read"),
@@ -4266,10 +4384,11 @@ export const schema: Record<string, z.ZodType> = {
   outerPath: z.string().optional().describe("Only objects somewhere under this outer, such as one level or world"),
   outputDir: z.string().optional().describe("Absolute or project-relative directory for <id>.png and a job-specific JSON manifest (render_mesh_studio). Absolute or project-relative directory for the frames (default Saved/SequenceFrames/<sequence>) (render_sequence_frames)"),
   outputPath: z.string().optional().describe("Absolute or project-relative PNG path to write; required when starting a capture (capture_scene_png). Alias for filename (capture_screenshot)"),
+  owner: z.string().optional().describe("Name of what owns the path; remove_python_path with only owner removes all of its paths (add_python_path). Only the paths of this owner (default: every owner) (list_python_paths). Owner it was added under; alone, removes every path of that owner (remove_python_path)"),
   packagePath: z.string().optional().describe("Destination folder (default /Game/Cinematics)"),
   packages: z.array(z.string()).optional().describe("Long package names to clear, as editor(list_dirty_packages) reports them (e.g. /Engine/Maps/Entry). Only these are touched"),
   parameterType: z.string().optional().describe("scalar | bool | vector | vector2d | color: adds a missing parameter to a parameter section. Inferred from the collection on a Material Parameter Collection track"),
-  path: z.string().optional().describe("Alias for sequencePath (add_sequence_section, get_sequence_binding_components, get_sequence_channel_keys, play_sequence, rebind_possessable, remove_sequence_section, render_sequence_frames, resolve_sequence_bindings, scrub_sequence, set_sequence_channel_keys, set_sequence_display_rate, set_sequence_keyframes, set_sequence_playback_range). Alias for assetPath (add_sequence_track, get_sequence_info, open_asset). Alias for objectPath (describe_object, get_property, set_property). Alias for filePath (run_python_file)"),
+  path: z.string().optional().describe("Absolute path of an existing folder to put on sys.path (add_python_path). Alias for sequencePath (add_sequence_section, get_sequence_binding_components, get_sequence_channel_keys, play_sequence, rebind_possessable, remove_sequence_section, render_sequence_frames, resolve_sequence_bindings, scrub_sequence, set_sequence_channel_keys, set_sequence_display_rate, set_sequence_keyframes, set_sequence_playback_range). Alias for assetPath (add_sequence_track, get_sequence_info, open_asset). Alias for objectPath (describe_object, get_property, set_property). Path to remove, as it was added (remove_python_path). Alias for filePath (run_python_file)"),
   paths: z.array(z.string()).optional().describe("Dotted property or function paths to evaluate per match. A function segment may carry literal arguments, e.g. GetBalance(gold, 2)"),
   pattern: z.string().optional().describe("Exact pattern of the policy to clear; omit to clear every policy (clear_dialog_policy). Substring matched against every registered console variable. Pass at least one of name, names and pattern (get_cvars). Case-insensitive substring of the library class name or its Python name (list_function_libraries). Substring matched case-insensitively against the dialog title and message (set_dialog_policy)"),
   paused: z.boolean().optional().describe("true pauses the running trace, false resumes it (default true) (pause_insights_trace). true pauses, false resumes (set_pie_paused)"),
@@ -4313,7 +4432,7 @@ export const schema: Record<string, z.ZodType> = {
   sectionIndex: z.number().int().optional().describe("Section index on the track (default 0) (get_sequence_channel_keys, set_sequence_channel_keys). Index of the section to remove, as get_sequence_info lists them (remove_sequence_section). Target section index (default 0) (set_sequence_keyframes)"),
   sequenceAction: z.string().optional().describe("play (default) | pause | stop"),
   sequencePath: z.string().optional().describe("Level Sequence asset path (add_sequence_section, get_sequence_binding_components, get_sequence_channel_keys, rebind_possessable, remove_sequence_section, resolve_sequence_bindings, set_sequence_channel_keys, set_sequence_display_rate, set_sequence_keyframes, set_sequence_playback_range). Report only actors playing this sequence (get_sequence_runtime_bindings). Level Sequence to open and drive; omit to drive the one already open (play_sequence). Level Sequence to render (render_sequence_frames). Level Sequence to open and scrub; omit to scrub the one already open (scrub_sequence)"),
-  severity: z.string().optional().describe("Severity-name substring: Error | Warning | PerformanceWarning | Info (get_message_log). Icon and colour of the toast (default info) (show_notification)"),
+  severity: z.string().optional().describe("Severity-name substring: Error | Warning | PerformanceWarning | Info (get_message_log, run_map_check). error | warning | info (log_map_check_message). Icon and colour of the toast (default info) (show_notification)"),
   showMouseCursor: z.boolean().optional().describe("Show the mouse cursor (default false for gameOnly, true otherwise)"),
   space: z.string().optional().describe("world (default) | component"),
   startFrame: z.number().optional().describe("First display frame to render. Not with startSeconds"),
