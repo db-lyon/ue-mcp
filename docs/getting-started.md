@@ -27,6 +27,7 @@ The wizard:
 3. Asks whether to wrap **native Unreal tools** (the toolset registry in UE 5.8 and later) and which categories get them. See [Native Epic tools](configuration.md#native-epic-tools).
 4. Asks for the **context strategy**: `micro` (default), `lean` or `full`. See [Context strategy](configuration.md#context-strategy-full-lean-micro).
 5. Lists the MCP clients it detects (Claude Code project and global, Claude Desktop, Cursor, VS Code, Gemini CLI, Codex project and global) and writes the config for each one you keep checked. Project-scoped clients start checked; global and Desktop configs start unchecked because they affect every project on the machine. A config that already holds an Unreal MCP entry also starts checked, and `init` names the entry before it asks. See [Replacing an Unreal MCP entry](#replacing-an-unreal-mcp-entry).
+    On UE 5.8 and later it then asks about Epic's own Unreal MCP server and, on UE 5.9 and later, the Unreal Assistant. See [Epic's Unreal MCP server and Unreal Assistant](#epics-unreal-mcp-server-and-unreal-assistant).
 6. Asks about **agent behavior**. Everything starts unchecked on a fresh install:
     - Enable the `feedback(submit)` tool.
     - With Claude Code selected: install a PostToolUse hook that nudges the agent to offer feedback after `execute_python`, and install the bundled Claude Code skills into `.claude/skills/`.
@@ -57,6 +58,8 @@ npx ue-mcp init --yes --json --project=C:/Games/MyGame/MyGame.uproject --clients
 | `--[no-]native-tools`, `--native-exclude=<categories>` | Native Unreal tools. |
 | `--[no-]pin` | Pin client configs to `ue-mcp@<this version>`. On by default with `--yes`, so the server and bridge move together; off by default in the wizard. |
 | `--command=<path>` | Use this instead of `npx` in client configs. |
+| `--[no-]unreal-mcp-autostart`, `--unreal-mcp-port=<port>` | Whether Epic's Unreal MCP server starts with this project's editor, and its port. |
+| `--[no-]unreal-assistant` | Attach ue-mcp to Epic's Unreal Assistant, or detach it. |
 | `--dry-run` | Print the plan and change nothing. |
 
 Unset flags keep the project's current choices. The exit code is 0 on success, 1 on failure, 2 on bad arguments.
@@ -71,6 +74,28 @@ UE 5.9's built-in MCP server can write its own entry into the project's client c
 For each client you configure, `init` copies the config to `<file>.ue-mcp-backup`, removes those entries, and writes the `ue-mcp` entry. Every other server and setting in the file is kept. The output names each entry it replaced and the backup it saved, in the wizard and with `--yes`; `--json` reports it as a `replace:<client>` step, and `--dry-run` lists it under each client's `replaces`. To undo, copy the backup over the config. A client left out of `--clients`, or unchecked in the wizard, is not touched.
 
 With a source-built engine, the editor writes these files into the engine root (the folder holding `Engine/`) instead of the project. `init` resolves the project's engine the same way `ue-mcp build` does and, when that engine is a source build, also replaces the entries it finds there, with the same backup and reporting: `--json` reports `replace:<client>:engine-root` and `client:<client>:engine-root`, and `--dry-run` lists them under each client's `engineRootConfig`. An installed engine (one with `Engine/Build/InstalledBuild.txt`, such as a launcher install) writes into the project, so `init` never edits files in it.
+
+### Epic's Unreal MCP server and Unreal Assistant
+
+UE 5.8 and later ship Epic's own MCP server (the ModelContextProtocol plugin, enabled by default), and UE 5.9's engine config starts it with the editor on `http://127.0.0.1:8000/mcp`. It then runs beside ue-mcp for the same project. ue-mcp's `epic` category and the `epic_*` actions already reach the same toolsets, so an agent given both servers sees the editor's tools twice.
+
+`init` and `doctor` read the server's state from files: whether the `.uproject` turns the plugin off, and `bAutoStartServer`, `ServerPortNumber` and `ServerUrlPath` from the engine's `BaseEditorPerProjectUserSettings.ini`, then the project's `Config/DefaultEditorPerProjectUserSettings.ini`, then your per-project user settings in `Saved/Config/<Platform>Editor/EditorPerProjectUserSettings.ini`, each later file winning. `-ModelContextProtocolPort=` on the editor command line overrides the port for that launch and is not read.
+
+- The wizard asks whether to keep **Start Epic's Unreal MCP server with the editor**. Unchecking it, or `--no-unreal-mcp-autostart`, writes `bAutoStartServer=False` to the `[/Script/ModelContextProtocol.ModelContextProtocolSettings]` section of your per-project user settings. `--unreal-mcp-autostart` writes `True`.
+- `--unreal-mcp-port=<port>` writes `ServerPortNumber` there instead, to move it. The ue-mcp bridge port for the project is refused.
+
+Every other line in that file is kept, and nothing is written when the setting already has that value. The editor reads it on start, so restart an editor that is open. `--json` reports the change as an `unreal-mcp` step, and `--dry-run` shows the server under `unrealMcp`.
+
+On UE 5.9 and later, with the AIAssistant plugin enabled (it is by default), the wizard also offers **Attach ue-mcp to Epic's Unreal Assistant**, and `--unreal-assistant` does the same without prompts. The assistant takes MCP servers for the agent it runs (the agent in its config, or the external agent picked in Editor Preferences) from `mcp_servers` in one per-user `AIAssistant.json`. It reads the first of these that exists: the engine's own `Engine/Config/AIAssistant.json` (and its `Restricted` variants), then `%LOCALAPPDATA%/UnrealEngine/<version>/AIAssistant.json`, then `%LOCALAPPDATA%/UnrealEngine/Common/AIAssistant.json`. On a source-built engine the last two are `Engine/AIAssistant.json`.
+
+- `init` adds a `ue-mcp` entry to that list in the user file the assistant would read, `Common` when there is none yet, launching the server the same way the client configs do. Every other key and server is kept, and an existing file is saved as `<file>.ue-mcp-backup` first.
+- When the file has no `mcp_servers` list yet, the assistant gives its agent the editor's own MCP server, and a list replaces that default. So `init` writes the editor's server (`unreal-mcp`, at this project's URL) beside ue-mcp, and Epic's tools stay available.
+- Running it again changes nothing. `--no-unreal-assistant`, or unchecking the box, removes only the `ue-mcp` entry, and a list left holding only the editor's server is removed so the assistant goes back to choosing it itself.
+- The file is per user, not per project, so the entry serves the project you last attached. A file in the engine's `Config` folder wins over it, and `init` and `doctor` say so.
+
+The assistant's hosted chat, without an agent, does not use these servers.
+
+`doctor` prints the server as `epic mcp` and the attachment as `epic assistant`, and adds a note when the server runs beside ue-mcp. `project(get_status)` carries `unrealMcpServer` (its URL and where the setting came from) while the server is set to start with the editor.
 
 ### `ue-mcp status`
 
@@ -169,7 +194,7 @@ If an update succeeds but the running server still reports an old version, run:
 npx ue-mcp doctor
 ```
 
-It prints every version source (registry latest, npm global, the running servers, the deployed bridge plugin) and flags a project-local `node_modules/ue-mcp` that **shadows** the global install: with `ue-mcp` in a project's `package.json`, `npx ue-mcp` runs that local copy. `ue-mcp update` never installs into the project; it tells you how to remove the local copy. `doctor` also flags a client config pinned to a version other than the installed bridge's, and one that launches without `--min-release-age=0`.
+It prints every version source (registry latest, npm global, the running servers, the deployed bridge plugin) and flags a project-local `node_modules/ue-mcp` that **shadows** the global install: with `ue-mcp` in a project's `package.json`, `npx ue-mcp` runs that local copy. `ue-mcp update` never installs into the project; it tells you how to remove the local copy. `doctor` also flags a client config pinned to a version other than the installed bridge's, and one that launches without `--min-release-age=0`. For a UE 5.8+ project it reports Epic's Unreal MCP server (see [Epic's Unreal MCP server and Unreal Assistant](#epics-unreal-mcp-server-and-unreal-assistant)) and flags it when it shares a port with ue-mcp.
 
 After removing the bridge or a project, MCP client configs can be left pointing at it. `doctor` names each such entry, in the project's configs and the machine-wide ones, and `--fix` removes exactly those entries (and adds `--min-release-age=0` where it is missing):
 
