@@ -12,8 +12,7 @@ Only the `ue-mcp:` block is needed. `init` writes `version: 1`, `contentRoots: [
 ue-mcp:            # project and server config (reference below)
   version: 1
   contentRoots: [/Game/, /MyPlugin/]
-  disable: [gas, networking]
-  nativeTools: { enabled: true, exclude: [animation] }
+  disable: [gas, networking, animation:epic]
   context: { strategy: micro }  # micro (default) | lean | full
   server: { mode: daemon }      # daemon (default) | in-process
 
@@ -66,8 +65,8 @@ Machine **state** the tool writes for itself (installed-hook paths, feedback, di
 |-----|------|---------|-------------|
 | `version` | `1` | `1` | Schema version. A layer without it reads as 1. |
 | `contentRoots` | `string[]` | init writes `["/Game/"]` | Content roots `asset(action="search")` searches when no `directory` is given, one root per page. Add plugin content roots here. |
-| `disable` | `string[]` | `[]` | Tool categories not registered with the server. `feedback` here turns off the feedback tool. |
-| `nativeTools` | `object` | `{ enabled: true }` | Native (UE 5.8+ toolset registry) tools. `enabled: false` leaves only the `epic` gateway. `exclude` (`string[]`) names categories that do not get the wrapped tools; they stay reachable through `epic(call_tool)`. See [Native Epic tools](configuration.md#native-epic-tools). |
+| `disable` | `string[]` | `[]` | Categories turned off. A bare name is the whole category (not advertised; `feedback` here turns off the feedback tool). `<category>:epic` takes out only the actions wrapping Unreal's toolsets, `<category>:native` only ue-mcp's own. `project(set_category_enabled)` and `ue-mcp tools` write it. See [Turning categories and toolsets on and off](configuration.md#turning-categories-and-toolsets-on-and-off). |
+| `nativeTools` | `object` | `{ enabled: true }` | Native (UE 5.8+ toolset registry) tools. `enabled: false` leaves only the `epic` gateway. `exclude` (`string[]`) is deprecated and read as `disable: [<category>:epic]` with a warning; the next `set_category_enabled` moves it. See [Native Epic tools](configuration.md#native-epic-tools). |
 | `bridge` | `object` | port derived from the project path | `port` (integer `1-65535`) pins the editor bridge port; the client connects there and the plugin listens there. `host` (default `127.0.0.1`) is where the client reaches this project's bridge, the per-project form of `UE_MCP_HOST`. See [Pinning the port](configuration.md#pinning-the-port). |
 | `editor` | `object` | the engine `EngineAssociation` names | Which engine this project uses. `path` is the editor binary and `buildToolPath` is `Build.bat` / `Build.sh`, the per-project forms of `UE_EDITOR_PATH` and `UE_BUILD_TOOL_PATH`. `launchArgs` is a list of extra arguments `start_editor` and `restart_editor` pass to the editor, `window` (`normal` or `offscreen`) and `ide` (`allow` or `none`) their default launch modes. See [Which Engine A Project Uses](configuration.md#which-engine-a-project-uses) and [How the editor is launched](configuration.md#how-the-editor-is-launched). |
 | `env` | `string` | unset | Which `ue-mcp.{env}.yml` overlay this project merges. `UE_MCP_ENV` wins. |

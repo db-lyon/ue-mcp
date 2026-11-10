@@ -73,6 +73,8 @@ const PER_SESSION: Record<string, string> = {
   "surface/category-state.ts": "Reads one project's disable config and applies it to that session's own graph, from that session's pristine copy.",
   "tools/project/categories.ts": "Turns categories and toolsets on and off in the addressed session, its project's config and its editor.",
   "integrations/epic/toolset-settings.ts": "Reads and writes the Toolset Registry setting file of the one project it is handed.",
+  "daemon/tools-routes.ts": "Runs the category and toolset actions in the editor each request names.",
+  "cli/tools-cli.ts": "Switches categories and toolsets for the one project it is handed, chosen with --project.",
   "surface/registered-surface.ts": "Withholds what one editor's plugin did not register, read off that session's own bridge.",
   "dispatch/locking.ts": "The lock registry lives in the addressed editor's bridge, under that session's owner id.",
   "index.ts": "Wires the registry, the per-session loads and the MCP server together.",
