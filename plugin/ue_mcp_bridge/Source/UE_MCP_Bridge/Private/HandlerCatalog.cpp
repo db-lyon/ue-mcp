@@ -41,6 +41,7 @@
 #include "Handlers/Diff/DiffHandlers.h"
 #include "Handlers/SourceControl/SourceControlHandlers.h"
 #include "Handlers/PIE/PIEHandlers.h"
+#include "Handlers/Localization/LocalizationHandlers.h"
 
 void MCPHandlerCatalog::RegisterAllHandlers(FMCPHandlerRegistry& Registry)
 {
@@ -87,4 +88,5 @@ void MCPHandlerCatalog::RegisterAllHandlers(FMCPHandlerRegistry& Registry)
 	FSourceControlHandlers::RegisterHandlers(Registry);
 	FPIEHandlers::RegisterHandlers(Registry);
 	FBatchHandlers::RegisterHandlers(Registry);
+	FLocalizationHandlers::RegisterHandlers(Registry);
 }

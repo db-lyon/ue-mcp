@@ -83,6 +83,11 @@ public class UE_MCP_Bridge : ModuleRules
 				"InputCore",
 				"Landscape",
 				"LevelEditor",
+				// Localization targets and their gather/compile configs
+				// (LocalizationSettings, LocalizationConfigurationScript), and the
+				// GatherText commandlet runner the Localization Dashboard uses.
+				"Localization",
+				"LocalizationCommandletExecution",
 				"LevelSequence",
 				"LevelSequenceEditor",
 				"MainFrame",

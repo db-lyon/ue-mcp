@@ -1,4 +1,5 @@
 #include "WidgetHandlers.h"
+#include "WidgetHandlers_MVVM.h"
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
 #include "WidgetGuidMap.h"
@@ -650,6 +651,9 @@ void FWidgetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("audit_commonui"), &AuditCommonUI, {
 		MCPParam::Optional(TEXT("assetPath"), EType::String, TEXT("Widget Blueprint whose CommonUI wiring to check as well")).Alias(TEXT("path")),
 	});
+
+	// Viewmodel (UMG MVVM) authoring, in its own translation unit.
+	FWidgetMVVMHandlers::RegisterHandlers(Registry);
 }
 
 UWidget* FWidgetHandlers::FindWidgetByNameRecursive(UWidget* Root, const FString& WidgetName)
