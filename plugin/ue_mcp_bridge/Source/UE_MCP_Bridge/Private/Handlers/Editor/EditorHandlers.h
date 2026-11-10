@@ -207,6 +207,9 @@ private:
 	// Reading a recorded .utrace back through TraceServices, in
 	// EditorHandlers_TraceAnalysis.cpp.
 	static TSharedPtr<FJsonValue> AnalyzeInsightsTrace(const TSharedPtr<FJsonObject>& Params);
+	// The CSV profiler with a named capture, in EditorHandlers_CsvProfile.cpp.
+	static TSharedPtr<FJsonValue> StartCsvProfile(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> StopCsvProfile(const TSharedPtr<FJsonObject>& Params);
 
 	static TSharedPtr<FJsonValue> ReloadHandlers(const TSharedPtr<FJsonObject>& Params);
 	// #378: flush dirty packages and report per-package success/failure

@@ -591,6 +591,15 @@ void FEditorHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("dumpToFile"), EType::Boolean, TEXT("Write the full analysis to a JSON file and return the headline numbers with its path (default false)")),
 		MCPParam::Optional(TEXT("outputPath"), EType::String, TEXT("File for dumpToFile; relative paths resolve under Saved/ (default Saved/UE_MCP/TraceAnalysis/<trace>.analysis.json)")),
 	});
+	// Both wait for a frame boundary the CSV profiler acts on, behind a
+	// deferred answer. Mirrored in src/bridge/bridge-timeouts.ts.
+	Registry.RegisterHandlerWithTimeout(TEXT("start_csv_profile"), &StartCsvProfile, 30.0f, {
+		MCPParam::Optional(TEXT("captureName"), EType::String, TEXT("File name for the capture, without extension (default <Project>_<timestamp>)")),
+		MCPParam::Optional(TEXT("maxFrames"), EType::Number, TEXT("End the capture by itself after this many frames (default: run until stop_csv_profile)")),
+		MCPParam::Optional(TEXT("folder"), EType::String, TEXT("Output folder (default <Project>/Saved/Profiling/CSV)")),
+	}, MCPSpec::ContractExempt(TEXT("starts a CSV profiler capture")));
+	Registry.RegisterHandlerWithTimeout(TEXT("stop_csv_profile"), &StopCsvProfile, 90.0f, {},
+		MCPSpec::ContractExempt(TEXT("ends the running CSV profiler capture")));
 	Registry.RegisterHandler(TEXT("reload_handlers"), &ReloadHandlers, NoParams,
 		MCPSpec::ContractExempt(TEXT("reloads the Python bridge handlers from disk")));
 	// save_asset is owned by FAssetHandlers (#768: adds force, file size, mtime).

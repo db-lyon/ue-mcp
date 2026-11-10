@@ -141,6 +141,8 @@ export const REGISTERED_HANDLER_TIMEOUT_SECONDS: Readonly<Record<string, number>
   source_control_submit: 120,
   source_control_sync: 300,
   spawn_actors_batch: 300,
+  start_csv_profile: 30,
+  stop_csv_profile: 90,
   summarize_static_mesh_usage: 300,
   transform_skinned_part: 600,
   trigger_hitch: 30,

@@ -1,5 +1,5 @@
 {
-  "handlerCount": 1262,
+  "handlerCount": 1264,
   "handlers": {
     "actors_in_box": {
       "category": "level",
@@ -45765,6 +45765,30 @@
       ],
       "contractExempt": "sets the running PIE player's input mode"
     },
+    "start_csv_profile": {
+      "category": "editor",
+      "params": [
+        {
+          "name": "captureName",
+          "type": "string",
+          "required": false,
+          "description": "File name for the capture, without extension (default <Project>_<timestamp>)"
+        },
+        {
+          "name": "maxFrames",
+          "type": "number",
+          "required": false,
+          "description": "End the capture by itself after this many frames (default: run until stop_csv_profile)"
+        },
+        {
+          "name": "folder",
+          "type": "string",
+          "required": false,
+          "description": "Output folder (default <Project>/Saved/Profiling/CSV)"
+        }
+      ],
+      "contractExempt": "starts a CSV profiler capture"
+    },
     "start_insights_trace": {
       "category": "editor",
       "params": [
@@ -45857,6 +45881,11 @@
           "description": "With mode=restart, restart from the root rather than resuming"
         }
       ]
+    },
+    "stop_csv_profile": {
+      "category": "editor",
+      "params": [],
+      "contractExempt": "ends the running CSV profiler capture"
     },
     "stop_insights_trace": {
       "category": "editor",

@@ -132,6 +132,7 @@ export const LOCAL_ACTIONS: Record<string, string> = {
   // The mutation journal (#1481) is a file in the project's Saved folder.
   "editor.journal_group": "Sets which group this server journals calls into. Nothing is sent anywhere.",
   "editor.list_journal": "Reads the journal file on disk.",
+  "editor.summarize_csv_profile": "Reads a CSV profiler capture from disk; the editor is never called.",
 
   // Reporting and introspection that never touch the editor.
   "feedback.submit": "Posts to a GitHub tracker. It needs the network and a user approval prompt, not an editor.",
