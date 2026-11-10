@@ -7,7 +7,7 @@ export const statetreeTool: ToolDef = categoryTool(
   "statetree",
   "StateTree asset editing: read, modify states/tasks/conditions/transitions/bindings/evaluators/global tasks/colors/state parameters/root parameters, compile and validate.",
   {
-    read:                   specBp("read", "Full dump of a StateTree asset: state hierarchy (with description, tag, customTickRate, color), tasks, conditions, transitions, evaluators, global tasks, root params, bindings.", "read_state_tree"),
+    read:                   specBp("read", "Full dump of a StateTree asset: state hierarchy (with description, tag, customTickRate, color), tasks, conditions, transitions, evaluators, global tasks, root params, bindings, and editor data extensions (class + objectPath, editable with editor(set_property)).", "read_state_tree"),
     list_states:            specBp("read", "List all states with IDs and paths, depth-first in the tree's authored order, cursor-paginated.", "list_state_tree_states"),
     add_state:              specBp("mutate", "Add a child state under the parent named by stateId or statePath, or a root state when neither is given.", "add_state_tree_state"),
     remove_state:           specBp("mutate", "Remove a state by ID.", "remove_state_tree_state"),

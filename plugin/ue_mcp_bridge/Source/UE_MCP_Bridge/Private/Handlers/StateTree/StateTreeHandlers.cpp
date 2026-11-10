@@ -1205,6 +1205,31 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::ReadStateTree(const TSharedPtr<FJsonO
 		Result->SetArrayField(TEXT("editorBindings"), BindArr);
 	}
 
+	// Editor data extensions (what K2_GetExtension returns, by class). Read
+	// through reflection: the Extensions array is not on every supported
+	// engine. Each objectPath is writable with editor(set_property).
+	{
+		TArray<TSharedPtr<FJsonValue>> ExtArr;
+		if (FArrayProperty* ExtProp = FindFProperty<FArrayProperty>(EditorData->GetClass(), TEXT("Extensions")))
+		{
+			if (FObjectPropertyBase* Inner = CastField<FObjectPropertyBase>(ExtProp->Inner))
+			{
+				FScriptArrayHelper Helper(ExtProp, ExtProp->ContainerPtrToValuePtr<void>(EditorData));
+				for (int32 i = 0; i < Helper.Num(); ++i)
+				{
+					if (UObject* Ext = Inner->GetObjectPropertyValue(Helper.GetRawPtr(i)))
+					{
+						auto EObj = MakeShared<FJsonObject>();
+						EObj->SetStringField(TEXT("class"), Ext->GetClass()->GetPathName());
+						EObj->SetStringField(TEXT("objectPath"), Ext->GetPathName());
+						ExtArr.Add(MakeShared<FJsonValueObject>(EObj));
+					}
+				}
+			}
+		}
+		Result->SetArrayField(TEXT("extensions"), ExtArr);
+	}
+
 	return MCPResult(Result);
 }
 
