@@ -136,6 +136,10 @@
 			"Name": "SemanticSearch",
 			"Enabled": true,
 			"Optional": true
+		},
+		{
+			"Name": "MovieRenderPipeline",
+			"Enabled": true
 		}
 	]
 }

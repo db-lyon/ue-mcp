@@ -1,5 +1,5 @@
 {
-  "handlerCount": 1262,
+  "handlerCount": 1269,
   "handlers": {
     "actors_in_box": {
       "category": "level",
@@ -25255,6 +25255,154 @@
           ]
         }
       ]
+    },
+    "mrq_cancel_render": {
+      "category": "editor",
+      "params": []
+    },
+    "mrq_create_job": {
+      "category": "editor",
+      "params": [
+        {
+          "name": "sequence",
+          "type": "string",
+          "required": true,
+          "description": "Level Sequence asset path to render"
+        },
+        {
+          "name": "map",
+          "type": "string",
+          "required": false,
+          "description": "World asset path to render in (default the level open in the editor)"
+        },
+        {
+          "name": "jobName",
+          "type": "string",
+          "required": false,
+          "description": "Job name, unique in the queue (default the sequence name)"
+        },
+        {
+          "name": "preset",
+          "type": "string",
+          "required": false,
+          "description": "MoviePipelinePrimaryConfig asset to copy into the job's configuration"
+        },
+        {
+          "name": "graph",
+          "type": "string",
+          "required": false,
+          "description": "MovieGraphConfig asset: render through Movie Render Graph instead of a preset"
+        },
+        {
+          "name": "outputDirectory",
+          "type": "string",
+          "required": false,
+          "description": "Output folder; {project_dir} and the other Movie Render Queue tokens are kept as written (default {project_dir}/Saved/MovieRenders/)"
+        },
+        {
+          "name": "fileNameFormat",
+          "type": "string",
+          "required": false,
+          "description": "File name format, e.g. {sequence_name}.{frame_number}"
+        },
+        {
+          "name": "width",
+          "type": "integer",
+          "required": false,
+          "description": "Output width in pixels (with height)"
+        },
+        {
+          "name": "height",
+          "type": "integer",
+          "required": false,
+          "description": "Output height in pixels (with width)"
+        },
+        {
+          "name": "format",
+          "type": "string",
+          "required": false,
+          "description": "png | jpg | exr | bmp; replaces the job's other image outputs (default png when the job has none)"
+        },
+        {
+          "name": "startFrame",
+          "type": "integer",
+          "required": false,
+          "description": "First display frame of a custom range (with endFrame)"
+        },
+        {
+          "name": "endFrame",
+          "type": "integer",
+          "required": false,
+          "description": "End display frame of a custom range, exclusive (with startFrame)"
+        }
+      ]
+    },
+    "mrq_delete_job": {
+      "category": "editor",
+      "params": [
+        {
+          "name": "jobName",
+          "type": "string",
+          "required": false,
+          "description": "Name of the job to delete"
+        },
+        {
+          "name": "jobIndex",
+          "type": "integer",
+          "required": false,
+          "description": "Queue index of the job to delete, when jobName is not given"
+        }
+      ]
+    },
+    "mrq_get_render_status": {
+      "category": "editor",
+      "params": []
+    },
+    "mrq_list_jobs": {
+      "category": "editor",
+      "params": []
+    },
+    "mrq_list_outputs": {
+      "category": "editor",
+      "params": [
+        {
+          "name": "jobName",
+          "type": "string",
+          "required": false,
+          "description": "List the files under this job's output folder"
+        },
+        {
+          "name": "outputDirectory",
+          "type": "string",
+          "required": false,
+          "description": "List the files under this folder instead"
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "description": "Files to return, newest first (default 200, max 5000)"
+        }
+      ]
+    },
+    "mrq_render": {
+      "category": "editor",
+      "params": [
+        {
+          "name": "jobNames",
+          "type": "array",
+          "required": false,
+          "description": "Jobs to render (default every enabled job in the queue)",
+          "items": "string"
+        },
+        {
+          "name": "wait",
+          "type": "boolean",
+          "required": false,
+          "description": "Wait for the render and answer with its outputs, reporting progress (default true); false returns once it starts"
+        }
+      ],
+      "contractExempt": "starts a render of every enabled job in the editor's queue"
     },
     "nav_project_point": {
       "category": "level",

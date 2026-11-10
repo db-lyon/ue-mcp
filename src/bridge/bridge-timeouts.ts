@@ -108,6 +108,7 @@ export const REGISTERED_HANDLER_TIMEOUT_SECONDS: Readonly<Record<string, number>
   metahuman_request_textures: 900,
   metahuman_set_body: 300,
   metahuman_set_wardrobe: 300,
+  mrq_render: 1800,
   paint_landscape_layer: 120,
   plan_real_world_landscape: 120,
   query_components: 300,
