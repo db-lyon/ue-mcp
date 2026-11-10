@@ -146,6 +146,107 @@ export const handlerSpecs: HandlerSpecs = {
     ],
     "contractExempt": "writes a bookmark into the running trace"
   },
+  "analyze_insights_trace": {
+    "category": "editor",
+    "params": [
+      {
+        "name": "file",
+        "type": "string",
+        "required": false,
+        "description": ".utrace to analyse, absolute or relative to Saved/Profiling (default the newest .utrace there)"
+      },
+      {
+        "name": "startSeconds",
+        "type": "number",
+        "required": false,
+        "description": "Window start, seconds from the start of the trace (default 0)"
+      },
+      {
+        "name": "endSeconds",
+        "type": "number",
+        "required": false,
+        "description": "Window end, seconds from the start of the trace (default the end)"
+      },
+      {
+        "name": "hitchThresholdMs",
+        "type": "number",
+        "required": false,
+        "description": "A frame at or over this many milliseconds is a hitch (default 50)"
+      },
+      {
+        "name": "worstFrames",
+        "type": "integer",
+        "required": false,
+        "description": "Slowest frames to list with their top timers (default 10, max 50)"
+      },
+      {
+        "name": "topTimers",
+        "type": "integer",
+        "required": false,
+        "description": "Timers to list over the window (default 20, max 200)"
+      },
+      {
+        "name": "timersPerFrame",
+        "type": "integer",
+        "required": false,
+        "description": "Timers listed per worst frame, by exclusive time (default 5, max 20)"
+      },
+      {
+        "name": "maxHitches",
+        "type": "integer",
+        "required": false,
+        "description": "Hitch rows returned; count covers them all (default 50, max 500)"
+      },
+      {
+        "name": "maxBookmarks",
+        "type": "integer",
+        "required": false,
+        "description": "Bookmark rows returned; count covers them all (default 100, max 1000)"
+      },
+      {
+        "name": "threads",
+        "type": "string",
+        "required": false,
+        "description": "game (default): timers on the game thread only | all: every CPU thread",
+        "enum": [
+          "game",
+          "all"
+        ]
+      },
+      {
+        "name": "timerSort",
+        "type": "string",
+        "required": false,
+        "description": "Order of topTimers: inclusive (default) or exclusive time",
+        "enum": [
+          "inclusive",
+          "exclusive"
+        ]
+      },
+      {
+        "name": "frameType",
+        "type": "string",
+        "required": false,
+        "description": "Frames to measure: game (default) or rendering",
+        "enum": [
+          "game",
+          "rendering"
+        ]
+      },
+      {
+        "name": "dumpToFile",
+        "type": "boolean",
+        "required": false,
+        "description": "Write the full analysis to a JSON file and return the headline numbers with its path (default false)"
+      },
+      {
+        "name": "outputPath",
+        "type": "string",
+        "required": false,
+        "description": "File for dumpToFile; relative paths resolve under Saved/ (default Saved/UE_MCP/TraceAnalysis/<trace>.analysis.json)"
+      }
+    ]
+  },
   "begin_editor_transaction": {
     "category": "editor",
     "params": [
@@ -3789,6 +3890,30 @@ export const handlerSpecs: HandlerSpecs = {
     ],
     "contractExempt": "sets the running PIE player's input mode"
   },
+  "start_csv_profile": {
+    "category": "editor",
+    "params": [
+      {
+        "name": "captureName",
+        "type": "string",
+        "required": false,
+        "description": "File name for the capture, without extension (default <Project>_<timestamp>)"
+      },
+      {
+        "name": "maxFrames",
+        "type": "number",
+        "required": false,
+        "description": "End the capture by itself after this many frames (default: run until stop_csv_profile)"
+      },
+      {
+        "name": "folder",
+        "type": "string",
+        "required": false,
+        "description": "Output folder (default <Project>/Saved/Profiling/CSV)"
+      }
+    ],
+    "contractExempt": "starts a CSV profiler capture"
+  },
   "start_insights_trace": {
     "category": "editor",
     "params": [
@@ -3834,6 +3959,11 @@ export const handlerSpecs: HandlerSpecs = {
       }
     ],
     "contractExempt": "starts an Insights trace"
+  },
+  "stop_csv_profile": {
+    "category": "editor",
+    "params": [],
+    "contractExempt": "ends the running CSV profiler capture"
   },
   "stop_insights_trace": {
     "category": "editor",
@@ -3969,6 +4099,7 @@ export const paramsClauses: Readonly<Record<string, string>> = {
   add_sequence_section: "Params: sequencePath (or assetPath, or path), trackType, actorLabel?, actorPath?, startSeconds?, endSeconds?, cameraActorLabel?, cameraActorPath?, materialParameterCollection?, animation?, startFrameOffset?, endFrameOffset?, playRate?",
   add_sequence_track: "Params: assetPath (or path), trackType, actorLabel?, actorPath?, materialParameterCollection?",
   add_trace_bookmark: "Params: bookmarkName",
+  analyze_insights_trace: "Params: file?, startSeconds?, endSeconds?, hitchThresholdMs?, worstFrames?, topTimers?, timersPerFrame?, maxHitches?, maxBookmarks?, threads?, timerSort?, frameType?, dumpToFile?, outputPath?",
   begin_editor_transaction: "Params: description? (or label)",
   begin_profile_region: "Params: regionName, regionCategory?",
   build_all: "Params: none",
@@ -4087,7 +4218,9 @@ export const paramsClauses: Readonly<Record<string, string>> = {
   set_viewport_view: "Params: fov?, nearClip?, farClip?, viewportType?, cameraSpeed?, viewportIndex?",
   show_notification: "Params: text, subText?, durationS?, severity?, hyperlinkText?, hyperlinkUrl?",
   stage_game_input: "Params: inputMode?, showMouseCursor?",
+  start_csv_profile: "Params: captureName?, maxFrames?, folder?",
   start_insights_trace: "Params: channels?, traceTarget?, file?, host?, truncate?, excludeTail?",
+  stop_csv_profile: "Params: none",
   stop_insights_trace: "Params: none",
   stop_standalone_game: "Params: none",
   teleport_runtime_actor: "Params: actorLabel?, actorPath?, location?, rotation?, stopMovement?, sweep?, world?, pieInstance?",
@@ -4132,6 +4265,7 @@ export const schema: Record<string, z.ZodType> = {
   captureId: z.string().optional().describe("Query the latest warm capture instead of starting one; outputPath must be omitted"),
   captureLog: z.boolean().optional().describe("false drops everything the script logged except its errors (default true)"),
   captureMode: z.enum(["beauty","matte","both"]).optional().describe("beauty: opaque colour; matte: opaque coverage grayscale; both: colour with coverage alpha (default both)"),
+  captureName: z.string().optional().describe("File name for the capture, without extension (default <Project>_<timestamp>)"),
   captures: z.array(z.object({ id: z.string().describe("Unique filename stem: letters, digits, underscore or hyphen"), meshPath: z.string().optional().describe("StaticMesh or SkeletalMesh asset path"), parts: z.array(z.object({ meshPath: z.string().describe("StaticMesh or SkeletalMesh asset path"), relativeTransform: z.object({ location: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Translation in centimetres, default zero"), rotation: z.object({ pitch: z.number(), yaw: z.number(), roll: z.number() }).optional().describe("Pitch, yaw and roll in degrees, default zero"), scale: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Scale, default one") }).optional().describe("Transform relative to the assembly origin") })).optional().describe("1-64 meshes forming one assembly"), aspect: z.object({ width: z.number().min(0.01).max(100).describe("Positive relative width"), height: z.number().min(0.01).max(100).describe("Positive relative height") }).optional().describe("Inventory aspect ratio; the longer output edge equals resolution") })).optional().describe("1-128 mesh captures, with unique filename-safe ids and exactly one of meshPath or parts"),
   captureTransform: z.object({ location: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Camera location"), rotation: z.object({ pitch: z.number(), yaw: z.number(), roll: z.number() }).optional().describe("Camera rotation"), scale: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Accepted for shape compatibility; a camera has no scale, so it is not applied") }).optional().describe("Camera pose as one object, the shape epic_capture_viewport takes. Each field conflicts with the matching top-level location or rotation"),
   category: z.string().optional().describe("Case-insensitive substring the log category must contain (get_output_log). Settings category, e.g. Engine (open_settings)"),
@@ -4169,13 +4303,14 @@ export const schema: Record<string, z.ZodType> = {
   discardUnsaved: z.boolean().optional().describe("For a map: switch even though the open map has unsaved changes, discarding them (default false)"),
   displayRate: z.unknown().optional().describe("Display rate: frames per second (24, 30, 60; 23.976, 29.97 and 59.94 map to the NTSC rates) or {numerator, denominator}. Bakes and display frames sample at this rate"),
   dryRun: z.boolean().optional().describe("Report what would happen to each package and clear nothing (default false) (discard_dirty). Report the targets without touching them (default TRUE; pass false to apply) (set_runtime_visibility)"),
+  dumpToFile: z.boolean().optional().describe("Write the full analysis to a JSON file and return the headline numbers with its path (default false)"),
   durationS: z.number().min(1).max(600).optional().describe("Seconds before the toast fades (default 8)"),
   enable: z.union([z.array(z.string()), z.string()]).optional().describe("Channels to turn on, as an array or a comma-separated string"),
   enabled: z.boolean().optional().describe("true (default) ejects the debug camera if needed and poses it; false returns control to the player (pose_debug_camera). Hide editor-only overlays (default true); false shows them again (set_game_view). Realtime update on every level viewport (default true) (set_realtime)"),
   enabledOnly: z.boolean().optional().describe("Only channels that are currently on (default false)"),
   endFrame: z.number().optional().describe("Last display frame to render, inclusive. Not with endSeconds"),
   endFrameOffset: z.number().int().optional().describe("SkeletalAnimation only: ticks trimmed from the clip's end"),
-  endSeconds: z.number().optional().describe("Section end in seconds (default one second after the start) (add_sequence_section). Range end in seconds, exclusive (render_sequence_frames). Range end in seconds (set_sequence_playback_range)"),
+  endSeconds: z.number().optional().describe("Section end in seconds (default one second after the start) (add_sequence_section). Window end, seconds from the start of the trace (default the end) (analyze_insights_trace). Range end in seconds, exclusive (render_sequence_frames). Range end in seconds (set_sequence_playback_range)"),
   entryPoint: z.string().optional().describe("Function in the file to call after loading it under runName (default ue_mcp_entry, so its main guard does not fire); its return value comes back as result"),
   ev100: z.number().optional().describe("Fixed EV100 to pin the viewport to; implies fixed exposure"),
   exactClass: z.boolean().optional().describe("Match className exactly instead of including subclasses (default false)"),
@@ -4183,7 +4318,7 @@ export const schema: Record<string, z.ZodType> = {
   extraArgs: z.string().optional().describe("Extra command-line arguments, appended verbatim"),
   factor: z.number().optional().describe("Time-scale factor, greater than 0 (e.g. 500)"),
   farClip: z.number().optional().describe("Far clip plane override"),
-  file: z.string().optional().describe(".utrace path to write, absolute or relative (default a timestamped file under <Project>/Saved/Profiling)"),
+  file: z.string().optional().describe(".utrace to analyse, absolute or relative to Saved/Profiling (default the newest .utrace there) (analyze_insights_trace). .utrace path to write, absolute or relative (default a timestamped file under <Project>/Saved/Profiling) (start_insights_trace)"),
   filename: z.string().optional().describe("Alias for outputPath (capture_scene_png). Image path to write; .png is appended without an image extension (capture_screenshot)"),
   filePath: z.string().optional().describe("Path to the .py file: absolute, or relative to the project directory, such as Tools/import_assets.py"),
   filter: z.string().optional().describe("Case-insensitive substring the message must contain (get_output_log). Case-insensitive substring over channel name and description (list_trace_channels). Substring of the test names to run (run_automation_tests)"),
@@ -4192,16 +4327,19 @@ export const schema: Record<string, z.ZodType> = {
   focusActorPath: z.string().optional().describe("Full object path of the actor to frame. Wins over focusActorLabel"),
   focusDirection: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Framing direction from the focus actor (default front and above)"),
   focusMargin: z.number().optional().describe("Positive bounds fill margin; higher pulls back (default 1.5)"),
+  folder: z.string().optional().describe("Output folder (default <Project>/Saved/Profiling/CSV)"),
   force: z.boolean().optional().describe("game mode, resuming only: clear the world's pauser when the game refuses to unpause (default false)"),
   format: z.string().optional().describe("Image format; only png"),
   fov: z.number().optional().describe("Capture FOV in degrees, greater than 0 and less than 180 (default 90) (capture_scene_png). Fixed camera FOV in degrees (default 90) (render_sequence_frames). Field of view in degrees, greater than 0 and less than 180 (set_viewport_view)"),
   frame: z.number().optional().describe("Playhead position as a frame number, read in timeUnit"),
   frameStep: z.number().optional().describe("Render every Nth frame (default 1)"),
+  frameType: z.enum(["game","rendering"]).optional().describe("Frames to measure: game (default) or rendering"),
   fullyLoadTextures: z.boolean().optional().describe("Stream textures in and flush the render thread before the capture (default true) (capture_scene_png). Wait across real editor frames for requested texture mips (default true); a 60s item timeout reports blocked (render_mesh_studio). Stream textures in before each capture (default true) (render_sequence_frames)"),
   functionName: z.string().optional().describe("BlueprintCallable or Exec UFUNCTION on the actor, or on component (invoke_function). UFUNCTION to call; an unknown name lists the available ones (invoke_object_function). Static UFUNCTION on the class (invoke_static_function)"),
   height: z.number().optional().describe("Capture height in pixels (default 720) (capture_scene_png). Viewport height to read y against, when picking from a screenshot of another resolution (hit_test_viewport_pixel). Frame height in pixels (default 720) (render_sequence_frames)"),
   hidden: z.boolean().optional().describe("true hides the target, false shows it"),
   hitchMilliseconds: z.number().optional().describe("How long to stall the game thread (default 250, max 5000)"),
+  hitchThresholdMs: z.number().optional().describe("A frame at or over this many milliseconds is a hitch (default 50)"),
   host: z.string().optional().describe("Trace server for traceTarget=network (default 127.0.0.1)"),
   hyperlinkText: z.string().optional().describe("Link label on the toast. Needs hyperlinkUrl"),
   hyperlinkUrl: z.string().optional().describe("http or https URL the link opens in the default browser"),
@@ -4237,10 +4375,12 @@ export const schema: Record<string, z.ZodType> = {
   mapName: z.string().optional().describe("Map to open in the standalone process"),
   matchSubclasses: z.boolean().optional().describe("Match subclasses of actorClass and componentClasses (default true)"),
   materialParameterCollection: z.string().optional().describe("Material Parameter Collection asset a MaterialParameterCollection track animates (required for that track type)"),
+  maxBookmarks: z.number().int().optional().describe("Bookmark rows returned; count covers them all (default 100, max 1000)"),
   maxButtons: z.number().int().optional().describe("Buttons reported per window (default 200)"),
   maxDistance: z.number().optional().describe("Max ray length in cm (default 200000)"),
   maxEntries: z.number().optional().describe("Cap on entries returned (default 50)"),
-  maxFrames: z.number().optional().describe("Refuse a range with more frames than this (default 300, max 5000)"),
+  maxFrames: z.number().optional().describe("Refuse a range with more frames than this (default 300, max 5000) (render_sequence_frames). End the capture by itself after this many frames (default: run until stop_csv_profile) (start_csv_profile)"),
+  maxHitches: z.number().int().optional().describe("Hitch rows returned; count covers them all (default 50, max 500)"),
   maxLines: z.number().int().optional().describe("Messages to return (default 200) (get_message_log). How far back into the ring buffer to read (default 100, or the whole 4096-line buffer when filter or category is given) (get_output_log)"),
   maxLogChars: z.number().optional().describe("Keep only the last N characters of logged output"),
   maxResults: z.number().int().optional().describe("Cap on matching lines collected out of the 4096-line ring buffer (default 4096)"),
@@ -4265,7 +4405,7 @@ export const schema: Record<string, z.ZodType> = {
   orthoZoom: z.number().optional().describe("Orthographic zoom, within the engine's own limits"),
   outerPath: z.string().optional().describe("Only objects somewhere under this outer, such as one level or world"),
   outputDir: z.string().optional().describe("Absolute or project-relative directory for <id>.png and a job-specific JSON manifest (render_mesh_studio). Absolute or project-relative directory for the frames (default Saved/SequenceFrames/<sequence>) (render_sequence_frames)"),
-  outputPath: z.string().optional().describe("Absolute or project-relative PNG path to write; required when starting a capture (capture_scene_png). Alias for filename (capture_screenshot)"),
+  outputPath: z.string().optional().describe("File for dumpToFile; relative paths resolve under Saved/ (default Saved/UE_MCP/TraceAnalysis/<trace>.analysis.json) (analyze_insights_trace). Absolute or project-relative PNG path to write; required when starting a capture (capture_scene_png). Alias for filename (capture_screenshot)"),
   packagePath: z.string().optional().describe("Destination folder (default /Game/Cinematics)"),
   packages: z.array(z.string()).optional().describe("Long package names to clear, as editor(list_dirty_packages) reports them (e.g. /Engine/Maps/Entry). Only these are touched"),
   parameterType: z.string().optional().describe("scalar | bool | vector | vector2d | color: adds a missing parameter to a parameter section. Inferred from the collection on a Material Parameter Collection track"),
@@ -4318,7 +4458,7 @@ export const schema: Record<string, z.ZodType> = {
   space: z.string().optional().describe("world (default) | component"),
   startFrame: z.number().optional().describe("First display frame to render. Not with startSeconds"),
   startFrameOffset: z.number().int().optional().describe("SkeletalAnimation only: ticks (the sequence's tick resolution, 24000/s by default) trimmed from the clip's start. Half a display frame samples a Step-interpolated clip inside each key"),
-  startSeconds: z.number().optional().describe("Section start in seconds (add_sequence_section). Range start in seconds (default the playback range) (render_sequence_frames). Range start in seconds (set_sequence_playback_range)"),
+  startSeconds: z.number().optional().describe("Section start in seconds (add_sequence_section). Window start, seconds from the start of the trace (default 0) (analyze_insights_trace). Range start in seconds (default the playback range) (render_sequence_frames). Range start in seconds (set_sequence_playback_range)"),
   steps: z.number().int().optional().describe("How many steps to apply (default 1)"),
   stopMovement: z.boolean().optional().describe("Stop the movement component so the move is not undone (default true)"),
   subsystemClass: z.string().optional().describe("Subsystem class name or /Script path, with target=subsystem: world, game instance, local player (by playerIndex), engine or editor"),
@@ -4328,7 +4468,11 @@ export const schema: Record<string, z.ZodType> = {
   target: z.string().optional().describe("auto (default) | pie | editor | window (capture_screenshot). gameinstance | gamemode | gamestate | playercontroller | playerpawn | subsystem (get_object_properties, invoke_object_function, set_object_property). editor (default) for a level viewport, pie for the running game viewport (set_buffer_visualization)"),
   templateLevel: z.string().optional().describe("Level to copy; omit, Empty or None for a blank level"),
   text: z.string().optional().describe("Headline of the toast"),
+  threads: z.enum(["game","all"]).optional().describe("game (default): timers on the game thread only | all: every CPU thread"),
+  timerSort: z.enum(["inclusive","exclusive"]).optional().describe("Order of topTimers: inclusive (default) or exclusive time"),
+  timersPerFrame: z.number().int().optional().describe("Timers listed per worst frame, by exclusive time (default 5, max 20)"),
   timeUnit: z.string().optional().describe("How to read frame: display (default, the frame numbers Sequencer shows) | tick (the units get_sequence_info's playbackRange reports)"),
+  topTimers: z.number().int().optional().describe("Timers to list over the window (default 20, max 200)"),
   traceFile: z.string().optional().describe(".utrace path for the standalone process to write"),
   traceTarget: z.string().optional().describe("file (default, writes a .utrace) | network (streams to a trace server) | none (memory only)"),
   trackIndex: z.number().int().optional().describe("Which matching track, when several match (default 0)"),
@@ -4352,6 +4496,7 @@ export const schema: Record<string, z.ZodType> = {
   worldContextParam: z.string().optional().describe("UObject* parameter to fill with the selected world; detected from WorldContext metadata and for WorldContextObject when omitted"),
   worldPartition: z.boolean().optional().describe("Create a blank World Partition level with one file per actor (default false); a templateLevel decides this itself"),
   worldPath: z.string().optional().describe("Exact PIE UWorld path or name to capture"),
+  worstFrames: z.number().int().optional().describe("Slowest frames to list with their top timers (default 10, max 50)"),
   x: z.number().optional().describe("Viewport pixel X"),
   y: z.number().optional().describe("Viewport pixel Y"),
   yaw: z.number().optional().describe("Control-rotation yaw"),
