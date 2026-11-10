@@ -4,7 +4,8 @@
  * (epic_list_mcp_resources / epic_read_mcp_resource).
  *
  * resources/list never fails: no editor, no plugin, an older bridge without the
- * methods, or no provider all list as empty.
+ * methods, or no provider all list as empty. Resources this process serves
+ * itself (the shipped skills) are listed first, editor or not.
  */
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import {
@@ -25,6 +26,11 @@ export interface EditorResource {
 }
 
 export type EditorResourceContents = { uri: string; mimeType?: string } & ({ text: string } | { blob: string });
+
+/** A resource this process serves from memory, with no editor involved. */
+export interface StaticResource extends EditorResource {
+  text: string;
+}
 
 const LIST_METHOD = "epic_list_mcp_resources";
 const READ_METHOD = "epic_read_mcp_resource";
@@ -92,15 +98,22 @@ export function announceResourceChange(server: McpServer): void {
   void server.server.sendResourceListChanged().catch(() => undefined);
 }
 
-/** Serve resources/list and resources/read from the bridge `bridgeFor` returns at call time. */
-export function registerEditorResources(server: McpServer, bridgeFor: () => IBridge): void {
+/**
+ * Serve resources/list and resources/read from the bridge `bridgeFor` returns
+ * at call time, after the static resources, which a read answers first.
+ */
+export function registerEditorResources(server: McpServer, bridgeFor: () => IBridge, statics: readonly StaticResource[] = []): void {
+  const byUri = new Map(statics.map((r) => [r.uri, r]));
+  const listed: EditorResource[] = statics.map(({ text: _text, ...entry }) => entry);
   // listChanged: the list is empty until an editor connects, so the server
   // tells the client to read it again when the surface changes.
   server.server.registerCapabilities({ resources: { listChanged: true } });
   server.server.setRequestHandler(ListResourcesRequestSchema, async () => ({
-    resources: await listEditorResources(bridgeFor()),
+    resources: [...listed, ...(await listEditorResources(bridgeFor()))],
   }));
-  server.server.setRequestHandler(ReadResourceRequestSchema, async (request) => ({
-    contents: await readEditorResource(bridgeFor(), request.params.uri),
-  }));
+  server.server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
+    const own = byUri.get(request.params.uri);
+    if (own) return { contents: [{ uri: own.uri, ...(own.mimeType ? { mimeType: own.mimeType } : {}), text: own.text }] };
+    return { contents: await readEditorResource(bridgeFor(), request.params.uri) };
+  });
 }
