@@ -38,8 +38,10 @@ async function call(method: string, params: Json, timeoutMs = 120_000): Promise<
 beforeAll(async () => {
   bridge = await getBridge();
   scratch = fs.mkdtempSync(path.join(os.tmpdir(), "trace-analysis-"));
+  // The live gate fails a skipped test, so a trace someone left running is stopped
+  // rather than worked around; the suite needs the trace slot for its own recording.
   tracingAtStart = (await call("get_insights_trace_status", {})).tracing === true;
-  if (tracingAtStart) return;
+  if (tracingAtStart) await call("stop_insights_trace", {});
 
   // A trace with a 300 ms stall and a bookmark in the middle of ordinary frames.
   traceFile = path.join(scratch, "analysis.utrace");
@@ -67,8 +69,7 @@ afterAll(async () => {
 }, 60_000);
 
 describe("editor(analyze_trace)", () => {
-  it("finds the frames, the 300 ms hitch, the bookmark and the timers in a recorded trace", async (ctx) => {
-    if (tracingAtStart) ctx.skip("a trace was already running before this suite; it is left alone");
+  it("finds the frames, the 300 ms hitch, the bookmark and the timers in a recorded trace", async () => {
     const result = await call("analyze_insights_trace", { file: traceFile, hitchThresholdMs: 200, worstFrames: 3 });
     expect(path.resolve(String(result.traceFile))).toBe(path.resolve(traceFile));
     expect(Number(result.traceFileBytes)).toBeGreaterThan(0);
@@ -110,8 +111,7 @@ describe("editor(analyze_trace)", () => {
     expect(typeof obj(result.gpu).present).toBe("boolean");
   }, 180_000);
 
-  it("narrows to a time window and sorts by exclusive time on request", async (ctx) => {
-    if (tracingAtStart) ctx.skip("a trace was already running before this suite; it is left alone");
+  it("narrows to a time window and sorts by exclusive time on request", async () => {
     const whole = await call("analyze_insights_trace", { file: traceFile });
     const duration = Number(whole.sessionDurationSeconds);
     const half = await call("analyze_insights_trace", {
@@ -129,8 +129,7 @@ describe("editor(analyze_trace)", () => {
     }
   }, 180_000);
 
-  it("writes the whole analysis to a file with dumpToFile and keeps the headline inline", async (ctx) => {
-    if (tracingAtStart) ctx.skip("a trace was already running before this suite; it is left alone");
+  it("writes the whole analysis to a file with dumpToFile and keeps the headline inline", async () => {
     const out = path.join(scratch, "analysis.json");
     const dumped = await call("analyze_insights_trace", { file: traceFile, dumpToFile: true, outputPath: out });
     expect(dumped.dumpedToFile).toBe(true);
