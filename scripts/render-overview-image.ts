@@ -7,12 +7,19 @@
  *
  * The template is scripts/assets/overview-image/overview.svg. It is rendered
  * with resvg and the fonts committed beside it, so the output does not depend
- * on a browser or on the fonts installed on the machine. The circles are drawn
- * to scale: the inner circle's area is Epic's share of the actions ue-mcp
- * advertises on the newest engine.
+ * on a browser or on the fonts installed on the machine.
  *
- * `npm run generate:metadata` calls this. It renders only when the figures or
- * the template changed, so an unchanged surface leaves the PNG untouched.
+ * The circles are a fixed size and say one thing: Epic's MCP is a subset of
+ * ue-mcp. The inner circle is every Epic tool ue-mcp wraps; the outer one is
+ * ue-mcp, which holds all of them plus its own actions and the capabilities
+ * listed beside it. They are deliberately not scaled by the counts: Epic's
+ * wrapped tools outnumber ue-mcp's own on UE 5.9, and a circle sized by that
+ * would draw the subset larger than the set that contains it. Only the numbers
+ * and the engine range are data.
+ *
+ * `npm run generate:metadata` calls this. It renders only when the figures,
+ * the template or this renderer changed, so an unchanged surface leaves the
+ * PNG untouched.
  * `--force` renders regardless.
  */
 import * as crypto from "node:crypto";
@@ -32,6 +39,8 @@ export const WIDTH = 1354;
 export const HEIGHT = 586;
 
 const OUTER = { cx: 268, r: 216 };
+/** Epic's circle. Fixed, and always well inside ue-mcp's. */
+const EPIC_R = 134;
 /** Gap between the inner circle and the outer one where they nearly touch. */
 const INSET = 4;
 const OWN_FONT_SIZE = 34;
@@ -49,23 +58,28 @@ const CHECKLIST = [
 ];
 
 export interface OverviewFigures {
-  epicEngine: string;
+  /** Every Epic tool ue-mcp wraps (`nativeToolActions`). */
   epicActions: number;
+  /** ue-mcp's own actions on top of them (`ownActions`). */
   ownActions: number;
+  /** From scripts/lib/engine-range.mjs, through the counts. */
   engineRange: { min: string; max: string };
-  /** sha256 of the template, so a template edit also requires a re-render. */
+  /** sha256 of the template and this renderer, so a change to how the image
+   *  is drawn also requires a re-render. */
   template: string;
 }
 
 export function templateHash(): string {
-  const text = fs.readFileSync(templatePath, "utf8").replace(/\r\n/g, "\n");
-  return crypto.createHash("sha256").update(text).digest("hex");
+  const hash = crypto.createHash("sha256");
+  for (const file of [templatePath, fileURLToPath(import.meta.url)]) {
+    hash.update(fs.readFileSync(file, "utf8").replace(/\r\n/g, "\n"));
+  }
+  return hash.digest("hex");
 }
 
 export function overviewFigures(counts: Counts): OverviewFigures {
   return {
-    epicEngine: counts.nativeEngine,
-    epicActions: counts.nativeEngineToolActions,
+    epicActions: counts.nativeToolActions,
     ownActions: counts.ownActions,
     engineRange: counts.engineRange,
     template: templateHash(),
@@ -74,7 +88,7 @@ export function overviewFigures(counts: Counts): OverviewFigures {
 
 export function overviewAltText(f: OverviewFigures): string {
   return (
-    `ue-mcp: Epic's ${fmt(f.epicActions)} native actions on UE ${f.epicEngine} plus ${fmt(f.ownActions)} of its own, ` +
+    `ue-mcp contains Epic's MCP and its ${fmt(f.epicActions)} actions. Around it, ue-mcp adds ${fmt(f.ownActions)} actions of its own, ` +
     "and dialog handling, retries and rollback, guardrails, spatial control, workflow automation, plugins, " +
     `multi-editor control and auto-reported tool gaps. Supports UE ${f.engineRange.min} to ${f.engineRange.max}.`
   );
@@ -109,9 +123,8 @@ function textWidth(resvg: ResvgModule, text: string, family: string, weight: num
 }
 
 export function buildSvg(resvg: ResvgModule, f: OverviewFigures): string {
-  // Area to scale: Epic's tools over everything ue-mcp advertises on that engine.
-  const share = f.epicActions / (f.epicActions + f.ownActions);
-  const epicR = OUTER.r * Math.sqrt(share);
+  // Fixed geometry: see the header for why the counts do not size the circles.
+  const epicR = EPIC_R;
   const epicCx = OUTER.cx - OUTER.r + INSET + epicR;
   const crescentLeft = epicCx + epicR;
   const crescentRight = OUTER.cx + OUTER.r;

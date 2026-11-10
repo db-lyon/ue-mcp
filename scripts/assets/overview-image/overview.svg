@@ -11,9 +11,8 @@
 
   <text x="{{ownCx}}" y="268" text-anchor="middle" font-family="JetBrains Mono" font-weight="700" font-size="15" fill="#e8720c">ue-mcp</text>
   <text x="{{ownCx}}" y="311" text-anchor="middle" font-family="Plus Jakarta Sans" font-weight="800" font-size="{{ownSize}}" fill="#f5f5f4">+{{ownActions}}</text>
-  <text x="{{ownCx}}" y="338" text-anchor="middle" font-family="Plus Jakarta Sans" font-weight="400" font-size="15" fill="#a1a1aa">actions</text>
+  <text x="{{ownCx}}" y="338" text-anchor="middle" font-family="Plus Jakarta Sans" font-weight="400" font-size="15" fill="#a1a1aa">actions, and…</text>
 
-  <text x="576" y="172" font-family="Plus Jakarta Sans" font-weight="700" font-size="24" fill="#f5f5f4">And more…</text>
   {{checklist}}
 
   <text x="576" y="431" font-family="JetBrains Mono" font-weight="400" font-size="15" fill="#8b8b8b">Supports UE {{engineMin}} to {{engineMax}}.</text>

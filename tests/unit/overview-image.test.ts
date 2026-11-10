@@ -10,8 +10,10 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { describe, expect, it } from "vitest";
 import { computeCounts } from "../../scripts/generate-tool-metadata.js";
+import { SUPPORTED_ENGINE_RANGE } from "../../scripts/lib/engine-range.mjs";
 import {
   FIGURES_PATH,
+  buildSvg,
   HEIGHT,
   PNG_PATH,
   WIDTH,
@@ -28,10 +30,21 @@ describe("overview image", () => {
     expect(committed).toEqual(expected);
   });
 
-  it("shows Epic's tools for the newest engine and ue-mcp's own actions", () => {
-    expect(expected.epicActions).toBe(counts.nativeEngineToolActions);
+  it("shows every wrapped Epic tool, ue-mcp's own actions and the declared engine range", () => {
+    expect(expected.epicActions).toBe(counts.nativeToolActions);
     expect(expected.ownActions).toBe(counts.ownActions);
-    expect(expected.engineRange.max).toBe(counts.nativeEngine);
+    expect(expected.engineRange).toEqual({ ...SUPPORTED_ENGINE_RANGE });
+  });
+
+  it("draws Epic's circle at a fixed size inside ue-mcp's, whatever the counts", async () => {
+    // Epic's wrapped tools outnumber ue-mcp's own on UE 5.9. Sizing the circles
+    // by the counts would draw the subset larger than the set containing it.
+    const resvg = await import("@resvg/resvg-js");
+    const radii = (svg: string) => [...svg.matchAll(/<circle\b[^>]*\br="([\d.]+)"/g)].map((m) => Number(m[1]));
+    const small = radii(buildSvg(resvg, { ...expected, epicActions: 10, ownActions: 5000 }));
+    const large = radii(buildSvg(resvg, { ...expected, epicActions: 5000, ownActions: 10 }));
+    expect(small).toEqual(large);
+    expect(small[1]).toBeLessThan(small[0]);
   });
 
   it("is a PNG of the size the README declares", () => {
