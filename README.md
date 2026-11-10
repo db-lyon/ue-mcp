@@ -8,7 +8,7 @@
 
 **Let an AI agent work inside your Unreal Editor.** Ask in plain English, and it builds levels, Blueprints, materials, VFX, landscapes and more in your open project.
 
-<img width="1354" height="586" alt="ue-mcp: Epic's 830 native actions plus 1,333 of its own, and dialog handling, retries and rollback, guardrails, spatial control, workflow automation, plugins, multi-editor control and auto-reported tool gaps" src="docs/assets/ue-mcp-overview.png" />
+<img width="1354" height="586" alt="ue-mcp: Epic's 830 native actions on UE 5.8 plus 1,333 of its own, and dialog handling, retries and rollback, guardrails, spatial control, workflow automation, plugins, multi-editor control and auto-reported tool gaps. Supports UE 5.4 to 5.8." src="docs/assets/ue-mcp-overview.png" />
 
 UE-MCP is a free, open-source [Model Context Protocol](https://modelcontextprotocol.io) server for Unreal Engine 5. It connects AI assistants like Claude, Cursor and Codex to the editor through <!-- count:actions -->3527+<!-- /count --> actions, including Epic's native Unreal 5.8 tools.
 

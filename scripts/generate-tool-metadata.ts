@@ -10,7 +10,9 @@
  *      (everything before the first `## `) is preserved from the existing
  *      file; every tool section is rebuilt from source so undocumented
  *      actions can never accumulate.
- *   3. Marker substitution - any file containing
+ *   3. `docs/assets/ue-mcp-overview.png`, the README's overview image, via
+ *      scripts/render-overview-image.ts.
+ *   4. Marker substitution - any file containing
  *      `<!-- count:tools -->...<!-- /count -->` or
  *      `<!-- count:actions -->...<!-- /count -->` has the inner span
  *      rewritten with the current numbers. Lets README / other docs stay
@@ -52,6 +54,13 @@ export interface Counts {
   /** Official Epic tools wrapped across those toolsets, counted inside
    *  `actions`. */
   nativeToolActions: number;
+  /** The newest engine with a recorded Epic catalog, and the number of Epic
+   *  tools that engine ships. This is what "Epic's MCP" means in public copy:
+   *  one engine's toolset, not the union across engines. */
+  nativeEngine: string;
+  nativeEngineToolActions: number;
+  /** The supported engine range, oldest to newest. */
+  engineRange: { min: string; max: string };
   generatedAt: string;
   version: string;
 }
@@ -95,6 +104,45 @@ function computeNativeCounts(): { nativeToolsets: number; nativeToolActions: num
   return { nativeToolsets: toolsets.length, nativeToolActions: declared };
 }
 
+/** Oldest supported engine. The newest is the newest engine with a recorded
+ *  Epic catalog, so recording a new engine's catalog moves the range. */
+export const SUPPORTED_ENGINE_MIN = "5.4";
+
+function compareEngines(a: string, b: string): number {
+  const [am, an] = a.split(".").map(Number);
+  const [bm, bn] = b.split(".").map(Number);
+  return am - bm || an - bn;
+}
+
+/**
+ * The newest engine's recorded Epic catalog. Reads either layout: one file per
+ * engine under `tests/golden/epic-catalog/<major.minor>.json`, or the single
+ * `tests/golden/epic-catalog.json`, which names its engine in
+ * `engineAssociation`.
+ */
+export function newestEpicCatalog(): { engine: string; toolActions: number } {
+  const golden = path.join(repo, "tests", "golden");
+  const dir = path.join(golden, "epic-catalog");
+  const files = fs.existsSync(dir)
+    ? fs.readdirSync(dir).filter((f) => /^\d+\.\d+\.json$/.test(f)).map((f) => path.join(dir, f))
+    : [path.join(golden, "epic-catalog.json")];
+  const catalogs = files.map((f) => {
+    const c = JSON.parse(fs.readFileSync(f, "utf8")) as {
+      engineAssociation?: string;
+      toolsets?: Array<{ tools?: unknown[] }>;
+    };
+    const engine = /^(\d+)\.(\d+)/.exec(String(c.engineAssociation ?? ""));
+    if (!engine) throw new Error(`${path.relative(repo, f)} does not name its engine in engineAssociation.`);
+    return {
+      engine: `${Number(engine[1])}.${Number(engine[2])}`,
+      toolActions: (c.toolsets ?? []).reduce((n, t) => n + (t.tools?.length ?? 0), 0),
+    };
+  });
+  const newest = catalogs.sort((a, b) => compareEngines(a.engine, b.engine)).at(-1);
+  if (!newest || newest.toolActions === 0) throw new Error("No recorded Epic catalog with any tools in tests/golden.");
+  return newest;
+}
+
 export function computeCounts(): Counts {
   const perTool: Record<string, number> = {};
   let total = 0;
@@ -106,6 +154,7 @@ export function computeCounts(): Counts {
   const bridge = enumerateBridgeActions().length;
   const pkg = JSON.parse(fs.readFileSync(path.join(repo, "package.json"), "utf8"));
   const native = computeNativeCounts();
+  const newest = newestEpicCatalog();
   return {
     tools: ALL_TOOLS.length,
     actions: total,
@@ -115,6 +164,9 @@ export function computeCounts(): Counts {
     perTool,
     nativeToolsets: native.nativeToolsets,
     nativeToolActions: native.nativeToolActions,
+    nativeEngine: newest.engine,
+    nativeEngineToolActions: newest.toolActions,
+    engineRange: { min: SUPPORTED_ENGINE_MIN, max: newest.engine },
     generatedAt: new Date().toISOString(),
     version: pkg.version,
   };
@@ -324,7 +376,7 @@ function updatePluginDescriptor(counts: Counts): boolean {
   return true;
 }
 
-function main(): void {
+async function main(): Promise<void> {
   const counts = computeCounts();
   const json = writeCountsJson(counts);
   const ref = regenerateToolReference(counts);
@@ -342,10 +394,18 @@ function main(): void {
   if (updated.length) console.log(`stamped markers in: ${updated.join(", ")}`);
   if (pkgChanged) console.log(`updated package.json description`);
   if (upluginChanged) console.log(`updated UE_MCP_Bridge.uplugin version and description`);
+  // Loaded here rather than at the top so importing `computeCounts` stays
+  // free of the native renderer.
+  const { renderOverviewImage } = await import("./render-overview-image.js");
+  const image = await renderOverviewImage(counts);
+  console.log(image.rendered ? `rendered ${image.png}` : `${image.png} already shows these counts`);
 }
 
 // Only when run as a script. `computeCounts` is imported by
 // tests/unit/tool-counts.test.ts, which must not rewrite the tree to read it.
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  main();
+  main().catch((e) => {
+    console.error(e);
+    process.exit(1);
+  });
 }
