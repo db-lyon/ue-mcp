@@ -18,6 +18,7 @@ import { toMermaid } from "./mermaid.js";
 import { svgToPng } from "./png.js";
 import { DEFAULT_MAX_NODES, MAX_NODES_LIMIT, selectView } from "./select.js";
 import { toSvg } from "./svg.js";
+import { encodeForInline, MAX_INLINE_EDGE } from "../dispatch/inline-image.js";
 
 export const DIAGRAM_FORMATS = ["json", "mermaid", "svg", "png"] as const;
 export type DiagramFormat = (typeof DIAGRAM_FORMATS)[number];
@@ -83,11 +84,13 @@ function writeFile(file: string, data: string | Buffer): void {
 /**
  * Inline image content for a rendered PNG, through the result's `media`
  * entries, which dispatch turns into MCP image content (splitMedia). This is
- * the one place a diagram becomes an inline image; an inline sizing option
- * shared with the capture actions would hook in here.
+ * the one place a diagram becomes an inline image. It goes through the
+ * sizing the capture actions' `inline` uses, at its largest edge, so a
+ * drawing keeps its rendered size and only one too large to send is scaled
+ * down; the file on disk is unchanged.
  */
-function inlinePng(png: Buffer, width: number, height: number, file: string): Record<string, unknown> {
-  return { type: "image", mimeType: "image/png", data: png.toString("base64"), path: file, width, height };
+function inlinePng(png: Buffer, file: string): Record<string, unknown> {
+  return { ...encodeForInline(png, { maxEdge: MAX_INLINE_EDGE }, file) };
 }
 
 /** Select, render and (for file formats) write a model, as the action's answer. */
@@ -139,7 +142,7 @@ export async function finishDiagram(ctx: Pick<ToolContext, "project" | "session"
   }
   const file = diagramFilePath(ctx, view.title, "png", outputPath);
   writeFile(file, png.png);
-  return { ...result, path: file, width: png.width, height: png.height, media: [inlinePng(png.png, png.width, png.height, file)] };
+  return { ...result, path: file, width: png.width, height: png.height, media: [inlinePng(png.png, file)] };
 }
 
 export interface DiagramActionOptions {
