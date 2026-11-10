@@ -20,6 +20,7 @@ import {
   bridgePort,
   engineConfigRoot,
   engineRootReplacements,
+  projectEpicIntegrations,
   plan,
   type ContextStrategy,
   type InitChoices,
@@ -90,6 +91,10 @@ export function choicesFromFlags(argv: string[], projectPath: string): InitChoic
   }
   const native = flagBool(argv, "native-tools");
   const exclude = list(flagValue(argv, "--native-exclude"));
+  const unrealMcpPort = flagValue(argv, "--unreal-mcp-port");
+  if (unrealMcpPort !== undefined && !/^\d+$/.test(unrealMcpPort)) {
+    throw new Error(`--unreal-mcp-port must be a port number, not '${unrealMcpPort}'`);
+  }
   return {
     project: projectPath,
     disable: list(flagValue(argv, "--disable")),
@@ -105,6 +110,9 @@ export function choicesFromFlags(argv: string[], projectPath: string): InitChoic
     // The machine path pins by default, so the server and bridge move together.
     pin: flagBool(argv, "pin") ?? true,
     command: flagValue(argv, "--command") ?? null,
+    unrealMcpAutoStart: flagBool(argv, "unreal-mcp-autostart"),
+    unrealMcpPort: unrealMcpPort === undefined ? undefined : Number(unrealMcpPort),
+    unrealAssistant: flagBool(argv, "unreal-assistant"),
   };
 }
 
@@ -313,6 +321,39 @@ async function init(argv: string[]): Promise<number | void> {
   }
   console.log("");
 
+  // 3b. Epic's Unreal MCP server and Unreal Assistant (UE 5.8 / 5.9), when the project has them.
+  const epic = projectEpicIntegrations(project);
+  const epicItems: CheckboxItem[] = [];
+  const mcpServer = epic.unrealMcp?.pluginEnabled ? epic.unrealMcp : null;
+  if (mcpServer) {
+    epicItems.push({
+      label: "Start Epic's Unreal MCP server with the editor",
+      checked: mcpServer.autoStart,
+      suffix: `${mcpServer.url}. It runs beside ue-mcp for this project, and ue-mcp's epic category already wraps the same toolsets. Unchecked writes bAutoStartServer=False to ${mcpServer.userIni}.`,
+    });
+  }
+  const assistant = epic.unrealAssistant.available ? epic.unrealAssistant : null;
+  if (assistant) {
+    epicItems.push({
+      label: "Attach ue-mcp to Epic's Unreal Assistant",
+      checked: assistant.attached,
+      suffix: `Adds ue-mcp to the MCP servers the assistant's agent gets, in ${assistant.configPath} (per user, every project).`,
+    });
+  }
+  let unrealMcpAutoStart: boolean | undefined;
+  let unrealAssistant: boolean | undefined;
+  if (epicItems.length > 0) {
+    const epicStates = await checkboxSelect(
+      "Epic's Unreal MCP server and Unreal Assistant",
+      epicItems,
+      "Pass --yes with --[no-]unreal-mcp-autostart, --unreal-mcp-port <n> and --[no-]unreal-assistant.",
+    );
+    let i = 0;
+    if (mcpServer) unrealMcpAutoStart = epicStates[i++];
+    if (assistant) unrealAssistant = epicStates[i++];
+    console.log("");
+  }
+
   // 4. Agent behavior. Everything here is off on a fresh install; re-init keeps prior choices.
   const configuredClaudeCode = selectedClients.some((n) => n.startsWith("Claude Code"));
   const isReInit = fs.existsSync(path.join(project.projectDir!, "ue-mcp.yml"));
@@ -352,6 +393,9 @@ async function init(argv: string[]): Promise<number | void> {
     install: (flagValue(rest, "--install") as InitChoices["install"]) ?? "auto",
     binaries: flagValue(rest, "--binaries") ?? null,
     pin: flagBool(rest, "pin") ?? false,
+    unrealMcpAutoStart,
+    unrealMcpPort: flagValue(rest, "--unreal-mcp-port") === undefined ? undefined : Number(flagValue(rest, "--unreal-mcp-port")),
+    unrealAssistant,
   };
   const planned = plan(choices);
   console.log("");
@@ -377,6 +421,7 @@ async function init(argv: string[]): Promise<number | void> {
 /** Flags that take a value, so the argument after one is not a positional. */
 const VALUE_FLAGS = new Set([
   "--project", "--clients", "--install", "--binaries", "--disable", "--context", "--native-exclude", "--command",
+  "--unreal-mcp-port",
 ]);
 
 function firstPositional(argv: string[]): string | undefined {
@@ -419,6 +464,9 @@ export const usage: CliUsage = {
     ...toggle("skills", "Install the bundled Claude Code skills"),
     ...toggle("native-tools", "Wrap native Epic tools"),
     ...toggle("pin", "Pin the client config to this exact version"),
+    ...toggle("unreal-mcp-autostart", "Start Epic's Unreal MCP server with this project's editor (UE 5.8+)"),
+    { name: "--unreal-mcp-port", value: "<port>", description: "Port Epic's Unreal MCP server listens on for this project" },
+    ...toggle("unreal-assistant", "Attach ue-mcp to Epic's Unreal Assistant (UE 5.9+)"),
     { name: "--editor", value: "<name-or-path>", description: "Target one of the editors this server drives" },
   ],
 };
