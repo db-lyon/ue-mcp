@@ -87,16 +87,16 @@ describe("NNE runtimes", () => {
     expect(plugins.find((p) => p.plugin === "NNERuntimeORT")).toMatchObject({ installed: true, enabled: true });
   }, 60_000);
 
-  it("reports NNERuntimeLiteRT registered with a CPU interface on an engine that ships it", async () => {
+  it("reports NNERuntimeLiteRT's plugin state, and its runtime exactly when the registry has it", async () => {
     const res = await call("nne_list_runtimes");
     const liteRT = res.liteRT as Json;
-    const [major, minor] = String(res.engineVersion).split(".").map(Number);
-    expect(liteRT.expectedOnThisEngine).toBe(major > 5 || (major === 5 && minor >= 9));
-    if (liteRT.expectedOnThisEngine === true) {
-      expect(liteRT).toMatchObject({ installed: true, enabled: true, runtimeRegistered: true, cpu: true });
-      expect((res.runtimes as Array<{ name: string }>).some((r) => r.name === "NNERuntimeLiteRT")).toBe(true);
-    } else {
-      expect(liteRT.runtimeRegistered).toBe(false);
+    const listed = (res.runtimes as Array<{ name: string; cpu: boolean }>).find((r) => r.name === "NNERuntimeLiteRT");
+    // The launcher's 5.9 build ships the plugin with the LiteRT library compiled out, so it
+    // can be enabled and still register nothing; the report must agree with the registry.
+    expect(liteRT.runtimeRegistered).toBe(listed !== undefined);
+    expect(liteRT.cpu).toBe(listed?.cpu === true);
+    if (liteRT.installed === true && liteRT.enabled === true && listed === undefined) {
+      expect(String(liteRT.note)).toContain("registered no runtime");
     }
   }, 60_000);
 });
