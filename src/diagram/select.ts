@@ -28,13 +28,13 @@ export function findFocus(nodes: DiagramNode[], focus: string): DiagramNode[] {
   const want = focus.trim().toLowerCase();
   if (!want) return [];
   const real = nodes.filter((n) => n.role !== "note");
-  const tiers: Array<(n: DiagramNode) => boolean> = [
+  const rules: Array<(n: DiagramNode) => boolean> = [
     (n) => n.id.toLowerCase() === want,
     (n) => n.label.toLowerCase() === want,
     (n) => n.label.toLowerCase().includes(want) || n.id.toLowerCase().includes(want),
   ];
-  for (const tier of tiers) {
-    const hit = real.filter(tier);
+  for (const rule of rules) {
+    const hit = real.filter(rule);
     if (hit.length) return hit;
   }
   return [];

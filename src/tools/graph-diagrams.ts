@@ -4,7 +4,7 @@
  * the matching adapter (src/diagram/adapters.ts); rendering is shared.
  */
 import type { HandlerActionSpec, ToolContext } from "../core/types.js";
-import { DIAGRAM_HELP, DIAGRAM_PARAMS, diagramAction, readFromBridge } from "../diagram/action.js";
+import { DIAGRAM_HELP, diagramAction, readFromBridge } from "../diagram/action.js";
 import {
   assetGraphModel,
   behaviorTreeModel,
@@ -66,7 +66,7 @@ export const blueprintDiagramAction: HandlerActionSpec = diagramAction({
     "events and function entries marked, read through read_graph_summary. edges: exec | data | all (default all); exec with focus " +
     "on an event traces its execution flow as get_execution_flow does. expandCollapsed draws each collapsed graph as a subgraph " +
     "beside the node that holds it; includeGraphs [names] adds function or macro graphs as subgraphs. " +
-    `${DIAGRAM_HELP} Params: assetPath, graphName? (default EventGraph), edges?, expandCollapsed?, includeGraphs?, ${DIAGRAM_PARAMS}`,
+    `${DIAGRAM_HELP} Params: assetPath, graphName? (default EventGraph), edges?, expandCollapsed?, includeGraphs?, format?, focus?, depth?, maxNodes?, outputPath?`,
   build: (ctx, p) => blueprintModel(ctx, p, "EventGraph"),
 });
 
@@ -77,7 +77,7 @@ export const animationDiagramAction: HandlerActionSpec = diagramAction({
     `graph, up to ${MAX_RULE_READS}; conditions=false skips it), blend time and inertialization. graphKind anim_graph (the default ` +
     "without stateMachineName) draws graphName (default AnimGraph) as a flowchart; graphKind control_rig draws a Control Rig's " +
     `RigVM models. ${DIAGRAM_HELP} Params: assetPath, stateMachineName?, graphKind? (state_machine|anim_graph|control_rig), ` +
-    `graphName?, conditions?, ${DIAGRAM_PARAMS}`,
+    `graphName?, conditions?, format?, focus?, depth?, maxNodes?, outputPath?`,
   build: async (ctx, p) => {
     const assetPath = requirePath(p, "assetPath", "path");
     const stateMachineName = text(p.stateMachineName);
@@ -122,7 +122,7 @@ export const stateTreeDiagramAction: HandlerActionSpec = diagramAction({
     "Draw a StateTree as a stateDiagram-v2: the state hierarchy as nested states (a parent entered through its first child), each " +
     "state's tasks and enter conditions, and every transition labelled with its trigger, event tag, conditions and delay. " +
     "Succeeded and Failed transitions end at Tree succeeded / Tree failed; NextState goes to the next sibling. Evaluators and " +
-    `global tasks are listed in notes. ${DIAGRAM_HELP} Params: assetPath, ${DIAGRAM_PARAMS}`,
+    `global tasks are listed in notes. ${DIAGRAM_HELP} Params: assetPath, format?, focus?, depth?, maxNodes?, outputPath?`,
   build: async (ctx, p) => stateTreeModel(await readFromBridge(ctx, "read_state_tree", { assetPath: requirePath(p, "assetPath", "path") })),
 });
 
@@ -130,7 +130,7 @@ export const behaviorTreeDiagramAction: HandlerActionSpec = diagramAction({
   description:
     "Draw a Behavior Tree as a top-down flowchart from ROOT: composites and tasks, each child edge numbered in execution order, " +
     "decorators (if: ...) and services listed on the node they guard, node ids being the nodePath read_behavior_tree_graph " +
-    `reports. ${DIAGRAM_HELP} Params: assetPath, ${DIAGRAM_PARAMS}`,
+    `reports. ${DIAGRAM_HELP} Params: assetPath, format?, focus?, depth?, maxNodes?, outputPath?`,
   build: async (ctx, p) => behaviorTreeModel(await readFromBridge(ctx, "read_behavior_tree_graph", { assetPath: requirePath(p, "assetPath", "path") })),
 });
 
@@ -139,7 +139,7 @@ export const materialDiagramAction: HandlerActionSpec = diagramAction({
     "Draw a material's expression graph as a left-to-right flowchart into the material output: parameters marked, every wire " +
     "labelled with the input it feeds (and the output index when not the first), each root input (BaseColor, Roughness, ...) " +
     `labelled on its wire into the output node. Node ids are expr:<nodeId>, the index the other material actions take. ${DIAGRAM_HELP} ` +
-    `Params: assetPath (or materialPath), ${DIAGRAM_PARAMS}`,
+    `Params: assetPath (or materialPath), format?, focus?, depth?, maxNodes?, outputPath?`,
   build: async (ctx, p) => {
     const materialPath = requirePath(p, "assetPath", "materialPath", "path");
     const pages: Array<Record<string, unknown>> = [];
@@ -156,7 +156,7 @@ export const materialDiagramAction: HandlerActionSpec = diagramAction({
 export const pcgDiagramAction: HandlerActionSpec = diagramAction({
   description:
     "Draw a PCG graph as a left-to-right flowchart from its input node to its output node, every edge labelled with the pins it " +
-    `joins when they are not the default In/Out. ${DIAGRAM_HELP} Params: assetPath, ${DIAGRAM_PARAMS}`,
+    `joins when they are not the default In/Out. ${DIAGRAM_HELP} Params: assetPath, format?, focus?, depth?, maxNodes?, outputPath?`,
   build: async (ctx, p) => pcgModel(await readFromBridge(ctx, "read_pcg_graph", { assetPath: requirePath(p, "assetPath", "path") })),
 });
 
@@ -165,7 +165,7 @@ export const assetGraphDiagramAction: HandlerActionSpec = diagramAction({
     "Draw the node graph of any EdGraph-backed asset read_graph can read (the types without a category of their own, " +
     "CustomizableObject among them) as a flowchart, one subgraph per graph when it has several, wires labelled with their pins. " +
     "maxNodes here caps the drawing; the read itself takes up to 500 nodes per graph. " +
-    `${DIAGRAM_HELP} Params: assetPath, graphName?, ${DIAGRAM_PARAMS}`,
+    `${DIAGRAM_HELP} Params: assetPath, graphName?, format?, focus?, depth?, maxNodes?, outputPath?`,
   build: async (ctx, p) => {
     const graphName = text(p.graphName);
     return assetGraphModel(await readFromBridge(ctx, "read_asset_graph", {

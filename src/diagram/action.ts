@@ -22,9 +22,6 @@ import { toSvg } from "./svg.js";
 export const DIAGRAM_FORMATS = ["json", "mermaid", "svg", "png"] as const;
 export type DiagramFormat = (typeof DIAGRAM_FORMATS)[number];
 
-/** The Params clause every diagram action shares, after its own reader parameters. */
-export const DIAGRAM_PARAMS = "format?, focus?, depth?, maxNodes?, outputPath?";
-
 /** What the diagram parameters do, said once in each action's description. */
 export const DIAGRAM_HELP =
   `format: mermaid (default; Mermaid text), svg (an image file drawn by ue-mcp, its path returned), png (the same image rasterised, ` +
