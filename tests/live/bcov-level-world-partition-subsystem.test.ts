@@ -8,9 +8,12 @@
  * with unsupported_engine_version; streaming, HLOD actor builds and the minimap actor have an older
  * equivalent and run on every engine. The map open before the file is reopened afterwards.
  */
+import * as fs from "node:fs";
+import * as path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { callBridge, disconnectBridge, getBridge, TEST_PREFIX, type TestResult } from "../setup.js";
 import type { EditorBridge } from "../../src/bridge/bridge.js";
+import { TEST_PROJECT_DIR } from "../../scripts/bridge-target.mjs";
 
 const HOME = "/Game/MCP_Home";
 const DIR = `${TEST_PREFIX}/BCov/WPSubsystem`;
@@ -84,6 +87,17 @@ afterAll(async () => {
   if (!succeeded(restored)) await callBridge(bridge, "load_level", { levelPath: HOME, discardUnsaved: true });
   await callBridge(bridge, "delete_asset", { assetPath: MAP, force: true });
   disconnectBridge();
+  // Deleting the map leaves its one-file-per-actor packages behind on disk.
+  const content = path.join(TEST_PROJECT_DIR, "Content");
+  const rel = MAP.slice("/Game/".length);
+  for (const kind of ["__ExternalActors__", "__ExternalObjects__"]) {
+    const dir = path.join(content, kind, rel);
+    fs.rmSync(dir, { recursive: true, force: true });
+    // Prune the now-empty folders above it, up to Content.
+    for (let up = path.dirname(dir); up.length > content.length; up = path.dirname(up)) {
+      try { fs.rmdirSync(up); } catch { break; }
+    }
+  }
 }, 300_000);
 
 describe("streaming", () => {
@@ -234,8 +248,13 @@ describe("HLOD actors and stats", () => {
     const none = await call("build_hlod_actors", {});
     expect(none.requested).toBe(0);
     expect(none.unchanged).toBe(true);
-    const wrong = await refused("build_hlod_actors", { actorLabels: [CUBE_LABEL] });
+    // A loaded actor that is not an HLOD actor. The saved cube is an external actor
+    // the reopened map leaves unloaded, so a fresh one is placed and never saved.
+    const loose = `${CUBE_LABEL}_Loose`;
+    await call("place_actor", { actorClass: "/Script/Engine.StaticMeshActor", label: loose, staticMesh: CUBE, location: { x: 300, y: 0, z: 100 } });
+    const wrong = await refused("build_hlod_actors", { actorLabels: [loose] });
     expect(String(wrong.error)).toContain("not an HLOD actor");
+    await call("delete_actor", { actorLabel: loose });
   }, 60_000);
 
   it("get_hlod_stats lists no HLOD actors in a map that has never been built", async () => {
