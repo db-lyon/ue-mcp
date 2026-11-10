@@ -20,8 +20,15 @@ export const handlerSpecs: HandlerSpecs = {
   },
   "demo_go_home": {
     "category": "demo",
-    "params": [],
-    "contractExempt": "Takes no parameters and acts unconditionally: creates the home level if missing and opens it"
+    "params": [
+      {
+        "name": "discardUnsaved",
+        "type": "boolean",
+        "required": false,
+        "description": "Switch even though the open map has unsaved changes, discarding them (default false)"
+      }
+    ],
+    "contractExempt": "Creates the home level if missing and opens it before the contract path can fail"
   },
   "demo_step": {
     "category": "demo",
@@ -43,12 +50,13 @@ export const handlerSpecs: HandlerSpecs = {
 export const paramsClauses: Readonly<Record<string, string>> = {
   demo_cleanup: "Params: none",
   demo_get_steps: "Params: none",
-  demo_go_home: "Params: none",
+  demo_go_home: "Params: discardUnsaved?",
   demo_step: "Params: step? (or stepIndex)",
 };
 
 /** Every key the spec'd demo handlers declare, aliases included. */
 export const schema: Record<string, z.ZodType> = {
+  discardUnsaved: z.boolean().optional().describe("Switch even though the open map has unsaved changes, discarding them (default false)"),
   step: z.number().int().optional().describe("Step index to execute, 1 to 19. Omit for the step list"),
   stepIndex: z.number().int().optional().describe("Alias for step"),
 };

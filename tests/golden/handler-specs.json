@@ -15776,8 +15776,15 @@
     },
     "demo_go_home": {
       "category": "demo",
-      "params": [],
-      "contractExempt": "Takes no parameters and acts unconditionally: creates the home level if missing and opens it"
+      "params": [
+        {
+          "name": "discardUnsaved",
+          "type": "boolean",
+          "required": false,
+          "description": "Switch even though the open map has unsaved changes, discarding them (default false)"
+        }
+      ],
+      "contractExempt": "Creates the home level if missing and opens it before the contract path can fail"
     },
     "demo_step": {
       "category": "demo",

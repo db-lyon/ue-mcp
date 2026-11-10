@@ -170,7 +170,7 @@ opencode 2.1.4 and later show the form, so they get `interactive`. Earlier openc
 
 Set it with `npx ue-mcp dialog mode <interactive|auto|defer>`. Add `--editor <name>` to scope it to one project; `default` clears it.
 
-What counts as blocking: the modal stack, then every top-level window that is modal or parented to another regular window. Menus, tooltips and notifications are not regular windows. Visibility is not consulted, because a window drawn behind the editor still blocks. Detection lives in the C++ bridge, so it changes only when the plugin is rebuilt.
+What counts as blocking: the modal stack, then every top-level window that is modal or parented to another regular window. Menus, tooltips and notifications are not regular windows. Visibility is not consulted, because a window drawn behind the editor still blocks. The editor's own progress windows (a slow task such as the "Validating Assets" a save opens, or a build) are on the modal stack but are not dialogs: the game thread keeps running the work they report, so a call made while one is up runs once that work is done, and nothing presses their Cancel button. `editor(list_dialogs)` lists them under `notTreatedAsDialogs`. Detection lives in the C++ bridge, so it changes only when the plugin is rebuilt.
 
 Under `interactive` the dialog text is returned on one call and the form goes up on the next, so a client that collapses long form messages cannot hide the question. `dialogPhase` on the refusal says which call this is: `relay` or `asking`. A client known to render the whole message skips the relay. `UE_MCP_DIALOG_RELAY=off` turns the relay off for every client, and `=on` forces it on.
 

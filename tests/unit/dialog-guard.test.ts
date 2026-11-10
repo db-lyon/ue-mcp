@@ -9,6 +9,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   DialogGuard,
   isModalSafeMethod,
+  isProgressReport,
   stampBlockedEditor,
   type GuardDeps,
 } from "../../src/editor/dialog-guard.js";
@@ -307,6 +308,40 @@ describe("detection does not depend on somebody making a call", () => {
     } finally {
       guard.stopWatching();
     }
+  });
+
+  it("does not gate on the slow-task progress window a save opens", async () => {
+    // #1851: "Validating Assets" is on the modal stack with a Cancel button and
+    // no title, while the game thread runs the validation. A plugin that still
+    // publishes it as a blocking modal refused the call made right after a save.
+    const guard = make({
+      readSnapshot: () => ({
+        modal: { title: "", message: "Validating Assets", buttons: ["Cancel"], blocksGameThread: true },
+        slowTask: { name: "Validating Assets", fraction: 0.4 },
+        ageSeconds: 0,
+      }),
+      probe: async () => empty,
+    });
+    guard.startWatching(20);
+    try {
+      expect(guard.current).toBeNull();
+      expect((await guard.check("project.search_tools", "action")).allow).toBe(true);
+    } finally {
+      guard.stopWatching();
+    }
+  });
+
+  it("recognises a progress window by shape and nothing looser", () => {
+    const task = { name: "Validating Assets", fraction: 0.1 };
+    expect(isProgressReport({ title: "", buttons: ["Cancel"] }, task)).toBe(true);
+    expect(isProgressReport({ title: "  ", buttons: [] }, task)).toBe(true);
+    // A titled window is a prompt, even with only Cancel on it.
+    expect(isProgressReport({ title: "Delete Assets", buttons: ["Cancel"] }, task)).toBe(false);
+    // A second button means a question with more than one answer.
+    expect(isProgressReport({ title: "", buttons: ["OK", "Cancel"] }, task)).toBe(false);
+    // With no slow task under way the window is not reporting one.
+    expect(isProgressReport({ title: "", buttons: ["Cancel"] }, null)).toBe(false);
+    expect(isProgressReport(null, task)).toBe(false);
   });
 
   it("still gates on a prompt that says it parks the game thread", async () => {

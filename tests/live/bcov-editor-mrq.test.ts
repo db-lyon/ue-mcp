@@ -57,7 +57,7 @@ async function cleanup(): Promise<void> {
 beforeAll(async () => {
   bridge = await getBridge();
   scratch = fs.mkdtempSync(path.join(os.tmpdir(), "bcov-mrq-"));
-  await call("demo_go_home");
+  await call("demo_go_home", { discardUnsaved: true });
   mapPath = String((await call("get_current_level")).mapPackagePath);
   expect(mapPath.startsWith("/Game/")).toBe(true);
   await cleanup();

@@ -231,6 +231,24 @@ function firstBlocking(list: unknown[]): unknown {
     && (d as { blocksGameThread?: boolean }).blocksGameThread !== false);
 }
 
+/**
+ * Whether a published modal is only the editor's slow-task progress window
+ * (#1851). A save opens "Validating Assets", which sits on Slate's modal stack
+ * while the game thread keeps running the work it reports, so it holds nothing.
+ * The plugin no longer publishes one; this covers a plugin that still does, so
+ * a call made right after a save is not refused on timing. Recognised by shape:
+ * no title, no button but the task's own Cancel, and a slow task under way.
+ */
+export function isProgressReport(modal: unknown, slowTask: unknown): boolean {
+  if (typeof modal !== "object" || modal === null) return false;
+  if (typeof slowTask !== "object" || slowTask === null) return false;
+  const r = modal as { title?: unknown; buttons?: unknown };
+  const title = typeof r.title === "string" ? r.title.trim() : "";
+  if (title !== "") return false;
+  const buttons = Array.isArray(r.buttons) ? r.buttons : [];
+  return buttons.every((b) => typeof b === "string" && b.trim() === "Cancel");
+}
+
 /** Read a dialog out of whatever shape reported it. */
 function asDialog(v: unknown): BlockingDialog | null {
   if (typeof v !== "object" || v === null) return null;
@@ -387,7 +405,7 @@ export interface GuardDeps {
    * `status.<pid>.json` over the shared file two editors of one project
    * take turns writing, and which reports how old the snapshot is.
    */
-  readSnapshot?: () => { modal?: unknown; ageSeconds?: number } | null;
+  readSnapshot?: () => { modal?: unknown; slowTask?: unknown; ageSeconds?: number } | null;
   /**
    * Whether the editor's own log records it exiting. A dialog latched before
    * the exit began is not one to refuse on: the editor that showed it is
@@ -1233,7 +1251,7 @@ export class DialogGuard {
     if (this.poll) return;
     const read = () => {
       if (!this.deps.readSnapshot) return;
-      let snap: { modal?: unknown; ageSeconds?: number } | null;
+      let snap: { modal?: unknown; slowTask?: unknown; ageSeconds?: number } | null;
       try {
         snap = this.deps.readSnapshot();
       } catch {
@@ -1258,7 +1276,8 @@ export class DialogGuard {
       // window stayed open, with no button that could clear it (#1118). An
       // older plugin omits the field and is believed, which is the behaviour
       // that existed before it.
-      const blocking = modal != null && modal.blocksGameThread !== false;
+      const blocking = modal != null && modal.blocksGameThread !== false
+        && !isProgressReport(modal, snap?.slowTask);
       // An editor that has begun to exit stops rewriting the file, so the modal
       // it last recorded (the Save Content prompt the quit raised, answered a
       // moment ago) reads as current for another 15 seconds. Its log knows

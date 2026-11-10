@@ -5,6 +5,7 @@
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
 #include "HandlerPagination.h"
+#include "HandlerLevelSwitch.h"
 #include "HandlerSkinnedAsset.h"
 #include "HandlerStaticMeshAsset.h"
 #include "LevelSpawnFinalize.h"
@@ -2878,17 +2879,12 @@ TSharedPtr<FJsonValue> FLevelHandlers::LoadLevel(const TSharedPtr<FJsonObject>& 
 	{
 		return MCPError(TEXT("Pass saveFirst or discardUnsaved, not both."));
 	}
+	// What the switch would lose, the open level's own packages included: a
+	// never-saved /Temp map can be missing from the editor's dirty-world list
+	// while the engine's LoadLevel still refuses on it (#1851).
 	auto CollectDirtyWorldPackages = []()
 	{
-		TArray<UPackage*> Packages;
-		FEditorFileUtils::GetDirtyWorldPackages(Packages);
-		TArray<FString> Names;
-		for (UPackage* Package : Packages)
-		{
-			if (Package && Package->IsDirty()) Names.AddUnique(Package->GetName());
-		}
-		Names.Sort();
-		return Names;
+		return MCPLevelSwitch::PackageNames(MCPLevelSwitch::CollectDirtyPackages(GetEditorWorld()));
 	};
 	TArray<FString> DirtyBefore = CollectDirtyWorldPackages();
 	TArray<FString> SavedFirst;
@@ -2905,7 +2901,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::LoadLevel(const TSharedPtr<FJsonObject>& 
 		// An untitled map has no path to save to, and saving it would raise a modal Save As dialog.
 		for (const FString& Name : DirtyBefore)
 		{
-			if (FPackageName::IsTempPackage(Name) || !FPackageName::IsValidLongPackageName(Name))
+			if (MCPLevelSwitch::IsUnsavedMapPackage(Name))
 			{
 				TSharedPtr<FJsonObject> Refusal = MCPErrorObject(FString::Printf(
 					TEXT("'%s' is an untitled map with no file to save to. Save it under a path first, or pass discardUnsaved=true. Nothing was unloaded."), *Name));
@@ -2949,10 +2945,33 @@ TSharedPtr<FJsonValue> FLevelHandlers::LoadLevel(const TSharedPtr<FJsonObject>& 
 		return MCPError(TEXT("LevelEditorSubsystem not available"));
 	}
 
-	bool bSuccess = LevelEditorSubsystem->LoadLevel(LevelPath);
+	// discardUnsaved is carried out here rather than left to the engine. Its
+	// LoadLevel refuses on any dirty level package from UE 5.9 unless told to
+	// discard, and on every version a world whose package is still dirty is
+	// kept loaded through the switch. Clearing the flags first is what
+	// editor(discard_dirty) does, and is the recovery that already worked.
+	if (bDiscardUnsaved && DirtyBefore.Num() > 0)
+	{
+		const TArray<FString> StillDirty = MCPLevelSwitch::DiscardChanges(MCPLevelSwitch::CollectDirtyPackages(GetEditorWorld()));
+		if (StillDirty.Num() > 0)
+		{
+			TSharedPtr<FJsonObject> Refusal = MCPErrorObject(FString::Printf(
+				TEXT("discardUnsaved could not discard %d package(s): each was dirty again as soon as its flag was cleared. Nothing was unloaded."), StillDirty.Num()));
+			Refusal->SetArrayField(TEXT("stillDirty"), MCPStringListToJson(StillDirty));
+			Refusal->SetBoolField(TEXT("endedPlaySession"), bEndedPIE);
+			return MCPResult(Refusal);
+		}
+	}
+
+	bool bSuccess = MCPLevelSwitch::LoadLevel(*LevelEditorSubsystem, LevelPath, bDiscardUnsaved);
 	if (!bSuccess)
 	{
-		return MCPError(FString::Printf(TEXT("Failed to load level: %s"), *LevelPath));
+		TSharedPtr<FJsonObject> Failure = MCPErrorObject(FString::Printf(
+			TEXT("Failed to load level: %s. The engine refused the switch; the output log carries its reason."), *LevelPath));
+		const TArray<FString> DirtyNow = CollectDirtyWorldPackages();
+		if (DirtyNow.Num() > 0) Failure->SetArrayField(TEXT("dirtyPackages"), MCPStringListToJson(DirtyNow));
+		Failure->SetStringField(TEXT("openMap"), MCPLevelSwitch::OpenMapPackageName());
+		return MCPResult(Failure);
 	}
 
 	// The open world is the proof the load happened, not the subsystem's return value.

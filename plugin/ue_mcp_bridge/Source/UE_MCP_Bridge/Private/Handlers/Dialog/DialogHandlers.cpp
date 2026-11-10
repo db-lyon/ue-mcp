@@ -45,6 +45,7 @@
 #include "Framework/Application/SlateApplication.h"
 #include "Framework/Docking/TabManager.h"
 #include "Widgets/SWindow.h"
+#include "Widgets/SNullWidget.h"
 #include "Widgets/IToolTip.h"
 #include "Widgets/SToolTip.h"
 #include "Widgets/Text/STextBlock.h"
@@ -1044,9 +1045,20 @@ namespace MCPDialogWindows
 		}
 		FSlateApplication& Slate = FSlateApplication::Get();
 		TArray<FFoundWindow> Found;
+		// A progress window is on the modal stack too, pushed by the editor's
+		// slow-task feedback without the modal loop, so the stack alone does not
+		// say the game thread is parked (#1851).
 		if (TSharedPtr<SWindow> Modal = Slate.GetActiveModalWindow())
 		{
-			Found.Add({ Modal, EMCPPromptKind::Modal });
+			FString ProgressReason;
+			if (!FDialogHandlers::IsProgressWindow(Modal.ToSharedRef(), &ProgressReason))
+			{
+				Found.Add({ Modal, EMCPPromptKind::Modal });
+			}
+			else if (OutSkipped)
+			{
+				OutSkipped->Add({ Modal->GetTitle().ToString(), ProgressReason });
+			}
 		}
 		Gather(Slate.GetInteractiveTopLevelWindows(), Found, OutSkipped);
 		if (Found.Num() == 0)
@@ -1477,13 +1489,53 @@ const TCHAR* FDialogHandlers::PromptKindName(EMCPPromptKind Kind)
 	}
 }
 
+bool FDialogHandlers::IsProgressWindow(const TSharedRef<SWindow>& Window, FString* OutReason)
+{
+	// The editor's feedback context builds both of its progress windows with
+	// the widget as the window's whole content (FeedbackContextEditor.cpp,
+	// StartSlowTask and ShowBuildProgressWindow), and pushes both with
+	// AddModalWindow(..., bSlowTaskWindow=true). The widget classes are private
+	// to UnrealEd, so they are matched by the type name SNew records.
+	static const FName SlowTaskWidgetType(TEXT("SSlowTaskWidget"));
+	static const FName BuildProgressWidgetType(TEXT("SBuildProgressWidget"));
+	const TSharedRef<SWidget> Content = Window->GetContent();
+	const FName ContentType = Content->GetType();
+	if (ContentType == SlowTaskWidgetType || ContentType == BuildProgressWidgetType)
+	{
+		if (OutReason)
+		{
+			*OutReason = TEXT("reports the progress of a slow task; the game thread keeps running the task behind it, so it holds nothing and asks nothing");
+		}
+		return true;
+	}
+	// FinalizeSlowTask empties the window before it asks for it to be
+	// destroyed, and destruction waits for the next Slate tick. A modal with
+	// no content in that gap is the progress window going away, not a prompt.
+	if (Window->IsModalWindow() && Content == SNullWidget::NullWidget)
+	{
+		if (OutReason)
+		{
+			*OutReason = TEXT("has no content and is being closed; it holds nothing and asks nothing");
+		}
+		return true;
+	}
+	return false;
+}
+
 EMCPPromptKind FDialogHandlers::ClassifyWindow(const TSharedRef<SWindow>& Window, FString* OutSkipReason)
 {
 	if (OutSkipReason) OutSkipReason->Reset();
 
 	if (!Window->IsRegularWindow()) return EMCPPromptKind::NotAPrompt;
+	// Before the modal test: a slow-task progress window is pushed with
+	// AddModalWindow's bSlowTaskWindow, which skips the modal loop, so it sets
+	// bIsModalWindow while the game thread keeps running the work it reports.
+	// Its one button is the task's Cancel, and pressing that because a call
+	// arrived would abort the save or validation behind it (#1851).
+	if (IsProgressWindow(Window, OutSkipReason)) return EMCPPromptKind::NotAPrompt;
 	// bIsModalWindow is set by FSlateApplication::AddModalWindow and nothing
-	// else, so this is the one case in which the game thread is parked.
+	// else, so apart from the progress windows above this is the one case in
+	// which the game thread is parked.
 	if (Window->IsModalWindow()) return EMCPPromptKind::Modal;
 	// Unparented and not modal: a top-level window of its own.
 	if (!Window->GetParentWindow().IsValid()) return EMCPPromptKind::NotAPrompt;
