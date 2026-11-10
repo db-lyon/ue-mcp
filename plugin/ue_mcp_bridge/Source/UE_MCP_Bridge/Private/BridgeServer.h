@@ -191,6 +191,12 @@ public:
 	// exactly as it did before that channel was added.
 	static FMCPBridgePortChoice ResolveConfiguredPort();
 
+	// True for a port the project's Unreal Canvas Bridge claims when that
+	// plugin is enabled: 9877 (its webcam server) and 9880 (its viewport
+	// stream). A pin on one falls back to the derived port, and the collision
+	// walk steps over both. Mirrors src/integrations/epic/unreal-canvas.ts.
+	static bool IsCanvasReservedPort(int32 Port);
+
 	// Get handler registry
 	FMCPHandlerRegistry& GetHandlerRegistry() { return HandlerRegistry; }
 

@@ -10,6 +10,7 @@
 #include "Misc/Parse.h"
 #include "Misc/Paths.h"
 #include "Misc/SecureHash.h"
+#include "Interfaces/IPluginManager.h"
 
 // Deterministic per-worktree base port. MUST match src/port.ts byte-for-byte:
 // normalize the project root (forward slashes, no trailing slash, lowercased),
@@ -503,10 +504,61 @@ namespace
 
 		return INDEX_NONE;
 	}
+
+	// Ports the Unreal Canvas Bridge (UE 5.9, UnrealCanvasBridge) claims on
+	// loopback: its webcam server's default (Scripts/webcam_server.py) and its
+	// viewport stream's fallback (UnrealCanvasViewportStreamer.h). Keep in step
+	// with CANVAS_RESERVED_PORTS in src/integrations/epic/unreal-canvas.ts.
+	constexpr int32 kCanvasReservedPorts[] = { 9877, 9880 };
+
+	// Read once, on the game thread, the first time the port is resolved. The
+	// plugin set is fixed by then, and the collision walk asks again from the
+	// server thread, where only the cached answer is read.
+	bool CanvasBridgeEnabled()
+	{
+		static const bool bEnabled = []()
+		{
+			const TSharedPtr<IPlugin> Plugin = IPluginManager::Get().FindPlugin(TEXT("UnrealCanvasBridge"));
+			return Plugin.IsValid() && Plugin->IsEnabled();
+		}();
+		return bEnabled;
+	}
+}
+
+bool FMCPBridgeServer::IsCanvasReservedPort(int32 Port)
+{
+	bool bReserved = false;
+	for (const int32 Reserved : kCanvasReservedPorts)
+	{
+		bReserved = bReserved || Reserved == Port;
+	}
+	return bReserved && CanvasBridgeEnabled();
 }
 
 FMCPBridgePortChoice FMCPBridgeServer::ResolveConfiguredPort()
 {
+	// A pin on a port the Canvas Bridge claims would take it from that plugin,
+	// or lose it to it, depending on who binds first. Fall back to the derived
+	// port, which is in the ephemeral range, as the client does for the same pin.
+	const auto KeepOffCanvasPorts = [](FMCPBridgePortChoice InChoice) -> FMCPBridgePortChoice
+	{
+		if (!InChoice.bPinned || !IsCanvasReservedPort(InChoice.Port))
+		{
+			return InChoice;
+		}
+		const int32 Derived = DeriveProjectPort(FPaths::ConvertRelativePathToFull(FPaths::ProjectDir()));
+		UE_LOG(LogMCPBridge, Warning,
+			TEXT("[UE-MCP] Port %d (%s) is claimed by the Unreal Canvas Bridge, which this project enables. Using the derived per-project port %d instead."),
+			InChoice.Port, *InChoice.Source, Derived);
+		FMCPBridgePortChoice Out;
+		Out.Port = Derived;
+		Out.Source = FString::Printf(TEXT("derived from the project path (%s pinned %d, which Unreal Canvas claims)"), *InChoice.Source, InChoice.Port);
+		Out.bPinned = false;
+		return Out;
+	};
+	// Cache the plugin answer here, on the game thread, before the walk reads it.
+	CanvasBridgeEnabled();
+
 	FMCPBridgePortChoice Choice;
 
 	// 1. Explicit command-line override: -MCPPort=NNNN
@@ -517,7 +569,7 @@ FMCPBridgePortChoice FMCPBridgeServer::ResolveConfiguredPort()
 		Choice.Port = CmdPort;
 		Choice.Source = TEXT("-MCPPort command line");
 		Choice.bPinned = true;
-		return Choice;
+		return KeepOffCanvasPorts(Choice);
 	}
 
 	// 2. Environment override: UE_MCP_PORT (matches the Node client's env var).
@@ -531,7 +583,7 @@ FMCPBridgePortChoice FMCPBridgeServer::ResolveConfiguredPort()
 			Choice.Port = P;
 			Choice.Source = TEXT("UE_MCP_PORT environment variable");
 			Choice.bPinned = true;
-			return Choice;
+			return KeepOffCanvasPorts(Choice);
 		}
 		UE_LOG(LogMCPBridge, Warning,
 			TEXT("[UE-MCP] UE_MCP_PORT is '%s', which is not a port number. Ignoring it."), *EnvPort);
@@ -568,7 +620,7 @@ FMCPBridgePortChoice FMCPBridgeServer::ResolveConfiguredPort()
 			Choice.Port = RequestedPort;
 			Choice.Source = TEXT("requested.json published by the ue-mcp client");
 			Choice.bPinned = true;
-			return Choice;
+			return KeepOffCanvasPorts(Choice);
 		}
 		if (!RequestDetail.IsEmpty())
 		{
@@ -591,7 +643,7 @@ FMCPBridgePortChoice FMCPBridgeServer::ResolveConfiguredPort()
 		Choice.Port = ConfigPort;
 		Choice.Source = FString::Printf(TEXT("bridge.port in %s"), *FPaths::GetCleanFilename(ConfigFile));
 		Choice.bPinned = true;
-		return Choice;
+		return KeepOffCanvasPorts(Choice);
 	}
 
 	// 5. Deterministic per-worktree port derived from the project root path.
