@@ -4,6 +4,8 @@ import { actions as epicActions, schema as epicSchema } from "./epic/gameplay.ge
 import { specBp, schema as specSchema } from "./specs/gameplay.generated.js";
 import { specBp as physicsSpecBp, schema as physicsSpecSchema } from "./specs/physics.generated.js";
 import { specBp as massSpecBp, schema as massSpecSchema } from "./specs/mass.generated.js";
+import { behaviorTreeDiagramAction } from "./graph-diagrams.js";
+import { diagramSchema } from "../diagram/action.js";
 
 export const gameplayTool: ToolDef = categoryTool(
   "gameplay",
@@ -108,6 +110,7 @@ export const gameplayTool: ToolDef = categoryTool(
     validate_mass_entity_config: specBp("read", "Audit a MassEntityConfigAsset and its whole Config.Parent chain: parent cycles, a null or wrong-typed trait entry, an abstract/deprecated/reinstanced trait class, a trait class provided twice (traits are combined uniquely, so the second copy is dead), an unset object or soft-object reference on a trait (the usual reason a Mass agent spawns and renders nothing) and an entirely empty config. Read-only, and it does NOT run the engine's own FMassEntityConfig ValidateEntityTemplate, which is a C++-only API that would need MassSpawner linked. Every reported trait carries its objectPath for editor(set_property). Returns assetPath, parentChain[], traits[], traitCount, problems[] ({severity, code, message, config, traitIndex, objectPath}), errorCount, warningCount, valid.", "validate_mass_entity_config"),
     query_zone_graph:       specBp("read", "Query the BUILT Zone Graph in a world. The graph lives in AZoneGraphData.ZoneStorage as parallel index arrays, where a lane names a half-open range into LanePoints and another into LaneLinks, so a raw editor(get_property) dump of it is technically reachable and unusable; this resolves the indirection. queryMode is summary (lane/zone counts and tagsInUse), lanes (index, zoneIndex, width, length, tags, start and end point), lane (one lane's full polyline plus its linked lanes, needs laneIndex) or nearest (closest point on any lane to location, within radius). Filter by tag NAME with tags[]. Zone SHAPE authoring is not here and does not need to be: spawn AZoneShape with level(place_actor), write its Points with editor(set_property), and call SetShapeType/SetTags/SetPolygonRoutingType with editor(invoke_object_function). If the world has shapes but no lanes then the graph has not been built, and the note says how to trigger it. Needs the ZoneGraph plugin. Returns data[], dataActorCount, laneCount, zoneShapeActorCount, plus found/laneIndex/distance/nearestPoint for nearest.", "query_zone_graph"),
     get_navmesh_details:    specBp("read", "Read RecastNavMesh generation params (cellSize, agentHeight, maxStepHeight, etc.) (#163).", "get_navmesh_details"),
+    diagram_behavior_tree: behaviorTreeDiagramAction,
     ...epicActions,
   },
   {
@@ -118,5 +121,6 @@ export const gameplayTool: ToolDef = categoryTool(
     ...physicsSpecSchema,
     ...massSpecSchema,
     ...specSchema,
+    ...diagramSchema({ ...epicSchema, ...physicsSpecSchema, ...massSpecSchema, ...specSchema }),
   },
 );

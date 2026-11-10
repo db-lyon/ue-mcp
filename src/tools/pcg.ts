@@ -4,6 +4,8 @@ import { categoryTool } from "../surface/category-tool.js";
 import { waitAfterRegenerate, waitForGeneration } from "./pcg-wait.js";
 import { actions as epicActions, schema as epicSchema } from "./epic/pcg.generated.js";
 import { specBp, schema as specSchema } from "./specs/pcg.generated.js";
+import { pcgDiagramAction } from "./graph-diagrams.js";
+import { diagramSchema } from "../diagram/action.js";
 
 export const pcgTool: ToolDef = categoryTool(
   "pcg",
@@ -61,6 +63,7 @@ export const pcgTool: ToolDef = categoryTool(
     get_component_parameters: specBp("read", "Read a PCG component's graph and each graph parameter's value and override state ({name, type, value, overridden}), on a placed actor (actorLabel or actorPath) or on a Blueprint's component template (blueprintPath). componentName picks one when there are several. A placed actor's component that its Blueprint's construction script builds reports blueprintOwned and a warning: values written to the placed actor can be discarded on reconstruction, so write them to the Blueprint.", "get_pcg_component_parameters"),
     set_component_parameters: specBp("mutate", "Set a PCG component's graph parameter overrides: overrides={name: value}, null clears one. With blueprintPath it writes the Blueprint's component template (a child Blueprint gets its own override of an inherited one), compiles and saves, so every reconstruction keeps the overrides; this is the write for a PCGComponent inside a Blueprint actor. With actorLabel or actorPath it writes the placed component; when the Blueprint's construction script builds that component, the call reruns the construction script as the editor does and fails with reason discarded_by_reconstruction, naming the lost overrides and the Blueprint write to use, if they did not survive (persistedThroughReconstruction). A name the graph does not declare or a value of the wrong type refuses the whole call with nothing changed. Returns previous values and every parameter's value and override state, and rolls back to the previous values.", "set_pcg_component_parameters"),
     read_generated_output: specBp("read", "Read the data a PCG component generated, for any actor's PCG components (not only PCGVolumes): per tagged data its pin, tags, dataClass, kind (points | attributeSet | other), count, and a page of entries with the requested attributes (selectors such as $Position, $Density, $Position.Z or a metadata attribute; default the point properties plus every metadata attribute). offset/limit page the entries, and nextOffset says there are more. A partitioned component's local components are read too. Each component row also lists what the graph spawned, which a spawner does not hand to the output node: spawnedComponents [{name, class, owner, mesh, instanceCount}], spawnedInstanceCount and spawnedActors, with totals spawnedComponentCount and spawnedInstanceCount on the result. With nodeName it reads that node's output from the component's inspection instead (UE 5.8+): the first call turns inspection on and asks for a regenerate, later calls return each execution stack's data (#1309).", "read_pcg_generated_output"),
+    diagram: pcgDiagramAction,
     ...epicActions,
   },
   {
@@ -69,6 +72,7 @@ export const pcgTool: ToolDef = categoryTool(
     // registration. A key listed again below is shared with hand-written
     // actions, and tests/unit/handler-specs.test.ts holds the two to one type.
     ...specSchema,
+    ...diagramSchema({ ...epicSchema, ...specSchema }),
     runId: z.number().optional().describe("wait_for_generation: the runId execute or force_regenerate returned"),
     graceSeconds: z.number().optional().describe("wait_for_generation: with no runId and nothing generating, how long to wait for a deferred start (default 2)"),
   },
