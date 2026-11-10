@@ -129,8 +129,12 @@ async function waitForFile(file: string, waitMs: number): Promise<boolean> {
   }
 }
 
-/** Read and shrink one image. Throws with the reason on anything unreadable. */
-function encodeForInline(bytes: Buffer, request: InlineRequest, file: string): InlinedImage {
+/**
+ * Shrink one image to the request: the sizing every inlined image shares,
+ * captures and rendered diagrams alike. Throws with the reason on anything
+ * unreadable.
+ */
+export function encodeForInline(bytes: Buffer, request: InlineRequest, file: string): InlinedImage {
   if (isPng(bytes)) {
     const size = pngSize(bytes);
     if (size && Math.max(size.width, size.height) <= request.maxEdge && bytes.length <= MAX_INLINE_BYTES) {

@@ -16,6 +16,8 @@ function strictItems(generated: z.ZodType | undefined): z.ZodType {
 }
 import { specBp as gameplaySpecBp, schema as gameplaySpecSchema } from "./specs/gameplay.generated.js";
 import { borrowSchema } from "../surface/handler-spec.js";
+import { assetGraphDiagramAction } from "./graph-diagrams.js";
+import { diagramSchema } from "../diagram/action.js";
 import { withInlineImage, inlineSchema } from "../dispatch/inline-image.js";
 
 /**
@@ -449,6 +451,7 @@ export const assetTool: ToolDef = categoryTool(
       }),
     },
     diff:                 specBp("read", "Semantic structural diff between two assets, dispatching on the asset's class. Blueprints: parent class, variables, functions, components, per-graph node and connection deltas. Skeleton and SkeletalMesh: raw bone additions and removals, reparenting (bone, fromParent, toParent), raw-index changes (bone, fromIndex, toIndex), and declared virtual-bone additions and removals, with hierarchyCompatible and editorCompatible reported SEPARATELY. That separation is the point: it answers whether two skeletons are bone-compatible enough to register as Compatible Skeletons or whether a retarget is required, because appending bones (virtual ones especially) leaves the shared hierarchy intact while reparenting an existing bone does not (#879). Deliberately OUT of scope and reported as such: reference-pose transforms (referencePoseCompared=false), export names (exportNamesCompared=false), sockets and retarget sources; structureScope spells the boundary out in the result. Both paths must be the same class. Other asset types report that diffing is not supported yet rather than failing opaquely.", "diff_asset"),
+    diagram: assetGraphDiagramAction,
     ...epicActions,
   },
   {
@@ -457,6 +460,7 @@ export const assetTool: ToolDef = categoryTool(
     // registration. A key listed again below is shared with hand-written
     // actions, and tests/unit/handler-specs.test.ts holds the two to one type.
     ...specSchema,
+    ...diagramSchema({ ...epicSchema, ...specSchema }),
     ...inlineSchema,
     // Spec'd keys whose zod refinements (bounds, integer, non-empty) the spec
     // types cannot carry. Each matches its spec's type, which

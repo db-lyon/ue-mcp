@@ -1,0 +1,28 @@
+{
+  "success": true,
+  "assetPath": "/Game/Rigs/CR_Arm",
+  "name": "CR_Arm",
+  "parentClass": "ControlRig",
+  "models": [
+    {
+      "name": "RigVMModel", "path": "/Game/Rigs/CR_Arm.CR_Arm:RigVMModel", "nodeCount": 3,
+      "nodes": [
+        { "name": "BeginExecution", "nodePath": "BeginExecution", "class": "RigVMUnitNode" },
+        { "name": "GetTransform", "nodePath": "GetTransform", "class": "RigVMUnitNode" },
+        { "name": "SetTransform", "nodePath": "SetTransform", "class": "RigVMUnitNode" }
+      ],
+      "nodesTruncated": false,
+      "links": [
+        { "source": "BeginExecution.ExecuteContext", "target": "SetTransform.ExecuteContext" },
+        { "source": "GetTransform.Transform", "target": "SetTransform.Value" },
+        { "source": "GetTransform.Transform.Translation", "target": "SetTransform.Value.Translation" }
+      ],
+      "linkCount": 3
+    }
+  ],
+  "modelCount": 1,
+  "totalNodes": 3,
+  "totalLinks": 3,
+  "variables": [],
+  "variableCount": 0
+}

@@ -70,6 +70,7 @@ nav:
   - Shader Compilation: shader-compilation.md
   - Studio Mesh Reference Images: mesh-studio-render.md
   - Material Graph Editing: material-graph-surgery.md
+  - Graph Diagrams: graph-diagrams.md
   - Handler Conventions: handler-conventions.md
   - Release Notes Style: release-notes-style.md
   - Widgets:

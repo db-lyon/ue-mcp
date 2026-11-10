@@ -2,6 +2,8 @@ import type { ToolDef } from "../core/types.js";
 import { categoryTool } from "../surface/category-tool.js";
 import { actions as epicActions, schema as epicSchema } from "./epic/statetree.generated.js";
 import { specBp, schema as specSchema } from "./specs/statetree.generated.js";
+import { stateTreeDiagramAction } from "./graph-diagrams.js";
+import { diagramSchema } from "../diagram/action.js";
 
 export const statetreeTool: ToolDef = categoryTool(
   "statetree",
@@ -55,6 +57,7 @@ export const statetreeTool: ToolDef = categoryTool(
     read_runtime:           specBp("read", "Read a RUNNING StateTree in depth: run status, last tick status, the state change count, the active states, the execution frames and the pending event queue. gameplay(get_state_tree_runtime) answers the same question with active state names only, which cannot tell you whether the tree succeeded, failed or stopped, nor whether an event you sent is still waiting to be consumed. Needs a game world, so run it in PIE. Pass actorLabel OR actorPath.", "read_state_tree_runtime"),
     send_event:             specBp("mutate", "Send a gameplay event to a running StateTree, which is how an event-driven tree is meant to be driven from outside and had no route at all. The event is QUEUED and consumed on the tree's next tick, so the snapshot returned still shows the state before it is handled; read it again with read_runtime after a tick. Refuses an unregistered tag, since no transition could ever match one. Has no inverse: once queued it is consumed and whatever it triggered has run. Pass actorLabel OR actorPath.", "send_state_tree_event"),
     request_transition:     specBp("mutate", "Force a running StateTree to transition to a named state, resolved through the COMPILED data - so a state added since the last compile is reported as missing rather than silently ignored. Queued like an event and resolved on the next tick against every other pending request by priority. Refuses when the tree is not Running, naming the status it is in. targetStateTag needs UE 5.8 or later; targetStateId works everywhere. Pass actorLabel OR actorPath, and targetStateId OR targetStateTag.", "request_state_tree_transition"),
+    diagram: stateTreeDiagramAction,
     ...epicActions,
   },
   {
@@ -63,5 +66,6 @@ export const statetreeTool: ToolDef = categoryTool(
     // registration. Every statetree bridge action is spec'd, so no key is
     // declared again by hand.
     ...specSchema,
+    ...diagramSchema({ ...epicSchema, ...specSchema }),
   },
 );
