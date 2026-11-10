@@ -78,6 +78,17 @@ export const UeMcpConfigSchema = z
         ttlSeconds: z.number().int().min(1).optional(),
       })
       .optional(),
+    // Asset leases for agents sharing one editor through the daemon. `auto`
+    // (default) honours project(acquire_lease) and, while more than one MCP
+    // session is connected, has each change take a lease on the paths it
+    // names; `on` does that for one session too; `off` checks nothing.
+    // `ttlSeconds` is how long a lease lasts (default 600). See dispatch/leases.ts.
+    leases: z
+      .object({
+        mode: z.enum(["auto", "on", "off"]).optional(),
+        ttlSeconds: z.number().int().min(1).optional(),
+      })
+      .optional(),
     http: z
       .object({
         enabled: z.boolean().optional(),

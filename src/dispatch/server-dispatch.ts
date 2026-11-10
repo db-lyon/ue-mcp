@@ -42,6 +42,9 @@ import { withheldTarget, wrapsEpicTool } from "../surface/registered-surface.js"
 import { epicEngineRefusalFor } from "../surface/epic-engines.js";
 import { explainMissingAction } from "../sessions/session-surface.js";
 import { disabledActionRefusal } from "../surface/category-state.js";
+import { leaseConflictMessage } from "./leases.js";
+import { leasePathsOf } from "./lease-paths.js";
+import { SESSION_ID } from "./lock-owner.js";
 import type { FlowContext } from "../flow/context.js";
 import type { SessionLoad, SessionLoads } from "../sessions/session-load.js";
 
@@ -218,6 +221,11 @@ export interface DispatchDeps {
    * refused by the read-only guard (#1484).
    */
   access?: () => SessionAccessMode;
+  /**
+   * The MCP session calls are attributed to for asset leases. The daemon
+   * gives each connection its own; absent is this process.
+   */
+  leaseHolder?: () => { id: string; label: string };
 }
 
 /** Window actions that can remove the window the dialog gate is holding (#1231). */
@@ -324,8 +332,10 @@ export async function dispatchCategoryCall(
   const facing = guard.current;
 
   const taskParams = stripAction(params);
+  const leaseHolder = deps.leaseHolder?.() ?? { id: SESSION_ID, label: deps.client()?.name ?? "this server" };
   const flowCtx: FlowContext = {
     ...loads.contextFor(session),
+    leaseHolder,
     elicit: deps.elicit(),
     onProgress: makeProgressReporter(extra),
     signal: extra?.signal,
@@ -388,6 +398,18 @@ export async function dispatchCategoryCall(
 
   const served = attribution(sessions, session);
 
+  // Asset leases (leases.ts): a change to a path another MCP session holds is
+  // refused, naming the holder. While leases are implicit, the change takes a
+  // lease on what it names for this session.
+  const leases = sessions.leases;
+  if (leases?.enforcing) {
+    const leasePaths = leasePathsOf(effectiveTask, subject.params, loads.dispatchUnion.tools);
+    if (leasePaths.length > 0) {
+      const hit = leases.conflict(session.name, leasePaths, leaseHolder.id);
+      if (hit) return errorResult(ErrorCode.ASSET_LEASED, leaseConflictMessage(hit.lease, hit.path, leases.now()), served);
+      if (leases.implicit) leases.acquire(session.name, leasePaths, leaseHolder, undefined, true);
+    }
+  }
   try {
     const task = await sessionRegistry.create(taskName, flowCtx, taskParams);
     // Locks are taken in the editor the call runs in, through the GUARDED

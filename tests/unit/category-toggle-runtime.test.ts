@@ -1,5 +1,6 @@
 /**
- * Turning categories on and off in a running server (#1827): the surface each client is advertised,
+ * Turning categories on and off in a running server (#1827), and asset leases
+ * between two clients on one runtime: the surface each client is advertised,
  * the tools/list_changed it is sent, the refusal a turned-off action gets, and
  * the files the editor-down path writes.
  */
@@ -216,3 +217,63 @@ describe("set_category_enabled on the micro gateway", () => {
   }, 120_000);
 });
 
+describe("asset leases between two clients on one runtime", () => {
+  it("refuses the other session's change, then frees the asset when the holder releases", async () => {
+    setEnv("UE_MCP_CONTEXT_STRATEGY", "full");
+    const uproject = makeProject(tmp, "Leases", "5.9");
+    const rt = await createRuntime([uproject]);
+    const a = await connect(rt, "session-a");
+    const b = await connect(rt, "session-b");
+    try {
+      const got = await a.call("project", { action: "acquire_lease", args: { paths: ["/Game/BP_Hero"], ttlSeconds: 120 } });
+      expect(got.isError, got.text).toBe(false);
+      expect(JSON.parse(got.text).acquired[0]).toMatchObject({ path: "/Game/BP_Hero", holder: "session-a", mine: true });
+
+      const refused = await b.call("blueprint", { action: "add_variable", args: { blueprintPath: "/Game/BP_Hero.BP_Hero", name: "Speed", type: "float" } });
+      expect(refused.isError).toBe(true);
+      expect(refused.text).toMatch(/^Error \[ASSET_LEASED\]: Asset '\/Game\/BP_Hero' is leased by session 'client-session-a' \(session-a\) until /);
+      // The holder itself is not refused by its own lease.
+      const own = await a.call("blueprint", { action: "add_variable", args: { blueprintPath: "/Game/BP_Hero", name: "Speed", type: "float" } });
+      expect(own.text).not.toContain("ASSET_LEASED");
+      // A second claim on it is refused too, naming the holder.
+      expect((await b.call("project", { action: "acquire_lease", args: { paths: ["/Game/BP_Hero"] } })).text).toContain("client-session-a");
+
+      const listed = JSON.parse((await b.call("project", { action: "list_leases", args: {} })).text);
+      expect(listed).toMatchObject({ mode: "auto", count: 1, you: { id: "session-b" } });
+      expect(listed.leases[0]).toMatchObject({ holder: "session-a", mine: false });
+
+      // Only the holder can release it.
+      expect(JSON.parse((await b.call("project", { action: "release_lease", args: { paths: ["/Game/BP_Hero"] } })).text).releasedCount).toBe(0);
+      expect(JSON.parse((await a.call("project", { action: "release_lease", args: {} })).text).releasedCount).toBe(1);
+      const after = await b.call("blueprint", { action: "add_variable", args: { blueprintPath: "/Game/BP_Hero", name: "Speed", type: "float" } });
+      expect(after.text).not.toContain("ASSET_LEASED");
+    } finally {
+      await a.close();
+      await b.close();
+    }
+  }, 120_000);
+
+  it("has a change take a lease for its session while more than one session is connected", async () => {
+    setEnv("UE_MCP_CONTEXT_STRATEGY", "full");
+    const uproject = makeProject(tmp, "Implicit", "5.9");
+    const rt = await createRuntime([uproject]);
+    const a = await connect(rt, "session-a");
+    const b = await connect(rt, "session-b");
+    try {
+      // One session: a change takes nothing.
+      await a.call("blueprint", { action: "add_variable", args: { blueprintPath: "/Game/BP_Solo", name: "X", type: "float" } });
+      expect(rt.sessions.leases.list()).toEqual([]);
+      rt.sessions.leases.liveSessions = () => 2;
+      await a.call("blueprint", { action: "add_variable", args: { blueprintPath: "/Game/BP_Shared", name: "X", type: "float" } });
+      expect(rt.sessions.leases.list()).toMatchObject([{ path: "/Game/BP_Shared", holder: "session-a", implicit: true }]);
+      const refused = await b.call("blueprint", { action: "add_variable", args: { blueprintPath: "/Game/BP_Shared", name: "Y", type: "float" } });
+      expect(refused.text).toContain("taken when that session last changed it");
+      // A session that ends gives its leases up.
+      expect(rt.sessions.leases.releaseHolder("session-a")).toBe(1);
+      expect((await b.call("blueprint", { action: "add_variable", args: { blueprintPath: "/Game/BP_Shared", name: "Y", type: "float" } })).text).not.toContain("ASSET_LEASED");
+    } finally {
+      await a.close();
+      await b.close();
+    }
+  }, 120_000);
+});

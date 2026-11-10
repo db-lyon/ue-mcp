@@ -12,6 +12,7 @@
     "tests/integration/daemon-cli.test.ts": 42.4,
     "tests/integration/daemon-composer.test.ts": 12,
     "tests/integration/daemon-http.test.ts": 10.5,
+    "tests/integration/daemon-leases.test.ts": 14,
     "tests/integration/daemon-script-events.test.ts": 2.6,
     "tests/integration/daemon-server-mode.test.ts": 26.2,
     "tests/integration/daemon-sessions.test.ts": 7.1,

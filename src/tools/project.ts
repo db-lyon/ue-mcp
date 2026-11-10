@@ -11,6 +11,7 @@ import { engineActions } from "./project/engine.js";
 import { surfaceActions } from "./project/surface.js";
 import { installActions } from "./project/install.js";
 import { categoryActions, categorySchema } from "./project/categories.js";
+import { leaseActions, leaseSchema } from "./project/leases.js";
 
 export { envWarningsFor } from "./project/sessions.js";
 
@@ -44,6 +45,9 @@ const ACTION_ORDER = [
   "list_categories",
   "set_category_enabled",
   "set_toolset_enabled",
+  "acquire_lease",
+  "release_lease",
+  "list_leases",
   "list_content_assets",
   "check_install",
   "execute_python_report",
@@ -98,7 +102,7 @@ export const projectTool: ToolDef = categoryTool(
   "project",
   "Project status and editor connection: get_status (is the editor connected?), set_project (switch/redirect the bridge to another .uproject), get_info. Also config INI files, module load state, and C++ source inspection. Call project(get_status) first in any session.",
   {
-    ...inAdvertisedOrder(sessionActions, configActions, sourceActions, engineActions, surfaceActions, installActions, categoryActions),
+    ...inAdvertisedOrder(sessionActions, configActions, sourceActions, engineActions, surfaceActions, installActions, categoryActions, leaseActions),
     ...epicActions,
   },
   {
@@ -108,6 +112,7 @@ export const projectTool: ToolDef = categoryTool(
     // actions, and tests/unit/handler-specs.test.ts holds the two to one type.
     ...specSchema,
     ...categorySchema,
+    ...leaseSchema,
     projectPath: z.string().optional().describe("For set_project / add_editor / check_install: path to .uproject"),
     editorName: z.string().optional().describe("For add_editor: name to address the new session by (default the project name) (#817)"),
     editorTarget: z.string().optional().describe("For use_editor / drop_editor: session name, project name, or .uproject path (#817)"),

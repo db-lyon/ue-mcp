@@ -68,6 +68,11 @@ export interface McpServerOptions {
    * read-write.
    */
   access?: SessionAccess;
+  /**
+   * The id this client's asset leases are held under. The daemon passes the
+   * connection's session id; a stdio server is one session, this process.
+   */
+  sessionId?: string;
 }
 
 export function createMcpServer(rt: Runtime, opts: McpServerOptions = {}): RuntimeServer {
@@ -104,6 +109,9 @@ export function createMcpServer(rt: Runtime, opts: McpServerOptions = {}): Runti
     gatePlaytest: true,
     flow: { tool: rt.flowTool, ctx: rt.baseCtx },
     ...(opts.access ? { access: () => opts.access!.mode } : {}),
+    ...(opts.sessionId
+      ? { leaseHolder: () => ({ id: opts.sessionId!, label: server.server.getClientVersion()?.name ?? "unknown client" }) }
+      : {}),
   };
 
   // The upgrade notice leads this client's first tool response.

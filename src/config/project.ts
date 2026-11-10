@@ -74,6 +74,13 @@ export interface UeMcpConfig {
     enabled?: boolean;
     ttlSeconds?: number;
   };
+  /** Asset leases for agents sharing one editor (see dispatch/leases.ts).
+   *  `auto` by default: explicit leases always, implicit ones while more than
+   *  one MCP session is connected. */
+  leases?: {
+    mode?: "auto" | "on" | "off";
+    ttlSeconds?: number;
+  };
   /** Optional HTTP surface for flow.run (#144). Disabled by default. */
   http?: {
     enabled?: boolean;

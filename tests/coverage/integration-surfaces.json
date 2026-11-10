@@ -722,6 +722,11 @@
       "summary": "GET /v1/tools, POST /v1/tools/categories and /v1/tools/toolsets list and switch categories and Unreal toolsets, live through the editor bridge"
     },
     {
+      "id": "daemon.leases",
+      "group": "daemon",
+      "summary": "two MCP sessions on one daemon: a lease one holds refuses the other's change naming the holder, a change takes a lease while two sessions share the editor, GET /v1/leases lists them, and they go when the session ends"
+    },
+    {
       "id": "package.dist-server",
       "group": "daemon",
       "summary": "the compiled package, laid out as npm installs it, starts from dist/index.js and serves what the source does"

@@ -196,7 +196,7 @@ describe("the daemon with an editor attached", () => {
 
   it("lists categories with the editor's toolset states and switches one live through the bridge", async () => {
     covers("daemon.tools");
-    expect((await call(d, "GET", "/v1/health")).body.features).toEqual(expect.arrayContaining(["tools.categories"]));
+    expect((await call(d, "GET", "/v1/health")).body.features).toEqual(expect.arrayContaining(["tools.categories", "leases"]));
     const listed = await call(d, "GET", "/v1/tools");
     expect(listed.status, listed.text).toBe(200);
     expect(listed.body.engine.connected).toBe(true);

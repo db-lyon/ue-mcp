@@ -201,6 +201,12 @@ export interface ToolContext {
    * the MCP surface.
    */
   flowStepApproval?: { approver: string; token: string };
+  /**
+   * The MCP session this call came from, as asset leases name it: the
+   * daemon's id for the connection, or this process for a stdio server.
+   * Absent where no session is behind the call.
+   */
+  leaseHolder?: { id: string; label: string };
 }
 
 export interface ProgressUpdate {

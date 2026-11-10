@@ -28,6 +28,7 @@ import { makeResolveExistingFile } from "../flow/guard.js";
 import { normalizeProjectRoot } from "../bridge/port.js";
 import { McpError, ErrorCode } from "../core/errors.js";
 import { warn } from "../core/log.js";
+import { LeaseRegistry } from "../dispatch/leases.js";
 import type { CategoryControl } from "../surface/category-state.js";
 import { newLockOwnerId } from "../dispatch/lock-owner.js";
 import { withoutDialogActuation } from "../editor/dialog-guard.js";
@@ -172,6 +173,8 @@ export class SessionRegistry {
    * the session loads, which own each session's graph (#1827).
    */
   categories?: CategoryControl;
+  /** Asset leases, shared by every MCP session dispatching through this registry. */
+  readonly leases = new LeaseRegistry();
   /** Held while a compound edit is mid-flight, so observers see one change. */
   private suppressNotify = false;
 

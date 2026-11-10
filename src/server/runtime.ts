@@ -26,6 +26,7 @@ import { GuardRegistry } from "../flow/guard.js";
 import { loadFlowConfig } from "../flow/loader.js";
 import { createFlowTool } from "../flow/flow-tool.js";
 import { resolveLockingConfig, type LockingConfig } from "../dispatch/locking.js";
+import { resolveLeaseConfig } from "../dispatch/leases.js";
 import { collapsingEnvWarnings } from "../config/session-env.js";
 import { checkPluginFreshness } from "../editor/bridge-freshness.js";
 import { unionSurface } from "../sessions/session-surface.js";
@@ -204,6 +205,10 @@ export async function createRuntime(projectArgs: string[]): Promise<Runtime> {
   if (lockingCfg.enabled) {
     info("locking", `Per-asset locking enabled (TTL ${lockingCfg.ttlSeconds}s)`);
   }
+
+  // Asset leases for agents sharing this server's editors. The mode is the
+  // first project's, like every process-level choice.
+  sessions.leases.config = resolveLeaseConfig(project.config.leases);
 
   // One task registry and guard pipeline per session, built from its own graph.
   await loads.finishStartup();
