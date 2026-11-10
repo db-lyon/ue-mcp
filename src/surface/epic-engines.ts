@@ -4,8 +4,10 @@
  * outside that list is refused before it is sent.
  */
 import type { ToolDef } from "../core/types.js";
-import type { EpicToolRef } from "./epic-input.js";
+import { engineMinor, type EpicToolRef } from "./epic-input.js";
 import { EPIC_CATALOG_ENGINES } from "../tools/epic/catalog-engines.js";
+
+export { engineMinor };
 
 /** The structured refusal, shaped like the plugin's own unsupported_engine_version answer. */
 export interface EngineVersionRefusal {
@@ -14,12 +16,6 @@ export interface EngineVersionRefusal {
   error: string;
   engineVersion: string;
   availableOn: string[];
-}
-
-/** "5.8" out of "5.8", "5.8.1" or "5.8.0-12345+++UE5+Release-5.8"; null when there is none. */
-export function engineMinor(version: string | null | undefined): string | null {
-  const m = /^(\d+)\.(\d+)/.exec(String(version ?? "").trim());
-  return m ? `${Number(m[1])}.${Number(m[2])}` : null;
 }
 
 /**
@@ -33,7 +29,10 @@ export function epicEngineRefusal(
   engineVersion: string | null | undefined,
   recorded: readonly string[] = EPIC_CATALOG_ENGINES,
 ): EngineVersionRefusal | null {
-  const engines = tool?.engines;
+  // The tool's own engines and every engine a successor of it covers.
+  const engines = tool?.engines
+    ? [...tool.engines, ...(tool.successors ?? []).flatMap((s) => s.engines)]
+    : undefined;
   const editor = engineMinor(engineVersion);
   if (!tool || !engines || !editor || !recorded.includes(editor) || engines.includes(editor)) return null;
   return {

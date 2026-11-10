@@ -74,16 +74,21 @@ export interface Counts {
  * build, so a missing or disagreeing catalog now throws.
  */
 function computeNativeCounts(): { nativeToolsets: number; nativeToolActions: number } {
-  const declared = ALL_TOOLS.reduce(
-    (n, t) => n + Object.keys(t.actions).filter((a) => a.startsWith(EPIC_ACTION_PREFIX)).length,
+  const epicSpecs = ALL_TOOLS.flatMap((t) => Object.entries(t.actions).filter(([a]) => a.startsWith(EPIC_ACTION_PREFIX)));
+  const declared = epicSpecs.length;
+  // Engine tools reached: an action whose tool a newer engine renamed reaches
+  // that successor too, under the same action name, so the catalog is checked
+  // against actions plus their successors.
+  const reached = epicSpecs.reduce(
+    (n, [, spec]) => n + 1 + (spec.kind === "bridge" ? spec.epicTool?.successors?.length ?? 0 : 0),
     0,
   );
   const toolsets = (loadMergedCatalog() as { toolsets: Array<{ tools?: unknown[] }> }).toolsets;
   const recorded = toolsets.reduce((n, t) => n + (t.tools?.length ?? 0), 0);
-  if (recorded !== declared || declared === 0) {
+  if (recorded !== reached || declared === 0) {
     throw new Error(
-      `Wrapped Epic tool count disagrees: ALL_TOOLS declares ${declared} ${EPIC_ACTION_PREFIX}* ` +
-        `actions, tests/golden/epic-catalog/ records ${recorded} across its engines. ` +
+      `Wrapped Epic tool count disagrees: ALL_TOOLS reaches ${reached} engine tools through ${declared} ` +
+        `${EPIC_ACTION_PREFIX}* actions, tests/golden/epic-catalog/ records ${recorded} across its engines. ` +
         `Run \`npm run epic:generate\` (or re-record the catalog) before regenerating metadata.`,
     );
   }

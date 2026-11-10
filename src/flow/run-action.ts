@@ -7,7 +7,7 @@ import type { FlowContext } from "./context.js";
 import { liftRollback } from "./rollback.js";
 import { applyHandlerOutcome } from "./handler-outcome.js";
 import { ensureGuard } from "../editor/dialog-guard.js";
-import { paramMapperOf } from "../surface/epic-input.js";
+import { epicSuccessorFor, paramMapperOf } from "../surface/epic-input.js";
 import { epicEngineRefusal } from "../surface/epic-engines.js";
 import { actionAccepts } from "../surface/action-schema.js";
 import type { BridgeCallOptions, IBridge } from "../bridge/bridge.js";
@@ -103,8 +103,12 @@ export async function runBridge(
   // mapper, since a mapper that forwards its input verbatim would carry it.
   const options = stripAction(rawOptions);
   // A wrapped engine tool the attached engine's recorded registry lacks is refused unsent.
-  const refused = epicEngineRefusal(name, prep?.epicTool, ctx.bridge?.capabilities?.engineVersion);
+  const engineVersion = ctx.bridge?.capabilities?.engineVersion;
+  const refused = epicEngineRefusal(name, prep?.epicTool, engineVersion);
   if (refused) return applyHandlerOutcome(ctx, refused, { success: true, data: { ...refused } });
+  // A wrapped tool the attached engine replaced goes to its successor, whichever
+  // route built the mapper.
+  if (epicSuccessorFor(prep?.epicTool, engineVersion)) mapParams = paramMapperOf({ epicTool: prep?.epicTool }, engineVersion);
   // The routing parameters come off, the paths are repaired, and the category
   // folds its accepted spellings into the canonical ones.
   const pipeline = prepareCall(options, withLiveContract(prep, ctx.bridge.capabilities?.pluginHandlerSpecs));

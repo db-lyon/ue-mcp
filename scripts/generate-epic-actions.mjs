@@ -65,6 +65,19 @@ const EFFECTS = flag("--effects", path.join(OUT_DIR, "effects.ts"));
  * routes the server publishes.
  */
 const ROUTES = [
+  // UE 5.9 toolsets, ahead of the broader patterns below so a name such as
+  // LevelSequenceEditor reaches animation rather than level.
+  [/levelsequence|templatesequence|sequencevalidator|deformergraph|optimus/i, "animation"],
+  [/pcgeditor/i, "pcg"],
+  [/environmentquery|navmesh|inputtoolset/i, "gameplay"],
+  [/mvvm|commonui|slatedebugger/i, "widget"],
+  [/metasound|soundwave/i, "audio"],
+  [/sourcecontrol/i, "source_control"],
+  [/blueprint_diff/i, "blueprint"],
+  [/curveatlas|userdefinedenum|userdefinedstruct|geometry_ops/i, "asset"],
+  [/editortoolset\.leveltoolset|unrealcanvasspatialannotation/i, "level"],
+  [/consoletoolset\.consoletoolset|cheatstoolset|python_scripting|undohistory|scenecapture|rewinddebugger|perftoolset|mediatoolset/i, "editor"],
+  [/filesystemtoolset|livecoding/i, "project"],
   [/physicsasset|physicstoolset/i, "gameplay"],
   [/gas|abilitysystem|gameplaycue|attributeset/i, "gas"],
   [/niagara/i, "niagara"],
@@ -114,6 +127,79 @@ function actionKey(bare) {
   return `epic_${snake}`;
 }
 
+/* ── successors ─────────────────────────────────────────────────────────── */
+
+function disjoint(a, b) {
+  return !a.some((e) => b.includes(e));
+}
+
+/**
+ * Which newer toolset replaced each older one: same category, no engine in
+ * common, and carrying at least half of the older toolset's tool names (the
+ * newer one with the most, when several do). Successors attach only within
+ * such a pair, so two toolsets that both ship `create` are never crossed.
+ */
+function successorToolsets(toolsets) {
+  const keysOf = (ts) => new Set(ts.tools.map((t) => actionKey(bareToolName(t.name))));
+  const out = new Map();
+  for (const old of toolsets) {
+    const oldKeys = keysOf(old);
+    let best = null;
+    let bestShare = 0.5;
+    for (const next of toolsets) {
+      if (next === old || routeToolset(next.name) !== routeToolset(old.name)) continue;
+      if (!disjoint(old.engines, next.engines) || compareEngines(next.engines[0], old.engines[0]) <= 0) continue;
+      const nextKeys = keysOf(next);
+      const share = [...oldKeys].filter((k) => nextKeys.has(k)).length / Math.max(1, oldKeys.size);
+      if (share >= bestShare && (!best || share > bestShare)) { best = next.name; bestShare = share; }
+    }
+    if (best) out.set(old.name, best);
+  }
+  return out;
+}
+
+// An argument name with case, underscores and a bool's leading `b` folded away:
+// `component_type` and `componentType`, `worldspace` and `bWorldSpace`.
+function foldName(name, prop) {
+  const flat = String(name).replace(/[^A-Za-z0-9]/g, "").toLowerCase();
+  return prop?.type === "boolean" && /^b[A-Z]/.test(name) ? flat.slice(1) : flat;
+}
+
+/** Older argument names a successor spells differently, matched by their folded form. */
+function renameMap(oldInput, newInput) {
+  const fresh = new Map(Object.entries(newInput?.properties ?? {}).map(([n, p]) => [foldName(n, p), n]));
+  const out = {};
+  for (const [name, prop] of Object.entries(oldInput?.properties ?? {})) {
+    const to = fresh.get(foldName(name, prop)) ?? fresh.get(foldName(name, { type: "boolean" }));
+    if (to && to !== name) out[name] = to;
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
+// The stronger claim wins when one action reaches two tools: a read on one
+// engine and a write on another is a write, and unknown gates hardest.
+function strongerEffect(a, b) {
+  const rank = { read: 0, mutate: 1, unknown: 2 };
+  return rank[b] > rank[a] ? b : a;
+}
+
+/** Declare a tool's arguments on its category, with every engine's type for each. */
+function addParams(bucket, tool, input) {
+  if (reservedArgs(input).length > 0) bucket.needsInput = true;
+  for (const [name, prop] of Object.entries(input.properties ?? {})) {
+    // Never declared: the category tool owns the name.
+    if (RESERVED_TOP_LEVEL.has(name)) continue;
+    if (!bucket.params.has(name)) bucket.params.set(name, { kinds: new Set(), description: "" });
+    const entry = bucket.params.get(name);
+    // Every engine's type for it, so a type that changed accepts either.
+    for (const s of tool.inputSchemas ?? [input]) if (s.properties?.[name]) entry.kinds.add(kindOf(s.properties[name]));
+    entry.kinds.add(kindOf(prop));
+    if (!entry.description && typeof prop?.description === "string") {
+      entry.description = prose(prop.description);
+    }
+  }
+}
+
 /* ── descriptions ───────────────────────────────────────────────────────── */
 
 // Epic's descriptions are Python docstrings: a sentence, then an indented
@@ -123,6 +209,9 @@ function prose(description) {
   const text = String(description ?? "").split(/\n\s*(?:Args|Arguments|Returns|Raises|Note):/)[0];
   return text
     .replace(/\s*—\s*/g, " - ") // em-dash-allowed: the literal is the character being stripped
+    // Epic's prose lands in tracked files under this repository's prose rules,
+    // which ban the word for a level ("quality tier" reads "quality level"). lint-prose-allow: tier
+    .replace(/\btier(s?)\b/gi, (_m, s) => `level${s}`) // lint-prose-allow: tier
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -242,6 +331,8 @@ function main() {
     .flatMap((ts) => ts.tools.map((tool) => ({ ts, tool })))
     .sort((a, b) => compareEngines(a.tool.engines[0], b.tool.engines[0]));
 
+  const successorToolset = successorToolsets(merged.toolsets);
+
   // category -> { actions: [...], params: Map<name, {kinds:Set, description}> }
   const byCategory = new Map();
   const missingEffects = [];
@@ -256,6 +347,24 @@ function main() {
     if (!effect) { missingEffects.push(tool.name); continue; }
 
     let key = actionKey(bareToolName(tool.name));
+    // The same tool under a newer engine's toolset, where the older one is gone:
+    // a successor of the existing action rather than a second, suffixed one, so
+    // the action keeps its name and reaches whichever tool the editor carries.
+    const prior = bucket.actions.find((a) => (a.key === key || a.key.startsWith(`${key}__`))
+      && successorToolset.get(a.toolset) === ts.name
+      && disjoint(a.engines.concat(a.successors.flatMap((s) => s.engines)), tool.engines));
+    if (prior) {
+      addParams(bucket, tool, tool.inputSchema ?? {});
+      prior.successors.push({
+        toolset: ts.name,
+        tool: tool.name,
+        engines: tool.engines,
+        input: tool.inputSchema ?? {},
+        rename: renameMap(prior.input, tool.inputSchema ?? {}),
+      });
+      prior.effect = strongerEffect(prior.effect, effect);
+      continue;
+    }
     if (bucket.keys.has(key)) {
       // Two toolsets in one category shipping the same bare name. Qualify
       // with the toolset's own short name so both stay reachable.
@@ -266,31 +375,31 @@ function main() {
     bucket.keys.add(key);
 
     const input = tool.inputSchema ?? {};
-    if (reservedArgs(input).length > 0) bucket.needsInput = true;
-    for (const [name, prop] of Object.entries(input.properties ?? {})) {
-      // Never declared: the category tool owns the name.
-      if (RESERVED_TOP_LEVEL.has(name)) continue;
-      if (!bucket.params.has(name)) bucket.params.set(name, { kinds: new Set(), description: "" });
-      const entry = bucket.params.get(name);
-      // Every engine's type for it, so a type that changed accepts either.
-      for (const s of tool.inputSchemas ?? [input]) if (s.properties?.[name]) entry.kinds.add(kindOf(s.properties[name]));
-      entry.kinds.add(kindOf(prop));
-      if (!entry.description && typeof prop?.description === "string") {
-        entry.description = prose(prop.description);
-      }
-    }
+    addParams(bucket, tool, input);
 
-    const summary = prose(tool.description) || bareToolName(tool.name);
-    const availability = availabilityClause(tool.engines, merged.engines);
     bucket.actions.push({
       key,
       effect,
       toolset: ts.name,
       tool: tool.name,
       engines: tool.engines,
-      description: `[Epic ${ts.name}] ${summary} ${availability}${paramsClause(input)}`.replace(/\s+/g, " ").trim(),
+      summary: prose(tool.description) || bareToolName(tool.name),
       input,
+      successors: [],
     });
+  }
+
+  // Descriptions last, once every successor is known: availability is the union
+  // of the engines the action reaches, and each successor names its own params.
+  for (const bucket of byCategory.values()) {
+    for (const a of bucket.actions) {
+      const reach = [...a.engines, ...a.successors.flatMap((s) => s.engines)];
+      const later = a.successors
+        .map((s) => `On UE ${s.engines.join(", ")} it calls ${s.tool} (${paramsClause(s.input)}).`)
+        .join(" ");
+      a.description = `[Epic ${a.toolset}] ${a.summary} ${availabilityClause(reach, merged.engines)}${paramsClause(a.input)}${later ? `. ${later}` : ""}`
+        .replace(/\s+/g, " ").trim();
+    }
   }
 
   if (missingEffects.length > 0) {
@@ -388,11 +497,18 @@ import { bp } from "../../surface/category-tool.js";
 
   const actions = bucket.actions
     .map((a) => {
-      const schemaConst = `const ${constName(a.key)} = ${JSON.stringify(minifySchema(a.input))} as const;`;
-      return { schemaConst, entry:
+      const consts = [`const ${constName(a.key)} = ${JSON.stringify(minifySchema(a.input))} as const;`];
+      const successors = a.successors.map((s, i) => {
+        const name = `${constName(a.key)}__${i + 1}`;
+        consts.push(`const ${name} = ${JSON.stringify(minifySchema(s.input))} as const;`);
+        const rename = s.rename ? `, rename: ${JSON.stringify(s.rename)}` : "";
+        return `{ toolset: ${q(s.toolset)}, name: ${q(s.tool)}, engines: ${q(s.engines)}, schema: ${name}${rename} }`;
+      });
+      const succ = successors.length > 0 ? `, successors: [${successors.join(", ")}]` : "";
+      return { schemaConst: consts.join("\n"), entry:
 `  ${safeKey(a.key)}: {
     epicSchema: ${constName(a.key)},
-    epicTool: { toolset: ${q(a.toolset)}, name: ${q(a.tool)}, engines: ${q(a.engines)} },
+    epicTool: { toolset: ${q(a.toolset)}, name: ${q(a.tool)}, engines: ${q(a.engines)}${succ} },
     ...bp(${q(a.effect)}, ${q(a.description)}, "epic_call_tool"),
   },` };
     });

@@ -95,8 +95,23 @@ describe("every tool has a reviewed effect", () => {
 });
 
 describe("the generated actions", () => {
-  it("declares one action per catalog tool", () => {
-    expect(epicActions().length).toBe(catalogTools.length);
+  it("reaches every catalog tool exactly once, as an action or a successor of one", () => {
+    const reached = epicActions().flatMap(({ spec }) =>
+      spec.kind === "bridge" && spec.epicTool
+        ? [spec.epicTool.name, ...(spec.epicTool.successors ?? []).map((s) => s.name)]
+        : []);
+    expect(new Set(reached).size).toBe(reached.length);
+    expect(reached.length).toBe(catalogTools.length);
+  });
+
+  it("attaches a successor only on engines its action's own tool is absent from", () => {
+    for (const { tool, action, spec } of epicActions()) {
+      if (spec.kind !== "bridge" || !spec.epicTool?.successors) continue;
+      const own = spec.epicTool.engines ?? [];
+      for (const s of spec.epicTool.successors) {
+        expect(s.engines.filter((e) => own.includes(e)), `${tool}.${action} -> ${s.name}`).toEqual([]);
+      }
+    }
   });
 
   it("carries a declared effect that matches the reviewed one", () => {
