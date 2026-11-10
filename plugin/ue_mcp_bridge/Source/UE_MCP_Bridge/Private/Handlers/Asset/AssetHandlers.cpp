@@ -1047,6 +1047,9 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("limit"), EType::Integer, TEXT("Rows per page, 1 to 200 (default 20)")),
 	});
 
+	// #1829: Epic's Semantic Search, through its module interface.
+	RegisterSemanticSearchHandlers(Registry);
+
 	// v0.7.19 #150 - AssetRegistry referencers
 	Registry.RegisterHandler(TEXT("get_asset_referencers"), &GetReferencers, {
 		MCPParam::Optional(TEXT("packages"), EType::Array, TEXT("Package or object paths to look up")).Items(EType::String).Alias(TEXT("assetPaths")),

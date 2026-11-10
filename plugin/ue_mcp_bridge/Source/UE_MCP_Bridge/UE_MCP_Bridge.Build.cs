@@ -209,5 +209,39 @@ public class UE_MCP_Bridge : ModuleRules
 		{
 			PrivateDefinitions.Add("WITH_UEMCP_EPIC_MCP=0");
 		}
+
+		// Epic's ToolsetRegistry in 5.8 keeps its process-wide registry as a
+		// member of UToolsetRegistrySubsystem, declared in this module's public
+		// headers. Headers only, never linked: epic(set_toolset_enabled) reads the
+		// member's address from the layout and calls the registry's exported
+		// methods by name. 5.9 moved the subsystem to an editor module and added
+		// FToolsetRegistry::Get(), so the header is not needed there.
+		bool bToolsetRegistrySubsystemHeader = System.IO.File.Exists(System.IO.Path.Combine(
+			EngineDirectory, "Plugins", "Experimental", "ToolsetRegistry", "Source", "ToolsetRegistry", "Public", "ToolsetRegistry", "ToolsetRegistrySubsystem.h"));
+		if (bToolsetRegistrySubsystemHeader && Target.bBuildEditor)
+		{
+			PrivateIncludePathModuleNames.Add("ToolsetRegistry");
+			PrivateDefinitions.Add("WITH_UEMCP_TOOLSET_REGISTRY_SUBSYSTEM=1");
+		}
+		else
+		{
+			PrivateDefinitions.Add("WITH_UEMCP_TOOLSET_REGISTRY_SUBSYSTEM=0");
+		}
+
+		// Epic's Semantic Search plugin (5.8+, experimental, off by default).
+		// Headers only, never linked: asset(semantic_search) reaches it through
+		// virtual calls on its module interface and embedding provider, so this
+		// DLL loads whether or not a project enables the plugin.
+		bool bSemanticSearchPresent = System.IO.File.Exists(System.IO.Path.Combine(
+			EngineDirectory, "Plugins", "Experimental", "SemanticSearch", "Source", "SemanticSearch", "Public", "ISemanticSearchModule.h"));
+		if (bSemanticSearchPresent && Target.bBuildEditor)
+		{
+			PrivateIncludePathModuleNames.Add("SemanticSearch");
+			PrivateDefinitions.Add("WITH_UEMCP_SEMANTIC_SEARCH=1");
+		}
+		else
+		{
+			PrivateDefinitions.Add("WITH_UEMCP_SEMANTIC_SEARCH=0");
+		}
 	}
 }

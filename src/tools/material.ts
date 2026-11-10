@@ -5,6 +5,7 @@ import { actions as epicActions, schema as epicSchema } from "./epic/material.ge
 import { specBp, schema as specSchema } from "./specs/material.generated.js";
 import { materialDiagramAction } from "./graph-diagrams.js";
 import { diagramSchema } from "../diagram/action.js";
+import { withInlineImage, inlineSchema } from "../dispatch/inline-image.js";
 
 export const materialTool: ToolDef = categoryTool(
   "material",
@@ -56,7 +57,7 @@ export const materialTool: ToolDef = categoryTool(
     export_graph:      specBp("read", "Export material graph as JSON in build_graph's shape: nodes[], connections[] and propertyConnections[], so the result imports back.", "export_material_graph"),
     import_graph:      specBp("mutate", "build_graph under another name: adds the nodes, connections and propertyConnections it is given (an export_graph result imports as is).", "import_material_graph"),
     build_graph:       specBp("mutate", "Add a whole node graph in one call. nodes[]: {name, class, posX?, posY?, parameterName?, group?, defaultValue?, value?, channels?, texturePath?, properties?:{UPROPERTY: value}}; name is yours and becomes the node description. connections[]: {from, fromOutput?, to, toInput?} between node names (or expressions already in the material), pins by name or index; a single-input node such as Sine takes toInput Input. propertyConnections[]: {property, from, output?}. removeExpressions[]: existing expressions to delete once the new nodes are wired, so a Custom node is replaced in one call (#1461). Every class, property and pin is checked first and a failure keeps nothing. Returns nodes[] mapping each name to its expressionName and expressionIndex.", "build_material_graph"),
-    render_preview:    specBp("mutate", "Render preview PNG.", "render_material_preview"),
+    render_preview:    withInlineImage(specBp("mutate", "Render preview PNG. inline=true, or a longest-edge size in pixels, also returns the written image as image content, scaled down when larger.", "render_material_preview"), ["outputPath"]),
     begin_transaction: specBp("mutate", "Begin undo transaction.", "begin_material_transaction"),
     end_transaction:   specBp("mutate", "End undo transaction.", "end_material_transaction"),
     // V15 Runtime Virtual Textures. Every SETTING on an RVT asset, on its
@@ -87,6 +88,7 @@ export const materialTool: ToolDef = categoryTool(
     // actions, and tests/unit/handler-specs.test.ts holds the two to one type.
     ...specSchema,
     ...diagramSchema({ ...epicSchema, ...specSchema }),
+    ...inlineSchema,
     // The spec cannot carry bounds; these keep them, with the type the spec declares.
     slotIndex: z.number().int().min(0).optional().describe("read_instance / *_designer*: material slot index on the mesh component (default 0) (#1114/#1131)"),
     layerIndex: z.number().int().min(0).optional().describe("Material Designer layer index within the slot (#1131)"),

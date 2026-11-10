@@ -5659,6 +5659,57 @@ export const handlerSpecs: HandlerSpecs = {
       }
     ]
   },
+  "semantic_search": {
+    "category": "asset",
+    "params": [
+      {
+        "name": "query",
+        "type": "string",
+        "required": true,
+        "description": "Natural-language description of the assets to find"
+      },
+      {
+        "name": "limit",
+        "type": "integer",
+        "required": false,
+        "description": "Most results to return, 1 to 200 (default 20)"
+      },
+      {
+        "name": "directory",
+        "type": "string",
+        "required": false,
+        "description": "Content folder to search within, e.g. /Game/Props (default every indexed folder)"
+      },
+      {
+        "name": "maxDistance",
+        "type": "number",
+        "required": false,
+        "description": "Largest vector distance a match may have (default the plugin's VectorDistanceCutoff)"
+      }
+    ]
+  },
+  "semantic_search_index": {
+    "category": "asset",
+    "params": [
+      {
+        "name": "assetPaths",
+        "type": "array",
+        "required": false,
+        "description": "Object or package paths to index (default every asset in the indexed folders)",
+        "items": "string"
+      },
+      {
+        "name": "force",
+        "type": "boolean",
+        "required": false,
+        "description": "With no assetPaths: clear the index and rebuild every embedding instead of reusing cached ones (default false)"
+      }
+    ]
+  },
+  "semantic_search_status": {
+    "category": "asset",
+    "params": []
+  },
   "set_asset_property": {
     "category": "asset",
     "params": [
@@ -6844,6 +6895,9 @@ export const paramsClauses: Readonly<Record<string, string>> = {
   save_asset: "Params: assetPath? (or path), assetPaths?, force?",
   scale_mesh_geometry: "Params: assetPath (or path), factor, pivot?, outputPath?, scaleSockets?, scaleCollision?, save?",
   search_assets_fts: "Params: query, classFilter?, cursor?, limit? (or maxResults)",
+  semantic_search: "Params: query, limit?, directory?, maxDistance?",
+  semantic_search_index: "Params: assetPaths?, force?",
+  semantic_search_status: "Params: none",
   set_asset_property: "Params: assetPath (or path), propertyName, value, save?",
   set_cloth_config: "Params: skeletalMeshPath (or assetPath), properties, clothingAsset?, configType?",
   set_curve_keys: "Params: assetPath (or path), channel?, channelName?, keys, save?",
@@ -6885,7 +6939,7 @@ export const schema: Record<string, z.ZodType> = {
   assetPath: z.string().optional().describe("CurveTable asset path (add_curvetable_key, add_curvetable_row, get_curvetable_keys, import_curvetable, list_curvetable_rows, read_curvetable, remove_curvetable_row, rename_curvetable_row, set_curvetable_keys). DataTable asset path (add_datatable_row, clone_datatable_rows, fill_datatable_from_json, get_datatable_row, read_datatable, reimport_datatable, remove_datatable_row, rename_datatable_row, set_datatable_cell, set_datatable_cells, set_datatable_row, update_datatable_row). EdGraph-backed asset path (add_graph_node, connect_graph_pins, disconnect_graph_pins, read_asset_graph, remove_graph_node). StaticMesh, SkeletalMesh or Skeleton asset path (add_socket, list_asset_sockets, list_sockets, remove_socket). Asset path; a Blueprint path writes its generated-class CDO (append_asset_array_elements, remove_asset_array_elements, set_asset_property). StaticMesh to cut; it is never modified (apply_mesh_fracture). StaticMesh to read (apply_mesh_hole_fill, apply_mesh_mirror, apply_mesh_remesh, apply_mesh_simplify). Asset to check (asset_health_check). Alias for skeletalMeshPath (bind_cloth_to_section, read_cloth_data, set_cloth_config, unbind_cloth_from_section). StaticMesh or SkeletalMesh asset path (check_uvs, export_uv_layout, get_mesh_bounds, get_mesh_geometry, get_mesh_info, measure_mesh_geometry, read_mesh_materials, read_uv_channels, set_socket_transform, set_uv_channel_count, transform_uvs, unwrap_uvs). CustomizableObject asset path (compile_customizable_object). Object path of the new pipeline (create_interchange_pipeline). Asset that owns the new subobject (create_subobject). Asset to delete (delete_asset). Blueprint, Skeleton or SkeletalMesh to diff from (diff_asset). Data asset path (edit_collection_entry). UserDefinedEnum asset path (edit_user_defined_enum). UserDefinedStruct asset path (edit_user_defined_struct, list_struct_fields, rename_struct_field). Asset to export (export_asset). Texture2D asset path (export_texture, get_texture_info, set_texture_settings). Asset to reload from disk (force_reload_asset). StaticMesh asset path (generate_lightmap_uvs, get_mesh_collision, get_static_mesh_build_settings, set_mesh_material, set_mesh_nav, set_static_mesh_build_settings). StaticMesh whose collision to build or clear (generate_mesh_collision). One SkeletalMesh (generate_skeletal_mesh_lods). Alias for packagePath (get_asset_dependencies, get_asset_referencers). Asset path; a Blueprint path reads its generated-class CDO (get_asset_properties, read_asset_properties). StaticMesh asset path; keep the same path on every snapshot page (get_static_mesh_geometry). StringTable asset path (get_stringtable_entry, import_stringtable, import_stringtable_csv, list_stringtable_keys, read_stringtable, remove_stringtable_entry, set_stringtable_entry). UEnum or UserDefinedEnum asset path (list_enum_values). SkeletalMesh or Skeleton asset path (list_skeleton_bones). Asset to rename in its own folder, together with newName (move_asset, rename_asset). Asset path (read_asset). Imported asset path (read_import_sources). SkeletalMesh asset path (read_skeletal_mesh_bone_vertex_bounds, read_skeletal_mesh_build_settings, read_skeletal_mesh_skin_weights, read_skeletal_mesh_vertices, set_sk_material_slots, set_skeletal_mesh_optimize_for_instancing, set_skeletal_mesh_skin_weights, transform_skinned_part). StaticMesh to recenter (recenter_pivot). Imported asset to rebuild from its source file (reimport_asset). Asset whose package to reload (reload_package). Asset to save; omit it and assetPaths to save every dirty asset under /Game (save_asset). StaticMesh to scale (scale_mesh_geometry). CurveFloat, CurveVector or CurveLinearColor asset path (set_curve_keys)"),
   assetPathA: z.string().optional().describe("First Texture2D"),
   assetPathB: z.string().optional().describe("Second Texture2D"),
-  assetPaths: z.array(z.string()).optional().describe("The exact assets to read (bulk_read_asset_properties). Assets to delete (delete_asset_batch). The exact assets to act on, the safest way to drive it (fix_asset_hygiene). Assets to reload from disk together in one pass, 1-500; use instead of assetPath (force_reload_asset). SkeletalMeshes, at most 500 (generate_skeletal_mesh_lods). Alias for packages (get_asset_dependencies, get_asset_referencers). Texture2D asset paths, 1-500; use instead of assetPath (get_texture_info, set_texture_settings). StaticMeshes to recenter together; the first sets the reference pivot (recenter_pivot). Save exactly these loaded packages (asset, object or package paths) and no others; each is reported saved, notDirty or failed (save_asset)"),
+  assetPaths: z.array(z.string()).optional().describe("The exact assets to read (bulk_read_asset_properties). Assets to delete (delete_asset_batch). The exact assets to act on, the safest way to drive it (fix_asset_hygiene). Assets to reload from disk together in one pass, 1-500; use instead of assetPath (force_reload_asset). SkeletalMeshes, at most 500 (generate_skeletal_mesh_lods). Alias for packages (get_asset_dependencies, get_asset_referencers). Texture2D asset paths, 1-500; use instead of assetPath (get_texture_info, set_texture_settings). StaticMeshes to recenter together; the first sets the reference pivot (recenter_pivot). Save exactly these loaded packages (asset, object or package paths) and no others; each is reported saved, notDirty or failed (save_asset). Object or package paths to index (default every asset in the indexed folders) (semantic_search_index)"),
   assignments: z.array(z.object({ assetPath: z.string().describe("StaticMesh or SkeletalMesh asset path"), materialPath: z.string().describe("Material to assign"), slotName: z.string().optional().describe("Slot by name, which survives a reimport reordering slot indices"), slotIndex: z.number().int().optional().describe("Slot by index (default 0); refused when it disagrees with slotName") })).optional().describe("Slot assignments, max 500"),
   autoCompact: z.boolean().optional().describe("Close the gaps the collapse leaves in the index space (default true)"),
   autoDetectBoxes: z.boolean().optional().describe("Use a box where one fits (default true)"),
@@ -6941,7 +6995,7 @@ export const schema: Record<string, z.ZodType> = {
   destinationChannel: z.number().optional().describe("Channel it writes (default: the current setting, or the next free channel)"),
   destinationPath: z.string().optional().describe("Object path of the copy (duplicate_asset). Alias for packagePath (import_animation, import_file, import_font, import_skeletal_mesh, import_static_mesh, import_texture). New object path, together with sourcePath (move_asset, rename_asset). Content folder to move it to (move_folder)"),
   directories: z.array(z.string()).optional().describe("Content paths to sweep, mount-rooted such as /Game/Characters (default /Game)"),
-  directory: z.string().optional().describe("Content path to sweep, added to directories (default /Game) (audit_asset_hygiene, fix_asset_hygiene). Content folder to sweep, narrowed by classNames (bulk_read_asset_properties). Every SkeletalMesh in this folder (generate_skeletal_mesh_lods). Content path to list (default /Game) (list_assets). Only textures whose object path starts with this (default /Game/) (list_textures). Content path to rescan (default /Game) (reindex_assets_fts)"),
+  directory: z.string().optional().describe("Content path to sweep, added to directories (default /Game) (audit_asset_hygiene, fix_asset_hygiene). Content folder to sweep, narrowed by classNames (bulk_read_asset_properties). Every SkeletalMesh in this folder (generate_skeletal_mesh_lods). Content path to list (default /Game) (list_assets). Only textures whose object path starts with this (default /Game/) (list_textures). Content path to rescan (default /Game) (reindex_assets_fts). Content folder to search within, e.g. /Game/Props (default every indexed folder) (semantic_search)"),
   discardAttributes: z.boolean().optional().describe("Throw away UVs, normals and material IDs so the remesher moves freely (default false)"),
   discardUnsaved: z.boolean().optional().describe("Reload even when a package has unsaved changes, discarding them (default false)"),
   displayName: z.string().optional().describe("Display text for the enumerator (add_value, rename_value)"),
@@ -6977,7 +7031,7 @@ export const schema: Record<string, z.ZodType> = {
   flipU: z.boolean().optional().describe("Mirror across U"),
   flipV: z.boolean().optional().describe("Mirror across V"),
   fontFaces: z.array(z.string()).optional().describe("FontFace asset paths, one typeface entry each"),
-  force: z.boolean().optional().describe("Delete even when other packages reference it, closing open editors (default false) (delete_asset). Delete referenced assets too, closing open editors (default false) (delete_asset_batch). Also delete the assets inside (default false: only empty folders) (delete_folder). Rebuild even when the settings already match (generate_lightmap_uvs). World renames only: merge into a destination that already holds external packages (used by rollback) (move_asset, rename_asset). Write the package even when it is not dirty (needs assetPath or assetPaths) (save_asset)"),
+  force: z.boolean().optional().describe("Delete even when other packages reference it, closing open editors (default false) (delete_asset). Delete referenced assets too, closing open editors (default false) (delete_asset_batch). Also delete the assets inside (default false: only empty folders) (delete_folder). Rebuild even when the settings already match (generate_lightmap_uvs). World renames only: merge into a destination that already holds external packages (used by rollback) (move_asset, rename_asset). Write the package even when it is not dirty (needs assetPath or assetPaths) (save_asset). With no assetPaths: clear the index and rebuild every embedding instead of reusing cached ones (default false) (semantic_search_index)"),
   format: z.string().optional().describe("R8 | RG8 | RGBA8 | RGBA8_SRGB | R16F | RG16F | RGBA16F | R32F | RG32F | RGBA32F | RGB10A2 (default RGBA8_SRGB) (create_render_target_2d). DataTable: json | csv; MaterialInstance: json (resolved parameters and overrides). Meshes use the FBX exporter; textures use PNG, selected by outputPath extension (export_asset). json | csv (default: from the file extension) (import_curvetable)"),
   fromChannel: z.number().optional().describe("Source channel (op=copy)"),
   gapWidth: z.number().optional().describe("How far apart the halves of each cut are pushed, in centimetres (default 0.01)"),
@@ -7033,7 +7087,7 @@ export const schema: Record<string, z.ZodType> = {
   keys: z.array(z.record(z.string(), z.unknown())).optional().describe("Replacement keys, [] to clear: [{time, value, interpMode? (cubic default, linear, constant, none), tangentMode? (auto|smartAuto|user|break|none), tangentWeightMode? (none|arrive|leave|both), arriveTangent?, leaveTangent?, arriveTangentWeight?, leaveTangentWeight?}]. A tangent given without tangentMode is kept as a user tangent (set_curve_keys). Replacement keys: [{time, value, interpMode?, arriveTangent?, leaveTangent?}] (set_curvetable_keys)"),
   keyTimeTolerance: z.number().optional().describe("How close an existing key must be to be updated rather than added"),
   lightmapResolution: z.number().optional().describe("The mesh's lightmap resolution"),
-  limit: z.number().int().optional().describe("Rows to return (default 200, max 2000) (bulk_read_asset_properties). Rows per page, 1 to 5000 (default 500) (list_assets). Bones per page (default every bone) (list_skeleton_bones). Rows per page, 1 to 2000 (default 50) (list_textures, search_assets_fts). Rows per page, 1 to 200 (default 20) (quick_search). Selected vertices to return inline, 1 to 20000 (default 2000); ignored with dumpToFile (read_skeletal_mesh_vertices)"),
+  limit: z.number().int().optional().describe("Rows to return (default 200, max 2000) (bulk_read_asset_properties). Rows per page, 1 to 5000 (default 500) (list_assets). Bones per page (default every bone) (list_skeleton_bones). Rows per page, 1 to 2000 (default 50) (list_textures, search_assets_fts). Rows per page, 1 to 200 (default 20) (quick_search). Selected vertices to return inline, 1 to 20000 (default 2000); ignored with dumpToFile (read_skeletal_mesh_vertices). Most results to return, 1 to 200 (default 20) (semantic_search)"),
   loadingPolicy: z.string().optional().describe("LazyLoad (default) | Stream | Inline"),
   lodCount: z.number().int().optional().describe("Total LODs including LOD 0, 1 to 8"),
   lodGroup: z.string().optional().describe("Texture LOD group, applied to the imported texture (import_texture). Texture group, with or without TEXTUREGROUP_: World, Weapon, WeaponNormalMap, WeaponSpecular and the other engine values (set_texture_settings)"),
@@ -7046,6 +7100,7 @@ export const schema: Record<string, z.ZodType> = {
   maxAssets: z.number().int().optional().describe("Assets the sweep walks before it reports scanTruncated (default 20000, max 200000) (audit_asset_hygiene, fix_asset_hygiene). Refuse to load more candidates than this (default 2000, max 20000) (bulk_read_asset_properties)"),
   maxConvexHulls: z.number().int().optional().describe("Convex hulls the decomposition may produce (default 1)"),
   maxDepth: z.number().int().min(1).max(8).optional().describe("Maximum reference depth for includeDetails (default 2)"),
+  maxDistance: z.number().optional().describe("Largest vector distance a match may have (default the plugin's VectorDistanceCutoff)"),
   maxExpandedObjects: z.number().int().optional().describe("Cap on expanded objects (default 64)"),
   maxFixes: z.number().int().optional().describe("Refuse the call past this many assets (default 100)"),
   maxIssues: z.number().int().optional().describe("Findings of each kind to list (default 200); the counts are always complete"),
@@ -7115,7 +7170,7 @@ export const schema: Record<string, z.ZodType> = {
   propertyName: z.string().optional().describe("Path of the TArray property (append_asset_array_elements, remove_asset_array_elements). Path to a TArray of structs or TMap with struct values (edit_collection_entry). One property to read; dotted and indexed paths walk structs, arrays and instanced subobjects (get_asset_properties, read_asset_properties). Property path; dotted and indexed paths walk structs, arrays and instanced subobjects (set_asset_property)"),
   propertyNames: z.array(z.string()).optional().describe("Property paths to read off every matched asset; dotted paths walk nested structs (max 32)"),
   quarantineFolder: z.string().optional().describe("Where quarantined assets move, keeping their folder shape (default /Game/Quarantine)"),
-  query: z.string().optional().describe("Words matched against names, classes and paths; every word must match. A leading BP_, M_ or DT_ keeps names with that prefix, and actor:, asset: or file: keeps one kind (quick_search). Words scored against each asset's name, class and path (search_assets_fts)"),
+  query: z.string().optional().describe("Words matched against names, classes and paths; every word must match. A leading BP_, M_ or DT_ keeps names with that prefix, and actor:, asset: or file: keeps one kind (quick_search). Words scored against each asset's name, class and path (search_assets_fts). Natural-language description of the assets to find (semantic_search)"),
   rasterSize: z.number().optional().describe("Raster resolution for the overlap estimate (default 512) (check_uvs). Raster resolution for the result's overlap estimate (default 512) (generate_lightmap_uvs, unwrap_uvs). Raster resolution for the coverage and overlap estimate (default 512) (read_uv_channels)"),
   recomputeNormals: z.boolean().optional().describe("Recompute normals on the written mesh (default false)"),
   recomputeTangents: z.boolean().optional().describe("Recompute tangents on the written mesh (default false)"),

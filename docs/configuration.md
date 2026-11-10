@@ -215,6 +215,8 @@ Actions are described by one-line signatures such as `set_property(assetPath|pat
 
 Every call, on every strategy, is validated against the category's full parameter schema, and a wrong type is refused with an `Input validation error`.
 
+`select` and `omit` narrow any answer: every category action, the flow tool and the micro gateway take them, with dotted paths that traverse arrays (`select: "actors.label"`). A result that wraps an instruction (the directive `execute_python` returns) is narrowed inside, so the instruction itself always arrives. The undo record a flow runner needs and the reports of what the server repaired or could not match are kept whatever the selection.
+
 - **micro** works like the native MCP toolset gateway. Its seed is one instruction line and the gateway; `tools(action="guide")` returns the usage, signature legend, spatial guidance and category list the seed leaves out. Then `tools(action="search", query="rotate clockwise")`, then `tools(action="describe", category="level", method="nudge_component")`, then `tools(action="call", category="level", method="nudge_component", args={ ... })`. Omit `method` from describe for a page of the category's signatures, and pass `offset` (the `nextOffset` it returns) for the next page. Flows are the `flow` category: `tools(action="call", category="flow", method="run", args={flowName: "<name>"})`. `timeoutMs`, `select` and `omit` go in `args` or beside it.
 - **lean** keeps the category tools and action names visible, so the model can often call directly. Unknown actions are refused with the closest names.
 - **full** suits an agent that should see every signature up front when the seed is affordable.
@@ -231,6 +233,19 @@ npx ue-mcp context           # show the current strategy
 ```
 
 The `init` wizard has the same choice, or set `context.strategy` in `ue-mcp.yml`. `UE_MCP_CONTEXT_STRATEGY` wins over the file for one launch; anything other than `full` or `lean` resolves to `micro`. Restart your MCP client (`/mcp` in Claude Code) after changing it.
+
+### Images in a result
+
+The actions that write an image take `inline`: `editor(capture_screenshot)`, `editor(capture_scene_png)`, `editor(capture_screenshot_sequence)`, `editor(render_mesh_studio)`, `editor(render_sequence_frames)`, `material(render_preview)`, `asset(export_texture)` and `asset(export_uv_layout)`. With `inline=true` the server reads the file the editor wrote and returns it as MCP image content beside the JSON result, scaled down to 1024 pixels on the longer edge when it is larger. A number instead of `true` sets that edge (16 to 4096). The file on disk is written and left exactly as without `inline`, and the editor never receives the key.
+
+```
+tools(action="call", category="editor", method="capture_scene_png",
+      args={outputPath: "Saved/Shots/hero.png", focusActorLabel: "Hero", inline: 512})
+```
+
+The result keeps its usual fields and adds `inlineImages` (`inlined`, `maxEdge`, and `notInlined` with a reason per file that was not returned). Each image is listed under `media` with its `path`, its size as sent and its original size, and names the content block that carries it. Actions that write several files return the first 8.
+
+Nothing here fails the call. The server reads the path the editor reported, so when the editor runs on another machine (`UE_MCP_HOST` or `bridge.host` pointing elsewhere) the file is on that machine and `notInlined` says so. A viewport screenshot (`target=editor`) is written by the renderer after the editor answers, so the server waits up to 3 seconds for the file. A warm `capture_scene_png` has no file until it completes: pass `inline` again on the query that reports `complete=true`. PNG is scaled; a JPEG is returned whole when it already fits, and otherwise reported, since only PNG is decoded here.
 
 ## The daemon
 
@@ -489,6 +504,25 @@ The engine is resolved once, and the same answer drives the build tool, the edit
 `UE_MCP_PROTECTED_ENGINE_ROOTS` outranks all of it. An engine equal to or under a protected root is refused, including one named by an explicit pin. Entries are separated by the platform path-list delimiter (`;` on Windows, `:` on macOS and Linux) and must be absolute.
 
 When nothing resolves, the error lists every path probed and where each came from.
+
+## Reading the project's ini settings
+
+`project(read_config)` shows one file. The editor reads a config category (Engine, Game, Input, DeviceProfiles, ...) through a stack of files, each applied on top of the last, and three local actions answer from that stack without an editor:
+
+- `project(resolve_setting, configName, section, key, platform?)`: the final value and the layer, file and line that set it.
+- `project(explain_setting, configName, section, key, platform?)`: every layer that touches the key, lowest first, with its lines and the value after each.
+- `project(diff_config_from_default, configName, platform?, includeUser?)`: every key the project changes from the engine's own value, with both values and the layer that changed it.
+
+The layers, lowest first, for a category `C` and platform `P` (default this machine's: Windows, Mac or Linux; `Win64` is read as Windows):
+
+1. `Engine/Config/Base.ini`
+2. `Engine/Config/BaseC.ini`
+3. `Engine/Config/P/BasePC.ini` (or `Engine/Platforms/P/Config/BasePC.ini`)
+4. `Config/DefaultC.ini` in the project
+5. `Config/P/PC.ini` (or `Platforms/P/Config/PC.ini`) in the project
+6. `Saved/Config/PEditor/C.ini`, the per-user copy the editor writes (`includeUser=false` leaves it out of the diff)
+
+Each line applies Unreal's array operations: `Key=Value` replaces every value, `+Key=Value` adds a value the key does not hold yet, `.Key=Value` adds it even when it does, `-Key=Value` removes that value and `!Key` clears the key. Lines starting with `;` are comments, and section names compare without case. A key with several values answers with a list, and one nobody sets with `null`. The engine is the one [Which Engine A Project Uses](#which-engine-a-project-uses) finds; without one the engine layers are skipped and the answer says so.
 
 ## Environment variables
 

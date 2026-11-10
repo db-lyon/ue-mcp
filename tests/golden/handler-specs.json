@@ -1,5 +1,5 @@
 {
-  "handlerCount": 1261,
+  "handlerCount": 1266,
   "handlers": {
     "actors_in_box": {
       "category": "level",
@@ -14887,6 +14887,17 @@
         }
       ]
     },
+    "epic_get_toolset_states": {
+      "category": "epic",
+      "params": [
+        {
+          "name": "nameFilter",
+          "type": "string",
+          "required": false,
+          "description": "Case-sensitive substring of the qualified toolset name"
+        }
+      ]
+    },
     "epic_list_mcp_resources": {
       "category": "epic",
       "params": []
@@ -14939,6 +14950,24 @@
           "type": "string",
           "required": true,
           "description": "Resource uri from epic_list_mcp_resources"
+        }
+      ]
+    },
+    "epic_set_toolset_enabled": {
+      "category": "epic",
+      "params": [
+        {
+          "name": "toolsets",
+          "type": "array",
+          "required": true,
+          "description": "Exact qualified toolset names from epic_get_toolset_states, e.g. GASToolsets.AttributeSetToolset",
+          "items": "string"
+        },
+        {
+          "name": "enabled",
+          "type": "boolean",
+          "required": true,
+          "description": "true turns the toolsets on, false turns them off"
         }
       ]
     },
@@ -35871,6 +35900,57 @@
           "description": "Keep the current selection and add to it (default false: replace it)"
         }
       ]
+    },
+    "semantic_search": {
+      "category": "asset",
+      "params": [
+        {
+          "name": "query",
+          "type": "string",
+          "required": true,
+          "description": "Natural-language description of the assets to find"
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "description": "Most results to return, 1 to 200 (default 20)"
+        },
+        {
+          "name": "directory",
+          "type": "string",
+          "required": false,
+          "description": "Content folder to search within, e.g. /Game/Props (default every indexed folder)"
+        },
+        {
+          "name": "maxDistance",
+          "type": "number",
+          "required": false,
+          "description": "Largest vector distance a match may have (default the plugin's VectorDistanceCutoff)"
+        }
+      ]
+    },
+    "semantic_search_index": {
+      "category": "asset",
+      "params": [
+        {
+          "name": "assetPaths",
+          "type": "array",
+          "required": false,
+          "description": "Object or package paths to index (default every asset in the indexed folders)",
+          "items": "string"
+        },
+        {
+          "name": "force",
+          "type": "boolean",
+          "required": false,
+          "description": "With no assetPaths: clear the index and rebuild every embedding instead of reusing cached ones (default false)"
+        }
+      ]
+    },
+    "semantic_search_status": {
+      "category": "asset",
+      "params": []
     },
     "send_ability_input": {
       "category": "gas",

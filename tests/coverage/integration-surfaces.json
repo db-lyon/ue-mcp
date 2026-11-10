@@ -77,6 +77,11 @@
       "summary": "running ue-mcp init a second time is idempotent"
     },
     {
+      "id": "cli.init.agent-guides",
+      "group": "cli",
+      "summary": "init writes a delimited ue-mcp block into AGENTS.md, GEMINI.md or .github/copilot-instructions.md for the clients it configures, keeps the user's own text, reruns unchanged, and removes the block when a client is dropped or --no-agent-guides is passed"
+    },
+    {
       "id": "cli.init.interactive",
       "group": "cli",
       "summary": "ue-mcp init without --yes walks the interactive prompts on a terminal"
@@ -465,6 +470,21 @@
       "id": "server.graph-diagram",
       "group": "server",
       "summary": "a category's diagram action reads its graph through the bridge and answers with Mermaid text, an SVG file, or a PNG returned as MCP image content"
+    },
+    {
+      "id": "server.field-select",
+      "group": "server",
+      "summary": "select and omit narrow what a category action, a bridge action through the gateway and the flow tool (advertised or through the gateway) answer, with dotted paths through arrays, and never reach the editor"
+    },
+    {
+      "id": "server.inline-image",
+      "group": "server",
+      "summary": "inline on an image-writing action reads the file the editor wrote, scales it to the size asked for and returns it as MCP image content, never sends the key to the editor, and reports a file this machine cannot read"
+    },
+    {
+      "id": "server.skill-prompts",
+      "group": "server",
+      "summary": "prompts/list and prompts/get serve every shipped skill as a prompt, and resources/list and resources/read serve it as a markdown resource at skill://ue-mcp/<name>, with or without an editor"
     },
     {
       "id": "gateway.list_categories",

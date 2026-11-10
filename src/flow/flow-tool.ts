@@ -12,7 +12,8 @@ import type {
 import type { FlowContext } from "./context.js";
 import { FlowStepKeySchema, type FlowConfig } from "./schema.js";
 import type { ToolDef, ToolContext, ActionSpec } from "../core/types.js";
-import { actionEnum } from "../surface/category-tool.js";
+import { actionEnum, SELECT_PARAM, OMIT_PARAM } from "../surface/category-tool.js";
+import { takeFieldSelection, projectResult, attachFieldReport } from "../surface/context/field-select.js";
 import { McpError, ErrorCode } from "../core/errors.js";
 import { nearestActions } from "../surface/action-schema.js";
 import { unknownRecord } from "../surface/context/call-envelope.js";
@@ -139,6 +140,8 @@ export function createFlowTool(
       skip: z.array(z.string()).optional().describe("run: step names or numbers to skip"),
       params: unknownRecord().optional().describe("run: runtime options merged into every step's options (highest priority)"),
       rollback_on_failure: z.boolean().optional().describe("run: invoke inverse tasks in reverse order on failure"),
+      select: SELECT_PARAM,
+      omit: OMIT_PARAM,
     },
     actions,
     handler: async (ctx, params) => {
@@ -154,7 +157,12 @@ export function createFlowTool(
             + ` Available: ${available.join(", ")}.`,
         );
       }
-      return spec.handler(ctx, params);
+      // select/omit narrow what the flow tool answers, as they do on every
+      // category tool. They are the caller's, so no step ever receives them.
+      const { selection, rest } = takeFieldSelection(params);
+      const answered = await spec.handler(ctx, rest);
+      const projection = projectResult(answered, selection);
+      return attachFieldReport(projection.result, projection);
     },
   };
   return def;
