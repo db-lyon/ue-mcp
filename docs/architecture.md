@@ -94,7 +94,7 @@ The `ue-mcp/daemon` package export (`src/daemon-api.ts`) carries the types and h
 
 **Entry point:** `src/index.ts`. A first argument naming a command runs the CLI (`src/cli/`); otherwise it starts the shim or the in-process server.
 
-The server registers the <!-- count:tools -->30<!-- /count --> category tools and the `flow` tool, each dispatched through the runtime's sessions.
+The server registers the <!-- count:tools -->31<!-- /count --> category tools and the `flow` tool, each dispatched through the runtime's sessions.
 
 ### Key modules
 

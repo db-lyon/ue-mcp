@@ -38,7 +38,7 @@ import { playtestRefusal } from "../editor/playtest-mode.js";
 import { contestedProject } from "../editor/project-holders.js";
 import { withAssetLocks, type LockingConfig } from "./locking.js";
 import { unknownActionMessage } from "../surface/action-schema.js";
-import { withheldTarget, wrapsEpicTool } from "../surface/registered-surface.js";
+import { runsEpicMcpTool, withheldTarget, wrapsEpicTool } from "../surface/registered-surface.js";
 import { epicEngineRefusalFor } from "../surface/epic-engines.js";
 import { explainMissingAction } from "../sessions/session-surface.js";
 import type { FlowContext } from "../flow/context.js";
@@ -377,6 +377,12 @@ export async function dispatchCategoryCall(
   if (wrapsEpicTool(sessionLoad.registryTools, effectiveTask)
     && (withheld || session.bridge.epicToolsets == null) && session.bridge.refreshEpicToolsets) {
     await session.bridge.refreshEpicToolsets();
+    withheld = withheldTarget(sessionLoad.registryTools, effectiveTask, session.bridge);
+  }
+  // The same for an MCP tool an engine plugin registers (#1824).
+  if (runsEpicMcpTool(sessionLoad.registryTools, effectiveTask)
+    && (withheld || session.bridge.epicMcpTools == null) && session.bridge.refreshEpicMcpTools) {
+    await session.bridge.refreshEpicMcpTools();
     withheld = withheldTarget(sessionLoad.registryTools, effectiveTask, session.bridge);
   }
   if (withheld) return errorResult("NOT_FOUND", withheld);

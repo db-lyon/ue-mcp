@@ -132,6 +132,16 @@
 			"Optional": true
 		},
 		{
+			"Name": "UnrealCanvasGraph",
+			"Enabled": true,
+			"Optional": true
+		},
+		{
+			"Name": "UnrealCanvasBridge",
+			"Enabled": true,
+			"Optional": true
+		},
+		{
 			"Name": "GraphDsl",
 			"Enabled": true,
 			"Optional": true

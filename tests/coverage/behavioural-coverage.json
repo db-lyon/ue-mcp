@@ -4811,6 +4811,11 @@
         },
         {
           "suite": "live",
+          "file": "tests/live/canvas.test.ts",
+          "test": "render_sequence returns one frame directory per capture, with its frames on disk"
+        },
+        {
+          "suite": "live",
           "file": "tests/live/sequencer-datasmith-metahuman.test.ts",
           "test": "keys an MPC parameter channel through its proxy and samples the constant hold (#1407)"
         },
@@ -5613,6 +5618,11 @@
           "suite": "live",
           "file": "tests/live/bcov-gameplay-zonegraph.test.ts",
           "test": "query_zone_graph counts a placed ZoneShape and drops it once removed"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/canvas.test.ts",
+          "test": "assigns and clears a stencil on a placed actor, and applies the capture setters"
         },
         {
           "suite": "live",
@@ -6648,6 +6658,51 @@
       "tests": [
         {
           "suite": "live",
+          "file": "tests/live/canvas.test.ts",
+          "test": "TriggerMRGRender returns one PNG path per capture, each on disk"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/canvas.test.ts",
+          "test": "a cancelled render leaves the render queue free for the next one"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/canvas.test.ts",
+          "test": "assigns and clears a stencil on a placed actor, and applies the capture setters"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/canvas.test.ts",
+          "test": "render returns image paths matching the preset's branches, written as PNGs"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/canvas.test.ts",
+          "test": "render with captureSceneState hands back a blob save_scene_snapshot turns into an asset"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/canvas.test.ts",
+          "test": "render_sequence returns one frame directory per capture, with its frames on disk"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/canvas.test.ts",
+          "test": "spawns a cutout from a PNG, adds and switches a variant, lists and removes it"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/canvas.test.ts",
+          "test": "starts, retimes and stops the viewport stream"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/canvas.test.ts",
+          "test": "status and list_passes read the configured preset"
+        },
+        {
+          "suite": "live",
           "file": "tests/live/epic-mcp.test.ts",
           "test": "forwards a cancel to the tool's CancelAsync"
         },
@@ -6756,6 +6811,11 @@
       "registeredIn": "EpicHandlers.cpp",
       "status": "covered",
       "tests": [
+        {
+          "suite": "live",
+          "file": "tests/live/canvas.test.ts",
+          "test": "lists the render, stream, stencil, splat and cutout tools as plugin tools"
+        },
         {
           "suite": "live",
           "file": "tests/live/epic-mcp.test.ts",
@@ -7757,6 +7817,11 @@
           "suite": "live",
           "file": "tests/live/bcov-niagara.test.ts",
           "test": "spawn_niagara_actor places a NiagaraActor and set_niagara_parameter keeps its override"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/canvas.test.ts",
+          "test": "assigns and clears a stencil on a placed actor, and applies the capture setters"
         },
         {
           "suite": "live",
@@ -11307,6 +11372,11 @@
           "suite": "live",
           "file": "tests/live/bcov-pcg.test.ts",
           "test": "export_level_to_pcg_asset writes a data asset update_pcg_level_assets re-exports"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/canvas.test.ts",
+          "test": "render with captureSceneState hands back a blob save_scene_snapshot turns into an asset"
         },
         {
           "suite": "live",
@@ -15643,6 +15713,11 @@
           "suite": "live",
           "file": "tests/live/bcov-level-multilevel.test.ts",
           "test": "nav_project_point projects onto a navmesh built over a floor"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/canvas.test.ts",
+          "test": "assigns and clears a stencil on a placed actor, and applies the capture setters"
         },
         {
           "suite": "live",
@@ -22742,6 +22817,11 @@
           "suite": "live",
           "file": "tests/live/bcov-editor-sequence.test.ts",
           "test": "set_sequence_playback_range sets the range get_sequence_info reports"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/canvas.test.ts",
+          "test": "render_sequence returns one frame directory per capture, with its frames on disk"
         }
       ]
     },

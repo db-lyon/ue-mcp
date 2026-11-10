@@ -411,6 +411,13 @@ export interface BridgeActionSpec extends ActionSpecBase {
    */
   epicTool?: EpicToolRef;
   /**
+   * The tool, served by Epic's Unreal MCP plugin outside the toolset registry,
+   * that this action runs through `epic_call_mcp_tool`, and the engine plugin
+   * that registers it. The action is withheld while the editor's MCP tool
+   * list is known and lacks the tool (#1824).
+   */
+  mcpTool?: { name: string; plugin: string };
+  /**
    * Runs after the bridge answers, with canonical parameters, the caller's routing timeoutMs when given, and the answer.
    * What it returns replaces the answer. Routing timeoutMs is never sent to the bridge as a handler parameter.
    * For work the editor cannot do on its game thread, such as waiting for a PCG generation (#1365).
