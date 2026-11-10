@@ -137,6 +137,9 @@ describe("landscape spline control points and segments", () => {
   }, 60_000);
 
   it("set_landscape_spline_segment_meshes builds spline mesh components and an empty list removes them", async () => {
+    // With no meshes of its own the editor draws a segment with its spline editor mesh,
+    // which is also a spline mesh component, so "removed" means back to that count.
+    const bare = Number((await segment("LspSeg"))!.meshComponentCount);
     const set = await call("set_landscape_spline_segment_meshes", {
       segment: "LspSeg", meshes: [{ mesh: CUBE, scale: { x: 1, y: 1, z: 0.2 }, forwardAxis: "X" }], collisionProfile: "NoCollision",
     });
@@ -148,7 +151,9 @@ describe("landscape spline control points and segments", () => {
 
     const cleared = await call("set_landscape_spline_segment_meshes", { segment: "LspSeg", meshes: [] });
     expect(cleared.updated).toBe(true);
-    expect((await segment("LspSeg"))!.meshComponentCount).toBe(0);
+    const afterClear = (await segment("LspSeg"))!;
+    expect(afterClear.meshes).toEqual([]);
+    expect(Number(afterClear.meshComponentCount)).toBe(bare);
     // The rollback carries the cube list back.
     await call("set_landscape_spline_segment_meshes", (cleared.rollback as { payload: Json }).payload);
     expect(Number((await segment("LspSeg"))!.meshComponentCount)).toBeGreaterThan(0);

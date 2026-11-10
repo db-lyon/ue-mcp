@@ -5,9 +5,12 @@
  * one, later points join it through ownerPath, and a segment joins them there.
  * The map is created for the file and deleted afterwards.
  */
+import * as fs from "node:fs";
+import * as path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { callBridge, disconnectBridge, getBridge, TEST_PREFIX, type TestResult } from "../setup.js";
 import type { EditorBridge } from "../../src/bridge/bridge.js";
+import { TEST_PROJECT_DIR } from "../../scripts/bridge-target.mjs";
 
 const HOME = "/Game/MCP_Home";
 const MAP = `${TEST_PREFIX}/LandscapeSplinesWP/L_LandscapeSplinesWP`;
@@ -47,6 +50,16 @@ afterAll(async () => {
   if (!succeeded(restored)) await callBridge(bridge, "load_level", { levelPath: HOME, discardUnsaved: true });
   await callBridge(bridge, "delete_asset", { assetPath: MAP, force: true });
   disconnectBridge();
+  // Deleting the map leaves its one-file-per-actor packages behind on disk.
+  const content = path.join(TEST_PROJECT_DIR, "Content");
+  const rel = MAP.slice("/Game/".length);
+  for (const kind of ["__ExternalActors__", "__ExternalObjects__"]) {
+    const dir = path.join(content, kind, rel);
+    fs.rmSync(dir, { recursive: true, force: true });
+    for (let up = path.dirname(dir); up.length > content.length; up = path.dirname(up)) {
+      try { fs.rmdirSync(up); } catch { break; }
+    }
+  }
 }, 300_000);
 
 describe("landscape splines on a World Partition map", () => {
