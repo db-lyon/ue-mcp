@@ -648,5 +648,6 @@ void FEpicHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("epic_read_mcp_resource"), &ReadMCPResource, {
 		MCPParam::Required(TEXT("uri"), EType::String, TEXT("Resource uri from epic_list_mcp_resources")),
 	});
+	RegisterToolsetStateHandlers(Registry);
 	RegisterAIAssistantHandlers(Registry);
 }
