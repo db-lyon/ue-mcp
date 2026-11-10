@@ -832,7 +832,7 @@ TSharedPtr<FJsonValue> FLevelBlockoutHandlers::ReplaceBlockout(const TSharedPtr<
 	for (const FPlan& Plan : Plans)
 	{
 		const FString Label = Plan.Blockout->GetActorLabel();
-		const FName Folder = Plan.Blockout->GetFolderPath();
+		const FName OutlinerFolder = Plan.Blockout->GetFolderPath();
 		AStaticMeshActor* Replacement = MCPBlkSpawnMeshActor(World, Plan.Blockout->GetLevel(), Plan.Mesh, Plan.Transform);
 		if (!Replacement) continue;
 		FString RecordError;
@@ -846,7 +846,7 @@ TSharedPtr<FJsonValue> FLevelBlockoutHandlers::ReplaceBlockout(const TSharedPtr<
 		const FString BlockoutPath = Plan.Blockout->GetPathName();
 		World->DestroyActor(Plan.Blockout);
 		Replacement->SetActorLabel(Label);
-		Replacement->SetFolderPath(Folder);
+		Replacement->SetFolderPath(OutlinerFolder);
 		MCPSpawnFinalize::FinishEditorSpawn(Replacement);
 		ReplacementPaths.Add(Replacement->GetPathName());
 
