@@ -154,6 +154,11 @@ private:
 	static void RegisterMapCheckHandlers(class FMCPHandlerRegistry& Registry);
 	static TSharedPtr<FJsonValue> RunMapCheck(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> LogMapCheckMessage(const TSharedPtr<FJsonObject>& Params);
+	// #1828: Python additional search paths. EditorHandlers_PythonPaths.cpp.
+	static void RegisterPythonPathHandlers(class FMCPHandlerRegistry& Registry);
+	static TSharedPtr<FJsonValue> AddPythonPath(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> RemovePythonPath(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> ListPythonPaths(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> GetBuildStatus(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> PieControl(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> PieStartIgnoringBlueprintErrors(const TSharedPtr<FJsonObject>& Params);

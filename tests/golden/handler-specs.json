@@ -1,5 +1,5 @@
 {
-  "handlerCount": 1287,
+  "handlerCount": 1290,
   "handlers": {
     "actors_in_box": {
       "category": "level",
@@ -2191,6 +2191,29 @@
           "type": "number",
           "required": false,
           "description": "Blend weight (default 1)"
+        }
+      ]
+    },
+    "add_python_path": {
+      "category": "editor",
+      "params": [
+        {
+          "name": "path",
+          "type": "string",
+          "required": true,
+          "description": "Absolute path of an existing folder to put on sys.path"
+        },
+        {
+          "name": "owner",
+          "type": "string",
+          "required": false,
+          "description": "Name of what owns the path; remove_python_path with only owner removes all of its paths"
+        },
+        {
+          "name": "mountPointRoot",
+          "type": "string",
+          "required": false,
+          "description": "Package root, such as /MyPlugin/Python/Extra, that gives Python types generated from this path stable names"
         }
       ]
     },
@@ -23145,6 +23168,17 @@
         }
       ]
     },
+    "list_python_paths": {
+      "category": "editor",
+      "params": [
+        {
+          "name": "owner",
+          "type": "string",
+          "required": false,
+          "description": "Only the paths of this owner (default: every owner)"
+        }
+      ]
+    },
     "list_runtime_partitions": {
       "category": "level",
       "params": []
@@ -32884,6 +32918,36 @@
           "type": "string",
           "required": true,
           "description": "Engine name of the node, as read_graph reports it"
+        }
+      ]
+    },
+    "remove_python_path": {
+      "category": "editor",
+      "params": [
+        {
+          "name": "path",
+          "type": "string",
+          "required": false,
+          "description": "Path to remove, as it was added"
+        },
+        {
+          "name": "owner",
+          "type": "string",
+          "required": false,
+          "description": "Owner it was added under; alone, removes every path of that owner"
+        }
+      ],
+      "choices": [
+        {
+          "mode": "atLeastOne",
+          "branches": [
+            [
+              "path"
+            ],
+            [
+              "owner"
+            ]
+          ]
         }
       ]
     },
