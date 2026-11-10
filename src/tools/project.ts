@@ -10,6 +10,8 @@ import { sourceActions } from "./project/source.js";
 import { engineActions } from "./project/engine.js";
 import { surfaceActions } from "./project/surface.js";
 import { installActions } from "./project/install.js";
+import { categoryActions, categorySchema } from "./project/categories.js";
+import { leaseActions, leaseSchema } from "./project/leases.js";
 
 export { envWarningsFor } from "./project/sessions.js";
 
@@ -43,6 +45,12 @@ const ACTION_ORDER = [
   "search_tools",
   "describe_action",
   "list_available_actions",
+  "list_categories",
+  "set_category_enabled",
+  "set_toolset_enabled",
+  "acquire_lease",
+  "release_lease",
+  "list_leases",
   "list_content_assets",
   "check_install",
   "execute_python_report",
@@ -97,7 +105,7 @@ export const projectTool: ToolDef = categoryTool(
   "project",
   "Project status and editor connection: get_status (is the editor connected?), set_project (switch/redirect the bridge to another .uproject), get_info. Also config INI files, module load state, and C++ source inspection. Call project(get_status) first in any session.",
   {
-    ...inAdvertisedOrder(sessionActions, configActions, sourceActions, engineActions, surfaceActions, installActions),
+    ...inAdvertisedOrder(sessionActions, configActions, sourceActions, engineActions, surfaceActions, installActions, categoryActions, leaseActions),
     ...epicActions,
   },
   {
@@ -106,6 +114,8 @@ export const projectTool: ToolDef = categoryTool(
     // registration. A key listed again below is shared with hand-written
     // actions, and tests/unit/handler-specs.test.ts holds the two to one type.
     ...specSchema,
+    ...categorySchema,
+    ...leaseSchema,
     projectPath: z.string().optional().describe("For set_project / add_editor / check_install: path to .uproject"),
     editorName: z.string().optional().describe("For add_editor: name to address the new session by (default the project name) (#817)"),
     editorTarget: z.string().optional().describe("For use_editor / drop_editor: session name, project name, or .uproject path (#817)"),
@@ -123,7 +133,7 @@ export const projectTool: ToolDef = categoryTool(
     // is already declared above and shared with the unpaged readers.
     cursor: CURSOR_PARAM,
     name: z.string().optional().describe("describe_action: the action to describe, as 'tool.action' or a bare action name"),
-    category: z.string().optional().describe("describe_action / list_available_actions: narrow to one category instead of the whole surface"),
+    category: z.string().optional().describe("describe_action / list_available_actions: narrow to one category instead of the whole surface. set_category_enabled: the category to turn on or off"),
     includeNames: z.boolean().optional().describe("list_available_actions: list the action names, not just the counts (default false)"),
     // Stays a strict enum on purpose: listAvailableActions treats anything that
     // is neither "all" nor "available" as "blocked", so nothing rejects a typo.

@@ -26,6 +26,7 @@ import { GuardRegistry } from "../flow/guard.js";
 import { loadFlowConfig } from "../flow/loader.js";
 import { createFlowTool } from "../flow/flow-tool.js";
 import { resolveLockingConfig, type LockingConfig } from "../dispatch/locking.js";
+import { resolveLeaseConfig } from "../dispatch/leases.js";
 import { collapsingEnvWarnings } from "../config/session-env.js";
 import { checkPluginFreshness } from "../editor/bridge-freshness.js";
 import { unionSurface } from "../sessions/session-surface.js";
@@ -189,9 +190,12 @@ export async function createRuntime(projectArgs: string[]): Promise<Runtime> {
   // At one editor, that editor's list. Beyond one, the union, so an action only
   // one project has is still addressable; dispatch to a session that lacks it
   // is refused by name.
-  const advertisedTools: ToolDef[] = sessions.size > 1
+  const computeAdvertised = (): ToolDef[] => sessions.size > 1
     ? unionSurface(loads.all().map((l) => ({ ...l.surface, tools: l.advertisedTools }))).tools
     : primaryLoad.advertisedTools;
+  // One array for the life of the runtime, refilled when a category is turned
+  // on or off, so every reader holding it sees the new surface.
+  const advertisedTools: ToolDef[] = [...computeAdvertised()];
   if (contextStrategy !== "full") {
     info("context", `Context strategy: ${contextStrategy}`);
   }
@@ -201,6 +205,10 @@ export async function createRuntime(projectArgs: string[]): Promise<Runtime> {
   if (lockingCfg.enabled) {
     info("locking", `Per-asset locking enabled (TTL ${lockingCfg.ttlSeconds}s)`);
   }
+
+  // Asset leases for agents sharing this server's editors. The mode is the
+  // first project's, like every process-level choice.
+  sessions.leases.config = resolveLeaseConfig(project.config.leases);
 
   // One task registry and guard pipeline per session, built from its own graph.
   await loads.finishStartup();
@@ -277,6 +285,19 @@ export async function createRuntime(projectArgs: string[]): Promise<Runtime> {
 
   sessions.onCountChanged = () => {
     for (const s of sessions.list()) watchParity(s);
+    syncEditorTargeting();
+    notify();
+  };
+
+  // A category turned on or off at runtime (project(set_category_enabled)):
+  // the advertised list is rebuilt from every session's load, targeting is put
+  // back on any category object the rebuild created, and each MCP server
+  // re-advertises, which is what sends tools/list_changed.
+  loads.onSurfaceRebuilt = () => {
+    const next = computeAdvertised();
+    advertisedTools.splice(0, advertisedTools.length, ...next);
+    targetable.splice(0, targetable.length, ...next, flowTool);
+    targetingSignature = "\u0000";
     syncEditorTargeting();
     notify();
   };

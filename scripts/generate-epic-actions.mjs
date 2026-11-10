@@ -61,8 +61,12 @@ const EFFECTS = flag("--effects", path.join(OUT_DIR, "effects.ts"));
  * Which ue-mcp category an Epic toolset belongs in. Kept here rather than
  * imported from src/ because this script runs before the module it generates
  * exists, and a generator that cannot run on a broken tree is no use.
- * `tests/unit/epic-generated.test.ts` asserts these stay in step with the
- * routes the server publishes.
+ *
+ * This list is the only copy. It is emitted as src/tools/epic/toolset-routes.ts,
+ * which the server reads when it maps a category to the toolsets to turn off
+ * (project(set_category_enabled) with scope epic), so the generator and the
+ * runtime cannot place one toolset in two different categories.
+ * `tests/unit/epic-generated.test.ts` fails when the emitted module is stale.
  */
 const ROUTES = [
   // UE 5.9 toolsets, ahead of the broader patterns below so a name such as
@@ -424,6 +428,7 @@ function main() {
   const index = [...byCategory.keys()].sort();
   fs.writeFileSync(path.join(OUT_DIR, "index.ts"), emitIndex(index));
   fs.writeFileSync(path.join(OUT_DIR, "catalog-engines.ts"), emitEngines(merged.engines));
+  fs.writeFileSync(path.join(OUT_DIR, "toolset-routes.ts"), emitRoutes(merged.toolsets));
 
   console.log(`generated ${total} actions across ${written.length} categories from UE ${merged.engines.join(", ")}`);
   for (const [cat, n, p] of written) console.log(`  ${cat.padEnd(14)} ${String(n).padStart(4)} actions, ${p} parameters`);
@@ -528,6 +533,46 @@ function emitEngines(engines) {
 
 /** Engine versions with a recorded toolset catalog, oldest first. */
 export const EPIC_CATALOG_ENGINES: readonly string[] = ${q(engines)};
+`;
+}
+
+/**
+ * The routing table as a runtime module: the patterns themselves, so a toolset
+ * an editor registers that no catalog recorded still routes, and the recorded
+ * toolsets per category, so a category maps to its toolsets with no editor up.
+ */
+function emitRoutes(toolsets) {
+  const byCategory = new Map();
+  for (const ts of toolsets) {
+    const category = routeToolset(ts.name);
+    if (!byCategory.has(category)) byCategory.set(category, []);
+    byCategory.get(category).push(ts.name);
+  }
+  const rows = ROUTES.map(([re, cat]) => `  [${re.toString()}, ${q(cat)}],`).join("\n");
+  const cats = [...byCategory]
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([cat, names]) => `  ${safeKey(cat)}: ${q([...names].sort())},`)
+    .join("\n");
+  return `// GENERATED FILE - do not edit. See scripts/generate-epic-actions.mjs.
+//
+// The routing the generator uses to place each Epic toolset in a ue-mcp
+// category, emitted so the server applies the same rule at runtime.
+
+/** Pattern to category, first match wins. A toolset matching none belongs to \`epic\`. */
+export const EPIC_TOOLSET_ROUTES: ReadonlyArray<readonly [RegExp, string]> = [
+${rows}
+];
+
+/** The ue-mcp category an Epic toolset belongs in. */
+export function routeEpicToolset(name: string): string {
+  for (const [re, category] of EPIC_TOOLSET_ROUTES) if (re.test(name)) return category;
+  return "epic";
+}
+
+/** Every recorded toolset, by the category it routes to. */
+export const EPIC_TOOLSETS_BY_CATEGORY: Readonly<Record<string, readonly string[]>> = {
+${cats}
+};
 `;
 }
 

@@ -58,7 +58,7 @@ npx ue-mcp init --yes --json --project=C:/Games/MyGame/MyGame.uproject --clients
 | `--context=micro\|lean\|full` | Context strategy. |
 | `--[no-]feedback`, `--feedback-mode=<mode>`, `--[no-]hook`, `--[no-]skills` | Agent behavior. `--feedback-mode` stores `interactive`, `auto-approve` or `defer` for this project. |
 | `--[no-]agent-guides` | Write the ue-mcp block into `AGENTS.md`, `GEMINI.md` or `.github/copilot-instructions.md` for the clients configured (default on). `--no-agent-guides` removes every block init wrote. |
-| `--[no-]native-tools`, `--native-exclude=<categories>` | Native Unreal tools. |
+| `--[no-]native-tools`, `--native-exclude=<categories>` | Native Unreal tools. Excluded categories are written as `disable: [<category>:epic]`. |
 | `--[no-]pin` | Pin client configs to `ue-mcp@<this version>`. On by default with `--yes`, so the server and bridge move together; off by default in the wizard. |
 | `--command=<path>` | Use this instead of `npx` in client configs. |
 | `--[no-]unreal-mcp-autostart`, `--unreal-mcp-port=<port>` | Whether Epic's Unreal MCP server starts with this project's editor, and its port. |

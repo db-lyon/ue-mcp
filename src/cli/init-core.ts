@@ -64,6 +64,7 @@ import { packageVersion } from "../core/package-root.js";
 import { warn as logWarn } from "../core/log.js";
 import { readEnv } from "../core/env.js";
 import { deriveProjectPort } from "../bridge/port.js";
+import { editDisableEntries, isScopeOff, parseDisableEntry, readCategoryState } from "../surface/category-state.js";
 import { readUserAuthSync } from "../feedback/github-auth.js";
 
 /* ------------------------------------------------------------------ */
@@ -344,7 +345,7 @@ export function plan(choices: InitChoices, hooks: ProbeHooks = DEFAULT_PROBE_HOO
   const feedback = choices.feedback ?? (isReInit && !existingDisabled.has("feedback"));
 
   const existingNative = (project.config.nativeTools ?? {}) as { enabled?: boolean; exclude?: string[] };
-  const nativeTools = choices.nativeTools ?? { enabled: existingNative.enabled !== false, exclude: existingNative.exclude ?? [] };
+  const nativeTools = choices.nativeTools ?? { enabled: existingNative.enabled !== false, exclude: [...readCategoryState(project.config).epic] };
   const contextStrategy = choices.contextStrategy ?? project.config.context?.strategy ?? "micro";
 
   const requiredPlugins = new Set(["PythonScriptPlugin"]);
@@ -640,17 +641,29 @@ export function writeProjectConfig(
   const block = ((existing["ue-mcp"] as Record<string, unknown>) ?? {});
   if (typeof block.version !== "number") block.version = 1;
 
-  if (disabled.length > 0) block.disable = disabled;
+  // Whole categories come from the choices. A scoped entry (`level:native`)
+  // is kept, and the Epic exclusions are written as `<category>:epic`, the
+  // spelling that replaced nativeTools.exclude.
+  const previous = Array.isArray(block.disable) ? (block.disable as unknown[]).filter((e): e is string => typeof e === "string") : [];
+  let entries: string[] = [...disabled];
+  for (const raw of previous) {
+    const e = parseDisableEntry(raw);
+    if (!e || e.scope === "all") continue;
+    if (nativeTools && e.scope === "epic") continue;
+    entries = editDisableEntries(entries, e.category, e.scope, false);
+  }
+  const priorNative = (block.nativeTools && typeof block.nativeTools === "object" ? block.nativeTools : {}) as { enabled?: boolean; exclude?: string[] };
+  const exclude = nativeTools ? nativeTools.exclude : (priorNative.exclude ?? []);
+  for (const c of exclude) {
+    if (!isScopeOff(readCategoryState({ disable: entries }), c, "epic")) entries = editDisableEntries(entries, c, "epic", false);
+  }
+  if (entries.length > 0) block.disable = entries;
   else delete block.disable;
 
-  // Only persisted when it differs from the default (on, nothing excluded).
-  if (nativeTools) {
-    const nt: Record<string, unknown> = {};
-    if (!nativeTools.enabled) nt.enabled = false;
-    else if (nativeTools.exclude.length > 0) nt.exclude = nativeTools.exclude;
-    if (Object.keys(nt).length > 0) block.nativeTools = nt;
-    else delete block.nativeTools;
-  }
+  // Only persisted when it differs from the default (on).
+  const enabled = nativeTools ? nativeTools.enabled : priorNative.enabled !== false;
+  if (!enabled) block.nativeTools = { enabled: false };
+  else delete block.nativeTools;
 
   // micro is the default (#1172), so only lean and full are written.
   if (contextStrategy === "lean" || contextStrategy === "full") block.context = { strategy: contextStrategy };

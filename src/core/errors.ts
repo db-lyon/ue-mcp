@@ -20,6 +20,12 @@ export enum ErrorCode {
   ASSET_LOCKED = "ASSET_LOCKED",
   /** The client cancelled the call (MCP notifications/cancelled) before it answered. */
   CANCELLED = "CANCELLED",
+  /** The action's category, or its native or Epic half, is turned off by the
+   *  project's `disable:` config. The message names the command that turns it back on. */
+  CATEGORY_DISABLED = "CATEGORY_DISABLED",
+  /** Another MCP session holds a lease on an asset this call would change.
+   *  The message names the holder and when the lease runs out. */
+  ASSET_LEASED = "ASSET_LEASED",
 }
 
 /**

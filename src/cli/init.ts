@@ -12,6 +12,7 @@ import { detectMcpClients, isProjectScopedClient, ueMcpServerArgs } from "../int
 import { describeUnrealMcpEntry, findUnrealMcpEntries, type UnrealMcpEntry } from "../integrations/claude-code/unreal-mcp-entries.js";
 import { takeEditorTarget, EditorFlagError } from "./editor-flag.js";
 import { findUProject } from "../config/uproject-path.js";
+import { readCategoryState } from "../surface/category-state.js";
 import {
   CATEGORIES,
   ENRICHABLE_CATEGORIES,
@@ -255,7 +256,8 @@ async function init(argv: string[]): Promise<number | void> {
   }], "Pass --yes with --native-tools or --no-native-tools."))[0];
   let nativeExclude: string[] = [];
   if (nativeEnabled) {
-    const existingExclude = new Set(existingNative.exclude ?? []);
+    // Both spellings: disable: [<category>:epic], and the deprecated nativeTools.exclude.
+    const existingExclude = readCategoryState(project.config).epic;
     const offer = ENRICHABLE_CATEGORIES.filter((c) => !disabled.includes(c));
     const includeStates = await checkboxSelect(
       "Include native tools in these categories (uncheck to skip)",
