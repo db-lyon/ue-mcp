@@ -21,6 +21,7 @@
     "tests/integration/epic-unreal.test.ts": 43.2,
     "tests/integration/extensions.test.ts": 59.9,
     "tests/integration/feedback.test.ts": 19.4,
+    "tests/integration/field-select.test.ts": 10.2,
     "tests/integration/flow-cli.test.ts": 25.1,
     "tests/integration/flow-http-daemon.test.ts": 6.6,
     "tests/integration/flow-plan-inputs.test.ts": 0.1,

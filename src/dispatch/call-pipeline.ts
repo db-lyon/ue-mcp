@@ -378,6 +378,11 @@ export function attachNotRead<T>(result: T, answered: unknown, pipeline?: Pick<C
  * path that matched nothing.
  */
 export function finishCall(raw: unknown, pipeline: CallPipeline): unknown {
+  // A directive response is an instruction wrapped around the result. The
+  // projection narrows the result it wraps, never the envelope: a
+  // `select: ["path"]` on execute_python must not filter away the directive
+  // the agent is required to see, and the reports belong beside the result.
+  if (isDirectiveResponse(raw)) return { ...raw, result: finishCall(raw.result, pipeline) };
   const projection = projectResult(raw, pipeline.selection);
   return attachNotRead(
     attachUnforwarded(

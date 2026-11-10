@@ -2581,6 +2581,20 @@
             "description": "Flow name from ue-mcp.yml",
             "type": "string"
           },
+          "omit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              }
+            ],
+            "description": "Drop these result fields (dotted paths, same traversal as select). Runs after select."
+          },
           "params": {
             "additionalProperties": {},
             "description": "run: runtime options merged into every step's options (highest priority)",
@@ -2589,6 +2603,20 @@
           "rollback_on_failure": {
             "description": "run: invoke inverse tasks in reverse order on failure",
             "type": "boolean"
+          },
+          "select": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              }
+            ],
+            "description": "Keep only these result fields (dotted paths; arrays are traversed, so 'components.name' keeps every component's name). Unmatched paths are reported."
           },
           "skip": {
             "description": "run: step names or numbers to skip",

@@ -467,6 +467,11 @@
       "summary": "an image or audio a bridge result carries in media comes back as MCP image or audio content, not base64 inside the JSON text"
     },
     {
+      "id": "server.field-select",
+      "group": "server",
+      "summary": "select and omit narrow what a category action, a bridge action through the gateway and the flow tool (advertised or through the gateway) answer, with dotted paths through arrays, and never reach the editor"
+    },
+    {
       "id": "server.inline-image",
       "group": "server",
       "summary": "inline on an image-writing action reads the file the editor wrote, scales it to the size asked for and returns it as MCP image content, never sends the key to the editor, and reports a file this machine cannot read"

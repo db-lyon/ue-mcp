@@ -215,6 +215,8 @@ Actions are described by one-line signatures such as `set_property(assetPath|pat
 
 Every call, on every strategy, is validated against the category's full parameter schema, and a wrong type is refused with an `Input validation error`.
 
+`select` and `omit` narrow any answer: every category action, the flow tool and the micro gateway take them, with dotted paths that traverse arrays (`select: "actors.label"`). A result that wraps an instruction (the directive `execute_python` returns) is narrowed inside, so the instruction itself always arrives. The undo record a flow runner needs and the reports of what the server repaired or could not match are kept whatever the selection.
+
 - **micro** works like the native MCP toolset gateway. Its seed is one instruction line and the gateway; `tools(action="guide")` returns the usage, signature legend, spatial guidance and category list the seed leaves out. Then `tools(action="search", query="rotate clockwise")`, then `tools(action="describe", category="level", method="nudge_component")`, then `tools(action="call", category="level", method="nudge_component", args={ ... })`. Omit `method` from describe for a page of the category's signatures, and pass `offset` (the `nextOffset` it returns) for the next page. Flows are the `flow` category: `tools(action="call", category="flow", method="run", args={flowName: "<name>"})`. `timeoutMs`, `select` and `omit` go in `args` or beside it.
 - **lean** keeps the category tools and action names visible, so the model can often call directly. Unknown actions are refused with the closest names.
 - **full** suits an agent that should see every signature up front when the seed is affordable.

@@ -32,7 +32,7 @@ Under the default `micro` context strategy there is no separate `flow` tool; the
 
 The config is reloaded on every `flow` call, so an edited flow runs without a server restart.
 
-The response carries a `summary` line per step, a `steps` array with what each step answered (`data`, `success`, `attempts`, `error`), `failedStep`, `rollback`, `hookErrors` and the `runId`.
+The response carries a `summary` line per step, a `steps` array with what each step answered (`data`, `success`, `attempts`, `error`), `failedStep`, `rollback`, `hookErrors` and the `runId`. Like every category tool, the flow tool takes `select` and `omit` (dotted paths, arrays traversed: `select: "steps.success"`) to narrow that answer; they apply to the flow tool's own response and never reach a step.
 
 ## The `flow` tool
 
