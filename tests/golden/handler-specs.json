@@ -1,5 +1,5 @@
 {
-  "handlerCount": 1273,
+  "handlerCount": 1278,
   "handlers": {
     "actors_in_box": {
       "category": "level",
@@ -10754,6 +10754,77 @@
           "type": "string",
           "required": false,
           "description": "skip (default) returns an existing asset untouched, error refuses"
+        }
+      ]
+    },
+    "create_blockout": {
+      "category": "level",
+      "params": [
+        {
+          "name": "shape",
+          "type": "string",
+          "required": true,
+          "description": "box | ramp | wedge | cylinder | stairs"
+        },
+        {
+          "name": "location",
+          "type": "vec3",
+          "required": false,
+          "description": "World position of the bottom centre (default origin)"
+        },
+        {
+          "name": "rotation",
+          "type": "rotator",
+          "required": false,
+          "description": "World rotation; a ramp and stairs climb toward the actor's +X"
+        },
+        {
+          "name": "size",
+          "type": "vec3",
+          "required": false,
+          "description": "Size in centimetres along the actor's X, Y and Z (default 100, 100, 100)"
+        },
+        {
+          "name": "steps",
+          "type": "integer",
+          "required": false,
+          "description": "Stairs: number of steps, 1 to 64 (default 8)"
+        },
+        {
+          "name": "sides",
+          "type": "integer",
+          "required": false,
+          "description": "Cylinder: number of sides, 3 to 64 (default 16)"
+        },
+        {
+          "name": "label",
+          "type": "string",
+          "required": false,
+          "description": "Actor label; an existing actor with this label is reported rather than duplicated (default a free Blockout_<Shape>)"
+        },
+        {
+          "name": "tag",
+          "type": "string",
+          "required": false,
+          "description": "Blockout tag the actor carries (default Blockout)"
+        },
+        {
+          "name": "material",
+          "type": "string",
+          "required": false,
+          "description": "Material override (default the grid material the mesh carries)"
+        },
+        {
+          "name": "meshFolder",
+          "type": "string",
+          "required": false,
+          "description": "Content folder for the generated shape meshes (default /Game/Blockout/Meshes)"
+        },
+        {
+          "name": "onConflict",
+          "type": "string",
+          "required": false,
+          "description": "When label is taken: skip (default) | error"
         }
       ]
     },
@@ -22457,6 +22528,23 @@
         }
       ]
     },
+    "list_blockout": {
+      "category": "level",
+      "params": [
+        {
+          "name": "tag",
+          "type": "string",
+          "required": false,
+          "description": "Blockout tag to list (default Blockout)"
+        },
+        {
+          "name": "includeReplaced",
+          "type": "boolean",
+          "required": false,
+          "description": "Also list replacements that carry a restorable blockout record (default false)"
+        }
+      ]
+    },
     "list_blueprint_functions": {
       "category": "blueprint",
       "params": [
@@ -24222,6 +24310,75 @@
         }
       ],
       "contractExempt": "Ends any play session, collects garbage and swaps the open map before the contract path can fail"
+    },
+    "match_asset_to_blockout": {
+      "category": "level",
+      "params": [
+        {
+          "name": "actorLabel",
+          "type": "string",
+          "required": false,
+          "description": "Blockout actor label"
+        },
+        {
+          "name": "actorPath",
+          "type": "string",
+          "required": false,
+          "description": "Blockout actor path; the unambiguous selector"
+        },
+        {
+          "name": "tag",
+          "type": "string",
+          "required": false,
+          "description": "Act on every blockout actor carrying this tag"
+        },
+        {
+          "name": "candidateFolder",
+          "type": "string",
+          "required": true,
+          "description": "Content folder of candidate StaticMeshes, e.g. /Game/Props"
+        },
+        {
+          "name": "recursive",
+          "type": "boolean",
+          "required": false,
+          "description": "Include subfolders of candidateFolder (default true)"
+        },
+        {
+          "name": "allowRotation",
+          "type": "boolean",
+          "required": false,
+          "description": "Also try each candidate turned a quarter about Z (default true)"
+        },
+        {
+          "name": "maxCandidates",
+          "type": "integer",
+          "required": false,
+          "description": "Load at most this many candidate meshes (default 500)"
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "description": "Candidates returned per blockout (default 5)"
+        }
+      ],
+      "choices": [
+        {
+          "mode": "exactlyOne",
+          "branches": [
+            [
+              "actorLabel"
+            ],
+            [
+              "actorPath"
+            ],
+            [
+              "tag"
+            ]
+          ]
+        }
+      ]
     },
     "measure_mesh_geometry": {
       "category": "asset",
@@ -34606,6 +34763,97 @@
         }
       ]
     },
+    "replace_blockout": {
+      "category": "level",
+      "params": [
+        {
+          "name": "actorLabel",
+          "type": "string",
+          "required": false,
+          "description": "Blockout actor label"
+        },
+        {
+          "name": "actorPath",
+          "type": "string",
+          "required": false,
+          "description": "Blockout actor path; the unambiguous selector"
+        },
+        {
+          "name": "tag",
+          "type": "string",
+          "required": false,
+          "description": "Act on every blockout actor carrying this tag"
+        },
+        {
+          "name": "actorPaths",
+          "type": "array",
+          "required": false,
+          "description": "Blockout actor paths",
+          "items": "string"
+        },
+        {
+          "name": "assetPath",
+          "type": "string",
+          "required": false,
+          "description": "StaticMesh to put in place of every target; wins over candidateFolder"
+        },
+        {
+          "name": "candidateFolder",
+          "type": "string",
+          "required": false,
+          "description": "Content folder of candidate StaticMeshes, e.g. /Game/Props"
+        },
+        {
+          "name": "recursive",
+          "type": "boolean",
+          "required": false,
+          "description": "Include subfolders of candidateFolder (default true)"
+        },
+        {
+          "name": "allowRotation",
+          "type": "boolean",
+          "required": false,
+          "description": "Also try each candidate turned a quarter about Z (default true)"
+        },
+        {
+          "name": "maxCandidates",
+          "type": "integer",
+          "required": false,
+          "description": "Load at most this many candidate meshes (default 500)"
+        },
+        {
+          "name": "fit",
+          "type": "string",
+          "required": false,
+          "description": "uniform (default, largest uniform scale that fits inside) | stretch (match every axis) | none (asset at scale 1)"
+        },
+        {
+          "name": "yawOffset",
+          "type": "number",
+          "required": false,
+          "description": "Extra yaw in degrees on top of the blockout's rotation (default the best match's, else 0)"
+        }
+      ],
+      "choices": [
+        {
+          "mode": "exactlyOne",
+          "branches": [
+            [
+              "actorLabel"
+            ],
+            [
+              "actorPath"
+            ],
+            [
+              "tag"
+            ],
+            [
+              "actorPaths"
+            ]
+          ]
+        }
+      ]
+    },
     "report_noise_event": {
       "category": "gameplay",
       "params": [
@@ -34958,6 +35206,46 @@
         }
       ],
       "contractExempt": "presses a button on the active modal dialog"
+    },
+    "restore_blockout": {
+      "category": "level",
+      "params": [
+        {
+          "name": "actorLabel",
+          "type": "string",
+          "required": false,
+          "description": "Replacement actor label"
+        },
+        {
+          "name": "actorPath",
+          "type": "string",
+          "required": false,
+          "description": "Replacement actor path"
+        },
+        {
+          "name": "actorPaths",
+          "type": "array",
+          "required": false,
+          "description": "Replacement actor paths, as replace_blockout returns them",
+          "items": "string"
+        }
+      ],
+      "choices": [
+        {
+          "mode": "exactlyOne",
+          "branches": [
+            [
+              "actorLabel"
+            ],
+            [
+              "actorPath"
+            ],
+            [
+              "actorPaths"
+            ]
+          ]
+        }
+      ]
     },
     "restore_component_relative_transform": {
       "category": "level",
