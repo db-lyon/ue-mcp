@@ -150,6 +150,10 @@ private:
 	static TSharedPtr<FJsonValue> GetOutputLog(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SearchLog(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> GetMessageLog(const TSharedPtr<FJsonObject>& Params);
+	// #1828: Map Check runs and messages. EditorHandlers_MapCheck.cpp.
+	static void RegisterMapCheckHandlers(class FMCPHandlerRegistry& Registry);
+	static TSharedPtr<FJsonValue> RunMapCheck(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> LogMapCheckMessage(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> GetBuildStatus(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> PieControl(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> PieStartIgnoringBlueprintErrors(const TSharedPtr<FJsonObject>& Params);

@@ -1,5 +1,5 @@
 {
-  "handlerCount": 1285,
+  "handlerCount": 1287,
   "handlers": {
     "actors_in_box": {
       "category": "level",
@@ -23873,6 +23873,35 @@
       ],
       "contractExempt": "Ends any play session, collects garbage and swaps the open map before the contract path can fail"
     },
+    "log_map_check_message": {
+      "category": "editor",
+      "params": [
+        {
+          "name": "severity",
+          "type": "string",
+          "required": true,
+          "description": "error | warning | info"
+        },
+        {
+          "name": "message",
+          "type": "string",
+          "required": true,
+          "description": "Message text"
+        },
+        {
+          "name": "actorLabel",
+          "type": "string",
+          "required": false,
+          "description": "Actor the message is about; the Message Log links to it"
+        },
+        {
+          "name": "actorPath",
+          "type": "string",
+          "required": false,
+          "description": "Object path of that actor; preferred over actorLabel when known"
+        }
+      ]
+    },
     "measure_mesh_geometry": {
       "category": "asset",
       "params": [
@@ -35150,6 +35179,23 @@
           "type": "number",
           "required": false,
           "description": "How many scored items to return (default 50)"
+        }
+      ]
+    },
+    "run_map_check": {
+      "category": "editor",
+      "params": [
+        {
+          "name": "maxMessages",
+          "type": "integer",
+          "required": false,
+          "description": "Messages to return (default 500, max 5000)"
+        },
+        {
+          "name": "severity",
+          "type": "string",
+          "required": false,
+          "description": "Severity-name substring: Error | Warning | PerformanceWarning | Info"
         }
       ]
     },
