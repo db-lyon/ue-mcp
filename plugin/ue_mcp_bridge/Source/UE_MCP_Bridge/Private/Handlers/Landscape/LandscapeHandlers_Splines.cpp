@@ -507,7 +507,7 @@ namespace
 
 	void MCPLspCopyFields(const TSharedPtr<FJsonObject>& From, const TSharedPtr<FJsonObject>& To)
 	{
-		for (const TPair<FString, TSharedPtr<FJsonValue>>& Pair : From->Values) To->SetField(Pair.Key, Pair.Value);
+		for (const auto& Pair : From->Values) To->SetField(Pair.Key, Pair.Value);
 	}
 
 	/** Remove a segment from the network, the way the spline tool's delete does. */
@@ -1042,9 +1042,9 @@ TSharedPtr<FJsonValue> FLandscapeSplineHandlers::UpdateSegment(const TSharedPtr<
 
 	const TSharedPtr<FJsonObject> After = MCPLspSegmentFieldsPayload(Segment);
 	bool bChanged = false;
-	for (const TPair<FString, TSharedPtr<FJsonValue>>& Pair : After->Values)
+	for (const auto& Pair : After->Values)
 	{
-		const TSharedPtr<FJsonValue> Old = Before->TryGetField(Pair.Key);
+		const TSharedPtr<FJsonValue> Old = Before->TryGetField(FString(Pair.Key));
 		if (!Old.IsValid() || !FJsonValue::CompareEqual(*Old, *Pair.Value)) { bChanged = true; break; }
 	}
 
@@ -1091,9 +1091,9 @@ TSharedPtr<FJsonValue> FLandscapeSplineHandlers::SetSegmentMeshes(const TSharedP
 
 	const TSharedPtr<FJsonObject> After = MCPLspMeshFieldsPayload(Segment);
 	bool bChanged = false;
-	for (const TPair<FString, TSharedPtr<FJsonValue>>& Pair : After->Values)
+	for (const auto& Pair : After->Values)
 	{
-		const TSharedPtr<FJsonValue> Old = Before->TryGetField(Pair.Key);
+		const TSharedPtr<FJsonValue> Old = Before->TryGetField(FString(Pair.Key));
 		if (!Old.IsValid() || !FJsonValue::CompareEqual(*Old, *Pair.Value)) { bChanged = true; break; }
 	}
 

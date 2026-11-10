@@ -140,7 +140,7 @@ namespace
 				return MCPError(FString::Printf(TEXT("rebuild: generator '%s' was a %s run, not %s; use the matching action or another generatorName"),
 					*Out.Generator, *PreviousKind, Kind));
 			}
-			for (const TPair<FString, TSharedPtr<FJsonValue>>& Pair : Out.Previous->Values) Out.Effective->SetField(Pair.Key, Pair.Value);
+			for (const auto& Pair : Out.Previous->Values) Out.Effective->SetField(Pair.Key, Pair.Value);
 		}
 		for (const TCHAR* Key : Keys)
 		{
@@ -206,9 +206,9 @@ namespace
 			FString PreviousKind;
 			Target.Previous->TryGetStringField(TEXT("kind"), PreviousKind);
 			TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
-			for (const TPair<FString, TSharedPtr<FJsonValue>>& Pair : Target.Previous->Values)
+			for (const auto& Pair : Target.Previous->Values)
 			{
-				if (Pair.Key != TEXT("kind")) Payload->SetField(Pair.Key, Pair.Value);
+				if (FString(Pair.Key) != TEXT("kind")) Payload->SetField(Pair.Key, Pair.Value);
 			}
 			Payload->SetStringField(TEXT("actorPath"), Target.Owner->GetPathName());
 			Payload->SetStringField(TEXT("generatorName"), Target.Generator);
@@ -797,9 +797,9 @@ TSharedPtr<FJsonValue> FLevelSplineGenHandlers::ClearSplineGenerated(const TShar
 		FString Kind;
 		Stored->TryGetStringField(TEXT("kind"), Kind);
 		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
-		for (const TPair<FString, TSharedPtr<FJsonValue>>& Pair : Stored->Values)
+		for (const auto& Pair : Stored->Values)
 		{
-			if (Pair.Key != TEXT("kind")) Payload->SetField(Pair.Key, Pair.Value);
+			if (FString(Pair.Key) != TEXT("kind")) Payload->SetField(Pair.Key, Pair.Value);
 		}
 		Payload->SetStringField(TEXT("actorPath"), Owner->GetPathName());
 		Payload->SetStringField(TEXT("generatorName"), Generator);
