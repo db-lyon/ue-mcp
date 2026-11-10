@@ -26,6 +26,7 @@ import {
 import type { Runtime } from "./runtime.js";
 import type { SessionAccess } from "../flow/session-access.js";
 import { announceResourceChange, registerEditorResources } from "./editor-resources.js";
+import { registerSkillPrompts, skillResources } from "./skill-prompts.js";
 
 export interface RuntimeServer {
   server: McpServer;
@@ -170,7 +171,8 @@ export function createMcpServer(rt: Runtime, opts: McpServerOptions = {}): Runti
   }
 
   // Resources registered with Epic's Unreal MCP plugin in the active editor.
-  registerEditorResources(server, () => sessions.active.guarded);
+  registerEditorResources(server, () => sessions.active.guarded, skillResources());
+  registerSkillPrompts(server);
 
   // Re-advertise whenever targeting or what the plugins registered changes.
   let parityKey: string | null = null;

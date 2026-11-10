@@ -147,6 +147,9 @@ const PER_SESSION: Record<string, string> = {
 const SESSION_INDEPENDENT: Record<string, string> = {
   "integrations/claude-code/unreal-mcp-entries.ts": "Finds and removes entries in the client config file it is handed. No editor is involved.",
   "integrations/epic/unreal-assistant.ts": "Edits the Unreal Assistant's per-user AIAssistant.json, which every project on the machine shares. No editor is involved.",
+  "integrations/agent-guides.ts": "Writes and removes one delimited block in the instruction files of the project directory it is handed. No editor is involved.",
+  "extensions/skill-catalog.ts": "Reads the skills shipped in this package; the same for every editor.",
+  "server/skill-prompts.ts": "Serves the package's shipped skills as prompts and resources; the same for every editor.",
   "editor/module-owner.ts": "Finds the .uplugin that declares a module under the project and engine roots it is handed. No editor is involved.",
   "daemon/extension-install.ts": "Installs an extension into the user's extensions directory. No editor is involved.",
   "daemon/install-names.ts": "The short names install resolves, as data. No editor is involved.",

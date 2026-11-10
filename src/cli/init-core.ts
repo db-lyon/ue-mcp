@@ -27,6 +27,7 @@ import {
   conflictMessages,
   syncPluginSkills,
 } from "../extensions/skills.js";
+import { AGENT_GUIDE_FILES, hasGuide, removeGuide, writeGuide } from "../integrations/agent-guides.js";
 import { installClaudeHooks, uninstallClaudeHooks } from "../integrations/claude-code/hook-installer.js";
 import { getFeedbackModeScopes, getInstalledHooks, setFeedbackMode, type FeedbackMode } from "../config/user-state.js";
 import {
@@ -157,6 +158,12 @@ export interface InitChoices {
   feedbackMode?: FeedbackMode;
   promptHook?: boolean;
   skills?: boolean;
+  /**
+   * Write the ue-mcp block into the instruction file each selected client
+   * reads (AGENTS.md, GEMINI.md, .github/copilot-instructions.md). Unset is
+   * true; false removes every block init wrote.
+   */
+  agentGuides?: boolean;
   /** auto picks binary when there is no toolchain and keeps whatever is installed. */
   install?: "auto" | InstallKind;
   /** Where prebuilt binaries come from; see resolveBinarySource. */
@@ -284,6 +291,11 @@ export interface InitPlan {
   feedbackMode: PlannedFeedbackMode;
   promptHook: boolean;
   skills: boolean;
+  /**
+   * The agent instruction files: `write` for each one a selected client reads,
+   * otherwise removed when it holds init's block. Files with neither are left out.
+   */
+  agentGuides: Array<{ file: string; write: boolean }>;
   /** Reasons apply() would refuse to run. */
   blockers: string[];
   /** The optional tool categories, in the order init offers them. */
@@ -422,6 +434,10 @@ export function plan(choices: InitChoices, hooks: ProbeHooks = DEFAULT_PROBE_HOO
   const hookInstalled = new Set(getInstalledHooks(projectDir).map((p) => path.resolve(p))).has(path.resolve(settingsPath));
   const promptHook = claudeCode && feedback && (choices.promptHook ?? hookInstalled);
   const skills = claudeCode && (choices.skills ?? coreSkillsInstalled(projectDir));
+  const selectedNames = new Set(clients.filter((c) => c.selected).map((c) => c.name));
+  const agentGuides = AGENT_GUIDE_FILES
+    .map((g) => ({ file: g.file, write: choices.agentGuides !== false && g.clients.some((c) => selectedNames.has(c)) }))
+    .filter((g) => g.write || hasGuide(projectDir, g.file));
 
   // Epic's own MCP server and assistant. A request the engine cannot honour is
   // a note at apply time, not a blocker, so one script can init any project.
@@ -488,6 +504,7 @@ export function plan(choices: InitChoices, hooks: ProbeHooks = DEFAULT_PROBE_HOO
     feedbackMode: feedbackModeOf(projectDir, choices.feedbackMode ?? null),
     promptHook,
     skills,
+    agentGuides,
     blockers,
     categories: CATEGORIES.filter((c) => !c.alwaysOn).map(({ name, label, description, requiredPlugins }) => ({ name, label, description, requiredPlugins })),
     nativeCategories: ENRICHABLE_CATEGORIES,
@@ -769,6 +786,16 @@ export async function apply(p: InitPlan): Promise<InitResult> {
       for (const [owner, r] of Object.entries(pluginSkills.plugins)) {
         warnings.push(...conflictMessages(r));
         if (r.installed.length > 0) steps.push({ id: `skills:${owner}`, status: "changed", target: r.skillsDir, detail: r.installed.join(", ") });
+      }
+    }
+
+    // 5b. The instruction files other clients read: one delimited block each.
+    for (const g of p.agentGuides) {
+      const target = path.join(projectDir, g.file);
+      if (g.write) {
+        steps.push({ id: `guide:${g.file}`, status: writeGuide(projectDir, g.file), target, detail: "ue-mcp agent guide block" });
+      } else if (removeGuide(projectDir, g.file)) {
+        steps.push({ id: `guide:${g.file}`, status: "removed", target, detail: "ue-mcp agent guide block removed" });
       }
     }
 

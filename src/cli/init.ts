@@ -105,6 +105,7 @@ export function choicesFromFlags(argv: string[], projectPath: string): InitChoic
     feedbackMode: feedbackMode as FeedbackMode | undefined,
     promptHook: flagBool(argv, "hook"),
     skills: flagBool(argv, "skills"),
+    agentGuides: flagBool(argv, "agent-guides"),
     install: install as InitChoices["install"],
     binaries: flagValue(argv, "--binaries") ?? null,
     // The machine path pins by default, so the server and bridge move together.
@@ -462,6 +463,7 @@ export const usage: CliUsage = {
     { name: "--feedback-mode", value: "<interactive|auto-approve|defer>", description: "Feedback approval mode for this project" },
     ...toggle("hook", "Install the feedback nudge hook"),
     ...toggle("skills", "Install the bundled Claude Code skills"),
+    ...toggle("agent-guides", "Write the ue-mcp block into AGENTS.md, GEMINI.md or .github/copilot-instructions.md for the clients configured"),
     ...toggle("native-tools", "Wrap native Epic tools"),
     ...toggle("pin", "Pin the client config to this exact version"),
     ...toggle("unreal-mcp-autostart", "Start Epic's Unreal MCP server with this project's editor (UE 5.8+)"),

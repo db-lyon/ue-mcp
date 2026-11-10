@@ -2,6 +2,7 @@
   "recordedAt": "2026-11-10",
   "source": "seconds per test file, from vitest JSON reports. Refresh with scripts/vitest-weights.mjs.",
   "files": {
+    "tests/integration/agent-guides.test.ts": 20.4,
     "tests/integration/auth.test.ts": 15.3,
     "tests/integration/checkpoints.test.ts": 5.1,
     "tests/integration/cli-basics.test.ts": 26.2,
