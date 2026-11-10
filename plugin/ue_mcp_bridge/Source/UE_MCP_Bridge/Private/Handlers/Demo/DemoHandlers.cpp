@@ -182,7 +182,7 @@ bool FDemoHandlers::EnsureHomeLevelLoaded(FString& OutError, EMCPHomeDiscard Dis
 				TEXT("Pass discardUnsaved=true to drop them, or save them first%s."),
 				NotDiscardable.Num(), *DemoConstants::HOME_LEVEL, *FString::Join(NotDiscardable, TEXT(", ")),
 				bUnsavedMap
-					? TEXT("; a never-saved map has no file to save to until level(save_as) gives it one")
+					? TEXT("; a never-saved map has no file to save to, so for it discarding is the only way off")
 					: TEXT(" with level(save) or editor(save_dirty)"));
 			return false;
 		}
