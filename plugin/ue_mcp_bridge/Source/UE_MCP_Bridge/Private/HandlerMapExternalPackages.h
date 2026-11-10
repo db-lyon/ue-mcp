@@ -126,12 +126,12 @@ namespace MCPMapExternalPackages
 			FPackageSourceControlHelper Helper;
 			Helper.Delete(ToDelete, /*bErrorsAsWarnings*/ true);
 		}
-		// A file still held by a loader that is no longer tied to a package in memory:
-		// reset every loader once and try those again.
+		// A file still held after the first pass (a package the collection above
+		// released late): collect once more and try those again.
 		TArray<FString> Retry = ToDelete.FilterByPredicate([](const FString& Name) { return FPackageName::DoesPackageExist(Name); });
 		if (Retry.Num() > 0)
 		{
-			ResetLoaders(nullptr);
+			CollectGarbage(GARBAGE_COLLECTION_KEEPFLAGS);
 			FPackageSourceControlHelper Helper;
 			Helper.Delete(Retry, /*bErrorsAsWarnings*/ true);
 		}
