@@ -101,7 +101,10 @@ const BASELINE = {
   // 188: landscape(apply_splines) writes the splines' deformation into the
   // landscape's heights and weights, which it does not read back first; it says
   // so through MCPSetNoRollback, as merge_edit_layers does.
-  mutationsWithoutRollback: 188,
+  // 190: editor(mrq_render) writes rendered frames, which nothing deletes, and
+  // editor(mrq_cancel_render) stops a render that cannot be resumed; both say so
+  // through MCPSetNoRollback.
+  mutationsWithoutRollback: 190,
   // Zero, and held there by a flat assertion. Every mutation with no inverse
   // now says so in its own result body with the reason, which is the half a
   // caller can act on.

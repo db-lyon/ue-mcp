@@ -21,4 +21,6 @@ private:
 	static TSharedPtr<FJsonValue> SetOwnerOnlyRelevant(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SetNetLoadOnClient(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> ConfigureNetCullDistance(const TSharedPtr<FJsonObject>& Params);
+	// NetworkingHandlers_Audit.cpp
+	static TSharedPtr<FJsonValue> AuditReplication(const TSharedPtr<FJsonObject>& Params);
 };
