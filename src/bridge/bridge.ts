@@ -357,6 +357,23 @@ export function epicToolsetNames(answer: unknown): readonly string[] | null {
   return null;
 }
 
+/**
+ * The tool names in an epic_list_mcp_tools answer: the list when it has one,
+ * empty when Epic's MCP plugin is absent, null when the answer says neither.
+ */
+export function epicMcpToolNames(answer: unknown): readonly string[] | null {
+  if (!answer || typeof answer !== "object" || Array.isArray(answer)) return null;
+  const body = answer as Record<string, unknown>;
+  if (Array.isArray(body.tools)) {
+    if (body.available === false) return [];
+    return body.tools
+      .map((t) => (t && typeof t === "object" ? (t as Record<string, unknown>).name : undefined))
+      .filter((n): n is string => typeof n === "string" && n !== "")
+      .sort();
+  }
+  return null;
+}
+
 export interface IBridge {
   readonly isConnected: boolean;
   /** #821: what the connected bridge reported at handshake, when there is one. */
@@ -373,6 +390,14 @@ export interface IBridge {
   refreshEpicToolsets?(): Promise<readonly string[] | null>;
   /** The toolsets the surface declares, which a read after the handshake waits for (#1538). */
   expectEpicToolsets?(names: readonly string[]): void;
+  /**
+   * The tools Epic's Unreal MCP plugin serves beside the registry (plugin and
+   * tool-library tools), or null while unknown. An action that runs one of
+   * them through epic_call_mcp_tool is withheld when it is not listed (#1824).
+   */
+  readonly epicMcpTools?: readonly string[] | null;
+  /** Re-read epicMcpTools from the editor. */
+  refreshEpicMcpTools?(): Promise<readonly string[] | null>;
   call(method: string, params?: Record<string, unknown>, timeoutMs?: number, options?: BridgeCallOptions): Promise<unknown>;
   connect(timeoutMs?: number): Promise<void>;
   /**
@@ -439,6 +464,48 @@ export class EditorBridge implements IBridge {
       this.toolsetsInFlight = null;
     });
     this.toolsetsInFlight = run;
+    return run;
+  }
+
+  private mcpTools: readonly string[] | null = null;
+  private mcpToolsInFlight: Promise<readonly string[] | null> | null = null;
+
+  /**
+   * The tools Epic's Unreal MCP plugin serves outside the toolset registry,
+   * or null while unknown. Read once after each handshake: they register when
+   * their modules start, before the bridge answers.
+   */
+  get epicMcpTools(): readonly string[] | null {
+    return this.mcpTools;
+  }
+
+  /**
+   * Read the MCP plugin's tool names. A plugin that is off is an empty list; a
+   * call that fails or a bridge without the method leaves it unknown.
+   */
+  refreshEpicMcpTools(): Promise<readonly string[] | null> {
+    if (this.mcpToolsInFlight) return this.mcpToolsInFlight;
+    if (!this.registered?.includes("epic_list_mcp_tools")) return Promise.resolve(this.mcpTools);
+    const run = (async () => {
+      let names: readonly string[] | null = null;
+      try {
+        names = epicMcpToolNames(await this.call("epic_list_mcp_tools", {}));
+      } catch {
+        names = null;
+      }
+      if (names !== null) {
+        const same = this.mcpTools !== null && names.length === this.mcpTools.length
+          && names.every((n, i) => n === this.mcpTools![i]);
+        if (!same) {
+          this.mcpTools = names;
+          this.notifyRegistered();
+        }
+      }
+      return this.mcpTools;
+    })().finally(() => {
+      this.mcpToolsInFlight = null;
+    });
+    this.mcpToolsInFlight = run;
     return run;
   }
 
@@ -535,6 +602,7 @@ export class EditorBridge implements IBridge {
     this.registered = actions;
     // Another plugin build may have another registry.
     this.toolsets = null;
+    this.mcpTools = null;
     this.notifyRegistered();
   }
 
@@ -1115,6 +1183,11 @@ export class EditorBridge implements IBridge {
           // Read off the handshake's critical path; a failure leaves it unknown.
           this.stopFollowingToolsets();
           queueMicrotask(() => this.followEpicToolsets(ws));
+          // An editor restarted with another plugin set answers with the same
+          // method list, so the MCP tools are read again on every handshake.
+          queueMicrotask(() => {
+            if (this.ws === ws) void this.refreshEpicMcpTools();
+          });
         }
 
         const mismatch = describeProtocolMismatch(capabilities);
