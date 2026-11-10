@@ -10,7 +10,7 @@
 
 <img width="1354" height="586" alt="ue-mcp: Epic's 830 native actions plus 1,333 of its own, and dialog handling, retries and rollback, guardrails, spatial control, workflow automation, plugins, multi-editor control and auto-reported tool gaps" src="docs/assets/ue-mcp-overview.png" />
 
-UE-MCP is a free, open-source [Model Context Protocol](https://modelcontextprotocol.io) server for Unreal Engine 5. It connects AI assistants like Claude, Cursor and Codex to the editor through <!-- count:actions -->2172+<!-- /count --> actions, including Epic's native Unreal 5.8 tools.
+UE-MCP is a free, open-source [Model Context Protocol](https://modelcontextprotocol.io) server for Unreal Engine 5. It connects AI assistants like Claude, Cursor and Codex to the editor through <!-- count:actions -->3527+<!-- /count --> actions, including Epic's native Unreal 5.8 tools.
 
 ```
 "Place a point light 300 units above the player start, warm white, intensity 5000."

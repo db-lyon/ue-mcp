@@ -1,6 +1,7 @@
 import type { ToolDef } from "../core/types.js";
 import { categoryTool } from "../surface/category-tool.js";
 import { specBp, schema as specSchema } from "./specs/audio.generated.js";
+import { actions as epicActions, schema as epicSchema } from "./epic/audio.generated.js";
 
 /**
  * Audio: the full UE5 audio stack, authored end-to-end through the bridge.
@@ -85,8 +86,10 @@ export const audioTool: ToolDef = categoryTool(
 
     // ── Generic property set (any audio asset) ─────────────────────────
     set_property:      specBp("mutate", "Set any UPROPERTY on an audio asset by (dotted) name, value as JSON. Handles nested structs, arrays, object refs.", "set_audio_property"),
+    ...epicActions,
   },
   {
+    ...epicSchema,
     // #1057: every key the audio handlers declare, generated from their C++
     // registrations.
     ...specSchema,

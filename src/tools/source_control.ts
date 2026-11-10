@@ -1,6 +1,7 @@
 import type { ToolDef } from "../core/types.js";
 import { categoryTool } from "../surface/category-tool.js";
 import { specBp, schema as specSchema } from "./specs/source_control.generated.js";
+import { actions as epicActions, schema as epicSchema } from "./epic/source_control.generated.js";
 
 // Source control through the editor's configured provider (ISourceControlModule),
 // so one surface serves Perforce, Git, Unity Version Control and Subversion.
@@ -22,8 +23,10 @@ export const sourceControlTool: ToolDef = categoryTool(
     history:           specBp("read", "Revision history of one asset or file, newest first: revision, user, date, action, description, changelist (checkInIdentifier) and file size per revision, capped at limit with total and truncated.", "source_control_history"),
     connect:           specBp("mutate", "Connect, or reconnect, the editor's configured provider, with an optional password or ticket for providers that log in. Reports wasConnected and connected, and the provider's own error text when it fails. The password is never echoed.", "source_control_connect"),
     set_checkout_mode: specBp("mutate", "Choose what a bridge write does with a read-only file under source control for the rest of the editor session. manual (the default) refuses and names source_control(checkout); auto checks the file out first and lists it on the result as autoCheckedOut. UE_MCP_CHECKOUT_MODE=auto at editor startup turns it on from the start. Rolls back to the previous mode.", "source_control_set_checkout_mode"),
+    ...epicActions,
   },
   {
+    ...epicSchema,
     // Every key the source_control handlers declare, generated from their C++ registrations.
     ...specSchema,
   },

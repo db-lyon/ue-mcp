@@ -34,11 +34,19 @@ import {
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
-/** Token budgets from #1172. A number over its budget fails the release gate. */
+/**
+ * Token budgets from #1172. A number over its budget fails the release gate.
+ *
+ * lean and full are the opt-in strategies that advertise every action, so they
+ * grow with Epic's catalog. Recording UE 5.9's (1,914 tools beside 5.8's 830,
+ * most of the growth in the Sequencer scripting libraries) took them past 30k
+ * and 60k, and they were raised to fit that surface with some headroom. micro,
+ * the default, is unchanged and stays under the engine's own surface.
+ */
 export const BUDGETS = {
   micro: 5_000,
-  lean: 30_000,
-  full: 60_000,
+  lean: 36_000,
+  full: 100_000,
   describe: 2_000,
   search: 1_000,
 };

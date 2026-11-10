@@ -66,7 +66,7 @@ describe("budget arithmetic", () => {
     expect(parseStamp("~2.1k")).toBe(2_100);
     const measured = rows({ full: 50_798 });
     const text = applyTaxMarkers("seed <!-- tax:full -->~45k<!-- /tax -->, budget <!-- tax:fullBudget -->x<!-- /tax -->", measured);
-    expect(text).toBe("seed <!-- tax:full -->~51k<!-- /tax -->, budget <!-- tax:fullBudget -->~60k<!-- /tax -->");
+    expect(text).toBe("seed <!-- tax:full -->~51k<!-- /tax -->, budget <!-- tax:fullBudget -->~100k<!-- /tax -->");
     expect(staleStamps(text, measured, "doc")).toEqual([]);
     expect(staleStamps("<!-- tax:full -->~45k<!-- /tax -->", measured, "doc")).toEqual(["doc: tax:full says ~45k, measured 50798"]);
   });

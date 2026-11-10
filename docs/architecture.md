@@ -152,7 +152,7 @@ Two kinds of action:
 
 ### Advertised surface and context strategy
 
-The [context strategy](configuration.md#context-strategy-full-lean-micro) decides what a client is handed at startup. `micro`, the default, advertises one `tools` gateway (<!-- tax:micro -->~240<!-- /tax --> tokens with the instructions). `lean` advertises the category tools with a summary each (<!-- tax:lean -->~20k<!-- /tax -->). `full` adds one signature line per action (<!-- tax:full -->~56k<!-- /tax -->). `scripts/context-tax.mjs` measures these and a release gate holds each to its budget.
+The [context strategy](configuration.md#context-strategy-full-lean-micro) decides what a client is handed at startup. `micro`, the default, advertises one `tools` gateway (<!-- tax:micro -->~240<!-- /tax --> tokens with the instructions). `lean` advertises the category tools with a summary each (<!-- tax:lean -->~32k<!-- /tax -->). `full` adds one signature line per action (<!-- tax:full -->~90k<!-- /tax -->). `scripts/context-tax.mjs` measures these and a release gate holds each to its budget.
 
 A category tool is advertised as `action` (the enum of its actions) plus `args` (an object). The server unwraps `args` and validates it against the category's zod shape, so a refusal names the bad parameter. The micro gateway's `call` is checked against the target category the same way.
 
