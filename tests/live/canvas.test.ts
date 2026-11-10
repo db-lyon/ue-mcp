@@ -49,6 +49,8 @@ async function canvas(action: string, args: Json = {}): Promise<Json> {
 
 beforeAll(async () => {
   bridge = await getBridge();
+  // The sequence render needs a saved level open; a fresh editor opens on an untitled map.
+  await callBridge(bridge, "demo_go_home", { discardUnsaved: true });
   const listed = await raw("epic_list_mcp_tools", { nameFilter: "MRG" });
   canvasLoaded = (listed.tools as Json[] | undefined)?.some((t) => t.name === "TriggerMRGRender") ?? false;
   server = await LiveServer.start({ projects: [(await liveTarget()).uproject] });

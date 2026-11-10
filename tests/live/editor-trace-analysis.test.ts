@@ -70,7 +70,7 @@ afterAll(async () => {
 
 describe("editor(analyze_trace)", () => {
   it("finds the frames, the 300 ms hitch, the bookmark and the timers in a recorded trace", async () => {
-    const result = await call("analyze_insights_trace", { file: traceFile, hitchThresholdMs: 200, worstFrames: 3 });
+    const result = await call("analyze_insights_trace", { file: traceFile, hitchThresholdMs: 200, worstFrames: 3, maxBookmarks: 1000 });
     expect(path.resolve(String(result.traceFile))).toBe(path.resolve(traceFile));
     expect(Number(result.traceFileBytes)).toBeGreaterThan(0);
     expect(Number(result.sessionDurationSeconds)).toBeGreaterThan(1);

@@ -181,7 +181,8 @@ describe("GAS on a live editor-world ASC", () => {
     const applied = await call("apply_effect", { ...live, effectClass: EFFECT });
     expect(applied.applied).toBe(true);
     const handle = String(applied.effectHandle);
-    expect(handle).toMatch(/^\d+$/);
+    // An integer through 5.8; UE 5.9's handle ToString prefixes its owner ("ASC-1").
+    expect(handle).toMatch(/^(?:[A-Za-z]+-)?\d+$/);
 
     const during = await call("get_active_effects", live);
     const effects = during.activeEffects as Array<{ handle: string; effectClass: string }>;

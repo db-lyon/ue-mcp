@@ -149,7 +149,8 @@ afterAll(async () => {
     try {
       fs.rmSync(path.join(projectDir, "Saved", "Diff", "UE_MCP_Checkpoints"), { recursive: true, force: true, maxRetries: 4, retryDelay: 250 });
     } catch (e) {
-      if ((e as NodeJS.ErrnoException).code !== "EBUSY") throw e;
+      // Windows reports the held directory as EBUSY or, for the folder itself, EPERM.
+      if (!["EBUSY", "EPERM"].includes(String((e as NodeJS.ErrnoException).code))) throw e;
     }
   }
   closeLiveBridges();

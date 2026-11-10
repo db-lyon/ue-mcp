@@ -443,15 +443,18 @@ TSharedPtr<FJsonValue> FGasHandlers::RemoveEffect(const TSharedPtr<FJsonObject>&
 	TArray<FActiveGameplayEffectHandle> ToRemove;
 	if (!HandleText.IsEmpty())
 	{
-		// A malformed handle is REFUSED, never coerced. FCString::Atoi turns
-		// "abc", "null" and " " into 0, and 0 is a legitimately reachable handle,
-		// so parsing without this guard would resolve a garbled record onto a
-		// real, unrelated active effect and remove it reporting success.
-		if (!HandleText.IsNumeric())
+		// A malformed handle is REFUSED, never coerced: it is matched as text
+		// against the ASC's live handles below, never parsed. The text is the
+		// handle's own ToString, an integer through 5.8 and owner-prefixed from
+		// 5.9 ("ASC-1"), so either shape is accepted and anything else refused.
+		int32 Dash = INDEX_NONE;
+		const bool bPrefixed = HandleText.FindLastChar(TEXT('-'), Dash) && Dash > 0
+			&& HandleText.Mid(Dash + 1).IsNumeric() && !HandleText.Left(Dash).Contains(TEXT(" "));
+		if (!HandleText.IsNumeric() && !bPrefixed)
 		{
 			return MCPError(FString::Printf(
-				TEXT("'effectHandle' is '%s', which is not a handle. A handle is the integer string gas(apply_effect) "
-					 "and gas(get_active_effects) report. Pass that exactly, or use 'effectClass' instead."),
+				TEXT("'effectHandle' is '%s', which is not a handle. A handle is the string gas(apply_effect) "
+					 "and gas(get_active_effects) report (an integer, or owner-prefixed like ASC-1 on UE 5.9). Pass that exactly, or use 'effectClass' instead."),
 				*HandleText));
 		}
 		Result->SetStringField(TEXT("effectHandle"), HandleText);

@@ -54,6 +54,9 @@ async function deleteLeftovers(): Promise<void> {
 
 beforeAll(async () => {
   bridge = await getBridge();
+  // On the home level, where the points land on the landscape's own splines component. In the
+  // untitled map a fresh editor opens on, they were put in a separate spline actor instead.
+  await call("demo_go_home", { discardUnsaved: true });
   await deleteLeftovers();
   const created = await call("create_landscape", {
     label: LABEL, location: { x: BX, y: BY, z: 0 },
