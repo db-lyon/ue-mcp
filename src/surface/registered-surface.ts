@@ -68,11 +68,17 @@ export function registeredUnion(bridges: readonly RegisteredSource[]): ReadonlyS
   return union;
 }
 
-/** The engine toolset a wrapped action needs and the editor lacks, if any. */
+/**
+ * The engine toolset a wrapped action needs and the editor lacks, if any. An
+ * action whose tool a newer engine renamed is present when the editor has
+ * either the tool's own toolset or a successor's.
+ */
 export function absentToolset(spec: ActionSpec | undefined, have: ReadonlySet<string> | null): string | undefined {
   if (!have || spec?.kind !== "bridge" || !have.has(EPIC_TOOLSETS_KNOWN)) return undefined;
   const toolset = spec.epicTool?.toolset;
-  return toolset && !have.has(EPIC_TOOLSET_PREFIX + toolset) ? toolset : undefined;
+  if (!toolset) return undefined;
+  const reachable = [toolset, ...(spec.epicTool?.successors ?? []).map((s) => s.toolset)];
+  return reachable.some((t) => have.has(EPIC_TOOLSET_PREFIX + t)) ? undefined : toolset;
 }
 
 export function isWithheld(spec: ActionSpec | undefined, have: ReadonlySet<string> | null): boolean {
@@ -127,7 +133,9 @@ export function epicToolsetsOf(graph: readonly ToolDef[]): string[] {
   const toolsets = new Set<string>();
   for (const tool of graph) {
     for (const spec of Object.values(tool.actions)) {
-      if (spec.kind === "bridge" && spec.epicTool?.toolset) toolsets.add(spec.epicTool.toolset);
+      if (spec.kind !== "bridge" || !spec.epicTool?.toolset) continue;
+      toolsets.add(spec.epicTool.toolset);
+      for (const s of spec.epicTool.successors ?? []) toolsets.add(s.toolset);
     }
   }
   return [...toolsets].sort();
