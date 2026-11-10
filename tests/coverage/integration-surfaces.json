@@ -462,6 +462,11 @@
       "summary": "an image or audio a bridge result carries in media comes back as MCP image or audio content, not base64 inside the JSON text"
     },
     {
+      "id": "server.graph-diagram",
+      "group": "server",
+      "summary": "a category's diagram action reads its graph through the bridge and answers with Mermaid text, an SVG file, or a PNG returned as MCP image content"
+    },
+    {
       "id": "gateway.list_categories",
       "group": "gateway",
       "summary": "tools(list_categories) lists every category with a summary"
