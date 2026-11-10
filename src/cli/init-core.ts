@@ -109,6 +109,7 @@ export const CATEGORIES: ToolCategory[] = [
   { name: "datasmith",      label: "datasmith",      description: "Datasmith scene import and metadata queries" },
   { name: "metahuman",      label: "metahuman",      description: "MetaHumanCharacter assets" },
   { name: "source_control", label: "source control", description: "provider status, checkout, history, diff, submit" },
+  { name: "canvas",         label: "unreal canvas",  description: "Unreal Canvas renders, viewport stream, stencils, splats, cutouts (UE 5.9)" },
   { name: "plugins",    label: "plugins",       alwaysOn: true },
   // feedback has its own toggle: enabling it gives the agent a tool that can
   // post to a public issue tracker, behind user approval.
