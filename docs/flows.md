@@ -46,7 +46,7 @@ The response carries a `summary` line per step, a `steps` array with what each s
 
 ## Tasks
 
-Every action is a task named `<category>.<action>`: `level.place_actor`, `asset.list`, `project.build`. There are <!-- count:actions -->3527+<!-- /count --> across <!-- count:tools -->30<!-- /count --> categories. A few more are built in:
+Every action is a task named `<category>.<action>`: `level.place_actor`, `asset.list`, `project.build`. There are <!-- count:actions -->3544+<!-- /count --> across <!-- count:tools -->30<!-- /count --> categories. A few more are built in:
 
 | Task | What it does |
 |------|--------------|
