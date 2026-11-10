@@ -10,11 +10,13 @@
  * the Bridge's own shipped preset (/UnrealCanvasBridge/MRG/MrgNodePreset).
  */
 import * as fs from "node:fs";
+import * as path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { callBridge, disconnectBridge, getBridge, type TestResult } from "../setup.js";
 import type { EditorBridge } from "../../src/bridge/bridge.js";
 import { LiveServer, resultJson, type LiveCallResult } from "./server.js";
 import { liveTarget } from "./harness.js";
+import { TEST_PROJECT_DIR } from "../../scripts/bridge-target.mjs";
 
 type Json = Record<string, any>;
 const body = (r: TestResult): Json => (r.result && typeof r.result === "object" ? (r.result as Json) : {});
@@ -26,6 +28,9 @@ const SMALL = { size: "custom", width: 256, height: 144, matchAspect: false };
 let bridge: EditorBridge;
 let server: LiveServer | null = null;
 let canvasLoaded = false;
+// The cutout tool writes its textures under /Game/UnrealCanvas; removed afterwards when the run created it.
+const CANVAS_CONTENT = path.join(TEST_PROJECT_DIR, "Content", "UnrealCanvas");
+const canvasContentExisted = fs.existsSync(CANVAS_CONTENT);
 
 async function raw(method: string, params: Json = {}): Promise<Json> {
   const r = await callBridge(bridge, method, params);
@@ -36,7 +41,10 @@ async function raw(method: string, params: Json = {}): Promise<Json> {
 async function canvas(action: string, args: Json = {}): Promise<Json> {
   const r: LiveCallResult = await server!.call("canvas", { action, args });
   expect(r.isError, `canvas.${action}: ${r.text}`).toBe(false);
-  return resultJson<Json>(r);
+  // A tool that fails answers success:false in the body; isError is for calls the server refused.
+  const answer = resultJson<Json>(r);
+  expect(answer.success, `canvas.${action}: ${r.text}`).not.toBe(false);
+  return answer;
 }
 
 beforeAll(async () => {
@@ -53,8 +61,15 @@ afterAll(async () => {
     await callBridge(bridge, "epic_call_mcp_tool", { tool: "StopViewportStream", input: {} });
     await callBridge(bridge, "delete_folder", { path: DIR, force: true });
   }
+  if (canvasLoaded && !canvasContentExisted) {
+    // The cutout textures can still be saving when the last test ends, so delete again once they have landed.
+    await callBridge(bridge, "delete_folder", { path: "/Game/UnrealCanvas", force: true });
+    await new Promise((resolve) => setTimeout(resolve, 3000));
+    await callBridge(bridge, "delete_folder", { path: "/Game/UnrealCanvas", force: true });
+  }
   await server?.close();
   if (bridge) disconnectBridge();
+  if (!canvasContentExisted) fs.rmSync(CANVAS_CONTENT, { recursive: true, force: true });
 });
 
 describe("the Canvas Bridge's tools through epic(call_mcp_tool)", () => {
@@ -151,21 +166,23 @@ describe("canvas category", () => {
     expect((await canvas("set_viewport_stream_fps", { fps: 5 })).fps).toBe(5);
     expect(await canvas("stop_viewport_stream")).toMatchObject({ streaming: false, wasStopped: true });
     const again = await server!.call("canvas", { action: "set_viewport_stream_fps", args: { fps: 5 } });
-    expect(again.isError).toBe(true);
+    expect(resultJson<Json>(again).success).toBe(false);
     expect(again.text).toContain("No viewport stream is running");
   }, 120_000);
 
   it("assigns and clears a stencil on a placed actor, and applies the capture setters", async (t) => {
     if (!canvasLoaded) t.skip();
-    const placed = await raw("place_actor", { actorClass: "StaticMeshActor", label: "CanvasStencilCube", location: { x: 0, y: 0, z: 0 } });
-    const actorPath = String(placed.actorPath ?? placed.path);
+    await raw("place_actor", { actorClass: "StaticMeshActor", label: "CanvasStencilCube", location: { x: 0, y: 0, z: 0 } });
+    const actorPath = String((await raw("get_actor_details", { actorLabel: "CanvasStencilCube" })).actorPath);
+    // The stencil lives on the mesh component, not the actor.
+    const stencil = async (): Promise<Json> =>
+      (await raw("get_object_properties", { objectPath: `${actorPath}.StaticMeshComponent0`, propertyNames: ["CustomDepthStencilValue", "bRenderCustomDepth"] })).properties as Json;
     try {
       await canvas("assign_stencil", { actorPath, stencilId: 7 });
-      let details = await raw("get_actor_details", { actorLabel: "CanvasStencilCube", includeProperties: true });
-      expect(JSON.stringify(details)).toMatch(/CustomDepthStencilValue"?\s*:\s*7/);
+      expect(await stencil()).toEqual({ CustomDepthStencilValue: "7", bRenderCustomDepth: "True" });
+      // Clearing turns custom depth off; the stored value is left as it was.
       await canvas("clear_stencil", { actorPath });
-      details = await raw("get_actor_details", { actorLabel: "CanvasStencilCube", includeProperties: true });
-      expect(JSON.stringify(details)).not.toMatch(/CustomDepthStencilValue"?\s*:\s*7/);
+      expect((await stencil()).bRenderCustomDepth).toBe("False");
     } finally {
       await callBridge(bridge, "delete_actor", { actorLabel: "CanvasStencilCube" });
     }

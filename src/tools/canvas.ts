@@ -76,6 +76,16 @@ interface CanvasOptions {
  * envelope epic_call_mcp_tool takes, the tool for withholding, and the
  * result shaping. Spread over a bp() that names epic_call_mcp_tool.
  */
+/**
+ * The Bridge's sequence render loads its SequencePath as an object path and
+ * refuses a bare package path, so "/Game/Dir/LS_X" becomes "/Game/Dir/LS_X.LS_X".
+ */
+export function sequenceObjectPath(path: unknown): unknown {
+  if (typeof path !== "string" || path === "" || path.includes(".")) return path;
+  const name = path.slice(path.lastIndexOf("/") + 1);
+  return name ? `${path}.${name}` : path;
+}
+
 function mcp(tool: string, toInput: (p: Params) => Params = () => ({}), options: CanvasOptions = {}): Partial<ActionSpec> {
   const shape = options.shape ?? "json";
   return defined({
@@ -107,7 +117,7 @@ export const canvasTool: ToolDef = categoryTool(
     render_sequence: { ...bp("mutate", "Render a Level Sequence through Movie Render Graph to PNG frames. sequencePath omitted renders the sequence open in Sequencer (only the focused shot when Sequencer is drilled into one); an explicit path renders all of it. cameraSource defaults to the sequence's own Camera Cuts. May take minutes. "
       + "Returns passes [{directory, passName, branchName, subResourceName, frameCount, fps, filePattern, startFrame, firstFrame, lastFrame, sequenceName}], one directory of PNG frames per capture under Saved/UnrealCanvasSequenceRender. presetPath, variables, resolution, cameraSource and viewportLook are as for render. "
       + "Params: sequencePath?, presetPath?, variables?, resolution?, cameraSource?, viewportLook?", "epic_call_mcp_tool"), ...mcp("TriggerSequenceRender", (p) => ({
-      SequencePath: p.sequencePath,
+      SequencePath: sequenceObjectPath(p.sequencePath),
       ...renderCommon(p),
       CameraSource: p.cameraSource,
       ViewportLookFlags: p.viewportLook,
