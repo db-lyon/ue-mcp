@@ -5008,8 +5008,28 @@
         },
         {
           "suite": "live",
+          "file": "tests/live/delete-wp-map-externals.test.ts",
+          "test": "leaves another map's packages alone when that map sits under the deleted one's path"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/delete-wp-map-externals.test.ts",
+          "test": "removes the map's external actor and object packages from disk"
+        },
+        {
+          "suite": "live",
           "file": "tests/live/level-roots-and-templates.test.ts",
           "test": "refuses a template that does not exist and leaves the open map alone"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/unsaved-map-switch.test.ts",
+          "test": "refuses without discardUnsaved, names the map, and leaves the editor on it"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/unsaved-map-switch.test.ts",
+          "test": "refuses without the flag and names the never-saved map"
         }
       ]
     },
@@ -5772,6 +5792,16 @@
         },
         {
           "suite": "live",
+          "file": "tests/live/delete-wp-map-externals.test.ts",
+          "test": "leaves another map's packages alone when that map sits under the deleted one's path"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/delete-wp-map-externals.test.ts",
+          "test": "removes the map's external actor and object packages from disk"
+        },
+        {
+          "suite": "live",
           "file": "tests/live/material-function-refs.test.ts",
           "test": "connects nodes by the names they were given"
         },
@@ -5784,6 +5814,16 @@
           "suite": "live",
           "file": "tests/live/source-control-provider.test.ts",
           "test": "blueprint diff against a submitted revision reports a node added since, by GUID (#1487)"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/unsaved-map-switch.test.ts",
+          "test": "refuses without discardUnsaved, names the map, and leaves the editor on it"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/unsaved-map-switch.test.ts",
+          "test": "refuses without the flag and names the never-saved map"
         }
       ]
     },
@@ -6032,6 +6072,31 @@
           "suite": "live",
           "file": "tests/live/bcov-pcg.test.ts",
           "test": "export_level_to_pcg_asset writes a data asset update_pcg_level_assets re-exports"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/delete-wp-map-externals.test.ts",
+          "test": "leaves another map's packages alone when that map sits under the deleted one's path"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/delete-wp-map-externals.test.ts",
+          "test": "removes the map's external actor and object packages from disk"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/unsaved-map-switch.test.ts",
+          "test": "leaves nothing behind for the next caller of demo_go_home"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/unsaved-map-switch.test.ts",
+          "test": "reaches the home level with discardUnsaved=true and says what it dropped"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/unsaved-map-switch.test.ts",
+          "test": "refuses without discardUnsaved, names the map, and leaves the editor on it"
         }
       ]
     },
@@ -7762,6 +7827,11 @@
           "suite": "live",
           "file": "tests/live/sequencer-datasmith-metahuman.test.ts",
           "test": "imports a scene, finds its actors by tag with metadata, and reimports a source change"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/unsaved-map-switch.test.ts",
+          "test": "discards the map itself and opens the target"
         }
       ]
     },
@@ -8510,6 +8580,36 @@
           "suite": "live",
           "file": "tests/live/open-asset-loaded-map.test.ts",
           "test": "reports it already open and leaves the editor running"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/save-validation-window.test.ts",
+          "test": "run instead of being refused while validation shows its progress window"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/unsaved-map-switch.test.ts",
+          "test": "discards the map itself and opens the target"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/unsaved-map-switch.test.ts",
+          "test": "leaves nothing behind for the next caller of demo_go_home"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/unsaved-map-switch.test.ts",
+          "test": "reaches the home level with discardUnsaved=true and says what it dropped"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/unsaved-map-switch.test.ts",
+          "test": "refuses without discardUnsaved, names the map, and leaves the editor on it"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/unsaved-map-switch.test.ts",
+          "test": "refuses without the flag and names the never-saved map"
         }
       ]
     },
@@ -11169,6 +11269,11 @@
         },
         {
           "suite": "live",
+          "file": "tests/live/delete-wp-map-externals.test.ts",
+          "test": "leaves another map's packages alone when that map sits under the deleted one's path"
+        },
+        {
+          "suite": "live",
           "file": "tests/live/level-ofpa-delete-save.test.ts",
           "test": "deletes the actor files and the actors stay gone after a reload"
         }
@@ -11702,6 +11807,11 @@
           "suite": "live",
           "file": "tests/live/perception-bt.test.ts",
           "test": "writes through the typed accessor and reports the previous value"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/save-validation-window.test.ts",
+          "test": "run instead of being refused while validation shows its progress window"
         }
       ]
     },
@@ -12938,6 +13048,11 @@
         },
         {
           "suite": "live",
+          "file": "tests/live/delete-wp-map-externals.test.ts",
+          "test": "leaves another map's packages alone when that map sits under the deleted one's path"
+        },
+        {
+          "suite": "live",
           "file": "tests/live/editor-lifecycle.test.ts",
           "test": "advertises the same epic_* actions after the editor restarts (#1538)"
         },
@@ -12985,6 +13100,21 @@
           "suite": "live",
           "file": "tests/live/open-asset-map-routing.test.ts",
           "test": "opens it by its ${form} as the editor world and reports World"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/unsaved-map-switch.test.ts",
+          "test": "discards the map itself and opens the target"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/unsaved-map-switch.test.ts",
+          "test": "refuses without discardUnsaved, names the map, and leaves the editor on it"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/unsaved-map-switch.test.ts",
+          "test": "refuses without the flag and names the never-saved map"
         }
       ]
     },
@@ -15646,6 +15776,16 @@
         },
         {
           "suite": "live",
+          "file": "tests/live/delete-wp-map-externals.test.ts",
+          "test": "leaves another map's packages alone when that map sits under the deleted one's path"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/delete-wp-map-externals.test.ts",
+          "test": "removes the map's external actor and object packages from disk"
+        },
+        {
+          "suite": "live",
           "file": "tests/live/dialog-gate.test.ts",
           "test": "defer withholds the press calls on a plain asset read"
         },
@@ -15693,6 +15833,16 @@
           "suite": "live",
           "file": "tests/live/spatial-communication.test.ts",
           "test": "exposes an enclosed, lamp-lit interior instead of rendering it near black (#1549)"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/unsaved-map-switch.test.ts",
+          "test": "refuses without discardUnsaved, names the map, and leaves the editor on it"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/unsaved-map-switch.test.ts",
+          "test": "refuses without the flag and names the never-saved map"
         }
       ]
     },
@@ -16209,6 +16359,16 @@
           "suite": "live",
           "file": "tests/live/crash-class-inputs.test.ts",
           "test": "renames an open Blueprint: the new path reads, the old one does not"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/delete-wp-map-externals.test.ts",
+          "test": "removes the map's external actor and object packages from disk"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/save-validation-window.test.ts",
+          "test": "run instead of being refused while validation shows its progress window"
         }
       ]
     },
@@ -19916,6 +20076,11 @@
         },
         {
           "suite": "live",
+          "file": "tests/live/save-validation-window.test.ts",
+          "test": "run instead of being refused while validation shows its progress window"
+        },
+        {
+          "suite": "live",
           "file": "tests/live/source-control-provider.test.ts",
           "test": "blueprint diff against a submitted revision reports a node added since, by GUID (#1487)"
         }
@@ -19989,6 +20154,16 @@
           "suite": "live",
           "file": "tests/live/checkpoints.test.ts",
           "test": "a turn through the server"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/delete-wp-map-externals.test.ts",
+          "test": "leaves another map's packages alone when that map sits under the deleted one's path"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/delete-wp-map-externals.test.ts",
+          "test": "removes the map's external actor and object packages from disk"
         },
         {
           "suite": "live",
@@ -20625,6 +20800,11 @@
           "suite": "live",
           "file": "tests/live/collection-entry-edits.test.ts",
           "test": "updates keyed array fields and clones with nested overrides, dry run and rollback"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/save-validation-window.test.ts",
+          "test": "run instead of being refused while validation shows its progress window"
         },
         {
           "suite": "live",

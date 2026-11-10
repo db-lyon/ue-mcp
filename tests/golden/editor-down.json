@@ -2106,7 +2106,7 @@
       "name": "datasmith"
     },
     {
-      "description": "Neon Shrine demo scene builder and cleanup.\n\nCall demo(action, args={...}). Actions:\nstep(step|stepIndex?:i)\nget_steps()\ncleanup()\ngo_home()",
+      "description": "Neon Shrine demo scene builder and cleanup.\n\nCall demo(action, args={...}). Actions:\nstep(step|stepIndex?:i)\nget_steps()\ncleanup()\ngo_home(discardUnsaved?:b)",
       "inputSchema": {
         "$schema": "http://json-schema.org/draft-07/schema#",
         "additionalProperties": true,
