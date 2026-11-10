@@ -25382,13 +25382,13 @@
         },
         {
           "name": "width",
-          "type": "integer",
+          "type": "number",
           "required": false,
           "description": "Output width in pixels (with height)"
         },
         {
           "name": "height",
-          "type": "integer",
+          "type": "number",
           "required": false,
           "description": "Output height in pixels (with width)"
         },
@@ -25400,13 +25400,13 @@
         },
         {
           "name": "startFrame",
-          "type": "integer",
+          "type": "number",
           "required": false,
           "description": "First display frame of a custom range (with endFrame)"
         },
         {
           "name": "endFrame",
-          "type": "integer",
+          "type": "number",
           "required": false,
           "description": "End display frame of a custom range, exclusive (with startFrame)"
         }
@@ -25454,7 +25454,7 @@
         },
         {
           "name": "limit",
-          "type": "integer",
+          "type": "number",
           "required": false,
           "description": "Files to return, newest first (default 200, max 5000)"
         }

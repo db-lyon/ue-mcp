@@ -662,11 +662,11 @@ void FMovieRenderQueueHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("graph"), EType::String, TEXT("MovieGraphConfig asset: render through Movie Render Graph instead of a preset")),
 		MCPParam::Optional(TEXT("outputDirectory"), EType::String, TEXT("Output folder; {project_dir} and the other Movie Render Queue tokens are kept as written (default {project_dir}/Saved/MovieRenders/)")),
 		MCPParam::Optional(TEXT("fileNameFormat"), EType::String, TEXT("File name format, e.g. {sequence_name}.{frame_number}")),
-		MCPParam::Optional(TEXT("width"), EType::Integer, TEXT("Output width in pixels (with height)")),
-		MCPParam::Optional(TEXT("height"), EType::Integer, TEXT("Output height in pixels (with width)")),
+		MCPParam::Optional(TEXT("width"), EType::Number, TEXT("Output width in pixels (with height)")),
+		MCPParam::Optional(TEXT("height"), EType::Number, TEXT("Output height in pixels (with width)")),
 		MCPParam::Optional(TEXT("format"), EType::String, TEXT("png | jpg | exr | bmp; replaces the job's other image outputs (default png when the job has none)")),
-		MCPParam::Optional(TEXT("startFrame"), EType::Integer, TEXT("First display frame of a custom range (with endFrame)")),
-		MCPParam::Optional(TEXT("endFrame"), EType::Integer, TEXT("End display frame of a custom range, exclusive (with startFrame)")),
+		MCPParam::Optional(TEXT("startFrame"), EType::Number, TEXT("First display frame of a custom range (with endFrame)")),
+		MCPParam::Optional(TEXT("endFrame"), EType::Number, TEXT("End display frame of a custom range, exclusive (with startFrame)")),
 	});
 	Registry.RegisterHandler(TEXT("mrq_list_jobs"), &ListJobs, {});
 	Registry.RegisterHandler(TEXT("mrq_delete_job"), &DeleteJob, {
@@ -683,7 +683,7 @@ void FMovieRenderQueueHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("mrq_list_outputs"), &ListOutputs, {
 		MCPParam::Optional(TEXT("jobName"), EType::String, TEXT("List the files under this job's output folder")),
 		MCPParam::Optional(TEXT("outputDirectory"), EType::String, TEXT("List the files under this folder instead")),
-		MCPParam::Optional(TEXT("limit"), EType::Integer, TEXT("Files to return, newest first (default 200, max 5000)")),
+		MCPParam::Optional(TEXT("limit"), EType::Number, TEXT("Files to return, newest first (default 200, max 5000)")),
 	});
 }
 
