@@ -63,6 +63,7 @@ export const REGISTERED_HANDLER_TIMEOUT_SECONDS: Readonly<Record<string, number>
   apply_mesh_simplify: 300,
   audit_asset_hygiene: 300,
   audit_blueprint_dead_code: 600,
+  audit_replication: 300,
   batch_retarget_animations: 300,
   batch_set_actor_properties: 300,
   batch_set_foliage_settings_where: 300,

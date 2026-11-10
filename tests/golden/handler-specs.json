@@ -1,5 +1,5 @@
 {
-  "handlerCount": 1261,
+  "handlerCount": 1262,
   "handlers": {
     "actors_in_box": {
       "category": "level",
@@ -5518,6 +5518,77 @@
           "aliases": [
             "path"
           ]
+        }
+      ]
+    },
+    "audit_replication": {
+      "category": "networking",
+      "params": [
+        {
+          "name": "path",
+          "type": "string",
+          "required": false,
+          "description": "Scope: a content path for Blueprints (default /Game) or a /Script/<Module> path for native classes; filters both"
+        },
+        {
+          "name": "className",
+          "type": "string",
+          "required": false,
+          "description": "Only this class and its subclasses: a native class name or path, or a Blueprint asset path"
+        },
+        {
+          "name": "includeNative",
+          "type": "boolean",
+          "required": false,
+          "description": "Audit native classes (default true)"
+        },
+        {
+          "name": "includeBlueprints",
+          "type": "boolean",
+          "required": false,
+          "description": "Audit Blueprint classes (default true)"
+        },
+        {
+          "name": "includeEngine",
+          "type": "boolean",
+          "required": false,
+          "description": "Also audit engine and engine-plugin native classes, not only project modules and project plugins (default false)"
+        },
+        {
+          "name": "requireServerValidation",
+          "type": "boolean",
+          "required": false,
+          "description": "Report every Server RPC without WithValidation (default false)"
+        },
+        {
+          "name": "onlyWithFindings",
+          "type": "boolean",
+          "required": false,
+          "description": "Keep only the classes that have findings (default false)"
+        },
+        {
+          "name": "maxBlueprints",
+          "type": "integer",
+          "required": false,
+          "description": "Cap on Blueprints loaded (default 500, max 5000)"
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "description": "Class rows to return inline (default 200, max 5000); totals stay complete"
+        },
+        {
+          "name": "dumpToFile",
+          "type": "boolean",
+          "required": false,
+          "description": "Write every row to a JSON file instead of returning them inline"
+        },
+        {
+          "name": "outputPath",
+          "type": "string",
+          "required": false,
+          "description": "Absolute or Saved-relative JSON path for the dump (default Saved/UE_MCP/Audits/replication_audit.json)"
         }
       ]
     },
