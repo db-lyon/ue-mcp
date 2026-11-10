@@ -1836,6 +1836,154 @@ export const handlerSpecs: HandlerSpecs = {
       }
     ]
   },
+  "mrq_cancel_render": {
+    "category": "editor",
+    "params": []
+  },
+  "mrq_create_job": {
+    "category": "editor",
+    "params": [
+      {
+        "name": "sequence",
+        "type": "string",
+        "required": true,
+        "description": "Level Sequence asset path to render"
+      },
+      {
+        "name": "map",
+        "type": "string",
+        "required": false,
+        "description": "World asset path to render in (default the level open in the editor)"
+      },
+      {
+        "name": "jobName",
+        "type": "string",
+        "required": false,
+        "description": "Job name, unique in the queue (default the sequence name)"
+      },
+      {
+        "name": "preset",
+        "type": "string",
+        "required": false,
+        "description": "MoviePipelinePrimaryConfig asset to copy into the job's configuration"
+      },
+      {
+        "name": "graph",
+        "type": "string",
+        "required": false,
+        "description": "MovieGraphConfig asset: render through Movie Render Graph instead of a preset"
+      },
+      {
+        "name": "outputDirectory",
+        "type": "string",
+        "required": false,
+        "description": "Output folder; {project_dir} and the other Movie Render Queue tokens are kept as written (default {project_dir}/Saved/MovieRenders/)"
+      },
+      {
+        "name": "fileNameFormat",
+        "type": "string",
+        "required": false,
+        "description": "File name format, e.g. {sequence_name}.{frame_number}"
+      },
+      {
+        "name": "width",
+        "type": "number",
+        "required": false,
+        "description": "Output width in pixels (with height)"
+      },
+      {
+        "name": "height",
+        "type": "number",
+        "required": false,
+        "description": "Output height in pixels (with width)"
+      },
+      {
+        "name": "format",
+        "type": "string",
+        "required": false,
+        "description": "png | jpg | exr | bmp; replaces the job's other image outputs (default png when the job has none)"
+      },
+      {
+        "name": "startFrame",
+        "type": "number",
+        "required": false,
+        "description": "First display frame of a custom range (with endFrame)"
+      },
+      {
+        "name": "endFrame",
+        "type": "number",
+        "required": false,
+        "description": "End display frame of a custom range, exclusive (with startFrame)"
+      }
+    ]
+  },
+  "mrq_delete_job": {
+    "category": "editor",
+    "params": [
+      {
+        "name": "jobName",
+        "type": "string",
+        "required": false,
+        "description": "Name of the job to delete"
+      },
+      {
+        "name": "jobIndex",
+        "type": "integer",
+        "required": false,
+        "description": "Queue index of the job to delete, when jobName is not given"
+      }
+    ]
+  },
+  "mrq_get_render_status": {
+    "category": "editor",
+    "params": []
+  },
+  "mrq_list_jobs": {
+    "category": "editor",
+    "params": []
+  },
+  "mrq_list_outputs": {
+    "category": "editor",
+    "params": [
+      {
+        "name": "jobName",
+        "type": "string",
+        "required": false,
+        "description": "List the files under this job's output folder"
+      },
+      {
+        "name": "outputDirectory",
+        "type": "string",
+        "required": false,
+        "description": "List the files under this folder instead"
+      },
+      {
+        "name": "limit",
+        "type": "number",
+        "required": false,
+        "description": "Files to return, newest first (default 200, max 5000)"
+      }
+    ]
+  },
+  "mrq_render": {
+    "category": "editor",
+    "params": [
+      {
+        "name": "jobNames",
+        "type": "array",
+        "required": false,
+        "description": "Jobs to render (default every enabled job in the queue)",
+        "items": "string"
+      },
+      {
+        "name": "wait",
+        "type": "boolean",
+        "required": false,
+        "description": "Wait for the render and answer with its outputs, reporting progress (default true); false returns once it starts"
+      }
+    ],
+    "contractExempt": "starts a render of every enabled job in the editor's queue"
+  },
   "open_asset": {
     "category": "editor",
     "params": [
@@ -4036,6 +4184,13 @@ export const paramsClauses: Readonly<Record<string, string>> = {
   list_pie_instances: "Params: none",
   list_trace_channels: "Params: filter?, enabledOnly?",
   list_windows: "Params: windowId?, maxTexts?, maxTextChars?, maxButtons?",
+  mrq_cancel_render: "Params: none",
+  mrq_create_job: "Params: sequence, map?, jobName?, preset?, graph?, outputDirectory?, fileNameFormat?, width?, height?, format?, startFrame?, endFrame?",
+  mrq_delete_job: "Params: jobName?, jobIndex?",
+  mrq_get_render_status: "Params: none",
+  mrq_list_jobs: "Params: none",
+  mrq_list_outputs: "Params: jobName?, outputDirectory?, limit?",
+  mrq_render: "Params: jobNames?, wait?",
   open_asset: "Params: assetPath (or path), saveFirst?, discardUnsaved?",
   open_settings: "Params: container?, category?, section?",
   open_tab: "Params: tabId",
@@ -4173,7 +4328,7 @@ export const schema: Record<string, z.ZodType> = {
   enable: z.union([z.array(z.string()), z.string()]).optional().describe("Channels to turn on, as an array or a comma-separated string"),
   enabled: z.boolean().optional().describe("true (default) ejects the debug camera if needed and poses it; false returns control to the player (pose_debug_camera). Hide editor-only overlays (default true); false shows them again (set_game_view). Realtime update on every level viewport (default true) (set_realtime)"),
   enabledOnly: z.boolean().optional().describe("Only channels that are currently on (default false)"),
-  endFrame: z.number().optional().describe("Last display frame to render, inclusive. Not with endSeconds"),
+  endFrame: z.number().optional().describe("End display frame of a custom range, exclusive (with startFrame) (mrq_create_job). Last display frame to render, inclusive. Not with endSeconds (render_sequence_frames)"),
   endFrameOffset: z.number().int().optional().describe("SkeletalAnimation only: ticks trimmed from the clip's end"),
   endSeconds: z.number().optional().describe("Section end in seconds (default one second after the start) (add_sequence_section). Range end in seconds, exclusive (render_sequence_frames). Range end in seconds (set_sequence_playback_range)"),
   entryPoint: z.string().optional().describe("Function in the file to call after loading it under runName (default ue_mcp_entry, so its main guard does not fire); its return value comes back as result"),
@@ -4185,6 +4340,7 @@ export const schema: Record<string, z.ZodType> = {
   farClip: z.number().optional().describe("Far clip plane override"),
   file: z.string().optional().describe(".utrace path to write, absolute or relative (default a timestamped file under <Project>/Saved/Profiling)"),
   filename: z.string().optional().describe("Alias for outputPath (capture_scene_png). Image path to write; .png is appended without an image extension (capture_screenshot)"),
+  fileNameFormat: z.string().optional().describe("File name format, e.g. {sequence_name}.{frame_number}"),
   filePath: z.string().optional().describe("Path to the .py file: absolute, or relative to the project directory, such as Tools/import_assets.py"),
   filter: z.string().optional().describe("Case-insensitive substring the message must contain (get_output_log). Case-insensitive substring over channel name and description (list_trace_channels). Substring of the test names to run (run_automation_tests)"),
   fixed: z.boolean().optional().describe("Use a fixed exposure rather than eye adaptation"),
@@ -4193,13 +4349,14 @@ export const schema: Record<string, z.ZodType> = {
   focusDirection: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Framing direction from the focus actor (default front and above)"),
   focusMargin: z.number().optional().describe("Positive bounds fill margin; higher pulls back (default 1.5)"),
   force: z.boolean().optional().describe("game mode, resuming only: clear the world's pauser when the game refuses to unpause (default false)"),
-  format: z.string().optional().describe("Image format; only png"),
+  format: z.string().optional().describe("png | jpg | exr | bmp; replaces the job's other image outputs (default png when the job has none) (mrq_create_job). Image format; only png (render_sequence_frames)"),
   fov: z.number().optional().describe("Capture FOV in degrees, greater than 0 and less than 180 (default 90) (capture_scene_png). Fixed camera FOV in degrees (default 90) (render_sequence_frames). Field of view in degrees, greater than 0 and less than 180 (set_viewport_view)"),
   frame: z.number().optional().describe("Playhead position as a frame number, read in timeUnit"),
   frameStep: z.number().optional().describe("Render every Nth frame (default 1)"),
   fullyLoadTextures: z.boolean().optional().describe("Stream textures in and flush the render thread before the capture (default true) (capture_scene_png). Wait across real editor frames for requested texture mips (default true); a 60s item timeout reports blocked (render_mesh_studio). Stream textures in before each capture (default true) (render_sequence_frames)"),
   functionName: z.string().optional().describe("BlueprintCallable or Exec UFUNCTION on the actor, or on component (invoke_function). UFUNCTION to call; an unknown name lists the available ones (invoke_object_function). Static UFUNCTION on the class (invoke_static_function)"),
-  height: z.number().optional().describe("Capture height in pixels (default 720) (capture_scene_png). Viewport height to read y against, when picking from a screenshot of another resolution (hit_test_viewport_pixel). Frame height in pixels (default 720) (render_sequence_frames)"),
+  graph: z.string().optional().describe("MovieGraphConfig asset: render through Movie Render Graph instead of a preset"),
+  height: z.number().optional().describe("Capture height in pixels (default 720) (capture_scene_png). Viewport height to read y against, when picking from a screenshot of another resolution (hit_test_viewport_pixel). Output height in pixels (with width) (mrq_create_job). Frame height in pixels (default 720) (render_sequence_frames)"),
   hidden: z.boolean().optional().describe("true hides the target, false shows it"),
   hitchMilliseconds: z.number().optional().describe("How long to stall the game thread (default 250, max 5000)"),
   host: z.string().optional().describe("Trace server for traceTarget=network (default 127.0.0.1)"),
@@ -4220,6 +4377,9 @@ export const schema: Record<string, z.ZodType> = {
   invalidateHitProxies: z.boolean().optional().describe("Also invalidate hit proxies, needed before a hit test (default true)"),
   items: z.array(z.object({ index: z.number().describe("Row index from list_dialogs"), checked: z.boolean().describe("Whether the row ends up ticked") })).optional().describe("The dialog's own tickable rows to set before the button is pressed; indices come from list_dialogs, and rows left out keep their state"),
   jobId: z.string().optional().describe("Job id returned by render_mesh_studio; already-finished jobs are returned unchanged (cancel_mesh_studio_render). Job id returned by render_mesh_studio (get_mesh_studio_render)"),
+  jobIndex: z.number().int().optional().describe("Queue index of the job to delete, when jobName is not given"),
+  jobName: z.string().optional().describe("Job name, unique in the queue (default the sequence name) (mrq_create_job). Name of the job to delete (mrq_delete_job). List the files under this job's output folder (mrq_list_outputs)"),
+  jobNames: z.array(z.string()).optional().describe("Jobs to render (default every enabled job in the queue)"),
   keyframes: z.array(z.record(z.string(), z.unknown())).optional().describe("Keys as [{seconds | frame | tick, value, interpolation?}]; frame is a display frame, value a number or boolean (set_sequence_channel_keys). Keys to add, as [{seconds, value, interpolation?}] (set_sequence_keyframes)"),
   kwargs: z.record(z.string(), z.unknown()).optional().describe("Keyword arguments for the entryPoint call"),
   label: z.string().optional().describe("Alias for description"),
@@ -4229,11 +4389,12 @@ export const schema: Record<string, z.ZodType> = {
   level: z.string().optional().describe("Low | Medium | High | Epic | Cinematic (default Epic)"),
   levelPath: z.string().optional().describe("Long package path of the new level, e.g. /Game/Maps/MyLevel. Validated before the engine is asked"),
   lightingPreset: z.enum(["studio"]).optional().describe("Studio lighting preset (default studio)"),
-  limit: z.number().optional().describe("Objects on this page (default 50, max 1000) (find_object). Max rows for a pattern search (default 100, max 1000) (get_cvars). Max properties returned (default 200) (get_object_properties). Lines on this page (default 200, max 4096) (get_output_log). Crash folders on this page (default 50, max 500) (list_crashes). Max bones when bones is omitted (default 200) (read_bone_transforms). Matches on this page (default 100, max 4096) (search_log)"),
+  limit: z.number().optional().describe("Objects on this page (default 50, max 1000) (find_object). Max rows for a pattern search (default 100, max 1000) (get_cvars). Max properties returned (default 200) (get_object_properties). Lines on this page (default 200, max 4096) (get_output_log). Crash folders on this page (default 50, max 500) (list_crashes). Files to return, newest first (default 200, max 5000) (mrq_list_outputs). Max bones when bones is omitted (default 200) (read_bone_transforms). Matches on this page (default 100, max 4096) (search_log)"),
   location: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Camera location (capture_scene_png, set_viewport_camera). Camera location; omit to keep the current one (pose_debug_camera). Fixed camera location, when no camera actor is given (render_sequence_frames). Destination; omit to keep the current location (teleport_runtime_actor)"),
   logName: z.string().optional().describe("Listing to read (MapCheck, AssetCheck, PIE, LoadErrors...); omit to list the registered ones"),
   lookAtActorLabel: z.string().optional().describe("Aim at this PIE actor's bounds center; wins over rotation"),
   lookAtActorPath: z.string().optional().describe("Full path of the PIE actor to aim at. Wins over lookAtActorLabel"),
+  map: z.string().optional().describe("World asset path to render in (default the level open in the editor)"),
   mapName: z.string().optional().describe("Map to open in the standalone process"),
   matchSubclasses: z.boolean().optional().describe("Match subclasses of actorClass and componentClasses (default true)"),
   materialParameterCollection: z.string().optional().describe("Material Parameter Collection asset a MaterialParameterCollection track animates (required for that track type)"),
@@ -4265,6 +4426,7 @@ export const schema: Record<string, z.ZodType> = {
   orthoZoom: z.number().optional().describe("Orthographic zoom, within the engine's own limits"),
   outerPath: z.string().optional().describe("Only objects somewhere under this outer, such as one level or world"),
   outputDir: z.string().optional().describe("Absolute or project-relative directory for <id>.png and a job-specific JSON manifest (render_mesh_studio). Absolute or project-relative directory for the frames (default Saved/SequenceFrames/<sequence>) (render_sequence_frames)"),
+  outputDirectory: z.string().optional().describe("Output folder; {project_dir} and the other Movie Render Queue tokens are kept as written (default {project_dir}/Saved/MovieRenders/) (mrq_create_job). List the files under this folder instead (mrq_list_outputs)"),
   outputPath: z.string().optional().describe("Absolute or project-relative PNG path to write; required when starting a capture (capture_scene_png). Alias for filename (capture_screenshot)"),
   packagePath: z.string().optional().describe("Destination folder (default /Game/Cinematics)"),
   packages: z.array(z.string()).optional().describe("Long package names to clear, as editor(list_dirty_packages) reports them (e.g. /Engine/Maps/Entry). Only these are touched"),
@@ -4282,6 +4444,7 @@ export const schema: Record<string, z.ZodType> = {
   playRate: z.number().optional().describe("SkeletalAnimation only: clip play rate, above 0 (default 1)"),
   postEditChange: z.boolean().optional().describe("Fire PostEditChangeProperty after the write (default false)"),
   prefix: z.string().optional().describe("Purge sys.modules entries starting with this prefix; must be non-empty"),
+  preset: z.string().optional().describe("MoviePipelinePrimaryConfig asset to copy into the job's configuration"),
   projection: z.string().optional().describe("perspective | top | bottom | left | right | front | back | orthoFreelook. Switched before the pose is applied"),
   propagateToChildren: z.boolean().optional().describe("Also take each matched component's descendants (default true)"),
   propertyName: z.string().optional().describe("Property name; dotted and indexed paths reach component and struct fields"),
@@ -4311,12 +4474,13 @@ export const schema: Record<string, z.ZodType> = {
   seconds: z.number().optional().describe("Playhead position in seconds. Pass exactly one of seconds and frame"),
   section: z.string().optional().describe("Settings section, e.g. Physics, or a combined Engine.Physics"),
   sectionIndex: z.number().int().optional().describe("Section index on the track (default 0) (get_sequence_channel_keys, set_sequence_channel_keys). Index of the section to remove, as get_sequence_info lists them (remove_sequence_section). Target section index (default 0) (set_sequence_keyframes)"),
+  sequence: z.string().optional().describe("Level Sequence asset path to render"),
   sequenceAction: z.string().optional().describe("play (default) | pause | stop"),
   sequencePath: z.string().optional().describe("Level Sequence asset path (add_sequence_section, get_sequence_binding_components, get_sequence_channel_keys, rebind_possessable, remove_sequence_section, resolve_sequence_bindings, set_sequence_channel_keys, set_sequence_display_rate, set_sequence_keyframes, set_sequence_playback_range). Report only actors playing this sequence (get_sequence_runtime_bindings). Level Sequence to open and drive; omit to drive the one already open (play_sequence). Level Sequence to render (render_sequence_frames). Level Sequence to open and scrub; omit to scrub the one already open (scrub_sequence)"),
   severity: z.string().optional().describe("Severity-name substring: Error | Warning | PerformanceWarning | Info (get_message_log). Icon and colour of the toast (default info) (show_notification)"),
   showMouseCursor: z.boolean().optional().describe("Show the mouse cursor (default false for gameOnly, true otherwise)"),
   space: z.string().optional().describe("world (default) | component"),
-  startFrame: z.number().optional().describe("First display frame to render. Not with startSeconds"),
+  startFrame: z.number().optional().describe("First display frame of a custom range (with endFrame) (mrq_create_job). First display frame to render. Not with startSeconds (render_sequence_frames)"),
   startFrameOffset: z.number().int().optional().describe("SkeletalAnimation only: ticks (the sequence's tick resolution, 24000/s by default) trimmed from the clip's start. Half a display frame samples a Step-interpolated clip inside each key"),
   startSeconds: z.number().optional().describe("Section start in seconds (add_sequence_section). Range start in seconds (default the playback range) (render_sequence_frames). Range start in seconds (set_sequence_playback_range)"),
   steps: z.number().int().optional().describe("How many steps to apply (default 1)"),
@@ -4341,11 +4505,12 @@ export const schema: Record<string, z.ZodType> = {
   viewMode: z.string().optional().describe("With buffer=off, the view mode to return to (default Lit) (set_buffer_visualization). Lit | Unlit | Wireframe | LightingOnly | DetailLighting | ShaderComplexity | ... get_viewport_state lists what this build supports (set_view_mode)"),
   viewportIndex: z.number().optional().describe("Level viewport to act on (default the active one)"),
   viewportType: z.string().optional().describe("Perspective | Top | Bottom | Left | Right | Front | Back | OrthoFreelook"),
+  wait: z.boolean().optional().describe("Wait for the render and answer with its outputs, reporting progress (default true); false returns once it starts"),
   waitForAssetRegistry: z.boolean().optional().describe("start only: block until the AssetRegistry initial scan completes, since PIE silently no-ops during it on a cold editor (default true)"),
   waitUntilIdle: z.boolean().optional().describe("Poll between game-thread ticks until shaders are idle; timeoutMs is the server routing budget (default 60000)"),
   warmupFrames: z.number().optional().describe("0 (default) keeps synchronous capture; 1-240 starts a tick-driven normal-streaming capture and returns captureId"),
   warmupTimeoutSeconds: z.number().optional().describe("Warm capture deadline checked between frames and before export, 1-120 seconds (default 60)"),
-  width: z.number().optional().describe("Capture width in pixels (default 1280) (capture_scene_png). Viewport width to read x against, when picking from a screenshot of another resolution (hit_test_viewport_pixel). Frame width in pixels (default 1280) (render_sequence_frames)"),
+  width: z.number().optional().describe("Capture width in pixels (default 1280) (capture_scene_png). Viewport width to read x against, when picking from a screenshot of another resolution (hit_test_viewport_pixel). Output width in pixels (with height) (mrq_create_job). Frame width in pixels (default 1280) (render_sequence_frames)"),
   windowed: z.boolean().optional().describe("Run windowed rather than fullscreen (default true)"),
   windowId: z.number().int().optional().describe("Window to close, by the id list_windows reported (close_window). Describe only this window, by the id list_windows or list_dialogs reported (list_windows). Window to press a button on, by the id list_windows reported (press_window_button)"),
   world: z.string().optional().describe("World scope: editor (default) | pie (capture_scene_png). editor (default) | pie | auto: pie runs it as a PIE player, through that player's console, cheat manager and world (execute_command). World scope: any (default) | editor | pie. A scoped search includes objects outered to that world's GameInstance or LocalPlayers (UMG widgets, LocalPlayer subsystems) (find_object). World scope: editor | pie | auto. Each action names its own default (get_object_properties, get_runtime_value, get_runtime_values, invoke_object_function, invoke_object_functions, pose_debug_camera, read_bone_transforms, restore_runtime_visibility, set_movement_mode, set_object_property, set_pie_paused, set_pie_view_target, set_runtime_visibility, teleport_runtime_actor). auto (default: PIE when running, else editor) | pie | editor (get_sequence_runtime_bindings). editor (default) | pie | auto (invoke_function). editor (default) | pie | game | auto (invoke_static_function)"),
