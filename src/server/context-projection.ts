@@ -70,7 +70,8 @@ interface Built {
 
 /** The enabled graph the server would advertise under `full`: one session's, or the union. */
 export function enabledGraph(rt: Runtime): ToolDef[] {
-  const enabled = (load: SessionLoad): ToolDef[] => load.surface.tools.filter((t) => !load.surface.disabled.has(t.name));
+  // A category whose every action a scope took out is not advertised either.
+  const enabled = (load: SessionLoad): ToolDef[] => load.surface.tools.filter((t) => !load.surface.disabled.has(t.name) && Object.keys(t.actions).length > 0);
   const loads = rt.loads.all();
   if (loads.length <= 1) return enabled(rt.primaryLoad);
   return unionSurface(loads.map((l) => ({ ...l.surface, tools: enabled(l) }))).tools;
