@@ -6693,6 +6693,16 @@
           "suite": "live",
           "file": "tests/live/epic-media.test.ts",
           "test": "returns CaptureAssetImage's thumbnail as media with a urn in its slot"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/epic-successor.test.ts",
+          "test": "answers the same when called with the newer argument name"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/epic-successor.test.ts",
+          "test": "answers with the asset's class when called with the older argument name"
         }
       ]
     },
