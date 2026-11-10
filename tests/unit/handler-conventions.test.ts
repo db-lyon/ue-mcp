@@ -88,7 +88,10 @@ const BASELINE = {
   // MCPSetNoRollback, as every other pie stop does (#1735).
   // 170: epic(call_mcp_tool) runs a tool Epic's MCP plugin registered; like call_tool, the effect is the tool's.
   // 170: epic(ai_assistant_send_message) sends a message UAIAssistantInstance has no call to delete.
-  mutationsWithoutRollback: 175,
+  // 177: editor(mrq_render) writes rendered frames, which nothing deletes, and
+  // editor(mrq_cancel_render) stops a render that cannot be resumed; both say so
+  // through MCPSetNoRollback.
+  mutationsWithoutRollback: 177,
   // Zero, and held there by a flat assertion. Every mutation with no inverse
   // now says so in its own result body with the reason, which is the half a
   // caller can act on.
