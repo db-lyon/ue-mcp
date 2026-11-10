@@ -88,7 +88,9 @@ const BASELINE = {
   // MCPSetNoRollback, as every other pie stop does (#1735).
   // 170: epic(call_mcp_tool) runs a tool Epic's MCP plugin registered; like call_tool, the effect is the tool's.
   // 170: epic(ai_assistant_send_message) sends a message UAIAssistantInstance has no call to delete.
-  mutationsWithoutRollback: 175,
+  // 176: asset(semantic_search_index) adds embeddings to Semantic Search's own index, which has no
+  // call that takes an asset back out (#1829).
+  mutationsWithoutRollback: 176,
   // Zero, and held there by a flat assertion. Every mutation with no inverse
   // now says so in its own result body with the reason, which is the half a
   // caller can act on.

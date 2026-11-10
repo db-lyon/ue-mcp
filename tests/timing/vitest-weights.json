@@ -2,6 +2,7 @@
   "recordedAt": "2026-11-10",
   "source": "seconds per test file, from vitest JSON reports. Refresh with scripts/vitest-weights.mjs.",
   "files": {
+    "tests/integration/agent-guides.test.ts": 20.4,
     "tests/integration/auth.test.ts": 15.3,
     "tests/integration/checkpoints.test.ts": 5.1,
     "tests/integration/cli-basics.test.ts": 26.2,
@@ -20,6 +21,7 @@
     "tests/integration/epic-unreal.test.ts": 43.2,
     "tests/integration/extensions.test.ts": 59.9,
     "tests/integration/feedback.test.ts": 19.4,
+    "tests/integration/field-select.test.ts": 10.2,
     "tests/integration/flow-cli.test.ts": 25.1,
     "tests/integration/flow-http-daemon.test.ts": 6.6,
     "tests/integration/flow-plan-inputs.test.ts": 0.1,
@@ -28,6 +30,7 @@
     "tests/integration/gateway.test.ts": 5,
     "tests/integration/guards.test.ts": 0.2,
     "tests/integration/init-interactive.test.ts": 27.5,
+    "tests/integration/inline-image.test.ts": 5.8,
     "tests/integration/journal.test.ts": 29.7,
     "tests/integration/npx-age-gate.test.ts": 25.5,
     "tests/integration/package-exports.test.ts": 10.8,

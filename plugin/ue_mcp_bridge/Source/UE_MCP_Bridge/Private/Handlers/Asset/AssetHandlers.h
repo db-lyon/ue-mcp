@@ -214,6 +214,13 @@ private:
 	static TSharedPtr<FJsonValue> ReindexAssetsFTS(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> QuickSearch(const TSharedPtr<FJsonObject>& Params);
 
+	// Epic's Semantic Search plugin through its module interface, never linked
+	// (#1829). AssetHandlers_SemanticSearch.cpp.
+	static void RegisterSemanticSearchHandlers(class FMCPHandlerRegistry& Registry);
+	static TSharedPtr<FJsonValue> SemanticSearchStatus(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> SemanticSearchQuery(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> SemanticSearchIndex(const TSharedPtr<FJsonObject>& Params);
+
 	// v0.7.19 issue #150 - AssetRegistry referencers for a set of packages
 	static TSharedPtr<FJsonValue> GetReferencers(const TSharedPtr<FJsonObject>& Params);
 
