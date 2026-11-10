@@ -145,10 +145,18 @@ function readToolsets(raw: unknown): string[] {
 }
 
 /** The toolsets the editor reports right now, or null without a live bridge. */
-async function liveToolsetStates(ctx: ToolContext): Promise<{ states: ToolsetState[] | null; error?: string }> {
+export async function liveToolsetStates(ctx: Pick<ToolContext, "bridge">): Promise<{ states: ToolsetState[] | null; error?: string }> {
   if (!ctx.bridge.isConnected) return { states: null };
   try {
-    return { states: parseToolsetStates(await ctx.bridge.call(GET_TOOLSETS_METHOD, {})) };
+    const answer = await ctx.bridge.call(GET_TOOLSETS_METHOD, {});
+    // The bridge answers a refusal (an engine older than 5.8, a non-Win64
+    // editor, no ToolsetRegistry) rather than throwing it. Read as a listing,
+    // it would report that the editor has no toolsets at all.
+    const body = answer && typeof answer === "object" ? (answer as Record<string, unknown>) : null;
+    if (body?.success === false) {
+      throw new Error(typeof body.error === "string" ? body.error : `${GET_TOOLSETS_METHOD} was refused`);
+    }
+    return { states: parseToolsetStates(answer) };
   } catch (e) {
     // An older bridge without the method still reports which toolsets exist.
     const names = ctx.bridge.epicToolsets ?? null;
