@@ -3061,21 +3061,11 @@ TSharedPtr<FJsonValue> FAssetHandlers::DeleteAsset(const TSharedPtr<FJsonObject>
 		TryCloseAssetEditors(AssetPath, bClosedEditor);
 	}
 
-	// A map that is not open has nothing holding its external packages yet, so
-	// they go first: deleting the map loads it to check its references, and the
-	// actor packages that load touches keep their files open for the rest of the
-	// call. An open map's packages are dealt with after it, as before.
-	const bool bExternalsFirst = bIsMap && ExternalPackages.Num() > 0 && FindPackage(nullptr, *PackageName) == nullptr;
-	MCPMapExternalPackages::FResult External = bExternalsFirst
-		? MCPMapExternalPackages::Delete(PackageName, ExternalPackages)
-		: MCPMapExternalPackages::FResult();
-
 	bool bRemovedOrphanFile = false;
 	const bool bSuccess = MCPDeleteAssetFromDisk(AssetPath, bRemovedOrphanFile);
-	if (bSuccess && !bExternalsFirst)
-	{
-		External = MCPMapExternalPackages::Delete(PackageName, ExternalPackages);
-	}
+	const MCPMapExternalPackages::FResult External = bSuccess
+		? MCPMapExternalPackages::Delete(PackageName, ExternalPackages)
+		: MCPMapExternalPackages::FResult();
 
 	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("path"), AssetPath);

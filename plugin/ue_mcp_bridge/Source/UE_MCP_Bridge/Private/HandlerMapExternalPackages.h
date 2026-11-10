@@ -13,7 +13,6 @@
 #include "HAL/FileManager.h"
 #include "Misc/PackageName.h"
 #include "PackageSourceControlHelper.h"
-#include "UObject/LinkerLoad.h"
 #include "UObject/Package.h"
 #include "UObject/UObjectGlobals.h"
 
@@ -102,14 +101,6 @@ namespace MCPMapExternalPackages
 		if (PackageNames.Num() == 0) return Result;
 
 		const auto IsLoaded = [](const FString& Name) { return FindPackage(nullptr, *Name) != nullptr; };
-		// Deleting the map loads it to check its references, and a package that load
-		// touched keeps its file open through its linker until the loader is reset,
-		// which makes the file delete fail on Windows. Close them before collecting.
-		FlushAsyncLoading();
-		for (const FString& Name : PackageNames)
-		{
-			if (UPackage* Loaded = FindPackage(nullptr, *Name)) ResetLoaders(Loaded);
-		}
 		if (PackageNames.ContainsByPredicate(IsLoaded))
 		{
 			CollectGarbage(GARBAGE_COLLECTION_KEEPFLAGS);
@@ -125,15 +116,6 @@ namespace MCPMapExternalPackages
 		{
 			FPackageSourceControlHelper Helper;
 			Helper.Delete(ToDelete, /*bErrorsAsWarnings*/ true);
-		}
-		// A file still held after the first pass (a package the collection above
-		// released late): collect once more and try those again.
-		TArray<FString> Retry = ToDelete.FilterByPredicate([](const FString& Name) { return FPackageName::DoesPackageExist(Name); });
-		if (Retry.Num() > 0)
-		{
-			CollectGarbage(GARBAGE_COLLECTION_KEEPFLAGS);
-			FPackageSourceControlHelper Helper;
-			Helper.Delete(Retry, /*bErrorsAsWarnings*/ true);
 		}
 		for (const FString& Name : ToDelete)
 		{
