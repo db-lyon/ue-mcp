@@ -56,6 +56,7 @@ const PER_SESSION: Record<string, string> = {
   "bridge/requested-port.ts": "Publishes one project's resolved port pin into that project's own Saved directory.",
   "editor/deployer.ts": "Attaches and deploys the bridge into one project.",
   "integrations/epic/unreal-mcp-server.ts": "Reads and writes Epic's Unreal MCP server settings for the one project it is handed.",
+  "integrations/epic/project-status.ts": "Reports Epic's Unreal MCP server and Unreal Assistant for the one ProjectContext it is handed.",
   "editor/install-marker.ts": "Reads and writes one project's plugin install marker and resolves where that project's plugin lives.",
   "editor/bridge-binaries.ts": "Installs prebuilt binaries into one project's plugin directory.",
   "editor/editor-plugin.ts": "Installs an extension's editor plugin into the one project it is handed.",
@@ -145,6 +146,7 @@ const PER_SESSION: Record<string, string> = {
 /** No editor concept, or one deliberate answer for the whole process. */
 const SESSION_INDEPENDENT: Record<string, string> = {
   "integrations/claude-code/unreal-mcp-entries.ts": "Finds and removes entries in the client config file it is handed. No editor is involved.",
+  "integrations/epic/unreal-assistant.ts": "Edits the Unreal Assistant's per-user AIAssistant.json, which every project on the machine shares. No editor is involved.",
   "editor/module-owner.ts": "Finds the .uplugin that declares a module under the project and engine roots it is handed. No editor is involved.",
   "daemon/extension-install.ts": "Installs an extension into the user's extensions directory. No editor is involved.",
   "daemon/install-names.ts": "The short names install resolves, as data. No editor is involved.",
