@@ -77,6 +77,11 @@
       "summary": "running ue-mcp init a second time is idempotent"
     },
     {
+      "id": "cli.init.agent-guides",
+      "group": "cli",
+      "summary": "init writes a delimited ue-mcp block into AGENTS.md, GEMINI.md or .github/copilot-instructions.md for the clients it configures, keeps the user's own text, reruns unchanged, and removes the block when a client is dropped or --no-agent-guides is passed"
+    },
+    {
       "id": "cli.init.interactive",
       "group": "cli",
       "summary": "ue-mcp init without --yes walks the interactive prompts on a terminal"
@@ -302,6 +307,16 @@
       "summary": "ue-mcp context micro|lean|full writes the strategy into ue-mcp.yml"
     },
     {
+      "id": "cli.tools.list",
+      "group": "cli",
+      "summary": "ue-mcp tools list prints every category, what is on in it (native and epic), and the Unreal toolsets it maps to, with or without an editor"
+    },
+    {
+      "id": "cli.tools.toggle",
+      "group": "cli",
+      "summary": "ue-mcp tools enable|disable <category|toolset> [--native|--epic] writes disable in ue-mcp.yml and the engine setting file with no editor, goes through the daemon when one serves the project, and refuses an engine change while an editor holds the project without answering"
+    },
+    {
       "id": "cli.resolve",
       "group": "cli",
       "summary": "ue-mcp resolve works a GitHub issue into a pull request through gh, git and claude"
@@ -462,6 +477,11 @@
       "summary": "tool calls with no editor running answer with a clear not-connected result instead of hanging"
     },
     {
+      "id": "server.category-toggle",
+      "group": "server",
+      "summary": "project(set_category_enabled) rebuilds the advertised surface without a restart, sends tools/list_changed, and a call to a turned-off action is refused naming the command that turns it back on"
+    },
+    {
       "id": "server.resources",
       "group": "server",
       "summary": "resources/list and resources/read serve the resources registered with Epic's Unreal MCP plugin in the active editor, and list nothing without one"
@@ -470,6 +490,26 @@
       "id": "server.media-content",
       "group": "server",
       "summary": "an image or audio a bridge result carries in media comes back as MCP image or audio content, not base64 inside the JSON text"
+    },
+    {
+      "id": "server.graph-diagram",
+      "group": "server",
+      "summary": "a category's diagram action reads its graph through the bridge and answers with Mermaid text, an SVG file, or a PNG returned as MCP image content"
+    },
+    {
+      "id": "server.field-select",
+      "group": "server",
+      "summary": "select and omit narrow what a category action, a bridge action through the gateway and the flow tool (advertised or through the gateway) answer, with dotted paths through arrays, and never reach the editor"
+    },
+    {
+      "id": "server.inline-image",
+      "group": "server",
+      "summary": "inline on an image-writing action reads the file the editor wrote, scales it to the size asked for and returns it as MCP image content, never sends the key to the editor, and reports a file this machine cannot read"
+    },
+    {
+      "id": "server.skill-prompts",
+      "group": "server",
+      "summary": "prompts/list and prompts/get serve every shipped skill as a prompt, and resources/list and resources/read serve it as a markdown resource at skill://ue-mcp/<name>, with or without an editor"
     },
     {
       "id": "gateway.list_categories",
@@ -555,6 +595,11 @@
       "id": "config.cascade",
       "group": "config",
       "summary": "global config, ue-mcp.yml, the env overlay and ue-mcp.local.yml merge in order"
+    },
+    {
+      "id": "config.native-tools-exclude",
+      "group": "config",
+      "summary": "the deprecated nativeTools.exclude is read as disable: [<category>:epic] with a warning"
     },
     {
       "id": "config.env-overlay",
@@ -705,6 +750,16 @@
       "id": "daemon.sessions-access",
       "group": "daemon",
       "summary": "the daemon lists each MCP session over /v1/sessions and PUT /v1/sessions/<id>/access switches one to read-only, refusing its state-changing calls while another session on the same editor stays writable"
+    },
+    {
+      "id": "daemon.tools",
+      "group": "daemon",
+      "summary": "GET /v1/tools, POST /v1/tools/categories and /v1/tools/toolsets list and switch categories and Unreal toolsets, live through the editor bridge"
+    },
+    {
+      "id": "daemon.leases",
+      "group": "daemon",
+      "summary": "two MCP sessions on one daemon: a lease one holds refuses the other's change naming the holder, a change takes a lease while two sessions share the editor, GET /v1/leases lists them, and they go when the session ends"
     },
     {
       "id": "package.dist-server",

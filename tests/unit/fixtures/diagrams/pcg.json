@@ -1,0 +1,20 @@
+{
+  "success": true,
+  "name": "PCG_Forest",
+  "path": "/Game/PCG/PCG_Forest",
+  "nodes": [
+    { "name": "SurfaceSampler_1", "title": "Surface Sampler", "inputPins": ["Surface", "Bounding Shape"], "outputPins": ["Out"] },
+    { "name": "DensityFilter_1", "title": "Density Filter", "inputPins": ["In"], "outputPins": ["Out"] },
+    { "name": "StaticMeshSpawner_1", "title": "Static Mesh Spawner", "inputPins": ["In"], "outputPins": ["Out"] }
+  ],
+  "nodeCount": 3,
+  "inputNode": { "name": "InputNode", "title": "Input", "inputPins": [], "outputPins": ["In", "Landscape"] },
+  "outputNode": { "name": "OutputNode", "title": "Output", "inputPins": ["Out"], "outputPins": [] },
+  "edges": [
+    { "from": "InputNode", "fromPin": "Landscape", "to": "SurfaceSampler_1", "toPin": "Surface" },
+    { "from": "SurfaceSampler_1", "fromPin": "Out", "to": "DensityFilter_1", "toPin": "In" },
+    { "from": "DensityFilter_1", "fromPin": "Out", "to": "StaticMeshSpawner_1", "toPin": "In" },
+    { "from": "StaticMeshSpawner_1", "fromPin": "Out", "to": "OutputNode", "toPin": "Out" }
+  ],
+  "edgeCount": 4
+}

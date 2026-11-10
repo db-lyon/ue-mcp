@@ -4,6 +4,8 @@ import { actions as epicActions, schema as epicSchema } from "./epic/gameplay.ge
 import { specBp, schema as specSchema } from "./specs/gameplay.generated.js";
 import { specBp as physicsSpecBp, schema as physicsSpecSchema } from "./specs/physics.generated.js";
 import { specBp as massSpecBp, schema as massSpecSchema } from "./specs/mass.generated.js";
+import { behaviorTreeDiagramAction } from "./graph-diagrams.js";
+import { diagramSchema } from "../diagram/action.js";
 
 export const gameplayTool: ToolDef = categoryTool(
   "gameplay",
@@ -114,6 +116,7 @@ export const gameplayTool: ToolDef = categoryTool(
     learning_agents_list_observation_types: specBp("read", "List the Learning Agents observation types (the ULearningAgentsObservations::Specify* functions) with their parameters, types and defaults, read from the engine's own reflection. supportsCrossAttention marks the types that take a QueryElement (cross-attention, added in UE 5.9 to the inclusive union, set, array and map observations); crossAttentionTypes lists them. Needs the Learning Agents plugin.", "learning_agents_list_observation_types"),
     learning_agents_read_observations: specBp("read", "Read the observation schema a Learning Agents interactor Blueprint builds in its SpecifyAgentObservation override: every Specify* node with its nodeId, observation type, input defaults and the nodes feeding each input (Element, QueryElement, ...), and rootNodeId, the observation returned as OutObservationSchemaElement. hasOverride=false when the Blueprint has not overridden it.", "learning_agents_read_observations"),
     learning_agents_add_observation: specBp("mutate", "Add an observation to a Learning Agents interactor Blueprint: a Specify* node in its SpecifyAgentObservation override (created when missing), its Schema input wired to the function's InObservationSchema, settings applied as input defaults by parameter name (validated against the function's signature before anything is added), and its output connected to the return value (connectTo=result) or to an input of another observation node (connectTo=<nodeId>, connectPin=Element / QueryElement / KeyElement ...). Inputs that take maps or arrays of elements (Struct, union and FromArrays variants) are left for blueprint graph actions. Compiles and saves; compiled=false names a Blueprint left with errors. Rolls back through delete_node.", "learning_agents_add_observation"),
+    diagram_behavior_tree: behaviorTreeDiagramAction,
     ...epicActions,
   },
   {
@@ -124,5 +127,6 @@ export const gameplayTool: ToolDef = categoryTool(
     ...physicsSpecSchema,
     ...massSpecSchema,
     ...specSchema,
+    ...diagramSchema({ ...epicSchema, ...physicsSpecSchema, ...massSpecSchema, ...specSchema }),
   },
 );

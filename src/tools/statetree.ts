@@ -2,6 +2,8 @@ import type { ToolDef } from "../core/types.js";
 import { categoryTool } from "../surface/category-tool.js";
 import { actions as epicActions, schema as epicSchema } from "./epic/statetree.generated.js";
 import { specBp, schema as specSchema } from "./specs/statetree.generated.js";
+import { stateTreeDiagramAction } from "./graph-diagrams.js";
+import { diagramSchema } from "../diagram/action.js";
 
 export const statetreeTool: ToolDef = categoryTool(
   "statetree",
@@ -62,6 +64,7 @@ export const statetreeTool: ToolDef = categoryTool(
     list_bindable_properties: specBp("read", "Binding discovery for one bindable struct (structId from list_bindable_sources or read_node's instanceStructId). Without targetPath: every property of it with type, category and current binding. With targetPath: every compatible source in that property's scope, exact matches before numeric promotions (exactOnly drops promotions; maxDepth limits descent into value structs). UE 5.7 and later.", "list_state_tree_bindable_properties"),
     check_binding:          specBp("read", "Check a proposed binding without writing it: resolve the target (and the source, when given) against the structs' current values, report each end's type, whether the source is in the target's scope, the compatibility (compatible, promotable, incompatible), canBind and the reasons. Omit the source to only resolve a path. UE 5.7 and later.", "check_state_tree_binding"),
     promote_to_parameter:   specBp("mutate", "Promote to Parameter: create a parameter with the target property's type and current value, on the given state (the target's state or an ancestor, not linked) or on the tree parameters when no state is given, and bind the target to it. The name defaults to the property name and is made unique. UE 5.7 and later.", "promote_state_tree_property_to_parameter"),
+    diagram: stateTreeDiagramAction,
     ...epicActions,
   },
   {
@@ -70,5 +73,6 @@ export const statetreeTool: ToolDef = categoryTool(
     // registration. Every statetree bridge action is spec'd, so no key is
     // declared again by hand.
     ...specSchema,
+    ...diagramSchema({ ...epicSchema, ...specSchema }),
   },
 );

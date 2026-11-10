@@ -3,6 +3,8 @@ import type { ToolDef } from "../core/types.js";
 import { categoryTool } from "../surface/category-tool.js";
 import { actions as epicActions, schema as epicSchema } from "./epic/animation.generated.js";
 import { specBp, schema as specSchema } from "./specs/animation.generated.js";
+import { animationDiagramAction } from "./graph-diagrams.js";
+import { diagramSchema } from "../diagram/action.js";
 
 export const animationTool: ToolDef = categoryTool(
   "animation",
@@ -143,6 +145,7 @@ export const animationTool: ToolDef = categoryTool(
     measure_natural_speed: specBp("read", "Measure a locomotion clip's planted-foot speed, in cm/s, by evaluating the pose and tracking the lowest foot's horizontal travel while it is in contact. Every retarget changes natural speed by the target skeleton's leg-length ratio, so a BlendSpace built on retargeted clips has to re-measure per clip per character (#923). Returns naturalSpeed, plantedDistance, plantedTime, contactThreshold, per-foot breakdown.", "measure_natural_speed"),
     preview_animation: specBp("mutate", "Toggle bUpdateAnimationInEditor + VisibilityBasedAnimTickOption=AlwaysTickPoseAndRefreshBones on every SkeletalMeshComponent of an actor. Bypasses the 'cannot be edited on templates' guard for level instances (#419/#420).", "preview_animation"),
     set_live_post_process_anim_blueprint: specBp("mutate", "Set or clear a transient post-process AnimBP override on one live SkeletalMeshComponent in the editor world or PIE. Pass the AnimBlueprintGeneratedClass object path (for example /Game/Animations/ABP_Name.ABP_Name_C), not the AnimBlueprint asset path; pass clear=true to remove the component override and fall back to the skeletal mesh asset setting. Incompatible skeletons and the component's main AnimBP class are refused before mutation. Reads back the override, effective class, and live post-process instance. Repeating the active override is a no-op. This never edits or saves a mesh, Blueprint, or component template.", "set_live_post_process_anim_blueprint"),
+    diagram: animationDiagramAction,
     ...epicActions,
   },
   {
@@ -150,6 +153,9 @@ export const animationTool: ToolDef = categoryTool(
     // #1057: every key a spec'd handler declares, generated from its C++
     // registration. The keys below add a bound the registration cannot state.
     ...specSchema,
+    ...diagramSchema({ ...epicSchema, ...specSchema }),
+    graphKind: z.string().optional().describe("diagram: state_machine | anim_graph | control_rig (default state_machine with stateMachineName, else anim_graph)"),
+    conditions: z.boolean().optional().describe("diagram: label state machine transitions with their rule (default true)"),
     loopCount: z.number().int().min(1).optional().describe("add_montage_segment: how many times the segment repeats (default 1)"),
     insertIndex: z.number().int().min(0).optional().describe("add_montage_segment: position within the slot's segment list (default: append)"),
     bindingTag: z.string().min(1).optional().describe("Stable Control Rig edit-session natural key used by begin/read/apply/bake."),

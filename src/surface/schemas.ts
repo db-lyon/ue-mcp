@@ -24,9 +24,9 @@ export const UeMcpConfigSchema = z
   .object({
     contentRoots: z.array(z.string()).optional(),
     disable: z.array(z.string()).optional(),
-    // Native (UE 5.8+ ToolsetRegistry) tool surfacing. Enabled by default;
-    // `exclude` names ue-mcp categories that should NOT be enriched with Epic
-    // tools (they stay reachable via the `epic` gateway). See scripts/generate-epic-actions.mjs.
+    // Native (UE 5.8+ ToolsetRegistry) tool surfacing. Enabled by default.
+    // `exclude` is deprecated for one release: it is read as `disable:
+    // [<category>:epic]` with a warning (see category-state.ts).
     nativeTools: z
       .object({
         enabled: z.boolean().optional(),
@@ -75,6 +75,17 @@ export const UeMcpConfigSchema = z
     locking: z
       .object({
         enabled: z.boolean().optional(),
+        ttlSeconds: z.number().int().min(1).optional(),
+      })
+      .optional(),
+    // Asset leases for agents sharing one editor through the daemon. `auto`
+    // (default) honours project(acquire_lease) and, while more than one MCP
+    // session is connected, has each change take a lease on the paths it
+    // names; `on` does that for one session too; `off` checks nothing.
+    // `ttlSeconds` is how long a lease lasts (default 600). See dispatch/leases.ts.
+    leases: z
+      .object({
+        mode: z.enum(["auto", "on", "off"]).optional(),
         ttlSeconds: z.number().int().min(1).optional(),
       })
       .optional(),

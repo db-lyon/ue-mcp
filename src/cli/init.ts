@@ -12,6 +12,7 @@ import { detectMcpClients, isProjectScopedClient, ueMcpServerArgs } from "../int
 import { describeUnrealMcpEntry, findUnrealMcpEntries, type UnrealMcpEntry } from "../integrations/claude-code/unreal-mcp-entries.js";
 import { takeEditorTarget, EditorFlagError } from "./editor-flag.js";
 import { findUProject } from "../config/uproject-path.js";
+import { readCategoryState } from "../surface/category-state.js";
 import {
   CATEGORIES,
   ENRICHABLE_CATEGORIES,
@@ -105,6 +106,7 @@ export function choicesFromFlags(argv: string[], projectPath: string): InitChoic
     feedbackMode: feedbackMode as FeedbackMode | undefined,
     promptHook: flagBool(argv, "hook"),
     skills: flagBool(argv, "skills"),
+    agentGuides: flagBool(argv, "agent-guides"),
     install: install as InitChoices["install"],
     binaries: flagValue(argv, "--binaries") ?? null,
     // The machine path pins by default, so the server and bridge move together.
@@ -256,7 +258,8 @@ async function init(argv: string[]): Promise<number | void> {
   }], "Pass --yes with --native-tools or --no-native-tools."))[0];
   let nativeExclude: string[] = [];
   if (nativeEnabled) {
-    const existingExclude = new Set(existingNative.exclude ?? []);
+    // Both spellings: disable: [<category>:epic], and the deprecated nativeTools.exclude.
+    const existingExclude = readCategoryState(project.config).epic;
     const offer = ENRICHABLE_CATEGORIES.filter((c) => !disabled.includes(c));
     const includeStates = await checkboxSelect(
       "Include native tools in these categories (uncheck to skip)",
@@ -464,6 +467,7 @@ export const usage: CliUsage = {
     { name: "--feedback-mode", value: "<interactive|auto-approve|defer>", description: "Feedback approval mode for this project" },
     ...toggle("hook", "Install the feedback nudge hook"),
     ...toggle("skills", "Install the bundled Claude Code skills"),
+    ...toggle("agent-guides", "Write the ue-mcp block into AGENTS.md, GEMINI.md or .github/copilot-instructions.md for the clients configured"),
     ...toggle("native-tools", "Wrap native Epic tools"),
     ...toggle("pin", "Pin the client config to this exact version"),
     ...toggle("unreal-mcp-autostart", "Start Epic's Unreal MCP server with this project's editor (UE 5.8+)"),

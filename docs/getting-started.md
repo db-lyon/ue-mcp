@@ -31,6 +31,8 @@ The wizard:
 6. Asks about **agent behavior**. Everything starts unchecked on a fresh install:
     - Enable the `feedback(submit)` tool.
     - With Claude Code selected: install a PostToolUse hook that nudges the agent to offer feedback after `execute_python`, and install the bundled Claude Code skills into `.claude/skills/`.
+
+    For Cursor, Codex, Gemini CLI and VS Code it also writes the ue-mcp block into the instruction file that client reads. See [Agent guides and skills for every client](#agent-guides-and-skills-for-every-client).
 7. Installs the C++ bridge plugin into `<YourProject>/Plugins/UE_MCP_Bridge/`. With a C++ toolchain on the machine it copies the source; without one it installs prebuilt binaries for your engine and platform. A plugin that is already there is adopted as it is, and source is never written over a binary install. `Plugins/UE_MCP_Bridge/.ue-mcp-install.json` records which kind it is.
 8. Enables `UE_MCP_Bridge` and `PythonScriptPlugin` in your `.uproject`, plus `Niagara`, `PCG`, `EnhancedInput` or `GameplayAbilities` for the categories you kept.
 9. Creates `ue-mcp.yml` if it is missing, writes your choices into it, and adds `ue-mcp.local.yml` to `.gitignore`.
@@ -55,7 +57,8 @@ npx ue-mcp init --yes --json --project=C:/Games/MyGame/MyGame.uproject --clients
 | `--disable=<categories>` | Tool categories to turn off. |
 | `--context=micro\|lean\|full` | Context strategy. |
 | `--[no-]feedback`, `--feedback-mode=<mode>`, `--[no-]hook`, `--[no-]skills` | Agent behavior. `--feedback-mode` stores `interactive`, `auto-approve` or `defer` for this project. |
-| `--[no-]native-tools`, `--native-exclude=<categories>` | Native Unreal tools. |
+| `--[no-]agent-guides` | Write the ue-mcp block into `AGENTS.md`, `GEMINI.md` or `.github/copilot-instructions.md` for the clients configured (default on). `--no-agent-guides` removes every block init wrote. |
+| `--[no-]native-tools`, `--native-exclude=<categories>` | Native Unreal tools. Excluded categories are written as `disable: [<category>:epic]`. |
 | `--[no-]pin` | Pin client configs to `ue-mcp@<this version>`. On by default with `--yes`, so the server and bridge move together; off by default in the wizard. |
 | `--command=<path>` | Use this instead of `npx` in client configs. |
 | `--[no-]unreal-mcp-autostart`, `--unreal-mcp-port=<port>` | Whether Epic's Unreal MCP server starts with this project's editor, and its port. |
@@ -63,6 +66,23 @@ npx ue-mcp init --yes --json --project=C:/Games/MyGame/MyGame.uproject --clients
 | `--dry-run` | Print the plan and change nothing. |
 
 Unset flags keep the project's current choices. The exit code is 0 on success, 1 on failure, 2 on bad arguments.
+
+### Agent guides and skills for every client
+
+Claude Code loads the skills `init` copies into `.claude/skills/`. Other clients read a project instruction file instead, so `init` writes a short ue-mcp block into the one each configured client reads:
+
+| Client | File |
+|---|---|
+| Cursor, Codex (global or project) | `AGENTS.md` |
+| Gemini CLI | `GEMINI.md` |
+| VS Code | `.github/copilot-instructions.md` |
+
+The block sits between `<!-- ue-mcp:begin ... -->` and `<!-- ue-mcp:end -->` and says how to start (`project(get_status)`), how to find and call an action, and which workflow guides the server serves. Everything outside the markers is yours and is never changed; an existing file gets the block appended after a blank line, in the file's own line endings. A rerun replaces the block whole, so it reports `unchanged` when nothing moved. Dropping a client from `--clients` removes its block, and `--no-agent-guides` removes them all; a file that held only the block is deleted. `--json` reports each as a `guide:<file>` step.
+
+The same guides are served by the server itself, to any client, editor or not:
+
+- **Prompts.** `prompts/list` names one prompt per shipped skill (`ue-mcp-workflow`, `ue-mcp-blueprint` and the rest); `prompts/get` returns the guide as a user message.
+- **Resources.** `resources/list` lists each as `skill://ue-mcp/<name>` (`text/markdown`) ahead of the editor's own resources, and `resources/read` returns the SKILL.md.
 
 ### Replacing an Unreal MCP entry
 
