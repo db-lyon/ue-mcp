@@ -121,4 +121,15 @@ private:
 	static TSharedPtr<FJsonValue> ReadRuntime(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SendEvent(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> RequestTransition(const TSharedPtr<FJsonObject>& Params);
+
+	// Node authoring by ID and binding introspection, the parts of the UE 5.9
+	// StateTree scripting surface that had no route. All in
+	// StateTreeHandlers_NodesAndBindings.cpp.
+	static TSharedPtr<FJsonValue> MoveNode(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> ReadNode(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> SetNodeFlags(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> SetNodeData(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> ListBindableProperties(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> CheckBinding(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> PromoteToParameter(const TSharedPtr<FJsonObject>& Params);
 };
