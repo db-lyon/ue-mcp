@@ -1,5 +1,5 @@
 {
-  "handlerCount": 1264,
+  "handlerCount": 1265,
   "handlers": {
     "actors_in_box": {
       "category": "level",
@@ -5619,6 +5619,89 @@
           "aliases": [
             "path"
           ]
+        }
+      ]
+    },
+    "audit_level_performance": {
+      "category": "level",
+      "params": [
+        {
+          "name": "world",
+          "type": "string",
+          "required": false,
+          "description": "World scope: editor (default) | pie"
+        },
+        {
+          "name": "pieInstance",
+          "type": "integer",
+          "required": false,
+          "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients"
+        },
+        {
+          "name": "regionMin",
+          "type": "vec3",
+          "required": false,
+          "description": "Audit only primitives and lights whose bounds meet this box; minimum corner, world space"
+        },
+        {
+          "name": "regionMax",
+          "type": "vec3",
+          "required": false,
+          "description": "Maximum corner of the box; pass with regionMin"
+        },
+        {
+          "name": "gridSize",
+          "type": "number",
+          "required": false,
+          "description": "Side of the X/Y cells regions are reported in, in cm (default 5000, min 100)"
+        },
+        {
+          "name": "maxResults",
+          "type": "integer",
+          "required": false,
+          "description": "Rows per list (default 20, max 200); totals cover everything"
+        },
+        {
+          "name": "instancingMinCount",
+          "type": "integer",
+          "required": false,
+          "description": "Separate components of one mesh before it is an instancing candidate (default 10)"
+        },
+        {
+          "name": "heavyTriangleThreshold",
+          "type": "number",
+          "required": false,
+          "description": "LOD0 triangles at which a non-Nanite static mesh is a Nanite candidate (default 50000)"
+        },
+        {
+          "name": "outlierFactor",
+          "type": "number",
+          "required": false,
+          "description": "How many times above or below the median a texel or lightmap density must be to be an outlier (default 4)"
+        },
+        {
+          "name": "translucentAreaM2",
+          "type": "number",
+          "required": false,
+          "description": "Largest bounds face, in square metres, at which a translucent primitive is an overdraw candidate (default 100)"
+        },
+        {
+          "name": "stackedTranslucentCount",
+          "type": "integer",
+          "required": false,
+          "description": "Overlapping translucent primitives, itself included, that make a stack (default 3)"
+        },
+        {
+          "name": "dumpToFile",
+          "type": "boolean",
+          "required": false,
+          "description": "Write every row to a JSON file and return the totals with its path (default false)"
+        },
+        {
+          "name": "outputPath",
+          "type": "string",
+          "required": false,
+          "description": "File for dumpToFile; relative paths resolve under Saved/ (default Saved/UE_MCP/PerfAudit/<world>_<time>.json)"
         }
       ]
     },

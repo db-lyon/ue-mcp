@@ -81,6 +81,9 @@ private:
 	static TSharedPtr<FJsonValue> GetActorsByComponentClass(const TSharedPtr<FJsonObject>& Params);
 	// Aggregate loaded static-mesh usage in one bounded, read-only world scan.
 	static TSharedPtr<FJsonValue> SummarizeStaticMeshUsage(const TSharedPtr<FJsonObject>& Params);
+	// Read-only scene performance audit over the loaded level or a box.
+	// LevelHandlers_PerfAudit.cpp.
+	static TSharedPtr<FJsonValue> AuditLevelPerformance(const TSharedPtr<FJsonObject>& Params);
 	// v0.7.19 issue #146 - actor class histogram (counts by class name)
 	static TSharedPtr<FJsonValue> CountActorsByClass(const TSharedPtr<FJsonObject>& Params);
 	// v0.7.19 issue #150 - RuntimeVirtualTextureVolume / component summary
