@@ -2,7 +2,7 @@
 
 This page lists ue-mcp's own category tools and actions. For the official Unreal tools (UE 5.8+) that ue-mcp wraps (surfaced inside these same categories), see [Native Tools](native-tools.md).
 
-UE-MCP exposes **<!-- count:tools -->30<!-- /count --> category tools** covering **<!-- count:actions -->3532+<!-- /count --> actions**, plus a `flow` tool for running multi-step YAML workflows. Every category tool takes an `action` parameter that selects the operation and an `args` object holding that action's parameters: `level(action="place_actor", args={actorClass: "PointLight"})`. Under the default `micro` [context strategy](configuration.md#context-strategy-full-lean-micro) the same call goes through the gateway: `tools(action="call", category="level", method="place_actor", args={...})`.
+UE-MCP exposes **<!-- count:tools -->30<!-- /count --> category tools** covering **<!-- count:actions -->3535+<!-- /count --> actions**, plus a `flow` tool for running multi-step YAML workflows. Every category tool takes an `action` parameter that selects the operation and an `args` object holding that action's parameters: `level(action="place_actor", args={actorClass: "PointLight"})`. Under the default `micro` [context strategy](configuration.md#context-strategy-full-lean-micro) the same call goes through the gateway: `tools(action="call", category="level", method="place_actor", args={...})`.
 
 !!! tip "First call in any session"
     Start with `project(action="get_status")` to check the connection, then `level(action="get_outliner")` or `asset(action="list")` to explore.
@@ -159,6 +159,9 @@ The press actions (`respond_to_dialog`, `press_window_button`, `close_window`) a
 | `read_config(configName)` | Read INI config. Params: `configName (e.g. 'Engine', 'Game')` |
 | `search_config(query)` | Search INI files. Params: `query` |
 | `list_config_tags()` | Extract gameplay tags from config. Params: `none` |
+| `resolve_setting(configName, key, section, platform?)` | Final value of one ini key as the editor reads it, through Unreal's whole config hierarchy (engine Base.ini, Base<Category>.ini, the engine platform file, the project's Default<Category>.ini and platform file, then Saved/Config/<Platform>Editor), with +, -, ., ! array operations applied. Returns value (a string, a list for an array key, null when unset), setBy (layer, file, line, text) and the layers read. No editor needed. Params: `configName (category, e.g. 'Engine', 'Game', 'Input'), section, key, platform? (default this machine's: Windows, Mac or Linux)` |
+| `explain_setting(configName, key, section, platform?)` | Every config layer that touches one ini key, lowest first, with the lines it applies (+, -, ., ! array operations included) and the value after each, then the final value. The layers are resolve_setting's. No editor needed. Params: `configName (category, e.g. 'Engine'), section, key, platform?` |
+| `diff_config_from_default(configName, includeUser?:b, platform?)` | The ini keys the project changes from the engine's defaults for one category: every key whose final value through the project (and, by default, the per-user Saved) layers differs from the value the engine layers alone give. Each change has section, key, engineValue, value and setBy. No editor needed. Params: `configName (category, e.g. 'Engine'), platform?, includeUser? (default true: include Saved/Config/<Platform>Editor)` |
 | `read_cpp_header(headerPath)` | Parse a .h file. Params: `headerPath` |
 | `read_module(moduleName)` | Read module source. Params: `moduleName` |
 | `list_modules()` | List C++ modules. Params: `none` |
