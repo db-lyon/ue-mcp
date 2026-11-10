@@ -432,9 +432,9 @@ Run `npx ue-mcp <command> --help` for a command's flags.
 
 | Command | Description |
 |---------|-------------|
-| `npx ue-mcp init` | Setup wizard. Installs the bridge, writes MCP client configs and `ue-mcp.yml`, optionally installs Claude Code skills and the feedback hook. `--yes` / `--json` run it from flags. See [Getting Started](getting-started.md#1-installation). |
+| `npx ue-mcp init` | Setup wizard. Installs the bridge, writes MCP client configs and `ue-mcp.yml`, optionally installs Claude Code skills and the feedback hook, can turn off Epic's Unreal MCP server auto-start (UE 5.8+), and can attach ue-mcp to the Unreal Assistant (UE 5.9+). `--yes` / `--json` run it from flags. See [Getting Started](getting-started.md#1-installation). |
 | `npx ue-mcp update` | Update the package, deploy the plugin source and rebuild the editor target. Skips the build while the editor runs and records it as owed. `--no-build` stops after the deploy, `--no-deploy` updates the package only. A binary install gets verified binaries instead. `--apply-only` installs this package's own bridge into the project and stops. |
-| `npx ue-mcp doctor [--fix]` | Report every version source and install problem. `--fix` removes client entries that point at a project which no longer exists or has no bridge, and adds `--min-release-age=0` to npx launches. |
+| `npx ue-mcp doctor [--fix]` | Report every version source and install problem, and Epic's Unreal MCP server and Unreal Assistant for a UE 5.8+ project. `--fix` removes client entries that point at a project which no longer exists or has no bridge, and adds `--min-release-age=0` to npx launches. |
 | `npx ue-mcp status [--json]` | The project's install and editor state, read-only. |
 | `npx ue-mcp deploy` | Copy the bridge plugin source into the project and refresh installed skills. |
 | `npx ue-mcp build` | Build the project's editor target with UnrealBuildTool. Stop the editor first. |

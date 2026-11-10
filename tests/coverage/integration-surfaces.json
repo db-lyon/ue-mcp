@@ -42,6 +42,16 @@
       "summary": "ue-mcp init finds an Unreal MCP entry (the editor's HTTP server or its stdio proxy) in a client config, selects that client, replaces the entry with ue-mcp, keeps every other server, saves the file first and says what it replaced, with and without prompts; for a source-build engine it does the same in the engine root, where the editor writes those configs, and never touches an installed engine"
     },
     {
+      "id": "cli.init.unreal-mcp",
+      "group": "cli",
+      "summary": "ue-mcp init --[no-]unreal-mcp-autostart and --unreal-mcp-port write Epic's Unreal MCP server settings to the project's EditorPerProjectUserSettings.ini section, keep the rest of the file, change nothing on a repeat, refuse the bridge's own port, and only warn on an engine without the server"
+    },
+    {
+      "id": "cli.init.unreal-assistant",
+      "group": "cli",
+      "summary": "ue-mcp init --unreal-assistant adds ue-mcp to mcp_servers in the per-user AIAssistant.json the Unreal Assistant reads (beside the editor's own server when the file had no list), merging with existing content and saving it first; a repeat changes nothing, --no-unreal-assistant removes only ue-mcp, and an engine-level file that shadows it is reported"
+    },
+    {
       "id": "cli.init.json",
       "group": "cli",
       "summary": "ue-mcp init --json prints one machine-readable result on stdout and nothing else"
@@ -115,6 +125,11 @@
       "id": "cli.doctor.fix",
       "group": "cli",
       "summary": "ue-mcp doctor --fix removes client config entries that point at missing projects"
+    },
+    {
+      "id": "cli.doctor.unreal-mcp",
+      "group": "cli",
+      "summary": "ue-mcp doctor reports Epic's Unreal MCP server for the project (plugin enabled in the .uproject, auto-start from the project user ini over the engine Base ini, port and URL), notes when it runs beside ue-mcp, and reports whether ue-mcp is attached to the Unreal Assistant"
     },
     {
       "id": "cli.doctor.age-gate",
@@ -360,6 +375,11 @@
       "id": "cli.plugin.usage",
       "group": "cli",
       "summary": "ue-mcp plugin with no or an unknown subcommand prints usage and fails"
+    },
+    {
+      "id": "server.status.unreal-mcp",
+      "group": "server",
+      "summary": "project(get_status) carries unrealMcpServer (URL, where auto-start and port came from) while Epic's Unreal MCP server is set to start with the project's editor, and leaves it out otherwise"
     },
     {
       "id": "server.startup.micro.in-process",

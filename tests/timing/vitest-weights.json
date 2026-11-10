@@ -1,5 +1,5 @@
 {
-  "recordedAt": "2026-11-08",
+  "recordedAt": "2026-11-10",
   "source": "seconds per test file, from vitest JSON reports. Refresh with scripts/vitest-weights.mjs.",
   "files": {
     "tests/integration/auth.test.ts": 15.3,
@@ -17,6 +17,7 @@
     "tests/integration/daemon-sessions.test.ts": 7.1,
     "tests/integration/dialog-mode.test.ts": 9.9,
     "tests/integration/editor-resources.test.ts": 2.8,
+    "tests/integration/epic-unreal.test.ts": 43.2,
     "tests/integration/extensions.test.ts": 59.9,
     "tests/integration/feedback.test.ts": 19.4,
     "tests/integration/flow-cli.test.ts": 25.1,
@@ -26,7 +27,7 @@
     "tests/integration/flows.test.ts": 0.3,
     "tests/integration/gateway.test.ts": 5,
     "tests/integration/guards.test.ts": 0.2,
-    "tests/integration/init-interactive.test.ts": 17.4,
+    "tests/integration/init-interactive.test.ts": 27.5,
     "tests/integration/journal.test.ts": 29.7,
     "tests/integration/npx-age-gate.test.ts": 25.5,
     "tests/integration/package-exports.test.ts": 10.8,
