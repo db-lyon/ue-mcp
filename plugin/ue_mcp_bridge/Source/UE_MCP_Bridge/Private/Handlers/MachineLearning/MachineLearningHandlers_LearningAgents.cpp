@@ -347,19 +347,20 @@ TSharedPtr<FJsonValue> FMachineLearningHandlers::LearningAgentsAddObservation(co
 	TArray<TPair<FString, FString>> PinValues;
 	if (bHasSettings)
 	{
-		for (const TPair<FString, TSharedPtr<FJsonValue>>& Entry : (*Settings)->Values)
+		for (const auto& Entry : (*Settings)->Values)
 		{
-			const FProperty* Prop = Function->FindPropertyByName(FName(*Entry.Key));
-			if (!Prop || !LAIsInputParam(Prop) || Entry.Key == TEXT("Schema"))
+			const FString Key(Entry.Key);
+			const FProperty* Prop = Function->FindPropertyByName(FName(*Key));
+			if (!Prop || !LAIsInputParam(Prop) || Key == TEXT("Schema"))
 			{
 				TArray<FString> Names;
 				for (TFieldIterator<FProperty> It(Function); It && It->HasAnyPropertyFlags(CPF_Parm); ++It)
 				{
 					if (LAIsInputParam(*It) && It->GetName() != TEXT("Schema")) Names.Add(It->GetName());
 				}
-				return MCPError(FString::Printf(TEXT("'%s' is not an input of %s. Inputs: %s."), *Entry.Key, *Function->GetName(), *FString::Join(Names, TEXT(", "))));
+				return MCPError(FString::Printf(TEXT("'%s' is not an input of %s. Inputs: %s."), *Key, *Function->GetName(), *FString::Join(Names, TEXT(", "))));
 			}
-			PinValues.Emplace(Entry.Key, LAJsonToPinText(Entry.Value));
+			PinValues.Emplace(Key, LAJsonToPinText(Entry.Value));
 		}
 	}
 	const bool bToResult = ConnectTo.Equals(TEXT("result"), ESearchCase::IgnoreCase);
