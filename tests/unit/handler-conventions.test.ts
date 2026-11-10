@@ -98,7 +98,10 @@ const BASELINE = {
   // level(repair_world_partition_errors) saves and moves actors, which the engine documents as not
   // undoable; level(replace_actors_with_class, replace_actors_with_asset) delete the replaced actors;
   // editor(log_map_check_message) adds a Message Log entry no call removes (#1828).
-  mutationsWithoutRollback: 187,
+  // 188: landscape(apply_splines) writes the splines' deformation into the
+  // landscape's heights and weights, which it does not read back first; it says
+  // so through MCPSetNoRollback, as merge_edit_layers does.
+  mutationsWithoutRollback: 188,
   // Zero, and held there by a flat assertion. Every mutation with no inverse
   // now says so in its own result body with the reason, which is the half a
   // caller can act on.

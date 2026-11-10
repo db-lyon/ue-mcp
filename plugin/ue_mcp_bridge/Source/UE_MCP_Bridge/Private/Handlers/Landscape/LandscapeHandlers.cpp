@@ -1,4 +1,5 @@
 #include "LandscapeHandlers.h"
+#include "LandscapeHandlers_Splines.h"
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
 #include "HandlerPagination.h"
@@ -688,6 +689,9 @@ void FLandscapeHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		SpecActorLabel, SpecActorPath,
 		MCPParam::Optional(TEXT("updateNow"), EType::Boolean, TEXT("Run the merge now rather than on the next editor tick (default true)")),
 	});
+
+	// Spline authoring, in LandscapeHandlers_Splines.cpp.
+	FLandscapeSplineHandlers::RegisterHandlers(Registry);
 }
 
 TSharedPtr<FJsonValue> FLandscapeHandlers::GetLandscapeInfo(const TSharedPtr<FJsonObject>& Params)
@@ -1099,34 +1103,16 @@ TSharedPtr<FJsonValue> FLandscapeHandlers::ListLandscapeSplines(const TSharedPtr
 {
 	REQUIRE_EDITOR_WORLD(World);
 
+	// Landscape actors, streaming proxies and World Partition spline actors.
 	TArray<TSharedPtr<FJsonValue>> SplineArray;
-
-	for (TActorIterator<ALandscapeProxy> It(World); It; ++It)
-	{
-		ALandscapeProxy* Landscape = *It;
-		if (!Landscape) continue;
-
-		ULandscapeSplinesComponent* SplinesComp = Landscape->GetSplinesComponent();
-		if (!SplinesComp) continue;
-
-		const TArray<TObjectPtr<ULandscapeSplineControlPoint>>& ControlPoints = SplinesComp->GetControlPoints();
-		for (const TObjectPtr<ULandscapeSplineControlPoint>& CP : ControlPoints)
-		{
-			if (!CP) continue;
-
-			TSharedPtr<FJsonObject> PointObj = MakeShared<FJsonObject>();
-			FVector Location = CP->Location;
-			PointObj->SetNumberField(TEXT("x"), Location.X);
-			PointObj->SetNumberField(TEXT("y"), Location.Y);
-			PointObj->SetNumberField(TEXT("z"), Location.Z);
-			PointObj->SetStringField(TEXT("landscapeName"), Landscape->GetName());
-			SplineArray.Add(MakeShared<FJsonValueObject>(PointObj));
-		}
-	}
+	TArray<TSharedPtr<FJsonValue>> SegmentArray;
+	MCPLandscapeSplines::DescribeAll(World, SplineArray, SegmentArray);
 
 	auto Result = MCPSuccess();
 	Result->SetArrayField(TEXT("controlPoints"), SplineArray);
 	Result->SetNumberField(TEXT("count"), SplineArray.Num());
+	Result->SetArrayField(TEXT("segments"), SegmentArray);
+	Result->SetNumberField(TEXT("segmentCount"), SegmentArray.Num());
 	return MCPResult(Result);
 }
 
