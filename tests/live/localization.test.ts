@@ -7,9 +7,11 @@
  * their own, so the manifest and LocRes they write are read back off disk.
  */
 import * as fs from "node:fs";
+import * as path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { callBridge, disconnectBridge, getBridge, type TestResult } from "../setup.js";
 import type { EditorBridge } from "../../src/bridge/bridge.js";
+import { TEST_PROJECT_DIR } from "../../scripts/bridge-target.mjs";
 
 const DIR = "/Game/MCPTest/Loc";
 const ST = `${DIR}/ST_MCPTestLoc`;
@@ -32,6 +34,11 @@ const succeeded = (r: TestResult): boolean => r.ok && body(r).success !== false;
 
 let bridge: EditorBridge;
 
+// Adding and removing a target saves ULocalizationSettings into the tracked
+// DefaultEditor.ini; the file is put back byte for byte afterwards.
+const EDITOR_INI = path.join(TEST_PROJECT_DIR, "Config", "DefaultEditor.ini");
+let editorIniBefore: string | null = null;
+
 async function call(method: string, params: Json): Promise<Json> {
   const r = await callBridge(bridge, method, params);
   expect(succeeded(r), `${method}: ${r.error ?? JSON.stringify(r.result)}`).toBe(true);
@@ -52,6 +59,7 @@ async function target(): Promise<TargetState | undefined> {
 }
 
 beforeAll(async () => {
+  editorIniBefore = fs.existsSync(EDITOR_INI) ? fs.readFileSync(EDITOR_INI, "utf8") : null;
   bridge = await getBridge();
   await callBridge(bridge, "remove_localization_target", { target: TARGET, deleteFiles: true });
   await callBridge(bridge, "delete_asset", { assetPath: WBP, force: true });
@@ -69,6 +77,8 @@ afterAll(async () => {
     await callBridge(bridge, "delete_asset", { assetPath: ST, force: true });
     disconnectBridge();
   }
+  if (editorIniBefore === null) fs.rmSync(EDITOR_INI, { force: true });
+  else if (fs.readFileSync(EDITOR_INI, "utf8") !== editorIniBefore) fs.writeFileSync(EDITOR_INI, editorIniBefore);
 });
 
 describe("localization", () => {
