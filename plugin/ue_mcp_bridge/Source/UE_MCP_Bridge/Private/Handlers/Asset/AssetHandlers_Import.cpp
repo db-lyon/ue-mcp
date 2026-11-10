@@ -3471,6 +3471,18 @@ TSharedPtr<FJsonValue> FAssetHandlers::FillDataTableFromJson(const TSharedPtr<FJ
 
 namespace
 {
+	/** Every metadata entry on one string table key, as { id: value }. */
+	TSharedPtr<FJsonObject> StringTableEntryMetaData(const UStringTable* StringTable, const FTextKey& Key)
+	{
+		TSharedPtr<FJsonObject> MetaData = MakeShared<FJsonObject>();
+		StringTable->GetStringTable()->EnumerateMetaData(Key, [&MetaData](FName MetaDataId, const FString& Value)
+		{
+			MetaData->SetStringField(MetaDataId.ToString(), Value);
+			return true;
+		});
+		return MetaData;
+	}
+
 	int32 AppendStringTableEntries(
 		const UStringTable* StringTable,
 		const FString& KeyFilter,
@@ -3502,6 +3514,7 @@ namespace
 					TSharedPtr<FJsonObject> Entry = MakeShared<FJsonObject>();
 					Entry->SetStringField(TEXT("key"), KeyString);
 					Entry->SetStringField(TEXT("sourceString"), SourceString);
+					Entry->SetObjectField(TEXT("metadata"), StringTableEntryMetaData(StringTable, Key));
 					OutEntries.Add(MakeShared<FJsonValueObject>(Entry));
 				}
 				return true;
@@ -3660,6 +3673,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::GetStringTableEntry(const TSharedPtr<FJso
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetStringField(TEXT("key"), Key);
 	Result->SetStringField(TEXT("sourceString"), SourceString);
+	Result->SetObjectField(TEXT("metadata"), StringTableEntryMetaData(StringTable, FTextKey(Key)));
 	return MCPResult(Result);
 }
 
@@ -3767,6 +3781,139 @@ TSharedPtr<FJsonValue> FAssetHandlers::RemoveStringTableEntry(const TSharedPtr<F
 	Payload->SetStringField(TEXT("sourceString"), PreviousSourceString);
 	MCPSetRollback(Result, TEXT("set_stringtable_entry"), Payload);
 
+	return MCPResult(Result);
+}
+
+TSharedPtr<FJsonValue> FAssetHandlers::SetStringTableEntryMetaData(const TSharedPtr<FJsonObject>& Params)
+{
+	FString Key;
+	const TSharedPtr<FJsonValue> MissingKey = RequireString(Params, TEXT("key"), Key);
+	FString MetaDataId;
+	const TSharedPtr<FJsonValue> MissingId = RequireString(Params, TEXT("metaDataId"), MetaDataId);
+	FString Value;
+	const bool bHasValue = TryGetStringParam(Params, TEXT("metaDataValue"), Value);
+	FString AssetPath;
+	UStringTable* StringTable = nullptr;
+	if (auto Err = MCPImportLoadTypedAsset(Params, TEXT("StringTable"), AssetPath, StringTable)) return Err;
+	if (MissingKey) return MissingKey;
+	if (MissingId) return MissingId;
+	if (!bHasValue)
+	{
+		return MCPError(TEXT("Missing required parameter 'metaDataValue'"));
+	}
+
+	const FTextKey EntryKey(Key);
+	FString SourceString;
+	if (!StringTable->GetStringTable()->GetSourceString(EntryKey, SourceString))
+	{
+		return MCPError(FString::Printf(TEXT("StringTable entry not found: %s. Create it with set_stringtable_entry first."), *Key));
+	}
+
+	const FName Id(*MetaDataId);
+	bool bHadValue = false;
+	FString Previous;
+	StringTable->GetStringTable()->EnumerateMetaData(EntryKey, [&](FName ExistingId, const FString& ExistingValue)
+	{
+		if (ExistingId == Id)
+		{
+			bHadValue = true;
+			Previous = ExistingValue;
+			return false;
+		}
+		return true;
+	});
+
+	auto Result = MCPSuccess();
+	Result->SetStringField(TEXT("assetPath"), AssetPath);
+	Result->SetStringField(TEXT("key"), Key);
+	Result->SetStringField(TEXT("metaDataId"), MetaDataId);
+	Result->SetStringField(TEXT("metaDataValue"), Value);
+	if (bHadValue && Previous.Equals(Value, ESearchCase::CaseSensitive))
+	{
+		MCPSetExisted(Result);
+		Result->SetBoolField(TEXT("unchanged"), true);
+		Result->SetObjectField(TEXT("metadata"), StringTableEntryMetaData(StringTable, EntryKey));
+		return MCPResult(Result);
+	}
+
+	StringTable->Modify(true);
+	StringTable->GetMutableStringTable()->SetMetaData(EntryKey, Id, Value);
+	FString SaveReason;
+	const bool bSaved = SaveAssetPackageChecked(StringTable, SaveReason);
+
+	if (bHadValue) MCPSetUpdated(Result); else MCPSetCreated(Result);
+	MCPNoteSaveOutcome(Result, StringTable->GetPathName(), bSaved, SaveReason);
+	Result->SetObjectField(TEXT("metadata"), StringTableEntryMetaData(StringTable, EntryKey));
+
+	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+	Payload->SetStringField(TEXT("assetPath"), AssetPath);
+	Payload->SetStringField(TEXT("key"), Key);
+	Payload->SetStringField(TEXT("metaDataId"), MetaDataId);
+	if (bHadValue)
+	{
+		Payload->SetStringField(TEXT("metaDataValue"), Previous);
+		Result->SetStringField(TEXT("previousMetaDataValue"), Previous);
+		MCPSetRollback(Result, TEXT("set_stringtable_entry_metadata"), Payload);
+	}
+	else
+	{
+		MCPSetRollback(Result, TEXT("remove_stringtable_entry_metadata"), Payload);
+	}
+	return MCPResult(Result);
+}
+
+TSharedPtr<FJsonValue> FAssetHandlers::RemoveStringTableEntryMetaData(const TSharedPtr<FJsonObject>& Params)
+{
+	FString Key;
+	const TSharedPtr<FJsonValue> MissingKey = RequireString(Params, TEXT("key"), Key);
+	FString MetaDataId;
+	const TSharedPtr<FJsonValue> MissingId = RequireString(Params, TEXT("metaDataId"), MetaDataId);
+	FString AssetPath;
+	UStringTable* StringTable = nullptr;
+	if (auto Err = MCPImportLoadTypedAsset(Params, TEXT("StringTable"), AssetPath, StringTable)) return Err;
+	if (MissingKey) return MissingKey;
+	if (MissingId) return MissingId;
+
+	const FTextKey EntryKey(Key);
+	const FName Id(*MetaDataId);
+	bool bHadValue = false;
+	FString Previous;
+	StringTable->GetStringTable()->EnumerateMetaData(EntryKey, [&](FName ExistingId, const FString& ExistingValue)
+	{
+		if (ExistingId == Id)
+		{
+			bHadValue = true;
+			Previous = ExistingValue;
+			return false;
+		}
+		return true;
+	});
+
+	auto Result = MCPSuccess();
+	Result->SetStringField(TEXT("assetPath"), AssetPath);
+	Result->SetStringField(TEXT("key"), Key);
+	Result->SetStringField(TEXT("metaDataId"), MetaDataId);
+	if (!bHadValue)
+	{
+		Result->SetBoolField(TEXT("alreadyRemoved"), true);
+		return MCPResult(Result);
+	}
+
+	StringTable->Modify(true);
+	StringTable->GetMutableStringTable()->RemoveMetaData(EntryKey, Id);
+	FString SaveReason;
+	const bool bSaved = SaveAssetPackageChecked(StringTable, SaveReason);
+
+	Result->SetBoolField(TEXT("deleted"), true);
+	MCPNoteSaveOutcome(Result, StringTable->GetPathName(), bSaved, SaveReason);
+	Result->SetObjectField(TEXT("metadata"), StringTableEntryMetaData(StringTable, EntryKey));
+
+	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+	Payload->SetStringField(TEXT("assetPath"), AssetPath);
+	Payload->SetStringField(TEXT("key"), Key);
+	Payload->SetStringField(TEXT("metaDataId"), MetaDataId);
+	Payload->SetStringField(TEXT("metaDataValue"), Previous);
+	MCPSetRollback(Result, TEXT("set_stringtable_entry_metadata"), Payload);
 	return MCPResult(Result);
 }
 

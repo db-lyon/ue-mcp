@@ -1,5 +1,5 @@
 {
-  "handlerCount": 1269,
+  "handlerCount": 1271,
   "handlers": {
     "actors_in_box": {
       "category": "level",
@@ -33356,6 +33356,32 @@
         }
       ]
     },
+    "remove_stringtable_entry_metadata": {
+      "category": "asset",
+      "params": [
+        {
+          "name": "assetPath",
+          "type": "string",
+          "required": true,
+          "description": "StringTable asset path",
+          "aliases": [
+            "path"
+          ]
+        },
+        {
+          "name": "key",
+          "type": "string",
+          "required": true,
+          "description": "Entry key"
+        },
+        {
+          "name": "metaDataId",
+          "type": "string",
+          "required": true,
+          "description": "Metadata id to remove"
+        }
+      ]
+    },
     "remove_timeline": {
       "category": "blueprint",
       "params": [
@@ -43508,6 +43534,38 @@
           "type": "any",
           "required": false,
           "description": "Source string to write, when sourceString is omitted"
+        }
+      ]
+    },
+    "set_stringtable_entry_metadata": {
+      "category": "asset",
+      "params": [
+        {
+          "name": "assetPath",
+          "type": "string",
+          "required": true,
+          "description": "StringTable asset path",
+          "aliases": [
+            "path"
+          ]
+        },
+        {
+          "name": "key",
+          "type": "string",
+          "required": true,
+          "description": "Entry key"
+        },
+        {
+          "name": "metaDataId",
+          "type": "string",
+          "required": true,
+          "description": "Metadata id, e.g. Comment"
+        },
+        {
+          "name": "metaDataValue",
+          "type": "string",
+          "required": true,
+          "description": "Metadata value to store"
         }
       ]
     },

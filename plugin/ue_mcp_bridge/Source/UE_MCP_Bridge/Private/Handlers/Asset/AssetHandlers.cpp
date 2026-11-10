@@ -1016,6 +1016,17 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StringTable asset path")).Alias(TEXT("path")),
 		MCPParam::Required(TEXT("key"), EType::String, TEXT("Entry key")),
 	});
+	Registry.RegisterHandler(TEXT("set_stringtable_entry_metadata"), &SetStringTableEntryMetaData, {
+		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StringTable asset path")).Alias(TEXT("path")),
+		MCPParam::Required(TEXT("key"), EType::String, TEXT("Entry key")),
+		MCPParam::Required(TEXT("metaDataId"), EType::String, TEXT("Metadata id, e.g. Comment")),
+		MCPParam::Required(TEXT("metaDataValue"), EType::String, TEXT("Metadata value to store")),
+	});
+	Registry.RegisterHandler(TEXT("remove_stringtable_entry_metadata"), &RemoveStringTableEntryMetaData, {
+		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StringTable asset path")).Alias(TEXT("path")),
+		MCPParam::Required(TEXT("key"), EType::String, TEXT("Entry key")),
+		MCPParam::Required(TEXT("metaDataId"), EType::String, TEXT("Metadata id to remove")),
+	});
 	Registry.RegisterHandler(TEXT("import_stringtable"), &ImportStringTable, {
 		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StringTable asset path")).Alias(TEXT("path")),
 		MCPParam::Required(TEXT("filePath"), EType::String, TEXT("CSV file to merge into the table")).Alias(TEXT("filename")).Alias(TEXT("csvPath")),

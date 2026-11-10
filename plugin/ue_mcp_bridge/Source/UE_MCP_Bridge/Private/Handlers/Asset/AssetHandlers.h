@@ -176,6 +176,8 @@ private:
 	static TSharedPtr<FJsonValue> GetStringTableEntry(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SetStringTableEntry(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> RemoveStringTableEntry(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> SetStringTableEntryMetaData(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> RemoveStringTableEntryMetaData(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> ImportStringTable(const TSharedPtr<FJsonObject>& Params);
 	// CSV import with key-set validation and an explicit save result (#978).
 	static TSharedPtr<FJsonValue> ImportStringTableCsv(const TSharedPtr<FJsonObject>& Params);
