@@ -1,5 +1,5 @@
 {
-  "handlerCount": 1261,
+  "handlerCount": 1268,
   "handlers": {
     "actors_in_box": {
       "category": "level",
@@ -8145,6 +8145,41 @@
           "type": "number",
           "required": false,
           "description": "PIE world instance (0 = server/primary); omit for the primary world"
+        }
+      ]
+    },
+    "check_state_tree_binding": {
+      "category": "statetree",
+      "params": [
+        {
+          "name": "assetPath",
+          "type": "string",
+          "required": true,
+          "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+        },
+        {
+          "name": "targetStructId",
+          "type": "string",
+          "required": true,
+          "description": "Target struct GUID"
+        },
+        {
+          "name": "targetPath",
+          "type": "string",
+          "required": false,
+          "description": "Target property path"
+        },
+        {
+          "name": "sourceStructId",
+          "type": "string",
+          "required": false,
+          "description": "Source struct GUID. Omit to resolve the target alone"
+        },
+        {
+          "name": "sourcePath",
+          "type": "string",
+          "required": false,
+          "description": "Source property path"
         }
       ]
     },
@@ -23179,6 +23214,41 @@
         }
       ]
     },
+    "list_state_tree_bindable_properties": {
+      "category": "statetree",
+      "params": [
+        {
+          "name": "assetPath",
+          "type": "string",
+          "required": true,
+          "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+        },
+        {
+          "name": "structId",
+          "type": "string",
+          "required": true,
+          "description": "Bindable struct GUID, as list_bindable_sources reports it"
+        },
+        {
+          "name": "targetPath",
+          "type": "string",
+          "required": false,
+          "description": "A property of that struct: list the compatible sources in its scope instead of the struct's properties"
+        },
+        {
+          "name": "exactOnly",
+          "type": "boolean",
+          "required": false,
+          "description": "With targetPath: leave out sources that need a numeric promotion"
+        },
+        {
+          "name": "maxDepth",
+          "type": "integer",
+          "required": false,
+          "description": "How deep to descend into value structs: 1 is top level only, 0 is unlimited (default 3)"
+        }
+      ]
+    },
     "list_state_tree_bindable_sources": {
       "category": "statetree",
       "params": [
@@ -25106,6 +25176,29 @@
           "type": "string",
           "required": true,
           "description": "Content folder to move it to"
+        }
+      ]
+    },
+    "move_state_tree_node": {
+      "category": "statetree",
+      "params": [
+        {
+          "name": "assetPath",
+          "type": "string",
+          "required": true,
+          "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+        },
+        {
+          "name": "nodeId",
+          "type": "string",
+          "required": true,
+          "description": "GUID of the task, condition, consideration, evaluator or global task, as the add_* actions return it"
+        },
+        {
+          "name": "newIndex",
+          "type": "integer",
+          "required": true,
+          "description": "Position the node ends up at within the list it is in, 0-based"
         }
       ]
     },
@@ -28534,6 +28627,47 @@
         }
       ]
     },
+    "promote_state_tree_property_to_parameter": {
+      "category": "statetree",
+      "params": [
+        {
+          "name": "assetPath",
+          "type": "string",
+          "required": true,
+          "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+        },
+        {
+          "name": "targetStructId",
+          "type": "string",
+          "required": true,
+          "description": "Struct GUID of the property to promote"
+        },
+        {
+          "name": "targetPath",
+          "type": "string",
+          "required": true,
+          "description": "Property path to promote"
+        },
+        {
+          "name": "parameterName",
+          "type": "string",
+          "required": false,
+          "description": "Name for the new parameter (default: the property name, made unique)"
+        },
+        {
+          "name": "stateId",
+          "type": "string",
+          "required": false,
+          "description": "State to hold the parameter: the target's state or an ancestor. Omit both for a tree parameter"
+        },
+        {
+          "name": "statePath",
+          "type": "string",
+          "required": false,
+          "description": "Dot-path of that state, as an alternative to stateId"
+        }
+      ]
+    },
     "purge_python_modules": {
       "category": "editor",
       "params": [
@@ -30634,6 +30768,23 @@
           "type": "string",
           "required": true,
           "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+        }
+      ]
+    },
+    "read_state_tree_node": {
+      "category": "statetree",
+      "params": [
+        {
+          "name": "assetPath",
+          "type": "string",
+          "required": true,
+          "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+        },
+        {
+          "name": "nodeId",
+          "type": "string",
+          "required": true,
+          "description": "GUID of any node in the tree, as the add_* actions return it"
         }
       ]
     },
@@ -42882,6 +43033,76 @@
           "type": "string",
           "required": true,
           "description": "The Blueprint class this node runs, as a class path or a loaded class name"
+        }
+      ]
+    },
+    "set_state_tree_node_data": {
+      "category": "statetree",
+      "params": [
+        {
+          "name": "assetPath",
+          "type": "string",
+          "required": true,
+          "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+        },
+        {
+          "name": "nodeId",
+          "type": "string",
+          "required": true,
+          "description": "GUID of the node, as the add_* actions return it"
+        },
+        {
+          "name": "target",
+          "type": "string",
+          "required": false,
+          "description": "node (the node struct), instance (default) or executionRuntime"
+        },
+        {
+          "name": "propertyName",
+          "type": "string",
+          "required": false,
+          "description": "Property to write. Omit to replace the whole struct with value"
+        },
+        {
+          "name": "value",
+          "type": "string",
+          "required": true,
+          "description": "Value in Unreal text format, e.g. 2.5, true, (X=1,Y=2)"
+        }
+      ]
+    },
+    "set_state_tree_node_flags": {
+      "category": "statetree",
+      "params": [
+        {
+          "name": "assetPath",
+          "type": "string",
+          "required": true,
+          "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+        },
+        {
+          "name": "nodeId",
+          "type": "string",
+          "required": true,
+          "description": "GUID of the node, as the add_* actions return it"
+        },
+        {
+          "name": "taskEnabled",
+          "type": "boolean",
+          "required": false,
+          "description": "Tasks: enable or disable the task"
+        },
+        {
+          "name": "consideredForCompletion",
+          "type": "boolean",
+          "required": false,
+          "description": "Tasks: whether the task counts toward the state completing. The task must be enabled and allow the edit"
+        },
+        {
+          "name": "evaluationMode",
+          "type": "string",
+          "required": false,
+          "description": "Conditions: Evaluated, ForcedTrue or ForcedFalse"
         }
       ]
     },
