@@ -45,7 +45,20 @@ import {
   sourceBuildConfigRoot,
   type UnrealMcpEntry,
 } from "../integrations/claude-code/unreal-mcp-entries.js";
-import { engineLookupFor, resolveEngineRoot } from "../editor/engine-root.js";
+import { protectedEngineRoots } from "../editor/engine-root.js";
+import {
+  writeUnrealMcpServerSettings,
+  type UnrealMcpServerChange,
+  type UnrealMcpServerStatus,
+} from "../integrations/epic/unreal-mcp-server.js";
+import {
+  attachUnrealAssistant,
+  detachUnrealAssistant,
+  editorServerDescriptor,
+  ueMcpAssistantDescriptor,
+  type UnrealAssistantStatus,
+} from "../integrations/epic/unreal-assistant.js";
+import { epicIntegrations, projectEngineRoot, type EpicIntegrations } from "../integrations/epic/project-status.js";
 import { packageVersion } from "../core/package-root.js";
 import { warn as logWarn } from "../core/log.js";
 import { readEnv } from "../core/env.js";
@@ -152,6 +165,12 @@ export interface InitChoices {
   pin?: boolean;
   /** Replaces npx in written client configs. */
   command?: string | null;
+  /** Whether Epic's Unreal MCP server auto-starts for this project. Unset keeps its setting. */
+  unrealMcpAutoStart?: boolean;
+  /** The port Epic's Unreal MCP server listens on for this project. Unset keeps it. */
+  unrealMcpPort?: number;
+  /** true attaches ue-mcp to Epic's Unreal Assistant, false detaches it, unset leaves it as it is. */
+  unrealAssistant?: boolean;
 }
 
 /** The bridge port a project uses, and what decided it. */
@@ -213,8 +232,17 @@ export interface PlannedClient {
  * which writes into the project directory.
  */
 export function engineConfigRoot(project: ProjectContext): string | null {
-  const engineRoot = resolveEngineRoot(engineLookupFor(project.projectPath, project.engineAssociation, project.config.editor));
-  return sourceBuildConfigRoot(engineRoot, project.projectDir!);
+  return sourceBuildConfigRoot(projectEngineRoot(project), project.projectDir!);
+}
+
+/** Epic's Unreal MCP server and Unreal Assistant for a project, counting the bridge port init gives it. */
+export function projectEpicIntegrations(project: ProjectContext, engineRoot?: string | null): EpicIntegrations {
+  return epicIntegrations(project, bridgePort(project).port, engineRoot === undefined ? projectEngineRoot(project) : engineRoot);
+}
+
+function insideDir(child: string, dir: string): boolean {
+  const rel = path.relative(path.resolve(dir), path.resolve(child));
+  return rel === "" || (!rel.startsWith("..") && !path.isAbsolute(rel));
 }
 
 /** Client configs in the engine root that hold Unreal MCP entries, by client name. */
@@ -267,6 +295,15 @@ export interface InitPlan {
   engineConfigRoot: string | null;
   /** The GitHub account feedback issues author as, from `ue-mcp auth`; null when not signed in. */
   feedbackAuth: { login: string | null };
+  /**
+   * Epic's Unreal MCP server for this project, and what apply() writes to its
+   * per-user settings (`change` is empty when nothing). Null when the engine has none.
+   */
+  unrealMcp: (UnrealMcpServerStatus & { change: UnrealMcpServerChange }) | null;
+  /** Epic's Unreal Assistant, and whether apply() attaches ue-mcp to it, detaches it, or leaves it. */
+  unrealAssistant: UnrealAssistantStatus & { action: "attach" | "detach" | "keep" };
+  /** Requests about Epic's server or assistant that this project's engine cannot honour; apply() reports them. */
+  epicNotes: string[];
 }
 
 function readUpluginVersion(pluginDir: string): string | null {
@@ -358,7 +395,8 @@ export function plan(choices: InitChoices, hooks: ProbeHooks = DEFAULT_PROBE_HOO
     if (!detected.some((c) => c.name === name)) blockers.push(`unknown client '${name}' (known: ${Object.keys(CLIENT_IDS).join(", ")})`);
   }
   const configured = detected.filter((c) => readUeMcpEntry(c).configured).map((c) => c.name);
-  const configRoot = engineConfigRoot(project);
+  const engineRoot = projectEngineRoot(project);
+  const configRoot = sourceBuildConfigRoot(engineRoot, projectDir);
   const atEngineRoot = engineRootReplacements(configRoot);
   const clients: PlannedClient[] = detected.map((c) => {
     const replaces = findUnrealMcpEntries(c);
@@ -384,6 +422,41 @@ export function plan(choices: InitChoices, hooks: ProbeHooks = DEFAULT_PROBE_HOO
   const hookInstalled = new Set(getInstalledHooks(projectDir).map((p) => path.resolve(p))).has(path.resolve(settingsPath));
   const promptHook = claudeCode && feedback && (choices.promptHook ?? hookInstalled);
   const skills = claudeCode && (choices.skills ?? coreSkillsInstalled(projectDir));
+
+  // Epic's own MCP server and assistant. A request the engine cannot honour is
+  // a note at apply time, not a blocker, so one script can init any project.
+  const epic = projectEpicIntegrations(project, engineRoot);
+  const bridge = bridgePort(project);
+  const epicNotes: string[] = [];
+  if (choices.unrealMcpPort !== undefined) {
+    const port = choices.unrealMcpPort;
+    if (!Number.isInteger(port) || port < 1 || port > 65535) blockers.push(`--unreal-mcp-port must be a port from 1 to 65535, not '${port}'`);
+    else if (port === bridge.port) blockers.push(`--unreal-mcp-port ${port} is the ue-mcp bridge port for this project`);
+  }
+  let unrealMcp: InitPlan["unrealMcp"] = null;
+  if (epic.unrealMcp) {
+    const change: UnrealMcpServerChange = {};
+    if (choices.unrealMcpAutoStart !== undefined && choices.unrealMcpAutoStart !== epic.unrealMcp.autoStart) change.autoStart = choices.unrealMcpAutoStart;
+    if (choices.unrealMcpPort !== undefined && choices.unrealMcpPort !== epic.unrealMcp.port) change.port = choices.unrealMcpPort;
+    unrealMcp = { ...epic.unrealMcp, change };
+  } else if (choices.unrealMcpAutoStart !== undefined || choices.unrealMcpPort !== undefined) {
+    epicNotes.push(`${project.projectName}'s engine has no Unreal MCP server (UE 5.8 and later), so its settings were left alone.`);
+  }
+  const assistant = epic.unrealAssistant;
+  let assistantAction: InitPlan["unrealAssistant"]["action"] = "keep";
+  if (choices.unrealAssistant === true) {
+    if (assistant.available) assistantAction = "attach";
+    else epicNotes.push(`Epic's Unreal Assistant was not attached: ${assistant.reason}.`);
+  } else if (choices.unrealAssistant === false && assistant.attached) {
+    assistantAction = "detach";
+  }
+  if (assistantAction === "attach" && assistant.invalid) {
+    blockers.push(`${assistant.configPath} is not a JSON object, which the Unreal Assistant ignores too; fix or remove it before attaching ue-mcp`);
+  }
+  if (assistantAction !== "keep" && assistant.configPath) {
+    const denied = protectedEngineRoots().find((root) => insideDir(assistant.configPath!, root));
+    if (denied) blockers.push(`${assistant.configPath} is inside the protected engine root ${denied}`);
+  }
 
   return {
     version,
@@ -418,9 +491,12 @@ export function plan(choices: InitChoices, hooks: ProbeHooks = DEFAULT_PROBE_HOO
     blockers,
     categories: CATEGORIES.filter((c) => !c.alwaysOn).map(({ name, label, description, requiredPlugins }) => ({ name, label, description, requiredPlugins })),
     nativeCategories: ENRICHABLE_CATEGORIES,
-    bridge: bridgePort(project),
+    bridge,
     engineConfigRoot: configRoot,
     feedbackAuth: { login: readUserAuthSync()?.login ?? null },
+    unrealMcp,
+    unrealAssistant: { ...assistant, action: assistantAction },
+    epicNotes,
   };
 }
 
@@ -715,6 +791,45 @@ export async function apply(p: InitPlan): Promise<InitResult> {
         status: before === p.feedbackMode.set ? "unchanged" : "changed",
         target: projectDir,
         detail: `feedback mode ${p.feedbackMode.set}`,
+      });
+    }
+
+    // 8. Epic's Unreal MCP server: its per-user settings for this project.
+    warnings.push(...p.epicNotes);
+    const mcp = p.unrealMcp;
+    if (mcp && (mcp.change.autoStart !== undefined || mcp.change.port !== undefined)) {
+      const changed = writeUnrealMcpServerSettings(mcp, mcp.change);
+      const what = [
+        mcp.change.autoStart !== undefined ? `auto-start ${mcp.change.autoStart ? "on" : "off"}` : null,
+        mcp.change.port !== undefined ? `port ${mcp.change.port}` : null,
+      ].filter(Boolean).join(", ");
+      steps.push({ id: "unreal-mcp", status: changed ? "changed" : "unchanged", target: mcp.userIni, detail: `Epic's Unreal MCP server: ${what}` });
+      if (changed) warnings.push("Epic's Unreal MCP server reads its settings when the editor starts, so restart an editor open on this project.");
+    }
+
+    // 9. Epic's Unreal Assistant: ue-mcp in the MCP server list of its per-user config.
+    const ua = p.unrealAssistant;
+    if (ua.action === "attach" && ua.configPath) {
+      // Stands in for the default a list would turn off, at the port this run leaves it on.
+      const editor = mcp?.pluginEnabled ? editorServerDescriptor(`http://127.0.0.1:${mcp.change.port ?? mcp.port}${mcp.urlPath}`) : null;
+      const r = attachUnrealAssistant(ua.configPath, ueMcpAssistantDescriptor(uproject, p.launch), editor);
+      steps.push({
+        id: "unreal-assistant",
+        status: r.changed ? "changed" : "unchanged",
+        target: ua.configPath,
+        detail: `ue-mcp in Epic's Unreal Assistant MCP servers${r.backup ? `; the previous file is saved as ${r.backup}` : ""}`,
+      });
+      if (ua.shadowedBy) warnings.push(`The Unreal Assistant reads ${ua.shadowedBy} first and ignores ${ua.configPath}; add the ue-mcp entry there, or remove that file.`);
+      if (ua.attachedProject && path.resolve(ua.attachedProject) !== path.resolve(uproject)) {
+        warnings.push(`${ua.configPath} is per user, not per project: its ue-mcp entry served ${ua.attachedProject} and now serves ${uproject}.`);
+      }
+    } else if (ua.action === "detach" && ua.configPath) {
+      const r = detachUnrealAssistant(ua.configPath);
+      steps.push({
+        id: "unreal-assistant",
+        status: r.changed ? "removed" : "unchanged",
+        target: ua.configPath,
+        detail: `ue-mcp removed from Epic's Unreal Assistant MCP servers${r.backup ? `; the previous file is saved as ${r.backup}` : ""}`,
       });
     }
 

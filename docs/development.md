@@ -3,7 +3,7 @@
 ## Prerequisites
 
 - [Node.js](https://nodejs.org/) 20 or newer
-- Unreal Engine 5.4 to 5.8, for building the plugin and live testing
+- Unreal Engine <!-- count:engineRange -->5.4 to 5.9<!-- /count -->, for building the plugin and live testing
 
 ## Setup
 

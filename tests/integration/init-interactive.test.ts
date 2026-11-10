@@ -10,6 +10,8 @@ import { covers } from "../helpers/covers.js";
 import { ENTRY, plain, runCli, Sandbox, snapshotTree, TSX } from "./harness.js";
 import { fakeSigning } from "./feedback-fakes.js";
 import { UNREAL_CLIENT_FIXTURES, UNREAL_URL } from "../helpers/unreal-mcp-fixtures.js";
+import { UNREAL_MCP_SECTION, userIniPath } from "../../src/integrations/epic/unreal-mcp-server.js";
+import { userSettingsDir } from "../../src/integrations/epic/unreal-assistant.js";
 
 type Pty = typeof import("node-pty");
 let pty: Pty | null = null;
@@ -169,6 +171,46 @@ describe("interactive init over a source build's engine root", () => {
     const servers = JSON.parse(fs.readFileSync(config, "utf8")).mcpServers as Record<string, unknown>;
     expect(Object.keys(servers).sort()).toEqual(["my-existing-server", "ue-mcp"]);
     expect(fs.readFileSync(`${config}.ue-mcp-backup`, "utf8")).toBe(gemini.content);
+  });
+});
+
+describe("interactive init on UE 5.9 with Epic's server and assistant", () => {
+  it.runIf(pty !== null || process.env.CI !== undefined)("asks about both, and writes the auto-start and the attachment as answered", async () => {
+    covers("cli.init.unreal-mcp", "cli.init.unreal-assistant");
+    // An installed 5.9 as these files see it: both plugins and the Base ini that turns auto-start on.
+    const root = sb.path("AskedEngine59");
+    for (const name of ["ModelContextProtocol", "AIAssistant"]) {
+      const dir = path.join(root, "Engine", "Plugins", "Experimental", name);
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(path.join(dir, `${name}.uplugin`), "{}");
+    }
+    fs.mkdirSync(path.join(root, "Engine", "Source"), { recursive: true });
+    fs.mkdirSync(path.join(root, "Engine", "Build"), { recursive: true });
+    fs.writeFileSync(path.join(root, "Engine", "Build", "InstalledBuild.txt"), "");
+    fs.mkdirSync(path.join(root, "Engine", "Config"), { recursive: true });
+    fs.writeFileSync(path.join(root, "Engine", "Config", "BaseEditorPerProjectUserSettings.ini"), `[${UNREAL_MCP_SECTION}]\nbAutoStartServer=True\n`);
+    const uproject = sb.makeProject("AskedEpic", { engine: "5.9" });
+    const projectDir = path.dirname(uproject);
+    fs.mkdirSync(path.join(sb.home, ".claude"), { recursive: true });
+
+    const r = await runInTerminal(["init", uproject, "--install", "source"], projectDir, [
+      { prompt: "Tool categories", keys: [ENTER] },
+      { prompt: "Native Unreal tools", keys: [ENTER] },
+      { prompt: "Include native tools in these categories", keys: [ENTER] },
+      { prompt: "Context strategy", keys: [ENTER] },
+      { prompt: "Configure MCP clients", keys: [ENTER] },
+      // Auto-start is first and checked; space clears it. The assistant is second and unchecked.
+      { prompt: "Epic's Unreal MCP server and Unreal Assistant", keys: [SPACE, DOWN, SPACE, ENTER] },
+      { prompt: "Agent behavior", keys: [ENTER] },
+    ], { UE_MCP_TEST_ENGINE_ROOT: root });
+
+    expect(r.code, r.output).toBe(0);
+    expect(r.output).toContain("Start Epic's Unreal MCP server with the editor");
+    expect(fs.readFileSync(userIniPath(projectDir), "utf8")).toBe(`[${UNREAL_MCP_SECTION}]\nbAutoStartServer=False\n`);
+    const assistant = path.join(userSettingsDir(sb.env()), "UnrealEngine", "Common", "AIAssistant.json");
+    const servers = (JSON.parse(fs.readFileSync(assistant, "utf8")).mcp_servers as Array<{ name: string }>).map((s) => s.name);
+    expect(servers).toEqual(["unreal-mcp", "ue-mcp"]);
+    fs.rmSync(assistant);
   });
 });
 

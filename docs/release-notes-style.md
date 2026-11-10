@@ -39,7 +39,7 @@ npx ue-mcp@latest
 259 new actions across 16 categories.
 ~~~
 
-**The engine range is 5.4 to 5.8.** State it. Do not annotate it with which
+**The engine range is <!-- count:engineRange -->5.4 to 5.9<!-- /count -->.** State it. Do not annotate it with which
 versions have been compiled, verified, gated or built. Someone on 5.5 who hits
 a problem files an issue.
 
