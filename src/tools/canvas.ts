@@ -189,7 +189,7 @@ export const canvasTool: ToolDef = categoryTool(
       width: z.number().int().optional(),
       height: z.number().int().optional(),
       matchAspect: z.boolean().optional(),
-    }).optional().describe("Output size: preset, a 16:9 tier, or custom width/height. matchAspect (default true) follows the render camera's aspect"),
+    }).optional().describe("Output size: preset, a 16:9 size (1080p, 1440p, 2160p), or custom width/height. matchAspect (default true) follows the render camera's aspect"),
     cameraSource: z.object({
       mode: z.enum(["viewport", "sequence", "actor"]).optional(),
       actorId: z.string().optional(),
