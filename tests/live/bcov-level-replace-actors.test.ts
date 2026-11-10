@@ -42,7 +42,8 @@ async function cube(label: string, location: Vec): Promise<void> {
   await call("place_actor", { actorClass: "/Script/Engine.StaticMeshActor", label, staticMesh: CUBE, location });
 }
 
-const exists = async (label: string) => succeeded(await callBridge(bridge, "get_actor_details", { actorLabel: label }));
+/** The class of the actor a label or path now names. The engine's replace gives each new actor the old one's label and object name. */
+const classAt = async (sel: Json) => String((await call("get_actor_details", sel)).class);
 
 beforeAll(async () => {
   bridge = await getBridge();
@@ -76,8 +77,8 @@ describe("replacing actors", () => {
       created.push(String(light.actorPath));
     }
     expect(out.rollbackPossible).toBe(false);
-    expect(await exists(A)).toBe(false);
-    expect(await exists(B)).toBe(false);
+    expect(await classAt({ actorLabel: A })).toBe("PointLight");
+    expect(await classAt({ actorLabel: B })).toBe("PointLight");
     const xs: number[] = [];
     for (const light of lights) xs.push(((await call("get_actor_details", { actorPath: light.actorPath })).location as Vec).x);
     expect(xs.sort((p, q) => p - q).map((x) => Math.round(x))).toEqual([0, 400]);
@@ -90,8 +91,9 @@ describe("replacing actors", () => {
       expect(String(actor.class)).toBe("/Script/Engine.StaticMeshActor");
       created.push(String(actor.actorPath));
     }
+    // No light is left behind: what each replaced light's label names now is a mesh actor.
     for (const light of lights) {
-      expect(succeeded(await callBridge(bridge, "get_actor_details", { actorPath: light.actorPath }))).toBe(false);
+      expect(await classAt({ actorLabel: light.actorLabel })).toBe("StaticMeshActor");
     }
   }, 60_000);
 
@@ -103,7 +105,7 @@ describe("replacing actors", () => {
     expect(String(noClass.error)).toContain("BCovNoSuchActorClass");
     const noAsset = await refused("replace_actors_with_asset", { actorLabels: [`${PREFIX}_C`], assetPath: "/Game/MCPTest/BCov/NoSuchMesh" });
     expect(String(noAsset.error)).toContain("NoSuchMesh");
-    expect(await exists(`${PREFIX}_C`)).toBe(true);
+    expect(await classAt({ actorLabel: `${PREFIX}_C` })).toBe("StaticMeshActor");
   }, 60_000);
 });
 
