@@ -743,7 +743,7 @@ TSharedPtr<FJsonValue> FChooserHandlers::AddParameter(const TSharedPtr<FJsonObje
 		{
 			const FString Text = MCPChooserJsonToText(Pair.Value);
 			FProperty* Prop = nullptr; void* Addr = nullptr; UObject* PropOwner = nullptr; FString PathError;
-			if (!MCPChooserAuthResolvePath(Owner, FString::Printf(TEXT("ContextData[%d]"), NewIndex), Pair.Key, Prop, Addr, PropOwner, PathError)
+			if (!MCPChooserAuthResolvePath(Owner, FString::Printf(TEXT("ContextData[%d]"), NewIndex), FString(Pair.Key), Prop, Addr, PropOwner, PathError)
 				|| !MCPChooserImportValidated(Prop, Addr, Text, PropOwner, PathError))
 			{
 				ContextData->RemoveAt(NewIndex);
