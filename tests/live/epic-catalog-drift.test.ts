@@ -52,6 +52,8 @@ describe("epic catalog drift", () => {
     const names = (list: Toolset[]) => list.flatMap((ts) => (ts.tools ?? []).map((t) => t.name));
     // Names first, so a drift reads as which tools moved before the full diff.
     expect(names(live)).toEqual(names(snapshot.toolsets));
-    expect(live).toEqual(snapshot.toolsets);
+    // Through JSON, as the snapshot was written: a -0 default (a rotator's roll)
+    // is recorded as 0, and toEqual tells the two apart.
+    expect(JSON.parse(JSON.stringify(live))).toEqual(snapshot.toolsets);
   }, 120_000);
 });

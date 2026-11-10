@@ -67,8 +67,9 @@ describe("epic_list_mcp_tools", () => {
     const greet = byName.get("UeMcpFixtureLibraryGreet");
     expect(greet?.source).toBe("toolLibrary");
     expect(greet?.library).toBe("/Script/UEMCPEpicMCPFixture.UEMCPFixtureToolLibrary");
-    // Epic's tool-search mode registers list_toolsets, describe_toolset and call_tool.
-    expect(registryAdapterCount).toBeGreaterThanOrEqual(3);
+    // Epic's tool-search mode registers list_toolsets, describe_toolset and call_tool
+    // on 5.8; 5.9 folds describe_toolset into list_toolsets and registers two.
+    expect(registryAdapterCount).toBeGreaterThanOrEqual(2);
     expect(tools.some((t) => t.source === "toolSearch" || t.source === "toolsetRegistry")).toBe(false);
 
     const withAdapters = await listTools({ includeRegistryAdapters: true });
