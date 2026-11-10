@@ -1,5 +1,5 @@
 {
-  "handlerCount": 1290,
+  "handlerCount": 1293,
   "handlers": {
     "actors_in_box": {
       "category": "level",
@@ -18724,6 +18724,26 @@
     "get_pcg_components": {
       "category": "pcg",
       "params": []
+    },
+    "get_pcg_custom_hlsl": {
+      "category": "pcg",
+      "params": [
+        {
+          "name": "assetPath",
+          "type": "string",
+          "required": true,
+          "description": "PCGGraph asset path",
+          "aliases": [
+            "path"
+          ]
+        },
+        {
+          "name": "nodeName",
+          "type": "string",
+          "required": true,
+          "description": "Engine name of the Custom HLSL node, as read_graph reports it"
+        }
+      ]
     },
     "get_pcg_generation_state": {
       "category": "pcg",
@@ -41111,6 +41131,51 @@
         }
       ]
     },
+    "set_pcg_custom_hlsl": {
+      "category": "pcg",
+      "params": [
+        {
+          "name": "assetPath",
+          "type": "string",
+          "required": true,
+          "description": "PCGGraph asset path",
+          "aliases": [
+            "path"
+          ]
+        },
+        {
+          "name": "nodeName",
+          "type": "string",
+          "required": true,
+          "description": "Engine name of the Custom HLSL node, as read_graph reports it"
+        },
+        {
+          "name": "sourceText",
+          "type": "string",
+          "required": false,
+          "description": "Kernel body (the Source pane of the HLSL Source Editor)"
+        },
+        {
+          "name": "functionsText",
+          "type": "string",
+          "required": false,
+          "description": "Helper functions the source can call (the Functions pane)"
+        }
+      ],
+      "choices": [
+        {
+          "mode": "atLeastOne",
+          "branches": [
+            [
+              "sourceText"
+            ],
+            [
+              "functionsText"
+            ]
+          ]
+        }
+      ]
+    },
     "set_pcg_graph_instance_overrides": {
       "category": "pcg",
       "params": [
@@ -47157,6 +47222,56 @@
           "description": "NiagaraSystem asset path",
           "aliases": [
             "assetPath"
+          ]
+        }
+      ]
+    },
+    "validate_pcg_edge": {
+      "category": "pcg",
+      "params": [
+        {
+          "name": "assetPath",
+          "type": "string",
+          "required": true,
+          "description": "PCGGraph asset path",
+          "aliases": [
+            "path"
+          ]
+        },
+        {
+          "name": "sourceNode",
+          "type": "string",
+          "required": true,
+          "description": "Node the edge leaves",
+          "aliases": [
+            "sourceNodeName"
+          ]
+        },
+        {
+          "name": "sourcePin",
+          "type": "string",
+          "required": false,
+          "description": "Output pin label (default: the first output pin)",
+          "aliases": [
+            "sourcePinLabel"
+          ]
+        },
+        {
+          "name": "targetNode",
+          "type": "string",
+          "required": true,
+          "description": "Node the edge enters",
+          "aliases": [
+            "targetNodeName"
+          ]
+        },
+        {
+          "name": "targetPin",
+          "type": "string",
+          "required": false,
+          "description": "Input pin label (default: the first input pin)",
+          "aliases": [
+            "targetPinLabel"
           ]
         }
       ]
