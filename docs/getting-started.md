@@ -6,7 +6,7 @@ UE-MCP lets an AI assistant work in the Unreal Editor: place actors, write Bluep
 
 ## Prerequisites
 
-1. Install [**Unreal Engine 5.4 to 5.8**](https://www.unrealengine.com/en-US/download "Free download via the Epic Games Launcher.")
+1. Install [**Unreal Engine <!-- count:engineRange -->5.4 to 5.9<!-- /count -->**](https://www.unrealengine.com/en-US/download "Free download via the Epic Games Launcher.")
 2. Install [**Node.js 20 or newer**](https://nodejs.org/ "JavaScript runtime that UE-MCP needs to run.")
 3. Install an MCP-capable AI client (e.g. [**Claude Code**](https://docs.anthropic.com/en/docs/claude-code "Anthropic's official CLI agent."))
 

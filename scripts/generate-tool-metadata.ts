@@ -28,6 +28,7 @@ import { fileURLToPath } from "node:url";
 import { ALL_TOOLS, enumerateBridgeActions } from "../src/tools.js";
 import { actionSignature } from "../src/surface/action-signature.js";
 import { loadMergedCatalog } from "./lib/epic-catalog.mjs";
+import { SUPPORTED_ENGINE_RANGE, compareEngines, engineRangeText } from "./lib/engine-range.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repo = path.resolve(here, "..");
@@ -41,10 +42,10 @@ export interface Counts {
    *  tools. This is a TOTAL, not an addend: since commit 023d86d4 the `epic_*`
    *  actions are declared in `ALL_TOOLS` like any other, so quoting this
    *  number next to `nativeToolActions` with an "also" or a "plus" claims a
-   *  surface that is 830 actions larger than the one that ships. */
+   *  surface larger, by every wrapped Epic tool, than the one that ships. */
   actions: number;
   /** ue-mcp's own actions: `actions` minus the wrapped Epic tools. This is the
-   *  number to quote when the copy names Epic's 830 separately. */
+   *  number to quote when the copy names Epic's tools separately. */
   ownActions: number;
   bridgeActions: number;
   localActions: number;
@@ -55,11 +56,13 @@ export interface Counts {
    *  `actions`. */
   nativeToolActions: number;
   /** The newest engine with a recorded Epic catalog, and the number of Epic
-   *  tools that engine ships. This is what "Epic's MCP" means in public copy:
-   *  one engine's toolset, not the union across engines. */
+   *  tools that one engine's registry offers. Public copy quotes
+   *  `nativeToolActions`, every Epic tool ue-mcp wraps across engines; these
+   *  are for a reader that wants the single-engine figure. */
   nativeEngine: string;
   nativeEngineToolActions: number;
-  /** The supported engine range, oldest to newest. */
+  /** The supported engine range, oldest to newest, as declared in
+   *  scripts/lib/engine-range.mjs. */
   engineRange: { min: string; max: string };
   generatedAt: string;
   version: string;
@@ -104,16 +107,6 @@ function computeNativeCounts(): { nativeToolsets: number; nativeToolActions: num
   return { nativeToolsets: toolsets.length, nativeToolActions: declared };
 }
 
-/** Oldest supported engine. The newest is the newest engine with a recorded
- *  Epic catalog, so recording a new engine's catalog moves the range. */
-export const SUPPORTED_ENGINE_MIN = "5.4";
-
-function compareEngines(a: string, b: string): number {
-  const [am, an] = a.split(".").map(Number);
-  const [bm, bn] = b.split(".").map(Number);
-  return am - bm || an - bn;
-}
-
 /**
  * The newest engine's recorded Epic catalog. Reads either layout: one file per
  * engine under `tests/golden/epic-catalog/<major.minor>.json`, or the single
@@ -155,6 +148,16 @@ export function computeCounts(): Counts {
   const pkg = JSON.parse(fs.readFileSync(path.join(repo, "package.json"), "utf8"));
   const native = computeNativeCounts();
   const newest = newestEpicCatalog();
+  // The range is declared in scripts/lib/engine-range.mjs. A catalog recorded
+  // from an engine past it means the range was not moved with it, and the
+  // overview image would show Epic's tools for an engine the copy calls
+  // unsupported.
+  if (compareEngines(newest.engine, SUPPORTED_ENGINE_RANGE.max) > 0) {
+    throw new Error(
+      `tests/golden holds an Epic catalog for UE ${newest.engine}, past the supported range ` +
+        `${engineRangeText()}. Move SUPPORTED_ENGINE_RANGE in scripts/lib/engine-range.mjs.`,
+    );
+  }
   return {
     tools: ALL_TOOLS.length,
     actions: total,
@@ -166,7 +169,7 @@ export function computeCounts(): Counts {
     nativeToolActions: native.nativeToolActions,
     nativeEngine: newest.engine,
     nativeEngineToolActions: newest.toolActions,
-    engineRange: { min: SUPPORTED_ENGINE_MIN, max: newest.engine },
+    engineRange: { min: SUPPORTED_ENGINE_RANGE.min, max: SUPPORTED_ENGINE_RANGE.max },
     generatedAt: new Date().toISOString(),
     version: pkg.version,
   };
@@ -269,7 +272,7 @@ function regenerateToolReference(counts: Counts): string {
   return file;
 }
 
-function applyCountMarkers(text: string, counts: Counts): string {
+export function applyCountMarkers(text: string, counts: Counts): string {
   return text
     .replace(/<!--\s*count:tools\s*-->[^<]*<!--\s*\/count\s*-->/g, `<!-- count:tools -->${counts.tools}<!-- /count -->`)
     .replace(/<!--\s*count:actions\s*-->[^<]*<!--\s*\/count\s*-->/g, `<!-- count:actions -->${counts.actions}+<!-- /count -->`)
@@ -288,6 +291,16 @@ function applyCountMarkers(text: string, counts: Counts): string {
     .replace(
       /<!--\s*count:bridgeActions\s*-->[^<]*<!--\s*\/count\s*-->/g,
       `<!-- count:bridgeActions -->${counts.bridgeActions}<!-- /count -->`,
+    )
+    // The supported engine range ("5.4 to 5.9") and its newest engine, from
+    // scripts/lib/engine-range.mjs.
+    .replace(
+      /<!--\s*count:engineRange\s*-->[^<]*<!--\s*\/count\s*-->/g,
+      `<!-- count:engineRange -->${engineRangeText(counts.engineRange)}<!-- /count -->`,
+    )
+    .replace(
+      /<!--\s*count:engineMax\s*-->[^<]*<!--\s*\/count\s*-->/g,
+      `<!-- count:engineMax -->${counts.engineRange.max}<!-- /count -->`,
     );
 }
 
@@ -295,7 +308,8 @@ function applyCountMarkers(text: string, counts: Counts): string {
 // file left off the list has to be corrected by hand every time the surface
 // grows, which is how docs/configuration.md came to say "all 22 category
 // tools" twice while the server advertised twenty-four.
-const MARKER_FILES = [
+export const MARKER_FILES = [
+  ".github/RELEASE_TEMPLATE.md",
   "CLAUDE.md",
   "README.md",
   "docs/index.md",
@@ -303,8 +317,11 @@ const MARKER_FILES = [
   "docs/configuration.md",
   "docs/development.md",
   "docs/flows.md",
+  "docs/getting-started.md",
   "docs/plugins-guards.md",
+  "docs/release-notes-style.md",
   "docs/tool-reference.md",
+  "docs/troubleshooting.md",
 ];
 
 function applyMarkersToFiles(counts: Counts): string[] {
