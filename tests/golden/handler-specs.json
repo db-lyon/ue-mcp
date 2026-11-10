@@ -1,5 +1,5 @@
 {
-  "handlerCount": 1271,
+  "handlerCount": 1279,
   "handlers": {
     "actors_in_box": {
       "category": "level",
@@ -9130,6 +9130,23 @@
         }
       ]
     },
+    "compile_localization_target": {
+      "category": "project",
+      "params": [
+        {
+          "name": "target",
+          "type": "string",
+          "required": true,
+          "description": "Localization target name"
+        },
+        {
+          "name": "culture",
+          "type": "string",
+          "required": false,
+          "description": "Compile only this culture (default every culture of the target)"
+        }
+      ]
+    },
     "compile_niagara_system": {
       "category": "niagara",
       "params": [
@@ -16237,6 +16254,17 @@
         }
       ]
     },
+    "gather_localization_target": {
+      "category": "project",
+      "params": [
+        {
+          "name": "target",
+          "type": "string",
+          "required": true,
+          "description": "Localization target name"
+        }
+      ]
+    },
     "generate_lightmap_uvs": {
       "category": "asset",
       "params": [
@@ -19769,6 +19797,32 @@
         }
       ]
     },
+    "get_text_localization": {
+      "category": "asset",
+      "params": [
+        {
+          "name": "assetPath",
+          "type": "string",
+          "required": true,
+          "description": "Asset holding the Text property; a Blueprint means its class defaults",
+          "aliases": [
+            "path"
+          ]
+        },
+        {
+          "name": "propertyName",
+          "type": "string",
+          "required": true,
+          "description": "Text property, dotted through structs and object references"
+        },
+        {
+          "name": "widgetName",
+          "type": "string",
+          "required": false,
+          "description": "A widget in a Widget Blueprint's tree that owns the property"
+        }
+      ]
+    },
     "get_texture_info": {
       "category": "asset",
       "params": [
@@ -22832,6 +22886,21 @@
           "type": "string",
           "required": true,
           "description": "Function name"
+        }
+      ]
+    },
+    "list_localization_cultures": {
+      "category": "project",
+      "params": []
+    },
+    "list_localization_targets": {
+      "category": "project",
+      "params": [
+        {
+          "name": "includeEngineTargets",
+          "type": "boolean",
+          "required": false,
+          "description": "Also list the engine's own targets (default false)"
         }
       ]
     },
@@ -32466,6 +32535,23 @@
         }
       ]
     },
+    "remove_localization_target": {
+      "category": "project",
+      "params": [
+        {
+          "name": "target",
+          "type": "string",
+          "required": true,
+          "description": "Localization target name"
+        },
+        {
+          "name": "deleteFiles",
+          "type": "boolean",
+          "required": false,
+          "description": "Also delete its config, manifest, archives and LocRes files (default false)"
+        }
+      ]
+    },
     "remove_loose_gameplay_tag": {
       "category": "gas",
       "params": [
@@ -39505,6 +39591,63 @@
         }
       ]
     },
+    "set_localization_target": {
+      "category": "project",
+      "params": [
+        {
+          "name": "target",
+          "type": "string",
+          "required": true,
+          "description": "Localization target name (letters, digits, _ and -); created when the project has none of that name"
+        },
+        {
+          "name": "cultures",
+          "type": "array",
+          "required": false,
+          "description": "Culture codes the target supports, e.g. [\"en\", \"fr\"]; replaces the list",
+          "items": "string"
+        },
+        {
+          "name": "nativeCulture",
+          "type": "string",
+          "required": false,
+          "description": "The culture source text is written in; one of cultures (default the first)"
+        },
+        {
+          "name": "gatherFromPackages",
+          "type": "boolean",
+          "required": false,
+          "description": "Gather text from assets and maps"
+        },
+        {
+          "name": "includePaths",
+          "type": "array",
+          "required": false,
+          "description": "Package path wildcards to gather from, relative to the project root, e.g. Content/UI/*; replaces the list",
+          "items": "string"
+        },
+        {
+          "name": "excludePaths",
+          "type": "array",
+          "required": false,
+          "description": "Package path wildcards to skip; replaces the list",
+          "items": "string"
+        },
+        {
+          "name": "gatherFromTextFiles",
+          "type": "boolean",
+          "required": false,
+          "description": "Gather LOCTEXT and NSLOCTEXT from source files"
+        },
+        {
+          "name": "searchDirectories",
+          "type": "array",
+          "required": false,
+          "description": "Source directories to gather from, relative to the project root, e.g. Source; replaces the list",
+          "items": "string"
+        }
+      ]
+    },
     "set_mapping_modifiers": {
       "category": "gameplay",
       "params": [
@@ -43676,6 +43819,62 @@
               "removeMarkers"
             ]
           ]
+        }
+      ]
+    },
+    "set_text_localization": {
+      "category": "asset",
+      "params": [
+        {
+          "name": "assetPath",
+          "type": "string",
+          "required": true,
+          "description": "Asset holding the Text property; a Blueprint means its class defaults",
+          "aliases": [
+            "path"
+          ]
+        },
+        {
+          "name": "propertyName",
+          "type": "string",
+          "required": true,
+          "description": "Text property, dotted through structs and object references"
+        },
+        {
+          "name": "widgetName",
+          "type": "string",
+          "required": false,
+          "description": "A widget in a Widget Blueprint's tree that owns the property"
+        },
+        {
+          "name": "namespace",
+          "type": "string",
+          "required": false,
+          "description": "Text namespace, without the package marker (default the current one)"
+        },
+        {
+          "name": "key",
+          "type": "string",
+          "required": false,
+          "description": "Text key (default the current one)"
+        },
+        {
+          "name": "sourceString",
+          "type": "string",
+          "required": false,
+          "description": "Source string (default the current one)"
+        },
+        {
+          "name": "stringTableId",
+          "type": "string",
+          "required": false,
+          "description": "Reference a string table entry instead: the table's asset path or id, with stringTableKey"
+        },
+        {
+          "name": "stringTableKey",
+          "type": "string",
+          "required": false,
+          "description": "Entry key in stringTableId"
         }
       ]
     },
