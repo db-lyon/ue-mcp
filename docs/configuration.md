@@ -201,8 +201,8 @@ Everything the server sends at session start (the `initialize` instructions plus
 | Strategy | Seed | What's advertised | Cost to use |
 |----------|------|-------------------|-------------|
 | **`micro`** (default) | <!-- tax:micro -->~240<!-- /tax --> tokens | a single `tools` gateway (`guide`, `search`, `list_categories`, `describe`, `call`) fronting every category and the flows | discovery for everything |
-| **`lean`** | <!-- tax:lean -->~32k<!-- /tax --> tokens | the <!-- count:tools -->30<!-- /count --> category tools with their `action` enums and a one-line summary each; a `catalog` tool (`search` / `describe` / `list_categories`) and a per-category `describe` action serve the signatures | about one round trip to learn a category |
-| **`full`** | <!-- tax:full -->~90k<!-- /tax --> tokens | the <!-- count:tools -->30<!-- /count --> category tools, each with one signature line per action inline | no discovery calls |
+| **`lean`** | <!-- tax:lean -->~32k<!-- /tax --> tokens | the <!-- count:tools -->31<!-- /count --> category tools with their `action` enums and a one-line summary each; a `catalog` tool (`search` / `describe` / `list_categories`) and a per-category `describe` action serve the signatures | about one round trip to learn a category |
+| **`full`** | <!-- tax:full -->~90k<!-- /tax --> tokens | the <!-- count:tools -->31<!-- /count --> category tools, each with one signature line per action inline | no discovery calls |
 
 On demand, micro's `describe` of the largest category (a page of signatures) costs <!-- tax:describe -->~1.5k<!-- /tax --> tokens and a default `search` <!-- tax:search -->~520<!-- /tax -->.
 

@@ -40,6 +40,7 @@
     "tests/integration/server-startup.test.ts": 15.9,
     "tests/integration/sessions.test.ts": 0.2,
     "tests/integration/source-bridge-build.test.ts": 43.3,
+    "tests/integration/unreal-canvas.test.ts": 15.4,
     "tests/integration/version-check.test.ts": 7.9,
     "tests/unit/action-class.test.ts": 0,
     "tests/unit/action-effects.test.ts": 0.1,

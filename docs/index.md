@@ -1,6 +1,6 @@
 # UE-MCP
 
-**Unreal Engine Model Context Protocol Server.** It lets AI assistants drive the Unreal Editor through <!-- count:tools -->30<!-- /count --> category tools covering <!-- count:actions -->3527+<!-- /count --> actions.
+**Unreal Engine Model Context Protocol Server.** It lets AI assistants drive the Unreal Editor through <!-- count:tools -->31<!-- /count --> category tools covering <!-- count:actions -->3555+<!-- /count --> actions.
 
 An MCP client (Claude Code, Claude Desktop, Cursor and others) launches `ue-mcp` for your project. By default that process relays to the project's daemon, a background Node.js process that holds the WebSocket connection to the C++ bridge plugin inside the editor. The daemon outlives editor restarts, serves every MCP client of the project, and serves UE-MCP Studio, the in-editor agent.
 
@@ -63,7 +63,7 @@ A **plugin system** lets npm packages add actions to the existing categories, so
 - **[Getting Started](getting-started.md)**: zero-to-running walkthrough
 - **[Studio](studio.md)**: the in-editor agent, from install to uninstall
 - **[Architecture](architecture.md)**: the daemon, the server, the bridge plugin and how they connect
-- **[Tool Reference](tool-reference.md)**: all <!-- count:tools -->30<!-- /count --> tools with every action and its parameters
+- **[Tool Reference](tool-reference.md)**: all <!-- count:tools -->31<!-- /count --> tools with every action and its parameters
 - **[Control Rig Animation](control-rig-animation.md)**: rig discovery, solving, keys, baking and verification
 - **[Spatial Instructions](spatial-instructions.md)**: how spatial edits are resolved and verified
 - **[Collection and Input Editing](collection-and-input-editing.md)**: nested collection fields and input mappings
