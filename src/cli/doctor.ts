@@ -30,6 +30,10 @@ import { RESET, BOLD, DIM, GREEN, RED, CYAN, YELLOW } from "./ui/ansi.js";
 import { cliCommandNames } from "./cli-commands.js";
 import type { CliUsage } from "./cli-main.js";
 import { defaultPluginDir, installKindOf, resolvePluginDir, type InstallKind } from "../editor/install-marker.js";
+import { ProjectContext } from "../config/project.js";
+import { projectEpicIntegrations } from "./init-core.js";
+import { describeUnrealMcpServer, type UnrealMcpServerStatus } from "../integrations/epic/unreal-mcp-server.js";
+import type { UnrealAssistantStatus } from "../integrations/epic/unreal-assistant.js";
 
 export interface DoctorReport {
   selfVersion: string;            // the ue-mcp currently executing this command
@@ -60,6 +64,23 @@ export interface DoctorReport {
   npmAgeGate?: NpmAgeGate | null;
   /** Client entries whose npx launch that gate refuses for a new release. */
   ageGatedLaunches?: AgeGatedLaunch[];
+  /** Epic's Unreal MCP server for the target project; null when its engine has none. */
+  unrealMcpServer?: UnrealMcpServerStatus | null;
+  /** Epic's Unreal Assistant for the target project, and whether ue-mcp is attached to it. */
+  unrealAssistant?: UnrealAssistantStatus | null;
+}
+
+/** Epic's Unreal MCP server and Unreal Assistant for a project, or nulls when it cannot be read. */
+function epicStatus(uproject: string | null): Pick<DoctorReport, "unrealMcpServer" | "unrealAssistant"> {
+  if (!uproject) return { unrealMcpServer: null, unrealAssistant: null };
+  try {
+    const project = new ProjectContext();
+    project.setProject(uproject);
+    const epic = projectEpicIntegrations(project);
+    return { unrealMcpServer: epic.unrealMcp, unrealAssistant: epic.unrealAssistant };
+  } catch {
+    return { unrealMcpServer: null, unrealAssistant: null };
+  }
 }
 
 export interface NpmAgeGate {
@@ -452,6 +473,7 @@ export function collectDoctor(projectArg?: string, cwd: string = process.cwd()):
     deadClientEntries: findDeadClientEntries(targetProjectDir ?? cwd),
     npmAgeGate: gate,
     ageGatedLaunches: findAgeGatedLaunches(targetProjectDir ?? cwd, gate),
+    ...epicStatus(uproject),
   };
 }
 
@@ -528,7 +550,29 @@ export function formatDoctor(d: DoctorReport): string {
     lines.push(row("bridge plugin:", `${v}${kind}  ${DIM}${path.basename(d.bridgePlugin.project)}${RESET}`));
   }
 
+  const epicMcp = d.unrealMcpServer;
+  if (epicMcp) {
+    const text = describeUnrealMcpServer(epicMcp);
+    lines.push(row("epic mcp:", epicMcp.runsBeside ? `${YELLOW}${text}${RESET}` : `${DIM}${text}${RESET}`));
+  }
+  const ua = d.unrealAssistant;
+  if (ua?.available) {
+    lines.push(row("epic assistant:", ua.attached
+      ? `${GREEN}ue-mcp attached${RESET}  ${DIM}${ua.configPath}${RESET}`
+      : `${DIM}ue-mcp not attached (ue-mcp init --unreal-assistant)${RESET}`));
+  }
+
   lines.push("");
+
+  // Facts worth knowing that are not wrong, so they do not spoil the verdict.
+  const notes: string[] = [];
+  if (epicMcp?.runsBeside) {
+    notes.push(
+      `Epic's Unreal MCP server starts with this project's editor on ${epicMcp.url}, beside ue-mcp. ` +
+      `An agent given both sees two tool surfaces for the same editor; ue-mcp's epic category already wraps Epic's toolsets. ` +
+      `\`ue-mcp init --yes --no-unreal-mcp-autostart\` stops it starting for this project, and \`--unreal-mcp-port <n>\` moves it.`,
+    );
+  }
 
   const problems: string[] = [];
   if (d.localShadow && behindLatest(d.localShadow.version, latest)) {
@@ -573,6 +617,12 @@ export function formatDoctor(d: DoctorReport): string {
         : `${launch.client} (${launch.config}) runs \`npx ${launch.spec}\`, which npm's ${describeGate(gate)} refuses for a release newer than the cutoff, even when ue-mcp is in min-release-age-exclude (npx ignores it). Run \`ue-mcp doctor --fix\` to add \`${NPX_AGE_GATE_OVERRIDE}\` to the launch.`,
     );
   }
+  for (const conflict of epicMcp?.portConflicts ?? []) {
+    problems.push(`Epic's Unreal MCP server listens on ${epicMcp!.port}, and ${conflict}. Move it with \`ue-mcp init --yes --unreal-mcp-port <n>\`.`);
+  }
+  if (ua?.available && ua.attached && ua.shadowedBy) {
+    problems.push(`The Unreal Assistant reads ${ua.shadowedBy} first and ignores ${ua.configPath}, where ue-mcp is attached. Add the ue-mcp entry there, or remove that file.`);
+  }
   for (const cfg of d.bareNpxConfigs) {
     const rel = path.relative(process.cwd(), cfg).replace(/\\/g, "/") || cfg;
     problems.push(`${rel} launches with bare \`npx ue-mcp\`. Use \`${UE_MCP_LAUNCH}\` so the server self-heals to latest on each launch.`);
@@ -599,6 +649,11 @@ export function formatDoctor(d: DoctorReport): string {
   } else {
     lines.push(`  ${BOLD}${YELLOW}Findings${RESET}`);
     for (const p of problems) lines.push(`  ${RED}!${RESET} ${p}`);
+  }
+  if (notes.length > 0) {
+    lines.push("");
+    lines.push(`  ${BOLD}${CYAN}Notes${RESET}`);
+    for (const n of notes) lines.push(`  ${CYAN}i${RESET} ${n}`);
   }
   lines.push("");
   return lines.join("\n");
