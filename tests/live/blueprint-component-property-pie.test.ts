@@ -103,7 +103,7 @@ function duplicates(bindings: Map<string, string[]>): string[] {
 beforeAll(async () => {
   bridge = await getBridge();
   await stopPie();
-  await call("demo_go_home");
+  await call("demo_go_home", { discardUnsaved: true });
   await callBridge(bridge, "delete_actor", { actorLabel: LABEL });
   await callBridge(bridge, "delete_folder", { path: DIR, force: true });
   await call("create_blueprint", { assetPath: BP, parentClass: "Character" });

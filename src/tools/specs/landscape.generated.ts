@@ -216,6 +216,164 @@ export const handlerSpecs: HandlerSpecs = {
       }
     ]
   },
+  "apply_landscape_splines": {
+    "category": "landscape",
+    "params": [
+      {
+        "name": "actorLabel",
+        "type": "string",
+        "required": false,
+        "description": "Landscape actor label, when the level has more than one"
+      },
+      {
+        "name": "actorPath",
+        "type": "string",
+        "required": false,
+        "description": "Landscape actor path; wins over actorLabel"
+      },
+      {
+        "name": "editLayer",
+        "type": "string",
+        "required": false,
+        "description": "Edit layer to write into when the landscape has no reserved splines layer"
+      },
+      {
+        "name": "editLayerIndex",
+        "type": "integer",
+        "required": false,
+        "description": "Edit layer index when editLayer is not given (default 0)"
+      },
+      {
+        "name": "updateNow",
+        "type": "boolean",
+        "required": false,
+        "description": "Merge the edit layers now rather than on the next editor tick (default true)"
+      }
+    ]
+  },
+  "connect_landscape_spline_points": {
+    "category": "landscape",
+    "params": [
+      {
+        "name": "startPoint",
+        "type": "string",
+        "required": true,
+        "description": "Control point the segment starts at, by name or path"
+      },
+      {
+        "name": "endPoint",
+        "type": "string",
+        "required": true,
+        "description": "Control point the segment ends at; must share the start point's spline owner"
+      },
+      {
+        "name": "startTangentLength",
+        "type": "number",
+        "required": false,
+        "description": "Tangent length at the start point (default the distance between the points)"
+      },
+      {
+        "name": "endTangentLength",
+        "type": "number",
+        "required": false,
+        "description": "Tangent length at the end point (default the distance between the points)"
+      },
+      {
+        "name": "layerName",
+        "type": "string",
+        "required": false,
+        "description": "Paint layer the segment paints when applied; empty clears it"
+      },
+      {
+        "name": "raiseTerrain",
+        "type": "boolean",
+        "required": false,
+        "description": "Raise terrain below the spline up to it when applied (engine default true)"
+      },
+      {
+        "name": "lowerTerrain",
+        "type": "boolean",
+        "required": false,
+        "description": "Lower terrain above the spline down to it when applied (engine default true)"
+      },
+      {
+        "name": "meshes",
+        "type": "array",
+        "required": false,
+        "description": "Meshes deformed along the segment, replacing the current list; an empty list clears it",
+        "items": "object",
+        "fields": [
+          {
+            "name": "mesh",
+            "type": "string",
+            "required": true,
+            "description": "StaticMesh asset path"
+          },
+          {
+            "name": "scale",
+            "type": "vec3",
+            "required": false,
+            "description": "Mesh scale (default 1, 1, 1)"
+          },
+          {
+            "name": "forwardAxis",
+            "type": "string",
+            "required": false,
+            "description": "X (default) | Y | Z: the mesh axis laid along the spline"
+          },
+          {
+            "name": "upAxis",
+            "type": "string",
+            "required": false,
+            "description": "X | Y | Z (default): the mesh axis kept up"
+          },
+          {
+            "name": "materialOverrides",
+            "type": "array",
+            "required": false,
+            "description": "Material per slot; an empty string keeps the mesh's own",
+            "items": "string"
+          },
+          {
+            "name": "centerH",
+            "type": "boolean",
+            "required": false,
+            "description": "Centre the mesh horizontally on the spline (default true)"
+          },
+          {
+            "name": "scaleToWidth",
+            "type": "boolean",
+            "required": false,
+            "description": "Scale the mesh to the spline width (default true)"
+          }
+        ]
+      },
+      {
+        "name": "collisionProfile",
+        "type": "string",
+        "required": false,
+        "description": "Collision profile of the segment's mesh components, e.g. BlockAll or NoCollision"
+      },
+      {
+        "name": "castShadow",
+        "type": "boolean",
+        "required": false,
+        "description": "Whether the segment's meshes cast shadows"
+      },
+      {
+        "name": "autoRotate",
+        "type": "boolean",
+        "required": false,
+        "description": "Rotate both points to follow the new segment (default true)"
+      },
+      {
+        "name": "name",
+        "type": "string",
+        "required": false,
+        "description": "Object name for the segment"
+      }
+    ]
+  },
   "create_landscape": {
     "category": "landscape",
     "params": [
@@ -310,6 +468,117 @@ export const handlerSpecs: HandlerSpecs = {
       }
     ],
     "contractExempt": "Contract values reach CreatePackage before anything is loaded"
+  },
+  "create_landscape_spline_point": {
+    "category": "landscape",
+    "params": [
+      {
+        "name": "location",
+        "type": "vec3",
+        "required": true,
+        "description": "World location of the control point"
+      },
+      {
+        "name": "rotation",
+        "type": "rotator",
+        "required": false,
+        "description": "World rotation of the tangent at the point"
+      },
+      {
+        "name": "halfWidth",
+        "type": "number",
+        "required": false,
+        "description": "Half-width of the spline at the point, in centimetres (engine default 1000)"
+      },
+      {
+        "name": "sideFalloff",
+        "type": "number",
+        "required": false,
+        "description": "Falloff beyond each side, in centimetres (engine default 1000)"
+      },
+      {
+        "name": "endFalloff",
+        "type": "number",
+        "required": false,
+        "description": "Falloff past an end point, in centimetres (engine default 2000)"
+      },
+      {
+        "name": "layerName",
+        "type": "string",
+        "required": false,
+        "description": "Paint layer applying the spline paints; empty clears it"
+      },
+      {
+        "name": "raiseTerrain",
+        "type": "boolean",
+        "required": false,
+        "description": "Raise terrain below the spline up to it when applied (engine default true)"
+      },
+      {
+        "name": "lowerTerrain",
+        "type": "boolean",
+        "required": false,
+        "description": "Lower terrain above the spline down to it when applied (engine default true)"
+      },
+      {
+        "name": "name",
+        "type": "string",
+        "required": false,
+        "description": "Object name for the point; an existing point of this name is reported rather than duplicated"
+      },
+      {
+        "name": "ownerPath",
+        "type": "string",
+        "required": false,
+        "description": "Existing spline owner to add the point to: a Landscape, LandscapeStreamingProxy or LandscapeSplineActor, by label or path"
+      },
+      {
+        "name": "newSplineActor",
+        "type": "boolean",
+        "required": false,
+        "description": "World Partition: put the point in a new LandscapeSplineActor (the default when ownerPath is not given)"
+      },
+      {
+        "name": "onConflict",
+        "type": "string",
+        "required": false,
+        "description": "When name is taken: skip (default) | error"
+      },
+      {
+        "name": "actorLabel",
+        "type": "string",
+        "required": false,
+        "description": "Landscape actor label, when the level has more than one"
+      },
+      {
+        "name": "actorPath",
+        "type": "string",
+        "required": false,
+        "description": "Landscape actor path; wins over actorLabel"
+      }
+    ]
+  },
+  "delete_landscape_spline_point": {
+    "category": "landscape",
+    "params": [
+      {
+        "name": "controlPoint",
+        "type": "string",
+        "required": true,
+        "description": "Control point object name or full path, as list_splines reports it"
+      }
+    ]
+  },
+  "delete_landscape_spline_segment": {
+    "category": "landscape",
+    "params": [
+      {
+        "name": "segment",
+        "type": "string",
+        "required": true,
+        "description": "Segment object name or full path, as list_splines reports it"
+      }
+    ]
   },
   "export_landscape_heightmap": {
     "category": "landscape",
@@ -1971,6 +2240,187 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "Internal name of the landscape proxy, when the level has more than one"
       }
     ]
+  },
+  "set_landscape_spline_segment_meshes": {
+    "category": "landscape",
+    "params": [
+      {
+        "name": "segment",
+        "type": "string",
+        "required": true,
+        "description": "Segment object name or full path, as list_splines reports it"
+      },
+      {
+        "name": "meshes",
+        "type": "array",
+        "required": false,
+        "description": "Meshes deformed along the segment, replacing the current list; an empty list clears it",
+        "items": "object",
+        "fields": [
+          {
+            "name": "mesh",
+            "type": "string",
+            "required": true,
+            "description": "StaticMesh asset path"
+          },
+          {
+            "name": "scale",
+            "type": "vec3",
+            "required": false,
+            "description": "Mesh scale (default 1, 1, 1)"
+          },
+          {
+            "name": "forwardAxis",
+            "type": "string",
+            "required": false,
+            "description": "X (default) | Y | Z: the mesh axis laid along the spline"
+          },
+          {
+            "name": "upAxis",
+            "type": "string",
+            "required": false,
+            "description": "X | Y | Z (default): the mesh axis kept up"
+          },
+          {
+            "name": "materialOverrides",
+            "type": "array",
+            "required": false,
+            "description": "Material per slot; an empty string keeps the mesh's own",
+            "items": "string"
+          },
+          {
+            "name": "centerH",
+            "type": "boolean",
+            "required": false,
+            "description": "Centre the mesh horizontally on the spline (default true)"
+          },
+          {
+            "name": "scaleToWidth",
+            "type": "boolean",
+            "required": false,
+            "description": "Scale the mesh to the spline width (default true)"
+          }
+        ]
+      },
+      {
+        "name": "collisionProfile",
+        "type": "string",
+        "required": false,
+        "description": "Collision profile of the segment's mesh components, e.g. BlockAll or NoCollision"
+      },
+      {
+        "name": "castShadow",
+        "type": "boolean",
+        "required": false,
+        "description": "Whether the segment's meshes cast shadows"
+      }
+    ]
+  },
+  "update_landscape_spline_point": {
+    "category": "landscape",
+    "params": [
+      {
+        "name": "controlPoint",
+        "type": "string",
+        "required": true,
+        "description": "Control point object name or full path, as list_splines reports it"
+      },
+      {
+        "name": "location",
+        "type": "vec3",
+        "required": false,
+        "description": "World location of the control point"
+      },
+      {
+        "name": "rotation",
+        "type": "rotator",
+        "required": false,
+        "description": "World rotation of the tangent at the point"
+      },
+      {
+        "name": "halfWidth",
+        "type": "number",
+        "required": false,
+        "description": "Half-width of the spline at the point, in centimetres (engine default 1000)"
+      },
+      {
+        "name": "sideFalloff",
+        "type": "number",
+        "required": false,
+        "description": "Falloff beyond each side, in centimetres (engine default 1000)"
+      },
+      {
+        "name": "endFalloff",
+        "type": "number",
+        "required": false,
+        "description": "Falloff past an end point, in centimetres (engine default 2000)"
+      },
+      {
+        "name": "layerName",
+        "type": "string",
+        "required": false,
+        "description": "Paint layer applying the spline paints; empty clears it"
+      },
+      {
+        "name": "raiseTerrain",
+        "type": "boolean",
+        "required": false,
+        "description": "Raise terrain below the spline up to it when applied (engine default true)"
+      },
+      {
+        "name": "lowerTerrain",
+        "type": "boolean",
+        "required": false,
+        "description": "Lower terrain above the spline down to it when applied (engine default true)"
+      },
+      {
+        "name": "autoRotate",
+        "type": "boolean",
+        "required": false,
+        "description": "Recompute the rotation from the connected segments when rotation is not given (default true when location moves)"
+      }
+    ]
+  },
+  "update_landscape_spline_segment": {
+    "category": "landscape",
+    "params": [
+      {
+        "name": "segment",
+        "type": "string",
+        "required": true,
+        "description": "Segment object name or full path, as list_splines reports it"
+      },
+      {
+        "name": "startTangentLength",
+        "type": "number",
+        "required": false,
+        "description": "Tangent length at the start point (default the distance between the points)"
+      },
+      {
+        "name": "endTangentLength",
+        "type": "number",
+        "required": false,
+        "description": "Tangent length at the end point (default the distance between the points)"
+      },
+      {
+        "name": "layerName",
+        "type": "string",
+        "required": false,
+        "description": "Paint layer the segment paints when applied; empty clears it"
+      },
+      {
+        "name": "raiseTerrain",
+        "type": "boolean",
+        "required": false,
+        "description": "Raise terrain below the spline up to it when applied (engine default true)"
+      },
+      {
+        "name": "lowerTerrain",
+        "type": "boolean",
+        "required": false,
+        "description": "Lower terrain above the spline down to it when applied (engine default true)"
+      }
+    ]
   }
 };
 
@@ -1979,8 +2429,13 @@ export const paramsClauses: Readonly<Record<string, string>> = {
   add_landscape_layer_info: "Params: layerName, landscapeName?, packagePath?",
   analyze_landscape_terrain: "Params: actorLabel?, actorPath?, region?, space?, center?, radius?, maxVertices?, histogramBins?, slopeThresholdDegrees?",
   apply_landscape_erosion: "Params: actorLabel?, actorPath?, erosionType?, region?, space?, center?, radius?, maxVertices?, iterations?, maxWork?, talusAngle?, strength?, rainAmount?, evaporation?, sedimentCapacity?, erosionRate?, depositionRate?, editLayer?, editLayerIndex?, rollbackMaxVertices?",
+  apply_landscape_splines: "Params: actorLabel?, actorPath?, editLayer?, editLayerIndex?, updateNow?",
+  connect_landscape_spline_points: "Params: startPoint, endPoint, startTangentLength?, endTangentLength?, layerName?, raiseTerrain?, lowerTerrain?, meshes?, collisionProfile?, castShadow?, autoRotate?, name?",
   create_landscape: "Params: location?, scale?, componentCountX?, componentCountY?, subsectionSizeQuads?, numSubsections?, heightOffset?, label?",
   create_landscape_layer_info: "Params: layerName, name?, packagePath?, onConflict?, physMaterial?, hardness?",
+  create_landscape_spline_point: "Params: location, rotation?, halfWidth?, sideFalloff?, endFalloff?, layerName?, raiseTerrain?, lowerTerrain?, name?, ownerPath?, newSplineActor?, onConflict?, actorLabel?, actorPath?",
+  delete_landscape_spline_point: "Params: controlPoint",
+  delete_landscape_spline_segment: "Params: segment",
   export_landscape_heightmap: "Params: filePath (or outputPath), actorLabel?, actorPath?, format?, region?, space?, center?, radius?, maxVertices?, editLayer?, editLayerIndex?, overwrite?",
   find_landscape_proxy_at: "Params: worldX, worldY",
   get_landscape_component: "Params: componentIndex?",
@@ -2012,28 +2467,38 @@ export const paramsClauses: Readonly<Record<string, string>> = {
   set_landscape_holes: "Params: actorLabel?, actorPath?, region?, space?, center?, radius?, x?, y?, point?, worldX?, worldY?, maxVertices?, hole?, holes?, weightsBase64?, editLayer?, editLayerIndex?, rollbackMaxVertices?",
   set_landscape_layer_weight_region: "Params: layerName, actorLabel?, actorPath?, region?, space?, center?, radius?, maxVertices?, weightsBase64?, weights?, weight?, strength?, editLayer?, editLayerIndex?, rollbackMaxVertices?",
   set_landscape_material: "Params: materialPath (or path, or assetPath), landscapeName?",
+  set_landscape_spline_segment_meshes: "Params: segment, meshes?, collisionProfile?, castShadow?",
+  update_landscape_spline_point: "Params: controlPoint, location?, rotation?, halfWidth?, sideFalloff?, endFalloff?, layerName?, raiseTerrain?, lowerTerrain?, autoRotate?",
+  update_landscape_spline_segment: "Params: segment, startTangentLength?, endTangentLength?, layerName?, raiseTerrain?, lowerTerrain?",
 };
 
 /** Every key the spec'd landscape handlers declare, aliases included. */
 export const schema: Record<string, z.ZodType> = {
   actorLabel: z.string().optional().describe("Landscape actor label, when the level has more than one"),
   actorLabels: z.array(z.string()).optional().describe("Exact editor labels of loaded LandscapeStreamingProxy actors, 1 to 256"),
-  actorPath: z.string().optional().describe("Landscape actor object path; wins over actorLabel, which is not unique"),
+  actorPath: z.string().optional().describe("Landscape actor object path; wins over actorLabel, which is not unique (analyze_landscape_terrain, apply_landscape_erosion, export_landscape_heightmap, get_landscape_height_at_point, get_landscape_height_region, get_landscape_holes, get_landscape_layer_weight_region, get_landscape_normal_at_point, get_landscape_slope_at_point, get_landscape_slope_map, import_landscape_heightmap, landscape_layer_exists, list_landscape_edit_layers, merge_landscape_edit_layers, paint_landscape_layer, project_geo_coordinates, remove_landscape_layer, sample_landscape, sculpt_landscape, sculpt_landscape_region, set_landscape_height_region, set_landscape_holes, set_landscape_layer_weight_region). Landscape actor path; wins over actorLabel (apply_landscape_splines, create_landscape_spline_point)"),
   amount: z.number().optional().describe("World centimetres to move at full brush strength (default 100) (sculpt_landscape). World centimetres at full strength (default 500) (sculpt_landscape_region)"),
   arrayEncodingLimit: z.number().int().optional().describe("Return the per-vertex array only up to this many values (default 16384)"),
   assetPath: z.string().optional().describe("Alias for materialPath"),
+  autoRotate: z.boolean().optional().describe("Rotate both points to follow the new segment (default true) (connect_landscape_spline_points). Recompute the rotation from the connected segments when rotation is not given (default true when location moves) (update_landscape_spline_point)"),
   bounds: z.object({ min: z.object({ x: z.number(), y: z.number(), z: z.number() }).describe("Box minimum"), max: z.object({ x: z.number(), y: z.number(), z: z.number() }).describe("Box maximum") }).optional().describe("World-space box; proxies intersecting it are refreshed"),
   boundsLatLon: z.record(z.string(), z.unknown()).optional().describe("Geographic box {minLat, minLon, maxLat, maxLon} in decimal degrees (plan_real_world_landscape). The geographic box the landscape was planned for {minLat, minLon, maxLat, maxLon} (project_geo_coordinates)"),
+  castShadow: z.boolean().optional().describe("Whether the segment's meshes cast shadows"),
   center: z.record(z.string(), z.unknown()).optional().describe("Brush centre {x, y} in world space"),
+  collisionProfile: z.string().optional().describe("Collision profile of the segment's mesh components, e.g. BlockAll or NoCollision"),
   componentCountX: z.number().int().optional().describe("Components along X (default 8)"),
   componentCountY: z.number().int().optional().describe("Components along Y (default 8)"),
   componentIndex: z.number().int().optional().describe("Index across every landscape component in the level (default 0)"),
+  controlPoint: z.string().optional().describe("Control point object name or full path, as list_splines reports it"),
   cursor: z.string().optional().describe("Resume a paged read: pass back the nextCursor from the previous page, unmodified"),
   depositionRate: z.number().optional().describe("Hydraulic: how fast over-loaded water drops sediment, 0..1 (default 0.3)"),
-  editLayer: z.string().optional().describe("Edit layer name"),
+  editLayer: z.string().optional().describe("Edit layer name (apply_landscape_erosion, export_landscape_heightmap, get_landscape_height_at_point, get_landscape_height_region, get_landscape_holes, get_landscape_layer_weight_region, import_landscape_heightmap, paint_landscape_layer, sculpt_landscape, sculpt_landscape_region, set_landscape_height_region, set_landscape_holes, set_landscape_layer_weight_region). Edit layer to write into when the landscape has no reserved splines layer (apply_landscape_splines)"),
   editLayerIndex: z.number().int().optional().describe("Edit layer index when editLayer is not given (default 0)"),
   elevationEncoding: z.string().optional().describe("full (default) | data (needs sourcePath)"),
   encoding: z.string().optional().describe("array | base64 | auto (default, picks by arrayEncodingLimit)"),
+  endFalloff: z.number().optional().describe("Falloff past an end point, in centimetres (engine default 2000)"),
+  endPoint: z.string().optional().describe("Control point the segment ends at; must share the start point's spline owner"),
+  endTangentLength: z.number().optional().describe("Tangent length at the end point (default the distance between the points)"),
   erosionRate: z.number().optional().describe("Hydraulic: how fast under-loaded water cuts in, 0..1 (default 0.3)"),
   erosionType: z.string().optional().describe("hydraulic (default) | thermal"),
   evaporation: z.number().optional().describe("Hydraulic: fraction of water lost per pass, 0.01..1 (default 0.5)"),
@@ -2042,6 +2507,7 @@ export const schema: Record<string, z.ZodType> = {
   flattenTo: z.string().optional().describe("mean (default) | center | min | max, when flatten has no targetHeight"),
   format: z.string().optional().describe("png16 | raw16; inferred from the file extension when omitted"),
   guids: z.array(z.string()).optional().describe("Actor GUIDs of loaded LandscapeStreamingProxy actors, 1 to 256"),
+  halfWidth: z.number().optional().describe("Half-width of the spline at the point, in centimetres (engine default 1000)"),
   hardness: z.number().optional().describe("Layer hardness"),
   height: z.number().optional().describe("Source image height in pixels, required for raw16 (import_landscape_heightmap). Source image height in pixels (plan_real_world_landscape). One world Z to fill the region with (set_landscape_height_region)"),
   heightOffset: z.number().int().optional().describe("Flat uint16 height (default 32768, the actor's own Z)"),
@@ -2059,9 +2525,10 @@ export const schema: Record<string, z.ZodType> = {
   iterations: z.number().int().optional().describe("Passes to run (default 20) (apply_landscape_erosion). Smooth passes (default 1) (sculpt_landscape_region)"),
   label: z.string().optional().describe("Actor label; an existing landscape with this label is reported rather than duplicated"),
   landscapeName: z.string().optional().describe("Internal name of the landscape proxy, when the level has more than one"),
-  layerName: z.string().optional().describe("Paint layer name (add_landscape_layer_info, create_landscape_layer_info, get_landscape_layer_weight_region, landscape_layer_exists, paint_landscape_layer, remove_landscape_layer, set_landscape_layer_weight_region). Report this paint layer only (sample_landscape)"),
+  layerName: z.string().optional().describe("Paint layer name (add_landscape_layer_info, create_landscape_layer_info, get_landscape_layer_weight_region, landscape_layer_exists, paint_landscape_layer, remove_landscape_layer, set_landscape_layer_weight_region). Paint layer the segment paints when applied; empty clears it (connect_landscape_spline_points, update_landscape_spline_segment). Paint layer applying the spline paints; empty clears it (create_landscape_spline_point, update_landscape_spline_point). Report this paint layer only (sample_landscape)"),
   limit: z.number().int().optional().describe("Rows on this page (default 200, max 2000)"),
-  location: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Actor location (create_landscape). Landscape origin; its Z is where elevation zero lands (plan_real_world_landscape)"),
+  location: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Actor location (create_landscape). World location of the control point (create_landscape_spline_point, update_landscape_spline_point). Landscape origin; its Z is where elevation zero lands (plan_real_world_landscape)"),
+  lowerTerrain: z.boolean().optional().describe("Lower terrain above the spline down to it when applied (engine default true)"),
   materialPath: z.string().optional().describe("Material or material instance asset path"),
   maxActors: z.number().int().optional().describe("Refuse more matches than this, 1 to 1024 (default 256)"),
   maxComponents: z.number().int().optional().describe("Reject configurations needing more components than this (default 1024)"),
@@ -2069,17 +2536,20 @@ export const schema: Record<string, z.ZodType> = {
   maxHeight: z.number().optional().describe("World Z the image value 65535 maps to"),
   maxVertices: z.number().int().optional().describe("Refuse an area covering more than this many vertices (analyze_landscape_terrain, apply_landscape_erosion, export_landscape_heightmap, get_landscape_height_region, get_landscape_holes, get_landscape_layer_weight_region, get_landscape_slope_map, import_landscape_heightmap, sculpt_landscape_region, set_landscape_height_region, set_landscape_holes, set_landscape_layer_weight_region). Refuse a brush covering more than this many vertices (default 4000000) (paint_landscape_layer, sculpt_landscape)"),
   maxWork: z.number().int().optional().describe("Refuse more than this many vertex-iterations (default 40000000)"),
+  meshes: z.array(z.object({ mesh: z.string().describe("StaticMesh asset path"), scale: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Mesh scale (default 1, 1, 1)"), forwardAxis: z.string().optional().describe("X (default) | Y | Z: the mesh axis laid along the spline"), upAxis: z.string().optional().describe("X | Y | Z (default): the mesh axis kept up"), materialOverrides: z.array(z.string()).optional().describe("Material per slot; an empty string keeps the mesh's own"), centerH: z.boolean().optional().describe("Centre the mesh horizontally on the spline (default true)"), scaleToWidth: z.boolean().optional().describe("Scale the mesh to the spline width (default true)") })).optional().describe("Meshes deformed along the segment, replacing the current list; an empty list clears it"),
   metersPerQuad: z.number().optional().describe("Ground distance one quad covers; omit for one vertex per image sample"),
   minElevationMeters: z.number().optional().describe("Real-world elevation the heightmap's low value stands for"),
   minHeight: z.number().optional().describe("World Z the image value 0 maps to"),
   mode: z.string().optional().describe("raise (default) | lower | flatten"),
-  name: z.string().optional().describe("LayerInfo asset name (default LI_<layerName>)"),
+  name: z.string().optional().describe("Object name for the segment (connect_landscape_spline_points). LayerInfo asset name (default LI_<layerName>) (create_landscape_layer_info). Object name for the point; an existing point of this name is reported rather than duplicated (create_landscape_spline_point)"),
+  newSplineActor: z.boolean().optional().describe("World Partition: put the point in a new LandscapeSplineActor (the default when ownerPath is not given)"),
   northAt: z.string().optional().describe("Which end of the Y axis is north: minY (default) | maxY"),
   numSubsections: z.number().int().optional().describe("1 | 2 (default 2)"),
-  onConflict: z.string().optional().describe("When the asset already exists: skip (default) | error"),
+  onConflict: z.string().optional().describe("When the asset already exists: skip (default) | error (create_landscape_layer_info). When name is taken: skip (default) | error (create_landscape_spline_point)"),
   operator: z.string().optional().describe("raise | lower | flatten | smooth | mountain | valley | ridge | plateau | crater | terrace"),
   outputPath: z.string().optional().describe("Alias for filePath"),
   overwrite: z.boolean().optional().describe("Allow replacing an existing file (default true)"),
+  ownerPath: z.string().optional().describe("Existing spline owner to add the point to: a Landscape, LandscapeStreamingProxy or LandscapeSplineActor, by label or path"),
   packagePath: z.string().optional().describe("Content folder for the LayerInfo asset (default /Game/Landscape/LayerInfos)"),
   path: z.string().optional().describe("Alias for materialPath"),
   physMaterial: z.string().optional().describe("PhysicalMaterial asset path"),
@@ -2087,6 +2557,7 @@ export const schema: Record<string, z.ZodType> = {
   points: z.array(z.record(z.string(), z.unknown())).optional().describe("Entries {lat, lon} to place, or {x, y} to convert back; an optional name is echoed"),
   radius: z.number().optional().describe("Brush radius in world centimetres (default 500)"),
   rainAmount: z.number().optional().describe("Hydraulic: water added per vertex per pass, in world centimetres (default 0.5)"),
+  raiseTerrain: z.boolean().optional().describe("Raise terrain below the spline up to it when applied (engine default true)"),
   rawHeight: z.number().optional().describe("One raw uint16 height to fill the region with (32768 = the actor's own Z)"),
   realWorldSizeMeters: z.record(z.string(), z.unknown()).optional().describe("Ground footprint {x, y} in metres"),
   region: z.record(z.string(), z.unknown()).optional().describe("Rectangle {minX, minY, maxX, maxY} in landscape vertex indices, or centimetres with space world. Omit it for the whole landscape"),
@@ -2095,21 +2566,26 @@ export const schema: Record<string, z.ZodType> = {
   rimPosition: z.number().optional().describe("Crater rim position as a fraction of the radius, 0.1..0.95 (default 0.75)"),
   rimRatio: z.number().optional().describe("Crater rim height as a fraction of the bowl depth (default 0.35)"),
   rollbackMaxVertices: z.number().int().optional().describe("Carry the previous data as a rollback record only up to this many vertices (default 262144 for heights, 524288 for weights)"),
+  rotation: z.object({ pitch: z.number(), yaw: z.number(), roll: z.number() }).optional().describe("World rotation of the tangent at the point"),
   sampleHeight: z.boolean().optional().describe("Read the surface height at each projected point (default true)"),
   save: z.literal(false).optional().describe("Saving is not supported; the refresh is in memory only. Omit it or pass false"),
   scale: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Actor scale (default 100, 100, 100)"),
   sedimentCapacity: z.number().optional().describe("Hydraulic: sediment a unit of water can hold (default 0.6)"),
+  segment: z.string().optional().describe("Segment object name or full path, as list_splines reports it"),
   shape: z.string().optional().describe("ellipse (radial falloff, default) | rect (falloff toward the region edges)"),
   sharpness: z.number().optional().describe("How peaked the dome operators are, 0.1..8 (default 1.5)"),
+  sideFalloff: z.number().optional().describe("Falloff beyond each side, in centimetres (engine default 1000)"),
   slopeThresholdDegrees: z.number().optional().describe("At or below this slope a vertex counts as flat (default 10)"),
   sourcePath: z.string().optional().describe("Alias for filePath (import_landscape_heightmap). Heightmap file to measure; a relative path resolves under the project Saved directory (plan_real_world_landscape)"),
   space: z.string().optional().describe("Units of region: quad (vertex indices, default) | world (centimetres)"),
+  startPoint: z.string().optional().describe("Control point the segment starts at, by name or path"),
+  startTangentLength: z.number().optional().describe("Tangent length at the start point (default the distance between the points)"),
   steps: z.number().int().optional().describe("Terrace steps across the region's height range (default 8)"),
   strength: z.number().optional().describe("Thermal: how much of the excess slumps per pass, 0..1 (default 0.5) (apply_landscape_erosion). Target weight at full brush strength, 0..1 (default 1) (paint_landscape_layer). How hard the operator blends into what is there, 0..1 (default 1) (sculpt_landscape_region). Fill fraction 0..1, used when weight is absent (set_landscape_layer_weight_region)"),
   subsectionSizeQuads: z.number().int().optional().describe("7 | 15 | 31 | 63 | 127 | 255 (default 63)"),
   talusAngle: z.number().optional().describe("Thermal: slope in degrees material stops slumping at (default 35)"),
   targetHeight: z.number().optional().describe("World Z that flatten and plateau pull toward"),
-  updateNow: z.boolean().optional().describe("Run the merge now rather than on the next editor tick (default true)"),
+  updateNow: z.boolean().optional().describe("Merge the edit layers now rather than on the next editor tick (default true) (apply_landscape_splines). Run the merge now rather than on the next editor tick (default true) (merge_landscape_edit_layers)"),
   verticalExaggeration: z.number().optional().describe("Multiply real elevations by this, 0.01..100 (default 1)"),
   weight: z.number().optional().describe("One value to fill the region with; 0..1 is a fraction, above that the raw 0..255"),
   weights: z.array(z.number()).optional().describe("One 0..255 weight per vertex, row-major from (minX, minY)"),

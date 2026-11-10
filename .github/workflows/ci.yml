@@ -448,9 +448,13 @@ jobs:
           # The draft must carry the prebuilt bridge for every promised engine
           # and its SHA-256 manifest; without them every binary install's update
           # fails. Rules and message in scripts/release-binaries.mjs, under unit
-          # test in tests/unit/release-binaries.test.ts.
+          # test in tests/unit/release-binaries.test.ts. The manifest names the
+          # build set, which decides whether a when-built engine is required.
+          gh release download "v$VERSION" --pattern "UE_MCP_Bridge-$VERSION-manifest.json" \
+            --dir /tmp/release-binaries --clobber || true
           gh release view "v$VERSION" --json assets --jq '.assets[].name' \
-            | node scripts/release-binaries.mjs --version "$VERSION"
+            | node scripts/release-binaries.mjs --version "$VERSION" \
+              --manifest "/tmp/release-binaries/UE_MCP_Bridge-$VERSION-manifest.json"
 
       - name: Prose rules, against what will be published
         if: steps.version.outputs.should_publish == 'true'

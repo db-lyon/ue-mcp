@@ -94,7 +94,7 @@ The `ue-mcp/daemon` package export (`src/daemon-api.ts`) carries the types and h
 
 **Entry point:** `src/index.ts`. A first argument naming a command runs the CLI (`src/cli/`); otherwise it starts the shim or the in-process server.
 
-The server registers the <!-- count:tools -->30<!-- /count --> category tools and the `flow` tool, each dispatched through the runtime's sessions.
+The server registers the <!-- count:tools -->31<!-- /count --> category tools and the `flow` tool, each dispatched through the runtime's sessions.
 
 ### Key modules
 
@@ -152,7 +152,7 @@ Two kinds of action:
 
 ### Advertised surface and context strategy
 
-The [context strategy](configuration.md#context-strategy-full-lean-micro) decides what a client is handed at startup. `micro`, the default, advertises one `tools` gateway (<!-- tax:micro -->~2.2k<!-- /tax --> tokens with the instructions). `lean` advertises the category tools with a summary each (<!-- tax:lean -->~20k<!-- /tax -->). `full` adds one signature line per action (<!-- tax:full -->~55k<!-- /tax -->). `scripts/context-tax.mjs` measures these and a release gate holds each to its budget.
+The [context strategy](configuration.md#context-strategy-full-lean-micro) decides what a client is handed at startup. `micro`, the default, advertises one `tools` gateway (<!-- tax:micro -->~240<!-- /tax --> tokens with the instructions). `lean` advertises the category tools with a summary each (<!-- tax:lean -->~32k<!-- /tax -->). `full` adds one signature line per action (<!-- tax:full -->~90k<!-- /tax -->). `scripts/context-tax.mjs` measures these and a release gate holds each to its budget.
 
 A category tool is advertised as `action` (the enum of its actions) plus `args` (an object). The server unwraps `args` and validates it against the category's zod shape, so a refusal names the bad parameter. The micro gateway's `call` is checked against the target category the same way.
 
@@ -321,7 +321,7 @@ The plugin runs a raw WebSocket server on a dedicated thread, dispatches each re
 | ProjectHandlers | Project info, world subsystem queries |
 | StateTreeHandlers | StateTree authoring |
 | ChooserHandlers | Chooser tables |
-| EpicHandlers | The UE 5.8 Toolset Registry |
+| EpicHandlers | The Toolset Registry (UE 5.8+) |
 | MassHandlers | Mass Entity fragments, traits and processors |
 | SkeletalMeshHandlers | Skeletal mesh LODs, sections, instancing settings |
 | FabHandlers | Fab library import |

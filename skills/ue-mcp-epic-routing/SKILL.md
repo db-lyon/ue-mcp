@@ -32,6 +32,10 @@ Authoring the **contents of a graph** (event graph, function body, macro) is the
 | A task with no native action but an `epic_*` one exists | the `epic_*` action |
 | A task with no epic equivalent | the native action |
 
+## Epic's Unreal MCP plugin: its own tools and resources
+
+Beside the registry, Epic's Unreal MCP plugin (ModelContextProtocol, off by default) serves tools of its own: legacy MCP Tool Library Blueprints and tools other plugins register. `epic(action="list_mcp_tools")` lists them with their `source`, and `epic(action="call_mcp_tool", args={tool, input})` runs one. Its adapters onto the registry are left out of that list, since `list_toolsets` and the `epic_*` actions already cover them. Resources its providers register are `epic(action="list_mcp_resources")` / `read_mcp_resource`, and this server also serves them as MCP resources.
+
 ## Fallback
 
 If `epic(action="status")` reports the registry unavailable (pre-5.8, plugins off, or `available=false`), route **everything** through the native path - the DSL actions will not exist. The native node-by-node path (`add_node` -> `set_node_property` -> `connect_pins` -> `compile`) always works; see the `ue-mcp-blueprint` skill.

@@ -25,6 +25,10 @@
 #include "Misc/Char.h"
 #include "Async/Async.h"
 #include "HandlerCatalog.h"
+#include "HandlerDeferred.h"
+#include "BridgeRequestContext.h"
+#include "GameThreadExecutor.h"
+#include "Misc/ScopeExit.h"
 
 #include "MCPSocketPlatform.h"
 
@@ -56,6 +60,24 @@ FMCPConnectionRelease::FMCPConnectionRelease(FMCPBridgeServer& InServer)
 FMCPConnectionRelease::~FMCPConnectionRelease()
 {
 	Server.ReleaseConnectionSlot();
+}
+
+bool FMCPConnectionWriter::Send(const TArray<uint8>& Frame)
+{
+	FScopeLock Guard(&Lock);
+	return bOpen && FMCPBridgeServer::SendAll(Socket, Frame.GetData(), Frame.Num());
+}
+
+void FMCPConnectionWriter::Close(uint16 StatusCode, const FString& Reason)
+{
+	FScopeLock Guard(&Lock);
+	if (bOpen) FMCPBridgeServer::SendCloseFrame(Socket, StatusCode, Reason);
+}
+
+void FMCPConnectionWriter::Retire()
+{
+	FScopeLock Guard(&Lock);
+	bOpen = false;
 }
 
 FMCPBridgeServer::FMCPBridgeServer(int32 Port, const FString& InPortSource, bool bInPortPinned)
@@ -249,6 +271,13 @@ uint32 FMCPBridgeServer::Run()
 	bool bBound = false;
 	for (int32 Offset = 0; Offset <= kMaxPortProbe; ++Offset)
 	{
+		// A port the project's Unreal Canvas Bridge claims stays free for it,
+		// even when it is free now: its servers start after this one.
+		if (IsCanvasReservedPort(RequestedPort + Offset))
+		{
+			continue;
+		}
+
 		sockaddr_in ServerAddr;
 		FMemory::Memset(&ServerAddr, 0, sizeof(ServerAddr));
 		ServerAddr.sin_family = AF_INET;
@@ -613,6 +642,12 @@ TSharedPtr<FJsonObject> FMCPBridgeServer::BuildCapabilitiesPayload()
 		// Every upgrade carries "Authorization: Bearer <token>" from the
 		// per-user token file (BridgeSessionToken.h).
 		TEXT("session-token"),
+		// A handler may answer later; the frame-level cancelToken names the
+		// request for cancel_request, and progress: true asks for
+		// notifications/progress frames while it is awaited.
+		TEXT("deferred-results"),
+		TEXT("cancel-request"),
+		TEXT("progress-frames"),
 	};
 	TArray<TSharedPtr<FJsonValue>> FeatureValues;
 	for (const TCHAR* Feature : Features)
@@ -652,6 +687,11 @@ TSharedPtr<FJsonObject> FMCPBridgeServer::BuildCapabilitiesPayload()
 }
 
 FString FMCPBridgeServer::ProcessMessage(const FString& Message)
+{
+	return ProcessMessage(Message, [](const FString&) {}, nullptr);
+}
+
+FString FMCPBridgeServer::ProcessMessage(const FString& Message, const TFunction<void(const FString&)>& SendInterim, TFunction<FString()>* OutDeferred)
 {
 	TSharedPtr<FJsonObject> Request = ParseJsonRpcRequest(Message);
 	if (!Request.IsValid())
@@ -738,6 +778,20 @@ FString FMCPBridgeServer::ProcessMessage(const FString& Message)
 		return CreateJsonRpcResponse(Request, MakeShared<FJsonValueObject>(Cleared));
 	}
 
+	// Off the game thread like the echo: it has to reach a request whose handler
+	// is still running there, and it arrives on a connection of its own.
+	if (Method == TEXT("cancel_request"))
+	{
+		FString Token;
+		Params->TryGetStringField(TEXT("cancelToken"), Token);
+		TSharedPtr<FJsonObject> Cancelled = MakeShared<FJsonObject>();
+		Cancelled->SetBoolField(TEXT("success"), !Token.IsEmpty());
+		Cancelled->SetBoolField(TEXT("servedWithoutGameThread"), true);
+		Cancelled->SetStringField(TEXT("state"), Token.IsEmpty() ? FString(TEXT("unknown")) : MCPRequestContext::Cancel(Token));
+		if (Token.IsEmpty()) Cancelled->SetStringField(TEXT("error"), TEXT("cancelToken is required"));
+		return CreateJsonRpcResponse(Request, MakeShared<FJsonValueObject>(Cancelled));
+	}
+
 	// A method nothing registered is answered as unknown before either gate, so
 	// it never reads as a dialog refusal or as the editor still starting up.
 	if (!HandlerRegistry.HasHandler(Method))
@@ -745,9 +799,18 @@ FString FMCPBridgeServer::ProcessMessage(const FString& Message)
 		return CreateJsonRpcError(Request, -32601, DescribeUnknownMethod(Method));
 	}
 
+	// The client names a request it may cancel with a frame-level cancelToken,
+	// and asks for progress frames with progress: true.
+	FString CancelToken;
+	Request->TryGetStringField(TEXT("cancelToken"), CancelToken);
+	bool bWantsProgress = false;
+	Request->TryGetBoolField(TEXT("progress"), bWantsProgress);
+	const FMCPRequestContextRef RequestContext = MakeShared<FMCPRequestContext, ESPMode::ThreadSafe>(CancelToken);
+
 	// Execute handler on game thread
-	FMCPHandlerRegistry::FHandlerFunction Handler = [this, Method](const TSharedPtr<FJsonObject>& HandlerParams) -> TSharedPtr<FJsonValue>
+	FMCPHandlerRegistry::FHandlerFunction Handler = [this, Method, RequestContext](const TSharedPtr<FJsonObject>& HandlerParams) -> TSharedPtr<FJsonValue>
 	{
+		MCPRequestContext::FScope Scope(RequestContext);
 		return HandlerRegistry.ExecuteHandler(Method, HandlerParams);
 	};
 
@@ -821,14 +884,40 @@ FString FMCPBridgeServer::ProcessMessage(const FString& Message)
 		}
 	}
 
+	const float WaitSeconds = PerHandlerTimeout > 0.0f ? PerHandlerTimeout : FMCPGameThreadExecutor::DefaultTimeoutSeconds;
+	const double StartedSeconds = FPlatformTime::Seconds();
+	MCPRequestContext::Register(RequestContext);
 	FMCPEngineStatus::Get().NoteHandlerBegin(Method);
-	TSharedPtr<FJsonValue> Result = GameThreadExecutor.ExecuteOnGameThread(
-		Handler,
-		Params,
-		PerHandlerTimeout > 0.0f ? PerHandlerTimeout : FMCPGameThreadExecutor::DefaultTimeoutSeconds,
-		bModalSafe);
+	TSharedPtr<FJsonValue> Result = GameThreadExecutor.ExecuteOnGameThread(Handler, Params, WaitSeconds, bModalSafe);
 	FMCPEngineStatus::Get().NoteHandlerEnd(Method);
 
+	// A deferred answer is awaited within the same budget, so the game thread
+	// keeps ticking while the work it started finishes. Over a connection the
+	// wait runs on a thread of its own and the connection reads on.
+	if (const FMCPDeferredCallPtr Deferred = RequestContext->GetDeferred())
+	{
+		if (MCPIsDeferredMarker(Result))
+		{
+			const double Deadline = StartedSeconds + WaitSeconds;
+			TFunction<FString()> Finish = [this, Request, Method, Deferred, RequestContext, Deadline, bWantsProgress, SendInterim]() -> FString
+			{
+				const TSharedPtr<FJsonValue> Answer = AwaitDeferredAnswer(*Request, Method, *Deferred, *RequestContext, Deadline, bWantsProgress, SendInterim);
+				MCPRequestContext::Unregister(RequestContext);
+				return FinishJsonRpcResponse(Request, Method, Answer);
+			};
+			if (!OutDeferred) return Finish();
+			*OutDeferred = MoveTemp(Finish);
+			return FString();
+		}
+		// Deferred by a nested call whose caller answered anyway: nothing waits for it.
+		Deferred->Cancel(TEXT("the handler answered without it"));
+	}
+	MCPRequestContext::Unregister(RequestContext);
+	return FinishJsonRpcResponse(Request, Method, Result);
+}
+
+FString FMCPBridgeServer::FinishJsonRpcResponse(const TSharedPtr<FJsonObject>& Request, const FString& Method, const TSharedPtr<FJsonValue>& Result)
+{
 	// A bare "Handler execution timed out" tells the caller nothing they can
 	// act on. Attach what the engine was doing while the request waited: the
 	// dialog blocking the game thread, the slow task and its percentage, or how
@@ -852,6 +941,82 @@ FString FMCPBridgeServer::ProcessMessage(const FString& Message)
 			FString::Printf(TEXT("Internal error: handler '%s' returned no result"), *Method));
 	}
 	return CreateJsonRpcResponse(Request, Result);
+}
+
+TSharedPtr<FJsonValue> FMCPBridgeServer::AwaitDeferredAnswer(
+	const FJsonObject& Request, const FString& Method, FMCPDeferredCall& Deferred, FMCPRequestContext& Context,
+	double DeadlineSeconds, bool bWantsProgress, const TFunction<void(const FString&)>& SendInterim)
+{
+	const double Started = FPlatformTime::Seconds();
+	double LastFrame = Started;
+	int32 Heartbeats = 0;
+	bool bHandlerReports = false;
+
+	const auto SendProgress = [&](double Progress, double Total, const FString& Text)
+	{
+		TSharedPtr<FJsonObject> Body = MakeShared<FJsonObject>();
+		if (TSharedPtr<FJsonValue> Id = Request.TryGetField(TEXT("id"))) Body->SetField(TEXT("id"), Id);
+		Body->SetNumberField(TEXT("progress"), Progress);
+		if (Total > 0.0) Body->SetNumberField(TEXT("total"), Total);
+		Body->SetStringField(TEXT("message"), Text);
+		TSharedPtr<FJsonObject> Frame = MakeShared<FJsonObject>();
+		Frame->SetStringField(TEXT("jsonrpc"), TEXT("2.0"));
+		Frame->SetStringField(TEXT("method"), TEXT("notifications/progress"));
+		Frame->SetObjectField(TEXT("params"), Body);
+		FString Out;
+		TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&Out);
+		FJsonSerializer::Serialize(Frame.ToSharedRef(), Writer);
+		SendInterim(Out);
+	};
+
+	const auto Stopped = [&](const TCHAR* Reason, const FString& Text)
+	{
+		Deferred.Cancel(Text);
+		TSharedPtr<FJsonValue> Answer = FMCPGameThreadExecutor::MakeExecutorError(Reason, *Text);
+		const FString Note = Deferred.GetCancelNote();
+		if (!Note.IsEmpty()) Answer->AsObject()->SetStringField(TEXT("cancelNote"), Note);
+		return Answer;
+	};
+
+	constexpr uint32 SliceMs = 100;
+	constexpr double HeartbeatSeconds = 1.0;
+	for (;;)
+	{
+		if (Deferred.Wait(SliceMs) && Deferred.IsComplete())
+		{
+			return Deferred.GetResult();
+		}
+		if (Context.IsCancelRequested() || Deferred.IsCancelled())
+		{
+			return Stopped(TEXT("cancelled"), FString::Printf(TEXT("'%s' was cancelled by the client before it finished."), *Method));
+		}
+		if (bShouldStop)
+		{
+			return Stopped(TEXT("shutting_down"), TEXT("Editor is shutting down; the deferred answer was abandoned."));
+		}
+		const double Now = FPlatformTime::Seconds();
+		if (Now >= DeadlineSeconds)
+		{
+			return Stopped(TEXT("timeout"), FString::Printf(TEXT("'%s' did not finish within its time budget; it was cancelled. Raise the budget with timeoutMs."), *Method));
+		}
+		if (!bWantsProgress) continue;
+
+		// The handler's own progress when it reports any, otherwise a heartbeat
+		// once a second, as Epic's server sends for a tool that reports none.
+		double Progress = 0.0, Total = 0.0;
+		FString Text;
+		if (Deferred.TakeProgress(Progress, Total, Text))
+		{
+			bHandlerReports = true;
+			SendProgress(Progress, Total, Text);
+			LastFrame = Now;
+		}
+		else if (!bHandlerReports && Now - LastFrame >= HeartbeatSeconds)
+		{
+			SendProgress(++Heartbeats, 0.0, FString::Printf(TEXT("%s running for %.0fs"), *Method, Now - Started));
+			LastFrame = Now;
+		}
+	}
 }
 
 FString FMCPBridgeServer::DescribeUnknownMethod(const FString& Method) const
@@ -965,6 +1130,12 @@ void FMCPBridgeServer::ProcessWebSocketMessages(FMCPSocketHandle ClientSocketFD,
 	// pipelined behind its upgrade request.
 	TArray<uint8> PendingBytes = MoveTemp(InitialBytes);
 
+	// Every write to this socket goes through the writer, under one lock, since
+	// a deferred answer's thread writes here too. Closed to writers on the way
+	// out, before the socket itself closes.
+	const TSharedRef<FMCPConnectionWriter, ESPMode::ThreadSafe> Writer = MakeShared<FMCPConnectionWriter, ESPMode::ThreadSafe>(ClientSocketFD);
+	ON_SCOPE_EXIT { Writer->Retire(); };
+
 	// Reassembly state for a fragmented message (a data frame with FIN clear
 	// followed by continuation frames).
 	TArray<uint8> MessagePayload;
@@ -996,7 +1167,7 @@ void FMCPBridgeServer::ProcessWebSocketMessages(FMCPSocketHandle ClientSocketFD,
 			if (Status == EMCPFrameDecode::ProtocolError)
 			{
 				UE_LOG(LogMCPBridge, Warning, TEXT("[UE-MCP] WebSocket protocol error, closing connection: %s"), *DecodeError);
-				SendCloseFrame(ClientSocketFD, DecodeCloseCode, DecodeError);
+				Writer->Close(DecodeCloseCode, DecodeError);
 				bDone = true;
 				break;
 			}
@@ -1025,14 +1196,13 @@ void FMCPBridgeServer::ProcessWebSocketMessages(FMCPSocketHandle ClientSocketFD,
 					PeerReason.IsEmpty() ? TEXT("") : TEXT(": "),
 					*PeerReason);
 				// Echo the code back to finish the handshake, then stop reading.
-				SendCloseFrame(ClientSocketFD, PeerCode, TEXT(""));
+				Writer->Close(PeerCode, TEXT(""));
 				bDone = true;
 				break;
 			}
 			if (Frame.Opcode == EMCPWebSocketOpcode::Ping)
 			{
-				const TArray<uint8> Pong = CreateControlFrame(EMCPWebSocketOpcode::Pong, Frame.Payload);
-				if (!SendAll(ClientSocketFD, Pong.GetData(), Pong.Num()))
+				if (!Writer->Send(CreateControlFrame(EMCPWebSocketOpcode::Pong, Frame.Payload)))
 				{
 					bDone = true;
 					break;
@@ -1049,7 +1219,7 @@ void FMCPBridgeServer::ProcessWebSocketMessages(FMCPSocketHandle ClientSocketFD,
 				if (!bAssembling)
 				{
 					UE_LOG(LogMCPBridge, Warning, TEXT("[UE-MCP] Continuation frame with no message in progress"));
-					SendCloseFrame(ClientSocketFD, 1002, TEXT("continuation frame with no message in progress"));
+					Writer->Close(1002, TEXT("continuation frame with no message in progress"));
 					bDone = true;
 					break;
 				}
@@ -1060,7 +1230,7 @@ void FMCPBridgeServer::ProcessWebSocketMessages(FMCPSocketHandle ClientSocketFD,
 				if (bAssembling)
 				{
 					UE_LOG(LogMCPBridge, Warning, TEXT("[UE-MCP] New data frame while a fragmented message was still open"));
-					SendCloseFrame(ClientSocketFD, 1002, TEXT("data frame interleaved with an open fragmented message"));
+					Writer->Close(1002, TEXT("data frame interleaved with an open fragmented message"));
 					bDone = true;
 					break;
 				}
@@ -1077,7 +1247,7 @@ void FMCPBridgeServer::ProcessWebSocketMessages(FMCPSocketHandle ClientSocketFD,
 					TEXT("message of %lld bytes exceeds the %lld byte bridge limit"),
 					(int64)MessagePayload.Num(), MCPWebSocketLimits::kMaxWebSocketMessageBytes);
 				UE_LOG(LogMCPBridge, Error, TEXT("[UE-MCP] %s"), *Reason);
-				SendCloseFrame(ClientSocketFD, 1009, Reason);
+				Writer->Close(1009, Reason);
 				bDone = true;
 				break;
 			}
@@ -1101,9 +1271,24 @@ void FMCPBridgeServer::ProcessWebSocketMessages(FMCPSocketHandle ClientSocketFD,
 				continue;
 			}
 
-			const FString Response = ProcessMessage(Message);
-			const TArray<uint8> ResponseFrame = CreateWebSocketFrame(Response);
-			if (!SendAll(ClientSocketFD, ResponseFrame.GetData(), ResponseFrame.Num()))
+			// A deferred answer is awaited on a thread of its own, counted like a
+			// connection so shutdown waits for it, and this one reads the next request.
+			TFunction<FString()> Deferred;
+			const FString Response = ProcessMessage(Message, [Writer](const FString& Interim)
+			{
+				Writer->Send(CreateWebSocketFrame(Interim));
+			}, &Deferred);
+			if (Deferred)
+			{
+				ActiveConnectionCount.Increment();
+				Async(EAsyncExecution::Thread, [this, Writer, Deferred = MoveTemp(Deferred)]()
+				{
+					FMCPConnectionRelease Release(*this);
+					Writer->Send(CreateWebSocketFrame(Deferred()));
+				});
+				continue;
+			}
+			if (!Writer->Send(CreateWebSocketFrame(Response)))
 			{
 				UE_LOG(LogMCPBridge, Warning, TEXT("[UE-MCP] Failed to send response frame; closing connection"));
 				bDone = true;
@@ -1156,7 +1341,7 @@ void FMCPBridgeServer::ProcessWebSocketMessages(FMCPSocketHandle ClientSocketFD,
 				TEXT("(a %lld byte message plus its frame header); no complete frame arrived"),
 				(int64)PendingBytes.Num(), MCPWebSocketLimits::kMaxPendingReceiveBytes, MCPWebSocketLimits::kMaxWebSocketMessageBytes);
 			UE_LOG(LogMCPBridge, Error, TEXT("[UE-MCP] %s"), *Reason);
-			SendCloseFrame(ClientSocketFD, 1009, Reason);
+			Writer->Close(1009, Reason);
 			bConnectionFinished = true;
 			break;
 		}
@@ -1167,6 +1352,6 @@ void FMCPBridgeServer::ProcessWebSocketMessages(FMCPSocketHandle ClientSocketFD,
 		// The only way out of the loop that is not the connection's own doing:
 		// the bridge is stopping. Tell the client so, instead of leaving it to
 		// infer a healthy editor from a severed socket.
-		SendCloseFrame(ClientSocketFD, 1001, TEXT("editor is shutting down"));
+		Writer->Close(1001, TEXT("editor is shutting down"));
 	}
 }

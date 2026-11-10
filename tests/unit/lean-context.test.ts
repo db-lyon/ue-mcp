@@ -11,7 +11,8 @@ import {
 import { buildMicroGateway } from "../../src/surface/context/micro-context.js";
 import { searchToolGraph } from "../../src/surface/context/tool-search.js";
 import { actionSignature } from "../../src/surface/action-signature.js";
-import { SERVER_INSTRUCTIONS, SERVER_INSTRUCTIONS_LEAN, SERVER_INSTRUCTIONS_MICRO } from "../../src/surface/context/instructions.js";
+import { SERVER_INSTRUCTIONS, SERVER_INSTRUCTIONS_LEAN, microGuide } from "../../src/surface/context/instructions.js";
+import { ALL_TOOLS } from "../../src/tools.js";
 
 function fixtureTools(): ToolDef[] {
   return [
@@ -199,10 +200,31 @@ describe("buildMicroGateway", () => {
     expect(out.params?.name).toBe("X");
   });
 
-  it("exposes search alongside the three gateway actions", () => {
+  it("exposes guide and search alongside the three gateway actions", () => {
     const gw = buildMicroGateway(microFixture());
     expect(gw.name).toBe("tools");
-    expect(Object.keys(gw.actions)).toEqual(["search", "list_categories", "describe", "call"]);
+    expect(Object.keys(gw.actions)).toEqual(["guide", "search", "list_categories", "describe", "call"]);
+  });
+
+  it("guide covers the categories it reaches and how to call them", async () => {
+    const gw = buildMicroGateway(microFixture());
+    const guide = (await gw.actions.guide.handler!(ctxB, { action: "guide" })) as string;
+    expect(guide).toContain("2 categories (3 actions)");
+    expect(guide).toContain("blueprint, level, flow.");
+    expect(guide).toContain("timeoutMs");
+  });
+
+  it("advertises only its own keys, with a strict action enum", () => {
+    const gw = buildMicroGateway(microFixture());
+    expect(Object.keys(gw.schema)).toEqual(["action", "category", "method", "args", "query", "offset", "limit"]);
+    expect(gw.schema.action.safeParse("bogus").success).toBe(false);
+  });
+
+  it("describes and lists flow as a category, and leaves running it to dispatch", async () => {
+    const gw = buildMicroGateway(microFixture());
+    const flow = (await gw.actions.describe.handler!(ctxB, { action: "describe", category: "flow" })) as { signatures: string[] };
+    expect(flow.signatures.map((sig) => sig.split("(")[0])).toEqual(["run", "plan", "list"]);
+    await expect(invoke(gw, { category: "flow", method: "list" })).rejects.toThrow(/flow route/);
   });
 
   it("list_categories returns every category with a summary", async () => {
@@ -210,8 +232,8 @@ describe("buildMicroGateway", () => {
     const out = (await gw.actions.list_categories.handler!(ctxB, { action: "list_categories" })) as {
       count: number; categories: Array<{ category: string; summary: string }>;
     };
-    expect(out.count).toBe(2);
-    expect(out.categories.map((c) => c.category)).toEqual(["blueprint", "level"]);
+    expect(out.count).toBe(3);
+    expect(out.categories.map((c) => c.category)).toEqual(["blueprint", "level", "flow"]);
   });
 
   it("describe lists a category's actions and rejects unknown ones", async () => {
@@ -293,7 +315,8 @@ describe("compact discovery for spatial requests", () => {
   });
 
   it("retains spatial interpretation and verification guidance in every context mode", () => {
-    for (const instructions of [SERVER_INSTRUCTIONS, SERVER_INSTRUCTIONS_LEAN, SERVER_INSTRUCTIONS_MICRO]) {
+    // Micro carries it in its guide, not its one-line seed.
+    for (const instructions of [SERVER_INSTRUCTIONS, SERVER_INSTRUCTIONS_LEAN, microGuide(ALL_TOOLS)]) {
       expect(instructions).toContain("dryRun=true");
       expect(instructions).toContain("viewRotation");
       expect(instructions).toContain("not visual verification");

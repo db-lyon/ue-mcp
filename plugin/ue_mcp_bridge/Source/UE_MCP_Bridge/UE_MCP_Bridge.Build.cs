@@ -83,6 +83,11 @@ public class UE_MCP_Bridge : ModuleRules
 				"InputCore",
 				"Landscape",
 				"LevelEditor",
+				// Localization targets and their gather/compile configs
+				// (LocalizationSettings, LocalizationConfigurationScript), and the
+				// GatherText commandlet runner the Localization Dashboard uses.
+				"Localization",
+				"LocalizationCommandletExecution",
 				"LevelSequence",
 				"LevelSequenceEditor",
 				"MainFrame",
@@ -127,6 +132,11 @@ public class UE_MCP_Bridge : ModuleRules
 				// GetStatistics, which editor(start_trace) and its channel actions
 				// call. Core includes the header but does not re-export these.
 				"TraceLog",
+				// ITraceServicesModule and its analysis providers (frames,
+				// timers, threads, bookmarks), which editor(analyze_trace)
+				// reads a recorded .utrace through. A Developer module, as the
+				// editor modules above are; Unreal Insights is built on it.
+				"TraceServices",
 				// The engine-status snapshot, in its own module so it can load
 				// at PostConfigInit and cover the startup window that exists
 				// before this module does.
@@ -193,6 +203,71 @@ public class UE_MCP_Bridge : ModuleRules
 		else
 		{
 			PublicDefinitions.Add("WITH_FAB_PLUGIN=0");
+		}
+
+		// Epic's Unreal MCP plugin (5.8+, off by default). Headers only, never
+		// linked: the handlers reach its module through virtual calls once it is
+		// loaded, so this DLL loads whether or not a project enables the plugin.
+		bool bEpicMCPPresent = System.IO.File.Exists(System.IO.Path.Combine(
+			EngineDirectory, "Plugins", "Experimental", "ModelContextProtocol", "Source", "ModelContextProtocol", "Public", "IModelContextProtocolResourceProvider.h"));
+		if (bEpicMCPPresent && Target.bBuildEditor)
+		{
+			PrivateIncludePathModuleNames.Add("ModelContextProtocol");
+			PrivateDefinitions.Add("WITH_UEMCP_EPIC_MCP=1");
+		}
+		else
+		{
+			PrivateDefinitions.Add("WITH_UEMCP_EPIC_MCP=0");
+		}
+
+		// Epic's ToolsetRegistry in 5.8 keeps its process-wide registry as a
+		// member of UToolsetRegistrySubsystem, declared in this module's public
+		// headers. Headers only, never linked: epic(set_toolset_enabled) reads the
+		// member's address from the layout and calls the registry's exported
+		// methods by name. 5.9 moved the subsystem to an editor module and added
+		// FToolsetRegistry::Get(), so the header is not needed there.
+		bool bToolsetRegistrySubsystemHeader = System.IO.File.Exists(System.IO.Path.Combine(
+			EngineDirectory, "Plugins", "Experimental", "ToolsetRegistry", "Source", "ToolsetRegistry", "Public", "ToolsetRegistry", "ToolsetRegistrySubsystem.h"));
+		if (bToolsetRegistrySubsystemHeader && Target.bBuildEditor)
+		{
+			PrivateIncludePathModuleNames.Add("ToolsetRegistry");
+			PrivateDefinitions.Add("WITH_UEMCP_TOOLSET_REGISTRY_SUBSYSTEM=1");
+		}
+		else
+		{
+			PrivateDefinitions.Add("WITH_UEMCP_TOOLSET_REGISTRY_SUBSYSTEM=0");
+		}
+
+		// Epic's Semantic Search plugin (5.8+, experimental, off by default).
+		// Headers only, never linked: asset(semantic_search) reaches it through
+		// virtual calls on its module interface and embedding provider, so this
+		// DLL loads whether or not a project enables the plugin.
+		bool bSemanticSearchPresent = System.IO.File.Exists(System.IO.Path.Combine(
+			EngineDirectory, "Plugins", "Experimental", "SemanticSearch", "Source", "SemanticSearch", "Public", "ISemanticSearchModule.h"));
+		if (bSemanticSearchPresent && Target.bBuildEditor)
+		{
+			PrivateIncludePathModuleNames.Add("SemanticSearch");
+			PrivateDefinitions.Add("WITH_UEMCP_SEMANTIC_SEARCH=1");
+		}
+		else
+		{
+			PrivateDefinitions.Add("WITH_UEMCP_SEMANTIC_SEARCH=0");
+		}
+
+		// The Neural Network Engine core is an engine module, not a plugin, so it
+		// links like any other runtime module where the engine has it. The
+		// runtimes (NNERuntimeORT, NNERuntimeLiteRT, ...) are plugins that
+		// register with it at load and are never linked.
+		bool bNNEPresent = System.IO.File.Exists(System.IO.Path.Combine(
+			EngineDirectory, "Source", "Runtime", "NNE", "Public", "NNERuntimeCPU.h"));
+		if (bNNEPresent)
+		{
+			PrivateDependencyModuleNames.Add("NNE");
+			PrivateDefinitions.Add("WITH_UEMCP_NNE=1");
+		}
+		else
+		{
+			PrivateDefinitions.Add("WITH_UEMCP_NNE=0");
 		}
 	}
 }

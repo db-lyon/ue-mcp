@@ -3,7 +3,7 @@
 ## Prerequisites
 
 - [Node.js](https://nodejs.org/) 20 or newer
-- Unreal Engine 5.4 to 5.8, for building the plugin and live testing
+- Unreal Engine <!-- count:engineRange -->5.4 to 5.9<!-- /count -->, for building the plugin and live testing
 
 ## Setup
 
@@ -88,7 +88,7 @@ src/
 ├── integrations/claude-code/  # Hooks and MCP client config
 ├── cli/                  # CLI commands, --editor parsing, terminal UI (cli/ui/)
 ├── flow/                 # Flow engine (registry, loader, task factory, HTTP)
-└── tools/                # <!-- count:tools -->30<!-- /count --> category tools, one file each
+└── tools/                # <!-- count:tools -->31<!-- /count --> category tools, one file each
     ├── project/          # project category, split by action group
     ├── epic/             # Generated epic_* actions (npm run epic:generate)
     └── specs/            # Generated parameter specs (npm run specs:generate)

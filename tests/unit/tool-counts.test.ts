@@ -13,6 +13,7 @@
  */
 import { describe, expect, it } from "vitest";
 import { computeCounts } from "../../scripts/generate-tool-metadata.js";
+import { SUPPORTED_ENGINE_RANGE } from "../../scripts/lib/engine-range.mjs";
 import { ALL_TOOLS } from "../../src/tools.js";
 import { SERVER_INSTRUCTIONS } from "../../src/surface/context/instructions.js";
 
@@ -30,6 +31,12 @@ describe("tool counts", () => {
       0,
     );
     expect(counts.nativeToolActions).toBe(declared);
+  });
+
+  it("takes Epic's per-engine count from the newest recorded catalog and the range from its one source", () => {
+    expect(counts.nativeEngineToolActions).toBeGreaterThan(0);
+    expect(counts.nativeEngineToolActions).toBeLessThanOrEqual(counts.nativeToolActions);
+    expect(counts.engineRange).toEqual({ ...SUPPORTED_ENGINE_RANGE });
   });
 
   it("never publishes a zero for a surface that ships", () => {

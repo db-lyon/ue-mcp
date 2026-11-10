@@ -2,7 +2,7 @@
 
 ## MCP Client Configuration
 
-`npx ue-mcp init` detects your MCP clients and writes the entry for each. To write it yourself, see [Manual configuration](getting-started.md#manual-configuration). Every client gets the same launch:
+`npx ue-mcp init` detects your MCP clients and writes the entry for each. To write it yourself, see [Manual configuration](getting-started.md#manual-configuration). Every client gets the same launch (VS Code keys it under `servers`, Codex writes it as TOML):
 
 ```json
 {
@@ -20,7 +20,11 @@
 | Claude Code | `.mcp.json` in the project root, or `~/.claude/.mcp.json` for every project |
 | Claude Desktop | `%APPDATA%/Claude/claude_desktop_config.json` |
 | Cursor | `.cursor/mcp.json` in the project root |
-| Codex | `~/.codex/config.toml` (TOML, with `cwd` set to the project directory) |
+| VS Code | `.vscode/mcp.json` in the project root, under `servers` with `"type": "stdio"` |
+| Gemini CLI | `.gemini/settings.json` in the project root |
+| Codex | `.codex/config.toml` in the project root, or `~/.codex/config.toml` (TOML, with `cwd` set to the project directory) |
+
+`init` replaces an existing Unreal MCP entry in any of these files and saves the file first. See [Replacing an Unreal MCP entry](getting-started.md#replacing-an-unreal-mcp-entry).
 
 An entry written with `--pin` names `ue-mcp@<version>` instead of `@latest`, and `ue-mcp update` moves it with the bridge. The project path may be the `.uproject` or its directory. Use an absolute path, since clients launch the server from a working directory you do not control.
 
@@ -105,6 +109,12 @@ editor(action="batch", args={
 - The wait is the sum of what each step would get alone, or the batch's own `timeoutMs`. A batch that outlives the wait keeps running on the game thread, and the error reports how many steps had finished and which one was under way.
 - The batch goes through dispatch as one action: the dialog guard checks it once, a write guard scoped to mutations or to writes sees every step's method and paths, and with locking on the locks taken are the union of every step's asset paths, held for the whole job.
 
+**Asset leases** keep agents off each other's assets across many calls. A lease is an exclusive claim on an asset path (or a folder, written with a trailing slash) in one editor, held by one MCP session in the daemon until it is released, runs out, or that session disconnects. Any call whose declared effect is `mutate` or `unknown` and whose parameters name a path another session holds is refused with `ASSET_LEASED`, naming the holder and when its lease runs out, before it reaches the editor.
+
+- `project(action="acquire_lease", args={ paths: ["/Game/BP_Door"], ttlSeconds: 900 })` claims assets for this session (all or none), `release_lease` gives them back (only the holder can), and `list_leases` shows every lease with its holder and time left. `GET /v1/leases` on the daemon returns the same list.
+- With the default `leases.mode: auto`, explicit leases are always honoured, and while more than one session is connected each change also takes a lease for its own session on the paths it names, so the second agent is kept off what the first is working on. With one session nothing is taken implicitly. `on` takes implicit leases for a single session too; `off` checks nothing.
+- Leases live in the server process, so they coordinate the clients of one daemon. Per-asset locking (below) lives in the editor and covers one call at a time; the two can be used together.
+
 **Per-asset locking** is the complement for calls that cannot be batched, and for a human and an agent on one editor. With `locking.enabled: true` in `ue-mcp.yml` every mutating call leases each asset path it names before it runs and releases it after; a call against an asset another session holds is refused with the retryable `ASSET_LOCKED` error naming the holder and when the lease frees. It is opt-in because it adds two bridge round-trips per mutating call, and it only covers calls that name an asset path. The explicit `asset(lock)`, `asset(unlock)`, `asset(unlock_all)` and `asset(list_locks)` actions work whether or not it is on. See the [`locking` key](config-file.md#ue-mcp-block-reference).
 
 ## Project Configuration (`ue-mcp.yml`)
@@ -113,15 +123,32 @@ Project config lives in `ue-mcp.yml` next to your `.uproject`, tracked in git so
 
 Per-user preferences (feedback, dialog and playtest modes) are not in `ue-mcp.yml`. They live in `~/.ue-mcp/state.json`, set by the commands below.
 
-### Native Epic 5.8 tools
+### Native Epic tools
 
-UE 5.8 ships an experimental AI Toolset Registry (the plugin behind Unreal's own MCP server). ue-mcp reaches it in process and adds each official tool as an action in the matching category: Epic's GAS tools appear in `gas`, Niagara in `niagara`, and so on. Toolsets with no natural home are reached through the `epic` gateway (`status`, `list_toolsets`, `describe_toolset`, `call_tool`). [Native Tools](native-tools.md) lists them.
+UE 5.8 and later ship an experimental AI Toolset Registry (the plugin behind Unreal's own MCP server). ue-mcp reaches it in process and adds each official tool as an action in the matching category: Epic's GAS tools appear in `gas`, Niagara in `niagara`, and so on. Toolsets with no natural home are reached through the `epic` gateway (`status`, `list_toolsets`, `describe_toolset`, `call_tool`). [Native Tools](native-tools.md) lists them.
 
 - **On by default.** The `init` wizard has a page for it. The choice is written to `nativeTools` in `ue-mcp.yml`.
 - **Needs UE 5.8 or later** with the `ToolsetRegistry` plugin (and the toolset plugins you want) enabled. Otherwise enrichment is skipped and `epic(status)` reports `available: false`.
 - **Same surface with or without an editor.** The catalog comes from the live editor when connected, then a per-project cache, then a snapshot shipped in the package, so the wrapped tools appear on a cold start and match the [tool reference](tool-reference.md).
 
-`nativeTools.enabled: false` turns it off (the `epic` gateway stays). Add a category to `nativeTools.exclude` to keep it on but leave that category unenriched.
+Each wrapped tool is an action with an `epic_` name in its category, and whole categories or their native or Epic halves can be turned on and off. See [Turning categories and toolsets on and off](#turning-categories-and-toolsets-on-and-off).
+
+### Turning categories and toolsets on and off
+
+Two switches, which are different things:
+
+- **ue-mcp's surface**: `disable:` in `ue-mcp.yml`. A bare name turns the whole category off. `<category>:epic` takes out only the actions wrapping Unreal's toolsets, `<category>:native` only ue-mcp's own.
+- **Unreal's Toolset Registry**: `BlockedNames` in `UToolsetRegistrySettings`, which is what Epic's own MCP server and the AI Assistant read too. UE 5.9 saves it to the project's `Config/DefaultGame.ini`, UE 5.8 per user to `Saved/Config/<Platform>Editor/EditorPerProjectUserSettings.ini`, both under `[/Script/ToolsetRegistry.ToolsetRegistrySettings]`.
+
+`project(action="set_category_enabled", args={ category, enabled, scope })` moves both: scope `native` changes the surface only, scope `epic` takes the category's Epic actions out AND blocks the toolsets the category maps to in the engine, and `all` (the default) does both. `project(action="set_toolset_enabled", args={ toolsets, enabled })` switches toolsets by name in the engine only. `project(action="list_categories")` shows what is on, the toolsets each category maps to and their state.
+
+- The surface is rebuilt without a restart, and connected clients get `tools/list_changed`.
+- A call to an action that is turned off is refused with `CATEGORY_DISABLED`, naming the call (and the `ue-mcp tools` line) that turns it back on.
+- `project` and `epic` keep their own actions: `project` holds the action that turns things back on, and `epic(status)` is how every Epic call is checked. Only scope `epic` applies to them.
+- The engine half takes whichever route is open. An editor whose bridge answers is changed live. An editor that is open but not answering refuses, because a setting file written under it would not reach the running registry and would be overwritten when it saves. With no editor running, the setting file is written and applies at the next start.
+- From a terminal: `ue-mcp tools list`, `ue-mcp tools disable gas`, `ue-mcp tools disable animation --epic`, `ue-mcp tools enable EditorToolset.MaterialToolset`. With a daemon serving the project the command goes through it, so its clients are re-advertised at once.
+
+`nativeTools.enabled: false` turns every category's Epic actions off (the `epic` gateway stays). `nativeTools.exclude` is deprecated: it is still read, as `disable: [<category>:epic]`, with a warning, and the next `set_category_enabled` moves it into `disable:`.
 
 ### Dialog handling mode
 
@@ -143,7 +170,7 @@ opencode 2.1.4 and later show the form, so they get `interactive`. Earlier openc
 
 Set it with `npx ue-mcp dialog mode <interactive|auto|defer>`. Add `--editor <name>` to scope it to one project; `default` clears it.
 
-What counts as blocking: the modal stack, then every top-level window that is modal or parented to another regular window. Menus, tooltips and notifications are not regular windows. Visibility is not consulted, because a window drawn behind the editor still blocks. Detection lives in the C++ bridge, so it changes only when the plugin is rebuilt.
+What counts as blocking: the modal stack, then every top-level window that is modal or parented to another regular window. Menus, tooltips and notifications are not regular windows. Visibility is not consulted, because a window drawn behind the editor still blocks. The editor's own progress windows (a slow task such as the "Validating Assets" a save opens, or a build) are on the modal stack but are not dialogs: the game thread keeps running the work they report, so a call made while one is up runs once that work is done, and nothing presses their Cancel button. `editor(list_dialogs)` lists them under `notTreatedAsDialogs`. Detection lives in the C++ bridge, so it changes only when the plugin is rebuilt.
 
 Under `interactive` the dialog text is returned on one call and the form goes up on the next, so a client that collapses long form messages cannot hide the question. `dialogPhase` on the refusal says which call this is: `relay` or `asking`. A client known to render the whole message skips the relay. `UE_MCP_DIALOG_RELAY=off` turns the relay off for every client, and `=on` forces it on.
 
@@ -196,23 +223,24 @@ Everything the server sends at session start (the `initialize` instructions plus
 
 | Strategy | Seed | What's advertised | Cost to use |
 |----------|------|-------------------|-------------|
-| **`micro`** (default) | <!-- tax:micro -->~2.2k<!-- /tax --> tokens | a single `tools` gateway (`search`, `list_categories`, `describe`, `call`) fronting every category | discovery for everything |
-| **`lean`** | <!-- tax:lean -->~20k<!-- /tax --> tokens | the <!-- count:tools -->30<!-- /count --> category tools with their `action` enums and a one-line summary each; a `catalog` tool (`search` / `describe` / `list_categories`) and a per-category `describe` action serve the signatures | about one round trip to learn a category |
-| **`full`** | <!-- tax:full -->~55k<!-- /tax --> tokens | the <!-- count:tools -->30<!-- /count --> category tools, each with one signature line per action inline | no discovery calls |
+| **`micro`** (default) | <!-- tax:micro -->~240<!-- /tax --> tokens | a single `tools` gateway (`guide`, `search`, `list_categories`, `describe`, `call`) fronting every category and the flows | discovery for everything |
+| **`lean`** | <!-- tax:lean -->~32k<!-- /tax --> tokens | the <!-- count:tools -->31<!-- /count --> category tools with their `action` enums and a one-line summary each; a `catalog` tool (`search` / `describe` / `list_categories`) and a per-category `describe` action serve the signatures | about one round trip to learn a category |
+| **`full`** | <!-- tax:full -->~90k<!-- /tax --> tokens | the <!-- count:tools -->31<!-- /count --> category tools, each with one signature line per action inline | no discovery calls |
 
 On demand, micro's `describe` of the largest category (a page of signatures) costs <!-- tax:describe -->~1.5k<!-- /tax --> tokens and a default `search` <!-- tax:search -->~520<!-- /tax -->.
 
-The figures include the <!-- count:nativeToolActions -->830<!-- /count --> wrapped Epic tools, which are declared in the package, and are measured hermetically (throwaway project, no editor) by `npm run context-tax`, which stamps them into these docs. Set `ANTHROPIC_API_KEY` for exact token counts instead of the chars/4 estimate. The `context-tax` release gate (`node scripts/check-release-gates.mjs context-tax`) fails the build when a seed exceeds its budget: micro <!-- tax:microBudget -->~5.0k<!-- /tax -->, lean <!-- tax:leanBudget -->~30k<!-- /tax -->, full <!-- tax:fullBudget -->~60k<!-- /tax -->, a category describe <!-- tax:describeBudget -->~2.0k<!-- /tax --> and a search <!-- tax:searchBudget -->~1.0k<!-- /tax -->.
-
+The figures include the <!-- count:nativeToolActions -->2185<!-- /count --> wrapped Epic tools, which are declared in the package, and are measured hermetically (throwaway project, no editor) by `npm run context-tax`, which stamps them into these docs. Set `ANTHROPIC_API_KEY` for exact token counts instead of the chars/4 estimate. The `context-tax` release gate (`node scripts/check-release-gates.mjs context-tax`) fails the build when a seed exceeds its budget: micro <!-- tax:microBudget -->~5.0k<!-- /tax -->, lean <!-- tax:leanBudget -->~36k<!-- /tax -->, full <!-- tax:fullBudget -->~100k<!-- /tax -->, a category describe <!-- tax:describeBudget -->~2.0k<!-- /tax --> and a search <!-- tax:searchBudget -->~1.0k<!-- /tax -->. It also fails when the default seed costs more than the tool-search surface of Unreal Engine 5.9's own ModelContextProtocol plugin (`list_toolsets`, `describe_toolset`, `call_tool`), measured the same way from a reconstruction of its source in `tests/fixtures/engine-tool-search-surface.mjs`.
 ### Calls, signatures and validation
 
 Every category tool takes `action` and `args`: `level(action="place_actor", args={actorClass: "PointLight", location: {x: 0, y: 0, z: 100}})`. Parameters sent flat beside `action` are also accepted. A call is read as flat when anything other than `args` and the routing parameters (`timeoutMs`, `select`, `omit`, `editor`, `toEditor`) is at the top level, so a category's own `args` parameter (`editor(invoke_function)`'s function arguments) keeps its meaning.
 
-Actions are described by one-line signatures such as `set_property(assetPath|path, propertyName, value:*, save?:b)`. The server instructions explain the notation once: `?` optional, `a|b` an alias, `one(a; b+c)` exactly one group, `any(a; b)` at least one, and a type code after a colon (none means a string). Signatures come from each action's recorded C++ spec or Epic input schema. `project(action="describe_action")` (or `describe` with a `method` in lean and micro) returns one action's full schema: every parameter's description, nested fields, allowed values and defaults.
+Actions are described by one-line signatures such as `set_property(assetPath|path, propertyName, value:*, save?:b)`. The server instructions explain the notation once (in micro, `tools(action="guide")` does): `?` optional, `a|b` an alias, `one(a; b+c)` exactly one group, `any(a; b)` at least one, and a type code after a colon (none means a string). Signatures come from each action's recorded C++ spec or Epic input schema. `project(action="describe_action")` (or `describe` with a `method` in lean and micro) returns one action's full schema: every parameter's description, nested fields, allowed values and defaults.
 
 Every call, on every strategy, is validated against the category's full parameter schema, and a wrong type is refused with an `Input validation error`.
 
-- **micro** works like the native MCP toolset gateway: `tools(action="search", query="rotate clockwise")`, then `tools(action="describe", category="level", method="nudge_component")`, then `tools(action="call", category="level", method="nudge_component", args={ ... })`. Omit `method` from describe for a page of the category's signatures, and pass `offset` (the `nextOffset` it returns) for the next page.
+`select` and `omit` narrow any answer: every category action, the flow tool and the micro gateway take them, with dotted paths that traverse arrays (`select: "actors.label"`). A result that wraps an instruction (the directive `execute_python` returns) is narrowed inside, so the instruction itself always arrives. The undo record a flow runner needs and the reports of what the server repaired or could not match are kept whatever the selection.
+
+- **micro** works like the native MCP toolset gateway. Its seed is one instruction line and the gateway; `tools(action="guide")` returns the usage, signature legend, spatial guidance and category list the seed leaves out. Then `tools(action="search", query="rotate clockwise")`, then `tools(action="describe", category="level", method="nudge_component")`, then `tools(action="call", category="level", method="nudge_component", args={ ... })`. Omit `method` from describe for a page of the category's signatures, and pass `offset` (the `nextOffset` it returns) for the next page. Flows are the `flow` category: `tools(action="call", category="flow", method="run", args={flowName: "<name>"})`. `timeoutMs`, `select` and `omit` go in `args` or beside it.
 - **lean** keeps the category tools and action names visible, so the model can often call directly. Unknown actions are refused with the closest names.
 - **full** suits an agent that should see every signature up front when the seed is affordable.
 
@@ -228,6 +256,19 @@ npx ue-mcp context           # show the current strategy
 ```
 
 The `init` wizard has the same choice, or set `context.strategy` in `ue-mcp.yml`. `UE_MCP_CONTEXT_STRATEGY` wins over the file for one launch; anything other than `full` or `lean` resolves to `micro`. Restart your MCP client (`/mcp` in Claude Code) after changing it.
+
+### Images in a result
+
+The actions that write an image take `inline`: `editor(capture_screenshot)`, `editor(capture_scene_png)`, `editor(capture_screenshot_sequence)`, `editor(render_mesh_studio)`, `editor(render_sequence_frames)`, `material(render_preview)`, `asset(export_texture)` and `asset(export_uv_layout)`. With `inline=true` the server reads the file the editor wrote and returns it as MCP image content beside the JSON result, scaled down to 1024 pixels on the longer edge when it is larger. A number instead of `true` sets that edge (16 to 4096). The file on disk is written and left exactly as without `inline`, and the editor never receives the key.
+
+```
+tools(action="call", category="editor", method="capture_scene_png",
+      args={outputPath: "Saved/Shots/hero.png", focusActorLabel: "Hero", inline: 512})
+```
+
+The result keeps its usual fields and adds `inlineImages` (`inlined`, `maxEdge`, and `notInlined` with a reason per file that was not returned). Each image is listed under `media` with its `path`, its size as sent and its original size, and names the content block that carries it. Actions that write several files return the first 8.
+
+Nothing here fails the call. The server reads the path the editor reported, so when the editor runs on another machine (`UE_MCP_HOST` or `bridge.host` pointing elsewhere) the file is on that machine and `notInlined` says so. A viewport screenshot (`target=editor`) is written by the renderer after the editor answers, so the server waits up to 3 seconds for the file. A warm `capture_scene_png` has no file until it completes: pass `inline` again on the query that reports `complete=true`. PNG is scaled; a JPEG is returned whole when it already fits, and otherwise reported, since only PNG is decoded here.
 
 ## The daemon
 
@@ -259,6 +300,8 @@ A call that still cannot reach the editor says why it last went away. The daemon
 
 The daemon also manages the project's plugins over HTTP. `GET /v1/plugins` lists the plugins `ue-mcp.yml` declares with their version, status and categories, and `GET /v1/plugins/catalog` lists the registry's published plugins. `POST /v1/plugins/install` (`{ name, version? }`), `POST /v1/plugins/update` (`{ name? }`) and `POST /v1/plugins/uninstall` (`{ name }`) run the same `ue-mcp plugin` commands, one at a time, and publish `plugins.changed` on the event stream. A change takes effect when the server restarts.
 
+Categories and Unreal toolsets switch over HTTP too, through the same project actions an MCP client calls, so the answer and the refusals are the same and every connected client is re-advertised. `GET /v1/tools` is `list_categories`, `POST /v1/tools/categories` (`{ category, enabled, scope?, editor? }`) is `set_category_enabled`, `POST /v1/tools/toolsets` (`{ toolsets, enabled, editor? }`) is `set_toolset_enabled`, and `GET /v1/leases` is `list_leases`. A refusal comes back as `{ error, code }`. `/v1/health` lists the `tools.categories` and `leases` features, and the event stream carries `leases.released` when a disconnecting session gives its leases up.
+
 ### What a client can read from the daemon
 
 These routes serve a client that builds its own agent context, such as an in-editor panel. Each is also on the extension API, and `/v1/health` lists its feature name under `features` (an extension reads `api.features`).
@@ -277,7 +320,7 @@ These routes serve a client that builds its own agent context, such as an in-edi
 
 One id is listed once. A project copy wins over the packaged one, and `.claude/skills` over `.agents/skills`; the winner lists what it hides in `shadows`. A SKILL.md whose frontmatter does not parse is still listed, with the reason in `problems`.
 
-**Context projection.** `GET /v1/context/projection?strategy=micro|lean|full&categories=a,b` returns what the server would hand a client under that [context strategy](#context-strategy-full-lean-micro), narrowed to those categories: `strategy`, `categories` (the scope after resolving; omitted means every enabled category), `instructions` (the initialize text, quoting the scope's counts and categories), `tools` (each tool's `name`, `description`, `inputSchema` as `tools/list` sends it, and `category`, null for micro's `tools` gateway, lean's `catalog` and `flow`), and `seedTokens`, the characters of the instructions and tools JSON divided by 4 (`estimator: "chars/4"`). Over every category it is exactly what the server sends for that strategy. Lean's `catalog` and micro's gateway search and describe only the scope. `strategy` defaults to the server's own; an unknown strategy or category answers 400.
+**Context projection.** `GET /v1/context/projection?strategy=micro|lean|full&categories=a,b` returns what the server would hand a client under that [context strategy](#context-strategy-full-lean-micro), narrowed to those categories: `strategy`, `categories` (the scope after resolving; omitted means every enabled category), `instructions` (the initialize text, quoting the scope's counts and categories), `tools` (each tool's `name`, `description`, `inputSchema` as `tools/list` sends it, and `category`, null for micro's `tools` gateway, lean's `catalog` and `flow`, which micro does not list because its gateway reaches flows), and `seedTokens`, the characters of the instructions and tools JSON divided by 4 (`estimator: "chars/4"`). Over every category it is exactly what the server sends for that strategy. Lean's `catalog` and micro's gateway search and describe only the scope. `strategy` defaults to the server's own; an unknown strategy or category answers 400.
 
 `api.context.call(tool, input, { strategy?, categories?, dialogPrompt?, dialogWaitMs?, elicit? })` runs one call to a projected tool as the MCP server would: a category, its lean `describe`, `catalog`, micro's `tools` gateway, or `flow`, through the same dispatch as `api.callAction`, so dialogs, forms, effect gates and checkpoints apply the same way. A call to a category outside the scope is refused with an error result and nothing runs.
 
@@ -356,6 +399,7 @@ The plugin reads `bridge.port` from the same layered files as the client: `~/.ue
 
 - **A pin is a request.** If something already holds the port, the plugin moves upward, logs a warning naming the port asked for and the one taken, and publishes the port it bound. The client follows `port.json`.
 - **A value the plugin cannot use is announced, not applied.** A `bridge.port` that is not a whole number in `1-65535` is logged as a warning and the derived port is used. The plugin reads this key with a small reader rather than a YAML parser: write it as plain nested keys, as above. A flow mapping (`bridge: { port: 50123 }`) or an anchor is not read by the plugin, and the editor log says so.
+- **Unreal Canvas keeps 9877 and 9880.** In a project that enables the Unreal Canvas Bridge (UE 5.9, `UnrealCanvasBridge`), its webcam server listens on `127.0.0.1:9877` and its viewport stream falls back to `9880`. There, a pin on either port is not used: both halves take the derived port instead and log why, and the plugin's upward walk steps over both. `ue-mcp doctor` reports a pin or a running editor on one of them.
 
 ### Which editor lifecycle actions act on
 
@@ -429,13 +473,14 @@ Run `npx ue-mcp <command> --help` for a command's flags.
 
 | Command | Description |
 |---------|-------------|
-| `npx ue-mcp init` | Setup wizard. Installs the bridge, writes MCP client configs and `ue-mcp.yml`, optionally installs Claude Code skills and the feedback hook. `--yes` / `--json` run it from flags. See [Getting Started](getting-started.md#1-installation). |
+| `npx ue-mcp init` | Setup wizard. Installs the bridge, writes MCP client configs and `ue-mcp.yml`, optionally installs Claude Code skills and the feedback hook, can turn off Epic's Unreal MCP server auto-start (UE 5.8+), and can attach ue-mcp to the Unreal Assistant (UE 5.9+). `--yes` / `--json` run it from flags. See [Getting Started](getting-started.md#1-installation). |
 | `npx ue-mcp update` | Update the package, deploy the plugin source and rebuild the editor target. Skips the build while the editor runs and records it as owed. `--no-build` stops after the deploy, `--no-deploy` updates the package only. A binary install gets verified binaries instead. `--apply-only` installs this package's own bridge into the project and stops. |
-| `npx ue-mcp doctor [--fix]` | Report every version source and install problem. `--fix` removes client entries that point at a project which no longer exists or has no bridge, and adds `--min-release-age=0` to npx launches. |
+| `npx ue-mcp doctor [--fix]` | Report every version source and install problem, and Epic's Unreal MCP server and Unreal Assistant for a UE 5.8+ project. `--fix` removes client entries that point at a project which no longer exists or has no bridge, and adds `--min-release-age=0` to npx launches. |
 | `npx ue-mcp status [--json]` | The project's install and editor state, read-only. |
 | `npx ue-mcp deploy` | Copy the bridge plugin source into the project and refresh installed skills. |
 | `npx ue-mcp build` | Build the project's editor target with UnrealBuildTool. Stop the editor first. |
 | `npx ue-mcp context [full\|lean\|micro]` | Read or set the [context strategy](#context-strategy-full-lean-micro) in `ue-mcp.yml`. |
+| `npx ue-mcp tools <list\|enable\|disable> [name ...] [--native\|--epic] [--project <uproject>]` | List categories and Unreal toolsets, or turn them on and off. A category name switches the category (or one scope of it); any other name is a toolset and switches only the editor's registry. Goes through the daemon when one serves the project. See [Turning categories and toolsets on and off](#turning-categories-and-toolsets-on-and-off). |
 | `npx ue-mcp daemon <run\|start\|stop\|status\|open>` | Inspect or control the project's [daemon](#the-daemon). |
 | `npx ue-mcp extension <install\|use\|remove\|list>` | Manage [daemon extensions](#the-daemon). |
 | `npx ue-mcp dialog mode [<mode>]` | Read or set the [dialog handling mode](#dialog-handling-mode) (`interactive`, `auto`, `defer`; `default` clears). |
@@ -486,6 +531,25 @@ The engine is resolved once, and the same answer drives the build tool, the edit
 `UE_MCP_PROTECTED_ENGINE_ROOTS` outranks all of it. An engine equal to or under a protected root is refused, including one named by an explicit pin. Entries are separated by the platform path-list delimiter (`;` on Windows, `:` on macOS and Linux) and must be absolute.
 
 When nothing resolves, the error lists every path probed and where each came from.
+
+## Reading the project's ini settings
+
+`project(read_config)` shows one file. The editor reads a config category (Engine, Game, Input, DeviceProfiles, ...) through a stack of files, each applied on top of the last, and three local actions answer from that stack without an editor:
+
+- `project(resolve_setting, configName, section, key, platform?)`: the final value and the layer, file and line that set it.
+- `project(explain_setting, configName, section, key, platform?)`: every layer that touches the key, lowest first, with its lines and the value after each.
+- `project(diff_config_from_default, configName, platform?, includeUser?)`: every key the project changes from the engine's own value, with both values and the layer that changed it.
+
+The layers, lowest first, for a category `C` and platform `P` (default this machine's: Windows, Mac or Linux; `Win64` is read as Windows):
+
+1. `Engine/Config/Base.ini`
+2. `Engine/Config/BaseC.ini`
+3. `Engine/Config/P/BasePC.ini` (or `Engine/Platforms/P/Config/BasePC.ini`)
+4. `Config/DefaultC.ini` in the project
+5. `Config/P/PC.ini` (or `Platforms/P/Config/PC.ini`) in the project
+6. `Saved/Config/PEditor/C.ini`, the per-user copy the editor writes (`includeUser=false` leaves it out of the diff)
+
+Each line applies Unreal's array operations: `Key=Value` replaces every value, `+Key=Value` adds a value the key does not hold yet, `.Key=Value` adds it even when it does, `-Key=Value` removes that value and `!Key` clears the key. Lines starting with `;` are comments, and section names compare without case. A key with several values answers with a list, and one nobody sets with `null`. The engine is the one [Which Engine A Project Uses](#which-engine-a-project-uses) finds; without one the engine layers are skipped and the answer says so.
 
 ## Environment variables
 

@@ -531,6 +531,26 @@ export const handlerSpecs: HandlerSpecs = {
     "category": "pcg",
     "params": []
   },
+  "get_pcg_custom_hlsl": {
+    "category": "pcg",
+    "params": [
+      {
+        "name": "assetPath",
+        "type": "string",
+        "required": true,
+        "description": "PCGGraph asset path",
+        "aliases": [
+          "path"
+        ]
+      },
+      {
+        "name": "nodeName",
+        "type": "string",
+        "required": true,
+        "description": "Engine name of the Custom HLSL node, as read_graph reports it"
+      }
+    ]
+  },
   "get_pcg_generation_state": {
     "category": "pcg",
     "params": [
@@ -862,6 +882,51 @@ export const handlerSpecs: HandlerSpecs = {
           ],
           [
             "actorPath"
+          ]
+        ]
+      }
+    ]
+  },
+  "set_pcg_custom_hlsl": {
+    "category": "pcg",
+    "params": [
+      {
+        "name": "assetPath",
+        "type": "string",
+        "required": true,
+        "description": "PCGGraph asset path",
+        "aliases": [
+          "path"
+        ]
+      },
+      {
+        "name": "nodeName",
+        "type": "string",
+        "required": true,
+        "description": "Engine name of the Custom HLSL node, as read_graph reports it"
+      },
+      {
+        "name": "sourceText",
+        "type": "string",
+        "required": false,
+        "description": "Kernel body (the Source pane of the HLSL Source Editor)"
+      },
+      {
+        "name": "functionsText",
+        "type": "string",
+        "required": false,
+        "description": "Helper functions the source can call (the Functions pane)"
+      }
+    ],
+    "choices": [
+      {
+        "mode": "atLeastOne",
+        "branches": [
+          [
+            "sourceText"
+          ],
+          [
+            "functionsText"
           ]
         ]
       }
@@ -1243,6 +1308,56 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "Save the assets after export (default true)"
       }
     ]
+  },
+  "validate_pcg_edge": {
+    "category": "pcg",
+    "params": [
+      {
+        "name": "assetPath",
+        "type": "string",
+        "required": true,
+        "description": "PCGGraph asset path",
+        "aliases": [
+          "path"
+        ]
+      },
+      {
+        "name": "sourceNode",
+        "type": "string",
+        "required": true,
+        "description": "Node the edge leaves",
+        "aliases": [
+          "sourceNodeName"
+        ]
+      },
+      {
+        "name": "sourcePin",
+        "type": "string",
+        "required": false,
+        "description": "Output pin label (default: the first output pin)",
+        "aliases": [
+          "sourcePinLabel"
+        ]
+      },
+      {
+        "name": "targetNode",
+        "type": "string",
+        "required": true,
+        "description": "Node the edge enters",
+        "aliases": [
+          "targetNodeName"
+        ]
+      },
+      {
+        "name": "targetPin",
+        "type": "string",
+        "required": false,
+        "description": "Input pin label (default: the first input pin)",
+        "aliases": [
+          "targetPinLabel"
+        ]
+      }
+    ]
   }
 };
 
@@ -1262,6 +1377,7 @@ export const paramsClauses: Readonly<Record<string, string>> = {
   get_pcg_component_details: "Params: actorLabel OR actorPath",
   get_pcg_component_parameters: "Params: blueprintPath OR actorLabel OR actorPath, componentName?",
   get_pcg_components: "Params: none",
+  get_pcg_custom_hlsl: "Params: assetPath (or path), nodeName",
   get_pcg_generation_state: "Params: actorLabel OR actorPath, componentName?",
   import_pcg_graph: "Params: assetPath (or path), nodes, connections?, replace?, removeNodes?, removeConnections?",
   list_pcg_graphs: "Params: cursor?, limit?",
@@ -1271,6 +1387,7 @@ export const paramsClauses: Readonly<Record<string, string>> = {
   remove_pcg_node: "Params: assetPath (or path), nodeName",
   set_pcg_component_graph: "Params: blueprintPath OR actorLabel OR actorPath, componentName?, graphPath",
   set_pcg_component_parameters: "Params: blueprintPath OR actorLabel OR actorPath, componentName?, overrides",
+  set_pcg_custom_hlsl: "Params: assetPath (or path), nodeName, at least one of sourceText/functionsText",
   set_pcg_graph_instance_overrides: "Params: assetPath (or path), overrides",
   set_pcg_graph_parameters: "Params: assetPath (or path), at least one of graphParameters/removeParameters",
   set_pcg_graph_pins: "Params: assetPath (or path), side, pins, mode?",
@@ -1281,6 +1398,7 @@ export const paramsClauses: Readonly<Record<string, string>> = {
   toggle_pcg_graph: "Params: actorLabel OR actorPath, graphPath?",
   unwrap_pcg_instance_nodes: "Params: assetPath (or path), nodeName?",
   update_pcg_level_assets: "Params: assetPaths, save?",
+  validate_pcg_edge: "Params: assetPath (or path), sourceNode (or sourceNodeName), sourcePin? (or sourcePinLabel), targetNode (or targetNodeName), targetPin? (or targetPinLabel)",
 };
 
 /** Every key the spec'd pcg handlers declare, aliases included. */
@@ -1288,7 +1406,7 @@ export const schema: Record<string, z.ZodType> = {
   actorLabel: z.string().optional().describe("Editor label of the actor holding the PCG component; a label naming several actors is refused"),
   actorPath: z.string().optional().describe("Full actor object path; the unambiguous selector"),
   assetName: z.string().optional().describe("Asset name (default: <LevelName>_PCG)"),
-  assetPath: z.string().optional().describe("PCGGraph asset path (add_pcg_node, connect_pcg_nodes, disconnect_pcg_nodes, export_pcg_graph, import_pcg_graph, read_pcg_graph, read_pcg_node_settings, remove_pcg_node, set_pcg_graph_parameters, set_pcg_graph_pins, set_pcg_node_settings, set_pcg_subgraph, set_pcg_subgraph_parameters, set_static_mesh_spawner_meshes, unwrap_pcg_instance_nodes). The PCG data asset's own path (an object path, or an existing asset's package path, updated in place), or else the folder for it (default: the level's folder) (export_level_to_pcg_asset). PCGGraphInstance asset path (set_pcg_graph_instance_overrides)"),
+  assetPath: z.string().optional().describe("PCGGraph asset path (add_pcg_node, connect_pcg_nodes, disconnect_pcg_nodes, export_pcg_graph, get_pcg_custom_hlsl, import_pcg_graph, read_pcg_graph, read_pcg_node_settings, remove_pcg_node, set_pcg_custom_hlsl, set_pcg_graph_parameters, set_pcg_graph_pins, set_pcg_node_settings, set_pcg_subgraph, set_pcg_subgraph_parameters, set_static_mesh_spawner_meshes, unwrap_pcg_instance_nodes, validate_pcg_edge). The PCG data asset's own path (an object path, or an existing asset's package path, updated in place), or else the folder for it (default: the level's folder) (export_level_to_pcg_asset). PCGGraphInstance asset path (set_pcg_graph_instance_overrides)"),
   assetPaths: z.array(z.string()).optional().describe("PCG data assets to re-export from their source levels"),
   attributes: z.array(z.string()).optional().describe("Selectors to read per entry: $Position, $Density, $Position.Z, MyAttr (default: the point properties and every metadata attribute)"),
   blueprintPath: z.string().optional().describe("Blueprint whose PCG component template is written; every placed instance rebuilds from it"),
@@ -1297,6 +1415,7 @@ export const schema: Record<string, z.ZodType> = {
   cursor: z.string().optional().describe("Resume a paged read: pass back the 'nextCursor' from the previous page, unmodified"),
   entries: z.array(z.object({ mesh: z.string().describe("StaticMesh, package or object path; an entry without one is skipped, and one that does not load refuses the call"), weight: z.number().optional().describe("Relative pick weight (default 1), truncated to a whole number") })).optional().describe("Weighted mesh entries"),
   extent: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Half-size of the volume box {x,y,z} before scale (default 500 on each axis)"),
+  functionsText: z.string().optional().describe("Helper functions the source can call (the Functions pane)"),
   graphParameters: z.array(z.object({ name: z.string().describe("Parameter name"), type: z.string().optional().describe("bool | int32 | int64 | float | double | name | string | text | vector | vector2d | vector4 | rotator | transform | quat | color | object | class | enum | struct; required for a new parameter, and a different type retypes an existing one"), typeObject: z.string().optional().describe("Class for object/class (default Object), the enum for enum, the struct for struct"), default: z.unknown().optional().describe("Default value, JSON or UE export text") })).optional().describe("Parameters to add or change, by name"),
   graphPath: z.string().optional().describe("PCGGraph to assign to the volume's component (add_pcg_volume). PCGGraph or PCGGraphInstance the instance runs (create_pcg_graph_instance). Graph holding nodeName, for a node in a subgraph (default: the component's graph) (read_pcg_generated_output). PCGGraph or PCGGraphInstance assigned through UPCGComponent::SetGraph; \"\" clears it (set_pcg_component_graph). PCGGraph to assign (default: re-apply the component's current graph) (toggle_pcg_graph)"),
   includeLocalComponents: z.boolean().optional().describe("Also read a partitioned component's local components (default true)"),
@@ -1307,7 +1426,7 @@ export const schema: Record<string, z.ZodType> = {
   location: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("World location {x,y,z} (default origin); wins over transform.location"),
   mode: z.string().optional().describe("append (default: add, or update a pin with the same label) | replace (the pins become exactly this list) | remove (labels only)"),
   name: z.string().optional().describe("Engine name for the node (default: engine-assigned). An existing node of the same class with this name is reported as existed; another class is refused (add_pcg_node). Graph asset name (create_pcg_graph). Graph instance asset name (create_pcg_graph_instance)"),
-  nodeName: z.string().optional().describe("Read this node's output from inspection instead of the component's final output; turns inspection on when it is off (UE 5.8+) (read_pcg_generated_output). Engine name of the node, as read_graph reports it (read_pcg_node_settings, remove_pcg_node, set_pcg_node_settings, set_static_mesh_spawner_meshes). Engine name of the Subgraph node, as read_graph reports it (set_pcg_subgraph). Engine name of the Subgraph node (set_pcg_subgraph_parameters). Only this node (default: every node in the graph) (unwrap_pcg_instance_nodes)"),
+  nodeName: z.string().optional().describe("Engine name of the Custom HLSL node, as read_graph reports it (get_pcg_custom_hlsl, set_pcg_custom_hlsl). Read this node's output from inspection instead of the component's final output; turns inspection on when it is off (UE 5.8+) (read_pcg_generated_output). Engine name of the node, as read_graph reports it (read_pcg_node_settings, remove_pcg_node, set_pcg_node_settings, set_static_mesh_spawner_meshes). Engine name of the Subgraph node, as read_graph reports it (set_pcg_subgraph). Engine name of the Subgraph node (set_pcg_subgraph_parameters). Only this node (default: every node in the graph) (unwrap_pcg_instance_nodes)"),
   nodes: z.array(z.record(z.string(), z.unknown())).optional().describe("[{name, class, posX?, posY?, settings?, subgraph?, parameter?}]"),
   nodeType: z.string().optional().describe("PCG settings class of the node to add"),
   offset: z.number().int().optional().describe("First entry to return (default 0)"),
@@ -1315,7 +1434,7 @@ export const schema: Record<string, z.ZodType> = {
   overrides: z.record(z.string(), z.unknown()).optional().describe("{parameterName: value} overrides to set on the new instance (create_pcg_graph_instance). {parameterName: value}; null clears that override (set_pcg_component_parameters, set_pcg_graph_instance_overrides)"),
   packagePath: z.string().optional().describe("Folder for the new graph (default /Game/PCG) (create_pcg_graph). Folder for the new instance (default /Game/PCG) (create_pcg_graph_instance)"),
   parameters: z.record(z.string(), z.unknown()).optional().describe("{parameterName: value}; null clears that override"),
-  path: z.string().optional().describe("Alias for assetPath (add_pcg_node, connect_pcg_nodes, disconnect_pcg_nodes, export_pcg_graph, import_pcg_graph, read_pcg_graph, read_pcg_node_settings, remove_pcg_node, set_pcg_graph_instance_overrides, set_pcg_graph_parameters, set_pcg_graph_pins, set_pcg_node_settings, set_pcg_subgraph, set_pcg_subgraph_parameters, set_static_mesh_spawner_meshes, unwrap_pcg_instance_nodes). Alias for packagePath (create_pcg_graph)"),
+  path: z.string().optional().describe("Alias for assetPath (add_pcg_node, connect_pcg_nodes, disconnect_pcg_nodes, export_pcg_graph, get_pcg_custom_hlsl, import_pcg_graph, read_pcg_graph, read_pcg_node_settings, remove_pcg_node, set_pcg_custom_hlsl, set_pcg_graph_instance_overrides, set_pcg_graph_parameters, set_pcg_graph_pins, set_pcg_node_settings, set_pcg_subgraph, set_pcg_subgraph_parameters, set_static_mesh_spawner_meshes, unwrap_pcg_instance_nodes, validate_pcg_edge). Alias for packagePath (create_pcg_graph)"),
   pin: z.string().optional().describe("Only data on this output pin"),
   pins: z.array(z.object({ label: z.string().describe("Pin label; edges are wired by it"), type: z.string().optional().describe("EPCGDataType name: Any (default for a new pin), Point, Spatial, Param, PolyLine, Surface...; omitted keeps an existing pin's type"), tooltip: z.string().optional().describe("Pin tooltip"), allowMultipleData: z.boolean().optional().describe("Accept more than one data (default true)"), allowMultipleConnections: z.boolean().optional().describe("Accept more than one edge (default true)") })).optional().describe("Pins matched by label"),
   posX: z.number().optional().describe("Graph editor X position for the new node"),
@@ -1333,12 +1452,13 @@ export const schema: Record<string, z.ZodType> = {
   side: z.string().optional().describe("input | output: the graph node whose pins change"),
   sourceNode: z.string().optional().describe("Node the edge leaves"),
   sourceNodeName: z.string().optional().describe("Alias for sourceNode"),
-  sourcePin: z.string().optional().describe("Output pin label. connect_nodes defaults to the first output pin, disconnect_nodes to any"),
+  sourcePin: z.string().optional().describe("Output pin label. connect_nodes defaults to the first output pin, disconnect_nodes to any (connect_pcg_nodes, disconnect_pcg_nodes). Output pin label (default: the first output pin) (validate_pcg_edge)"),
   sourcePinLabel: z.string().optional().describe("Alias for sourcePin"),
+  sourceText: z.string().optional().describe("Kernel body (the Source pane of the HLSL Source Editor)"),
   subgraphPath: z.string().optional().describe("PCGGraph or PCGGraphInstance to run; \"\" clears it"),
   targetNode: z.string().optional().describe("Node the edge enters"),
   targetNodeName: z.string().optional().describe("Alias for targetNode"),
-  targetPin: z.string().optional().describe("Input pin label. connect_nodes defaults to the first input pin, disconnect_nodes to any"),
+  targetPin: z.string().optional().describe("Input pin label. connect_nodes defaults to the first input pin, disconnect_nodes to any (connect_pcg_nodes, disconnect_pcg_nodes). Input pin label (default: the first input pin) (validate_pcg_edge)"),
   targetPinLabel: z.string().optional().describe("Alias for targetPin"),
   timeoutSeconds: z.number().optional().describe("Longest wait in seconds (default 600)"),
   transform: z.object({ location: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("World location"), rotation: z.object({ pitch: z.number(), yaw: z.number(), roll: z.number() }).optional().describe("World rotation"), scale: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Actor scale (default 1)"), scale3D: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Same as scale") }).optional().describe("Actor transform; scale multiplies the extent"),

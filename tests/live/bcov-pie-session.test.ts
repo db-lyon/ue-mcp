@@ -66,7 +66,7 @@ async function replayFinished(): Promise<Json> {
 beforeAll(async () => {
   bridge = await getBridge();
   await stopPie();
-  await call("demo_go_home");
+  await call("demo_go_home", { discardUnsaved: true });
   for (const label of [CUBE, SKEL]) await callBridge(bridge, "delete_actor", { actorLabel: label });
   await callBridge(bridge, "delete_folder", { path: DIR, force: true });
   await callBridge(bridge, "pie_record_delete", { id: REC, confirm: true });

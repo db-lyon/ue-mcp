@@ -142,7 +142,7 @@ const WINDOWS_INSTALL_BASES = [
 ];
 
 /** Engine versions probed in the default install locations, newest first. */
-const DEFAULT_VERSIONS = ["5.8", "5.7", "5.6", "5.5", "5.4", "5.3"];
+export const DEFAULT_ENGINE_VERSIONS = ["5.9", "5.8", "5.7", "5.6", "5.5", "5.4", "5.3"];
 
 function pathImpl(platform: NodeJS.Platform): path.PlatformPath {
   return platform === "win32" ? path.win32 : path.posix;
@@ -364,7 +364,7 @@ function defaultInstallRoots(
       probed.push(`${base} (no engine install directory there)`);
       continue;
     }
-    for (const version of DEFAULT_VERSIONS) roots.push(impl.join(base, `UE_${version}`));
+    for (const version of DEFAULT_ENGINE_VERSIONS) roots.push(impl.join(base, `UE_${version}`));
   }
 
   // Linux and macOS source builds live in the home directory with no version

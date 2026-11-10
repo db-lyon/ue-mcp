@@ -1,5 +1,6 @@
 #include "PCGHandlers.h"
 #include "PCGHandlers_Internal.h"
+#include "PCGEdgeValidation.h"
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
 #include "HandlerPagination.h"
@@ -799,6 +800,8 @@ void FPCGHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("sourcePin"), EType::String, TEXT("Output pin label. connect_nodes defaults to the first output pin, disconnect_nodes to any")).Alias(TEXT("sourcePinLabel")),
 		MCPParam::Optional(TEXT("targetPin"), EType::String, TEXT("Input pin label. connect_nodes defaults to the first input pin, disconnect_nodes to any")).Alias(TEXT("targetPinLabel")),
 	});
+	// #1828: Custom HLSL node source and UPCGGraph::ValidateEdge.
+	RegisterCustomHLSLHandlers(Registry);
 	Registry.RegisterHandler(TEXT("remove_pcg_node"), &RemovePCGNode, {
 		GraphPath(),
 		MCPParam::Required(TEXT("nodeName"), EType::String, TEXT("Engine name of the node, as read_graph reports it")),
@@ -1362,11 +1365,33 @@ TSharedPtr<FJsonValue> FPCGHandlers::ConnectPCGNodes(const TSharedPtr<FJsonObjec
 	SourceNode->Modify();
 	TargetNode->Modify();
 
+	// #1828: a refused edge says why. 5.9's TryAddEdge reports the reason itself;
+	// before it, AddEdge only returns null, so the same checks run afterwards to name it.
+#if UE_MCP_HAS_5_9_API
+	FText ConnectReason;
+	const EPCGGraphConnectionResult Connected = Graph->TryAddEdge(SourceNode, ResolvedSourcePinLabel, TargetNode, ResolvedTargetPinLabel, ConnectReason);
+	if (Connected != EPCGGraphConnectionResult::Success)
+	{
+		Transaction.Cancel();
+		FMCPPCGEdgeCheck Check;
+		Check.Result = StaticEnum<EPCGGraphConnectionResult>()->GetNameStringByValue(static_cast<int64>(Connected));
+		Check.Reason = ConnectReason.ToString();
+		return MCPPCGEdgeRefusal(Check, SourceNodeName, ResolvedSourcePinLabel, TargetNodeName, ResolvedTargetPinLabel);
+	}
+#else
 	UPCGNode* ResultNode = Graph->AddEdge(SourceNode, ResolvedSourcePinLabel, TargetNode, ResolvedTargetPinLabel);
 	if (!ResultNode)
 	{
-		return MCPError(TEXT("Failed to connect pins - connection may already exist or be incompatible"));
+		Transaction.Cancel();
+		FMCPPCGEdgeCheck Check = MCPPCGValidateEdge(Graph, SourceNode, ResolvedSourcePinLabel, TargetNode, ResolvedTargetPinLabel);
+		if (Check.IsSuccess())
+		{
+			Check.Result = TEXT("Rejected");
+			Check.Reason = TEXT("UPCGGraph::AddEdge refused the edge without a reason this engine reports.");
+		}
+		return MCPPCGEdgeRefusal(Check, SourceNodeName, ResolvedSourcePinLabel, TargetNodeName, ResolvedTargetPinLabel);
 	}
+#endif
 
 	// #304: AddEdge has shipped variants that report success while failing to
 	// instantiate the UPCGEdge object on the pin. Verify by walking the source

@@ -8,12 +8,13 @@ import * as path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { covers } from "../helpers/covers.js";
 import { writeBridgeTree } from "../helpers/bridge-tree-fixture.js";
+import { proxyMcpJson, UNREAL_CLIENT_FIXTURES, UNREAL_URL } from "../helpers/unreal-mcp-fixtures.js";
 import { PACKAGE_VERSION, plain, REPO_ROOT, runCli, Sandbox, snapshotTree, type CliOptions, type CliResult } from "./harness.js";
 
 const IS_WINDOWS = process.platform === "win32";
 const PLATFORM = IS_WINDOWS ? "Win64" : process.platform === "darwin" ? "Mac" : "Linux";
 const HOOK_MATCHER = "mcp__ue-mcp__editor";
-const ALL_CLIENTS = "claude-code,claude-code-global,claude-desktop,cursor,codex";
+const ALL_CLIENTS = "claude-code,claude-code-global,claude-desktop,cursor,vscode,gemini,codex,codex-project";
 
 let sb: Sandbox;
 let fakeNpm: string;
@@ -102,7 +103,7 @@ describe("init --yes", () => {
   });
 
   it("deploys the bridge, enables it, and writes config, client entries, the hook and skills", () => {
-    covers("cli.init.yes");
+    covers("cli.init.yes", "cli.init.clients");
     expect(first.code, first.stdout + first.stderr).toBe(0);
     const dir = path.dirname(uproject);
 
@@ -122,15 +123,24 @@ describe("init --yes", () => {
       path.join(sb.home, ".claude", ".mcp.json"),
       path.join(sb.home, "AppData", "Roaming", "Claude", "claude_desktop_config.json"),
       path.join(dir, ".cursor", "mcp.json"),
+      path.join(dir, ".gemini", "settings.json"),
     ]) {
       const entry = ueMcpEntry(config);
       expect(entry, config).toBeDefined();
       // The machine path pins the exact version so server and bridge move together.
       expect(entry.args).toEqual(["-y", "--min-release-age=0", `ue-mcp@${PACKAGE_VERSION}`, serves]);
     }
-    const codex = fs.readFileSync(path.join(sb.home, ".codex", "config.toml"), "utf8");
-    expect(codex).toContain("[mcp_servers.ue-mcp]");
-    expect(codex).toContain(`ue-mcp@${PACKAGE_VERSION}`);
+    // VS Code keys its servers under `servers` and documents type stdio.
+    expect(readJson(path.join(dir, ".vscode", "mcp.json")).servers["ue-mcp"]).toEqual({
+      type: "stdio",
+      command: "npx",
+      args: ["-y", "--min-release-age=0", `ue-mcp@${PACKAGE_VERSION}`, serves],
+    });
+    for (const toml of [path.join(sb.home, ".codex", "config.toml"), path.join(dir, ".codex", "config.toml")]) {
+      const codex = fs.readFileSync(toml, "utf8");
+      expect(codex, toml).toContain("[mcp_servers.ue-mcp]");
+      expect(codex, toml).toContain(`ue-mcp@${PACKAGE_VERSION}`);
+    }
 
     const settings = path.join(dir, ".claude", "settings.json");
     expect(hasHookMatcher(settings)).toBe(true);
@@ -184,6 +194,155 @@ describe("init --json", () => {
   });
 });
 
+describe("init over Unreal MCP entries", () => {
+  /** A project holding every client config as the editor's MCP server writes it. */
+  function projectWithUnrealEntries(name: string): string {
+    const uproject = sb.makeProject(name);
+    for (const f of UNREAL_CLIENT_FIXTURES) {
+      const file = path.join(path.dirname(uproject), f.file);
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      fs.writeFileSync(file, f.content);
+    }
+    return uproject;
+  }
+
+  it("selects and replaces the HTTP entry in each client, keeps every other server, and saves each file first", async () => {
+    covers("cli.init.replace-unreal-mcp", "cli.init.clients");
+    const uproject = projectWithUnrealEntries("Replaced");
+    const dir = path.dirname(uproject);
+
+    // No --clients: the configs holding an entry are selected by default.
+    const planned = JSON.parse((await cli(["init", uproject, "--json", "--dry-run", "--install", "source"])).stdout).plan;
+    for (const f of UNREAL_CLIENT_FIXTURES) {
+      expect(planned.clients.find((c: { id: string }) => c.id === f.id), f.id).toMatchObject({
+        selected: true,
+        replaces: [{ name: "unreal-mcp", kind: "http", target: UNREAL_URL }],
+      });
+    }
+
+    const r = await cli(["init", uproject, "--json", "--install", "source"]);
+    expect(r.code, r.stdout + r.stderr).toBe(0);
+    const steps = JSON.parse(r.stdout).steps as Array<{ id: string; status: string; target: string; detail: string }>;
+    for (const f of UNREAL_CLIENT_FIXTURES) {
+      const file = path.join(dir, f.file);
+      const step = steps.find((s) => s.id === `replace:${f.id}`);
+      expect(step, f.id).toMatchObject({ status: "changed", target: file });
+      expect(step!.detail).toContain(`'unreal-mcp' (${UNREAL_URL})`);
+      expect(step!.detail).toContain(`${file}.ue-mcp-backup`);
+      // The saved copy is the file as it was, so restoring it undoes the replacement.
+      expect(fs.readFileSync(`${file}.ue-mcp-backup`, "utf8")).toBe(f.content);
+
+      const after = fs.readFileSync(file, "utf8");
+      expect(after, f.id).not.toContain("unreal-mcp");
+      if (f.serversKey) {
+        const parsed = JSON.parse(after);
+        expect(Object.keys(parsed[f.serversKey]).sort(), f.id).toEqual(["my-existing-server", "ue-mcp"]);
+        expect(parsed[f.serversKey]["ue-mcp"].args).toContain(uproject.replace(/\\/g, "/"));
+      } else {
+        expect(after).toContain('model = "o3"');
+        expect(after).toContain("[mcp_servers.my-existing-server]");
+        expect(after).toContain("[mcp_servers.ue-mcp]");
+      }
+    }
+
+    // Nothing left to replace on a second run.
+    const again = JSON.parse((await cli(["init", uproject, "--json", "--install", "source"])).stdout);
+    expect(again.steps.filter((s: { id: string }) => s.id.startsWith("replace:"))).toEqual([]);
+  });
+
+  it("replaces the stdio proxy entry and prints what it replaced", async () => {
+    covers("cli.init.replace-unreal-mcp");
+    const uproject = sb.makeProject("Proxied");
+    const mcpJson = path.join(path.dirname(uproject), ".mcp.json");
+    const proxy = sb.path("UnrealEngine", "Engine", "Plugins", "Experimental", "ModelContextProtocol", "Extras", "Proxy", "Bin", "Win64", "unreal_mcp_proxy.exe");
+    const original = proxyMcpJson(proxy, mcpJson);
+    fs.writeFileSync(mcpJson, original);
+
+    const r = await cli(["init", uproject, "--yes", "--install", "source", "--clients", "claude-code"]);
+    expect(r.code, r.stdout + r.stderr).toBe(0);
+    expect(plain(r.stdout)).toContain(`replaced Unreal MCP entry 'unreal-mcp-proxy' (stdio proxy ${proxy}) with ue-mcp`);
+    expect(Object.keys(readJson(mcpJson).mcpServers).sort()).toEqual(["my-existing-server", "ue-mcp"]);
+    expect(fs.readFileSync(`${mcpJson}.ue-mcp-backup`, "utf8")).toBe(original);
+  });
+
+  /** Every client config the editor writes, placed in `root`. */
+  function writeUnrealConfigs(root: string): void {
+    for (const f of UNREAL_CLIENT_FIXTURES) {
+      const file = path.join(root, f.file);
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      fs.writeFileSync(file, f.content);
+    }
+  }
+
+  /** An engine tree with Engine/Source, as a source build has; InstalledBuild.txt marks an installed one. */
+  function engineTree(name: string, installed: boolean): string {
+    const root = sb.path(name);
+    fs.mkdirSync(path.join(root, "Engine", "Source"), { recursive: true });
+    fs.mkdirSync(path.join(root, "Engine", "Build"), { recursive: true });
+    if (installed) fs.writeFileSync(path.join(root, "Engine", "Build", "InstalledBuild.txt"), "");
+    writeUnrealConfigs(root);
+    return root;
+  }
+
+  it("replaces the entries a source build's editor wrote into the engine root, beside the project's own", async () => {
+    covers("cli.init.replace-unreal-mcp");
+    const root = engineTree("SourceEngine", false);
+    const uproject = sb.makeProject("SourceGame");
+    const env = { UE_MCP_TEST_ENGINE_ROOT: root };
+
+    const planned = JSON.parse((await cli(["init", uproject, "--json", "--dry-run", "--install", "source"], { env })).stdout).plan;
+    expect(planned.engineConfigRoot).toBe(path.resolve(root));
+    for (const f of UNREAL_CLIENT_FIXTURES) {
+      expect(planned.clients.find((c: { id: string }) => c.id === f.id), f.id).toMatchObject({
+        selected: true,
+        replaces: [],
+        engineRootConfig: { configPath: path.join(root, f.file), replaces: [{ name: "unreal-mcp", kind: "http", target: UNREAL_URL }] },
+      });
+    }
+
+    const r = await cli(["init", uproject, "--json", "--install", "source"], { env });
+    expect(r.code, r.stdout + r.stderr).toBe(0);
+    const steps = JSON.parse(r.stdout).steps as Array<{ id: string; status: string; target: string; detail: string }>;
+    for (const f of UNREAL_CLIENT_FIXTURES) {
+      const file = path.join(root, f.file);
+      expect(steps.find((s) => s.id === `replace:${f.id}:engine-root`), f.id).toMatchObject({ status: "changed", target: file });
+      expect(steps.find((s) => s.id === `client:${f.id}:engine-root`), f.id).toMatchObject({ status: "changed", target: file });
+      expect(fs.readFileSync(`${file}.ue-mcp-backup`, "utf8")).toBe(f.content);
+      const after = fs.readFileSync(file, "utf8");
+      expect(after, f.id).not.toContain("unreal-mcp");
+      if (f.serversKey) {
+        expect(Object.keys(JSON.parse(after)[f.serversKey]).sort(), f.id).toEqual(["my-existing-server", "ue-mcp"]);
+      } else {
+        expect(after).toContain("[mcp_servers.my-existing-server]");
+        expect(after).toContain("[mcp_servers.ue-mcp]");
+      }
+      // The project's own config is written as for any selected client.
+      expect(fs.existsSync(path.join(path.dirname(uproject), f.file)), f.id).toBe(true);
+    }
+  });
+
+  it("never touches an installed engine, which writes into the project instead", async () => {
+    covers("cli.init.replace-unreal-mcp");
+    const root = engineTree("InstalledEngine", true);
+    const uproject = sb.makeProject("InstalledGame");
+    const before = snapshotTree(root);
+    const r = await cli(["init", uproject, "--json", "--install", "source", "--clients", "claude-code"], { env: { UE_MCP_TEST_ENGINE_ROOT: root } });
+    expect(r.code, r.stdout + r.stderr).toBe(0);
+    expect(JSON.parse(r.stdout).plan.engineConfigRoot).toBeNull();
+    expect(snapshotTree(root)).toEqual(before);
+  });
+
+  it("leaves a config alone when --clients leaves its client out", async () => {
+    covers("cli.init.replace-unreal-mcp");
+    const uproject = projectWithUnrealEntries("LeftOut");
+    const cursor = path.join(path.dirname(uproject), ".cursor", "mcp.json");
+    const r = await cli(["init", uproject, "--json", "--install", "source", "--clients", "claude-code"]);
+    expect(r.code, r.stdout + r.stderr).toBe(0);
+    expect(fs.readFileSync(cursor, "utf8")).toBe(UNREAL_CLIENT_FIXTURES.find((f) => f.id === "cursor")!.content);
+    expect(fs.existsSync(`${cursor}.ue-mcp-backup`)).toBe(false);
+  });
+});
+
 describe("init --dry-run", () => {
   it("prints the plan and writes nothing, and a blocked plan exits 1", async () => {
     covers("cli.init.dry-run");
@@ -204,7 +363,7 @@ describe("init --dry-run", () => {
     // What a setup page needs to offer every choice the interactive wizard does.
     expect(plan.categories.map((c: { name: string }) => c.name)).toEqual(
       ["level", "blueprint", "material", "asset", "animation", "niagara", "landscape", "pcg", "foliage", "audio", "widget", "gameplay", "gas", "networking", "demo",
-       "pie", "statetree", "chooser", "dataflow", "conversation", "epic", "fab", "datasmith", "metahuman", "source_control"],
+       "pie", "statetree", "chooser", "dataflow", "conversation", "epic", "fab", "datasmith", "metahuman", "source_control", "canvas"],
     );
     expect(plan.categories.find((c: { name: string }) => c.name === "niagara")).toEqual(
       { name: "niagara", label: "vfx (niagara)", description: "VFX systems, emitters, modules", requiredPlugins: ["Niagara"] },

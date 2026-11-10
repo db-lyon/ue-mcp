@@ -64,11 +64,21 @@ function isEpicPassthrough(name: string, spec: ActionSpec): boolean {
     && spec.epicSchema !== undefined && spec.epicTool !== undefined && spec.mapParams === undefined;
 }
 
-/** Actions of a tool that dispatch to a spec'd bridge method, the Epic passthrough aside. */
+/**
+ * The second passthrough (#1824): an action that runs a tool Epic's Unreal MCP
+ * plugin serves declares it as `mcpTool` and builds epic_call_mcp_tool's bag
+ * (tool, input) in its mapParams. Its own parameters are typed by its category
+ * and mapped onto the tool's input names, which the C++ spec cannot know.
+ */
+function isMcpToolPassthrough(spec: ActionSpec): boolean {
+  return spec.kind === "bridge" && spec.bridge === "epic_call_mcp_tool" && spec.mcpTool !== undefined && spec.mapParams !== undefined;
+}
+
+/** Actions of a tool that dispatch to a spec'd bridge method, the Epic passthroughs aside. */
 function specdActions(tool: ToolDef = animationTool): Array<[string, { bridge: string; description: string; mapParams?: unknown }]> {
   const out: Array<[string, { bridge: string; description: string; mapParams?: unknown }]> = [];
   for (const [name, spec] of Object.entries(tool.actions)) {
-    if (spec.kind === "bridge" && SNAPSHOT.handlers[spec.bridge] && !isEpicPassthrough(name, spec)) {
+    if (spec.kind === "bridge" && SNAPSHOT.handlers[spec.bridge] && !isEpicPassthrough(name, spec) && !isMcpToolPassthrough(spec)) {
       out.push([name, { bridge: spec.bridge, description: spec.description ?? "", mapParams: spec.mapParams }]);
     }
   }

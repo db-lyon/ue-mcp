@@ -10,6 +10,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createRuntime, type Runtime } from "../../src/server/runtime.js";
 import { ContextProjector } from "../../src/server/context-projection.js";
 import { closeLiveBridges, liveTarget } from "./harness.js";
+import { blockText, resultText } from "../helpers/content-text.js";
 
 type Json = Record<string, any>;
 const ENV = ["UE_MCP_PORT", "UE_MCP_HOST", "UE_MCP_CONTEXT_STRATEGY", "UE_MCP_DISABLE_UPDATE_CHECK"] as const;
@@ -18,7 +19,7 @@ const saved: Partial<Record<(typeof ENV)[number], string | undefined>> = {};
 let rt: Runtime;
 let projector: ContextProjector;
 
-const text = (r: { content: Array<{ text?: string }> }): string => r.content.map((c) => c.text ?? "").join("\n");
+const text = resultText;
 
 beforeAll(async () => {
   const target = await liveTarget();
@@ -45,7 +46,7 @@ describe("a projected call against the editor", () => {
   it("runs a lean category call the micro process does not advertise", async () => {
     const r = await projector.call({ strategy: "lean", categories: ["level"] }, "level", { action: "get_outliner", args: { limit: 5 } });
     expect(r.isError, text(r)).toBeFalsy();
-    const body = JSON.parse(r.content[0].text ?? "{}") as Json;
+    const body = JSON.parse(blockText(r.content[0]) ?? "{}") as Json;
     expect(Array.isArray(body.actors)).toBe(true);
   });
 

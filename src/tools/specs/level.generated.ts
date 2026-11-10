@@ -162,6 +162,23 @@ export const handlerSpecs: HandlerSpecs = {
       }
     ]
   },
+  "add_hlod_setup": {
+    "category": "level",
+    "params": [
+      {
+        "name": "partitionName",
+        "type": "string",
+        "required": true,
+        "description": "Runtime partition name, as list_runtime_partitions reports it"
+      },
+      {
+        "name": "setupName",
+        "type": "string",
+        "required": true,
+        "description": "Name of the spatially loaded HLOD setup to add"
+      }
+    ]
+  },
   "add_instances": {
     "category": "level",
     "params": [
@@ -261,6 +278,24 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "Report an existing transformer of this class instead of adding a duplicate (default true)"
       }
     ]
+  },
+  "add_runtime_partition": {
+    "category": "level",
+    "params": [
+      {
+        "name": "partitionName",
+        "type": "string",
+        "required": true,
+        "description": "Name of the runtime partition to add"
+      },
+      {
+        "name": "partitionClass",
+        "type": "string",
+        "required": false,
+        "description": "RuntimePartition class (default /Script/Engine.RuntimePartitionLHGrid)"
+      }
+    ],
+    "contractExempt": "The contract name and the default class are valid, so on a runtime hash set map the call would add a partition"
   },
   "add_streaming_sublevel": {
     "category": "level",
@@ -463,6 +498,89 @@ export const handlerSpecs: HandlerSpecs = {
       }
     ]
   },
+  "audit_level_performance": {
+    "category": "level",
+    "params": [
+      {
+        "name": "world",
+        "type": "string",
+        "required": false,
+        "description": "World scope: editor (default) | pie"
+      },
+      {
+        "name": "pieInstance",
+        "type": "integer",
+        "required": false,
+        "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients"
+      },
+      {
+        "name": "regionMin",
+        "type": "vec3",
+        "required": false,
+        "description": "Audit only primitives and lights whose bounds meet this box; minimum corner, world space"
+      },
+      {
+        "name": "regionMax",
+        "type": "vec3",
+        "required": false,
+        "description": "Maximum corner of the box; pass with regionMin"
+      },
+      {
+        "name": "gridSize",
+        "type": "number",
+        "required": false,
+        "description": "Side of the X/Y cells regions are reported in, in cm (default 5000, min 100)"
+      },
+      {
+        "name": "maxResults",
+        "type": "integer",
+        "required": false,
+        "description": "Rows per list (default 20, max 200); totals cover everything"
+      },
+      {
+        "name": "instancingMinCount",
+        "type": "integer",
+        "required": false,
+        "description": "Separate components of one mesh before it is an instancing candidate (default 10)"
+      },
+      {
+        "name": "heavyTriangleThreshold",
+        "type": "number",
+        "required": false,
+        "description": "LOD0 triangles at which a non-Nanite static mesh is a Nanite candidate (default 50000)"
+      },
+      {
+        "name": "outlierFactor",
+        "type": "number",
+        "required": false,
+        "description": "How many times above or below the median a texel or lightmap density must be to be an outlier (default 4)"
+      },
+      {
+        "name": "translucentAreaM2",
+        "type": "number",
+        "required": false,
+        "description": "Largest bounds face, in square metres, at which a translucent primitive is an overdraw candidate (default 100)"
+      },
+      {
+        "name": "stackedTranslucentCount",
+        "type": "integer",
+        "required": false,
+        "description": "Overlapping translucent primitives, itself included, that make a stack (default 3)"
+      },
+      {
+        "name": "dumpToFile",
+        "type": "boolean",
+        "required": false,
+        "description": "Write every row to a JSON file and return the totals with its path (default false)"
+      },
+      {
+        "name": "outputPath",
+        "type": "string",
+        "required": false,
+        "description": "File for dumpToFile; relative paths resolve under Saved/ (default Saved/UE_MCP/PerfAudit/<world>_<time>.json)"
+      }
+    ]
+  },
   "batch_set_actor_properties": {
     "category": "level",
     "params": [
@@ -587,6 +705,151 @@ export const handlerSpecs: HandlerSpecs = {
         ]
       }
     ]
+  },
+  "build_hlod_actors": {
+    "category": "level",
+    "params": [
+      {
+        "name": "actorLabels",
+        "type": "array",
+        "required": false,
+        "description": "HLOD actors to build (default: every loaded HLOD actor)",
+        "items": "string"
+      },
+      {
+        "name": "force",
+        "type": "boolean",
+        "required": false,
+        "description": "Rebuild actors that are up to date (default false)"
+      }
+    ],
+    "contractExempt": "Without actorLabels the call builds every loaded HLOD actor"
+  },
+  "build_spline_meshes": {
+    "category": "level",
+    "params": [
+      {
+        "name": "actorLabel",
+        "type": "string",
+        "required": false,
+        "description": "Label of the actor that owns the spline; pass actorLabel or actorPath"
+      },
+      {
+        "name": "actorPath",
+        "type": "string",
+        "required": false,
+        "description": "Full path of the actor that owns the spline; wins over actorLabel"
+      },
+      {
+        "name": "componentName",
+        "type": "string",
+        "required": false,
+        "description": "Spline component, when the actor has several (default the first)"
+      },
+      {
+        "name": "generatorName",
+        "type": "string",
+        "required": false,
+        "description": "Names this output so a later run replaces it (default SplineMeshes)"
+      },
+      {
+        "name": "staticMesh",
+        "type": "string",
+        "required": false,
+        "description": "Mesh laid along the spline; required unless rebuild is set"
+      },
+      {
+        "name": "spacing",
+        "type": "number",
+        "required": false,
+        "description": "Length of each piece in centimetres (default the mesh length along forwardAxis times its scale)"
+      },
+      {
+        "name": "forwardAxis",
+        "type": "string",
+        "required": false,
+        "description": "X (default) | Y | Z: the mesh axis laid along the spline"
+      },
+      {
+        "name": "scale",
+        "type": "vec3",
+        "required": false,
+        "description": "Mesh scale; the forwardAxis component scales the default spacing, the other two the cross-section"
+      },
+      {
+        "name": "roll",
+        "type": "number",
+        "required": false,
+        "description": "Roll of every piece around the spline, in degrees"
+      },
+      {
+        "name": "startOffset",
+        "type": "number",
+        "required": false,
+        "description": "Distance along the spline to leave empty at its start, in centimetres"
+      },
+      {
+        "name": "endOffset",
+        "type": "number",
+        "required": false,
+        "description": "Distance along the spline to leave empty at its end, in centimetres"
+      },
+      {
+        "name": "stretchToFit",
+        "type": "boolean",
+        "required": false,
+        "description": "Stretch the pieces so a whole number of them fills the spline exactly (default true)"
+      },
+      {
+        "name": "collisionProfile",
+        "type": "string",
+        "required": false,
+        "description": "Collision profile for the pieces, e.g. BlockAll or NoCollision"
+      },
+      {
+        "name": "rebuild",
+        "type": "boolean",
+        "required": false,
+        "description": "Reuse the parameters stored by the last run of this generator; passed parameters override them"
+      }
+    ],
+    "choices": [
+      {
+        "mode": "exactlyOne",
+        "branches": [
+          [
+            "actorLabel"
+          ],
+          [
+            "actorPath"
+          ]
+        ]
+      }
+    ]
+  },
+  "build_world_partition_hlods": {
+    "category": "level",
+    "params": [
+      {
+        "name": "hlodLayer",
+        "type": "string",
+        "required": false,
+        "description": "Build only the HLODs of this HLODLayer asset; omitted or null builds every layer",
+        "nullable": true
+      },
+      {
+        "name": "force",
+        "type": "boolean",
+        "required": false,
+        "description": "Rebuild HLODs that are up to date (default false)"
+      }
+    ],
+    "contractExempt": "Without hlodLayer the call builds every HLOD of the open world"
+  },
+  "build_world_partition_minimap": {
+    "category": "level",
+    "params": [],
+    "contractExempt": "Takes no parameters and builds the open world's minimap in an external process"
   },
   "bulk_line_trace": {
     "category": "level",
@@ -775,6 +1038,10 @@ export const handlerSpecs: HandlerSpecs = {
       }
     ]
   },
+  "check_world_partition_errors": {
+    "category": "level",
+    "params": []
+  },
   "clear_level_script": {
     "category": "level",
     "params": [
@@ -792,6 +1059,42 @@ export const handlerSpecs: HandlerSpecs = {
       }
     ],
     "contractExempt": "The contract's dryRun=false clears the loaded Level Blueprint; nothing it reads fails first"
+  },
+  "clear_spline_generated": {
+    "category": "level",
+    "params": [
+      {
+        "name": "actorLabel",
+        "type": "string",
+        "required": false,
+        "description": "Label of the actor that owns the spline; pass actorLabel or actorPath"
+      },
+      {
+        "name": "actorPath",
+        "type": "string",
+        "required": false,
+        "description": "Full path of the actor that owns the spline; wins over actorLabel"
+      },
+      {
+        "name": "generatorName",
+        "type": "string",
+        "required": true,
+        "description": "The generator whose output and stored parameters to remove"
+      }
+    ],
+    "choices": [
+      {
+        "mode": "exactlyOne",
+        "branches": [
+          [
+            "actorLabel"
+          ],
+          [
+            "actorPath"
+          ]
+        ]
+      }
+    ]
   },
   "convert_brushes_to_static_mesh": {
     "category": "level",
@@ -889,6 +1192,77 @@ export const handlerSpecs: HandlerSpecs = {
       }
     ]
   },
+  "create_blockout": {
+    "category": "level",
+    "params": [
+      {
+        "name": "shape",
+        "type": "string",
+        "required": true,
+        "description": "box | ramp | wedge | cylinder | stairs"
+      },
+      {
+        "name": "location",
+        "type": "vec3",
+        "required": false,
+        "description": "World position of the bottom centre (default origin)"
+      },
+      {
+        "name": "rotation",
+        "type": "rotator",
+        "required": false,
+        "description": "World rotation; a ramp and stairs climb toward the actor's +X"
+      },
+      {
+        "name": "size",
+        "type": "vec3",
+        "required": false,
+        "description": "Size in centimetres along the actor's X, Y and Z (default 100, 100, 100)"
+      },
+      {
+        "name": "steps",
+        "type": "integer",
+        "required": false,
+        "description": "Stairs: number of steps, 1 to 64 (default 8)"
+      },
+      {
+        "name": "sides",
+        "type": "integer",
+        "required": false,
+        "description": "Cylinder: number of sides, 3 to 64 (default 16)"
+      },
+      {
+        "name": "label",
+        "type": "string",
+        "required": false,
+        "description": "Actor label; an existing actor with this label is reported rather than duplicated (default a free Blockout_<Shape>)"
+      },
+      {
+        "name": "tag",
+        "type": "string",
+        "required": false,
+        "description": "Blockout tag the actor carries (default Blockout)"
+      },
+      {
+        "name": "material",
+        "type": "string",
+        "required": false,
+        "description": "Material override (default the grid material the mesh carries)"
+      },
+      {
+        "name": "meshFolder",
+        "type": "string",
+        "required": false,
+        "description": "Content folder for the generated shape meshes (default /Game/Blockout/Meshes)"
+      },
+      {
+        "name": "onConflict",
+        "type": "string",
+        "required": false,
+        "description": "When label is taken: skip (default) | error"
+      }
+    ]
+  },
   "create_outliner_folder": {
     "category": "level",
     "params": [
@@ -920,6 +1294,86 @@ export const handlerSpecs: HandlerSpecs = {
       }
     ],
     "contractExempt": "The contract value is a valid folder name, so the call would create a folder in the editor world"
+  },
+  "create_spline_actor": {
+    "category": "level",
+    "params": [
+      {
+        "name": "splinePoints",
+        "type": "array",
+        "required": true,
+        "description": "At least two positions, world space unless coordinateSpace is local",
+        "items": "object",
+        "fields": [
+          {
+            "name": "x",
+            "type": "number",
+            "required": true,
+            "description": "X"
+          },
+          {
+            "name": "y",
+            "type": "number",
+            "required": true,
+            "description": "Y"
+          },
+          {
+            "name": "z",
+            "type": "number",
+            "required": true,
+            "description": "Z"
+          }
+        ]
+      },
+      {
+        "name": "label",
+        "type": "string",
+        "required": false,
+        "description": "Actor label (default SplineActor); an existing actor with this label is reported rather than duplicated"
+      },
+      {
+        "name": "location",
+        "type": "vec3",
+        "required": false,
+        "description": "Actor location (default the first point)"
+      },
+      {
+        "name": "closedLoop",
+        "type": "boolean",
+        "required": false,
+        "description": "Close the spline (default false)"
+      },
+      {
+        "name": "pointType",
+        "type": "string",
+        "required": false,
+        "description": "Curve (default) | Linear | CurveClamped | Constant, for every point"
+      },
+      {
+        "name": "coordinateSpace",
+        "type": "string",
+        "required": false,
+        "description": "world (default) | local: whether points are relative to the actor location"
+      },
+      {
+        "name": "tags",
+        "type": "array",
+        "required": false,
+        "description": "Actor tags to add",
+        "items": "string"
+      },
+      {
+        "name": "onConflict",
+        "type": "string",
+        "required": false,
+        "description": "When the label is taken: skip (default) | update (rewrite its spline points) | error"
+      }
+    ]
+  },
+  "create_world_partition_minimap": {
+    "category": "level",
+    "params": [],
+    "contractExempt": "Takes no parameters and spawns the minimap actor when the world has none"
   },
   "delete_actor": {
     "category": "level",
@@ -1125,6 +1579,11 @@ export const handlerSpecs: HandlerSpecs = {
         ]
       }
     ]
+  },
+  "delete_world_partition_hlods": {
+    "category": "level",
+    "params": [],
+    "contractExempt": "Takes no parameters and deletes every HLOD of the open world"
   },
   "destroy_transient_actor": {
     "category": "level",
@@ -1486,6 +1945,10 @@ export const handlerSpecs: HandlerSpecs = {
     "category": "level",
     "params": []
   },
+  "get_hlod_stats": {
+    "category": "level",
+    "params": []
+  },
   "get_instance_transforms": {
     "category": "level",
     "params": [
@@ -1621,6 +2084,23 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "integer",
         "required": false,
         "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients"
+      }
+    ]
+  },
+  "get_runtime_partition": {
+    "category": "level",
+    "params": [
+      {
+        "name": "partitionName",
+        "type": "string",
+        "required": true,
+        "description": "Runtime partition name, as list_runtime_partitions reports it"
+      },
+      {
+        "name": "setupName",
+        "type": "string",
+        "required": false,
+        "description": "Read this HLOD setup's partition instead of the main partition"
       }
     ]
   },
@@ -1933,6 +2413,10 @@ export const handlerSpecs: HandlerSpecs = {
       }
     ]
   },
+  "get_world_partition_minimap": {
+    "category": "level",
+    "params": []
+  },
   "get_world_partition_settings": {
     "category": "level",
     "params": []
@@ -2090,6 +2574,34 @@ export const handlerSpecs: HandlerSpecs = {
       }
     ]
   },
+  "list_blockout": {
+    "category": "level",
+    "params": [
+      {
+        "name": "tag",
+        "type": "string",
+        "required": false,
+        "description": "Blockout tag to list (default Blockout)"
+      },
+      {
+        "name": "includeReplaced",
+        "type": "boolean",
+        "required": false,
+        "description": "Also list replacements that carry a restorable blockout record (default false)"
+      }
+    ]
+  },
+  "list_hlod_setups": {
+    "category": "level",
+    "params": [
+      {
+        "name": "partitionName",
+        "type": "string",
+        "required": true,
+        "description": "Runtime partition name, as list_runtime_partitions reports it"
+      }
+    ]
+  },
   "list_levels": {
     "category": "level",
     "params": [
@@ -2106,6 +2618,10 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "Rows on this page"
       }
     ]
+  },
+  "list_runtime_partitions": {
+    "category": "level",
+    "params": []
   },
   "list_streaming_sublevels": {
     "category": "level",
@@ -2249,6 +2765,75 @@ export const handlerSpecs: HandlerSpecs = {
       }
     ],
     "contractExempt": "Ends any play session, collects garbage and swaps the open map before the contract path can fail"
+  },
+  "match_asset_to_blockout": {
+    "category": "level",
+    "params": [
+      {
+        "name": "actorLabel",
+        "type": "string",
+        "required": false,
+        "description": "Blockout actor label"
+      },
+      {
+        "name": "actorPath",
+        "type": "string",
+        "required": false,
+        "description": "Blockout actor path; the unambiguous selector"
+      },
+      {
+        "name": "tag",
+        "type": "string",
+        "required": false,
+        "description": "Act on every blockout actor carrying this tag"
+      },
+      {
+        "name": "candidateFolder",
+        "type": "string",
+        "required": true,
+        "description": "Content folder of candidate StaticMeshes, e.g. /Game/Props"
+      },
+      {
+        "name": "recursive",
+        "type": "boolean",
+        "required": false,
+        "description": "Include subfolders of candidateFolder (default true)"
+      },
+      {
+        "name": "allowRotation",
+        "type": "boolean",
+        "required": false,
+        "description": "Also try each candidate turned a quarter about Z (default true)"
+      },
+      {
+        "name": "maxCandidates",
+        "type": "integer",
+        "required": false,
+        "description": "Load at most this many candidate meshes (default 500)"
+      },
+      {
+        "name": "limit",
+        "type": "integer",
+        "required": false,
+        "description": "Candidates returned per blockout (default 5)"
+      }
+    ],
+    "choices": [
+      {
+        "mode": "exactlyOne",
+        "branches": [
+          [
+            "actorLabel"
+          ],
+          [
+            "actorPath"
+          ],
+          [
+            "tag"
+          ]
+        ]
+      }
+    ]
   },
   "move_actor": {
     "category": "level",
@@ -2827,6 +3412,54 @@ export const handlerSpecs: HandlerSpecs = {
       }
     ]
   },
+  "rebuild_brush": {
+    "category": "level",
+    "params": [
+      {
+        "name": "actorLabel",
+        "type": "string",
+        "required": false,
+        "description": "Brush or volume to rebuild"
+      },
+      {
+        "name": "actorPath",
+        "type": "string",
+        "required": false,
+        "description": "Object path of the brush; preferred over actorLabel when known"
+      },
+      {
+        "name": "builderClass",
+        "type": "string",
+        "required": false,
+        "description": "Brush builder class to rebuild with (default: the brush's current builder)"
+      },
+      {
+        "name": "builderProperties",
+        "type": "object",
+        "required": false,
+        "description": "Builder property name -> value, such as {X: 400, Y: 200, Z: 100} for a CubeBuilder"
+      },
+      {
+        "name": "deferBsp",
+        "type": "boolean",
+        "required": false,
+        "description": "Defer the BSP rebuild for batching; a later call without it processes the pending BSP (default false)"
+      }
+    ],
+    "choices": [
+      {
+        "mode": "atLeastOne",
+        "branches": [
+          [
+            "actorLabel"
+          ],
+          [
+            "actorPath"
+          ]
+        ]
+      }
+    ]
+  },
   "rebuild_water_zone": {
     "category": "level",
     "params": [
@@ -3092,6 +3725,23 @@ export const handlerSpecs: HandlerSpecs = {
       }
     ]
   },
+  "remove_hlod_setup": {
+    "category": "level",
+    "params": [
+      {
+        "name": "partitionName",
+        "type": "string",
+        "required": true,
+        "description": "Runtime partition name, as list_runtime_partitions reports it"
+      },
+      {
+        "name": "setupName",
+        "type": "string",
+        "required": true,
+        "description": "HLOD setup name, as list_hlod_setups reports it"
+      }
+    ]
+  },
   "remove_instance": {
     "category": "level",
     "params": [
@@ -3118,6 +3768,17 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "integer",
         "required": true,
         "description": "Instance index"
+      }
+    ]
+  },
+  "remove_runtime_partition": {
+    "category": "level",
+    "params": [
+      {
+        "name": "partitionName",
+        "type": "string",
+        "required": true,
+        "description": "Runtime partition name, as list_runtime_partitions reports it"
       }
     ]
   },
@@ -3207,6 +3868,161 @@ export const handlerSpecs: HandlerSpecs = {
       }
     ]
   },
+  "rename_runtime_partition": {
+    "category": "level",
+    "params": [
+      {
+        "name": "partitionName",
+        "type": "string",
+        "required": true,
+        "description": "Runtime partition name, as list_runtime_partitions reports it"
+      },
+      {
+        "name": "newName",
+        "type": "string",
+        "required": true,
+        "description": "New runtime partition name"
+      }
+    ]
+  },
+  "repair_world_partition_errors": {
+    "category": "level",
+    "params": [],
+    "contractExempt": "Takes no parameters and repairs, saving the world, when there is something to repair"
+  },
+  "replace_actors_with_asset": {
+    "category": "level",
+    "params": [
+      {
+        "name": "actorLabels",
+        "type": "array",
+        "required": true,
+        "description": "Labels (or names or paths) of the actors to replace",
+        "items": "string"
+      },
+      {
+        "name": "assetPath",
+        "type": "string",
+        "required": true,
+        "description": "Asset to create the new actors from: a static mesh, Blueprint, particle system..."
+      },
+      {
+        "name": "copySourceProperties",
+        "type": "boolean",
+        "required": false,
+        "description": "When the asset is a Blueprint sharing a native parent with a replaced actor, copy that actor's property values (default true)"
+      }
+    ]
+  },
+  "replace_actors_with_class": {
+    "category": "level",
+    "params": [
+      {
+        "name": "actorLabels",
+        "type": "array",
+        "required": true,
+        "description": "Labels (or names or paths) of the actors to replace",
+        "items": "string"
+      },
+      {
+        "name": "className",
+        "type": "string",
+        "required": true,
+        "description": "Actor class to create in their place; it needs an actor factory that works without an asset (lights, empty actors, volumes)"
+      }
+    ]
+  },
+  "replace_blockout": {
+    "category": "level",
+    "params": [
+      {
+        "name": "actorLabel",
+        "type": "string",
+        "required": false,
+        "description": "Blockout actor label"
+      },
+      {
+        "name": "actorPath",
+        "type": "string",
+        "required": false,
+        "description": "Blockout actor path; the unambiguous selector"
+      },
+      {
+        "name": "tag",
+        "type": "string",
+        "required": false,
+        "description": "Act on every blockout actor carrying this tag"
+      },
+      {
+        "name": "actorPaths",
+        "type": "array",
+        "required": false,
+        "description": "Blockout actor paths",
+        "items": "string"
+      },
+      {
+        "name": "assetPath",
+        "type": "string",
+        "required": false,
+        "description": "StaticMesh to put in place of every target; wins over candidateFolder"
+      },
+      {
+        "name": "candidateFolder",
+        "type": "string",
+        "required": false,
+        "description": "Content folder of candidate StaticMeshes, e.g. /Game/Props"
+      },
+      {
+        "name": "recursive",
+        "type": "boolean",
+        "required": false,
+        "description": "Include subfolders of candidateFolder (default true)"
+      },
+      {
+        "name": "allowRotation",
+        "type": "boolean",
+        "required": false,
+        "description": "Also try each candidate turned a quarter about Z (default true)"
+      },
+      {
+        "name": "maxCandidates",
+        "type": "integer",
+        "required": false,
+        "description": "Load at most this many candidate meshes (default 500)"
+      },
+      {
+        "name": "fit",
+        "type": "string",
+        "required": false,
+        "description": "uniform (default, largest uniform scale that fits inside) | stretch (match every axis) | none (asset at scale 1)"
+      },
+      {
+        "name": "yawOffset",
+        "type": "number",
+        "required": false,
+        "description": "Extra yaw in degrees on top of the blockout's rotation (default the best match's, else 0)"
+      }
+    ],
+    "choices": [
+      {
+        "mode": "exactlyOne",
+        "branches": [
+          [
+            "actorLabel"
+          ],
+          [
+            "actorPath"
+          ],
+          [
+            "tag"
+          ],
+          [
+            "actorPaths"
+          ]
+        ]
+      }
+    ]
+  },
   "rerun_construction_scripts": {
     "category": "level",
     "params": [
@@ -3264,6 +4080,46 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "string",
         "required": true,
         "description": "Internal UObject name, such as StaticMeshActor_141"
+      }
+    ]
+  },
+  "restore_blockout": {
+    "category": "level",
+    "params": [
+      {
+        "name": "actorLabel",
+        "type": "string",
+        "required": false,
+        "description": "Replacement actor label"
+      },
+      {
+        "name": "actorPath",
+        "type": "string",
+        "required": false,
+        "description": "Replacement actor path"
+      },
+      {
+        "name": "actorPaths",
+        "type": "array",
+        "required": false,
+        "description": "Replacement actor paths, as replace_blockout returns them",
+        "items": "string"
+      }
+    ],
+    "choices": [
+      {
+        "mode": "exactlyOne",
+        "branches": [
+          [
+            "actorLabel"
+          ],
+          [
+            "actorPath"
+          ],
+          [
+            "actorPaths"
+          ]
+        ]
       }
     ]
   },
@@ -3370,6 +4226,146 @@ export const handlerSpecs: HandlerSpecs = {
       }
     ],
     "contractExempt": "Saves the current level under the contract values; nothing it reads fails first"
+  },
+  "scatter_along_spline": {
+    "category": "level",
+    "params": [
+      {
+        "name": "actorLabel",
+        "type": "string",
+        "required": false,
+        "description": "Label of the actor that owns the spline; pass actorLabel or actorPath"
+      },
+      {
+        "name": "actorPath",
+        "type": "string",
+        "required": false,
+        "description": "Full path of the actor that owns the spline; wins over actorLabel"
+      },
+      {
+        "name": "componentName",
+        "type": "string",
+        "required": false,
+        "description": "Spline component, when the actor has several (default the first)"
+      },
+      {
+        "name": "generatorName",
+        "type": "string",
+        "required": false,
+        "description": "Names this output so a later run replaces it (default SplineScatter)"
+      },
+      {
+        "name": "meshes",
+        "type": "array",
+        "required": false,
+        "description": "StaticMesh paths to scatter; required unless rebuild is set",
+        "items": "string"
+      },
+      {
+        "name": "weights",
+        "type": "array",
+        "required": false,
+        "description": "Relative pick weight per mesh (default equal)",
+        "items": "number"
+      },
+      {
+        "name": "mode",
+        "type": "string",
+        "required": false,
+        "description": "instances (default, one HierarchicalInstancedStaticMeshComponent per mesh on the spline actor) | actors (StaticMeshActors)"
+      },
+      {
+        "name": "interval",
+        "type": "number",
+        "required": false,
+        "description": "Distance between placements in centimetres (default 200); ignored when count is given"
+      },
+      {
+        "name": "count",
+        "type": "integer",
+        "required": false,
+        "description": "Number of placements spread evenly over the spline"
+      },
+      {
+        "name": "startOffset",
+        "type": "number",
+        "required": false,
+        "description": "Distance along the spline to leave empty at its start, in centimetres"
+      },
+      {
+        "name": "endOffset",
+        "type": "number",
+        "required": false,
+        "description": "Distance along the spline to leave empty at its end, in centimetres"
+      },
+      {
+        "name": "offset",
+        "type": "vec3",
+        "required": false,
+        "description": "Constant offset in the spline's frame: x along it, y to its right, z up"
+      },
+      {
+        "name": "positionJitter",
+        "type": "vec3",
+        "required": false,
+        "description": "Random offset range per axis in the spline's frame, in centimetres"
+      },
+      {
+        "name": "yawJitter",
+        "type": "number",
+        "required": false,
+        "description": "Random yaw range in degrees, either way"
+      },
+      {
+        "name": "scaleMin",
+        "type": "number",
+        "required": false,
+        "description": "Smallest uniform scale (default 1)"
+      },
+      {
+        "name": "scaleMax",
+        "type": "number",
+        "required": false,
+        "description": "Largest uniform scale (default scaleMin)"
+      },
+      {
+        "name": "alignToSpline",
+        "type": "boolean",
+        "required": false,
+        "description": "Rotate each placement to the spline's direction (default true)"
+      },
+      {
+        "name": "seed",
+        "type": "integer",
+        "required": false,
+        "description": "Random seed; the same seed and parameters place the same result (default 0)"
+      },
+      {
+        "name": "maxCount",
+        "type": "integer",
+        "required": false,
+        "description": "Refuse more placements than this (default 10000)"
+      },
+      {
+        "name": "rebuild",
+        "type": "boolean",
+        "required": false,
+        "description": "Reuse the parameters stored by the last run of this generator; passed parameters override them"
+      }
+    ],
+    "choices": [
+      {
+        "mode": "exactlyOne",
+        "branches": [
+          [
+            "actorLabel"
+          ],
+          [
+            "actorPath"
+          ]
+        ]
+      }
+    ]
   },
   "select_actors": {
     "category": "level",
@@ -4133,6 +5129,30 @@ export const handlerSpecs: HandlerSpecs = {
       }
     ]
   },
+  "set_hlod_setup_layers": {
+    "category": "level",
+    "params": [
+      {
+        "name": "partitionName",
+        "type": "string",
+        "required": true,
+        "description": "Runtime partition name, as list_runtime_partitions reports it"
+      },
+      {
+        "name": "setupName",
+        "type": "string",
+        "required": true,
+        "description": "HLOD setup name, as list_hlod_setups reports it"
+      },
+      {
+        "name": "hlodLayers",
+        "type": "array",
+        "required": true,
+        "description": "HLODLayer asset paths to assign; empty leaves the setup without layers",
+        "items": "string"
+      }
+    ]
+  },
   "set_light_properties": {
     "category": "level",
     "params": [
@@ -4268,6 +5288,40 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "boolean",
         "required": false,
         "description": "Enable each written setting's bOverride flag (default true)"
+      }
+    ]
+  },
+  "set_runtime_hash_class": {
+    "category": "level",
+    "params": [
+      {
+        "name": "runtimeHashClass",
+        "type": "string",
+        "required": true,
+        "description": "Runtime hash class: WorldPartitionRuntimeHashSet, WorldPartitionRuntimeSpatialHash, or a /Script path"
+      }
+    ]
+  },
+  "set_runtime_partition_properties": {
+    "category": "level",
+    "params": [
+      {
+        "name": "partitionName",
+        "type": "string",
+        "required": true,
+        "description": "Runtime partition name, as list_runtime_partitions reports it"
+      },
+      {
+        "name": "setupName",
+        "type": "string",
+        "required": false,
+        "description": "Write this HLOD setup's partition instead of the main partition"
+      },
+      {
+        "name": "properties",
+        "type": "object",
+        "required": true,
+        "description": "Property name -> value, as get_runtime_partition lists them"
       }
     ]
   },
@@ -4552,6 +5606,18 @@ export const handlerSpecs: HandlerSpecs = {
         ]
       }
     ]
+  },
+  "set_world_partition_streaming": {
+    "category": "level",
+    "params": [
+      {
+        "name": "enabled",
+        "type": "boolean",
+        "required": true,
+        "description": "true streams the world; false keeps every actor loaded"
+      }
+    ],
+    "contractExempt": "The contract boolean is a valid value, so on a partitioned map the call would change its streaming"
   },
   "set_world_settings": {
     "category": "level",
@@ -5533,25 +6599,38 @@ export const paramsClauses: Readonly<Record<string, string>> = {
   add_actor_tag: "Params: actorLabel?, actorPath?, tag",
   add_component_to_actor: "Params: actorLabel?, actorPath?, componentClass, componentName, onConflict?",
   add_hismc_instances: "Params: actorLabel?, actorPath?, componentName?, transforms, worldSpace?",
+  add_hlod_setup: "Params: partitionName, setupName",
   add_instances: "Params: actorLabel?, actorPath?, componentName?, transforms, worldSpace?",
   add_post_process_blendable: "Params: actorLabel?, actorPath?, materialPath (or material), weight?",
   add_runtime_cell_transformer: "Params: transformerClass (or className), properties?, position?, skipIfPresent?",
+  add_runtime_partition: "Params: partitionName, partitionClass?",
   add_streaming_sublevel: "Params: levelPath, streamingClass?, location?, initiallyLoaded?, initiallyVisible?",
   aim_actor_at: "Params: actorLabel?, actorPath?, targetPoint?, targetActor?, targetActorPath?, roll?, world?, pieInstance?",
   attach_actor: "Params: childLabel?, childPath?, parentLabel?, parentPath?, attachRule?, socketName?",
   attach_component: "Params: childLabel?, childPath?, parentLabel?, parentPath?, childComponentName?, parentComponentName?, attachRule?, weldSimulatedBodies?, socketName?, relativeLocation?, relativeRotation?",
+  audit_level_performance: "Params: world?, pieInstance?, regionMin?, regionMax?, gridSize?, maxResults?, instancingMinCount?, heavyTriangleThreshold?, outlierFactor?, translucentAreaM2?, stackedTranslucentCount?, dumpToFile?, outputPath?",
   batch_set_actor_properties: "Params: properties, actorLabels?, labelPrefix?, labelContains?, tag?, classFilter?, folderPath?, folderPathPrefix?, matchSubclasses?, dryRun?, force?, transactionLabel?",
   batch_translate: "Params: offset, at least one of actorLabels/actorPaths/tag",
+  build_hlod_actors: "Params: actorLabels?, force?",
+  build_spline_meshes: "Params: actorLabel OR actorPath, componentName?, generatorName?, staticMesh?, spacing?, forwardAxis?, scale?, roll?, startOffset?, endOffset?, stretchToFit?, collisionProfile?, rebuild?",
+  build_world_partition_hlods: "Params: hlodLayer?, force?",
+  build_world_partition_minimap: "Params: none",
   bulk_line_trace: "Params: traces, world?, pieInstance?",
   bulk_set_component_property: "Params: componentName, propertyName, value, at least one of actorLabels/labelPrefix/labelContains/tag/classFilter/folderPath/folderPathPrefix, matchSubclasses?, dryRun?, transactionLabel?",
+  check_world_partition_errors: "Params: none",
   clear_level_script: "Params: dryRun?, save?",
+  clear_spline_generated: "Params: actorLabel OR actorPath, generatorName",
   convert_brushes_to_static_mesh: "Params: at least one of actorLabels/folderPath, recursiveFolder?, classFilter?, exactClass?, destinationPath?, dryRun?, allowSubtractive?, includeVolumes?",
   count_actors_by_class: "Params: world?, pieInstance?, topN?",
+  create_blockout: "Params: shape, location?, rotation?, size?, steps?, sides?, label?, tag?, material?, meshFolder?, onConflict?",
   create_outliner_folder: "Params: at least one of folderPath/folderPaths",
+  create_spline_actor: "Params: splinePoints, label?, location?, closedLoop?, pointType?, coordinateSpace?, tags?, onConflict?",
+  create_world_partition_minimap: "Params: none",
   delete_actor: "Params: actorLabel?, actorPath?",
   delete_actors: "Params: at least one of labelPrefix/labelContains/nameContains/className/tag/classPathContains/classPathContainsAny/folderPath/folderPathPrefix, dryRun?",
   delete_exact_labeled_actors_in_levels: "Params: levels, dryRun?, onMissing?, restoreOriginalLevel?",
   delete_outliner_folder: "Params: at least one of folderPath/folderPaths, dryRun?",
+  delete_world_partition_hlods: "Params: none",
   destroy_transient_actor: "Params: world?, pieInstance?, actorPath?, actorLabel?, all?",
   detach_actor: "Params: childLabel?, childPath?",
   detach_component: "Params: childLabel?, childPath?, childComponentName?",
@@ -5564,27 +6643,34 @@ export const paramsClauses: Readonly<Record<string, string>> = {
   get_component_tree: "Params: actorLabel?, actorPath?, includeProperties?, componentClass?, componentName?, relativeTo?, socketNames?, world?, pieInstance?",
   get_current_edit_level: "Params: none",
   get_current_level: "Params: none",
+  get_hlod_stats: "Params: none",
   get_instance_transforms: "Params: actorLabel?, actorPath?, componentName?, worldSpace?",
   get_nanite_info: "Params: assetPath (or meshPath)",
   get_post_process_settings: "Params: actorLabel?, actorPath?, componentName?, propertyName?, onlyOverridden?, nameContains?, names?",
   get_relative_transform: "Params: targetLabel? (or target), targetPath?, referenceLabel? (or reference), referencePath?, world?, pieInstance?",
+  get_runtime_partition: "Params: partitionName, setupName?",
   get_runtime_virtual_texture_summary: "Params: world?, pieInstance?",
   get_selected_actors: "Params: none",
   get_skinned_vertices: "Params: at least one of actorLabel/actorPath, componentName?, world?, pieInstance?, lodIndex?, space?, boneNames?, includeChildBones?, minWeight?, box?, nearPoint?, radius?, include?, startIndex?, limit?, dumpToFile?, outputPath?",
   get_spline_info: "Params: actorLabel OR actorPath, componentName?, projectPoint?, world?, pieInstance?",
   get_water_state: "Params: actorLabel?, actorPath?",
   get_world_outliner: "Params: classFilter?, exactClass?, nameFilter?, folderPath?, folderPathPrefix?, editorHidden?, includeStreaming?, world?, pieInstance?, cursor?, limit?",
+  get_world_partition_minimap: "Params: none",
   get_world_partition_settings: "Params: none",
   get_world_settings: "Params: none",
   line_trace: "Params: start?, end?, direction?, distance?, traceComplex?, channel?, ignoreActors?, multi?, world?, pieInstance?",
   list_actor_descs: "Params: filter?, className?, guids?, bounds?, loadedOnly?, unloadedOnly?, cursor?, limit?",
   list_actor_tags: "Params: actorLabel?, actorPath?, cursor?, limit?",
+  list_blockout: "Params: tag?, includeReplaced?",
+  list_hlod_setups: "Params: partitionName",
   list_levels: "Params: cursor?, limit?",
+  list_runtime_partitions: "Params: none",
   list_streaming_sublevels: "Params: none",
   list_transient_actors: "Params: world?, pieInstance?, cursor?, limit?",
   list_volumes: "Params: volumeType?, cursor?, limit?",
   load_actor_descs: "Params: mode?, filter?, className?, guids?, bounds?, loadedOnly?, unloadedOnly?, maxActors?, dryRun?",
   load_level: "Params: levelPath, saveFirst? (or saveCurrent), discardUnsaved?",
+  match_asset_to_blockout: "Params: actorLabel OR actorPath OR tag, candidateFolder, recursive?, allowRotation?, maxCandidates?, limit?",
   move_actor: "Params: actorLabel?, actorPath?, location?, rotation?, scale?, world?, pieInstance?",
   nav_project_point: "Params: point, extent?, world?, pieInstance?",
   nudge_component: "Params: actorLabel OR actorPath, componentName, frame?, translationDelta?, axisRotation?, viewRotation?, scaleMultiplier?, dryRun?, world?, pieInstance?",
@@ -5592,18 +6678,28 @@ export const paramsClauses: Readonly<Record<string, string>> = {
   place_actors_batch: "Params: actors",
   query_components: "Params: componentClass?, actorClass?, matchSubclasses?, componentNameContains?, actorLabelPrefix?, actorLabelContains?, actorTag?, folderPath?, folderPathPrefix?, includeChildActors?, fields?, propertyNames?, actorPropertyNames?, where?, whereMode?, suspectOnly?, groupBy?, countBy?, sampleLimit?, countOnly?, limit?, startIndex?, duplicateTransformTolerance?, levelPath?, world?, pieInstance?, includeCollision?, collisionChannel?",
   read_actor_motion: "Params: actorLabel?, actorLabels?, actorPath?, actorPaths?, world?, pieInstance?",
+  rebuild_brush: "Params: at least one of actorLabel/actorPath, builderClass?, builderProperties?, deferBsp?",
   rebuild_water_zone: "Params: actorLabel?, actorPath?, zoneExtent?, tileSize?, maxPasses?",
   recreate_physics_state: "Params: at least one of actorLabels/labelPrefix/tag/classFilter/componentClass/componentNameContains, dryRun?, maxComponents?, world?, pieInstance?",
   remove_actor_tag: "Params: actorLabel?, actorPath?, tag",
   remove_component_from_actor: "Params: actorLabel?, actorPath?, componentName",
   remove_components_by_class: "Params: componentClass, matchComponentSubclasses?, componentNameContains?, actorLabels?, labelPrefix?, labelContains?, tag?, classFilter? (or actorClassFilter), folderPath?, folderPathPrefix?, matchSubclasses?, dryRun?, save?, transactionLabel?",
+  remove_hlod_setup: "Params: partitionName, setupName",
   remove_instance: "Params: actorLabel?, actorPath?, componentName?, index",
+  remove_runtime_partition: "Params: partitionName",
   remove_streaming_sublevel: "Params: levelName (or levelPath)",
   rename_actor_object: "Params: at least one of actorLabel/actorPath/renames, newName?, dryRun?",
+  rename_runtime_partition: "Params: partitionName, newName",
+  repair_world_partition_errors: "Params: none",
+  replace_actors_with_asset: "Params: actorLabels, assetPath, copySourceProperties?",
+  replace_actors_with_class: "Params: actorLabels, className",
+  replace_blockout: "Params: actorLabel OR actorPath OR tag OR actorPaths, assetPath?, candidateFolder?, recursive?, allowRotation?, maxCandidates?, fit?, yawOffset?",
   rerun_construction_scripts: "Params: at least one of actorLabels/className, matchSubclasses?, world?, pieInstance?",
   resolve_actor: "Params: internalName",
+  restore_blockout: "Params: actorLabel OR actorPath OR actorPaths",
   restore_component_relative_transform: "Params: actorLabel OR actorPath, componentName, relativeTransform, world?, pieInstance?",
   save_level: "Params: force?, includeExternalActors?, commitDeletes?",
+  scatter_along_spline: "Params: actorLabel OR actorPath, componentName?, generatorName?, meshes?, weights?, mode?, interval?, count?, startOffset?, endOffset?, offset?, positionJitter?, yawJitter?, scaleMin?, scaleMax?, alignToSpline?, seed?, maxCount?, rebuild?",
   select_actors: "Params: at least one of actorLabels/actorPaths",
   select_component: "Params: actorLabel?, actorPath?, componentName, addToSelection?",
   set_actor_folder_path: "Params: folderPath, at least one of actorLabels/labelPrefix/className/tag, dryRun?, transactionLabel?",
@@ -5619,14 +6715,18 @@ export const paramsClauses: Readonly<Record<string, string>> = {
   set_editor_visibility: "Params: hidden, actorLabels?, all?",
   set_fixed_exposure: "Params: actorLabel?, actorPath?, componentName?, propertyName?, exposure (or brightness), bias?",
   set_fog_properties: "Params: actorLabel?, actorPath?, world?, pieInstance?, fogDensity?, fogHeightFalloff?, startDistance?, fogInscatteringColor? (or color), enableVolumetricFog?, volumetricFogScatteringDistribution?, volumetricFogExtinctionScale?, volumetricFogDistance?, volumetricFogAlbedo?",
+  set_hlod_setup_layers: "Params: partitionName, setupName, hlodLayers",
   set_light_properties: "Params: actorLabel?, actorPath?, intensity?, color?, rotation?, mobility?, recaptureSky?, volumetricScatteringIntensity?, sourceRadius?, innerConeAngle?, outerConeAngle?",
   set_nanite_settings: "Params: assetPath (or meshPath), enabled?, positionPrecision?",
   set_post_process_settings: "Params: actorLabel?, actorPath?, componentName?, propertyName?, settings, enableOverrides?",
+  set_runtime_hash_class: "Params: runtimeHashClass",
+  set_runtime_partition_properties: "Params: partitionName, setupName?, properties",
   set_spline_points: "Params: actorLabel OR actorPath, points, componentName?, closedLoop?, loopPosition?, loopPositionOverride?, markEdited?",
   set_streaming_sublevel_properties: "Params: levelName (or levelPath), initiallyLoaded?, initiallyVisible?, location?, editorVisible?",
   set_volume_properties: "Params: actorLabel?, actorPath?, properties",
   set_water_body_property: "Params: actorLabel?, actorPath?, propertyName, value",
   set_world_partition_settings: "Params: at least one of cellSize/loadingRange/settings, grid?, gridPath?",
+  set_world_partition_streaming: "Params: enabled",
   set_world_settings: "Params: defaultGameMode?, killZ?, globalGravityZ?, enableWorldBoundsChecks?",
   shape_trace: "Params: shape, radius?, halfExtent?, halfHeight?, start?, end?, direction?, distance?, traceComplex?, channel?, ignoreActors?, world?, pieInstance?, multi?",
   snap_actor_to_floor: "Params: actorLabel?, actorPath?, floorOffset?, maxDistance?, world?, pieInstance?",
@@ -5646,25 +6746,27 @@ export const paramsClauses: Readonly<Record<string, string>> = {
 export const schema: Record<string, z.ZodType> = {
   actorClass: z.string().optional().describe("Actor class: short name, /Script path or Blueprint class path (place_actor, spawn_actors_batch, spawn_transient_actor). Owning actor class, resolved as a class or matched as a substring (query_components)"),
   actorClassFilter: z.string().optional().describe("Alias for classFilter"),
-  actorLabel: z.string().optional().describe("Actor editor label; pass actorLabel or actorPath (add_actor_tag, add_component_to_actor, add_hismc_instances, add_instances, add_post_process_blendable, aim_actor_at, delete_actor, export_actor_fbx, get_actor_bounds, get_actor_details, get_component_details, get_component_tree, get_instance_transforms, get_post_process_settings, get_spline_info, get_water_state, list_actor_tags, move_actor, nudge_component, read_actor_motion, rebuild_water_zone, remove_actor_tag, remove_component_from_actor, remove_instance, rename_actor_object, restore_component_relative_transform, select_component, set_actor_material, set_actor_mobility, set_actor_property, set_actor_tags, set_component_property, set_component_skeletal_mesh, set_fixed_exposure, set_fog_properties, set_light_properties, set_post_process_settings, set_spline_points, set_volume_properties, set_water_body_property, snap_actor_to_floor, snap_instances_to_surface, update_instance_transform). Transient actor label (destroy_transient_actor). Actor label, name or path; pass actorLabel or actorPath (get_skinned_vertices)"),
+  actorLabel: z.string().optional().describe("Actor editor label; pass actorLabel or actorPath (add_actor_tag, add_component_to_actor, add_hismc_instances, add_instances, add_post_process_blendable, aim_actor_at, delete_actor, export_actor_fbx, get_actor_bounds, get_actor_details, get_component_details, get_component_tree, get_instance_transforms, get_post_process_settings, get_spline_info, get_water_state, list_actor_tags, move_actor, nudge_component, read_actor_motion, rebuild_water_zone, remove_actor_tag, remove_component_from_actor, remove_instance, rename_actor_object, restore_component_relative_transform, select_component, set_actor_material, set_actor_mobility, set_actor_property, set_actor_tags, set_component_property, set_component_skeletal_mesh, set_fixed_exposure, set_fog_properties, set_light_properties, set_post_process_settings, set_spline_points, set_volume_properties, set_water_body_property, snap_actor_to_floor, snap_instances_to_surface, update_instance_transform). Label of the actor that owns the spline; pass actorLabel or actorPath (build_spline_meshes, clear_spline_generated, scatter_along_spline). Transient actor label (destroy_transient_actor). Actor label, name or path; pass actorLabel or actorPath (get_skinned_vertices). Blockout actor label (match_asset_to_blockout, replace_blockout). Brush or volume to rebuild (rebuild_brush). Replacement actor label (restore_blockout)"),
   actorLabelA: z.string().optional().describe("First actor label; pass actorLabelA or actorPathA"),
   actorLabelB: z.string().optional().describe("Second actor label; pass actorLabelB or actorPathB"),
   actorLabelContains: z.string().optional().describe("Case-insensitive substring over the actor's editor label"),
   actorLabelPrefix: z.string().optional().describe("Case-sensitive prefix over the actor's editor label"),
-  actorLabels: z.array(z.string()).optional().describe("Exact actor editor labels"),
-  actorPath: z.string().optional().describe("Full actor object path; the unambiguous selector, and it wins over actorLabel (add_actor_tag, add_component_to_actor, add_hismc_instances, add_instances, add_post_process_blendable, aim_actor_at, delete_actor, export_actor_fbx, get_actor_bounds, get_actor_details, get_component_details, get_component_tree, get_instance_transforms, get_post_process_settings, get_spline_info, get_water_state, list_actor_tags, move_actor, nudge_component, read_actor_motion, rebuild_water_zone, remove_actor_tag, remove_component_from_actor, remove_instance, rename_actor_object, restore_component_relative_transform, select_component, set_actor_material, set_actor_mobility, set_actor_property, set_actor_tags, set_component_property, set_component_skeletal_mesh, set_fixed_exposure, set_fog_properties, set_light_properties, set_post_process_settings, set_spline_points, set_volume_properties, set_water_body_property, snap_actor_to_floor, snap_instances_to_surface, update_instance_transform). Transient actor object path (destroy_transient_actor). Actor object path; preferred when labels repeat (get_skinned_vertices)"),
+  actorLabels: z.array(z.string()).optional().describe("Exact actor editor labels (batch_set_actor_properties, batch_translate, bulk_set_component_property, convert_brushes_to_static_mesh, read_actor_motion, recreate_physics_state, remove_components_by_class, rerun_construction_scripts, select_actors, set_actor_folder_path, set_actor_hlod_layer, set_component_materials, set_editor_visibility). HLOD actors to build (default: every loaded HLOD actor) (build_hlod_actors). Labels (or names or paths) of the actors to replace (replace_actors_with_asset, replace_actors_with_class)"),
+  actorPath: z.string().optional().describe("Full actor object path; the unambiguous selector, and it wins over actorLabel (add_actor_tag, add_component_to_actor, add_hismc_instances, add_instances, add_post_process_blendable, aim_actor_at, delete_actor, export_actor_fbx, get_actor_bounds, get_actor_details, get_component_details, get_component_tree, get_instance_transforms, get_post_process_settings, get_spline_info, get_water_state, list_actor_tags, move_actor, nudge_component, read_actor_motion, rebuild_water_zone, remove_actor_tag, remove_component_from_actor, remove_instance, rename_actor_object, restore_component_relative_transform, select_component, set_actor_material, set_actor_mobility, set_actor_property, set_actor_tags, set_component_property, set_component_skeletal_mesh, set_fixed_exposure, set_fog_properties, set_light_properties, set_post_process_settings, set_spline_points, set_volume_properties, set_water_body_property, snap_actor_to_floor, snap_instances_to_surface, update_instance_transform). Full path of the actor that owns the spline; wins over actorLabel (build_spline_meshes, clear_spline_generated, scatter_along_spline). Transient actor object path (destroy_transient_actor). Actor object path; preferred when labels repeat (get_skinned_vertices). Blockout actor path; the unambiguous selector (match_asset_to_blockout, replace_blockout). Object path of the brush; preferred over actorLabel when known (rebuild_brush). Replacement actor path (restore_blockout)"),
   actorPathA: z.string().optional().describe("First actor object path"),
   actorPathB: z.string().optional().describe("Second actor object path"),
-  actorPaths: z.array(z.string()).optional().describe("Full actor object paths"),
+  actorPaths: z.array(z.string()).optional().describe("Full actor object paths (batch_translate, read_actor_motion, select_actors). Blockout actor paths (replace_blockout). Replacement actor paths, as replace_blockout returns them (restore_blockout)"),
   actorPropertyNames: z.array(z.string()).optional().describe("Owning actor property names or dotted paths, Blueprint variables included, projected under actorProps.*, at most 32"),
   actors: z.array(z.object({ staticMesh: z.string().describe("Static mesh asset path"), location: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("World location"), rotation: z.object({ pitch: z.number(), yaw: z.number(), roll: z.number() }).optional().describe("World rotation"), scale: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("World scale"), label: z.string().optional().describe("Actor label"), tags: z.array(z.string()).optional().describe("Actor tags to add"), parentLabel: z.string().optional().describe("Label of the actor to attach to, keeping world transform; may name an actor later in the batch") })).optional().describe("StaticMeshActors to spawn; meshes load once per path"),
   actorTag: z.string().optional().describe("Actor must carry this tag"),
   addToSelection: z.boolean().optional().describe("Keep the current selection and add to it (default false: replace it)"),
+  alignToSpline: z.boolean().optional().describe("Rotate each placement to the spline's direction (default true)"),
   all: z.boolean().optional().describe("Destroy every transient verification actor in the world (destroy_transient_actor). Target every actor (set_editor_visibility)"),
+  allowRotation: z.boolean().optional().describe("Also try each candidate turned a quarter about Z (default true)"),
   allowSubtractive: z.boolean().optional().describe("Also convert subtractive brushes, which have no surface of their own"),
   alongSpline: z.object({ actorLabel: z.string().optional().describe("Spline actor label; pass actorLabel or actorPath"), actorPath: z.string().optional().describe("Spline actor object path"), componentName: z.string().optional().describe("Spline component, when the actor has several"), spacing: z.number().describe("Distance between spawns in cm, at least 1"), startDistance: z.number().optional().describe("Distance along the spline to start at (default 0)"), endDistance: z.number().optional().describe("Distance along the spline to stop at (default its length)"), offset: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Offset, in the spline's frame when aligning to it"), alignToTangent: z.boolean().optional().describe("Rotate each spawn to the spline (default true)") }).optional().describe("Spawns scattered along a spline by distance"),
   animSequence: z.string().optional().describe("Single-node preview animation"),
-  assetPath: z.string().optional().describe("StaticMesh asset path"),
+  assetPath: z.string().optional().describe("StaticMesh asset path (get_nanite_info, set_nanite_settings). Asset to create the new actors from: a static mesh, Blueprint, particle system... (replace_actors_with_asset). StaticMesh to put in place of every target; wins over candidateFolder (replace_blockout)"),
   attachRule: z.string().optional().describe("KeepWorld | KeepRelative | SnapToTarget"),
   attenuationRadius: z.number().optional().describe("Point, spot and rect lights only"),
   axisRotation: z.object({ axis: z.string().describe("forward | right | up"), degrees: z.number().describe("Signed rotation in degrees") }).optional().describe("Quaternion rotation about one frame axis; not with viewRotation"),
@@ -5673,25 +6775,32 @@ export const schema: Record<string, z.ZodType> = {
   bounds: z.record(z.string(), z.unknown()).optional().describe("{min:{x,y,z}, max:{x,y,z}} intersection test"),
   box: z.object({ min: z.object({ x: z.number(), y: z.number(), z: z.number() }).describe("Box minimum (cm)"), max: z.object({ x: z.number(), y: z.number(), z: z.number() }).describe("Box maximum (cm)") }).optional().describe("Keep vertices whose posed position is inside this box (inclusive), in space"),
   brightness: z.number().optional().describe("Alias for exposure"),
+  builderClass: z.string().optional().describe("Brush builder class to rebuild with (default: the brush's current builder)"),
+  builderProperties: z.record(z.string(), z.unknown()).optional().describe("Builder property name -> value, such as {X: 400, Y: 200, Z: 100} for a CubeBuilder"),
+  candidateFolder: z.string().optional().describe("Content folder of candidate StaticMeshes, e.g. /Game/Props"),
   cellSize: z.number().optional().describe("Streaming cell size in world centimetres"),
   channel: z.string().optional().describe("Collision channel (default Visibility)"),
   childComponentName: z.string().optional().describe("Child SceneComponent instance name; omitted selects the actor root"),
   childLabel: z.string().optional().describe("Child actor label; pass childLabel or childPath"),
   childPath: z.string().optional().describe("Child actor object path"),
   classFilter: z.string().optional().describe("Case-insensitive substring over the actor class name (actors_in_box). Actor class, resolved as a class or matched as a substring (batch_set_actor_properties, bulk_set_component_property, set_actor_hlod_layer, set_component_materials). Brush class to convert (convert_brushes_to_static_mesh). Case-sensitive substring over the class name (get_world_outliner). Actor class the owners must be (recreate_physics_state). Restrict to actors of this class (remove_components_by_class)"),
-  className: z.string().optional().describe("Alias for transformerClass (add_runtime_cell_transformer). Case-sensitive substring over the class name (delete_actors, set_actor_folder_path). Class name, /Script path or Blueprint class path; required without labelPrefix (get_actors_by_class). Alias for componentClass (get_actors_by_component_class). Actor class filter (list_actor_descs, load_actor_descs). Blueprint or native class, resolved as a class or matched as a substring (rerun_construction_scripts)"),
+  className: z.string().optional().describe("Alias for transformerClass (add_runtime_cell_transformer). Case-sensitive substring over the class name (delete_actors, set_actor_folder_path). Class name, /Script path or Blueprint class path; required without labelPrefix (get_actors_by_class). Alias for componentClass (get_actors_by_component_class). Actor class filter (list_actor_descs, load_actor_descs). Actor class to create in their place; it needs an actor factory that works without an asset (lights, empty actors, volumes) (replace_actors_with_class). Blueprint or native class, resolved as a class or matched as a substring (rerun_construction_scripts)"),
   classPathContains: z.string().optional().describe("Case-insensitive substring of the generated class path"),
   classPathContainsAny: z.array(z.string()).optional().describe("Match when the class path contains any of these case-insensitive substrings"),
   clearOverrides: z.boolean().optional().describe("true drops every component override so the mesh asset's own slots show through"),
-  closedLoop: z.boolean().optional().describe("Close the spline"),
+  closedLoop: z.boolean().optional().describe("Close the spline (default false) (create_spline_actor). Close the spline (set_spline_points)"),
   collisionChannel: z.string().optional().describe("Collision channel to inspect; omitted lists non-Block responses, capped at 32"),
+  collisionProfile: z.string().optional().describe("Collision profile for the pieces, e.g. BlockAll or NoCollision"),
   color: z.record(z.string(), z.unknown()).optional().describe("Alias for fogInscatteringColor (set_fog_properties). Colour {r, g, b} in 0-255 (set_light_properties, spawn_light)"),
   commitDeletes: z.boolean().optional().describe("Save through the editor's dirty-package save, which deletes the packages of deleted World Partition actors (default false)"),
   componentClass: z.string().optional().describe("Component class: short name or full path (add_component_to_actor). Component class name, exact or substring (get_actors_by_component_class). Case-insensitive substring over the component class name (get_component_tree). Component class, resolved as a class or matched as a substring (query_components). Primitive component class to rebuild (recreate_physics_state). Component class to remove (remove_components_by_class)"),
-  componentName: z.string().optional().describe("Name of the new component (add_component_to_actor). Component instance name (add_hismc_instances, add_instances, get_component_details, get_instance_transforms, remove_instance, set_component_property, snap_instances_to_surface, update_instance_transform). Component name looked up on every matched actor (bulk_set_component_property). Only this component, by instance name (get_component_tree). Component holding the post-process settings, when the actor is not a PostProcessVolume (get_post_process_settings, set_fixed_exposure, set_post_process_settings). Skinned mesh component (default: the first on the actor); a leader-pose follower reads as drawn (get_skinned_vertices). Spline component, when the actor has several (get_spline_info). Exact SceneComponent instance name (nudge_component, restore_component_relative_transform). Component to remove (remove_component_from_actor). Component instance name, on the actor or on one of its child actors (select_component). Mesh component (default: the actor's first mesh component) (set_component_materials). Skinned mesh component (default: the first on the actor) (set_component_skeletal_mesh). Spline component, when the actor has several; matched exactly (set_spline_points)"),
+  componentName: z.string().optional().describe("Name of the new component (add_component_to_actor). Component instance name (add_hismc_instances, add_instances, get_component_details, get_instance_transforms, remove_instance, set_component_property, snap_instances_to_surface, update_instance_transform). Spline component, when the actor has several (default the first) (build_spline_meshes, scatter_along_spline). Component name looked up on every matched actor (bulk_set_component_property). Only this component, by instance name (get_component_tree). Component holding the post-process settings, when the actor is not a PostProcessVolume (get_post_process_settings, set_fixed_exposure, set_post_process_settings). Skinned mesh component (default: the first on the actor); a leader-pose follower reads as drawn (get_skinned_vertices). Spline component, when the actor has several (get_spline_info). Exact SceneComponent instance name (nudge_component, restore_component_relative_transform). Component to remove (remove_component_from_actor). Component instance name, on the actor or on one of its child actors (select_component). Mesh component (default: the actor's first mesh component) (set_component_materials). Skinned mesh component (default: the first on the actor) (set_component_skeletal_mesh). Spline component, when the actor has several; matched exactly (set_spline_points)"),
   componentNameA: z.string().optional().describe("Component on actor A; omitted selects its root"),
   componentNameB: z.string().optional().describe("Component on actor B; omitted selects its root"),
   componentNameContains: z.string().optional().describe("Case-insensitive substring over the component instance name"),
+  coordinateSpace: z.string().optional().describe("world (default) | local: whether points are relative to the actor location"),
+  copySourceProperties: z.boolean().optional().describe("When the asset is a Blueprint sharing a native parent with a replaced actor, copy that actor's property values (default true)"),
+  count: z.number().int().optional().describe("Number of placements spread evenly over the spline"),
   countBy: z.array(z.string()).optional().describe("Dot paths to build value histograms for, at most 8"),
   countOnly: z.boolean().optional().describe("Return the aggregates without rows"),
   countX: z.number().int().optional().describe("Actors along X (default 4)"),
@@ -5699,27 +6808,30 @@ export const schema: Record<string, z.ZodType> = {
   countZ: z.number().int().optional().describe("Actors along Z (default 1)"),
   cursor: z.string().optional().describe("Resume a paged read: pass back the nextCursor from the previous page, unmodified"),
   defaultGameMode: z.string().optional().describe("GameMode class path or short name; None clears it"),
+  deferBsp: z.boolean().optional().describe("Defer the BSP rebuild for batching; a later call without it processes the pending BSP (default false)"),
   destinationPath: z.string().optional().describe("Content path the generated static meshes are written to (default /Game/Meshes/Converted)"),
   direction: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Ray direction, normalised internally (line_trace, shape_trace). Trace direction (default straight down) (snap_instances_to_surface)"),
   discardUnsaved: z.boolean().optional().describe("Switch even though the open map has unsaved changes, discarding them (default false)"),
   distance: z.number().optional().describe("Ray length when direction is given (default 200000)"),
   dryRun: z.boolean().optional().describe("Report what would change without writing (batch_set_actor_properties, bulk_set_component_property, load_actor_descs, rename_actor_object, set_actor_hlod_layer, set_component_materials, snap_instances_to_surface). Report what would be removed without removing it (default true) (clear_level_script). Report the verdict per brush without converting (default TRUE) (convert_brushes_to_static_mesh). Report the matches without deleting them (default false) (delete_actors). Preview without deleting (default TRUE) (delete_exact_labeled_actors_in_levels). Report what would be deleted without deleting (default false) (delete_outliner_folder). Inspect and preview the requested transform without writing (default false) (nudge_component). List what would be rebuilt without rebuilding it (default TRUE) (recreate_physics_state). Report what would be removed without removing it (default TRUE) (remove_components_by_class). Report the matches without moving them (default false) (set_actor_folder_path). Return every computed transform without spawning (spawn_actors_batch)"),
-  dumpToFile: z.boolean().optional().describe("Write the whole selection to a JSON file and return only the summary"),
+  dumpToFile: z.boolean().optional().describe("Write every row to a JSON file and return the totals with its path (default false) (audit_level_performance). Write the whole selection to a JSON file and return only the summary (get_skinned_vertices)"),
   duplicateTransformTolerance: z.number().optional().describe("Centimetre bucket for duplicate-transform detection"),
   editorHidden: z.boolean().optional().describe("Only editor-hidden (true) or only visible (false) actors"),
   editorVisible: z.boolean().optional().describe("Editor viewport visibility"),
   enableAutoLODGeneration: z.boolean().optional().describe("Also set bEnableAutoLODGeneration on each matched actor"),
-  enabled: z.boolean().optional().describe("Enable Nanite (default true)"),
+  enabled: z.boolean().optional().describe("Enable Nanite (default true) (set_nanite_settings). true streams the world; false keeps every actor loaded (set_world_partition_streaming)"),
   enableOverrides: z.boolean().optional().describe("Enable each written setting's bOverride flag (default true)"),
   enableVolumetricFog: z.boolean().optional().describe("Enable volumetric fog"),
   enableWorldBoundsChecks: z.boolean().optional().describe("Enable world bounds checks"),
   end: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Ray end; pass end or direction and distance"),
+  endOffset: z.number().optional().describe("Distance along the spline to leave empty at its end, in centimetres"),
   exactClass: z.boolean().optional().describe("Require classFilter to be the exact class (default true) (convert_brushes_to_static_mesh). Require classFilter to be the exact class name (get_world_outliner)"),
   exposure: z.number().optional().describe("Fixed adaptation brightness, written to both min and max"),
   extent: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Query extent (default 100, 100, 100) (nav_project_point). Half extent of the cube brush (default 100, 100, 100) (spawn_volume)"),
   fields: z.array(z.string()).optional().describe("Field groups: transform, bounds, localBounds, shadow, nanite, navigation, tick, materials, mesh, decal, health, physics, attachment, customPrimitiveData"),
   filePath: z.string().optional().describe("Alias for outputPath"),
   filter: z.string().optional().describe("Case-insensitive substring over label, name, class and path"),
+  fit: z.string().optional().describe("uniform (default, largest uniform scale that fits inside) | stretch (match every axis) | none (asset at scale 1)"),
   floorOffset: z.number().optional().describe("Vertical offset added to the impact Z"),
   fogDensity: z.number().optional().describe("Fog density"),
   fogHeightFalloff: z.number().optional().describe("Fog height falloff"),
@@ -5727,20 +6839,25 @@ export const schema: Record<string, z.ZodType> = {
   folderPath: z.string().optional().describe("World Outliner folder, matched exactly (batch_set_actor_properties, bulk_set_component_property, delete_actors, get_world_outliner, query_components, remove_components_by_class, set_actor_hlod_layer, set_component_materials). World Outliner folder whose brushes are converted (convert_brushes_to_static_mesh). World Outliner folder to create, such as Props/Lights (create_outliner_folder). World Outliner folder to delete, with the empty folders under it (delete_outliner_folder). World Outliner folder; an empty string moves the actors to the root (set_actor_folder_path)"),
   folderPathPrefix: z.string().optional().describe("World Outliner folder, matched with every folder nested under it"),
   folderPaths: z.array(z.string()).optional().describe("World Outliner folders; combined with folderPath"),
-  force: z.boolean().optional().describe("Bypass EditDefaultsOnly to write per-instance overrides (batch_set_actor_properties). Write a package even when it is already clean (default false) (save_level). Bypass EditDefaultsOnly to write a per-instance override (set_actor_property)"),
+  force: z.boolean().optional().describe("Bypass EditDefaultsOnly to write per-instance overrides (batch_set_actor_properties). Rebuild actors that are up to date (default false) (build_hlod_actors). Rebuild HLODs that are up to date (default false) (build_world_partition_hlods). Write a package even when it is already clean (default false) (save_level). Bypass EditDefaultsOnly to write a per-instance override (set_actor_property)"),
+  forwardAxis: z.string().optional().describe("X (default) | Y | Z: the mesh axis laid along the spline"),
   frame: z.string().optional().describe("Frame for translation and axis rotation: world | actor (default) | parent | component"),
   fromComponents: z.object({ componentClass: z.string().optional().describe("Component class the components must be"), componentNameContains: z.string().optional().describe("Case-insensitive substring over the component name"), actorLabels: z.array(z.string()).optional().describe("Exact actor editor labels"), labelPrefix: z.string().optional().describe("Case-sensitive prefix over the actor's editor label"), labelContains: z.string().optional().describe("Case-insensitive substring over the actor's editor label"), tag: z.string().optional().describe("Actor must carry this tag"), classFilter: z.string().optional().describe("Actor class, resolved as a class or matched as a substring"), folderPath: z.string().optional().describe("World Outliner folder, matched exactly"), folderPathPrefix: z.string().optional().describe("World Outliner folder, matched with every folder nested under it"), matchSubclasses: z.boolean().optional().describe("Match subclasses of classFilter (default true)"), space: z.string().optional().describe("local (default, the component's own orientation) | world (axis-aligned bounds)"), offset: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Offset added to the computed point"), extentFraction: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Fraction of the box extent added per axis, such as {z: 0.72}"), inheritRotation: z.boolean().optional().describe("Spawn with the component's rotation (default false)") }).optional().describe("One spawn per matched component, placed from its bounds"),
+  generatorName: z.string().optional().describe("Names this output so a later run replaces it (default SplineMeshes) (build_spline_meshes). The generator whose output and stored parameters to remove (clear_spline_generated). Names this output so a later run replaces it (default SplineScatter) (scatter_along_spline)"),
   globalGravityZ: z.number().optional().describe("Global gravity Z"),
   graphPath: z.string().optional().describe("PCG graph for a PCGVolume"),
   grid: z.string().optional().describe("Streaming grid for cellSize and loadingRange, by name; needed when the map has several"),
   gridPath: z.string().optional().describe("Streaming grid for cellSize and loadingRange, by the dotted path get_world_partition_settings reports"),
+  gridSize: z.number().optional().describe("Side of the X/Y cells regions are reported in, in cm (default 5000, min 100)"),
   groupBy: z.string().optional().describe("Dot path to group matches by; counts components, not instances"),
   guids: z.array(z.string()).optional().describe("Exact actor GUIDs"),
   halfExtent: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Positive box half extents in cm; axis aligned"),
   halfHeight: z.number().optional().describe("Capsule half height in cm, including caps; at least radius"),
+  heavyTriangleThreshold: z.number().optional().describe("LOD0 triangles at which a non-Nanite static mesh is a Nanite candidate (default 50000)"),
   hidden: z.boolean().optional().describe("true hides the actors in the editor, false shows them"),
   hideFromOutliner: z.boolean().optional().describe("Keep the actor out of the World Outliner (default false)"),
-  hlodLayer: z.string().nullable().optional().describe("HLODLayer asset path, or null to clear the per-actor override"),
+  hlodLayer: z.string().nullable().optional().describe("Build only the HLODs of this HLODLayer asset; omitted or null builds every layer (build_world_partition_hlods). HLODLayer asset path, or null to clear the per-actor override (set_actor_hlod_layer)"),
+  hlodLayers: z.array(z.string()).optional().describe("HLODLayer asset paths to assign; empty leaves the setup without layers"),
   ignoreActors: z.array(z.string()).optional().describe("Actor labels to skip"),
   include: z.array(z.string()).optional().describe("Data per vertex: any of positions, weights, triangles (default positions and weights)"),
   includeChildActors: z.boolean().optional().describe("Match a ChildActorComponent's child actor by the actor filters of the top-level actor that owns it (default false)"),
@@ -5750,6 +6867,7 @@ export const schema: Record<string, z.ZodType> = {
   includeHidden: z.boolean().optional().describe("Include actors hidden in the queried world (default false)"),
   includeOccurrences: z.boolean().optional().describe("Include example actor and component occurrences per mesh"),
   includeProperties: z.boolean().optional().describe("Include reflected UPROPERTY values"),
+  includeReplaced: z.boolean().optional().describe("Also list replacements that carry a restorable blockout record (default false)"),
   includeStreaming: z.boolean().optional().describe("Include World Partition streaming-proxy and HLOD actors (default false)"),
   includeTransforms: z.boolean().optional().describe("Include each actor's location, rotation and scale (default true)"),
   includeValues: z.boolean().optional().describe("Dump UPROPERTY values"),
@@ -5761,21 +6879,23 @@ export const schema: Record<string, z.ZodType> = {
   innerConeAngle: z.number().optional().describe("Spot light inner cone angle"),
   instanceIndices: z.array(z.number().int()).optional().describe("Instance indices to project; omit for every instance"),
   instances: z.array(z.object({ location: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("World location"), rotation: z.object({ pitch: z.number(), yaw: z.number(), roll: z.number() }).optional().describe("World rotation"), scale: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Actor scale"), label: z.string().optional().describe("Actor label"), properties: z.record(z.string(), z.unknown()).optional().describe("Property name to value for this spawn; wins over the shared properties") })).optional().describe("Explicit spawns"),
+  instancingMinCount: z.number().int().optional().describe("Separate components of one mesh before it is an instancing candidate (default 10)"),
   intensity: z.number().optional().describe("Light intensity"),
   internalName: z.string().optional().describe("Internal UObject name, such as StaticMeshActor_141"),
+  interval: z.number().optional().describe("Distance between placements in centimetres (default 200); ignored when count is given"),
   jitter: z.number().optional().describe("Per-axis location jitter"),
   killZ: z.number().optional().describe("KillZ height"),
-  label: z.string().optional().describe("Actor label; an existing actor with this label is reported rather than duplicated (place_actor, spawn_light, spawn_skeletal_mesh_actor, spawn_volume). Actor label (spawn_transient_actor)"),
+  label: z.string().optional().describe("Actor label; an existing actor with this label is reported rather than duplicated (default a free Blockout_<Shape>) (create_blockout). Actor label (default SplineActor); an existing actor with this label is reported rather than duplicated (create_spline_actor). Actor label; an existing actor with this label is reported rather than duplicated (place_actor, spawn_light, spawn_skeletal_mesh_actor, spawn_volume). Actor label (spawn_transient_actor)"),
   labelContains: z.string().optional().describe("Case-insensitive substring over the actor's editor label"),
   labelPrefix: z.string().optional().describe("Case-sensitive prefix over the actor's editor label (batch_set_actor_properties, bulk_set_component_property, delete_actors, get_actors_by_class, recreate_physics_state, remove_components_by_class, set_actor_folder_path, set_actor_hlod_layer, set_component_materials). Label prefix for the spawned actors (spawn_actors_batch). Label prefix for the spawned actors (default Grid) (spawn_grid)"),
   levelName: z.string().optional().describe("Streaming sub-level name or package path (remove_streaming_sublevel, set_streaming_sublevel_properties). Loaded sub-level to make current (set_current_edit_level)"),
   levelPath: z.string().optional().describe("Map package to add as a streaming sub-level (add_streaming_sublevel). Map package to open (load_level). Query another map: opened temporarily, refused while anything is dirty, and the open map restored (query_components). Alias for levelName (remove_streaming_sublevel, set_current_edit_level, set_streaming_sublevel_properties)"),
   levels: z.array(z.object({ levelPath: z.string().describe("Long package name of the .umap, such as /Game/Maps/Arena"), actorLabels: z.array(z.string()).describe("Exact editor labels to delete in that map, at most 256, no duplicates"), expectedClassPath: z.string().optional().describe("Actor class every matched actor must be, such as /Script/Engine.StaticMeshActor") })).optional().describe("Per-map targets, at most 16"),
   lightType: z.string().optional().describe("point | spot | directional | rect | sky"),
-  limit: z.number().int().optional().describe("Rows returned (default 200, max 2000) (actors_in_box, query_components). Selected vertices to return inline, 1 to 20000 (default 2000); ignored with dumpToFile (get_skinned_vertices). Rows on this page (get_world_outliner, list_actor_descs, list_actor_tags, list_levels, list_transient_actors, list_volumes)"),
+  limit: z.number().int().optional().describe("Rows returned (default 200, max 2000) (actors_in_box, query_components). Selected vertices to return inline, 1 to 20000 (default 2000); ignored with dumpToFile (get_skinned_vertices). Rows on this page (get_world_outliner, list_actor_descs, list_actor_tags, list_levels, list_transient_actors, list_volumes). Candidates returned per blockout (default 5) (match_asset_to_blockout)"),
   loadedOnly: z.boolean().optional().describe("Only actors currently streamed in"),
   loadingRange: z.number().optional().describe("Streaming loading range in world centimetres"),
-  location: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Sub-level offset (add_streaming_sublevel, set_streaming_sublevel_properties). World location (move_actor, place_actor, spawn_light, spawn_skeletal_mesh_actor, spawn_transient_actor, spawn_volume, update_instance_transform)"),
+  location: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Sub-level offset (add_streaming_sublevel, set_streaming_sublevel_properties). World position of the bottom centre (default origin) (create_blockout). Actor location (default the first point) (create_spline_actor). World location (move_actor, place_actor, spawn_light, spawn_skeletal_mesh_actor, spawn_transient_actor, spawn_volume, update_instance_transform)"),
   lodIndex: z.number().int().optional().describe("Render LOD to skin (default: the LOD the component draws)"),
   loop: z.boolean().optional().describe("Loop the preview animation (default true)"),
   loopPosition: z.number().optional().describe("Input key a closed loop closes at, with loopPositionOverride"),
@@ -5783,72 +6903,92 @@ export const schema: Record<string, z.ZodType> = {
   markEdited: z.boolean().optional().describe("Value for bSplineHasBeenEdited (default true), which keeps these points when the owner's construction script reruns; false clears it"),
   matchComponentSubclasses: z.boolean().optional().describe("Also match subclasses of componentClass (default true)"),
   matchSubclasses: z.boolean().optional().describe("Match subclasses of the class filter (default true)"),
-  material: z.string().optional().describe("Alias for materialPath (add_post_process_blendable). Material applied at slot 0 (place_actor). One material path applied to every slot (set_component_materials)"),
+  material: z.string().optional().describe("Alias for materialPath (add_post_process_blendable). Material override (default the grid material the mesh carries) (create_blockout). Material applied at slot 0 (place_actor). One material path applied to every slot (set_component_materials)"),
   materialPath: z.string().optional().describe("Material to add as a blendable (add_post_process_blendable). Material asset path (set_actor_material)"),
   materials: z.array(z.unknown()).optional().describe("Per-slot material paths; index is the slot, and a null or empty entry clears that slot's override (set_component_materials). Per-slot component material override paths; index is the slot, and a null or empty entry leaves that slot alone (spawn_skeletal_mesh_actor)"),
   max: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Box maximum corner, world space; at least min on every axis (actors_in_box). Grid upper bound (spawn_grid)"),
   maxActors: z.number().int().optional().describe("Refuse to act on more than this many actors (default 256)"),
+  maxCandidates: z.number().int().optional().describe("Load at most this many candidate meshes (default 500)"),
   maxComponents: z.number().int().optional().describe("Refuse to rebuild more than this many components (default 2000, max 20000)"),
+  maxCount: z.number().int().optional().describe("Refuse more placements than this (default 10000)"),
   maxDistance: z.number().optional().describe("Downward trace length (default 100000)"),
   maxInstances: z.number().int().optional().describe("Cap on instances processed in one call"),
   maxOccurrences: z.number().int().optional().describe("Cap on occurrence examples per mesh"),
   maxPasses: z.number().int().optional().describe("Rebuild passes before giving up on a stable QuadTreeResolution, 2..8 (default 4)"),
-  maxResults: z.number().int().optional().describe("Cap on result rows; full-scan totals are still reported"),
+  maxResults: z.number().int().optional().describe("Rows per list (default 20, max 200); totals cover everything (audit_level_performance). Cap on result rows; full-scan totals are still reported (summarize_static_mesh_usage)"),
   maxSpawn: z.number().int().optional().describe("Refuse a plan larger than this (default 500, max 5000)"),
+  meshes: z.array(z.string()).optional().describe("StaticMesh paths to scatter; required unless rebuild is set"),
+  meshFolder: z.string().optional().describe("Content folder for the generated shape meshes (default /Game/Blockout/Meshes)"),
   meshPath: z.string().optional().describe("Alias for assetPath (get_nanite_info, set_nanite_settings). The older spelling of skeletalMesh (spawn_skeletal_mesh_actor)"),
   method: z.string().optional().describe("OBB (oriented, default) | AABB (axis-aligned world bounds)"),
   min: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Box minimum corner, world space (actors_in_box). Grid lower bound (spawn_grid)"),
   minWeight: z.number().optional().describe("With boneNames, keep a vertex only when its summed weight on the selected bones is at least this (0 < minWeight <= 1; default any positive weight)"),
   mobility: z.string().optional().describe("static | stationary | movable"),
-  mode: z.string().optional().describe("overlap (default): bounds intersect the box | contained: bounds lie fully inside it (actors_in_box). pin (make resident, default) | unpin (release) (load_actor_descs)"),
+  mode: z.string().optional().describe("overlap (default): bounds intersect the box | contained: bounds lie fully inside it (actors_in_box). pin (make resident, default) | unpin (release) (load_actor_descs). instances (default, one HierarchicalInstancedStaticMeshComponent per mesh on the spline actor) | actors (StaticMeshActors) (scatter_along_spline)"),
   multi: z.boolean().optional().describe("Return overlaps and the first blocking hit, capped at 64 (default false)"),
   nameContains: z.string().optional().describe("Case-insensitive substring over the actor's internal name (delete_actors). Substring over the setting name (get_post_process_settings)"),
   nameFilter: z.string().optional().describe("Case-sensitive substring over the internal name or the label"),
   names: z.array(z.string()).optional().describe("Exact setting names to return"),
   nearPoint: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Keep vertices within radius of this point, in space; needs radius"),
-  newName: z.string().optional().describe("New object name; omitted, a unique name is generated from the actor's class"),
-  offset: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("World-space offset added to each actor's location"),
-  onConflict: z.string().optional().describe("When the label or name is taken: skip (default) | error"),
+  newName: z.string().optional().describe("New object name; omitted, a unique name is generated from the actor's class (rename_actor_object). New runtime partition name (rename_runtime_partition)"),
+  offset: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("World-space offset added to each actor's location (batch_translate). Constant offset in the spline's frame: x along it, y to its right, z up (scatter_along_spline)"),
+  onConflict: z.string().optional().describe("When the label or name is taken: skip (default) | error (add_component_to_actor, place_actor, spawn_light, spawn_skeletal_mesh_actor, spawn_volume). When label is taken: skip (default) | error (create_blockout). When the label is taken: skip (default) | update (rewrite its spline points) | error (create_spline_actor)"),
   onlyColliding: z.boolean().optional().describe("Only colliding components contribute to the bounds (default false) (actors_in_box). Only colliding components contribute to the bounds (get_actor_bounds)"),
   onlyOverridden: z.boolean().optional().describe("Only settings whose bOverride flag is on"),
   onMiss: z.string().optional().describe("error (default, aborts the batch) | skip"),
   onMissing: z.string().optional().describe("error (default) | ignore"),
   outerConeAngle: z.number().optional().describe("Spot light outer cone angle"),
-  outputPath: z.string().optional().describe("Output .fbx path (export_actor_fbx). File for dumpToFile; relative paths resolve under Saved/ (default Saved/UE_MCP/SkinnedVertices/) (get_skinned_vertices)"),
+  outlierFactor: z.number().optional().describe("How many times above or below the median a texel or lightmap density must be to be an outlier (default 4)"),
+  outputPath: z.string().optional().describe("File for dumpToFile; relative paths resolve under Saved/ (default Saved/UE_MCP/PerfAudit/<world>_<time>.json) (audit_level_performance). Output .fbx path (export_actor_fbx). File for dumpToFile; relative paths resolve under Saved/ (default Saved/UE_MCP/SkinnedVertices/) (get_skinned_vertices)"),
   parentComponentName: z.string().optional().describe("Parent SceneComponent instance name; omitted selects the actor root"),
   parentLabel: z.string().optional().describe("Parent actor label; pass parentLabel or parentPath"),
   parentPath: z.string().optional().describe("Parent actor object path"),
+  partitionClass: z.string().optional().describe("RuntimePartition class (default /Script/Engine.RuntimePartitionLHGrid)"),
+  partitionName: z.string().optional().describe("Runtime partition name, as list_runtime_partitions reports it (add_hlod_setup, get_runtime_partition, list_hlod_setups, remove_hlod_setup, remove_runtime_partition, rename_runtime_partition, set_hlod_setup_layers, set_runtime_partition_properties). Name of the runtime partition to add (add_runtime_partition)"),
   pieInstance: z.number().int().optional().describe("Which PIE world when world is pie: 0 = server or primary, 1..N = clients"),
   point: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("World point to project onto the navmesh"),
   points: z.array(z.object({ x: z.number().optional().describe("World X, with y and z"), y: z.number().optional().describe("World Y"), z: z.number().optional().describe("World Z"), location: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("World position, instead of x, y, z"), position: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("World position, instead of x, y, z"), worldLocation: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("World position, instead of x, y, z"), pointType: z.string().optional().describe("Linear | Curve (default) | Constant | CurveClamped | CurveCustomTangent"), arriveTangent: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("World arrive tangent; pass both tangents or neither"), leaveTangent: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("World leave tangent; pass both tangents or neither"), rotation: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("World rotation as {x: pitch, y: yaw, z: roll} in degrees"), scale: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Point scale"), inputKey: z.number().optional().describe("Input key; keys must strictly increase (default the point's index)") })).optional().describe("Points in world space: a bare {x, y, z} or the typed form; validated as a batch before anything is cleared"),
+  pointType: z.string().optional().describe("Curve (default) | Linear | CurveClamped | Constant, for every point"),
   position: z.number().int().optional().describe("Stack index to insert at; -1 (default) appends"),
+  positionJitter: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Random offset range per axis in the spline's frame, in centimetres"),
   positionPrecision: z.number().int().optional().describe("Nanite position precision"),
   projectPoint: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("World point to project onto the spline"),
-  properties: z.record(z.string(), z.unknown()).optional().describe("Property name to value, applied to the new transformer instance (add_runtime_cell_transformer). Property name to value, dotted paths supported (batch_set_actor_properties). Property name to value (set_volume_properties). Property name to value applied to every spawn (spawn_actors_batch). Property name to value, applied before initialisation (spawn_transient_actor)"),
+  properties: z.record(z.string(), z.unknown()).optional().describe("Property name to value, applied to the new transformer instance (add_runtime_cell_transformer). Property name to value, dotted paths supported (batch_set_actor_properties). Property name -> value, as get_runtime_partition lists them (set_runtime_partition_properties). Property name to value (set_volume_properties). Property name to value applied to every spawn (spawn_actors_batch). Property name to value, applied before initialisation (spawn_transient_actor)"),
   propertyName: z.string().optional().describe("Property name, dotted paths supported (bulk_set_component_property, set_actor_property, set_component_property, set_water_body_property). Only this property, with includeProperties (get_actor_details). FPostProcessSettings property on that component (get_post_process_settings, set_fixed_exposure, set_post_process_settings)"),
   propertyNames: z.array(z.string()).optional().describe("Restrict includeValues to these properties (get_component_details). Component property names or dotted struct paths (AttachEndTo.ComponentProperty) projected under props.*, at most 32 (query_components)"),
   radius: z.number().optional().describe("Distance from nearPoint in cm, above 0; needs nearPoint (get_skinned_vertices). Positive sphere or capsule radius in cm (shape_trace)"),
+  rebuild: z.boolean().optional().describe("Reuse the parameters stored by the last run of this generator; passed parameters override them"),
   recaptureSky: z.boolean().optional().describe("Recapture a SkyLight after the change"),
+  recursive: z.boolean().optional().describe("Include subfolders of candidateFolder (default true)"),
   recursiveFolder: z.boolean().optional().describe("Also take brushes in folders nested under folderPath (default true)"),
   reference: z.string().optional().describe("Alias for referenceLabel"),
   referenceLabel: z.string().optional().describe("Reference actor label; pass referenceLabel or referencePath"),
   referencePath: z.string().optional().describe("Reference actor object path"),
+  regionMax: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Maximum corner of the box; pass with regionMin"),
+  regionMin: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Audit only primitives and lights whose bounds meet this box; minimum corner, world space"),
   relativeLocation: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Relative location set after the attach, in the parent component or socket frame"),
   relativeRotation: z.object({ pitch: z.number(), yaw: z.number(), roll: z.number() }).optional().describe("Relative rotation set after the attach, in the parent component or socket frame"),
   relativeTo: z.string().optional().describe("Scene component on the same actor (instance name); every scene component and socket row also reports its transform in that component's space"),
   relativeTransform: z.object({ location: z.object({ x: z.number(), y: z.number(), z: z.number() }).describe("Relative location"), quaternion: z.record(z.string(), z.unknown()).describe("Relative rotation {x, y, z, w}; this is what is applied"), scale: z.object({ x: z.number(), y: z.number(), z: z.number() }).describe("Relative scale"), rotation: z.object({ pitch: z.number(), yaw: z.number(), roll: z.number() }).optional().describe("The same rotation as a rotator, for reading only") }).optional().describe("The relative transform to put back, as nudge_component's rollback records it"),
   renames: z.array(z.object({ actorPath: z.string().optional().describe("Full actor object path; wins over actorLabel"), actorLabel: z.string().optional().describe("Actor editor label"), newName: z.string().optional().describe("New object name; omitted, one is generated from the class") })).optional().describe("Batch form, at most 512; replaces actorLabel/actorPath/newName"),
   restoreOriginalLevel: z.boolean().optional().describe("Reopen the map that was open before the call (default true)"),
-  roll: z.number().optional().describe("Roll in degrees (default 0)"),
-  rotation: z.object({ pitch: z.number(), yaw: z.number(), roll: z.number() }).optional().describe("World rotation (move_actor, place_actor, spawn_light, spawn_skeletal_mesh_actor, spawn_transient_actor, update_instance_transform). DirectionalLight sun angle (set_light_properties)"),
+  roll: z.number().optional().describe("Roll in degrees (default 0) (aim_actor_at). Roll of every piece around the spline, in degrees (build_spline_meshes)"),
+  rotation: z.object({ pitch: z.number(), yaw: z.number(), roll: z.number() }).optional().describe("World rotation; a ramp and stairs climb toward the actor's +X (create_blockout). World rotation (move_actor, place_actor, spawn_light, spawn_skeletal_mesh_actor, spawn_transient_actor, update_instance_transform). DirectionalLight sun angle (set_light_properties)"),
+  runtimeHashClass: z.string().optional().describe("Runtime hash class: WorldPartitionRuntimeHashSet, WorldPartitionRuntimeSpatialHash, or a /Script path"),
   sampleLimit: z.number().int().optional().describe("Sample labels per group (default 5, max 25)"),
   save: z.boolean().optional().describe("Save only the current level after a successful clear and compile (default false) (clear_level_script). Save the level after a committed removal (default false) (remove_components_by_class)"),
   saveCurrent: z.boolean().optional().describe("Alias for saveFirst"),
   saveFirst: z.boolean().optional().describe("Save the open map and its dirty external actor packages before switching (default false)"),
-  scale: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Actor scale"),
+  scale: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Mesh scale; the forwardAxis component scales the default spacing, the other two the cross-section (build_spline_meshes). Actor scale (move_actor, place_actor, spawn_skeletal_mesh_actor, spawn_transient_actor, update_instance_transform)"),
+  scaleMax: z.number().optional().describe("Largest uniform scale (default scaleMin)"),
+  scaleMin: z.number().optional().describe("Smallest uniform scale (default 1)"),
   scaleMultiplier: z.number().optional().describe("Uniform relative-scale multiplier, greater than zero"),
+  seed: z.number().int().optional().describe("Random seed; the same seed and parameters place the same result (default 0)"),
   settings: z.record(z.string(), z.unknown()).optional().describe("Setting name to value; each setting's bOverride flag is enabled too (set_post_process_settings). Dotted path rooted at the world partition to value (set_world_partition_settings)"),
-  shape: z.string().optional().describe("sphere | box | capsule"),
+  setupName: z.string().optional().describe("Name of the spatially loaded HLOD setup to add (add_hlod_setup). Read this HLOD setup's partition instead of the main partition (get_runtime_partition). HLOD setup name, as list_hlod_setups reports it (remove_hlod_setup, set_hlod_setup_layers). Write this HLOD setup's partition instead of the main partition (set_runtime_partition_properties)"),
+  shape: z.string().optional().describe("box | ramp | wedge | cylinder | stairs (create_blockout). sphere | box | capsule (shape_trace)"),
+  sides: z.number().int().optional().describe("Cylinder: number of sides, 3 to 64 (default 16)"),
+  size: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Size in centimetres along the actor's X, Y and Z (default 100, 100, 100)"),
   skeletalMesh: z.string().nullable().optional().describe("SkeletalMesh asset path, or null to clear the mesh (set_component_skeletal_mesh). SkeletalMesh asset path to spawn; null is refused here (spawn_skeletal_mesh_actor)"),
   skipIfPresent: z.boolean().optional().describe("Report an existing transformer of this class instead of adding a duplicate (default true)"),
   slotIndex: z.number().int().optional().describe("Material slot (default 0)"),
@@ -5856,17 +6996,23 @@ export const schema: Record<string, z.ZodType> = {
   socketNames: z.array(z.string()).optional().describe("Bone or socket names; each component that has sockets reports their component-space transforms"),
   sourceRadius: z.number().optional().describe("Point or spot light source radius"),
   space: z.enum(["component","world"]).optional().describe("Space of positions, box and nearPoint (default component)"),
+  spacing: z.number().optional().describe("Length of each piece in centimetres (default the mesh length along forwardAxis times its scale)"),
+  splinePoints: z.array(z.object({ x: z.number().describe("X"), y: z.number().describe("Y"), z: z.number().describe("Z") })).optional().describe("At least two positions, world space unless coordinateSpace is local"),
+  stackedTranslucentCount: z.number().int().optional().describe("Overlapping translucent primitives, itself included, that make a stack (default 3)"),
   start: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Ray start"),
   startDistance: z.number().optional().describe("Fog start distance"),
   startIndex: z.number().int().optional().describe("First selected vertex to return (default 0); ignored with dumpToFile (get_skinned_vertices). First row index; rows are sorted so the index is stable across calls (query_components)"),
-  staticMesh: z.string().optional().describe("Static mesh for a StaticMeshActor (place_actor). Static mesh to place (spawn_grid)"),
+  startOffset: z.number().optional().describe("Distance along the spline to leave empty at its start, in centimetres"),
+  staticMesh: z.string().optional().describe("Mesh laid along the spline; required unless rebuild is set (build_spline_meshes). Static mesh for a StaticMeshActor (place_actor). Static mesh to place (spawn_grid)"),
+  steps: z.number().int().optional().describe("Stairs: number of steps, 1 to 64 (default 8)"),
   streamingClass: z.string().optional().describe("LevelStreamingDynamic (default) | LevelStreamingAlwaysLoaded"),
+  stretchToFit: z.boolean().optional().describe("Stretch the pieces so a whole number of them fills the spline exactly (default true)"),
   surfaceActorClass: z.string().optional().describe("Only accept hits on actors of this class"),
   surfaceActorLabels: z.array(z.string()).optional().describe("Only accept hits on actors with these labels"),
   surfaceOffset: z.number().optional().describe("Offset along the surface normal after the hit"),
   suspectOnly: z.boolean().optional().describe("Shorthand for where health.suspect isTrue"),
-  tag: z.string().optional().describe("Actor tag (add_actor_tag, remove_actor_tag). Actor must carry this tag (batch_set_actor_properties, batch_translate, bulk_set_component_property, delete_actors, recreate_physics_state, remove_components_by_class, set_actor_folder_path, set_actor_hlod_layer, set_component_materials)"),
-  tags: z.array(z.string()).optional().describe("The actor's complete tag list"),
+  tag: z.string().optional().describe("Actor tag (add_actor_tag, remove_actor_tag). Actor must carry this tag (batch_set_actor_properties, batch_translate, bulk_set_component_property, delete_actors, recreate_physics_state, remove_components_by_class, set_actor_folder_path, set_actor_hlod_layer, set_component_materials). Blockout tag the actor carries (default Blockout) (create_blockout). Blockout tag to list (default Blockout) (list_blockout). Act on every blockout actor carrying this tag (match_asset_to_blockout, replace_blockout)"),
+  tags: z.array(z.string()).optional().describe("Actor tags to add (create_spline_actor). The actor's complete tag list (set_actor_tags)"),
   target: z.string().optional().describe("Alias for targetLabel"),
   targetActor: z.string().optional().describe("Label of the actor to look at"),
   targetActorPath: z.string().optional().describe("Object path of the actor to look at"),
@@ -5884,6 +7030,7 @@ export const schema: Record<string, z.ZodType> = {
   transformerClass: z.string().optional().describe("WorldPartitionRuntimeCellTransformer subclass: short name, Module.Class or /Script path"),
   transforms: z.array(z.record(z.string(), z.unknown())).optional().describe("Transforms {location, rotation?, scale?} to add"),
   translationDelta: z.object({ forwardCm: z.number().optional().describe("Along the frame's forward axis"), rightCm: z.number().optional().describe("Along the frame's right axis"), upCm: z.number().optional().describe("Along the frame's up axis") }).optional().describe("Frame-relative translation in centimetres"),
+  translucentAreaM2: z.number().optional().describe("Largest bounds face, in square metres, at which a translucent primitive is an overdraw candidate (default 100)"),
   unloadedOnly: z.boolean().optional().describe("Only actors on disk that are not streamed in"),
   value: z.unknown().optional().describe("Value to write; null clears an object reference (bulk_set_component_property, set_component_property). Value to write (set_actor_property). Value to write: string, number or boolean (set_water_body_property)"),
   viewRotation: z.object({ viewFrom: z.string().describe("front | back | right | left | above | below"), direction: z.string().describe("clockwise | counterclockwise"), degrees: z.number().describe("Rotation in degrees, greater than zero") }).optional().describe("Observer-relative rotation in the selected frame; not with axisRotation"),
@@ -5894,11 +7041,14 @@ export const schema: Record<string, z.ZodType> = {
   volumetricScatteringIntensity: z.number().optional().describe("Volumetric scattering intensity"),
   volumeType: z.string().optional().describe("Substring over the volume class name (list_volumes). Volume class, by short name or alias such as trigger, blocking, postprocess, navmesh (spawn_volume)"),
   weight: z.number().optional().describe("Blend weight (default 1)"),
+  weights: z.array(z.number()).optional().describe("Relative pick weight per mesh (default equal)"),
   weldSimulatedBodies: z.boolean().optional().describe("Weld simulated bodies during attachment (default false)"),
   where: z.array(z.object({ field: z.string().describe("Dot path into the row, such as shadow.effectiveCastShadow or props.CullDistance"), op: z.string().optional().describe("eq (default) | ne | lt | lte | gt | gte | contains | notContains | startsWith | endsWith | in | notIn | exists | notExists | isNull | isNotNull | isTrue | isFalse"), value: z.unknown().optional().describe("Value the operator compares against") })).optional().describe("Predicates evaluated in the editor, at most 24"),
   whereMode: z.string().optional().describe("all (default) | any"),
-  world: z.string().optional().describe("World scope: editor (default) | pie (actors_in_box, aim_actor_at, bulk_line_trace, count_actors_by_class, destroy_transient_actor, get_actor_bounds, get_actor_details, get_actors_by_class, get_actors_by_component_class, get_component_details, get_relative_transform, get_runtime_virtual_texture_summary, get_skinned_vertices, get_spline_info, get_world_outliner, line_trace, list_transient_actors, move_actor, nav_project_point, nudge_component, place_actor, query_components, recreate_physics_state, rerun_construction_scripts, restore_component_relative_transform, set_actor_property, set_component_property, set_component_skeletal_mesh, set_fog_properties, shape_trace, snap_actor_to_floor, spawn_transient_actor, summarize_static_mesh_usage, test_component_overlap). editor (default) | pie | a world object path such as a Blueprint editor preview world (/Engine/Transient.World_N); with world omitted, an actorPath in another world reads that world (get_component_tree). World scope: auto (default, PIE when running) | editor | pie (read_actor_motion)"),
+  world: z.string().optional().describe("World scope: editor (default) | pie (actors_in_box, aim_actor_at, audit_level_performance, bulk_line_trace, count_actors_by_class, destroy_transient_actor, get_actor_bounds, get_actor_details, get_actors_by_class, get_actors_by_component_class, get_component_details, get_relative_transform, get_runtime_virtual_texture_summary, get_skinned_vertices, get_spline_info, get_world_outliner, line_trace, list_transient_actors, move_actor, nav_project_point, nudge_component, place_actor, query_components, recreate_physics_state, rerun_construction_scripts, restore_component_relative_transform, set_actor_property, set_component_property, set_component_skeletal_mesh, set_fog_properties, shape_trace, snap_actor_to_floor, spawn_transient_actor, summarize_static_mesh_usage, test_component_overlap). editor (default) | pie | a world object path such as a Blueprint editor preview world (/Engine/Transient.World_N); with world omitted, an actorPath in another world reads that world (get_component_tree). World scope: auto (default, PIE when running) | editor | pie (read_actor_motion)"),
   worldSpace: z.boolean().optional().describe("Treat transforms as world space (default true)"),
+  yawJitter: z.number().optional().describe("Random yaw range in degrees, either way"),
+  yawOffset: z.number().optional().describe("Extra yaw in degrees on top of the blockout's rotation (default the best match's, else 0)"),
   zoneExtent: z.unknown().optional().describe("New WaterZone ZoneExtent in cm, {x, y} or [x, y]"),
 };
 

@@ -1,0 +1,16 @@
+---
+title: "CO_Hero · CustomizableObject"
+---
+flowchart LR
+  subgraph g_graph_Source["Source"]
+    direction LR
+    n_B0000000_0000_0000_0000_000000000001["Base Object<br/>CustomizableObjectNodeObject"]
+    n_B0000000_0000_0000_0000_000000000002["Mesh Component<br/>CustomizableObjectNodeComponentMesh"]
+  end
+  subgraph g_graph_Macro["Macro"]
+    direction LR
+    n_B0000000_0000_0000_0000_000000000003["Macro Input<br/>CustomizableObjectNodeMacroInput"]
+  end
+  n_B0000000_0000_0000_0000_000000000002 -.->|"Component → Components"| n_B0000000_0000_0000_0000_000000000001
+  classDef ue_default fill:#181d25,stroke:#3a414c,color:#f5f5f4
+  class n_B0000000_0000_0000_0000_000000000001,n_B0000000_0000_0000_0000_000000000002,n_B0000000_0000_0000_0000_000000000003 ue_default

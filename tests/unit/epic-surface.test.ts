@@ -95,10 +95,14 @@ describe("native tool surface filtering", () => {
 
     applyNativeToolsConfig(tools, { enabled: false });
 
+    // An `epic_` name that is still an action is one of ue-mcp's own (an
+    // epic category action that wraps no toolset), which stays by design.
+    const kept = new Set(tools.flatMap((tool) => Object.keys(tool.actions)));
+    const wrapped = (m: RegExpMatchArray) => !kept.has(m[0]);
     const mentions = tools.flatMap((tool) => [
-      ...[...tool.description.matchAll(/\bepic_[a-z]\w*/g)].map((m) => `${tool.name}: ${m[0]}`),
+      ...[...tool.description.matchAll(/\bepic_[a-z]\w*/g)].filter(wrapped).map((m) => `${tool.name}: ${m[0]}`),
       ...Object.entries(tool.actions).flatMap(([name, spec]) =>
-        [...(spec.description ?? "").matchAll(/\bepic_[a-z]\w*/g)].map((m) => `${tool.name}.${name}: ${m[0]}`)),
+        [...(spec.description ?? "").matchAll(/\bepic_[a-z]\w*/g)].filter(wrapped).map((m) => `${tool.name}.${name}: ${m[0]}`)),
     ]);
     expect(mentions).toEqual([]);
   });

@@ -5,6 +5,8 @@ import { actions as epicActions, schema as epicSchema } from "./epic/blueprint.g
 import { specBp, schema as specSchema } from "./specs/blueprint.generated.js";
 import { blueprintDiffAction } from "./blueprint-diff.js";
 import { openDiffWindowAction } from "./blueprint-diff-window.js";
+import { blueprintDiagramAction } from "./graph-diagrams.js";
+import { diagramSchema } from "../diagram/action.js";
 
 export const blueprintTool: ToolDef = categoryTool(
   "blueprint",
@@ -155,6 +157,7 @@ export const blueprintTool: ToolDef = categoryTool(
     set_struct_field_default: specBp("mutate", "Set a UserDefinedStruct member's default value. A member is an FStructVariableDescription inside the struct's editor data, not a UPROPERTY on the asset, so asset(set_property) cannot reach it; the engine call also parses the text against the member's real property and recompiles the struct so every dependent default is repaired, which a raw write would skip. defaultValue is Unreal export text ('5', 'true', '(X=1.000000,Y=2.000000,Z=0.000000)'); an empty string clears it. Resolve the field by fieldName (display or internal name) or fieldGuid. Idempotent, with a rollback carrying the previous value.", "set_struct_field_default"),
     reorder_struct_fields: specBp("mutate", "Reorder a UserDefinedStruct's members. Member order decides the details-panel layout and the DataTable column order and is authored data with no property behind it. order is the COMPLETE list by display name, internal name or GUID; a partial list, an unknown entry or a repeat is refused before anything moves. Idempotent. A move the engine refuses mid-sequence is reported with complete=false and the count that landed, never as a plain success, and the rollback restores the original order by GUID.", "reorder_struct_fields"),
     edit_struct_metadata: specBp("mutate", "Set a UserDefinedStruct's tooltip and its per-member tooltip, editableOnInstance, saveGame, multiLineText, widget3D and arbitrary metadata, in one batched call. All of these live in the struct's editor data rather than as UPROPERTYs, and each has an engine setter that recompiles the struct. fields is [{fieldName or fieldGuid, tooltip?, editableOnInstance?, saveGame?, multiLineText?, widget3D?, metadata?}]. Every member is resolved and every type-gated switch is checked (multiLineText needs a text-like member, widget3D a Vector or Transform) BEFORE the first write, so a refusal on entry nine leaves entries one through eight untouched. Idempotent; the rollback restores every value by GUID, and states the one thing it cannot: a metadata key that did not exist before is restored to an empty string rather than removed.", "edit_struct_metadata"),
+    diagram: blueprintDiagramAction,
     ...epicActions,
   },
   {
@@ -164,6 +167,10 @@ export const blueprintTool: ToolDef = categoryTool(
     // author action, and tests/unit/handler-specs.test.ts holds the two to one
     // type.
     ...specSchema,
+    ...diagramSchema({ ...epicSchema, ...specSchema }),
+    edges: z.string().optional().describe("diagram: exec | data | all (default all)"),
+    expandCollapsed: z.boolean().optional().describe("diagram: draw each collapsed graph as a subgraph"),
+    includeGraphs: z.array(z.string()).optional().describe("diagram: function or macro graphs drawn as subgraphs beside graphName"),
     assetPath: z.string().optional().describe("Blueprint asset path. Read/graph actions also accept a World/umap path (e.g. /Game/Maps/SomeLevel), resolved to that map's level script Blueprint (#942)"),
     parentClass: z.string().optional().describe("create / author / reparent: the parent class. export_batch: only Blueprints deriving from this class (#1166)"),
     components: z.array(z.record(z.string(), z.unknown())).optional().describe("author: [{componentClass, componentName?, parentComponent?, parentSocket?, childActorClass?, asRoot?}] (#607, #1478)"),
