@@ -95,6 +95,10 @@ namespace MCPPIE
 		float ThrTrackedDefault = 0.f;
 		TMap<FString, float> TrackedThresholds;
 		bool bEject = false;
+		// Block the user's own keyboard, mouse and gamepad from the PIE game
+		// while the replay runs, so only the recording drives the player.
+		// Ignored in monitor mode, where the user plays on purpose.
+		bool bLockInput = false;
 		float TimeScale = 1.0f;
 		// Opt-in stronger reproducibility (item X2): drive the engine at a fixed
 		// delta time (1/pin_fps) during replay instead of just capping FPS. Makes

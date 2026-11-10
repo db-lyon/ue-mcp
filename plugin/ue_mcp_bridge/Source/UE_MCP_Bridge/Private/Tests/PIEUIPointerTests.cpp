@@ -215,4 +215,32 @@ bool FPIEUIPointerModifiersTest::RunTest(const FString& /*Parameters*/)
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FPIEUIPointerEnhancedInputFilterTest,
+	"UE.MCP.PIE.UIPointer.EnhancedInputFilter",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FPIEUIPointerEnhancedInputFilterTest::RunTest(const FString& /*Parameters*/)
+{
+	using namespace MCPPIE;
+	const TSet<FKey> Mapped = { EKeys::LeftMouseButton, EKeys::MouseWheelAxis };
+
+	TestTrue(TEXT("mapped button"), IsUIPointerInputMapped(Mapped, EUIPointerEvent::Down, EKeys::LeftMouseButton));
+	TestFalse(TEXT("unmapped button"), IsUIPointerInputMapped(Mapped, EUIPointerEvent::Down, EKeys::RightMouseButton));
+	TestTrue(TEXT("mapped wheel axis covers the wheel"), IsUIPointerInputMapped(Mapped, EUIPointerEvent::Wheel, EKeys::Invalid));
+	TestFalse(TEXT("unmapped wheel"), IsUIPointerInputMapped({ EKeys::LeftMouseButton }, EUIPointerEvent::Wheel, EKeys::Invalid));
+	TestTrue(TEXT("scroll-up key counts as the wheel"), IsUIPointerInputMapped({ EKeys::MouseScrollUp }, EUIPointerEvent::Wheel, EKeys::Invalid));
+	TestFalse(TEXT("a move never matches"), IsUIPointerInputMapped(Mapped, EUIPointerEvent::Move, EKeys::LeftMouseButton));
+
+	// Skipped only when the press reaches the game and Enhanced Input maps it.
+	TestTrue(TEXT("mapped click on the game viewport is skipped"), ShouldSkipUIPointerEvent(EUIPointerEvent::Down, true, true));
+	TestTrue(TEXT("mapped double click on the game viewport is skipped"), ShouldSkipUIPointerEvent(EUIPointerEvent::DoubleClick, true, true));
+	TestTrue(TEXT("mapped wheel on the game viewport is skipped"), ShouldSkipUIPointerEvent(EUIPointerEvent::Wheel, true, true));
+	TestFalse(TEXT("click on a UMG widget is recorded even when mapped"), ShouldSkipUIPointerEvent(EUIPointerEvent::Down, false, true));
+	TestFalse(TEXT("unmapped click on the game viewport is recorded"), ShouldSkipUIPointerEvent(EUIPointerEvent::Down, true, false));
+	TestFalse(TEXT("moves are always recorded"), ShouldSkipUIPointerEvent(EUIPointerEvent::Move, true, true));
+	TestFalse(TEXT("releases follow their press"), ShouldSkipUIPointerEvent(EUIPointerEvent::Up, true, true));
+	return true;
+}
+
 #endif

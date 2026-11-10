@@ -82,6 +82,18 @@ namespace MCPPIE
 	void BuildUIPointerSteps(const TArray<FUIPointerSample>& Samples, double BaseRealTime,
 		TArray<FStep>& OutSteps);
 
+	// ── Enhanced Input overlap filter ────────────────────────────────────
+
+	// True when Enhanced Input maps the key behind this event: Button for a
+	// press or double click, any wheel key for the wheel. Moves never match.
+	bool IsUIPointerInputMapped(const TSet<FKey>& MappedKeys, EUIPointerEvent Event, const FKey& Button);
+
+	// A press, double click or wheel that lands on the game viewport itself
+	// (no UMG widget under the cursor to take it) on a key Enhanced Input
+	// maps already reaches the recording as an action value. Recording it
+	// as ui_input too would fire it twice on replay, so it is skipped.
+	bool ShouldSkipUIPointerEvent(EUIPointerEvent Event, bool bReachesGameViewport, bool bMappedInEnhancedInput);
+
 	// ── Capture ──────────────────────────────────────────────────────────
 
 	/**
@@ -91,7 +103,8 @@ namespace MCPPIE
 	 * which Enhanced Input already records) and only inside the PIE
 	 * viewport, except that a button pressed inside keeps reporting moves
 	 * and its release until it comes up, so a drag that leaves the viewport
-	 * is still whole.
+	 * is still whole. Presses and wheel that Enhanced Input already handles
+	 * are skipped (see ShouldSkipUIPointerEvent).
 	 */
 	class FPIEUIPointerCapture : public IInputProcessor
 	{
@@ -99,6 +112,8 @@ namespace MCPPIE
 		void SetTarget(UWorld* World, APlayerController* PC);
 		void Reset();
 		const TArray<FUIPointerSample>& GetSamples() const { return Samples; }
+		// Presses and wheel left to Enhanced Input this recording.
+		int32 GetSkippedForEnhancedInput() const { return SkippedForEnhancedInput; }
 
 		// Register with / unregister from FSlateApplication. Safe to call
 		// when Slate is not initialised (no-op).
@@ -116,11 +131,14 @@ namespace MCPPIE
 
 	private:
 		void Record(EUIPointerEvent Event, const FPointerEvent& MouseEvent);
+		// Applies ShouldSkipUIPointerEvent to a live press or wheel; logs the decision.
+		bool SkipForEnhancedInput(EUIPointerEvent Event, const FKey& Button, const FPointerEvent& MouseEvent);
 
 		TWeakObjectPtr<UWorld> World;
 		TWeakObjectPtr<APlayerController> PlayerController;
 		TArray<FUIPointerSample> Samples;
 		TSet<FKey> HeldButtons;       // pressed inside the viewport, not yet released
+		int32 SkippedForEnhancedInput = 0;
 	};
 
 	// ── Replay ───────────────────────────────────────────────────────────

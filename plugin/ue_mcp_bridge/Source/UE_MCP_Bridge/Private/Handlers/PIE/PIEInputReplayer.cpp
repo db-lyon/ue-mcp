@@ -1,4 +1,5 @@
 #include "Handlers/PIE/PIEInputReplayer.h"
+#include "Handlers/PIE/PIEReplayInputLock.h"
 #include "MCPPIEViewportCapture.h"
 #include "Handlers/PIE/PIEGifEncoder.h"
 #include "Handlers/PIE/PIEContactSheet.h"
@@ -145,6 +146,7 @@ namespace MCPPIE
 		bEndFrameBound = false;
 		FPSPin.Restore();
 		RestoreFixedTimestep();
+		ReplayInputLock::Stop();
 		State = EReplayerState::Idle;
 		bArmed = false;
 		TargetWorld.Reset();
@@ -166,6 +168,7 @@ namespace MCPPIE
 		ActiveTapes.Reset();
 		UIPlayer.ReleaseAll(nullptr);
 		UIPlayer.Reset();
+		ReplayInputLock::Stop();
 	}
 
 	bool FPIEInputReplayer::LoadSourceFrames(const FString& CSVPath, FString& OutError)
@@ -892,6 +895,11 @@ namespace MCPPIE
 					}
 				}
 
+				if (Pending.bLockInput && !Pending.bMonitor)
+				{
+					ReplayInputLock::Start(PIEWorld);
+				}
+
 				if (Pending.bEject)
 				{
 					EjectPlayer(PIEWorld);
@@ -1195,6 +1203,8 @@ namespace MCPPIE
 				if (SourceFrames.Num() == 0 || bSourceExhausted)
 				{
 					State = EReplayerState::Completed;
+					// Hand the player back as soon as the recording is done, not when PIE ends.
+					ReplayInputLock::Stop();
 				}
 			}
 		}
@@ -1369,6 +1379,7 @@ namespace MCPPIE
 			}
 		}
 
+		ReplayInputLock::Stop();
 		RepossessPlayer();
 		RestoreFixedTimestep();
 		FPSPin.Restore();

@@ -27,11 +27,11 @@ What replay holds constant: the same Enhanced Input values at the same times, th
 
 ## Editor UI
 
-A **Record** button sits in the Play toolbar. Record arms the recorder. Its menu offers Record + Play, Arm Recorder, Disarm Recorder, Stop Recording and Open PIE Studio Panel.
+A **Record** button sits in the Play toolbar. Record arms the recorder. Its menu offers Record + Play, Arm Recorder, Disarm Recorder, Stop Recording and Open PIE Studio Panel, plus a **Capture Cursor / UI** toggle (off by default, kept for the editor session) that arms every Studio recording with `capture_ui_pointer`.
 
 The **PIE Studio** tab, listed with the editor's tool tabs, is a dockable panel:
 
-- **Recorder**: state, recording id, frame count and elapsed time, with Record + Play, Arm, Disarm and Stop.
+- **Recorder**: state, recording id, frame count and elapsed time, with Record + Play, Arm, Disarm and Stop, and a **Lock Input During Replay** checkbox (off by default, kept for the editor session) that runs every Studio replay with `lock_input`.
 - **Time Scale**: a slider from 1% to 400% and presets (1%, 10%, 25%, 50%, 100%, 200%). The panel reapplies the scale when PIE restarts. From an agent, use `editor(set_pie_time_scale)`.
 - **Recordings**: every saved recording with Replay and Delete. Replay arms the replayer with the active observation profiles and starts PIE. With **Capture GIF** on it also captures frames and encodes a GIF, listed with Open and Delete.
 - **Observation Profiles**: a checkbox marking each profile active, Edit, Delete, Create and Refresh.
@@ -147,6 +147,7 @@ Replay drives the sequence through `UEnhancedInputLocalPlayerSubsystem::InjectIn
 | Param | Default | Notes |
 |-------|---------|-------|
 | `eject` | `false` | Fly a spectator pawn while inputs drive the original; possession returns on stop |
+| `lock_input` | `false` | Block the user's own keyboard, mouse and gamepad from the PIE game while the replay runs, so only the recording drives the player. Keyboard is blocked only while the PIE viewport has focus and the mouse only inside the viewport, so the rest of the editor stays usable; key and button releases, Esc, Shift+F1 and F8 always pass. The lock lifts when the steps finish, not when PIE ends. Ignored in `mode=monitor` |
 | `time_scale` | `1.0` | Global time dilation; `0.01` is 1% speed |
 | `settle_ms` | sequence (500) | Delay after pawn attach before the first step |
 | `pin_fps` | sequence `sample_hz` | `t.MaxFPS` pin; `0` skips it |
@@ -195,8 +196,8 @@ Enhanced Input never sees the cursor, so clicking or hovering a UMG button, navi
 - **Positions** are `x` and `y` from 0 to 1 across the PIE viewport, so a recording stays valid at another window size.
 - **Timing.** `ui_input` delays run on the world's real-time clock, which ignores time dilation and keeps running while the game is paused, since menus are often opened paused. `time_scale` still scales them on replay. Moves are kept at most once per frame.
 - **Events** are `mouse_move`, `mouse_down`, `mouse_up`, `mouse_double_click` (each press and release event names a `button` FKey) and `mouse_wheel` (`wheel_delta`). `modifiers` lists any of `shift`, `control`, `alt`, `command` held at the time.
-- **Overlap with Enhanced Input.** A click that is also bound to an Enhanced Input action is recorded twice, once as each, and fires twice on replay. That is why capture is off by default; leave it off for recordings of mouse-driven gameplay.
-- A replay that stops with a button still down releases it. Moving the real mouse over the viewport during a replay interferes with the replayed cursor.
+- **Overlap with Enhanced Input.** A press, double click or wheel that lands on the game viewport itself (no hit-testable UMG widget under the cursor) on a key the player's mapping contexts bind is left to Enhanced Input, which already records it as an action value, so it does not fire twice on replay. A click a UMG widget takes is always recorded, mapped or not, because Enhanced Input never sees it. Each decision is logged under `LogMCPPIE`. The filter cannot tell when a widget lets a click bubble through to the game; such a click is recorded as `ui_input` and also reaches Enhanced Input. Capture stays off by default.
+- A replay that stops with a button still down releases it. While `ui_input` steps replay, the real mouse is ignored inside the PIE viewport so it cannot pull the cursor off the recorded path; outside the viewport it still works. `lock_input` extends this to the keyboard, gamepad and the rest of the mouse.
 - `ui_input` steps can also be written by hand in `replay_arm(steps=[...])`. An unknown `event`, or a press or release with no `button`, is refused.
 
 ### Analysis and comparison

@@ -320,6 +320,7 @@ void FPIEHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("record_drift"), EType::Boolean, TEXT("Record drift against the source (default true)")),
 		MCPParam::Optional(TEXT("auto_stop_pie"), EType::Boolean, TEXT("End PIE when the replay completes (replay_arm default false, replay_run default true)")),
 		MCPParam::Optional(TEXT("eject"), EType::Boolean, TEXT("Eject to a spectator camera during replay")),
+		MCPParam::Optional(TEXT("lock_input"), EType::Boolean, TEXT("Block the user's keyboard, mouse and gamepad from the PIE game while the replay runs, so only the recording drives the player; Esc, Shift+F1 and F8 still work, and monitor mode ignores it (default false)")),
 		MCPParam::Optional(TEXT("time_scale"), EType::Number, TEXT("Playback speed multiplier (default 1)")),
 		MCPParam::Optional(TEXT("mode"), EType::String, TEXT("replay drives input; monitor only samples (default replay)")).Enum({ TEXT("replay"), TEXT("monitor") }),
 		MCPParam::Optional(TEXT("capture_frame_every"), EType::Integer, TEXT("Capture a viewport JPEG every N steps and build a contact sheet")).Min(0),
