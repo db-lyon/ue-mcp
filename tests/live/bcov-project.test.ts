@@ -15,7 +15,15 @@ import { liveTarget } from "./harness.js";
 const DIR = "/Game/MCPTest/BCov/Project";
 const EPIC_BP = `${DIR}/BP_BCov_Project_Epic`;
 const EPIC_BP_OBJECT = `${EPIC_BP}.BP_BCov_Project_Epic`;
-const BLUEPRINT_TOOLSET = "editor_toolset.toolsets.blueprint.BlueprintTools";
+/**
+ * The Blueprint variable tools by engine: 5.8 registers them in BlueprintTools; 5.9 replaced that
+ * toolset with BlueprintToolsets.BlueprintToolset, with the type argument renamed (the successor
+ * src/tools/epic/blueprint.generated.ts records for epic_add_variable and epic_list_variables).
+ */
+const BLUEPRINT_TOOLS = {
+  "5.8": { toolset: "editor_toolset.toolsets.blueprint.BlueprintTools", add: "add_variable", list: "list_variables", typeArg: "type_name" },
+  "5.9": { toolset: "BlueprintToolsets.BlueprintToolset", add: "AddVariable", list: "ListVariables", typeArg: "typeName" },
+} as const;
 const CONFIG_FILE = "BCovProjectProbe.ini";
 const CONFIG_SECTION = "/Script/BCovProject.ProbeSettings";
 const CONFIG_KEY = "ProbeValue";
@@ -260,12 +268,15 @@ describe("C++ class creation", () => {
 
 describe("Epic toolsets", () => {
   it("epic_call_tool runs a wrapped Blueprint tool whose variable the bridge then lists", async () => {
+    // The engine's own registry says which generation of the Blueprint tools it has.
+    const probe = await callBridge(bridge, "epic_call_tool", { toolset: BLUEPRINT_TOOLS["5.8"].toolset, tool: BLUEPRINT_TOOLS["5.8"].list, input: { blueprint: { refPath: EPIC_BP_OBJECT } } });
+    const tools = succeeded(probe) ? BLUEPRINT_TOOLS["5.8"] : BLUEPRINT_TOOLS["5.9"];
     const added = await call("epic_call_tool", {
-      toolset: BLUEPRINT_TOOLSET,
-      tool: "add_variable",
-      input: { blueprint: { refPath: EPIC_BP_OBJECT }, name: "BCovEpicCount", type_name: "int" },
+      toolset: tools.toolset,
+      tool: tools.add,
+      input: { blueprint: { refPath: EPIC_BP_OBJECT }, name: "BCovEpicCount", [tools.typeArg]: "int" },
     });
-    expect(added.tool).toBe("add_variable");
+    expect(added.tool).toBe(tools.add);
 
     const vars = await call("list_blueprint_variables", { assetPath: EPIC_BP });
     const row = (vars.variables as Json[]).find((v) => v.name === "BCovEpicCount");
@@ -273,12 +284,14 @@ describe("Epic toolsets", () => {
     expect(row!.type).toBe("int");
 
     const listed = await call("epic_call_tool", {
-      toolset: BLUEPRINT_TOOLSET,
-      tool: "list_variables",
+      toolset: tools.toolset,
+      tool: tools.list,
       input: { blueprint: { refPath: EPIC_BP_OBJECT } },
     });
-    const result = listed.result as Json | string[] | undefined;
-    const names = Array.isArray(result) ? result : ((result as Json | undefined)?.returnValue as string[] | undefined) ?? [];
+    const result = listed.result as Json | unknown[] | undefined;
+    const rows = Array.isArray(result) ? result : ((result as Json | undefined)?.returnValue as unknown[] | undefined) ?? [];
+    // 5.8 lists names; 5.9 lists { name, type } rows.
+    const names = rows.map((r) => (typeof r === "string" ? r : String((r as Json).name)));
     expect(names).toContain("BCovEpicCount");
   }, 120_000);
 });
