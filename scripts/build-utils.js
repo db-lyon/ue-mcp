@@ -132,7 +132,7 @@ function defaultEngineRoots(platform = process.platform) {
  * carries the name of the thing that produced it so failures can name the
  * setting the caller has to correct.
  */
-function engineRootCandidates(env = process.env, platform = process.platform) {
+function engineRootCandidates(env = process.env, platform = process.platform, association = projectEngineAssociation()) {
   const candidates = [];
 
   if (env.UE_MCP_TEST_ENGINE_ROOT) {
@@ -150,11 +150,32 @@ function engineRootCandidates(env = process.env, platform = process.platform) {
     }
   }
 
+  // The engine the test project names, ahead of the newest install: a 5.8 project built with
+  // 5.9 leaves modules a 5.8 editor skips as out of date, and the editor then waits on the
+  // rebuild prompt with nobody to answer it.
+  if (association) {
+    for (const engineRoot of defaultEngineRoots(platform)) {
+      if (pathImpl(platform).basename(engineRoot) === `UE_${association}`) {
+        candidates.push({ source: 'default engine install', engineRoot, association: true });
+      }
+    }
+  }
+
   for (const engineRoot of defaultEngineRoots(platform)) {
     candidates.push({ source: 'default engine install', engineRoot });
   }
 
   return candidates;
+}
+
+/** The test project's EngineAssociation when it names a launcher version ("5.8"), else null. */
+function projectEngineAssociation() {
+  try {
+    const value = JSON.parse(fs.readFileSync(getProjectPaths().projectFile, 'utf8')).EngineAssociation;
+    return typeof value === 'string' && /^\d+\.\d+$/.test(value) ? value : null;
+  } catch {
+    return null;
+  }
 }
 
 function canonicalDirectory(directoryPath) {
@@ -356,6 +377,7 @@ export {
   engineExecutables,
   engineRootFromEnginePath,
   defaultEngineRoots,
+  engineRootCandidates,
   unrealTargetPlatform,
   isSameOrUnder,
   protectedEngineRoots,
