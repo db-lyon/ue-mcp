@@ -3346,12 +3346,25 @@ TSharedPtr<FJsonValue> FPCGHandlers::ImportGraph(const TSharedPtr<FJsonObject>& 
 
 			SrcNode->Modify();
 			DstNode->Modify();
+#if UE_MCP_HAS_5_9_API
+			// 5.9's TryAddEdge says why an edge is refused, as pcg(connect_nodes) reports it (#1828).
+			FText RefusedBecause;
+			const EPCGGraphConnectionResult Added = Graph->TryAddEdge(SrcNode, SrcPinName, DstNode, DstPinName, RefusedBecause);
+			if (Added != EPCGGraphConnectionResult::Success)
+			{
+				++ImportFailures;
+				Warnings.Add(MakeShared<FJsonValueString>(FString::Printf(TEXT("connection %s.%s -> %s.%s: %s (%s)"), *From, *SrcPinName.ToString(), *To, *DstPinName.ToString(),
+					*StaticEnum<EPCGGraphConnectionResult>()->GetNameStringByValue(static_cast<int64>(Added)), *RefusedBecause.ToString())));
+				continue;
+			}
+#else
 			if (!Graph->AddEdge(SrcNode, SrcPinName, DstNode, DstPinName))
 			{
 				++ImportFailures;
 				Warnings.Add(MakeShared<FJsonValueString>(FString::Printf(TEXT("connection %s.%s -> %s.%s: AddEdge failed (incompatible or duplicate?)"), *From, *SrcPinName.ToString(), *To, *DstPinName.ToString())));
 				continue;
 			}
+#endif
 			// #304: verify the UPCGEdge object was actually instantiated. Some
 			// pin/label combinations return success from AddEdge while leaving
 			// no edge in either pin's Edges array; those phantom connections
