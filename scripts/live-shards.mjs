@@ -217,6 +217,19 @@ export function overBudget(tests, budgets) {
   return out.sort((a, b) => b.ms - a.ms);
 }
 
+/**
+ * Time budgets are goals: a test or a run over its budget is printed and
+ * recorded, but only real problems (a failed or skipped test, a file that did
+ * not run, an editor that would not start or died) fail the run.
+ */
+export function runVerdict({ problems, over = [], wallS = 0, wallClockS = Infinity, wallChecked = true }) {
+  const goals = [
+    ...over.map((o) => `over its time goal: ${o.test} took ${(o.ms / 1000).toFixed(1)}s, goal ${(o.limit / 1000).toFixed(0)}s`),
+    ...(wallChecked && wallS > wallClockS ? [`over its time goal: the run took ${wallS.toFixed(0)}s, goal ${wallClockS}s`] : []),
+  ];
+  return { problems, goals, exitCode: problems.length ? 1 : 0 };
+}
+
 /** The slowest tests, longest first. */
 export function slowest(tests, n = 15) {
   return Object.entries(tests).sort((a, b) => b[1] - a[1]).slice(0, n).map(([test, ms]) => ({ test, ms }));
