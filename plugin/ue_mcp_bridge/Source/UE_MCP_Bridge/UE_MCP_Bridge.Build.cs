@@ -1,3 +1,5 @@
+using System.Linq;
+using EpicGames.Core;
 using UnrealBuildTool;
 
 // UBT caches this module's file list and rescans only when this file changes.
@@ -210,7 +212,9 @@ public class UE_MCP_Bridge : ModuleRules
 		// loaded, so this DLL loads whether or not a project enables the plugin.
 		bool bEpicMCPPresent = System.IO.File.Exists(System.IO.Path.Combine(
 			EngineDirectory, "Plugins", "Experimental", "ModelContextProtocol", "Source", "ModelContextProtocol", "Public", "IModelContextProtocolResourceProvider.h"));
-		if (bEpicMCPPresent && Target.bBuildEditor)
+		// Its headers include UHT-generated ones, which exist only when the project
+		// being built enables the plugin; elsewhere the handlers compile out (ProjectEnables).
+		if (bEpicMCPPresent && Target.bBuildEditor && ProjectEnables(Target, "ModelContextProtocol"))
 		{
 			PrivateIncludePathModuleNames.Add("ModelContextProtocol");
 			PrivateDefinitions.Add("WITH_UEMCP_EPIC_MCP=1");
@@ -228,7 +232,7 @@ public class UE_MCP_Bridge : ModuleRules
 		// FToolsetRegistry::Get(), so the header is not needed there.
 		bool bToolsetRegistrySubsystemHeader = System.IO.File.Exists(System.IO.Path.Combine(
 			EngineDirectory, "Plugins", "Experimental", "ToolsetRegistry", "Source", "ToolsetRegistry", "Public", "ToolsetRegistry", "ToolsetRegistrySubsystem.h"));
-		if (bToolsetRegistrySubsystemHeader && Target.bBuildEditor)
+		if (bToolsetRegistrySubsystemHeader && Target.bBuildEditor && ProjectEnables(Target, "ToolsetRegistry"))
 		{
 			PrivateIncludePathModuleNames.Add("ToolsetRegistry");
 			PrivateDefinitions.Add("WITH_UEMCP_TOOLSET_REGISTRY_SUBSYSTEM=1");
@@ -244,7 +248,7 @@ public class UE_MCP_Bridge : ModuleRules
 		// DLL loads whether or not a project enables the plugin.
 		bool bSemanticSearchPresent = System.IO.File.Exists(System.IO.Path.Combine(
 			EngineDirectory, "Plugins", "Experimental", "SemanticSearch", "Source", "SemanticSearch", "Public", "ISemanticSearchModule.h"));
-		if (bSemanticSearchPresent && Target.bBuildEditor)
+		if (bSemanticSearchPresent && Target.bBuildEditor && ProjectEnables(Target, "SemanticSearch"))
 		{
 			PrivateIncludePathModuleNames.Add("SemanticSearch");
 			PrivateDefinitions.Add("WITH_UEMCP_SEMANTIC_SEARCH=1");
@@ -269,5 +273,30 @@ public class UE_MCP_Bridge : ModuleRules
 		{
 			PrivateDefinitions.Add("WITH_UEMCP_NNE=0");
 		}
+	}
+
+	/// <summary>
+	/// Whether the project being built enables an Epic plugin that is off by
+	/// default and whose headers this module includes. Such a plugin's
+	/// UHT-generated headers exist only when it is part of the build, so
+	/// compiling against it in a project that leaves it off fails. Read from the
+	/// target's own plugin lists, then the .uproject. A build with no project
+	/// (an engine build) counts it as on.
+	/// </summary>
+	private static bool ProjectEnables(ReadOnlyTargetRules Target, string Plugin)
+	{
+		if (Target.DisablePlugins.Contains(Plugin)) return false;
+		if (Target.EnablePlugins.Contains(Plugin)) return true;
+		if (Target.ProjectFile == null) return true;
+		JsonObject Project;
+		JsonObject[] Plugins;
+		if (!JsonObject.TryRead(Target.ProjectFile, out Project) || !Project.TryGetObjectArrayField("Plugins", out Plugins)) return false;
+		foreach (JsonObject Entry in Plugins)
+		{
+			string Name;
+			bool Enabled;
+			if (Entry.TryGetStringField("Name", out Name) && Name == Plugin) return Entry.TryGetBoolField("Enabled", out Enabled) && Enabled;
+		}
+		return false;
 	}
 }
