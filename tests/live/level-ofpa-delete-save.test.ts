@@ -29,7 +29,7 @@ async function call(method: string, params: Json = {}): Promise<Json> {
 beforeAll(async () => {
   bridge = await getBridge();
   originalMap = body(await callBridge(bridge, "get_current_level", {})).mapPackagePath as string | undefined;
-  await call("demo_go_home");
+  await call("demo_go_home", { discardUnsaved: true });
   await callBridge(bridge, "delete_asset", { assetPath: MAP, force: true });
   const created = await call("create_new_level", { levelPath: MAP, worldPartition: true });
   expect(created.externalActors).toBe(true);

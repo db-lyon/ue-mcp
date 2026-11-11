@@ -53,6 +53,7 @@ export const CLI_COMMANDS: readonly CliCommand[] = [
   { name: "flow", summary: "List, plan or run a project's flows", load: () => import("./flow-cli.js") },
   { name: "plugin", summary: "Install, create and publish plugins", load: () => import("./plugin-cli.js") },
   { name: "context", summary: "Read or set the context strategy", load: () => import("./context-cli.js"), ownHelp: true },
+  { name: "tools", summary: "List, enable or disable categories and Unreal toolsets", load: () => import("./tools-cli.js") },
   {
     name: "version",
     aliases: ["--version", "-v"],

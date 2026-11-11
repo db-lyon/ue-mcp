@@ -3,7 +3,7 @@
  *
  * Three checked-in artifacts have to agree:
  *
- *   tests/golden/epic-catalog.json     what Unreal's registry contains
+ *   tests/golden/epic-catalog/*.json  what Unreal's registry contains, per engine
  *   src/tools/epic/effects.ts          what each tool does, decided by a person
  *   src/tools/epic/*.generated.ts      the actions, generated from both
  *
@@ -21,9 +21,10 @@ import { fileURLToPath } from "node:url";
 import { ALL_TOOLS } from "../../src/tools.js";
 import { EPIC_TOOL_EFFECTS } from "../../src/tools/epic/effects.js";
 import { EPIC_CATEGORIES } from "../../src/tools/epic/index.js";
+import { EPIC_CATALOG_ENGINES } from "../../src/tools/epic/catalog-engines.js";
+import { CATALOG_DIR, loadMergedCatalog, loadSnapshots } from "../../scripts/lib/epic-catalog.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
-const CATALOG = path.join(ROOT, "tests", "golden", "epic-catalog.json");
 const GEN_DIR = path.join(ROOT, "src", "tools", "epic");
 
 interface Catalog {
@@ -32,8 +33,12 @@ interface Catalog {
   toolsets: Array<{ name: string; tools?: Array<{ name: string }> }>;
 }
 
-const catalog: Catalog = JSON.parse(fs.readFileSync(CATALOG, "utf8"));
-const catalogTools = catalog.toolsets.flatMap((ts) => (ts.tools ?? []).map((t) => t.name));
+const snapshots = loadSnapshots() as Array<{ engine: string; catalog: Catalog }>;
+const merged = loadMergedCatalog() as {
+  engines: string[];
+  toolsets: Array<{ tools: Array<{ name: string; engines: string[] }> }>;
+};
+const catalogTools = merged.toolsets.flatMap((ts) => ts.tools.map((t) => t.name));
 
 function epicActions() {
   return ALL_TOOLS.flatMap((t) =>
@@ -44,11 +49,27 @@ function epicActions() {
 }
 
 describe("the recorded catalog", () => {
-  it("is a real recording, keyed by the engine it came from", () => {
-    expect(catalog.engineAssociation).toMatch(/^\d+\.\d+/);
-    expect(catalogTools.length).toBe(catalog.recordedTools);
-    expect(catalogTools.length).toBeGreaterThan(700);
-    expect(new Set(catalogTools).size, "the registry names a tool twice").toBe(catalogTools.length);
+  it("holds one real recording per engine, each named for the engine it came from", () => {
+    expect(snapshots.length).toBeGreaterThan(0);
+    expect(fs.readdirSync(CATALOG_DIR).filter((f) => f.endsWith(".json")).sort())
+      .toEqual(snapshots.map((s) => `${s.engine}.json`).sort());
+    for (const { engine, catalog } of snapshots) {
+      expect(catalog.engineAssociation, engine).toBe(engine);
+      const tools = catalog.toolsets.flatMap((ts) => (ts.tools ?? []).map((t) => t.name));
+      expect(tools.length, engine).toBe(catalog.recordedTools);
+      expect(tools.length, engine).toBeGreaterThan(700);
+      expect(new Set(tools).size, `the ${engine} registry names a tool twice`).toBe(tools.length);
+    }
+    expect(new Set(catalogTools).size, "the union names a tool twice").toBe(catalogTools.length);
+  });
+
+  it("generated the engine list and each action's engines from the snapshots", () => {
+    expect([...EPIC_CATALOG_ENGINES]).toEqual(snapshots.map((s) => s.engine));
+    const enginesOf = new Map(merged.toolsets.flatMap((ts) => ts.tools.map((t) => [t.name, t.engines] as const)));
+    for (const { tool, action, spec } of epicActions()) {
+      if (spec.kind !== "bridge") continue;
+      expect(spec.epicTool?.engines, `${tool}.${action}`).toEqual(enginesOf.get(spec.epicTool!.name));
+    }
   });
 });
 
@@ -74,8 +95,23 @@ describe("every tool has a reviewed effect", () => {
 });
 
 describe("the generated actions", () => {
-  it("declares one action per catalog tool", () => {
-    expect(epicActions().length).toBe(catalogTools.length);
+  it("reaches every catalog tool exactly once, as an action or a successor of one", () => {
+    const reached = epicActions().flatMap(({ spec }) =>
+      spec.kind === "bridge" && spec.epicTool
+        ? [spec.epicTool.name, ...(spec.epicTool.successors ?? []).map((s) => s.name)]
+        : []);
+    expect(new Set(reached).size).toBe(reached.length);
+    expect(reached.length).toBe(catalogTools.length);
+  });
+
+  it("attaches a successor only on engines its action's own tool is absent from", () => {
+    for (const { tool, action, spec } of epicActions()) {
+      if (spec.kind !== "bridge" || !spec.epicTool?.successors) continue;
+      const own = spec.epicTool.engines ?? [];
+      for (const s of spec.epicTool.successors) {
+        expect(s.engines.filter((e) => own.includes(e)), `${tool}.${action} -> ${s.name}`).toEqual([]);
+      }
+    }
   });
 
   it("carries a declared effect that matches the reviewed one", () => {
@@ -150,7 +186,7 @@ describe("the committed modules match their inputs", () => {
     const read = (f: string) => fs.readFileSync(path.join(GEN_DIR, f), "utf8").replace(/\r\n/g, "\n");
     const before = new Map<string, string>();
     for (const f of fs.readdirSync(GEN_DIR)) {
-      if (f.endsWith(".generated.ts") || f === "index.ts") before.set(f, read(f));
+      if (f.endsWith(".generated.ts") || f === "index.ts" || f === "catalog-engines.ts" || f === "toolset-routes.ts") before.set(f, read(f));
     }
 
     // Under tsx: the generator imports ROUTING_PARAMS from source rather than
@@ -171,4 +207,24 @@ describe("the committed modules match their inputs", () => {
       + "do not hand-edit a generated file.",
     ).toEqual([]);
   }, 60_000);
+});
+
+describe("the emitted toolset routing", () => {
+  it("places every generated action's toolset in the category that declares it", async () => {
+    const { routeEpicToolset, EPIC_TOOLSETS_BY_CATEGORY } = await import("../../src/tools/epic/toolset-routes.js");
+    for (const { tool, action, spec } of epicActions()) {
+      const epicTool = (spec as { epicTool?: { toolset: string; successors?: Array<{ toolset: string }> } }).epicTool;
+      if (!epicTool) continue;
+      for (const toolset of [epicTool.toolset, ...(epicTool.successors ?? []).map((s) => s.toolset)]) {
+        expect(routeEpicToolset(toolset), `${tool}.${action} (${toolset})`).toBe(tool);
+        expect(EPIC_TOOLSETS_BY_CATEGORY[tool], `${tool} lists ${toolset}`).toContain(toolset);
+      }
+    }
+  });
+
+  it("routes a toolset no catalog recorded by the same patterns", async () => {
+    const { routeEpicToolset } = await import("../../src/tools/epic/toolset-routes.js");
+    expect(routeEpicToolset("SomePlugin.NiagaraFutureToolset")).toBe("niagara");
+    expect(routeEpicToolset("Unheard.Of")).toBe("epic");
+  });
 });

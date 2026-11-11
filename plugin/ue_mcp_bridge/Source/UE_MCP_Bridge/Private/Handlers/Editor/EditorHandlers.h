@@ -150,6 +150,15 @@ private:
 	static TSharedPtr<FJsonValue> GetOutputLog(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SearchLog(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> GetMessageLog(const TSharedPtr<FJsonObject>& Params);
+	// #1828: Map Check runs and messages. EditorHandlers_MapCheck.cpp.
+	static void RegisterMapCheckHandlers(class FMCPHandlerRegistry& Registry);
+	static TSharedPtr<FJsonValue> RunMapCheck(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> LogMapCheckMessage(const TSharedPtr<FJsonObject>& Params);
+	// #1828: Python additional search paths. EditorHandlers_PythonPaths.cpp.
+	static void RegisterPythonPathHandlers(class FMCPHandlerRegistry& Registry);
+	static TSharedPtr<FJsonValue> AddPythonPath(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> RemovePythonPath(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> ListPythonPaths(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> GetBuildStatus(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> PieControl(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> PieStartIgnoringBlueprintErrors(const TSharedPtr<FJsonObject>& Params);
@@ -204,6 +213,12 @@ private:
 	static TSharedPtr<FJsonValue> LaunchStandaloneGame(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> GetStandaloneStatus(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> StopStandaloneGame(const TSharedPtr<FJsonObject>& Params);
+	// Reading a recorded .utrace back through TraceServices, in
+	// EditorHandlers_TraceAnalysis.cpp.
+	static TSharedPtr<FJsonValue> AnalyzeInsightsTrace(const TSharedPtr<FJsonObject>& Params);
+	// The CSV profiler with a named capture, in EditorHandlers_CsvProfile.cpp.
+	static TSharedPtr<FJsonValue> StartCsvProfile(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> StopCsvProfile(const TSharedPtr<FJsonObject>& Params);
 
 	static TSharedPtr<FJsonValue> ReloadHandlers(const TSharedPtr<FJsonObject>& Params);
 	// #378: flush dirty packages and report per-package success/failure

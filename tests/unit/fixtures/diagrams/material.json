@@ -1,0 +1,26 @@
+{
+  "success": true,
+  "materialPath": "/Game/Materials/M_Rock.M_Rock",
+  "expressions": [
+    { "nodeId": "0", "class": "MaterialExpressionTextureSampleParameter2D", "description": "Texture Sample", "name": "", "positionX": -600, "positionY": 0, "parameterName": "Albedo",
+      "inputs": [{ "inputIndex": 0, "inputName": "UVs", "connectedExpressionClass": "MaterialExpressionTextureCoordinate", "connectedExpressionDescription": "TexCoord[0]", "connectedOutputIndex": 0, "connectedExpressionIndex": 2 }] },
+    { "nodeId": "1", "class": "MaterialExpressionScalarParameter", "description": "Roughness", "name": "", "positionX": -400, "positionY": 200, "parameterName": "Roughness", "inputs": [] },
+    { "nodeId": "2", "class": "MaterialExpressionTextureCoordinate", "description": "TexCoord[0]", "name": "", "positionX": -800, "positionY": 0, "inputs": [] },
+    { "nodeId": "3", "class": "MaterialExpressionMultiply", "description": "Multiply", "name": "Tint", "positionX": -200, "positionY": 0,
+      "inputs": [
+        { "inputIndex": 0, "inputName": "A", "connectedExpressionClass": "MaterialExpressionTextureSampleParameter2D", "connectedExpressionDescription": "Texture Sample", "connectedOutputIndex": 0, "connectedExpressionIndex": 0 },
+        { "inputIndex": 1, "inputName": "B", "connectedExpressionClass": "MaterialExpressionTextureSampleParameter2D", "connectedExpressionDescription": "Texture Sample", "connectedOutputIndex": 4, "connectedExpressionIndex": 0 }
+      ] }
+  ],
+  "count": 4,
+  "limit": 2000,
+  "pageOffset": 0,
+  "hasMore": false,
+  "total": 4,
+  "totalKnown": true,
+  "connections": {
+    "BaseColor": { "expressionClass": "MaterialExpressionMultiply", "expressionDescription": "Multiply", "outputIndex": 0, "expressionIndex": 3 },
+    "Metallic": null,
+    "Roughness": { "expressionClass": "MaterialExpressionScalarParameter", "expressionDescription": "Roughness", "outputIndex": 0, "expressionIndex": 1 }
+  }
+}

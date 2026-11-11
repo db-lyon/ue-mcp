@@ -1,0 +1,28 @@
+{
+  "success": true,
+  "assetPath": "/Game/Mutable/CO_Hero",
+  "assetClass": "CustomizableObject",
+  "graphs": [
+    {
+      "name": "Source", "path": "/Game/Mutable/CO_Hero.CO_Hero:Source", "class": "CustomizableObjectGraph", "schema": "CustomizableObjectSchema", "nodeCount": 2,
+      "nodes": [
+        { "name": "CustomizableObjectNodeObject_0", "nodeGuid": "B0000000-0000-0000-0000-000000000001", "path": "/Game/Mutable/CO_Hero.CO_Hero:Source.CustomizableObjectNodeObject_0", "class": "CustomizableObjectNodeObject", "title": "Base Object", "posX": 0, "posY": 0, "pinCount": 1, "linkCount": 1,
+          "pins": [{ "name": "Components", "pinId": "P1", "direction": "input", "type": "Component", "linkedTo": [{ "pinName": "Component", "pinId": "P2", "nodeGuid": "B0000000-0000-0000-0000-000000000002", "nodeName": "CustomizableObjectNodeComponentMesh_0", "nodeClass": "CustomizableObjectNodeComponentMesh" }], "linkCount": 1 }] },
+        { "name": "CustomizableObjectNodeComponentMesh_0", "nodeGuid": "B0000000-0000-0000-0000-000000000002", "path": "/Game/Mutable/CO_Hero.CO_Hero:Source.CustomizableObjectNodeComponentMesh_0", "class": "CustomizableObjectNodeComponentMesh", "title": "Mesh Component", "posX": -300, "posY": 0, "pinCount": 1, "linkCount": 1,
+          "pins": [{ "name": "Component", "pinId": "P2", "direction": "output", "type": "Component", "linkedTo": [{ "pinName": "Components", "pinId": "P1", "nodeGuid": "B0000000-0000-0000-0000-000000000001", "nodeName": "CustomizableObjectNodeObject_0", "nodeClass": "CustomizableObjectNodeObject" }], "linkCount": 1 }] }
+      ],
+      "pinCount": 2, "connectionCount": 1
+    },
+    {
+      "name": "Macro", "path": "/Game/Mutable/CO_Hero.CO_Hero:Macro", "class": "CustomizableObjectGraph", "schema": "CustomizableObjectSchema", "nodeCount": 1,
+      "nodes": [
+        { "name": "CustomizableObjectNodeMacroInput_0", "nodeGuid": "B0000000-0000-0000-0000-000000000003", "class": "CustomizableObjectNodeMacroInput", "title": "Macro Input", "posX": 0, "posY": 0, "pinCount": 0, "linkCount": 0, "pins": [] }
+      ],
+      "pinCount": 0, "connectionCount": 0
+    }
+  ],
+  "graphCount": 2,
+  "nodesReported": 3,
+  "pinCount": 2,
+  "connectionCount": 1
+}

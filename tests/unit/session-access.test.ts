@@ -23,6 +23,7 @@ import {
 } from "../../src/flow/session-access.js";
 import { bridgeMethodEffect, mayChangeState } from "../../src/surface/action-effects.js";
 import type { IBridge } from "../../src/bridge/bridge.js";
+import { blockText } from "../helpers/content-text.js";
 
 const graph = [...ALL_TOOLS, buildMicroGateway(ALL_TOOLS)];
 const every = graph.flatMap((t) => Object.entries(t.actions).map(([action, spec]) => ({
@@ -174,7 +175,7 @@ describe("dispatch in read-only mode", () => {
     const wrong: string[] = [];
     for (const { category, action } of changing) {
       const r = await rt.callAction(category, action, {}, { access: "read-only" });
-      const text = r.content.map((c) => c.text).join("\n");
+      const text = r.content.map((c) => blockText(c)).join("\n");
       if (!r.isError || !text.startsWith(`Error [WRITE_BLOCKED]: read-only session mode refuses ${category}(${action})`)) {
         wrong.push(`${category}.${action}: ${text.slice(0, 120)}`);
       }
@@ -184,7 +185,7 @@ describe("dispatch in read-only mode", () => {
 
   it("passes a read action the gate", async () => {
     const r = await rt.callAction("project", "get_status", {}, { access: "read-only" });
-    expect(r.content.map((c) => c.text).join("\n")).not.toContain("read-only session mode");
+    expect(r.content.map((c) => blockText(c)).join("\n")).not.toContain("read-only session mode");
   }, 60_000);
 
   it("holds per MCP session: one client read-only, another on the same runtime writable", async () => {

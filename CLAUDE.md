@@ -4,7 +4,7 @@ Operating guide for Claude Code (and any AI agent) working in this repo. Shared 
 
 ## Repo at a glance
 
-- **TS server** (`src/`) - the MCP server. Wraps the UE bridge over WebSocket, exposes <!-- count:tools -->30<!-- /count --> category tools with <!-- count:actions -->2163+<!-- /count --> actions. The numbers between those markers are stamped by `scripts/generate-tool-metadata.ts` from `ALL_TOOLS`; do not hand-edit them, and do not remove the markers, because a hand-written count here is the first thing every agent reads and the last thing anyone remembers to update.
+- **TS server** (`src/`) - the MCP server. Wraps the UE bridge over WebSocket, exposes <!-- count:tools -->31<!-- /count --> category tools with <!-- count:actions -->3695+<!-- /count --> actions. The numbers between those markers are stamped by `scripts/generate-tool-metadata.ts` from `ALL_TOOLS`; do not hand-edit them, and do not remove the markers, because a hand-written count here is the first thing every agent reads and the last thing anyone remembers to update.
 - **C++ plugin** (`plugin/ue_mcp_bridge/`) - the editor-side bridge. Lives in `Private/Handlers/<Category>/*.cpp`, registers actions with `FMCPHandlerRegistry`.
 - **Test project** (`tests/ue_mcp/`) - the dedicated UE project used for smoke testing. The plugin is deployed here from `plugin/` via the deployer. This is the **only** safe target for live tests.
 - **Docs** (`docs/`) - MkDocs site. Release bodies are drafted outside the repo (see Release process).
@@ -58,7 +58,7 @@ The merge style follows the commit count, and writing five commits only to squas
 
 - Target **only** `tests/ue_mcp/ue_mcp.uproject`. Confirm the MCP connection via `project(get_status)` before running. If the editor is connected to anything else (the user's real project, another workspace), abort.
 - Smoke tests execute real mutations (create blueprints, delete assets, modify levels). A misrouted run against a real project can corrupt an active editor session.
-- <!-- count:bridgeActions -->2087<!-- /count --> bridge actions. Pass = every handler responds either with success or an expected parameter-validation error. Any timeout or `Unknown method` is a real failure.
+- <!-- count:bridgeActions -->3602<!-- /count --> bridge actions. Pass = every handler responds either with success or an expected parameter-validation error. Any timeout or `Unknown method` is a real failure.
 
 ### Golden baseline - the advertised surface
 
@@ -179,7 +179,7 @@ Main and `release/*` take only pull requests that are up to date with them and w
 
 Release notes structure (below the frontmatter): **`## Features` / `## Fixes` / `## Mentions` / `## Contributions`**, in that order. Read `docs/release-notes-style.md` before writing any of it. The rules that get broken most:
 
-- **The engine range is 5.4 to 5.8.** Say the range. Never annotate it with which versions have been compiled, verified or gated. A user on 5.5 who hits a problem files an issue; that is the system working, not something to pre-empt in public copy.
+- **The engine range is <!-- count:engineRange -->5.4 to 5.9<!-- /count -->.** Say the range. It is declared once, in `scripts/lib/engine-range.mjs`, and stamped everywhere else by `npm run generate:metadata`. Never annotate it with which versions have been compiled, verified or gated. A user on 5.5 who hits a problem files an issue; that is the system working, not something to pre-empt in public copy.
 - **No thesis sentence, no three-part summary.** The opening is a compatibility line, an install block, and at most one plain sentence of scale. "N new actions across M categories, every X doing Y, and the Z now W" is a bulleted list flattened into prose.
 - **Cumulative, not archaeological.** A stable release never mentions its own betas or what an earlier release got wrong.
 - **Credit contributors** from `gh api repos/OWNER/REPO/compare/vPREV...vNEW --jq '.commits[].author.login'`, not from memory.

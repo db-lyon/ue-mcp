@@ -1,6 +1,6 @@
 // GENERATED FILE - do not edit.
 //
-// Written by scripts/generate-epic-actions.mjs from tests/golden/epic-catalog.json
+// Written by scripts/generate-epic-actions.mjs from tests/golden/epic-catalog/
 // and src/tools/epic/effects.ts. To change what an action DOES, edit the
 // effects file and regenerate; to pick up a new engine's toolsets, re-record
 // the catalog and regenerate.
@@ -15,6 +15,7 @@ import { bp } from "../../surface/category-tool.js";
 
 const S_epic_add_cue_tag = {"properties":{"cueTag":{"type":"string"},"comment":{"type":"string"}},"required":["cueTag"]} as const;
 const S_epic_create_cue_notify_asset = {"properties":{"cueTag":{"type":"string"},"packagePath":{"type":"string"},"assetName":{"type":"string"},"bIsActor":{"type":"boolean"}},"required":["cueTag","packagePath","assetName","bIsActor"]} as const;
+const S_epic_create_gameplay_ability = {"properties":{"folderPath":{"type":"string"},"assetName":{"type":"string"},"parentClass":{"type":"object","properties":{"refPath":{}}}},"required":["folderPath","assetName","parentClass"]} as const;
 const S_epic_execute_cue_on_selected_actor = {"properties":{"cueTag":{"type":"string"},"normalizedMagnitude":{"type":"number"},"location":{"type":"object","properties":{"x":{"type":"number"},"y":{"type":"number"},"z":{"type":"number"}}},"normal":{"type":"object","properties":{"x":{"type":"number"},"y":{"type":"number"},"z":{"type":"number"}}}},"required":["cueTag","normalizedMagnitude","location","normal"]} as const;
 const S_epic_find_attribute_set_classes = {"properties":{}} as const;
 const S_epic_find_cue_notify_assets = {"properties":{"parentTag":{"type":"string"}},"required":["parentTag"]} as const;
@@ -28,76 +29,81 @@ const S_epic_list_attributes = {"properties":{"className":{"type":"string"}},"re
 const S_epic_list_cues = {"properties":{"parentTag":{"type":"string"}},"required":["parentTag"]} as const;
 const S_epic_remove_cue_tag = {"properties":{"cueTag":{"type":"string"}},"required":["cueTag"]} as const;
 
-/** 14 wrapped engine tools routed to the `gas` category. */
+/** 15 wrapped engine tools routed to the `gas` category. */
 export const actions: Record<string, ActionSpec> = {
   epic_add_cue_tag: {
     epicSchema: S_epic_add_cue_tag,
-    epicTool: { toolset: "GASToolsets.GameplayCueToolset", name: "GASToolsets.GameplayCueToolset.AddCueTag" },
+    epicTool: { toolset: "GASToolsets.GameplayCueToolset", name: "GASToolsets.GameplayCueToolset.AddCueTag", engines: ["5.8","5.9"] },
     ...bp("mutate", "[Epic GASToolsets.GameplayCueToolset] Adds a new gameplay cue tag to the project. This should ONLY be called after getting explicit direction or permission from the user. Params: cueTag, comment?", "epic_call_tool"),
   },
   epic_create_cue_notify_asset: {
     epicSchema: S_epic_create_cue_notify_asset,
-    epicTool: { toolset: "GASToolsets.GameplayCueToolset", name: "GASToolsets.GameplayCueToolset.CreateCueNotifyAsset" },
+    epicTool: { toolset: "GASToolsets.GameplayCueToolset", name: "GASToolsets.GameplayCueToolset.CreateCueNotifyAsset", engines: ["5.8","5.9"] },
     ...bp("mutate", "[Epic GASToolsets.GameplayCueToolset] Creates a new GameplayCueNotify Blueprint asset at the specified content browser location. This should ONLY be called after getting explicit direction or permission from the user. Params: cueTag, packagePath, assetName, bIsActor", "epic_call_tool"),
+  },
+  epic_create_gameplay_ability: {
+    epicSchema: S_epic_create_gameplay_ability,
+    epicTool: { toolset: "GASToolsets.GameplayAbilityToolset", name: "GASToolsets.GameplayAbilityToolset.CreateGameplayAbility", engines: ["5.9"] },
+    ...bp("mutate", "[Epic GASToolsets.GameplayAbilityToolset] Creates a new Gameplay Ability Blueprint asset, the same as the Content Browser's Gameplay Ability Blueprint factory. Unlike a plain Blueprint with a GameplayAbility parent, its root ability has a \"Gameplay Ability Graph\" in place of the default \"EventGraph\". This should ONLY be called after getting explicit direction or permission from the user. Available on UE 5.9; absent from UE 5.8. Params: folderPath, assetName, parentClass", "epic_call_tool"),
   },
   epic_execute_cue_on_selected_actor: {
     epicSchema: S_epic_execute_cue_on_selected_actor,
-    epicTool: { toolset: "GASToolsets.GameplayCueToolset", name: "GASToolsets.GameplayCueToolset.ExecuteCueOnSelectedActor" },
+    epicTool: { toolset: "GASToolsets.GameplayCueToolset", name: "GASToolsets.GameplayCueToolset.ExecuteCueOnSelectedActor", engines: ["5.8","5.9"] },
     ...bp("mutate", "[Epic GASToolsets.GameplayCueToolset] Executes a gameplay cue non-replicated on the currently selected actor in the editor. Useful for previewing cue effects without network replication. Requires a PIE session or a configured GameplayCueManager to produce visible results. Params: cueTag, normalizedMagnitude, location, normal", "epic_call_tool"),
   },
   epic_find_attribute_set_classes: {
     epicSchema: S_epic_find_attribute_set_classes,
-    epicTool: { toolset: "GASToolsets.AttributeSetToolset", name: "GASToolsets.AttributeSetToolset.FindAttributeSetClasses" },
+    epicTool: { toolset: "GASToolsets.AttributeSetToolset", name: "GASToolsets.AttributeSetToolset.FindAttributeSetClasses", engines: ["5.8","5.9"] },
     ...bp("read", "[Epic GASToolsets.AttributeSetToolset] Returns all AttributeSet subclasses found in the project, including their attributes. Covers both native C++ subclasses and Blueprint subclasses discovered via the asset registry. Params: none", "epic_call_tool"),
   },
   epic_find_cue_notify_assets: {
     epicSchema: S_epic_find_cue_notify_assets,
-    epicTool: { toolset: "GASToolsets.GameplayCueToolset", name: "GASToolsets.GameplayCueToolset.FindCueNotifyAssets" },
-    ...bp("read", "[Epic GASToolsets.GameplayCueToolset] Returns all GameplayCueNotify assets found in the project via the asset registry. Params: parentTag", "epic_call_tool"),
+    epicTool: { toolset: "GASToolsets.GameplayCueToolset", name: "GASToolsets.GameplayCueToolset.FindCueNotifyAssets", engines: ["5.8"] },
+    ...bp("read", "[Epic GASToolsets.GameplayCueToolset] Returns all GameplayCueNotify assets found in the project via the asset registry. Available on UE 5.8; absent from UE 5.9. Params: parentTag", "epic_call_tool"),
   },
   epic_find_cue_tags_without_notifies: {
     epicSchema: S_epic_find_cue_tags_without_notifies,
-    epicTool: { toolset: "GASToolsets.GameplayCueToolset", name: "GASToolsets.GameplayCueToolset.FindCueTagsWithoutNotifies" },
-    ...bp("read", "[Epic GASToolsets.GameplayCueToolset] Returns gameplay cue tags that have no corresponding GameplayCueNotify asset in the project. Tags without notifies produce no visible effect when triggered at runtime. Params: none", "epic_call_tool"),
+    epicTool: { toolset: "GASToolsets.GameplayCueToolset", name: "GASToolsets.GameplayCueToolset.FindCueTagsWithoutNotifies", engines: ["5.8","5.9"] },
+    ...bp("read", "[Epic GASToolsets.GameplayCueToolset] Returns gameplay cue tags that have no GameplayCueNotify of their own. Params: none", "epic_call_tool"),
   },
   epic_get_active_effects: {
     epicSchema: S_epic_get_active_effects,
-    epicTool: { toolset: "GASToolsets.AbilitySystemInspectorToolset", name: "GASToolsets.AbilitySystemInspectorToolset.GetActiveEffects" },
+    epicTool: { toolset: "GASToolsets.AbilitySystemInspectorToolset", name: "GASToolsets.AbilitySystemInspectorToolset.GetActiveEffects", engines: ["5.8","5.9"] },
     ...bp("read", "[Epic GASToolsets.AbilitySystemInspectorToolset] Returns all gameplay effects currently active on the actor's AbilitySystemComponent. Params: actor", "epic_call_tool"),
   },
   epic_get_active_tags: {
     epicSchema: S_epic_get_active_tags,
-    epicTool: { toolset: "GASToolsets.AbilitySystemInspectorToolset", name: "GASToolsets.AbilitySystemInspectorToolset.GetActiveTags" },
+    epicTool: { toolset: "GASToolsets.AbilitySystemInspectorToolset", name: "GASToolsets.AbilitySystemInspectorToolset.GetActiveTags", engines: ["5.8","5.9"] },
     ...bp("read", "[Epic GASToolsets.AbilitySystemInspectorToolset] Returns the gameplay tags currently owned by the actor's AbilitySystemComponent (includes loose tags, effect-granted tags, etc.). Params: actor", "epic_call_tool"),
   },
   epic_get_attribute_values: {
     epicSchema: S_epic_get_attribute_values,
-    epicTool: { toolset: "GASToolsets.AbilitySystemInspectorToolset", name: "GASToolsets.AbilitySystemInspectorToolset.GetAttributeValues" },
+    epicTool: { toolset: "GASToolsets.AbilitySystemInspectorToolset", name: "GASToolsets.AbilitySystemInspectorToolset.GetAttributeValues", engines: ["5.8","5.9"] },
     ...bp("read", "[Epic GASToolsets.AbilitySystemInspectorToolset] Returns the current base and modified values of all gameplay attributes on the actor's AbilitySystemComponent. Params: actor", "epic_call_tool"),
   },
   epic_get_cue_info: {
     epicSchema: S_epic_get_cue_info,
-    epicTool: { toolset: "GASToolsets.GameplayCueToolset", name: "GASToolsets.GameplayCueToolset.GetCueInfo" },
-    ...bp("read", "[Epic GASToolsets.GameplayCueToolset] Returns information about a specific gameplay cue, including its notify asset. Params: cueTag", "epic_call_tool"),
+    epicTool: { toolset: "GASToolsets.GameplayCueToolset", name: "GASToolsets.GameplayCueToolset.GetCueInfo", engines: ["5.8","5.9"] },
+    ...bp("read", "[Epic GASToolsets.GameplayCueToolset] Returns information about a specific gameplay cue, including its notify asset. Only notifies in the project's gameplay cue notify paths are known. Params: cueTag", "epic_call_tool"),
   },
   epic_get_granted_abilities: {
     epicSchema: S_epic_get_granted_abilities,
-    epicTool: { toolset: "GASToolsets.AbilitySystemInspectorToolset", name: "GASToolsets.AbilitySystemInspectorToolset.GetGrantedAbilities" },
+    epicTool: { toolset: "GASToolsets.AbilitySystemInspectorToolset", name: "GASToolsets.AbilitySystemInspectorToolset.GetGrantedAbilities", engines: ["5.8","5.9"] },
     ...bp("read", "[Epic GASToolsets.AbilitySystemInspectorToolset] Returns all abilities granted to the actor's AbilitySystemComponent. Params: actor", "epic_call_tool"),
   },
   epic_list_attributes: {
     epicSchema: S_epic_list_attributes,
-    epicTool: { toolset: "GASToolsets.AttributeSetToolset", name: "GASToolsets.AttributeSetToolset.ListAttributes" },
+    epicTool: { toolset: "GASToolsets.AttributeSetToolset", name: "GASToolsets.AttributeSetToolset.ListAttributes", engines: ["5.8","5.9"] },
     ...bp("read", "[Epic GASToolsets.AttributeSetToolset] Returns the gameplay attributes defined on a specific AttributeSet class. Params: className", "epic_call_tool"),
   },
   epic_list_cues: {
     epicSchema: S_epic_list_cues,
-    epicTool: { toolset: "GASToolsets.GameplayCueToolset", name: "GASToolsets.GameplayCueToolset.ListCues" },
+    epicTool: { toolset: "GASToolsets.GameplayCueToolset", name: "GASToolsets.GameplayCueToolset.ListCues", engines: ["5.8","5.9"] },
     ...bp("read", "[Epic GASToolsets.GameplayCueToolset] Returns gameplay cue tags registered in the project. Params: parentTag", "epic_call_tool"),
   },
   epic_remove_cue_tag: {
     epicSchema: S_epic_remove_cue_tag,
-    epicTool: { toolset: "GASToolsets.GameplayCueToolset", name: "GASToolsets.GameplayCueToolset.RemoveCueTag" },
+    epicTool: { toolset: "GASToolsets.GameplayCueToolset", name: "GASToolsets.GameplayCueToolset.RemoveCueTag", engines: ["5.8","5.9"] },
     ...bp("mutate", "[Epic GASToolsets.GameplayCueToolset] Removes a gameplay cue tag from the project. This should ONLY be called after getting explicit direction or permission from the user. Params: cueTag", "epic_call_tool"),
   },
 };
@@ -107,12 +113,14 @@ export const schema: Record<string, z.ZodType> = {
   actor: z.union([z.string(), z.record(z.string(), z.unknown())]).optional().describe("The target actor."),
   assetName: z.string().optional().describe("The file name for the new asset, e.g. \"GCN_CharacterDeath\"."),
   bIsActor: z.boolean().optional().describe("If true, creates a GameplayCueNotify_Actor (spawned actor in the world). If false, creates a GameplayCueNotify_Static (instant effect, no spawned actor)."),
-  className: z.string().optional().describe("The UClass name to look up, e.g. \"UMyHealthSet\". Raises a script error if the class is not found or is not an AttributeSet subclass."),
+  className: z.string().optional().describe("The UClass name to look up, e.g. \"UMyHealthSet\"."),
   comment: z.string().optional().describe("An optional developer comment describing the cue's purpose."),
   cueTag: z.string().optional().describe("The fully-qualified tag to add. Must begin with \"GameplayCue.\" (e.g. \"GameplayCue.Character.Death\")."),
+  folderPath: z.string().optional().describe("The content browser folder for the asset, e.g. \"/Game/Abilities\"."),
   location: z.record(z.string(), z.unknown()).optional().describe("World-space location parameter passed to the cue."),
   normal: z.record(z.string(), z.unknown()).optional().describe("World-space direction parameter passed to the cue."),
   normalizedMagnitude: z.number().optional().describe("A normalized (0.0-1.0) magnitude value passed to the cue."),
-  packagePath: z.string().optional().describe("The content browser folder for the asset, e.g. \"/Game/Effects/Cues\"."),
+  packagePath: z.string().optional().describe("The content browser folder for the asset, e.g. \"/Game/Effects/Cues\". Must be in one of the project's gameplay cue notify paths."),
+  parentClass: z.union([z.string(), z.record(z.string(), z.unknown())]).optional().describe("The parent class: UGameplayAbility or a subclass, including Blueprint subclasses."),
   parentTag: z.string().optional().describe("If non-empty, only notifies whose cue tag descends from this tag are returned. Pass an empty string to return all notify assets in the project."),
 };

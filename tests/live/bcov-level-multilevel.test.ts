@@ -57,7 +57,7 @@ beforeAll(async () => {
   bridge = await getBridge();
   originalMap = await currentMap();
   // MCP_Home is not checked in; demo_go_home creates it on a fresh project and loads it.
-  await call("demo_go_home");
+  await call("demo_go_home", { discardUnsaved: true });
 }, 300_000);
 
 afterAll(async () => {

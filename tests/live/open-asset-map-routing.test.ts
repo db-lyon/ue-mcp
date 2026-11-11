@@ -27,7 +27,7 @@ const currentMap = async (): Promise<string | undefined> => {
 beforeAll(async () => {
   bridge = await getBridge();
   // MCP_Home is not checked in; demo_go_home creates it on a fresh project and loads it.
-  await callBridge(bridge, "demo_go_home", {});
+  await callBridge(bridge, "demo_go_home", { discardUnsaved: true });
   await callBridge(bridge, "load_level", { levelPath: HOME });
   await callBridge(bridge, "delete_asset", { assetPath: MAP, force: true });
   const created = await callBridge(bridge, "create_new_level", { levelPath: MAP });

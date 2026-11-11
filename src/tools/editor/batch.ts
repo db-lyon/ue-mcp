@@ -218,7 +218,7 @@ export function prepareBatch(ctx: ToolContext, params: Record<string, unknown>):
     try {
       const flat = validateCategoryParams(tool, { ...stripEditorTarget(args), action: call.method });
       pipeline = prepareCall(stripAction(flat), prep);
-      sent = forwardToBridge(pipeline, pipeline.params, paramMapperOf(step), task);
+      sent = forwardToBridge(pipeline, pipeline.params, paramMapperOf(step, ctx.bridge.capabilities?.engineVersion), task);
     } catch (e) {
       if (e instanceof SdkMcpError || e instanceof McpError) {
         const code = e instanceof McpError ? e.code : ErrorCode.INVALID_PARAMS;

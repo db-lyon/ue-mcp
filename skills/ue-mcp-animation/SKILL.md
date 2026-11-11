@@ -1,6 +1,6 @@
 ---
 name: ue-mcp-animation
-description: Use when creating, modifying, retargeting, rigging, constraining, or validating skeletal animation through UE-MCP. Covers native UE 5.8 IK Rig and Retargeter authoring, the Control Rig begin/read/apply/bake loop, generic contact locks, per-rig anatomical and mirrored-axis discovery, quaternion keying, deterministic bone analysis, and exact fixed-frame Unreal capture.
+description: Use when creating, modifying, retargeting, rigging, constraining, or validating skeletal animation through UE-MCP. Covers native UE 5.8+ IK Rig and Retargeter authoring, the Control Rig begin/read/apply/bake loop, generic contact locks, per-rig anatomical and mirrored-axis discovery, quaternion keying, deterministic bone analysis, and exact fixed-frame Unreal capture.
 ---
 
 # UE-MCP native animation workflow
@@ -69,7 +69,7 @@ applied.
    with `read_control_rig_hierarchy` and `read_control_rig_graph`. It must have
    the controls, Forward Solve, and Backward Solve required for the intended
    edits. If the project or character has no suitable rig, create one first
-   with the bundled Epic 5.8 controlrig actions (`epic_create`,
+   with the bundled Epic controlrig actions (UE 5.8+) (`epic_create`,
    `epic_import_bones_from_asset`, `epic_add_control`, deliberate Forward Solve
    nodes/links, and `epic_add_backward_solve_graph`), then save the exact rig
    with `asset(epic_save_assets)`. `epic_create` alone creates no imported
@@ -79,7 +79,7 @@ applied.
 3. Resolve the source AnimSequence, mesh, skeleton, verified Control Rig, and
    frame rate.
    When IK/retarget assets are part of the job, use `read_ik_rig` and
-   `read_ik_retargeter` first. On UE 5.8 use `configure_ik_rig` for validated
+   `read_ik_retargeter` first. On UE 5.8+ use `configure_ik_rig` for validated
    roots, ancestry-valid chains, concrete goals, solver connections and
    effectors; use `configure_ik_retargeter` for the default op stack, source and
    target rig assignment to every op, auto/manual mappings, preview meshes, and
@@ -192,7 +192,7 @@ mirrored scale, limits, and motion constraints are rig-specific.
 ## Compatibility and endpoint rule
 
 The four Control Rig session actions, `configure_ik_rig`,
-`configure_ik_retargeter`, and `contact_lock` are UE 5.8 only and return
+`configure_ik_retargeter`, and `contact_lock` need UE 5.8 or later and return
 `unsupported_engine_version` on older engines; do not invent a reflected or
 raw-bone fallback. Legacy IK create/read behavior is unchanged.
 `analyze_animation` is cross-version through the native APIs in the compiled

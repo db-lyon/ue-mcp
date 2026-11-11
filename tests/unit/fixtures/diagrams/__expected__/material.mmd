@@ -1,0 +1,20 @@
+---
+title: "M_Rock · Material graph"
+---
+flowchart LR
+  n_expr_0>"Albedo<br/>TextureSampleParameter2D #35;0"]
+  n_expr_1>"Roughness<br/>ScalarParameter #35;1"]
+  n_expr_2["TexCoord[0]<br/>TextureCoordinate #35;2"]
+  n_expr_3["Tint<br/>Multiply #35;3"]
+  n_material[/"M_Rock<br/>Material output"\]
+  n_expr_2 -.->|"UVs"| n_expr_0
+  n_expr_0 -.->|"A"| n_expr_3
+  n_expr_0 -.->|"out 4 → B"| n_expr_3
+  n_expr_3 -.->|"BaseColor"| n_material
+  n_expr_1 -.->|"Roughness"| n_material
+  classDef ue_parameter fill:#1c1a12,stroke:#facc15,color:#f5f5f4
+  class n_expr_0,n_expr_1 ue_parameter
+  classDef ue_default fill:#181d25,stroke:#3a414c,color:#f5f5f4
+  class n_expr_2,n_expr_3 ue_default
+  classDef ue_output fill:#2a1b0e,stroke:#e8720c,color:#f5f5f4
+  class n_material ue_output

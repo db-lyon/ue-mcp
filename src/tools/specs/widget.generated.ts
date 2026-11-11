@@ -200,6 +200,167 @@ export const handlerSpecs: HandlerSpecs = {
       }
     ]
   },
+  "add_widget_viewmodel": {
+    "category": "widget",
+    "params": [
+      {
+        "name": "assetPath",
+        "type": "string",
+        "required": true,
+        "description": "Widget Blueprint asset path, e.g. /Game/UI/WBP_Example",
+        "aliases": [
+          "path"
+        ]
+      },
+      {
+        "name": "viewModelClass",
+        "type": "string",
+        "required": true,
+        "description": "Viewmodel class: a native MVVMViewModelBase subclass name or path, or a Blueprint viewmodel asset path"
+      },
+      {
+        "name": "viewModelName",
+        "type": "string",
+        "required": false,
+        "description": "Name of the generated viewmodel property (default the class name)"
+      },
+      {
+        "name": "creationType",
+        "type": "string",
+        "required": false,
+        "description": "How the widget gets its instance (default the first type the class allows, usually CreateInstance). Context is UE 5.8+",
+        "enum": [
+          "Manual",
+          "CreateInstance",
+          "GlobalViewModelCollection",
+          "PropertyPath",
+          "Resolver",
+          "Context"
+        ]
+      },
+      {
+        "name": "globalViewModelIdentifier",
+        "type": "string",
+        "required": false,
+        "description": "Identifier in the global viewmodel collection, for creationType GlobalViewModelCollection"
+      },
+      {
+        "name": "viewModelPropertyPath",
+        "type": "string",
+        "required": false,
+        "description": "Property or function path that returns the instance, for creationType PropertyPath"
+      },
+      {
+        "name": "optional",
+        "type": "boolean",
+        "required": false,
+        "description": "Do not warn when the instance is not set or found"
+      },
+      {
+        "name": "createSetter",
+        "type": "boolean",
+        "required": false,
+        "description": "Generate a public setter for the viewmodel"
+      },
+      {
+        "name": "createGetter",
+        "type": "boolean",
+        "required": false,
+        "description": "Generate a public getter for the viewmodel (default true)"
+      },
+      {
+        "name": "viewModelId",
+        "type": "string",
+        "required": false,
+        "description": "Reuse this viewmodel id; the rollback of remove_widget_viewmodel passes the removed one so its bindings resolve again"
+      }
+    ]
+  },
+  "add_widget_viewmodel_binding": {
+    "category": "widget",
+    "params": [
+      {
+        "name": "assetPath",
+        "type": "string",
+        "required": true,
+        "description": "Widget Blueprint asset path, e.g. /Game/UI/WBP_Example",
+        "aliases": [
+          "path"
+        ]
+      },
+      {
+        "name": "sourcePath",
+        "type": "string",
+        "required": false,
+        "description": "Source of the value: a viewmodel name, a widget name or Self, then its fields, e.g. PlayerVM.Health"
+      },
+      {
+        "name": "destinationPath",
+        "type": "string",
+        "required": false,
+        "description": "Where the value goes, same form, e.g. HealthBar.Percent. Required unless a destinationToSource conversion binds the widget through conversionArguments"
+      },
+      {
+        "name": "bindingMode",
+        "type": "string",
+        "required": false,
+        "description": "Direction and frequency (default OneWayToDestination)",
+        "enum": [
+          "OneTimeToDestination",
+          "OneWayToDestination",
+          "TwoWay",
+          "OneWayToSource"
+        ]
+      },
+      {
+        "name": "executionMode",
+        "type": "string",
+        "required": false,
+        "description": "When the binding runs; Default uses the project setting",
+        "enum": [
+          "Default",
+          "Immediate",
+          "Delayed",
+          "Tick",
+          "Auto"
+        ]
+      },
+      {
+        "name": "conversionFunction",
+        "type": "string",
+        "required": false,
+        "description": "Pure function converting the value: Class.Function (KismetTextLibrary.Conv_IntToText), /Script/Module.Class:Function, or a function on this widget blueprint"
+      },
+      {
+        "name": "conversionArguments",
+        "type": "object",
+        "required": false,
+        "description": "Conversion inputs by pin name: a literal (string, number, boolean or {literal}) or {path} bound to a field. The input sourcePath is not given to goes to the first free input"
+      },
+      {
+        "name": "conversionDirection",
+        "type": "string",
+        "required": false,
+        "description": "Which way the conversion runs (default sourceToDestination, destinationToSource for OneWayToSource)",
+        "enum": [
+          "sourceToDestination",
+          "destinationToSource"
+        ]
+      },
+      {
+        "name": "enabled",
+        "type": "boolean",
+        "required": false,
+        "description": "Whether the binding runs by default (default true)"
+      },
+      {
+        "name": "includeInCompile",
+        "type": "boolean",
+        "required": false,
+        "description": "False keeps the binding in the editor but out of the compiled class (default true)"
+      }
+    ]
+  },
   "audit_commonui": {
     "category": "widget",
     "params": [
@@ -396,6 +557,20 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "string",
         "required": false,
         "description": "Up, Down, Left, Right, Next or Previous; omit to clear all six"
+      }
+    ]
+  },
+  "compile_widget_viewmodels": {
+    "category": "widget",
+    "params": [
+      {
+        "name": "assetPath",
+        "type": "string",
+        "required": true,
+        "description": "Widget Blueprint asset path, e.g. /Game/UI/WBP_Example",
+        "aliases": [
+          "path"
+        ]
       }
     ]
   },
@@ -1077,6 +1252,34 @@ export const handlerSpecs: HandlerSpecs = {
       }
     ]
   },
+  "list_widget_viewmodel_bindings": {
+    "category": "widget",
+    "params": [
+      {
+        "name": "assetPath",
+        "type": "string",
+        "required": true,
+        "description": "Widget Blueprint asset path, e.g. /Game/UI/WBP_Example",
+        "aliases": [
+          "path"
+        ]
+      }
+    ]
+  },
+  "list_widget_viewmodels": {
+    "category": "widget",
+    "params": [
+      {
+        "name": "assetPath",
+        "type": "string",
+        "required": true,
+        "description": "Widget Blueprint asset path, e.g. /Game/UI/WBP_Example",
+        "aliases": [
+          "path"
+        ]
+      }
+    ]
+  },
   "move_widget": {
     "category": "widget",
     "params": [
@@ -1265,6 +1468,46 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "string",
         "required": true,
         "description": "Reflected property name on the widget"
+      }
+    ]
+  },
+  "remove_widget_viewmodel": {
+    "category": "widget",
+    "params": [
+      {
+        "name": "assetPath",
+        "type": "string",
+        "required": true,
+        "description": "Widget Blueprint asset path, e.g. /Game/UI/WBP_Example",
+        "aliases": [
+          "path"
+        ]
+      },
+      {
+        "name": "viewModelName",
+        "type": "string",
+        "required": true,
+        "description": "Name of the viewmodel to remove"
+      }
+    ]
+  },
+  "remove_widget_viewmodel_binding": {
+    "category": "widget",
+    "params": [
+      {
+        "name": "assetPath",
+        "type": "string",
+        "required": true,
+        "description": "Widget Blueprint asset path, e.g. /Game/UI/WBP_Example",
+        "aliases": [
+          "path"
+        ]
+      },
+      {
+        "name": "bindingId",
+        "type": "string",
+        "required": true,
+        "description": "Binding id, as list_widget_viewmodel_bindings reports it"
       }
     ]
   },
@@ -1595,6 +1838,97 @@ export const handlerSpecs: HandlerSpecs = {
       }
     ]
   },
+  "update_widget_viewmodel_binding": {
+    "category": "widget",
+    "params": [
+      {
+        "name": "assetPath",
+        "type": "string",
+        "required": true,
+        "description": "Widget Blueprint asset path, e.g. /Game/UI/WBP_Example",
+        "aliases": [
+          "path"
+        ]
+      },
+      {
+        "name": "bindingId",
+        "type": "string",
+        "required": true,
+        "description": "Binding id, as list_widget_viewmodel_bindings reports it"
+      },
+      {
+        "name": "sourcePath",
+        "type": "string",
+        "required": false,
+        "description": "Source of the value: a viewmodel name, a widget name or Self, then its fields, e.g. PlayerVM.Health"
+      },
+      {
+        "name": "destinationPath",
+        "type": "string",
+        "required": false,
+        "description": "Where the value goes, same form, e.g. HealthBar.Percent"
+      },
+      {
+        "name": "bindingMode",
+        "type": "string",
+        "required": false,
+        "description": "Direction and frequency",
+        "enum": [
+          "OneTimeToDestination",
+          "OneWayToDestination",
+          "TwoWay",
+          "OneWayToSource"
+        ]
+      },
+      {
+        "name": "executionMode",
+        "type": "string",
+        "required": false,
+        "description": "When the binding runs; Default uses the project setting",
+        "enum": [
+          "Default",
+          "Immediate",
+          "Delayed",
+          "Tick",
+          "Auto"
+        ]
+      },
+      {
+        "name": "conversionFunction",
+        "type": "string",
+        "required": false,
+        "description": "Pure function converting the value, as for add; an empty string removes the conversion"
+      },
+      {
+        "name": "conversionArguments",
+        "type": "object",
+        "required": false,
+        "description": "Conversion inputs by pin name: a literal (string, number, boolean or {literal}) or {path} bound to a field. The input sourcePath is not given to goes to the first free input"
+      },
+      {
+        "name": "conversionDirection",
+        "type": "string",
+        "required": false,
+        "description": "Which way the conversion runs (default sourceToDestination, destinationToSource for OneWayToSource)",
+        "enum": [
+          "sourceToDestination",
+          "destinationToSource"
+        ]
+      },
+      {
+        "name": "enabled",
+        "type": "boolean",
+        "required": false,
+        "description": "Whether the binding runs by default (default true)"
+      },
+      {
+        "name": "includeInCompile",
+        "type": "boolean",
+        "required": false,
+        "description": "False keeps the binding in the editor but out of the compiled class (default true)"
+      }
+    ]
+  },
   "wrap_root_widget": {
     "category": "widget",
     "params": [
@@ -1633,6 +1967,8 @@ export const paramsClauses: Readonly<Record<string, string>> = {
   add_widget_animation_event_key: "Params: assetPath (or path), animationName, functionName, time?, trackName?",
   add_widget_animation_key: "Params: assetPath (or path), animationName, widgetName, propertyName, time, value, channel?, channelIndex?, interpolation?",
   add_widget_animation_track: "Params: assetPath (or path), animationName, widgetName, propertyName",
+  add_widget_viewmodel: "Params: assetPath (or path), viewModelClass, viewModelName?, creationType?, globalViewModelIdentifier?, viewModelPropertyPath?, optional?, createSetter?, createGetter?, viewModelId?",
+  add_widget_viewmodel_binding: "Params: assetPath (or path), sourcePath?, destinationPath?, bindingMode?, executionMode?, conversionFunction?, conversionArguments?, conversionDirection?, enabled?, includeInCompile?",
   audit_commonui: "Params: assetPath? (or path)",
   audit_widget_accessibility: "Params: assetPath (or path), minFontSize?, minHitSize?",
   audit_widget_focus_chain: "Params: assetPath (or path)",
@@ -1642,6 +1978,7 @@ export const paramsClauses: Readonly<Record<string, string>> = {
   check_widget_structure: "Params: assetPath (or path)",
   clear_widget_binding: "Params: assetPath (or path), widgetName, propertyName?",
   clear_widget_navigation: "Params: assetPath (or path), widgetName, direction?",
+  compile_widget_viewmodels: "Params: assetPath (or path)",
   create_editor_utility_blueprint: "Params: at least one of assetPath (or path)/name, packagePath?, onConflict?",
   create_editor_utility_widget: "Params: at least one of assetPath (or path)/name, packagePath?, onConflict?",
   create_widget_animation: "Params: assetPath (or path), animationName, durationSeconds?, displayRate?, displayLabel?",
@@ -1661,6 +1998,8 @@ export const paramsClauses: Readonly<Record<string, string>> = {
   list_widget_bindings: "Params: assetPath (or path), filterWidgetName?, filterProperty?",
   list_widget_blueprints: "Params: recursive?, cursor?, limit?",
   list_widget_classes: "Params: filter?, module?, includeAbstract?, includeBlueprint?, cursor?, limit?",
+  list_widget_viewmodel_bindings: "Params: assetPath (or path)",
+  list_widget_viewmodels: "Params: assetPath (or path)",
   move_widget: "Params: assetPath (or path), widgetName, newParentWidgetName (or parentWidgetName)",
   read_widget_animations: "Params: assetPath (or path)",
   read_widget_tree: "Params: assetPath (or path)",
@@ -1668,6 +2007,8 @@ export const paramsClauses: Readonly<Record<string, string>> = {
   remove_widget_animation_event_key: "Params: assetPath (or path), animationName, time?, trackName?",
   remove_widget_animation_key: "Params: assetPath (or path), animationName, widgetName, propertyName, time, channel?, channelIndex?",
   remove_widget_animation_track: "Params: assetPath (or path), animationName, widgetName, propertyName",
+  remove_widget_viewmodel: "Params: assetPath (or path), viewModelName",
+  remove_widget_viewmodel_binding: "Params: assetPath (or path), bindingId",
   rename_widget: "Params: assetPath (or path), widgetName, newName",
   reorder_child: "Params: assetPath (or path), widgetName, index",
   restore_widget_navigation: "Params: assetPath (or path), previous",
@@ -1679,13 +2020,16 @@ export const paramsClauses: Readonly<Record<string, string>> = {
   set_widget_property: "Params: assetPath (or path), widgetName, propertyName, value (or propertyValue)",
   set_widget_style: "Params: assetPath (or path), widgetName, propertyName, value",
   unbind_widget_animation_event: "Params: assetPath (or path), animationName, event?, userTag?",
+  update_widget_viewmodel_binding: "Params: assetPath (or path), bindingId, sourcePath?, destinationPath?, bindingMode?, executionMode?, conversionFunction?, conversionArguments?, conversionDirection?, enabled?, includeInCompile?",
   wrap_root_widget: "Params: assetPath (or path), wrapperClass (or widgetClass), wrapperName?",
 };
 
 /** Every key the spec'd widget handlers declare, aliases included. */
 export const schema: Record<string, z.ZodType> = {
   animationName: z.string().optional().describe("The UWidgetAnimation's object name or display label"),
-  assetPath: z.string().optional().describe("Widget Blueprint or Editor Utility asset path, e.g. /Game/UI/WBP_Example (#798) (add_to_viewport, add_widget, add_widget_animation_event_key, add_widget_animation_key, add_widget_animation_track, audit_widget_accessibility, audit_widget_focus_chain, bind_widget_animation_event, build_tree, bulk_set_widget_properties, check_widget_structure, clear_widget_binding, clear_widget_navigation, create_widget_animation, delete_widget_animation, get_widget_animation, get_widget_details, get_widget_properties, list_widget_bindings, move_widget, read_widget_animations, read_widget_tree, remove_widget, remove_widget_animation_event_key, remove_widget_animation_key, remove_widget_animation_track, rename_widget, reorder_child, restore_widget_navigation, run_editor_utility_blueprint, run_editor_utility_widget, set_root_widget, set_widget_navigation, set_widget_property, set_widget_style, unbind_widget_animation_event, wrap_root_widget). Widget Blueprint whose CommonUI wiring to check as well (audit_commonui). Full destination, e.g. /Game/UI/WBP_Example; wins over name + packagePath (create_editor_utility_blueprint, create_editor_utility_widget, create_widget_blueprint). Widget Blueprint whose parent's contract to read and whose tree to check against it (get_bind_widget_contract)"),
+  assetPath: z.string().optional().describe("Widget Blueprint or Editor Utility asset path, e.g. /Game/UI/WBP_Example (#798) (add_to_viewport, add_widget, add_widget_animation_event_key, add_widget_animation_key, add_widget_animation_track, audit_widget_accessibility, audit_widget_focus_chain, bind_widget_animation_event, build_tree, bulk_set_widget_properties, check_widget_structure, clear_widget_binding, clear_widget_navigation, create_widget_animation, delete_widget_animation, get_widget_animation, get_widget_details, get_widget_properties, list_widget_bindings, move_widget, read_widget_animations, read_widget_tree, remove_widget, remove_widget_animation_event_key, remove_widget_animation_key, remove_widget_animation_track, rename_widget, reorder_child, restore_widget_navigation, run_editor_utility_blueprint, run_editor_utility_widget, set_root_widget, set_widget_navigation, set_widget_property, set_widget_style, unbind_widget_animation_event, wrap_root_widget). Widget Blueprint asset path, e.g. /Game/UI/WBP_Example (add_widget_viewmodel, add_widget_viewmodel_binding, compile_widget_viewmodels, list_widget_viewmodel_bindings, list_widget_viewmodels, remove_widget_viewmodel, remove_widget_viewmodel_binding, update_widget_viewmodel_binding). Widget Blueprint whose CommonUI wiring to check as well (audit_commonui). Full destination, e.g. /Game/UI/WBP_Example; wins over name + packagePath (create_editor_utility_blueprint, create_editor_utility_widget, create_widget_blueprint). Widget Blueprint whose parent's contract to read and whose tree to check against it (get_bind_widget_contract)"),
+  bindingId: z.string().optional().describe("Binding id, as list_widget_viewmodel_bindings reports it"),
+  bindingMode: z.enum(["OneTimeToDestination","OneWayToDestination","TwoWay","OneWayToSource"]).optional().describe("Direction and frequency (default OneWayToDestination) (add_widget_viewmodel_binding). Direction and frequency (update_widget_viewmodel_binding)"),
   channel: z.string().optional().describe("Channel by name (R/G/B/A, Left/Top/Right/Bottom, Translation.X); a miss lists the section's real channels"),
   channelIndex: z.number().int().optional().describe("Channel by index, used when channel is not given (default 0)"),
   childClassFilter: z.string().optional().describe("Class substring filter for subtree nodes (implies includeSubtree)"),
@@ -1693,23 +2037,33 @@ export const schema: Record<string, z.ZodType> = {
   classFilter: z.string().optional().describe("Class name substring filter"),
   className: z.string().optional().describe("Native UserWidget parent whose contract to read: a short name, a class path, or a Widget Blueprint path (get_bind_widget_contract). Widget class name that locates the live host widget (get_runtime_delegates, get_runtime_widget, invoke_runtime_function, set_runtime_focus)"),
   commitMethod: z.string().optional().describe("Text and spin box commit type: OnEnter (default), OnUserMovedFocus, OnCleared, Default (#812)"),
+  conversionArguments: z.record(z.string(), z.unknown()).optional().describe("Conversion inputs by pin name: a literal (string, number, boolean or {literal}) or {path} bound to a field. The input sourcePath is not given to goes to the first free input"),
+  conversionDirection: z.enum(["sourceToDestination","destinationToSource"]).optional().describe("Which way the conversion runs (default sourceToDestination, destinationToSource for OneWayToSource)"),
+  conversionFunction: z.string().optional().describe("Pure function converting the value: Class.Function (KismetTextLibrary.Conv_IntToText), /Script/Module.Class:Function, or a function on this widget blueprint (add_widget_viewmodel_binding). Pure function converting the value, as for add; an empty string removes the conversion (update_widget_viewmodel_binding)"),
+  createGetter: z.boolean().optional().describe("Generate a public getter for the viewmodel (default true)"),
+  createSetter: z.boolean().optional().describe("Generate a public setter for the viewmodel"),
+  creationType: z.enum(["Manual","CreateInstance","GlobalViewModelCollection","PropertyPath","Resolver","Context"]).optional().describe("How the widget gets its instance (default the first type the class allows, usually CreateInstance). Context is UE 5.8+"),
   cursor: z.string().optional().describe("Resume a paged read: pass back the 'nextCursor' from the previous page, unmodified"),
   destinationAssetPath: z.string().optional().describe("Destination package path, including the new asset name"),
   destinationParentClass: z.string().optional().describe("UUserWidget subclass for the destination (default UserWidget)"),
-  destinationPath: z.string().optional().describe("Alias for destinationAssetPath"),
+  destinationPath: z.string().optional().describe("Where the value goes, same form, e.g. HealthBar.Percent. Required unless a destinationToSource conversion binds the widget through conversionArguments (add_widget_viewmodel_binding). Alias for destinationAssetPath (extract_widget_subtree). Where the value goes, same form, e.g. HealthBar.Percent (update_widget_viewmodel_binding)"),
   destinationRootName: z.string().optional().describe("Name override for the extracted root; descendants keep their names"),
   direction: z.string().optional().describe("Up, Down, Left, Right, Next or Previous; omit to clear all six (clear_widget_navigation). Direction of a single write, which it needs: Up, Down, Left, Right, Next or Previous (set_widget_navigation)"),
   displayLabel: z.string().optional().describe("Designer-facing label (defaults to animationName)"),
   displayRate: z.number().optional().describe("Timeline display rate in fps (default 60)"),
   dryRun: z.boolean().optional().describe("Plan only, no asset is created or saved (default true)"),
   durationSeconds: z.number().optional().describe("Playback range length in seconds (default 1)"),
+  enabled: z.boolean().optional().describe("Whether the binding runs by default (default true)"),
   event: z.string().optional().describe("Animation lifecycle event: Finished (default) or Started"),
+  executionMode: z.enum(["Default","Immediate","Delayed","Tick","Auto"]).optional().describe("When the binding runs; Default uses the project setting"),
   filter: z.string().optional().describe("Case-insensitive substring of the class name"),
   filterProperty: z.string().optional().describe("Only bindings of this property (#530)"),
   filterWidgetName: z.string().optional().describe("Only bindings on this widget (#530)"),
   functionName: z.string().optional().describe("Widget Blueprint function the event key calls (add_widget_animation_event_key). Parameterless UFUNCTION to call on the live widget (#559), or with childName the child delegate to fire (#812) (invoke_runtime_function)"),
+  globalViewModelIdentifier: z.string().optional().describe("Identifier in the global viewmodel collection, for creationType GlobalViewModelCollection"),
   includeAbstract: z.boolean().optional().describe("Include abstract base classes, which cannot be added to a tree (default false)"),
   includeBlueprint: z.boolean().optional().describe("Include loaded Widget Blueprint generated classes as well as native ones (default false)"),
+  includeInCompile: z.boolean().optional().describe("False keeps the binding in the editor but out of the compiled class (default true)"),
   includeLayout: z.boolean().optional().describe("Add read-only layout diagnostics (geometry, slot, clipping, viewport, per-node deltas) to every node and report the host UserWidget under host (#775)"),
   includeSubtree: z.boolean().optional().describe("Also dump descendant widgets (#547)"),
   index: z.number().optional().describe("Target sibling index within the parent panel (#635)"),
@@ -1726,6 +2080,7 @@ export const schema: Record<string, z.ZodType> = {
   newName: z.string().optional().describe("New widget name; refused when another widget, variable or function already holds it"),
   newParentWidgetName: z.string().optional().describe("Panel widget to reparent into"),
   onConflict: z.string().optional().describe("When the asset exists: skip (default, report it) | error"),
+  optional: z.boolean().optional().describe("Do not warn when the instance is not set or found"),
   packagePath: z.string().optional().describe("Folder for name (default /Game/EditorUtilities) (create_editor_utility_blueprint, create_editor_utility_widget). Folder for name (default /Game/UI/Widgets) (create_widget_blueprint)"),
   parentClass: z.string().optional().describe("UUserWidget subclass: a short name or a class path (default UserWidget)"),
   parentWidgetName: z.string().optional().describe("Name of the parent panel widget (#798) (add_widget). Panel to build under (default: the root panel, or the tree root when there is none) (build_tree). Alias for newParentWidgetName (move_widget)"),
@@ -1740,7 +2095,7 @@ export const schema: Record<string, z.ZodType> = {
   rule: z.string().optional().describe("Rule of a single write: Escape, Explicit (default), Wrap, Stop, Custom or CustomBoundary"),
   rules: z.array(z.object({ widgetName: z.string().describe("Widget whose navigation is written"), direction: z.string().describe("Up, Down, Left, Right, Next or Previous"), rule: z.string().optional().describe("Escape, Explicit (default), Wrap, Stop, Custom or CustomBoundary"), widgetToFocus: z.string().optional().describe("Target widget name; required for Explicit") })).optional().describe("Navigation writes applied as one validated batch"),
   sourceAssetPath: z.string().optional().describe("WidgetBlueprint the subtree is read from"),
-  sourcePath: z.string().optional().describe("Alias for sourceAssetPath"),
+  sourcePath: z.string().optional().describe("Source of the value: a viewmodel name, a widget name or Self, then its fields, e.g. PlayerVM.Health (add_widget_viewmodel_binding, update_widget_viewmodel_binding). Alias for sourceAssetPath (extract_widget_subtree)"),
   sourceWidgetName: z.string().optional().describe("Widget in the source that becomes the extracted root"),
   time: z.number().optional().describe("Key time in SECONDS, converted to frames on the animation's tick resolution"),
   trackName: z.string().optional().describe("Event track display name (default Events)"),
@@ -1749,6 +2104,10 @@ export const schema: Record<string, z.ZodType> = {
   userIndex: z.number().int().optional().describe("Local player user index (default 0)"),
   userTag: z.string().optional().describe("User tag scoping a Started binding"),
   value: z.unknown().optional().describe("The keyed number (add_widget_animation_key). Value for the child interaction: true, false or toggle for a CheckBox, a number for a Slider or SpinBox, text for a text box, an option or index for a ComboBoxString (invoke_runtime_function). New value: UE export text, e.g. (Left=8,Top=8,Right=8,Bottom=8), or a JSON object or array that fills a struct or array field by field. An enum takes its short, full or prefixed name or an enumerator number (set_widget_property). JSON object mirroring the style struct, or a scalar (set_widget_style)"),
+  viewModelClass: z.string().optional().describe("Viewmodel class: a native MVVMViewModelBase subclass name or path, or a Blueprint viewmodel asset path"),
+  viewModelId: z.string().optional().describe("Reuse this viewmodel id; the rollback of remove_widget_viewmodel passes the removed one so its bindings resolve again"),
+  viewModelName: z.string().optional().describe("Name of the generated viewmodel property (default the class name) (add_widget_viewmodel). Name of the viewmodel to remove (remove_widget_viewmodel)"),
+  viewModelPropertyPath: z.string().optional().describe("Property or function path that returns the instance, for creationType PropertyPath"),
   viewportOnly: z.boolean().optional().describe("Only widgets currently added to the viewport"),
   widgetBlueprintPath: z.string().optional().describe("Alias for assetPath"),
   widgetClass: z.string().optional().describe("Widget class: a short name (TextBlock, CanvasPanel), a full path, or a Widget Blueprint path (add_widget). Alias for wrapperClass (wrap_root_widget)"),

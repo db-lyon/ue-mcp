@@ -238,7 +238,7 @@ const HOME_LEVEL = "/Game/MCP_Home";
 // we're not currently sitting on the scratch we're about to delete.
 async function preFlight(ws, idGen) {
   console.log(`${DIM}  preflight: anchor MCP_Home + create blank ${SCRATCH_LEVEL}${RESET}`);
-  await rpcRaw(ws, "demo_go_home", {}, idGen());
+  await rpcRaw(ws, "demo_go_home", { discardUnsaved: true }, idGen());
   await rpcRaw(ws, "delete_asset", { assetPath: SCRATCH_LEVEL, force: true }, idGen());
   const r = await rpcRaw(ws, "create_new_level", { levelPath: SCRATCH_LEVEL }, idGen());
   if (r.error) {

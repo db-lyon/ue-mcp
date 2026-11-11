@@ -120,6 +120,15 @@ public:
 	 *  candidate. */
 	static EMCPPromptKind ClassifyWindow(const TSharedRef<class SWindow>& Window, FString* OutSkipReason = nullptr);
 
+	/** Is this one of the editor's own progress windows (a slow task's, a
+	 *  build's), or a modal already emptied for closing? (#1851)
+	 *
+	 *  Those sit on Slate's modal stack without the modal loop: the game thread
+	 *  keeps running the work they report, so they are neither a prompt nor a
+	 *  reason to refuse a call. OutReason carries the sentence list_dialogs
+	 *  reports under notTreatedAsDialogs. */
+	static bool IsProgressWindow(const TSharedRef<class SWindow>& Window, FString* OutReason = nullptr);
+
 	/** Is the editor waiting on an answer from this window? (#1078)
 	 *
 	 *  True for either prompt kind. Whether the game thread is PARKED behind

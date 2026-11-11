@@ -1,5 +1,5 @@
 {
-  "handlerCount": 1252,
+  "handlerCount": 1384,
   "handlers": {
     "actors_in_box": {
       "category": "level",
@@ -1118,6 +1118,23 @@
         }
       ]
     },
+    "add_hlod_setup": {
+      "category": "level",
+      "params": [
+        {
+          "name": "partitionName",
+          "type": "string",
+          "required": true,
+          "description": "Runtime partition name, as list_runtime_partitions reports it"
+        },
+        {
+          "name": "setupName",
+          "type": "string",
+          "required": true,
+          "description": "Name of the spatially loaded HLOD setup to add"
+        }
+      ]
+    },
     "add_imc_mapping": {
       "category": "gameplay",
       "params": [
@@ -2177,6 +2194,29 @@
         }
       ]
     },
+    "add_python_path": {
+      "category": "editor",
+      "params": [
+        {
+          "name": "path",
+          "type": "string",
+          "required": true,
+          "description": "Absolute path of an existing folder to put on sys.path"
+        },
+        {
+          "name": "owner",
+          "type": "string",
+          "required": false,
+          "description": "Name of what owns the path; remove_python_path with only owner removes all of its paths"
+        },
+        {
+          "name": "mountPointRoot",
+          "type": "string",
+          "required": false,
+          "description": "Package root, such as /MyPlugin/Python/Extra, that gives Python types generated from this path stable names"
+        }
+      ]
+    },
     "add_runtime_cell_transformer": {
       "category": "level",
       "params": [
@@ -2208,6 +2248,24 @@
           "description": "Report an existing transformer of this class instead of adding a duplicate (default true)"
         }
       ]
+    },
+    "add_runtime_partition": {
+      "category": "level",
+      "params": [
+        {
+          "name": "partitionName",
+          "type": "string",
+          "required": true,
+          "description": "Name of the runtime partition to add"
+        },
+        {
+          "name": "partitionClass",
+          "type": "string",
+          "required": false,
+          "description": "RuntimePartition class (default /Script/Engine.RuntimePartitionLHGrid)"
+        }
+      ],
+      "contractExempt": "The contract name and the default class are valid, so on a runtime hash set map the call would add a partition"
     },
     "add_rvt_output": {
       "category": "material",
@@ -3608,6 +3666,167 @@
         }
       ]
     },
+    "add_widget_viewmodel": {
+      "category": "widget",
+      "params": [
+        {
+          "name": "assetPath",
+          "type": "string",
+          "required": true,
+          "description": "Widget Blueprint asset path, e.g. /Game/UI/WBP_Example",
+          "aliases": [
+            "path"
+          ]
+        },
+        {
+          "name": "viewModelClass",
+          "type": "string",
+          "required": true,
+          "description": "Viewmodel class: a native MVVMViewModelBase subclass name or path, or a Blueprint viewmodel asset path"
+        },
+        {
+          "name": "viewModelName",
+          "type": "string",
+          "required": false,
+          "description": "Name of the generated viewmodel property (default the class name)"
+        },
+        {
+          "name": "creationType",
+          "type": "string",
+          "required": false,
+          "description": "How the widget gets its instance (default the first type the class allows, usually CreateInstance). Context is UE 5.8+",
+          "enum": [
+            "Manual",
+            "CreateInstance",
+            "GlobalViewModelCollection",
+            "PropertyPath",
+            "Resolver",
+            "Context"
+          ]
+        },
+        {
+          "name": "globalViewModelIdentifier",
+          "type": "string",
+          "required": false,
+          "description": "Identifier in the global viewmodel collection, for creationType GlobalViewModelCollection"
+        },
+        {
+          "name": "viewModelPropertyPath",
+          "type": "string",
+          "required": false,
+          "description": "Property or function path that returns the instance, for creationType PropertyPath"
+        },
+        {
+          "name": "optional",
+          "type": "boolean",
+          "required": false,
+          "description": "Do not warn when the instance is not set or found"
+        },
+        {
+          "name": "createSetter",
+          "type": "boolean",
+          "required": false,
+          "description": "Generate a public setter for the viewmodel"
+        },
+        {
+          "name": "createGetter",
+          "type": "boolean",
+          "required": false,
+          "description": "Generate a public getter for the viewmodel (default true)"
+        },
+        {
+          "name": "viewModelId",
+          "type": "string",
+          "required": false,
+          "description": "Reuse this viewmodel id; the rollback of remove_widget_viewmodel passes the removed one so its bindings resolve again"
+        }
+      ]
+    },
+    "add_widget_viewmodel_binding": {
+      "category": "widget",
+      "params": [
+        {
+          "name": "assetPath",
+          "type": "string",
+          "required": true,
+          "description": "Widget Blueprint asset path, e.g. /Game/UI/WBP_Example",
+          "aliases": [
+            "path"
+          ]
+        },
+        {
+          "name": "sourcePath",
+          "type": "string",
+          "required": false,
+          "description": "Source of the value: a viewmodel name, a widget name or Self, then its fields, e.g. PlayerVM.Health"
+        },
+        {
+          "name": "destinationPath",
+          "type": "string",
+          "required": false,
+          "description": "Where the value goes, same form, e.g. HealthBar.Percent. Required unless a destinationToSource conversion binds the widget through conversionArguments"
+        },
+        {
+          "name": "bindingMode",
+          "type": "string",
+          "required": false,
+          "description": "Direction and frequency (default OneWayToDestination)",
+          "enum": [
+            "OneTimeToDestination",
+            "OneWayToDestination",
+            "TwoWay",
+            "OneWayToSource"
+          ]
+        },
+        {
+          "name": "executionMode",
+          "type": "string",
+          "required": false,
+          "description": "When the binding runs; Default uses the project setting",
+          "enum": [
+            "Default",
+            "Immediate",
+            "Delayed",
+            "Tick",
+            "Auto"
+          ]
+        },
+        {
+          "name": "conversionFunction",
+          "type": "string",
+          "required": false,
+          "description": "Pure function converting the value: Class.Function (KismetTextLibrary.Conv_IntToText), /Script/Module.Class:Function, or a function on this widget blueprint"
+        },
+        {
+          "name": "conversionArguments",
+          "type": "object",
+          "required": false,
+          "description": "Conversion inputs by pin name: a literal (string, number, boolean or {literal}) or {path} bound to a field. The input sourcePath is not given to goes to the first free input"
+        },
+        {
+          "name": "conversionDirection",
+          "type": "string",
+          "required": false,
+          "description": "Which way the conversion runs (default sourceToDestination, destinationToSource for OneWayToSource)",
+          "enum": [
+            "sourceToDestination",
+            "destinationToSource"
+          ]
+        },
+        {
+          "name": "enabled",
+          "type": "boolean",
+          "required": false,
+          "description": "Whether the binding runs by default (default true)"
+        },
+        {
+          "name": "includeInCompile",
+          "type": "boolean",
+          "required": false,
+          "description": "False keeps the binding in the editor but out of the compiled class (default true)"
+        }
+      ]
+    },
     "aim_actor_at": {
       "category": "level",
       "params": [
@@ -3717,6 +3936,107 @@
           "type": "string",
           "required": false,
           "description": "Directory under Project/Saved/Codex/AnimationQA for analysis artifacts; must not already contain them"
+        }
+      ]
+    },
+    "analyze_insights_trace": {
+      "category": "editor",
+      "params": [
+        {
+          "name": "file",
+          "type": "string",
+          "required": false,
+          "description": ".utrace to analyse, absolute or relative to Saved/Profiling (default the newest .utrace there)"
+        },
+        {
+          "name": "startSeconds",
+          "type": "number",
+          "required": false,
+          "description": "Window start, seconds from the start of the trace (default 0)"
+        },
+        {
+          "name": "endSeconds",
+          "type": "number",
+          "required": false,
+          "description": "Window end, seconds from the start of the trace (default the end)"
+        },
+        {
+          "name": "hitchThresholdMs",
+          "type": "number",
+          "required": false,
+          "description": "A frame at or over this many milliseconds is a hitch (default 50)"
+        },
+        {
+          "name": "worstFrames",
+          "type": "integer",
+          "required": false,
+          "description": "Slowest frames to list with their top timers (default 10, max 50)"
+        },
+        {
+          "name": "topTimers",
+          "type": "integer",
+          "required": false,
+          "description": "Timers to list over the window (default 20, max 200)"
+        },
+        {
+          "name": "timersPerFrame",
+          "type": "integer",
+          "required": false,
+          "description": "Timers listed per worst frame, by exclusive time (default 5, max 20)"
+        },
+        {
+          "name": "maxHitches",
+          "type": "integer",
+          "required": false,
+          "description": "Hitch rows returned; count covers them all (default 50, max 500)"
+        },
+        {
+          "name": "maxBookmarks",
+          "type": "integer",
+          "required": false,
+          "description": "Bookmark rows returned; count covers them all (default 100, max 1000)"
+        },
+        {
+          "name": "threads",
+          "type": "string",
+          "required": false,
+          "description": "game (default): timers on the game thread only | all: every CPU thread",
+          "enum": [
+            "game",
+            "all"
+          ]
+        },
+        {
+          "name": "timerSort",
+          "type": "string",
+          "required": false,
+          "description": "Order of topTimers: inclusive (default) or exclusive time",
+          "enum": [
+            "inclusive",
+            "exclusive"
+          ]
+        },
+        {
+          "name": "frameType",
+          "type": "string",
+          "required": false,
+          "description": "Frames to measure: game (default) or rendering",
+          "enum": [
+            "game",
+            "rendering"
+          ]
+        },
+        {
+          "name": "dumpToFile",
+          "type": "boolean",
+          "required": false,
+          "description": "Write the full analysis to a JSON file and return the headline numbers with its path (default false)"
+        },
+        {
+          "name": "outputPath",
+          "type": "string",
+          "required": false,
+          "description": "File for dumpToFile; relative paths resolve under Saved/ (default Saved/UE_MCP/TraceAnalysis/<trace>.analysis.json)"
         }
       ]
     },
@@ -4354,6 +4674,41 @@
           "type": "integer",
           "required": false,
           "description": "Carry the previous data as a rollback record only up to this many vertices (default 262144 for heights, 524288 for weights)"
+        }
+      ]
+    },
+    "apply_landscape_splines": {
+      "category": "landscape",
+      "params": [
+        {
+          "name": "actorLabel",
+          "type": "string",
+          "required": false,
+          "description": "Landscape actor label, when the level has more than one"
+        },
+        {
+          "name": "actorPath",
+          "type": "string",
+          "required": false,
+          "description": "Landscape actor path; wins over actorLabel"
+        },
+        {
+          "name": "editLayer",
+          "type": "string",
+          "required": false,
+          "description": "Edit layer to write into when the landscape has no reserved splines layer"
+        },
+        {
+          "name": "editLayerIndex",
+          "type": "integer",
+          "required": false,
+          "description": "Edit layer index when editLayer is not given (default 0)"
+        },
+        {
+          "name": "updateNow",
+          "type": "boolean",
+          "required": false,
+          "description": "Merge the edit layers now rather than on the next editor tick (default true)"
         }
       ]
     },
@@ -5521,6 +5876,160 @@
         }
       ]
     },
+    "audit_level_performance": {
+      "category": "level",
+      "params": [
+        {
+          "name": "world",
+          "type": "string",
+          "required": false,
+          "description": "World scope: editor (default) | pie"
+        },
+        {
+          "name": "pieInstance",
+          "type": "integer",
+          "required": false,
+          "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients"
+        },
+        {
+          "name": "regionMin",
+          "type": "vec3",
+          "required": false,
+          "description": "Audit only primitives and lights whose bounds meet this box; minimum corner, world space"
+        },
+        {
+          "name": "regionMax",
+          "type": "vec3",
+          "required": false,
+          "description": "Maximum corner of the box; pass with regionMin"
+        },
+        {
+          "name": "gridSize",
+          "type": "number",
+          "required": false,
+          "description": "Side of the X/Y cells regions are reported in, in cm (default 5000, min 100)"
+        },
+        {
+          "name": "maxResults",
+          "type": "integer",
+          "required": false,
+          "description": "Rows per list (default 20, max 200); totals cover everything"
+        },
+        {
+          "name": "instancingMinCount",
+          "type": "integer",
+          "required": false,
+          "description": "Separate components of one mesh before it is an instancing candidate (default 10)"
+        },
+        {
+          "name": "heavyTriangleThreshold",
+          "type": "number",
+          "required": false,
+          "description": "LOD0 triangles at which a non-Nanite static mesh is a Nanite candidate (default 50000)"
+        },
+        {
+          "name": "outlierFactor",
+          "type": "number",
+          "required": false,
+          "description": "How many times above or below the median a texel or lightmap density must be to be an outlier (default 4)"
+        },
+        {
+          "name": "translucentAreaM2",
+          "type": "number",
+          "required": false,
+          "description": "Largest bounds face, in square metres, at which a translucent primitive is an overdraw candidate (default 100)"
+        },
+        {
+          "name": "stackedTranslucentCount",
+          "type": "integer",
+          "required": false,
+          "description": "Overlapping translucent primitives, itself included, that make a stack (default 3)"
+        },
+        {
+          "name": "dumpToFile",
+          "type": "boolean",
+          "required": false,
+          "description": "Write every row to a JSON file and return the totals with its path (default false)"
+        },
+        {
+          "name": "outputPath",
+          "type": "string",
+          "required": false,
+          "description": "File for dumpToFile; relative paths resolve under Saved/ (default Saved/UE_MCP/PerfAudit/<world>_<time>.json)"
+        }
+      ]
+    },
+    "audit_replication": {
+      "category": "networking",
+      "params": [
+        {
+          "name": "path",
+          "type": "string",
+          "required": false,
+          "description": "Scope: a content path for Blueprints (default /Game) or a /Script/<Module> path for native classes; filters both"
+        },
+        {
+          "name": "className",
+          "type": "string",
+          "required": false,
+          "description": "Only this class and its subclasses: a native class name or path, or a Blueprint asset path"
+        },
+        {
+          "name": "includeNative",
+          "type": "boolean",
+          "required": false,
+          "description": "Audit native classes (default true)"
+        },
+        {
+          "name": "includeBlueprints",
+          "type": "boolean",
+          "required": false,
+          "description": "Audit Blueprint classes (default true)"
+        },
+        {
+          "name": "includeEngine",
+          "type": "boolean",
+          "required": false,
+          "description": "Also audit engine and engine-plugin native classes, not only project modules and project plugins (default false)"
+        },
+        {
+          "name": "requireServerValidation",
+          "type": "boolean",
+          "required": false,
+          "description": "Report every Server RPC without WithValidation (default false)"
+        },
+        {
+          "name": "onlyWithFindings",
+          "type": "boolean",
+          "required": false,
+          "description": "Keep only the classes that have findings (default false)"
+        },
+        {
+          "name": "maxBlueprints",
+          "type": "integer",
+          "required": false,
+          "description": "Cap on Blueprints loaded (default 500, max 5000)"
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "description": "Class rows to return inline (default 200, max 5000); totals stay complete"
+        },
+        {
+          "name": "dumpToFile",
+          "type": "boolean",
+          "required": false,
+          "description": "Write every row to a JSON file instead of returning them inline"
+        },
+        {
+          "name": "outputPath",
+          "type": "string",
+          "required": false,
+          "description": "Absolute or Saved-relative JSON path for the dump (default Saved/UE_MCP/Audits/replication_audit.json)"
+        }
+      ]
+    },
     "audit_widget_accessibility": {
       "category": "widget",
       "params": [
@@ -5945,7 +6454,7 @@
           "description": "Custom range end in display-rate frames, sampled as the last key; pass with startFrame"
         }
       ],
-      "contractExempt": "5.8 only: before 5.8 the handler is a stub that reads nothing, and on 5.8 it bakes and saves a new AnimSequence"
+      "contractExempt": "UE 5.8+: before 5.8 the handler is a stub that reads nothing, and on 5.8 and later it bakes and saves a new AnimSequence"
     },
     "bake_keyframes_batch": {
       "category": "animation",
@@ -6223,7 +6732,7 @@
           ]
         }
       ],
-      "contractExempt": "5.8 only: before 5.8 the handler is a stub that reads nothing, and on 5.8 it bakes and saves a new AnimSequence"
+      "contractExempt": "UE 5.8+: before 5.8 the handler is a stub that reads nothing, and on 5.8 and later it bakes and saves a new AnimSequence"
     },
     "batch_retarget_animations": {
       "category": "animation",
@@ -6570,7 +7079,7 @@
           "description": "skip returns the existing session, error (default) refuses; an existing session is never modified"
         }
       ],
-      "contractExempt": "5.8 only: before 5.8 the handler is a stub that reads nothing, and on 5.8 it creates and saves a LevelSequence"
+      "contractExempt": "UE 5.8+: before 5.8 the handler is a stub that reads nothing, and on 5.8 and later it creates and saves a LevelSequence"
     },
     "begin_editor_transaction": {
       "category": "editor",
@@ -6797,6 +7306,25 @@
       "category": "editor",
       "params": [],
       "contractExempt": "builds HLODs"
+    },
+    "build_hlod_actors": {
+      "category": "level",
+      "params": [
+        {
+          "name": "actorLabels",
+          "type": "array",
+          "required": false,
+          "description": "HLOD actors to build (default: every loaded HLOD actor)",
+          "items": "string"
+        },
+        {
+          "name": "force",
+          "type": "boolean",
+          "required": false,
+          "description": "Rebuild actors that are up to date (default false)"
+        }
+      ],
+      "contractExempt": "Without actorLabels the call builds every loaded HLOD actor"
     },
     "build_lighting": {
       "category": "editor",
@@ -7266,6 +7794,108 @@
         }
       ]
     },
+    "build_spline_meshes": {
+      "category": "level",
+      "params": [
+        {
+          "name": "actorLabel",
+          "type": "string",
+          "required": false,
+          "description": "Label of the actor that owns the spline; pass actorLabel or actorPath"
+        },
+        {
+          "name": "actorPath",
+          "type": "string",
+          "required": false,
+          "description": "Full path of the actor that owns the spline; wins over actorLabel"
+        },
+        {
+          "name": "componentName",
+          "type": "string",
+          "required": false,
+          "description": "Spline component, when the actor has several (default the first)"
+        },
+        {
+          "name": "generatorName",
+          "type": "string",
+          "required": false,
+          "description": "Names this output so a later run replaces it (default SplineMeshes)"
+        },
+        {
+          "name": "staticMesh",
+          "type": "string",
+          "required": false,
+          "description": "Mesh laid along the spline; required unless rebuild is set"
+        },
+        {
+          "name": "spacing",
+          "type": "number",
+          "required": false,
+          "description": "Length of each piece in centimetres (default the mesh length along forwardAxis times its scale)"
+        },
+        {
+          "name": "forwardAxis",
+          "type": "string",
+          "required": false,
+          "description": "X (default) | Y | Z: the mesh axis laid along the spline"
+        },
+        {
+          "name": "scale",
+          "type": "vec3",
+          "required": false,
+          "description": "Mesh scale; the forwardAxis component scales the default spacing, the other two the cross-section"
+        },
+        {
+          "name": "roll",
+          "type": "number",
+          "required": false,
+          "description": "Roll of every piece around the spline, in degrees"
+        },
+        {
+          "name": "startOffset",
+          "type": "number",
+          "required": false,
+          "description": "Distance along the spline to leave empty at its start, in centimetres"
+        },
+        {
+          "name": "endOffset",
+          "type": "number",
+          "required": false,
+          "description": "Distance along the spline to leave empty at its end, in centimetres"
+        },
+        {
+          "name": "stretchToFit",
+          "type": "boolean",
+          "required": false,
+          "description": "Stretch the pieces so a whole number of them fills the spline exactly (default true)"
+        },
+        {
+          "name": "collisionProfile",
+          "type": "string",
+          "required": false,
+          "description": "Collision profile for the pieces, e.g. BlockAll or NoCollision"
+        },
+        {
+          "name": "rebuild",
+          "type": "boolean",
+          "required": false,
+          "description": "Reuse the parameters stored by the last run of this generator; passed parameters override them"
+        }
+      ],
+      "choices": [
+        {
+          "mode": "exactlyOne",
+          "branches": [
+            [
+              "actorLabel"
+            ],
+            [
+              "actorPath"
+            ]
+          ]
+        }
+      ]
+    },
     "build_tree": {
       "category": "widget",
       "params": [
@@ -7291,6 +7921,30 @@
           "description": "Panel to build under (default: the root panel, or the tree root when there is none)"
         }
       ]
+    },
+    "build_world_partition_hlods": {
+      "category": "level",
+      "params": [
+        {
+          "name": "hlodLayer",
+          "type": "string",
+          "required": false,
+          "description": "Build only the HLODs of this HLODLayer asset; omitted or null builds every layer",
+          "nullable": true
+        },
+        {
+          "name": "force",
+          "type": "boolean",
+          "required": false,
+          "description": "Rebuild HLODs that are up to date (default false)"
+        }
+      ],
+      "contractExempt": "Without hlodLayer the call builds every HLOD of the open world"
+    },
+    "build_world_partition_minimap": {
+      "category": "level",
+      "params": [],
+      "contractExempt": "Takes no parameters and builds the open world's minimap in an external process"
     },
     "bulk_line_trace": {
       "category": "level",
@@ -8148,6 +8802,41 @@
         }
       ]
     },
+    "check_state_tree_binding": {
+      "category": "statetree",
+      "params": [
+        {
+          "name": "assetPath",
+          "type": "string",
+          "required": true,
+          "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+        },
+        {
+          "name": "targetStructId",
+          "type": "string",
+          "required": true,
+          "description": "Target struct GUID"
+        },
+        {
+          "name": "targetPath",
+          "type": "string",
+          "required": false,
+          "description": "Target property path"
+        },
+        {
+          "name": "sourceStructId",
+          "type": "string",
+          "required": false,
+          "description": "Source struct GUID. Omit to resolve the target alone"
+        },
+        {
+          "name": "sourcePath",
+          "type": "string",
+          "required": false,
+          "description": "Source property path"
+        }
+      ]
+    },
     "check_uvs": {
       "category": "asset",
       "params": [
@@ -8200,6 +8889,10 @@
         }
       ]
     },
+    "check_world_partition_errors": {
+      "category": "level",
+      "params": []
+    },
     "chooser_add_column": {
       "category": "chooser",
       "params": [
@@ -8235,6 +8928,50 @@
           "type": "string",
           "required": false,
           "description": "Enum asset path for an EnumColumn"
+        },
+        {
+          "name": "nested",
+          "type": "string",
+          "required": false,
+          "description": "Name or object path of a nested chooser inside the table's asset to work on instead of the table itself (chooser(list_nested) lists them)"
+        },
+        {
+          "name": "insertIndex",
+          "type": "integer",
+          "required": false,
+          "description": "Column position (default where the editor places a new column: last, but before a trailing randomize column)"
+        }
+      ]
+    },
+    "chooser_add_parameter": {
+      "category": "chooser",
+      "params": [
+        {
+          "name": "table",
+          "type": "string",
+          "required": true,
+          "description": "ChooserTable or ChooserSignature asset path. A nested chooser uses its root table's signature",
+          "aliases": [
+            "assetPath"
+          ]
+        },
+        {
+          "name": "nested",
+          "type": "string",
+          "required": false,
+          "description": "Name or object path of a nested chooser inside the table's asset to work on instead of the table itself (chooser(list_nested) lists them)"
+        },
+        {
+          "name": "parameterType",
+          "type": "string",
+          "required": true,
+          "description": "Parameter struct type, e.g. ContextObjectTypeClass or ContextObjectTypeStruct (chooser(list_types, kind='parameter') lists them)"
+        },
+        {
+          "name": "properties",
+          "type": "object",
+          "required": false,
+          "description": "Property path to value text to set on the new parameter, e.g. {\"Class\": \"/Script/Engine.Character\", \"Direction\": \"ReadWrite\"}"
         }
       ]
     },
@@ -8273,6 +9010,158 @@
           "type": "object",
           "required": false,
           "description": "Cell values keyed by column index (as string) or column name; same value format as cells"
+        },
+        {
+          "name": "nested",
+          "type": "string",
+          "required": false,
+          "description": "Name or object path of a nested chooser inside the table's asset to work on instead of the table itself (chooser(list_nested) lists them)"
+        },
+        {
+          "name": "resultType",
+          "type": "string",
+          "required": false,
+          "description": "Result struct type for a default result (AssetChooser, SoftAssetChooser, EvaluateChooser, ClassChooser and so on; chooser(list_types, kind='result') lists them). Fill it in with chooser(set_property)"
+        },
+        {
+          "name": "insertIndex",
+          "type": "integer",
+          "required": false,
+          "description": "Insert the row before this row index (default append)"
+        }
+      ]
+    },
+    "chooser_auto_populate": {
+      "category": "chooser",
+      "params": [
+        {
+          "name": "table",
+          "type": "string",
+          "required": true,
+          "description": "ChooserTable asset path, e.g. /Game/Path/CT_Locomotion",
+          "aliases": [
+            "assetPath"
+          ]
+        },
+        {
+          "name": "nested",
+          "type": "string",
+          "required": false,
+          "description": "Name or object path of a nested chooser inside the table's asset to work on instead of the table itself (chooser(list_nested) lists them)"
+        },
+        {
+          "name": "column",
+          "type": "integer",
+          "required": false,
+          "description": "Fill only this column, for every row and the fallback"
+        },
+        {
+          "name": "rows",
+          "type": "array",
+          "required": false,
+          "description": "Fill only these rows, in every auto populating column",
+          "items": "integer"
+        },
+        {
+          "name": "includeFallback",
+          "type": "boolean",
+          "required": false,
+          "description": "With rows, also fill the fallback"
+        }
+      ]
+    },
+    "chooser_copy_column": {
+      "category": "chooser",
+      "params": [
+        {
+          "name": "table",
+          "type": "string",
+          "required": true,
+          "description": "ChooserTable asset path, e.g. /Game/Path/CT_Locomotion",
+          "aliases": [
+            "assetPath"
+          ]
+        },
+        {
+          "name": "nested",
+          "type": "string",
+          "required": false,
+          "description": "Name or object path of a nested chooser inside the table's asset to work on instead of the table itself (chooser(list_nested) lists them)"
+        },
+        {
+          "name": "column",
+          "type": "integer",
+          "required": true,
+          "description": "Column index, 0-based"
+        },
+        {
+          "name": "targetTable",
+          "type": "string",
+          "required": false,
+          "description": "Destination ChooserTable asset path (default the source table)"
+        },
+        {
+          "name": "targetNested",
+          "type": "string",
+          "required": false,
+          "description": "Nested chooser inside targetTable's asset to copy into"
+        },
+        {
+          "name": "insertIndex",
+          "type": "integer",
+          "required": false,
+          "description": "Insert the copy before this column of the target (default last, before a randomize column)"
+        }
+      ]
+    },
+    "chooser_copy_rows": {
+      "category": "chooser",
+      "params": [
+        {
+          "name": "table",
+          "type": "string",
+          "required": true,
+          "description": "ChooserTable asset path, e.g. /Game/Path/CT_Locomotion",
+          "aliases": [
+            "assetPath"
+          ]
+        },
+        {
+          "name": "nested",
+          "type": "string",
+          "required": false,
+          "description": "Name or object path of a nested chooser inside the table's asset to work on instead of the table itself (chooser(list_nested) lists them)"
+        },
+        {
+          "name": "rows",
+          "type": "array",
+          "required": true,
+          "description": "Row indices, 0-based; duplicates are ignored",
+          "items": "integer"
+        },
+        {
+          "name": "targetTable",
+          "type": "string",
+          "required": false,
+          "description": "Destination ChooserTable asset path (default the source table)"
+        },
+        {
+          "name": "targetNested",
+          "type": "string",
+          "required": false,
+          "description": "Nested chooser inside targetTable's asset to copy into"
+        },
+        {
+          "name": "insertIndex",
+          "type": "integer",
+          "required": false,
+          "description": "Insert the copies before this row of the target (default append)"
+        },
+        {
+          "name": "includeFallback",
+          "type": "boolean",
+          "required": false,
+          "description": "Also copy the fallback result and fallback cells, replacing the target's (default false)"
         }
       ]
     },
@@ -8300,6 +9189,84 @@
       ],
       "contractExempt": "Creates and saves a ChooserTable under the contract values; nothing it reads fails first"
     },
+    "chooser_create_nested": {
+      "category": "chooser",
+      "params": [
+        {
+          "name": "table",
+          "type": "string",
+          "required": true,
+          "description": "ChooserTable asset path, e.g. /Game/Path/CT_Locomotion",
+          "aliases": [
+            "assetPath"
+          ]
+        },
+        {
+          "name": "nested",
+          "type": "string",
+          "required": false,
+          "description": "Name or object path of a nested chooser inside the table's asset to work on instead of the table itself (chooser(list_nested) lists them)"
+        },
+        {
+          "name": "row",
+          "type": "integer",
+          "required": false,
+          "description": "Row whose result becomes the new nested chooser (default: add a new row for it)"
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "required": false,
+          "description": "Name for the nested chooser (default NestedChooser, made unique)"
+        }
+      ]
+    },
+    "chooser_delete_column": {
+      "category": "chooser",
+      "params": [
+        {
+          "name": "table",
+          "type": "string",
+          "required": true,
+          "description": "ChooserTable asset path, e.g. /Game/Path/CT_Locomotion",
+          "aliases": [
+            "assetPath"
+          ]
+        },
+        {
+          "name": "nested",
+          "type": "string",
+          "required": false,
+          "description": "Name or object path of a nested chooser inside the table's asset to work on instead of the table itself (chooser(list_nested) lists them)"
+        },
+        {
+          "name": "column",
+          "type": "integer",
+          "required": true,
+          "description": "Column index, 0-based"
+        }
+      ]
+    },
+    "chooser_delete_nested": {
+      "category": "chooser",
+      "params": [
+        {
+          "name": "table",
+          "type": "string",
+          "required": true,
+          "description": "ChooserTable asset path, e.g. /Game/Path/CT_Locomotion",
+          "aliases": [
+            "assetPath"
+          ]
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "required": true,
+          "description": "Nested object name or object path (chooser(list_nested) lists them)"
+        }
+      ]
+    },
     "chooser_delete_row": {
       "category": "chooser",
       "params": [
@@ -8317,10 +9284,218 @@
           "type": "integer",
           "required": true,
           "description": "Row index, 0-based"
+        },
+        {
+          "name": "nested",
+          "type": "string",
+          "required": false,
+          "description": "Name or object path of a nested chooser inside the table's asset to work on instead of the table itself (chooser(list_nested) lists them)"
+        }
+      ]
+    },
+    "chooser_delete_rows": {
+      "category": "chooser",
+      "params": [
+        {
+          "name": "table",
+          "type": "string",
+          "required": true,
+          "description": "ChooserTable asset path, e.g. /Game/Path/CT_Locomotion",
+          "aliases": [
+            "assetPath"
+          ]
+        },
+        {
+          "name": "nested",
+          "type": "string",
+          "required": false,
+          "description": "Name or object path of a nested chooser inside the table's asset to work on instead of the table itself (chooser(list_nested) lists them)"
+        },
+        {
+          "name": "rows",
+          "type": "array",
+          "required": true,
+          "description": "Row indices, 0-based; duplicates are ignored",
+          "items": "integer"
         }
       ]
     },
     "chooser_describe": {
+      "category": "chooser",
+      "params": [
+        {
+          "name": "table",
+          "type": "string",
+          "required": true,
+          "description": "ChooserTable asset path, e.g. /Game/Path/CT_Locomotion",
+          "aliases": [
+            "assetPath"
+          ]
+        },
+        {
+          "name": "nested",
+          "type": "string",
+          "required": false,
+          "description": "Name or object path of a nested chooser inside the table's asset to work on instead of the table itself (chooser(list_nested) lists them)"
+        }
+      ]
+    },
+    "chooser_duplicate_column": {
+      "category": "chooser",
+      "params": [
+        {
+          "name": "table",
+          "type": "string",
+          "required": true,
+          "description": "ChooserTable asset path, e.g. /Game/Path/CT_Locomotion",
+          "aliases": [
+            "assetPath"
+          ]
+        },
+        {
+          "name": "nested",
+          "type": "string",
+          "required": false,
+          "description": "Name or object path of a nested chooser inside the table's asset to work on instead of the table itself (chooser(list_nested) lists them)"
+        },
+        {
+          "name": "column",
+          "type": "integer",
+          "required": true,
+          "description": "Column index, 0-based"
+        }
+      ]
+    },
+    "chooser_duplicate_rows": {
+      "category": "chooser",
+      "params": [
+        {
+          "name": "table",
+          "type": "string",
+          "required": true,
+          "description": "ChooserTable asset path, e.g. /Game/Path/CT_Locomotion",
+          "aliases": [
+            "assetPath"
+          ]
+        },
+        {
+          "name": "nested",
+          "type": "string",
+          "required": false,
+          "description": "Name or object path of a nested chooser inside the table's asset to work on instead of the table itself (chooser(list_nested) lists them)"
+        },
+        {
+          "name": "rows",
+          "type": "array",
+          "required": true,
+          "description": "Row indices, 0-based; duplicates are ignored",
+          "items": "integer"
+        }
+      ]
+    },
+    "chooser_get_cell": {
+      "category": "chooser",
+      "params": [
+        {
+          "name": "table",
+          "type": "string",
+          "required": true,
+          "description": "ChooserTable asset path, e.g. /Game/Path/CT_Locomotion",
+          "aliases": [
+            "assetPath"
+          ]
+        },
+        {
+          "name": "nested",
+          "type": "string",
+          "required": false,
+          "description": "Name or object path of a nested chooser inside the table's asset to work on instead of the table itself (chooser(list_nested) lists them)"
+        },
+        {
+          "name": "column",
+          "type": "integer",
+          "required": true,
+          "description": "Column index, 0-based"
+        },
+        {
+          "name": "row",
+          "type": "integer",
+          "required": false,
+          "description": "Row index, 0-based (omit with fallback=true)"
+        },
+        {
+          "name": "fallback",
+          "type": "boolean",
+          "required": false,
+          "description": "Address the column's fallback cell instead of a row (output columns only)"
+        }
+      ]
+    },
+    "chooser_get_property": {
+      "category": "chooser",
+      "params": [
+        {
+          "name": "table",
+          "type": "string",
+          "required": true,
+          "description": "ChooserTable asset path, e.g. /Game/Path/CT_Locomotion",
+          "aliases": [
+            "assetPath"
+          ]
+        },
+        {
+          "name": "nested",
+          "type": "string",
+          "required": false,
+          "description": "Name or object path of a nested chooser inside the table's asset to work on instead of the table itself (chooser(list_nested) lists them)"
+        },
+        {
+          "name": "target",
+          "type": "string",
+          "required": true,
+          "description": "What the path is read from: a column, a row's result, the fallback result, or a parameter",
+          "enum": [
+            "column",
+            "row",
+            "fallback",
+            "parameter"
+          ]
+        },
+        {
+          "name": "index",
+          "type": "integer",
+          "required": false,
+          "description": "Column, row or parameter index (not used for fallback)"
+        },
+        {
+          "name": "propertyPath",
+          "type": "string",
+          "required": false,
+          "description": "'.' separated property names with [index] for array elements, stepping into instanced structs, e.g. 'InputValue.Binding.DisplayName', 'Asset', 'DefaultRowValue'. Empty addresses the whole struct"
+        }
+      ]
+    },
+    "chooser_get_signature": {
+      "category": "chooser",
+      "params": [
+        {
+          "name": "table",
+          "type": "string",
+          "required": true,
+          "description": "ChooserTable or ChooserSignature asset path. A nested chooser uses its root table's signature",
+          "aliases": [
+            "assetPath"
+          ]
+        },
+        {
+          "name": "nested",
+          "type": "string",
+          "required": false,
+          "description": "Name or object path of a nested chooser inside the table's asset to work on instead of the table itself (chooser(list_nested) lists them)"
+        }
+      ]
+    },
+    "chooser_list_nested": {
       "category": "chooser",
       "params": [
         {
@@ -8371,6 +9546,112 @@
           "aliases": [
             "assetPath"
           ]
+        },
+        {
+          "name": "nested",
+          "type": "string",
+          "required": false,
+          "description": "Name or object path of a nested chooser inside the table's asset to work on instead of the table itself (chooser(list_nested) lists them)"
+        }
+      ]
+    },
+    "chooser_list_types": {
+      "category": "chooser",
+      "params": [
+        {
+          "name": "kind",
+          "type": "string",
+          "required": true,
+          "description": "Which types: column, result (row result), parameter, or input (the input types one column accepts; needs table and column)",
+          "enum": [
+            "column",
+            "result",
+            "parameter",
+            "input"
+          ]
+        },
+        {
+          "name": "table",
+          "type": "string",
+          "required": false,
+          "description": "ChooserTable asset path, for kind 'input'"
+        },
+        {
+          "name": "nested",
+          "type": "string",
+          "required": false,
+          "description": "Name or object path of a nested chooser inside the table's asset to work on instead of the table itself (chooser(list_nested) lists them)"
+        },
+        {
+          "name": "column",
+          "type": "integer",
+          "required": false,
+          "description": "Column index, for kind 'input'"
+        }
+      ]
+    },
+    "chooser_move_column": {
+      "category": "chooser",
+      "params": [
+        {
+          "name": "table",
+          "type": "string",
+          "required": true,
+          "description": "ChooserTable asset path, e.g. /Game/Path/CT_Locomotion",
+          "aliases": [
+            "assetPath"
+          ]
+        },
+        {
+          "name": "nested",
+          "type": "string",
+          "required": false,
+          "description": "Name or object path of a nested chooser inside the table's asset to work on instead of the table itself (chooser(list_nested) lists them)"
+        },
+        {
+          "name": "column",
+          "type": "integer",
+          "required": true,
+          "description": "Column index, 0-based"
+        },
+        {
+          "name": "newIndex",
+          "type": "integer",
+          "required": true,
+          "description": "Index the column ends up at. A randomize column stays last and cannot be moved"
+        }
+      ]
+    },
+    "chooser_move_rows": {
+      "category": "chooser",
+      "params": [
+        {
+          "name": "table",
+          "type": "string",
+          "required": true,
+          "description": "ChooserTable asset path, e.g. /Game/Path/CT_Locomotion",
+          "aliases": [
+            "assetPath"
+          ]
+        },
+        {
+          "name": "nested",
+          "type": "string",
+          "required": false,
+          "description": "Name or object path of a nested chooser inside the table's asset to work on instead of the table itself (chooser(list_nested) lists them)"
+        },
+        {
+          "name": "rows",
+          "type": "array",
+          "required": true,
+          "description": "Row indices, 0-based; duplicates are ignored",
+          "items": "integer"
+        },
+        {
+          "name": "targetIndex",
+          "type": "integer",
+          "required": true,
+          "description": "Insert the rows, in their current order, before this row index as it is before the move; rowCount moves them to the end. To move row r to final index n, pass n+1 when n > r, else n"
         }
       ]
     },
@@ -8424,6 +9705,287 @@
         }
       ]
     },
+    "chooser_remove_disabled": {
+      "category": "chooser",
+      "params": [
+        {
+          "name": "table",
+          "type": "string",
+          "required": true,
+          "description": "ChooserTable asset path, e.g. /Game/Path/CT_Locomotion",
+          "aliases": [
+            "assetPath"
+          ]
+        },
+        {
+          "name": "nested",
+          "type": "string",
+          "required": false,
+          "description": "Name or object path of a nested chooser inside the table's asset to work on instead of the table itself (chooser(list_nested) lists them)"
+        }
+      ]
+    },
+    "chooser_remove_parameter": {
+      "category": "chooser",
+      "params": [
+        {
+          "name": "table",
+          "type": "string",
+          "required": true,
+          "description": "ChooserTable or ChooserSignature asset path. A nested chooser uses its root table's signature",
+          "aliases": [
+            "assetPath"
+          ]
+        },
+        {
+          "name": "nested",
+          "type": "string",
+          "required": false,
+          "description": "Name or object path of a nested chooser inside the table's asset to work on instead of the table itself (chooser(list_nested) lists them)"
+        },
+        {
+          "name": "index",
+          "type": "integer",
+          "required": true,
+          "description": "Parameter index, 0-based"
+        }
+      ]
+    },
+    "chooser_rename_nested": {
+      "category": "chooser",
+      "params": [
+        {
+          "name": "table",
+          "type": "string",
+          "required": true,
+          "description": "ChooserTable asset path, e.g. /Game/Path/CT_Locomotion",
+          "aliases": [
+            "assetPath"
+          ]
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "required": true,
+          "description": "Nested object name or object path (chooser(list_nested) lists them)"
+        },
+        {
+          "name": "newName",
+          "type": "string",
+          "required": true,
+          "description": "New object name, unique among the asset's nested objects"
+        }
+      ]
+    },
+    "chooser_restore_snapshot": {
+      "category": "chooser",
+      "params": [
+        {
+          "name": "table",
+          "type": "string",
+          "required": true,
+          "description": "ChooserTable asset path, e.g. /Game/Path/CT_Locomotion",
+          "aliases": [
+            "assetPath"
+          ]
+        },
+        {
+          "name": "snapshot",
+          "type": "object",
+          "required": true,
+          "description": "Snapshot of the asset's chooser tables, as the rollback of delete_column, delete_rows, move_rows, auto_populate, delete_nested and remove_disabled carries it"
+        }
+      ]
+    },
+    "chooser_set_cell": {
+      "category": "chooser",
+      "params": [
+        {
+          "name": "table",
+          "type": "string",
+          "required": true,
+          "description": "ChooserTable asset path, e.g. /Game/Path/CT_Locomotion",
+          "aliases": [
+            "assetPath"
+          ]
+        },
+        {
+          "name": "nested",
+          "type": "string",
+          "required": false,
+          "description": "Name or object path of a nested chooser inside the table's asset to work on instead of the table itself (chooser(list_nested) lists them)"
+        },
+        {
+          "name": "column",
+          "type": "integer",
+          "required": true,
+          "description": "Column index, 0-based"
+        },
+        {
+          "name": "row",
+          "type": "integer",
+          "required": false,
+          "description": "Row index, 0-based (omit with fallback=true)"
+        },
+        {
+          "name": "fallback",
+          "type": "boolean",
+          "required": false,
+          "description": "Address the column's fallback cell instead of a row (output columns only)"
+        },
+        {
+          "name": "value",
+          "type": "string",
+          "required": true,
+          "description": "Cell value as struct text, e.g. '(Min=0,Max=100)', or a bare number or boolean for a scalar cell"
+        }
+      ]
+    },
+    "chooser_set_column": {
+      "category": "chooser",
+      "params": [
+        {
+          "name": "table",
+          "type": "string",
+          "required": true,
+          "description": "ChooserTable asset path, e.g. /Game/Path/CT_Locomotion",
+          "aliases": [
+            "assetPath"
+          ]
+        },
+        {
+          "name": "nested",
+          "type": "string",
+          "required": false,
+          "description": "Name or object path of a nested chooser inside the table's asset to work on instead of the table itself (chooser(list_nested) lists them)"
+        },
+        {
+          "name": "column",
+          "type": "integer",
+          "required": true,
+          "description": "Column index, 0-based"
+        },
+        {
+          "name": "disabled",
+          "type": "boolean",
+          "required": false,
+          "description": "Disable or enable the column"
+        },
+        {
+          "name": "inputType",
+          "type": "string",
+          "required": false,
+          "description": "Change the column's input type (chooser(list_types, kind='input') lists the ones it accepts)"
+        },
+        {
+          "name": "parameterIndex",
+          "type": "integer",
+          "required": false,
+          "description": "Bind the input to this class or struct parameter (with propertyChain)"
+        },
+        {
+          "name": "propertyChain",
+          "type": "array",
+          "required": false,
+          "description": "Property names to follow from the parameter, e.g. [\"Speed\"] or [\"MyStruct\", \"MyFloat\"]; empty binds the parameter itself",
+          "items": "string"
+        }
+      ]
+    },
+    "chooser_set_fallback": {
+      "category": "chooser",
+      "params": [
+        {
+          "name": "table",
+          "type": "string",
+          "required": true,
+          "description": "ChooserTable asset path, e.g. /Game/Path/CT_Locomotion",
+          "aliases": [
+            "assetPath"
+          ]
+        },
+        {
+          "name": "nested",
+          "type": "string",
+          "required": false,
+          "description": "Name or object path of a nested chooser inside the table's asset to work on instead of the table itself (chooser(list_nested) lists them)"
+        },
+        {
+          "name": "resultType",
+          "type": "string",
+          "required": false,
+          "description": "Result struct type for a default result (AssetChooser, SoftAssetChooser, EvaluateChooser, ClassChooser and so on; chooser(list_types, kind='result') lists them). Fill it in with chooser(set_property)"
+        },
+        {
+          "name": "output",
+          "type": "string",
+          "required": false,
+          "description": "Output asset path for the row (a PoseSearchDatabase, a nested ChooserTable, etc.)"
+        },
+        {
+          "name": "outputType",
+          "type": "string",
+          "required": false,
+          "description": "Output wrapper: 'asset' (hard ref, default) | 'soft_asset' | 'evaluate' (nested ChooserTable reference)"
+        },
+        {
+          "name": "remove",
+          "type": "boolean",
+          "required": false,
+          "description": "Remove the fallback result; output columns keep their fallback cells"
+        }
+      ]
+    },
+    "chooser_set_property": {
+      "category": "chooser",
+      "params": [
+        {
+          "name": "table",
+          "type": "string",
+          "required": true,
+          "description": "ChooserTable asset path, e.g. /Game/Path/CT_Locomotion",
+          "aliases": [
+            "assetPath"
+          ]
+        },
+        {
+          "name": "nested",
+          "type": "string",
+          "required": false,
+          "description": "Name or object path of a nested chooser inside the table's asset to work on instead of the table itself (chooser(list_nested) lists them)"
+        },
+        {
+          "name": "target",
+          "type": "string",
+          "required": true,
+          "description": "What the path is read from: a column, a row's result, the fallback result, or a parameter",
+          "enum": [
+            "column",
+            "row",
+            "fallback",
+            "parameter"
+          ]
+        },
+        {
+          "name": "index",
+          "type": "integer",
+          "required": false,
+          "description": "Column, row or parameter index (not used for fallback)"
+        },
+        {
+          "name": "propertyPath",
+          "type": "string",
+          "required": false,
+          "description": "'.' separated property names with [index] for array elements, stepping into instanced structs, e.g. 'InputValue.Binding.DisplayName', 'Asset', 'DefaultRowValue'. Empty addresses the whole struct"
+        },
+        {
+          "name": "value",
+          "type": "string",
+          "required": true,
+          "description": "Value in Unreal text format, the form copy and paste use in the details panel, e.g. '0.5', '/Game/Anims/Run.Run', '(Min=0,Max=100)'"
+        }
+      ]
+    },
     "chooser_set_row": {
       "category": "chooser",
       "params": [
@@ -8471,6 +10033,61 @@
           "type": "object",
           "required": false,
           "description": "Cell values keyed by column index (as string) or column name; same value format as cells"
+        },
+        {
+          "name": "nested",
+          "type": "string",
+          "required": false,
+          "description": "Name or object path of a nested chooser inside the table's asset to work on instead of the table itself (chooser(list_nested) lists them)"
+        },
+        {
+          "name": "resultType",
+          "type": "string",
+          "required": false,
+          "description": "Result struct type for a default result (AssetChooser, SoftAssetChooser, EvaluateChooser, ClassChooser and so on; chooser(list_types, kind='result') lists them). Fill it in with chooser(set_property)"
+        }
+      ]
+    },
+    "chooser_set_signature": {
+      "category": "chooser",
+      "params": [
+        {
+          "name": "table",
+          "type": "string",
+          "required": true,
+          "description": "ChooserTable or ChooserSignature asset path. A nested chooser uses its root table's signature",
+          "aliases": [
+            "assetPath"
+          ]
+        },
+        {
+          "name": "nested",
+          "type": "string",
+          "required": false,
+          "description": "Name or object path of a nested chooser inside the table's asset to work on instead of the table itself (chooser(list_nested) lists them)"
+        },
+        {
+          "name": "resultType",
+          "type": "string",
+          "required": false,
+          "description": "What the chooser returns",
+          "enum": [
+            "ObjectResult",
+            "ClassResult",
+            "NoPrimaryResult"
+          ]
+        },
+        {
+          "name": "resultClass",
+          "type": "string",
+          "required": false,
+          "description": "Result Class: the class of object returned, or the parent class of the classes returned. Empty clears it"
+        },
+        {
+          "name": "signatureAsset",
+          "type": "string",
+          "required": false,
+          "description": "ChooserSignature asset to inherit the result type, result class and parameters from (UE 5.9). Empty clears the reference and restores the local values"
         }
       ]
     },
@@ -8623,6 +10240,42 @@
           "type": "string",
           "required": false,
           "description": "Clear every volume in the open level bound to this ProceduralFoliageSpawner"
+        }
+      ]
+    },
+    "clear_spline_generated": {
+      "category": "level",
+      "params": [
+        {
+          "name": "actorLabel",
+          "type": "string",
+          "required": false,
+          "description": "Label of the actor that owns the spline; pass actorLabel or actorPath"
+        },
+        {
+          "name": "actorPath",
+          "type": "string",
+          "required": false,
+          "description": "Full path of the actor that owns the spline; wins over actorLabel"
+        },
+        {
+          "name": "generatorName",
+          "type": "string",
+          "required": true,
+          "description": "The generator whose output and stored parameters to remove"
+        }
+      ],
+      "choices": [
+        {
+          "mode": "exactlyOne",
+          "branches": [
+            [
+              "actorLabel"
+            ],
+            [
+              "actorPath"
+            ]
+          ]
         }
       ]
     },
@@ -8969,6 +10622,23 @@
         }
       ]
     },
+    "compile_localization_target": {
+      "category": "project",
+      "params": [
+        {
+          "name": "target",
+          "type": "string",
+          "required": true,
+          "description": "Localization target name"
+        },
+        {
+          "name": "culture",
+          "type": "string",
+          "required": false,
+          "description": "Compile only this culture (default every culture of the target)"
+        }
+      ]
+    },
     "compile_niagara_system": {
       "category": "niagara",
       "params": [
@@ -9003,6 +10673,20 @@
           "type": "string",
           "required": true,
           "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+        }
+      ]
+    },
+    "compile_widget_viewmodels": {
+      "category": "widget",
+      "params": [
+        {
+          "name": "assetPath",
+          "type": "string",
+          "required": true,
+          "description": "Widget Blueprint asset path, e.g. /Game/UI/WBP_Example",
+          "aliases": [
+            "path"
+          ]
         }
       ]
     },
@@ -9717,6 +11401,129 @@
           "type": "boolean",
           "required": false,
           "description": "Save the asset after the edit (default true)"
+        }
+      ]
+    },
+    "connect_landscape_spline_points": {
+      "category": "landscape",
+      "params": [
+        {
+          "name": "startPoint",
+          "type": "string",
+          "required": true,
+          "description": "Control point the segment starts at, by name or path"
+        },
+        {
+          "name": "endPoint",
+          "type": "string",
+          "required": true,
+          "description": "Control point the segment ends at; must share the start point's spline owner"
+        },
+        {
+          "name": "startTangentLength",
+          "type": "number",
+          "required": false,
+          "description": "Tangent length at the start point (default the distance between the points)"
+        },
+        {
+          "name": "endTangentLength",
+          "type": "number",
+          "required": false,
+          "description": "Tangent length at the end point (default the distance between the points)"
+        },
+        {
+          "name": "layerName",
+          "type": "string",
+          "required": false,
+          "description": "Paint layer the segment paints when applied; empty clears it"
+        },
+        {
+          "name": "raiseTerrain",
+          "type": "boolean",
+          "required": false,
+          "description": "Raise terrain below the spline up to it when applied (engine default true)"
+        },
+        {
+          "name": "lowerTerrain",
+          "type": "boolean",
+          "required": false,
+          "description": "Lower terrain above the spline down to it when applied (engine default true)"
+        },
+        {
+          "name": "meshes",
+          "type": "array",
+          "required": false,
+          "description": "Meshes deformed along the segment, replacing the current list; an empty list clears it",
+          "items": "object",
+          "fields": [
+            {
+              "name": "mesh",
+              "type": "string",
+              "required": true,
+              "description": "StaticMesh asset path"
+            },
+            {
+              "name": "scale",
+              "type": "vec3",
+              "required": false,
+              "description": "Mesh scale (default 1, 1, 1)"
+            },
+            {
+              "name": "forwardAxis",
+              "type": "string",
+              "required": false,
+              "description": "X (default) | Y | Z: the mesh axis laid along the spline"
+            },
+            {
+              "name": "upAxis",
+              "type": "string",
+              "required": false,
+              "description": "X | Y | Z (default): the mesh axis kept up"
+            },
+            {
+              "name": "materialOverrides",
+              "type": "array",
+              "required": false,
+              "description": "Material per slot; an empty string keeps the mesh's own",
+              "items": "string"
+            },
+            {
+              "name": "centerH",
+              "type": "boolean",
+              "required": false,
+              "description": "Centre the mesh horizontally on the spline (default true)"
+            },
+            {
+              "name": "scaleToWidth",
+              "type": "boolean",
+              "required": false,
+              "description": "Scale the mesh to the spline width (default true)"
+            }
+          ]
+        },
+        {
+          "name": "collisionProfile",
+          "type": "string",
+          "required": false,
+          "description": "Collision profile of the segment's mesh components, e.g. BlockAll or NoCollision"
+        },
+        {
+          "name": "castShadow",
+          "type": "boolean",
+          "required": false,
+          "description": "Whether the segment's meshes cast shadows"
+        },
+        {
+          "name": "autoRotate",
+          "type": "boolean",
+          "required": false,
+          "description": "Rotate both points to follow the new segment (default true)"
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "required": false,
+          "description": "Object name for the segment"
         }
       ]
     },
@@ -10458,6 +12265,77 @@
           "type": "string",
           "required": false,
           "description": "skip (default) returns an existing asset untouched, error refuses"
+        }
+      ]
+    },
+    "create_blockout": {
+      "category": "level",
+      "params": [
+        {
+          "name": "shape",
+          "type": "string",
+          "required": true,
+          "description": "box | ramp | wedge | cylinder | stairs"
+        },
+        {
+          "name": "location",
+          "type": "vec3",
+          "required": false,
+          "description": "World position of the bottom centre (default origin)"
+        },
+        {
+          "name": "rotation",
+          "type": "rotator",
+          "required": false,
+          "description": "World rotation; a ramp and stairs climb toward the actor's +X"
+        },
+        {
+          "name": "size",
+          "type": "vec3",
+          "required": false,
+          "description": "Size in centimetres along the actor's X, Y and Z (default 100, 100, 100)"
+        },
+        {
+          "name": "steps",
+          "type": "integer",
+          "required": false,
+          "description": "Stairs: number of steps, 1 to 64 (default 8)"
+        },
+        {
+          "name": "sides",
+          "type": "integer",
+          "required": false,
+          "description": "Cylinder: number of sides, 3 to 64 (default 16)"
+        },
+        {
+          "name": "label",
+          "type": "string",
+          "required": false,
+          "description": "Actor label; an existing actor with this label is reported rather than duplicated (default a free Blockout_<Shape>)"
+        },
+        {
+          "name": "tag",
+          "type": "string",
+          "required": false,
+          "description": "Blockout tag the actor carries (default Blockout)"
+        },
+        {
+          "name": "material",
+          "type": "string",
+          "required": false,
+          "description": "Material override (default the grid material the mesh carries)"
+        },
+        {
+          "name": "meshFolder",
+          "type": "string",
+          "required": false,
+          "description": "Content folder for the generated shape meshes (default /Game/Blockout/Meshes)"
+        },
+        {
+          "name": "onConflict",
+          "type": "string",
+          "required": false,
+          "description": "When label is taken: skip (default) | error"
         }
       ]
     },
@@ -11538,6 +13416,95 @@
         }
       ],
       "contractExempt": "Contract values reach CreatePackage before anything is loaded"
+    },
+    "create_landscape_spline_point": {
+      "category": "landscape",
+      "params": [
+        {
+          "name": "location",
+          "type": "vec3",
+          "required": true,
+          "description": "World location of the control point"
+        },
+        {
+          "name": "rotation",
+          "type": "rotator",
+          "required": false,
+          "description": "World rotation of the tangent at the point"
+        },
+        {
+          "name": "halfWidth",
+          "type": "number",
+          "required": false,
+          "description": "Half-width of the spline at the point, in centimetres (engine default 1000)"
+        },
+        {
+          "name": "sideFalloff",
+          "type": "number",
+          "required": false,
+          "description": "Falloff beyond each side, in centimetres (engine default 1000)"
+        },
+        {
+          "name": "endFalloff",
+          "type": "number",
+          "required": false,
+          "description": "Falloff past an end point, in centimetres (engine default 2000)"
+        },
+        {
+          "name": "layerName",
+          "type": "string",
+          "required": false,
+          "description": "Paint layer applying the spline paints; empty clears it"
+        },
+        {
+          "name": "raiseTerrain",
+          "type": "boolean",
+          "required": false,
+          "description": "Raise terrain below the spline up to it when applied (engine default true)"
+        },
+        {
+          "name": "lowerTerrain",
+          "type": "boolean",
+          "required": false,
+          "description": "Lower terrain above the spline down to it when applied (engine default true)"
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "required": false,
+          "description": "Object name for the point; an existing point of this name is reported rather than duplicated"
+        },
+        {
+          "name": "ownerPath",
+          "type": "string",
+          "required": false,
+          "description": "Existing spline owner to add the point to: a Landscape, LandscapeStreamingProxy or LandscapeSplineActor, by label or path"
+        },
+        {
+          "name": "newSplineActor",
+          "type": "boolean",
+          "required": false,
+          "description": "World Partition: put the point in a new LandscapeSplineActor (the default when ownerPath is not given)"
+        },
+        {
+          "name": "onConflict",
+          "type": "string",
+          "required": false,
+          "description": "When name is taken: skip (default) | error"
+        },
+        {
+          "name": "actorLabel",
+          "type": "string",
+          "required": false,
+          "description": "Landscape actor label, when the level has more than one"
+        },
+        {
+          "name": "actorPath",
+          "type": "string",
+          "required": false,
+          "description": "Landscape actor path; wins over actorLabel"
+        }
+      ]
     },
     "create_level_sequence": {
       "category": "editor",
@@ -12723,6 +14690,81 @@
       ],
       "contractExempt": "Creates and saves a SoundMix asset named by the contract values"
     },
+    "create_spline_actor": {
+      "category": "level",
+      "params": [
+        {
+          "name": "splinePoints",
+          "type": "array",
+          "required": true,
+          "description": "At least two positions, world space unless coordinateSpace is local",
+          "items": "object",
+          "fields": [
+            {
+              "name": "x",
+              "type": "number",
+              "required": true,
+              "description": "X"
+            },
+            {
+              "name": "y",
+              "type": "number",
+              "required": true,
+              "description": "Y"
+            },
+            {
+              "name": "z",
+              "type": "number",
+              "required": true,
+              "description": "Z"
+            }
+          ]
+        },
+        {
+          "name": "label",
+          "type": "string",
+          "required": false,
+          "description": "Actor label (default SplineActor); an existing actor with this label is reported rather than duplicated"
+        },
+        {
+          "name": "location",
+          "type": "vec3",
+          "required": false,
+          "description": "Actor location (default the first point)"
+        },
+        {
+          "name": "closedLoop",
+          "type": "boolean",
+          "required": false,
+          "description": "Close the spline (default false)"
+        },
+        {
+          "name": "pointType",
+          "type": "string",
+          "required": false,
+          "description": "Curve (default) | Linear | CurveClamped | Constant, for every point"
+        },
+        {
+          "name": "coordinateSpace",
+          "type": "string",
+          "required": false,
+          "description": "world (default) | local: whether points are relative to the actor location"
+        },
+        {
+          "name": "tags",
+          "type": "array",
+          "required": false,
+          "description": "Actor tags to add",
+          "items": "string"
+        },
+        {
+          "name": "onConflict",
+          "type": "string",
+          "required": false,
+          "description": "When the label is taken: skip (default) | update (rewrite its spline points) | error"
+        }
+      ]
+    },
     "create_state_machine": {
       "category": "animation",
       "params": [
@@ -13072,6 +15114,11 @@
         }
       ],
       "contractExempt": "Creates and saves a Widget Blueprint under the contract values; nothing it reads fails first"
+    },
+    "create_world_partition_minimap": {
+      "category": "level",
+      "params": [],
+      "contractExempt": "Takes no parameters and spawns the minimap actor when the world has none"
     },
     "datasmith_import": {
       "category": "datasmith",
@@ -13490,6 +15537,28 @@
         }
       ]
     },
+    "delete_landscape_spline_point": {
+      "category": "landscape",
+      "params": [
+        {
+          "name": "controlPoint",
+          "type": "string",
+          "required": true,
+          "description": "Control point object name or full path, as list_splines reports it"
+        }
+      ]
+    },
+    "delete_landscape_spline_segment": {
+      "category": "landscape",
+      "params": [
+        {
+          "name": "segment",
+          "type": "string",
+          "required": true,
+          "description": "Segment object name or full path, as list_splines reports it"
+        }
+      ]
+    },
     "delete_macro": {
       "category": "blueprint",
       "params": [
@@ -13691,6 +15760,11 @@
         }
       ]
     },
+    "delete_world_partition_hlods": {
+      "category": "level",
+      "params": [],
+      "contractExempt": "Takes no parameters and deletes every HLOD of the open world"
+    },
     "demo_cleanup": {
       "category": "demo",
       "params": [],
@@ -13702,8 +15776,15 @@
     },
     "demo_go_home": {
       "category": "demo",
-      "params": [],
-      "contractExempt": "Takes no parameters and acts unconditionally: creates the home level if missing and opens it"
+      "params": [
+        {
+          "name": "discardUnsaved",
+          "type": "boolean",
+          "required": false,
+          "description": "Switch even though the open map has unsaved changes, discarding them (default false)"
+        }
+      ],
+      "contractExempt": "Creates the home level if missing and opens it before the contract path can fail"
     },
     "demo_step": {
       "category": "demo",
@@ -14724,6 +16805,128 @@
         }
       ]
     },
+    "epic_ai_assistant_get_conversation": {
+      "category": "epic",
+      "params": [
+        {
+          "name": "conversationId",
+          "type": "string",
+          "required": false,
+          "description": "Conversation to use; empty or omitted starts a new one (send_message) or reads the active one (get_conversation)"
+        },
+        {
+          "name": "wait",
+          "type": "boolean",
+          "required": false,
+          "description": "Return only once the result is complete (default true); false returns the requestId to poll with get_request"
+        },
+        {
+          "name": "timeoutSeconds",
+          "type": "number",
+          "required": false,
+          "description": "Longest wait in seconds (send_message default 300, get_conversation default 60)"
+        }
+      ],
+      "contractExempt": "opens the AI Assistant panel"
+    },
+    "epic_ai_assistant_get_events": {
+      "category": "epic",
+      "params": [
+        {
+          "name": "sinceSeq",
+          "type": "integer",
+          "required": false,
+          "description": "Return only updates after this seq (default 0, every recorded update)"
+        },
+        {
+          "name": "conversationId",
+          "type": "string",
+          "required": false,
+          "description": "Return only this conversation's updates"
+        }
+      ]
+    },
+    "epic_ai_assistant_get_request": {
+      "category": "epic",
+      "params": [
+        {
+          "name": "requestId",
+          "type": "integer",
+          "required": true,
+          "description": "requestId from send_message or get_conversation"
+        }
+      ]
+    },
+    "epic_ai_assistant_send_message": {
+      "category": "epic",
+      "params": [
+        {
+          "name": "message",
+          "type": "string",
+          "required": true,
+          "description": "The user-visible prompt text"
+        },
+        {
+          "name": "conversationId",
+          "type": "string",
+          "required": false,
+          "description": "Conversation to use; empty or omitted starts a new one (send_message) or reads the active one (get_conversation)"
+        },
+        {
+          "name": "hiddenContext",
+          "type": "string",
+          "required": false,
+          "description": "Context appended to the message but not shown in the panel"
+        },
+        {
+          "name": "reply",
+          "type": "boolean",
+          "required": false,
+          "description": "Resolve with the assistant's reply text (default true); false resolves as soon as the message is bound to a conversation, with its id"
+        },
+        {
+          "name": "wait",
+          "type": "boolean",
+          "required": false,
+          "description": "Return only once the result is complete (default true); false returns the requestId to poll with get_request"
+        },
+        {
+          "name": "timeoutSeconds",
+          "type": "number",
+          "required": false,
+          "description": "Longest wait in seconds (send_message default 300, get_conversation default 60)"
+        }
+      ],
+      "contractExempt": "opens the AI Assistant panel and sends a message to its backend"
+    },
+    "epic_ai_assistant_status": {
+      "category": "epic",
+      "params": []
+    },
+    "epic_call_mcp_tool": {
+      "category": "epic",
+      "params": [
+        {
+          "name": "tool",
+          "type": "string",
+          "required": true,
+          "description": "Tool name from epic_list_mcp_tools"
+        },
+        {
+          "name": "input",
+          "type": "object",
+          "required": false,
+          "description": "Tool arguments as a JSON object"
+        },
+        {
+          "name": "inputJson",
+          "type": "string",
+          "required": false,
+          "description": "Tool arguments as a raw JSON string; wins over input"
+        }
+      ],
+      "contractExempt": "runs a registered engine tool"
+    },
     "epic_call_tool": {
       "category": "epic",
       "params": [
@@ -14765,6 +16968,44 @@
         }
       ]
     },
+    "epic_get_toolset_states": {
+      "category": "epic",
+      "params": [
+        {
+          "name": "nameFilter",
+          "type": "string",
+          "required": false,
+          "description": "Case-sensitive substring of the qualified toolset name"
+        }
+      ]
+    },
+    "epic_list_mcp_resources": {
+      "category": "epic",
+      "params": []
+    },
+    "epic_list_mcp_tools": {
+      "category": "epic",
+      "params": [
+        {
+          "name": "nameFilter",
+          "type": "string",
+          "required": false,
+          "description": "Case-sensitive substring of the tool name"
+        },
+        {
+          "name": "includeSchemas",
+          "type": "boolean",
+          "required": false,
+          "description": "Return each tool's input and output schemas (default false)"
+        },
+        {
+          "name": "includeRegistryAdapters",
+          "type": "boolean",
+          "required": false,
+          "description": "Also list the tools that only adapt ToolsetRegistry tools, which epic(list_toolsets) already covers (default false)"
+        }
+      ]
+    },
     "epic_list_toolsets": {
       "category": "epic",
       "params": [
@@ -14779,6 +17020,35 @@
           "type": "boolean",
           "required": false,
           "description": "Return each tool with its input and output schemas instead of its name (default false)"
+        }
+      ]
+    },
+    "epic_read_mcp_resource": {
+      "category": "epic",
+      "params": [
+        {
+          "name": "uri",
+          "type": "string",
+          "required": true,
+          "description": "Resource uri from epic_list_mcp_resources"
+        }
+      ]
+    },
+    "epic_set_toolset_enabled": {
+      "category": "epic",
+      "params": [
+        {
+          "name": "toolsets",
+          "type": "array",
+          "required": true,
+          "description": "Exact qualified toolset names from epic_get_toolset_states, e.g. GASToolsets.AttributeSetToolset",
+          "items": "string"
+        },
+        {
+          "name": "enabled",
+          "type": "boolean",
+          "required": true,
+          "description": "true turns the toolsets on, false turns them off"
         }
       ]
     },
@@ -15736,6 +18006,12 @@
           "type": "boolean",
           "required": false,
           "description": "Permit a path naming a whole content root (default false)"
+        },
+        {
+          "name": "deleteRedirectors",
+          "type": "boolean",
+          "required": false,
+          "description": "Delete each redirector once nothing references it (default true); false keeps the stubs"
         }
       ]
     },
@@ -15899,6 +18175,17 @@
               "assetPaths"
             ]
           ]
+        }
+      ]
+    },
+    "gather_localization_target": {
+      "category": "project",
+      "params": [
+        {
+          "name": "target",
+          "type": "string",
+          "required": true,
+          "description": "Localization target name"
         }
       ]
     },
@@ -17303,6 +19590,10 @@
         }
       ]
     },
+    "get_hlod_stats": {
+      "category": "level",
+      "params": []
+    },
     "get_input_mapping_contexts": {
       "category": "gameplay",
       "params": [
@@ -18446,6 +20737,26 @@
       "category": "pcg",
       "params": []
     },
+    "get_pcg_custom_hlsl": {
+      "category": "pcg",
+      "params": [
+        {
+          "name": "assetPath",
+          "type": "string",
+          "required": true,
+          "description": "PCGGraph asset path",
+          "aliases": [
+            "path"
+          ]
+        },
+        {
+          "name": "nodeName",
+          "type": "string",
+          "required": true,
+          "description": "Engine name of the Custom HLSL node, as read_graph reports it"
+        }
+      ]
+    },
     "get_pcg_generation_state": {
       "category": "pcg",
       "params": [
@@ -18736,6 +21047,23 @@
           "type": "integer",
           "required": false,
           "description": "Local player user index (default 0)"
+        }
+      ]
+    },
+    "get_runtime_partition": {
+      "category": "level",
+      "params": [
+        {
+          "name": "partitionName",
+          "type": "string",
+          "required": true,
+          "description": "Runtime partition name, as list_runtime_partitions reports it"
+        },
+        {
+          "name": "setupName",
+          "type": "string",
+          "required": false,
+          "description": "Read this HLOD setup's partition instead of the main partition"
         }
       ]
     },
@@ -19434,6 +21762,32 @@
         }
       ]
     },
+    "get_text_localization": {
+      "category": "asset",
+      "params": [
+        {
+          "name": "assetPath",
+          "type": "string",
+          "required": true,
+          "description": "Asset holding the Text property; a Blueprint means its class defaults",
+          "aliases": [
+            "path"
+          ]
+        },
+        {
+          "name": "propertyName",
+          "type": "string",
+          "required": true,
+          "description": "Text property, dotted through structs and object references"
+        },
+        {
+          "name": "widgetName",
+          "type": "string",
+          "required": false,
+          "description": "A widget in a Widget Blueprint's tree that owns the property"
+        }
+      ]
+    },
     "get_texture_info": {
       "category": "asset",
       "params": [
@@ -19651,6 +22005,10 @@
           "description": "Rows on this page"
         }
       ]
+    },
+    "get_world_partition_minimap": {
+      "category": "level",
+      "params": []
     },
     "get_world_partition_settings": {
       "category": "level",
@@ -21421,6 +23779,81 @@
       ],
       "contractExempt": "launches a game process"
     },
+    "learning_agents_add_observation": {
+      "category": "gameplay",
+      "params": [
+        {
+          "name": "blueprintPath",
+          "type": "string",
+          "required": true,
+          "description": "Learning Agents interactor Blueprint"
+        },
+        {
+          "name": "observationType",
+          "type": "string",
+          "required": true,
+          "description": "Observation type: Float, Location, Set, ... or the Specify function name"
+        },
+        {
+          "name": "settings",
+          "type": "object",
+          "required": false,
+          "description": "Input pin defaults by parameter name, e.g. {\"Tag\": \"Speed\", \"MaxNum\": 8}"
+        },
+        {
+          "name": "connectTo",
+          "type": "string",
+          "required": false,
+          "description": "result to return this observation from SpecifyAgentObservation, or the nodeId of an observation to feed"
+        },
+        {
+          "name": "connectPin",
+          "type": "string",
+          "required": false,
+          "description": "Input of the connectTo node to feed, e.g. Element or QueryElement"
+        },
+        {
+          "name": "posX",
+          "type": "integer",
+          "required": false,
+          "description": "Node X position (default 0)"
+        },
+        {
+          "name": "posY",
+          "type": "integer",
+          "required": false,
+          "description": "Node Y position (default below the existing nodes)"
+        }
+      ]
+    },
+    "learning_agents_list_observation_types": {
+      "category": "gameplay",
+      "params": [
+        {
+          "name": "nameFilter",
+          "type": "string",
+          "required": false,
+          "description": "Case-sensitive substring of the Specify function name"
+        },
+        {
+          "name": "includeParameters",
+          "type": "boolean",
+          "required": false,
+          "description": "Include each function's parameters with types and defaults (default true)"
+        }
+      ]
+    },
+    "learning_agents_read_observations": {
+      "category": "gameplay",
+      "params": [
+        {
+          "name": "blueprintPath",
+          "type": "string",
+          "required": true,
+          "description": "Learning Agents interactor Blueprint"
+        }
+      ]
+    },
     "line_trace": {
       "category": "level",
       "params": [
@@ -21812,6 +24245,23 @@
           "type": "number",
           "required": false,
           "description": "Rows on this page (default 200, max 2000)"
+        }
+      ]
+    },
+    "list_blockout": {
+      "category": "level",
+      "params": [
+        {
+          "name": "tag",
+          "type": "string",
+          "required": false,
+          "description": "Blockout tag to list (default Blockout)"
+        },
+        {
+          "name": "includeReplaced",
+          "type": "boolean",
+          "required": false,
+          "description": "Also list replacements that carry a restorable blockout record (default false)"
         }
       ]
     },
@@ -22364,6 +24814,17 @@
         }
       ]
     },
+    "list_hlod_setups": {
+      "category": "level",
+      "params": [
+        {
+          "name": "partitionName",
+          "type": "string",
+          "required": true,
+          "description": "Runtime partition name, as list_runtime_partitions reports it"
+        }
+      ]
+    },
     "list_imc_mappings": {
       "category": "gameplay",
       "params": [
@@ -22497,6 +24958,21 @@
           "type": "string",
           "required": true,
           "description": "Function name"
+        }
+      ]
+    },
+    "list_localization_cultures": {
+      "category": "project",
+      "params": []
+    },
+    "list_localization_targets": {
+      "category": "project",
+      "params": [
+        {
+          "name": "includeEngineTargets",
+          "type": "boolean",
+          "required": false,
+          "description": "Also list the engine's own targets (default false)"
         }
       ]
     },
@@ -22857,6 +25333,21 @@
         }
       ]
     },
+    "list_python_paths": {
+      "category": "editor",
+      "params": [
+        {
+          "name": "owner",
+          "type": "string",
+          "required": false,
+          "description": "Only the paths of this owner (default: every owner)"
+        }
+      ]
+    },
+    "list_runtime_partitions": {
+      "category": "level",
+      "params": []
+    },
     "list_runtime_widgets": {
       "category": "widget",
       "params": [
@@ -23016,6 +25507,41 @@
           "aliases": [
             "maxResults"
           ]
+        }
+      ]
+    },
+    "list_state_tree_bindable_properties": {
+      "category": "statetree",
+      "params": [
+        {
+          "name": "assetPath",
+          "type": "string",
+          "required": true,
+          "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+        },
+        {
+          "name": "structId",
+          "type": "string",
+          "required": true,
+          "description": "Bindable struct GUID, as list_bindable_sources reports it"
+        },
+        {
+          "name": "targetPath",
+          "type": "string",
+          "required": false,
+          "description": "A property of that struct: list the compatible sources in its scope instead of the struct's properties"
+        },
+        {
+          "name": "exactOnly",
+          "type": "boolean",
+          "required": false,
+          "description": "With targetPath: leave out sources that need a numeric promotion"
+        },
+        {
+          "name": "maxDepth",
+          "type": "integer",
+          "required": false,
+          "description": "How deep to descend into value structs: 1 is top level only, 0 is unlimited (default 3)"
         }
       ]
     },
@@ -23449,6 +25975,34 @@
         }
       ]
     },
+    "list_widget_viewmodel_bindings": {
+      "category": "widget",
+      "params": [
+        {
+          "name": "assetPath",
+          "type": "string",
+          "required": true,
+          "description": "Widget Blueprint asset path, e.g. /Game/UI/WBP_Example",
+          "aliases": [
+            "path"
+          ]
+        }
+      ]
+    },
+    "list_widget_viewmodels": {
+      "category": "widget",
+      "params": [
+        {
+          "name": "assetPath",
+          "type": "string",
+          "required": true,
+          "description": "Widget Blueprint asset path, e.g. /Game/UI/WBP_Example",
+          "aliases": [
+            "path"
+          ]
+        }
+      ]
+    },
     "list_windows": {
       "category": "editor",
       "params": [
@@ -23580,6 +26134,104 @@
         }
       ],
       "contractExempt": "Ends any play session, collects garbage and swaps the open map before the contract path can fail"
+    },
+    "log_map_check_message": {
+      "category": "editor",
+      "params": [
+        {
+          "name": "severity",
+          "type": "string",
+          "required": true,
+          "description": "error | warning | info"
+        },
+        {
+          "name": "message",
+          "type": "string",
+          "required": true,
+          "description": "Message text"
+        },
+        {
+          "name": "actorLabel",
+          "type": "string",
+          "required": false,
+          "description": "Actor the message is about; the Message Log links to it"
+        },
+        {
+          "name": "actorPath",
+          "type": "string",
+          "required": false,
+          "description": "Object path of that actor; preferred over actorLabel when known"
+        }
+      ]
+    },
+    "match_asset_to_blockout": {
+      "category": "level",
+      "params": [
+        {
+          "name": "actorLabel",
+          "type": "string",
+          "required": false,
+          "description": "Blockout actor label"
+        },
+        {
+          "name": "actorPath",
+          "type": "string",
+          "required": false,
+          "description": "Blockout actor path; the unambiguous selector"
+        },
+        {
+          "name": "tag",
+          "type": "string",
+          "required": false,
+          "description": "Act on every blockout actor carrying this tag"
+        },
+        {
+          "name": "candidateFolder",
+          "type": "string",
+          "required": true,
+          "description": "Content folder of candidate StaticMeshes, e.g. /Game/Props"
+        },
+        {
+          "name": "recursive",
+          "type": "boolean",
+          "required": false,
+          "description": "Include subfolders of candidateFolder (default true)"
+        },
+        {
+          "name": "allowRotation",
+          "type": "boolean",
+          "required": false,
+          "description": "Also try each candidate turned a quarter about Z (default true)"
+        },
+        {
+          "name": "maxCandidates",
+          "type": "integer",
+          "required": false,
+          "description": "Load at most this many candidate meshes (default 500)"
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "description": "Candidates returned per blockout (default 5)"
+        }
+      ],
+      "choices": [
+        {
+          "mode": "exactlyOne",
+          "branches": [
+            [
+              "actorLabel"
+            ],
+            [
+              "actorPath"
+            ],
+            [
+              "tag"
+            ]
+          ]
+        }
+      ]
     },
     "measure_mesh_geometry": {
       "category": "asset",
@@ -24949,6 +27601,29 @@
         }
       ]
     },
+    "move_state_tree_node": {
+      "category": "statetree",
+      "params": [
+        {
+          "name": "assetPath",
+          "type": "string",
+          "required": true,
+          "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+        },
+        {
+          "name": "nodeId",
+          "type": "string",
+          "required": true,
+          "description": "GUID of the task, condition, consideration, evaluator or global task, as the add_* actions return it"
+        },
+        {
+          "name": "newIndex",
+          "type": "integer",
+          "required": true,
+          "description": "Position the node ends up at within the list it is in, 0-based"
+        }
+      ]
+    },
     "move_state_tree_state": {
       "category": "statetree",
       "params": [
@@ -25025,6 +27700,154 @@
         }
       ]
     },
+    "mrq_cancel_render": {
+      "category": "editor",
+      "params": []
+    },
+    "mrq_create_job": {
+      "category": "editor",
+      "params": [
+        {
+          "name": "sequence",
+          "type": "string",
+          "required": true,
+          "description": "Level Sequence asset path to render"
+        },
+        {
+          "name": "map",
+          "type": "string",
+          "required": false,
+          "description": "World asset path to render in (default the level open in the editor)"
+        },
+        {
+          "name": "jobName",
+          "type": "string",
+          "required": false,
+          "description": "Job name, unique in the queue (default the sequence name)"
+        },
+        {
+          "name": "preset",
+          "type": "string",
+          "required": false,
+          "description": "MoviePipelinePrimaryConfig asset to copy into the job's configuration"
+        },
+        {
+          "name": "graph",
+          "type": "string",
+          "required": false,
+          "description": "MovieGraphConfig asset: render through Movie Render Graph instead of a preset"
+        },
+        {
+          "name": "outputDirectory",
+          "type": "string",
+          "required": false,
+          "description": "Output folder; {project_dir} and the other Movie Render Queue tokens are kept as written (default {project_dir}/Saved/MovieRenders/)"
+        },
+        {
+          "name": "fileNameFormat",
+          "type": "string",
+          "required": false,
+          "description": "File name format, e.g. {sequence_name}.{frame_number}"
+        },
+        {
+          "name": "width",
+          "type": "number",
+          "required": false,
+          "description": "Output width in pixels (with height)"
+        },
+        {
+          "name": "height",
+          "type": "number",
+          "required": false,
+          "description": "Output height in pixels (with width)"
+        },
+        {
+          "name": "format",
+          "type": "string",
+          "required": false,
+          "description": "png | jpg | exr | bmp; replaces the job's other image outputs (default png when the job has none)"
+        },
+        {
+          "name": "startFrame",
+          "type": "number",
+          "required": false,
+          "description": "First display frame of a custom range (with endFrame)"
+        },
+        {
+          "name": "endFrame",
+          "type": "number",
+          "required": false,
+          "description": "End display frame of a custom range, exclusive (with startFrame)"
+        }
+      ]
+    },
+    "mrq_delete_job": {
+      "category": "editor",
+      "params": [
+        {
+          "name": "jobName",
+          "type": "string",
+          "required": false,
+          "description": "Name of the job to delete"
+        },
+        {
+          "name": "jobIndex",
+          "type": "integer",
+          "required": false,
+          "description": "Queue index of the job to delete, when jobName is not given"
+        }
+      ]
+    },
+    "mrq_get_render_status": {
+      "category": "editor",
+      "params": []
+    },
+    "mrq_list_jobs": {
+      "category": "editor",
+      "params": []
+    },
+    "mrq_list_outputs": {
+      "category": "editor",
+      "params": [
+        {
+          "name": "jobName",
+          "type": "string",
+          "required": false,
+          "description": "List the files under this job's output folder"
+        },
+        {
+          "name": "outputDirectory",
+          "type": "string",
+          "required": false,
+          "description": "List the files under this folder instead"
+        },
+        {
+          "name": "limit",
+          "type": "number",
+          "required": false,
+          "description": "Files to return, newest first (default 200, max 5000)"
+        }
+      ]
+    },
+    "mrq_render": {
+      "category": "editor",
+      "params": [
+        {
+          "name": "jobNames",
+          "type": "array",
+          "required": false,
+          "description": "Jobs to render (default every enabled job in the queue)",
+          "items": "string"
+        },
+        {
+          "name": "wait",
+          "type": "boolean",
+          "required": false,
+          "description": "Wait for the render and answer with its outputs, reporting progress (default true); false returns once it starts"
+        }
+      ],
+      "contractExempt": "starts a render of every enabled job in the editor's queue"
+    },
     "nav_project_point": {
       "category": "level",
       "params": [
@@ -25051,6 +27874,82 @@
           "type": "integer",
           "required": false,
           "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients"
+        }
+      ]
+    },
+    "nne_import_model": {
+      "category": "gameplay",
+      "params": [
+        {
+          "name": "sourceFile",
+          "type": "string",
+          "required": true,
+          "description": "Absolute path of the model file (.onnx, .tflite, ...)"
+        },
+        {
+          "name": "assetPath",
+          "type": "string",
+          "required": true,
+          "description": "NNEModelData asset to create, e.g. /Game/ML/NNE_Model"
+        },
+        {
+          "name": "fileType",
+          "type": "string",
+          "required": false,
+          "description": "Model file type the runtimes read (default the file's extension)"
+        },
+        {
+          "name": "targetRuntimes",
+          "type": "array",
+          "required": false,
+          "description": "Runtimes to cook the model for, e.g. NNERuntimeORTCpu or NNERuntimeLiteRT (default every runtime)",
+          "items": "string"
+        },
+        {
+          "name": "onConflict",
+          "type": "string",
+          "required": false,
+          "description": "skip (default) reports an existing asset, error refuses it"
+        }
+      ]
+    },
+    "nne_list_runtimes": {
+      "category": "gameplay",
+      "params": []
+    },
+    "nne_run_inference": {
+      "category": "gameplay",
+      "params": [
+        {
+          "name": "assetPath",
+          "type": "string",
+          "required": true,
+          "description": "NNEModelData asset"
+        },
+        {
+          "name": "runtime",
+          "type": "string",
+          "required": false,
+          "description": "CPU runtime to run on (default the first registered CPU runtime that accepts the model)"
+        },
+        {
+          "name": "inputs",
+          "type": "array",
+          "required": false,
+          "description": "One entry per model input, in order: {values: number[], shape?: int[]}; shape is needed only for dynamic dimensions",
+          "items": "object"
+        },
+        {
+          "name": "iterations",
+          "type": "integer",
+          "required": false,
+          "description": "Timed runs (default 1, max 1000)"
+        },
+        {
+          "name": "maxOutputValues",
+          "type": "integer",
+          "required": false,
+          "description": "Values returned per output (default 256, max 65536)"
         }
       ]
     },
@@ -28374,6 +31273,47 @@
         }
       ]
     },
+    "promote_state_tree_property_to_parameter": {
+      "category": "statetree",
+      "params": [
+        {
+          "name": "assetPath",
+          "type": "string",
+          "required": true,
+          "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+        },
+        {
+          "name": "targetStructId",
+          "type": "string",
+          "required": true,
+          "description": "Struct GUID of the property to promote"
+        },
+        {
+          "name": "targetPath",
+          "type": "string",
+          "required": true,
+          "description": "Property path to promote"
+        },
+        {
+          "name": "parameterName",
+          "type": "string",
+          "required": false,
+          "description": "Name for the new parameter (default: the property name, made unique)"
+        },
+        {
+          "name": "stateId",
+          "type": "string",
+          "required": false,
+          "description": "State to hold the parameter: the target's state or an ancestor. Omit both for a tree parameter"
+        },
+        {
+          "name": "statePath",
+          "type": "string",
+          "required": false,
+          "description": "Dot-path of that state, as an alternative to stateId"
+        }
+      ]
+    },
     "purge_python_modules": {
       "category": "editor",
       "params": [
@@ -30477,6 +33417,23 @@
         }
       ]
     },
+    "read_state_tree_node": {
+      "category": "statetree",
+      "params": [
+        {
+          "name": "assetPath",
+          "type": "string",
+          "required": true,
+          "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+        },
+        {
+          "name": "nodeId",
+          "type": "string",
+          "required": true,
+          "description": "GUID of any node in the tree, as the add_* actions return it"
+        }
+      ]
+    },
     "read_state_tree_runtime": {
       "category": "statetree",
       "params": [
@@ -30739,6 +33696,54 @@
           "type": "boolean",
           "required": false,
           "description": "Rename the binding to the new actor's label (default false)"
+        }
+      ]
+    },
+    "rebuild_brush": {
+      "category": "level",
+      "params": [
+        {
+          "name": "actorLabel",
+          "type": "string",
+          "required": false,
+          "description": "Brush or volume to rebuild"
+        },
+        {
+          "name": "actorPath",
+          "type": "string",
+          "required": false,
+          "description": "Object path of the brush; preferred over actorLabel when known"
+        },
+        {
+          "name": "builderClass",
+          "type": "string",
+          "required": false,
+          "description": "Brush builder class to rebuild with (default: the brush's current builder)"
+        },
+        {
+          "name": "builderProperties",
+          "type": "object",
+          "required": false,
+          "description": "Builder property name -> value, such as {X: 400, Y: 200, Z: 100} for a CubeBuilder"
+        },
+        {
+          "name": "deferBsp",
+          "type": "boolean",
+          "required": false,
+          "description": "Defer the BSP rebuild for batching; a later call without it processes the pending BSP (default false)"
+        }
+      ],
+      "choices": [
+        {
+          "mode": "atLeastOne",
+          "branches": [
+            [
+              "actorLabel"
+            ],
+            [
+              "actorPath"
+            ]
+          ]
         }
       ]
     },
@@ -32009,6 +35014,23 @@
         }
       ]
     },
+    "remove_hlod_setup": {
+      "category": "level",
+      "params": [
+        {
+          "name": "partitionName",
+          "type": "string",
+          "required": true,
+          "description": "Runtime partition name, as list_runtime_partitions reports it"
+        },
+        {
+          "name": "setupName",
+          "type": "string",
+          "required": true,
+          "description": "HLOD setup name, as list_hlod_setups reports it"
+        }
+      ]
+    },
     "remove_imc_mapping": {
       "category": "gameplay",
       "params": [
@@ -32100,6 +35122,23 @@
           "type": "string",
           "required": false,
           "description": "Landscape actor object path; wins over actorLabel, which is not unique"
+        }
+      ]
+    },
+    "remove_localization_target": {
+      "category": "project",
+      "params": [
+        {
+          "name": "target",
+          "type": "string",
+          "required": true,
+          "description": "Localization target name"
+        },
+        {
+          "name": "deleteFiles",
+          "type": "boolean",
+          "required": false,
+          "description": "Also delete its config, manifest, archives and LocRes files (default false)"
         }
       ]
     },
@@ -32501,6 +35540,36 @@
         }
       ]
     },
+    "remove_python_path": {
+      "category": "editor",
+      "params": [
+        {
+          "name": "path",
+          "type": "string",
+          "required": false,
+          "description": "Path to remove, as it was added"
+        },
+        {
+          "name": "owner",
+          "type": "string",
+          "required": false,
+          "description": "Owner it was added under; alone, removes every path of that owner"
+        }
+      ],
+      "choices": [
+        {
+          "mode": "atLeastOne",
+          "branches": [
+            [
+              "path"
+            ],
+            [
+              "owner"
+            ]
+          ]
+        }
+      ]
+    },
     "remove_retarget_pose": {
       "category": "animation",
       "params": [
@@ -32524,6 +35593,17 @@
           "type": "string",
           "required": false,
           "description": "source | target (default target)"
+        }
+      ]
+    },
+    "remove_runtime_partition": {
+      "category": "level",
+      "params": [
+        {
+          "name": "partitionName",
+          "type": "string",
+          "required": true,
+          "description": "Runtime partition name, as list_runtime_partitions reports it"
         }
       ]
     },
@@ -32993,6 +36073,32 @@
         }
       ]
     },
+    "remove_stringtable_entry_metadata": {
+      "category": "asset",
+      "params": [
+        {
+          "name": "assetPath",
+          "type": "string",
+          "required": true,
+          "description": "StringTable asset path",
+          "aliases": [
+            "path"
+          ]
+        },
+        {
+          "name": "key",
+          "type": "string",
+          "required": true,
+          "description": "Entry key"
+        },
+        {
+          "name": "metaDataId",
+          "type": "string",
+          "required": true,
+          "description": "Metadata id to remove"
+        }
+      ]
+    },
     "remove_timeline": {
       "category": "blueprint",
       "params": [
@@ -33199,6 +36305,46 @@
           "type": "string",
           "required": true,
           "description": "Reflected property name on the widget"
+        }
+      ]
+    },
+    "remove_widget_viewmodel": {
+      "category": "widget",
+      "params": [
+        {
+          "name": "assetPath",
+          "type": "string",
+          "required": true,
+          "description": "Widget Blueprint asset path, e.g. /Game/UI/WBP_Example",
+          "aliases": [
+            "path"
+          ]
+        },
+        {
+          "name": "viewModelName",
+          "type": "string",
+          "required": true,
+          "description": "Name of the viewmodel to remove"
+        }
+      ]
+    },
+    "remove_widget_viewmodel_binding": {
+      "category": "widget",
+      "params": [
+        {
+          "name": "assetPath",
+          "type": "string",
+          "required": true,
+          "description": "Widget Blueprint asset path, e.g. /Game/UI/WBP_Example",
+          "aliases": [
+            "path"
+          ]
+        },
+        {
+          "name": "bindingId",
+          "type": "string",
+          "required": true,
+          "description": "Binding id, as list_widget_viewmodel_bindings reports it"
         }
       ]
     },
@@ -33448,6 +36594,23 @@
           "type": "string",
           "required": false,
           "description": "source | target (default target)"
+        }
+      ]
+    },
+    "rename_runtime_partition": {
+      "category": "level",
+      "params": [
+        {
+          "name": "partitionName",
+          "type": "string",
+          "required": true,
+          "description": "Runtime partition name, as list_runtime_partitions reports it"
+        },
+        {
+          "name": "newName",
+          "type": "string",
+          "required": true,
+          "description": "New runtime partition name"
         }
       ]
     },
@@ -33918,6 +37081,11 @@
         }
       ]
     },
+    "repair_world_partition_errors": {
+      "category": "level",
+      "params": [],
+      "contractExempt": "Takes no parameters and repairs, saving the world, when there is something to repair"
+    },
     "reparent_blueprint": {
       "category": "blueprint",
       "params": [
@@ -33961,6 +37129,139 @@
           "type": "string",
           "required": true,
           "description": "New parent component name"
+        }
+      ]
+    },
+    "replace_actors_with_asset": {
+      "category": "level",
+      "params": [
+        {
+          "name": "actorLabels",
+          "type": "array",
+          "required": true,
+          "description": "Labels (or names or paths) of the actors to replace",
+          "items": "string"
+        },
+        {
+          "name": "assetPath",
+          "type": "string",
+          "required": true,
+          "description": "Asset to create the new actors from: a static mesh, Blueprint, particle system..."
+        },
+        {
+          "name": "copySourceProperties",
+          "type": "boolean",
+          "required": false,
+          "description": "When the asset is a Blueprint sharing a native parent with a replaced actor, copy that actor's property values (default true)"
+        }
+      ]
+    },
+    "replace_actors_with_class": {
+      "category": "level",
+      "params": [
+        {
+          "name": "actorLabels",
+          "type": "array",
+          "required": true,
+          "description": "Labels (or names or paths) of the actors to replace",
+          "items": "string"
+        },
+        {
+          "name": "className",
+          "type": "string",
+          "required": true,
+          "description": "Actor class to create in their place; it needs an actor factory that works without an asset (lights, empty actors, volumes)"
+        }
+      ]
+    },
+    "replace_blockout": {
+      "category": "level",
+      "params": [
+        {
+          "name": "actorLabel",
+          "type": "string",
+          "required": false,
+          "description": "Blockout actor label"
+        },
+        {
+          "name": "actorPath",
+          "type": "string",
+          "required": false,
+          "description": "Blockout actor path; the unambiguous selector"
+        },
+        {
+          "name": "tag",
+          "type": "string",
+          "required": false,
+          "description": "Act on every blockout actor carrying this tag"
+        },
+        {
+          "name": "actorPaths",
+          "type": "array",
+          "required": false,
+          "description": "Blockout actor paths",
+          "items": "string"
+        },
+        {
+          "name": "assetPath",
+          "type": "string",
+          "required": false,
+          "description": "StaticMesh to put in place of every target; wins over candidateFolder"
+        },
+        {
+          "name": "candidateFolder",
+          "type": "string",
+          "required": false,
+          "description": "Content folder of candidate StaticMeshes, e.g. /Game/Props"
+        },
+        {
+          "name": "recursive",
+          "type": "boolean",
+          "required": false,
+          "description": "Include subfolders of candidateFolder (default true)"
+        },
+        {
+          "name": "allowRotation",
+          "type": "boolean",
+          "required": false,
+          "description": "Also try each candidate turned a quarter about Z (default true)"
+        },
+        {
+          "name": "maxCandidates",
+          "type": "integer",
+          "required": false,
+          "description": "Load at most this many candidate meshes (default 500)"
+        },
+        {
+          "name": "fit",
+          "type": "string",
+          "required": false,
+          "description": "uniform (default, largest uniform scale that fits inside) | stretch (match every axis) | none (asset at scale 1)"
+        },
+        {
+          "name": "yawOffset",
+          "type": "number",
+          "required": false,
+          "description": "Extra yaw in degrees on top of the blockout's rotation (default the best match's, else 0)"
+        }
+      ],
+      "choices": [
+        {
+          "mode": "exactlyOne",
+          "branches": [
+            [
+              "actorLabel"
+            ],
+            [
+              "actorPath"
+            ],
+            [
+              "tag"
+            ],
+            [
+              "actorPaths"
+            ]
+          ]
         }
       ]
     },
@@ -34316,6 +37617,46 @@
         }
       ],
       "contractExempt": "presses a button on the active modal dialog"
+    },
+    "restore_blockout": {
+      "category": "level",
+      "params": [
+        {
+          "name": "actorLabel",
+          "type": "string",
+          "required": false,
+          "description": "Replacement actor label"
+        },
+        {
+          "name": "actorPath",
+          "type": "string",
+          "required": false,
+          "description": "Replacement actor path"
+        },
+        {
+          "name": "actorPaths",
+          "type": "array",
+          "required": false,
+          "description": "Replacement actor paths, as replace_blockout returns them",
+          "items": "string"
+        }
+      ],
+      "choices": [
+        {
+          "mode": "exactlyOne",
+          "branches": [
+            [
+              "actorLabel"
+            ],
+            [
+              "actorPath"
+            ],
+            [
+              "actorPaths"
+            ]
+          ]
+        }
+      ]
     },
     "restore_component_relative_transform": {
       "category": "level",
@@ -34718,6 +38059,23 @@
           "type": "number",
           "required": false,
           "description": "How many scored items to return (default 50)"
+        }
+      ]
+    },
+    "run_map_check": {
+      "category": "editor",
+      "params": [
+        {
+          "name": "maxMessages",
+          "type": "integer",
+          "required": false,
+          "description": "Messages to return (default 500, max 5000)"
+        },
+        {
+          "name": "severity",
+          "type": "string",
+          "required": false,
+          "description": "Severity-name substring: Error | Warning | PerformanceWarning | Info"
         }
       ]
     },
@@ -35153,6 +38511,146 @@
           "type": "boolean",
           "required": false,
           "description": "Include each sequence's bone track names"
+        }
+      ]
+    },
+    "scatter_along_spline": {
+      "category": "level",
+      "params": [
+        {
+          "name": "actorLabel",
+          "type": "string",
+          "required": false,
+          "description": "Label of the actor that owns the spline; pass actorLabel or actorPath"
+        },
+        {
+          "name": "actorPath",
+          "type": "string",
+          "required": false,
+          "description": "Full path of the actor that owns the spline; wins over actorLabel"
+        },
+        {
+          "name": "componentName",
+          "type": "string",
+          "required": false,
+          "description": "Spline component, when the actor has several (default the first)"
+        },
+        {
+          "name": "generatorName",
+          "type": "string",
+          "required": false,
+          "description": "Names this output so a later run replaces it (default SplineScatter)"
+        },
+        {
+          "name": "meshes",
+          "type": "array",
+          "required": false,
+          "description": "StaticMesh paths to scatter; required unless rebuild is set",
+          "items": "string"
+        },
+        {
+          "name": "weights",
+          "type": "array",
+          "required": false,
+          "description": "Relative pick weight per mesh (default equal)",
+          "items": "number"
+        },
+        {
+          "name": "mode",
+          "type": "string",
+          "required": false,
+          "description": "instances (default, one HierarchicalInstancedStaticMeshComponent per mesh on the spline actor) | actors (StaticMeshActors)"
+        },
+        {
+          "name": "interval",
+          "type": "number",
+          "required": false,
+          "description": "Distance between placements in centimetres (default 200); ignored when count is given"
+        },
+        {
+          "name": "count",
+          "type": "integer",
+          "required": false,
+          "description": "Number of placements spread evenly over the spline"
+        },
+        {
+          "name": "startOffset",
+          "type": "number",
+          "required": false,
+          "description": "Distance along the spline to leave empty at its start, in centimetres"
+        },
+        {
+          "name": "endOffset",
+          "type": "number",
+          "required": false,
+          "description": "Distance along the spline to leave empty at its end, in centimetres"
+        },
+        {
+          "name": "offset",
+          "type": "vec3",
+          "required": false,
+          "description": "Constant offset in the spline's frame: x along it, y to its right, z up"
+        },
+        {
+          "name": "positionJitter",
+          "type": "vec3",
+          "required": false,
+          "description": "Random offset range per axis in the spline's frame, in centimetres"
+        },
+        {
+          "name": "yawJitter",
+          "type": "number",
+          "required": false,
+          "description": "Random yaw range in degrees, either way"
+        },
+        {
+          "name": "scaleMin",
+          "type": "number",
+          "required": false,
+          "description": "Smallest uniform scale (default 1)"
+        },
+        {
+          "name": "scaleMax",
+          "type": "number",
+          "required": false,
+          "description": "Largest uniform scale (default scaleMin)"
+        },
+        {
+          "name": "alignToSpline",
+          "type": "boolean",
+          "required": false,
+          "description": "Rotate each placement to the spline's direction (default true)"
+        },
+        {
+          "name": "seed",
+          "type": "integer",
+          "required": false,
+          "description": "Random seed; the same seed and parameters place the same result (default 0)"
+        },
+        {
+          "name": "maxCount",
+          "type": "integer",
+          "required": false,
+          "description": "Refuse more placements than this (default 10000)"
+        },
+        {
+          "name": "rebuild",
+          "type": "boolean",
+          "required": false,
+          "description": "Reuse the parameters stored by the last run of this generator; passed parameters override them"
+        }
+      ],
+      "choices": [
+        {
+          "mode": "exactlyOne",
+          "branches": [
+            [
+              "actorLabel"
+            ],
+            [
+              "actorPath"
+            ]
+          ]
         }
       ]
     },
@@ -35711,6 +39209,57 @@
           "description": "Keep the current selection and add to it (default false: replace it)"
         }
       ]
+    },
+    "semantic_search": {
+      "category": "asset",
+      "params": [
+        {
+          "name": "query",
+          "type": "string",
+          "required": true,
+          "description": "Natural-language description of the assets to find"
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "description": "Most results to return, 1 to 200 (default 20)"
+        },
+        {
+          "name": "directory",
+          "type": "string",
+          "required": false,
+          "description": "Content folder to search within, e.g. /Game/Props (default every indexed folder)"
+        },
+        {
+          "name": "maxDistance",
+          "type": "number",
+          "required": false,
+          "description": "Largest vector distance a match may have (default the plugin's VectorDistanceCutoff)"
+        }
+      ]
+    },
+    "semantic_search_index": {
+      "category": "asset",
+      "params": [
+        {
+          "name": "assetPaths",
+          "type": "array",
+          "required": false,
+          "description": "Object or package paths to index (default every asset in the indexed folders)",
+          "items": "string"
+        },
+        {
+          "name": "force",
+          "type": "boolean",
+          "required": false,
+          "description": "With no assetPaths: clear the index and rebuild every embedding instead of reusing cached ones (default false)"
+        }
+      ]
+    },
+    "semantic_search_status": {
+      "category": "asset",
+      "params": []
     },
     "send_ability_input": {
       "category": "gas",
@@ -38403,6 +41952,30 @@
       ],
       "contractExempt": "toggles game view on a live level viewport"
     },
+    "set_hlod_setup_layers": {
+      "category": "level",
+      "params": [
+        {
+          "name": "partitionName",
+          "type": "string",
+          "required": true,
+          "description": "Runtime partition name, as list_runtime_partitions reports it"
+        },
+        {
+          "name": "setupName",
+          "type": "string",
+          "required": true,
+          "description": "HLOD setup name, as list_hlod_setups reports it"
+        },
+        {
+          "name": "hlodLayers",
+          "type": "array",
+          "required": true,
+          "description": "HLODLayer asset paths to assign; empty leaves the setup without layers",
+          "items": "string"
+        }
+      ]
+    },
     "set_ik_retargeter_rig": {
       "category": "animation",
       "params": [
@@ -38864,6 +42437,81 @@
         }
       ]
     },
+    "set_landscape_spline_segment_meshes": {
+      "category": "landscape",
+      "params": [
+        {
+          "name": "segment",
+          "type": "string",
+          "required": true,
+          "description": "Segment object name or full path, as list_splines reports it"
+        },
+        {
+          "name": "meshes",
+          "type": "array",
+          "required": false,
+          "description": "Meshes deformed along the segment, replacing the current list; an empty list clears it",
+          "items": "object",
+          "fields": [
+            {
+              "name": "mesh",
+              "type": "string",
+              "required": true,
+              "description": "StaticMesh asset path"
+            },
+            {
+              "name": "scale",
+              "type": "vec3",
+              "required": false,
+              "description": "Mesh scale (default 1, 1, 1)"
+            },
+            {
+              "name": "forwardAxis",
+              "type": "string",
+              "required": false,
+              "description": "X (default) | Y | Z: the mesh axis laid along the spline"
+            },
+            {
+              "name": "upAxis",
+              "type": "string",
+              "required": false,
+              "description": "X | Y | Z (default): the mesh axis kept up"
+            },
+            {
+              "name": "materialOverrides",
+              "type": "array",
+              "required": false,
+              "description": "Material per slot; an empty string keeps the mesh's own",
+              "items": "string"
+            },
+            {
+              "name": "centerH",
+              "type": "boolean",
+              "required": false,
+              "description": "Centre the mesh horizontally on the spline (default true)"
+            },
+            {
+              "name": "scaleToWidth",
+              "type": "boolean",
+              "required": false,
+              "description": "Scale the mesh to the spline width (default true)"
+            }
+          ]
+        },
+        {
+          "name": "collisionProfile",
+          "type": "string",
+          "required": false,
+          "description": "Collision profile of the segment's mesh components, e.g. BlockAll or NoCollision"
+        },
+        {
+          "name": "castShadow",
+          "type": "boolean",
+          "required": false,
+          "description": "Whether the segment's meshes cast shadows"
+        }
+      ]
+    },
     "set_light_properties": {
       "category": "level",
       "params": [
@@ -39073,6 +42721,63 @@
           "type": "string",
           "required": false,
           "description": "auto (default, prefers PIE) | pie | game | editor"
+        }
+      ]
+    },
+    "set_localization_target": {
+      "category": "project",
+      "params": [
+        {
+          "name": "target",
+          "type": "string",
+          "required": true,
+          "description": "Localization target name (letters, digits, _ and -); created when the project has none of that name"
+        },
+        {
+          "name": "cultures",
+          "type": "array",
+          "required": false,
+          "description": "Culture codes the target supports, e.g. [\"en\", \"fr\"]; replaces the list",
+          "items": "string"
+        },
+        {
+          "name": "nativeCulture",
+          "type": "string",
+          "required": false,
+          "description": "The culture source text is written in; one of cultures (default the first)"
+        },
+        {
+          "name": "gatherFromPackages",
+          "type": "boolean",
+          "required": false,
+          "description": "Gather text from assets and maps"
+        },
+        {
+          "name": "includePaths",
+          "type": "array",
+          "required": false,
+          "description": "Package path wildcards to gather from, relative to the project root, e.g. Content/UI/*; replaces the list",
+          "items": "string"
+        },
+        {
+          "name": "excludePaths",
+          "type": "array",
+          "required": false,
+          "description": "Package path wildcards to skip; replaces the list",
+          "items": "string"
+        },
+        {
+          "name": "gatherFromTextFiles",
+          "type": "boolean",
+          "required": false,
+          "description": "Gather LOCTEXT and NSLOCTEXT from source files"
+        },
+        {
+          "name": "searchDirectories",
+          "type": "array",
+          "required": false,
+          "description": "Source directories to gather from, relative to the project root, e.g. Source; replaces the list",
+          "items": "string"
         }
       ]
     },
@@ -40545,6 +44250,51 @@
         }
       ]
     },
+    "set_pcg_custom_hlsl": {
+      "category": "pcg",
+      "params": [
+        {
+          "name": "assetPath",
+          "type": "string",
+          "required": true,
+          "description": "PCGGraph asset path",
+          "aliases": [
+            "path"
+          ]
+        },
+        {
+          "name": "nodeName",
+          "type": "string",
+          "required": true,
+          "description": "Engine name of the Custom HLSL node, as read_graph reports it"
+        },
+        {
+          "name": "sourceText",
+          "type": "string",
+          "required": false,
+          "description": "Kernel body (the Source pane of the HLSL Source Editor)"
+        },
+        {
+          "name": "functionsText",
+          "type": "string",
+          "required": false,
+          "description": "Helper functions the source can call (the Functions pane)"
+        }
+      ],
+      "choices": [
+        {
+          "mode": "atLeastOne",
+          "branches": [
+            [
+              "sourceText"
+            ],
+            [
+              "functionsText"
+            ]
+          ]
+        }
+      ]
+    },
     "set_pcg_graph_instance_overrides": {
       "category": "pcg",
       "params": [
@@ -41660,6 +45410,40 @@
         }
       ]
     },
+    "set_runtime_hash_class": {
+      "category": "level",
+      "params": [
+        {
+          "name": "runtimeHashClass",
+          "type": "string",
+          "required": true,
+          "description": "Runtime hash class: WorldPartitionRuntimeHashSet, WorldPartitionRuntimeSpatialHash, or a /Script path"
+        }
+      ]
+    },
+    "set_runtime_partition_properties": {
+      "category": "level",
+      "params": [
+        {
+          "name": "partitionName",
+          "type": "string",
+          "required": true,
+          "description": "Runtime partition name, as list_runtime_partitions reports it"
+        },
+        {
+          "name": "setupName",
+          "type": "string",
+          "required": false,
+          "description": "Write this HLOD setup's partition instead of the main partition"
+        },
+        {
+          "name": "properties",
+          "type": "object",
+          "required": true,
+          "description": "Property name -> value, as get_runtime_partition lists them"
+        }
+      ]
+    },
     "set_runtime_visibility": {
       "category": "editor",
       "params": [
@@ -42725,6 +46509,76 @@
         }
       ]
     },
+    "set_state_tree_node_data": {
+      "category": "statetree",
+      "params": [
+        {
+          "name": "assetPath",
+          "type": "string",
+          "required": true,
+          "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+        },
+        {
+          "name": "nodeId",
+          "type": "string",
+          "required": true,
+          "description": "GUID of the node, as the add_* actions return it"
+        },
+        {
+          "name": "target",
+          "type": "string",
+          "required": false,
+          "description": "node (the node struct), instance (default) or executionRuntime"
+        },
+        {
+          "name": "propertyName",
+          "type": "string",
+          "required": false,
+          "description": "Property to write. Omit to replace the whole struct with value"
+        },
+        {
+          "name": "value",
+          "type": "string",
+          "required": true,
+          "description": "Value in Unreal text format, e.g. 2.5, true, (X=1,Y=2)"
+        }
+      ]
+    },
+    "set_state_tree_node_flags": {
+      "category": "statetree",
+      "params": [
+        {
+          "name": "assetPath",
+          "type": "string",
+          "required": true,
+          "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+        },
+        {
+          "name": "nodeId",
+          "type": "string",
+          "required": true,
+          "description": "GUID of the node, as the add_* actions return it"
+        },
+        {
+          "name": "taskEnabled",
+          "type": "boolean",
+          "required": false,
+          "description": "Tasks: enable or disable the task"
+        },
+        {
+          "name": "consideredForCompletion",
+          "type": "boolean",
+          "required": false,
+          "description": "Tasks: whether the task counts toward the state completing. The task must be enabled and allow the edit"
+        },
+        {
+          "name": "evaluationMode",
+          "type": "string",
+          "required": false,
+          "description": "Conditions: Evaluated, ForcedTrue or ForcedFalse"
+        }
+      ]
+    },
     "set_state_tree_root_parameters": {
       "category": "statetree",
       "params": [
@@ -43108,6 +46962,38 @@
         }
       ]
     },
+    "set_stringtable_entry_metadata": {
+      "category": "asset",
+      "params": [
+        {
+          "name": "assetPath",
+          "type": "string",
+          "required": true,
+          "description": "StringTable asset path",
+          "aliases": [
+            "path"
+          ]
+        },
+        {
+          "name": "key",
+          "type": "string",
+          "required": true,
+          "description": "Entry key"
+        },
+        {
+          "name": "metaDataId",
+          "type": "string",
+          "required": true,
+          "description": "Metadata id, e.g. Comment"
+        },
+        {
+          "name": "metaDataValue",
+          "type": "string",
+          "required": true,
+          "description": "Metadata value to store"
+        }
+      ]
+    },
     "set_struct_field_default": {
       "category": "blueprint",
       "params": [
@@ -43215,6 +47101,62 @@
               "removeMarkers"
             ]
           ]
+        }
+      ]
+    },
+    "set_text_localization": {
+      "category": "asset",
+      "params": [
+        {
+          "name": "assetPath",
+          "type": "string",
+          "required": true,
+          "description": "Asset holding the Text property; a Blueprint means its class defaults",
+          "aliases": [
+            "path"
+          ]
+        },
+        {
+          "name": "propertyName",
+          "type": "string",
+          "required": true,
+          "description": "Text property, dotted through structs and object references"
+        },
+        {
+          "name": "widgetName",
+          "type": "string",
+          "required": false,
+          "description": "A widget in a Widget Blueprint's tree that owns the property"
+        },
+        {
+          "name": "namespace",
+          "type": "string",
+          "required": false,
+          "description": "Text namespace, without the package marker (default the current one)"
+        },
+        {
+          "name": "key",
+          "type": "string",
+          "required": false,
+          "description": "Text key (default the current one)"
+        },
+        {
+          "name": "sourceString",
+          "type": "string",
+          "required": false,
+          "description": "Source string (default the current one)"
+        },
+        {
+          "name": "stringTableId",
+          "type": "string",
+          "required": false,
+          "description": "Reference a string table entry instead: the table's asset path or id, with stringTableKey"
+        },
+        {
+          "name": "stringTableKey",
+          "type": "string",
+          "required": false,
+          "description": "Entry key in stringTableId"
         }
       ]
     },
@@ -43995,6 +47937,18 @@
           ]
         }
       ]
+    },
+    "set_world_partition_streaming": {
+      "category": "level",
+      "params": [
+        {
+          "name": "enabled",
+          "type": "boolean",
+          "required": true,
+          "description": "true streams the world; false keeps every actor loaded"
+        }
+      ],
+      "contractExempt": "The contract boolean is a valid value, so on a partitioned map the call would change its streaming"
     },
     "set_world_settings": {
       "category": "level",
@@ -45504,6 +49458,30 @@
       ],
       "contractExempt": "sets the running PIE player's input mode"
     },
+    "start_csv_profile": {
+      "category": "editor",
+      "params": [
+        {
+          "name": "captureName",
+          "type": "string",
+          "required": false,
+          "description": "File name for the capture, without extension (default <Project>_<timestamp>)"
+        },
+        {
+          "name": "maxFrames",
+          "type": "number",
+          "required": false,
+          "description": "End the capture by itself after this many frames (default: run until stop_csv_profile)"
+        },
+        {
+          "name": "folder",
+          "type": "string",
+          "required": false,
+          "description": "Output folder (default <Project>/Saved/Profiling/CSV)"
+        }
+      ],
+      "contractExempt": "starts a CSV profiler capture"
+    },
     "start_insights_trace": {
       "category": "editor",
       "params": [
@@ -45596,6 +49574,11 @@
           "description": "With mode=restart, restart from the root rather than resuming"
         }
       ]
+    },
+    "stop_csv_profile": {
+      "category": "editor",
+      "params": [],
+      "contractExempt": "ends the running CSV profiler capture"
     },
     "stop_insights_trace": {
       "category": "editor",
@@ -46399,6 +50382,112 @@
         }
       ]
     },
+    "update_landscape_spline_point": {
+      "category": "landscape",
+      "params": [
+        {
+          "name": "controlPoint",
+          "type": "string",
+          "required": true,
+          "description": "Control point object name or full path, as list_splines reports it"
+        },
+        {
+          "name": "location",
+          "type": "vec3",
+          "required": false,
+          "description": "World location of the control point"
+        },
+        {
+          "name": "rotation",
+          "type": "rotator",
+          "required": false,
+          "description": "World rotation of the tangent at the point"
+        },
+        {
+          "name": "halfWidth",
+          "type": "number",
+          "required": false,
+          "description": "Half-width of the spline at the point, in centimetres (engine default 1000)"
+        },
+        {
+          "name": "sideFalloff",
+          "type": "number",
+          "required": false,
+          "description": "Falloff beyond each side, in centimetres (engine default 1000)"
+        },
+        {
+          "name": "endFalloff",
+          "type": "number",
+          "required": false,
+          "description": "Falloff past an end point, in centimetres (engine default 2000)"
+        },
+        {
+          "name": "layerName",
+          "type": "string",
+          "required": false,
+          "description": "Paint layer applying the spline paints; empty clears it"
+        },
+        {
+          "name": "raiseTerrain",
+          "type": "boolean",
+          "required": false,
+          "description": "Raise terrain below the spline up to it when applied (engine default true)"
+        },
+        {
+          "name": "lowerTerrain",
+          "type": "boolean",
+          "required": false,
+          "description": "Lower terrain above the spline down to it when applied (engine default true)"
+        },
+        {
+          "name": "autoRotate",
+          "type": "boolean",
+          "required": false,
+          "description": "Recompute the rotation from the connected segments when rotation is not given (default true when location moves)"
+        }
+      ]
+    },
+    "update_landscape_spline_segment": {
+      "category": "landscape",
+      "params": [
+        {
+          "name": "segment",
+          "type": "string",
+          "required": true,
+          "description": "Segment object name or full path, as list_splines reports it"
+        },
+        {
+          "name": "startTangentLength",
+          "type": "number",
+          "required": false,
+          "description": "Tangent length at the start point (default the distance between the points)"
+        },
+        {
+          "name": "endTangentLength",
+          "type": "number",
+          "required": false,
+          "description": "Tangent length at the end point (default the distance between the points)"
+        },
+        {
+          "name": "layerName",
+          "type": "string",
+          "required": false,
+          "description": "Paint layer the segment paints when applied; empty clears it"
+        },
+        {
+          "name": "raiseTerrain",
+          "type": "boolean",
+          "required": false,
+          "description": "Raise terrain below the spline up to it when applied (engine default true)"
+        },
+        {
+          "name": "lowerTerrain",
+          "type": "boolean",
+          "required": false,
+          "description": "Lower terrain above the spline down to it when applied (engine default true)"
+        }
+      ]
+    },
     "update_pcg_level_assets": {
       "category": "pcg",
       "params": [
@@ -46414,6 +50503,97 @@
           "type": "boolean",
           "required": false,
           "description": "Save the assets after export (default true)"
+        }
+      ]
+    },
+    "update_widget_viewmodel_binding": {
+      "category": "widget",
+      "params": [
+        {
+          "name": "assetPath",
+          "type": "string",
+          "required": true,
+          "description": "Widget Blueprint asset path, e.g. /Game/UI/WBP_Example",
+          "aliases": [
+            "path"
+          ]
+        },
+        {
+          "name": "bindingId",
+          "type": "string",
+          "required": true,
+          "description": "Binding id, as list_widget_viewmodel_bindings reports it"
+        },
+        {
+          "name": "sourcePath",
+          "type": "string",
+          "required": false,
+          "description": "Source of the value: a viewmodel name, a widget name or Self, then its fields, e.g. PlayerVM.Health"
+        },
+        {
+          "name": "destinationPath",
+          "type": "string",
+          "required": false,
+          "description": "Where the value goes, same form, e.g. HealthBar.Percent"
+        },
+        {
+          "name": "bindingMode",
+          "type": "string",
+          "required": false,
+          "description": "Direction and frequency",
+          "enum": [
+            "OneTimeToDestination",
+            "OneWayToDestination",
+            "TwoWay",
+            "OneWayToSource"
+          ]
+        },
+        {
+          "name": "executionMode",
+          "type": "string",
+          "required": false,
+          "description": "When the binding runs; Default uses the project setting",
+          "enum": [
+            "Default",
+            "Immediate",
+            "Delayed",
+            "Tick",
+            "Auto"
+          ]
+        },
+        {
+          "name": "conversionFunction",
+          "type": "string",
+          "required": false,
+          "description": "Pure function converting the value, as for add; an empty string removes the conversion"
+        },
+        {
+          "name": "conversionArguments",
+          "type": "object",
+          "required": false,
+          "description": "Conversion inputs by pin name: a literal (string, number, boolean or {literal}) or {path} bound to a field. The input sourcePath is not given to goes to the first free input"
+        },
+        {
+          "name": "conversionDirection",
+          "type": "string",
+          "required": false,
+          "description": "Which way the conversion runs (default sourceToDestination, destinationToSource for OneWayToSource)",
+          "enum": [
+            "sourceToDestination",
+            "destinationToSource"
+          ]
+        },
+        {
+          "name": "enabled",
+          "type": "boolean",
+          "required": false,
+          "description": "Whether the binding runs by default (default true)"
+        },
+        {
+          "name": "includeInCompile",
+          "type": "boolean",
+          "required": false,
+          "description": "False keeps the binding in the editor but out of the compiled class (default true)"
         }
       ]
     },
@@ -46545,6 +50725,56 @@
           "description": "NiagaraSystem asset path",
           "aliases": [
             "assetPath"
+          ]
+        }
+      ]
+    },
+    "validate_pcg_edge": {
+      "category": "pcg",
+      "params": [
+        {
+          "name": "assetPath",
+          "type": "string",
+          "required": true,
+          "description": "PCGGraph asset path",
+          "aliases": [
+            "path"
+          ]
+        },
+        {
+          "name": "sourceNode",
+          "type": "string",
+          "required": true,
+          "description": "Node the edge leaves",
+          "aliases": [
+            "sourceNodeName"
+          ]
+        },
+        {
+          "name": "sourcePin",
+          "type": "string",
+          "required": false,
+          "description": "Output pin label (default: the first output pin)",
+          "aliases": [
+            "sourcePinLabel"
+          ]
+        },
+        {
+          "name": "targetNode",
+          "type": "string",
+          "required": true,
+          "description": "Node the edge enters",
+          "aliases": [
+            "targetNodeName"
+          ]
+        },
+        {
+          "name": "targetPin",
+          "type": "string",
+          "required": false,
+          "description": "Input pin label (default: the first input pin)",
+          "aliases": [
+            "targetPinLabel"
           ]
         }
       ]

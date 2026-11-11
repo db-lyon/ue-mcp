@@ -1,0 +1,57 @@
+{
+  "success": true,
+  "assetPath": "/Game/AI/ST_Guard",
+  "schemaClass": "/Script/GameplayStateTreeModule.StateTreeComponentSchema",
+  "subTrees": [
+    {
+      "name": "Root", "id": "00000001-0000-0000-0000-000000000000", "path": "Root", "type": "State", "selectionBehavior": "TrySelectChildrenInOrder", "bEnabled": true,
+      "tasks": [], "enterConditions": [], "transitions": [],
+      "children": [
+        {
+          "name": "Patrol", "id": "00000002-0000-0000-0000-000000000000", "path": "Root/Patrol", "type": "State", "selectionBehavior": "TrySelectChildrenInOrder", "bEnabled": true,
+          "tasks": [{ "id": "T1", "structType": "/Script/StateTreeModule.StateTreeMoveToTask", "structName": "StateTreeMoveToTask" }],
+          "enterConditions": [],
+          "transitions": [
+            { "index": 0, "id": "X1", "trigger": "OnEvent", "transitionType": "GotoState", "eventTag": "AI.Alert", "targetStateId": "00000003-0000-0000-0000-000000000000", "targetStatePath": "Root/Combat", "bEnabled": true, "bDelayTransition": false, "delayDuration": 0, "delayRandomVariance": 0, "conditions": [] },
+            { "index": 1, "id": "X2", "trigger": "OnStateSucceeded|OnStateFailed", "transitionType": "NextState", "bEnabled": true, "bDelayTransition": true, "delayDuration": 1.5, "delayRandomVariance": 0, "conditions": [] }
+          ],
+          "children": []
+        },
+        {
+          "name": "Combat", "id": "00000003-0000-0000-0000-000000000000", "path": "Root/Combat", "type": "Group", "selectionBehavior": "TrySelectChildrenInOrder", "bEnabled": true,
+          "tasks": [],
+          "enterConditions": [{ "id": "C1", "structType": "/Script/StateTreeModule.StateTreeCompareBoolCondition", "structName": "StateTreeCompareBoolCondition", "operand": "Copy" }],
+          "transitions": [
+            { "index": 0, "id": "X3", "trigger": "OnTick", "transitionType": "GotoState", "targetStateId": "00000002-0000-0000-0000-000000000000", "bEnabled": true, "bDelayTransition": false, "delayDuration": 0, "delayRandomVariance": 0,
+              "conditions": [
+                { "id": "C2", "structName": "StateTreeCompareFloatCondition", "operand": "Copy" },
+                { "id": "C3", "structName": "StateTreeCompareBoolCondition", "operand": "Or" }
+              ] }
+          ],
+          "children": [
+            {
+              "name": "Attack", "id": "00000004-0000-0000-0000-000000000000", "path": "Root/Combat/Attack", "type": "State", "selectionBehavior": "TryEnterState", "bEnabled": true,
+              "tasks": [{ "id": "T2", "structName": "StateTreeRunEnvQueryTask" }, { "id": "T3", "structName": "STT_Attack" }],
+              "enterConditions": [],
+              "transitions": [
+                { "index": 0, "id": "X4", "trigger": "OnStateFailed", "transitionType": "Failed", "bEnabled": true, "bDelayTransition": false, "delayDuration": 0, "delayRandomVariance": 0, "conditions": [] },
+                { "index": 1, "id": "X5", "trigger": "OnStateSucceeded", "transitionType": "NextState", "bEnabled": true, "bDelayTransition": false, "delayDuration": 0, "delayRandomVariance": 0, "conditions": [] }
+              ],
+              "children": []
+            },
+            {
+              "name": "Flee", "id": "00000005-0000-0000-0000-000000000000", "path": "Root/Combat/Flee", "type": "LinkedAsset", "linkedAsset": "/Game/AI/ST_Flee.ST_Flee", "selectionBehavior": "TryEnterState", "bEnabled": true,
+              "tasks": [], "enterConditions": [],
+              "transitions": [
+                { "index": 0, "id": "X6", "trigger": "OnStateSucceeded", "transitionType": "Succeeded", "bEnabled": true, "bDelayTransition": false, "delayDuration": 0, "delayRandomVariance": 0, "conditions": [] }
+              ],
+              "children": []
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "evaluators": [{ "id": "E1", "structName": "StateTreeObjectPropertyEvaluator" }],
+  "globalTasks": [{ "id": "G1", "structName": "STT_Perception" }]
+}

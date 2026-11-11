@@ -195,7 +195,7 @@ describe("migrate", () => {
     await call("save_asset", { assetPath: ST, force: true });
     // Migrate refuses while anything is unsaved, so start from a saved level: demo_go_home creates and saves
     // MCP_Home on a fresh project, which does not check it in.
-    await call("demo_go_home", {});
+    await call("demo_go_home", { discardUnsaved: true });
     await call("load_level", { levelPath: "/Game/MCP_Home", discardUnsaved: true });
     await call("save_all_dirty", {});
     const content = join(scratch, "OtherProject", "Content");

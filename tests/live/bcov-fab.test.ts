@@ -71,6 +71,12 @@ afterAll(async () => {
 describe("fab local state", () => {
   it("fab_status, fab_cache_info and fab_list_cached agree on the local download cache", async () => {
     const status = await call("fab_status", {});
+    // The UE 5.9 install ships no Fab plugin; there the status says so instead of reading a cache.
+    if (status.pluginLoaded === false) {
+      expect(status.nativeApiLinked).toBe(false);
+      expect(String(status.note)).toContain("Fab plugin module not loaded");
+      return;
+    }
     expect(status.pluginLoaded, JSON.stringify(status)).toBe(true);
     expect(status.nativeApiLinked).toBe(true);
     expect(typeof status.fabWindowOpened).toBe("boolean");
@@ -88,6 +94,12 @@ describe("fab local state", () => {
   }, 60_000);
 
   it("fab_import_file imports a local file into the destination folder", async () => {
+    if ((await call("fab_status", {})).pluginLoaded === false) {
+      const refused = await callBridge(bridge, "fab_import_file", { source: SOURCE, destination: DIR });
+      expect(refused.ok && (refused.result as Record<string, unknown>)?.success !== false).toBe(false);
+      expect(JSON.stringify(refused.result ?? refused.error)).toContain("Fab plugin not loaded");
+      return;
+    }
     const imported = await call("fab_import_file", { source: SOURCE, destination: DIR });
     expect(imported.source).toBe(SOURCE);
     expect(imported.destination).toBe(DIR);

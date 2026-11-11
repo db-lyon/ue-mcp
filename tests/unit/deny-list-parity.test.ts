@@ -2,8 +2,11 @@
  * The protected-engine deny list is parsed twice: by the build scripts (plain
  * node, no TS) and by the server. Both must split and reject entries the same
  * way, because a mangled entry silently protects nothing. The scripts also
- * canonicalize each entry, so entries are compared after path.resolve.
+ * canonicalize each entry (the on-disk spelling when the directory exists, as
+ * E:\Other does on some machines), so the server's entries are compared after
+ * the same canonicalization.
  */
+import * as fs from "node:fs";
 import * as path from "node:path";
 import { describe, expect, it } from "vitest";
 import { protectedEngineRoots as scriptRoots } from "../../scripts/build-utils.js";
@@ -23,9 +26,17 @@ const REJECTED = ["relative/path;C:\\ok", "C:\\ok:engines"];
 
 const env = (value: string) => ({ UE_MCP_PROTECTED_ENGINE_ROOTS: value });
 
+const canonical = (p: string): string => {
+  try {
+    return fs.realpathSync.native(p);
+  } catch {
+    return path.resolve(p);
+  }
+};
+
 describe("protected engine deny list", () => {
   it.each(ACCEPTED)("script and server split %j the same way", (value) => {
-    const server = serverRoots(env(value)).map((p) => path.resolve(p));
+    const server = serverRoots(env(value)).map(canonical);
     expect(scriptRoots(env(value))).toEqual(server);
   });
 

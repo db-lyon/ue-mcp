@@ -1,8 +1,11 @@
 #include "LevelHandlers.h"
+#include "LevelHandlers_SplineGen.h"
+#include "LevelHandlers_Blockout.h"
 #include "FileHelpers.h"
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
 #include "HandlerPagination.h"
+#include "HandlerLevelSwitch.h"
 #include "HandlerSkinnedAsset.h"
 #include "HandlerStaticMeshAsset.h"
 #include "LevelSpawnFinalize.h"
@@ -377,6 +380,22 @@ void FLevelHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("includeOccurrences"), EType::Boolean, TEXT("Include example actor and component occurrences per mesh")),
 		MCPParam::Optional(TEXT("maxOccurrences"), EType::Integer, TEXT("Cap on occurrence examples per mesh")),
 	});
+	// A whole-map scan like the two above, plus material and texture reads per
+	// component, so it gets the same budget. Mirrored in src/bridge/bridge-timeouts.ts.
+	Registry.RegisterHandlerWithTimeout(TEXT("audit_level_performance"), &AuditLevelPerformance, 300.0f, {
+		SpecWorld, SpecPieInstance,
+		MCPParam::Optional(TEXT("regionMin"), EType::Vec3, TEXT("Audit only primitives and lights whose bounds meet this box; minimum corner, world space")),
+		MCPParam::Optional(TEXT("regionMax"), EType::Vec3, TEXT("Maximum corner of the box; pass with regionMin")),
+		MCPParam::Optional(TEXT("gridSize"), EType::Number, TEXT("Side of the X/Y cells regions are reported in, in cm (default 5000, min 100)")),
+		MCPParam::Optional(TEXT("maxResults"), EType::Integer, TEXT("Rows per list (default 20, max 200); totals cover everything")),
+		MCPParam::Optional(TEXT("instancingMinCount"), EType::Integer, TEXT("Separate components of one mesh before it is an instancing candidate (default 10)")),
+		MCPParam::Optional(TEXT("heavyTriangleThreshold"), EType::Number, TEXT("LOD0 triangles at which a non-Nanite static mesh is a Nanite candidate (default 50000)")),
+		MCPParam::Optional(TEXT("outlierFactor"), EType::Number, TEXT("How many times above or below the median a texel or lightmap density must be to be an outlier (default 4)")),
+		MCPParam::Optional(TEXT("translucentAreaM2"), EType::Number, TEXT("Largest bounds face, in square metres, at which a translucent primitive is an overdraw candidate (default 100)")),
+		MCPParam::Optional(TEXT("stackedTranslucentCount"), EType::Integer, TEXT("Overlapping translucent primitives, itself included, that make a stack (default 3)")),
+		MCPParam::Optional(TEXT("dumpToFile"), EType::Boolean, TEXT("Write every row to a JSON file and return the totals with its path (default false)")),
+		MCPParam::Optional(TEXT("outputPath"), EType::String, TEXT("File for dumpToFile; relative paths resolve under Saved/ (default Saved/UE_MCP/PerfAudit/<world>_<time>.json)")),
+	});
 	Registry.RegisterHandler(TEXT("count_actors_by_class"), &CountActorsByClass, {
 		SpecWorld, SpecPieInstance,
 		MCPParam::Optional(TEXT("topN"), EType::Integer, TEXT("Only the N most common classes")),
@@ -661,6 +680,10 @@ void FLevelHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("position"), EType::Integer, TEXT("Stack index to insert at; -1 (default) appends")),
 		MCPParam::Optional(TEXT("skipIfPresent"), EType::Boolean, TEXT("Report an existing transformer of this class instead of adding a duplicate (default true)")),
 	});
+	// #1828: UWorldPartitionSubsystem setup, HLOD and minimap calls, and the
+	// UEditorActorSubsystem replace and brush rebuild calls.
+	RegisterWorldPartitionSubsystemHandlers(Registry);
+	RegisterActorReplaceHandlers(Registry);
 	// #985: bulk HLOD layer assignment. A whole-map selector, so it takes the
 	// same 300 second budget as the other batch writes. Mirrored in
 	// src/bridge-timeouts.ts, which a parity test checks.
@@ -962,6 +985,10 @@ void FLevelHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("list_transient_actors"), &ListTransientActors, {
 		SpecWorld, SpecPieInstance, SpecCursor, SpecLimit,
 	});
+
+	// Spline generators (LevelHandlers_SplineGen.cpp) and blockout (LevelHandlers_Blockout.cpp).
+	FLevelSplineGenHandlers::RegisterHandlers(Registry);
+	FLevelBlockoutHandlers::RegisterHandlers(Registry);
 }
 
 TSharedPtr<FJsonValue> FLevelHandlers::GetOutliner(const TSharedPtr<FJsonObject>& Params)
@@ -2852,17 +2879,12 @@ TSharedPtr<FJsonValue> FLevelHandlers::LoadLevel(const TSharedPtr<FJsonObject>& 
 	{
 		return MCPError(TEXT("Pass saveFirst or discardUnsaved, not both."));
 	}
+	// What the switch would lose, the open level's own packages included: a
+	// never-saved /Temp map can be missing from the editor's dirty-world list
+	// while the engine's LoadLevel still refuses on it (#1851).
 	auto CollectDirtyWorldPackages = []()
 	{
-		TArray<UPackage*> Packages;
-		FEditorFileUtils::GetDirtyWorldPackages(Packages);
-		TArray<FString> Names;
-		for (UPackage* Package : Packages)
-		{
-			if (Package && Package->IsDirty()) Names.AddUnique(Package->GetName());
-		}
-		Names.Sort();
-		return Names;
+		return MCPLevelSwitch::PackageNames(MCPLevelSwitch::CollectDirtyPackages(GetEditorWorld()));
 	};
 	TArray<FString> DirtyBefore = CollectDirtyWorldPackages();
 	TArray<FString> SavedFirst;
@@ -2879,7 +2901,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::LoadLevel(const TSharedPtr<FJsonObject>& 
 		// An untitled map has no path to save to, and saving it would raise a modal Save As dialog.
 		for (const FString& Name : DirtyBefore)
 		{
-			if (FPackageName::IsTempPackage(Name) || !FPackageName::IsValidLongPackageName(Name))
+			if (MCPLevelSwitch::IsUnsavedMapPackage(Name))
 			{
 				TSharedPtr<FJsonObject> Refusal = MCPErrorObject(FString::Printf(
 					TEXT("'%s' is an untitled map with no file to save to. Save it under a path first, or pass discardUnsaved=true. Nothing was unloaded."), *Name));
@@ -2923,10 +2945,33 @@ TSharedPtr<FJsonValue> FLevelHandlers::LoadLevel(const TSharedPtr<FJsonObject>& 
 		return MCPError(TEXT("LevelEditorSubsystem not available"));
 	}
 
-	bool bSuccess = LevelEditorSubsystem->LoadLevel(LevelPath);
+	// discardUnsaved is carried out here rather than left to the engine. Its
+	// LoadLevel refuses on any dirty level package from UE 5.9 unless told to
+	// discard, and on every version a world whose package is still dirty is
+	// kept loaded through the switch. Clearing the flags first is what
+	// editor(discard_dirty) does, and is the recovery that already worked.
+	if (bDiscardUnsaved && DirtyBefore.Num() > 0)
+	{
+		const TArray<FString> StillDirty = MCPLevelSwitch::DiscardChanges(MCPLevelSwitch::CollectDirtyPackages(GetEditorWorld()));
+		if (StillDirty.Num() > 0)
+		{
+			TSharedPtr<FJsonObject> Refusal = MCPErrorObject(FString::Printf(
+				TEXT("discardUnsaved could not discard %d package(s): each was dirty again as soon as its flag was cleared. Nothing was unloaded."), StillDirty.Num()));
+			Refusal->SetArrayField(TEXT("stillDirty"), MCPStringListToJson(StillDirty));
+			Refusal->SetBoolField(TEXT("endedPlaySession"), bEndedPIE);
+			return MCPResult(Refusal);
+		}
+	}
+
+	bool bSuccess = MCPLevelSwitch::LoadLevel(*LevelEditorSubsystem, LevelPath, bDiscardUnsaved);
 	if (!bSuccess)
 	{
-		return MCPError(FString::Printf(TEXT("Failed to load level: %s"), *LevelPath));
+		TSharedPtr<FJsonObject> Failure = MCPErrorObject(FString::Printf(
+			TEXT("Failed to load level: %s. The engine refused the switch; the output log carries its reason."), *LevelPath));
+		const TArray<FString> DirtyNow = CollectDirtyWorldPackages();
+		if (DirtyNow.Num() > 0) Failure->SetArrayField(TEXT("dirtyPackages"), MCPStringListToJson(DirtyNow));
+		Failure->SetStringField(TEXT("openMap"), MCPLevelSwitch::OpenMapPackageName());
+		return MCPResult(Failure);
 	}
 
 	// The open world is the proof the load happened, not the subsystem's return value.

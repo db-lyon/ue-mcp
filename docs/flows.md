@@ -28,9 +28,11 @@ Run it:
 flow(action="run", flowName="build_and_check")
 ```
 
+Under the default `micro` context strategy there is no separate `flow` tool; the same call goes through the gateway as `tools(action="call", category="flow", method="run", args={flowName: "build_and_check"})`, and so do `plan` and `list`.
+
 The config is reloaded on every `flow` call, so an edited flow runs without a server restart.
 
-The response carries a `summary` line per step, a `steps` array with what each step answered (`data`, `success`, `attempts`, `error`), `failedStep`, `rollback`, `hookErrors` and the `runId`.
+The response carries a `summary` line per step, a `steps` array with what each step answered (`data`, `success`, `attempts`, `error`), `failedStep`, `rollback`, `hookErrors` and the `runId`. Like every category tool, the flow tool takes `select` and `omit` (dotted paths, arrays traversed: `select: "steps.success"`) to narrow that answer; they apply to the flow tool's own response and never reach a step.
 
 ## The `flow` tool
 
@@ -44,7 +46,7 @@ The response carries a `summary` line per step, a `steps` array with what each s
 
 ## Tasks
 
-Every action is a task named `<category>.<action>`: `level.place_actor`, `asset.list`, `project.build`. There are <!-- count:actions -->2163+<!-- /count --> across <!-- count:tools -->30<!-- /count --> categories. A few more are built in:
+Every action is a task named `<category>.<action>`: `level.place_actor`, `asset.list`, `project.build`. There are <!-- count:actions -->3695+<!-- /count --> across <!-- count:tools -->31<!-- /count --> categories. A few more are built in:
 
 | Task | What it does |
 |------|--------------|

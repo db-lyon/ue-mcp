@@ -481,6 +481,7 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("dryRun"), EType::Boolean, TEXT("Report the redirectors, referencers and packages it would load and save, and stop (default false)")),
 		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save the repointed referencers (default true); false leaves them dirty in memory and keeps every redirector they reference")),
 		MCPParam::Optional(TEXT("allowProjectWide"), EType::Boolean, TEXT("Permit a path naming a whole content root (default false)")),
+		MCPParam::Optional(TEXT("deleteRedirectors"), EType::Boolean, TEXT("Delete each redirector once nothing references it (default true); false keeps the stubs")),
 	});
 	Registry.RegisterHandler(TEXT("create_data_asset"), &CreateDataAsset, {
 		MCPParam::Required(TEXT("name"), EType::String, TEXT("Asset name")),
@@ -1016,6 +1017,17 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StringTable asset path")).Alias(TEXT("path")),
 		MCPParam::Required(TEXT("key"), EType::String, TEXT("Entry key")),
 	});
+	Registry.RegisterHandler(TEXT("set_stringtable_entry_metadata"), &SetStringTableEntryMetaData, {
+		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StringTable asset path")).Alias(TEXT("path")),
+		MCPParam::Required(TEXT("key"), EType::String, TEXT("Entry key")),
+		MCPParam::Required(TEXT("metaDataId"), EType::String, TEXT("Metadata id, e.g. Comment")),
+		MCPParam::Required(TEXT("metaDataValue"), EType::String, TEXT("Metadata value to store")),
+	});
+	Registry.RegisterHandler(TEXT("remove_stringtable_entry_metadata"), &RemoveStringTableEntryMetaData, {
+		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StringTable asset path")).Alias(TEXT("path")),
+		MCPParam::Required(TEXT("key"), EType::String, TEXT("Entry key")),
+		MCPParam::Required(TEXT("metaDataId"), EType::String, TEXT("Metadata id to remove")),
+	});
 	Registry.RegisterHandler(TEXT("import_stringtable"), &ImportStringTable, {
 		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StringTable asset path")).Alias(TEXT("path")),
 		MCPParam::Required(TEXT("filePath"), EType::String, TEXT("CSV file to merge into the table")).Alias(TEXT("filename")).Alias(TEXT("csvPath")),
@@ -1046,6 +1058,9 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		SpecCursor,
 		MCPParam::Optional(TEXT("limit"), EType::Integer, TEXT("Rows per page, 1 to 200 (default 20)")),
 	});
+
+	// #1829: Epic's Semantic Search, through its module interface.
+	RegisterSemanticSearchHandlers(Registry);
 
 	// v0.7.19 #150 - AssetRegistry referencers
 	Registry.RegisterHandler(TEXT("get_asset_referencers"), &GetReferencers, {

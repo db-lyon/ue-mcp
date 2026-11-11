@@ -185,6 +185,11 @@ export interface ToolContext {
    */
   onProgress?: ProgressFn;
   /**
+   * Aborted when the client cancels this call (notifications/cancelled). A
+   * bridge call handed it sends cancel_request to the editor and stops waiting.
+   */
+  readonly signal?: AbortSignal;
+  /**
    * Who is on the other end of the transport, from the MCP `initialize`
    * handshake. Used to explain client-specific rendering limits in a result
    * rather than leaving the user staring at a call that looks frozen.
@@ -196,6 +201,12 @@ export interface ToolContext {
    * the MCP surface.
    */
   flowStepApproval?: { approver: string; token: string };
+  /**
+   * The MCP session this call came from, as asset leases name it: the
+   * daemon's id for the connection, or this process for a stdio server.
+   * Absent where no session is behind the call.
+   */
+  leaseHolder?: { id: string; label: string };
 }
 
 export interface ProgressUpdate {
@@ -388,6 +399,13 @@ interface ActionSpecBase {
    * the canonical address. Built by `movedAction`.
    */
   movedTo?: { category: string; action: string };
+  /**
+   * Result paths (dotted, arrays traversed) that name an image file this
+   * action wrote. Set by `withInlineImage`, which also adds the `inline`
+   * parameter: with it, dispatch reads those files and returns them as image
+   * content.
+   */
+  imageOutputs?: readonly string[];
 }
 
 /** Forwards to a C++ bridge method over the WebSocket. Built by `bp`. */
@@ -405,6 +423,13 @@ export interface BridgeActionSpec extends ActionSpecBase {
    * `epic_call_tool` envelope from it and `epicSchema` (see paramMapperOf).
    */
   epicTool?: EpicToolRef;
+  /**
+   * The tool, served by Epic's Unreal MCP plugin outside the toolset registry,
+   * that this action runs through `epic_call_mcp_tool`, and the engine plugin
+   * that registers it. The action is withheld while the editor's MCP tool
+   * list is known and lacks the tool (#1824).
+   */
+  mcpTool?: { name: string; plugin: string };
   /**
    * Runs after the bridge answers, with canonical parameters, the caller's routing timeoutMs when given, and the answer.
    * What it returns replaces the answer. Routing timeoutMs is never sent to the bridge as a handler parameter.

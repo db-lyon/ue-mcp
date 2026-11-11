@@ -173,6 +173,13 @@ describe("asset hygiene", () => {
     const audit = await call("audit_asset_hygiene", { directory: DIR, recursive: false, checks: ["redirectors"] });
     expect((audit.redirectors as { count: number }).count).toBeGreaterThan(0);
 
+    // deleteRedirectors=false repoints and saves the referencers but keeps the stubs (#1828).
+    const kept = await call("fixup_redirectors", { paths: [DIR], deleteRedirectors: false });
+    expect(kept.deleteRedirectors).toBe(false);
+    expect(Number(kept.deletedRedirectorCount)).toBe(0);
+    expect((kept.redirectors as Array<{ status: string }>).some((r) => r.status === "kept")).toBe(true);
+    expect((await listNames(DIR, "ObjectRedirector")).length).toBeGreaterThan(0);
+
     const fixup = await call("fixup_redirectors", { paths: [DIR] });
     expect(Number(fixup.redirectorCount)).toBeGreaterThan(0);
     // The rename already repointed the loaded referencer; the collection is what held the redirector, so the
