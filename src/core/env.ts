@@ -36,6 +36,8 @@ export const ENV_VARS = {
   // ── Editor and engine ──────────────────────────────────────────────
   /** Engine root to build and launch with, over the project's association. */
   testEngineRoot: "UE_MCP_TEST_ENGINE_ROOT",
+  /** Folder of Unreal's per-version user config, where its recent-project lists are. Unset means %LOCALAPPDATA%\UnrealEngine on Windows. */
+  recentProjectsDir: "UE_MCP_RECENT_PROJECTS_DIR",
   /** Engine roots the build and launch helpers refuse to touch, separated by `;`. */
   protectedEngineRoots: "UE_MCP_PROTECTED_ENGINE_ROOTS",
   /** Cap on UBT's parallel compile actions for `build`. */

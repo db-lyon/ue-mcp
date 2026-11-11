@@ -92,6 +92,8 @@ interface Preferences {
 interface UserState {
   preferences?: Preferences;
   projects?: Record<string, ProjectState>;
+  /** The machine's project list beyond Unreal's recent ones: .uproject paths the user added, and found ones they hid. */
+  projectList?: { added?: string[]; hidden?: string[] };
 }
 
 function statePath(): string {
@@ -641,6 +643,28 @@ export function clearExtensionRecords(name: string): void {
     }
     if (changed) writeState(state);
   });
+}
+
+/** The user's additions to the machine's project list, and the found projects they hid, as .uproject paths. */
+export function getProjectList(): { added: string[]; hidden: string[] } {
+  return getProjectListOf(readState());
+}
+
+/** Change the project list under the state lock. */
+export function updateProjectList(mutate: (list: { added: string[]; hidden: string[] }) => void): void {
+  withStateLock(() => {
+    const state = readState();
+    const list = getProjectListOf(state);
+    mutate(list);
+    if (list.added.length || list.hidden.length) state.projectList = list;
+    else delete state.projectList;
+    writeState(state);
+  });
+}
+
+function getProjectListOf(state: UserState): { added: string[]; hidden: string[] } {
+  const paths = (v: unknown): string[] => (Array.isArray(v) ? v.filter((p): p is string => typeof p === "string" && p.length > 0) : []);
+  return { added: paths(state.projectList?.added), hidden: paths(state.projectList?.hidden) };
 }
 
 export function getUserStatePath(): string {
