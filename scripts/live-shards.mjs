@@ -221,6 +221,7 @@ export function overBudget(tests, budgets) {
  * Time budgets are goals: a test or a run over its budget is printed and
  * recorded, but only real problems (a failed or skipped test, a file that did
  * not run, an editor that would not start or died) fail the run.
+ * @param {{ problems: string[], over?: Array<{ test: string, ms: number, limit: number }>, wallS?: number, wallClockS?: number, wallChecked?: boolean }} run
  */
 export function runVerdict({ problems, over = [], wallS = 0, wallClockS = Infinity, wallChecked = true }) {
   const goals = [
