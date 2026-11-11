@@ -491,6 +491,7 @@ Run `npx ue-mcp <command> --help` for a command's flags.
 | `npx ue-mcp login` / `logout` | Sign in to your UE-MCP account at `accounts.ue-mcp.com` with an email code (`--email <address>`) or GitHub (`--github`), or forget the cached token. Studio and `ue-mcp plugin publish` use it. |
 | `npx ue-mcp uninstall-hooks` | Remove the feedback hook from every Claude Code settings file recorded for this project. |
 | `npx ue-mcp resolve <issue>` | Fetch a feedback issue, branch, hand it to Claude Code to implement, open a PR. See [Development](development.md#resolving-an-issue-with-claude-code). |
+| `npx ue-mcp flow <list\|plan\|run> [name] [--param key=value] [--skip <step>] [--rollback-on-failure] [--json]` | List, plan or run the project's [flows](flows.md#from-a-terminal) in their own process. |
 | `npx ue-mcp plugin <install\|uninstall\|update\|list\|config\|create\|publish\|check-skills\|record-specs>` | Install, configure, create and publish plugins. See [Using plugins](plugins-using.md) and [Plugins](plugins.md). |
 | `npx ue-mcp version` | Print the installed version. |
 
