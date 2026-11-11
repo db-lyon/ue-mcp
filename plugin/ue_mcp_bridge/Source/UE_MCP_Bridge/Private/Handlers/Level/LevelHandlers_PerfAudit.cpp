@@ -236,7 +236,9 @@ namespace
 TSharedPtr<FJsonValue> FLevelHandlers::AuditLevelPerformance(const TSharedPtr<FJsonObject>& Params)
 {
 	check(IsInGameThread());
-	MCPReadParamsAhead(Params, { TEXT("regionMin"), TEXT("regionMax"), TEXT("world"), TEXT("pieInstance"), TEXT("maxResults") });
+	MCPReadParamsAhead(Params, { TEXT("regionMin"), TEXT("regionMax"), TEXT("world"), TEXT("pieInstance"), TEXT("maxResults"),
+		TEXT("gridSize"), TEXT("dumpToFile"), TEXT("outputPath"), TEXT("instancingMinCount"), TEXT("heavyTriangleThreshold"),
+		TEXT("outlierFactor"), TEXT("translucentAreaM2"), TEXT("stackedTranslucentCount") });
 
 	const FString RequestedWorld = OptionalString(Params, TEXT("world"), TEXT("editor"));
 	if (!RequestedWorld.Equals(TEXT("editor"), ESearchCase::IgnoreCase) && !RequestedWorld.Equals(TEXT("pie"), ESearchCase::IgnoreCase))
