@@ -232,6 +232,8 @@ TSharedPtr<FJsonValue> FLevelHandlers::ReplaceActorsWithAsset(const TSharedPtr<F
 // level(rebuild_brush): UEditorActorSubsystem::RebuildBrush.
 TSharedPtr<FJsonValue> FLevelHandlers::RebuildBrush(const TSharedPtr<FJsonObject>& Params)
 {
+	// Engines before 5.9 refuse before the actor is looked up; its parameters are read either way.
+	MCPReadParamsAhead(Params, { TEXT("actorLabel"), TEXT("actorPath") });
 	const FString BuilderClassName = OptionalString(Params, TEXT("builderClass"));
 	const TSharedPtr<FJsonObject>* BuilderPropsField = nullptr;
 	const bool bHasBuilderProps = TryGetObjectParam(Params, TEXT("builderProperties"), BuilderPropsField) && BuilderPropsField && (*BuilderPropsField).IsValid();
