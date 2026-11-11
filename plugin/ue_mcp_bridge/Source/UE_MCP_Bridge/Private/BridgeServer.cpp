@@ -312,6 +312,32 @@ uint32 FMCPBridgeServer::Run()
 	}
 	if (!bBound)
 	{
+		// Windows reserves whole port ranges for Hyper-V, WSL and Docker (netsh int ipv4
+		// show excludedportrange), and a project whose range falls inside one is refused
+		// every port with WSAEACCES. Take a free loopback port from the OS instead; the
+		// lockfile names it, which is where clients look.
+		sockaddr_in AnyAddr;
+		FMemory::Memset(&AnyAddr, 0, sizeof(AnyAddr));
+		AnyAddr.sin_family = AF_INET;
+		AnyAddr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+		AnyAddr.sin_port = 0;
+		if (bind(ServerSocketFD, (sockaddr*)&AnyAddr, sizeof(AnyAddr)) == 0)
+		{
+			sockaddr_in Assigned;
+			socklen_t AssignedLen = sizeof(Assigned);
+			if (getsockname(ServerSocketFD, (sockaddr*)&Assigned, &AssignedLen) == 0 && ntohs(Assigned.sin_port) != 0)
+			{
+				BoundPort = ntohs(Assigned.sin_port);
+				ServerPort = BoundPort;
+				bBound = true;
+				UE_LOG(LogMCPBridge, Warning,
+					TEXT("[UE-MCP] Every port in [%d, %d] (%s) was refused, as a range Windows reserves would be; bound to %d from the OS instead. The port lockfile names %d, which is what clients read."),
+					RequestedPort, RequestedPort + kMaxPortProbe, *PortSource, BoundPort, BoundPort);
+			}
+		}
+	}
+	if (!bBound)
+	{
 		int32 ErrorCode = 0;
 #if PLATFORM_WINDOWS
 		ErrorCode = WSAGetLastError();
