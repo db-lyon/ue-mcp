@@ -15,7 +15,7 @@ Studio's window has three tabs: **Chat**, **Plugins** and **Settings**. **Feedba
 ## Requirements
 
 - Windows 10 or 11.
-- Unreal Engine 5.7 or 5.8.
+- Unreal Engine 5.7, 5.8 or 5.9.
 - [Node.js](https://nodejs.org/) 20 or newer. The UE-MCP app's setup offers to install the LTS release with winget. Otherwise install it from the Node.js website with its Windows installer, using the default options. When it is missing, Studio's setup page opens the Node.js download page.
 - ue-mcp 1.4.11 or later. Studio installs it.
 - The Microsoft Edge WebView2 Runtime, which Windows 11 includes. On Windows 10, if it is not already installed, get the Evergreen Runtime from [Microsoft's WebView2 page](https://developer.microsoft.com/en-us/microsoft-edge/webview2/). Without it, Studio opens in your web browser instead of its own window.
