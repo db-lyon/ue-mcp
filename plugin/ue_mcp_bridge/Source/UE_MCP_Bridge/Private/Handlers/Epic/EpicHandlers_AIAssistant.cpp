@@ -9,9 +9,14 @@
 #include "UObject/UObjectHash.h"
 #include "UObject/WeakObjectPtrTemplates.h"
 
-// ── Reflection bridge to /Script/AIAssistant.AIAssistantInstance (UE 5.9+) ───
+// ── Reflection bridge to UAIAssistantInstance (UE 5.9+) ───
 //
-// Static UFUNCTIONs, each returning a UToolCallAsyncResultString:
+// The class lives in the AIAssistantEditor module (/Script/AIAssistantEditor.AIAssistantInstance).
+// Early 5.9 builds had it in AIAssistant; the plugin's ClassRedirects map the old path, but
+// FindObject does not follow redirects, so both paths are tried.
+//
+// Static UFUNCTIONs, each returning an async string result (UAsyncFunctionResultString,
+// UToolCallAsyncResultString on early builds; both expose bIsComplete, Error and Value):
 //   SendTextMessage(InConversationId, Message, HiddenContext)            -> conversation id
 //   SendTextMessageAndGetReply(InConversationId, Message, HiddenContext) -> reply text
 //   GetConversationJson(InConversationId)                                -> conversation JSON
@@ -19,7 +24,8 @@
 // requestId and the server polls epic_ai_assistant_get_request for it.
 namespace UEMCPAIAssistant
 {
-	static const TCHAR* const InstanceClassPath = TEXT("/Script/AIAssistant.AIAssistantInstance");
+	static const TCHAR* const InstanceClassPath = TEXT("/Script/AIAssistantEditor.AIAssistantInstance");
+	static const TCHAR* const LegacyInstanceClassPath = TEXT("/Script/AIAssistant.AIAssistantInstance");
 	static const TCHAR* const Subject = TEXT("Epic's AI Assistant API (UAIAssistantInstance)");
 	static const TCHAR* const FnSend = TEXT("SendTextMessage");
 	static const TCHAR* const FnSendAndReply = TEXT("SendTextMessageAndGetReply");
@@ -56,7 +62,8 @@ namespace UEMCPAIAssistant
 
 	static UClass* InstanceClass()
 	{
-		return FindObject<UClass>(nullptr, InstanceClassPath);
+		if (UClass* Cls = FindObject<UClass>(nullptr, InstanceClassPath)) return Cls;
+		return FindObject<UClass>(nullptr, LegacyInstanceClassPath);
 	}
 
 	static FString EngineVersionString()
@@ -275,9 +282,30 @@ namespace UEMCPAIAssistant
 				}
 				else if (R.Function == FnSendAndReply)
 				{
-					Res->SetStringField(TEXT("reply"), S.Value);
+					// Current 5.9 builds resolve with FSendTextMessageReply serialized as
+					// {"conversationId", "reply"}; earlier ones with the bare reply text. The
+					// conversationId in it is the canonical one: the first update event can
+					// carry a provisional local id that the conversation is renamed from.
+					TSharedPtr<FJsonObject> Wrapped;
+					FString WrappedReply;
+					TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(S.Value);
+					if (S.Value.StartsWith(TEXT("{")) && FJsonSerializer::Deserialize(Reader, Wrapped) && Wrapped.IsValid()
+						&& Wrapped->TryGetStringField(TEXT("reply"), WrappedReply))
+					{
+						Res->SetStringField(TEXT("reply"), WrappedReply);
+						FString WrappedConversation;
+						if (Wrapped->TryGetStringField(TEXT("conversationId"), WrappedConversation) && !WrappedConversation.IsEmpty())
+						{
+							Res->SetStringField(TEXT("conversationId"), WrappedConversation);
+							Res->SetStringField(TEXT("conversationIdSource"), TEXT("reply"));
+						}
+					}
+					else
+					{
+						Res->SetStringField(TEXT("reply"), S.Value);
+					}
 					FString Source;
-					const FString Conversation = ConversationOf(R, Source);
+					const FString Conversation = Res->HasField(TEXT("conversationId")) ? FString() : ConversationOf(R, Source);
 					if (!Conversation.IsEmpty())
 					{
 						Res->SetStringField(TEXT("conversationId"), Conversation);
