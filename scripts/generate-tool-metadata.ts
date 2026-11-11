@@ -318,7 +318,7 @@ export const MARKER_FILES = [
   "docs/development.md",
   "docs/flows.md",
   "docs/getting-started.md",
-  "docs/plugins-guards.md",
+  "docs/guards.md",
   "docs/release-notes-style.md",
   "docs/tool-reference.md",
   "docs/troubleshooting.md",

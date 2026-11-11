@@ -93,10 +93,10 @@ nav:
     - Using: plugins-using.md
     - Authoring: plugins-authoring.md
     - Native Modules: plugins-native-modules.md
-    - Guards: plugins-guards.md
     - Troubleshooting: plugins-troubleshooting.md
   - Configuration: configuration.md
   - ue-mcp.yml Reference: config-file.md
+  - Guards: guards.md
   - Neon Shrine Demo: neon-shrine-demo.md
   - Feedback: feedback.md
   - Troubleshooting: troubleshooting.md

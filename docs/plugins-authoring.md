@@ -1,6 +1,6 @@
 # Authoring a plugin
 
-How to build and publish a plugin. To use one, see [Using plugins](plugins-using.md). [Native C++ modules](plugins-native-modules.md) and [Guards](plugins-guards.md) have their own pages.
+How to build and publish a plugin. To use one, see [Using plugins](plugins-using.md). [Native C++ modules](plugins-native-modules.md) have their own page. A plugin can also ship [guards](guards.md), declared in the same shape as a project's.
 
 ## Scaffold
 
@@ -103,11 +103,11 @@ knowledge:
 | `tasks` | `<task name>: { class_path, description? }`. Every `inject` and `provides` action names one. |
 | `flows` | See [Flows](#flows). |
 | `knowledge` | `<category>: <path>`. See [Knowledge files](#knowledge-files). |
-| `guards` | See [Guards](plugins-guards.md). |
+| `guards` | See [Guards](guards.md). |
 | `nativeModule` | See [Native C++ modules](plugins-native-modules.md). |
 | `registry` | See [The registry listing](#the-registry-listing). |
 
-`effect` says what the action does to the editor. [Guard scopes](plugins-guards.md#scopes) are read from it. When it is omitted, the effect is inferred from the action name.
+`effect` says what the action does to the editor. [Guard scopes](guards.md#scopes) are read from it. When it is omitted, the effect is inferred from the action name.
 
 ### Parameter schemas
 
@@ -139,7 +139,7 @@ inject:
         changelist: { type: string, required: true }
 ```
 
-Leave checkout, add, delete, revert, sync, submit and checkout on write to core. See [Source control](plugins-guards.md#source-control).
+Leave checkout, add, delete, revert, sync, submit and checkout on write to core. See [Source control](guards.md#source-control).
 
 ## Providing categories
 
