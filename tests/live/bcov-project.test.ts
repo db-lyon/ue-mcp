@@ -288,8 +288,10 @@ describe("Epic toolsets", () => {
       tool: tools.list,
       input: { blueprint: { refPath: EPIC_BP_OBJECT } },
     });
-    const result = listed.result as Json | string[] | undefined;
-    const names = Array.isArray(result) ? result : ((result as Json | undefined)?.returnValue as string[] | undefined) ?? [];
+    const result = listed.result as Json | unknown[] | undefined;
+    const rows = Array.isArray(result) ? result : ((result as Json | undefined)?.returnValue as unknown[] | undefined) ?? [];
+    // 5.8 lists names; 5.9 lists { name, type } rows.
+    const names = rows.map((r) => (typeof r === "string" ? r : String((r as Json).name)));
     expect(names).toContain("BCovEpicCount");
   }, 120_000);
 });
