@@ -27,7 +27,7 @@ plugins: []        # npm packages that inject new actions
 | `tasks:` | Custom flow-engine task definitions | [Flows](flows.md) |
 | `flows:` | Custom multi-step flows | [Flows](flows.md) |
 | `plugins:` | npm packages injecting actions into built-in categories (`name`, optional `version` range) | [Using plugins](plugins-using.md) |
-| `guards:` | Project guards: deny or observe policies around actions | [Guards](plugins-guards.md) |
+| `guards:` | Project guards: deny or observe policies around actions | [Guards](guards.md) |
 | `git_snapshot:` | Snapshot `Content/` and `Config/` before a flow and reset on failure | [Flows](flows.md#git-snapshot) |
 
 ## Config layering
