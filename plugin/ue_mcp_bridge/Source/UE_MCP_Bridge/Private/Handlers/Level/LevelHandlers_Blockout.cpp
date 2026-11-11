@@ -315,10 +315,14 @@ namespace
 		return Out;
 	}
 
-	/** The blockout actors a call names: one by label or path, or every one carrying tag. */
-	TSharedPtr<FJsonValue> MCPBlkResolveTargets(UWorld* World, const TSharedPtr<FJsonObject>& Params, TArray<AActor*>& Out)
+	/**
+	 * The blockout actors a call names: one by label or path, every one carrying
+	 * tag, or a list of actorPaths. bTag and bPaths say which of those the
+	 * calling action declares; one it does not declare is never read.
+	 */
+	TSharedPtr<FJsonValue> MCPBlkResolveTargets(UWorld* World, const TSharedPtr<FJsonObject>& Params, TArray<AActor*>& Out, bool bTag, bool bPaths)
 	{
-		const FString Tag = OptionalString(Params, TEXT("tag"));
+		const FString Tag = bTag ? OptionalString(Params, TEXT("tag")) : FString();
 		if (!Tag.IsEmpty())
 		{
 			Out = MCPBlkCollectTagged(World, FName(*Tag), false);
@@ -326,7 +330,7 @@ namespace
 			return nullptr;
 		}
 		const TArray<TSharedPtr<FJsonValue>>* Paths = nullptr;
-		if (TryGetArrayParam(Params, TEXT("actorPaths"), Paths) && Paths)
+		if (bPaths && TryGetArrayParam(Params, TEXT("actorPaths"), Paths) && Paths)
 		{
 			for (const TSharedPtr<FJsonValue>& Value : *Paths)
 			{
@@ -689,7 +693,7 @@ TSharedPtr<FJsonValue> FLevelBlockoutHandlers::MatchAssetToBlockout(const TShare
 	});
 	REQUIRE_EDITOR_WORLD(World);
 	TArray<AActor*> Targets;
-	if (auto Err = MCPBlkResolveTargets(World, Params, Targets)) return Err;
+	if (auto Err = MCPBlkResolveTargets(World, Params, Targets, true, false)) return Err;
 	FString Folder;
 	if (auto Err = RequireString(Params, TEXT("candidateFolder"), Folder)) return Err;
 	const bool bRecursive = OptionalBool(Params, TEXT("recursive"), true);
@@ -739,7 +743,7 @@ TSharedPtr<FJsonValue> FLevelBlockoutHandlers::ReplaceBlockout(const TSharedPtr<
 	});
 	REQUIRE_EDITOR_WORLD(World);
 	TArray<AActor*> Targets;
-	if (auto Err = MCPBlkResolveTargets(World, Params, Targets)) return Err;
+	if (auto Err = MCPBlkResolveTargets(World, Params, Targets, true, true)) return Err;
 	const FString Fit = OptionalString(Params, TEXT("fit"), TEXT("uniform"));
 	if (Fit != TEXT("uniform") && Fit != TEXT("stretch") && Fit != TEXT("none")) return MCPError(TEXT("fit must be uniform, stretch or none"));
 	const FString AssetPath = OptionalString(Params, TEXT("assetPath"));
@@ -886,7 +890,7 @@ TSharedPtr<FJsonValue> FLevelBlockoutHandlers::RestoreBlockout(const TSharedPtr<
 	MCPReadParamsAhead(Params, { TEXT("actorLabel"), TEXT("actorPath"), TEXT("actorPaths") });
 	REQUIRE_EDITOR_WORLD(World);
 	TArray<AActor*> Targets;
-	if (auto Err = MCPBlkResolveTargets(World, Params, Targets)) return Err;
+	if (auto Err = MCPBlkResolveTargets(World, Params, Targets, false, true)) return Err;
 
 	struct FPlan { AActor* Replacement; UStaticMesh* Mesh; TSharedPtr<FJsonObject> Record; };
 	TArray<FPlan> Plans;
