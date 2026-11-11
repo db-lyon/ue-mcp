@@ -32,6 +32,8 @@ import { ENGINES } from "./release-binaries.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const PLUGIN = path.join(ROOT, "plugin", "ue_mcp_bridge", "UE_MCP_Bridge.uplugin");
+/** Epic's off-by-default plugins whose handlers the bridge compiles in only where a project enables them. */
+const HOST_OPTIONAL_PLUGINS = ["ModelContextProtocol", "ToolsetRegistry", "SemanticSearch"];
 const version = JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf-8")).version;
 
 function arg(name, fallback) {
@@ -141,9 +143,18 @@ async function buildEngine(engine) {
   const hostProject = path.join(host, "Host.uproject");
   const hostPlugin = path.join(host, "Plugins", "UE_MCP_Bridge");
   fs.mkdirSync(host, { recursive: true });
-  if (!fs.existsSync(hostProject)) {
-    fs.writeFileSync(hostProject, JSON.stringify({ FileVersion: 3, Plugins: [{ Name: "UE_MCP_Bridge", Enabled: true }] }, null, "\t"));
-  }
+  // The bridge compiles its handlers for Epic's experimental plugins in only where the project enables
+  // them (UE_MCP_Bridge.Build.cs, ProjectEnables), so the host enables them for the published binaries.
+  // Optional: engines before 5.8 do not have them. Those binaries never link them, so they load either way.
+  const hostDescriptor = JSON.stringify({
+    FileVersion: 3,
+    Plugins: [
+      { Name: "UE_MCP_Bridge", Enabled: true },
+      ...HOST_OPTIONAL_PLUGINS.map((Name) => ({ Name, Enabled: true, Optional: true })),
+    ],
+  }, null, "\t");
+  // Written only when it changes: a newer .uproject makes UBT rebuild its makefile.
+  if (!fs.existsSync(hostProject) || fs.readFileSync(hostProject, "utf-8") !== hostDescriptor) fs.writeFileSync(hostProject, hostDescriptor);
   syncTree(path.dirname(PLUGIN), hostPlugin, ["Binaries", "Intermediate"]);
 
   const manifest = path.join(stage, "Manifest.xml");
