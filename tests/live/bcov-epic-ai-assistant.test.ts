@@ -49,7 +49,7 @@ async function expectRefused(method: string, params: Json): Promise<void> {
     );
   }
   expect(refused.requiredPlugin).toBe("AIAssistant");
-  expect(refused.requiredClass).toBe("/Script/AIAssistant.AIAssistantInstance");
+  expect(refused.requiredClass).toBe("/Script/AIAssistantEditor.AIAssistantInstance");
   expect(refused.engineVersion).toBe(version);
 }
 
@@ -149,12 +149,33 @@ describe("epic AI Assistant", () => {
     expect(conversation.state, JSON.stringify(conversation)).toBe("complete");
     expect(JSON.stringify(conversation.conversation)).toContain("pong");
 
+    // The assistant is still answering "pong". A send-and-reply into a conversation mid-generation
+    // fails in the engine ("Reached complete before generation started"), so wait for it to finish.
+    const generated = Date.now() + 120_000;
+    for (;;) {
+      const ev = await call("epic_ai_assistant_get_events", { conversationId });
+      if ((ev.events as Json[]).some((e) => e.updateType === "Complete")) break;
+      expect(Date.now() < generated, "the first message's generation never completed").toBe(true);
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+    }
+
     // SendTextMessageAndGetReply: the same conversation, resolved with the assistant's text.
     const asked = await call("epic_ai_assistant_send_message", { message: "Reply with the single word: ping", conversationId, wait: false });
     const replied = asked.state === "pending" ? await settle(Number(asked.requestId), 300_000) : asked;
     expect(replied.state, JSON.stringify(replied)).toBe("complete");
     expect(String(replied.reply).length).toBeGreaterThan(0);
+    // The engine resolves with {"conversationId","reply"}; the bridge hands back the text alone.
+    expect(String(replied.reply)).not.toMatch(/^\{"conversationId"/);
     expect(replied.conversationId).toBe(conversationId);
+
+    // A new conversation: its id is the canonical one the reply names, not the provisional
+    // local id the first update event can carry.
+    const fresh = await call("epic_ai_assistant_send_message", { message: "Reply with the single word: pong", wait: false });
+    const freshReply = fresh.state === "pending" ? await settle(Number(fresh.requestId), 300_000) : fresh;
+    expect(freshReply.state, JSON.stringify(freshReply)).toBe("complete");
+    expect(String(freshReply.reply)).not.toMatch(/^\{"conversationId"/);
+    const freshEvents = await call("epic_ai_assistant_get_events", { conversationId: String(freshReply.conversationId) });
+    expect((freshEvents.events as Json[]).map((e) => e.updateType)).toContain("Complete");
 
     // OnConversationUpdated: the reply's generation was recorded against that conversation.
     const events = await call("epic_ai_assistant_get_events", { conversationId });
