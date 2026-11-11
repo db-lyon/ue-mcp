@@ -154,6 +154,8 @@ const PER_SESSION: Record<string, string> = {
 
 /** No editor concept, or one deliberate answer for the whole process. */
 const SESSION_INDEPENDENT: Record<string, string> = {
+  "machine/projects.ts": "Machine scoped: every project on this computer and every daemon running, read from user state, Unreal's recent lists and the daemons folder.",
+  "cli/projects-cli.ts": "Prints or edits the machine's project list, which no one editor owns.",
   "integrations/claude-code/unreal-mcp-entries.ts": "Finds and removes entries in the client config file it is handed. No editor is involved.",
   "integrations/epic/unreal-assistant.ts": "Edits the Unreal Assistant's per-user AIAssistant.json, which every project on the machine shares. No editor is involved.",
   "integrations/agent-guides.ts": "Writes and removes one delimited block in the instruction files of the project directory it is handed. No editor is involved.",
