@@ -27,7 +27,7 @@ https://github.com/user-attachments/assets/24d4fc16-e6b4-4dc7-98ea-eaf4798923b1
 
 [**Studio**](https://ue-mcp.com/docs/studio) is a free desktop client with the agent built in. Dock it in the editor or run it in its own window. Sign in with your Claude or ChatGPT account, or use an API key. Every turn is checkpointed so you can review and revert changes, and shell commands and file edits wait for your approval.
 
-Download the editor plugin from [its latest release](https://github.com/db-lyon/ue-mcp-studio-plugin/releases/latest), unzip it into your project's `Plugins` folder, and open Studio from the toolbar. Studio sets up everything else. Windows, UE 5.7 and 5.8.
+Download the editor plugin from [its latest release](https://github.com/db-lyon/ue-mcp-studio-plugin/releases/latest), unzip it into your project's `Plugins` folder, and open Studio from the toolbar. Studio sets up everything else. Windows, UE 5.7, 5.8 and 5.9.
 
 ### 2. Bring your own AI client
 
@@ -61,7 +61,7 @@ No. UE-MCP and Studio are MIT-licensed and free for personal and commercial use.
 
 **Which Unreal versions and platforms?**
 
-UE <!-- count:engineRange -->5.4 to 5.9<!-- /count --> on Windows, 5.6+ on macOS and Linux. Studio is Windows-only for now, on UE 5.7 and 5.8. You also need Node.js 20+ and a C++ toolchain, since the bridge plugin compiles in your project.
+UE <!-- count:engineRange -->5.4 to 5.9<!-- /count --> on Windows, 5.6+ on macOS and Linux. Studio is Windows-only for now, on UE 5.7, 5.8 and 5.9. You also need Node.js 20+ and a C++ toolchain, since the bridge plugin compiles in your project.
 
 **Is it safe to let an AI edit my project?**
 
