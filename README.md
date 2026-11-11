@@ -61,7 +61,7 @@ No. UE-MCP and Studio are MIT-licensed and free for personal and commercial use.
 
 **Which Unreal versions and platforms?**
 
-UE <!-- count:engineRange -->5.4 to 5.9<!-- /count --> on Windows, 5.6+ on macOS and Linux. Studio is Windows-only for now, on UE 5.7, 5.8 and 5.9. You also need Node.js 20+ and a C++ toolchain, since the bridge plugin compiles in your project.
+UE <!-- count:engineRange -->5.4 to 5.9<!-- /count --> on Windows, 5.6+ on macOS and Linux. Studio is Windows-only for now, on UE 5.7, 5.8 and 5.9. You also need Node.js 20+. With a C++ toolchain the bridge plugin compiles in your project; without one, `init` installs prebuilt bridge binaries for your engine and platform when the release has them. See [Getting Started](https://ue-mcp.com/docs/getting-started).
 
 **Is it safe to let an AI edit my project?**
 
