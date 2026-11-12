@@ -80,7 +80,7 @@ Every route is on `127.0.0.1` and needs `Authorization: Bearer <token>`. The ser
 
 An extension (`src/daemon/extensions.ts`) is a package with `activate(api)` and a `ueMcpExtension` field naming the extension API range it supports. The daemon loads extensions at startup from `~/.ue-mcp/extensions/` (`UE_MCP_EXTENSIONS_DIR`). An extension can register routes under `/v1/ext/<name>/`, publish and read events, run actions in process with `callAction`, register a model provider, use checkpoints, keep a data directory, trust a key for UI bundles, and provide or use objects shared with other extensions through `services` (one provider per id, revoked when the provider is disposed). `EXTENSION_API_VERSION` versions this contract; the daemon serves every version from `EXTENSION_API_MIN_VERSION` up.
 
-Versions install side by side as `<name>@<version>/`, and each project records the version it loads (`extension-versions.ts`), so updating an extension for one project does not change another. `ue-mcp extension install|use|list|remove` manages them.
+Versions install side by side as `<name>@<version>/`, and each project records the version it loads (`extension-versions.ts`), so updating an extension for one project does not change another. `ue-mcp extension install|use|list|remove` manages them. `ue-mcp install <name>` is the same install with the name resolved through `install-names.ts`, a list of names and release manifests. A manifest that declares an editor plugin channel also gets the project set up through init's `plan()` and `apply()`, and the channel's build for the project's engine installed under `Plugins/` (`editor/editor-plugin.ts`).
 
 A UI bundle (`src/daemon/ui-bundles.ts`) lives under `~/.ue-mcp/ui/`. It is served at `/ui/` only when its `manifest.sig` Ed25519 signature verifies against a key an extension trusted and every file matches its SHA-256 in `manifest.json`. A bundle named for a loaded extension is served only at that extension's version or older. A bundle named for a loaded extension verifies only against keys that extension trusted. Each loaded extension's own bundle is also served at `/ui/ext/<name>/`, within its own version window, and `ueMcpExtension.ui.root: false` keeps it off `/ui/`. A manifest's optional `module` (`entry`, `host`) is signed with it and names a file another page loads.
 
@@ -94,7 +94,7 @@ The `ue-mcp/daemon` package export (`src/daemon-api.ts`) carries the types and h
 
 **Entry point:** `src/index.ts`. A first argument naming a command runs the CLI (`src/cli/`); otherwise it starts the shim or the in-process server.
 
-The server registers the <!-- count:tools -->30<!-- /count --> category tools and the `flow` tool, each dispatched through the runtime's sessions.
+The server registers the <!-- count:tools -->31<!-- /count --> category tools and the `flow` tool, each dispatched through the runtime's sessions.
 
 ### Key modules
 
@@ -152,7 +152,7 @@ Two kinds of action:
 
 ### Advertised surface and context strategy
 
-The [context strategy](configuration.md#context-strategy-full-lean-micro) decides what a client is handed at startup. `micro`, the default, advertises one `tools` gateway (<!-- tax:micro -->~2.2k<!-- /tax --> tokens with the instructions). `lean` advertises the category tools with a summary each (<!-- tax:lean -->~20k<!-- /tax -->). `full` adds one signature line per action (<!-- tax:full -->~55k<!-- /tax -->). `scripts/context-tax.mjs` measures these and a release gate holds each to its budget.
+The [context strategy](configuration.md#context-strategy-full-lean-micro) decides what a client is handed at startup. `micro`, the default, advertises one `tools` gateway (<!-- tax:micro -->~240<!-- /tax --> tokens with the instructions). `lean` advertises the category tools with a summary each (<!-- tax:lean -->~32k<!-- /tax -->). `full` adds one signature line per action (<!-- tax:full -->~90k<!-- /tax -->). `scripts/context-tax.mjs` measures these and a release gate holds each to its budget.
 
 A category tool is advertised as `action` (the enum of its actions) plus `args` (an object). The server unwraps `args` and validates it against the category's zod shape, so a refusal names the bad parameter. The micro gateway's `call` is checked against the target category the same way.
 
@@ -187,6 +187,8 @@ A message, the unparsed receive buffer and any single frame's declared length ar
 A close frame gets its status code echoed back and a ping gets a pong with the same payload. When the editor shuts down with a client attached, the bridge closes with `1001`.
 
 The upgrade request is read to its blank line under one deadline and one size bound, and validated before a `101` is sent: `GET`, HTTP/1.1, `Upgrade: websocket`, `Connection: Upgrade`, `Sec-WebSocket-Version: 13`, and a `Sec-WebSocket-Key` that decodes to 16 bytes. A refusal answers with an HTTP status and a sentence. Bytes pipelined behind the request go straight to the frame reader.
+
+**Session token.** The bridge listens on 127.0.0.1 only and refuses any upgrade that carries an `Origin` header, which keeps out other machines and web pages. To keep out other local processes and other accounts on the same machine, it also requires a token. When its port is bound it writes 32 random bytes from the OS (BCryptGenRandom on Windows, `/dev/urandom` elsewhere), as 64 hex digits, to `~/.ue-mcp/bridge/<port>.token`, and every upgrade must carry `Authorization: Bearer <token>`. On Linux and macOS the directory is `0700` and the file `0600`; on Windows both get an access list that grants the editor's user alone. The comparison is constant time, a refusal is a `401` with a sentence saying what to do, and the file is removed on a clean shutdown. `UE_MCP_BRIDGE_TOKEN_DIR` moves the directory for the plugin and the client alike. The client sends the token when the file for its port exists and connects without one when it does not, so it still works with a plugin that predates the token. The `101` and the `401` carry `X-UE-MCP-Bridge-Auth: token-file`, and `get_bridge_capabilities` lists the `session-token` feature.
 
 #### Capability handshake
 
@@ -319,7 +321,7 @@ The plugin runs a raw WebSocket server on a dedicated thread, dispatches each re
 | ProjectHandlers | Project info, world subsystem queries |
 | StateTreeHandlers | StateTree authoring |
 | ChooserHandlers | Chooser tables |
-| EpicHandlers | The UE 5.8 Toolset Registry |
+| EpicHandlers | The Toolset Registry (UE 5.8+) |
 | MassHandlers | Mass Entity fragments, traits and processors |
 | SkeletalMeshHandlers | Skeletal mesh LODs, sections, instancing settings |
 | FabHandlers | Fab library import |

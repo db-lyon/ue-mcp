@@ -9,7 +9,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { z } from "zod";
 import { composeServerInstructions } from "../surface/context/instructions.js";
 import { fullSurfaceDescription } from "../surface/context/lean-context.js";
-import { envelopeInputSchema, envelopeShape, strippingInputSchema, usesArgsEnvelope } from "../surface/context/call-envelope.js";
+import { envelopeInputSchema, envelopeShape, flatInputSchema, strippingInputSchema, usesArgsEnvelope } from "../surface/context/call-envelope.js";
 import type { ToolDef } from "../core/types.js";
 import type { ContextStrategy } from "../surface/context/lean-context.js";
 import { withholdFromTool } from "../surface/registered-surface.js";
@@ -25,6 +25,8 @@ import {
 } from "../dispatch/server-dispatch.js";
 import type { Runtime } from "./runtime.js";
 import type { SessionAccess } from "../flow/session-access.js";
+import { announceResourceChange, registerEditorResources } from "./editor-resources.js";
+import { registerSkillPrompts, skillResources } from "./skill-prompts.js";
 
 export interface RuntimeServer {
   server: McpServer;
@@ -52,7 +54,12 @@ export function advertisedPresentation(
       inputSchema: envelopeInputSchema(view),
     };
   }
-  return { description: view.description, inputSchema: strippingInputSchema(view.schema) };
+  return { description: view.description, inputSchema: flatInputSchema(view, view.schema) };
+}
+
+/** Whether tools/list carries the flow tool. Micro reaches flows through its gateway. */
+export function advertisesFlowTool(strategy: ContextStrategy): boolean {
+  return strategy !== "micro";
 }
 
 export interface McpServerOptions {
@@ -62,6 +69,11 @@ export interface McpServerOptions {
    * read-write.
    */
   access?: SessionAccess;
+  /**
+   * The id this client's asset leases are held under. The daemon passes the
+   * connection's session id; a stdio server is one session, this process.
+   */
+  sessionId?: string;
 }
 
 export function createMcpServer(rt: Runtime, opts: McpServerOptions = {}): RuntimeServer {
@@ -96,7 +108,11 @@ export function createMcpServer(rt: Runtime, opts: McpServerOptions = {}): Runti
     client: () => server.server.getClientVersion(),
     // An MCP session's playtest runs follow `ue-mcp playtest mode`.
     gatePlaytest: true,
+    flow: { tool: rt.flowTool, ctx: rt.baseCtx },
     ...(opts.access ? { access: () => opts.access!.mode } : {}),
+    ...(opts.sessionId
+      ? { leaseHolder: () => ({ id: opts.sessionId!, label: server.server.getClientVersion()?.name ?? "unknown client" }) }
+      : {}),
   };
 
   // The upgrade notice leads this client's first tool response.
@@ -133,7 +149,12 @@ export function createMcpServer(rt: Runtime, opts: McpServerOptions = {}): Runti
   }
 
   // ── Category tools, dispatched through each session's task registry ──
-  for (const tool of rt.advertisedTools) {
+  // A call reaches the category as it is advertised NOW: turning a category
+  // on or off at runtime can replace the object (the micro gateway, a lean
+  // view), and the registration has to follow it by name.
+  const currentTool = (name: string, fallback: ToolDef): ToolDef =>
+    rt.advertisedTools.find((t) => t.name === name) ?? fallback;
+  function registerCategory(tool: ToolDef): void {
     const shape: Record<string, z.ZodType> = { ...tool.schema };
     // Advertised as `action` + `args` (#1172); the flat shape stays the
     // validation contract, applied in dispatch instead of by the SDK.
@@ -142,22 +163,30 @@ export function createMcpServer(rt: Runtime, opts: McpServerOptions = {}): Runti
     const description = descriptionFor(tool);
     const callback = (callArgs: Record<string, unknown>, extra: CallExtra) => {
       claimElicit();
-      return withNotice(dispatchCategoryCall(deps, tool, envelope, callArgs, extra));
+      return withNotice(dispatchCategoryCall(deps, currentTool(tool.name, tool), envelope, callArgs, extra));
     };
     const registration = envelope
       ? server.registerTool(tool.name, { description, inputSchema: envelopeInputSchema(tool) }, callback as never)
-      : server.registerTool(tool.name, { description, inputSchema: strippingInputSchema(shape) }, callback as never);
+      : server.registerTool(tool.name, { description, inputSchema: flatInputSchema(tool, shape) }, callback as never);
     registeredTools.set(tool.name, registration);
   }
+  for (const tool of rt.advertisedTools) registerCategory(tool);
 
   // ── Flow tool ────────────────────────────────────────────────────
-  const flowTool = rt.flowTool;
-  const flowShape: Record<string, z.ZodType> = { ...flowTool.schema };
-  const flowRegistration = server.registerTool(flowTool.name, { description: flowTool.description, inputSchema: strippingInputSchema(flowShape) }, ((rawParams: Record<string, unknown>) => {
-    claimElicit();
-    return withNotice(dispatchFlowCall(deps, flowTool, rt.baseCtx, rawParams)) as never;
-  }) as never);
-  registeredTools.set(flowTool.name, flowRegistration);
+  // In micro mode flow is a gateway category (deps.flow), not a second tool.
+  if (advertisesFlowTool(contextStrategy)) {
+    const flowTool = rt.flowTool;
+    const flowShape: Record<string, z.ZodType> = { ...flowTool.schema };
+    const flowRegistration = server.registerTool(flowTool.name, { description: flowTool.description, inputSchema: strippingInputSchema(flowShape) }, ((rawParams: Record<string, unknown>) => {
+      claimElicit();
+      return withNotice(dispatchFlowCall(deps, flowTool, rt.baseCtx, rawParams)) as never;
+    }) as never);
+    registeredTools.set(flowTool.name, flowRegistration);
+  }
+
+  // Resources registered with Epic's Unreal MCP plugin in the active editor.
+  registerEditorResources(server, () => sessions.active.guarded, skillResources());
+  registerSkillPrompts(server);
 
   // Re-advertise whenever targeting or what the plugins registered changes.
   let parityKey: string | null = null;
@@ -166,10 +195,21 @@ export function createMcpServer(rt: Runtime, opts: McpServerOptions = {}): Runti
     const key = have ? [...have].sort().join(",") : "";
     if (!force && key === parityKey) return;
     parityKey = key;
+    // A category turned on at runtime that was off at startup was never
+    // registered; one turned off is still registered and is hidden.
+    for (const tool of rt.advertisedTools) if (!registeredTools.has(tool.name)) registerCategory(tool);
+    const live = new Set(rt.targetable.map((t) => t.name));
+    for (const [name, registration] of registeredTools) {
+      if (!live.has(name) && registration.enabled) registration.disable();
+    }
     for (const tool of rt.targetable) advertise(tool, have);
   };
   sync(true);
-  const unsubscribe = rt.onSurfaceChanged(() => sync(true));
+  const unsubscribe = rt.onSurfaceChanged(() => {
+    sync(true);
+    // An editor that connected or changed may serve different resources.
+    announceResourceChange(server);
+  });
 
   return { server, dispose: unsubscribe };
 }

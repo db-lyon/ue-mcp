@@ -18,11 +18,16 @@
 #include "HandlerJsonProperty.h"
 #include "HandlerPropertyText.h"
 #include "HandlerSkinnedAsset.h"
+#include "HandlerStaticMeshAsset.h"
 #include "JsonSerializer.h"
 
+#include "Components/PrimitiveComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Components/SkinnedMeshComponent.h"
 #include "Editor.h"
+#include "Engine/Blueprint.h"
+#include "Kismet2/BlueprintEditorUtils.h"
+#include "Misc/PackageName.h"
 #include "Engine/Engine.h"
 #include "Engine/GameInstance.h"
 #include "Engine/World.h"
@@ -551,6 +556,7 @@ namespace
 		Result->SetBoolField(TEXT("changed"), !bPureFunction);
 		Result->SetBoolField(TEXT("changeDetected"), false);
 		Result->SetBoolField(TEXT("rollbackPossible"), false);
+		if (auto Err = MCPRejectUnknownFunctionArgs(Func, Args)) return Err;
 
 		TArray<uint8> ParamBuf;
 		ParamBuf.SetNumZeroed(Func->ParmsSize);
@@ -1397,12 +1403,21 @@ TSharedPtr<FJsonValue> FEditorHandlers::TeleportRuntimeActor(const TSharedPtr<FJ
 		Movement->StopMovementImmediately();
 	}
 
-	bool bMoved = Actor->TeleportTo(Location, Rotation, /*bIsATest=*/false, /*bNoCheck=*/!bSweep);
-	if (!bMoved)
+	// sweep moves the root along the way and stops at the first blocking hit, dispatched like any swept
+	// move (#1449). TeleportTo only checks the destination, and its fallback passed through walls.
+	FHitResult SweepHit;
+	bool bMoved = false;
+	if (bSweep)
 	{
-		// TeleportTo refuses when the destination is blocked; fall back to a
-		// direct set so a deliberate test placement is not silently ignored.
-		bMoved = Actor->SetActorLocationAndRotation(Location, Rotation, /*bSweep=*/false);
+		bMoved = Actor->SetActorLocationAndRotation(Location, Rotation, /*bSweep=*/true, &SweepHit, ETeleportType::None);
+	}
+	else
+	{
+		bMoved = Actor->TeleportTo(Location, Rotation, /*bIsATest=*/false, /*bNoCheck=*/true);
+		if (!bMoved)
+		{
+			bMoved = Actor->SetActorLocationAndRotation(Location, Rotation, /*bSweep=*/false);
+		}
 	}
 
 	// Stop again after the move: a character that was mid-fall regains velocity
@@ -1419,6 +1434,27 @@ TSharedPtr<FJsonValue> FEditorHandlers::TeleportRuntimeActor(const TSharedPtr<FJ
 	Result->SetStringField(TEXT("netMode"), DescribePIENetMode(World));
 	Result->SetBoolField(TEXT("teleported"), bMoved);
 	Result->SetBoolField(TEXT("movementStopped"), bStopMovement && Movement != nullptr);
+	if (bSweep)
+	{
+		Result->SetBoolField(TEXT("blocked"), SweepHit.bBlockingHit);
+		if (SweepHit.bBlockingHit)
+		{
+			TSharedPtr<FJsonObject> Hit = MakeShared<FJsonObject>();
+			if (AActor* HitActor = SweepHit.GetActor())
+			{
+				Hit->SetStringField(TEXT("actorLabel"), HitActor->GetActorLabel());
+				Hit->SetStringField(TEXT("actorPath"), HitActor->GetPathName());
+			}
+			if (UPrimitiveComponent* HitComponent = SweepHit.GetComponent())
+			{
+				Hit->SetStringField(TEXT("component"), HitComponent->GetName());
+			}
+			Hit->SetObjectField(TEXT("impactPoint"), MCPVec3ToJsonObject(SweepHit.ImpactPoint));
+			Hit->SetObjectField(TEXT("impactNormal"), MCPVec3ToJsonObject(SweepHit.ImpactNormal));
+			Hit->SetNumberField(TEXT("time"), SweepHit.Time);
+			Result->SetObjectField(TEXT("hit"), Hit);
+		}
+	}
 	Result->SetObjectField(TEXT("requestedLocation"), MCPVec3ToJsonObject(Location));
 	// Read the transform back rather than reporting what was asked for.
 	Result->SetObjectField(TEXT("actualLocation"), MCPVec3ToJsonObject(Actor->GetActorLocation()));
@@ -1659,6 +1695,26 @@ TSharedPtr<FJsonValue> FEditorHandlers::SetMovementMode(const TSharedPtr<FJsonOb
 
 namespace
 {
+	// The world a live object plays in (#1543). Most runtime objects sit under a
+	// UWorld, but UMG widgets are outered to the GameInstance, and a LocalPlayer
+	// and its subsystems hang off the engine, so a typed-outer UWorld misses
+	// them. The first world, GameInstance or LocalPlayer up the outer chain
+	// decides; a GameInstance answers with the world it is playing.
+	UWorld* FindPlayingWorld(UObject* Obj)
+	{
+		for (UObject* It = Obj; It; It = It->GetOuter())
+		{
+			if (UWorld* World = Cast<UWorld>(It)) return World;
+			if (UGameInstance* GameInstance = Cast<UGameInstance>(It)) return GameInstance->GetWorld();
+			if (ULocalPlayer* LocalPlayer = Cast<ULocalPlayer>(It))
+			{
+				UGameInstance* GameInstance = LocalPlayer->GetGameInstance();
+				return GameInstance ? GameInstance->GetWorld() : nullptr;
+			}
+		}
+		return nullptr;
+	}
+
 	TSharedPtr<FJsonObject> DescribeLiveObject(UObject* Obj)
 	{
 		TSharedPtr<FJsonObject> Entry = MakeShared<FJsonObject>();
@@ -1668,7 +1724,7 @@ namespace
 		Entry->SetStringField(TEXT("classPath"), Obj->GetClass()->GetPathName());
 		Entry->SetStringField(TEXT("outerPath"), Obj->GetOuter() ? Obj->GetOuter()->GetPathName() : FString());
 		Entry->SetBoolField(TEXT("isDefaultObject"), Obj->HasAnyFlags(RF_ClassDefaultObject | RF_ArchetypeObject));
-		if (UWorld* OwningWorld = Obj->GetTypedOuter<UWorld>())
+		if (UWorld* OwningWorld = FindPlayingWorld(Obj))
 		{
 			Entry->SetStringField(TEXT("world"), OwningWorld->GetPathName());
 			Entry->SetStringField(TEXT("worldType"), MCPDescribeWorldType(OwningWorld));
@@ -1782,7 +1838,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::FindLiveObjects(const TSharedPtr<FJsonOb
 			}
 			if (!bUnderOuter) return;
 		}
-		if (bScopeToWorld && Obj->GetTypedOuter<UWorld>() != ScopeWorld) return;
+		if (bScopeToWorld && FindPlayingWorld(Obj) != ScopeWorld) return;
 
 		// The object's full path is the page anchor: it is the one string that
 		// names this instance across two separate enumerations, and it is what
@@ -1900,6 +1956,30 @@ TSharedPtr<FJsonValue> FEditorHandlers::SetObjectProperty(const TSharedPtr<FJson
 		return MCPResult(MeshResult);
 	}
 
+	// A static mesh component's mesh goes through SetStaticMesh (#1548).
+	if (MCPStaticMeshAsset::IsMeshProperty(Prop))
+	{
+		UStaticMeshComponent* MeshComp = Cast<UStaticMeshComponent>(ExportOwner);
+		FString PreviousMesh;
+		FString MeshErr;
+		if (!MeshComp || !MCPStaticMeshAsset::AssignFromJson(MeshComp, NewValue, PreviousMesh, MeshErr))
+		{
+			return MCPError(FString::Printf(TEXT("Failed to set '%s': %s"), *PropertyName,
+				MeshComp ? *MeshErr : TEXT("the owning static mesh component could not be resolved")));
+		}
+		auto MeshResult = MCPSuccess();
+		MCPSetUpdated(MeshResult);
+		MeshResult->SetStringField(TEXT("target"), Description);
+		MeshResult->SetStringField(TEXT("objectPath"), Target->GetPathName());
+		MeshResult->SetStringField(TEXT("propertyName"), ResolvedName);
+		MeshResult->SetStringField(TEXT("resolvedPropertyName"), PathInfo.IndexedPath);
+		if (PathInfo.bUsedKeySelector) MeshResult->SetStringField(TEXT("indexedPath"), PathInfo.IndexedPath);
+		MCPStaticMeshAsset::Report(MeshResult, MeshComp, PreviousMesh);
+		MCPSetNoRollback(MeshResult,
+			TEXT("No rollback payload is built for a mesh swap here. Restore previousValue with this action and value set to it."));
+		return MCPResult(MeshResult);
+	}
+
 	// Structured, not export text, and reported under the same field names and
 	// in the same form editor(set_property) uses: a caller reading
 	// previousValue/value off one of the two actions must not have to re-parse
@@ -1919,7 +1999,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::SetObjectProperty(const TSharedPtr<FJson
 	// rollback can be verified before it is advertised.
 	const bool bComparable = MCPJsonProperty::PropertyIsComparableByIdentity(Prop);
 	FDefaultConstructedPropertyElement PreviousRaw(Prop);
-	Prop->CopyCompleteValue(PreviousRaw.GetObjAddress(), ValueAddr);
+	Prop->CopySingleValue(PreviousRaw.GetObjAddress(), ValueAddr);
 
 	// Prove the round trip rather than asserting it, keeping the two ways it
 	// can fail apart: a value the setter REFUSES cannot be rolled back at all
@@ -1945,18 +2025,43 @@ TSharedPtr<FJsonValue> FEditorHandlers::SetObjectProperty(const TSharedPtr<FJson
 		bRollbackApplies = true;
 	}
 
+	// An object inside a package that is saved to disk (a Widget Blueprint's
+	// WidgetTree template, a Blueprint, an actor placed in an editor level) is
+	// part of that asset, not a live instance: the write is dirtied and
+	// reported as pending a save instead of as lost (#1544). A PIE world, the
+	// transient package, /Temp and anything under a transient outer stay
+	// live-only and are never dirtied.
+	UPackage* OwnerPackage = ExportOwner->GetPackage();
+	bool bTransientOuter = false;
+	for (const UObject* Outer = ExportOwner; Outer; Outer = Outer->GetOuter())
+	{
+		if (Outer->HasAnyFlags(RF_Transient)) { bTransientOuter = true; break; }
+	}
+	const bool bInSavedPackage = OwnerPackage
+		&& OwnerPackage != GetTransientPackage()
+		&& !OwnerPackage->HasAnyPackageFlags(PKG_PlayInEditor)
+		&& !bTransientOuter
+		&& !OwnerPackage->GetName().StartsWith(TEXT("/Temp/"));
+	UBlueprint* OwningBlueprint = nullptr;
+	const bool bInLevel = bInSavedPackage && ExportOwner->GetTypedOuter<UWorld>() != nullptr;
+	if (bInSavedPackage)
+	{
+		OwningBlueprint = Cast<UBlueprint>(ExportOwner);
+		if (!OwningBlueprint) OwningBlueprint = ExportOwner->GetTypedOuter<UBlueprint>();
+		ExportOwner->Modify(false);
+	}
+
 	FString SetError;
 	if (!MCPJsonProperty::SetJsonOnPropertyWithOwner(Prop, ValueAddr, NewValue, ExportOwner, SetError))
 	{
 		// A refused write may have landed part of the value; put it back.
-		Prop->CopyCompleteValue(ValueAddr, PreviousRaw.GetObjAddress());
+		Prop->CopySingleValue(ValueAddr, PreviousRaw.GetObjAddress());
 		return MCPError(FString::Printf(TEXT("Failed to set '%s': %s"), *ResolvedName, *SetError));
 	}
 
-	// Deliberately no Modify/MarkPackageDirty/save. A live instance is not an
-	// asset, and dirtying a PIE package or a spawned widget's outer would ask
-	// the editor to save something that does not exist on disk. Asset writes
-	// belong in editor(set_property).
+	// No save here, and no dirtying of a live instance: a PIE package or a
+	// spawned widget's outer does not exist on disk. Saving belongs to
+	// editor(set_property) and asset(save).
 	if (bPostEditChange)
 	{
 		FPropertyChangedEvent ChangeEvent(Prop);
@@ -1967,6 +2072,14 @@ TSharedPtr<FJsonValue> FEditorHandlers::SetObjectProperty(const TSharedPtr<FJson
 	// agree on values that differ past the sixth decimal.
 	const bool bChanged = !bComparable
 		|| !Prop->Identical(ValueAddr, PreviousRaw.GetObjAddress(), PPF_None);
+
+	if (bInSavedPackage && bChanged)
+	{
+		// A Blueprint's own templates reach its generated class only through a
+		// compile, so it is flagged as needing one, as a Details-panel edit is.
+		if (OwningBlueprint) FBlueprintEditorUtils::MarkBlueprintAsModified(OwningBlueprint);
+		else ExportOwner->MarkPackageDirty();
+	}
 
 	auto Result = MCPSuccess();
 	if (bChanged) MCPSetUpdated(Result);
@@ -1985,7 +2098,30 @@ TSharedPtr<FJsonValue> FEditorHandlers::SetObjectProperty(const TSharedPtr<FJson
 		Result->SetStringField(TEXT("world"), World->GetPathName());
 		Result->SetStringField(TEXT("netMode"), DescribePIENetMode(World));
 	}
-	Result->SetStringField(TEXT("note"), TEXT("Written to the live instance only. It is not saved and does not survive PIE ending or the object being destroyed; use editor(set_property) to write an asset."));
+	Result->SetStringField(TEXT("owner"), bInSavedPackage ? (bInLevel ? TEXT("level") : TEXT("asset")) : TEXT("liveInstance"));
+	if (bInSavedPackage)
+	{
+		Result->SetStringField(TEXT("package"), OwnerPackage->GetName());
+		Result->SetBoolField(TEXT("packageDirty"), OwnerPackage->IsDirty());
+		Result->SetBoolField(TEXT("saveRequired"), OwnerPackage->IsDirty());
+		if (OwningBlueprint)
+		{
+			Result->SetStringField(TEXT("blueprint"), OwningBlueprint->GetPathName());
+			Result->SetBoolField(TEXT("compileRequired"), bChanged || OwningBlueprint->Status == BS_Dirty);
+		}
+		const FString SaveHint = bInLevel
+			? TEXT("level(save)")
+			: FString::Printf(TEXT("asset(save, assetPath=\"%s\")"), *OwnerPackage->GetName());
+		Result->SetStringField(TEXT("note"), OwningBlueprint
+			? FString::Printf(TEXT("Written to an object that is part of the Blueprint %s and marked dirty, not yet saved. Run blueprint(compile) to carry it into the generated class, then %s to keep it on disk."),
+				*OwningBlueprint->GetPathName(), *SaveHint)
+			: FString::Printf(TEXT("Written to an object that is part of %s and marked dirty, not yet saved. Run %s to keep it on disk."),
+				*OwnerPackage->GetName(), *SaveHint));
+	}
+	else
+	{
+		Result->SetStringField(TEXT("note"), TEXT("Written to the live instance only. It is not saved and does not survive PIE ending or the object being destroyed; use editor(set_property) to write an asset."));
+	}
 	Result->SetBoolField(TEXT("changed"), bChanged);
 	// changeDetected has ONE meaning everywhere it appears: true when `changed`
 	// came from comparing the value before against the value after.

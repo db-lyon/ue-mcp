@@ -28,9 +28,11 @@ Run it:
 flow(action="run", flowName="build_and_check")
 ```
 
+Under the default `micro` context strategy there is no separate `flow` tool; the same call goes through the gateway as `tools(action="call", category="flow", method="run", args={flowName: "build_and_check"})`, and so do `plan` and `list`.
+
 The config is reloaded on every `flow` call, so an edited flow runs without a server restart.
 
-The response carries a `summary` line per step, a `steps` array with what each step answered (`data`, `success`, `attempts`, `error`), `failedStep`, `rollback`, `hookErrors` and the `runId`.
+The response carries a `summary` line per step, a `steps` array with what each step answered (`data`, `success`, `attempts`, `error`), `failedStep`, `rollback`, `hookErrors` and the `runId`. Like every category tool, the flow tool takes `select` and `omit` (dotted paths, arrays traversed: `select: "steps.success"`) to narrow that answer; they apply to the flow tool's own response and never reach a step.
 
 ## The `flow` tool
 
@@ -44,7 +46,7 @@ The response carries a `summary` line per step, a `steps` array with what each s
 
 ## Tasks
 
-Every action is a task named `<category>.<action>`: `level.place_actor`, `asset.list`, `project.build`. There are <!-- count:actions -->2125+<!-- /count --> across <!-- count:tools -->30<!-- /count --> categories. A few more are built in:
+Every action is a task named `<category>.<action>`: `level.place_actor`, `asset.list`, `project.build`. There are <!-- count:actions -->3704+<!-- /count --> across <!-- count:tools -->31<!-- /count --> categories. A few more are built in:
 
 | Task | What it does |
 |------|--------------|
@@ -76,6 +78,33 @@ tasks:
 | `options_schema` | Declared options (`type`, `required`, `default`, `enum`, `minimum` and the other JSON Schema keywords). Step options are validated against it before the task runs. |
 
 `class_path: ue-mcp.bridge` calls a bridge method directly. The `method` option names it and the other options are sent as its parameters.
+
+### A project script as a named task
+
+A Python script the project keeps under `Tools/` becomes a named task through `editor.run_python_file`. A relative `filePath` is resolved against the project directory, so the same `ue-mcp.yml` works on every machine. `entryPoint` calls one function in the script without firing its `__main__` guard, and its return value comes back as `result`.
+
+```yaml
+tasks:
+  import_blender_anims:
+    class_path: editor.run_python_file
+    description: Import Blender FBX animations with the project's import script
+    options:
+      filePath: Tools/BlenderMCP/unreal/import_assets.py
+      entryPoint: import_animations
+
+flows:
+  import_blender_anims:
+    description: Import and register the latest Blender animations
+    steps:
+      1:
+        task: import_blender_anims
+```
+
+```
+flow(action="run", flowName="import_blender_anims", params={ kwargs: { skeleton: "/Game/Characters/SK_Hero_Skeleton" } })
+```
+
+`kwargs` are the function's keyword arguments and `args` its positional ones. For a plain FBX animation import, `asset(import_animation)` does it natively: `skeletonPath`, `packagePath`, a batch through `filePaths`, any FBX import setting through `importSettings`, and a readback of every AnimSequence it created.
 
 ## Steps
 

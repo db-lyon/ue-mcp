@@ -14,6 +14,8 @@
 *.py text eol=lf
 *.sh text eol=lf
 *.glsl text eol=lf
+*.mmd text eol=lf
+*.svg text eol=lf
 
 # Unreal and Windows tooling expect CRLF
 *.cpp text eol=crlf

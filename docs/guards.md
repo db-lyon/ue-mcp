@@ -1,6 +1,6 @@
 # Guards
 
-A guard gates every bridge call, not only a plugin's own actions. Guards are declared in a plugin manifest or in a project's `ue-mcp.yml`, in the same shape. They run in an ordered pipeline around each bridge call: a `before` hook can deny the call or act on it (for example check a file out), and an `after` hook can observe or replace the result. Source control, access policy, audit and rate limiting are all guards.
+A guard gates every bridge call. Guards are declared in the `guards:` section of a project's `ue-mcp.yml` and need no plugin. A plugin can ship guards too, declared in the same shape in its manifest. They run in an ordered pipeline around each bridge call: a `before` hook can deny the call or act on it (for example check a file out), and an `after` hook can observe or replace the result. Source control, access policy, audit and rate limiting are all guards.
 
 ## Declaring a guard
 
@@ -52,7 +52,7 @@ guards:
       class_path: guards/AskFirst
 ```
 
-The <!-- count:nativeToolActions -->830<!-- /count --> actions that wrap Unreal's own toolsets all dispatch through the bridge method `epic_call_tool`. Their scope is decided from the method and the tool named in its arguments, so `gas(epic_list_attributes)` is in `reads` and `widget(epic_add_widget)` is in `mutations`, as each one declares.
+The <!-- count:nativeToolActions -->2185<!-- /count --> actions that wrap Unreal's own toolsets all dispatch through the bridge method `epic_call_tool`. Their scope is decided from the method and the tool named in its arguments, so `gas(epic_list_attributes)` is in `reads` and `widget(epic_add_widget)` is in `mutations`, as each one declares.
 
 `writes` and `mutations` are computed only when a guard asks, so a read pays nothing for them. The `source_control_*` calls are never in `writes`: they are the operations a source control guard would make itself.
 

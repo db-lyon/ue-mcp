@@ -75,6 +75,9 @@ export const LOCAL_ACTIONS: Record<string, string> = {
   "project.get_info": "Reads the .uproject file.",
   "project.read_config": "Reads INI files from the project's Config directory.",
   "project.search_config": "Searches the project's INI files on disk.",
+  "project.resolve_setting": "Reads the engine's and the project's INI files on disk.",
+  "project.explain_setting": "Reads the engine's and the project's INI files on disk.",
+  "project.diff_config_from_default": "Reads the engine's and the project's INI files on disk.",
   "project.list_config_tags": "Builds the gameplay tag tree from the project's INI files.",
   "project.read_cpp_header": "Reads a header from the project's Source tree.",
   "project.read_module": "Reads a module's headers from the project's Source tree.",
@@ -112,6 +115,12 @@ export const LOCAL_ACTIONS: Record<string, string> = {
   "project.execute_python_report": "Reads this session's own recorded calls.",
   "project.list_available_actions": "Classifies the tool graph this server holds in memory.",
   "project.check_install": "Inspects the project, the engine tree and the deployed plugin on disk.",
+  "project.list_categories": "Reads the tool graph this server holds and the engine's setting file; asks the editor for toolset states only when one is attached.",
+  "project.set_category_enabled": "Writes ue-mcp.yml and rebuilds the surface in this process; with no editor running, the engine's setting file is written instead of calling it.",
+  "project.set_toolset_enabled": "With no editor running, writes the engine's setting file; reaches the editor only when one is attached.",
+  "project.acquire_lease": "Asset leases live in this server process, not in the editor.",
+  "project.release_lease": "Asset leases live in this server process, not in the editor.",
+  "project.list_leases": "Asset leases live in this server process, not in the editor.",
 
   // Process lifecycle. Starting an editor is the one thing that must work
   // without one, and building requires the editor to be stopped.
@@ -129,6 +138,11 @@ export const LOCAL_ACTIONS: Record<string, string> = {
   "editor.restore": "Writes files back from the shadow history. A connected editor reloads them; without one there is nothing loaded to reload.",
   "editor.clear_checkpoints": "Deletes the shadow history on disk.",
 
+  // The mutation journal (#1481) is a file in the project's Saved folder.
+  "editor.journal_group": "Sets which group this server journals calls into. Nothing is sent anywhere.",
+  "editor.list_journal": "Reads the journal file on disk.",
+  "editor.summarize_csv_profile": "Reads a CSV profiler capture from disk; the editor is never called.",
+
   // Reporting and introspection that never touch the editor.
   "feedback.submit": "Posts to a GitHub tracker. It needs the network and a user approval prompt, not an editor.",
   "feedback.route": "Answers where an issue would land from the plugin registry on disk.",
@@ -145,16 +159,28 @@ export const LOCAL_ACTIONS: Record<string, string> = {
  */
 export const EDITOR_BOUND_LOCAL_ACTIONS: Record<string, string> = {
   "asset.search": "Wraps the search_assets bridge method, resolving content roots first.",
+  "fab.list_epic_tools": "Calls epic_list_toolsets and epic_list_mcp_tools, which read the editor's Toolset Registry and Unreal MCP plugin, and keeps the Fab tools.",
   "editor.diff_checkpoint_asset": "Exports two versions from the shadow history and calls checkpoint_diff_asset, which loads them in the editor to diff them.",
   "editor.open_checkpoint_diff": "Exports versions from the shadow history and calls checkpoint_open_native_diff, which opens Unreal's diff window.",
+  "editor.revert_group": "Replays each entry's rollback descriptor as a bridge call; entries restored from checkpoint snapshots are file writes the editor then reloads.",
+  "editor.revert_after_group": "Replays each entry's rollback descriptor as a bridge call; entries restored from checkpoint snapshots are file writes the editor then reloads.",
+  "blueprint.open_diff_window": "Opens Unreal's diff window through checkpoint_open_native_diff or source_control_diff, both in the editor.",
   "asset.migrate": "Calls the migrate bridge method from a module-level helper, then rescans the destination editor.",
   "asset.lock": "Calls the acquire_lock bridge method. The lock registry lives in the editor.",
   "asset.unlock": "Calls the release_lock bridge method. The lock registry lives in the editor.",
   "asset.unlock_all": "Calls the release_session_locks bridge method. The lock registry lives in the editor.",
   "blueprint.author": "Runs a sequence of bridge calls to create and populate a Blueprint.",
+  "blueprint.diagram": "Reads the graph through its reader over the bridge, then draws it in this process.",
+  "animation.diagram": "Reads the graph through its reader over the bridge, then draws it in this process.",
+  "statetree.diagram": "Reads the graph through its reader over the bridge, then draws it in this process.",
+  "gameplay.diagram_behavior_tree": "Reads the graph through its reader over the bridge, then draws it in this process.",
+  "material.diagram": "Reads the graph through its reader over the bridge, then draws it in this process.",
+  "pcg.diagram": "Reads the graph through its reader over the bridge, then draws it in this process.",
+  "asset.diagram": "Reads the graph through its reader over the bridge, then draws it in this process.",
   "niagara.batch": "Runs a sequence of bridge calls against one Niagara system.",
   "pcg.wait_for_generation": "Polls the get_pcg_generation_state bridge method until a generation ends.",
   "editor.execute_python": "Runs Python inside the editor process.",
+  "editor.capture_screenshot_sequence": "Calls the capture_screenshot bridge method once per frame on a fixed interval.",
   "editor.batch": "Sends its steps to the editor as one execute_batch bridge call, which runs them in one game-thread job.",
   "editor.play_in_editor_ignore_blueprint_errors": "Starts Play In Editor through the pie_start_ignoring_blueprint_errors bridge method.",
   "editor.request_editor_shutdown": "Asks the running editor to shut itself down over the bridge.",

@@ -273,11 +273,12 @@ TSharedPtr<FJsonValue> FLevelHandlers::SaveLevel(const TSharedPtr<FJsonObject>& 
 	int32 LandscapesMerged = 0;
 	for (TActorIterator<ALandscape> It(World); It; ++It)
 	{
-		if (It->HasLayersContent())
-		{
-			It->ForceUpdateLayersContent();
-			++LandscapesMerged;
-		}
+		// From 5.7 every landscape uses edit layers and HasLayersContent is deprecated.
+#if !UE_MCP_HAS_5_7_API
+		if (!It->HasLayersContent()) continue;
+#endif
+		It->ForceUpdateLayersContent();
+		++LandscapesMerged;
 	}
 
 	// commitDeletes: the editor's own save path, which removes the external

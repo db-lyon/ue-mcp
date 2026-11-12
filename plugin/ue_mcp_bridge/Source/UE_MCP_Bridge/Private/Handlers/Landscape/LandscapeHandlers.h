@@ -17,6 +17,10 @@ namespace MCPLandscape
 	/** A landscape or streaming proxy by label, internal name or path; an empty
 	 *  name means the only ALandscape in the world. */
 	ALandscapeProxy* ResolveLandscapeProxyByName(UWorld* World, const FString& LandscapeName, TSharedPtr<FJsonValue>& OutError);
+
+	/** The edit layer a write targets: editLayer by name, else editLayerIndex
+	 *  (default 0). Defined beside the sculpt handlers that share it. */
+	bool ResolveEditLayer(ALandscape* Landscape, const TSharedPtr<FJsonObject>& Params, FGuid& OutGuid, FString& OutName, FString& OutError);
 }
 
 class FLandscapeHandlers

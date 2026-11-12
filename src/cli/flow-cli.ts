@@ -11,6 +11,7 @@ import type { FlowEvent } from "../flow/events.js";
 import { subscribeFlowEvents } from "../flow/events.js";
 import { findUProject, isUProjectPath } from "../config/uproject-path.js";
 import { takeEditorTarget, EditorFlagError } from "./editor-flag.js";
+import { setDefaultLogLevel } from "../core/log.js";
 import { BOLD, DIM, GREEN, RED, RESET, YELLOW } from "./ui/ansi.js";
 import type { CliUsage } from "./cli-main.js";
 
@@ -183,7 +184,7 @@ export async function run(argv: string[]): Promise<number> {
   if (!project) return report(json, { code: 2, message: "No .uproject found. Run from your project directory or pass --editor." });
 
   // The runtime logs its startup the way a server does; a terminal command wants warnings only.
-  process.env.UE_MCP_LOG_LEVEL ??= "warn";
+  setDefaultLogLevel("warn");
   const { createRuntime } = await import("../server/runtime.js");
   const rt = await createRuntime([project]);
 
@@ -210,7 +211,9 @@ export async function run(argv: string[]): Promise<number> {
     unsubscribe();
   }
 
-  const text = result.content[0]?.text ?? "";
+  // A flow answers with one text block; a media block (an image a step returned) carries no JSON.
+  const first = result.content[0];
+  const text = first?.type === "text" ? first.text : "";
   if (result.isError) {
     if (json) console.log(text);
     else console.error(`  ${RED}${text}${RESET}`);

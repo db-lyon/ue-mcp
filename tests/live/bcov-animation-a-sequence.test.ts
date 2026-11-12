@@ -105,6 +105,15 @@ describe("animation sequence authoring", () => {
     expect(Math.hypot(pelvis.x, pelvis.y, pelvis.z)).toBeGreaterThan(50);
     const all = await call("get_bone_transforms", { skeletonPath: SKELETON });
     expect(all.boneCount).toBe(info.boneCount);
+    expect(all.poseSource).toBe("skeleton");
+    expect(String(all.poseSourcePath)).toContain("TutorialTPP_Skeleton");
+    // A mesh path reads the mesh's own bind pose, not its Skeleton's (#1451).
+    const fromMesh = await call("get_bone_transforms", { skeletonPath: ENGINE_MESH });
+    expect(fromMesh.poseSource).toBe("skeletalMesh");
+    expect(String(fromMesh.poseSourcePath)).toContain(`${ENGINE_MESH}.`);
+    expect(String(fromMesh.skeletonPath)).toContain("TutorialTPP_Skeleton");
+    const meshBones = fromMesh.bones as Array<{ name: string }>;
+    expect(meshBones.map((b) => b.name)).toEqual(expect.arrayContaining(["Root", "pelvis"]));
 
     await call("create_sequence", { name: "AS_BCovA_Root", skeletonPath: SKELETON, packagePath: DIR, numFrames: 10, frameRate: 30 });
     const keyframes = Array.from({ length: 11 }, (_, i) => ({ location: { x: pelvis.x + 10 * i, y: pelvis.y, z: pelvis.z } }));

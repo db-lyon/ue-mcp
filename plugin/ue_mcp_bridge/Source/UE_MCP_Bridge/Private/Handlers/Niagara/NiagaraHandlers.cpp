@@ -3,6 +3,7 @@
 #include "HandlerUtils.h"
 #include "HandlerPagination.h"
 #include "NiagaraHandlers_Internal.h"
+#include "HandlerQuery.h"
 
 #include "UObject/StrongObjectPtr.h"
 #include "HandlerJsonProperty.h"
@@ -106,7 +107,7 @@ void FNiagaraHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	using EType = EMCPParamType;
 	auto SystemPathParam = []()
 	{
-		return MCPParam::Required(TEXT("systemPath"), EType::String, TEXT("NiagaraSystem asset path"));
+		return MCPParam::Required(TEXT("systemPath"), EType::String, TEXT("NiagaraSystem asset path")).Alias(TEXT("assetPath"));
 	};
 	auto EmitterNameParam = []()
 	{
@@ -195,7 +196,7 @@ void FNiagaraHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		OnConflictParam(),
 	}, MCPSpec::ContractExempt(TEXT("Creates and saves a system under the contract values; nothing it reads fails first")));
 	Registry.RegisterHandler(TEXT("get_niagara_info"), &GetNiagaraInfo, {
-		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("NiagaraSystem asset path")).Alias(TEXT("path")),
+		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("NiagaraSystem asset path")).Alias(TEXT("path")).Alias(TEXT("systemPath")),
 	});
 	Registry.RegisterHandler(TEXT("list_emitters_in_system"), &ListEmittersInSystem, {
 		SystemPathParam(),
@@ -249,8 +250,11 @@ void FNiagaraHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Required(TEXT("value"), EType::Any, TEXT("New value, as a string")),
 	});
 	Registry.RegisterHandler(TEXT("get_emitter_info"), &GetEmitterInfo, {
-		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("NiagaraEmitter asset path")),
-	});
+		MCPParam::Optional(TEXT("assetPath"), EType::String, TEXT("NiagaraEmitter asset path, or a NiagaraSystem asset path to read one of its emitters")),
+		MCPParam::Optional(TEXT("systemPath"), EType::String, TEXT("NiagaraSystem whose emitter to read, picked by emitterName or emitterIndex")),
+		EmitterNameParam(),
+		EmitterIndexParam(),
+	}, MCPSpec::ExactlyOne({ { TEXT("assetPath") }, { TEXT("systemPath") } }));
 
 	// v0.7.10 - depth
 	Registry.RegisterHandler(TEXT("list_emitter_renderers"), &ListEmitterRenderers, {
@@ -1370,25 +1374,71 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::SetEmitterProperty(const TSharedPtr<FJs
 
 TSharedPtr<FJsonValue> FNiagaraHandlers::GetEmitterInfo(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath;
-	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
+	const FString AssetPath = OptionalString(Params, TEXT("assetPath"), TEXT(""));
+	FString SystemPath = OptionalString(Params, TEXT("systemPath"), TEXT(""));
+	const FString EmitterName = OptionalString(Params, TEXT("emitterName"), TEXT(""));
+	const int32 EmitterIndex = OptionalInt(Params, TEXT("emitterIndex"), 0);
+	if (AssetPath.IsEmpty() == SystemPath.IsEmpty())
+	{
+		return MCPError(TEXT("Pass exactly one of 'assetPath' (a NiagaraEmitter or NiagaraSystem asset) or 'systemPath' (a NiagaraSystem, with emitterName or emitterIndex)."));
+	}
 
-	REQUIRE_ASSET(UNiagaraEmitter, Emitter, AssetPath);
+	// An emitter inside a system is addressed by systemPath plus emitterName or
+	// emitterIndex; a system path passed as assetPath means the same (#1552).
+	UNiagaraSystem* System = nullptr;
+	UNiagaraEmitter* Emitter = nullptr;
+	if (!SystemPath.IsEmpty())
+	{
+		REQUIRE_ASSET(UNiagaraSystem, LoadedSystem, SystemPath);
+		System = LoadedSystem;
+	}
+	else
+	{
+		UObject* Loaded = LoadAssetByPath<UObject>(AssetPath);
+		if (!Loaded) return MCPAssetLoadError(AssetPath, TEXT("UNiagaraEmitter"));
+		System = Cast<UNiagaraSystem>(Loaded);
+		Emitter = Cast<UNiagaraEmitter>(Loaded);
+		if (!System && !Emitter)
+		{
+			return MCPError(FString::Printf(
+				TEXT("'%s' is a %s, not a NiagaraEmitter or NiagaraSystem."), *AssetPath, *Loaded->GetClass()->GetName()));
+		}
+		if (System) SystemPath = AssetPath;
+	}
 
 	auto Result = MCPSuccess();
-	Result->SetStringField(TEXT("path"), AssetPath);
-	Result->SetStringField(TEXT("name"), Emitter->GetName());
-	Result->SetStringField(TEXT("class"), Emitter->GetClass()->GetName());
-
-	// Include version data properties (#68)
-	// UNiagaraEmitter in UE 5.7 requires a version guid to get emitter data
-	// Use the exposed version array to get the latest
-	const TArray<FNiagaraAssetVersion>& Versions = Emitter->GetAllAvailableVersions();
 	FVersionedNiagaraEmitterData* Data = nullptr;
-	if (Versions.Num() > 0)
+	if (System)
 	{
-		Data = Emitter->GetEmitterData(Versions.Last().VersionGuid);
+		FString ResolveError;
+		const int32 HandleIndex = MCPNiagara::ResolveEmitterHandleIndex(System, EmitterName, EmitterIndex, ResolveError);
+		if (HandleIndex == INDEX_NONE) return MCPError(ResolveError);
+		FGuid Version;
+		Data = MCPNiagara::ResolveEmitter(System, FString(), HandleIndex, Emitter, Version, ResolveError);
+		if (!Data) return MCPError(ResolveError);
+		const FNiagaraEmitterHandle& Handle = System->GetEmitterHandles()[HandleIndex];
+		Result->SetStringField(TEXT("systemPath"), SystemPath);
+		Result->SetStringField(TEXT("emitterName"), Handle.GetName().ToString());
+		Result->SetNumberField(TEXT("emitterIndex"), HandleIndex);
+		Result->SetBoolField(TEXT("enabled"), Handle.GetIsEnabled());
+		Result->SetStringField(TEXT("path"), Emitter ? Emitter->GetPathName() : FString());
 	}
+	else
+	{
+		// A standalone emitter asset: its latest version (#68).
+		Result->SetStringField(TEXT("path"), AssetPath);
+		const TArray<FNiagaraAssetVersion>& Versions = Emitter->GetAllAvailableVersions();
+		if (Versions.Num() > 0)
+		{
+			Data = Emitter->GetEmitterData(Versions.Last().VersionGuid);
+		}
+	}
+	if (Emitter)
+	{
+		Result->SetStringField(TEXT("name"), Emitter->GetName());
+		Result->SetStringField(TEXT("class"), Emitter->GetClass()->GetName());
+	}
+
 	if (Data)
 	{
 		// Simulation stages / sim target
@@ -1408,7 +1458,9 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::GetEmitterInfo(const TSharedPtr<FJsonOb
 		Result->SetArrayField(TEXT("renderers"), RenderersArray);
 		Result->SetNumberField(TEXT("rendererCount"), RenderersArray.Num());
 
-		// List properties via reflection
+		// Every reflected emitter-data property with its value. Containers are
+		// listed without one: the renderer array is reported above and the rest
+		// are graph plumbing.
 		TArray<TSharedPtr<FJsonValue>> PropsArray;
 		UStruct* Struct = FVersionedNiagaraEmitterData::StaticStruct();
 		for (TFieldIterator<FProperty> It(Struct); It; ++It)
@@ -1416,9 +1468,43 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::GetEmitterInfo(const TSharedPtr<FJsonOb
 			TSharedPtr<FJsonObject> PropObj = MakeShared<FJsonObject>();
 			PropObj->SetStringField(TEXT("name"), It->GetName());
 			PropObj->SetStringField(TEXT("type"), It->GetCPPType());
+			if (!It->IsA<FArrayProperty>() && !It->IsA<FMapProperty>() && !It->IsA<FSetProperty>())
+			{
+				PropObj->SetField(TEXT("value"), MCPQuery::PropertyToJson(*It, It->ContainerPtrToValuePtr<void>(Data)));
+			}
 			PropsArray.Add(MakeShared<FJsonValueObject>(PropObj));
 		}
 		Result->SetArrayField(TEXT("properties"), PropsArray);
+
+		// The module stack per context. Spawn rate, loop behaviour and the
+		// other stack settings are module inputs, read with list_module_inputs.
+		TArray<MCPNiagara::FStackSlot> Slots;
+		FString ContextError;
+		MCPNiagara::CollectStackContexts(Data, TEXT("all"), Slots, ContextError);
+		TArray<TSharedPtr<FJsonValue>> ModulesArray;
+		for (const MCPNiagara::FStackSlot& Slot : Slots)
+		{
+			TArray<UNiagaraNodeFunctionCall*> Modules;
+			MCPNiagara::OrderedModulesOfSlot(Slot, Modules);
+			for (int32 StackIndex = 0; StackIndex < Modules.Num(); ++StackIndex)
+			{
+				const UNiagaraNodeFunctionCall* FC = Modules[StackIndex];
+				TSharedPtr<FJsonObject> ModObj = MakeShared<FJsonObject>();
+				ModObj->SetStringField(TEXT("stackContext"), Slot.Context);
+				ModObj->SetNumberField(TEXT("stackIndex"), StackIndex);
+				ModObj->SetStringField(TEXT("moduleName"), FC->GetFunctionName());
+				ModObj->SetStringField(TEXT("scriptAsset"), FC->FunctionScript ? FC->FunctionScript->GetPathName() : FString());
+				ModObj->SetBoolField(TEXT("enabled"), FC->GetDesiredEnabledState() != ENodeEnabledState::Disabled);
+				ModulesArray.Add(MakeShared<FJsonValueObject>(ModObj));
+			}
+		}
+		Result->SetArrayField(TEXT("modules"), ModulesArray);
+		Result->SetNumberField(TEXT("moduleCount"), ModulesArray.Num());
+		if (System)
+		{
+			Result->SetStringField(TEXT("hint"),
+				TEXT("Module input values (SpawnRate, EmitterState loop settings, Lifetime) come from niagara(list_module_inputs) with this systemPath and emitterName."));
+		}
 	}
 
 	return MCPResult(Result);
@@ -2041,19 +2127,21 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::ListModuleInputs(const TSharedPtr<FJson
 	TArray<TSharedPtr<FJsonValue>> ModulesArr;
 	for (const MCPNiagara::FStackSlot& Slot : Scripts)
 	{
-		UNiagaraGraph* Graph = MCPNiagara::GraphOfScript(Slot.Script);
-		if (!Graph) continue;
-		for (UEdGraphNode* N : Graph->Nodes)
+		// Only the modules wired into this context's output node (#1552).
+		TArray<UNiagaraNodeFunctionCall*> Modules;
+		MCPNiagara::OrderedModulesOfSlot(Slot, Modules);
+		for (int32 StackIndex = 0; StackIndex < Modules.Num(); ++StackIndex)
 		{
-			UNiagaraNodeFunctionCall* FC = Cast<UNiagaraNodeFunctionCall>(N);
-			if (!FC) continue;
+			UNiagaraNodeFunctionCall* FC = Modules[StackIndex];
 			const FString ModName = FC->GetFunctionName();
 			if (!ModuleFilter.IsEmpty() && !ModName.Equals(ModuleFilter, ESearchCase::IgnoreCase)) continue;
 
 			TSharedPtr<FJsonObject> ModObj = MakeShared<FJsonObject>();
 			ModObj->SetStringField(TEXT("stackContext"), Slot.Context);
+			ModObj->SetNumberField(TEXT("stackIndex"), StackIndex);
 			ModObj->SetStringField(TEXT("moduleName"), ModName);
 			ModObj->SetStringField(TEXT("scriptAsset"), FC->FunctionScript ? FC->FunctionScript->GetPathName() : FString());
+			ModObj->SetBoolField(TEXT("enabled"), FC->GetDesiredEnabledState() != ENodeEnabledState::Disabled);
 
 			// #784: the function-call node's PINS are only the compile-time
 			// switches and enums. The values an author actually sets - Spawn
@@ -2109,12 +2197,13 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::ListModuleInputs(const TSharedPtr<FJson
 					}
 					InObj->SetStringField(TEXT("type"), Var.GetType().GetName());
 
+					// The current value and where it comes from (#1552).
+					const TSharedPtr<FJsonObject> ValueObj = MCPNiagara::ReadModuleInputValue(
+						Slot, Emitter ? Emitter->GetUniqueEmitterName() : FString(), *FC, Var);
+					for (const auto& Field : ValueObj->Values) InObj->SetField(Field.Key, Field.Value);
+
 					// Whether set_module_input can bind this input through the
-					// override map. FNiagaraStackFunctionInputBinder::GetData is
-					// not exported from NiagaraEditor, so the current value
-					// cannot be read back from here; the binding check still
-					// tells the caller which inputs are writable, and the name
-					// is what set_module_input takes.
+					// override map; the name is what set_module_input takes.
 					FNiagaraStackFunctionInputBinder Binder;
 					FText BindErr;
 					const bool bBound = Emitter && Binder.TryBind(

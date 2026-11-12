@@ -12,6 +12,7 @@ import type { EditorBridge } from "../../src/bridge/bridge.js";
 const DIR = "/Game/MCPTest/BCov/Blueprint";
 const BP = `${DIR}/BP_BCovMembers`;
 const BPI = `${DIR}/BPI_BCovMembers`;
+const CURVE = `${DIR}/Curve_BCovTimeline`;
 
 type Json = Record<string, unknown>;
 type Row = Record<string, unknown>;
@@ -40,6 +41,7 @@ beforeAll(async () => {
   bridge = await getBridge();
   await callBridge(bridge, "delete_asset", { assetPath: BP, force: true });
   await callBridge(bridge, "delete_asset", { assetPath: BPI, force: true });
+  await callBridge(bridge, "delete_asset", { assetPath: CURVE, force: true });
   await call("create_blueprint", { assetPath: BP, parentClass: "Actor" });
 }, 120_000);
 
@@ -47,6 +49,7 @@ afterAll(async () => {
   if (bridge) {
     await callBridge(bridge, "delete_asset", { assetPath: BP, force: true });
     await callBridge(bridge, "delete_asset", { assetPath: BPI, force: true });
+    await callBridge(bridge, "delete_asset", { assetPath: CURVE, force: true });
     disconnectBridge();
   }
 });
@@ -231,11 +234,55 @@ describe("blueprint dispatchers, interfaces and timelines", () => {
     });
     expect(added.keyCount).toBe(2);
     expect(added.trackType).toBe("float");
+    // Public and under the generated class, so a level holding an instance saves (#1650).
+    expect(added.curvePublic).toBe(true);
+    expect(String(added.curvePath)).toContain("BP_BCovMembers_C:");
+    expect(String(added.curvePath)).not.toContain("_Template");
+    expect(added.externalCurve).toBe(false);
 
     const again = await call("add_timeline_track", {
       assetPath: BP, timelineName: "BCovTimeline", trackName: "Alpha", trackType: "vector",
     });
     expect(again.alreadyExists).toBe(true);
     expect(again.existingTrackType).toBe("float");
+  }, 120_000);
+
+  it("add_timeline_track binds an existing curve asset as an external curve (#1650)", async () => {
+    await call("create_asset_by_class", { name: "Curve_BCovTimeline", className: "CurveFloat", packagePath: DIR });
+
+    const bound = await call("add_timeline_track", {
+      assetPath: BP, timelineName: "BCovExternal", trackName: "Ext", trackType: "float", curveAssetPath: CURVE,
+    });
+    expect(bound.externalCurve).toBe(true);
+    expect(String(bound.curvePath)).toBe(`${CURVE}.Curve_BCovTimeline`);
+
+    const wrongType = await callBridge(bridge, "add_timeline_track", {
+      assetPath: BP, timelineName: "BCovExternal", trackName: "Vec", trackType: "vector", curveAssetPath: CURVE,
+    });
+    expect(succeeded(wrongType)).toBe(false);
+    expect(String(wrongType.error ?? JSON.stringify(wrongType.result))).toContain("CurveVector");
+  }, 120_000);
+
+  it("remove_timeline drops the template so the name builds a fresh timeline (#1654)", async () => {
+    const created = await call("add_timeline_track", {
+      assetPath: BP, timelineName: "BCovRemoved", trackName: "Alpha", trackType: "float",
+    });
+    expect(created.createdTimeline).toBe(true);
+    expect((created.rollback as Json | undefined)?.method).toBe("remove_timeline");
+
+    const removed = await call("remove_timeline", { assetPath: BP, timelineName: "BCovRemoved" });
+    expect(removed.removed).toBe(true);
+    expect(removed.templateRemoved).toBe(true);
+    expect(removed.timelines as string[]).not.toContain("BCovRemoved");
+
+    const again = await call("remove_timeline", { assetPath: BP, timelineName: "BCovRemoved" });
+    expect(again.alreadyRemoved).toBe(true);
+
+    // A template left behind would make this an existing track, not a new timeline.
+    const rebuilt = await call("add_timeline_track", {
+      assetPath: BP, timelineName: "BCovRemoved", trackName: "Alpha", trackType: "float",
+    });
+    expect(rebuilt.alreadyExists).toBeUndefined();
+    expect(rebuilt.createdTimeline).toBe(true);
   }, 120_000);
 });

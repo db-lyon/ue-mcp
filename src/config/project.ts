@@ -29,11 +29,12 @@ export interface PluginInfo {
 export interface UeMcpConfig {
   /** Content roots to search by default (e.g. ["/Game/", "/GASP/", "/MyPlugin/"]) */
   contentRoots?: string[];
-  /** Tool categories to disable (e.g. ["gas", "networking", "pcg"]) */
+  /** Tool categories to turn off (e.g. ["gas", "networking", "pcg"]). An entry
+   *  may carry a scope: `animation:epic` takes out only the actions wrapping
+   *  Unreal's toolsets, `level:native` only ue-mcp's own (see category-state.ts). */
   disable?: string[];
-  /** Native (Epic 5.8 ToolsetRegistry) tool surfacing. Enabled by default;
-   *  `exclude` names ue-mcp categories that should not be enriched with Epic
-   *  tools (they remain reachable via the `epic` gateway). */
+  /** Native (UE 5.8+ ToolsetRegistry) tool surfacing. Enabled by default.
+   *  `exclude` is deprecated: it is read as `disable: [<category>:epic]`. */
   nativeTools?: {
     enabled?: boolean;
     exclude?: string[];
@@ -71,6 +72,13 @@ export interface UeMcpConfig {
    *  Opt-in; disabled by default. */
   locking?: {
     enabled?: boolean;
+    ttlSeconds?: number;
+  };
+  /** Asset leases for agents sharing one editor (see dispatch/leases.ts).
+   *  `auto` by default: explicit leases always, implicit ones while more than
+   *  one MCP session is connected. */
+  leases?: {
+    mode?: "auto" | "on" | "off";
     ttlSeconds?: number;
   };
   /** Optional HTTP surface for flow.run (#144). Disabled by default. */
@@ -304,6 +312,9 @@ export class ProjectContext {
       throw new Error(
         `'contentPath' must be a mount path such as /Game or /Game/Characters (got '${contentPath}').`,
       );
+    }
+    if (normalized.split("/").some((part) => part === "." || part === "..")) {
+      throw new Error(`'contentPath' names a folder inside a mount and cannot contain '.' or '..' (got '${contentPath}').`);
     }
     if (isGamePath(normalized)) {
       if (!this.contentDir) throw new Error("No project is loaded, so /Game has no directory to read.");

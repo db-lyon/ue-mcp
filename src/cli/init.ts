@@ -2,21 +2,26 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import * as readline from "node:readline";
 import { ProjectContext } from "../config/project.js";
-import { BOLD, CYAN, DIM, GREEN, RED, RESET, fail, info, ok, warn } from "./ui/ansi.js";
+import { BOLD, CYAN, DIM, GREEN, RED, RESET, fail, info, ok, redirectConsoleToStderr, warn } from "./ui/ansi.js";
 import { checkboxSelect, singleSelect, type CheckboxItem } from "./ui/select.js";
 import { runFeedbackAuthStep } from "./auth-cli.js";
 import type { CliUsage } from "./cli-main.js";
 import { getInstalledHooks, type FeedbackMode } from "../config/user-state.js";
 import { coreSkillsInstalled } from "../extensions/skills.js";
 import { detectMcpClients, isProjectScopedClient, ueMcpServerArgs } from "../integrations/claude-code/mcp-client-config.js";
+import { describeUnrealMcpEntry, findUnrealMcpEntries, type UnrealMcpEntry } from "../integrations/claude-code/unreal-mcp-entries.js";
 import { takeEditorTarget, EditorFlagError } from "./editor-flag.js";
 import { findUProject } from "../config/uproject-path.js";
+import { readCategoryState } from "../surface/category-state.js";
 import {
   CATEGORIES,
   ENRICHABLE_CATEGORIES,
   FEEDBACK_MODES,
   apply,
   bridgePort,
+  engineConfigRoot,
+  engineRootReplacements,
+  projectEpicIntegrations,
   plan,
   type ContextStrategy,
   type InitChoices,
@@ -87,6 +92,10 @@ export function choicesFromFlags(argv: string[], projectPath: string): InitChoic
   }
   const native = flagBool(argv, "native-tools");
   const exclude = list(flagValue(argv, "--native-exclude"));
+  const unrealMcpPort = flagValue(argv, "--unreal-mcp-port");
+  if (unrealMcpPort !== undefined && !/^\d+$/.test(unrealMcpPort)) {
+    throw new Error(`--unreal-mcp-port must be a port number, not '${unrealMcpPort}'`);
+  }
   return {
     project: projectPath,
     disable: list(flagValue(argv, "--disable")),
@@ -97,11 +106,15 @@ export function choicesFromFlags(argv: string[], projectPath: string): InitChoic
     feedbackMode: feedbackMode as FeedbackMode | undefined,
     promptHook: flagBool(argv, "hook"),
     skills: flagBool(argv, "skills"),
+    agentGuides: flagBool(argv, "agent-guides"),
     install: install as InitChoices["install"],
     binaries: flagValue(argv, "--binaries") ?? null,
     // The machine path pins by default, so the server and bridge move together.
     pin: flagBool(argv, "pin") ?? true,
     command: flagValue(argv, "--command") ?? null,
+    unrealMcpAutoStart: flagBool(argv, "unreal-mcp-autostart"),
+    unrealMcpPort: unrealMcpPort === undefined ? undefined : Number(unrealMcpPort),
+    unrealAssistant: flagBool(argv, "unreal-assistant"),
   };
 }
 
@@ -154,13 +167,6 @@ async function initNonInteractive(argv: string[], projectPath: string): Promise<
   }
 }
 
-function redirectConsoleToStderr(): () => void {
-  const original = console.log;
-  console.log = (...args: unknown[]) => console.error(...args);
-  return () => {
-    console.log = original;
-  };
-}
 
 /* ------------------------------------------------------------------ */
 /*  Interactive init                                                   */
@@ -221,7 +227,9 @@ async function init(argv: string[]): Promise<number | void> {
   // The port this worktree will use, so checkouts on one machine are visibly distinct.
   const port = bridgePort(project);
   info(
-    port.pinnedBy
+    port.avoided
+      ? `Bridge port for this worktree: ${DIM}${port.port}${RESET} (${port.pinnedBy === "env" ? "UE_MCP_PORT" : "ue-mcp.bridge.port"} pins ${port.avoided.port}, but ${port.avoided.reason})`
+      : port.pinnedBy
       ? `Bridge port for this worktree: ${DIM}${port.port}${RESET} (${port.pinnedBy === "env" ? "pinned by UE_MCP_PORT" : "pinned by ue-mcp.bridge.port"}; ${port.derivedPort} is what the project path derives)`
       : `Bridge port for this worktree: ${DIM}${port.port}${RESET} (derived from the project path; pin with ue-mcp.bridge.port if needed)`,
   );
@@ -241,16 +249,17 @@ async function init(argv: string[]): Promise<number | void> {
   const disabled = optional.filter((_, i) => !states[i]).map((c) => c.name);
   console.log("");
 
-  // 2b. Native (Epic 5.8) tools, on by default.
+  // 2b. Native Unreal (UE 5.8+) tools, on by default.
   const existingNative = (project.config.nativeTools ?? {}) as { enabled?: boolean; exclude?: string[] };
-  const nativeEnabled = (await checkboxSelect("Native Unreal tools (Epic 5.8)", [{
-    label: "Enable native Epic 5.8 MCP tools",
+  const nativeEnabled = (await checkboxSelect("Native Unreal tools (UE 5.8+)", [{
+    label: "Enable native Unreal MCP tools (UE 5.8+)",
     checked: existingNative.enabled !== false,
     suffix: "Wraps Unreal's ToolsetRegistry (GAS, Niagara, PCG, UMG, ...) as first-class actions in the matching categories",
   }], "Pass --yes with --native-tools or --no-native-tools."))[0];
   let nativeExclude: string[] = [];
   if (nativeEnabled) {
-    const existingExclude = new Set(existingNative.exclude ?? []);
+    // Both spellings: disable: [<category>:epic], and the deprecated nativeTools.exclude.
+    const existingExclude = readCategoryState(project.config).epic;
     const offer = ENRICHABLE_CATEGORIES.filter((c) => !disabled.includes(c));
     const includeStates = await checkboxSelect(
       "Include native tools in these categories (uncheck to skip)",
@@ -274,14 +283,33 @@ async function init(argv: string[]): Promise<number | void> {
   console.log("");
 
   // 3. MCP clients. Global and Desktop configs affect every project, so they start unchecked.
-  const detected = detectMcpClients(project.projectDir!).filter((c) => c.detected);
+  // A source build's editor writes client configs into the engine root too.
+  const atEngineRoot = engineRootReplacements(engineConfigRoot(project));
+  const detected = detectMcpClients(project.projectDir!).filter((c) => c.detected || atEngineRoot.has(c.name));
   let selectedClients: string[] = [];
   if (detected.length > 0) {
-    const clientStates = await checkboxSelect("Configure MCP clients", detected.map((c) => ({
-      label: c.name,
-      checked: isProjectScopedClient(c.name),
-      suffix: c.configPath,
-    })), "Pass --yes with --clients <ids>.");
+    // A config holding an Unreal MCP entry starts checked, and the entry is replaced.
+    const replaces = detected.map((c) => findUnrealMcpEntries(c));
+    const report = (name: string, file: string, found: UnrealMcpEntry[]) =>
+      info(`${name}: ${file} has Unreal MCP entry ${found.map(describeUnrealMcpEntry).join(", ")}; ue-mcp replaces it and saves the file first`);
+    detected.forEach((c, i) => {
+      if (replaces[i].length > 0) report(c.name, c.configPath, replaces[i]);
+      const engine = atEngineRoot.get(c.name);
+      if (engine) report(c.name, engine.client.configPath, engine.replaces);
+    });
+    const names = (found: UnrealMcpEntry[]) => found.map((e) => `'${e.name}'`).join(", ");
+    const clientStates = await checkboxSelect("Configure MCP clients", detected.map((c, i) => {
+      const engine = atEngineRoot.get(c.name);
+      const notes = [
+        replaces[i].length > 0 ? `replaces ${names(replaces[i])}` : null,
+        engine ? `replaces ${names(engine.replaces)} in ${engine.client.configPath}` : null,
+      ].filter(Boolean);
+      return {
+        label: c.name,
+        checked: isProjectScopedClient(c.name) || replaces[i].length > 0 || !!engine,
+        suffix: notes.length > 0 ? `${c.configPath} (${notes.join("; ")})` : c.configPath,
+      };
+    }), "Pass --yes with --clients <ids>.");
     selectedClients = detected.filter((_, i) => clientStates[i]).map((c) => c.name);
   } else {
     warn("No MCP clients detected. Add this to your MCP client config:");
@@ -297,6 +325,39 @@ async function init(argv: string[]): Promise<number | void> {
     console.log("");
   }
   console.log("");
+
+  // 3b. Epic's Unreal MCP server and Unreal Assistant (UE 5.8 / 5.9), when the project has them.
+  const epic = projectEpicIntegrations(project);
+  const epicItems: CheckboxItem[] = [];
+  const mcpServer = epic.unrealMcp?.pluginEnabled ? epic.unrealMcp : null;
+  if (mcpServer) {
+    epicItems.push({
+      label: "Start Epic's Unreal MCP server with the editor",
+      checked: mcpServer.autoStart,
+      suffix: `${mcpServer.url}. It runs beside ue-mcp for this project and serves the same Toolset Registry, which ue-mcp extends rather than replaces. Unchecked writes bAutoStartServer=False to ${mcpServer.userIni}.`,
+    });
+  }
+  const assistant = epic.unrealAssistant.available ? epic.unrealAssistant : null;
+  if (assistant) {
+    epicItems.push({
+      label: "Attach ue-mcp to Epic's Unreal Assistant",
+      checked: assistant.attached,
+      suffix: `Adds ue-mcp to the MCP servers the assistant's agent gets, in ${assistant.configPath} (per user, every project).`,
+    });
+  }
+  let unrealMcpAutoStart: boolean | undefined;
+  let unrealAssistant: boolean | undefined;
+  if (epicItems.length > 0) {
+    const epicStates = await checkboxSelect(
+      "Epic's Unreal MCP server and Unreal Assistant",
+      epicItems,
+      "Pass --yes with --[no-]unreal-mcp-autostart, --unreal-mcp-port <n> and --[no-]unreal-assistant.",
+    );
+    let i = 0;
+    if (mcpServer) unrealMcpAutoStart = epicStates[i++];
+    if (assistant) unrealAssistant = epicStates[i++];
+    console.log("");
+  }
 
   // 4. Agent behavior. Everything here is off on a fresh install; re-init keeps prior choices.
   const configuredClaudeCode = selectedClients.some((n) => n.startsWith("Claude Code"));
@@ -337,6 +398,9 @@ async function init(argv: string[]): Promise<number | void> {
     install: (flagValue(rest, "--install") as InitChoices["install"]) ?? "auto",
     binaries: flagValue(rest, "--binaries") ?? null,
     pin: flagBool(rest, "pin") ?? false,
+    unrealMcpAutoStart,
+    unrealMcpPort: flagValue(rest, "--unreal-mcp-port") === undefined ? undefined : Number(flagValue(rest, "--unreal-mcp-port")),
+    unrealAssistant,
   };
   const planned = plan(choices);
   console.log("");
@@ -362,6 +426,7 @@ async function init(argv: string[]): Promise<number | void> {
 /** Flags that take a value, so the argument after one is not a positional. */
 const VALUE_FLAGS = new Set([
   "--project", "--clients", "--install", "--binaries", "--disable", "--context", "--native-exclude", "--command",
+  "--unreal-mcp-port",
 ]);
 
 function firstPositional(argv: string[]): string | undefined {
@@ -402,8 +467,12 @@ export const usage: CliUsage = {
     { name: "--feedback-mode", value: "<interactive|auto-approve|defer>", description: "Feedback approval mode for this project" },
     ...toggle("hook", "Install the feedback nudge hook"),
     ...toggle("skills", "Install the bundled Claude Code skills"),
+    ...toggle("agent-guides", "Write the ue-mcp block into AGENTS.md, GEMINI.md or .github/copilot-instructions.md for the clients configured"),
     ...toggle("native-tools", "Wrap native Epic tools"),
     ...toggle("pin", "Pin the client config to this exact version"),
+    ...toggle("unreal-mcp-autostart", "Start Epic's Unreal MCP server with this project's editor (UE 5.8+)"),
+    { name: "--unreal-mcp-port", value: "<port>", description: "Port Epic's Unreal MCP server listens on for this project" },
+    ...toggle("unreal-assistant", "Attach ue-mcp to Epic's Unreal Assistant (UE 5.9+)"),
     { name: "--editor", value: "<name-or-path>", description: "Target one of the editors this server drives" },
   ],
 };

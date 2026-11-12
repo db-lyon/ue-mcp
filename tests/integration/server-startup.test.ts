@@ -5,7 +5,7 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { covers } from "../helpers/covers.js";
-import { McpServer, Sandbox } from "./harness.js";
+import { McpServer, Sandbox, json } from "./harness.js";
 
 type Strategy = "micro" | "lean" | "full";
 
@@ -38,14 +38,30 @@ async function inProcessSurface(strategy: Strategy): Promise<Surface> {
 }
 
 describe("in process", () => {
-  it("micro advertises the gateway and flow, and says how to use them", async () => {
+  it("micro advertises only the gateway, which guides, reaches flows and passes routing keys through", async () => {
     covers("server.startup.micro.in-process");
     const s = await inProcessSurface("micro");
-    expect(s.tools.map((t) => t.name)).toEqual(["flow", "tools"]);
-    expect(s.instructions).toContain("micro mode");
-    expect(s.instructions).toContain('tools(action="search"');
+    expect(s.tools.map((t) => t.name)).toEqual(["tools"]);
+    expect(s.instructions).toContain('tools(action="guide")');
     const gateway = s.tools.find((t) => t.name === "tools")!;
     expect(JSON.stringify(gateway.inputSchema)).toMatch(/list_categories/);
+
+    const server = await McpServer.start(sb, { projects: [project], strategy: "micro", mode: "in-process" });
+    try {
+      const guide = (await server.call("tools", { action: "guide" })).text;
+      expect(guide).toContain('tools(action=\\"search\\"');
+      expect(guide).toContain("SPATIAL EDITS");
+      const categories = json<{ categories: Array<{ category: string }> }>(await server.call("tools", { action: "list_categories" }));
+      expect(categories.categories.map((c) => c.category)).toContain("flow");
+      const flows = await server.call("tools", { action: "call", category: "flow", method: "list" });
+      expect(flows.isError).toBe(false);
+      expect(json(flows)).toHaveProperty("flowCount");
+      // Not advertised, still honoured beside args.
+      const selected = json(await server.call("tools", { action: "call", category: "project", method: "get_status", select: "flows" }));
+      expect(Object.keys(selected)).toEqual(["flows"]);
+    } finally {
+      await server.close();
+    }
   });
 
   it("lean advertises a catalog tool beside trimmed category tools", async () => {
@@ -78,7 +94,7 @@ describe("in process", () => {
     const s = await surface(undefined, "in-process", {}, configured);
     expect(s.tools.map((t) => t.name)).toEqual((await inProcessSurface("full")).tools.map((t) => t.name));
     const env = await surface("micro", "in-process", {}, configured);
-    expect(env.tools.map((t) => t.name)).toEqual(["flow", "tools"]);
+    expect(env.tools.map((t) => t.name)).toEqual(["tools"]);
   });
 });
 

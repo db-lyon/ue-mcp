@@ -58,4 +58,26 @@ describe("native view and shape traces", () => {
     expect(levelTool.schema.includeCollision.safeParse(1).success).toBe(false);
     expect(levelTool.schema.collisionChannel.safeParse(1).success).toBe(false);
   });
+
+  it("accepts multi on line traces and on each bulk item (#1564)", () => {
+    const start = { x: 0, y: 0, z: 1100 };
+    const end = { x: 0, y: 0, z: -500 };
+    expect(parseTraceParams(levelTool.actions.line_trace, { start, end, multi: true })).toEqual({ start, end, multi: true });
+    const bulk = { traces: [{ start, end, multi: true }, { start, end }], world: "editor" };
+    expect(parseTraceParams(levelTool.actions.bulk_line_trace, bulk)).toEqual(bulk);
+    expect(levelTool.schema.multi.safeParse("yes").success).toBe(false);
+  });
+
+  it("exposes actors_in_box as a read with a required box (#1564)", () => {
+    const action = levelTool.actions.actors_in_box;
+    expect(levelTool.schema.action.safeParse("actors_in_box").success).toBe(true);
+    expect(action.bridge).toBe("actors_in_box");
+    expect(action.mapParams).toBeUndefined();
+    expect(declaredActionEffect(levelTool.name, "actors_in_box")).toBe("read");
+    const params = { min: { x: -500, y: -500, z: 0 }, max: { x: 500, y: 500, z: 400 }, mode: "contained",
+      includeHidden: true, classFilter: "StaticMeshActor", onlyColliding: true, limit: 50, world: "pie", pieInstance: 1 };
+    expect(parseTraceParams(action, params)).toEqual(params);
+    expect(() => parseTraceParams(action, { min: params.min })).toThrow();
+    expect(() => parseTraceParams(action, { ...params, limit: 1.5 })).toThrow();
+  });
 });

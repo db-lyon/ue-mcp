@@ -18,6 +18,7 @@ import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import WebSocket from "ws";
+import { bridgeSocketOptions, watchUpgradeRefusal } from "./lib/bridge-token.mjs";
 import { listRegistrations } from "./lib/cpp-registrations.mjs";
 import { closeEditorTabWindows, guardUserLayoutsUntilExit } from "./user-layout-guard.mjs";
 import {
@@ -76,11 +77,21 @@ function discoverHandlers() {
 // ---------------------------------------------------------------------------
 function connect(url, timeoutMs = TIMEOUT_MS) {
   return new Promise((resolve, reject) => {
-    const ws = new WebSocket(url);
+    let ws;
+    try {
+      ws = new WebSocket(url, bridgeSocketOptions(url));
+    } catch (err) {
+      reject(err);
+      return;
+    }
     const timer = setTimeout(() => {
       ws.terminate();
       reject(new Error(`Connection to ${url} timed out after ${timeoutMs}ms`));
     }, timeoutMs);
+    watchUpgradeRefusal(ws, url, (err) => {
+      clearTimeout(timer);
+      reject(err);
+    });
 
     ws.on("open", () => {
       clearTimeout(timer);
@@ -227,7 +238,7 @@ const HOME_LEVEL = "/Game/MCP_Home";
 // we're not currently sitting on the scratch we're about to delete.
 async function preFlight(ws, idGen) {
   console.log(`${DIM}  preflight: anchor MCP_Home + create blank ${SCRATCH_LEVEL}${RESET}`);
-  await rpcRaw(ws, "demo_go_home", {}, idGen());
+  await rpcRaw(ws, "demo_go_home", { discardUnsaved: true }, idGen());
   await rpcRaw(ws, "delete_asset", { assetPath: SCRATCH_LEVEL, force: true }, idGen());
   const r = await rpcRaw(ws, "create_new_level", { levelPath: SCRATCH_LEVEL }, idGen());
   if (r.error) {

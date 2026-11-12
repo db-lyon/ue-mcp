@@ -3,7 +3,7 @@
  * built against one EXTENSION_API_VERSION keeps working until that number
  * changes, so anything here changes additively or bumps it.
  */
-import type { DialogPromptFn, ElicitParams, ElicitResult } from "../core/types.js";
+import type { DialogBlock, DialogPromptFn, ElicitParams, ElicitResult } from "../core/types.js";
 import type { DisconnectCause } from "./disconnect.js";
 import type { DaemonEvent } from "./events.js";
 import type { UiBundleInfo, UiManifest } from "./ui-bundles.js";
@@ -153,8 +153,9 @@ export interface CallActionOptions {
 
 /**
  * The data of a dialog.* event. `type` names the event: dialog.opened,
- * dialog.answered (button, and via: prompt or action), dialog.delegated,
- * dialog.closed.
+ * dialog.updated (the same dialog, read again with more of its content: rows,
+ * blocks, or a changed tick), dialog.answered (button, and via: prompt or
+ * action), dialog.delegated, dialog.closed.
  */
 export interface DialogEventData {
   editor: string;
@@ -162,6 +163,8 @@ export interface DialogEventData {
   message: string;
   buttons: string[];
   items?: Array<{ index: number; label: string; cells: string[]; checked: boolean }>;
+  /** The body as paragraphs and tables, when the plugin reports it. */
+  blocks?: DialogBlock[];
   mode?: "auto" | "interactive" | "defer";
   button?: string;
   via?: "prompt" | "action";
@@ -233,8 +236,8 @@ export interface DaemonExtensionApi {
    *                              refuses every call that may change state
    *   "modes"                    `modes` reads and sets this project's feedback and dialog modes
    *   "modes.playtest"           `modes.get` carries `playtest` and `modes.setPlaytest` sets it
-   *   "events.dialog"            dialog.opened, dialog.answered, dialog.delegated and
-   *                              dialog.closed on the event stream (see DialogEventData)
+   *   "events.dialog"            dialog.opened, dialog.updated, dialog.answered, dialog.delegated
+   *                              and dialog.closed on the event stream (see DialogEventData)
    *   "models.provider"          `models.register` supplies the model flow agent steps run on
    *   "events.script"            script.run_started, script.step_started, script.step_acted,
    *                              script.step_passed, script.step_failed, script.verdict_requested,

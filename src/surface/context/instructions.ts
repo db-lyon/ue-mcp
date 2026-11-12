@@ -78,6 +78,17 @@ function categoryList(tools: readonly ToolDef[], epicActionCount: number): strin
   );
 }
 
+/**
+ * ue-mcp extends Unreal's own toolsets; it never stands in front of them. A
+ * toolset no recorded catalog has (the Fab plugin's, or a newer engine's) has
+ * no `epic_*` action, and an agent that only reads ue-mcp's actions would tell
+ * the user the editor cannot do what that toolset does.
+ */
+const BUILT_IN_TOOLS = `Unreal's own toolsets stay available beside ue-mcp's actions, including ones with no epic_* action here
+(a launcher plugin's, such as Fab's catalog search and import, or a newer engine's): epic(list_toolsets) lists every
+toolset the editor has and epic(call_tool) runs any of them; fab(list_epic_tools) lists Fab's. Check them before
+telling the user the editor cannot do something.`;
+
 const SPATIAL_GUIDANCE = `For spatial edits, resolve target + frame + viewpoint + operation + amount + constraints.
 Character left/right uses actor axes; screen left/right needs the camera viewpoint.
 Use nudge_component with dryRun=true to inspect or preview without changing the scene.
@@ -123,7 +134,7 @@ and that a native tool for it can be requested at ${CORE_ISSUES_URL}.
 `;
 
 function fullInstructions(f: SurfaceFacts): string {
-  return `UE-MCP: Unreal Engine editor bridge (C++ plugin) - ${f.categoryCount} category tools covering ${f.actionCount} actions: ${f.ownActionCount} of ue-mcp's own, plus ${f.epicActionCount} official Unreal 5.8 tools wrapped in-process as \`epic_*\` actions (UE 5.8+; see the epic category).
+  return `UE-MCP: Unreal Engine editor bridge (C++ plugin) - ${f.categoryCount} category tools covering ${f.actionCount} actions: ${f.ownActionCount} of ue-mcp's own, plus ${f.epicActionCount} official Unreal tools wrapped in-process as \`epic_*\` actions (UE 5.8+; see the epic category).
 
 Every category tool takes "action" (the operation) and "args" (that action's parameters): level(action="place_actor", args={actorClass: "PointLight"}). Call project(action="get_status") first.
 
@@ -142,6 +153,9 @@ Every category tool lists one signature per action in its description.
 ${SIGNATURE_LEGEND}
 Categories:
 ${f.categories}.
+
+═══ UNREAL'S BUILT-IN TOOLS ═══
+${BUILT_IN_TOOLS}
 
 ═══ TIPS ═══
 • Start with level(action="get_outliner") or asset(action="list") to discover what's in the project.
@@ -214,6 +228,9 @@ Tool descriptions are trimmed in lean mode. Find the action you need with:
 ${SIGNATURE_LEGEND}
 Each category's "action" parameter is still an enum, so unknown actions are rejected with the closest names. Call describe/search first when you are unsure of the exact action name.
 
+═══ UNREAL'S BUILT-IN TOOLS ═══
+${BUILT_IN_TOOLS}
+
 ═══ SPATIAL EDITS ═══
 ${SPATIAL_GUIDANCE}
 
@@ -231,10 +248,15 @@ UE_MCP_CONTEXT_STRATEGY=lean. The default is micro; full lists every signature i
 }
 
 // Smallest surface (context.strategy = "micro", the default since #1172). The
-// entire ue-mcp API is reached through one gateway tool, mirroring the native
-// MCP toolset gateway (list_toolsets / describe_toolset / call_tool).
-function microInstructions(f: SurfaceFacts): string {
-  return `UE-MCP (micro mode): Unreal Engine editor bridge (C++ plugin). The entire surface (${f.categoryCount} categories, ${f.actionCount} actions) is reached through a single gateway tool to keep context tiny.
+// seed is one line and one gateway tool, held at or below the engine's own
+// tool-search surface by the context-tax gate; the rest is tools(action="guide").
+function microInstructions(): string {
+  return 'UE-MCP: Unreal Engine editor bridge. Every action and flow is behind the tools gateway; read tools(action="guide") before your first call.';
+}
+
+/** What tools(action="guide") answers in micro mode: the usage the seed leaves out. */
+function microGuideText(f: SurfaceFacts): string {
+  return `UE-MCP (micro mode): Unreal Engine editor bridge (C++ plugin). ${f.categoryCount} categories (${f.actionCount} actions) and the project's named flows, all reached through the one \`tools\` gateway.
 
 ═══ HOW TO USE ═══
 - tools(action="search", query="rotate clockwise") - find action signatures by intent
@@ -244,30 +266,41 @@ function microInstructions(f: SurfaceFacts): string {
 - tools(action="call", category="blueprint", method="create", args={ ... }) - invoke any action
 
 \`method\` is the action name; \`args\` is the object of that action's parameters.
+Every call also takes, in args or beside it: timeoutMs (how long to wait in ms, default 30s; a timeout never means the call did not happen, so read the state back before retrying), select and omit (result fields to keep or drop, as dotted paths).
 ${SIGNATURE_LEGEND}
 Start with: tools(action="call", category="project", method="get_status").
+
+═══ UNREAL'S BUILT-IN TOOLS ═══
+${BUILT_IN_TOOLS}
+In micro mode reach them through tools(action="call", category="epic", method="list_toolsets") and method="call_tool".
 
 ═══ SPATIAL EDITS ═══
 ${SPATIAL_GUIDANCE}
 In micro mode invoke it through tools(action="call", category="level", method="nudge_component", args={ ... }).
 
 ═══ CATEGORIES ═══
-${f.categories}.
+${f.categories}, flow.
 
 ═══ FLOWS ═══
-flow(action="run", flowName="<name>") runs a named sequence; see the \`flows\` field
-from tools(action="call", category="project", method="get_status").
+Before chaining 3+ calls, check the \`flows\` field from tools(action="call", category="project", method="get_status")
+and run a matching flow: tools(action="call", category="flow", method="run", args={flowName: "<name>"}).
+method="list" lists the flows; method="plan" shows one without running it.
 
 This micro surface is the default. context.strategy: lean or full in ue-mcp.yml (or
 UE_MCP_CONTEXT_STRATEGY) advertises the category tools directly instead.
 `;
 }
 
+/** The micro guide for the categories one gateway reaches. */
+export function microGuide(tools: readonly ToolDef[]): string {
+  return microGuideText(surfaceFacts(tools));
+}
+
 const DECLARED = surfaceFacts(ALL_TOOLS);
 
 export const SERVER_INSTRUCTIONS = fullInstructions(DECLARED);
 export const SERVER_INSTRUCTIONS_LEAN = leanInstructions(DECLARED);
-export const SERVER_INSTRUCTIONS_MICRO = microInstructions(DECLARED);
+export const SERVER_INSTRUCTIONS_MICRO = microInstructions();
 
 /**
  * One strategy's base text. Without `scope` it quotes the declared graph and is
@@ -276,7 +309,7 @@ export const SERVER_INSTRUCTIONS_MICRO = microInstructions(DECLARED);
  */
 export function strategyInstructions(strategy: ContextStrategy, scope?: readonly ToolDef[], feedback = true): string {
   const facts = scope || !feedback ? surfaceFacts(scope ?? ALL_TOOLS, feedback) : DECLARED;
-  return strategy === "micro" ? microInstructions(facts) : strategy === "lean" ? leanInstructions(facts) : fullInstructions(facts);
+  return strategy === "micro" ? microInstructions() : strategy === "lean" ? leanInstructions(facts) : fullInstructions(facts);
 }
 
 /**

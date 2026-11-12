@@ -69,6 +69,20 @@ void FNetworkingHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Required(TEXT("blueprintPath"), EType::String, TEXT("Actor Blueprint asset path")),
 		MCPParam::Optional(TEXT("netCullDistanceSquared"), EType::Number, TEXT("NetCullDistanceSquared (default 225000000)")),
 	});
+	// Loads every Blueprint in scope, so it gets the long timeout.
+	Registry.RegisterHandlerWithTimeout(TEXT("audit_replication"), &AuditReplication, 300.0f, {
+		MCPParam::Optional(TEXT("path"), EType::String, TEXT("Scope: a content path for Blueprints (default /Game) or a /Script/<Module> path for native classes; filters both")),
+		MCPParam::Optional(TEXT("className"), EType::String, TEXT("Only this class and its subclasses: a native class name or path, or a Blueprint asset path")),
+		MCPParam::Optional(TEXT("includeNative"), EType::Boolean, TEXT("Audit native classes (default true)")),
+		MCPParam::Optional(TEXT("includeBlueprints"), EType::Boolean, TEXT("Audit Blueprint classes (default true)")),
+		MCPParam::Optional(TEXT("includeEngine"), EType::Boolean, TEXT("Also audit engine and engine-plugin native classes, not only project modules and project plugins (default false)")),
+		MCPParam::Optional(TEXT("requireServerValidation"), EType::Boolean, TEXT("Report every Server RPC without WithValidation (default false)")),
+		MCPParam::Optional(TEXT("onlyWithFindings"), EType::Boolean, TEXT("Keep only the classes that have findings (default false)")),
+		MCPParam::Optional(TEXT("maxBlueprints"), EType::Integer, TEXT("Cap on Blueprints loaded (default 500, max 5000)")),
+		MCPParam::Optional(TEXT("limit"), EType::Integer, TEXT("Class rows to return inline (default 200, max 5000); totals stay complete")),
+		MCPParam::Optional(TEXT("dumpToFile"), EType::Boolean, TEXT("Write every row to a JSON file instead of returning them inline")),
+		MCPParam::Optional(TEXT("outputPath"), EType::String, TEXT("Absolute or Saved-relative JSON path for the dump (default Saved/UE_MCP/Audits/replication_audit.json)")),
+	});
 }
 
 namespace

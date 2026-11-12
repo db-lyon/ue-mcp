@@ -2,6 +2,7 @@
 #if WITH_DEV_AUTOMATION_TESTS
 
 #include "HandlerRegistry.h"
+#include "HandlerWorld.h"
 #include "HandlerEngineVersion.h"
 #include "Handlers/Landscape/LandscapeHandlers.h"
 #include "Editor.h"
@@ -44,7 +45,7 @@ namespace LandscapeHeightReadTests
 			if (World)
 			{
 				GEditor->GetEditorWorldContext().SetCurrentWorld(OriginalWorld);
-				World->DestroyWorld(false);
+				MCPDestroyDisposableWorld(World);
 			}
 			if (Package)
 			{

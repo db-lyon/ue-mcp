@@ -58,6 +58,7 @@ import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+import { bridgeTokenDir } from "../../src/bridge/bridge-token.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
@@ -419,7 +420,12 @@ export async function captureSurface(options: CaptureOptions): Promise<GoldenRec
     command: process.execPath,
     args: ["--import", "tsx", path.join(REPO_ROOT, "src", "index.ts"), uproject],
     cwd: REPO_ROOT,
-    env: recordingEnv(sandbox, host, options.port) as Record<string, string>,
+    env: {
+      ...recordingEnv(sandbox, host, options.port),
+      // A live editor publishes its session token under the real home, which
+      // the sandbox hides. Only the connected half reads it.
+      ...(options.scenario === "editor-connected" ? { UE_MCP_BRIDGE_TOKEN_DIR: bridgeTokenDir() } : {}),
+    } as Record<string, string>,
     stderr: logFd,
   });
 

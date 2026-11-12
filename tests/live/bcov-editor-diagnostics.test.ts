@@ -62,6 +62,10 @@ describe("the output log", () => {
     expect(rows[0].message).toContain(MARKER);
     expect(rows[0].category.toLowerCase()).toContain("python");
 
+    // lastN is the window under its other name (#1551): a one-line window ends at the newest line.
+    const window = await call("get_output_log", { lastN: 1 });
+    expect((window.lines as unknown[]).length).toBe(1);
+
     const found = await call("search_log", { query: MARKER });
     expect(Number(found.matchCount)).toBeGreaterThan(0);
     expect(JSON.stringify(found)).toContain(MARKER);
@@ -191,6 +195,20 @@ describe("function libraries", () => {
     const abs = await call("invoke_static_function", { className: "KismetMathLibrary", functionName: "Abs", args: { A: -3.5 } });
     expect(Number((abs.returnValues as Json).ReturnValue)).toBe(3.5);
   }, 60_000);
+
+  it("list_function_libraries reports the Python names and matches a pattern against them (#1453)", async () => {
+    const listed = await call("list_function_libraries", { pattern: "unreal.MathLibrary" });
+    type Lib = { name: string; pythonName: string; functions: Array<{ name: string; pythonName: string; pythonMethod?: string }> };
+    const lib = (listed.libraries as Lib[]).find((l) => l.name === "KismetMathLibrary");
+    expect(lib).toBeDefined();
+    // The pattern matched the Python name: "unreal.mathlibrary" is not in any class name.
+    expect(lib!.pythonName).toBe("unreal.MathLibrary");
+    const fn = (n: string) => lib!.functions.find((f) => f.name === n);
+    expect(fn("Abs")!.pythonName).toBe("abs");
+    expect(fn("RandomUnitVector")!.pythonName).toBe("random_unit_vector");
+    expect(fn("Add_VectorVector")!.pythonName).toBe("add_vector_vector");
+    expect(fn("Add_VectorVector")!.pythonMethod).toBe("add");
+  }, 60_000);
 });
 
 describe("editor tabs", () => {
@@ -236,5 +254,27 @@ describe("PIE settings", () => {
     const after = await call("get_pie_config", {});
     expect(after.numClients).toBe(before.numClients);
     expect(after.netMode).toBe(before.netMode);
+  }, 60_000);
+
+  it("configure_pie playMode writes the play mode get_pie_config reads, and its rollback restores it (#1526)", async () => {
+    const before = await call("get_pie_config", {});
+    expect(["viewport", "new_window", "standalone"]).toContain(before.playMode);
+    const wanted = before.playMode === "new_window" ? "viewport" : "new_window";
+    const set = await call("configure_pie", { playMode: wanted });
+    try {
+      expect(set.previousPlayMode).toBe(before.playMode);
+      expect(set.playMode).toBe(wanted);
+      expect(set.changed).toBe(true);
+      expect((await call("get_pie_config", {})).playMode).toBe(wanted);
+    } finally {
+      const rollback = set.rollback as { method: string; payload: Json };
+      expect(rollback.payload.playMode).toBe(before.playMode);
+      await call(rollback.method, rollback.payload);
+    }
+    expect((await call("get_pie_config", {})).playMode).toBe(before.playMode);
+
+    const bad = await callBridge(bridge, "configure_pie", { playMode: "sideways" });
+    expect(succeeded(bad)).toBe(false);
+    expect((await call("get_pie_config", {})).playMode).toBe(before.playMode);
   }, 60_000);
 });

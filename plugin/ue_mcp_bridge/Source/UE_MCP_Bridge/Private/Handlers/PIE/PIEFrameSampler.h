@@ -36,8 +36,9 @@ namespace MCPPIE
 	public:
 		struct FConfig
 		{
-			// Optional whitelist of UInputAction asset paths. Empty = record all
-			// actions bound to the pawn's UEnhancedInputComponent.
+			// Optional whitelist of UInputAction asset paths, package or object
+			// form (normalized by SetConfig). Empty = record every action bound
+			// to the player.
 			TArray<FString> ActionPaths;
 			// Dotted reflection paths sampled to doubles per frame.
 			TArray<FString> TrackedValuePaths;
@@ -51,14 +52,25 @@ namespace MCPPIE
 
 		FPIEFrameSampler();
 
+		// Replaces the whole config, including the tracked value list (#1690).
 		void SetConfig(const FConfig& InConfig);
 		void Reset();
+
+		// "/Game/Input/IA_Move" -> "/Game/Input/IA_Move.IA_Move". Object paths
+		// and export text ("InputAction'/Game/...'") normalize to the object path.
+		static FString NormalizeActionPath(const FString& InPath);
 
 		// Walk the PIE world's first player and bind to its pawn's
 		// EnhancedInputComponent. Returns true once attached; subsequent
 		// calls are no-ops. Safe to call every frame until it succeeds.
-		bool AttachToPIE(UWorld* PIEWorld);
+		// bRequireInputComponent=false attaches to a pawn that has no input
+		// component (input disabled, or a pawn left behind by an earlier run).
+		bool AttachToPIE(UWorld* PIEWorld, bool bRequireInputComponent = true);
 		bool IsAttached() const { return bAttached; }
+		// Why the last AttachToPIE call did not attach. Empty once attached.
+		const FString& GetAttachBlocker() const { return AttachBlocker; }
+		// The last AttachToPIE call found the pawn and only its input component was missing.
+		bool IsBlockedOnInputComponent() const { return bBlockedOnInputComponent; }
 
 		// Sample one frame. Caller supplies the absolute game time, dt, and
 		// frame index. Returns the populated row, including edge events
@@ -71,6 +83,12 @@ namespace MCPPIE
 		const TArray<FTrackedValueSpec>& GetTrackedValues() const { return TrackedValues; }
 		FString GetPawnClassPath() const { return PawnClassPath; }
 		FString GetPIEWorldPath() const { return PIEWorldPath; }
+
+		// Whitelisted action paths no bound action matched. Empty until attach.
+		TArray<FString> GetUnmatchedActionPaths() const;
+		// One line per problem found at attach: unmatched actions, tracked
+		// values that do not resolve to a numeric leaf. Empty when clean.
+		const TArray<FString>& GetWarnings() const { return Warnings; }
 
 		// Insert a marker label into the next emitted row's EdgeEvents.
 		// Multiple markers in the same frame are concatenated.
@@ -87,15 +105,32 @@ namespace MCPPIE
 		};
 
 		void DiscoverActions(APlayerController* PC, APawn* Pawn);
+		void SeedTrackedValues();
+		void ProbeTrackedValues(UWorld* PIEWorld, APawn* Pawn);
+		bool SampleTrackedValue(UWorld* PIEWorld, APawn* Pawn, const FString& Path, double& OutValue, FString* OutWhy);
+		// "<Actor>.<path>": the level actor named by the head segment, or null.
+		AActor* FindTrackedActor(UWorld* PIEWorld, const FString& Id);
 
 		FConfig Config;
 		bool bAttached = false;
+		FString AttachBlocker;
+		bool bBlockedOnInputComponent = false;
 		FString PawnClassPath;
 		FString PIEWorldPath;
 		TArray<FActionSpec> Actions;
 		TArray<FTrackedValueSpec> TrackedValues;
 		TArray<FTrackedAction> Tracked;
 		TArray<FString> PendingMarkerLabels;
+		TArray<FString> Warnings;
+		// Actor lookups for actor-qualified tracked values (#1655). A miss is
+		// retried at most once a second so an unresolved path does not walk
+		// every actor in the world each frame.
+		struct FTrackedActorRef
+		{
+			TWeakObjectPtr<AActor> Actor;
+			double NextRetrySeconds = 0.0;
+		};
+		TMap<FString, FTrackedActorRef> TrackedActorRefs;
 		FVector PrevPawnLocation = FVector::ZeroVector;
 	};
 }

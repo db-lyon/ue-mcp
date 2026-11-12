@@ -18,6 +18,8 @@ export const ENV_VARS = {
   bridgeTimeoutMs: "UE_MCP_BRIDGE_TIMEOUT_MS",
   /** `1` refuses a call with a parameter the action does not forward, instead of warning. */
   strictParams: "UE_MCP_STRICT_PARAMS",
+  /** Directory of the bridge's per-port session token files, read by the plugin too. Unset means ~/.ue-mcp/bridge. */
+  bridgeTokenDir: "UE_MCP_BRIDGE_TOKEN_DIR",
 
   // ── Config and context ─────────────────────────────────────────────
   /** Selects the `ue-mcp.<env>.yml` overlay merged over each project's config. */
@@ -34,6 +36,8 @@ export const ENV_VARS = {
   // ── Editor and engine ──────────────────────────────────────────────
   /** Engine root to build and launch with, over the project's association. */
   testEngineRoot: "UE_MCP_TEST_ENGINE_ROOT",
+  /** Folder of Unreal's per-version user config, where its recent-project lists are. Unset means %LOCALAPPDATA%\UnrealEngine on Windows. */
+  recentProjectsDir: "UE_MCP_RECENT_PROJECTS_DIR",
   /** Engine roots the build and launch helpers refuse to touch, separated by `;`. */
   protectedEngineRoots: "UE_MCP_PROTECTED_ENGINE_ROOTS",
   /** Cap on UBT's parallel compile actions for `build`. */
@@ -58,6 +62,8 @@ export const ENV_VARS = {
   daemonIdleMs: "UE_MCP_DAEMON_IDLE_MS",
   /** Directory daemon extensions are loaded from. Unset means ~/.ue-mcp/extensions. */
   extensionsDir: "UE_MCP_EXTENSIONS_DIR",
+  /** JSON file of the names `ue-mcp install <name>` resolves, replacing the built-in list. */
+  installIndex: "UE_MCP_INSTALL_INDEX",
 
   // ── Flow HTTP surface ──────────────────────────────────────────────
   /** Bearer token for the flow HTTP server, over a freshly generated one. */
@@ -88,6 +94,8 @@ export const ENV_VARS = {
   githubApi: "UE_MCP_GITHUB_API",
   /** Origin of the plugin registry. Unset means https://plugins.ue-mcp.com. */
   registry: "UE_MCP_REGISTRY",
+  /** Origin of the account sign-in endpoints `ue-mcp login` calls. Unset means https://accounts.ue-mcp.com. */
+  authUrl: "UE_MCP_AUTH_URL",
   /** Path of the cached registry catalog. */
   registryCache: "UE_MCP_REGISTRY_CACHE",
   /** Registry publish token for CI, over the one `ue-mcp login` cached. */

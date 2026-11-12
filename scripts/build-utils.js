@@ -114,7 +114,7 @@ function engineRootFromEnginePath(enginePath, platform = process.platform) {
 }
 
 function defaultEngineRoots(platform = process.platform) {
-  const versions = ['5.8', '5.7', '5.6', '5.5', '5.4', '5.3'];
+  const versions = ['5.9', '5.8', '5.7', '5.6', '5.5', '5.4', '5.3'];
 
   if (platform === 'win32') {
     return versions.map((version) => path.win32.join('C:/Program Files/Epic Games', `UE_${version}`));
@@ -132,7 +132,7 @@ function defaultEngineRoots(platform = process.platform) {
  * carries the name of the thing that produced it so failures can name the
  * setting the caller has to correct.
  */
-function engineRootCandidates(env = process.env, platform = process.platform) {
+function engineRootCandidates(env = process.env, platform = process.platform, association = projectEngineAssociation()) {
   const candidates = [];
 
   if (env.UE_MCP_TEST_ENGINE_ROOT) {
@@ -150,11 +150,32 @@ function engineRootCandidates(env = process.env, platform = process.platform) {
     }
   }
 
+  // The engine the test project names, ahead of the newest install: a 5.8 project built with
+  // 5.9 leaves modules a 5.8 editor skips as out of date, and the editor then waits on the
+  // rebuild prompt with nobody to answer it.
+  if (association) {
+    for (const engineRoot of defaultEngineRoots(platform)) {
+      if (pathImpl(platform).basename(engineRoot) === `UE_${association}`) {
+        candidates.push({ source: 'default engine install', engineRoot, association: true });
+      }
+    }
+  }
+
   for (const engineRoot of defaultEngineRoots(platform)) {
     candidates.push({ source: 'default engine install', engineRoot });
   }
 
   return candidates;
+}
+
+/** The test project's EngineAssociation when it names a launcher version ("5.8"), else null. */
+function projectEngineAssociation() {
+  try {
+    const value = JSON.parse(fs.readFileSync(getProjectPaths().projectFile, 'utf8')).EngineAssociation;
+    return typeof value === 'string' && /^\d+\.\d+$/.test(value) ? value : null;
+  } catch {
+    return null;
+  }
 }
 
 function canonicalDirectory(directoryPath) {
@@ -314,6 +335,12 @@ function createTestBuildPlan(env = process.env, platform = process.platform) {
     buildArgs.push('-NoEngineChanges');
   }
 
+  // The same cap build_project honours, for a machine already short of memory.
+  const parallel = Number(env.UE_MCP_MAX_PARALLEL_ACTIONS);
+  if (Number.isInteger(parallel) && parallel > 0) {
+    buildArgs.push(`-MaxParallelActions=${parallel}`);
+  }
+
   return { ...engine, projectRoot, projectFile, buildArgs };
 }
 
@@ -349,6 +376,8 @@ export {
   comparisonPath,
   engineExecutables,
   engineRootFromEnginePath,
+  defaultEngineRoots,
+  engineRootCandidates,
   unrealTargetPlatform,
   isSameOrUnder,
   protectedEngineRoots,

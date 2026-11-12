@@ -25,6 +25,8 @@
 #include "Handlers/Niagara/NiagaraHandlers.h"
 #include "Handlers/PCG/PCGHandlers.h"
 #include "Handlers/Sequencer/SequencerHandlers.h"
+#include "Handlers/Sequencer/MovieRenderQueueHandlers.h"
+#include "Handlers/MachineLearning/MachineLearningHandlers.h"
 #include "Handlers/Spline/SplineHandlers.h"
 #include "Handlers/Physics/PhysicsHandlers.h"
 #include "Handlers/Demo/DemoHandlers.h"
@@ -41,6 +43,7 @@
 #include "Handlers/Diff/DiffHandlers.h"
 #include "Handlers/SourceControl/SourceControlHandlers.h"
 #include "Handlers/PIE/PIEHandlers.h"
+#include "Handlers/Localization/LocalizationHandlers.h"
 
 void MCPHandlerCatalog::RegisterAllHandlers(FMCPHandlerRegistry& Registry)
 {
@@ -69,6 +72,8 @@ void MCPHandlerCatalog::RegisterAllHandlers(FMCPHandlerRegistry& Registry)
 	FNiagaraHandlers::RegisterHandlers(Registry);
 	FPCGHandlers::RegisterHandlers(Registry);
 	FSequencerHandlers::RegisterHandlers(Registry);
+	FMovieRenderQueueHandlers::RegisterHandlers(Registry);
+	FMachineLearningHandlers::RegisterHandlers(Registry);
 	FSplineHandlers::RegisterHandlers(Registry);
 	FPhysicsHandlers::RegisterHandlers(Registry);
 	FDemoHandlers::RegisterHandlers(Registry);
@@ -87,4 +92,5 @@ void MCPHandlerCatalog::RegisterAllHandlers(FMCPHandlerRegistry& Registry)
 	FSourceControlHandlers::RegisterHandlers(Registry);
 	FPIEHandlers::RegisterHandlers(Registry);
 	FBatchHandlers::RegisterHandlers(Registry);
+	FLocalizationHandlers::RegisterHandlers(Registry);
 }

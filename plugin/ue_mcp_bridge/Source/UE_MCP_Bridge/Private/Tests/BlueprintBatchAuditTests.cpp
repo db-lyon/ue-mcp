@@ -208,8 +208,6 @@ bool FMCPBlueprintExportBatchTest::RunTest(const FString& Parameters)
 	const FString AbsoluteDir = FPaths::ConvertRelativePathToFull(FPaths::Combine(FPaths::ProjectSavedDir(), RelativeDir));
 	ON_SCOPE_EXIT { IFileManager::Get().DeleteDirectory(*AbsoluteDir, false, true); };
 
-	// The missing path goes through the editor asset library, which logs it.
-	AddExpectedError(TEXT("LoadAsset failed"), EAutomationExpectedErrorFlags::Contains, 0);
 	auto Params = ParamsFor(Fixture.PackageName);
 	TArray<TSharedPtr<FJsonValue>> Paths = Params->GetArrayField(TEXT("assetPaths"));
 	Paths.Add(MakeShared<FJsonValueString>(Fixture.Mount.RootPath + TEXT("BP_DoesNotExist")));

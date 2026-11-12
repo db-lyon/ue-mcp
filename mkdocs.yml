@@ -58,6 +58,7 @@ nav:
   - Home: index.md
   - Getting Started: getting-started.md
   - Studio: studio.md
+  - Remote control: remote-control.md
   - Architecture: architecture.md
   - Tool Reference: tool-reference.md
   - Control Rig Animation: control-rig-animation.md
@@ -66,8 +67,11 @@ nav:
   - Blueprint Component Properties: blueprint-component-properties-batch.md
   - Native Tools: native-tools.md
   - Native Asset Pipeline: native-asset-pipeline.md
+  - Owned Fab Content: fab-owned-content.md
   - Shader Compilation: shader-compilation.md
   - Studio Mesh Reference Images: mesh-studio-render.md
+  - Material Graph Editing: material-graph-surgery.md
+  - Graph Diagrams: graph-diagrams.md
   - Handler Conventions: handler-conventions.md
   - Release Notes Style: release-notes-style.md
   - Widgets:
@@ -83,16 +87,17 @@ nav:
   - Flows:
     - flows.md
   - Checkpoints: checkpoints.md
+  - Mutation journal: journal.md
   - Plugins:
     - plugins.md
     - Registry (plugins.ue-mcp.com): https://plugins.ue-mcp.com
     - Using: plugins-using.md
     - Authoring: plugins-authoring.md
     - Native Modules: plugins-native-modules.md
-    - Guards: plugins-guards.md
     - Troubleshooting: plugins-troubleshooting.md
   - Configuration: configuration.md
   - ue-mcp.yml Reference: config-file.md
+  - Guards: guards.md
   - Neon Shrine Demo: neon-shrine-demo.md
   - Feedback: feedback.md
   - Troubleshooting: troubleshooting.md

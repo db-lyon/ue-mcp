@@ -50,6 +50,11 @@ public:
 	static TSharedPtr<FJsonValue> InjectInputStop(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> InjectInputTape(const TSharedPtr<FJsonObject>& Params);
 
+	// Pawn driving
+	static TSharedPtr<FJsonValue> PieDrivePawn(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> PieDriveStatus(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> PieDriveStop(const TSharedPtr<FJsonObject>& Params);
+
 	// Multiplayer players
 	static TSharedPtr<FJsonValue> PieClients(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> PieConsole(const TSharedPtr<FJsonObject>& Params);

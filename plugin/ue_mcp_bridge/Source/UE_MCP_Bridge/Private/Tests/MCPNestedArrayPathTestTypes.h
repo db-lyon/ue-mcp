@@ -50,4 +50,8 @@ public:
 
 	UPROPERTY()
 	TArray<FUEMCPNestedArrayPathMapProfile> MapProfiles;
+
+	/** A plain string list, the shape of an allow-list of map names (#1659). */
+	UPROPERTY()
+	TArray<FString> OnlyInMaps;
 };

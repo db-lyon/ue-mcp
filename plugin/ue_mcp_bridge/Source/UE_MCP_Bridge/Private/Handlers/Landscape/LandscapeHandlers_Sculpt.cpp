@@ -299,6 +299,13 @@ namespace
 	}
 }
 
+// Shared with the landscape spline handlers, which apply splines into an edit
+// layer chosen the same way the sculpt and paint writes choose theirs.
+bool MCPLandscape::ResolveEditLayer(ALandscape* Landscape, const TSharedPtr<FJsonObject>& Params, FGuid& OutGuid, FString& OutName, FString& OutError)
+{
+	return ResolveEditLayerGuid(Landscape, Params, OutGuid, OutName, OutError);
+}
+
 // landscape(sculpt): raise, lower or flatten a circular brush footprint.
 TSharedPtr<FJsonValue> FLandscapeHandlers::Sculpt(const TSharedPtr<FJsonObject>& Params)
 {
@@ -2537,7 +2544,8 @@ TSharedPtr<FJsonValue> FLandscapeHandlers::ExportHeightmap(const TSharedPtr<FJso
 	TSharedPtr<FJsonValue> Error;
 	if (!MCPLscResolve(World, Params, Landscape, Info, Error)) return Error;
 
-	const FString Resolved = MCPLscResolveFilePath(FilePath);
+	FString Resolved;
+	if (auto Err = MCPRequireWritablePath(MCPLscResolveFilePath(FilePath), Resolved)) return Err;
 	FString Format, FormatError;
 	if (!MCPLscResolveHeightmapFormat(Params, Resolved, Format, FormatError)) return MCPError(FormatError);
 
@@ -4645,7 +4653,12 @@ TSharedPtr<FJsonValue> FLandscapeHandlers::ListEditLayers(const TSharedPtr<FJson
 	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("actorLabel"), Landscape->GetActorLabel());
 	Result->SetStringField(TEXT("actorPath"), Landscape->GetPathName());
+	// From 5.7 every landscape uses edit layers and HasLayersContent is deprecated.
+#if UE_MCP_HAS_5_7_API
+	Result->SetBoolField(TEXT("hasLayersContent"), true);
+#else
 	Result->SetBoolField(TEXT("hasLayersContent"), Landscape->HasLayersContent());
+#endif
 	Result->SetNumberField(TEXT("count"), Rows.Num());
 	Result->SetArrayField(TEXT("editLayers"), Rows);
 	return MCPResult(Result);
@@ -4660,10 +4673,13 @@ TSharedPtr<FJsonValue> FLandscapeHandlers::MergeEditLayers(const TSharedPtr<FJso
 	TSharedPtr<FJsonValue> Err;
 	ALandscape* Landscape = MCPLandscape::ResolveLandscape(World, Params, Err);
 	if (!Landscape) return Err;
+#if !UE_MCP_HAS_5_7_API
+	// From 5.7 every landscape uses edit layers and HasLayersContent is deprecated.
 	if (!Landscape->HasLayersContent())
 	{
 		return MCPError(FString::Printf(TEXT("Landscape '%s' has no edit layers, so there is nothing to merge"), *Landscape->GetActorLabel()));
 	}
+#endif
 
 	Landscape->ForceLayersFullUpdate();
 	if (bUpdateNow)

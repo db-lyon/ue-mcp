@@ -37,6 +37,7 @@
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
 #include "JsonSerializer.h"
+#include "LevelSpawnFinalize.h"
 
 namespace
 {
@@ -195,8 +196,15 @@ TSharedPtr<FJsonValue> FLevelHandlers::SpawnTransientActor(const TSharedPtr<FJso
 	{
 		Actor->RerunConstructionScripts();
 		Actor->RegisterAllComponents();
-		Actor->DispatchBeginPlay();
-		InitializeNote = TEXT("Components were registered and the begin-play cycle was dispatched on this actor, so InitializeComponent and BeginPlay ran. This is what a component that does its setup in BeginPlay needs before it can be read. It runs on this actor only, in a world that has not begun play, so anything depending on other actors or on world subsystems may still be absent.");
+		// The spawn skips component initialization because the editor world's
+		// actors are never initialized, and DispatchBeginPlay does not do it
+		// either, so it is run here first (#1480).
+		Actor->InitializeComponents();
+		if (!Actor->HasActorBegunPlay())
+		{
+			Actor->DispatchBeginPlay();
+		}
+		InitializeNote = TEXT("Components were registered, InitializeComponent ran on every registered component that wants it, and BeginPlay was dispatched on this actor. This is what a component that does its setup in BeginPlay needs before it can be read. It runs on this actor only, in a world that has not begun play, so anything depending on other actors or on world subsystems may still be absent.");
 	}
 	else
 	{
@@ -205,6 +213,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::SpawnTransientActor(const TSharedPtr<FJso
 #else
 	InitializeNote = TEXT("Non-editor build: no construction or begin-play cycle was run.");
 #endif
+	MCPSpawnFinalize::FinishEditorSpawn(Actor);
 
 	// Read back after initialization, so the report shows what the actor holds
 	// now rather than what the write returned.
@@ -223,17 +232,26 @@ TSharedPtr<FJsonValue> FLevelHandlers::SpawnTransientActor(const TSharedPtr<FJso
 		}
 	}
 
+	// initialized is true when InitializeComponent has nothing pending: it ran,
+	// or the component never asks for it. HasBeenInitialized alone is false
+	// forever on a component without bWantsInitializeComponent (#1480).
 	TArray<TSharedPtr<FJsonValue>> Components;
+	TArray<FString> NotBegunPlay;
 	for (UActorComponent* Component : Actor->GetComponents())
 	{
 		if (!Component) continue;
+		const bool bWantsInitialize = Component->bWantsInitializeComponent;
 		TSharedPtr<FJsonObject> ComponentObject = MakeShared<FJsonObject>();
 		ComponentObject->SetStringField(TEXT("name"), Component->GetName());
 		ComponentObject->SetStringField(TEXT("class"), Component->GetClass()->GetName());
 		ComponentObject->SetBoolField(TEXT("registered"), Component->IsRegistered());
-		// The read side of #956 needs this: a component whose setup happens in
-		// InitializeComponent is not ready until this is true.
-		ComponentObject->SetBoolField(TEXT("initialized"), Component->HasBeenInitialized());
+		ComponentObject->SetBoolField(TEXT("wantsInitializeComponent"), bWantsInitialize);
+		ComponentObject->SetBoolField(TEXT("initialized"), Component->HasBeenInitialized() || !bWantsInitialize);
+		ComponentObject->SetBoolField(TEXT("hasBegunPlay"), Component->HasBegunPlay());
+		if (!Component->HasBegunPlay())
+		{
+			NotBegunPlay.Add(Component->GetName());
+		}
 		Components.Add(MakeShared<FJsonValueObject>(ComponentObject));
 	}
 
@@ -243,6 +261,18 @@ TSharedPtr<FJsonValue> FLevelHandlers::SpawnTransientActor(const TSharedPtr<FJso
 	Result->SetStringField(TEXT("initialize"), Initialize);
 	Result->SetStringField(TEXT("initializeNote"), InitializeNote);
 	Result->SetArrayField(TEXT("components"), Components);
+	Result->SetBoolField(TEXT("hasBegunPlay"), Actor->HasActorBegunPlay());
+	if (!Actor->HasActorBegunPlay() || NotBegunPlay.Num() > 0)
+	{
+		// A call into setup that BeginPlay does (option lists, delegate
+		// bindings) succeeds on this actor and changes nothing, so say so.
+		Result->SetArrayField(TEXT("componentsNotBegunPlay"), MCPStringListToJson(NotBegunPlay));
+		Result->SetStringField(TEXT("beginPlayWarning"), FString::Printf(
+			TEXT("BeginPlay has not run on %s%d of %d components. Anything they set up in BeginPlay does not exist yet, so a function invoked on them can return success and change nothing.%s"),
+			Actor->HasActorBegunPlay() ? TEXT("") : TEXT("this actor or on "),
+			NotBegunPlay.Num(), Components.Num(),
+			Initialize == TEXT("beginplay") ? TEXT(" Unregistered components do not begin play.") : TEXT(" Spawn with initialize='beginPlay' to run it.")));
+	}
 	if (PropertyRows.Num() > 0)
 	{
 		Result->SetArrayField(TEXT("properties"), PropertyRows);

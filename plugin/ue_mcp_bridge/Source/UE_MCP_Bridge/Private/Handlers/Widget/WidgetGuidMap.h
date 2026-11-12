@@ -8,7 +8,77 @@
 #include "WidgetBlueprint.h"
 #include "Blueprint/WidgetTree.h"
 #include "Components/Widget.h"
+#include "Blueprint/UserWidget.h"
 #include "Kismet2/KismetEditorUtilities.h"
+#include "Kismet2/CompilerResultsLog.h"
+#include "Editor.h"
+#include "Containers/Ticker.h"
+#include "UObject/WeakObjectPtrTemplates.h"
+#include "UE_MCP_BridgeModule.h"
+
+// ── Live widgets during a play session (#1553) ─────────────────────────────
+//
+// Compiling a Widget Blueprint while play runs reinstances every live widget
+// made from it, and a reinstanced widget is rebuilt from the class: content the
+// game added at runtime is gone. Handlers that can avoid the compile write the
+// live widgets directly and compile once play ends; the rest report it.
+namespace MCPWidgetPlaySession
+{
+	/** Lets an automation test stand in for a running play session. */
+	struct FTestOverride
+	{
+		TArray<TWeakObjectPtr<UUserWidget>> Widgets;
+	};
+
+	inline FTestOverride*& TestOverride()
+	{
+		static FTestOverride* Override = nullptr;
+		return Override;
+	}
+
+	/** Is a play or simulate session running, or a test standing in for one? */
+	inline bool IsActive()
+	{
+		return TestOverride() != nullptr || MCPIsPlayInEditorActive();
+	}
+
+	/** Live user widgets made from WidgetBP's class in a play world, nested
+	 *  ones included. */
+	inline TArray<UUserWidget*> LiveWidgets(const UWidgetBlueprint* WidgetBP)
+	{
+		TArray<UUserWidget*> Out;
+		const UClass* Generated = WidgetBP ? WidgetBP->GeneratedClass.Get() : nullptr;
+		if (!Generated) return Out;
+		if (FTestOverride* Override = TestOverride())
+		{
+			for (const TWeakObjectPtr<UUserWidget>& Weak : Override->Widgets)
+			{
+				if (UUserWidget* Widget = Weak.Get(); Widget && Widget->IsA(Generated)) Out.Add(Widget);
+			}
+			return Out;
+		}
+		for (TObjectIterator<UUserWidget> It; It; ++It)
+		{
+			UUserWidget* Widget = *It;
+			if (Widget->HasAnyFlags(RF_ClassDefaultObject | RF_ArchetypeObject) || !Widget->IsA(Generated)) continue;
+			const UWorld* World = Widget->GetWorld();
+			if (World && (World->WorldType == EWorldType::PIE || World->WorldType == EWorldType::Game)) Out.Add(Widget);
+		}
+		return Out;
+	}
+
+	/** Stands in for a play session holding Widgets for the life of the scope. */
+	struct FScopedTestPlaySession
+	{
+		FTestOverride Override;
+		explicit FScopedTestPlaySession(const TArray<UUserWidget*>& Widgets)
+		{
+			for (UUserWidget* Widget : Widgets) Override.Widgets.Add(Widget);
+			TestOverride() = &Override;
+		}
+		~FScopedTestPlaySession() { TestOverride() = nullptr; }
+	};
+}
 
 // ── Widget variable GUID metadata (#728, #799) ───────────────────────────────
 //
@@ -44,8 +114,15 @@ namespace MCPWidgetGuidMap
 	{
 		/** False when this engine has no WidgetVariableNameToGuidMap at all. */
 		bool bSupported = false;
-		/** True once CompileChecked has actually run the compile. */
+		/** True once CompileChecked ran the compiler; false means it refused. */
+		bool bCompileAttempted = false;
+		/** True only when that compile finished with no errors. */
 		bool bCompiled = false;
+		/** Error-severity messages from the compile, and how many of them the
+		 *  baseline taken before the edit already had. */
+		int32 CompileErrors = 0;
+		int32 PreexistingErrors = 0;
+		TArray<FString> CompileMessages;
 		int32 Added = 0;
 		int32 Pruned = 0;
 		/** Widgets moved out of the tree because nothing reached them. */
@@ -58,8 +135,24 @@ namespace MCPWidgetGuidMap
 		TArray<FName> Unusable;
 		/** What is actually wrong, one clause per defect, for the message. */
 		TArray<FString> Defects;
+		/** A play session was running when CompileChecked compiled, and how many
+		 *  live widgets made from the blueprint it reinstanced (#1553). */
+		bool bCompiledDuringPlay = false;
+		int32 LivePlayWidgets = 0;
 
 		bool IsClean() const { return Unusable.Num() == 0; }
+
+		/** CompileChecked refused to compile: the GUID preflight failed. */
+		bool WasRefused() const { return !bCompileAttempted; }
+
+		int32 IntroducedErrors() const { return FMath::Max(0, CompileErrors - PreexistingErrors); }
+
+		/** The compile failed and the edit is to blame: either it added errors
+		 *  the baseline did not have, or no baseline accounts for the failure. */
+		bool EditBrokeCompile() const
+		{
+			return bCompileAttempted && !bCompiled && (IntroducedErrors() > 0 || PreexistingErrors == 0);
+		}
 
 		FString DefectList() const
 		{
@@ -304,18 +397,70 @@ namespace MCPWidgetGuidMap
 		return Stuck;
 	}
 
+	/** Compiler errors a Widget Blueprint already had before a handler edits
+	 *  it, so an unrelated broken graph does not block the edit. */
+	struct FCompileBaseline
+	{
+		TMap<FString, int32> Errors;
+	};
+
+	/** Compile WidgetBP without saving and return its error-severity messages. */
+	inline TArray<FString> CompileForErrors(UWidgetBlueprint* WidgetBP, int32& OutNumErrors)
+	{
+		FCompilerResultsLog CompileLog;
+		CompileLog.SetSourcePath(WidgetBP->GetPathName());
+		// SkipSave: the editor's SaveOnCompile preference must not persist an
+		// edit before the handler has checked the result.
+		FKismetEditorUtilities::CompileBlueprint(WidgetBP, EBlueprintCompileOptions::SkipSave, &CompileLog);
+		OutNumErrors = CompileLog.NumErrors;
+		TArray<FString> Messages;
+		for (const TSharedRef<FTokenizedMessage>& Message : CompileLog.Messages)
+		{
+			if (Message->GetSeverity() == EMessageSeverity::Error)
+			{
+				Messages.Add(Message->ToText().ToString());
+			}
+		}
+		return Messages;
+	}
+
+	/**
+	 * Call before mutating. Compiles only when the blueprint already reports
+	 * BS_Error, which is the one state where the post-edit compile cannot tell
+	 * the edit's errors from the asset's own. Skipped when the GUID map is in
+	 * a state CompileChecked would refuse, since that compile is what ensures.
+	 */
+	inline FCompileBaseline CaptureBaseline(UWidgetBlueprint* WidgetBP)
+	{
+		FCompileBaseline Baseline;
+		if (!WidgetBP || WidgetBP->Status != BS_Error || !Sync(WidgetBP).IsClean())
+		{
+			return Baseline;
+		}
+		int32 NumErrors = 0;
+		for (const FString& Message : CompileForErrors(WidgetBP, NumErrors))
+		{
+			++Baseline.Errors.FindOrAdd(Message);
+		}
+		return Baseline;
+	}
+
 	/**
 	 * Sync, compile, sync again.
 	 *
 	 * When the map cannot be made to match what the compiler checks - which in
 	 * practice means two variables carrying one GUID, the one defect neither
 	 * the sync nor the engine can repair without picking which set of external
-	 * references to break - the compile does NOT run and bCompiled stays false.
+	 * references to break - the compile does NOT run and WasRefused() is true.
 	 * The ensure inside the compiler is the thing this exists to prevent, and a
 	 * handler that compiled anyway would be reporting success on an asset it
 	 * had just broken.
+	 *
+	 * A compile that ran but failed is not refused: the handler reports it
+	 * through MCPSetWidgetCompileOutcome and skips the save when
+	 * EditBrokeCompile() says the edit caused it.
 	 */
-	inline FSyncReport CompileChecked(UWidgetBlueprint* WidgetBP)
+	inline FSyncReport CompileChecked(UWidgetBlueprint* WidgetBP, const FCompileBaseline& Baseline = FCompileBaseline())
 	{
 		FSyncReport Report = Sync(WidgetBP);
 		if (!Report.IsClean())
@@ -323,7 +468,27 @@ namespace MCPWidgetGuidMap
 			return Report;
 		}
 
-		FKismetEditorUtilities::CompileBlueprint(WidgetBP);
+		Report.bCompileAttempted = true;
+		if (MCPWidgetPlaySession::IsActive())
+		{
+			// Counted before the compile, which swaps these objects for new ones.
+			Report.bCompiledDuringPlay = true;
+			Report.LivePlayWidgets = MCPWidgetPlaySession::LiveWidgets(WidgetBP).Num();
+		}
+		int32 NumErrors = 0;
+		Report.CompileMessages = CompileForErrors(WidgetBP, NumErrors);
+		Report.CompileErrors = FMath::Max(NumErrors, Report.CompileMessages.Num());
+
+		TMap<FString, int32> Remaining = Baseline.Errors;
+		for (const FString& Message : Report.CompileMessages)
+		{
+			int32* Count = Remaining.Find(Message);
+			if (Count && *Count > 0)
+			{
+				--*Count;
+				++Report.PreexistingErrors;
+			}
+		}
 
 		const FSyncReport After = Sync(WidgetBP);
 		Report.Added += After.Added;
@@ -331,8 +496,21 @@ namespace MCPWidgetGuidMap
 		Report.Repaired += After.Repaired;
 		Report.Unusable = After.Unusable;
 		Report.Defects = After.Defects;
-		Report.bCompiled = true;
+		Report.bCompiled = Report.CompileErrors == 0 && WidgetBP->Status != BS_Error;
 		return Report;
+	}
+
+	/** Save unless the edit broke the compile. A failed edit stays in memory,
+	 *  unsaved, and the result says so and carries the way back. */
+	inline bool SaveIfCompiled(UWidgetBlueprint* WidgetBP, const FSyncReport& Report, FString& OutError)
+	{
+		if (Report.EditBrokeCompile())
+		{
+			OutError = FString::Printf(
+				TEXT("not saved because the edit left the blueprint with %d compiler error(s)"), Report.CompileErrors);
+			return false;
+		}
+		return SaveAssetPackageChecked(WidgetBP, OutError);
 	}
 
 	/** The error a handler returns when CompileChecked refused to compile. */
@@ -346,6 +524,104 @@ namespace MCPWidgetGuidMap
 			TEXT("recreate one of %s."),
 			*AssetPath, *Report.DefectList(), *Report.UnusableList()));
 	}
+}
+
+// ── Compiles deferred until play ends (#1553) ──────────────────────────────
+namespace MCPWidgetPlaySession
+{
+	struct FDeferredCompile
+	{
+		TWeakObjectPtr<UWidgetBlueprint> WidgetBP;
+		MCPWidgetGuidMap::FCompileBaseline Baseline;
+	};
+
+	inline TArray<FDeferredCompile>& DeferredCompiles()
+	{
+		static TArray<FDeferredCompile> Pending;
+		return Pending;
+	}
+
+	inline bool IsDeferred(const UWidgetBlueprint* WidgetBP)
+	{
+		for (const FDeferredCompile& Entry : DeferredCompiles())
+		{
+			if (Entry.WidgetBP.Get() == WidgetBP) return true;
+		}
+		return false;
+	}
+
+	/** Compile and save every blueprint whose compile waited for play to end.
+	 *  An edit that does not compile stays in memory, unsaved, and is logged. */
+	inline void FlushDeferred()
+	{
+		TArray<FDeferredCompile> Pending = MoveTemp(DeferredCompiles());
+		DeferredCompiles().Reset();
+		for (const FDeferredCompile& Entry : Pending)
+		{
+			UWidgetBlueprint* WidgetBP = Entry.WidgetBP.Get();
+			if (!WidgetBP) continue;
+			const FString AssetPath = WidgetBP->GetPathName();
+			const MCPWidgetGuidMap::FSyncReport Report = MCPWidgetGuidMap::CompileChecked(WidgetBP, Entry.Baseline);
+			if (Report.WasRefused())
+			{
+				UE_LOG(LogMCPBridge, Warning, TEXT("Deferred widget compile refused for '%s': %s"), *AssetPath, *Report.DefectList());
+				continue;
+			}
+			FString SaveError;
+			if (!MCPWidgetGuidMap::SaveIfCompiled(WidgetBP, Report, SaveError))
+			{
+				UE_LOG(LogMCPBridge, Warning, TEXT("Deferred widget compile for '%s' was not saved: %s"), *AssetPath, *SaveError);
+				continue;
+			}
+			UE_LOG(LogMCPBridge, Log, TEXT("Compiled and saved '%s' after play ended."), *AssetPath);
+		}
+	}
+
+	/** Bound once: flush on the tick after play shuts down, when the play world
+	 *  and its widgets are gone, so the compile reinstances nothing live. */
+	inline void EnsureFlushOnPlayEnd()
+	{
+		static bool bBound = false;
+		if (bBound) return;
+		bBound = true;
+		FEditorDelegates::ShutdownPIE.AddLambda([](bool)
+		{
+			FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateLambda([](float)
+			{
+				FlushDeferred();
+				return false;
+			}));
+		});
+	}
+
+	/** Leave WidgetBP uncompiled and unsaved until play ends. */
+	inline void DeferCompile(UWidgetBlueprint* WidgetBP, const MCPWidgetGuidMap::FCompileBaseline& Baseline)
+	{
+		if (!WidgetBP) return;
+		WidgetBP->MarkPackageDirty();
+		WidgetBP->Status = BS_Dirty;
+		if (!IsDeferred(WidgetBP))
+		{
+			DeferredCompiles().Add({ WidgetBP, Baseline });
+		}
+		EnsureFlushOnPlayEnd();
+	}
+}
+
+/** The note a widget edit carries when it compiled during play (#1553). The
+ *  engine reinstances live widgets of a recompiled class, and a reinstanced
+ *  widget does not keep what was built into it at runtime. */
+inline FString MCPWidgetPlaySessionWarning(const FString& AssetPath, int32 LivePlayWidgets)
+{
+	const FString Live = LivePlayWidgets > 0
+		? FString::Printf(TEXT("%d live widget(s) made from it in the play world were reinstanced"), LivePlayWidgets)
+		: FString(TEXT("no live widget made from it was found in the play world, but any created later uses the new class"));
+	return FString::Printf(
+		TEXT("A play-in-editor session is running, so compiling '%s' took effect in play at once: %s. A reinstanced ")
+		TEXT("widget is rebuilt from the class, so content added to it at runtime (children added to panels, pages pushed ")
+		TEXT("into a stack, text set by game code) can come back empty until its owner rebuilds it or play restarts. To ")
+		TEXT("avoid it, stop play with editor(action=\"play_in_editor\", pieAction=\"stop\") before editing widgets."),
+		*AssetPath, *Live);
 }
 
 /** Stamp GUID bookkeeping onto a widget mutation result, and withdraw the
@@ -380,6 +656,11 @@ inline void MCPSetWidgetGuidOutcome(
 	if (Report.Repaired > 0)
 	{
 		Result->SetNumberField(TEXT("repairedGuidEntries"), Report.Repaired);
+	}
+	if (Report.bCompiledDuringPlay)
+	{
+		Result->SetNumberField(TEXT("reinstancedPlayWidgets"), Report.LivePlayWidgets);
+		Result->SetStringField(TEXT("playSessionWarning"), MCPWidgetPlaySessionWarning(AssetPath, Report.LivePlayWidgets));
 	}
 	if (Report.IsClean())
 	{
@@ -420,23 +701,53 @@ inline FString WidgetCompileStatusString(const UWidgetBlueprint* WidgetBP)
 	}
 }
 
-/** Stamp compile state onto a mutation result, and withdraw the success claim
- *  when the blueprint no longer compiles (#799). */
+/**
+ * Stamp compile state onto a mutation result (#799, #1195). Call it after the
+ * save outcome, so its error replaces the generic unsaved message.
+ *
+ * - The edit broke the compile: success is withdrawn, the edit stays applied in
+ *   memory and unsaved, and the error names the ways back.
+ * - The blueprint only has errors it had before the edit: the edit was saved
+ *   and keeps its success; compileWarning names the pre-existing errors.
+ */
 inline void MCPSetWidgetCompileOutcome(
 	TSharedPtr<FJsonObject> Result,
 	const UWidgetBlueprint* WidgetBP,
 	const FString& AssetPath,
+	const MCPWidgetGuidMap::FSyncReport& Report,
 	const FString& WhatHappened)
 {
-	const FString CompileStatus = WidgetCompileStatusString(WidgetBP);
-	Result->SetStringField(TEXT("compileStatus"), CompileStatus);
-	if (CompileStatus == TEXT("error"))
+	if (!Result.IsValid()) return;
+	Result->SetStringField(TEXT("compileStatus"), WidgetCompileStatusString(WidgetBP));
+	Result->SetBoolField(TEXT("compiled"), Report.bCompiled);
+	if (Report.bCompiled) return;
+
+	Result->SetNumberField(TEXT("compileErrors"), Report.CompileErrors);
+	Result->SetNumberField(TEXT("introducedCompileErrors"), Report.IntroducedErrors());
+	Result->SetNumberField(TEXT("preexistingCompileErrors"), Report.PreexistingErrors);
+	TArray<TSharedPtr<FJsonValue>> Messages;
+	for (const FString& Message : Report.CompileMessages)
 	{
-		// The mutation is already on disk, so keep reporting what landed, but a
-		// blueprint that no longer compiles is not a success.
-		Result->SetBoolField(TEXT("success"), false);
-		Result->SetStringField(TEXT("error"), FString::Printf(
-			TEXT("%s and saved, but '%s' no longer compiles - open the blueprint's compiler results for the cause."),
-			*WhatHappened, *AssetPath));
+		Messages.Add(MakeShared<FJsonValueString>(Message));
 	}
+	Result->SetArrayField(TEXT("compileMessages"), Messages);
+	const FString Joined = Report.CompileMessages.Num()
+		? FString::Join(Report.CompileMessages, TEXT("; "))
+		: FString(TEXT("the compiler reported no message; open the blueprint's compiler results"));
+
+	if (!Report.EditBrokeCompile())
+	{
+		Result->SetStringField(TEXT("compileWarning"), FString::Printf(
+			TEXT("'%s' already had %d compiler error(s) before this edit and the edit added none: %s"),
+			*AssetPath, Report.PreexistingErrors, *Joined));
+		return;
+	}
+
+	Result->SetBoolField(TEXT("success"), false);
+	Result->SetBoolField(TEXT("appliedInMemory"), true);
+	Result->SetStringField(TEXT("error"), FString::Printf(
+		TEXT("%s, but '%s' no longer compiles (%d error(s), %d of them new), so it was not saved. The edit is still ")
+		TEXT("applied in memory and the package is dirty: undo it with this result's rollback when it carries one, ")
+		TEXT("discard it with asset(reload_package), or fix the errors and save. Errors: %s"),
+		*WhatHappened, *AssetPath, Report.CompileErrors, Report.IntroducedErrors(), *Joined));
 }

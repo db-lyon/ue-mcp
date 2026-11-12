@@ -116,6 +116,8 @@ const EXPLICIT: Record<string, Extractor> = {
   begin_control_rig_edit: (p) => strArray([p.sequencePath]),
   // The bake writes its output asset and leaves the edit sequence alone.
   bake_control_rig_edit: (p) => strArray([p.outputAssetPath]),
+  // Same for a bake of any sequence binding: the LevelSequence is only read.
+  bake_sequence_animation: (p) => strArray([p.outputAssetPath]),
   // Batch rename: each entry is {sourcePath, destinationPath} or {assetPath, newName}.
   bulk_rename_assets: (p) => {
     const out: string[] = [];
@@ -156,6 +158,10 @@ const EXPLICIT: Record<string, Extractor> = {
     }
     return out;
   },
+  // A chooser copy writes the destination table and only reads the source;
+  // with no targetTable the destination is the source table itself.
+  chooser_copy_rows: (p) => strArray([str(p.targetTable) ?? str(p.table) ?? p.assetPath]),
+  chooser_copy_column: (p) => strArray([str(p.targetTable) ?? str(p.table) ?? p.assetPath]),
 };
 
 /** A parameter's name and every alias the registry renames to it. */

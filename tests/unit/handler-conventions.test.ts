@@ -84,7 +84,27 @@ const BASELINE = {
   // 170: editor(discard_dirty) clears named dirty flags; no action restores
   // those flags, and closing the editor loses the unsaved contents. The
   // handler reports that limit through MCPSetNoRollback.
-  mutationsWithoutRollback: 172,
+  // 173: pie(drive_stop) ends a pawn drive, which is not resumed; it says so through
+  // MCPSetNoRollback, as every other pie stop does (#1735).
+  // 170: epic(call_mcp_tool) runs a tool Epic's MCP plugin registered; like call_tool, the effect is the tool's.
+  // 170: epic(ai_assistant_send_message) sends a message UAIAssistantInstance has no call to delete.
+  // 176: asset(semantic_search_index) adds embeddings to Semantic Search's own index, which has no
+  // call that takes an asset back out (#1829).
+  // 177: widget(compile_viewmodels) regenerates the class from the view; the previous class is not kept.
+  // 179: project(gather_localization_target) and compile_localization_target rewrite the manifest,
+  // archives and LocRes in place; the previous files are not kept.
+  // 187: level(build_hlod_actors, build_world_partition_hlods, delete_world_partition_hlods,
+  // build_world_partition_minimap) regenerate or delete derived HLOD and minimap data and keep no copy;
+  // level(repair_world_partition_errors) saves and moves actors, which the engine documents as not
+  // undoable; level(replace_actors_with_class, replace_actors_with_asset) delete the replaced actors;
+  // editor(log_map_check_message) adds a Message Log entry no call removes (#1828).
+  // 188: landscape(apply_splines) writes the splines' deformation into the
+  // landscape's heights and weights, which it does not read back first; it says
+  // so through MCPSetNoRollback, as merge_edit_layers does.
+  // 190: editor(mrq_render) writes rendered frames, which nothing deletes, and
+  // editor(mrq_cancel_render) stops a render that cannot be resumed; both say so
+  // through MCPSetNoRollback.
+  mutationsWithoutRollback: 190,
   // Zero, and held there by a flat assertion. Every mutation with no inverse
   // now says so in its own result body with the reason, which is the half a
   // caller can act on.

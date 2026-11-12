@@ -11,6 +11,7 @@
 #include "UObject/GCObjectScopeGuard.h"
 #include "HandlerFunctionCall.h"
 #include "HandlerJsonProperty.h"
+#include "HandlerPlaySession.h"
 #include "JsonSerializer.h"
 #include "Containers/Ticker.h"
 #include "Editor.h"
@@ -408,8 +409,8 @@ static TSharedPtr<FJsonValue> MCPRunPieControl(
 		// that makes the answer below true rather than assumed.
 		const bool bAlreadyQueued = GEditor->IsPlaySessionRequestQueued();
 
-		FRequestPlaySessionParams SessionParams;
-		GEditor->RequestPlaySession(SessionParams);
+		const MCPPlaySession::FLaunch Launch = MCPPlaySession::Request(/*bNeedsEditorWorld=*/false);
+		MCPPlaySession::WriteLaunch(Launch, Result);
 		Result->SetStringField(TEXT("action"), Action);
 		// A REQUEST: UEditorEngine::RequestPlaySession stores the params to be
 		// acted on next tick, so PIE is not running yet and isPlaying still
@@ -422,6 +423,11 @@ static TSharedPtr<FJsonValue> MCPRunPieControl(
 		Result->SetStringField(TEXT("startNote"), bAlreadyQueued
 			? TEXT("A play session was already queued and this call replaced that request rather than adding one. It begins on a later editor tick; poll pie_control(pieAction=status) until isPlaying is true before doing anything that needs the PIE world.")
 			: TEXT("The play session is queued and begins on a later editor tick. Poll pie_control(pieAction=status) until isPlaying is true before doing anything that needs the PIE world."));
+		if (Launch.Used == EMCPPlayMode::Standalone)
+		{
+			Result->SetStringField(TEXT("startNote"),
+				TEXT("The editor plays standalone, so the game launches as a separate process with no PIE world in this editor and isPlaying stays false. configure_pie(playMode=viewport) plays inside the editor."));
+		}
 
 		// No rollback, and stopping is not one. The request is deferred, so at
 		// the moment a rollback would run PlayWorld is still null and
@@ -1396,21 +1402,62 @@ TSharedPtr<FJsonValue> FEditorHandlers::GetPiePawn(const TSharedPtr<FJsonObject>
 {
 	// Read before PIE is checked, so the parameter counts either way (#1057).
 	const int32 PlayerIndex = OptionalInt(Params, TEXT("playerIndex"), 0);
+	int32 PieInstance = INDEX_NONE;
+	double RawInstance = 0.0;
+	if (TryGetNumberParam(Params, TEXT("pieInstance"), RawInstance))
+	{
+		PieInstance = FMath::RoundToInt(RawInstance);
+	}
 
 	if (!GEditor) return MCPError(TEXT("Editor not available"));
 
-	FWorldContext* PieCtx = GEditor->GetPIEWorldContext();
-	UWorld* PieWorld = PieCtx ? PieCtx->World() : nullptr;
+	UWorld* PieWorld = nullptr;
+	if (PieInstance != INDEX_NONE)
+	{
+		PieWorld = GetPIEWorldByInstance(PieInstance);
+		if (!PieWorld)
+		{
+			return MCPError(FString::Printf(TEXT("No PIE instance %d - see list_pie_instances"), PieInstance));
+		}
+	}
+	else
+	{
+		FWorldContext* PieCtx = GEditor->GetPIEWorldContext();
+		PieWorld = PieCtx ? PieCtx->World() : nullptr;
+		// A dedicated server's controllers are the clients' server-side copies,
+		// not a player of its own, so default to the first client world (#1657).
+		if (PieWorld && PieWorld->GetNetMode() == NM_DedicatedServer)
+		{
+			for (const FWorldContext& Ctx : GEngine->GetWorldContexts())
+			{
+				UWorld* W = Ctx.World();
+				if (Ctx.WorldType == EWorldType::PIE && W && W->GetNetMode() != NM_DedicatedServer
+					&& W->GetGameInstance() && W->GetGameInstance()->GetFirstGamePlayer())
+				{
+					PieWorld = W;
+					break;
+				}
+			}
+		}
+	}
 	if (!PieWorld)
 	{
 		return MCPError(TEXT("PIE not running - start PIE before resolving the player pawn"));
 	}
+	const FWorldContext* ResolvedCtx = GEngine->GetWorldContextFromWorld(PieWorld);
+	const int32 ResolvedInstance = ResolvedCtx ? ResolvedCtx->PIEInstance : INDEX_NONE;
 
 	APlayerController* PC = UGameplayStatics::GetPlayerController(PieWorld, PlayerIndex);
 	APawn* Pawn = PC ? PC->GetPawn() : nullptr;
-	if (!Pawn) return MCPError(FString::Printf(TEXT("No controlled pawn for player index %d"), PlayerIndex));
+	if (!Pawn)
+	{
+		return MCPError(FString::Printf(TEXT("No controlled pawn for player index %d in PIE instance %d (%s)"),
+			PlayerIndex, ResolvedInstance, *DescribePIENetMode(PieWorld)));
+	}
 
 	auto Result = MCPSuccess();
+	Result->SetNumberField(TEXT("pieInstance"), ResolvedInstance);
+	Result->SetStringField(TEXT("netMode"), DescribePIENetMode(PieWorld));
 	Result->SetStringField(TEXT("actorLabel"), Pawn->GetActorLabel());
 	Result->SetStringField(TEXT("actorName"), Pawn->GetName());
 	Result->SetStringField(TEXT("class"), Pawn->GetClass()->GetPathName());
@@ -1427,6 +1474,11 @@ TSharedPtr<FJsonValue> FEditorHandlers::GetPiePawn(const TSharedPtr<FJsonObject>
 	RotO->SetNumberField(TEXT("yaw"), R.Yaw);
 	RotO->SetNumberField(TEXT("roll"), R.Roll);
 	Result->SetObjectField(TEXT("rotation"), RotO);
+	// The controller's view and the map the pawn is in now, so a check after a level change reads both (#1565).
+	Result->SetObjectField(TEXT("controlRotation"), MCPRotatorToJsonObject(PC->GetControlRotation()));
+	Result->SetObjectField(TEXT("velocity"), MCPVec3ToJsonObject(Pawn->GetVelocity()));
+	Result->SetStringField(TEXT("map"), UWorld::RemovePIEPrefix(PieWorld->GetOutermost()->GetName()));
+	Result->SetStringField(TEXT("worldPath"), PieWorld->GetPathName());
 	return MCPResult(Result);
 }
 
@@ -1534,6 +1586,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::InvokeFunction(const TSharedPtr<FJsonObj
 
 	UFunction* Func = CallTarget->FindFunction(FName(*FunctionName));
 	if (!Func) return MCPError(FString::Printf(TEXT("Function '%s' not found on %s"), *FunctionName, *CallTarget->GetClass()->GetName()));
+	if (auto Err = MCPRejectUnknownFunctionArgs(Func, ArgsMap)) return Err;
 
 	TArray<uint8> ParamBuf;
 	ParamBuf.SetNumZeroed(Func->ParmsSize);
@@ -1826,6 +1879,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::InvokeStaticFunction(const TSharedPtr<FJ
 
 	UFunction* Func = LibClass->FindFunctionByName(FName(*FunctionName));
 	if (!Func) return MCPError(FString::Printf(TEXT("Static function '%s' not found on %s"), *FunctionName, *LibClass->GetName()));
+	if (auto Err = MCPRejectUnknownFunctionArgs(Func, ArgsMap)) return Err;
 
 	TArray<uint8> ParamBuf;
 	ParamBuf.SetNumZeroed(Func->ParmsSize);
@@ -1953,8 +2007,20 @@ TSharedPtr<FJsonValue> FEditorHandlers::InvokeStaticFunction(const TSharedPtr<FJ
 		}
 	}
 
+	// #1490: the call may replace the world (a level load run through Python),
+	// and the old one is then collected. Keep only a weak handle and its path;
+	// a strong guard would trip the world-leak check on map change.
+	const TWeakObjectPtr<UWorld> WorldBefore(World);
+	const FString WorldPathBefore = World->GetPathName();
+	World = nullptr;
+
 	FGCObjectScopeGuard CDOGuard(CDO);
 	CDO->ProcessEvent(Func, ParamBuf.GetData());
+
+	// Re-resolve for the reply. A weak handle compares by object index and
+	// serial, so a new world allocated at the old address still reads as replaced.
+	UWorld* WorldAfter = ResolveWorldFromParams(Params, *WorldScope);
+	const bool bWorldReplaced = !WorldBefore.IsValid() || WorldBefore.Get() != WorldAfter;
 
 	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("className"), LibClass->GetName());
@@ -1962,9 +2028,16 @@ TSharedPtr<FJsonValue> FEditorHandlers::InvokeStaticFunction(const TSharedPtr<FJ
 	// #971: say which world the call actually ran against and which parameter
 	// carried it. "subsystem unavailable" from a static that looks a
 	// GameInstance subsystem up off its context is unreadable without this.
-	Result->SetStringField(TEXT("world"), WorldLabel);
-	Result->SetStringField(TEXT("worldPath"), World->GetPathName());
-	Result->SetStringField(TEXT("netMode"), DescribePIENetMode(World));
+	Result->SetStringField(TEXT("world"), WorldAfter
+		? (WorldAfter->IsPlayInEditor() ? TEXT("PIE") : TEXT("editor"))
+		: WorldLabel);
+	Result->SetStringField(TEXT("worldPath"), WorldAfter ? WorldAfter->GetPathName() : FString());
+	Result->SetStringField(TEXT("netMode"), WorldAfter ? DescribePIENetMode(WorldAfter) : FString());
+	Result->SetBoolField(TEXT("worldReplaced"), bWorldReplaced);
+	if (bWorldReplaced)
+	{
+		Result->SetStringField(TEXT("previousWorldPath"), WorldPathBefore);
+	}
 	if (!FilledWcParam.IsEmpty())
 	{
 		Result->SetStringField(TEXT("worldContextParam"), FilledWcParam);
@@ -2029,6 +2102,8 @@ TSharedPtr<FJsonValue> FEditorHandlers::ConfigurePie(const TSharedPtr<FJsonObjec
 	FIntPoint PrevNewWindowPosition = FIntPoint::ZeroValue;
 	GetIntPointPropOn(Settings, TEXT("NewWindowPosition"), PrevNewWindowPosition);
 	const bool bPrevCenterNewWindow = GetBoolPropOn(Settings, TEXT("CenterNewWindow"), true);
+	// #1526: where every PIE launch lands, the Play button included.
+	const EMCPPlayMode PrevPlayMode = MCPPlaySession::EditorPlayMode();
 
 	int32 ClientW = 0, ClientH = 0;
 	const bool bHasClientW = TryGetNumberParam(Params, TEXT("clientWindowWidth"), ClientW);
@@ -2127,10 +2202,21 @@ TSharedPtr<FJsonValue> FEditorHandlers::ConfigurePie(const TSharedPtr<FJsonObjec
 		SetBoolPropOn(Settings, TEXT("CenterNewWindow"), bCenterNewWindow);
 		bAny = true;
 	}
+	FString PlayModeName;
+	if (TryGetStringParam(Params, TEXT("playMode"), PlayModeName) && !PlayModeName.IsEmpty())
+	{
+		EMCPPlayMode Mode = EMCPPlayMode::Viewport;
+		if (!MCPPlaySession::ParsePlayMode(PlayModeName, Mode))
+		{
+			return MCPError(FString::Printf(TEXT("Unknown playMode '%s'. Use viewport | new_window | standalone."), *PlayModeName));
+		}
+		MCPPlaySession::SetEditorPlayMode(Mode);
+		bAny = true;
+	}
 
 	if (!bAny)
 	{
-		return MCPError(TEXT("Nothing to configure - provide numClients / netMode / runUnderOneProcess / launchSeparateServer / newWindowWidth / newWindowHeight / clientWindowWidth / clientWindowHeight / newWindowPosition / centerNewWindow"));
+		return MCPError(TEXT("Nothing to configure - provide numClients / netMode / runUnderOneProcess / launchSeparateServer / newWindowWidth / newWindowHeight / clientWindowWidth / clientWindowHeight / newWindowPosition / centerNewWindow / playMode"));
 	}
 
 	Settings->SaveConfig();
@@ -2149,6 +2235,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::ConfigurePie(const TSharedPtr<FJsonObjec
 	Result->SetNumberField(TEXT("clientWindowHeight"), GetIntPropOn(Settings, TEXT("ClientWindowHeight"), 0));
 	Result->SetObjectField(TEXT("newWindowPosition"), IntPointToJson(NewWindowPosition));
 	Result->SetBoolField(TEXT("centerNewWindow"), GetBoolPropOn(Settings, TEXT("CenterNewWindow"), true));
+	Result->SetStringField(TEXT("playMode"), MCPPlaySession::PlayModeName(MCPPlaySession::EditorPlayMode()));
 
 	Result->SetNumberField(TEXT("previousNumClients"), PrevNumClients);
 	Result->SetStringField(TEXT("previousNetMode"), PrevNetMode);
@@ -2160,6 +2247,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::ConfigurePie(const TSharedPtr<FJsonObjec
 	Result->SetNumberField(TEXT("previousClientWindowHeight"), PrevClientWindowHeight);
 	Result->SetObjectField(TEXT("previousNewWindowPosition"), IntPointToJson(PrevNewWindowPosition));
 	Result->SetBoolField(TEXT("previousCenterNewWindow"), bPrevCenterNewWindow);
+	Result->SetStringField(TEXT("previousPlayMode"), MCPPlaySession::PlayModeName(PrevPlayMode));
 	const bool bChanged =
 		GetIntPropOn(Settings, TEXT("PlayNumberOfClients"), 1) != PrevNumClients
 		|| PrevNetMode != NetModeNameFromValue(GetEnumPropOn(Settings, TEXT("PlayNetMode")))
@@ -2170,7 +2258,8 @@ TSharedPtr<FJsonValue> FEditorHandlers::ConfigurePie(const TSharedPtr<FJsonObjec
 		|| GetIntPropOn(Settings, TEXT("ClientWindowWidth"), 0) != PrevClientWindowWidth
 		|| GetIntPropOn(Settings, TEXT("ClientWindowHeight"), 0) != PrevClientWindowHeight
 		|| NewWindowPosition != PrevNewWindowPosition
-		|| GetBoolPropOn(Settings, TEXT("CenterNewWindow"), true) != bPrevCenterNewWindow;
+		|| GetBoolPropOn(Settings, TEXT("CenterNewWindow"), true) != bPrevCenterNewWindow
+		|| MCPPlaySession::EditorPlayMode() != PrevPlayMode;
 	Result->SetBoolField(TEXT("changed"), bChanged);
 
 	// Self-inverse: the same handler with every field's previous value. The
@@ -2187,6 +2276,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::ConfigurePie(const TSharedPtr<FJsonObjec
 	if (PrevClientWindowHeight > 0) Payload->SetNumberField(TEXT("clientWindowHeight"), PrevClientWindowHeight);
 	Payload->SetObjectField(TEXT("newWindowPosition"), IntPointToJson(PrevNewWindowPosition));
 	Payload->SetBoolField(TEXT("centerNewWindow"), bPrevCenterNewWindow);
+	Payload->SetStringField(TEXT("playMode"), MCPPlaySession::PlayModeName(PrevPlayMode));
 	MCPSetRollback(Result, TEXT("configure_pie"), Payload);
 	// This handler ignores a non-positive numClients / newWindowWidth /
 	// newWindowHeight, so a previous value of zero cannot be written back and
@@ -2512,5 +2602,6 @@ TSharedPtr<FJsonValue> FEditorHandlers::GetPieConfig(const TSharedPtr<FJsonObjec
 	GetIntPointPropOn(Settings, TEXT("NewWindowPosition"), NewWindowPosition);
 	Result->SetObjectField(TEXT("newWindowPosition"), IntPointToJson(NewWindowPosition));
 	Result->SetBoolField(TEXT("centerNewWindow"), GetBoolPropOn(Settings, TEXT("CenterNewWindow"), true));
+	Result->SetStringField(TEXT("playMode"), MCPPlaySession::PlayModeName(MCPPlaySession::EditorPlayMode()));
 	return MCPResult(Result);
 }

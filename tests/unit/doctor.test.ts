@@ -222,3 +222,44 @@ describe("formatDoctor verdict", () => {
     expect(out).not.toContain("Everything aligned");
   });
 });
+
+describe("formatDoctor on Epic's Unreal MCP server and Unreal Assistant (#1825, #1826)", () => {
+  const server = {
+    engineVersion: "5.9", pluginEnabled: true, enabledBy: "default" as const, autoStart: true, autoStartSource: "engine" as const,
+    port: 8000, portSource: "default" as const, urlPath: "/mcp", url: "http://127.0.0.1:8000/mcp",
+    userIni: "C:/proj/Vale/Saved/Config/WindowsEditor/EditorPerProjectUserSettings.ini",
+    section: "/Script/ModelContextProtocol.ModelContextProtocolSettings", runsBeside: true, portConflicts: [] as string[],
+  };
+  const assistant = {
+    available: true, reason: null, configPath: "C:/L/UnrealEngine/Common/AIAssistant.json", shadowedBy: null,
+    attached: false, attachedProject: null, invalid: false,
+  };
+
+  it("notes a server running beside ue-mcp without spoiling the verdict", () => {
+    const out = stripAnsi(formatDoctor(baseReport({ unrealMcpServer: server, unrealAssistant: assistant })));
+    expect(out).toMatch(/epic mcp:\s+starts with the editor on http:\/\/127\.0\.0\.1:8000\/mcp/);
+    expect(out).toMatch(/epic assistant:\s+ue-mcp not attached/);
+    expect(out).toContain("Notes");
+    expect(out).toContain("beside ue-mcp");
+  });
+
+  it("flags a port collision and an attached entry an engine file shadows", () => {
+    const out = stripAnsi(formatDoctor(baseReport({
+      unrealMcpServer: { ...server, port: 9877, portConflicts: ["ue-mcp's bridge port for this project is also 9877"] },
+      unrealAssistant: { ...assistant, attached: true, shadowedBy: "C:/UE/Engine/Config/AIAssistant.json" },
+    })));
+    expect(out).not.toContain("Everything aligned");
+    expect(out).toContain("Epic's Unreal MCP server listens on 9877, and ue-mcp's bridge port for this project is also 9877");
+    expect(out).toContain("reads C:/UE/Engine/Config/AIAssistant.json first");
+  });
+
+  it("says nothing more when the server is off and the engine has no assistant", () => {
+    const out = stripAnsi(formatDoctor(baseReport({
+      unrealMcpServer: { ...server, autoStart: false, runsBeside: false },
+      unrealAssistant: { ...assistant, available: false },
+    })));
+    expect(out).toMatch(/epic mcp:\s+enabled, does not auto-start/);
+    expect(out).not.toContain("epic assistant:");
+    expect(out).not.toContain("Notes");
+  });
+});

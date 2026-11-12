@@ -13,7 +13,7 @@ headline:
 
 ## vX.Y.Z
 
-Unreal Engine 5.4 to 5.8.
+Unreal Engine <!-- count:engineRange -->5.4 to 5.9<!-- /count -->.
 
 ```bash
 npx ue-mcp@latest

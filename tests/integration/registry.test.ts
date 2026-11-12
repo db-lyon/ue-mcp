@@ -1,6 +1,6 @@
 /**
  * The plugin registry as the user meets it: `ue-mcp login` and `logout`
- * trading a GitHub token for a publish token, and the catalog the server
+ * trading a GitHub token or an emailed code for the account token, and the catalog the server
  * fetches and keeps on disk for when the registry cannot be reached.
  */
 import * as fs from "node:fs";
@@ -14,6 +14,7 @@ let sb: Sandbox;
 let registry: FakeHttp;
 const exchanges: Array<{ githubToken: string }> = [];
 const posts: Array<string | undefined> = [];
+const emailCalls: Array<{ url: string; body: Record<string, string> }> = [];
 
 const CATALOG = [
   { slug: "clifix", name: "CLI Fixture", packageName: "ue-mcp-clifix", repoUrl: "https://github.com/example/ue-mcp-clifix", provides: ["tools"], status: "published" },
@@ -28,6 +29,18 @@ beforeAll(async () => {
       exchanges.push(body);
       if (body.githubToken === "gho_revoked") return { status: 403, json: { error: "GitHub token rejected" } };
       return { json: { token: "uemcp_minted", login: "registry-octo" } };
+    }
+    if (req.url === "/api/auth/email/start" && req.method === "POST") {
+      const body = JSON.parse(req.body) as { email: string };
+      emailCalls.push({ url: req.url, body });
+      if (body.email === "busy@example.com") return { status: 429, json: { error: "Too many requests.", retryAfter: 45 } };
+      return { json: { ok: true, expiresInSeconds: 600 } };
+    }
+    if (req.url === "/api/auth/email/verify" && req.method === "POST") {
+      const body = JSON.parse(req.body) as { email: string; code: string };
+      emailCalls.push({ url: req.url, body });
+      if (body.code !== "246810") return { status: 400, json: { error: "That code is wrong or has expired. Request a new one." } };
+      return { json: { ok: true, token: "uemcp_email", prefix: "uemcp_em", login: body.email, email: body.email, created: true } };
     }
     if (req.url === "/api/plugins") return { json: { plugins: CATALOG } };
     if (req.url === "/api/publish" && req.method === "POST") {
@@ -46,7 +59,7 @@ afterAll(async () => {
 describe("login and logout", () => {
   const authDir = () => path.join(sb.home, ".ue-mcp");
   const registryJson = () => path.join(authDir(), "registry.json");
-  const cli = (args: string[], env: Record<string, string> = {}) => runCli(sb, args, { env: { UE_MCP_REGISTRY: registry.origin, ...env } });
+  const cli = (args: string[], env: Record<string, string> = {}) => runCli(sb, args, { env: { UE_MCP_REGISTRY: registry.origin, UE_MCP_AUTH_URL: registry.origin, ...env } });
 
   beforeAll(() => {
     fs.mkdirSync(authDir(), { recursive: true });
@@ -103,6 +116,57 @@ describe("login and logout", () => {
     const again = await cli(["logout"]);
     expect(again.code).toBe(0);
     expect(plain(again.stdout)).toContain("Not logged in.");
+  });
+});
+
+describe("email login", () => {
+  const cli = (args: string[], authDir: string, input?: string) =>
+    runCli(sb, args, { env: { UE_MCP_REGISTRY: registry.origin, UE_MCP_AUTH_URL: registry.origin, UE_MCP_AUTH_DIR: authDir }, input });
+
+  it("login --email sends a code, takes a retry after a wrong code, and caches the account without an @", async () => {
+    covers("cli.login.email");
+    const dir = sb.path("email-auth");
+    fs.mkdirSync(dir, { recursive: true });
+    const r = await cli(["login", "--email", "dev@example.com"], dir, "111111\n246810\n");
+    expect(r.code, r.stderr + r.stdout).toBe(0);
+    const out = plain(r.stdout);
+    expect(out).toContain("Sent a sign-in code to dev@example.com. It is valid for 10 minutes.");
+    expect(out).toContain("That code is wrong or has expired. Request a new one.");
+    expect(out).toContain("Created a UE-MCP account for dev@example.com.");
+    expect(out).toContain(`Logged in to ${registry.origin} as dev@example.com.`);
+    expect(out).not.toContain("@dev@example.com");
+    expect(out).not.toContain("uemcp_email");
+    expect(emailCalls.map((c) => [c.url, c.body.code])).toEqual([
+      ["/api/auth/email/start", undefined],
+      ["/api/auth/email/verify", "111111"],
+      ["/api/auth/email/verify", "246810"],
+    ]);
+    const saved = JSON.parse(fs.readFileSync(path.join(dir, "registry.json"), "utf8"));
+    expect(saved).toMatchObject({ token: "uemcp_email", login: "dev@example.com", email: "dev@example.com", method: "email", registry: registry.origin });
+
+    const out2 = await cli(["logout"], dir);
+    expect(plain(out2.stdout)).toContain(`Logged out of ${registry.origin} (was dev@example.com)`);
+  });
+
+  it("login --email prints the wait when the registry rate limits and caches nothing", async () => {
+    covers("cli.login.email");
+    const dir = sb.path("email-busy");
+    fs.mkdirSync(dir, { recursive: true });
+    const r = await cli(["login", "--email", "busy@example.com"], dir);
+    expect(r.code).toBe(1);
+    expect(r.stderr).toContain("too many requests; try again in 45 seconds");
+    expect(fs.existsSync(path.join(dir, "registry.json"))).toBe(false);
+  });
+
+  it("plain login without a terminal keeps the GitHub flow and never asks the registry for methods", async () => {
+    covers("cli.login");
+    const dir = sb.path("plain-auth");
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, "auth.json"), JSON.stringify({ token: "gho_plain", login: "octo", authorized_at: "2026-01-01T00:00:00Z" }));
+    const r = await cli(["login"], dir);
+    expect(r.code, r.stderr + r.stdout).toBe(0);
+    expect(plain(r.stdout)).toContain(`Logged in to ${registry.origin} as @registry-octo`);
+    expect(registry.requests.some((q) => q.url === "/api/auth/methods")).toBe(false);
   });
 });
 

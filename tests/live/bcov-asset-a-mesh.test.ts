@@ -113,6 +113,40 @@ describe("collision", () => {
     const shapes = Number(after.numBoxElems) + Number(after.numConvexElems) + Number(after.numSphereElems) + Number(after.numSphylElems);
     expect(shapes).toBe(Number(built.shapeCount));
   }, 600_000);
+
+  it("generate_mesh_collision keeps render bounds, welds unwelded faces and fits a BoundingBox (#1653)", async () => {
+    const before = await extent(CUBE);
+    const sameBounds = (e: Vec) => {
+      expect(e.x).toBeCloseTo(before.x, 2);
+      expect(e.y).toBeCloseTo(before.y, 2);
+      expect(e.z).toBeCloseTo(before.z, 2);
+    };
+
+    const cleared = await call("generate_mesh_collision", { assetPath: CUBE, op: "clear" }, 300_000);
+    expect((cleared.renderData as Json).valid).toBe(true);
+    sameBounds(await extent(CUBE));
+
+    // Render data splits the cube's faces at their hard edges; welding makes
+    // them one island, so one aligned box covers the whole cube.
+    const boxes = await call("generate_mesh_collision", { assetPath: CUBE, method: "AlignedBoxes", lodType: "RenderData", maxShapeCount: 1 }, 300_000);
+    const weld = boxes.weld as Json;
+    expect(weld.applied).toBe(true);
+    expect(Number(weld.islandsAfter)).toBe(1);
+    expect(Number(boxes.shapeCount)).toBe(1);
+    expect((boxes.renderData as Json).valid).toBe(true);
+    sameBounds(await extent(CUBE));
+
+    const fitted = await call("generate_mesh_collision", { assetPath: CUBE, method: "BoundingBox", lodType: "RenderData" }, 300_000);
+    expect(Number(fitted.shapeCount)).toBe(1);
+    expect((fitted.renderData as Json).valid).toBe(true);
+    const collision = await call("get_mesh_collision", { assetPath: CUBE });
+    expect(Number(collision.numBoxElems)).toBe(1);
+    expect(Number(collision.numConvexElems)).toBe(0);
+    sameBounds(await extent(CUBE));
+
+    const repeat = await call("generate_mesh_collision", { assetPath: CUBE, method: "BoundingBox", lodType: "RenderData" }, 300_000);
+    expect(repeat.changed).toBe(false);
+  }, 600_000);
 });
 
 describe("geometry edits", () => {

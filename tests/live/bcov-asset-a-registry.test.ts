@@ -89,6 +89,13 @@ describe("registry queries", () => {
     const depsByPkg = deps.dependenciesByPackage as Record<string, string[]>;
     expect(depsByPkg[CHILD]).toContain(PARENT);
     expect(Number(deps.totalDependencies)).toBeGreaterThan(0);
+
+    // assetPath and assetPaths name the same lookups, and an object path names its package (#1551).
+    const childObject = `${CHILD}.MI_BCovChild`;
+    const refsByAsset = await call("get_asset_referencers", { assetPath: `${PARENT}.M_BCovParent` });
+    expect((refsByAsset.referencersByPackage as Record<string, string[]>)[`${PARENT}.M_BCovParent`]).toContain(CHILD);
+    const depsByAssets = await call("get_asset_dependencies", { assetPaths: [childObject] });
+    expect((depsByAssets.dependenciesByPackage as Record<string, string[]>)[childObject]).toContain(PARENT);
   }, 120_000);
 
   it("asset_health_check and diagnose_registry track an asset through its deletion", async () => {
@@ -165,6 +172,13 @@ describe("asset hygiene", () => {
     expect(Number(renamed.redirectorsLeft), "a redirector to fix up").toBeGreaterThan(0);
     const audit = await call("audit_asset_hygiene", { directory: DIR, recursive: false, checks: ["redirectors"] });
     expect((audit.redirectors as { count: number }).count).toBeGreaterThan(0);
+
+    // deleteRedirectors=false repoints and saves the referencers but keeps the stubs (#1828).
+    const kept = await call("fixup_redirectors", { paths: [DIR], deleteRedirectors: false });
+    expect(kept.deleteRedirectors).toBe(false);
+    expect(Number(kept.deletedRedirectorCount)).toBe(0);
+    expect((kept.redirectors as Array<{ status: string }>).some((r) => r.status === "kept")).toBe(true);
+    expect((await listNames(DIR, "ObjectRedirector")).length).toBeGreaterThan(0);
 
     const fixup = await call("fixup_redirectors", { paths: [DIR] });
     expect(Number(fixup.redirectorCount)).toBeGreaterThan(0);

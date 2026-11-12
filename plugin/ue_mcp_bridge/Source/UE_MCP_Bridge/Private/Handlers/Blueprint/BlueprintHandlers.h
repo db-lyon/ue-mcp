@@ -52,6 +52,8 @@ private:
 	static TSharedPtr<FJsonValue> ListOverridableFunctions(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> ConnectPins(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> DeleteNode(const TSharedPtr<FJsonObject>& Params);
+	// #1487: open the Blueprint editor on one node. BlueprintHandlers_Focus.cpp.
+	static TSharedPtr<FJsonValue> FocusNode(const TSharedPtr<FJsonObject>& Params);
 	// #1132: ReconstructNode on one node, and breaking one or all links on a pin.
 	static TSharedPtr<FJsonValue> RefreshNode(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> DisconnectPins(const TSharedPtr<FJsonObject>& Params);
@@ -64,6 +66,8 @@ private:
 	static TSharedPtr<FJsonValue> SetComponentOverrideMaterials(const TSharedPtr<FJsonObject>& Params);
 	// #457: timeline track authoring (float / vector / linear-color / event).
 	static TSharedPtr<FJsonValue> AddTimelineTrack(const TSharedPtr<FJsonObject>& Params);
+	// #1654: remove a timeline, its template and every node bound to it.
+	static TSharedPtr<FJsonValue> RemoveTimeline(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SetClassDefault(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> RemoveComponent(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> DeleteVariable(const TSharedPtr<FJsonObject>& Params);

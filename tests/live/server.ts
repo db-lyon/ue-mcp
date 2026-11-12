@@ -24,6 +24,7 @@ import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+import { bridgeTokenDir } from "../../src/bridge/bridge-token.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 export const REPO_ROOT = path.resolve(here, "..", "..");
@@ -61,6 +62,9 @@ export class LiveServer {
     }
     env.HOME = sandbox;
     env.USERPROFILE = sandbox;
+    // The editor publishes its session token under the real home, which the
+    // sandbox just hid. Point the server back at it, resolved by this process.
+    env.UE_MCP_BRIDGE_TOKEN_DIR = bridgeTokenDir();
     env.UE_MCP_HOST = options.host ?? "127.0.0.1";
     if (options.port !== undefined) env.UE_MCP_PORT = String(options.port);
     env.UE_MCP_GLOBAL_CONFIG = path.join(sandbox, "global-config.yml");

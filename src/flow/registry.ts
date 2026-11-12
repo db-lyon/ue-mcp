@@ -90,7 +90,7 @@ export function buildFlowRegistry(tools: ToolDef[], baseDir?: string): TaskRegis
           // widget.remove_widget) declare 120s because their method has no
           // entry in the editor's own timeout table, and dropping it here gave
           // them the 30s default on every live call.
-          bridgeTaskClass(taskName, spec.bridge, paramMapperOf(spec), spec.timeoutMs, prep, spec.followUp),
+          bridgeTaskClass(taskName, spec.bridge, paramMapperOf(spec), spec.timeoutMs, prep, { followUp: spec.followUp, intercept: spec.intercept }),
         );
       }
     }

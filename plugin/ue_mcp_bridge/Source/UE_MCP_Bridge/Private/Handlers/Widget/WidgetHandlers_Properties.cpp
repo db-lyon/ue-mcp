@@ -7,6 +7,7 @@
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
 #include "WidgetGuidMap.h"
+#include "WidgetClassDefaults.h"
 #include "HandlerJsonProperty.h"
 #include "HandlerQuery.h"
 #include "WidgetBlueprint.h"
@@ -391,6 +392,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::ClearWidgetBinding(const TSharedPtr<FJso
 	TSharedPtr<FJsonValue> ResolveError;
 	UWidgetBlueprint* WidgetBP = MCPWidget::ResolveWidgetBlueprintOrError(AssetPath, ResolveError);
 	if (!WidgetBP) return ResolveError;
+	const MCPWidgetGuidMap::FCompileBaseline CompileBaseline = MCPWidgetGuidMap::CaptureBaseline(WidgetBP);
 
 	WidgetBP->Modify();
 	const int32 Removed = WidgetBP->Bindings.RemoveAll([&](const FDelegateEditorBinding& B)
@@ -415,13 +417,13 @@ TSharedPtr<FJsonValue> FWidgetHandlers::ClearWidgetBinding(const TSharedPtr<FJso
 	// meet a widget it generates a variable for that owns no entry in
 	// WidgetVariableNameToGuidMap, which it reports as a failure. CompileChecked
 	// makes the map match first and refuses to compile if it cannot.
-	const MCPWidgetGuidMap::FSyncReport GuidSync = MCPWidgetGuidMap::CompileChecked(WidgetBP);
-	if (!GuidSync.bCompiled)
+	const MCPWidgetGuidMap::FSyncReport GuidSync = MCPWidgetGuidMap::CompileChecked(WidgetBP, CompileBaseline);
+	if (GuidSync.WasRefused())
 	{
 		return MCPWidgetGuidMap::BlockedError(AssetPath, GuidSync);
 	}
 	FString SaveError;
-	const bool bSaved = SaveAssetPackageChecked(WidgetBP, SaveError);
+	const bool bSaved = MCPWidgetGuidMap::SaveIfCompiled(WidgetBP, GuidSync, SaveError);
 	MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveError);
 	MCPSetUpdated(Result);
 	MCPSetWidgetGuidOutcome(Result, GuidSync, AssetPath);
@@ -437,6 +439,8 @@ TSharedPtr<FJsonValue> FWidgetHandlers::ClearWidgetBinding(const TSharedPtr<FJso
 		TEXT("removes them. widget(extract_subtree) is the only action that writes Bindings, and it writes them onto the NEW blueprint it ")
 		TEXT("creates, never back onto this one. Record what widget(list_bindings) reports before clearing, and re-create the binding in ")
 		TEXT("the UMG editor if it is needed again."));
+	MCPSetWidgetCompileOutcome(Result, WidgetBP, AssetPath, GuidSync,
+		FString::Printf(TEXT("%d binding(s) on '%s' were cleared"), Removed, *WidgetName));
 	return MCPResult(Result);
 }
 
@@ -836,6 +840,7 @@ namespace
 			else if (Val == TEXT("center"))  Align = EHorizontalAlignment::HAlign_Center;
 			else if (Val == TEXT("right"))   Align = EHorizontalAlignment::HAlign_Right;
 			else if (Val == TEXT("fill"))    Align = EHorizontalAlignment::HAlign_Fill;
+			else return false; // enumerator names resolve through reflection (#1541)
 
 			if (UHorizontalBoxSlot* HSlot = Cast<UHorizontalBoxSlot>(BoxSlot))
 				HSlot->SetHorizontalAlignment(Align);
@@ -854,6 +859,7 @@ namespace
 			else if (Val == TEXT("center"))  Align = EVerticalAlignment::VAlign_Center;
 			else if (Val == TEXT("bottom"))  Align = EVerticalAlignment::VAlign_Bottom;
 			else if (Val == TEXT("fill"))    Align = EVerticalAlignment::VAlign_Fill;
+			else return false; // enumerator names resolve through reflection (#1541)
 
 			if (UHorizontalBoxSlot* HSlot = Cast<UHorizontalBoxSlot>(BoxSlot))
 				HSlot->SetVerticalAlignment(Align);
@@ -936,6 +942,19 @@ namespace
 		return false;
 	}
 
+	/** Write a property from its text form. An enum resolves its short, full and
+	 *  prefixed names or a number naming an enumerator, and refuses anything else:
+	 *  the engine importer keeps the old value on a name it does not know (#1540). */
+	bool MCPWidgetImportValueText(FProperty* Prop, void* Addr, const FString& Text, UObject* Owner, FString& OutError)
+	{
+		const FByteProperty* ByteProp = CastField<FByteProperty>(Prop);
+		if (Prop->IsA<FEnumProperty>() || (ByteProp && ByteProp->Enum))
+		{
+			return MCPJsonProperty::SetJsonOnPropertyWithOwner(Prop, Addr, MakeShared<FJsonValueString>(Text.TrimStartAndEnd()), Owner, OutError);
+		}
+		return Prop->ImportText_Direct(*Text, Addr, Owner, PPF_None) != nullptr;
+	}
+
 	/** slot.* properties: struct text and nested paths through reflection, the
 	 *  typed canvas and box slot routes, then any other slot UPROPERTY. Returns the
 	 *  refusal for a value the slot property will not take, or nullptr. */
@@ -999,7 +1018,8 @@ namespace
 						void* LeafAddr = LeafProp->ContainerPtrToValuePtr<void>(CurContainer);
 						FString PreviousText;
 						LeafProp->ExportText_Direct(PreviousText, LeafAddr, LeafAddr, Slot, PPF_None);
-						if (LeafProp->ImportText_Direct(*PropertyValue, LeafAddr, Slot, PPF_None))
+						FString LeafError;
+						if (MCPWidgetImportValueText(LeafProp, LeafAddr, PropertyValue, Slot, LeafError))
 						{
 							bPropertySet = true;
 							PreviousPropertyValue = PreviousText;
@@ -1008,8 +1028,8 @@ namespace
 						else
 						{
 							return MCPError(FString::Printf(
-								TEXT("Value '%s' is not valid for slot property '%s' (type %s). Use UE struct text, e.g. `(Value=1.0,SizeRule=Fill)` for Size or `(Left=8,Top=8,Right=8,Bottom=8)` for Padding."),
-								*PropertyValue, *SlotPropName, *LeafProp->GetCPPType()));
+								TEXT("Value '%s' is not valid for slot property '%s' (type %s)%s%s. Use UE struct text, e.g. `(Value=1.0,SizeRule=Fill)` for Size or `(Left=8,Top=8,Right=8,Bottom=8)` for Padding, or a JSON object."),
+								*PropertyValue, *SlotPropName, *LeafProp->GetCPPType(), LeafError.IsEmpty() ? TEXT("") : TEXT(": "), *LeafError));
 						}
 					}
 				}
@@ -1028,20 +1048,34 @@ namespace
 				bPropertySet = MCPWidgetSetBoxSlotProperty(Slot, SlotPropName, PropertyValue);
 			}
 
-			// Generic slot reflection fallback
+			// Generic slot reflection fallback. Every other slot class (SizeBox,
+			// WidgetSwitcher, Border, ScrollBox...) lands here, so an enum takes the
+			// same "Center" / "HAlign_Center" spellings the typed box route does
+			// (#1541), and the slot is synchronized so the preview shows the write.
 			if (!bPropertySet)
 			{
-				FProperty* SlotProp = Slot->GetClass()->FindPropertyByName(FName(*SlotPropName));
+				FString ReflectedName = SlotPropName;
+				if (ReflectedName.Equals(TEXT("hAlign"), ESearchCase::IgnoreCase)) ReflectedName = TEXT("HorizontalAlignment");
+				else if (ReflectedName.Equals(TEXT("vAlign"), ESearchCase::IgnoreCase)) ReflectedName = TEXT("VerticalAlignment");
+				FProperty* SlotProp = Slot->GetClass()->FindPropertyByName(FName(*ReflectedName));
 				if (SlotProp)
 				{
 					void* SlotValuePtr = SlotProp->ContainerPtrToValuePtr<void>(Slot);
 					FString PreviousText;
 					SlotProp->ExportText_Direct(PreviousText, SlotValuePtr, SlotValuePtr, Slot, PPF_None);
-					if (SlotProp->ImportText_Direct(*PropertyValue, SlotValuePtr, Slot, PPF_None))
+					FString SetError;
+					if (MCPWidgetImportValueText(SlotProp, SlotValuePtr, PropertyValue, Slot, SetError))
 					{
 						bPropertySet = true;
 						PreviousPropertyValue = PreviousText;
 						bCapturedPreviousValue = true;
+						Slot->SynchronizeProperties();
+					}
+					else
+					{
+						return MCPError(FString::Printf(TEXT("Value '%s' is not valid for slot property '%s' on %s (type %s)%s%s"),
+							*PropertyValue, *SlotPropName, *Slot->GetClass()->GetName(), *SlotProp->GetCPPType(),
+							SetError.IsEmpty() ? TEXT("") : TEXT(": "), *SetError));
 					}
 				}
 			}
@@ -1089,7 +1123,8 @@ namespace
 			void* ValuePtr = FinalProp->ContainerPtrToValuePtr<void>(CurrentContainer);
 			FString PreviousText;
 			FinalProp->ExportText_Direct(PreviousText, ValuePtr, ValuePtr, FoundWidget, PPF_None);
-			if (FinalProp->ImportText_Direct(*PropertyValue, ValuePtr, FoundWidget, PPF_None))
+			FString SetError;
+			if (MCPWidgetImportValueText(FinalProp, ValuePtr, PropertyValue, FoundWidget, SetError))
 			{
 				FoundWidget->PostEditChange();
 				bPropertySet = true;
@@ -1105,43 +1140,171 @@ namespace
 			else
 			{
 				return MCPError(FString::Printf(
-					TEXT("Value '%s' is not valid for property '%s' (type %s). Use UE's text format (e.g. `(X=64,Y=64)` for FVector2D)."),
-					*PropertyValue, *FinalProp->GetName(), *FinalProp->GetCPPType()));
+					TEXT("Value '%s' is not valid for property '%s' (type %s)%s%s. Use UE's text format (e.g. `(X=64,Y=64)` for FVector2D) or a JSON object."),
+					*PropertyValue, *FinalProp->GetName(), *FinalProp->GetCPPType(), SetError.IsEmpty() ? TEXT("") : TEXT(": "), *SetError));
 			}
 		}
 		return nullptr;
 	}
 
+	/** A JSON object or array value: the property (slot.* on the slot, dotted
+	 *  paths into structs) is filled field by field. OutValueText is the value
+	 *  as UE export text once written. Returns the refusal, or nullptr (#1540). */
+	TSharedPtr<FJsonValue> MCPWidgetApplyJsonProperty(
+		UWidgetBlueprint* WidgetBP, UWidget* FoundWidget, const FString& PropertyName, const TSharedPtr<FJsonValue>& Value,
+		FMCPWidgetPropertyCapture& Capture, FString& OutValueText)
+	{
+		const bool bSlot = PropertyName.StartsWith(TEXT("slot."), ESearchCase::IgnoreCase);
+		UObject* Target = bSlot ? static_cast<UObject*>(FoundWidget->Slot) : static_cast<UObject*>(FoundWidget);
+		if (!Target)
+		{
+			return MCPError(FString::Printf(TEXT("Widget '%s' has no slot (it is the root, or not inside a panel), so '%s' cannot be set"),
+				*FoundWidget->GetName(), *PropertyName));
+		}
+		const FString Path = bSlot ? PropertyName.Mid(5) : PropertyName;
+
+		FProperty* Prop = nullptr;
+		void* Addr = nullptr;
+		UObject* LeafOwner = nullptr;
+		FString ResolveError;
+		if (!MCPJsonProperty::ResolveDottedPath(Target, Path, Prop, Addr, LeafOwner, ResolveError))
+		{
+			return MCPError(FString::Printf(TEXT("Property '%s' not found on %s: %s"), *Path, *Target->GetClass()->GetName(), *ResolveError));
+		}
+		UObject* Owner = LeafOwner ? LeafOwner : Target;
+
+		// #200: a slot write that is not recorded is lost to the compile.
+		WidgetBP->Modify();
+		if (WidgetBP->WidgetTree) WidgetBP->WidgetTree->Modify();
+		FoundWidget->Modify();
+		Target->Modify();
+		if (Owner != Target) Owner->Modify();
+
+		FString PreviousText;
+		Prop->ExportText_Direct(PreviousText, Addr, Addr, Owner, PPF_None);
+		FString SetError;
+		if (!MCPJsonProperty::SetJsonOnPropertyWithOwner(Prop, Addr, Value, Owner, SetError))
+		{
+			return MCPError(FString::Printf(
+				TEXT("The JSON value does not fit '%s' (type %s): %s. Give an object whose keys are its fields, e.g. {\"Left\":8,\"Top\":8,\"Right\":8,\"Bottom\":8} for a margin, or the UE text form (Left=8,Top=8,Right=8,Bottom=8)."),
+				*PropertyName, *Prop->GetCPPType(), *SetError));
+		}
+		Prop->ExportText_Direct(OutValueText, Addr, Addr, Owner, PPF_None);
+		if (bSlot) FoundWidget->Slot->SynchronizeProperties();
+		else FoundWidget->PostEditChange();
+
+		Capture.PreviousPropertyValue = PreviousText;
+		Capture.bCapturedPreviousValue = true;
+		Capture.bCapturedOnFlatWidgetProperty = !bSlot && !Path.Contains(TEXT("."));
+		if (Capture.bCapturedOnFlatWidgetProperty)
+		{
+			Capture.FlatWidgetPropertyName = Path;
+			Capture.bFlatCaptureWasStringProperty = Prop->IsA<FStrProperty>();
+		}
+		return nullptr;
+	}
+
+	/** What writing a property onto the live play widgets did. */
+	struct FMCPWidgetLiveWrite
+	{
+		int32 Updated = 0;
+		TArray<FString> Missed;
+	};
+
+	/**
+	 * Write the property onto every live widget made from WidgetBP in the play
+	 * world, through the same routes the template write took, and push it to
+	 * Slate. This makes a property edit visible during play without the compile
+	 * that would reinstance those widgets and drop their runtime content (#1553).
+	 */
+	FMCPWidgetLiveWrite MCPWidgetWriteLiveWidgets(
+		UWidgetBlueprint* WidgetBP, const FString& WidgetName, const FString& PropertyName, const FString& PropertyValue)
+	{
+		FMCPWidgetLiveWrite Outcome;
+		for (UUserWidget* Live : MCPWidgetPlaySession::LiveWidgets(WidgetBP))
+		{
+			UWidget* Target = Live->GetWidgetFromName(FName(*WidgetName));
+			if (!Target)
+			{
+				Outcome.Missed.Add(Live->GetPathName());
+				continue;
+			}
+			FMCPWidgetPropertyCapture Unused;
+			bool bSet = MCPWidgetApplyTypedProperty(Target, PropertyName, PropertyValue);
+			if (!bSet && PropertyName.StartsWith(TEXT("slot."), ESearchCase::IgnoreCase))
+			{
+				MCPWidgetApplySlotProperty(WidgetBP, Target, PropertyName, PropertyValue, Unused, bSet);
+			}
+			if (!bSet)
+			{
+				MCPWidgetApplyReflectedProperty(Target, PropertyName, PropertyValue, Unused, bSet);
+			}
+			if (!bSet)
+			{
+				Outcome.Missed.Add(Live->GetPathName());
+				continue;
+			}
+			Target->SynchronizeProperties();
+			if (Target->Slot) Target->Slot->SynchronizeProperties();
+			++Outcome.Updated;
+		}
+		return Outcome;
+	}
+
 	/** Compile and save a widget Blueprint whose property was written, and the
-	 *  result with the rollback the capture allows. */
+	 *  result with the rollback the capture allows. With LiveWrite the compile
+	 *  and save wait for play to end instead. */
 	TSharedPtr<FJsonValue> MCPWidgetFinishSetProperty(
 		UWidgetBlueprint* WidgetBP, const FString& AssetPath, const FString& WidgetName,
-		const FString& PropertyName, const FString& PropertyValue, const FMCPWidgetPropertyCapture& Capture)
+		const FString& PropertyName, const FString& PropertyValue, const FMCPWidgetPropertyCapture& Capture,
+		const MCPWidgetGuidMap::FCompileBaseline& CompileBaseline, const FMCPWidgetLiveWrite* LiveWrite = nullptr)
 	{
 		const FString& PreviousPropertyValue = Capture.PreviousPropertyValue;
 		const bool bCapturedPreviousValue = Capture.bCapturedPreviousValue;
 		const bool bCapturedOnFlatWidgetProperty = Capture.bCapturedOnFlatWidgetProperty;
 		const FString& FlatWidgetPropertyName = Capture.FlatWidgetPropertyName;
 		const bool bFlatCaptureWasStringProperty = Capture.bFlatCaptureWasStringProperty;
-		// Mark package dirty and save
-		WidgetBP->MarkPackageDirty();
-		// #728: see ClearWidgetBinding. A property write compiles the blueprint,
-		// and the compile is where a missing widget variable GUID surfaces.
-		const MCPWidgetGuidMap::FSyncReport GuidSync = MCPWidgetGuidMap::CompileChecked(WidgetBP);
-		if (!GuidSync.bCompiled)
-		{
-			return MCPWidgetGuidMap::BlockedError(AssetPath, GuidSync);
-		}
-		FString SaveError;
-		const bool bSaved = SaveAssetPackageChecked(WidgetBP, SaveError);
 
 		auto Result = MCPSuccess();
 		MCPSetUpdated(Result);
-		MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveError);
+		MCPWidgetGuidMap::FSyncReport GuidSync;
+		if (LiveWrite)
+		{
+			MCPWidgetPlaySession::DeferCompile(WidgetBP, CompileBaseline);
+			Result->SetBoolField(TEXT("saved"), false);
+			Result->SetBoolField(TEXT("compileDeferred"), true);
+			Result->SetStringField(TEXT("compileStatus"), WidgetCompileStatusString(WidgetBP));
+			Result->SetNumberField(TEXT("liveWidgetsUpdated"), LiveWrite->Updated);
+			if (LiveWrite->Missed.Num())
+			{
+				TArray<TSharedPtr<FJsonValue>> Missed;
+				for (const FString& Path : LiveWrite->Missed) Missed.Add(MakeShared<FJsonValueString>(Path));
+				Result->SetArrayField(TEXT("liveWidgetsMissed"), Missed);
+			}
+			Result->SetStringField(TEXT("playSessionNote"), FString::Printf(
+				TEXT("A play-in-editor session is running, so '%s' was not compiled: compiling would reinstance the live widgets made ")
+				TEXT("from it and drop the content the game built into them. The value was written to the asset and to %d live ")
+				TEXT("widget(s) instead. The asset is compiled and saved when play ends."),
+				*AssetPath, LiveWrite->Updated));
+		}
+		else
+		{
+			WidgetBP->MarkPackageDirty();
+			// #728: see ClearWidgetBinding. A property write compiles the blueprint,
+			// and the compile is where a missing widget variable GUID surfaces.
+			GuidSync = MCPWidgetGuidMap::CompileChecked(WidgetBP, CompileBaseline);
+			if (GuidSync.WasRefused())
+			{
+				return MCPWidgetGuidMap::BlockedError(AssetPath, GuidSync);
+			}
+			FString SaveError;
+			const bool bSaved = MCPWidgetGuidMap::SaveIfCompiled(WidgetBP, GuidSync, SaveError);
+			MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveError);
+			MCPSetWidgetGuidOutcome(Result, GuidSync, AssetPath);
+		}
 		Result->SetStringField(TEXT("widgetName"), WidgetName);
 		Result->SetStringField(TEXT("propertyName"), PropertyName);
 		Result->SetStringField(TEXT("propertyValue"), PropertyValue);
-		MCPSetWidgetGuidOutcome(Result, GuidSync, AssetPath);
 
 		if (bCapturedPreviousValue) { Result->SetStringField(TEXT("previousPropertyValue"), PreviousPropertyValue); }
 		if (bCapturedPreviousValue && !PreviousPropertyValue.IsEmpty())
@@ -1210,6 +1373,11 @@ namespace
 				TEXT("UPROPERTY name and rolls back exactly."), *PropertyName));
 		}
 
+		if (!LiveWrite)
+		{
+			MCPSetWidgetCompileOutcome(Result, WidgetBP, AssetPath, GuidSync,
+				FString::Printf(TEXT("'%s' on '%s' was set"), *PropertyName, *WidgetName));
+		}
 		return MCPResult(Result);
 	}
 }
@@ -1225,13 +1393,20 @@ TSharedPtr<FJsonValue> FWidgetHandlers::SetWidgetProperty(const TSharedPtr<FJson
 	FString PropertyName;
 	if (auto Err = RequireString(Params, TEXT("propertyName"), PropertyName)) return Err;
 
+	// `propertyValue` is a spec alias, resolved by the registry (#1057). An object
+	// or array fills a struct or array field by field; anything else is text (#1540).
 	FString PropertyValue;
-	// `propertyValue` is a spec alias, resolved by the registry (#1057).
-	if (auto Err = RequireString(Params, TEXT("value"), PropertyValue)) return Err;
+	TSharedPtr<FJsonValue> StructuredValue = TryGetParam(Params, TEXT("value"));
+	if (!StructuredValue.IsValid() || (StructuredValue->Type != EJson::Object && StructuredValue->Type != EJson::Array))
+	{
+		StructuredValue.Reset();
+		if (auto Err = RequireString(Params, TEXT("value"), PropertyValue)) return Err;
+	}
 
 	TSharedPtr<FJsonValue> ResolveError;
 	UWidgetBlueprint* WidgetBP = MCPWidget::ResolveWidgetBlueprintOrError(AssetPath, ResolveError);
 	if (!WidgetBP) return ResolveError;
+	const MCPWidgetGuidMap::FCompileBaseline CompileBaseline = MCPWidgetGuidMap::CaptureBaseline(WidgetBP);
 
 	if (!WidgetBP->WidgetTree) return MCPWidget::MissingWidgetTreeError(AssetPath);
 
@@ -1244,7 +1419,14 @@ TSharedPtr<FJsonValue> FWidgetHandlers::SetWidgetProperty(const TSharedPtr<FJson
 	}
 
 	FMCPWidgetPropertyCapture Capture;
-	bool bPropertySet = MCPWidgetApplyTypedProperty(FoundWidget, PropertyName, PropertyValue);
+	if (StructuredValue.IsValid())
+	{
+		if (auto Refusal = MCPWidgetApplyJsonProperty(WidgetBP, FoundWidget, PropertyName, StructuredValue, Capture, PropertyValue))
+		{
+			return Refusal;
+		}
+	}
+	bool bPropertySet = StructuredValue.IsValid() || MCPWidgetApplyTypedProperty(FoundWidget, PropertyName, PropertyValue);
 
 	// ── Slot properties (slot.anchors, slot.alignment, slot.position, slot.autoSize, slot.*) ──
 	// Case-insensitive: "Slot.padding" and "slot.padding" both route here (#364).
@@ -1273,7 +1455,16 @@ TSharedPtr<FJsonValue> FWidgetHandlers::SetWidgetProperty(const TSharedPtr<FJson
 	{
 		return MCPError(FString::Printf(TEXT("Failed to set property '%s' on widget '%s'. Property not found or value format invalid."), *PropertyName, *WidgetName));
 	}
-	return MCPWidgetFinishSetProperty(WidgetBP, AssetPath, WidgetName, PropertyName, PropertyValue, Capture);
+
+	// #1553: during play a compile would reinstance the live widgets and empty
+	// them, so the write goes to them directly and the compile waits for play
+	// to end. A blueprint already in error compiles now, as its baseline needs.
+	if (MCPWidgetPlaySession::IsActive() && WidgetBP->Status != BS_Error)
+	{
+		const FMCPWidgetLiveWrite LiveWrite = MCPWidgetWriteLiveWidgets(WidgetBP, WidgetName, PropertyName, PropertyValue);
+		return MCPWidgetFinishSetProperty(WidgetBP, AssetPath, WidgetName, PropertyName, PropertyValue, Capture, CompileBaseline, &LiveWrite);
+	}
+	return MCPWidgetFinishSetProperty(WidgetBP, AssetPath, WidgetName, PropertyName, PropertyValue, Capture, CompileBaseline);
 }
 
 // ─── #1300 build_tree ───────────────────────────────────────────────────────
@@ -1387,6 +1578,74 @@ namespace
 		if (!bSet) OutError = TEXT("property not found or value format invalid");
 		return bSet;
 	}
+
+	/** One bulk_set_widget_properties write. Keys address what set_widget_property
+	 *  does: slot.* on the widget's slot, dotted paths, its typed names (#1632).
+	 *  OutPrevious replays through this action, or is null when the write took a
+	 *  typed route whose input format the old value does not read back as. */
+	bool ApplyBulkWidgetProperty(UWidgetBlueprint* WidgetBP, UWidget* Widget, const FString& Key,
+		const TSharedPtr<FJsonValue>& Value, TSharedPtr<FJsonValue>& OutPrevious, FString& OutError)
+	{
+		OutPrevious.Reset();
+		const bool bSlot = Key.StartsWith(TEXT("slot."), ESearchCase::IgnoreCase);
+		UObject* Target = bSlot ? static_cast<UObject*>(Widget->Slot) : static_cast<UObject*>(Widget);
+		if (!Target) { OutError = TEXT("the widget has no slot (it is the root, or not inside a panel)"); return false; }
+		const FString Path = bSlot ? Key.Mid(5) : Key;
+		const bool bStructured = Value->Type == EJson::Object || Value->Type == EJson::Array;
+
+		// #200: a slot write that is not recorded is lost to the compile.
+		WidgetBP->Modify();
+		if (WidgetBP->WidgetTree) WidgetBP->WidgetTree->Modify();
+		Widget->Modify();
+		Target->Modify();
+
+		FProperty* Prop = nullptr;
+		void* Addr = nullptr;
+		UObject* LeafOwner = nullptr;
+		FString ResolveError, SetError;
+		if (MCPJsonProperty::ResolveDottedPath(Target, Path, Prop, Addr, LeafOwner, ResolveError))
+		{
+			UObject* Owner = LeafOwner ? LeafOwner : Target;
+			if (Owner != Target) Owner->Modify();
+			const TSharedPtr<FJsonValue> Previous = MCPQuery::PropertyToJson(Prop, Addr);
+			if (MCPJsonProperty::SetJsonOnPropertyWithOwner(Prop, Addr, Value, Owner, SetError))
+			{
+				Widget->PostEditChange();
+				OutPrevious = Previous;
+				return true;
+			}
+			if (bStructured) { OutError = SetError; return false; }
+		}
+		else if (bStructured)
+		{
+			OutError = FString::Printf(TEXT("property not found: %s"), *ResolveError);
+			return false;
+		}
+
+		// A scalar the reflected path did not take: set_widget_property's typed
+		// routes ("R,G,B,A" colours, canvas slot anchors and position).
+		FString Text;
+		if (Value->Type == EJson::Boolean) Text = Value->AsBool() ? TEXT("true") : TEXT("false");
+		else if (Value->Type == EJson::Number) Text = FString::SanitizeFloat(Value->AsNumber());
+		else Text = Value->AsString();
+
+		FMCPWidgetPropertyCapture Capture;
+		bool bSet = MCPWidgetApplyTypedProperty(Widget, Key, Text);
+		if (!bSet && bSlot)
+		{
+			if (auto Refusal = MCPWidgetApplySlotProperty(WidgetBP, Widget, Key, Text, Capture, bSet)) { OutError = BuildTreeErrorText(Refusal); return false; }
+		}
+		if (!bSet)
+		{
+			OutError = !SetError.IsEmpty() ? SetError : FString::Printf(TEXT("property not found: %s"), *ResolveError);
+			return false;
+		}
+		if (Capture.bCapturedPreviousValue && !Capture.PreviousPropertyValue.IsEmpty())
+		{
+			OutPrevious = MakeShared<FJsonValueString>(Capture.PreviousPropertyValue);
+		}
+		return true;
+	}
 }
 
 TSharedPtr<FJsonValue> FWidgetHandlers::BuildTree(const TSharedPtr<FJsonObject>& Params)
@@ -1425,6 +1684,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::BuildTree(const TSharedPtr<FJsonObject>&
 	TSharedPtr<FJsonValue> ResolveError;
 	UWidgetBlueprint* WidgetBP = MCPWidget::ResolveWidgetBlueprintOrError(AssetPath, ResolveError);
 	if (!WidgetBP) return ResolveError;
+	const MCPWidgetGuidMap::FCompileBaseline CompileBaseline = MCPWidgetGuidMap::CaptureBaseline(WidgetBP);
 	if (!WidgetBP->WidgetTree) return MCPWidget::MissingWidgetTreeError(AssetPath);
 	UWidgetTree* Tree = WidgetBP->WidgetTree;
 
@@ -1494,6 +1754,23 @@ TSharedPtr<FJsonValue> FWidgetHandlers::BuildTree(const TSharedPtr<FJsonObject>&
 			return MCPError(FString::Printf(TEXT("%s: failed to construct %s. Nothing was kept."), *Nodes[i].Path, *Nodes[i].Class->GetName()));
 		}
 	}
+	// Class defaults as they are at placement, less the keys this call sets.
+	MCPWidgetClassDefaults::FSnapshot ClassDefaults;
+	for (int32 i = 0; i < Nodes.Num(); ++i)
+	{
+		TSet<FName> Explicit;
+		if (Nodes[i].Properties.IsValid())
+		{
+			for (const auto& Pair : Nodes[i].Properties->Values)
+			{
+				FString Head(Pair.Key);
+				int32 Dot = INDEX_NONE;
+				if (Head.FindChar(TEXT('.'), Dot)) Head.LeftInline(Dot);
+				Explicit.Add(FName(*Head));
+			}
+		}
+		MCPWidgetClassDefaults::Capture(Built[i], Explicit, ClassDefaults);
+	}
 	RootWidget = Built[RootIndex];
 	if (bBecomesRoot)
 	{
@@ -1534,13 +1811,14 @@ TSharedPtr<FJsonValue> FWidgetHandlers::BuildTree(const TSharedPtr<FJsonObject>&
 	}
 
 	WidgetBP->MarkPackageDirty();
-	const MCPWidgetGuidMap::FSyncReport GuidSync = MCPWidgetGuidMap::CompileChecked(WidgetBP);
-	if (!GuidSync.bCompiled)
+	const MCPWidgetGuidMap::FSyncReport GuidSync = MCPWidgetGuidMap::CompileChecked(WidgetBP, CompileBaseline);
+	if (GuidSync.WasRefused())
 	{
 		return MCPWidgetGuidMap::BlockedError(AssetPath, GuidSync);
 	}
+	const TArray<TSharedPtr<FJsonValue>> RestoredDefaults = MCPWidgetClassDefaults::Restore(WidgetBP, ClassDefaults);
 	FString SaveError;
-	const bool bSaved = SaveAssetPackageChecked(WidgetBP, SaveError);
+	const bool bSaved = MCPWidgetGuidMap::SaveIfCompiled(WidgetBP, GuidSync, SaveError);
 
 	TArray<TSharedPtr<FJsonValue>> Created;
 	for (int32 i = 0; i < Nodes.Num(); ++i)
@@ -1564,13 +1842,14 @@ TSharedPtr<FJsonValue> FWidgetHandlers::BuildTree(const TSharedPtr<FJsonObject>&
 	Result->SetNumberField(TEXT("widgetCount"), Created.Num());
 	Result->SetNumberField(TEXT("propertiesSet"), PropertiesSet);
 	MCPSetWidgetGuidOutcome(Result, GuidSync, AssetPath);
-	MCPSetWidgetCompileOutcome(Result, WidgetBP, AssetPath,
-		FString::Printf(TEXT("A %d-widget tree under '%s' was built"), Created.Num(), *RootWidget->GetName()));
+	MCPWidgetClassDefaults::Report(Result, RestoredDefaults);
 
 	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
 	Payload->SetStringField(TEXT("assetPath"), AssetPath);
 	Payload->SetStringField(TEXT("widgetName"), RootWidget->GetName());
 	MCPSetRollback(Result, TEXT("remove_widget"), Payload);
+	MCPSetWidgetCompileOutcome(Result, WidgetBP, AssetPath, GuidSync,
+		FString::Printf(TEXT("A %d-widget tree under '%s' was built"), Created.Num(), *RootWidget->GetName()));
 	return MCPResult(Result);
 }
 
@@ -1698,6 +1977,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::SetWidgetStyle(const TSharedPtr<FJsonObj
 	TSharedPtr<FJsonValue> ResolveError;
 	UWidgetBlueprint* WidgetBP = MCPWidget::ResolveWidgetBlueprintOrError(AssetPath, ResolveError);
 	if (!WidgetBP) return ResolveError;
+	const MCPWidgetGuidMap::FCompileBaseline CompileBaseline = MCPWidgetGuidMap::CaptureBaseline(WidgetBP);
 	if (!WidgetBP->WidgetTree) return MCPWidget::MissingWidgetTreeError(AssetPath);
 
 	UWidget* Widget = MCPWidget::FindWidgetByName(WidgetBP->WidgetTree, WidgetName);
@@ -1721,13 +2001,13 @@ TSharedPtr<FJsonValue> FWidgetHandlers::SetWidgetStyle(const TSharedPtr<FJsonObj
 		return MCPError(FString::Printf(TEXT("Failed to set '%s': %s"), *PropertyName, *SetErr));
 	}
 	// #728: see ClearWidgetBinding.
-	const MCPWidgetGuidMap::FSyncReport GuidSync = MCPWidgetGuidMap::CompileChecked(WidgetBP);
-	if (!GuidSync.bCompiled)
+	const MCPWidgetGuidMap::FSyncReport GuidSync = MCPWidgetGuidMap::CompileChecked(WidgetBP, CompileBaseline);
+	if (GuidSync.WasRefused())
 	{
 		return MCPWidgetGuidMap::BlockedError(AssetPath, GuidSync);
 	}
 	FString SaveError;
-	const bool bSaved = SaveAssetPackageChecked(WidgetBP, SaveError);
+	const bool bSaved = MCPWidgetGuidMap::SaveIfCompiled(WidgetBP, GuidSync, SaveError);
 
 	auto Result = MCPSuccess();
 	MCPSetUpdated(Result);
@@ -1750,6 +2030,8 @@ TSharedPtr<FJsonValue> FWidgetHandlers::SetWidgetStyle(const TSharedPtr<FJsonObj
 	Payload->SetField(TEXT("value"), PreviousValue);
 	MCPSetRollback(Result, TEXT("set_widget_style"), Payload);
 	Result->SetBoolField(TEXT("rollbackLossy"), false);
+	MCPSetWidgetCompileOutcome(Result, WidgetBP, AssetPath, GuidSync,
+		FString::Printf(TEXT("'%s' on '%s' was set"), *PropertyName, *WidgetName));
 	return MCPResult(Result);
 }
 
@@ -1768,6 +2050,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::BulkSetWidgetProperties(const TSharedPtr
 	TSharedPtr<FJsonValue> ResolveError;
 	UWidgetBlueprint* WidgetBP = MCPWidget::ResolveWidgetBlueprintOrError(AssetPath, ResolveError);
 	if (!WidgetBP) return ResolveError;
+	const MCPWidgetGuidMap::FCompileBaseline CompileBaseline = MCPWidgetGuidMap::CaptureBaseline(WidgetBP);
 	if (!WidgetBP->WidgetTree) return MCPWidget::MissingWidgetTreeError(AssetPath);
 
 	TArray<TSharedPtr<FJsonValue>> Results;
@@ -1776,6 +2059,8 @@ TSharedPtr<FJsonValue> FWidgetHandlers::BulkSetWidgetProperties(const TSharedPtr
 	// properties this call changed, in the order it changed them, and touch
 	// nothing it did not.
 	TArray<TSharedPtr<FJsonValue>> InversePropertyEntries;
+	// Writes that landed through a typed route with no exact inverse.
+	TArray<TSharedPtr<FJsonValue>> NotRestorable;
 	int32 Applied = 0, Failed = 0;
 	int32 EntryIndex = -1;
 	for (const TSharedPtr<FJsonValue>& EV : *Entries)
@@ -1815,28 +2100,23 @@ TSharedPtr<FJsonValue> FWidgetHandlers::BulkSetWidgetProperties(const TSharedPtr
 			R->SetStringField(TEXT("error"), TEXT("widget/property/value missing"));
 			Results.Add(MakeShared<FJsonValueObject>(R)); ++Failed; continue;
 		}
-		FProperty* Prop = Widget->GetClass()->FindPropertyByName(FName(*PName));
-		if (!Prop)
-		{
-			R->SetBoolField(TEXT("ok"), false);
-			R->SetStringField(TEXT("error"), TEXT("property not found"));
-			Results.Add(MakeShared<FJsonValueObject>(R)); ++Failed; continue;
-		}
-		Widget->Modify();
-		void* EntryValuePtr = Prop->ContainerPtrToValuePtr<void>(Widget);
-		const TSharedPtr<FJsonValue> EntryPrevious = MCPQuery::PropertyToJson(Prop, EntryValuePtr);
+		TSharedPtr<FJsonValue> EntryPrevious;
 		FString SetErr;
-		if (MCPJsonProperty::SetJsonOnProperty(Prop, EntryValuePtr, Val, SetErr))
+		if (ApplyBulkWidgetProperty(WidgetBP, Widget, PName, Val, EntryPrevious, SetErr))
 		{
 			R->SetBoolField(TEXT("ok"), true); ++Applied;
-			// PropertyToJson answers for every property kind, so every write that
-			// lands contributes exactly one inverse entry and the two counts move
-			// together.
-			TSharedPtr<FJsonObject> Inverse = MakeShared<FJsonObject>();
-			Inverse->SetStringField(TEXT("widgetName"), WName);
-			Inverse->SetStringField(TEXT("propertyName"), PName);
-			Inverse->SetField(TEXT("value"), EntryPrevious);
-			InversePropertyEntries.Add(MakeShared<FJsonValueObject>(Inverse));
+			if (EntryPrevious.IsValid())
+			{
+				TSharedPtr<FJsonObject> Inverse = MakeShared<FJsonObject>();
+				Inverse->SetStringField(TEXT("widgetName"), WName);
+				Inverse->SetStringField(TEXT("propertyName"), PName);
+				Inverse->SetField(TEXT("value"), EntryPrevious);
+				InversePropertyEntries.Add(MakeShared<FJsonValueObject>(Inverse));
+			}
+			else
+			{
+				NotRestorable.Add(MakeShared<FJsonValueString>(FString::Printf(TEXT("%s.%s"), *WName, *PName)));
+			}
 		}
 		else
 		{
@@ -1848,13 +2128,13 @@ TSharedPtr<FJsonValue> FWidgetHandlers::BulkSetWidgetProperties(const TSharedPtr
 	}
 
 	// #728: see ClearWidgetBinding.
-	const MCPWidgetGuidMap::FSyncReport GuidSync = MCPWidgetGuidMap::CompileChecked(WidgetBP);
-	if (!GuidSync.bCompiled)
+	const MCPWidgetGuidMap::FSyncReport GuidSync = MCPWidgetGuidMap::CompileChecked(WidgetBP, CompileBaseline);
+	if (GuidSync.WasRefused())
 	{
 		return MCPWidgetGuidMap::BlockedError(AssetPath, GuidSync);
 	}
 	FString SaveError;
-	const bool bSaved = SaveAssetPackageChecked(WidgetBP, SaveError);
+	const bool bSaved = MCPWidgetGuidMap::SaveIfCompiled(WidgetBP, GuidSync, SaveError);
 
 	auto Result = MCPSuccess();
 	MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveError);
@@ -1873,15 +2153,26 @@ TSharedPtr<FJsonValue> FWidgetHandlers::BulkSetWidgetProperties(const TSharedPtr
 		Payload->SetStringField(TEXT("assetPath"), AssetPath);
 		Payload->SetArrayField(TEXT("properties"), InversePropertyEntries);
 		MCPSetRollback(Result, TEXT("bulk_set_widget_properties"), Payload);
-		Result->SetBoolField(TEXT("rollbackLossy"), false);
+		Result->SetBoolField(TEXT("rollbackLossy"), NotRestorable.Num() > 0);
 	}
-	else
+	if (NotRestorable.Num() > 0)
+	{
+		Result->SetArrayField(TEXT("notRestorable"), NotRestorable);
+		if (InversePropertyEntries.Num() == 0) Result->SetBoolField(TEXT("rollbackPossible"), false);
+		Result->SetStringField(TEXT("rollbackNote"),
+			TEXT("The writes in `notRestorable` went through a typed route (comma-separated colours, canvas slot anchors or position) ")
+			TEXT("whose input format the old value does not read back as, so the rollback leaves them. Write them by their full ")
+			TEXT("UPROPERTY path for an exact inverse."));
+	}
+	else if (InversePropertyEntries.Num() == 0)
 	{
 		Result->SetBoolField(TEXT("rollbackPossible"), false);
 		Result->SetStringField(TEXT("rollbackNote"),
 			TEXT("No write landed, so nothing was changed and there is nothing to restore. Every entry was rejected: `results` says why ")
 			TEXT("for each one."));
 	}
+	MCPSetWidgetCompileOutcome(Result, WidgetBP, AssetPath, GuidSync,
+		FString::Printf(TEXT("%d widget property write(s) were applied"), Applied));
 	return MCPResult(Result);
 }
 
@@ -1900,6 +2191,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::ReorderChild(const TSharedPtr<FJsonObjec
 	TSharedPtr<FJsonValue> ResolveError;
 	UWidgetBlueprint* WidgetBP = MCPWidget::ResolveWidgetBlueprintOrError(AssetPath, ResolveError);
 	if (!WidgetBP) return ResolveError;
+	const MCPWidgetGuidMap::FCompileBaseline CompileBaseline = MCPWidgetGuidMap::CaptureBaseline(WidgetBP);
 	if (!WidgetBP->WidgetTree) return MCPWidget::MissingWidgetTreeError(AssetPath);
 	UWidget* Widget = MCPWidget::FindWidgetByName(WidgetBP->WidgetTree, WidgetName);
 	if (!Widget) return MCPError(FString::Printf(TEXT("Widget not found: %s"), *WidgetName));
@@ -1914,13 +2206,13 @@ TSharedPtr<FJsonValue> FWidgetHandlers::ReorderChild(const TSharedPtr<FJsonObjec
 	Parent->Modify();
 	Parent->ShiftChild(ClampedIndex, Widget);
 	// #728: see ClearWidgetBinding.
-	const MCPWidgetGuidMap::FSyncReport GuidSync = MCPWidgetGuidMap::CompileChecked(WidgetBP);
-	if (!GuidSync.bCompiled)
+	const MCPWidgetGuidMap::FSyncReport GuidSync = MCPWidgetGuidMap::CompileChecked(WidgetBP, CompileBaseline);
+	if (GuidSync.WasRefused())
 	{
 		return MCPWidgetGuidMap::BlockedError(AssetPath, GuidSync);
 	}
 	FString SaveError;
-	const bool bSaved = SaveAssetPackageChecked(WidgetBP, SaveError);
+	const bool bSaved = MCPWidgetGuidMap::SaveIfCompiled(WidgetBP, GuidSync, SaveError);
 
 	auto Result = MCPSuccess();
 	MCPSetUpdated(Result);
@@ -1941,5 +2233,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::ReorderChild(const TSharedPtr<FJsonObjec
 	Payload->SetNumberField(TEXT("index"), OldIndex);
 	MCPSetRollback(Result, TEXT("reorder_child"), Payload);
 	Result->SetBoolField(TEXT("rollbackLossy"), false);
+	MCPSetWidgetCompileOutcome(Result, WidgetBP, AssetPath, GuidSync,
+		FString::Printf(TEXT("Widget '%s' was moved to index %d"), *WidgetName, ClampedIndex));
 	return MCPResult(Result);
 }

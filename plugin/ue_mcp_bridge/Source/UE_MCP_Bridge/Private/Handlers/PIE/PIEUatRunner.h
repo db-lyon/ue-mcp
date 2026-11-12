@@ -10,7 +10,7 @@
  * Scenario JSON:
  *   { name, map?, pie: { players, net_mode: "listen"|"dedicated", one_process, windowless?, client_fps? }, join_timeout_s, settle_ms,
  *     steps: [ { name,
- *                do: [ { client, tape: {action, values} } | { client, press: {action, frames?} }
+ *                do: [ { client, tape: {action, values, hz?} } | { client, press: {action, frames?} }
  *                    | { client, hold: {action, value, ms} } | { client, inject: {action, value} }
  *                    | { client, console: "cmd" }
  *                    | { client, place: {at, offset?, face?} | {location, yaw?} } | { client, capture: "label" | true }
@@ -28,6 +28,12 @@
  */
 namespace MCPPIE
 {
+	/**
+	 * Removes the launch parameters a windowless acceptance run adds (its t.MaxFPS / t.IdleWhenNotForeground
+	 * -ExecCmds entry and one -RenderOffscreen per entry), so a value an earlier run leaked is not grown again.
+	 */
+	FString StripUatLaunchParameters(const FString& LaunchParameters);
+
 	class FPIEUatRunner
 	{
 	public:
@@ -44,6 +50,7 @@ namespace MCPPIE
 		/** Live state, then the final verdict once finished. */
 		TSharedPtr<FJsonObject> Status() const;
 
+		/** Restores Play settings a run changed and never put back because the editor stopped mid-run. */
 		void Init();
 		void Shutdown();
 

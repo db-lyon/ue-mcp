@@ -9,6 +9,23 @@ import { makeSpecBp, type HandlerSpecs } from "../../surface/handler-spec.js";
 
 /** The recorded contract of every spec'd project handler. */
 export const handlerSpecs: HandlerSpecs = {
+  "compile_localization_target": {
+    "category": "project",
+    "params": [
+      {
+        "name": "target",
+        "type": "string",
+        "required": true,
+        "description": "Localization target name"
+      },
+      {
+        "name": "culture",
+        "type": "string",
+        "required": false,
+        "description": "Compile only this culture (default every culture of the target)"
+      }
+    ]
+  },
   "create_cpp_class": {
     "category": "project",
     "params": [
@@ -72,10 +89,25 @@ export const handlerSpecs: HandlerSpecs = {
       }
     ]
   },
+  "gather_localization_target": {
+    "category": "project",
+    "params": [
+      {
+        "name": "target",
+        "type": "string",
+        "required": true,
+        "description": "Localization target name"
+      }
+    ]
+  },
   "generate_project_files": {
     "category": "project",
     "params": [],
     "contractExempt": "runs the project file generator"
+  },
+  "get_maps_settings": {
+    "category": "project",
+    "params": []
   },
   "list_available_plugins": {
     "category": "project",
@@ -112,6 +144,21 @@ export const handlerSpecs: HandlerSpecs = {
       }
     ]
   },
+  "list_localization_cultures": {
+    "category": "project",
+    "params": []
+  },
+  "list_localization_targets": {
+    "category": "project",
+    "params": [
+      {
+        "name": "includeEngineTargets",
+        "type": "boolean",
+        "required": false,
+        "description": "Also list the engine's own targets (default false)"
+      }
+    ]
+  },
   "list_project_modules": {
     "category": "project",
     "params": [
@@ -145,6 +192,23 @@ export const handlerSpecs: HandlerSpecs = {
     "category": "project",
     "params": []
   },
+  "remove_localization_target": {
+    "category": "project",
+    "params": [
+      {
+        "name": "target",
+        "type": "string",
+        "required": true,
+        "description": "Localization target name"
+      },
+      {
+        "name": "deleteFiles",
+        "type": "boolean",
+        "required": false,
+        "description": "Also delete its config, manifest, archives and LocRes files (default false)"
+      }
+    ]
+  },
   "set_config": {
     "category": "project",
     "params": [
@@ -177,20 +241,195 @@ export const handlerSpecs: HandlerSpecs = {
       }
     ],
     "contractExempt": "writes an INI file under the project's Config folder"
+  },
+  "set_developer_setting": {
+    "category": "project",
+    "params": [
+      {
+        "name": "settingsClass",
+        "type": "string",
+        "required": true,
+        "description": "Config class as a short name (GameMapsSettings) or /Script/<Module>.<Class> path"
+      },
+      {
+        "name": "propertyName",
+        "type": "string",
+        "required": true,
+        "description": "Config property; a dotted or indexed path reaches inside a struct or array"
+      },
+      {
+        "name": "settingValue",
+        "type": "any",
+        "required": true,
+        "description": "New value as structured JSON, the form editor(get_property) returns under value"
+      },
+      {
+        "name": "persist",
+        "type": "string",
+        "required": false,
+        "description": "default writes Default<Config>.ini; user writes the per-user config. Omitted follows the Project Settings dialog: default for a defaultconfig class, user otherwise",
+        "enum": [
+          "default",
+          "user"
+        ]
+      }
+    ]
+  },
+  "set_localization_target": {
+    "category": "project",
+    "params": [
+      {
+        "name": "target",
+        "type": "string",
+        "required": true,
+        "description": "Localization target name (letters, digits, _ and -); created when the project has none of that name"
+      },
+      {
+        "name": "cultures",
+        "type": "array",
+        "required": false,
+        "description": "Culture codes the target supports, e.g. [\"en\", \"fr\"]; replaces the list",
+        "items": "string"
+      },
+      {
+        "name": "nativeCulture",
+        "type": "string",
+        "required": false,
+        "description": "The culture source text is written in; one of cultures (default the first)"
+      },
+      {
+        "name": "gatherFromPackages",
+        "type": "boolean",
+        "required": false,
+        "description": "Gather text from assets and maps"
+      },
+      {
+        "name": "includePaths",
+        "type": "array",
+        "required": false,
+        "description": "Package path wildcards to gather from, relative to the project root, e.g. Content/UI/*; replaces the list",
+        "items": "string"
+      },
+      {
+        "name": "excludePaths",
+        "type": "array",
+        "required": false,
+        "description": "Package path wildcards to skip; replaces the list",
+        "items": "string"
+      },
+      {
+        "name": "gatherFromTextFiles",
+        "type": "boolean",
+        "required": false,
+        "description": "Gather LOCTEXT and NSLOCTEXT from source files"
+      },
+      {
+        "name": "searchDirectories",
+        "type": "array",
+        "required": false,
+        "description": "Source directories to gather from, relative to the project root, e.g. Source; replaces the list",
+        "items": "string"
+      }
+    ]
+  },
+  "set_maps_settings": {
+    "category": "project",
+    "params": [
+      {
+        "name": "globalDefaultGameMode",
+        "type": "string",
+        "required": false,
+        "description": "Default GameMode: a GameModeBase class as a /Script path, short name or Blueprint asset path; empty clears"
+      },
+      {
+        "name": "globalDefaultServerGameMode",
+        "type": "string",
+        "required": false,
+        "description": "Dedicated server GameMode, same forms; empty clears"
+      },
+      {
+        "name": "gameInstanceClass",
+        "type": "string",
+        "required": false,
+        "description": "GameInstance class, same forms; empty clears"
+      },
+      {
+        "name": "gameDefaultMap",
+        "type": "string",
+        "required": false,
+        "description": "Game default map as a world asset path, /Game/Maps/MyMap; empty clears"
+      },
+      {
+        "name": "serverDefaultMap",
+        "type": "string",
+        "required": false,
+        "description": "Dedicated server default map, same form; empty clears"
+      },
+      {
+        "name": "editorStartupMap",
+        "type": "string",
+        "required": false,
+        "description": "Map the editor opens at startup, same form; empty clears"
+      },
+      {
+        "name": "transitionMap",
+        "type": "string",
+        "required": false,
+        "description": "Seamless travel transition map, same form; empty clears"
+      }
+    ],
+    "choices": [
+      {
+        "mode": "atLeastOne",
+        "branches": [
+          [
+            "globalDefaultGameMode"
+          ],
+          [
+            "globalDefaultServerGameMode"
+          ],
+          [
+            "gameInstanceClass"
+          ],
+          [
+            "gameDefaultMap"
+          ],
+          [
+            "serverDefaultMap"
+          ],
+          [
+            "editorStartupMap"
+          ],
+          [
+            "transitionMap"
+          ]
+        ]
+      }
+    ],
+    "contractExempt": "writes DefaultEngine.ini under the project's Config folder"
   }
 };
 
 /** The Params: clause of each spec'd bridge method. */
 export const paramsClauses: Readonly<Record<string, string>> = {
+  compile_localization_target: "Params: target, culture?",
   create_cpp_class: "Params: className, parentClass?, moduleName?, classDomain?, subPath?",
   disable_plugin: "Params: pluginName, removeReference?",
   enable_plugin: "Params: pluginName",
+  gather_localization_target: "Params: target",
   generate_project_files: "Params: none",
+  get_maps_settings: "Params: none",
   list_available_plugins: "Params: filter?, pluginCategory?, enabledOnly?, cursor?, limit?",
+  list_localization_cultures: "Params: none",
+  list_localization_targets: "Params: includeEngineTargets?",
   list_project_modules: "Params: cursor?, limit?",
   live_coding_compile: "Params: wait?",
   live_coding_status: "Params: none",
+  remove_localization_target: "Params: target, deleteFiles?",
   set_config: "Params: configName? (or configFile), section, key, value",
+  set_developer_setting: "Params: settingsClass, propertyName, settingValue, persist?",
+  set_localization_target: "Params: target, cultures?, nativeCulture?, gatherFromPackages?, includePaths?, excludePaths?, gatherFromTextFiles?, searchDirectories?",
+  set_maps_settings: "Params: at least one of globalDefaultGameMode/globalDefaultServerGameMode/gameInstanceClass/gameDefaultMap/serverDefaultMap/editorStartupMap/transitionMap",
 };
 
 /** Every key the spec'd project handlers declare, aliases included. */
@@ -199,18 +438,40 @@ export const schema: Record<string, z.ZodType> = {
   className: z.string().optional().describe("Class name without its prefix; the parent decides A or U"),
   configFile: z.string().optional().describe("Alias for configName"),
   configName: z.string().optional().describe("Config to write: Engine, Game, Input... or a file name ending .ini (default DefaultEngine.ini)"),
+  culture: z.string().optional().describe("Compile only this culture (default every culture of the target)"),
+  cultures: z.array(z.string()).optional().describe("Culture codes the target supports, e.g. [\"en\", \"fr\"]; replaces the list"),
   cursor: z.string().optional().describe("Resume a paged read: the nextCursor from the previous page, unmodified"),
+  deleteFiles: z.boolean().optional().describe("Also delete its config, manifest, archives and LocRes files (default false)"),
+  editorStartupMap: z.string().optional().describe("Map the editor opens at startup, same form; empty clears"),
   enabledOnly: z.boolean().optional().describe("Only plugins enabled in this editor session (default false)"),
+  excludePaths: z.array(z.string()).optional().describe("Package path wildcards to skip; replaces the list"),
   filter: z.string().optional().describe("Case-insensitive substring of the plugin name or friendly name"),
+  gameDefaultMap: z.string().optional().describe("Game default map as a world asset path, /Game/Maps/MyMap; empty clears"),
+  gameInstanceClass: z.string().optional().describe("GameInstance class, same forms; empty clears"),
+  gatherFromPackages: z.boolean().optional().describe("Gather text from assets and maps"),
+  gatherFromTextFiles: z.boolean().optional().describe("Gather LOCTEXT and NSLOCTEXT from source files"),
+  globalDefaultGameMode: z.string().optional().describe("Default GameMode: a GameModeBase class as a /Script path, short name or Blueprint asset path; empty clears"),
+  globalDefaultServerGameMode: z.string().optional().describe("Dedicated server GameMode, same forms; empty clears"),
+  includeEngineTargets: z.boolean().optional().describe("Also list the engine's own targets (default false)"),
+  includePaths: z.array(z.string()).optional().describe("Package path wildcards to gather from, relative to the project root, e.g. Content/UI/*; replaces the list"),
   key: z.string().optional().describe("INI key"),
   limit: z.number().optional().describe("Rows per page, a whole number (default 200, max 2000)"),
   moduleName: z.string().optional().describe("Project module to add it to (default the first; list_project_modules names them)"),
+  nativeCulture: z.string().optional().describe("The culture source text is written in; one of cultures (default the first)"),
   parentClass: z.string().optional().describe("Parent class as a short name (Actor) or /Script/<Module>.<Class> path (default UObject)"),
+  persist: z.enum(["default","user"]).optional().describe("default writes Default<Config>.ini; user writes the per-user config. Omitted follows the Project Settings dialog: default for a defaultconfig class, user otherwise"),
   pluginCategory: z.string().optional().describe("Case-insensitive substring of the plugin category"),
   pluginName: z.string().optional().describe("Plugin name as its .uplugin spells it, any case"),
+  propertyName: z.string().optional().describe("Config property; a dotted or indexed path reaches inside a struct or array"),
   removeReference: z.boolean().optional().describe("Delete the .uproject entry instead of writing an explicit disable (default false)"),
+  searchDirectories: z.array(z.string()).optional().describe("Source directories to gather from, relative to the project root, e.g. Source; replaces the list"),
   section: z.string().optional().describe("INI section"),
+  serverDefaultMap: z.string().optional().describe("Dedicated server default map, same form; empty clears"),
+  settingsClass: z.string().optional().describe("Config class as a short name (GameMapsSettings) or /Script/<Module>.<Class> path"),
+  settingValue: z.unknown().optional().describe("New value as structured JSON, the form editor(get_property) returns under value"),
   subPath: z.string().optional().describe("Folder under the domain folder, e.g. Gameplay/Abilities (default its root)"),
+  target: z.string().optional().describe("Localization target name (compile_localization_target, gather_localization_target, remove_localization_target). Localization target name (letters, digits, _ and -); created when the project has none of that name (set_localization_target)"),
+  transitionMap: z.string().optional().describe("Seamless travel transition map, same form; empty clears"),
   value: z.string().optional().describe("INI value"),
   wait: z.boolean().optional().describe("Block until the compile finishes (default false returns in_progress)"),
 };

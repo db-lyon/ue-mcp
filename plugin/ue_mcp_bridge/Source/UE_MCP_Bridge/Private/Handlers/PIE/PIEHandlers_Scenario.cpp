@@ -77,9 +77,11 @@ TSharedPtr<FJsonValue> FPIEHandlers::PieScenarioScaffold(const TSharedPtr<FJsonO
 
 	TSharedRef<FJsonObject> ScenarioJson = FPIEScenario::ToJson(S);
 
-	const FString Dir = Folder / TEXT("scenarios");
+	FString Dir;
+	if (auto Err = MCPRequireWritablePath(Folder / TEXT("scenarios"), Dir)) return Err;
+	FString Path;
+	if (auto Err = MCPRequirePathInside(Dir / (Name + TEXT(".json")), { Dir }, Path)) return Err;
 	IFileManager::Get().MakeDirectory(*Dir, true);
-	const FString Path = Dir / (Name + TEXT(".json"));
 
 	FString Out;
 	TSharedRef<TJsonWriter<>> W = TJsonWriterFactory<>::Create(&Out);

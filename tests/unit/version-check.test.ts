@@ -223,6 +223,28 @@ describe("version-check", () => {
       expect(consumeUpgradeNotice()).toBeNull();
     });
 
+    it("keeps its cache under the user's ~/.ue-mcp by default, never the shared temp dir", async () => {
+      const home = fs.mkdtempSync(path.join(os.tmpdir(), "ue-mcp-version-home-"));
+      const saved = { HOME: process.env.HOME, USERPROFILE: process.env.USERPROFILE };
+      delete process.env.UE_MCP_VERSION_CACHE;
+      process.env.HOME = home;
+      process.env.USERPROFILE = home;
+      try {
+        vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, json: async () => ({ version: "9.0.0" }) })));
+        const { startVersionCheck } = await import("../../src/core/version-check.js");
+        startVersionCheck("1.0.0");
+        await vi.waitFor(() => expect(fs.existsSync(path.join(home, ".ue-mcp", "version-check.json"))).toBe(true), { timeout: 5000 });
+        const src = fs.readFileSync(path.join(__dirname, "../../src/core/version-check.ts"), "utf8");
+        expect(src).not.toMatch(/tmpdir\(\)/);
+      } finally {
+        for (const [k, v] of Object.entries(saved)) {
+          if (v === undefined) delete process.env[k];
+          else process.env[k] = v;
+        }
+        fs.rmSync(home, { recursive: true, force: true });
+      }
+    });
+
     it("writes the cache owner-readable only", async () => {
       vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, json: async () => ({ version: "9.0.0" }) })));
       const { startVersionCheck } = await import("../../src/core/version-check.js");
