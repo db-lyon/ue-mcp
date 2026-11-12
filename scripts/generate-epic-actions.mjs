@@ -69,6 +69,11 @@ const EFFECTS = flag("--effects", path.join(OUT_DIR, "effects.ts"));
  * `tests/unit/epic-generated.test.ts` fails when the emitted module is stale.
  */
 const ROUTES = [
+  // The Fab plugin's own toolset (module FabToolset, delivered by the launcher
+  // with the "Fab UE Plugin" item, not with the engine). First, so a Fab tool
+  // named for assets or materials still lands beside fab's own actions rather
+  // than in asset or material. PlayFab and Fabric are not Fab.
+  [/(?:^|[._])fab(?!ric)/i, "fab"],
   // UE 5.9 toolsets, ahead of the broader patterns below so a name such as
   // LevelSequenceEditor reaches animation rather than level.
   [/levelsequence|templatesequence|sequencevalidator|deformergraph|optimus/i, "animation"],

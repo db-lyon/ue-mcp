@@ -7894,6 +7894,11 @@
           "suite": "live",
           "file": "tests/live/epic-toolset-toggle.test.ts",
           "test": "epic_set_toolset_enabled turns a toolset off in the live registry and the config, and back on"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/fab-epic-tools.test.ts",
+          "test": "reports the Fab toolsets the editor's registry has, each with the call that runs its tools"
         }
       ]
     },

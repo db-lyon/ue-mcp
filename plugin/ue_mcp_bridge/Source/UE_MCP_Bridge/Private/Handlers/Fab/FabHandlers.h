@@ -7,9 +7,12 @@
 // Native Fab account lifecycle, owned library synchronization, resumable UE
 // asset-pack downloads, cache inspection and Content import. The Epic Games
 // Launcher installs the Fab editor plugin into Engine/Plugins/Fab as its own
-// "Fab UE Plugin" item, not as part of the engine (#1889). Catalog search and
-// purchases stay in the Fab website: Fab publishes no search API and its terms
-// forbid automated access to fab.com, so open_search only opens that page (#1485).
+// "Fab UE Plugin" item, not as part of the engine (#1889). These handlers send
+// no catalog requests of their own: Fab publishes no public search API and its
+// terms forbid automated access to fab.com, so open_search only opens that page
+// (#1485). Catalog search and listing import inside the editor are what the Fab
+// plugin's own FabToolset does in Unreal's Toolset Registry (UE 5.9); the server
+// finds it with fab(list_epic_tools) and runs it through epic_call_tool.
 class FFabHandlers
 {
 public:

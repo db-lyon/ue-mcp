@@ -159,6 +159,7 @@ export const LOCAL_ACTIONS: Record<string, string> = {
  */
 export const EDITOR_BOUND_LOCAL_ACTIONS: Record<string, string> = {
   "asset.search": "Wraps the search_assets bridge method, resolving content roots first.",
+  "fab.list_epic_tools": "Calls epic_list_toolsets and epic_list_mcp_tools, which read the editor's Toolset Registry and Unreal MCP plugin, and keeps the Fab tools.",
   "editor.diff_checkpoint_asset": "Exports two versions from the shadow history and calls checkpoint_diff_asset, which loads them in the editor to diff them.",
   "editor.open_checkpoint_diff": "Exports versions from the shadow history and calls checkpoint_open_native_diff, which opens Unreal's diff window.",
   "editor.revert_group": "Replays each entry's rollback descriptor as a bridge call; entries restored from checkpoint snapshots are file writes the editor then reloads.",
