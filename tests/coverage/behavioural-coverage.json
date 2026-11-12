@@ -11132,6 +11132,11 @@
         },
         {
           "suite": "live",
+          "file": "tests/live/bcov-pie-script-triggered.test.ts",
+          "test": "passes on a press from outside the script after act, not on act's own press, and records when and what"
+        },
+        {
+          "suite": "live",
           "file": "tests/live/blueprint-component-property-pie.test.ts",
           "test": "reinstances the possessed pawn without binding any delegate twice, and the value reads back"
         },
@@ -16019,6 +16024,11 @@
         },
         {
           "suite": "live",
+          "file": "tests/live/bcov-pie-script-triggered.test.ts",
+          "test": "passes on a press from outside the script after act, not on act's own press, and records when and what"
+        },
+        {
+          "suite": "live",
           "file": "tests/live/bcov-pie-scripts.test.ts",
           "test": "script_replay re-evaluates the auto steps on the run's recording and reports what regressed"
         },
@@ -16264,6 +16274,11 @@
       "registeredIn": "PIEHandlers.cpp",
       "status": "covered",
       "tests": [
+        {
+          "suite": "live",
+          "file": "tests/live/bcov-pie-script-triggered.test.ts",
+          "test": "passes on a press from outside the script after act, not on act's own press, and records when and what"
+        },
         {
           "suite": "live",
           "file": "tests/live/bcov-pie-session.test.ts",
@@ -17127,6 +17142,11 @@
         },
         {
           "suite": "live",
+          "file": "tests/live/bcov-pie-script-triggered.test.ts",
+          "test": "passes on a press from outside the script after act, not on act's own press, and records when and what"
+        },
+        {
+          "suite": "live",
           "file": "tests/live/bcov-pie-scripts.test.ts",
           "test": "script_run evaluates auto steps live, holds at the manual step, and takes its verdict"
         },
@@ -17195,6 +17215,11 @@
           "suite": "live",
           "file": "tests/live/bcov-pie-script-act.test.ts",
           "test": "skips arrange and act, since nothing is in PIE, and says so on the step"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/bcov-pie-script-triggered.test.ts",
+          "test": "passes on a press from outside the script after act, not on act's own press, and records when and what"
         },
         {
           "suite": "live",
@@ -17299,6 +17324,11 @@
           "suite": "live",
           "file": "tests/live/bcov-pie-script-act.test.ts",
           "test": "script_validate refuses an actor or Input Action that does not exist, and accepts ones that do"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/bcov-pie-script-triggered.test.ts",
+          "test": "script_validate reports an Input Action that does not exist with candidates, and takes a package path"
         },
         {
           "suite": "live",
