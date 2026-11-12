@@ -8319,6 +8319,11 @@
           "suite": "live",
           "file": "tests/live/bcov-fab.test.ts",
           "test": "fab_status, fab_cache_info and fab_list_cached agree on the local download cache"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/bcov-fab.test.ts",
+          "test": "without the Fab plugin the Fab actions refuse with PLUGIN_NOT_AVAILABLE and the install step"
         }
       ]
     },
@@ -8340,6 +8345,11 @@
           "suite": "live",
           "file": "tests/live/bcov-fab.test.ts",
           "test": "fab_import_file imports a local file into the destination folder"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/bcov-fab.test.ts",
+          "test": "without the Fab plugin the Fab actions refuse with PLUGIN_NOT_AVAILABLE and the install step"
         }
       ]
     },
@@ -8353,6 +8363,11 @@
           "suite": "live",
           "file": "tests/live/bcov-fab.test.ts",
           "test": "fab_status, fab_cache_info and fab_list_cached agree on the local download cache"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/bcov-fab.test.ts",
+          "test": "without the Fab plugin the Fab actions refuse with PLUGIN_NOT_AVAILABLE and the install step"
         }
       ]
     },
@@ -8405,6 +8420,11 @@
           "suite": "live",
           "file": "tests/live/bcov-fab.test.ts",
           "test": "fab_status, fab_cache_info and fab_list_cached agree on the local download cache"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/bcov-fab.test.ts",
+          "test": "without the Fab plugin the Fab actions refuse with PLUGIN_NOT_AVAILABLE and the install step"
         }
       ]
     },
