@@ -75,7 +75,9 @@ static TSharedPtr<FJsonValue> FabUnavailableError()
 }
 
 // The refusal of an action that needs the native Fab API when this build of
-// the bridge was compiled without it, although the module is loaded now.
+// the bridge was compiled without it, although the module is loaded now. Only
+// defined where it is called, so a build with Fab has no unused function.
+#if !WITH_FAB_PLUGIN
 static TSharedPtr<FJsonValue> FabNativeApiMissingError(const TCHAR* What)
 {
 	return MCPErrorWithCode(TEXT("PLUGIN_NOT_AVAILABLE"), FString::Printf(
@@ -83,6 +85,7 @@ static TSharedPtr<FJsonValue> FabNativeApiMissingError(const TCHAR* What)
 			 "when the bridge was built. Rebuild the UE_MCP_Bridge plugin now that Fab is installed."),
 		What));
 }
+#endif
 
 // Run one of the Fab plugin's registered console commands (Fab.Login,
 // Fab.Logout, Fab.ClearCache, Fab.TEDS.MyFolderIntegration, ...). These are
