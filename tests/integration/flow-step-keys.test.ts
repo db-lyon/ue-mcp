@@ -47,7 +47,7 @@ describe("named flow step keys", () => {
   it("are refused by flow(plan) and flow(run) with the run-order rule", async () => {
     covers("flow.plan", "flow.run.yaml");
     for (const action of ["plan", "run"]) {
-      const r = await server.call("flow", { action, flowName: "named" });
+      const r = await server.callFlow({ action, flowName: "named" });
       expect(r.isError, `${action}: ${r.text}`).toBe(true);
       expect(r.text).toContain(`Flow 'named' has step key "read"`);
       expect(r.text).toContain("run order");
@@ -60,7 +60,7 @@ describe("named flow step keys", () => {
     const r = await server.call("plugins", { action: "list" });
     expect(r.text).toContain("ue-mcp-named-steps");
     expect(r.text).toContain("run order");
-    const flows = await server.call("flow", { action: "list" });
+    const flows = await server.callFlow({ action: "list" });
     expect(flows.text).not.toContain("named_pack");
   });
 });

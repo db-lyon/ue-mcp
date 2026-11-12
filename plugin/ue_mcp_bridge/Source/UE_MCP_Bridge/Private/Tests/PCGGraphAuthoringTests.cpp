@@ -358,7 +358,10 @@ bool FMCPPCGImportUpsertTest::RunTest(const FString& Parameters)
 	const FString GraphPath = NewGraph(Registry);
 	UPCGGraph* Graph = GraphPath.IsEmpty() ? nullptr : LoadObject<UPCGGraph>(nullptr, *GraphPath);
 	if (!TestNotNull(TEXT("the graph loads"), Graph)) return false;
-	TestTrue(TEXT("the named node is created"), Ok(ImportGraph(Registry, GraphPath, { ImportNode(TEXT("FT_BankDist"), TEXT("PCGDistanceSettings")) })));
+	// The edge comes from another Distance node: point data into point data on every engine. From the graph
+	// input (Any) into Source (Point), 5.9 asks for a conversion node first.
+	TestTrue(TEXT("the named nodes are created"), Ok(ImportGraph(Registry, GraphPath,
+		{ ImportNode(TEXT("FT_Src"), TEXT("PCGDistanceSettings")), ImportNode(TEXT("FT_BankDist"), TEXT("PCGDistanceSettings")) })));
 	UPCGNode* Original = FindNode(Graph, TEXT("FT_BankDist"));
 	if (!TestNotNull(TEXT("it keeps its name"), Original)) return false;
 	const int32 NodeCount = Graph->GetNodes().Num();
@@ -367,7 +370,7 @@ bool FMCPPCGImportUpsertTest::RunTest(const FString& Parameters)
 	auto Settings = MakeShared<FJsonObject>();
 	Settings->SetNumberField(TEXT("MaximumDistance"), 1234.0);
 	auto Edge = MakeShared<FJsonObject>();
-	Edge->SetStringField(TEXT("from"), Graph->GetInputNode()->GetName());
+	Edge->SetStringField(TEXT("from"), TEXT("FT_Src"));
 	Edge->SetStringField(TEXT("to"), TEXT("FT_BankDist"));
 	const TSharedPtr<FJsonObject> Upserted = ImportGraph(Registry, GraphPath,
 		{ ImportNode(TEXT("FT_BankDist"), TEXT("PCGDistanceSettings"), Settings) }, { MakeShared<FJsonValueObject>(Edge) });

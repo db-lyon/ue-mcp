@@ -54,6 +54,33 @@ describe("MCP client config detection", () => {
     });
     expect(isProjectScopedClient("Codex")).toBe(false);
   });
+
+  it("offers VS Code, Gemini CLI and Codex at the project paths they read", () => {
+    const projectDir = path.join(tmpRoot, "project");
+    fs.mkdirSync(path.join(projectDir, ".vscode"), { recursive: true });
+    fs.mkdirSync(path.join(projectDir, ".gemini"));
+    fs.mkdirSync(path.join(projectDir, ".codex"));
+    const clients = detectMcpClients(projectDir);
+    const byName = (n: string) => clients.find((c) => c.name === n);
+
+    expect(byName("VS Code")).toMatchObject({ configPath: path.join(projectDir, ".vscode", "mcp.json"), detected: true, format: "json", serversKey: "servers", stdioType: true });
+    expect(byName("Gemini CLI")).toMatchObject({ configPath: path.join(projectDir, ".gemini", "settings.json"), detected: true, format: "json" });
+    expect(byName("Codex (project)")).toMatchObject({ configPath: path.join(projectDir, ".codex", "config.toml"), detected: true, format: "toml" });
+    for (const n of ["VS Code", "Gemini CLI", "Codex (project)"]) expect(isProjectScopedClient(n)).toBe(true);
+  });
+
+  it("counts Gemini CLI and Codex (project) as present when only the user folder exists", () => {
+    const projectDir = path.join(tmpRoot, "project");
+    fs.mkdirSync(projectDir);
+    const before = detectMcpClients(projectDir);
+    expect(before.find((c) => c.name === "Gemini CLI")?.detected).toBe(false);
+    expect(before.find((c) => c.name === "VS Code")?.detected).toBe(false);
+    fs.mkdirSync(path.join(tmpRoot, ".gemini"));
+    fs.mkdirSync(path.join(tmpRoot, ".codex"));
+    const after = detectMcpClients(projectDir);
+    expect(after.find((c) => c.name === "Gemini CLI")?.detected).toBe(true);
+    expect(after.find((c) => c.name === "Codex (project)")?.detected).toBe(true);
+  });
 });
 
 describe("JSON MCP client config", () => {

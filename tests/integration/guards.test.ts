@@ -90,7 +90,7 @@ describe("a guard from ue-mcp.yml", () => {
     covers("guards.config");
     mutationsBridge.calls.length = 0;
     const run = json<{ success: boolean; steps: Array<{ success: boolean; error?: string }> }>(
-      await mutations.call("flow", { action: "run", flowName: "spawn_light" }),
+      await mutations.callFlow({ action: "run", flowName: "spawn_light" }),
     );
     expect(run.success).toBe(false);
     expect(JSON.stringify(run.steps[0])).toContain("blocked (place_actor)");

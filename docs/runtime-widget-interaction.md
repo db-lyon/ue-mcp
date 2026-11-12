@@ -21,8 +21,19 @@ event. For timed input sequences or Enhanced Input injection, use
 | `SpinBox` | number | `OnValueChanged` then `OnValueCommitted` |
 | `EditableText`, `EditableTextBox`, `MultiLineEditableText`, `MultiLineEditableTextBox` | string | `OnTextChanged` then `OnTextCommitted` |
 | `ComboBoxString` | option string, or the option index as a number | `OnSelectionChanged` |
+| `CommonButtonBase` subclass (CommonUI) | not used | `OnClicked` (default) runs `HandleButtonClicked`; `OnPressed` / `OnReleased` via `functionName` run `HandleButtonPressed` / `HandleButtonReleased` |
 
 Any other class returns an error naming the class and listing the supported ones.
+
+### CommonUI buttons
+
+A CommonUI button is a UserWidget that wraps an internal button. The handler calls the button's own `HandleButtonClicked` (or `HandleButtonPressed` / `HandleButtonReleased`), the function its internal button is bound to, so lock, selection and click behaviour all run exactly as for a real click: `OnClicked`, `OnButtonBaseClicked` and the Blueprint `On Clicked` event fire. The CommonUI plugin is reached at runtime, so the bridge works in projects without it.
+
+A button with interaction disabled is refused, because no real click can reach it. The response adds `handler`, `locked` (a locked button sends the click to its lock event instead), and `wasSelected` / `isSelected`, the selection state before and after the click.
+
+```json
+{ "action": "invoke_runtime_function", "className": "WBP_MainMenu", "childName": "PlayButton" }
+```
 
 ## Selecting a single delegate
 

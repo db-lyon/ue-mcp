@@ -10,6 +10,7 @@
 #include "Handlers/PIE/PIEInputReplayer.h"
 #include "Handlers/PIE/PIEPredicateEvaluator.h"
 #include "Editor.h"
+#include "HandlerPlaySession.h"
 #include "Editor/EditorEngine.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
@@ -72,6 +73,18 @@ TSharedPtr<FJsonValue> FPIEHandlers::PieTestScaffold(const TSharedPtr<FJsonObjec
 
 	const FString Name = OptionalString(Params, TEXT("name"), TEXT("repro"));
 
+	// test_run replays with this gate, so it is checked here, where it is written.
+	const TSharedPtr<FJsonObject>* StartWhen = nullptr;
+	if (TryGetObjectParam(Params, TEXT("start_when"), StartWhen) && StartWhen && StartWhen->IsValid())
+	{
+		FReplayStartGate Gate;
+		FString GateErr;
+		if (!ParseReplayStartGate(*StartWhen, Gate, GateErr))
+		{
+			return MCPError(GateErr);
+		}
+	}
+
 	TSharedRef<FJsonObject> Asserts = MakeShared<FJsonObject>();
 	Asserts->SetNumberField(TEXT("max_position_drift_cm"), OptionalNumber(Params, TEXT("max_position_drift_cm"), 10.0));
 	Asserts->SetNumberField(TEXT("max_velocity_drift_cms"), OptionalNumber(Params, TEXT("max_velocity_drift_cms"), 50.0));
@@ -83,15 +96,21 @@ TSharedPtr<FJsonValue> FPIEHandlers::PieTestScaffold(const TSharedPtr<FJsonObjec
 	Scenario->SetStringField(TEXT("source_recording_dir"), Folder);
 	Scenario->SetStringField(TEXT("drive"), TEXT("replay"));
 	Scenario->SetObjectField(TEXT("assertions"), Asserts);
+	if (StartWhen && StartWhen->IsValid())
+	{
+		Scenario->SetObjectField(TEXT("start_when"), *StartWhen);
+	}
 
 	// Roadmap v2 Phase A: seed a predicate set derived from the recorded series so
 	// the scaffold asserts intent (ranges, montages, no errors), not just drift.
 	const int32 MaxErrorsInt = static_cast<int32>(OptionalNumber(Params, TEXT("max_errors"), 0.0));
 	Scenario->SetArrayField(TEXT("predicates"), DerivePredicates(ResolveSeriesCsv(Folder), MaxErrorsInt));
 
-	const FString TestsDir = Folder / TEXT("tests");
+	FString TestsDir;
+	if (auto Err = MCPRequireWritablePath(Folder / TEXT("tests"), TestsDir)) return Err;
+	FString Path;
+	if (auto Err = MCPRequirePathInside(TestsDir / (Name + TEXT(".json")), { TestsDir }, Path)) return Err;
 	IFileManager::Get().MakeDirectory(*TestsDir, true);
-	const FString Path = TestsDir / (Name + TEXT(".json"));
 
 	FString Out;
 	TSharedRef<TJsonWriter<>> W = TJsonWriterFactory<>::Create(&Out);
@@ -189,12 +208,21 @@ TSharedPtr<FJsonValue> FPIEHandlers::PieTestRun(const TSharedPtr<FJsonObject>& P
 		Cfg.SourceRecordingId = FPaths::GetCleanFilename(Source);
 		Cfg.bAutoStopPIE = true;
 		Cfg.bRecordDrift = true;
+		const TSharedPtr<FJsonObject>* StartWhen = nullptr;
+		if (Scenario->TryGetObjectField(TEXT("start_when"), StartWhen) && StartWhen && StartWhen->IsValid())
+		{
+			FString GateErr;
+			if (!ParseReplayStartGate(*StartWhen, Cfg.StartGate, GateErr))
+			{
+				return MCPError(FString::Printf(TEXT("%s in %s"), *GateErr, *TestPath));
+			}
+		}
 		FString Err, Msg;
 		if (!FPIEInputReplayer::Get().Arm(Cfg, Err, Msg)) return MCPError(Err);
-		FRequestPlaySessionParams PlayParams;
-		GEditor->RequestPlaySession(PlayParams);
+		const MCPPlaySession::FLaunch Launch = MCPPlaySession::Request(/*bNeedsEditorWorld=*/true);
 
 		auto Started = MCPSuccess();
+		MCPPlaySession::WriteLaunch(Launch, Started);
 		Started->SetBoolField(TEXT("started"), true);
 		Started->SetStringField(TEXT("test_path"), TestPath);
 		Started->SetStringField(TEXT("poll"), TEXT("Poll replay_status until pie_active=false, then call test_run again to evaluate."));
@@ -240,6 +268,15 @@ TSharedPtr<FJsonValue> FPIEHandlers::PieTestRun(const TSharedPtr<FJsonObject>& P
 		FString::Printf(TEXT("rotation drift %.1f deg > %.1f"), D.MaxRotationDriftDeg, MaxRot));
 	Check(D.Summary.ErrorsDuringRun <= MaxErrors,
 		FString::Printf(TEXT("%d errors logged > %d allowed"), D.Summary.ErrorsDuringRun, MaxErrors));
+	// A replay that compared nothing has not shown the drift is small.
+	if (D.bHasStartGate && !D.bStartGatePassed)
+	{
+		Check(false, FString::Printf(TEXT("start_when never opened: %s"), *D.StartGateBlocker));
+	}
+	else
+	{
+		Check(D.FramesCompared > 0, TEXT("no replay frame was compared with the recording"));
+	}
 
 	bool bPassed = Failures.Num() == 0;
 
@@ -262,9 +299,23 @@ TSharedPtr<FJsonValue> FPIEHandlers::PieTestRun(const TSharedPtr<FJsonObject>& P
 		{
 			return MCPError(FString::Printf(TEXT("predicate parse error: %s"), *PErr));
 		}
+		// Predicates judge the replay this test ran, not the source recording:
+		// its trajectory (replay.csv) and the errors its PIE session logged.
+		FString SeriesCsv = ResolveSeriesCsv(Source);
+		if (!D.ReplayCSVFile.IsEmpty() && FPaths::FileExists(Source / D.ReplayCSVFile))
+		{
+			SeriesCsv = Source / D.ReplayCSVFile;
+		}
+		FString ErrorsJson = Source / TEXT("session_errors.json");
+		if (!D.Summary.SessionDir.IsEmpty() && FPaths::FileExists(D.Summary.SessionDir / TEXT("session_errors.json")))
+		{
+			ErrorsJson = D.Summary.SessionDir / TEXT("session_errors.json");
+		}
+		Result->SetStringField(TEXT("predicates_series"), SeriesCsv);
+		Result->SetStringField(TEXT("predicates_errors"), ErrorsJson);
 		TArray<MCPPIE::FPredicateResult> PResults;
 		if (MCPPIE::FPIEPredicateEvaluator::Evaluate(
-				ResolveSeriesCsv(Source), Source / TEXT("session_errors.json"),
+				SeriesCsv, ErrorsJson,
 				Source / TEXT("manifest.json"), Preds, PResults, PErr))
 		{
 			bool bPredPassed = true;
@@ -370,11 +421,15 @@ TSharedPtr<FJsonValue> FPIEHandlers::PieAssertEval(const TSharedPtr<FJsonObject>
 	const FString Sheet = FindContactSheet(RunDir);
 	if (!Sheet.IsEmpty()) Verdict->SetStringField(TEXT("contact_sheet_path"), Sheet);
 
-	// Persist the verdict next to the run for later inspection.
+	// Persist the verdict next to the run for later inspection, when the run is in a writable folder.
 	FString Out;
 	TSharedRef<TJsonWriter<>> W = TJsonWriterFactory<>::Create(&Out);
 	FJsonSerializer::Serialize(Verdict, W);
-	FFileHelper::SaveStringToFile(Out, *(RunDir / TEXT("verdict.json")));
+	FString VerdictPath, VerdictError;
+	if (MCPResolvePathInside(RunDir / TEXT("verdict.json"), MCPDefaultWritableRoots(), VerdictPath, VerdictError))
+	{
+		FFileHelper::SaveStringToFile(Out, *VerdictPath);
+	}
 
 	TSharedPtr<FJsonObject> VerdictResult = Verdict;
 	MCPSetIdempotencyUnobservable(VerdictResult, TEXT("verdict.json is rewritten from the same inputs on every call"));

@@ -11,7 +11,7 @@ import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { execFileSync } from "node:child_process";
+import { extractZip, sha256Of } from "../core/archive.js";
 import { readEnv } from "../core/env.js";
 import { BRIDGE_PLUGIN_NAME, writeInstallMarker, type InstallMarker } from "./install-marker.js";
 import { treeFiles, verifyBridgeTree } from "./bridge-tree.js";
@@ -102,25 +102,9 @@ export async function verifyDownload(zipUrl: string, zipPath: string, t: BinaryT
   const name = zipUrl.split("/").pop() ?? "";
   const entry = manifest.assets?.find((a) => a.file === name);
   if (!entry) throw new Error(`${name} is not in ${manifestUrl}; refusing to install unverified binaries`);
-  const actual = crypto.createHash("sha256").update(fs.readFileSync(zipPath)).digest("hex");
+  const actual = sha256Of(zipPath);
   if (actual !== entry.sha256.toLowerCase()) {
     throw new Error(`${name} does not match its manifest hash (expected ${entry.sha256}, got ${actual}); refusing to install it`);
-  }
-}
-
-/**
- * bsdtar reads zip and ships with Windows 10+ and macOS. On Windows it is named
- * by path, because a Git Bash PATH puts GNU tar first and GNU tar cannot.
- */
-function extractZip(zip: string, into: string): void {
-  fs.mkdirSync(into, { recursive: true });
-  const tar = process.platform === "win32"
-    ? path.join(process.env.SystemRoot ?? process.env.SYSTEMROOT ?? "C:\\Windows", "System32", "tar.exe")
-    : "tar";
-  try {
-    execFileSync(tar, ["-xf", zip, "-C", into], { windowsHide: true, stdio: ["ignore", "ignore", "pipe"] });
-  } catch {
-    execFileSync("unzip", ["-q", "-o", zip, "-d", into], { windowsHide: true, stdio: ["ignore", "ignore", "pipe"] });
   }
 }
 
@@ -161,6 +145,8 @@ export function updateWorkDir(pluginDir: string): string {
     if (!hasProject) continue;
     const work = path.join(project, "Intermediate", "UE_MCP_Update");
     try {
+      // Plugins/ may not exist yet on a fresh project; without it the stat fails and a spare lands under Plugins/.
+      fs.mkdirSync(parent, { recursive: true });
       fs.mkdirSync(work, { recursive: true });
       if (fs.statSync(work).dev === fs.statSync(parent).dev) return work;
     } catch {
@@ -182,6 +168,13 @@ function dropEmptyWorkDir(updateDir: string): void {
 
 function uniqueName(prefix: string): string {
   return `${prefix}-${process.pid}-${Date.now()}-${crypto.randomBytes(3).toString("hex")}`;
+}
+
+/** A fresh path in the update work directory to build a tree in before swapIn moves it to `target`. */
+export function stagingDir(target: string): string {
+  const updateDir = updateWorkDir(target);
+  fs.mkdirSync(updateDir, { recursive: true });
+  return path.join(updateDir, uniqueName("staging"));
 }
 
 /**
@@ -217,9 +210,7 @@ export async function stageBinaryPlugin(
       throw new Error(`${describeBinarySource(source)} has no Binaries/${t.platform}; it was built for another platform`);
     }
 
-    const updateDir = updateWorkDir(targetPluginDir);
-    fs.mkdirSync(updateDir, { recursive: true });
-    const staging = path.join(updateDir, uniqueName("staging"));
+    const staging = stagingDir(targetPluginDir);
     try {
       fs.cpSync(root, staging, { recursive: true });
       fs.rmSync(path.join(staging, "Source"), { recursive: true, force: true });
@@ -233,7 +224,7 @@ export async function stageBinaryPlugin(
       return { staging, from: describeBinarySource(source), marker, files: treeFiles(staging) };
     } catch (e) {
       fs.rmSync(staging, { recursive: true, force: true });
-      dropEmptyWorkDir(updateDir);
+      dropEmptyWorkDir(path.dirname(staging));
       throw e;
     }
   } finally {

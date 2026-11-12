@@ -1,0 +1,12 @@
+---
+title: "CR_Arm · Rig graph"
+---
+flowchart LR
+  n_RigVMModel_BeginExecution["BeginExecution<br/>UnitNode"]
+  n_RigVMModel_GetTransform["GetTransform<br/>UnitNode"]
+  n_RigVMModel_SetTransform["SetTransform<br/>UnitNode"]
+  n_RigVMModel_BeginExecution --> n_RigVMModel_SetTransform
+  n_RigVMModel_GetTransform -.->|"Transform"| n_RigVMModel_SetTransform
+  n_RigVMModel_GetTransform -.->|"Transform.Translation → Value.Translation"| n_RigVMModel_SetTransform
+  classDef ue_default fill:#181d25,stroke:#3a414c,color:#f5f5f4
+  class n_RigVMModel_BeginExecution,n_RigVMModel_GetTransform,n_RigVMModel_SetTransform ue_default

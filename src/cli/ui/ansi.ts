@@ -22,3 +22,12 @@ export const ok = (msg: string): void => console.log(`  ${GREEN}✓${RESET} ${ms
 export const warn = (msg: string): void => console.log(`  ${YELLOW}!${RESET} ${msg}`);
 export const fail = (msg: string): void => console.log(`  ${RED}✗${RESET} ${msg}`);
 export const info = (msg: string): void => console.log(`  ${DIM}${msg}${RESET}`);
+
+/** Send console.log to stderr until the returned function runs, so stdout stays one JSON document. */
+export function redirectConsoleToStderr(): () => void {
+  const original = console.log;
+  console.log = (...args: unknown[]) => console.error(...args);
+  return () => {
+    console.log = original;
+  };
+}

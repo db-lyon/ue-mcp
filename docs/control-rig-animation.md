@@ -18,8 +18,8 @@ configured.
 
 | Capability | Engine support |
 |------------|----------------|
-| `begin_control_rig_edit`, `read_control_rig_edit`, `capture_control_rig_pose`, `apply_control_rig_edits`, `bake_control_rig_edit` | UE 5.8 only. Older engines return `unsupported_engine_version`; there is no fallback to raw bone tracks |
-| `configure_ik_rig`, `configure_ik_retargeter` | UE 5.8 only, same error on older engines |
+| `begin_control_rig_edit`, `read_control_rig_edit`, `capture_control_rig_pose`, `apply_control_rig_edits`, `bake_control_rig_edit`, `bake_sequence_animation` | UE 5.8 and later. Older engines return `unsupported_engine_version`; there is no fallback to raw bone tracks |
+| `configure_ik_rig`, `configure_ik_retargeter` | UE 5.8 and later, same error on older engines |
 | `analyze_animation` | Every supported engine |
 | Other IK Rig and IK Retargeter create/read actions | See each action in the [tool reference](tool-reference.md) |
 
@@ -91,7 +91,7 @@ exposes the controls the motion needs, a Forward Solve that drives the bones,
 and a Backward Solve that initializes those controls from source animation
 without a pose jump. `rigMode="asset"` rejects a rig without inverse execution.
 
-If none fits, build one with the UE 5.8 Control Rig toolset wrapped on the
+If none fits, build one with the Control Rig toolset (UE 5.8+) wrapped on the
 animation category: `epic_create`, then `epic_import_bones_from_asset` for the
 production skeleton, `epic_add_control` for each control, and
 `epic_add_backward_solve_graph`. Wire the rest with the other Control Rig graph,
@@ -372,6 +372,24 @@ animation(
 The source animation and LevelSequence are unchanged. Key reduction and
 Sequencer links are not supported: omit `reduceKeys` and `createLink` or pass
 `false`. The rollback deletes the created asset.
+
+The bake records the bound mesh's own bone lengths, so the output names that
+mesh as its retarget source asset (`retargetSourceAsset` in the result and in
+`read_sequence`). Without it, a mesh whose proportions differ from the
+skeleton's reference pose is retargeted a second time on playback and limbs
+land centimetres off. Pass `setRetargetSourceAsset=false` only when the clip
+must play from the skeleton's reference pose. `interpolation` defaults to the
+interpolation of the clip the session began from, so a Step clip bakes as Step,
+and `begin_control_rig_edit` samples a Step clip so every frame keeps its own
+key. The rest of the Sequencer bake options are accepted too: `curveInterpolation`,
+`recordInWorldSpace`, `evaluateAllSkeletalMeshComponents`, the `export*` toggles,
+`skipCurvesWithZeroValue`, `includeAnimationNames`, `excludeAnimationNames`,
+`removeExcludedCurves`, `warmUpFrames`, `delayBeforeStart`, `bakeTimecode`,
+`timecodeRate`, and a custom `startFrame`/`endFrame` range.
+
+To bake a skeletal mesh binding of any LevelSequence, not only an edit
+session, use `bake_sequence_animation` with `bindingTag`, `bindingGuid` or
+`bindingName`. It takes the same options and the same retarget source default.
 
 ## Validation
 

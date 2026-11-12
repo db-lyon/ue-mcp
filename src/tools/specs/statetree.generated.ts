@@ -436,6 +436,41 @@ export const handlerSpecs: HandlerSpecs = {
       }
     ]
   },
+  "check_state_tree_binding": {
+    "category": "statetree",
+    "params": [
+      {
+        "name": "assetPath",
+        "type": "string",
+        "required": true,
+        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+      },
+      {
+        "name": "targetStructId",
+        "type": "string",
+        "required": true,
+        "description": "Target struct GUID"
+      },
+      {
+        "name": "targetPath",
+        "type": "string",
+        "required": false,
+        "description": "Target property path"
+      },
+      {
+        "name": "sourceStructId",
+        "type": "string",
+        "required": false,
+        "description": "Source struct GUID. Omit to resolve the target alone"
+      },
+      {
+        "name": "sourcePath",
+        "type": "string",
+        "required": false,
+        "description": "Source property path"
+      }
+    ]
+  },
   "clear_state_tree_state_nodes": {
     "category": "statetree",
     "params": [
@@ -467,6 +502,41 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "string",
         "required": true,
         "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+      }
+    ]
+  },
+  "list_state_tree_bindable_properties": {
+    "category": "statetree",
+    "params": [
+      {
+        "name": "assetPath",
+        "type": "string",
+        "required": true,
+        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+      },
+      {
+        "name": "structId",
+        "type": "string",
+        "required": true,
+        "description": "Bindable struct GUID, as list_bindable_sources reports it"
+      },
+      {
+        "name": "targetPath",
+        "type": "string",
+        "required": false,
+        "description": "A property of that struct: list the compatible sources in its scope instead of the struct's properties"
+      },
+      {
+        "name": "exactOnly",
+        "type": "boolean",
+        "required": false,
+        "description": "With targetPath: leave out sources that need a numeric promotion"
+      },
+      {
+        "name": "maxDepth",
+        "type": "integer",
+        "required": false,
+        "description": "How deep to descend into value structs: 1 is top level only, 0 is unlimited (default 3)"
       }
     ]
   },
@@ -602,6 +672,29 @@ export const handlerSpecs: HandlerSpecs = {
       }
     ]
   },
+  "move_state_tree_node": {
+    "category": "statetree",
+    "params": [
+      {
+        "name": "assetPath",
+        "type": "string",
+        "required": true,
+        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+      },
+      {
+        "name": "nodeId",
+        "type": "string",
+        "required": true,
+        "description": "GUID of the task, condition, consideration, evaluator or global task, as the add_* actions return it"
+      },
+      {
+        "name": "newIndex",
+        "type": "integer",
+        "required": true,
+        "description": "Position the node ends up at within the list it is in, 0-based"
+      }
+    ]
+  },
   "move_state_tree_state": {
     "category": "statetree",
     "params": [
@@ -649,6 +742,47 @@ export const handlerSpecs: HandlerSpecs = {
       }
     ]
   },
+  "promote_state_tree_property_to_parameter": {
+    "category": "statetree",
+    "params": [
+      {
+        "name": "assetPath",
+        "type": "string",
+        "required": true,
+        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+      },
+      {
+        "name": "targetStructId",
+        "type": "string",
+        "required": true,
+        "description": "Struct GUID of the property to promote"
+      },
+      {
+        "name": "targetPath",
+        "type": "string",
+        "required": true,
+        "description": "Property path to promote"
+      },
+      {
+        "name": "parameterName",
+        "type": "string",
+        "required": false,
+        "description": "Name for the new parameter (default: the property name, made unique)"
+      },
+      {
+        "name": "stateId",
+        "type": "string",
+        "required": false,
+        "description": "State to hold the parameter: the target's state or an ancestor. Omit both for a tree parameter"
+      },
+      {
+        "name": "statePath",
+        "type": "string",
+        "required": false,
+        "description": "Dot-path of that state, as an alternative to stateId"
+      }
+    ]
+  },
   "read_state_tree": {
     "category": "statetree",
     "params": [
@@ -657,6 +791,23 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "string",
         "required": true,
         "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+      }
+    ]
+  },
+  "read_state_tree_node": {
+    "category": "statetree",
+    "params": [
+      {
+        "name": "assetPath",
+        "type": "string",
+        "required": true,
+        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+      },
+      {
+        "name": "nodeId",
+        "type": "string",
+        "required": true,
+        "description": "GUID of any node in the tree, as the add_* actions return it"
       }
     ]
   },
@@ -1229,6 +1380,76 @@ export const handlerSpecs: HandlerSpecs = {
       }
     ]
   },
+  "set_state_tree_node_data": {
+    "category": "statetree",
+    "params": [
+      {
+        "name": "assetPath",
+        "type": "string",
+        "required": true,
+        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+      },
+      {
+        "name": "nodeId",
+        "type": "string",
+        "required": true,
+        "description": "GUID of the node, as the add_* actions return it"
+      },
+      {
+        "name": "target",
+        "type": "string",
+        "required": false,
+        "description": "node (the node struct), instance (default) or executionRuntime"
+      },
+      {
+        "name": "propertyName",
+        "type": "string",
+        "required": false,
+        "description": "Property to write. Omit to replace the whole struct with value"
+      },
+      {
+        "name": "value",
+        "type": "string",
+        "required": true,
+        "description": "Value in Unreal text format, e.g. 2.5, true, (X=1,Y=2)"
+      }
+    ]
+  },
+  "set_state_tree_node_flags": {
+    "category": "statetree",
+    "params": [
+      {
+        "name": "assetPath",
+        "type": "string",
+        "required": true,
+        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+      },
+      {
+        "name": "nodeId",
+        "type": "string",
+        "required": true,
+        "description": "GUID of the node, as the add_* actions return it"
+      },
+      {
+        "name": "taskEnabled",
+        "type": "boolean",
+        "required": false,
+        "description": "Tasks: enable or disable the task"
+      },
+      {
+        "name": "consideredForCompletion",
+        "type": "boolean",
+        "required": false,
+        "description": "Tasks: whether the task counts toward the state completing. The task must be enabled and allow the edit"
+      },
+      {
+        "name": "evaluationMode",
+        "type": "string",
+        "required": false,
+        "description": "Conditions: Evaluated, ForcedTrue or ForcedFalse"
+      }
+    ]
+  },
   "set_state_tree_root_parameters": {
     "category": "statetree",
     "params": [
@@ -1489,16 +1710,21 @@ export const paramsClauses: Readonly<Record<string, string>> = {
   add_state_tree_task: "Params: assetPath, stateId?, statePath?, structType, instanceProperties?",
   add_state_tree_transition: "Params: assetPath, stateId?, statePath?, trigger, transitionType, eventTag?, targetStateId?, targetStatePath?, priority?, delayDuration?, bDelayTransition?",
   add_state_tree_transition_condition: "Params: assetPath, stateId?, statePath?, transitionIndex, structType, instanceProperties?, operand?",
+  check_state_tree_binding: "Params: assetPath, targetStructId, targetPath?, sourceStructId?, sourcePath?",
   clear_state_tree_state_nodes: "Params: assetPath, stateId?, statePath?",
   compile_state_tree: "Params: assetPath",
+  list_state_tree_bindable_properties: "Params: assetPath, structId, targetPath?, exactOnly?, maxDepth?",
   list_state_tree_bindable_sources: "Params: assetPath, cursor?, limit?",
   list_state_tree_bindings: "Params: assetPath, structId?",
   list_state_tree_colors: "Params: assetPath",
   list_state_tree_node_types: "Params: assetPath, nodeType?, filter?, includeInstanceProperties?, schemaAllowedOnly?",
   list_state_tree_state_parameters: "Params: assetPath, stateId?, statePath?",
   list_state_tree_states: "Params: assetPath, cursor?, limit?",
+  move_state_tree_node: "Params: assetPath, nodeId, newIndex",
   move_state_tree_state: "Params: assetPath, stateId?, statePath?, newParentStateId?, newParentStatePath?, toRoot?, insertIndex?",
+  promote_state_tree_property_to_parameter: "Params: assetPath, targetStructId, targetPath, parameterName?, stateId?, statePath?",
   read_state_tree: "Params: assetPath",
+  read_state_tree_node: "Params: assetPath, nodeId",
   read_state_tree_runtime: "Params: actorLabel?, actorPath?, componentName?, world?, pieInstance?, includeDebugStrings?",
   read_state_tree_state: "Params: assetPath, stateId?, statePath?",
   remove_state_tree_binding: "Params: assetPath, targetStructId, targetPath",
@@ -1518,6 +1744,8 @@ export const paramsClauses: Readonly<Record<string, string>> = {
   set_state_tree_global_task_instance_property: "Params: assetPath, nodeId, propertyName, value",
   set_state_tree_global_task_property: "Params: assetPath, nodeId, propertyName, value",
   set_state_tree_node_class: "Params: assetPath, nodeId, nodeClass",
+  set_state_tree_node_data: "Params: assetPath, nodeId, target?, propertyName?, value",
+  set_state_tree_node_flags: "Params: assetPath, nodeId, taskEnabled?, consideredForCompletion?, evaluationMode?",
   set_state_tree_root_parameters: "Params: assetPath, parameters",
   set_state_tree_schema: "Params: assetPath, schema?",
   set_state_tree_state_link: "Params: assetPath, stateId?, statePath?, linkType, targetStateId?, targetStatePath?, linkedAsset?",
@@ -1538,10 +1766,13 @@ export const schema: Record<string, z.ZodType> = {
   componentName: z.string().optional().describe("Which StateTree component, when the actor has more than one"),
   conditionIndex: z.number().int().optional().describe("Condition index within the list, as read_state reports it"),
   considerationIndex: z.number().int().optional().describe("Index of the consideration within the state, as read_state reports it"),
+  consideredForCompletion: z.boolean().optional().describe("Tasks: whether the task counts toward the state completing. The task must be enabled and allow the edit"),
   cursor: z.string().optional().describe("Resume a paged read: pass back the nextCursor from the previous page, unmodified"),
   delayDuration: z.number().optional().describe("Transition delay in seconds"),
   displayName: z.string().optional().describe("Display name for the new palette entry"),
+  evaluationMode: z.string().optional().describe("Conditions: Evaluated, ForcedTrue or ForcedFalse"),
   eventTag: z.string().optional().describe("Gameplay tag for OnEvent transitions, e.g. MyGame.SomeEvent (add_state_tree_transition). Registered gameplay tag of the event (send_state_tree_event)"),
+  exactOnly: z.boolean().optional().describe("With targetPath: leave out sources that need a numeric promotion"),
   fallback: z.string().optional().describe("None (default) or NextSelectableSibling"),
   filter: z.string().optional().describe("Only structs and classes whose name contains this substring"),
   includeDebugStrings: z.boolean().optional().describe("Include the engine's own debug dump of the execution state"),
@@ -1552,41 +1783,46 @@ export const schema: Record<string, z.ZodType> = {
   linkedAsset: z.string().optional().describe("linkType=asset: the StateTree asset this state runs"),
   linkedSubtree: z.string().optional().describe("StateTree ASSET path assigned to LinkedAsset. To link a Subtree state inside this asset, use set_state_link with linkType=subtree"),
   linkType: z.string().optional().describe("subtree (a Subtree state in this asset), asset (another StateTree asset), or none (clear both)"),
+  maxDepth: z.number().int().optional().describe("How deep to descend into value structs: 1 is top level only, 0 is unlimited (default 3)"),
   name: z.string().optional().describe("Name for the new state"),
+  newIndex: z.number().int().optional().describe("Position the node ends up at within the list it is in, 0-based"),
   newParentStateId: z.string().optional().describe("GUID of the state to move under"),
   newParentStatePath: z.string().optional().describe("Dot-path of the state to move under, as an alternative to newParentStateId"),
   nodeClass: z.string().optional().describe("The Blueprint class this node runs, as a class path or a loaded class name"),
-  nodeId: z.string().optional().describe("GUID of the evaluator node (remove_state_tree_evaluator, set_state_tree_evaluator_instance_property, set_state_tree_evaluator_property). GUID of the global task node (remove_state_tree_global_task, set_state_tree_global_task_instance_property, set_state_tree_global_task_property). GUID of the Blueprint node wrapper, as every add_* action returns it (set_state_tree_node_class)"),
+  nodeId: z.string().optional().describe("GUID of the task, condition, consideration, evaluator or global task, as the add_* actions return it (move_state_tree_node). GUID of any node in the tree, as the add_* actions return it (read_state_tree_node). GUID of the evaluator node (remove_state_tree_evaluator, set_state_tree_evaluator_instance_property, set_state_tree_evaluator_property). GUID of the global task node (remove_state_tree_global_task, set_state_tree_global_task_instance_property, set_state_tree_global_task_property). GUID of the Blueprint node wrapper, as every add_* action returns it (set_state_tree_node_class). GUID of the node, as the add_* actions return it (set_state_tree_node_data, set_state_tree_node_flags)"),
   nodeType: z.string().optional().describe("task, condition, evaluator, consideration, or all (default)"),
   operand: z.string().optional().describe("Expression operand for conditions: And or Or"),
   origin: z.string().optional().describe("Who the event says it came from (default ue-mcp)"),
+  parameterName: z.string().optional().describe("Name for the new parameter (default: the property name, made unique)"),
   parameters: z.array(z.record(z.string(), z.unknown())).optional().describe("Root parameter definitions [{name, type}] where type is float, int32, bool, string, name or double"),
   paramName: z.string().optional().describe("Parameter name"),
   paramType: z.string().optional().describe("Bool, Int32, Int64, Float, Double, Name, String or Text"),
   pieInstance: z.number().int().optional().describe("Which PIE instance, when several are running"),
   priority: z.string().optional().describe("Low, Normal, Medium, High or Critical"),
-  propertyName: z.string().optional().describe("Property to set (set_state_tree_evaluator_instance_property, set_state_tree_evaluator_property, set_state_tree_global_task_instance_property, set_state_tree_global_task_property, set_state_tree_task_instance_property, set_state_tree_task_property). Property to set: name, type, selectionBehavior, bEnabled, weight, linkedAsset, description, tag, customTickRate or color (set_state_tree_state_property)"),
+  propertyName: z.string().optional().describe("Property to set (set_state_tree_evaluator_instance_property, set_state_tree_evaluator_property, set_state_tree_global_task_instance_property, set_state_tree_global_task_property, set_state_tree_task_instance_property, set_state_tree_task_property). Property to write. Omit to replace the whole struct with value (set_state_tree_node_data). Property to set: name, type, selectionBehavior, bEnabled, weight, linkedAsset, description, tag, customTickRate or color (set_state_tree_state_property)"),
   schema: z.string().optional().describe("Schema class path, e.g. /Script/GameplayStateTreeModule.StateTreeComponentSchema (default: the first concrete schema this editor has)"),
   schemaAllowedOnly: z.boolean().optional().describe("Only node types this tree's schema permits (default true)"),
   selectionBehavior: z.string().optional().describe("Selection behavior: TryEnterState, TrySelectChildrenInOrder, TrySelectChildrenAtRandom, etc."),
   sourcePath: z.string().optional().describe("Source property path"),
-  sourceStructId: z.string().optional().describe("Source struct GUID, as list_bindable_sources reports it"),
-  stateId: z.string().optional().describe("GUID of the target state (or pass statePath) (add_state_tree_consideration, add_state_tree_enter_condition, add_state_tree_state_parameter, add_state_tree_task, add_state_tree_transition, add_state_tree_transition_condition, clear_state_tree_state_nodes, list_state_tree_state_parameters, move_state_tree_state, read_state_tree_state, remove_state_tree_consideration, remove_state_tree_enter_condition, remove_state_tree_state, remove_state_tree_state_parameter, remove_state_tree_task, remove_state_tree_transition, remove_state_tree_transition_condition, set_state_tree_state_link, set_state_tree_state_parameter, set_state_tree_state_property, set_state_tree_task_instance_property, set_state_tree_task_property). Parent state GUID (omit both parent selectors for a root state) (add_state_tree_state)"),
-  statePath: z.string().optional().describe("Dot-path to the target state, as an alternative to stateId (add_state_tree_consideration, add_state_tree_enter_condition, add_state_tree_state_parameter, add_state_tree_task, add_state_tree_transition, add_state_tree_transition_condition, clear_state_tree_state_nodes, list_state_tree_state_parameters, move_state_tree_state, read_state_tree_state, remove_state_tree_consideration, remove_state_tree_enter_condition, remove_state_tree_state, remove_state_tree_state_parameter, remove_state_tree_task, remove_state_tree_transition, remove_state_tree_transition_condition, set_state_tree_state_link, set_state_tree_state_parameter, set_state_tree_state_property, set_state_tree_task_instance_property, set_state_tree_task_property). Parent state dot-path, as an alternative to stateId (add_state_tree_state)"),
+  sourceStructId: z.string().optional().describe("Source struct GUID, as list_bindable_sources reports it (add_state_tree_binding). Source struct GUID. Omit to resolve the target alone (check_state_tree_binding)"),
+  stateId: z.string().optional().describe("GUID of the target state (or pass statePath) (add_state_tree_consideration, add_state_tree_enter_condition, add_state_tree_state_parameter, add_state_tree_task, add_state_tree_transition, add_state_tree_transition_condition, clear_state_tree_state_nodes, list_state_tree_state_parameters, move_state_tree_state, read_state_tree_state, remove_state_tree_consideration, remove_state_tree_enter_condition, remove_state_tree_state, remove_state_tree_state_parameter, remove_state_tree_task, remove_state_tree_transition, remove_state_tree_transition_condition, set_state_tree_state_link, set_state_tree_state_parameter, set_state_tree_state_property, set_state_tree_task_instance_property, set_state_tree_task_property). Parent state GUID (omit both parent selectors for a root state) (add_state_tree_state). State to hold the parameter: the target's state or an ancestor. Omit both for a tree parameter (promote_state_tree_property_to_parameter)"),
+  statePath: z.string().optional().describe("Dot-path to the target state, as an alternative to stateId (add_state_tree_consideration, add_state_tree_enter_condition, add_state_tree_state_parameter, add_state_tree_task, add_state_tree_transition, add_state_tree_transition_condition, clear_state_tree_state_nodes, list_state_tree_state_parameters, move_state_tree_state, read_state_tree_state, remove_state_tree_consideration, remove_state_tree_enter_condition, remove_state_tree_state, remove_state_tree_state_parameter, remove_state_tree_task, remove_state_tree_transition, remove_state_tree_transition_condition, set_state_tree_state_link, set_state_tree_state_parameter, set_state_tree_state_property, set_state_tree_task_instance_property, set_state_tree_task_property). Parent state dot-path, as an alternative to stateId (add_state_tree_state). Dot-path of that state, as an alternative to stateId (promote_state_tree_property_to_parameter)"),
   stateType: z.string().optional().describe("State type: State, Group, LinkedAsset, Subtree"),
-  structId: z.string().optional().describe("Only bindings whose source or target is this struct GUID"),
+  structId: z.string().optional().describe("Bindable struct GUID, as list_bindable_sources reports it (list_state_tree_bindable_properties). Only bindings whose source or target is this struct GUID (list_state_tree_bindings)"),
   structType: z.string().optional().describe("C++ struct name of the consideration (add_state_tree_consideration). C++ struct name of the condition (add_state_tree_enter_condition, add_state_tree_transition_condition). C++ struct name deriving from FStateTreeEvaluatorBase (add_state_tree_evaluator). C++ struct name deriving from FStateTreeTaskBase (add_state_tree_global_task). C++ struct name, e.g. FMyStateTreeTask or an engine task like FStateTreeRunParallelStateTreesTask (add_state_tree_task)"),
-  targetPath: z.string().optional().describe("Target property path"),
+  target: z.string().optional().describe("node (the node struct), instance (default) or executionRuntime"),
+  targetPath: z.string().optional().describe("Target property path (add_state_tree_binding, check_state_tree_binding, remove_state_tree_binding). A property of that struct: list the compatible sources in its scope instead of the struct's properties (list_state_tree_bindable_properties). Property path to promote (promote_state_tree_property_to_parameter)"),
   targetStateId: z.string().optional().describe("Target state GUID for GotoState transitions (add_state_tree_transition). GUID of the state to transition to (or pass targetStateTag) (request_state_tree_transition). linkType=subtree: GUID of the Subtree state to link to (set_state_tree_state_link)"),
   targetStatePath: z.string().optional().describe("Target state dot-path for GotoState transitions (add_state_tree_transition). linkType=subtree: dot-path of the Subtree state to link to (set_state_tree_state_link)"),
   targetStateTag: z.string().optional().describe("Tag of the state to transition to, UE 5.8 and later"),
-  targetStructId: z.string().optional().describe("Target struct GUID"),
+  targetStructId: z.string().optional().describe("Target struct GUID (add_state_tree_binding, check_state_tree_binding, remove_state_tree_binding). Struct GUID of the property to promote (promote_state_tree_property_to_parameter)"),
+  taskEnabled: z.boolean().optional().describe("Tasks: enable or disable the task"),
   taskIndex: z.number().int().optional().describe("Task index within the state"),
   toRoot: z.boolean().optional().describe("Move the state to the top level of the asset instead of under a parent"),
   transitionIndex: z.number().int().optional().describe("Transition index within the state"),
   transitionType: z.string().optional().describe("GotoState, NextState, NextSelectableState, Succeeded or Failed"),
   trigger: z.string().optional().describe("OnStateCompleted, OnStateSucceeded, OnStateFailed, OnTick or OnEvent; combine with | e.g. OnStateSucceeded|OnStateFailed"),
-  value: z.string().optional().describe("Property value as a string (set_state_tree_evaluator_instance_property, set_state_tree_evaluator_property, set_state_tree_global_task_instance_property, set_state_tree_global_task_property, set_state_tree_state_parameter, set_state_tree_task_instance_property, set_state_tree_task_property). Property value as a string. tag: gameplay tag or empty to clear. customTickRate: seconds or empty to disable. color: palette display name, GUID, or empty to clear (set_state_tree_state_property)"),
+  value: z.string().optional().describe("Property value as a string (set_state_tree_evaluator_instance_property, set_state_tree_evaluator_property, set_state_tree_global_task_instance_property, set_state_tree_global_task_property, set_state_tree_state_parameter, set_state_tree_task_instance_property, set_state_tree_task_property). Value in Unreal text format, e.g. 2.5, true, (X=1,Y=2) (set_state_tree_node_data). Property value as a string. tag: gameplay tag or empty to clear. customTickRate: seconds or empty to disable. color: palette display name, GUID, or empty to clear (set_state_tree_state_property)"),
   world: z.string().optional().describe("pie (default), auto, or editor"),
 };
 

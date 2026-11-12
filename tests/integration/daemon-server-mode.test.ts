@@ -32,8 +32,8 @@ describe("server mode", () => {
       McpServer.start(sb, { projects: [inProcess], env }),
     ]);
     try {
-      expect(await a.toolNames()).toEqual(["flow", "tools"]);
-      expect(await b.toolNames()).toEqual(["flow", "tools"]);
+      expect(await a.toolNames()).toEqual(["tools"]);
+      expect(await b.toolNames()).toEqual(["tools"]);
       const d = readDiscovery(sb, viaDaemon)!;
       expect(d).not.toBeNull();
       expect((await call(d, "GET", "/v1/health")).body.clients).toBe(1);
@@ -43,7 +43,7 @@ describe("server mode", () => {
       // The variable wins over the file.
       const overridden = await McpServer.start(sb, { projects: [sb.makeProject("ModeOverride", { config: config("daemon") })], mode: "in-process" });
       try {
-        expect(await overridden.toolNames()).toEqual(["flow", "tools"]);
+        expect(await overridden.toolNames()).toEqual(["tools"]);
         expect(readDiscovery(sb, path.join(sb.root, "ModeOverride", "ModeOverride.uproject"))).toBeNull();
       } finally {
         await overridden.client.close();
@@ -81,7 +81,7 @@ describe("server mode", () => {
     fs.writeFileSync(file, "not a directory");
     const server = await McpServer.start(sb, { projects: [project], mode: "daemon", env: { UE_MCP_DAEMON_DIR: path.join(file, "daemons"), UE_MCP_LOG_LEVEL: "warn" } });
     try {
-      expect(await server.toolNames()).toEqual(["flow", "tools"]);
+      expect(await server.toolNames()).toEqual(["tools"]);
       const r = await server.call("tools", { action: "call", category: "project", method: "get_status" });
       expect(r.isError, r.text).toBe(false);
       expect(server.log).toContain("daemon unavailable; serving in process");

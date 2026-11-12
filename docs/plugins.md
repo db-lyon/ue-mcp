@@ -6,7 +6,7 @@ A ue-mcp plugin is an npm package that extends the server. It can:
 - **Provide** a new top-level category it owns.
 - **Ship native C++** that registers handlers on the editor bridge.
 
-It can also ship [flows](flows.md), [guards](plugins-guards.md), knowledge text for the categories it touches, and Claude Code skills.
+It can also ship [flows](flows.md), [guards](guards.md), knowledge text for the categories it touches, and Claude Code skills.
 
 Published plugins are listed at **[plugins.ue-mcp.com](https://plugins.ue-mcp.com)**.
 
@@ -70,5 +70,6 @@ Everything else is a plugin:
 - [Using plugins](plugins-using.md): install, update, configure, inspect and remove.
 - [Authoring a plugin](plugins-authoring.md): scaffold, manifest, tasks, provided categories, skills and publishing.
 - [Native C++ modules](plugins-native-modules.md): C++ handlers on the bridge.
-- [Guards](plugins-guards.md): gate every bridge call.
 - [Validation and troubleshooting](plugins-troubleshooting.md): the loader's rules and common failures.
+
+Guards are not a plugin feature. A project declares them in its `ue-mcp.yml` with no plugin installed, and a plugin can ship them as well. See [Guards](guards.md).

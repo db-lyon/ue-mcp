@@ -9,7 +9,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { callBridge, disconnectBridge, getBridge, type TestResult } from "../setup.js";
+import { callBridge, closeEditorTabWindows, disconnectBridge, getBridge, type TestResult } from "../setup.js";
 import type { EditorBridge } from "../../src/bridge/bridge.js";
 
 const DIR = "/Game/MCPTest/BCov/AssetB/Misc";
@@ -62,6 +62,7 @@ beforeAll(async () => {
 }, 120_000);
 
 afterAll(async () => {
+  if (bridge) await closeEditorTabWindows(bridge);
   if (scratch) rmSync(scratch, { recursive: true, force: true });
   if (bridge) {
     await callBridge(bridge, "delete_folder", { path: DIR, force: true });
@@ -176,6 +177,13 @@ describe("searching", () => {
     expect(rows.find((r) => r.name === "E_BCovB_SearchProbe")?.className).toBe("UserDefinedEnum");
     const none = await call("search_assets", { query: "NoSuchBCovProbe", directory: `${DIR}/Search` });
     expect(none.results).toEqual([]);
+
+    // classFilter (and its alias typeFilter) is applied, not ignored (#1551).
+    const enums = await call("search_assets", { query: "SearchProbe", directory: `${DIR}/Search`, classFilter: "userdefinedenum" });
+    expect((enums.results as Row[]).map((r) => r.name)).toContain("E_BCovB_SearchProbe");
+    expect(enums.paramsNotRead).toBeUndefined();
+    const materials = await call("search_assets", { query: "SearchProbe", directory: `${DIR}/Search`, typeFilter: "Material" });
+    expect(materials.results).toEqual([]);
   }, 120_000);
 
   it("reindex_assets_fts rescans a folder and search_assets_fts ranks its asset", async () => {

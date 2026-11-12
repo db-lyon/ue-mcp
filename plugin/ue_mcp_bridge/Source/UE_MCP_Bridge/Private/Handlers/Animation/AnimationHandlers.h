@@ -45,6 +45,8 @@ private:
 	static TSharedPtr<FJsonValue> ListSockets(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> GetPhysicsAssetInfo(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> GetPhysicsAssetConstraints(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> SetPhysicsAssetConstraintLimits(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> SetPhysicsAssetBodyMaterial(const TSharedPtr<FJsonObject>& Params);
 
 	// Read handlers for animation asset types
 	static TSharedPtr<FJsonValue> ReadAnimBlueprint(const TSharedPtr<FJsonObject>& Params);
@@ -110,6 +112,7 @@ private:
 	static TSharedPtr<FJsonValue> AddCurve(const TSharedPtr<FJsonObject>& Params);
 	// #712: set float-curve key VALUES directly (add_curve only names an empty curve).
 	static TSharedPtr<FJsonValue> SetAnimCurveKeys(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> ReadAnimCurveKeys(const TSharedPtr<FJsonObject>& Params);
 	// #712: instantiate + run a UAnimationModifier subclass on an AnimSequence
 	// (e.g. DistanceCurveModifier to bake a Distance curve from root motion).
 	static TSharedPtr<FJsonValue> ApplyAnimationModifier(const TSharedPtr<FJsonObject>& Params);
@@ -148,6 +151,7 @@ private:
 	static TSharedPtr<FJsonValue> CaptureControlRigPose(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> ApplyControlRigEdits(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> BakeControlRigEdit(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> BakeSequenceAnimation(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> AnalyzeAnimation(const TSharedPtr<FJsonObject>& Params);
 
 	// v0.7.11 - depth

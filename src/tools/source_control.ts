@@ -1,6 +1,7 @@
 import type { ToolDef } from "../core/types.js";
 import { categoryTool } from "../surface/category-tool.js";
 import { specBp, schema as specSchema } from "./specs/source_control.generated.js";
+import { actions as epicActions, schema as epicSchema } from "./epic/source_control.generated.js";
 
 // Source control through the editor's configured provider (ISourceControlModule),
 // so one surface serves Perforce, Git, Unity Version Control and Subversion.
@@ -15,15 +16,17 @@ export const sourceControlTool: ToolDef = categoryTool(
     checkout:          specBp("mutate", "Check out (open for edit) files so they can be saved. Reports checkedOut, alreadyCheckedOut and failed with a reason per file (locked by another user, out of date, not under source control). On a provider without checkout (Git) the files are reported as checkoutNotRequired. Rolls back by reverting exactly the files this call checked out.", "source_control_checkout"),
     add:               specBp("mutate", "Mark new files for add. A file must exist on disk, so save a new asset first. Reports added, alreadyControlled and failed per file. Rolls back by reverting exactly the files this call added.", "source_control_add"),
     revert:            specBp("mutate", "Revert files to the repository revision, discarding local edits. dryRun=true lists what would be reverted (wouldRevert) and changes nothing. Unsaved editor edits to a named package are reported (unsavedInEditor) and refuse the call unless discardUnsaved=true. Loaded packages are unloaded and reloaded around the revert; a loaded map must be closed first. No inverse: the discarded edits are gone.", "source_control_revert"),
-    diff:              specBp("read", "Diff one file against its latest repository revision. A text file (config, source, .uproject) returns a unified diff with addedLines and removedLines, capped at maxLines. A package returns its status and the revision it would be compared with; openEditor=true opens the editor's asset diff window against that revision.", "source_control_diff"),
+    diff:              specBp("read", "Diff one file against a repository revision: head, or revision (the provider's id, a unique prefix of 7 or more characters, its number, or head, as history lists them). A text file (config, source, .uproject) returns a unified diff with addedLines and removedLines, capped at maxLines. A package returns its status and the revision it would be compared with; openEditor=true opens the editor's asset diff window against that revision, with the revision loaded into a /Temp package that is unloaded when the window closes (unloadsOnClose).", "source_control_diff"),
     submit:            specBp("mutate", "Submit (Perforce, Subversion, Unity Version Control) or commit (Git) the named files with a description. Only the named files are submitted, never implicitly. Files with unsaved editor edits refuse the call. Reports submitted and failed per file. No inverse: a submit is in the repository history, and undoing it is a new change.", "source_control_submit"),
     mark_for_delete:   { ...specBp("mutate", "Mark files for delete in the repository. Where the provider removes the file from disk on delete (Git, Perforce) it is gone locally too. Reports markedForDelete, alreadyDeleted and failed per file (marked for add, not under source control, locked). Files with unsaved editor edits refuse the call; a clean loaded package is listed under loadedInEditor. Rolls back by reverting exactly the files this call marked.", "source_control_mark_for_delete"), destructive: true },
     sync:              specBp("mutate", "Sync (Perforce get latest, Git pull) the named paths, or the project's Content, Config, Source and Plugins folders, to the latest repository revision. Packages under the paths with unsaved editor edits refuse the call. Loaded packages whose file changed are reloaded (reloaded); changedFiles lists the named files and loaded packages the sync rewrote. No inverse: going back is another sync.", "source_control_sync"),
     history:           specBp("read", "Revision history of one asset or file, newest first: revision, user, date, action, description, changelist (checkInIdentifier) and file size per revision, capped at limit with total and truncated.", "source_control_history"),
     connect:           specBp("mutate", "Connect, or reconnect, the editor's configured provider, with an optional password or ticket for providers that log in. Reports wasConnected and connected, and the provider's own error text when it fails. The password is never echoed.", "source_control_connect"),
     set_checkout_mode: specBp("mutate", "Choose what a bridge write does with a read-only file under source control for the rest of the editor session. manual (the default) refuses and names source_control(checkout); auto checks the file out first and lists it on the result as autoCheckedOut. UE_MCP_CHECKOUT_MODE=auto at editor startup turns it on from the start. Rolls back to the previous mode.", "source_control_set_checkout_mode"),
+    ...epicActions,
   },
   {
+    ...epicSchema,
     // Every key the source_control handlers declare, generated from their C++ registrations.
     ...specSchema,
   },

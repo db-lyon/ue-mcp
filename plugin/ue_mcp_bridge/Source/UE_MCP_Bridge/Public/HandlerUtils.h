@@ -53,3 +53,4 @@
 #include "HandlerPackageSave.h"
 #include "HandlerObjectUtils.h"
 #include "HandlerLogCapture.h"
+#include "HandlerPathGuard.h"

@@ -12,6 +12,7 @@
 #include "Components/Slider.h"
 #include "Components/SpinBox.h"
 #include "Types/SlateEnums.h"
+#include "UObject/StructOnScope.h"
 
 // ─────────────────────────────────────────────────────────────
 // #812  Runtime child-widget interaction.
@@ -37,7 +38,8 @@ namespace WidgetInteraction_Internal
 	/** Widget classes invoke_runtime_function can drive, for the unsupported-class error. */
 	static const TCHAR* SupportedClasses =
 		TEXT("Button, CheckBox, Slider, SpinBox, EditableText, EditableTextBox, "
-		     "MultiLineEditableText, MultiLineEditableTextBox, ComboBoxString");
+		     "MultiLineEditableText, MultiLineEditableTextBox, ComboBoxString, "
+		     "CommonButtonBase (CommonUI)");
 
 	/** The `value` param as a raw JSON value, or an unset pointer when absent/null. */
 	static TSharedPtr<FJsonValue> ReadValueField(const TSharedPtr<FJsonObject>& Params)
@@ -203,6 +205,37 @@ namespace WidgetInteraction_Internal
 			OutInfo->SetStringField(TEXT("invoked"), Names.Last());
 		}
 	}
+
+	/**
+	 * CommonUI's button base, or null when the plugin is not loaded. Reached by
+	 * path so the bridge keeps no link dependency on CommonUI (#1455).
+	 */
+	static UClass* FindCommonButtonBaseClass()
+	{
+		return FindObject<UClass>(nullptr, TEXT("/Script/CommonUI.CommonButtonBase"));
+	}
+
+	/** Run a parameterless UFUNCTION on a CommonUI button. False when it is absent. */
+	static bool CallCommonButtonHandler(UObject* Button, const TCHAR* FunctionName)
+	{
+		UFunction* Function = Button->FindFunction(FName(FunctionName));
+		if (!Function || Function->ParmsSize != 0) return false;
+		Button->ProcessEvent(Function, nullptr);
+		return true;
+	}
+
+	/** Read a `bool Fn() const` UFUNCTION on a CommonUI button. False when it is absent. */
+	static bool ReadCommonButtonBool(UObject* Button, const TCHAR* FunctionName, bool& Out)
+	{
+		UFunction* Function = Button->FindFunction(FName(FunctionName));
+		if (!Function || Function->NumParms != 1) return false;
+		FBoolProperty* Return = CastField<FBoolProperty>(Function->GetReturnProperty());
+		if (!Return) return false;
+		FStructOnScope Frame(Function);
+		Button->ProcessEvent(Function, Frame.GetStructMemory());
+		Out = Return->GetPropertyValue_InContainer(Frame.GetStructMemory());
+		return true;
+	}
 }
 
 TSharedPtr<FJsonValue> FWidgetHandlers::SimulateRuntimeChildInteraction(
@@ -256,6 +289,78 @@ TSharedPtr<FJsonValue> FWidgetHandlers::SimulateRuntimeChildInteraction(
 				TEXT("OnClicked, OnPressed, OnReleased, OnHovered, OnUnhovered"));
 		}
 		return TSharedPtr<FJsonValue>();
+	}
+
+	// ── UCommonButtonBase: run the handler the internal button is bound to ──
+	// A CommonUI button is a UserWidget wrapping an internal UButton whose
+	// clicks land in HandleButtonClicked/Pressed/Released. Those apply the
+	// lock, selection and click logic, then fire OnClicked and the Blueprint
+	// event, so calling them is what a real click does (#1455).
+	if (UClass* CommonButtonClass = FindCommonButtonBaseClass())
+	{
+		if (Target->IsA(CommonButtonClass))
+		{
+			const TCHAR* Handler = nullptr;
+			const TCHAR* Delegate = nullptr;
+			if (Requested.IsEmpty() || NameMatches(Requested, TEXT("OnClicked")) ||
+				NameMatches(Requested, TEXT("HandleButtonClicked")))
+			{
+				Handler = TEXT("HandleButtonClicked");
+				Delegate = TEXT("OnClicked");
+			}
+			else if (NameMatches(Requested, TEXT("OnPressed")) || NameMatches(Requested, TEXT("HandleButtonPressed")))
+			{
+				Handler = TEXT("HandleButtonPressed");
+				Delegate = TEXT("OnPressed");
+			}
+			else if (NameMatches(Requested, TEXT("OnReleased")) || NameMatches(Requested, TEXT("HandleButtonReleased")))
+			{
+				Handler = TEXT("HandleButtonReleased");
+				Delegate = TEXT("OnReleased");
+			}
+			else
+			{
+				return UnsupportedDelegate(Target, Requested, TEXT("OnClicked, OnPressed, OnReleased"));
+			}
+
+			// A disabled CommonUI button disables its internal button, so no
+			// real click can reach it. Refuse rather than run a graph the UI
+			// would never run.
+			bool bInteractionEnabled = true;
+			if (ReadCommonButtonBool(Target, TEXT("IsInteractionEnabled"), bInteractionEnabled) && !bInteractionEnabled)
+			{
+				return MCPError(FString::Printf(
+					TEXT("CommonButtonBase '%s' has interaction disabled, so it cannot be clicked. Enable it with SetIsInteractionEnabled first."),
+					*Target->GetName()));
+			}
+
+			bool bWasSelected = false;
+			const bool bHasSelection = ReadCommonButtonBool(Target, TEXT("GetSelected"), bWasSelected);
+
+			if (!CallCommonButtonHandler(Target, Handler))
+			{
+				return MCPError(FString::Printf(
+					TEXT("CommonButtonBase '%s' exposes no %s in this engine version"),
+					*Target->GetName(), Handler));
+			}
+
+			OutInfo->SetStringField(TEXT("interaction"), TEXT("click"));
+			OutInfo->SetStringField(TEXT("handler"), Handler);
+			bool bLocked = false;
+			if (ReadCommonButtonBool(Target, TEXT("GetLocked"), bLocked))
+			{
+				// A locked button routes the click to OnLockClicked instead.
+				OutInfo->SetBoolField(TEXT("locked"), bLocked);
+			}
+			bool bIsSelected = false;
+			if (bHasSelection && ReadCommonButtonBool(Target, TEXT("GetSelected"), bIsSelected))
+			{
+				OutInfo->SetBoolField(TEXT("wasSelected"), bWasSelected);
+				OutInfo->SetBoolField(TEXT("isSelected"), bIsSelected);
+			}
+			RecordDelegates(OutInfo, TArray<FString>{ Delegate });
+			return TSharedPtr<FJsonValue>();
+		}
 	}
 
 	// ── UCheckBox: set the state, then broadcast OnCheckStateChanged ─────────

@@ -10,7 +10,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "no
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { deflateSync } from "node:zlib";
-import { callBridge, disconnectBridge, getBridge, type TestResult } from "../setup.js";
+import { callBridge, closeEditorTabWindows, disconnectBridge, getBridge, type TestResult } from "../setup.js";
 import type { EditorBridge } from "../../src/bridge/bridge.js";
 
 const DIR = "/Game/MCPTest/BCov/AssetA/Import";
@@ -92,6 +92,7 @@ beforeAll(async () => {
 }, 120_000);
 
 afterAll(async () => {
+  if (bridge) await closeEditorTabWindows(bridge);
   if (scratch) rmSync(scratch, { recursive: true, force: true });
   if (bridge) {
     await callBridge(bridge, "delete_folder", { path: DIR, force: true });
@@ -128,6 +129,16 @@ describe("textures", () => {
     expect(bytes.subarray(1, 4).toString("ascii")).toBe("PNG");
     expect(bytes.readUInt32BE(16)).toBe(16);
     expect(bytes.readUInt32BE(20)).toBe(16);
+
+    // A size cap shrinks the platform data but not the PNG, which is written
+    // from the source. The reported size is the written image's (#1550).
+    await call("set_texture_settings", { assetPath: `${DIR}/T_BCovBlue`, maxTextureSize: 4 });
+    const cappedFile = join(scratch, "exported", "blue-capped.png");
+    const capped = await call("export_texture", { assetPath: `${DIR}/T_BCovBlue`, outputPath: cappedFile });
+    const cappedBytes = readFileSync(cappedFile);
+    expect(capped.width).toBe(cappedBytes.readUInt32BE(16));
+    expect(capped.height).toBe(cappedBytes.readUInt32BE(20));
+    expect(capped.width).toBe(16);
   }, 300_000);
 
   it("create_render_target_2d creates a render target with the requested size", async () => {

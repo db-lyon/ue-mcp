@@ -19,6 +19,7 @@
  * are additive.
  */
 export { DAEMON_API_VERSION, readDiscovery, readLiveDiscovery, discoveryPath, type DaemonDiscovery } from "./daemon/discovery.js";
+export type { FlowStepApprovalRequest, FlowStepApprover, FlowStepDecision } from "./flow/step-approval.js";
 export {
   EXTENSION_API_VERSION,
   EXTENSION_API_MIN_VERSION,
@@ -32,6 +33,7 @@ export {
   type DaemonExtensionApi,
   type ExtensionServicesApi,
   type DaemonHealth,
+  type McpSessionInfo,
   type EditorStatus,
   type ExtensionHandler,
   type ExtensionRequest,
@@ -63,7 +65,8 @@ export {
   type ContextScopeBucket,
 } from "./daemon/context-measurement.js";
 export type { DaemonEvent } from "./daemon/events.js";
-export type { DialogPromptFn, DialogPromptRequest, DialogPromptResult } from "./core/types.js";
+export type { DialogBlock, DialogPromptFn, DialogPromptRequest, DialogPromptResult } from "./core/types.js";
 export type { DisconnectCause } from "./daemon/disconnect.js";
 export { signBundle, verifyBundle, type UiBundleInfo, type UiManifest } from "./daemon/ui-bundles.js";
 export type { StatusReport, ClientStatus } from "./cli/status.js";
+export { MACHINE_REPORT_VERSION, type MachineReport, type MachineProject, type MachineDaemon } from "./machine/projects.js";

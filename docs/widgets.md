@@ -30,6 +30,33 @@ Every authoring action resolves its WidgetBlueprint from the path on every call.
 
 While PIE is running, the first two errors add a note to stop play and retry.
 
+## When an authoring edit does not compile
+
+Every authoring action that changes a Widget Blueprint compiles it before saving. The result carries `compileStatus` and `compiled`. When the compile fails, it also carries `compileErrors`, `compileMessages`, and how many of those errors the edit introduced (`introducedCompileErrors`) against how many the blueprint already had (`preexistingCompileErrors`).
+
+| Case | `success` | `saved` | What to do |
+|---|---|---|---|
+| The edit introduced errors | `false` | `false` | The edit stays applied in memory (`appliedInMemory: true`) and the package is dirty. Replay the result's `rollback` to undo it, discard it with `asset(reload_package)`, or fix the errors and save. |
+| The blueprint already had errors and the edit added none | `true` | `true` | The edit was saved. `compileWarning` lists the errors the blueprint had before the call. |
+
+The bridge knows which errors were already there only when the blueprint's last compile had failed: it compiles once before the edit and compares. Errors from graph changes that were never compiled count as introduced.
+
+The compile never saves on its own, whatever the editor's save-on-compile setting is.
+
+A refusal to compile is a different error: two widget variables share a GUID. Nothing is compiled or saved, and the message names the variables to recreate.
+
+## Placing a Widget Blueprint inside another
+
+`add_widget` and `build_tree` accept a Widget Blueprint as `widgetClass`, so one page can be placed in another screen. The placed template takes the class defaults the child class has at that moment, including ones just written with `blueprint(set_class_default)`. After the compile, the bridge checks every property the child class declares against those values, in the designer tree and in the compiled tree, and writes back any the compile lost before saving. Each one is listed in `classDefaultsRestored` with `widgetName`, `property`, the `value` written back and the value `found`; `classDefaultNow` appears when the child class default itself changed since placement. Properties a `build_tree` node sets in `properties` are left as the call set them.
+
+## Editing a widget while PIE runs
+
+Compiling a Widget Blueprint during play reinstances every live widget made from it. A reinstanced widget is rebuilt from its class, so children added at runtime, pages pushed into a stack and text set by game code are lost.
+
+`widget(set_property)` therefore does not compile during play. It writes the value to the asset and to every live widget made from it, where it shows at once, and compiles and saves the asset when play ends. The result carries `compileDeferred: true`, `saved: false`, `liveWidgetsUpdated`, `liveWidgetsMissed` (live widgets that lack the named widget, when any) and `playSessionNote`. A blueprint that already fails to compile is the exception: it compiles at once, as outside play.
+
+Every other authoring action changes the asset in a way only a compile can carry, so it still compiles during play. Its result adds `reinstancedPlayWidgets`, the number of live widgets the compile rebuilt, and `playSessionWarning`. Stop play first to keep the running screens intact.
+
 ## Where the runtime actions stop
 
 The runtime actions are point-in-time: one read of the current state, or one

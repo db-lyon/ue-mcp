@@ -42,6 +42,12 @@ export interface ElicitFn {
 
 export interface ElicitParams {
   message: string;
+  /**
+   * Machine-readable context for a client that renders the form as its own
+   * card, keyed by a namespaced name such as `ue-mcp/guard`. Optional; a
+   * client that ignores it still has the message and the form.
+   */
+  _meta?: Record<string, unknown>;
   requestedSchema: {
     type: "object";
     properties: Record<string, ElicitPrimitiveSchema>;
@@ -72,6 +78,31 @@ export interface ElicitResult {
 }
 
 /**
+ * One block of an editor dialog's body, in reading order (#1891).
+ *
+ * The flat `message` is every text widget of the dialog on its own line,
+ * buttons and table cells included. `blocks` is the same body as it reads:
+ *
+ *   paragraph  text outside any table and any button; texts laid side by side
+ *              in the dialog are one paragraph.
+ *   table      a list or tree view: its visible column headings and one row of
+ *              cells per row. `checked` (when any row has a checkbox) holds each
+ *              row's state, null for a row without one, and `items` the index of
+ *              that row in the dialog's `items`, which respond_to_dialog takes.
+ *
+ * The dialog's title and its button labels are never part of it.
+ */
+export type DialogBlock =
+  | { type: "paragraph"; text: string }
+  | {
+      type: "table";
+      columns: string[];
+      rows: string[][];
+      checked?: Array<boolean | null>;
+      items?: Array<number | null>;
+    };
+
+/**
  * A blocking dialog put to a daemon extension, for a call that extension made.
  *
  * The same form an MCP client is elicited with (`message`, `requestedSchema`,
@@ -88,6 +119,8 @@ export interface DialogPromptRequest extends ElicitParams {
     buttons: string[];
     /** The rows a person can tick, for a dialog that asks per item. */
     items?: Array<{ index: number; label: string; cells: string[]; checked: boolean }>;
+    /** The body as paragraphs and tables, when the plugin reports it; `message` otherwise. */
+    blocks?: DialogBlock[];
     /** The `category.action` whose call met the dialog. */
     subject: string;
     /** An answer sooner than this many milliseconds is not taken as a person's. */
@@ -123,6 +156,12 @@ export interface InProcessCallOptions {
    * that wants a person applies as it does for a client without elicitation.
    */
   elicit?: ElicitFn;
+  /**
+   * The access mode this call runs under. `read-only` refuses an action whose
+   * declared effect is `mutate` or `unknown`, and every state-changing bridge
+   * call it would make. Default read-write.
+   */
+  access?: "read-write" | "read-only";
 }
 
 export interface ToolContext {
@@ -173,11 +212,28 @@ export interface ToolContext {
    */
   onProgress?: ProgressFn;
   /**
+   * Aborted when the client cancels this call (notifications/cancelled). A
+   * bridge call handed it sends cancel_request to the editor and stops waiting.
+   */
+  readonly signal?: AbortSignal;
+  /**
    * Who is on the other end of the transport, from the MCP `initialize`
    * handshake. Used to explain client-specific rendering limits in a result
    * rather than leaving the user staring at a call that looks frozen.
    */
   client?: { name: string; version?: string };
+  /**
+   * A flow run started over HTTP with `stepApproval`: every task it creates
+   * asks this registered approver first (flow/step-approval.ts). Never set by
+   * the MCP surface.
+   */
+  flowStepApproval?: { approver: string; token: string };
+  /**
+   * The MCP session this call came from, as asset leases name it: the
+   * daemon's id for the connection, or this process for a stdio server.
+   * Absent where no session is behind the call.
+   */
+  leaseHolder?: { id: string; label: string };
 }
 
 export interface ProgressUpdate {
@@ -370,6 +426,13 @@ interface ActionSpecBase {
    * the canonical address. Built by `movedAction`.
    */
   movedTo?: { category: string; action: string };
+  /**
+   * Result paths (dotted, arrays traversed) that name an image file this
+   * action wrote. Set by `withInlineImage`, which also adds the `inline`
+   * parameter: with it, dispatch reads those files and returns them as image
+   * content.
+   */
+  imageOutputs?: readonly string[];
 }
 
 /** Forwards to a C++ bridge method over the WebSocket. Built by `bp`. */
@@ -388,10 +451,25 @@ export interface BridgeActionSpec extends ActionSpecBase {
    */
   epicTool?: EpicToolRef;
   /**
-   * Runs after the bridge answers, with the parameters sent and the answer; what it returns replaces the answer.
+   * The tool, served by Epic's Unreal MCP plugin outside the toolset registry,
+   * that this action runs through `epic_call_mcp_tool`, and the engine plugin
+   * that registers it. The action is withheld while the editor's MCP tool
+   * list is known and lacks the tool (#1824).
+   */
+  mcpTool?: { name: string; plugin: string };
+  /**
+   * Runs after the bridge answers, with canonical parameters, the caller's routing timeoutMs when given, and the answer.
+   * What it returns replaces the answer. Routing timeoutMs is never sent to the bridge as a handler parameter.
    * For work the editor cannot do on its game thread, such as waiting for a PCG generation (#1365).
    */
   followUp?: (ctx: ToolContext, params: Record<string, unknown>, answered: unknown) => Promise<unknown>;
+  /**
+   * Runs before the bridge call, with the parameters that would be sent. A value
+   * other than undefined is the answer, and the bridge is not called; followUp does
+   * not run on it. For a form of a call only this process can answer, such as
+   * blueprint(diff) against a checkpoint in the shadow history (#1487).
+   */
+  intercept?: (ctx: ToolContext, params: Record<string, unknown>) => Promise<unknown>;
   handler?: never;
 }
 

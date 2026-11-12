@@ -1,0 +1,17 @@
+{
+  "success": true,
+  "states": [
+    { "name": "Idle", "animAsset": "/Game/Anims/A_Idle.A_Idle" },
+    { "name": "Walk", "animAsset": "/Game/Anims/A_Walk.A_Walk" },
+    { "name": "Jump", "animAsset": "/Game/Anims/A_Jump.A_Jump" },
+    { "name": "Fall" }
+  ],
+  "transitions": [
+    { "fromState": "Idle", "toState": "Walk", "transitionGuid": "6A1F2C3D-4B5E-4F60-8172-93A4B5C6D7E8", "boundGraph": "Transition", "blendDuration": 0.2, "logicType": "Standard" },
+    { "fromState": "Walk", "toState": "Idle", "transitionGuid": "7B2F3C4D-5B6E-4F70-8273-A3B4C5D6E7F9", "boundGraph": "Transition_1", "blendDuration": 0.25, "logicType": "Standard" },
+    { "fromState": "Walk", "toState": "Jump", "transitionGuid": "8C3F4D5E-6C7F-4081-9384-B4C5D6E7F80A", "boundGraph": "Transition_2", "blendDuration": 0.1, "logicType": "Inertialization" },
+    { "fromState": "Jump", "toState": "Fall", "transitionGuid": "9D4F5E6F-7D80-4192-A495-C5D6E7F8091B", "boundGraph": "Transition_3", "blendDuration": 0, "logicType": "Standard" }
+  ],
+  "assetPath": "/Game/Characters/ABP_Hero",
+  "stateMachineName": "Locomotion"
+}

@@ -145,6 +145,43 @@ export async function callBridge(
 
 export const TEST_PREFIX = "/Game/MCPTest";
 
+/** Every dirty content and map package the editor reports, as editor(list_dirty_packages) names them. */
+export async function listDirtyPackages(bridge: EditorBridge): Promise<string[]> {
+  const r = await callBridge(bridge, "list_dirty_packages", {});
+  const out = (r.result ?? {}) as { content?: Array<{ package: string }>; maps?: Array<{ package: string }> };
+  return [...(out.content ?? []), ...(out.maps ?? [])].map((e) => e.package);
+}
+
+/**
+ * Clear the dirty flag on every package under one of the prefixes, without
+ * saving. Live files share one editor, so unsaved assets a file leaves behind
+ * make the next file's dirty-refusing actions fail (#1444). Call it from the
+ * file's afterAll on the folders it created. Returns what is still dirty under
+ * the prefixes afterwards.
+ */
+export async function discardDirtyTestPackages(
+  bridge: EditorBridge,
+  prefixes: string[] = [TEST_PREFIX],
+): Promise<string[]> {
+  const under = (name: string) => prefixes.some((p) => name === p || name.startsWith(p.endsWith("/") ? p : `${p}/`));
+  const owned = (await listDirtyPackages(bridge)).filter(under);
+  for (let i = 0; i < owned.length; i += 256) {
+    await callBridge(bridge, "discard_dirty", { packages: owned.slice(i, i + 256), allowContent: true });
+  }
+  return (await listDirtyPackages(bridge)).filter(under);
+}
+
+/**
+ * Close the floating Project Settings, Content Browser and similar windows a
+ * test opened. Every editor saves them to one per-user layout and restores
+ * them at startup, so a test that leaves one open opens it in the developer's
+ * own editor next time. Returns the titles closed.
+ */
+export async function closeEditorTabWindows(bridge: EditorBridge): Promise<string[]> {
+  const { closeEditorTabWindows: close } = await import("../scripts/user-layout-guard.mjs");
+  return close(async (method: string, params: Record<string, unknown>) => (await callBridge(bridge, method, params)).result);
+}
+
 /** Safely extract an array field from an untyped bridge result. */
 export function resultArray(
   result: unknown,

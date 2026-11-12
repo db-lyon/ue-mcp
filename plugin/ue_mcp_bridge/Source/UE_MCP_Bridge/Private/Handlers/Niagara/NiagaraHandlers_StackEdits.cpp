@@ -17,6 +17,7 @@
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
 #include "NiagaraHandlers_Internal.h"
+#include "HandlerQuery.h"
 
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
@@ -36,6 +37,7 @@
 #include "NiagaraNodeCustomHlsl.h"
 #include "NiagaraNodeOutput.h"
 #include "NiagaraNodeInput.h"
+#include "NiagaraScriptVariable.h"
 #include "EdGraphSchema_Niagara.h"
 #include "NiagaraEditorUtilities.h"
 #include "ViewModels/Stack/NiagaraStackGraphUtilities.h"
@@ -477,6 +479,171 @@ namespace
 			return nullptr;
 		}
 		return Script;
+	}
+
+#if UE_MCP_HAS_5_5_API
+	/** Raw Niagara value bytes as typed JSON: a number for float and int, the
+	 *  enumerator name for an enum, a bool for bool, and an object of the
+	 *  struct's fields ({X,Y,Z}, {R,G,B,A}) for vectors and colours. */
+	TSharedPtr<FJsonValue> NiaAdvValueToJson(const FNiagaraTypeDefinition& Type, const uint8* Data)
+	{
+		if (!Data) return MakeShared<FJsonValueNull>();
+		if (Type == FNiagaraTypeDefinition::GetFloatDef())
+		{
+			float V = 0.f;
+			FMemory::Memcpy(&V, Data, sizeof(float));
+			return MakeShared<FJsonValueNumber>(V);
+		}
+		if (Type == FNiagaraTypeDefinition::GetBoolDef())
+		{
+			return MakeShared<FJsonValueBoolean>(reinterpret_cast<const FNiagaraBool*>(Data)->GetValue());
+		}
+		if (Type == FNiagaraTypeDefinition::GetIntDef() || Type.IsEnum())
+		{
+			int32 V = 0;
+			FMemory::Memcpy(&V, Data, sizeof(int32));
+			if (const UEnum* Enum = Type.GetEnum())
+			{
+				return MakeShared<FJsonValueString>(MCPQuery::ShortEnumName(Enum->GetNameStringByValue(V)));
+			}
+			return MakeShared<FJsonValueNumber>(V);
+		}
+		if (UScriptStruct* Struct = Type.GetScriptStruct())
+		{
+			TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
+			for (TFieldIterator<FProperty> It(Struct); It; ++It)
+			{
+				Obj->SetField(It->GetName(), MCPQuery::PropertyToJson(*It, It->ContainerPtrToValuePtr<void>(Data)));
+			}
+			return MakeShared<FJsonValueObject>(Obj);
+		}
+		return MakeShared<FJsonValueNull>();
+	}
+
+	/** The override pin for one module input: on the map-set node feeding this
+	 *  module first, since that is the one the stack writes, then anywhere in
+	 *  the graph. */
+	UEdGraphPin* NiaAdvModuleOverridePin(UNiagaraGraph* Graph, UNiagaraNodeFunctionCall& FC, const FName& Aliased)
+	{
+		if (UEdGraphPin* InMap = NiaAdvMapPin(&FC, EGPD_Input))
+		{
+			UEdGraphNode* Upstream = InMap->LinkedTo.Num() > 0 && InMap->LinkedTo[0] ? InMap->LinkedTo[0]->GetOwningNode() : nullptr;
+			if (NiaAdvIsMapSetNode(Upstream))
+			{
+				for (UEdGraphPin* Pin : Upstream->Pins)
+				{
+					if (Pin && Pin->Direction == EGPD_Input && Pin->PinName == Aliased) return Pin;
+				}
+			}
+		}
+		return NiaAdvFindOverridePin(Graph, Aliased);
+	}
+#endif
+}
+
+namespace MCPNiagara
+{
+	void OrderedModulesOfSlot(const FStackSlot& Slot, TArray<UNiagaraNodeFunctionCall*>& Out)
+	{
+		if (!Slot.Script) return;
+		UNiagaraGraph* Graph = GraphOfScript(Slot.Script);
+		NiaAdvOrderedModules(NiaAdvFindOutputNode(Graph, Slot.Usage, Slot.Script->GetUsageId()), Out);
+	}
+
+	TSharedPtr<FJsonObject> ReadModuleInputValue(
+		const FStackSlot& Slot, const FString& UniqueEmitterName,
+		UNiagaraNodeFunctionCall& FC, const FNiagaraVariable& Input)
+	{
+		TSharedPtr<FJsonObject> Out = MakeShared<FJsonObject>();
+#if UE_MCP_HAS_5_5_API
+		const FNiagaraTypeDefinition Type = Input.GetType();
+		UNiagaraGraph* Graph = GraphOfScript(Slot.Script);
+		const FName Aliased = NiaAdvAliasedHandle(Input.GetName().ToString(), FC);
+		UEdGraphPin* Override = NiaAdvModuleOverridePin(Graph, FC, Aliased);
+
+		// A wired override pin: the value comes from a dynamic input or a
+		// parameter link, and list_dynamic_inputs describes what is wired.
+		if (Override && Override->LinkedTo.Num() > 0)
+		{
+			Out->SetStringField(TEXT("valueSource"), TEXT("linked"));
+			UEdGraphNode* Source = Override->LinkedTo[0] ? Override->LinkedTo[0]->GetOwningNode() : nullptr;
+			if (const UNiagaraNodeFunctionCall* Dyn = Cast<UNiagaraNodeFunctionCall>(Source))
+			{
+				Out->SetStringField(TEXT("linkedTo"), Dyn->GetFunctionName());
+			}
+			else if (Source)
+			{
+				Out->SetStringField(TEXT("linkedTo"), Source->GetClass()->GetName());
+			}
+			return Out;
+		}
+
+		// A local value of a rapid-iteration type (float, int, vectors, colour)
+		// lives in the script's rapid-iteration parameter store, the store
+		// set_niagara_module_input writes through the binder.
+		const bool bRapidIteration = Type.IsValid() && Type != FNiagaraTypeDefinition::GetBoolDef() && !Type.IsEnum()
+			&& Type != FNiagaraTypeDefinition::GetParameterMapDef() && !Type.IsUObject();
+		if (bRapidIteration && Slot.Script)
+		{
+			const bool bSystemScript = Slot.Usage == ENiagaraScriptUsage::SystemSpawnScript || Slot.Usage == ENiagaraScriptUsage::SystemUpdateScript;
+			const FNiagaraVariable RapidVar = FNiagaraUtilities::ConvertVariableToRapidIterationConstantName(
+				FNiagaraVariable(Type, Aliased), bSystemScript ? nullptr : *UniqueEmitterName, Slot.Usage);
+			if (Slot.Script->RapidIterationParameters.IndexOf(RapidVar) != INDEX_NONE)
+			{
+				TArray<uint8> Bytes;
+				Bytes.SetNumZeroed(Type.GetSize());
+				if (Slot.Script->RapidIterationParameters.CopyParameterData(RapidVar, Bytes.GetData()))
+				{
+					Out->SetField(TEXT("value"), NiaAdvValueToJson(Type, Bytes.GetData()));
+					Out->SetStringField(TEXT("valueSource"), TEXT("local"));
+					return Out;
+				}
+			}
+		}
+
+		// A local bool or enum value is held as the override pin's default.
+		if (Override)
+		{
+			const FNiagaraVariable PinVar = UEdGraphSchema_Niagara::PinToNiagaraVariable(Override, true);
+			if (PinVar.IsDataAllocated() && PinVar.GetSizeInBytes() == Type.GetSize())
+			{
+				Out->SetField(TEXT("value"), NiaAdvValueToJson(Type, PinVar.GetData()));
+			}
+			else
+			{
+				Out->SetStringField(TEXT("value"), Override->DefaultValue);
+			}
+			Out->SetStringField(TEXT("valueSource"), TEXT("local"));
+			return Out;
+		}
+
+		// Nothing authored: the module script's own default.
+		Out->SetStringField(TEXT("valueSource"), TEXT("moduleDefault"));
+		UNiagaraGraph* Called = FC.GetCalledGraph();
+		UNiagaraScriptVariable* ScriptVar = Called ? Called->GetScriptVariable(Input.GetName()) : nullptr;
+		if (!ScriptVar) return Out;
+		if (ScriptVar->DefaultMode != ENiagaraDefaultMode::Value)
+		{
+			// A binding or custom default has no single value to report.
+			const TCHAR* Mode = TEXT("Custom");
+			switch (ScriptVar->DefaultMode)
+			{
+			case ENiagaraDefaultMode::Binding:                Mode = TEXT("Binding"); break;
+			case ENiagaraDefaultMode::FailIfPreviouslyNotSet: Mode = TEXT("FailIfPreviouslyNotSet"); break;
+			default: break;
+			}
+			Out->SetStringField(TEXT("defaultMode"), Mode);
+			return Out;
+		}
+		const uint8* DefaultData = ScriptVar->GetDefaultValueData();
+		if (DefaultData && ScriptVar->GetDefaultValueVariant().GetNumBytes() == Type.GetSize())
+		{
+			Out->SetField(TEXT("value"), NiaAdvValueToJson(Type, DefaultData));
+		}
+#else
+		(void)Slot; (void)UniqueEmitterName; (void)FC; (void)Input;
+#endif
+		return Out;
 	}
 }
 

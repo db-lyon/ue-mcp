@@ -21,6 +21,10 @@ namespace MCPPIE
 			FInputActionValue Value;
 			FString ActionPath;
 			FString ActionName;
+			FHoldOptions Options;
+			// Game seconds the hold has run, summed from world-time deltas so a level change does not reset it.
+			double ElapsedSeconds = 0;
+			double LastWorldTime = -1;
 		};
 
 		struct FTapeEntry
@@ -29,6 +33,12 @@ namespace MCPPIE
 			TWeakObjectPtr<UEnhancedInputLocalPlayerSubsystem> Subsystem;
 			TArray<FVector> Values;
 			int32 Index = 0;
+			// Values are spaced 1/Hz apart on the player's world clock, so a
+			// slow frame skips ahead instead of stretching the tape (#1657).
+			// Hz <= 0 plays one value per frame.
+			int32 Hz = 0;
+			double StartTime = 0.0;
+			TWeakObjectPtr<UWorld> World;
 			FString ActionPath;
 			FString ActionName;
 		};
@@ -53,6 +63,31 @@ namespace MCPPIE
 		void StopHoldEntry(const FHoldEntry& Entry)
 		{
 			StopContinuousInjection(Entry.Subsystem.Get(), Entry.Action.Get());
+		}
+
+		ULocalPlayer* LocalPlayerOf(const FHoldEntry& Entry)
+		{
+			UEnhancedInputLocalPlayerSubsystem* Subsystem = Entry.Subsystem.Get();
+			return Subsystem ? Subsystem->GetLocalPlayer<ULocalPlayer>() : nullptr;
+		}
+
+		// Advances the hold's game-time clock and re-applies its control rotation.
+		void TickHoldOptions(FHoldEntry& Entry)
+		{
+			ULocalPlayer* LocalPlayer = LocalPlayerOf(Entry);
+			if (UWorld* World = LocalPlayer ? LocalPlayer->GetWorld() : nullptr)
+			{
+				const double Now = World->GetTimeSeconds();
+				if (Entry.LastWorldTime >= 0)
+				{
+					Entry.ElapsedSeconds += FMath::Max(0.0, Now - Entry.LastWorldTime);
+				}
+				Entry.LastWorldTime = Now;
+			}
+			if (Entry.Options.bHasControlRotation && LocalPlayer && LocalPlayer->PlayerController)
+			{
+				LocalPlayer->PlayerController->SetControlRotation(Entry.Options.ControlRotation);
+			}
 		}
 
 		void StopTapeEntry(const FTapeEntry& Entry)
@@ -184,6 +219,14 @@ namespace MCPPIE
 				{
 					StopHoldEntry(Hold);
 					It.RemoveCurrent();
+					continue;
+				}
+
+				TickHoldOptions(Hold);
+				if (Hold.Options.DurationSeconds > 0 && Hold.ElapsedSeconds >= Hold.Options.DurationSeconds)
+				{
+					StopHoldEntry(Hold);
+					It.RemoveCurrent();
 				}
 			}
 
@@ -197,7 +240,15 @@ namespace MCPPIE
 					continue;
 				}
 
-				if (Tape.Index >= Tape.Values.Num())
+				// Per frame by default; at Hz, the entry due on the world clock.
+				int32 Next = Tape.Index;
+				if (Tape.Hz > 0)
+				{
+					const UWorld* World = Tape.World.Get();
+					Next = FPIEInputInjector::TapeIndexAt(
+						World ? World->GetTimeSeconds() - Tape.StartTime : 0.0, Tape.Hz);
+				}
+				if (Next >= Tape.Values.Num())
 				{
 					StopTapeEntry(Tape);
 					const FString FinishedId = It->Key;
@@ -205,12 +256,17 @@ namespace MCPPIE
 					GOnTapeFinished.Broadcast(FinishedId);
 					continue;
 				}
+				if (Next < Tape.Index)
+				{
+					// The entry already applied is still the one due.
+					continue;
+				}
 
 				const FInputActionValue Value = AxisFromVector(
-					Tape.Action->ValueType, Tape.Values[Tape.Index]);
+					Tape.Action->ValueType, Tape.Values[Next]);
 				Tape.Subsystem->UpdateValueOfContinuousInputInjectionForAction(
 					Tape.Action.Get(), Value);
-				Tape.Index++;
+				Tape.Index = Next + 1;
 			}
 
 			if (GHolds.Num() == 0 && GTapes.Num() == 0)
@@ -261,7 +317,7 @@ namespace MCPPIE
 
 	FString FPIEInputInjector::StartHold(UInputAction* Action, const FInputActionValue& Value,
 		const FString& DesiredId, FString& OutError, int32 ClientIndex, int32 PIEInstance,
-		ULocalPlayer* ExactLocalPlayer)
+		ULocalPlayer* ExactLocalPlayer, const FHoldOptions& Options)
 	{
 		if (!Action)
 		{
@@ -294,6 +350,9 @@ namespace MCPPIE
 		Entry.Value = Value;
 		Entry.ActionPath = Action->GetPathName();
 		Entry.ActionName = Action->GetName();
+		Entry.Options = Options;
+		// Starts the clock and applies the control rotation before the first frame the hold is seen in.
+		TickHoldOptions(Entry);
 		Subsystem->StartContinuousInputInjectionForAction(Action, Value, {}, {});
 		GHolds.Add(Id, Entry);
 		EnsureTickerBound();
@@ -318,6 +377,25 @@ namespace MCPPIE
 		return true;
 	}
 
+	bool FPIEInputInjector::SetHoldControlRotation(const FString& Id, const FRotator& Rotation)
+	{
+		FHoldEntry* Entry = GHolds.Find(Id);
+		if (!Entry)
+		{
+			return false;
+		}
+		Entry->Options.bHasControlRotation = true;
+		Entry->Options.ControlRotation = Rotation;
+		if (ULocalPlayer* LocalPlayer = LocalPlayerOf(*Entry))
+		{
+			if (LocalPlayer->PlayerController)
+			{
+				LocalPlayer->PlayerController->SetControlRotation(Rotation);
+			}
+		}
+		return true;
+	}
+
 	bool FPIEInputInjector::StopHold(const FString& Id)
 	{
 		FHoldEntry* Entry = GHolds.Find(Id);
@@ -334,8 +412,14 @@ namespace MCPPIE
 		return true;
 	}
 
+	int32 FPIEInputInjector::TapeIndexAt(double ElapsedSeconds, int32 Hz)
+	{
+		if (Hz <= 0) return 0;
+		return FMath::FloorToInt(FMath::Max(0.0, ElapsedSeconds) * static_cast<double>(Hz) + 1e-6);
+	}
+
 	FString FPIEInputInjector::StartTape(UInputAction* Action, const TArray<FVector>& Values,
-		int32 /*Hz*/, const FString& DesiredId, FString& OutError, int32 ClientIndex,
+		int32 Hz, const FString& DesiredId, FString& OutError, int32 ClientIndex,
 		int32 PIEInstance, ULocalPlayer* ExactLocalPlayer)
 	{
 		if (!Action)
@@ -373,6 +457,16 @@ namespace MCPPIE
 		Entry.Subsystem = Subsystem;
 		Entry.Values = Values;
 		Entry.Index = 1;
+		Entry.Hz = Hz;
+		if (const ULocalPlayer* Owner = Subsystem->GetLocalPlayer())
+		{
+			Entry.World = Owner->GetWorld();
+		}
+		Entry.StartTime = Entry.World.IsValid() ? Entry.World->GetTimeSeconds() : 0.0;
+		if (!Entry.World.IsValid())
+		{
+			Entry.Hz = 0;
+		}
 		Entry.ActionPath = Action->GetPathName();
 		Entry.ActionName = Action->GetName();
 		const FInputActionValue FirstValue = AxisFromVector(Action->ValueType, Values[0]);
@@ -421,6 +515,10 @@ namespace MCPPIE
 			S.ActionName = KV.Value.ActionName;
 			S.bIsTape = false;
 			S.CurrentValue = KV.Value.Value;
+			S.DurationSeconds = KV.Value.Options.DurationSeconds;
+			S.ElapsedSeconds = KV.Value.ElapsedSeconds;
+			S.bHasControlRotation = KV.Value.Options.bHasControlRotation;
+			S.ControlRotation = KV.Value.Options.ControlRotation;
 			Out.Add(S);
 		}
 		for (const TPair<FString, FTapeEntry>& KV : GTapes)

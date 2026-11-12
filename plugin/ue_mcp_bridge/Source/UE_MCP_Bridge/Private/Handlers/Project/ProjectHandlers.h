@@ -37,4 +37,8 @@ private:
 	static TSharedPtr<FJsonValue> ListAvailablePlugins(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> EnablePlugin(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> DisablePlugin(const TSharedPtr<FJsonObject>& Params);
+
+	// Defined in ProjectHandlers_Settings.cpp: a config property on a settings
+	// class default object, saved as the Project Settings dialog saves it (#1651).
+	static TSharedPtr<FJsonValue> SetDeveloperSetting(const TSharedPtr<FJsonObject>& Params);
 };

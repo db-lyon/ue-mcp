@@ -22,7 +22,7 @@ import {
   warn,
 } from "./ui/ansi.js";
 import { singleSelect } from "./ui/select.js";
-import { isMainModule, type CliUsage } from "./cli-main.js";
+import { guardFetchExitAbort, isMainModule, type CliUsage } from "./cli-main.js";
 
 /**
  * Sign in, or reuse a cached sign-in. True when a token is cached afterwards.
@@ -166,6 +166,7 @@ export async function run(argv: string[] = []): Promise<number | void> {
 
 // Also runnable as `node dist/cli/auth-cli.js`, only when executed directly.
 if (isMainModule(import.meta.url)) {
+  guardFetchExitAbort();
   runFeedbackAuthStep({ ask: false }).then((authorized) => {
     if (!authorized) process.exitCode = 1;
   }, (e) => {

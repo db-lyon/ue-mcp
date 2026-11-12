@@ -32,7 +32,7 @@ const ASSET_ACTIONS = [
   "set_property", "set_style", "reorder_child", "bulk_set_properties",
   "read_animations", "create", "create_utility_widget", "run_utility_widget",
   "create_utility_blueprint", "run_utility_blueprint", "add_widget", "remove_widget",
-  "move_widget", "set_root", "wrap_root", "add_to_viewport",
+  "move_widget", "rename_widget", "set_root", "wrap_root", "add_to_viewport",
   // UMG animation authoring, navigation rules and the two tree audits (T7/T8).
   // All addressed by one Widget Blueprint.
   "create_animation", "delete_animation", "get_animation",
@@ -49,6 +49,9 @@ const ASSET_ACTIONS = [
   "get_bind_widget_contract", "audit_commonui",
   // Subtree authoring and the ownership check, each on one Widget Blueprint.
   "build_tree", "check_structure",
+  // Viewmodel authoring, each on one Widget Blueprint.
+  "list_viewmodels", "add_viewmodel", "remove_viewmodel", "list_viewmodel_bindings",
+  "add_viewmodel_binding", "update_viewmodel_binding", "remove_viewmodel_binding", "compile_viewmodels",
 ];
 
 /**

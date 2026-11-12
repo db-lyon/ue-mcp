@@ -14,8 +14,8 @@ enum class EMCPPIEStepJudge : uint8
 UENUM(BlueprintType)
 enum class EMCPPIEExpectOp : uint8
 {
-	Decreasing UMETA(ToolTip="Value drops below its value at step start."),
-	Increasing UMETA(ToolTip="Value rises above its value at step start."),
+	Decreasing UMETA(ToolTip="Value drops below its value at step start, by at least Target when set."),
+	Increasing UMETA(ToolTip="Value rises above its value at step start, by at least Target when set."),
 	Eq UMETA(DisplayName="Equal", ToolTip="Value equals Target (small epsilon)."),
 	Gt UMETA(DisplayName="Greater Than", ToolTip="Value is greater than Target."),
 	Lt UMETA(DisplayName="Less Than", ToolTip="Value is less than Target."),
@@ -37,11 +37,11 @@ struct FMCPPIEStepExpect
 	EMCPPIEExpectOp Op = EMCPPIEExpectOp::Eq;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Expect",
-		meta=(ToolTip="Whether Target is set. Required for Eq, Gt and Lt; Visible and Exists default to true."))
+		meta=(ToolTip="Whether Target is set. Required for Eq, Gt and Lt; Visible and Exists default to true; optional for Decreasing and Increasing."))
 	bool bHasTarget = false;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Expect",
-		meta=(EditCondition="bHasTarget", ToolTip="Target number. For Visible and Exists, 0 means false and anything else true."))
+		meta=(EditCondition="bHasTarget", ToolTip="Target number. For Visible and Exists, 0 means false and anything else true. For Decreasing and Increasing, the least change from the value at step start."))
 	double Target = 0.0;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Expect",

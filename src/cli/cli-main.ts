@@ -4,6 +4,7 @@
  */
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { setFlagsFromString } from "node:v8";
 
 /**
  * A command's entry point. `argv` is everything after the command name. A
@@ -89,8 +90,36 @@ export function preflight(argv: readonly string[], usage: CliUsage | undefined):
   return undefined;
 }
 
+/**
+ * Node builds where `process.exit()` on Windows can abort with 0xC0000409 once
+ * `fetch` has run: V8 recompiles undici's WebAssembly parser in the background
+ * and posts to a platform exit has already closed (nodejs/node#56645). Fixed in
+ * 24.20.0 and 26.7.0; 23 and 25 never got the fix.
+ */
+export function hasFetchExitAbort(version: string = process.versions.node, platform: string = process.platform): boolean {
+  if (platform !== "win32") return false;
+  const [major, minor] = version.replace(/^v/, "").split(".").map(Number);
+  if (major === 23 || major === 25) return true;
+  if (major === 24) return minor < 20;
+  if (major === 26) return minor < 7;
+  return false;
+}
+
+let fetchExitGuarded = false;
+
+/**
+ * Turn off WebAssembly dynamic tiering on the affected builds, so no background
+ * recompile is in flight when the process exits. Must run before the first fetch.
+ */
+export function guardFetchExitAbort(): void {
+  if (fetchExitGuarded || !hasFetchExitAbort()) return;
+  fetchExitGuarded = true;
+  setFlagsFromString("--no-wasm-dynamic-tiering");
+}
+
 /** Run a command and exit with the code it returned, if it returned one. */
 export async function runCli(run: CliRun, argv: string[], usage?: CliUsage): Promise<void> {
+  guardFetchExitAbort();
   const early = preflight(argv, usage);
   const code = early ?? (await run(argv));
   if (typeof code === "number") process.exit(code);

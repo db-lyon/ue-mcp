@@ -5,7 +5,7 @@
  * Refs #1223.
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { callBridge, disconnectBridge, getBridge, TEST_PREFIX, type TestResult } from "../setup.js";
+import { callBridge, disconnectBridge, discardDirtyTestPackages, getBridge, TEST_PREFIX, type TestResult } from "../setup.js";
 import type { EditorBridge } from "../../src/bridge/bridge.js";
 
 const DIR = `${TEST_PREFIX}/BCov/Pcg`;
@@ -74,6 +74,8 @@ afterAll(async () => {
   if (bridge) {
     await callBridge(bridge, "delete_actor", { actorLabel: VOLUME });
     await callBridge(bridge, "delete_folder", { path: DIR, force: true });
+    // A delete that leaves a package dirty fails the next file's dirty-refusing actions (#1444).
+    expect(await discardDirtyTestPackages(bridge, [DIR])).toEqual([]);
     disconnectBridge();
   }
 });
@@ -150,7 +152,7 @@ describe("PCG instance nodes", () => {
 describe("PCG level assets", () => {
   it("export_level_to_pcg_asset writes a data asset update_pcg_level_assets re-exports", async () => {
     // Export reads a saved level; whatever an earlier file left open may be an unsaved one.
-    await call("demo_go_home", {});
+    await call("demo_go_home", { discardUnsaved: true });
     const levelPackage = await python(
       "import unreal; print(unreal.get_editor_subsystem(unreal.UnrealEditorSubsystem).get_editor_world().get_outermost().get_name())",
     );

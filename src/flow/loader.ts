@@ -384,7 +384,28 @@ function defaultFlows(): Record<string, unknown> {
     7: { task: "niagara.validate", options: { systemPath: "${steps.2.path}" } },
   };
 
+  // blockout_to_assets - the end of a blockout pass. Every blockout actor that
+  // carries the tag is matched against a folder of meshes by bounds and swapped
+  // for its best match, each swap keeping a record restore_blockout reads.
+  // tag defaults to Blockout at the two steps that need a selector; a run's
+  // params override it, and candidateFolder is the one input left open.
+  const blockoutSteps: Record<string, unknown> = {
+    1: { task: "level.list_blockout" },
+    2: { task: "level.match_asset_to_blockout", options: { tag: "Blockout" } },
+    3: { task: "level.replace_blockout", options: { tag: "Blockout" } },
+    4: { task: "level.list_blockout", options: { includeReplaced: true } },
+  };
+
   return {
+    blockout_to_assets: {
+      description:
+        "Replace every blockout actor carrying tag (default Blockout) with the best-fitting " +
+        "StaticMesh under candidateFolder: lists the set, ranks the candidates by bounds, " +
+        "swaps each actor for its best match fitted to its bounds (fit, default uniform), " +
+        "then lists the replacements. Each replacement keeps a record, so " +
+        "level(restore_blockout) or the run's rollback puts the blockout back.",
+      steps: blockoutSteps,
+    },
     niagara_fire: {
       description:
         "Build a fire Niagara system from scratch (spawn rate, upward velocity, HDR " +

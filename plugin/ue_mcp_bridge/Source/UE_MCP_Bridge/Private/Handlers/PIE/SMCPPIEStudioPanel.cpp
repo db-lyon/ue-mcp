@@ -27,6 +27,7 @@
 #include "Misc/Paths.h"
 #include "Interfaces/IPluginManager.h"
 #include "LevelEditor.h"
+#include "HandlerPlaySession.h"
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "Editor.h"
 #include "Kismet/GameplayStatics.h"
@@ -180,8 +181,7 @@ void SMCPPIEStudioPanel::RegisterToolbarButton()
 						MCPPIE::FPIEInputRecorder::Get().Arm(Cfg, Err, Msg);
 						if (GEditor && !GEditor->PlayWorld)
 						{
-							FRequestPlaySessionParams P;
-							GEditor->RequestPlaySession(P);
+							MCPPlaySession::Request(/*bNeedsEditorWorld=*/true);
 						}
 					}),
 					FText::GetEmpty(),
@@ -211,8 +211,7 @@ void SMCPPIEStudioPanel::RegisterToolbarButton()
 								MCPPIE::FPIEInputRecorder::Get().Arm(Cfg, Err, Msg);
 								if (GEditor && !GEditor->PlayWorld)
 								{
-									FRequestPlaySessionParams P;
-									GEditor->RequestPlaySession(P);
+									MCPPlaySession::Request(/*bNeedsEditorWorld=*/true);
 								}
 							}))
 						);
@@ -357,7 +356,7 @@ TSharedRef<SWidget> SMCPPIEStudioPanel::BuildRecorderSection()
 					MCPPIE::FPIEInputRecorder::Get().Arm(Cfg, Err, Msg);
 					if (GEditor && !GEditor->PlayWorld)
 					{
-						FRequestPlaySessionParams P; GEditor->RequestPlaySession(P);
+						MCPPlaySession::Request(/*bNeedsEditorWorld=*/true);
 					}
 					return FReply::Handled();
 				})
@@ -717,8 +716,7 @@ void SMCPPIEStudioPanel::RefreshRecordings()
 						}
 						if (GEditor && !GEditor->PlayWorld)
 						{
-							FRequestPlaySessionParams P;
-							GEditor->RequestPlaySession(P);
+							MCPPlaySession::Request(/*bNeedsEditorWorld=*/true);
 						}
 						return FReply::Handled();
 					})

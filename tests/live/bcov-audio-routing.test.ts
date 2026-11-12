@@ -5,7 +5,7 @@
  * property reader on a SoundCue this file creates. Refs #1223.
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { callBridge, disconnectBridge, getBridge, TEST_PREFIX, type TestResult } from "../setup.js";
+import { callBridge, disconnectBridge, discardDirtyTestPackages, getBridge, TEST_PREFIX, type TestResult } from "../setup.js";
 import type { EditorBridge } from "../../src/bridge/bridge.js";
 
 const DIR = `${TEST_PREFIX}/BCov/AudioRouting`;
@@ -46,6 +46,8 @@ beforeAll(async () => {
 afterAll(async () => {
   if (bridge) {
     await callBridge(bridge, "delete_folder", { path: DIR, force: true });
+    // A delete that leaves a package dirty fails the next file's dirty-refusing actions (#1444).
+    expect(await discardDirtyTestPackages(bridge, [DIR])).toEqual([]);
     disconnectBridge();
   }
 }, 180_000);

@@ -99,10 +99,32 @@ private:
 	FMCPBridgeServer& Server;
 };
 
+/**
+ * The one way to write to a client socket. A deferred answer is sent from a
+ * thread of its own while the connection thread goes on answering, so every
+ * frame is written whole under this lock, and nothing is written once the
+ * connection has retired it.
+ */
+class FMCPConnectionWriter
+{
+public:
+	explicit FMCPConnectionWriter(FMCPSocketHandle InSocket) : Socket(InSocket) {}
+
+	bool Send(const TArray<uint8>& Frame);
+	void Close(uint16 StatusCode, const FString& Reason);
+	void Retire();
+
+private:
+	FCriticalSection Lock;
+	FMCPSocketHandle Socket;
+	bool bOpen = true;
+};
+
 class FMCPBridgeServer : public FRunnable
 {
 	friend class FMCPConnectionUnlist;
 	friend class FMCPConnectionRelease;
+	friend class FMCPConnectionWriter;
 
 public:
 	FMCPBridgeServer(int32 Port = 9877, const FString& InPortSource = TEXT("default"), bool bInPortPinned = false);
@@ -169,6 +191,12 @@ public:
 	// exactly as it did before that channel was added.
 	static FMCPBridgePortChoice ResolveConfiguredPort();
 
+	// True for a port the project's Unreal Canvas Bridge claims when that
+	// plugin is enabled: 9877 (its webcam server) and 9880 (its viewport
+	// stream). A pin on one falls back to the derived port, and the collision
+	// walk steps over both. Mirrors src/integrations/epic/unreal-canvas.ts.
+	static bool IsCanvasReservedPort(int32 Port);
+
 	// Get handler registry
 	FMCPHandlerRegistry& GetHandlerRegistry() { return HandlerRegistry; }
 
@@ -177,6 +205,20 @@ public:
 
 	// Process a JSON-RPC message
 	FString ProcessMessage(const FString& Message);
+
+	// SendInterim writes a notification frame to the requesting client while a
+	// deferred answer is awaited (progress).
+	// OutDeferred, when given, receives the wait for a deferred answer instead of
+	// it running here; the empty string is returned and the caller runs it.
+	FString ProcessMessage(const FString& Message, const TFunction<void(const FString&)>& SendInterim, TFunction<FString()>* OutDeferred);
+
+	/** The JSON-RPC response for a handler's result, with the engine state attached to a timeout. */
+	FString FinishJsonRpcResponse(const TSharedPtr<FJsonObject>& Request, const FString& Method, const TSharedPtr<FJsonValue>& Result);
+
+	/** Wait for a handler's deferred answer until the deadline, a cancel or shutdown, sending progress frames when asked. */
+	TSharedPtr<FJsonValue> AwaitDeferredAnswer(
+		const FJsonObject& Request, const FString& Method, class FMCPDeferredCall& Deferred, class FMCPRequestContext& Context,
+		double DeadlineSeconds, bool bWantsProgress, const TFunction<void(const FString&)>& SendInterim);
 
 	/**
 	 * #821: what this bridge is and what it can do, answered without the game
@@ -270,8 +312,19 @@ private:
 	/** Case-insensitive, line-scoped header lookup. */
 	static bool FindHeaderValue(const FString& Request, const FString& HeaderName, FString& OutValue);
 
-	/** Refuse an upgrade with an HTTP status the caller can read. */
-	static void SendHttpError(FMCPSocketHandle SocketFD, int32 StatusCode, const FString& StatusText, const FString& Detail);
+	/** Refuse an upgrade with an HTTP status the caller can read. ExtraHeaders
+	 *  is zero or more complete header lines, each ending in CRLF. */
+	static void SendHttpError(FMCPSocketHandle SocketFD, int32 StatusCode, const FString& StatusText, const FString& Detail, const FString& ExtraHeaders = FString());
+
+	/**
+	 * Generate this session's token and publish it to the per-user token file
+	 * for ServerPort. Runs once on the server thread before the first accept.
+	 * On failure SessionToken stays empty and every upgrade is refused.
+	 */
+	void PublishSessionToken();
+
+	/** Remove the token file if it still holds this session's token. */
+	void RetractSessionToken();
 
 	FString CreateWebSocketAcceptKey(const FString& ClientKey);
 
@@ -310,4 +363,11 @@ private:
 	// form any record or payload uses.
 	const FString InstanceId;
 	FDateTime StartedAtUtc;
+
+	// Required as "Authorization: Bearer <token>" on every upgrade. Written on
+	// the server thread before the accept loop starts and read-only after, so
+	// connection threads read it without a lock. Never logged, and never
+	// written into the project's port lockfile or any other record.
+	FString SessionToken;
+	FString SessionTokenDir;
 };

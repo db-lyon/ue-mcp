@@ -124,6 +124,11 @@ tasks:
   ${prefix}.greet:
     class_path: tasks/${greetClass}
 
+# knowledge: markdown attached to a category's AI-facing docs at server start.
+#    Only files listed here are read.
+knowledge:
+  project: knowledge/project.md
+
 # 3) flows: chain tasks/actions into one call. This one just runs the hello
 #    task; expand 'steps' to orchestrate real multi-step work.
 flows:

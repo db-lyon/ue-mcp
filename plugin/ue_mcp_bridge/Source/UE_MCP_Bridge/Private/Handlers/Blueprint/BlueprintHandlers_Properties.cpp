@@ -36,6 +36,7 @@
 #include "Components/MeshComponent.h"
 #include "Materials/MaterialInterface.h"
 #include "Engine/TimelineTemplate.h"
+#include "K2Node_Timeline.h"
 #include "Curves/CurveFloat.h"
 #include "Curves/CurveVector.h"
 #include "Curves/CurveLinearColor.h"
@@ -781,6 +782,8 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddFunctionParameter(const TSharedPtr
 	FString ParamType = OptionalString(Params, TEXT("parameterType"), TEXT("Float"));
 
 	bool bIsOutput = OptionalBool(Params, TEXT("isOutput"), false);
+	const bool bIsReference = OptionalBool(Params, TEXT("isReference"), false);
+	const bool bIsConst = OptionalBool(Params, TEXT("isConst"), false);
 
 	UBlueprint* Blueprint = LoadBlueprint(AssetPath);
 	if (!Blueprint)
@@ -870,6 +873,13 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddFunctionParameter(const TSharedPtr
 	{
 		return MCPError(FString::Printf(TEXT("Unrecognized parameter type: %s"), *TypeError));
 	}
+
+	// Anim node functions bound on an AnimGraph node need their
+	// FAnimUpdateContext / FAnimNodeReference parameters as const references, or
+	// UFunction::IsSignatureCompatibleWith rejects them against the node's
+	// prototype function.
+	PinType.bIsReference = bIsReference;
+	PinType.bIsConst = bIsConst;
 
 	if (bIsOutput)
 	{
@@ -1356,11 +1366,59 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetActorTickSettings(const TSharedPtr
 	// the claim and the contradiction in the same result.
 	bool bSaved = true;
 	FString SaveError;
+	int32 InstancesUpdated = 0;
+	int32 InstancesKeptOverride = 0;
 	if (!bNoChange)
 	{
+		// Placed instances and child templates whose field still equals the old
+		// default follow the new one, as the details panel propagates a default.
+		// Without this, an actor placed before the call keeps the old value and
+		// the level saves it as an override, so a Tick never runs (#1655).
+		struct FTickFollower
+		{
+			TWeakObjectPtr<AActor> Actor;
+			bool bCanEverTick = false;
+			bool bStartWithTickEnabled = false;
+			bool bTickInterval = false;
+		};
+		TArray<FTickFollower> Followers;
+		TArray<UObject*> Instances;
+		CDO->GetArchetypeInstances(Instances);
+		for (UObject* Instance : Instances)
+		{
+			AActor* A = Cast<AActor>(Instance);
+			if (!IsValid(A) || A == CDO) continue;
+			if (A->GetClass()->HasAnyClassFlags(CLASS_NewerVersionExists)) continue;
+			if (A->GetOutermost()->HasAnyPackageFlags(PKG_PlayInEditor)) continue;
+			FTickFollower F;
+			F.Actor = A;
+			bool bOverride = false;
+			const auto Follow = [&bOverride](bool bFieldChanges, bool bMatchesOld, bool& bOut)
+			{
+				if (!bFieldChanges) return;
+				if (bMatchesOld) bOut = true; else bOverride = true;
+			};
+			Follow(bCanEverTick != bPrevCanEverTick, A->PrimaryActorTick.bCanEverTick == bPrevCanEverTick, F.bCanEverTick);
+			Follow(bStartWithTickEnabled != bPrevStartWithTickEnabled, A->PrimaryActorTick.bStartWithTickEnabled == bPrevStartWithTickEnabled, F.bStartWithTickEnabled);
+			Follow(NewTickInterval != PrevTickInterval, A->PrimaryActorTick.TickInterval == PrevTickInterval, F.bTickInterval);
+			if (bOverride) ++InstancesKeptOverride;
+			if (F.bCanEverTick || F.bStartWithTickEnabled || F.bTickInterval) Followers.Add(F);
+		}
+
 		CDO->PrimaryActorTick.bCanEverTick = bCanEverTick;
 		CDO->PrimaryActorTick.bStartWithTickEnabled = bStartWithTickEnabled;
 		CDO->PrimaryActorTick.TickInterval = NewTickInterval;
+
+		for (const FTickFollower& F : Followers)
+		{
+			AActor* A = F.Actor.Get();
+			if (!A) continue;
+			A->Modify();
+			if (F.bCanEverTick) A->PrimaryActorTick.bCanEverTick = bCanEverTick;
+			if (F.bStartWithTickEnabled) A->PrimaryActorTick.bStartWithTickEnabled = bStartWithTickEnabled;
+			if (F.bTickInterval) A->PrimaryActorTick.TickInterval = NewTickInterval;
+			++InstancesUpdated;
+		}
 
 		Blueprint->MarkPackageDirty();
 		bSaved = SaveAssetPackageChecked(Blueprint, SaveError);
@@ -1377,6 +1435,8 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetActorTickSettings(const TSharedPtr
 	Result->SetBoolField(TEXT("previousStartWithTickEnabled"), bPrevStartWithTickEnabled);
 	Result->SetNumberField(TEXT("previousTickInterval"), PrevTickInterval);
 	Result->SetBoolField(TEXT("unchanged"), bNoChange);
+	Result->SetNumberField(TEXT("instancesUpdated"), InstancesUpdated);
+	Result->SetNumberField(TEXT("instancesKeptOverride"), InstancesKeptOverride);
 
 	if (bNoChange)
 	{
@@ -1776,6 +1836,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetComponentOverrideMaterials(const T
 //   trackType ("float" | "vector" | "color" | "event"),
 //   keyframes ([{time, value}]) - value: number for float/event,
 //     {x,y,z} for vector, {r,g,b,a} for color.
+//   curveAssetPath - bind an existing curve asset instead of keyframes.
 TSharedPtr<FJsonValue> FBlueprintHandlers::AddTimelineTrack(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath;
@@ -1790,9 +1851,44 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddTimelineTrack(const TSharedPtr<FJs
 	// fail (#1057).
 	const TArray<TSharedPtr<FJsonValue>>* Keys = nullptr;
 	TryGetArrayParam(Params, TEXT("keyframes"), Keys);
+	const FString CurveAssetPath = OptionalString(Params, TEXT("curveAssetPath"));
+
+	UClass* ExpectedCurveClass = nullptr;
+	if (TrackType == TEXT("float") || TrackType == TEXT("event")) ExpectedCurveClass = UCurveFloat::StaticClass();
+	else if (TrackType == TEXT("vector")) ExpectedCurveClass = UCurveVector::StaticClass();
+	else if (TrackType == TEXT("color")) ExpectedCurveClass = UCurveLinearColor::StaticClass();
+	else
+	{
+		return MCPError(FString::Printf(TEXT("Unknown trackType '%s'. Use 'float' | 'vector' | 'color' | 'event'."), *TrackType));
+	}
+
+	// An external curve asset is referenced, not copied, so keys for it would
+	// have nowhere to go: they are refused rather than written into the asset.
+	UCurveBase* ExternalCurve = nullptr;
+	if (!CurveAssetPath.IsEmpty())
+	{
+		if (Keys && Keys->Num() > 0)
+		{
+			return MCPError(TEXT("Pass keyframes or curveAssetPath, not both. curveAssetPath binds the track to an existing curve asset, whose keys are its own."));
+		}
+		ExternalCurve = LoadObject<UCurveBase>(nullptr, *CurveAssetPath);
+		if (!ExternalCurve)
+		{
+			return MCPError(FString::Printf(TEXT("Curve asset not found: '%s'."), *CurveAssetPath));
+		}
+		if (!ExternalCurve->IsA(ExpectedCurveClass))
+		{
+			return MCPError(FString::Printf(TEXT("Curve asset '%s' is a %s; a %s track needs a %s."),
+				*CurveAssetPath, *ExternalCurve->GetClass()->GetName(), *TrackType, *ExpectedCurveClass->GetName()));
+		}
+	}
 
 	UBlueprint* Blueprint = LoadBlueprint(AssetPath);
 	if (!Blueprint) return BlueprintNotFoundError(AssetPath);
+	if (!Blueprint->GeneratedClass)
+	{
+		return MCPError(FString::Printf(TEXT("'%s' has no generated class to hold timeline curves. Compile it first."), *AssetPath));
+	}
 
 	// Find or create the UTimelineTemplate that backs the K2Node_Timeline.
 	const FName TimelineFName(*TimelineName);
@@ -1801,6 +1897,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddTimelineTrack(const TSharedPtr<FJs
 	{
 		if (T && T->GetVariableName() == TimelineFName) { Timeline = T; break; }
 	}
+	const bool bCreatedTimeline = (Timeline == nullptr);
 	if (!Timeline)
 	{
 		// The compiler requires the template outered to the generated class, which
@@ -1857,10 +1954,56 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddTimelineTrack(const TSharedPtr<FJs
 		if (Time > Timeline->TimelineLength) Timeline->TimelineLength = Time;
 	};
 
+	// Curves are made the way the timeline editor makes them: outered to the
+	// generated class and RF_Public. A placed instance's TimelineComponent
+	// references them from the level package, and a private curve outered to
+	// the template makes that level fail to save (#1650).
+	UClass* CurveOuter = Blueprint->GeneratedClass;
+	auto NewTrackCurve = [CurveOuter](UClass* CurveClass) -> UCurveBase*
+	{
+		return NewObject<UCurveBase>(CurveOuter, CurveClass, NAME_None, RF_Public | RF_Transactional);
+	};
+
+	// Curves an earlier bridge made private under their template move to the
+	// same place, on every timeline of this Blueprint, so a level that already
+	// refuses to save is fixed by the next add_timeline_track.
+	int32 RepairedCurves = 0;
+	auto RepairCurve = [&RepairedCurves, CurveOuter](UCurveBase* Curve, bool bExternal)
+	{
+		if (!Curve || bExternal || Curve->GetOuter()->IsA<UPackage>()) return;
+		if (Curve->GetOuter() == CurveOuter && Curve->HasAnyFlags(RF_Public)) return;
+		Curve->Modify();
+		if (Curve->GetOuter() != CurveOuter)
+		{
+			const FName NewName = MakeUniqueObjectName(CurveOuter, Curve->GetClass(), Curve->GetFName());
+			Curve->Rename(*NewName.ToString(), CurveOuter, REN_DontCreateRedirectors);
+		}
+		Curve->SetFlags(RF_Public);
+		++RepairedCurves;
+	};
+	for (UTimelineTemplate* T : Blueprint->Timelines)
+	{
+		if (!T) continue;
+		for (const FTTFloatTrack& Tr : T->FloatTracks) RepairCurve(Tr.CurveFloat, Tr.bIsExternalCurve);
+		for (const FTTVectorTrack& Tr : T->VectorTracks) RepairCurve(Tr.CurveVector, Tr.bIsExternalCurve);
+		for (const FTTLinearColorTrack& Tr : T->LinearColorTracks) RepairCurve(Tr.CurveLinearColor, Tr.bIsExternalCurve);
+		for (const FTTEventTrack& Tr : T->EventTracks) RepairCurve(Tr.CurveKeys, Tr.bIsExternalCurve);
+	}
+
+	// An external curve's own keys decide how long the timeline must run.
+	if (ExternalCurve)
+	{
+		float MinTime = 0.f, MaxTime = 0.f;
+		ExternalCurve->GetTimeRange(MinTime, MaxTime);
+		BumpLength(MaxTime);
+	}
+	const bool bExternal = ExternalCurve != nullptr;
+	FTTTrackId NewTrackId;
+	UCurveBase* TrackCurve = nullptr;
+
 	if (TrackType == TEXT("float"))
 	{
-		// Build a CurveFloat asset bound to the timeline.
-		UCurveFloat* Curve = NewObject<UCurveFloat>(Timeline, NAME_None, RF_Transactional);
+		UCurveFloat* Curve = CastChecked<UCurveFloat>(bExternal ? ExternalCurve : NewTrackCurve(UCurveFloat::StaticClass()));
 		if (Keys)
 		{
 			for (const TSharedPtr<FJsonValue>& KV : *Keys)
@@ -1877,11 +2020,13 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddTimelineTrack(const TSharedPtr<FJs
 		FTTFloatTrack Track;
 		Track.SetTrackName(TrackFName, Timeline);
 		Track.CurveFloat = Curve;
-		Timeline->FloatTracks.Add(Track);
+		TrackCurve = Curve;
+		Track.bIsExternalCurve = bExternal;
+		NewTrackId = FTTTrackId(FTTTrackBase::TT_FloatInterp, Timeline->FloatTracks.Add(Track));
 	}
 	else if (TrackType == TEXT("vector"))
 	{
-		UCurveVector* Curve = NewObject<UCurveVector>(Timeline, NAME_None, RF_Transactional);
+		UCurveVector* Curve = CastChecked<UCurveVector>(bExternal ? ExternalCurve : NewTrackCurve(UCurveVector::StaticClass()));
 		if (Keys)
 		{
 			for (const TSharedPtr<FJsonValue>& KV : *Keys)
@@ -1907,11 +2052,13 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddTimelineTrack(const TSharedPtr<FJs
 		FTTVectorTrack Track;
 		Track.SetTrackName(TrackFName, Timeline);
 		Track.CurveVector = Curve;
-		Timeline->VectorTracks.Add(Track);
+		TrackCurve = Curve;
+		Track.bIsExternalCurve = bExternal;
+		NewTrackId = FTTTrackId(FTTTrackBase::TT_VectorInterp, Timeline->VectorTracks.Add(Track));
 	}
 	else if (TrackType == TEXT("color"))
 	{
-		UCurveLinearColor* Curve = NewObject<UCurveLinearColor>(Timeline, NAME_None, RF_Transactional);
+		UCurveLinearColor* Curve = CastChecked<UCurveLinearColor>(bExternal ? ExternalCurve : NewTrackCurve(UCurveLinearColor::StaticClass()));
 		if (Keys)
 		{
 			for (const TSharedPtr<FJsonValue>& KV : *Keys)
@@ -1939,13 +2086,14 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddTimelineTrack(const TSharedPtr<FJs
 		FTTLinearColorTrack Track;
 		Track.SetTrackName(TrackFName, Timeline);
 		Track.CurveLinearColor = Curve;
-		Timeline->LinearColorTracks.Add(Track);
+		TrackCurve = Curve;
+		Track.bIsExternalCurve = bExternal;
+		NewTrackId = FTTTrackId(FTTTrackBase::TT_LinearColorInterp, Timeline->LinearColorTracks.Add(Track));
 	}
-	else if (TrackType == TEXT("event"))
+	else
 	{
-		FTTEventTrack EventTrack;
-		EventTrack.SetTrackName(TrackFName, Timeline);
-		UCurveFloat* Curve = NewObject<UCurveFloat>(Timeline, NAME_None, RF_Transactional);
+		UCurveFloat* Curve = CastChecked<UCurveFloat>(bExternal ? ExternalCurve : NewTrackCurve(UCurveFloat::StaticClass()));
+		if (!bExternal) Curve->bIsEventCurve = true;
 		if (Keys)
 		{
 			for (const TSharedPtr<FJsonValue>& KV : *Keys)
@@ -1958,13 +2106,15 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddTimelineTrack(const TSharedPtr<FJs
 				BumpLength((float)T);
 			}
 		}
+		FTTEventTrack EventTrack;
+		EventTrack.SetTrackName(TrackFName, Timeline);
 		EventTrack.CurveKeys = Curve;
-		Timeline->EventTracks.Add(EventTrack);
+		TrackCurve = Curve;
+		EventTrack.bIsExternalCurve = bExternal;
+		NewTrackId = FTTTrackId(FTTTrackBase::TT_Event, Timeline->EventTracks.Add(EventTrack));
 	}
-	else
-	{
-		return MCPError(FString::Printf(TEXT("Unknown trackType '%s'. Use 'float' | 'vector' | 'color' | 'event'."), *TrackType));
-	}
+	// The timeline editor lists tracks from the display order, not the arrays.
+	Timeline->AddDisplayTrack(NewTrackId);
 
 	// Recompile so K2Node_Timeline regenerates its output pins for the new track.
 	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
@@ -1982,14 +2132,138 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddTimelineTrack(const TSharedPtr<FJs
 	Result->SetNumberField(TEXT("keyCount"), Keys ? Keys->Num() : 0);
 	Result->SetNumberField(TEXT("timelineLength"), Timeline->TimelineLength);
 
-	// add_timeline_track is the only timeline action the bridge registers. There
-	// is no remove_timeline_track and no editor for a timeline's track list, so
-	// no inverse is named here rather than one that does not exist.
+	Result->SetBoolField(TEXT("createdTimeline"), bCreatedTimeline);
+	Result->SetBoolField(TEXT("externalCurve"), bExternal);
+	Result->SetStringField(TEXT("curvePath"), TrackCurve->GetPathName());
+	Result->SetBoolField(TEXT("curvePublic"), TrackCurve->HasAnyFlags(RF_Public));
+	Result->SetNumberField(TEXT("repairedCurves"), RepairedCurves);
+
+	// A timeline this call created is undone whole by remove_timeline. No action
+	// removes a single track, so a track added to an existing timeline has none.
+	if (bCreatedTimeline)
+	{
+		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+		Payload->SetStringField(TEXT("assetPath"), AssetPath);
+		Payload->SetStringField(TEXT("timelineName"), TimelineName);
+		MCPSetRollback(Result, TEXT("remove_timeline"), Payload);
+	}
+	else
+	{
+		Result->SetBoolField(TEXT("rollbackPossible"), false);
+		Result->SetStringField(TEXT("rollbackNote"), TEXT(
+			"No action removes a single timeline track. The timeline existed before this call, so remove_timeline "
+			"would remove its other tracks and its node too. The track, its generated curve object and any "
+			"TimelineLength this call raised all stay."));
+	}
+	return MCPResult(Result);
+}
+
+// ---------------------------------------------------------------------------
+// remove_timeline: remove a timeline from a Blueprint the way the editor does
+// (#1654). Every K2Node_Timeline bound to it goes through
+// FBlueprintEditorUtils::RemoveNode, whose DestroyNode calls RemoveTimeline;
+// a template with no node left is removed with RemoveTimeline directly. The
+// compile then drops the generated TimelineComponent variable.
+// delete_node keeps the template on purpose so its rollback can paste the
+// curves back; this is the action that drops it.
+// ---------------------------------------------------------------------------
+TSharedPtr<FJsonValue> FBlueprintHandlers::RemoveTimeline(const TSharedPtr<FJsonObject>& Params)
+{
+	FString AssetPath;
+	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
+	FString TimelineName;
+	if (auto Err = RequireString(Params, TEXT("timelineName"), TimelineName)) return Err;
+
+	UBlueprint* Blueprint = LoadBlueprint(AssetPath);
+	if (!Blueprint) return BlueprintNotFoundError(AssetPath);
+
+	const FName TimelineFName(*TimelineName);
+	UTimelineTemplate* Timeline = nullptr;
+	for (UTimelineTemplate* T : Blueprint->Timelines)
+	{
+		if (T && T->GetVariableName() == TimelineFName) { Timeline = T; break; }
+	}
+
+	// A node is bound by name; the guid also catches a node whose name drifted
+	// from its template.
+	TArray<UK2Node_Timeline*> AllTimelineNodes;
+	FBlueprintEditorUtils::GetAllNodesOfClass(Blueprint, AllTimelineNodes);
+	TArray<UK2Node_Timeline*> BoundNodes;
+	for (UK2Node_Timeline* Node : AllTimelineNodes)
+	{
+		if (!Node) continue;
+		if (Node->TimelineName == TimelineFName || (Timeline && Node->TimelineGuid == Timeline->TimelineGuid))
+		{
+			BoundNodes.Add(Node);
+		}
+	}
+
+	auto ListTimelines = [Blueprint]()
+	{
+		TArray<TSharedPtr<FJsonValue>> Names;
+		for (UTimelineTemplate* T : Blueprint->Timelines)
+		{
+			if (T) Names.Add(MakeShared<FJsonValueString>(T->GetVariableName().ToString()));
+		}
+		return Names;
+	};
+
+	if (!Timeline && BoundNodes.Num() == 0)
+	{
+		auto Noop = MCPSuccess();
+		Noop->SetStringField(TEXT("path"), AssetPath);
+		Noop->SetStringField(TEXT("timelineName"), TimelineName);
+		Noop->SetBoolField(TEXT("alreadyRemoved"), true);
+		Noop->SetBoolField(TEXT("unchanged"), true);
+		Noop->SetArrayField(TEXT("timelines"), ListTimelines());
+		return MCPResult(Noop);
+	}
+
+	Blueprint->Modify();
+
+	TArray<TSharedPtr<FJsonValue>> RemovedNodes;
+	for (UK2Node_Timeline* Node : BoundNodes)
+	{
+		int32 LinkCount = 0;
+		for (const UEdGraphPin* Pin : Node->Pins)
+		{
+			if (Pin) LinkCount += Pin->LinkedTo.Num();
+		}
+		TSharedPtr<FJsonObject> Entry = MakeShared<FJsonObject>();
+		Entry->SetStringField(TEXT("nodeId"), Node->NodeGuid.ToString());
+		Entry->SetStringField(TEXT("graphName"), Node->GetGraph() ? Node->GetGraph()->GetName() : FString());
+		Entry->SetNumberField(TEXT("brokenLinks"), LinkCount);
+		RemovedNodes.Add(MakeShared<FJsonValueObject>(Entry));
+		FBlueprintEditorUtils::RemoveNode(Blueprint, Node, /*bDontRecompile*/ true);
+	}
+
+	// The node's DestroyNode removes the template it resolves by name. One with
+	// no node, or one its node did not resolve, is removed here and renamed out
+	// of the generated class as DestroyNode does, so the name is free again.
+	if (Timeline && Blueprint->Timelines.Contains(Timeline))
+	{
+		FBlueprintEditorUtils::RemoveTimeline(Blueprint, Timeline, /*bDontRecompile*/ true);
+		Timeline->Rename(nullptr, GetTransientPackage(), REN_DontCreateRedirectors | REN_NonTransactional);
+	}
+
+	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
+	FKismetEditorUtilities::CompileBlueprint(Blueprint);
+	FString SaveError;
+	const bool bSaved = SaveAssetPackageChecked(Blueprint, SaveError);
+
+	auto Result = MCPSuccess();
+	MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveError);
+	Result->SetStringField(TEXT("path"), AssetPath);
+	Result->SetStringField(TEXT("timelineName"), TimelineName);
+	Result->SetBoolField(TEXT("removed"), true);
+	Result->SetBoolField(TEXT("templateRemoved"), Timeline != nullptr);
+	Result->SetArrayField(TEXT("removedNodes"), RemovedNodes);
+	Result->SetNumberField(TEXT("removedNodeCount"), RemovedNodes.Num());
+	Result->SetArrayField(TEXT("timelines"), ListTimelines());
 	Result->SetBoolField(TEXT("rollbackPossible"), false);
 	Result->SetStringField(TEXT("rollbackNote"), TEXT(
-		"No action removes a timeline track: add_timeline_track is the only timeline action registered, so there is "
-		"nothing to name as an inverse. The track, its generated curve object and any TimelineLength this call "
-		"raised all stay."));
+		"The timeline template, its curve tracks and its nodes are gone. add_timeline_track can build a timeline "
+		"of the same name again, but the tracks, the node and its wiring have to be re-authored."));
 	return MCPResult(Result);
 }
 

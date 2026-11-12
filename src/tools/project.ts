@@ -10,6 +10,9 @@ import { sourceActions } from "./project/source.js";
 import { engineActions } from "./project/engine.js";
 import { surfaceActions } from "./project/surface.js";
 import { installActions } from "./project/install.js";
+import { localizationActions } from "./project/localization.js";
+import { categoryActions, categorySchema } from "./project/categories.js";
+import { leaseActions, leaseSchema } from "./project/leases.js";
 
 export { envWarningsFor } from "./project/sessions.js";
 
@@ -29,6 +32,9 @@ const ACTION_ORDER = [
   "read_config",
   "search_config",
   "list_config_tags",
+  "resolve_setting",
+  "explain_setting",
+  "diff_config_from_default",
   "read_cpp_header",
   "read_module",
   "list_modules",
@@ -40,11 +46,20 @@ const ACTION_ORDER = [
   "search_tools",
   "describe_action",
   "list_available_actions",
+  "list_categories",
+  "set_category_enabled",
+  "set_toolset_enabled",
+  "acquire_lease",
+  "release_lease",
+  "list_leases",
   "list_content_assets",
   "check_install",
   "execute_python_report",
   "list_files",
   "set_config",
+  "set_developer_setting",
+  "get_maps_settings",
+  "set_maps_settings",
   "build",
   "generate_project_files",
   "create_cpp_class",
@@ -73,6 +88,12 @@ const ACTION_ORDER = [
   "lint_cpp_header",
   "add_module_dependency",
   "add_cpp_member",
+  "list_localization_cultures",
+  "list_localization_targets",
+  "set_localization_target",
+  "remove_localization_target",
+  "gather_localization_target",
+  "compile_localization_target",
 ] as const;
 
 function inAdvertisedOrder(...groups: Record<string, ActionSpec>[]): Record<string, ActionSpec> {
@@ -91,7 +112,7 @@ export const projectTool: ToolDef = categoryTool(
   "project",
   "Project status and editor connection: get_status (is the editor connected?), set_project (switch/redirect the bridge to another .uproject), get_info. Also config INI files, module load state, and C++ source inspection. Call project(get_status) first in any session.",
   {
-    ...inAdvertisedOrder(sessionActions, configActions, sourceActions, engineActions, surfaceActions, installActions),
+    ...inAdvertisedOrder(sessionActions, configActions, sourceActions, engineActions, surfaceActions, installActions, localizationActions, categoryActions, leaseActions),
     ...epicActions,
   },
   {
@@ -100,12 +121,15 @@ export const projectTool: ToolDef = categoryTool(
     // registration. A key listed again below is shared with hand-written
     // actions, and tests/unit/handler-specs.test.ts holds the two to one type.
     ...specSchema,
+    ...categorySchema,
+    ...leaseSchema,
     projectPath: z.string().optional().describe("For set_project / add_editor / check_install: path to .uproject"),
     editorName: z.string().optional().describe("For add_editor: name to address the new session by (default the project name) (#817)"),
     editorTarget: z.string().optional().describe("For use_editor / drop_editor: session name, project name, or .uproject path (#817)"),
     start: z.boolean().optional().describe("For add_editor: launch the editor for that project and wait until it is ready (#817)"),
     timeout: z.number().optional().describe("For add_editor with start: seconds to wait for readiness (default 300)"),
-    configName: z.string().optional().describe("For read_config/set_config: config file name"),
+    configName: z.string().optional().describe("For read_config/set_config: config file name. resolve_setting / explain_setting / diff_config_from_default: the category (Engine, Game, Input, ...)"),
+    includeUser: z.boolean().optional().describe("diff_config_from_default: include the per-user Saved/Config/<Platform>Editor layer (default true)"),
     query: z.string().optional().describe("For search_config/search_cpp: search text"),
     headerPath: z.string().optional().describe("For read_cpp_header: path to .h file"),
     moduleName: z.string().optional().describe("For read_module and the deprecated is_module_loaded address: module name. create_cpp_class: project module to add the class to (default the first)"),
@@ -116,7 +140,7 @@ export const projectTool: ToolDef = categoryTool(
     // is already declared above and shared with the unpaged readers.
     cursor: CURSOR_PARAM,
     name: z.string().optional().describe("describe_action: the action to describe, as 'tool.action' or a bare action name"),
-    category: z.string().optional().describe("describe_action / list_available_actions: narrow to one category instead of the whole surface"),
+    category: z.string().optional().describe("describe_action / list_available_actions: narrow to one category instead of the whole surface. set_category_enabled: the category to turn on or off"),
     includeNames: z.boolean().optional().describe("list_available_actions: list the action names, not just the counts (default false)"),
     // Stays a strict enum on purpose: listAvailableActions treats anything that
     // is neither "all" nor "available" as "blocked", so nothing rejects a typo.
@@ -130,7 +154,7 @@ export const projectTool: ToolDef = categoryTool(
     recursive: z.boolean().optional().describe("For list_files / list_content_assets: recurse into subdirectories (#608)"),
     directory: z.string().optional().describe("For search_cpp: subdirectory"),
     configuration: z.string().optional().describe("Build configuration: Development, Debug, Shipping"),
-    platform: z.string().optional().describe("Target platform: Win64, Linux, Mac"),
+    platform: z.string().optional().describe("Target platform: Win64, Linux, Mac. resolve_setting / explain_setting / diff_config_from_default: the config platform (Windows, Mac, Linux, Android, IOS; default this machine's)"),
     clean: z.boolean().optional().describe("Clean build"),
     symbol: z.string().optional().describe("Symbol name for find_engine_symbol / find_example_usage / class_hierarchy / find_references / find_callers / find_callees / symbol_context"),
     names: z.union([z.string(), z.array(z.string())]).optional().describe("verify_symbols / suggest_build_deps: engine symbol names, as an array or a comma-separated string (max 200)"),

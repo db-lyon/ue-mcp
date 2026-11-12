@@ -92,6 +92,15 @@ void FProjectHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Required(TEXT("pluginName"), EType::String, TEXT("Plugin name as its .uplugin spells it, any case")),
 		MCPParam::Optional(TEXT("removeReference"), EType::Boolean, TEXT("Delete the .uproject entry instead of writing an explicit disable (default false)")),
 	});
+
+	// Settings writes. Body lives in ProjectHandlers_Settings.cpp. The ini it
+	// writes is chosen by the class, never by a caller-supplied path.
+	Registry.RegisterHandler(TEXT("set_developer_setting"), &SetDeveloperSetting, {
+		MCPParam::Required(TEXT("settingsClass"), EType::String, TEXT("Config class as a short name (GameMapsSettings) or /Script/<Module>.<Class> path")),
+		MCPParam::Required(TEXT("propertyName"), EType::String, TEXT("Config property; a dotted or indexed path reaches inside a struct or array")),
+		MCPParam::Required(TEXT("settingValue"), EType::Any, TEXT("New value as structured JSON, the form editor(get_property) returns under value")),
+		MCPParam::Optional(TEXT("persist"), EType::String, TEXT("default writes Default<Config>.ini; user writes the per-user config. Omitted follows the Project Settings dialog: default for a defaultconfig class, user otherwise")).Enum({ TEXT("default"), TEXT("user") }),
+	});
 }
 
 // ─── create_cpp_class ────────────────────────────────────────────────
@@ -189,6 +198,9 @@ TSharedPtr<FJsonValue> FProjectHandlers::CreateCppClass(const TSharedPtr<FJsonOb
 	NewClassPath /= DomainFolder;
 	if (!SubPath.IsEmpty())
 	{
+		// subPath stays inside the module's own source folder.
+		FString Contained;
+		if (auto Err = MCPRequirePathInside(NewClassPath / SubPath, { SelectedModule.ModuleSourcePath }, Contained)) return Err;
 		NewClassPath /= SubPath;
 	}
 	NewClassPath /= TEXT("");                                 // ensure trailing /

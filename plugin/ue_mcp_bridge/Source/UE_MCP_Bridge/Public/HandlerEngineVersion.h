@@ -40,6 +40,10 @@
 // it must not depend on this one).
 #define UE_MCP_HAS_5_8_API ((ENGINE_MAJOR_VERSION > 5) || (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 8))
 
+// True on UE 5.9+. Gates the Unreal MCP plugin's out-of-line
+// FModelContextProtocolToolRequestId constructors (inline before 5.9).
+#define UE_MCP_HAS_5_9_API ((ENGINE_MAJOR_VERSION > 5) || (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 9))
+
 // ── Engine API shims ─────────────────────────────────────────────────────────
 //
 // Where an engine API was renamed or wrapped between 5.4 and 5.8, the shim goes
