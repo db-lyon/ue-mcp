@@ -67,6 +67,7 @@ nav:
   - Blueprint Component Properties: blueprint-component-properties-batch.md
   - Native Tools: native-tools.md
   - Native Asset Pipeline: native-asset-pipeline.md
+  - Owned Fab Content: fab-owned-content.md
   - Shader Compilation: shader-compilation.md
   - Studio Mesh Reference Images: mesh-studio-render.md
   - Material Graph Editing: material-graph-surgery.md
