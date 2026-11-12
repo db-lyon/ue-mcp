@@ -11172,6 +11172,11 @@
         },
         {
           "suite": "live",
+          "file": "tests/live/bcov-pie-script-triggered.test.ts",
+          "test": "passes on a press from outside the script after act, not on act's own press, and records when and what"
+        },
+        {
+          "suite": "live",
           "file": "tests/live/blueprint-component-property-pie.test.ts",
           "test": "reinstances the possessed pawn without binding any delegate twice, and the value reads back"
         },
@@ -12788,6 +12793,11 @@
           "suite": "live",
           "file": "tests/live/bcov-level-loaded-regions.test.ts",
           "test": "unload_loaded_regions says when a pin still holds actors it unloaded the region of"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/bcov-level-multilevel.test.ts",
+          "test": "list_actor_descs finds the descriptor by its package, full or by its tail, and names the missing ones"
         },
         {
           "suite": "live",
@@ -14799,6 +14809,11 @@
           "suite": "live",
           "file": "tests/live/bcov-level-multilevel.test.ts",
           "test": "load_actor_descs pins and unpins the descriptor"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/bcov-level-multilevel.test.ts",
+          "test": "load_actor_descs takes the same packages filter"
         }
       ]
     },
@@ -16140,6 +16155,11 @@
         },
         {
           "suite": "live",
+          "file": "tests/live/bcov-pie-script-triggered.test.ts",
+          "test": "passes on a press from outside the script after act, not on act's own press, and records when and what"
+        },
+        {
+          "suite": "live",
           "file": "tests/live/bcov-pie-scripts.test.ts",
           "test": "script_replay re-evaluates the auto steps on the run's recording and reports what regressed"
         },
@@ -16385,6 +16405,11 @@
       "registeredIn": "PIEHandlers.cpp",
       "status": "covered",
       "tests": [
+        {
+          "suite": "live",
+          "file": "tests/live/bcov-pie-script-triggered.test.ts",
+          "test": "passes on a press from outside the script after act, not on act's own press, and records when and what"
+        },
         {
           "suite": "live",
           "file": "tests/live/bcov-pie-session.test.ts",
@@ -17248,6 +17273,11 @@
         },
         {
           "suite": "live",
+          "file": "tests/live/bcov-pie-script-triggered.test.ts",
+          "test": "passes on a press from outside the script after act, not on act's own press, and records when and what"
+        },
+        {
+          "suite": "live",
           "file": "tests/live/bcov-pie-scripts.test.ts",
           "test": "script_run evaluates auto steps live, holds at the manual step, and takes its verdict"
         },
@@ -17316,6 +17346,11 @@
           "suite": "live",
           "file": "tests/live/bcov-pie-script-act.test.ts",
           "test": "skips arrange and act, since nothing is in PIE, and says so on the step"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/bcov-pie-script-triggered.test.ts",
+          "test": "passes on a press from outside the script after act, not on act's own press, and records when and what"
         },
         {
           "suite": "live",
@@ -17420,6 +17455,11 @@
           "suite": "live",
           "file": "tests/live/bcov-pie-script-act.test.ts",
           "test": "script_validate refuses an actor or Input Action that does not exist, and accepts ones that do"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/bcov-pie-script-triggered.test.ts",
+          "test": "script_validate reports an Input Action that does not exist with candidates, and takes a package path"
         },
         {
           "suite": "live",
@@ -22985,6 +23025,11 @@
           "suite": "live",
           "file": "tests/live/bcov-level-actors.test.ts",
           "test": "set_actor_folder_path moves the actor into a folder and back to the root"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/bcov-level-multilevel.test.ts",
+          "test": "World Partition actor descriptors"
         }
       ]
     },
@@ -23907,6 +23952,11 @@
           "suite": "live",
           "file": "tests/live/bcov-material-graph.test.ts",
           "test": "set_expression_value changes a Constant's value"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/bcov-material-graph.test.ts",
+          "test": "set_expression_value swaps a TextureSample's texture through the native edit path (#1441)"
         }
       ]
     },

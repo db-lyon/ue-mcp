@@ -246,12 +246,15 @@ describe("actor object renames", () => {
 
 describe("World Partition actor descriptors", () => {
   const LABEL = "BCov_Level_WPActor";
+  const FOLDER = "BCov/WPFolder";
   let guid = "";
+  let actorPackage = "";
 
   beforeAll(async () => {
     const created = await openNewMap(WP, { worldPartition: true });
     expect(created.worldPartition).toBe(true);
     await cube(LABEL, { x: 0, y: 0, z: 100 });
+    await call("set_actor_folder_path", { folderPath: FOLDER, actorLabels: [LABEL] });
     await call("save_level");
     // Reopened from disk, as a saved World Partition map is used: the descriptors and the
     // pinned-actor loader belong to the loaded map, not to the one just created in memory.
@@ -268,6 +271,46 @@ describe("World Partition actor descriptors", () => {
     // Reopened from disk, the actor is a descriptor until something loads it; pinning below does.
     expect(desc.loaded).toBe(false);
     expect(guid).not.toBe("");
+    // The Outliner folder comes from the descriptor while the actor is not loaded.
+    expect(desc.folderPath).toBe(FOLDER);
+    actorPackage = String(desc.package);
+    expect(actorPackage).toContain("/__ExternalActors__/");
+  }, 120_000);
+
+  it("list_actor_descs finds the descriptor by its package, full or by its tail, and names the missing ones", async () => {
+    const tail = actorPackage.split("/").slice(-3).join("/");
+    const missing = "/Game/__ExternalActors__/NoSuchMap/0/ZZ/NOSUCHACTOR";
+    const out = await call("list_actor_descs", { packages: [actorPackage, `${tail}.uasset`, missing] });
+    // Two requests name the same actor: one row, both requests satisfied.
+    expect(out.matched).toBe(1);
+    expect(out.unloadedMatches).toBe(1);
+    expect(out.missingPackages).toEqual([missing]);
+    const desc = (out.actorDescs as Json[])[0];
+    expect(desc.guid).toBe(guid);
+    expect(desc.label).toBe(LABEL);
+    expect(desc.folderPath).toBe(FOLDER);
+
+    // Another filter excluding the actor does not make its package missing: the map still holds it.
+    const excluded = await call("list_actor_descs", { packages: [tail], loadedOnly: true });
+    expect(excluded.matched).toBe(0);
+    expect(excluded.missingPackages).toEqual([]);
+
+    // A tail matches whole path segments only: "B/CDEF" is a string suffix of ".../AB/CDEF" but not a tail of it.
+    const [, mid, leaf] = tail.split("/");
+    const partialTail = `${mid.slice(1)}/${leaf}`;
+    const partial = await call("list_actor_descs", { packages: [partialTail] });
+    expect(partial.matched).toBe(0);
+    expect(partial.missingPackages).toEqual([partialTail]);
+  }, 120_000);
+
+  it("load_actor_descs takes the same packages filter", async () => {
+    const out = await call("load_actor_descs", { mode: "pin", packages: [actorPackage], dryRun: true });
+    expect(out.matched).toBe(1);
+    expect(out.missingPackages).toEqual([]);
+    expect(out.pinStateChanged).toBe(0);
+    const none = await call("load_actor_descs", { mode: "pin", packages: ["0/ZZ/NOSUCHACTOR"] });
+    expect(none.matched).toBe(0);
+    expect(none.missingPackages).toEqual(["0/ZZ/NOSUCHACTOR"]);
   }, 120_000);
 
   it("load_actor_descs pins and unpins the descriptor", async () => {

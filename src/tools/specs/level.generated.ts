@@ -2514,6 +2514,13 @@ export const handlerSpecs: HandlerSpecs = {
         "items": "string"
       },
       {
+        "name": "packages",
+        "type": "array",
+        "required": false,
+        "description": "External actor package paths, full (/Game/__ExternalActors__/...) or their XX/YY/NAME tail; .uasset and backslashes accepted. Unmatched ones are returned as missingPackages",
+        "items": "string"
+      },
+      {
         "name": "bounds",
         "type": "object",
         "required": false,
@@ -2734,6 +2741,13 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "array",
         "required": false,
         "description": "Exact actor GUIDs",
+        "items": "string"
+      },
+      {
+        "name": "packages",
+        "type": "array",
+        "required": false,
+        "description": "External actor package paths, full (/Game/__ExternalActors__/...) or their XX/YY/NAME tail; .uasset and backslashes accepted. Unmatched ones are returned as missingPackages",
         "items": "string"
       },
       {
@@ -6767,7 +6781,7 @@ export const paramsClauses: Readonly<Record<string, string>> = {
   get_world_partition_settings: "Params: none",
   get_world_settings: "Params: none",
   line_trace: "Params: start?, end?, direction?, distance?, traceComplex?, channel?, ignoreActors?, multi?, world?, pieInstance?",
-  list_actor_descs: "Params: filter?, className?, guids?, bounds?, loadedOnly?, unloadedOnly?, cursor?, limit?",
+  list_actor_descs: "Params: filter?, className?, guids?, packages?, bounds?, loadedOnly?, unloadedOnly?, cursor?, limit?",
   list_actor_tags: "Params: actorLabel?, actorPath?, cursor?, limit?",
   list_blockout: "Params: tag?, includeReplaced?",
   list_hlod_setups: "Params: partitionName",
@@ -6777,7 +6791,7 @@ export const paramsClauses: Readonly<Record<string, string>> = {
   list_streaming_sublevels: "Params: none",
   list_transient_actors: "Params: world?, pieInstance?, cursor?, limit?",
   list_volumes: "Params: volumeType?, cursor?, limit?",
-  load_actor_descs: "Params: mode?, filter?, className?, guids?, bounds?, loadedOnly?, unloadedOnly?, maxActors?, dryRun?",
+  load_actor_descs: "Params: mode?, filter?, className?, guids?, packages?, bounds?, loadedOnly?, unloadedOnly?, maxActors?, dryRun?",
   load_level: "Params: levelPath, saveFirst? (or saveCurrent), discardUnsaved?",
   load_region: "Params: bounds, label?, maxActors?, dryRun?",
   match_asset_to_blockout: "Params: actorLabel OR actorPath OR tag, candidateFolder, recursive?, allowRotation?, maxCandidates?, limit?",
@@ -7054,6 +7068,7 @@ export const schema: Record<string, z.ZodType> = {
   outerConeAngle: z.number().optional().describe("Spot light outer cone angle"),
   outlierFactor: z.number().optional().describe("How many times above or below the median a texel or lightmap density must be to be an outlier (default 4)"),
   outputPath: z.string().optional().describe("File for dumpToFile; relative paths resolve under Saved/ (default Saved/UE_MCP/PerfAudit/<world>_<time>.json) (audit_level_performance). Output .fbx path (export_actor_fbx). File for dumpToFile; relative paths resolve under Saved/ (default Saved/UE_MCP/SkinnedVertices/) (get_skinned_vertices)"),
+  packages: z.array(z.string()).optional().describe("External actor package paths, full (/Game/__ExternalActors__/...) or their XX/YY/NAME tail; .uasset and backslashes accepted. Unmatched ones are returned as missingPackages"),
   parentComponentName: z.string().optional().describe("Parent SceneComponent instance name; omitted selects the actor root"),
   parentLabel: z.string().optional().describe("Parent actor label; pass parentLabel or parentPath"),
   parentPath: z.string().optional().describe("Parent actor object path"),

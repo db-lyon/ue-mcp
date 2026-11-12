@@ -1,4 +1,5 @@
 #include "Handlers/PIE/PIESequenceFormat.h"
+#include "Handlers/PIE/PIEUIPointer.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "GameFramework/Actor.h"
@@ -127,6 +128,7 @@ namespace MCPPIE
 		case EStepType::Console:   return TEXT("console");
 		case EStepType::InputTape: return TEXT("input_tape");
 		case EStepType::Mark:      return TEXT("mark");
+		case EStepType::UIInput:   return TEXT("ui_input");
 		}
 		return TEXT("input");
 	}
@@ -139,6 +141,7 @@ namespace MCPPIE
 		if (Str == TEXT("console"))    { Out = EStepType::Console;   return true; }
 		if (Str == TEXT("input_tape")) { Out = EStepType::InputTape; return true; }
 		if (Str == TEXT("mark"))       { Out = EStepType::Mark;      return true; }
+		if (Str == TEXT("ui_input"))   { Out = EStepType::UIInput;   return true; }
 		return false;
 	}
 
@@ -405,6 +408,30 @@ namespace MCPPIE
 			case EStepType::Mark:
 				SO->SetStringField(TEXT("label"), Step.Label);
 				break;
+			case EStepType::UIInput:
+			{
+				SO->SetStringField(TEXT("event"), Step.UIEvent);
+				SO->SetNumberField(TEXT("x"), Step.PointerX);
+				SO->SetNumberField(TEXT("y"), Step.PointerY);
+				if (!Step.UIKey.IsEmpty())
+				{
+					SO->SetStringField(TEXT("button"), Step.UIKey);
+				}
+				if (Step.WheelDelta != 0.0)
+				{
+					SO->SetNumberField(TEXT("wheel_delta"), Step.WheelDelta);
+				}
+				if (Step.UIModifiers != 0)
+				{
+					TArray<TSharedPtr<FJsonValue>> Mods;
+					for (const FString& M : UIModifiersToStrings(Step.UIModifiers))
+					{
+						Mods.Add(MakeShared<FJsonValueString>(M));
+					}
+					SO->SetArrayField(TEXT("modifiers"), Mods);
+				}
+				break;
+			}
 			case EStepType::InputTape:
 			{
 				SO->SetStringField(TEXT("action"), Step.Action);
@@ -508,6 +535,38 @@ namespace MCPPIE
 			SO->TryGetStringField(TEXT("name"), Step.CaptureName);
 			SO->TryGetStringField(TEXT("command"), Step.Command);
 			SO->TryGetStringField(TEXT("label"), Step.Label);
+
+			if (Step.Type == EStepType::UIInput)
+			{
+				SO->TryGetStringField(TEXT("event"), Step.UIEvent);
+				EUIPointerEvent Parsed;
+				if (!ParseUIPointerEvent(Step.UIEvent, Parsed))
+				{
+					OutError = FString::Printf(TEXT("sequence: ui_input step has unknown event '%s'"), *Step.UIEvent);
+					return false;
+				}
+				SO->TryGetNumberField(TEXT("x"), Step.PointerX);
+				SO->TryGetNumberField(TEXT("y"), Step.PointerY);
+				SO->TryGetStringField(TEXT("button"), Step.UIKey);
+				SO->TryGetNumberField(TEXT("wheel_delta"), Step.WheelDelta);
+				const TArray<TSharedPtr<FJsonValue>>* Mods = nullptr;
+				if (SO->TryGetArrayField(TEXT("modifiers"), Mods) && Mods)
+				{
+					TArray<FString> Names;
+					for (const TSharedPtr<FJsonValue>& M : *Mods)
+					{
+						if (M.IsValid()) Names.Add(M->AsString());
+					}
+					Step.UIModifiers = UIModifiersFromStrings(Names);
+				}
+				const bool bNeedsButton = Parsed == EUIPointerEvent::Down || Parsed == EUIPointerEvent::Up
+					|| Parsed == EUIPointerEvent::DoubleClick;
+				if (bNeedsButton && Step.UIKey.IsEmpty())
+				{
+					OutError = FString::Printf(TEXT("sequence: ui_input %s step needs 'button'"), *Step.UIEvent);
+					return false;
+				}
+			}
 
 			if (Step.Type == EStepType::InputTape)
 			{
