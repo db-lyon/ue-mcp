@@ -211,7 +211,9 @@ export async function run(argv: string[]): Promise<number> {
     unsubscribe();
   }
 
-  const text = result.content[0]?.text ?? "";
+  // A flow answers with one text block; a media block (an image a step returned) carries no JSON.
+  const first = result.content[0];
+  const text = first?.type === "text" ? first.text : "";
   if (result.isError) {
     if (json) console.log(text);
     else console.error(`  ${RED}${text}${RESET}`);

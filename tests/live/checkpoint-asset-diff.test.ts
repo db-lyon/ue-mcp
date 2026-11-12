@@ -85,7 +85,7 @@ beforeAll(async () => {
   projectDir = (await liveTarget()).projectDir;
   localYml = path.join(projectDir, "ue-mcp.local.yml");
   // Off any map under DIR so the folder can be deleted. MCP_Home is not checked in; demo_go_home creates and loads it.
-  await call("demo_go_home");
+  await call("demo_go_home", { discardUnsaved: true });
   // delete_asset also removes a map file the asset registry no longer lists; delete_folder only sees what it lists.
   await callBridge(bridge, "delete_asset", { assetPath: LEVEL, force: true });
   await callBridge(bridge, "delete_folder", { path: DIR, force: true });
@@ -131,7 +131,7 @@ afterAll(async () => {
   await server?.close();
   if (bridge) {
     await callBridge(bridge, "checkpoint_arm", { enabled: false });
-    await callBridge(bridge, "demo_go_home", {});
+    await callBridge(bridge, "demo_go_home", { discardUnsaved: true });
     await callBridge(bridge, "delete_asset", { assetPath: LEVEL, force: true });
     await callBridge(bridge, "delete_folder", { path: DIR, force: true });
     disconnectBridge();
@@ -149,7 +149,8 @@ afterAll(async () => {
     try {
       fs.rmSync(path.join(projectDir, "Saved", "Diff", "UE_MCP_Checkpoints"), { recursive: true, force: true, maxRetries: 4, retryDelay: 250 });
     } catch (e) {
-      if ((e as NodeJS.ErrnoException).code !== "EBUSY") throw e;
+      // Windows reports the held directory as EBUSY or, for the folder itself, EPERM.
+      if (!["EBUSY", "EPERM"].includes(String((e as NodeJS.ErrnoException).code))) throw e;
     }
   }
   closeLiveBridges();

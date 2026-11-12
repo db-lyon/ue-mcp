@@ -56,7 +56,8 @@ describe("source_control", () => {
   it("is one category tool in ALL_TOOLS, named apart from the p4 plugin's category", () => {
     expect(ALL_TOOLS.filter((t) => t.name === "source_control")).toHaveLength(1);
     expect(sourceControlTool.name).not.toBe("p4");
-    expect(Object.keys(sourceControlTool.actions).sort()).toEqual(Object.keys(ACTIONS).sort());
+    // ue-mcp's own actions; Epic's SourceControlHelpers toolset (UE 5.9) adds epic_* ones beside them.
+    expect(Object.keys(sourceControlTool.actions).filter((a) => !a.startsWith("epic_")).sort()).toEqual(Object.keys(ACTIONS).sort());
   });
 
   it.each(Object.entries(ACTIONS))("%s dispatches to its spec'd handler and forwards the bag as sent", (name, want) => {

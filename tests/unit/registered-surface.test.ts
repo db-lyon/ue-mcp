@@ -6,6 +6,7 @@
 import { describe, it, expect } from "vitest";
 import {
   absentToolset,
+  epicToolsetsOf,
   registeredMethodsOf,
   wrapsEpicTool,
   registeredSet,
@@ -101,10 +102,10 @@ describe("discovery reads the registered surface in every strategy", () => {
     expect(describeAlpha.count).toBe(2);
 
     const listed = await (gateway.actions.list_categories as { handler: Function }).handler(ctx, {});
-    expect(listed.categories.map((c: { category: string }) => c.category)).toEqual(["alpha"]);
+    expect(listed.categories.map((c: { category: string }) => c.category)).toEqual(["alpha", "flow"]);
 
     const unfiltered = await (gateway.actions.list_categories as { handler: Function }).handler(ctxWith(null), {});
-    expect(unfiltered.count).toBe(2);
+    expect(unfiltered.count).toBe(3);
   });
 
   it("lean: the catalog and a category's describe skip withheld actions", async () => {
@@ -155,6 +156,24 @@ describe("epic_* actions whose engine toolset the editor lacks (#1323, #1182)", 
     expect(withheldTarget(epicGraph(), "asset.epic_list", { registeredActions: methods, epicToolsets: ["Present.Tools"] })).toBeNull();
     expect(wrapsEpicTool(epicGraph(), "asset.epic_list")).toBe(true);
     expect(wrapsEpicTool(epicGraph(), "asset.save")).toBe(false);
+  });
+
+  it("keeps an action whose tool the editor has under a successor's toolset", () => {
+    const renamed = {
+      ...bp("read", "[Epic Old.ActorTools] Gets components. Params: actor", "epic_call_tool"),
+      epicTool: {
+        toolset: "Old.ActorTools",
+        name: "Old.ActorTools.get_components",
+        engines: ["5.8"],
+        successors: [{ toolset: "New.ActorToolset", name: "New.ActorToolset.GetComponents", engines: ["5.9"] }],
+      },
+    };
+    const onNew = registeredMethodsOf({ registeredActions: methods, epicToolsets: ["New.ActorToolset"] });
+    expect(absentToolset(renamed, onNew)).toBeUndefined();
+    const onNeither = registeredMethodsOf({ registeredActions: methods, epicToolsets: ["Present.Tools"] });
+    expect(absentToolset(renamed, onNeither)).toBe("Old.ActorTools");
+    const graph = [categoryTool("level", "Level", { epic_get_components: renamed })];
+    expect(epicToolsetsOf(graph)).toEqual(["New.ActorToolset", "Old.ActorTools"]);
   });
 
   it("judges a toolset absent across editors only when every editor's list is known", () => {

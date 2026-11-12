@@ -159,7 +159,7 @@ Lifecycle actions are not affected by the last case: they use the addressed proj
 ### Plugin fails to compile
 
 1. **Engine plugins.** The bridge's `.uplugin` depends on `PythonScriptPlugin`, `EnhancedInput`, `GameplayAbilities`, `Niagara`, `PCG`, `ControlRig`, `StateTree` and others ([full list](configuration.md#plugin-deployment)). Unreal enables them with the bridge. If an error names one, make sure the `.uproject` does not disable it.
-2. **Engine version.** The supported range is UE 5.4 to 5.8. Check the build log for the first error.
+2. **Engine version.** The supported range is UE <!-- count:engineRange -->5.4 to 5.9<!-- /count -->. Check the build log for the first error.
 3. **Rebuild from clean.** Delete `<Project>/Plugins/UE_MCP_Bridge/Binaries/` and `<Project>/Plugins/UE_MCP_Bridge/Intermediate/`, then run `npx ue-mcp build`.
 4. **No C++ toolchain.** Use prebuilt binaries instead: remove `Plugins/UE_MCP_Bridge/` and run `npx ue-mcp init --install=binary`.
 

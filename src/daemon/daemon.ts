@@ -66,7 +66,7 @@ import { existingGuard, onDialogEvent } from "../editor/dialog-guard.js";
 export const EXTENSION_FEATURES: readonly string[] = ["callAction.dialogPrompt", "callAction.elicit", "callAction.access", "checkpoints", "checkpoints.assetDiff", "events.dialog", "events.script", "models.provider", "modes", "modes.playtest", "skills", "context.projection", "actions.effects", "extension.versions", "ui.scopedKeys", "ui.extensions", "extension.services", "flows.stepApproval"];
 
 /** What this daemon's HTTP API offers beyond DAEMON_API_VERSION, reported by /v1/health. */
-export const DAEMON_FEATURES: readonly string[] = ["checkpoints", "checkpoints.assetDiff", "skills", "context.projection", "actions.effects", "install.pendingBuild", "editor.rebuild", "ui.scopedKeys", "ui.extensions", "flows.stepApproval", "sessions.access", "journal"];
+export const DAEMON_FEATURES: readonly string[] = ["checkpoints", "checkpoints.assetDiff", "skills", "context.projection", "actions.effects", "install.pendingBuild", "editor.rebuild", "ui.scopedKeys", "ui.extensions", "flows.stepApproval", "sessions.access", "journal", "tools.categories", "leases"];
 import { extensionsDir, loadExtensions, matchRoute, normalizeResponse, type LoadedExtension } from "./extensions.js";
 import { installedCopies, recordedVersion, versionsOf } from "./extension-versions.js";
 import { UiBundleStore, contentType, type UiBundleOwner } from "./ui-bundles.js";
@@ -84,6 +84,7 @@ import { pluginRoutes } from "./plugin-routes.js";
 import { releaseStartLock, waitForStartTurn } from "./start-lock.js";
 import { checkpointRoute } from "./checkpoint-routes.js";
 import { journalRoute } from "./journal-routes.js";
+import { toolsRoute } from "./tools-routes.js";
 import { checkpointsFor, subscribeCheckpointEvents } from "../checkpoints/service.js";
 import { listDaemonSkills } from "../extensions/skills-list.js";
 import { ContextProjectionError, ContextProjector, enabledGraph } from "../server/context-projection.js";
@@ -164,6 +165,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
         message: open.message,
         buttons: open.buttons,
         ...(open.items ? { items: open.items } : {}),
+        ...(open.blocks ? { blocks: open.blocks } : {}),
         mode: guard.mode,
       });
     }
@@ -311,6 +313,8 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
   // Every open MCP session by id, with the access mode its calls run under (#1484).
   const mcpSessions = new Map<string, { client: () => string; connectedAt: string; access: SessionAccess }>();
   const sessionIds = new WeakMap<http.IncomingMessage, string>();
+  // Implicit asset leases switch on once more than one client shares the editor.
+  rt.sessions.leases.liveSessions = () => mcpSessions.size;
   const listSessions = (): McpSessionInfo[] => [...mcpSessions].map(([id, m]) =>
     ({ id, client: m.client(), connectedAt: m.connectedAt, access: m.access.mode }));
   // The id goes back on the upgrade response, so a client on the socket knows which session it is.
@@ -328,7 +332,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
     const sessionId = sessionIds.get(req) ?? randomUUID();
     // A client can open its session read-only, so no call slips through before it sets the mode.
     const access = new SessionAccess(parseSessionAccessMode(req.headers["x-ue-mcp-access"]));
-    const { server, dispose } = createMcpServer(rt, { access });
+    const { server, dispose } = createMcpServer(rt, { access, sessionId });
     // The MCP client's own name once it has introduced itself, else what the shim said.
     const client = (): string => server.server.getClientVersion()?.name ?? header;
     mcpSessions.set(sessionId, { client, connectedAt: new Date().toISOString(), access });
@@ -361,6 +365,9 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
       clients -= 1;
       transports.delete(transport);
       mcpSessions.delete(sessionId);
+      // A session that ends gives up its asset leases, so nobody waits out a holder that is gone.
+      const released = rt.sessions.leases.releaseHolder(sessionId);
+      if (released > 0) events.publish("leases.released", { session: sessionId, count: released });
       dispose();
       void server.close().catch(() => {});
       events.publish("client.disconnected", { client: client(), clients, session: sessionId });
@@ -420,7 +427,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
   // The daemon owns these, so it can say beforehand why the editor is about to
   // go away and the disconnect is classified as that rather than guessed.
   const editorOp = async (op: string): Promise<Record<string, unknown>> => {
-    const text = (r: { content?: Array<{ text?: string }> }) => r.content?.map((c) => c.text ?? "").join("\n") ?? "";
+    const text = (r: { content?: Array<{ type?: string; text?: string }> }) => r.content?.map((c) => c.text ?? "").join("\n") ?? "";
     const step = async (category: string, action: string) => {
       const name = `${category}.${action}`;
       events.publish("editor.operation", { op, step: name, phase: "started" });
@@ -822,6 +829,13 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
       const sub = url.pathname.slice("/v1/journal".length).replace(/\/+$/, "");
       readBody(req)
         .then((body) => journalRoute(rt.sessions, req.method ?? "GET", sub, url.searchParams, body))
+        .then((r) => (r ? json(res, r.status, r.body) : void res.writeHead(404).end()), (e) => json(res, 500, { error: e instanceof Error ? e.message : String(e) }));
+      return;
+    }
+    if (url.pathname === "/v1/tools" || url.pathname.startsWith("/v1/tools/") || url.pathname === "/v1/leases") {
+      const route = url.pathname.replace(/\/+$/, "");
+      readBody(req)
+        .then((body) => toolsRoute(rt, req.method ?? "GET", route, body))
         .then((r) => (r ? json(res, r.status, r.body) : void res.writeHead(404).end()), (e) => json(res, 500, { error: e instanceof Error ? e.message : String(e) }));
       return;
     }

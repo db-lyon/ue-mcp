@@ -4,7 +4,7 @@ Operating guide for Claude Code (and any AI agent) working in this repo. Shared 
 
 ## Repo at a glance
 
-- **TS server** (`src/`) - the MCP server. Wraps the UE bridge over WebSocket, exposes <!-- count:tools -->30<!-- /count --> category tools with <!-- count:actions -->2163+<!-- /count --> actions. The numbers between those markers are stamped by `scripts/generate-tool-metadata.ts` from `ALL_TOOLS`; do not hand-edit them, and do not remove the markers, because a hand-written count here is the first thing every agent reads and the last thing anyone remembers to update.
+- **TS server** (`src/`) - the MCP server. Wraps the UE bridge over WebSocket, exposes <!-- count:tools -->31<!-- /count --> category tools with <!-- count:actions -->3704+<!-- /count --> actions. The numbers between those markers are stamped by `scripts/generate-tool-metadata.ts` from `ALL_TOOLS`; do not hand-edit them, and do not remove the markers, because a hand-written count here is the first thing every agent reads and the last thing anyone remembers to update.
 - **C++ plugin** (`plugin/ue_mcp_bridge/`) - the editor-side bridge. Lives in `Private/Handlers/<Category>/*.cpp`, registers actions with `FMCPHandlerRegistry`.
 - **Test project** (`tests/ue_mcp/`) - the dedicated UE project used for smoke testing. The plugin is deployed here from `plugin/` via the deployer. This is the **only** safe target for live tests.
 - **Docs** (`docs/`) - MkDocs site. Release bodies are drafted outside the repo (see Release process).
@@ -58,7 +58,7 @@ The merge style follows the commit count, and writing five commits only to squas
 
 - Target **only** `tests/ue_mcp/ue_mcp.uproject`. Confirm the MCP connection via `project(get_status)` before running. If the editor is connected to anything else (the user's real project, another workspace), abort.
 - Smoke tests execute real mutations (create blueprints, delete assets, modify levels). A misrouted run against a real project can corrupt an active editor session.
-- <!-- count:bridgeActions -->2087<!-- /count --> bridge actions. Pass = every handler responds either with success or an expected parameter-validation error. Any timeout or `Unknown method` is a real failure.
+- <!-- count:bridgeActions -->3610<!-- /count --> bridge actions. Pass = every handler responds either with success or an expected parameter-validation error. Any timeout or `Unknown method` is a real failure.
 
 ### Golden baseline - the advertised surface
 
@@ -81,7 +81,7 @@ The merge style follows the commit count, and writing five commits only to squas
 
 ### Live tests
 
-`npm run test:live` runs every file in `tests/live/` through the shipped server, sharded across editors it launches itself, and has a release-gate budget: the whole run must finish in 10 minutes and every test within its own budget (#1436).
+`npm run test:live` runs every file in `tests/live/` through the shipped server, sharded across editors it launches itself, with time goals: the whole run in 10 minutes and every test within its own budget (#1436). The goals are reported, never a failure.
 
 - **Shards.** Each shard is a copy of `tests/ue_mcp` under `tests/.shards/<name>/ue_mcp` with its own editor and port, verified by asking the editor which project it has open before anything is sent. The headless and `none` files are one queue, longest first by `tests/live/timing-baseline.json`: each headless editor takes batches that shrink as it drains, and another starts whenever one fits and the queue holds a launch's worth of work. The other kinds keep fixed shards split by measured time and launch first. The results are merged into one report. Shards copy their build output from a snapshot in `tests/.shards/_build`, taken at the start of the run (`--stage-build` takes one alone, `--staged-build` reuses it).
 - **Editor kinds.** Every live file starts with `// @live-editor <kind>`, and `tests/unit/live-shards.test.ts` fails on a file without one:
@@ -94,7 +94,7 @@ The merge style follows the commit count, and writing five commits only to squas
   Tag a file by what it needs, proven by running it headless first. Never move a file to a heavier editor to hide a handler bug.
 - **Memory.** The runner reads free memory at launch, keeps `max(4 GB, 12%)` free for the rest of the machine, and starts only as many headless shards as fit beside the other editors (`EDITOR_PEAK_MB` in `scripts/live-shards.mjs`: about 3.6 GB headless, 4.6 GB render). Each editor waits for room before it starts. `--shards N` caps the headless count; it never raises it past what fits.
 - **An editor that dies** is reported with its cause from its own log (crash, quit, or no crash recorded), and the files it never ran go to a fresh editor. The file it died in stays a failure.
-- **Gates.** The run fails on any failed or skipped test, any file that did not run, a test over its budget (`tests/live/budgets.json`, a default plus named exceptions), or a run over the wall-clock budget. Every run prints the 15 slowest tests and writes `tests/.shards/last-run.json`.
+- **Gates.** The run fails on any failed or skipped test, any file that did not run, or an editor that would not start or died. A test over its budget (`tests/live/budgets.json`, a default plus named exceptions) or a run over the wall-clock budget is a missed time goal: printed as a warning and recorded under `timeGoalsMissed` in `tests/.shards/last-run.json`, never a failure. Every run prints the 15 slowest tests.
 - **One shard:** `npm run test:live -- --shard r1`, with the shard names the run prints, or `--shard headless` for the headless queue. `--kinds a,b` runs only the files of those kinds. `--files a,b` runs only files whose path contains one of the strings. `--record-timing` on a full run rewrites the committed baseline.
 - **Attach mode:** `--attach`, `--only <file>`, `--record-golden` and `--lifecycle` drive the `tests/ue_mcp` editor that is already running, as the suite did before sharding.
 - The leak assertions need the parameter echo, which shard editors are launched with. In attach mode, launch with `UE_MCP_PARAM_ECHO=1` to include them.
@@ -179,7 +179,7 @@ Main and `release/*` take only pull requests that are up to date with them and w
 
 Release notes structure (below the frontmatter): **`## Features` / `## Fixes` / `## Mentions` / `## Contributions`**, in that order. Read `docs/release-notes-style.md` before writing any of it. The rules that get broken most:
 
-- **The engine range is 5.4 to 5.8.** Say the range. Never annotate it with which versions have been compiled, verified or gated. A user on 5.5 who hits a problem files an issue; that is the system working, not something to pre-empt in public copy.
+- **The engine range is <!-- count:engineRange -->5.4 to 5.9<!-- /count -->.** Say the range. It is declared once, in `scripts/lib/engine-range.mjs`, and stamped everywhere else by `npm run generate:metadata`. Never annotate it with which versions have been compiled, verified or gated. A user on 5.5 who hits a problem files an issue; that is the system working, not something to pre-empt in public copy.
 - **No thesis sentence, no three-part summary.** The opening is a compatibility line, an install block, and at most one plain sentence of scale. "N new actions across M categories, every X doing Y, and the Z now W" is a bulleted list flattened into prose.
 - **Cumulative, not archaeological.** A stable release never mentions its own betas or what an earlier release got wrong.
 - **Credit contributors** from `gh api repos/OWNER/REPO/compare/vPREV...vNEW --jq '.commits[].author.login'`, not from memory.

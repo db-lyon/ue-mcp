@@ -27,6 +27,7 @@ export const CLI_COMMANDS: readonly CliCommand[] = [
   { name: "doctor", summary: "Report what is installed and running", load: () => import("./doctor.js") },
   { name: "extension", summary: "Install, remove or list daemon extensions", load: () => import("./extension-cli.js") },
   { name: "daemon", summary: "Run, start, stop or inspect a project's daemon", load: () => import("./daemon-cli.js") },
+  { name: "projects", summary: "List this computer's Unreal projects and daemons (--json), add or remove one", load: () => import("./projects-cli.js") },
   { name: "status", summary: "Report one project's install and editor state (--json)", load: () => import("./status.js") },
   { name: "deploy", summary: "Deploy the bridge plugin into a project", load: () => import("./deploy-cli.js") },
   { name: "hook", summary: "Claude Code hook handler", load: () => import("./hook-handler.js") },
@@ -52,6 +53,7 @@ export const CLI_COMMANDS: readonly CliCommand[] = [
   { name: "flow", summary: "List, plan or run a project's flows", load: () => import("./flow-cli.js") },
   { name: "plugin", summary: "Install, create and publish plugins", load: () => import("./plugin-cli.js") },
   { name: "context", summary: "Read or set the context strategy", load: () => import("./context-cli.js"), ownHelp: true },
+  { name: "tools", summary: "List, enable or disable categories and Unreal toolsets", load: () => import("./tools-cli.js") },
   {
     name: "version",
     aliases: ["--version", "-v"],

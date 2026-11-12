@@ -1415,7 +1415,7 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "Custom range end in display-rate frames, sampled as the last key; pass with startFrame"
       }
     ],
-    "contractExempt": "5.8 only: before 5.8 the handler is a stub that reads nothing, and on 5.8 it bakes and saves a new AnimSequence"
+    "contractExempt": "UE 5.8+: before 5.8 the handler is a stub that reads nothing, and on 5.8 and later it bakes and saves a new AnimSequence"
   },
   "bake_keyframes_batch": {
     "category": "animation",
@@ -1693,7 +1693,7 @@ export const handlerSpecs: HandlerSpecs = {
         ]
       }
     ],
-    "contractExempt": "5.8 only: before 5.8 the handler is a stub that reads nothing, and on 5.8 it bakes and saves a new AnimSequence"
+    "contractExempt": "UE 5.8+: before 5.8 the handler is a stub that reads nothing, and on 5.8 and later it bakes and saves a new AnimSequence"
   },
   "batch_retarget_animations": {
     "category": "animation",
@@ -1829,7 +1829,7 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "skip returns the existing session, error (default) refuses; an existing session is never modified"
       }
     ],
-    "contractExempt": "5.8 only: before 5.8 the handler is a stub that reads nothing, and on 5.8 it creates and saves a LevelSequence"
+    "contractExempt": "UE 5.8+: before 5.8 the handler is a stub that reads nothing, and on 5.8 and later it creates and saves a LevelSequence"
   },
   "begin_skeleton_edit": {
     "category": "animation",

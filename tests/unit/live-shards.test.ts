@@ -7,7 +7,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { describe, expect, it } from "vitest";
 import {
-  balance, buildOutputFilter, editorFits, launchOrder, liveFiles, mirror, nextBatch, overBudget, planFixedShards, planShards, poolQueue,
+  balance, buildOutputFilter, editorFits, launchOrder, liveFiles, mirror, nextBatch, overBudget, runVerdict, planFixedShards, planShards, poolQueue,
   poolWantsEditor, readKind, splitAtDeath, timingFromReports, undeployedSources,
 } from "../../scripts/live-shards.mjs";
 import { liveShardProjectDir, LIVE_SHARD_ROOT } from "../../scripts/bridge-target.mjs";
@@ -215,5 +215,26 @@ describe("the deployed bridge check", () => {
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
     }
+  });
+});
+
+describe("time budgets are goals", () => {
+  const over = [{ test: "tests/live/dialog-gate.test.ts > a modal blocks every action", ms: 33_400, limit: 20_000 }];
+
+  it("passes a run whose only misses are time goals, and names them as warnings", () => {
+    const v = runVerdict({ problems: [], over, wallS: 838, wallClockS: 600 });
+    expect(v.exitCode).toBe(0);
+    expect(v.goals).toEqual([
+      "over its time goal: tests/live/dialog-gate.test.ts > a modal blocks every action took 33.4s, goal 20s",
+      "over its time goal: the run took 838s, goal 600s",
+    ]);
+  });
+
+  it("still fails on a real problem", () => {
+    expect(runVerdict({ problems: ["failed: tests/live/x.test.ts > broke"], over, wallS: 100, wallClockS: 600 }).exitCode).toBe(1);
+  });
+
+  it("leaves the wall clock out of a partial run", () => {
+    expect(runVerdict({ problems: [], wallS: 900, wallClockS: 600, wallChecked: false }).goals).toEqual([]);
   });
 });

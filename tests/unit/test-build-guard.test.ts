@@ -246,3 +246,22 @@ describe("UE_ROOT", () => {
     expect(plan.buildArgs.filter((argument: string) => argument === "-NoEngineChanges")).toHaveLength(1);
   });
 });
+
+describe("the engine a test build picks with nothing pinned", () => {
+  it("tries the engine the test project names before the newest install", async () => {
+    const { engineRootCandidates } = await import("../../scripts/build-utils.js");
+    const roots = engineRootCandidates({}, "win32", "5.8").map((c: { engineRoot: string }) => path.win32.basename(c.engineRoot));
+    expect(roots[0]).toBe("UE_5.8");
+    expect(roots.slice(1, 3)).toEqual(["UE_5.9", "UE_5.8"]);
+  });
+
+  it("keeps the newest-first order when the project names no launcher version", async () => {
+    const { engineRootCandidates } = await import("../../scripts/build-utils.js");
+    expect(path.win32.basename(engineRootCandidates({}, "win32", null)[0].engineRoot)).toBe("UE_5.9");
+  });
+
+  it("still lets an explicit pin win", async () => {
+    const { engineRootCandidates } = await import("../../scripts/build-utils.js");
+    expect(engineRootCandidates({ UE_MCP_TEST_ENGINE_ROOT: "D:/UE_5.7" }, "win32", "5.8")[0].source).toBe("UE_MCP_TEST_ENGINE_ROOT");
+  });
+});

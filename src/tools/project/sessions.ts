@@ -14,6 +14,7 @@ import type { ToolContext, ActionSpec } from "../../core/types.js";
 import type { EditorSession } from "../../sessions/session.js";
 import { toolGraphOf } from "../../surface/target-params.js";
 import { startProgress } from "../../cli/ui/progress.js";
+import { epicIntegrations } from "../../integrations/epic/project-status.js";
 
 /**
  * The environment variables flattening every registered editor into one, right
@@ -56,12 +57,34 @@ function sessionStaleness(ctx: ToolContext, s: EditorSession): Record<string, un
   };
 }
 
+/**
+ * Epic's Unreal MCP server for the session's project when it will be listening
+ * beside ue-mcp, read from the settings files; undefined otherwise, or when
+ * they cannot be read, so the common response is unchanged (#1826).
+ */
+function besideUnrealMcpServer(ctx: ToolContext, bridgePort: number): Record<string, unknown> | undefined {
+  if (!ctx.project.isLoaded || !ctx.project.projectPath) return undefined;
+  try {
+    const s = epicIntegrations(ctx.project, bridgePort).unrealMcp;
+    if (!s?.runsBeside) return undefined;
+    return {
+      url: s.url,
+      autoStartSource: s.autoStartSource,
+      portSource: s.portSource,
+      portConflicts: s.portConflicts.length > 0 ? s.portConflicts : undefined,
+      note: "Epic's MCP server starts with this editor beside ue-mcp. `ue-mcp init --yes --no-unreal-mcp-autostart` turns that off for this project; --unreal-mcp-port <n> moves it.",
+    };
+  } catch {
+    return undefined;
+  }
+}
+
 /** Editor sessions: status, the project this session drives, and the editors the server holds. */
 export const sessionActions: Record<string, ActionSpec> = {
   get_status: {
     kind: "handler",
     effect: "read",
-    description: "Check server mode and editor connection. pluginStale is the primary staleness verdict: from the running plugin's own handler list when it published one (pluginStaleSource 'parity'), else from build timestamps ('build-timestamps'). pluginBuildStale reports the compiled bridge being older than its source, read from disk. deployedPlugin is what the binary that answered says about itself: when it was built, and how many methods this server advertises that it does not register, which is what 'Unknown method' on a real action means. answeringPid is the editor process the bridge is connected to; projectEditors and projectEditorsWarning appear when several editor processes (headless included) hold the project, and every response then carries the answering pid. Params: none (#785, #1002, #1021, #1150)",
+    description: "Check server mode and editor connection. pluginStale is the primary staleness verdict: from the running plugin's own handler list when it published one (pluginStaleSource 'parity'), else from build timestamps ('build-timestamps'). pluginBuildStale reports the compiled bridge being older than its source, read from disk. deployedPlugin is what the binary that answered says about itself: when it was built, and how many methods this server advertises that it does not register, which is what 'Unknown method' on a real action means. answeringPid is the editor process the bridge is connected to; projectEditors and projectEditorsWarning appear when several editor processes (headless included) hold the project, and every response then carries the answering pid. unrealMcpServer appears when Epic's own Unreal MCP server (UE 5.8+) is set to start with this project's editor, with its URL and where that came from, because it then runs beside ue-mcp. Params: none (#785, #1002, #1021, #1150, #1826)",
     handler: async (ctx) => {
       const flows = ctx.getFlows?.() ?? [];
       const bridgeApiVersion = ctx.project.projectDir
@@ -119,6 +142,7 @@ export const sessionActions: Record<string, ActionSpec> = {
       const holders = await detectProjectHolders(ctx.project.projectDir, ctx.project.projectPath, answeringPid);
 
       const stale = pluginStaleness(parity, freshness);
+      const unrealMcpServer = besideUnrealMcpServer(ctx, target.port);
       return {
         engine: offlineEngine ?? undefined,
         // Parity first (6.4): read from the running binary's handler list.
@@ -180,6 +204,8 @@ export const sessionActions: Record<string, ActionSpec> = {
         // matches a flow's name/description, prefer flow(action="run")
         // over composing the sequence by hand. See SERVER_INSTRUCTIONS.
         flows: flows.length > 0 ? flows : undefined,
+        // #1826: absent unless Epic's server starts with this editor too.
+        unrealMcpServer,
         // #817: only beyond one editor, so a single-editor status response
         // is exactly what it has always been.
         editors: ctx.sessions && ctx.sessions.size > 1

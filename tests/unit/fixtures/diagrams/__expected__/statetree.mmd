@@ -1,0 +1,35 @@
+---
+title: "ST_Guard · StateTree"
+---
+%% Evaluators: ObjectPropertyEvaluator.
+%% Global tasks: STT_Perception.
+stateDiagram-v2
+  direction TB
+  state "Tree failed" as n_tree_failed
+  state "Tree succeeded" as n_tree_succeeded
+  state "Root" as n_00000001_0000_0000_0000_000000000000 {
+    [*] --> n_00000002_0000_0000_0000_000000000000
+    state "Patrol" as n_00000002_0000_0000_0000_000000000000
+    n_00000002_0000_0000_0000_000000000000 : task: MoveTo
+    state "Combat" as n_00000003_0000_0000_0000_000000000000 {
+      [*] --> n_00000004_0000_0000_0000_000000000000
+      state "Attack" as n_00000004_0000_0000_0000_000000000000
+      n_00000004_0000_0000_0000_000000000000 : task: RunEnvQuery
+      n_00000004_0000_0000_0000_000000000000 : task: STT_Attack
+      state "Flee" as n_00000005_0000_0000_0000_000000000000
+      n_00000005_0000_0000_0000_000000000000 : linked: ST_Flee
+    }
+  }
+  [*] --> n_00000001_0000_0000_0000_000000000000
+  n_00000002_0000_0000_0000_000000000000 --> n_00000003_0000_0000_0000_000000000000 : event · AI.Alert
+  n_00000002_0000_0000_0000_000000000000 --> n_00000003_0000_0000_0000_000000000000 : completed · after 1.5s
+  n_00000003_0000_0000_0000_000000000000 --> n_00000002_0000_0000_0000_000000000000 : tick · if CompareFloat or CompareBool
+  n_00000004_0000_0000_0000_000000000000 --> n_tree_failed : failed
+  n_00000004_0000_0000_0000_000000000000 --> n_00000005_0000_0000_0000_000000000000 : succeeded
+  n_00000005_0000_0000_0000_000000000000 --> n_tree_succeeded : succeeded
+  classDef ue_state fill:#132033,stroke:#60a5fa,color:#f5f5f4
+  class n_00000002_0000_0000_0000_000000000000,n_00000004_0000_0000_0000_000000000000 ue_state
+  classDef ue_collapsed fill:#132033,stroke:#60a5fa,color:#f5f5f4,stroke-dasharray:4 3
+  class n_00000005_0000_0000_0000_000000000000 ue_collapsed
+  classDef ue_exit fill:#122019,stroke:#34d399,color:#f5f5f4
+  class n_tree_failed,n_tree_succeeded ue_exit

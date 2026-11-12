@@ -6,6 +6,17 @@
 
 class FMCPHandlerRegistry;
 
+/** What EnsureHomeLevelLoaded may do with unsaved changes in the open map (#1851). */
+enum class EMCPHomeDiscard : uint8
+{
+	/** Refuse, naming the dirty packages. */
+	Refuse,
+	/** Discard the demo's own packages, which cleanup deletes anyway; refuse on any other. */
+	DemoPackagesOnly,
+	/** Discard every dirty package the switch would lose. */
+	Everything,
+};
+
 /**
  * Demo scene builder handlers - Neon Shrine demo.
  * Ports the Python demo.py scene builder to C++ for the UE MCP Bridge.
@@ -30,7 +41,14 @@ private:
 	// Ensures /Game/MCP_Home exists on disk and loads it. Used by cleanup +
 	// go_home to keep the editor anchored to a saved level instead of an
 	// auto-generated Untitled (which traps the editor in a save dialog).
-	static bool EnsureHomeLevelLoaded(FString& OutError);
+	// True only when the home level is the open map afterwards. On a refusal
+	// for unsaved changes OutDirty names them; OutDiscarded names what a
+	// discard dropped.
+	static bool EnsureHomeLevelLoaded(
+		FString& OutError,
+		EMCPHomeDiscard Discard = EMCPHomeDiscard::Refuse,
+		TArray<FString>* OutDirty = nullptr,
+		TArray<FString>* OutDiscarded = nullptr);
 
 	// ---- Individual step implementations (19 steps) ----
 	static TSharedPtr<FJsonObject> StepCreateLevel();

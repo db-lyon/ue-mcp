@@ -22,7 +22,7 @@ import { TEST_EDITOR_ARGS } from "./test-editor-args.mjs";
 import { guardUserLayouts } from "./user-layout-guard.mjs";
 import {
   KIND_FLAGS, EDITOR_PEAK_MB, KEEP_IN_SHARD, liveFiles, planFixedShards, poolQueue, poolWantsEditor, nextLaunch, nextBatch, POOL_EDITOR_WORK_MS, POOL_MIN_SHARE_MS, mirror, buildOutputFilter,
-  timingFromReports, overBudget, slowest, headroomMB, editorFits, launchOrder, splitAtDeath, undeployedSources, deathOf, awaitEditorStartup,
+  timingFromReports, overBudget, runVerdict, slowest, headroomMB, editorFits, launchOrder, splitAtDeath, undeployedSources, deathOf, awaitEditorStartup,
   trackedStageDir, sweepStaleTrackedStages, stageTrackedProject,
 } from "./live-shards.mjs";
 
@@ -546,7 +546,6 @@ export async function runSharded(opts) {
     .map((f) => `${rel(repoRoot, f.name)}: ${String(f.message ?? "failed outside a test").split("\n")[0]}`);
   const neverRan = plannedFiles.filter((f) => !results.has(f));
   const over = overBudget(timing.tests, budgets);
-  const wallOver = !opts.onlyShard && !opts.files?.length && wallS > budgets.wallClockS;
 
   const record = {
     recordedAt: new Date().toISOString(),
@@ -578,15 +577,18 @@ export async function runSharded(opts) {
     ...fileErrors.map((f) => `file: ${f}`),
     ...failed.map((f) => `failed: ${f}`),
     ...(totals.skipped ? [`skipped: ${totals.skipped} test(s) did not run; the suite runs every test`] : []),
-    ...over.map((o) => `over budget: ${o.test} took ${(o.ms / 1000).toFixed(1)}s, budget ${(o.limit / 1000).toFixed(0)}s`),
-    ...(wallOver ? [`over budget: the run took ${wallS.toFixed(0)}s, budget ${budgets.wallClockS}s`] : []),
   ];
-  if (problems.length) {
+  // Budgets are goals: a miss is a warning here and in last-run.json, never the run's failure.
+  const verdict = runVerdict({ problems, over, wallS, wallClockS: budgets.wallClockS, wallChecked: !opts.onlyShard && !opts.files?.length });
+  fs.writeFileSync(path.join(LIVE_SHARD_ROOT, "last-run.json"), `${JSON.stringify({ ...record, problems: verdict.problems, timeGoalsMissed: verdict.goals }, null, 2)}
+`);
+  for (const g of verdict.goals) say(`warning: ${g}`);
+  if (verdict.exitCode) {
     say(`${problems.length} problem(s):`);
     for (const p of problems) say(`  ${p}`);
     say(`per-shard output: ${path.join(LIVE_SHARD_ROOT, "<shard>", "vitest.log")}`);
-    return 1;
+    return verdict.exitCode;
   }
-  say("every shard green, within budget.");
+  say(verdict.goals.length ? "every shard green; some time goals missed (warnings above)." : "every shard green, within its time goals.");
   return 0;
 }

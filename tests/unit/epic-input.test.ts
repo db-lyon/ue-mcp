@@ -161,7 +161,8 @@ describe("array-of-struct parameters on epic_* wrappers (#1281)", () => {
     expect(actionSignature(pcgTool, "epic_set_graph_params")).toContain("params:[o]");
     const described = actionSchema(pcgTool, "epic_set_graph_params").params.find((p) => p.name === "params")!;
     expect(described.items?.properties?.type.enumValues).toContain("Integer32");
-    expect(described.items?.properties?.containerType.enumValues).toEqual(["None", "Array", "Set", "Map", "Count"]);
+    // The newest engine's enum: UE 5.9 dropped the Count sentinel 5.8 listed.
+    expect(described.items?.properties?.containerType.enumValues).toEqual(["None", "Array", "Set", "Map"]);
   });
 });
 

@@ -218,6 +218,17 @@ describe("flow inputs of the shipped flows", () => {
     }
   });
 
+  it("blockout_to_assets leaves candidateFolder as its one required input and sets tag at the selecting steps", async () => {
+    const cfg = FlowConfigSchema.parse(defaults);
+    const inputs = await inputsOf(cfg, "blockout_to_assets", ALL_TOOLS);
+    const folder = inputs.find((i) => i.name === "candidateFolder");
+    expect(folder?.required).toBe(true);
+    expect(folder?.steps.map((s) => s.path)).toEqual(["2", "3"]);
+    expect(inputs.filter((i) => i.required).map((i) => i.name)).toEqual(["candidateFolder"]);
+    // Steps 2 and 3 set tag; only the listing steps read it unset.
+    expect(inputs.find((i) => i.name === "tag")?.steps.map((s) => s.path)).toEqual(["1", "4"]);
+  });
+
   it("neon_shrine takes nothing: each step sets demo(step) by its alias stepIndex", async () => {
     const cfg = FlowConfigSchema.parse(defaults);
     expect(await inputsOf(cfg, "neon_shrine", ALL_TOOLS)).toEqual([]);

@@ -6,7 +6,7 @@
  * By default the run is sharded: scripts/live-sharded-run.mjs copies
  * tests/ue_mcp once per shard, launches an editor on each with the flags its
  * files declare (`// @live-editor <kind>`), splits the files by measured
- * time, and merges the results under the run's time budgets. It starts and
+ * time, and merges the results, reporting the run's time goals. It starts and
  * stops those editors itself, and never touches any other project.
  *
  * Attach mode drives the tests/ue_mcp editor that is already running, through

@@ -4,7 +4,7 @@
  * and every network endpoint local.
  *
  * Isolation follows the golden recorder (tests/golden/capture.ts): every
- * inherited UE_MCP_* variable is dropped, HOME, USERPROFILE and APPDATA point
+ * inherited UE_MCP_* variable is dropped, HOME, USERPROFILE, APPDATA and LOCALAPPDATA point
  * into the sandbox (so ~/.ue-mcp, ~/.claude and the Claude Desktop config are
  * the sandbox's), each user file the server reads has its own override set
  * anyway, the update check is off, and every service origin the code can be
@@ -53,6 +53,8 @@ export class Sandbox {
     this.npmLog = path.join(this.root, "npm-calls.jsonl");
     fs.mkdirSync(this.home, { recursive: true });
     fs.mkdirSync(path.join(this.home, "AppData", "Roaming"), { recursive: true });
+    // Present from the start: a tool that finds LOCALAPPDATA missing falls back to a folder under home.
+    fs.mkdirSync(path.join(this.root, "localappdata"), { recursive: true });
     fs.mkdirSync(this.bin, { recursive: true });
     this.installFakeNpm();
   }
@@ -87,6 +89,9 @@ export class Sandbox {
       HOME: this.home,
       USERPROFILE: this.home,
       APPDATA: path.join(this.home, "AppData", "Roaming"),
+      // Unreal's per-user folder (FPlatformProcess::UserSettingsDir), where the Unreal Assistant reads its config.
+      // Beside home, not in it: Windows tools such as PowerShell cache files there, which would spoil a snapshot of home.
+      LOCALAPPDATA: path.join(this.root, "localappdata"),
       XDG_CONFIG_HOME: path.join(this.home, ".config"),
       UE_MCP_GLOBAL_CONFIG: path.join(this.home, ".ue-mcp", "config.yml"),
       UE_MCP_USER_STATE: path.join(this.home, ".ue-mcp", "state.json"),
@@ -220,6 +225,8 @@ export interface CallResult {
   isError: boolean;
   blocks: string[];
   text: string;
+  /** Image and audio content blocks, in order. */
+  media: Array<{ type: string; mimeType: string; data: string }>;
 }
 
 /** A real ue-mcp server on stdio with an MCP client attached. */
@@ -276,10 +283,19 @@ export class McpServer {
 
   async call(name: string, args: Record<string, unknown>, timeoutMs = 60_000): Promise<CallResult> {
     const raw = await this.client.callTool({ name, arguments: args }, undefined, { timeout: timeoutMs });
-    const blocks = ((raw.content ?? []) as Array<{ type: string; text?: string }>)
-      .filter((b) => b.type === "text")
-      .map((b) => b.text ?? "");
-    return { isError: raw.isError === true, blocks, text: blocks.join("\n") };
+    const content = (raw.content ?? []) as Array<{ type: string; text?: string; mimeType?: string; data?: string }>;
+    const blocks = content.filter((b) => b.type === "text").map((b) => b.text ?? "");
+    const media = content
+      .filter((b) => b.type === "image" || b.type === "audio")
+      .map((b) => ({ type: b.type, mimeType: b.mimeType ?? "", data: b.data ?? "" }));
+    return { isError: raw.isError === true, blocks, text: blocks.join("\n"), media };
+  }
+
+  /** A flow call: the flow tool where it is advertised, the micro gateway's flow category otherwise. */
+  async callFlow(args: Record<string, unknown>, timeoutMs = 60_000): Promise<CallResult> {
+    if ((await this.toolNames()).includes("flow")) return this.call("flow", args, timeoutMs);
+    const { action, ...rest } = args;
+    return this.call("tools", { action: "call", category: "flow", method: action, args: rest }, timeoutMs);
   }
 
   async close(): Promise<void> {

@@ -15,8 +15,8 @@ Studio's window has three tabs: **Chat**, **Plugins** and **Settings**. **Feedba
 ## Requirements
 
 - Windows 10 or 11.
-- Unreal Engine 5.7 or 5.8.
-- [Node.js](https://nodejs.org/) 20 or newer. The installer offers to install the LTS release with winget. Otherwise install it from the Node.js website with its Windows installer, using the default options. When it is missing, Studio's setup page opens the Node.js download page.
+- Unreal Engine 5.7, 5.8 or 5.9.
+- [Node.js](https://nodejs.org/) 20 or newer. The UE-MCP app's setup offers to install the LTS release with winget. Otherwise install it from the Node.js website with its Windows installer, using the default options. When it is missing, Studio's setup page opens the Node.js download page.
 - ue-mcp 1.4.11 or later. Studio installs it.
 - The Microsoft Edge WebView2 Runtime, which Windows 11 includes. On Windows 10, if it is not already installed, get the Evergreen Runtime from [Microsoft's WebView2 page](https://developer.microsoft.com/en-us/microsoft-edge/webview2/). Without it, Studio opens in your web browser instead of its own window.
 - An internet connection, and an account or API key for at least one model provider (see [Models and accounts](#models-and-accounts)).
@@ -27,7 +27,7 @@ Studio's own setup does not compile anything: the Studio plugin release is alrea
 
 Close the project in Unreal first. Then either:
 
-- Run the installer, [UE-MCP-Studio-Setup.exe](https://github.com/db-lyon/ue-mcp-studio/releases/latest/download/UE-MCP-Studio-Setup.exe). It checks for Node.js, offers to install it, lets you pick the project, and runs the command below.
+- Install the UE-MCP app with [UE-MCP-Setup.exe](https://github.com/db-lyon/ue-mcp-studio/releases/latest/download/UE-MCP-Setup.exe). It installs for your Windows user without admin rights and checks for Node.js. The app lists your Unreal projects (`npx ue-mcp projects`): pick one and choose **Add Studio**, which runs the command below. The app also launches the editor, opens each project's Studio, shows what has an update, and lists the daemons running with their logs.
 - Or run this in your project folder, the one holding the `.uproject`:
 
     ```bash
@@ -67,7 +67,7 @@ After **Allow**, the tab shows the setup page with three steps.
 2. **Bridge.** A page for each group of choices, the same choices `npx ue-mcp init` makes, then **Review and install**. Every choice can be changed later.
     - **Project**: the project, its engine, the bridge port and the installed bridge version. Studio installs prebuilt binaries.
     - **Tools**: the tool categories to turn on. `project`, `editor`, `reflection` and `feedback` are always on.
-    - **Native tools**, on Unreal Engine 5.8 only: whether to offer the engine's own MCP tools as actions in the matching categories, and in which categories.
+    - **Native tools**, on Unreal Engine 5.8 and later: whether to offer the engine's own MCP tools as actions in the matching categories, and in which categories.
     - **Context**: how much of the tool surface an agent sees at the start of a session: `micro` (recommended), `lean` or `full`.
     - **MCP clients**: other MCP clients found on this machine to connect as well. A client whose config applies to every project is never chosen for you.
     - **Agent**: **Report ue-mcp gaps**, with its [feedback mode](#feedback), and an optional GitHub sign-in so issues are filed as your account. Without the sign-in, issues are filed anonymously on your behalf.

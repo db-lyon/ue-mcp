@@ -18,6 +18,7 @@
 #include "Misc/AutomationTest.h"
 #include "Misc/ScopeExit.h"
 #include "Widgets/Docking/SDockTab.h"
+#include "Widgets/Layout/SBorder.h"
 #include "Widgets/Input/SButton.h"
 #include "Widgets/SWindow.h"
 #include "Widgets/Text/STextBlock.h"
@@ -125,6 +126,79 @@ bool FMCPDialogBlockingWindowTest::RunTest(const FString& Parameters)
 			FString(FDialogHandlers::PromptKindName(EMCPPromptKind::Modal)), FString(TEXT("modalWindow")));
 		TestEqual(TEXT("and which kind the other one is"),
 			FString(FDialogHandlers::PromptKindName(EMCPPromptKind::Parented)), FString(TEXT("parentedWindow")));
+	}
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FMCPDialogProgressWindowTest,
+	"UE.MCP.Dialog.Gate.AProgressWindowIsNotAPrompt",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMCPDialogProgressWindowTest::RunTest(const FString& Parameters)
+{
+	if (!FSlateApplication::IsInitialized())
+	{
+		AddInfo(TEXT("Slate is not initialized in this run, so there are no windows to classify."));
+		return true;
+	}
+
+	// #1851: a save opens a "Validating Assets" progress window, and calls
+	// that landed while it was up were refused as if a dialog were blocking.
+	// The editor pushes that window with AddModalWindow's bSlowTaskWindow,
+	// which sets the modal flag and skips the modal loop. The widget it hosts
+	// is private to UnrealEd, so the stand-in is an SBorder (its base class)
+	// recorded under the private class's name, which is all the walk reads.
+	// The Cancel button is real: the validation task shows one, and it is what
+	// made the window look like a prompt with a button to press.
+	const auto MakeProgressWindow = [](const ANSICHAR* WidgetTypeName)
+	{
+		const TSharedRef<SWidget> Content =
+			MakeTDecl<SBorder>(WidgetTypeName, __FILE__, __LINE__, RequiredArgs::MakeRequiredArgs())
+			<<= SBorder::FArguments()
+			[
+				SNew(SButton)[SNew(STextBlock).Text(FText::FromString(TEXT("Cancel")))]
+			];
+		const TSharedRef<SWindow> Window = MakeOffscreenWindow(Content, TEXT(""));
+		Window->SetAsModalWindow();
+		return Window;
+	};
+
+	for (const ANSICHAR* TypeName : { "SSlowTaskWidget", "SBuildProgressWidget" })
+	{
+		const TSharedRef<SWindow> Window = MakeProgressWindow(TypeName);
+		const FString TypeLabel(ANSI_TO_TCHAR(TypeName));
+		FString Reason;
+		TestTrue(FString::Printf(TEXT("%s: recognised as a progress window"), *TypeLabel),
+			FDialogHandlers::IsProgressWindow(Window, &Reason));
+		TestTrue(FString::Printf(TEXT("%s: the reason says the game thread keeps running"), *TypeLabel),
+			Reason.Contains(TEXT("game thread keeps running")));
+		TestEqual(FString::Printf(TEXT("%s: on the modal stack and still not a prompt"), *TypeLabel),
+			(int32)FDialogHandlers::ClassifyWindow(Window), (int32)EMCPPromptKind::NotAPrompt);
+		TestFalse(FString::Printf(TEXT("%s: not a blocking window either"), *TypeLabel),
+			FDialogHandlers::IsBlockingWindow(Window));
+	}
+
+	// The gap between FinalizeSlowTask emptying the window and Slate
+	// destroying it on the next tick.
+	{
+		const TSharedRef<SWindow> Window = MakeOffscreenWindow(SNullWidget::NullWidget, TEXT(""));
+		Window->SetAsModalWindow();
+		TestEqual(TEXT("an emptied modal on its way out is not a prompt"),
+			(int32)FDialogHandlers::ClassifyWindow(Window), (int32)EMCPPromptKind::NotAPrompt);
+	}
+
+	// The same button in an ordinary modal is still a question the game
+	// thread is parked behind. Losing this would let a real prompt through.
+	{
+		const TSharedRef<SWindow> Window = MakeOffscreenWindow(
+			SNew(SBorder)[SNew(SButton)[SNew(STextBlock).Text(FText::FromString(TEXT("Cancel")))]],
+			TEXT("Delete Assets"));
+		Window->SetAsModalWindow();
+		TestFalse(TEXT("an ordinary modal is not a progress window"), FDialogHandlers::IsProgressWindow(Window));
+		TestEqual(TEXT("and is still classified as modal"),
+			(int32)FDialogHandlers::ClassifyWindow(Window), (int32)EMCPPromptKind::Modal);
 	}
 
 	return true;
