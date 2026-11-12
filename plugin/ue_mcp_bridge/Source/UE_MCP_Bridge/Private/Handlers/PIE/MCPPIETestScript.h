@@ -20,7 +20,8 @@ enum class EMCPPIEExpectOp : uint8
 	Gt UMETA(DisplayName="Greater Than", ToolTip="Value is greater than Target."),
 	Lt UMETA(DisplayName="Less Than", ToolTip="Value is less than Target."),
 	Visible UMETA(ToolTip="Widget is on screen. Target 0 means not visible."),
-	Exists UMETA(ToolTip="Actor resolves in the PIE world. Target 0 means gone.")
+	Exists UMETA(ToolTip="Actor resolves in the PIE world. Target 0 means gone."),
+	Triggered UMETA(ToolTip="The person playing fires the Input Action named by Value on player Client, after the step's act ends. WithinMs 0 waits with no timeout.")
 };
 
 USTRUCT(BlueprintType)
@@ -29,7 +30,7 @@ struct FMCPPIEStepExpect
 	GENERATED_BODY()
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Expect",
-		meta=(ToolTip="Tracked value path (or its last segment), actor id for Exists, widget class or name for Visible."))
+		meta=(ToolTip="Tracked value path (or its last segment), actor id for Exists, widget class or name for Visible, Input Action object path for Triggered."))
 	FString Value;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Expect",
@@ -45,8 +46,12 @@ struct FMCPPIEStepExpect
 	double Target = 0.0;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Expect",
-		meta=(ClampMin="0", ToolTip="Milliseconds of game time the condition has to hold within. 0 uses the script default."))
+		meta=(ClampMin="0", ToolTip="Milliseconds of game time the condition has to hold within. 0 uses the script default, except on Triggered, where 0 waits with no timeout."))
 	int32 WithinMs = 0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Expect",
+		meta=(ClampMin="0", EditCondition="Op == EMCPPIEExpectOp::Triggered", ToolTip="Triggered only: the player whose input is watched. 0 is the editor's own player, 1..N a remote player in join order, as act's client."))
+	int32 Client = 0;
 };
 
 USTRUCT(BlueprintType)

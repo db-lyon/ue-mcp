@@ -23,7 +23,8 @@ class UMCPPIETestScript;
 namespace MCPPIE
 {
 	enum class EScriptJudge : uint8 { Auto, Manual };
-	enum class EScriptExpectOp : uint8 { Decreasing, Increasing, Eq, Gt, Lt, Visible, Exists };
+	// Triggered waits for a person to fire an Input Action; the others read an observed value.
+	enum class EScriptExpectOp : uint8 { Decreasing, Increasing, Eq, Gt, Lt, Visible, Exists, Triggered };
 	enum class EScriptStepStatus : uint8 { Pending, Running, Passed, Failed, AwaitingVerdict, Skipped };
 	enum class EScriptRunState : uint8 { Idle, Armed, Running, AwaitingVerdict, Finished, Stopped };
 	enum class EScriptExpectOutcome : uint8 { Pending, Passed, Failed };
@@ -48,6 +49,10 @@ namespace MCPPIE
 	bool IsScriptRelativeOp(EScriptExpectOp Op);
 	// eq / gt / lt need a target.
 	bool ScriptOpNeedsTarget(EScriptExpectOp Op);
+	// triggered watches an Input Action on a player rather than reading a value.
+	bool IsScriptTriggerOp(EScriptExpectOp Op);
+	// An Input Action given as a package path (/Game/Input/IA_Jump) as its object path (/Game/Input/IA_Jump.IA_Jump).
+	FString NormalizeScriptInputActionPath(const FString& Path);
 	// passed, failed, skipped.
 	bool IsScriptStepSettled(EScriptStepStatus Status);
 
@@ -59,8 +64,10 @@ namespace MCPPIE
 		double Target = 0.0;
 		// The target was given as true or false rather than a number. Draft-time checks only.
 		bool bTargetIsBool = false;
-		// 0 = the run's default.
+		// 0 = the run's default; on triggered, 0 waits with no timeout.
 		int32 WithinMs = 0;
+		// triggered only: the player whose input is watched, as act's client counts them (0 the editor's own player, 1..N remote players).
+		int32 Client = 0;
 	};
 
 	struct FScriptStepDef
@@ -116,7 +123,7 @@ namespace MCPPIE
 
 	// ── Step definitions: JSON and asset ────────────────────────────────
 
-	// {instruction, judge, agent_judgeable, resolve_in_pie, arrange:[...], act:[...], expect:{value, op, target (number or boolean), within_ms}}.
+	// {instruction, judge, agent_judgeable, resolve_in_pie, arrange:[...], act:[...], expect:{value, op, target (number or boolean), within_ms, client}}.
 	// OutField, when given, names the field the error is about, such as instruction or expect.op.
 	bool ParseScriptStepJson(const TSharedPtr<FJsonValue>& Value, int32 Index, FScriptStepDef& Out, FString& OutError, FString* OutField = nullptr);
 	bool ParseScriptStepsJson(const TArray<TSharedPtr<FJsonValue>>& Values, TArray<FScriptStepDef>& Out, FString& OutError);
@@ -162,6 +169,45 @@ namespace MCPPIE
 		// Manual steps: what the verdict's author cites. Required for an agent verdict.
 		FString Note;
 		TArray<FString> Captures;
+		// triggered: when the Input Action fired (run ms) and its value on that frame.
+		bool bTriggered = false;
+		double TriggeredAtMs = -1.0;
+		FVector TriggerValue = FVector::ZeroVector;
+		// bool, axis1d, axis2d or axis3d; empty when the type is not known.
+		FString TriggerValueType;
+	};
+
+	// A trigger a triggered expectation saw: when (run ms) and the action's value on that frame.
+	struct FScriptTrigger
+	{
+		double AtMs = -1.0;
+		FVector Value = FVector::ZeroVector;
+		// bool, axis1d, axis2d or axis3d.
+		FString ValueType;
+	};
+
+	enum class EScriptTriggerRead : uint8
+	{
+		// The player or the action cannot be watched yet; OutWhy says why.
+		Unwatched,
+		// Watching; nothing fresh has triggered.
+		Watching,
+		// A fresh trigger, in OutTrigger.
+		Triggered
+	};
+
+	// Watches Input Actions for triggered expectations. The run model asks it, so tests drive the model with a fake.
+	class IScriptTriggerSource
+	{
+	public:
+		virtual ~IScriptTriggerSource() = default;
+		// Step Index's watch, begun on the first call. FromMs opens its window: a trigger counts only after it.
+		virtual EScriptTriggerRead ReadTrigger(int32 Index, const FScriptExpect& Expect, double FromMs,
+			FScriptTrigger& OutTrigger, FString& OutWhy) = 0;
+		// Step Index settled: stop its watch.
+		virtual void EndWatch(int32 Index) {}
+		// The run ended: stop every watch.
+		virtual void Cancel() {}
 	};
 
 	// The evidence a verdict carries: a note plus capture file paths.
@@ -294,10 +340,12 @@ namespace MCPPIE
 	bool AreScriptManualStepsSettled(const FScriptRun& Run);
 	void AddScriptEvent(FScriptRun& Run, const FString& Type, int32 Step, const TSharedPtr<FJsonObject>& Data);
 	// Sequential mode: steps start in order; a running auto step holds the run, and so does a step's act.
-	// Without a driver a step's arrange and act are skipped.
-	void AdvanceScriptRun(FScriptRun& Run, double NowMs, int64 Frame, FScriptValueReader Reader, IScriptStepDriver* Driver = nullptr);
+	// Without a driver a step's arrange and act are skipped. Without a trigger source a triggered step is never
+	// watched, so it fails at its timeout (or waits for the run to stop when it has none).
+	void AdvanceScriptRun(FScriptRun& Run, double NowMs, int64 Frame, FScriptValueReader Reader, IScriptStepDriver* Driver = nullptr,
+		IScriptTriggerSource* Triggers = nullptr);
 	// Replay mode: every auto step is judged in its own recorded window.
-	void AdvanceScriptReplay(FScriptRun& Run, double NowMs, int64 Frame, FScriptValueReader Reader);
+	void AdvanceScriptReplay(FScriptRun& Run, double NowMs, int64 Frame, FScriptValueReader Reader, IScriptTriggerSource* Triggers = nullptr);
 	// Manual steps only. Source is human (recorded as action), elicitation or agent; an agent
 	// verdict needs an evidence note and is refused on a step with agent_judgeable false.
 	// A repeated identical verdict succeeds with bOutUnchanged.
@@ -377,6 +425,7 @@ namespace MCPPIE
 		FScriptRun Run;
 		bool bHasRun = false;
 		TSharedPtr<IScriptStepDriver> StepDriver;
+		TSharedPtr<class FEditorScriptTriggerSource> TriggerSource;
 
 		FDelegateHandle EndPIEHandle;
 		FDelegateHandle EndFrameHandle;
