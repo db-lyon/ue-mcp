@@ -22,10 +22,11 @@ Every action on this page is in the `pie` category.
 | `resolve_in_pie` | boolean | Default `false`, and only on a step with `expect`, `arrange` or `act`. `true` means `expect.value`, and the actors `arrange` and `act` name, only exist once PIE is running, such as an actor spawned during play, so `script_create` and `script_update` do not check them against the level. |
 | `arrange` | array | Optional. Run when the step starts: a scenario's arrange entries, `{kind: "spawn", class, at?, rotation?, scale?}`, `{kind: "set", target, path, value}` or `{kind: "call", target, func, args?}`. |
 | `act` | array | Optional. Run after `arrange`: the step actions `uat_run` takes in a step's `do` (see [Arrange and act](#arrange-and-act)). |
-| `expect.value` | string | Required in `expect`. For `decreasing`, `increasing`, `eq`, `gt` and `lt`: a tracked value path, or its last segment, or one of the player pawn's sampled channels, read with no profile: `pos_x`, `pos_y`, `pos_z`, `vel_x`, `vel_y`, `vel_z`, `rot_pitch`, `rot_yaw`, `rot_roll`, `speed2d` (the `recording.csv` column names). A tracked value of the same name wins. For `exists`: an actor id. For `visible`: a widget class or name. |
+| `expect.value` | string | Required in `expect`. For `decreasing`, `increasing`, `eq`, `gt` and `lt`: a tracked value path, or its last segment, or one of the player pawn's sampled channels, read with no profile: `pos_x`, `pos_y`, `pos_z`, `vel_x`, `vel_y`, `vel_z`, `rot_pitch`, `rot_yaw`, `rot_roll`, `speed2d` (the `recording.csv` column names). A tracked value of the same name wins. For `exists`: an actor id. For `visible`: a widget class or name. For `triggered`: an Input Action, as a package path (`/Game/Input/IA_Interact`) or an object path (`/Game/Input/IA_Interact.IA_Interact`). |
 | `expect.op` | string | Required in `expect`. One of the ops below. |
-| `expect.target` | number or boolean | Required for `eq`, `gt` and `lt`. Optional for `visible` and `exists`, default `true`; `false` asks for the opposite. Optional for `decreasing` and `increasing`: a number above 0, the least change from the value at step start. A boolean given to `eq`, `gt` or `lt` is read as 1 or 0. |
-| `expect.within_ms` | integer | How long the step has to meet its expectation, in game milliseconds from the moment it starts, or from the end of its `act` when it has one. 0 or absent uses the run's `default_within_ms`. |
+| `expect.target` | number or boolean | Required for `eq`, `gt` and `lt`. Optional for `visible` and `exists`, default `true`; `false` asks for the opposite. Optional for `decreasing` and `increasing`: a number above 0, the least change from the value at step start. A boolean given to `eq`, `gt` or `lt` is read as 1 or 0. Refused on `triggered`. |
+| `expect.within_ms` | integer | How long the step has to meet its expectation, in game milliseconds from the moment it starts, or from the end of its `act` when it has one. 0 or absent uses the run's `default_within_ms`, except on `triggered`, where 0 or absent waits with no timeout. |
+| `expect.client` | integer | `triggered` only, refused on the other ops. The player whose input is watched, counted as `act` counts them: 0 (default) the editor's own player, 1..N a remote player in join order. |
 
 A manual step takes no `expect`, and a step that has one is refused. An auto step without `expect` passes as soon as it starts (once its `act` ends, when it has one), with `evidence.reason` set to `no expectation`.
 
@@ -44,8 +45,28 @@ An auto step is checked on every observed frame from the frame it starts. It pas
 | `lt` | The value is less than `target`. |
 | `visible` | The widget is visible (or not, with `target: false`). |
 | `exists` | The actor resolves in the PIE world (or does not, with `target: false`). |
+| `triggered` | The person playing fires the Input Action on player `client`. See [Waiting for the player](#waiting-for-the-player). |
 
 Auto steps run one at a time. The next step starts on the frame the previous one settled, so the baseline of a `decreasing` or `increasing` step is the value at that frame, or at the frame its `act` ended.
+
+### Waiting for the player
+
+A `triggered` step holds the run until the person playing presses an Input Action, then the run carries on: "start the playtest, at step 5 wait until the player interacts".
+
+```json
+{
+  "instruction": "Walk to the brazier and press Interact",
+  "expect": { "op": "triggered", "value": "/Game/Input/IA_Interact" }
+}
+```
+
+- The step passes on the first frame the action is in its Triggered event on that player's Enhanced Input, after the window opens at the end of the step's `act`.
+- Only a fresh trigger counts: the action has to be seen not triggering inside the window first. A press the step's own `act` made, or a key already held when the window opened, does not pass the step; release and press again.
+- `within_ms` 0 or absent waits with no timeout, until the action fires or `script_stop`, so a person can take their time. With a `within_ms`, the step fails when nothing fires in time, with `evidence.reason` `... was not triggered by client N within M ms`.
+- The evidence records `triggered_at_ms` (game milliseconds into the run), `action_value` (a boolean, a number, or `[x, y]` / `[x, y, z]`, by the action's value type) and `value_type` (`bool`, `axis1d`, `axis2d` or `axis3d`).
+- The editor's own player is read every frame. A remote player (`client` 1..N) watches its own input and reports the trigger over the game connection, so its `triggered_at_ms` is when the editor heard of it.
+- `script_create`, `script_update` and `script_validate` check that the Input Action exists, and report one that does not on `expect.value` with candidates.
+- A replay watches the replayed input the same way, in the step's own window.
 
 ### Arrange and act
 
@@ -119,9 +140,9 @@ Only a script that cannot be written is refused: no steps, a step that does not 
 {
   "success": false,
   "errorCode": "INVALID_SCRIPT_STEPS",
-  "error": "The script cannot be saved as written (1 problem): steps[0].expect.op 'sideways' is unknown (decreasing, increasing, eq, gt, lt, visible, exists)",
+  "error": "The script cannot be saved as written (1 problem): steps[0].expect.op 'sideways' is unknown (decreasing, increasing, eq, gt, lt, visible, exists, triggered)",
   "errors": [
-    { "step": 0, "field": "expect.op", "message": "steps[0].expect.op 'sideways' is unknown (decreasing, increasing, eq, gt, lt, visible, exists)", "candidates": ["decreasing", "increasing", "eq"] }
+    { "step": 0, "field": "expect.op", "message": "steps[0].expect.op 'sideways' is unknown (decreasing, increasing, eq, gt, lt, visible, exists, triggered)", "candidates": ["decreasing", "increasing", "eq"] }
   ],
   "warnings": []
 }
