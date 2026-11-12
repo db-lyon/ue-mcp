@@ -87,6 +87,7 @@ async function install(target: string, sha256: string | undefined, uproject: str
     ensurePluginsEnabled(uproject, [p.name]);
     result.editorPlugin = p;
     say(p.changed ? `installed the ${p.title} editor plugin ${p.version}` : `the ${p.title} editor plugin ${p.version} is already installed`);
+    if (p.compiles) say(`it has no build for this platform yet, so Unreal builds it from its source when the project opens`);
   } else if (plugin) {
     warn("no .uproject here, so no project was set up: run this again in the project folder or name its .uproject");
   }

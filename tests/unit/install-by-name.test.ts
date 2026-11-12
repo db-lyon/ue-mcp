@@ -50,11 +50,15 @@ function project(engine: string): string {
   return p;
 }
 
-function pluginZip(version: string, platform = unrealPlatform()): { zip: Buffer; sha256: string } {
-  const root = path.join(dir, `src-${version}-${platform}`, "My_Plugin");
+function pluginZip(version: string, platform = unrealPlatform(), withSource = false): { zip: Buffer; sha256: string } {
+  const root = path.join(dir, `src-${version}-${platform}${withSource ? "-src" : ""}`, "My_Plugin");
   fs.mkdirSync(path.join(root, "Binaries", platform), { recursive: true });
+  if (withSource) {
+    fs.mkdirSync(path.join(root, "Source", "My_Plugin"), { recursive: true });
+    fs.writeFileSync(path.join(root, "Source", "My_Plugin", "My_Plugin.Build.cs"), "// module rules");
+  }
   fs.writeFileSync(path.join(root, "My_Plugin.uplugin"), JSON.stringify({ VersionName: version, FriendlyName: "My Plugin" }));
-  const zip = path.join(dir, `p-${version}-${platform}.zip`);
+  const zip = path.join(dir, `p-${version}-${platform}${withSource ? "-src" : ""}.zip`);
   execFileSync(tar, ["-a", "-c", "-f", zip, "-C", path.dirname(root), "My_Plugin"]);
   const bytes = fs.readFileSync(zip);
   return { zip: bytes, sha256: crypto.createHash("sha256").update(bytes).digest("hex") };
@@ -139,5 +143,18 @@ describe("installEditorPlugin", () => {
       await expect(installEditorPlugin(`${base}/other.json`, project("5.7"))).rejects.toThrow(new RegExp(`has no build for ${unrealPlatform()}`));
     });
     expect(fs.existsSync(path.join(dir, "Game", "Plugins", "My_Plugin"))).toBe(false);
+  });
+
+  it("installs another platform's build that carries its source, for Unreal to compile in the project", async () => {
+    const uproject = project("5.7");
+    const other = pluginZip("0.2.0", unrealPlatform() === "Win64" ? "Linux" : "Win64", true);
+    await serving({
+      "/plugin.json": { version: "0.2.0", files: { "5.7": { url: "o.zip", sha256: other.sha256 } } },
+      "/o.zip": other.zip,
+    }, async (base) => {
+      const p = await installEditorPlugin(`${base}/plugin.json`, uproject);
+      expect(p.compiles).toBe(true);
+      expect(fs.existsSync(path.join(p.dir, "Source", "My_Plugin", "My_Plugin.Build.cs"))).toBe(true);
+    });
   });
 });
