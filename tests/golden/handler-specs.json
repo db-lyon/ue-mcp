@@ -29341,6 +29341,12 @@
           "description": "Idle frames that split input runs (default 6)"
         },
         {
+          "name": "capture_ui_pointer",
+          "type": "boolean",
+          "required": false,
+          "description": "Also record the mouse through Slate (cursor, UMG hover, click, drag, wheel) while the cursor is shown, as ui_input steps (default false)"
+        },
+        {
           "name": "recording_dir",
           "type": "string",
           "required": false,
@@ -29639,6 +29645,12 @@
           "description": "Eject to a spectator camera during replay"
         },
         {
+          "name": "lock_input",
+          "type": "boolean",
+          "required": false,
+          "description": "Block the user's keyboard, mouse and gamepad from the PIE game while the replay runs, so only the recording drives the player; Esc, Shift+F1 and F8 still work, and monitor mode ignores it (default false)"
+        },
+        {
           "name": "time_scale",
           "type": "number",
           "required": false,
@@ -29784,6 +29796,12 @@
           "type": "boolean",
           "required": false,
           "description": "Eject to a spectator camera during replay"
+        },
+        {
+          "name": "lock_input",
+          "type": "boolean",
+          "required": false,
+          "description": "Block the user's keyboard, mouse and gamepad from the PIE game while the replay runs, so only the recording drives the player; Esc, Shift+F1 and F8 still work, and monitor mode ignores it (default false)"
         },
         {
           "name": "time_scale",

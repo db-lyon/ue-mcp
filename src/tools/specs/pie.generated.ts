@@ -928,6 +928,12 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "Idle frames that split input runs (default 6)"
       },
       {
+        "name": "capture_ui_pointer",
+        "type": "boolean",
+        "required": false,
+        "description": "Also record the mouse through Slate (cursor, UMG hover, click, drag, wheel) while the cursor is shown, as ui_input steps (default false)"
+      },
+      {
         "name": "recording_dir",
         "type": "string",
         "required": false,
@@ -1226,6 +1232,12 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "Eject to a spectator camera during replay"
       },
       {
+        "name": "lock_input",
+        "type": "boolean",
+        "required": false,
+        "description": "Block the user's keyboard, mouse and gamepad from the PIE game while the replay runs, so only the recording drives the player; Esc, Shift+F1 and F8 still work, and monitor mode ignores it (default false)"
+      },
+      {
         "name": "time_scale",
         "type": "number",
         "required": false,
@@ -1371,6 +1383,12 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "boolean",
         "required": false,
         "description": "Eject to a spectator camera during replay"
+      },
+      {
+        "name": "lock_input",
+        "type": "boolean",
+        "required": false,
+        "description": "Block the user's keyboard, mouse and gamepad from the PIE game while the replay runs, so only the recording drives the player; Esc, Shift+F1 and F8 still work, and monitor mode ignores it (default false)"
       },
       {
         "name": "time_scale",
@@ -2409,7 +2427,7 @@ export const paramsClauses: Readonly<Record<string, string>> = {
   pie_profile_list: "Params: directory?",
   pie_profile_read: "Params: path",
   pie_profile_update: "Params: path, tracked_values?, tracked_actors?, tracked_widgets?, capture_pawn_state?, capture_montage?, position_threshold_cm?, rotation_threshold_deg?, velocity_threshold_cms?, tracked_value_default_threshold?",
-  pie_record_arm: "Params: actions?, track_values?, track_actors?, axis_threshold?, sample_hz?, pin_fps?, capture_pawn_state?, capture_montage?, take_record?, client_id?, pie_instance?, rng_seed?, run_gap_frames?, recording_dir?, id?",
+  pie_record_arm: "Params: actions?, track_values?, track_actors?, axis_threshold?, sample_hz?, pin_fps?, capture_pawn_state?, capture_montage?, take_record?, client_id?, pie_instance?, rng_seed?, run_gap_frames?, capture_ui_pointer?, recording_dir?, id?",
   pie_record_delete: "Params: id, confirm?, recording_dir?",
   pie_record_diff: "Params: a_id, b_id, recording_dir?, position_cm?, rotation_deg?, velocity_cms?, tracked_default?, tracked_thresholds?",
   pie_record_disarm: "Params: none",
@@ -2419,9 +2437,9 @@ export const paramsClauses: Readonly<Record<string, string>> = {
   pie_record_stop: "Params: none",
   pie_remote_result: "Params: request_id (or injection_id)",
   pie_replay_analyze: "Params: recording_id?, recording_dir?, limit?, offset?",
-  pie_replay_arm: "Params: recording_id?, sequence_path?, recording_dir?, steps?, settle_ms?, sample_hz?, rng_seed?, pin_fps?, apply_rng_seed?, record_drift?, auto_stop_pie?, eject?, time_scale?, mode?, capture_frame_every?, encode_gif?, fixed_timestep?, client_id?, pie_instance?, drift_thresholds?, start_when?",
+  pie_replay_arm: "Params: recording_id?, sequence_path?, recording_dir?, steps?, settle_ms?, sample_hz?, rng_seed?, pin_fps?, apply_rng_seed?, record_drift?, auto_stop_pie?, eject?, lock_input?, time_scale?, mode?, capture_frame_every?, encode_gif?, fixed_timestep?, client_id?, pie_instance?, drift_thresholds?, start_when?",
   pie_replay_disarm: "Params: none",
-  pie_replay_run: "Params: recording_id?, sequence_path?, recording_dir?, steps?, settle_ms?, sample_hz?, rng_seed?, pin_fps?, apply_rng_seed?, record_drift?, auto_stop_pie?, eject?, time_scale?, mode?, capture_frame_every?, encode_gif?, fixed_timestep?, client_id?, pie_instance?, drift_thresholds?, start_when?",
+  pie_replay_run: "Params: recording_id?, sequence_path?, recording_dir?, steps?, settle_ms?, sample_hz?, rng_seed?, pin_fps?, apply_rng_seed?, record_drift?, auto_stop_pie?, eject?, lock_input?, time_scale?, mode?, capture_frame_every?, encode_gif?, fixed_timestep?, client_id?, pie_instance?, drift_thresholds?, start_when?",
   pie_replay_state: "Params: recording_id?, recording_dir?, at_time?, at_frame?, apply?",
   pie_replay_status: "Params: none",
   pie_replay_stop: "Params: none",
@@ -2472,6 +2490,7 @@ export const schema: Record<string, z.ZodType> = {
   capture_frame_every: z.number().int().min(0).optional().describe("Capture a viewport JPEG every N steps and build a contact sheet"),
   capture_montage: z.boolean().optional().describe("Sample the active montage (pie_profile_create, pie_profile_update). Sample the active montage (default true) (pie_record_arm)"),
   capture_pawn_state: z.boolean().optional().describe("Sample the pawn transform and movement (pie_profile_create, pie_profile_update). Sample the pawn transform and movement (default true) (pie_record_arm)"),
+  capture_ui_pointer: z.boolean().optional().describe("Also record the mouse through Slate (cursor, UMG hover, click, drag, wheel) while the cursor is shown, as ui_input steps (default false)"),
   category: z.string().optional().describe("Exact log category, such as LogTemp"),
   channel: z.string().optional().describe("Collision channel, including project-renamed channels (default Visibility)"),
   channels: z.string().optional().describe("series: comma-separated columns (default: every t:* plus speed2d, gpu_ms, game_ms)"),
@@ -2506,6 +2525,7 @@ export const schema: Record<string, z.ZodType> = {
   injection_id: z.string().optional().describe("Caller-chosen hold id (minted when absent) (pie_inject_input_start). Hold or tape id to stop (pie_inject_input_stop). Caller-chosen tape id (minted when absent) (pie_inject_input_tape). Hold id from inject_input_start (pie_inject_input_update). Alias for request_id (pie_remote_result)"),
   label: z.string().optional().describe("Marker label"),
   limit: z.number().int().optional().describe("Most rows (default 200) (pie_observe_list, pie_record_list, pie_session_log). csv/tracked: most rows (default 1000) (pie_observe_read). csv: most rows (default 1000) (pie_record_read). Most frames_over_threshold entries returned (default 50) (pie_replay_analyze). Most runs, newest first (default 50) (pie_script_runs). Most entries per list (default 400) (pie_script_values)"),
+  lock_input: z.boolean().optional().describe("Block the user's keyboard, mouse and gamepad from the PIE game while the replay runs, so only the recording drives the player; Esc, Shift+F1 and F8 still work, and monitor mode ignores it (default false)"),
   manual_only: z.boolean().optional().describe("Every step is judged by a verdict: allows a script with no auto step that has an expect (default false)"),
   map: z.string().optional().describe("Level the script plays in, as a package or object path such as /Game/Maps/L_Arena. A run opens it before PIE and refuses when the open level has unsaved changes; empty plays whatever level is open (pie_script_create). Level to open before PIE; overrides the script's. Mode manual leaves the open level as it is (pie_script_run). Level the script plays in; empty clears it (pie_script_update). Level the script would play in (pie_script_validate)"),
   max_errors: z.number().int().min(0).optional().describe("no-errors predicate threshold (default 0) (pie_scenario_scaffold). Most errors logged during the run (default 0) (pie_test_scaffold)"),

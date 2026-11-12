@@ -45,6 +45,10 @@ namespace
 		R->SetNumberField(TEXT("elapsed_seconds"), S.ElapsedSeconds);
 		R->SetNumberField(TEXT("tracked_action_count"), S.TrackedActionCount);
 		R->SetBoolField(TEXT("pie_active"), S.bPIEActive);
+		if (S.bCaptureUIPointer)
+		{
+			R->SetNumberField(TEXT("ui_pointer_events"), S.UIPointerEvents);
+		}
 		if (S.PIEInstance != INDEX_NONE)
 		{
 			R->SetNumberField(TEXT("pie_instance"), S.PIEInstance);
@@ -71,6 +75,7 @@ namespace
 		R->SetStringField(TEXT("sequence_path"), F.SequencePath);
 		R->SetNumberField(TEXT("total_frames"), F.TotalFrames);
 		R->SetNumberField(TEXT("duration_seconds"), F.DurationSeconds);
+		R->SetNumberField(TEXT("ui_pointer_steps"), F.UIPointerSteps);
 		if (F.bTakeRecordAttempted)
 		{
 			R->SetStringField(TEXT("take_recorder_status"), F.TakeRecorderStatus);
@@ -152,6 +157,7 @@ TSharedPtr<FJsonValue> FPIEHandlers::PieRecordArm(const TSharedPtr<FJsonObject>&
 	if (TryGetBoolParam(Params, TEXT("capture_pawn_state"), BV)) Cfg.bCapturePawnState = BV;
 	if (TryGetBoolParam(Params, TEXT("capture_montage"), BV))    Cfg.bCaptureMontage = BV;
 	if (TryGetBoolParam(Params, TEXT("take_record"), BV))        Cfg.bTakeRecord = BV;
+	if (TryGetBoolParam(Params, TEXT("capture_ui_pointer"), BV)) Cfg.bCaptureUIPointer = BV;
 
 	int32 ClientId = 0;
 	if (TryGetNumberParam(Params, TEXT("client_id"), ClientId))
