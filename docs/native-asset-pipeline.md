@@ -130,7 +130,7 @@ Create the material first, then add these nodes. Give each node the listed `name
 | ScaledRoughness | Multiply | RMA R to A, RoughnessScale to B |
 | ScaledMetallic | Multiply | RMA G to A, MetallicScale to B |
 
-For each texture node, call `set_expression_value` with `texturePath`. Set its sampler in a separate call using `propertyName="SamplerType"` and `value="SAMPLERTYPE_Color"`, `"SAMPLERTYPE_Normal"` or `"SAMPLERTYPE_Masks"`. This reflection setter requires the enum identifier, including its prefix. Virtual textures require the corresponding variant, such as `SAMPLERTYPE_VirtualColor`.
+For each texture node, call `set_expression_value` with `texturePath`. The texture is applied as a native property edit, so the engine picks the sampler that matches the texture and the response reports it as `samplerType`; the material is recompiled with its instances, and `shaderState` names any instance left without a shader map. To override the sampler, make a separate call using `propertyName="SamplerType"` and `value="SAMPLERTYPE_Color"`, `"SAMPLERTYPE_Normal"` or `"SAMPLERTYPE_Masks"`. This reflection setter requires the enum identifier, including its prefix. Virtual textures require the corresponding variant, such as `SAMPLERTYPE_VirtualColor`.
 
 Connect ScaledUV to the Coordinates input of all three texture nodes. Connect TintedColor to BaseColor, Normal's RGB output to Normal, ScaledRoughness to Roughness, ScaledMetallic to Metallic, and RMA's B output to AmbientOcclusion. This channel order is RMA; ORM uses a different order. Recompile, then verify using `read_graph` and `list_parameters`.
 
