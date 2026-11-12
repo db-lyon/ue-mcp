@@ -12,6 +12,7 @@
 #include "GameFramework/Pawn.h"
 #include "InputAction.h"
 #include "InputActionValue.h"
+#include "Misc/CoreDelegates.h"
 
 namespace
 {
@@ -68,6 +69,8 @@ void UMCPPIERemoteControl::EndPlay(const EEndPlayReason::Type EndPlayReason)
 		MCPPIE::FPIEInputInjector::StopAny(Id);
 	}
 	OwnedTapes.Reset();
+	Watches.Reset();
+	UnbindWatchFrame();
 	if (Capture.IsValid())
 	{
 		Capture->SetEnabled(false);
@@ -128,6 +131,18 @@ void UMCPPIERemoteControl::SendConsole(const FString& Id, const FString& Command
 {
 	Results.Remove(Id);
 	ClientConsole(Id, Command);
+}
+
+void UMCPPIERemoteControl::SendWatchTrigger(const FString& Id, const FSoftObjectPath& Action)
+{
+	Results.Remove(Id);
+	Triggers.Remove(Id);
+	ClientWatchTrigger(Id, Action);
+}
+
+void UMCPPIERemoteControl::SendStopWatch(const FString& Id)
+{
+	ClientStopWatch(Id);
 }
 
 // ── Client-side execution ───────────────────────────────────────────────────
@@ -272,6 +287,77 @@ void UMCPPIERemoteControl::ClientConsole_Implementation(const FString& Id, const
 	Report(Id, true, true, FString());
 }
 
+void UMCPPIERemoteControl::ClientWatchTrigger_Implementation(const FString& Id, const FSoftObjectPath& Action)
+{
+	FString Error;
+	UInputAction* Loaded = LoadAction(Action, Error);
+	ULocalPlayer* LocalPlayer = Loaded ? ResolveOwnLocalPlayer(Error) : nullptr;
+	if (!LocalPlayer)
+	{
+		Report(Id, false, true, Error);
+		return;
+	}
+	Watches.RemoveAll([&Id](const FMCPPIERemoteWatch& W) { return W.Id == Id; });
+	FMCPPIERemoteWatch& Watch = Watches.AddDefaulted_GetRef();
+	Watch.Id = Id;
+	Watch.Path = Action;
+	Watch.Action = Loaded;
+	if (!WatchFrameHandle.IsValid())
+	{
+		WatchFrameHandle = FCoreDelegates::OnEndFrame.AddUObject(this, &UMCPPIERemoteControl::PollWatches);
+	}
+	Report(Id, true, false, FString());
+}
+
+void UMCPPIERemoteControl::ClientStopWatch_Implementation(const FString& Id)
+{
+	Watches.RemoveAll([&Id](const FMCPPIERemoteWatch& W) { return W.Id == Id; });
+	if (Watches.Num() == 0) UnbindWatchFrame();
+}
+
+void UMCPPIERemoteControl::PollWatches()
+{
+	FString Error;
+	ULocalPlayer* LocalPlayer = ResolveOwnLocalPlayer(Error);
+	for (int32 I = Watches.Num() - 1; I >= 0; --I)
+	{
+		FMCPPIERemoteWatch& Watch = Watches[I];
+		const UInputAction* Action = Watch.Action.Get();
+		if (!Action)
+		{
+			Action = Cast<UInputAction>(Watch.Path.TryLoad());
+			Watch.Action = Action;
+		}
+		if (!Action)
+		{
+			Report(Watch.Id, false, true, FString::Printf(TEXT("the watched Input Action '%s' no longer loads"), *Watch.Path.ToString()));
+			Watches.RemoveAt(I);
+			continue;
+		}
+		bool bTriggered = false;
+		FVector Value = FVector::ZeroVector;
+		// A player between pawns has no input to read this frame; the watch waits for it.
+		if (!LocalPlayer || !MCPPIE::ReadActionTriggerState(LocalPlayer, Action, bTriggered, Value, Error)) continue;
+		if (Watch.Gate.Feed(bTriggered))
+		{
+			UE_LOG(LogMCPPIERuntime, Log, TEXT("[PIEStudio] watch %s: %s triggered"), *Watch.Id, *Action->GetName());
+			ServerTriggered(Watch.Id, Value);
+			Report(Watch.Id, true, true, FString());
+			Watches.RemoveAt(I);
+		}
+	}
+	if (Watches.Num() == 0) UnbindWatchFrame();
+}
+
+void UMCPPIERemoteControl::UnbindWatchFrame()
+{
+	if (WatchFrameHandle.IsValid())
+	{
+		FCoreDelegates::OnEndFrame.Remove(WatchFrameHandle);
+		WatchFrameHandle.Reset();
+	}
+}
+
 void UMCPPIERemoteControl::HandleTapeFinished(const FString& Id)
 {
 	if (OwnedTapes.Remove(Id) > 0)
@@ -287,6 +373,13 @@ void UMCPPIERemoteControl::ServerReady_Implementation(const FString& LogFile)
 	bClientReady = true;
 	ClientLogFile = LogFile;
 	UE_LOG(LogMCPPIERuntime, Log, TEXT("[PIEStudio] remote player %s is ready"), *GetNameSafe(GetOwner()));
+}
+
+void UMCPPIERemoteControl::ServerTriggered_Implementation(const FString& Id, FVector Value)
+{
+	FMCPPIERemoteTrigger& Trigger = Triggers.FindOrAdd(Id);
+	Trigger.Id = Id;
+	Trigger.Value = Value;
 }
 
 void UMCPPIERemoteControl::ServerReport_Implementation(const FString& Id, bool bOk, bool bFinished, const FString& Error)
