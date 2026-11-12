@@ -7,6 +7,9 @@
 #include "Misc/PackageName.h"
 #include "Engine/Engine.h"
 #include "HAL/PlatformProcess.h"
+#include "Interfaces/IPluginManager.h"
+#include "Misc/Paths.h"
+#include "Runtime/Launch/Resources/Version.h"
 
 #ifndef WITH_FAB_PLUGIN
 #define WITH_FAB_PLUGIN 0
@@ -21,14 +24,68 @@
 
 static const TCHAR* FabModuleName = TEXT("Fab");
 
-// The Fab plugin is an engine editor plugin, enabled by default on 5.8 but not
-// guaranteed to be present or loaded (disabled, or an older engine). Every
-// action funnels through this so callers get a clear message instead of a
-// crash or an "Unknown method".
+// The Fab plugin is not part of the engine install. The Epic Games Launcher
+// delivers it as its own catalog item, "Fab UE Plugin" (app FabPlugin_<x.y>,
+// flagged to install with the engine), into Engine/Plugins/Fab. A UE 5.9
+// install can come without it (#1889), a source build never has it, and a
+// project can disable it. Every action funnels through IsFabModuleLoaded so
+// callers get a clear message instead of a crash or an "Unknown method".
 static bool IsFabModuleLoaded()
 {
 	return FModuleManager::Get().IsModuleLoaded(FabModuleName);
 }
+
+// Why Fab cannot answer, as one sentence naming what is missing and how to get
+// it. Distinguishes a plugin that is not installed in this engine from one that
+// is installed but disabled or not loaded.
+static FString FabUnavailableReason()
+{
+	const FString EngineVersion = FString::Printf(TEXT("%d.%d"), ENGINE_MAJOR_VERSION, ENGINE_MINOR_VERSION);
+	TSharedPtr<IPlugin> Plugin = IPluginManager::Get().FindPlugin(FabModuleName);
+	if (!Plugin.IsValid())
+	{
+		return FString::Printf(
+			TEXT("The Fab plugin is not installed in this engine (looked for %s). Unreal Engine %s does not bundle it: the Epic Games Launcher installs it as "
+				 "the separate 'Fab UE Plugin' item (FabPlugin_%s). In the launcher open Unreal Engine > Library, find Fab UE Plugin, choose Install to Engine "
+				 "and pick %s, then restart the editor. A source-built engine needs the plugin copied into Engine/Plugins/Fab."),
+			*FPaths::ConvertRelativePathToFull(FPaths::Combine(FPaths::EnginePluginsDir(), TEXT("Fab"))),
+			*EngineVersion, *EngineVersion, *EngineVersion);
+	}
+	if (!Plugin->IsEnabled())
+	{
+		return FString::Printf(
+			TEXT("The Fab plugin is installed (%s) but this project disables it. Enable Fab in Edit > Plugins (or set \"Enabled\": true for Fab in the .uproject) and restart the editor."),
+			*FPaths::ConvertRelativePathToFull(Plugin->GetBaseDir()));
+	}
+	return FString::Printf(
+		TEXT("The Fab plugin is installed and enabled (%s) but its module is not loaded. Restart the editor; if it still does not load, check the log for Fab module load errors."),
+		*FPaths::ConvertRelativePathToFull(Plugin->GetBaseDir()));
+}
+
+// The refusal every Fab action returns while the module is not loaded:
+// errorCode PLUGIN_NOT_AVAILABLE, the reason, and the plugin's state.
+static TSharedPtr<FJsonValue> FabUnavailableError()
+{
+	TSharedPtr<FJsonObject> Obj = MCPErrorObject(FabUnavailableReason());
+	Obj->SetStringField(TEXT("errorCode"), TEXT("PLUGIN_NOT_AVAILABLE"));
+	TSharedPtr<IPlugin> Plugin = IPluginManager::Get().FindPlugin(FabModuleName);
+	Obj->SetBoolField(TEXT("pluginInstalled"), Plugin.IsValid());
+	Obj->SetBoolField(TEXT("pluginEnabled"), Plugin.IsValid() && Plugin->IsEnabled());
+	return MakeShared<FJsonValueObject>(Obj);
+}
+
+// The refusal of an action that needs the native Fab API when this build of
+// the bridge was compiled without it, although the module is loaded now. Only
+// defined where it is called, so a build with Fab has no unused function.
+#if !WITH_FAB_PLUGIN
+static TSharedPtr<FJsonValue> FabNativeApiMissingError(const TCHAR* What)
+{
+	return MCPErrorWithCode(TEXT("PLUGIN_NOT_AVAILABLE"), FString::Printf(
+		TEXT("%s needs the Fab plugin's native API, and this build of the bridge was compiled without it because the Fab plugin was not in the engine "
+			 "when the bridge was built. Rebuild the UE_MCP_Bridge plugin now that Fab is installed."),
+		What));
+}
+#endif
 
 // Run one of the Fab plugin's registered console commands (Fab.Login,
 // Fab.Logout, Fab.ClearCache, Fab.TEDS.MyFolderIntegration, ...). These are
@@ -83,12 +140,26 @@ TSharedPtr<FJsonValue> FFabHandlers::Status(const TSharedPtr<FJsonObject>& Param
 	// native Fab API in this build, vs. console-command-only.
 	Res->SetBoolField(TEXT("nativeApiLinked"), WITH_FAB_PLUGIN ? true : false);
 	Res->SetBoolField(TEXT("fabWindowOpened"), HasFabBrowserApiInstance());
+	TSharedPtr<IPlugin> Plugin = IPluginManager::Get().FindPlugin(FabModuleName);
+	Res->SetBoolField(TEXT("pluginInstalled"), Plugin.IsValid());
+	Res->SetBoolField(TEXT("pluginEnabled"), Plugin.IsValid() && Plugin->IsEnabled());
+	if (Plugin.IsValid())
+	{
+		Res->SetStringField(TEXT("pluginDir"), FPaths::ConvertRelativePathToFull(Plugin->GetBaseDir()));
+		Res->SetStringField(TEXT("pluginVersion"), Plugin->GetDescriptor().VersionName);
+	}
 
 	if (!bLoaded)
 	{
-		Res->SetStringField(TEXT("note"), TEXT("Fab plugin module not loaded. It ships enabled by default on UE 5.8; enable it in the editor's Plugins panel if missing."));
+		// Still a successful read: status reports the state, and the reason is
+		// the same sentence every other Fab action refuses with.
+		Res->SetStringField(TEXT("errorCode"), TEXT("PLUGIN_NOT_AVAILABLE"));
+		Res->SetStringField(TEXT("note"), FString::Printf(TEXT("Fab plugin module not loaded. %s"), *FabUnavailableReason()));
 		return MCPResult(Res);
 	}
+#if !WITH_FAB_PLUGIN
+	Res->SetStringField(TEXT("note"), TEXT("The Fab module is loaded, but this build of the bridge was compiled without the Fab plugin's native API, so list_cached, cache_info and import_file refuse until the bridge is rebuilt with Fab installed."));
+#endif
 
 #if WITH_FAB_PLUGIN
 	Res->SetStringField(TEXT("cacheLocation"), FFabAssetsCache::GetCacheLocation());
@@ -100,7 +171,7 @@ TSharedPtr<FJsonValue> FFabHandlers::Status(const TSharedPtr<FJsonObject>& Param
 
 TSharedPtr<FJsonValue> FFabHandlers::Login(const TSharedPtr<FJsonObject>& Params)
 {
-	if (!IsFabModuleLoaded()) return MCPError(TEXT("Fab plugin not loaded"));
+	if (!IsFabModuleLoaded()) return FabUnavailableError();
 	// Fab.Login opens the EOS account-portal login flow. Asynchronous: this
 	// returns once the flow is triggered, not once the user has authenticated.
 	if (!RunFabConsoleCommand(TEXT("Fab.Login")))
@@ -130,7 +201,7 @@ TSharedPtr<FJsonValue> FFabHandlers::Login(const TSharedPtr<FJsonObject>& Params
 
 TSharedPtr<FJsonValue> FFabHandlers::Logout(const TSharedPtr<FJsonObject>& Params)
 {
-	if (!IsFabModuleLoaded()) return MCPError(TEXT("Fab plugin not loaded"));
+	if (!IsFabModuleLoaded()) return FabUnavailableError();
 	if (!RunFabConsoleCommand(TEXT("Fab.Logout")))
 		return MCPError(TEXT("Failed to invoke Fab.Logout console command"));
 	auto Res = MCPSuccess();
@@ -156,7 +227,7 @@ TSharedPtr<FJsonValue> FFabHandlers::Logout(const TSharedPtr<FJsonObject>& Param
 
 TSharedPtr<FJsonValue> FFabHandlers::SyncLibrary(const TSharedPtr<FJsonObject>& Params)
 {
-	if (!IsFabModuleLoaded()) return MCPError(TEXT("Fab plugin not loaded"));
+	if (!IsFabModuleLoaded()) return FabUnavailableError();
 	// Loads the user's owned Fab library ("My Folder") into TEDS so it surfaces
 	// in the Content Browser. Optional batch size controls how many items are
 	// pulled per sync request.
@@ -189,7 +260,7 @@ TSharedPtr<FJsonValue> FFabHandlers::SyncLibrary(const TSharedPtr<FJsonObject>& 
 
 TSharedPtr<FJsonValue> FFabHandlers::ListCached(const TSharedPtr<FJsonObject>& Params)
 {
-	if (!IsFabModuleLoaded()) return MCPError(TEXT("Fab plugin not loaded"));
+	if (!IsFabModuleLoaded()) return FabUnavailableError();
 #if WITH_FAB_PLUGIN
 	auto Res = MCPSuccess();
 	const TArray<FString> Cached = FFabAssetsCache::GetCachedAssets();
@@ -203,13 +274,13 @@ TSharedPtr<FJsonValue> FFabHandlers::ListCached(const TSharedPtr<FJsonObject>& P
 	Res->SetStringField(TEXT("cacheLocation"), FFabAssetsCache::GetCacheLocation());
 	return MCPResult(Res);
 #else
-	return MCPError(TEXT("Fab native API not linked in this build (Fab plugin absent at build time). Cache listing unavailable."));
+	return FabNativeApiMissingError(TEXT("Listing the Fab download cache"));
 #endif
 }
 
 TSharedPtr<FJsonValue> FFabHandlers::CacheInfo(const TSharedPtr<FJsonObject>& Params)
 {
-	if (!IsFabModuleLoaded()) return MCPError(TEXT("Fab plugin not loaded"));
+	if (!IsFabModuleLoaded()) return FabUnavailableError();
 #if WITH_FAB_PLUGIN
 	auto Res = MCPSuccess();
 	Res->SetStringField(TEXT("cacheLocation"), FFabAssetsCache::GetCacheLocation());
@@ -218,13 +289,13 @@ TSharedPtr<FJsonValue> FFabHandlers::CacheInfo(const TSharedPtr<FJsonObject>& Pa
 	Res->SetNumberField(TEXT("count"), FFabAssetsCache::GetCachedAssets().Num());
 	return MCPResult(Res);
 #else
-	return MCPError(TEXT("Fab native API not linked in this build (Fab plugin absent at build time). Cache info unavailable."));
+	return FabNativeApiMissingError(TEXT("Reading the Fab download cache"));
 #endif
 }
 
 TSharedPtr<FJsonValue> FFabHandlers::ClearCache(const TSharedPtr<FJsonObject>& Params)
 {
-	if (!IsFabModuleLoaded()) return MCPError(TEXT("Fab plugin not loaded"));
+	if (!IsFabModuleLoaded()) return FabUnavailableError();
 
 	// Read the cache size first so the result can say whether this call actually
 	// deleted anything. Only available when the native API is linked; without it
@@ -265,7 +336,7 @@ TSharedPtr<FJsonValue> FFabHandlers::ImportFile(const TSharedPtr<FJsonObject>& P
 	FString Destination;
 	if (auto Err = RequireString(Params, TEXT("destination"), Destination)) return Err;
 
-	if (!IsFabModuleLoaded()) return MCPError(TEXT("Fab plugin not loaded"));
+	if (!IsFabModuleLoaded()) return FabUnavailableError();
 #if WITH_FAB_PLUGIN
 	if (!FPaths::FileExists(Source))
 		return MCPError(FString::Printf(TEXT("Source file not found on disk: %s"), *Source));
@@ -349,7 +420,7 @@ TSharedPtr<FJsonValue> FFabHandlers::ImportFile(const TSharedPtr<FJsonObject>& P
 	}
 	return MCPResult(Res);
 #else
-	return MCPError(TEXT("Fab native API not linked in this build (Fab plugin absent at build time). Import unavailable."));
+	return FabNativeApiMissingError(TEXT("Importing through the Fab pipeline"));
 #endif
 }
 

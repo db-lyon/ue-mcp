@@ -3,7 +3,9 @@
  * The Fab actions that work without an account: the local cache readers,
  * cross-checked against each other, and importing a local file into a content
  * folder, and building the fab.com search page URL. Login, logout, library sync
- * and cache clearing are not run. Refs #1223, #1485.
+ * and cache clearing are not run. Without the Fab plugin (a UE 5.9 install
+ * the launcher did not add the "Fab UE Plugin" item to), the actions that need
+ * it refuse with PLUGIN_NOT_AVAILABLE. Refs #1223, #1485, #1889.
  */
 import * as fs from "node:fs";
 import * as os from "node:os";
@@ -71,13 +73,26 @@ afterAll(async () => {
 describe("fab local state", () => {
   it("fab_status, fab_cache_info and fab_list_cached agree on the local download cache", async () => {
     const status = await call("fab_status", {});
-    // The UE 5.9 install ships no Fab plugin; there the status says so instead of reading a cache.
+    expect(typeof status.pluginInstalled).toBe("boolean");
+    expect(typeof status.pluginEnabled).toBe("boolean");
+    // The launcher installs Fab as its own item ("Fab UE Plugin"), and a UE 5.9
+    // engine can come without it (#1889). There the status says what is missing
+    // and how to get it instead of reading a cache.
     if (status.pluginLoaded === false) {
-      expect(status.nativeApiLinked).toBe(false);
+      expect(status.errorCode).toBe("PLUGIN_NOT_AVAILABLE");
       expect(String(status.note)).toContain("Fab plugin module not loaded");
+      if (status.pluginInstalled === false) {
+        expect(status.nativeApiLinked).toBe(false);
+        expect(status.pluginEnabled).toBe(false);
+        expect(String(status.note)).toContain("Fab UE Plugin");
+        expect(String(status.note)).toContain("Install to Engine");
+      }
       return;
     }
     expect(status.pluginLoaded, JSON.stringify(status)).toBe(true);
+    expect(status.pluginInstalled).toBe(true);
+    expect(status.pluginEnabled).toBe(true);
+    expect(String(status.pluginDir)).toMatch(/Fab/);
     expect(status.nativeApiLinked).toBe(true);
     expect(typeof status.fabWindowOpened).toBe("boolean");
 
@@ -96,8 +111,10 @@ describe("fab local state", () => {
   it("fab_import_file imports a local file into the destination folder", async () => {
     if ((await call("fab_status", {})).pluginLoaded === false) {
       const refused = await callBridge(bridge, "fab_import_file", { source: SOURCE, destination: DIR });
-      expect(refused.ok && (refused.result as Record<string, unknown>)?.success !== false).toBe(false);
-      expect(JSON.stringify(refused.result ?? refused.error)).toContain("Fab plugin not loaded");
+      expect(succeeded(refused)).toBe(false);
+      expect(body(refused).errorCode).toBe("PLUGIN_NOT_AVAILABLE");
+      expect(String(body(refused).error)).toContain("Fab plugin");
+      expect(await assetsUnder()).toEqual([]);
       return;
     }
     const imported = await call("fab_import_file", { source: SOURCE, destination: DIR });
@@ -116,6 +133,31 @@ describe("fab local state", () => {
     expect(assets.length, `nothing landed under ${DIR}`).toBeGreaterThan(0);
     expect(assets.some((a) => a.name.toLowerCase().includes(BASE.toLowerCase())), JSON.stringify(assets)).toBe(true);
   }, 120_000);
+
+  it("without the Fab plugin the Fab actions refuse with PLUGIN_NOT_AVAILABLE and the install step", async () => {
+    const status = await call("fab_status", {});
+    // With Fab loaded the readers and the import are asserted above; the live
+    // suite skips no test, so this one has nothing left to check there.
+    if (status.pluginLoaded !== false) return;
+
+    const refusals = [
+      await callBridge(bridge, "fab_list_cached", {}),
+      await callBridge(bridge, "fab_cache_info", {}),
+      await callBridge(bridge, "fab_import_file", { source: SOURCE, destination: DIR }),
+    ];
+    for (const r of refusals) {
+      expect(succeeded(r), JSON.stringify(r.result)).toBe(false);
+      const b = body(r);
+      expect(b.errorCode).toBe("PLUGIN_NOT_AVAILABLE");
+      expect(b.pluginInstalled).toBe(status.pluginInstalled);
+      expect(b.pluginEnabled).toBe(status.pluginEnabled);
+      // The refusal is the same sentence status reports, naming what is missing and how to get it.
+      expect(String(status.note)).toContain(String(b.error));
+      if (status.pluginInstalled === false) expect(String(b.error)).toMatch(/not installed in this engine.*Fab UE Plugin/s);
+    }
+    // Nothing was imported by the refused call.
+    expect(await assetsUnder()).toEqual([]);
+  }, 60_000);
 
   it("fab_open_search builds the fab.com search URL from each filter without opening it", async () => {
     // open:false only: the live suite runs unattended, so nothing here launches

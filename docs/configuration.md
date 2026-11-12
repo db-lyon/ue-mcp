@@ -467,6 +467,8 @@ A port pinned with `UE_MCP_PORT` (or an explicit port argument) was chosen for t
 
 The plugin is editor-only. Its `.uplugin` depends on these engine plugins, which Unreal enables with it: `PythonScriptPlugin`, `DataValidation`, `EditorScriptingUtilities`, `EnhancedInput`, `GameplayAbilities`, `GameplayTagsEditor`, `Niagara`, `PCG`, `IKRig`, `ControlRig`, `PoseSearch`, `Chooser`, `PropertyBindingUtils`, `Metasound`, `Synthesis`, `StateTree`, and `Fab` (optional).
 
+Fab is not part of the engine install. The Epic Games Launcher adds it as its own Library item, **Fab UE Plugin**, which installs into `Engine/Plugins/Fab` and normally arrives with the engine; an engine can still come without it (seen on a UE 5.9 install). Without it the `fab` actions other than `open_search` answer `PLUGIN_NOT_AVAILABLE` with the install step, and `fab(status)` says what is missing. To add it, open Unreal Engine > Library in the launcher, find Fab UE Plugin, choose Install to Engine and pick the version, then restart the editor. A source build of the bridge links Fab's native import and cache API only when the plugin was present at build time, so rebuild the bridge after installing it.
+
 ## CLI Subcommands
 
 Run `npx ue-mcp <command> --help` for a command's flags.

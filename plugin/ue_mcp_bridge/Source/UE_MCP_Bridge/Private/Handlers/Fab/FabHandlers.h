@@ -4,8 +4,9 @@
 #include "Dom/JsonValue.h"
 #include "Dom/JsonObject.h"
 
-// Fab asset importer. Fab is Epic's unified content marketplace; the engine
-// ships an editor plugin (/Engine/Plugins/Fab) whose window is a web frontend
+// Fab asset importer. Fab is Epic's unified content marketplace; the Epic
+// Games Launcher installs its editor plugin into Engine/Plugins/Fab as a
+// separate "Fab UE Plugin" item, not as part of the engine (#1889). Its window is a web frontend
 // (catalog browse, library, purchase, signed-URL resolution all live server
 // side) sitting on top of a thin native download+import layer. This category
 // drives the parts of that native layer that don't need the web frontend:

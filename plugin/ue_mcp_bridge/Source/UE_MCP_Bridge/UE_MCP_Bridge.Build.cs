@@ -184,20 +184,24 @@ public class UE_MCP_Bridge : ModuleRules
 			PrivateDependencyModuleNames.Add("LiveCoding");
 		}
 
-		// Fab is Epic's marketplace plugin. It ships enabled by default on UE 5.8
-		// but is absent on older engines and can be disabled, so we do not hard
-		// depend on it: detect the plugin on disk and only then link its native
-		// import/cache API, guarding those code paths with WITH_FAB_PLUGIN. When
-		// absent, the Fab handlers still register and fall back to console-command
-		// paths (login/sync/clear) or return a clean "not available" error.
+		// Fab is Epic's marketplace plugin. It is not part of the engine install:
+		// the launcher delivers it as its own catalog item ("Fab UE Plugin", app
+		// FabPlugin_<version>, flagged to install with the engine) into
+		// Engine/Plugins/Fab. An engine installed without it, a source build, or
+		// a project that disables it has no Fab, so we do not hard depend on it:
+		// detect the plugin on disk and only then link its native import/cache
+		// API, guarding those code paths with WITH_FAB_PLUGIN. When absent, the
+		// Fab handlers still register, fall back to console-command paths
+		// (login/sync/clear) when the module is loaded, and otherwise answer
+		// PLUGIN_NOT_AVAILABLE with the install step.
 		// Test for the header this module actually includes, not just the
 		// plugin directory: 5.4 ships a Fab plugin whose public surface is
 		// FabModule.h alone, with no Importers/ or Utilities/ headers, so a
 		// directory check turns WITH_FAB_PLUGIN on and the compile then fails
-		// on the missing include.
-		bool bFabPluginPresent = System.IO.File.Exists(System.IO.Path.Combine(
-			EngineDirectory, "Plugins", "Fab", "Source", "Fab", "Public", "Importers", "GenericAssetImporter.h"));
-		if (bFabPluginPresent && Target.bBuildEditor)
+		// on the missing include. Fab is enabled by default, so only a project
+		// that turns it off explicitly compiles it out.
+		bool bFabPluginPresent = FindFabPlugin(EngineDirectory) != null;
+		if (bFabPluginPresent && Target.bBuildEditor && ProjectEnables(Target, "Fab", true))
 		{
 			PrivateDependencyModuleNames.Add("Fab");
 			PublicDefinitions.Add("WITH_FAB_PLUGIN=1");
@@ -281,22 +285,51 @@ public class UE_MCP_Bridge : ModuleRules
 	/// UHT-generated headers exist only when it is part of the build, so
 	/// compiling against it in a project that leaves it off fails. Read from the
 	/// target's own plugin lists, then the .uproject. A build with no project
-	/// (an engine build) counts it as on.
+	/// (an engine build) counts it as on. A plugin enabled by default (Fab)
+	/// passes bEnabledByDefault, so only an explicit "Enabled": false turns it
+	/// off.
 	/// </summary>
-	private static bool ProjectEnables(ReadOnlyTargetRules Target, string Plugin)
+	private static bool ProjectEnables(ReadOnlyTargetRules Target, string Plugin, bool bEnabledByDefault = false)
 	{
 		if (Target.DisablePlugins.Contains(Plugin)) return false;
 		if (Target.EnablePlugins.Contains(Plugin)) return true;
 		if (Target.ProjectFile == null) return true;
 		JsonObject Project;
 		JsonObject[] Plugins;
-		if (!JsonObject.TryRead(Target.ProjectFile, out Project) || !Project.TryGetObjectArrayField("Plugins", out Plugins)) return false;
+		if (!JsonObject.TryRead(Target.ProjectFile, out Project) || !Project.TryGetObjectArrayField("Plugins", out Plugins)) return bEnabledByDefault;
 		foreach (JsonObject Entry in Plugins)
 		{
 			string Name;
 			bool Enabled;
 			if (Entry.TryGetStringField("Name", out Name) && Name == Plugin) return Entry.TryGetBoolField("Enabled", out Enabled) && Enabled;
 		}
-		return false;
+		return bEnabledByDefault;
+	}
+
+	/// <summary>
+	/// The directory of a Fab plugin whose native import/cache headers this
+	/// module can compile against, or null. The launcher installs the "Fab UE
+	/// Plugin" item into Engine/Plugins/Fab; an older vault install or a copy
+	/// made by hand sits under Engine/Plugins/Marketplace instead, in a folder
+	/// of any name holding Fab.uplugin.
+	/// </summary>
+	private static string FindFabPlugin(string EngineDir)
+	{
+		System.Collections.Generic.List<string> Candidates = new System.Collections.Generic.List<string>();
+		Candidates.Add(System.IO.Path.Combine(EngineDir, "Plugins", "Fab"));
+		string Marketplace = System.IO.Path.Combine(EngineDir, "Plugins", "Marketplace");
+		if (System.IO.Directory.Exists(Marketplace))
+		{
+			Candidates.AddRange(System.IO.Directory.GetDirectories(Marketplace));
+		}
+		foreach (string Dir in Candidates)
+		{
+			if (System.IO.File.Exists(System.IO.Path.Combine(Dir, "Fab.uplugin"))
+				&& System.IO.File.Exists(System.IO.Path.Combine(Dir, "Source", "Fab", "Public", "Importers", "GenericAssetImporter.h")))
+			{
+				return Dir;
+			}
+		}
+		return null;
 	}
 }
