@@ -2880,6 +2880,18 @@ export const EPIC_TOOL_EFFECTS: Record<string, ActionEffect> = {
   // Sets a variable's developer tooltip.
   "EditorToolset.UserDefinedStructToolset.SetVariableTooltip": "mutate", // EPIC accessMode=write
 
+  /* ── FabToolset.FabToolset ─────────────────────────────────────── */
+  // Starts Fab sign-in by opening the Epic account portal in the user's system browser. Only needed when another t
+  "FabToolset.FabToolset.FabSignIn": "mutate", // EPIC accessMode=write
+  // Reads the full details of one Fab listing: description, tags, licenses and their prices, rating. Use this afte
+  "FabToolset.FabToolset.GetFabListingDetails": "read", // EPIC accessMode=read
+  // Installs a Fab asset into the running editor: one the user owns, or a free one. Returns JSON: { listingId, ass
+  "FabToolset.FabToolset.InstallFabListing": "mutate", // EPIC accessMode=write
+  // Searches the whole Fab marketplace, as JSON: { query, results: [...], nextCursor }. Use this when the user wan
+  "FabToolset.FabToolset.SearchFabListings": "read", // EPIC accessMode=read
+  // Searches everything the user has a license to on Fab, as JSON: { query, results: [...], nextCursor }. Only the
+  "FabToolset.FabToolset.SearchFabMyLibrary": "read", // EPIC accessMode=read
+
   /* ── FileSystemToolset.FileSystemToolset ───────────────────────── */
   // Creates a directory and any missing parents. A directory that already exists is a success.
   "FileSystemToolset.FileSystemToolset.CreateDirectory": "mutate", // EPIC accessMode=write

@@ -8,15 +8,25 @@
  * than replacing them, so an agent working in the fab category has to be able
  * to find and run them from here.
  *
- * No catalog this package was generated from recorded a Fab toolset (the test
- * project's engine has no Fab plugin), so there are no `epic_*` actions for it.
- * Instead this action asks the connected editor what it has, under the same
- * routing rule the generator and `project(set_category_enabled)` use, and
- * names the gateway that runs each tool: epic(call_tool) for a registry tool,
- * epic(call_mcp_tool) for one the Fab plugin registers with Epic's MCP plugin.
+ * The 5.9 catalog records the Fab plugin's toolset (FabToolset.FabToolset, as
+ * Fab UE Plugin 0.0.22 registers it), so its tools are also declared as fab's
+ * epic_* actions. The plugin is a launcher item that versions on its own,
+ * though, so this action asks the connected editor what it actually has, under
+ * the same routing rule the generator and `project(set_category_enabled)` use,
+ * and names the call that runs each tool: epic(call_tool) with its toolset for
+ * a registry tool, epic(call_mcp_tool) for one the Fab plugin registers with
+ * Epic's MCP plugin, and the fab epic_* action when one wraps the tool.
  */
 import type { HandlerActionSpec, ToolContext } from "../core/types.js";
+import { actions as fabEpicActions } from "./epic/fab.generated.js";
 import { routeEpicToolset } from "./epic/toolset-routes.js";
+
+/** The fab epic_* action that wraps each recorded Fab tool, by its qualified registry name. */
+const ACTION_BY_TOOL: ReadonlyMap<string, string> = new Map(
+  Object.entries(fabEpicActions)
+    .map(([key, spec]) => [(spec as { epicTool?: { name?: string } }).epicTool?.name, key] as const)
+    .filter((e): e is readonly [string, string] => typeof e[0] === "string"),
+);
 
 /** Whether a toolset or tool name belongs to Fab, by the same rule the generator routes with. */
 export function isFabToolName(name: string): boolean {
@@ -73,8 +83,9 @@ export const listEpicFabTools: HandlerActionSpec = {
   effect: "read",
   description:
     "List Epic's built-in Fab tools the connected editor has, which search the Fab catalog and import listings "
-    + "(the Fab plugin's FabToolset in Unreal's Toolset Registry, UE 5.9, and any Fab tool registered with Epic's Unreal MCP plugin). "
-    + "Each tool names the call that runs it: epic(call_tool) with its qualified name, or epic(call_mcp_tool). "
+    + "(the Fab plugin's FabToolset.FabToolset in Unreal's Toolset Registry, UE 5.9, and any Fab tool registered with Epic's Unreal MCP plugin). "
+    + "Each tool names the call that runs it: epic(call_tool) with its toolset and qualified name, or epic(call_mcp_tool), "
+    + "plus the fab epic_* action that wraps it when this session has one. "
     + "ue-mcp does not replace these tools; use them for catalog search and free-asset import, and fab's own actions for the owned library. "
     + "includeSchemas returns each tool's input schema. available=false with a note when the editor has none. "
     + "Params: includeSchemas? (bool)",
@@ -87,6 +98,13 @@ export const listEpicFabTools: HandlerActionSpec = {
     // Neither call reached an editor: the caller has to hear why, not "no tools".
     if (registry.thrown && mcp.thrown) throw registry.thrown;
 
+    // A fab action is named only while this session still has it: nativeTools can withhold the epic_* ones.
+    const fabNow = ctx.getToolGraph?.().find((t) => t.name === "fab");
+    const actionFor = (tool: string): string | undefined => {
+      const key = ACTION_BY_TOOL.get(tool);
+      return key && (!ctx.getToolGraph || (fabNow && key in fabNow.actions)) ? key : undefined;
+    };
+
     const toolsets = records(registry.body?.toolsets)
       .filter((ts) => typeof ts.name === "string" && isFabToolName(ts.name))
       .map((ts) => ({
@@ -95,7 +113,15 @@ export const listEpicFabTools: HandlerActionSpec = {
         tools: (Array.isArray(ts.tools) ? ts.tools : [])
           .map(toolEntry)
           .filter((t): t is Body => t !== null)
-          .map((t) => ({ ...t, call: `epic(action="call_tool", args={tool: "${String(t.name)}", input: {...}})` })),
+          .map((t) => {
+            const action = actionFor(String(t.name));
+            return {
+              ...t,
+              // epic_call_tool requires the toolset beside the tool; a call without it is refused.
+              call: `epic(action="call_tool", args={toolset: "${String(ts.name)}", tool: "${String(t.name)}", input: {...}})`,
+              ...(action ? { action: `fab(action="${action}", args={...})` } : {}),
+            };
+          }),
       }));
     const mcpTools = records(mcp.body?.tools)
       .filter((t) => typeof t.name === "string" && isFabToolName(t.name))
