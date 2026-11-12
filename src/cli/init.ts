@@ -334,7 +334,7 @@ async function init(argv: string[]): Promise<number | void> {
     epicItems.push({
       label: "Start Epic's Unreal MCP server with the editor",
       checked: mcpServer.autoStart,
-      suffix: `${mcpServer.url}. It runs beside ue-mcp for this project, and ue-mcp's epic category already wraps the same toolsets. Unchecked writes bAutoStartServer=False to ${mcpServer.userIni}.`,
+      suffix: `${mcpServer.url}. It runs beside ue-mcp for this project and serves the same Toolset Registry, which ue-mcp extends rather than replaces. Unchecked writes bAutoStartServer=False to ${mcpServer.userIni}.`,
     });
   }
   const assistant = epic.unrealAssistant.available ? epic.unrealAssistant : null;

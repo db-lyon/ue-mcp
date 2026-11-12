@@ -468,7 +468,7 @@ export function blockedStartupReason(
     parts.push(
       "Verify the engine install in the Epic Games Launcher, or disable "
       + plugins.map((p) => `${p} for this project by adding {"Name": "${p}", "Enabled": false} to the Plugins array of ${uproject}`).join(", and ")
-      + ".",
+      + ". Verifying keeps the plugin and the editor tools it brings; disabling removes them for this project.",
     );
   }
   if (projectModules.length > 0 || engineOwned.length === 0) {

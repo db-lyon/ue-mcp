@@ -78,6 +78,17 @@ function categoryList(tools: readonly ToolDef[], epicActionCount: number): strin
   );
 }
 
+/**
+ * ue-mcp extends Unreal's own toolsets; it never stands in front of them. A
+ * toolset no recorded catalog has (the Fab plugin's, or a newer engine's) has
+ * no `epic_*` action, and an agent that only reads ue-mcp's actions would tell
+ * the user the editor cannot do what that toolset does.
+ */
+const BUILT_IN_TOOLS = `Unreal's own toolsets stay available beside ue-mcp's actions, including ones with no epic_* action here
+(a launcher plugin's, such as Fab's catalog search and import, or a newer engine's): epic(list_toolsets) lists every
+toolset the editor has and epic(call_tool) runs any of them; fab(list_epic_tools) lists Fab's. Check them before
+telling the user the editor cannot do something.`;
+
 const SPATIAL_GUIDANCE = `For spatial edits, resolve target + frame + viewpoint + operation + amount + constraints.
 Character left/right uses actor axes; screen left/right needs the camera viewpoint.
 Use nudge_component with dryRun=true to inspect or preview without changing the scene.
@@ -142,6 +153,9 @@ Every category tool lists one signature per action in its description.
 ${SIGNATURE_LEGEND}
 Categories:
 ${f.categories}.
+
+═══ UNREAL'S BUILT-IN TOOLS ═══
+${BUILT_IN_TOOLS}
 
 ═══ TIPS ═══
 • Start with level(action="get_outliner") or asset(action="list") to discover what's in the project.
@@ -214,6 +228,9 @@ Tool descriptions are trimmed in lean mode. Find the action you need with:
 ${SIGNATURE_LEGEND}
 Each category's "action" parameter is still an enum, so unknown actions are rejected with the closest names. Call describe/search first when you are unsure of the exact action name.
 
+═══ UNREAL'S BUILT-IN TOOLS ═══
+${BUILT_IN_TOOLS}
+
 ═══ SPATIAL EDITS ═══
 ${SPATIAL_GUIDANCE}
 
@@ -252,6 +269,10 @@ function microGuideText(f: SurfaceFacts): string {
 Every call also takes, in args or beside it: timeoutMs (how long to wait in ms, default 30s; a timeout never means the call did not happen, so read the state back before retrying), select and omit (result fields to keep or drop, as dotted paths).
 ${SIGNATURE_LEGEND}
 Start with: tools(action="call", category="project", method="get_status").
+
+═══ UNREAL'S BUILT-IN TOOLS ═══
+${BUILT_IN_TOOLS}
+In micro mode reach them through tools(action="call", category="epic", method="list_toolsets") and method="call_tool".
 
 ═══ SPATIAL EDITS ═══
 ${SPATIAL_GUIDANCE}
