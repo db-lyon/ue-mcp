@@ -4,6 +4,7 @@
 #include "Handlers/PIE/PIEFrameSampler.h"
 #include "Handlers/PIE/PIESequenceFormat.h"
 #include "Handlers/PIE/PIEMaxFPSPin.h"
+#include "Handlers/PIE/PIEUIPointer.h"
 #include "UObject/WeakObjectPtrTemplates.h"
 
 class UWorld;
@@ -94,6 +95,10 @@ namespace MCPPIE
 		float ThrTrackedDefault = 0.f;
 		TMap<FString, float> TrackedThresholds;
 		bool bEject = false;
+		// Block the user's own keyboard, mouse and gamepad from the PIE game
+		// while the replay runs, so only the recording drives the player.
+		// Ignored in monitor mode, where the user plays on purpose.
+		bool bLockInput = false;
 		float TimeScale = 1.0f;
 		// Opt-in stronger reproducibility (item X2): drive the engine at a fixed
 		// delta time (1/pin_fps) during replay instead of just capping FPS. Makes
@@ -189,6 +194,9 @@ namespace MCPPIE
 		void OnEndFrame();
 		FReplayerFinishResult FinaliseCurrent();
 		void ExecutePendingSteps(double ElapsedMs);
+		// ui_input steps run on their own cursor and clock (real time, so a
+		// paused game still plays its menu input).
+		void ExecutePendingUISteps(double UIElapsedMs);
 		void ApplyFPSPin(UWorld* PIEWorld, int32 Hz);
 		bool UpdateStartGate(UWorld* PIEWorld, double Now, FString& OutBlocker);
 
@@ -260,6 +268,13 @@ namespace MCPPIE
 		TArray<FCSVRow> ReplayRows;
 		int32 NextStepIndex = 0;
 		int32 ExecutedSteps = 0;
+		// ui_input playback (#1822).
+		FPIEUIPointerPlayer UIPlayer;
+		int32 NextUIStepIndex = 0;
+		int32 UIStepErrors = 0;
+		double AttachRealTime = 0.0;
+		double UIClockStartRealMs = 0.0;
+		double UIClockStartStepMs = 0.0;
 		FString StartedAt;
 
 		// Active hold lifecycles: maps "step <i> stop time ms" -> injection id.

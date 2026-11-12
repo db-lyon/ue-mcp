@@ -6,6 +6,7 @@
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "GameFramework/Actor.h"
+#include "GameFramework/PlayerController.h"
 #include "HAL/FileManager.h"
 #include "HAL/PlatformFileManager.h"
 #include "HAL/PlatformTime.h"
@@ -85,9 +86,12 @@ namespace MCPPIE
 		OnEndFrameHandle.Reset();
 		bEndFrameBound = false;
 		FPSPin.Restore();
+		StopUICapture();
+		UICapture.Reset();
 		State = ERecorderState::Idle;
 		bArmed = false;
 		TargetWorld.Reset();
+		TargetPlayerController.Reset();
 		ResolvedPIEInstance = INDEX_NONE;
 		bTargetResolved = false;
 		TargetResolveStartSeconds = 0.0;
@@ -149,6 +153,10 @@ namespace MCPPIE
 		if (!bArmed) return;
 		bArmed = false;
 		TargetWorld.Reset();
+		TargetPlayerController.Reset();
+		StopUICapture();
+		UICapture.Reset();
+		FirstRowRealTime = -1.0;
 		ResolvedPIEInstance = INDEX_NONE;
 		bTargetResolved = false;
 		TargetResolveStartSeconds = FPlatformTime::Seconds();
@@ -201,6 +209,16 @@ namespace MCPPIE
 		}
 	}
 
+	void FPIEInputRecorder::StopUICapture()
+	{
+		// Unregisters from Slate but keeps the samples, which the sequence
+		// is built from after the recording stops.
+		if (UICapture.IsValid())
+		{
+			FPIEUIPointerCapture::Stop(UICapture);
+		}
+	}
+
 	void FPIEInputRecorder::OnEndFrame()
 	{
 		if (State == ERecorderState::Idle) return;
@@ -221,6 +239,7 @@ namespace MCPPIE
 				return;
 			}
 			TargetWorld = Target.World;
+			TargetPlayerController = Target.PlayerController;
 			ResolvedPIEInstance = Target.PIEInstance;
 			bTargetResolved = true;
 			TargetResolveError.Reset();
@@ -246,6 +265,13 @@ namespace MCPPIE
 				CSVHeader = BuildCSVHeader(CSVHdr);
 				CSVBody.Reset();
 
+				if (Pending.bCaptureUIPointer)
+				{
+					UICapture = FPIEUIPointerCapture::Start(PIEWorld, TargetPlayerController.Get());
+					UE_LOG(LogMCPPIE, Log, TEXT("[PIE-REC] ui pointer capture %s"),
+						UICapture.IsValid() ? TEXT("on") : TEXT("unavailable (Slate not initialised)"));
+				}
+
 				State = ERecorderState::Recording;
 			}
 			return;
@@ -256,6 +282,10 @@ namespace MCPPIE
 			const double GameTime = PIEWorld->GetTimeSeconds();
 			const double Dt = PIEWorld->GetDeltaSeconds();
 			const uint64 FrameNum = static_cast<uint64>(Rows.Num());
+			if (FrameNum == 0)
+			{
+				FirstRowRealTime = PIEWorld->GetRealTimeSeconds();
+			}
 			FCSVRow Row = Sampler.SampleFrame(PIEWorld, FrameNum, GameTime, Dt);
 
 			// Lift mark:* edge events into the manifest markers list.
@@ -422,7 +452,15 @@ namespace MCPPIE
 			Out.Steps.Add(S);
 		}
 
-		Out.Steps.Sort([](const FStep& A, const FStep& B) { return A.DelayMs < B.DelayMs; });
+		// Cursor / UMG pointer events, on the real-time clock from the first row.
+		if (UICapture.IsValid() && FirstRowRealTime >= 0.0)
+		{
+			BuildUIPointerSteps(UICapture->GetSamples(), FirstRowRealTime, Out.Steps);
+		}
+
+		// Stable: a press and its release, or a move and the click after it,
+		// can land on the same millisecond and must keep their order.
+		Out.Steps.StableSort([](const FStep& A, const FStep& B) { return A.DelayMs < B.DelayMs; });
 	}
 
 	FRecorderFinishResult FPIEInputRecorder::FinaliseCurrent()
@@ -435,6 +473,7 @@ namespace MCPPIE
 		}
 		const bool bHadData = Rows.Num() > 0 && Sampler.IsAttached();
 		FPSPin.Restore();
+		StopUICapture();
 		R.Id = CurrentId;
 		R.RecordingDir = CurrentDir;
 
@@ -480,6 +519,9 @@ namespace MCPPIE
 			TrackedActorCache.Reset();
 			Markers.Reset();
 			TargetWorld.Reset();
+			TargetPlayerController.Reset();
+			UICapture.Reset();
+			FirstRowRealTime = -1.0;
 			ResolvedPIEInstance = INDEX_NONE;
 			bTargetResolved = false;
 			TargetResolveStartSeconds = 0.0;
@@ -505,6 +547,10 @@ namespace MCPPIE
 
 		FSequence Seq;
 		BuildSequenceSteps(Seq);
+		for (const FStep& Step : Seq.Steps)
+		{
+			if (Step.Type == EStepType::UIInput) ++R.UIPointerSteps;
+		}
 		if (!SaveSequence(SeqPath, Seq, WriteErr))
 		{
 			R.Error = WriteErr;
@@ -599,6 +645,9 @@ namespace MCPPIE
 		TrackedActorCache.Reset();
 		Markers.Reset();
 		TargetWorld.Reset();
+		TargetPlayerController.Reset();
+		UICapture.Reset();
+		FirstRowRealTime = -1.0;
 		ResolvedPIEInstance = INDEX_NONE;
 		bTargetResolved = false;
 		TargetResolveStartSeconds = 0.0;
@@ -623,6 +672,8 @@ namespace MCPPIE
 		S.LastError = LastError;
 		S.Warnings = Sampler.GetWarnings();
 		S.PIEInstance = ResolvedPIEInstance;
+		S.bCaptureUIPointer = State != ERecorderState::Idle && Pending.bCaptureUIPointer;
+		S.UIPointerEvents = UICapture.IsValid() ? UICapture->GetSamples().Num() : 0;
 		if (State == ERecorderState::WaitingForPawn)
 		{
 			S.WaitingFor = !bTargetResolved

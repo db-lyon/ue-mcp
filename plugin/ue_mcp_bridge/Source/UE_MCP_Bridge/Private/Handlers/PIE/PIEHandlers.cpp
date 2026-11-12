@@ -275,6 +275,7 @@ void FPIEHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("pie_instance"), EType::Integer, PieInstanceDoc).Min(0),
 		MCPParam::Optional(TEXT("rng_seed"), EType::Number, TEXT("Seed the stream RNG for reproducible runs")),
 		MCPParam::Optional(TEXT("run_gap_frames"), EType::Integer, TEXT("Idle frames that split input runs (default 6)")),
+		MCPParam::Optional(TEXT("capture_ui_pointer"), EType::Boolean, TEXT("Also record the mouse through Slate (cursor, UMG hover, click, drag, wheel) while the cursor is shown, as ui_input steps (default false)")),
 		MCPParam::Optional(TEXT("recording_dir"), EType::String, TEXT("Recordings root (default Saved/MCPRecordings)")),
 		MCPParam::Optional(TEXT("id"), EType::String, TEXT("Recording id (default: a timestamp)")),
 	}, MCPSpec::ContractExempt(TEXT("Arms the recorder, which starts on the next PIE session")));
@@ -319,6 +320,7 @@ void FPIEHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("record_drift"), EType::Boolean, TEXT("Record drift against the source (default true)")),
 		MCPParam::Optional(TEXT("auto_stop_pie"), EType::Boolean, TEXT("End PIE when the replay completes (replay_arm default false, replay_run default true)")),
 		MCPParam::Optional(TEXT("eject"), EType::Boolean, TEXT("Eject to a spectator camera during replay")),
+		MCPParam::Optional(TEXT("lock_input"), EType::Boolean, TEXT("Block the user's keyboard, mouse and gamepad from the PIE game while the replay runs, so only the recording drives the player; Esc, Shift+F1 and F8 still work, and monitor mode ignores it (default false)")),
 		MCPParam::Optional(TEXT("time_scale"), EType::Number, TEXT("Playback speed multiplier (default 1)")),
 		MCPParam::Optional(TEXT("mode"), EType::String, TEXT("replay drives input; monitor only samples (default replay)")).Enum({ TEXT("replay"), TEXT("monitor") }),
 		MCPParam::Optional(TEXT("capture_frame_every"), EType::Integer, TEXT("Capture a viewport JPEG every N steps and build a contact sheet")).Min(0),

@@ -71,6 +71,18 @@ static void UnregisterPIEStudioStyle()
 
 namespace
 {
+	// Studio's "Capture Cursor / UI" and "Lock Input During Replay" toggles (#1822). Editor-session only; off by default.
+	bool GStudioCaptureUIPointer = false;
+	bool GStudioLockInputOnReplay = false;
+
+	// Arm config for every PIE Studio record button, so they all honour the toggle.
+	MCPPIE::FRecorderArmConfig MakeStudioArmConfig()
+	{
+		MCPPIE::FRecorderArmConfig Cfg;
+		Cfg.bCaptureUIPointer = GStudioCaptureUIPointer;
+		return Cfg;
+	}
+
 	FString RecorderStateStr(MCPPIE::ERecorderState S)
 	{
 		switch (S)
@@ -159,7 +171,7 @@ void SMCPPIEStudioPanel::RegisterToolbarButton()
 					"Record",
 					FExecuteAction::CreateLambda([]()
 					{
-						MCPPIE::FRecorderArmConfig Cfg;
+						MCPPIE::FRecorderArmConfig Cfg = MakeStudioArmConfig();
 						FString Err, Msg;
 						MCPPIE::FPIEInputRecorder::Get().Arm(Cfg, Err, Msg);
 					}),
@@ -176,7 +188,7 @@ void SMCPPIEStudioPanel::RegisterToolbarButton()
 					"RecordPlay",
 					FExecuteAction::CreateLambda([]()
 					{
-						MCPPIE::FRecorderArmConfig Cfg;
+						MCPPIE::FRecorderArmConfig Cfg = MakeStudioArmConfig();
 						FString Err, Msg;
 						MCPPIE::FPIEInputRecorder::Get().Arm(Cfg, Err, Msg);
 						if (GEditor && !GEditor->PlayWorld)
@@ -206,7 +218,7 @@ void SMCPPIEStudioPanel::RegisterToolbarButton()
 							FSlateIcon(FAppStyle::GetAppStyleSetName(), "Icons.Recording"),
 							FUIAction(FExecuteAction::CreateLambda([]()
 							{
-								MCPPIE::FRecorderArmConfig Cfg;
+								MCPPIE::FRecorderArmConfig Cfg = MakeStudioArmConfig();
 								FString Err, Msg;
 								MCPPIE::FPIEInputRecorder::Get().Arm(Cfg, Err, Msg);
 								if (GEditor && !GEditor->PlayWorld)
@@ -222,10 +234,22 @@ void SMCPPIEStudioPanel::RegisterToolbarButton()
 							FSlateIcon(FAppStyle::GetAppStyleSetName(), "Icons.Recording"),
 							FUIAction(FExecuteAction::CreateLambda([]()
 							{
-								MCPPIE::FRecorderArmConfig Cfg;
+								MCPPIE::FRecorderArmConfig Cfg = MakeStudioArmConfig();
 								FString Err, Msg;
 								MCPPIE::FPIEInputRecorder::Get().Arm(Cfg, Err, Msg);
 							}))
+						);
+
+						Menu.AddMenuEntry(
+							FText::FromString(TEXT("Capture Cursor / UI")),
+							FText::FromString(TEXT("Also record the mouse cursor, UMG hover, clicks, drag and wheel while the cursor is shown (ui_input steps). Applies the next time the recorder is armed.")),
+							FSlateIcon(),
+							FUIAction(
+								FExecuteAction::CreateLambda([]() { GStudioCaptureUIPointer = !GStudioCaptureUIPointer; }),
+								FCanExecuteAction(),
+								FIsActionChecked::CreateLambda([]() { return GStudioCaptureUIPointer; })),
+							NAME_None,
+							EUserInterfaceActionType::ToggleButton
 						);
 
 						const auto RecState = MCPPIE::FPIEInputRecorder::Get().GetStatus().State;
@@ -351,7 +375,7 @@ TSharedRef<SWidget> SMCPPIEStudioPanel::BuildRecorderSection()
 				.Text(FText::FromString(TEXT("Record + Play")))
 				.OnClicked_Lambda([]()
 				{
-					MCPPIE::FRecorderArmConfig Cfg;
+					MCPPIE::FRecorderArmConfig Cfg = MakeStudioArmConfig();
 					FString Err, Msg;
 					MCPPIE::FPIEInputRecorder::Get().Arm(Cfg, Err, Msg);
 					if (GEditor && !GEditor->PlayWorld)
@@ -367,7 +391,7 @@ TSharedRef<SWidget> SMCPPIEStudioPanel::BuildRecorderSection()
 				.Text(FText::FromString(TEXT("Arm")))
 				.OnClicked_Lambda([]()
 				{
-					MCPPIE::FRecorderArmConfig Cfg;
+					MCPPIE::FRecorderArmConfig Cfg = MakeStudioArmConfig();
 					FString Err, Msg;
 					MCPPIE::FPIEInputRecorder::Get().Arm(Cfg, Err, Msg);
 					return FReply::Handled();
@@ -393,6 +417,16 @@ TSharedRef<SWidget> SMCPPIEStudioPanel::BuildRecorderSection()
 					MCPPIE::FPIEInputRecorder::Get().ForceStop();
 					return FReply::Handled();
 				})
+			]
+			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(8, 0, 0, 0)
+			[
+				SNew(SCheckBox)
+				.IsChecked_Lambda([]() { return GStudioLockInputOnReplay ? ECheckBoxState::Checked : ECheckBoxState::Unchecked; })
+				.OnCheckStateChanged_Lambda([](ECheckBoxState S) { GStudioLockInputOnReplay = (S == ECheckBoxState::Checked); })
+				.ToolTipText(FText::FromString(TEXT("While a Studio replay runs, your keyboard, mouse and gamepad stop reaching the game, so only the recording drives the player. Esc, Shift+F1 and F8 still work.")))
+				[
+					SNew(STextBlock).Text(FText::FromString(TEXT("Lock Input During Replay")))
+				]
 			]
 		];
 }
@@ -705,6 +739,7 @@ void SMCPPIEStudioPanel::RefreshRecordings()
 						MCPPIE::FReplayerArmConfig Cfg;
 						Cfg.SourceRecordingId = Id;
 						Cfg.CaptureFrameEvery = bCaptureGifOnReplay ? 2 : 0;
+						Cfg.bLockInput = GStudioLockInputOnReplay;
 						FString Err, Msg;
 						MCPPIE::FPIEInputReplayer::Get().Arm(Cfg, Err, Msg);
 						for (const FString& ProfilePath : ActiveProfilePaths)
