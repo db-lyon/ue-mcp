@@ -41,6 +41,7 @@
 #include "WorldPartition/WorldPartition.h"
 #include "WorldPartition/WorldPartitionActorDescInstance.h"
 #include "WorldPartition/WorldPartitionHelpers.h"
+#include "EditorActorFolders.h"
 #endif
 
 namespace
@@ -66,6 +67,8 @@ namespace
 		bool bActorIsEditorOnly = false;
 		FName ActorPackage;
 		FName ActorPath;
+		/** World Outliner folder, NAME_None at the root. Resolved against the world: see ResolveActorDescFolder. */
+		FName FolderPath;
 		TArray<FSoftObjectPath> DataLayerAssets;
 
 		explicit FMCPActorDescSnapshot(const FWorldPartitionActorDescInstance& Instance)
@@ -100,6 +103,131 @@ namespace
 			{
 				DataLayerAssets.Add(FSoftObjectPath(DataLayerAssetPath.ToString()));
 			}
+		}
+	};
+
+	/**
+	 * The World Outliner folder an actor descriptor sits in, placed the way the
+	 * Outliner places it. A resident actor answers for itself, which stays
+	 * current when a move to another folder is not saved yet and the descriptor
+	 * still holds the old one. An unloaded actor goes through
+	 * FActorFolders::GetActorDescInstanceFolder, the Outliner's own lookup: by
+	 * folder GUID when the level uses actor folder objects, so a renamed folder
+	 * resolves to its current path, otherwise the path the descriptor saved.
+	 */
+	FName ResolveActorDescFolder(UWorld& World, const FWorldPartitionActorDescInstance& Instance)
+	{
+		if (const AActor* Actor = Instance.GetActor(/*bEvenIfPendingKill*/ false))
+		{
+			return Actor->GetFolderPath();
+		}
+		return FActorFolders::GetActorDescInstanceFolder(World, &Instance).GetPath();
+	}
+
+	/**
+	 * The 'packages' filter: external actor package paths, each either a full
+	 * long package name (/Game/__ExternalActors__/Map/A/BC/DEFGHIJ...) matched
+	 * exactly, or a tail of one (A/BC/DEFGHIJ...) matched on whole path
+	 * segments. A .uasset extension or an object name after a dot is dropped and
+	 * backslashes read as slashes, so a file path from source control or an
+	 * object path can be passed as it is. Package names are case-insensitive.
+	 *
+	 * It records which requests some descriptor held, so the caller is told
+	 * which packages this World Partition does not hold at all (deleted, from
+	 * another map, or mistyped) instead of reading an empty result as "not
+	 * loaded".
+	 */
+	struct FMCPDescPackageFilter
+	{
+		/** One entry per distinct request, as the caller wrote it. */
+		TArray<FString> Requested;
+		/** Normalised and lower-cased, parallel to Requested. */
+		TArray<FString> Keys;
+		TArray<bool> Found;
+		TMap<FString, int32> ExactIndex;
+		TMap<FString, int32> TailIndex;
+
+		explicit FMCPDescPackageFilter(const TSharedPtr<FJsonObject>& Params)
+		{
+			const TArray<TSharedPtr<FJsonValue>>* Values = nullptr;
+			if (!Params.IsValid() || !TryGetArrayParam(Params, TEXT("packages"), Values) || !Values) return;
+			for (const TSharedPtr<FJsonValue>& Value : *Values)
+			{
+				FString Raw;
+				if (!Value.IsValid() || !Value->TryGetString(Raw)) continue;
+				const FString Key = Normalize(Raw);
+				if (Key.IsEmpty() || ExactIndex.Contains(Key) || TailIndex.Contains(Key)) continue;
+				const int32 Index = Keys.Add(Key);
+				Requested.Add(Raw.TrimStartAndEnd());
+				Found.Add(false);
+				(Key.StartsWith(TEXT("/")) ? ExactIndex : TailIndex).Add(Key, Index);
+			}
+		}
+
+		static FString Normalize(const FString& Raw)
+		{
+			FString Key = Raw.TrimStartAndEnd().Replace(TEXT("\\"), TEXT("/"));
+			while (Key.Len() > 1 && Key.EndsWith(TEXT("/")))
+			{
+				Key.LeftChopInline(1);
+			}
+			int32 LastSlash = INDEX_NONE;
+			Key.FindLastChar(TEXT('/'), LastSlash);
+			const int32 Dot = Key.Find(TEXT("."), ESearchCase::CaseSensitive, ESearchDir::FromStart, LastSlash + 1);
+			if (Dot != INDEX_NONE)
+			{
+				Key.LeftInline(Dot);
+			}
+			return Key.ToLower();
+		}
+
+		bool IsActive() const { return Keys.Num() > 0; }
+
+		/** True when Package is one of the requested ones; marks every request it satisfies. */
+		bool Matches(FName Package)
+		{
+			const FString Path = Package.ToString().ToLower();
+			bool bMatched = false;
+			if (const int32* Index = ExactIndex.Find(Path))
+			{
+				Found[*Index] = true;
+				bMatched = true;
+			}
+			if (TailIndex.Num() > 0)
+			{
+				// Each tail that starts after a separator, so a request only ever
+				// matches whole segments: "BC/DEF" matches ".../A/BC/DEF" and
+				// "C/DEF" does not.
+				for (int32 Char = 0; Char + 1 < Path.Len(); ++Char)
+				{
+					if (Path[Char] != TEXT('/')) continue;
+					if (const int32* Index = TailIndex.Find(Path.RightChop(Char + 1)))
+					{
+						Found[*Index] = true;
+						bMatched = true;
+					}
+				}
+			}
+			return bMatched;
+		}
+
+		/** The requests no descriptor held, in the order they were given. */
+		TArray<TSharedPtr<FJsonValue>> MissingJson() const
+		{
+			TArray<TSharedPtr<FJsonValue>> Missing;
+			for (int32 Index = 0; Index < Requested.Num(); ++Index)
+			{
+				if (!Found[Index]) Missing.Add(MakeShared<FJsonValueString>(Requested[Index]));
+			}
+			return Missing;
+		}
+
+		/** Sorted, so the same set given in another order is the same paged query. */
+		FString CollectionKey() const
+		{
+			TArray<FString> Sorted = Keys;
+			Sorted.Sort();
+			return FString::Join(Sorted, TEXT(","));
 		}
 	};
 
@@ -145,6 +273,7 @@ namespace
 		Obj->SetStringField(TEXT("classPath"), Desc.Class.ToString());
 		Obj->SetStringField(TEXT("actorPath"), Desc.ActorPath.ToString());
 		Obj->SetStringField(TEXT("package"), Desc.ActorPackage.ToString());
+		Obj->SetStringField(TEXT("folderPath"), Desc.FolderPath.IsNone() ? FString() : Desc.FolderPath.ToString());
 		Obj->SetStringField(TEXT("runtimeGrid"), Desc.RuntimeGrid.ToString());
 		Obj->SetBoolField(TEXT("spatiallyLoaded"), Desc.bIsSpatiallyLoaded);
 		Obj->SetBoolField(TEXT("editorOnly"), Desc.bActorIsEditorOnly);
@@ -189,10 +318,16 @@ namespace
 		return true;
 	}
 
-	/** Descriptors matching the caller's filters, honouring an explicit guid list. */
+	/**
+	 * Descriptors matching the caller's filters, honouring an explicit guid list.
+	 * PackageFilter is applied first, to every descriptor visited (all of them,
+	 * or those in 'bounds'), so what it records as found means "this World
+	 * Partition holds that package", whatever the other filters then keep.
+	 */
 	bool GatherMatchingDescs(
 		const TSharedPtr<FJsonObject>& Params,
 		UWorld* World,
+		FMCPDescPackageFilter& PackageFilter,
 		TArray<FMCPActorDescSnapshot>& OutMatches,
 		FString& OutError)
 	{
@@ -209,9 +344,17 @@ namespace
 		TArray<FMCPActorDescSnapshot> AllDescs;
 		FBox Box(ForceInit);
 		const bool bHasBounds = TryReadBounds(Params, Box);
-		auto Collect = [&AllDescs](const FWorldPartitionActorDescInstance* Instance) -> bool
+		// The instances, parallel to AllDescs, so the folder is resolved only for
+		// the descriptors that survive the filters. They stay valid for the call:
+		// nothing below loads, unloads or collects.
+		TArray<const FWorldPartitionActorDescInstance*> AllInstances;
+		auto Collect = [&AllDescs, &AllInstances](const FWorldPartitionActorDescInstance* Instance) -> bool
 		{
-			if (Instance) AllDescs.Emplace(*Instance);
+			if (Instance)
+			{
+				AllDescs.Emplace(*Instance);
+				AllInstances.Add(Instance);
+			}
 			return true;
 		};
 		if (bHasBounds)
@@ -245,8 +388,10 @@ namespace
 		const bool bUnloadedOnly = OptionalBool(Params, TEXT("unloadedOnly"), false);
 		const TSet<FGuid> LoadedGuids = CollectLoadedActorGuids(World);
 
-		for (const FMCPActorDescSnapshot& Desc : AllDescs)
+		for (int32 DescIndex = 0; DescIndex < AllDescs.Num(); ++DescIndex)
 		{
+			const FMCPActorDescSnapshot& Desc = AllDescs[DescIndex];
+			if (PackageFilter.IsActive() && !PackageFilter.Matches(Desc.ActorPackage)) continue;
 			if (WantedGuids.Num() > 0 && !WantedGuids.Contains(Desc.Guid.ToString().ToLower())) continue;
 			if (!ActorDescMatchesFilter(Desc, LowerFilter)) continue;
 			if (!ClassName.IsEmpty() && !ActorDescClassName(Desc).ToLower().Contains(ClassName)) continue;
@@ -255,7 +400,7 @@ namespace
 			if (bLoadedOnly && !bLoaded) continue;
 			if (bUnloadedOnly && bLoaded) continue;
 
-			OutMatches.Add(Desc);
+			OutMatches.Add_GetRef(Desc).FolderPath = ResolveActorDescFolder(*World, *AllInstances[DescIndex]);
 		}
 		return true;
 	}
@@ -296,11 +441,12 @@ namespace
 		}
 
 		return FString::Printf(
-			TEXT("%s|filter=%s|className=%s|guids=%s|bounds=%s|loadedOnly=%d|unloadedOnly=%d"),
+			TEXT("%s|filter=%s|className=%s|guids=%s|packages=%s|bounds=%s|loadedOnly=%d|unloadedOnly=%d"),
 			Method,
 			*OptionalString(Params, TEXT("filter")).ToLower(),
 			*OptionalString(Params, TEXT("className")).ToLower(),
 			*Guids,
+			*FMCPDescPackageFilter(Params).CollectionKey(),
 			*Bounds,
 			OptionalBool(Params, TEXT("loadedOnly"), false) ? 1 : 0,
 			OptionalBool(Params, TEXT("unloadedOnly"), false) ? 1 : 0);
@@ -321,8 +467,8 @@ namespace
 TSharedPtr<FJsonValue> FLevelHandlers::ListActorDescs(const TSharedPtr<FJsonObject>& Params)
 {
 	MCPReadParamsAhead(Params, {
-		TEXT("filter"), TEXT("className"), TEXT("guids"), TEXT("bounds"), TEXT("loadedOnly"), TEXT("unloadedOnly"),
-		TEXT("cursor"), TEXT("limit"),
+		TEXT("filter"), TEXT("className"), TEXT("guids"), TEXT("packages"), TEXT("bounds"), TEXT("loadedOnly"),
+		TEXT("unloadedOnly"), TEXT("cursor"), TEXT("limit"),
 	});
 
 #if UE_MCP_HAS_ACTOR_DESC_INSTANCE_API
@@ -342,9 +488,10 @@ TSharedPtr<FJsonValue> FLevelHandlers::ListActorDescs(const TSharedPtr<FJsonObje
 		return PageErr;
 	}
 
+	FMCPDescPackageFilter PackageFilter(Params);
 	TArray<FMCPActorDescSnapshot> Matches;
 	FString Error;
-	if (!GatherMatchingDescs(Params, World, Matches, Error))
+	if (!GatherMatchingDescs(Params, World, PackageFilter, Matches, Error))
 	{
 		return MCPError(Error);
 	}
@@ -380,6 +527,8 @@ TSharedPtr<FJsonValue> FLevelHandlers::ListActorDescs(const TSharedPtr<FJsonObje
 	Result->SetNumberField(TEXT("matched"), Matches.Num());
 	Result->SetNumberField(TEXT("loadedMatches"), LoadedCount);
 	Result->SetNumberField(TEXT("unloadedMatches"), Matches.Num() - LoadedCount);
+	// On every page: it describes the query, not the page.
+	if (PackageFilter.IsActive()) Result->SetArrayField(TEXT("missingPackages"), PackageFilter.MissingJson());
 	MCPPagination::EmitPage(Page, Rows, TEXT("actorDescs"), Result);
 	Result->SetNumberField(TEXT("returned"), Result->GetIntegerField(TEXT("count")));
 	return MCPResult(Result);
@@ -393,8 +542,8 @@ TSharedPtr<FJsonValue> FLevelHandlers::ListActorDescs(const TSharedPtr<FJsonObje
 TSharedPtr<FJsonValue> FLevelHandlers::LoadActorDescs(const TSharedPtr<FJsonObject>& Params)
 {
 	MCPReadParamsAhead(Params, {
-		TEXT("mode"), TEXT("filter"), TEXT("className"), TEXT("guids"), TEXT("bounds"), TEXT("loadedOnly"),
-		TEXT("unloadedOnly"), TEXT("maxActors"), TEXT("dryRun"),
+		TEXT("mode"), TEXT("filter"), TEXT("className"), TEXT("guids"), TEXT("packages"), TEXT("bounds"),
+		TEXT("loadedOnly"), TEXT("unloadedOnly"), TEXT("maxActors"), TEXT("dryRun"),
 	});
 
 #if UE_MCP_HAS_ACTOR_DESC_INSTANCE_API
@@ -419,9 +568,10 @@ TSharedPtr<FJsonValue> FLevelHandlers::LoadActorDescs(const TSharedPtr<FJsonObje
 		return MCPError(TEXT("The current editor world has no World Partition"));
 	}
 
+	FMCPDescPackageFilter PackageFilter(Params);
 	TArray<FMCPActorDescSnapshot> Matches;
 	FString Error;
-	if (!GatherMatchingDescs(Params, World, Matches, Error))
+	if (!GatherMatchingDescs(Params, World, PackageFilter, Matches, Error))
 	{
 		return MCPError(Error);
 	}
@@ -432,6 +582,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::LoadActorDescs(const TSharedPtr<FJsonObje
 		Empty->SetStringField(TEXT("mode"), Mode);
 		Empty->SetNumberField(TEXT("matched"), 0);
 		Empty->SetNumberField(TEXT("affected"), 0);
+		if (PackageFilter.IsActive()) Empty->SetArrayField(TEXT("missingPackages"), PackageFilter.MissingJson());
 		Empty->SetStringField(TEXT("note"), TEXT("No actor descriptor matched. Use list_actor_descs to see what the map contains."));
 		Empty->SetBoolField(TEXT("changed"), false);
 		Empty->SetBoolField(TEXT("unchanged"), true);
@@ -516,6 +667,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::LoadActorDescs(const TSharedPtr<FJsonObje
 	Result->SetNumberField(TEXT("affected"), bDryRun ? 0 : Changed);
 	Result->SetNumberField(TEXT("residentAfter"), ResidentAfter);
 	Result->SetArrayField(TEXT("actors"), Affected);
+	if (PackageFilter.IsActive()) Result->SetArrayField(TEXT("missingPackages"), PackageFilter.MissingJson());
 	Result->SetNumberField(TEXT("pinStateChanged"), FlippedGuids.Num());
 
 	const bool bChanged = FlippedGuids.Num() > 0;
