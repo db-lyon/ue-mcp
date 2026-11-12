@@ -78,6 +78,31 @@ export interface ElicitResult {
 }
 
 /**
+ * One block of an editor dialog's body, in reading order (#1891).
+ *
+ * The flat `message` is every text widget of the dialog on its own line,
+ * buttons and table cells included. `blocks` is the same body as it reads:
+ *
+ *   paragraph  text outside any table and any button; texts laid side by side
+ *              in the dialog are one paragraph.
+ *   table      a list or tree view: its visible column headings and one row of
+ *              cells per row. `checked` (when any row has a checkbox) holds each
+ *              row's state, null for a row without one, and `items` the index of
+ *              that row in the dialog's `items`, which respond_to_dialog takes.
+ *
+ * The dialog's title and its button labels are never part of it.
+ */
+export type DialogBlock =
+  | { type: "paragraph"; text: string }
+  | {
+      type: "table";
+      columns: string[];
+      rows: string[][];
+      checked?: Array<boolean | null>;
+      items?: Array<number | null>;
+    };
+
+/**
  * A blocking dialog put to a daemon extension, for a call that extension made.
  *
  * The same form an MCP client is elicited with (`message`, `requestedSchema`,
@@ -94,6 +119,8 @@ export interface DialogPromptRequest extends ElicitParams {
     buttons: string[];
     /** The rows a person can tick, for a dialog that asks per item. */
     items?: Array<{ index: number; label: string; cells: string[]; checked: boolean }>;
+    /** The body as paragraphs and tables, when the plugin reports it; `message` otherwise. */
+    blocks?: DialogBlock[];
     /** The `category.action` whose call met the dialog. */
     subject: string;
     /** An answer sooner than this many milliseconds is not taken as a person's. */

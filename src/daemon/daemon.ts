@@ -165,6 +165,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
         message: open.message,
         buttons: open.buttons,
         ...(open.items ? { items: open.items } : {}),
+        ...(open.blocks ? { blocks: open.blocks } : {}),
         mode: guard.mode,
       });
     }
