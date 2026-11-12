@@ -52,6 +52,7 @@
 #include "Widgets/Text/SRichTextBlock.h"
 #include "Widgets/Input/SButton.h"
 #include "Widgets/Input/SCheckBox.h"
+#include "Widgets/Views/SHeaderRow.h"
 
 // Static member definitions
 TArray<FDialogHandlers::FDialogPolicy> FDialogHandlers::Policies;
@@ -1554,6 +1555,250 @@ EMCPPromptKind FDialogHandlers::ClassifyWindow(const TSharedRef<SWindow>& Window
 	return EMCPPromptKind::Parented;
 }
 
+/**
+ * A dialog's body as a person reads it, not one line per text widget (#1891).
+ *
+ * The flat message lists every STextBlock in walk order, so the Save Content
+ * prompt came out as eleven lines in one column: the caption, the column
+ * headings, each cell of each row, and the labels of the buttons that are
+ * already reported as the dialog's choices. This walk keeps the same widgets
+ * and returns them in reading order as blocks:
+ *
+ *   paragraph  shown text outside any table and any button. Texts laid side by
+ *              side in one SHorizontalBox are one line ("Label: value").
+ *   table      an SListView or STreeView: the visible columns of its
+ *              SHeaderRow, one row per generated row widget with one cell per
+ *              column, and each row's checkbox state when it has one.
+ *
+ * Only what is shown is read: a collapsed warning box is not part of the
+ * question. A list view generates rows only for what is on screen, so a very
+ * long list reports the rows Slate has generated.
+ *
+ * Named namespace, for the unity build (see MCPDialogPolicy above).
+ */
+namespace MCPDialogStructure
+{
+	struct FBlock
+	{
+		bool bTable = false;
+		/** A paragraph's text. */
+		FString Text;
+		/** A table's visible column headings, in header order. */
+		TArray<FString> Columns;
+		TArray<TArray<FString>> Rows;
+		/** Per row: 1 ticked, 0 not ticked, -1 the row has no checkbox. */
+		TArray<int32> Checked;
+		/** Per row: the row's checkbox, to pair the row with its list_dialogs item. */
+		TArray<TSharedPtr<SCheckBox>> Boxes;
+	};
+
+	static bool IsShown(const TSharedRef<SWidget>& Widget)
+	{
+		return Widget->GetVisibility().IsVisible();
+	}
+
+	static bool IsTableView(const FName& Type)
+	{
+		const FString Name = Type.ToString();
+		return Name.StartsWith(TEXT("SListView")) || Name.StartsWith(TEXT("STreeView"));
+	}
+
+	static FString TextOf(const TSharedRef<SWidget>& Widget)
+	{
+		return StaticCastSharedRef<STextBlock>(Widget)->GetText().ToString().TrimStartAndEnd();
+	}
+
+	/** Every shown, non-empty text under a widget, depth first. */
+	static void GatherText(const TSharedRef<SWidget>& Widget, TArray<FString>& Out)
+	{
+		if (!IsShown(Widget)) return;
+		if (Widget->GetType() == TEXT("STextBlock"))
+		{
+			const FString Text = TextOf(Widget);
+			if (!Text.IsEmpty()) Out.Add(Text);
+		}
+		if (FChildren* Children = Widget->GetChildren())
+		{
+			for (int32 i = 0; i < Children->Num(); ++i)
+			{
+				GatherText(Children->GetChildAt(i), Out);
+			}
+		}
+	}
+
+	/** The first descendant of this type, depth first, the widget itself excluded. */
+	static TSharedPtr<SWidget> FindFirst(const TSharedRef<SWidget>& Widget, const FName& Type)
+	{
+		FChildren* Children = Widget->GetChildren();
+		if (!Children) return nullptr;
+		for (int32 i = 0; i < Children->Num(); ++i)
+		{
+			const TSharedRef<SWidget> Child = Children->GetChildAt(i);
+			if (Child->GetType() == Type) return Child;
+			if (TSharedPtr<SWidget> Found = FindFirst(Child, Type)) return Found;
+		}
+		return nullptr;
+	}
+
+	static FBlock ReadTable(const TSharedRef<SWidget>& View)
+	{
+		FBlock Table;
+		Table.bTable = true;
+
+		// The columns a row generates a cell for: SMultiColumnTableRow skips
+		// the rest (SHeaderRow::ShouldGeneratedColumn, restated because older
+		// engines do not export it).
+		if (TSharedPtr<SWidget> Header = FindFirst(View, TEXT("SHeaderRow")))
+		{
+			for (const SHeaderRow::FColumn& Column : StaticCastSharedPtr<SHeaderRow>(Header)->GetColumns())
+			{
+				if (Column.ShouldGenerateWidget.Get(true) && Column.bIsVisible)
+				{
+					Table.Columns.Add(Column.DefaultText.Get().ToString().TrimStartAndEnd());
+				}
+			}
+		}
+
+		const TSharedPtr<SWidget> Panel = FindFirst(View, TEXT("SListPanel"));
+		FChildren* RowWidgets = Panel.IsValid() ? Panel->GetChildren() : nullptr;
+		for (int32 r = 0; RowWidgets && r < RowWidgets->Num(); ++r)
+		{
+			const TSharedRef<SWidget> Row = RowWidgets->GetChildAt(r);
+			if (!IsShown(Row)) continue;
+
+			// A multi-column row lays its cells out as the slots of one
+			// SHorizontalBox, one per generated column. When the count agrees,
+			// each slot is a cell; otherwise the row's texts are its cells.
+			TArray<FString> Cells;
+			const TSharedPtr<SWidget> Box = FindFirst(Row, TEXT("SHorizontalBox"));
+			FChildren* Slots = Box.IsValid() ? Box->GetChildren() : nullptr;
+			if (Slots && Table.Columns.Num() > 0 && Slots->Num() == Table.Columns.Num())
+			{
+				for (int32 c = 0; c < Slots->Num(); ++c)
+				{
+					TArray<FString> Texts;
+					GatherText(Slots->GetChildAt(c), Texts);
+					Cells.Add(FString::Join(Texts, TEXT(" ")));
+				}
+			}
+			else
+			{
+				GatherText(Row, Cells);
+			}
+
+			const TSharedPtr<SWidget> Check = FindFirst(Row, TEXT("SCheckBox"));
+			const TSharedPtr<SCheckBox> CheckBox = Check.IsValid() ? StaticCastSharedPtr<SCheckBox>(Check) : nullptr;
+			Table.Rows.Add(MoveTemp(Cells));
+			Table.Checked.Add(CheckBox.IsValid() ? (CheckBox->IsChecked() ? 1 : 0) : -1);
+			Table.Boxes.Add(CheckBox);
+		}
+
+		// A column with no heading and nothing in any cell is the checkbox or
+		// icon column: its state is in Checked, and an empty column says nothing.
+		bool bAligned = Table.Columns.Num() > 0;
+		for (const TArray<FString>& Cells : Table.Rows)
+		{
+			bAligned &= Cells.Num() == Table.Columns.Num();
+		}
+		if (bAligned)
+		{
+			for (int32 c = Table.Columns.Num() - 1; c >= 0; --c)
+			{
+				bool bEmpty = Table.Columns[c].IsEmpty();
+				for (const TArray<FString>& Cells : Table.Rows)
+				{
+					bEmpty &= Cells[c].IsEmpty();
+				}
+				if (!bEmpty) continue;
+				Table.Columns.RemoveAt(c);
+				for (TArray<FString>& Cells : Table.Rows)
+				{
+					Cells.RemoveAt(c);
+				}
+			}
+		}
+		return Table;
+	}
+
+	struct FWalker
+	{
+		/** The window title and the button labels: neither is part of the body. */
+		TSet<FString> Excluded;
+		TArray<FBlock>& Out;
+		FString Line;
+		bool bInLine = false;
+
+		explicit FWalker(TArray<FBlock>& InOut) : Out(InOut) {}
+
+		void Flush()
+		{
+			Line.TrimStartAndEndInline();
+			if (!Line.IsEmpty() && !Excluded.Contains(Line))
+			{
+				FBlock Paragraph;
+				Paragraph.Text = Line;
+				Out.Add(MoveTemp(Paragraph));
+			}
+			Line.Reset();
+		}
+
+		void Walk(const TSharedRef<SWidget>& Widget)
+		{
+			if (!IsShown(Widget)) return;
+			const FName Type = Widget->GetType();
+			// A button's label is one of the dialog's choices, reported as such.
+			if (Type == TEXT("SButton")) return;
+			if (IsTableView(Type))
+			{
+				Flush();
+				Out.Add(ReadTable(Widget));
+				return;
+			}
+			if (Type == TEXT("STextBlock"))
+			{
+				const FString Text = TextOf(Widget);
+				if (!Text.IsEmpty())
+				{
+					if (!Line.IsEmpty()) Line += TEXT(" ");
+					Line += Text;
+					if (!bInLine) Flush();
+				}
+			}
+
+			const bool bStartsLine = !bInLine && Type == TEXT("SHorizontalBox");
+			if (bStartsLine)
+			{
+				Flush();
+				bInLine = true;
+			}
+			if (FChildren* Children = Widget->GetChildren())
+			{
+				for (int32 i = 0; i < Children->Num(); ++i)
+				{
+					Walk(Children->GetChildAt(i));
+				}
+			}
+			if (bStartsLine)
+			{
+				Flush();
+				bInLine = false;
+			}
+		}
+	};
+
+	static void Collect(const TSharedRef<SWidget>& Root, const FString& Title, const TArray<FString>& ButtonLabels, TArray<FBlock>& Out)
+	{
+		FWalker Walker(Out);
+		Walker.Excluded.Add(Title.TrimStartAndEnd());
+		for (const FString& Label : ButtonLabels)
+		{
+			Walker.Excluded.Add(Label.TrimStartAndEnd());
+		}
+		Walker.Walk(Root);
+		Walker.Flush();
+	}
+}
+
 TSharedPtr<SWindow> FDialogHandlers::CollectActiveModal(FString& OutTitle, FString& OutMessage, TArray<FModalButton>& OutButtons, TArray<FModalItem>* OutItems, EMCPPromptKind* OutKind)
 {
 	OutTitle.Empty();
@@ -1716,7 +1961,8 @@ TSharedPtr<FJsonValue> FDialogHandlers::ListDialogs(const TSharedPtr<FJsonObject
 	TArray<FModalButton> Buttons;
 	TArray<FModalItem> Items;
 	EMCPPromptKind Kind = EMCPPromptKind::NotAPrompt;
-	const bool bHasDialog = CollectActiveModal(Title, Message, Buttons, &Items, &Kind).IsValid();
+	const TSharedPtr<SWindow> Modal = CollectActiveModal(Title, Message, Buttons, &Items, &Kind);
+	const bool bHasDialog = Modal.IsValid();
 
 	// Every open modal and floating window, as the ids the window actions take,
 	// read here too because this is the call a refused client can still make.
@@ -1791,6 +2037,73 @@ TSharedPtr<FJsonValue> FDialogHandlers::ListDialogs(const TSharedPtr<FJsonObject
 			ItemsJsonArray.Add(MakeShared<FJsonValueObject>(ItemObj));
 		}
 		DialogObj->SetArrayField(TEXT("items"), ItemsJsonArray);
+
+		// The same body as `message`, structured (#1891): paragraphs and tables
+		// in reading order, with the title and the button labels left out.
+		// `message` stays as it was for a client that reads only that.
+		TArray<FString> ButtonLabels;
+		for (const FModalButton& Button : Buttons)
+		{
+			ButtonLabels.Add(Button.Label);
+		}
+		TArray<MCPDialogStructure::FBlock> Blocks;
+		MCPDialogStructure::Collect(Modal.ToSharedRef(), Title, ButtonLabels, Blocks);
+		TArray<TSharedPtr<FJsonValue>> BlocksJson;
+		for (const MCPDialogStructure::FBlock& Block : Blocks)
+		{
+			TSharedPtr<FJsonObject> BlockObj = MakeShared<FJsonObject>();
+			if (!Block.bTable)
+			{
+				BlockObj->SetStringField(TEXT("type"), TEXT("paragraph"));
+				BlockObj->SetStringField(TEXT("text"), Block.Text);
+				BlocksJson.Add(MakeShared<FJsonValueObject>(BlockObj));
+				continue;
+			}
+			BlockObj->SetStringField(TEXT("type"), TEXT("table"));
+			TArray<TSharedPtr<FJsonValue>> ColumnsJson;
+			for (const FString& Column : Block.Columns)
+			{
+				ColumnsJson.Add(MakeShared<FJsonValueString>(Column));
+			}
+			BlockObj->SetArrayField(TEXT("columns"), ColumnsJson);
+			TArray<TSharedPtr<FJsonValue>> RowsJson;
+			for (const TArray<FString>& Row : Block.Rows)
+			{
+				TArray<TSharedPtr<FJsonValue>> CellsJson;
+				for (const FString& Cell : Row)
+				{
+					CellsJson.Add(MakeShared<FJsonValueString>(Cell));
+				}
+				RowsJson.Add(MakeShared<FJsonValueArray>(CellsJson));
+			}
+			BlockObj->SetArrayField(TEXT("rows"), RowsJson);
+			// Per row, only when some row has a checkbox: its state, and the
+			// index of the matching entry in `items`, which is what
+			// respond_to_dialog's items parameter takes. null for a row
+			// without one.
+			if (Block.Checked.ContainsByPredicate([](int32 State) { return State >= 0; }))
+			{
+				TArray<TSharedPtr<FJsonValue>> CheckedJson;
+				TArray<TSharedPtr<FJsonValue>> RowItemsJson;
+				for (int32 r = 0; r < Block.Rows.Num(); ++r)
+				{
+					CheckedJson.Add(Block.Checked[r] < 0
+						? StaticCastSharedRef<FJsonValue>(MakeShared<FJsonValueNull>())
+						: StaticCastSharedRef<FJsonValue>(MakeShared<FJsonValueBoolean>(Block.Checked[r] == 1)));
+					const int32 ItemIndex = Block.Boxes[r].IsValid()
+						? Items.IndexOfByPredicate([&](const FModalItem& Item) { return Item.Box == Block.Boxes[r]; })
+						: INDEX_NONE;
+					RowItemsJson.Add(ItemIndex == INDEX_NONE
+						? StaticCastSharedRef<FJsonValue>(MakeShared<FJsonValueNull>())
+						: StaticCastSharedRef<FJsonValue>(MakeShared<FJsonValueNumber>(ItemIndex)));
+				}
+				BlockObj->SetArrayField(TEXT("checked"), CheckedJson);
+				BlockObj->SetArrayField(TEXT("items"), RowItemsJson);
+			}
+			BlocksJson.Add(MakeShared<FJsonValueObject>(BlockObj));
+		}
+		DialogObj->SetArrayField(TEXT("blocks"), BlocksJson);
+
 		DialogObj->SetArrayField(TEXT("buttons"), ButtonsJsonArray);
 		DialogObj->SetArrayField(TEXT("choices"), ChoicesJsonArray);
 		if (ChoicesJsonArray.Num() == 0)

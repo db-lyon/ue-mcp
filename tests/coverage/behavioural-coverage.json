@@ -13066,6 +13066,11 @@
         },
         {
           "suite": "live",
+          "file": "tests/live/dialog-structure.test.ts",
+          "test": "reports the caption as a paragraph and the package list as a table with its ticks"
+        },
+        {
+          "suite": "live",
           "file": "tests/live/perception-bt.test.ts",
           "test": "does not restart a tree that is already the running root"
         },
@@ -17595,6 +17600,11 @@
         },
         {
           "suite": "live",
+          "file": "tests/live/dialog-structure.test.ts",
+          "test": "reports the caption as a paragraph and the package list as a table with its ticks"
+        },
+        {
+          "suite": "live",
           "file": "tests/live/level-roots-and-templates.test.ts",
           "test": "names the mobility mismatch when a Static child meets a Movable parent"
         },
@@ -21665,6 +21675,11 @@
           "suite": "live",
           "file": "tests/live/dialog-gate.test.ts",
           "test": "refuses editor-bound calls, offline calls and other categories alike"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/dialog-structure.test.ts",
+          "test": "reports the caption as a paragraph and the package list as a table with its ticks"
         },
         {
           "suite": "live",
