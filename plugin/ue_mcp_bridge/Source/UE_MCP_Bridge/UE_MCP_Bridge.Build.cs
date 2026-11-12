@@ -35,6 +35,9 @@ public class UE_MCP_Bridge : ModuleRules
 				"AIModule",
 				"HTTP",
 				"BuildPatchServices",
+				// The local server UE.MCP.Fab.EndToEnd answers the Fab library,
+				// distribution and CDN requests from.
+				"HTTPServer",
 				// #889: authoring a BehaviorTree means driving UBehaviorTreeGraph
 				// and its node classes, then calling UpdateAsset to compile the
 				// graph into the runnable UBTCompositeNode tree. That orchestration
