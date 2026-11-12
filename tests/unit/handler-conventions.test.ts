@@ -104,7 +104,9 @@ const BASELINE = {
   // 190: editor(mrq_render) writes rendered frames, which nothing deletes, and
   // editor(mrq_cancel_render) stops a render that cannot be resumed; both say so
   // through MCPSetNoRollback.
-  mutationsWithoutRollback: 190,
+  // 191: level(unload_loaded_regions) destroys the actors a region held and releases a user region, so
+  // load_region would make a new region rather than put the old one back.
+  mutationsWithoutRollback: 191,
   // Zero, and held there by a flat assertion. Every mutation with no inverse
   // now says so in its own result body with the reason, which is the half a
   // caller can act on.

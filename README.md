@@ -8,9 +8,9 @@
 
 **Let an AI agent work inside your Unreal Editor.** Ask in plain English, and it builds levels, Blueprints, materials, VFX, landscapes and more in your open project.
 
-<img width="1354" height="586" alt="ue-mcp contains Epic's MCP and its 2,190 actions. Around it, ue-mcp adds 1,519 actions of its own, and dialog handling, retries and rollback, guardrails, spatial control, workflow automation, plugins, multi-editor control and auto-reported tool gaps. Supports UE 5.4 to 5.9." src="docs/assets/ue-mcp-overview.png" />
+<img width="1354" height="586" alt="ue-mcp contains Epic's MCP and its 2,190 actions. Around it, ue-mcp adds 1,522 actions of its own, and dialog handling, retries and rollback, guardrails, spatial control, workflow automation, plugins, multi-editor control and auto-reported tool gaps. Supports UE 5.4 to 5.9." src="docs/assets/ue-mcp-overview.png" />
 
-UE-MCP is a free, open-source [Model Context Protocol](https://modelcontextprotocol.io) server for Unreal Engine 5. It connects AI assistants like Claude, Cursor and Codex to the editor through <!-- count:actions -->3709+<!-- /count --> actions, including every one of Epic's native Unreal tools (UE 5.8 and later).
+UE-MCP is a free, open-source [Model Context Protocol](https://modelcontextprotocol.io) server for Unreal Engine 5. It connects AI assistants like Claude, Cursor and Codex to the editor through <!-- count:actions -->3712+<!-- /count --> actions, including every one of Epic's native Unreal tools (UE 5.8 and later).
 
 ```
 "Place a point light 300 units above the player start, warm white, intensity 5000."
@@ -73,7 +73,7 @@ Partly. Config, C++ headers and asset listings can be read with the editor close
 
 **How is this different from Epic's built-in AI tools?**
 
-UE-MCP wraps all <!-- count:nativeToolActions -->2190<!-- /count --> of Epic's native Unreal tools and adds <!-- count:ownActions -->1519+<!-- /count --> actions of its own, plus flows, guards and plugins. See the [comparison](https://ue-mcp.com/compare) against Epic and other Unreal MCP servers.
+UE-MCP wraps all <!-- count:nativeToolActions -->2190<!-- /count --> of Epic's native Unreal tools and adds <!-- count:ownActions -->1522+<!-- /count --> actions of its own, plus flows, guards and plugins. See the [comparison](https://ue-mcp.com/compare) against Epic and other Unreal MCP servers.
 
 **It won't connect / something isn't working.**
 
