@@ -4,10 +4,12 @@
 #include "Handlers/PIE/PIEFrameSampler.h"
 #include "Handlers/PIE/PIESequenceFormat.h"
 #include "Handlers/PIE/PIEMaxFPSPin.h"
+#include "Handlers/PIE/PIEUIPointer.h"
 #include "UObject/WeakObjectPtrTemplates.h"
 
 class UWorld;
 class AActor;
+class APlayerController;
 
 /**
  * PIE input recorder: opt-in arm-then-record. Module-owned singleton, hooked
@@ -65,6 +67,11 @@ namespace MCPPIE
 		int64 RngSeed = 0;                // 0 = auto-generate
 		bool bUserSuppliedSeed = false;
 		int32 RunGapFrames = 6;           // sequence run-extraction gap tolerance
+		// Also record the mouse at the Slate layer (cursor moves, UMG hover,
+		// clicks, drag-and-drop, wheel) as ui_input steps while the player
+		// shows its cursor (#1822). Off by default: a click that is also
+		// bound to an Enhanced Input action would replay twice.
+		bool bCaptureUIPointer = false;
 	};
 
 	struct FRecorderStatus
@@ -83,6 +90,8 @@ namespace MCPPIE
 		FString WaitingFor;
 		int32 PIEInstance = INDEX_NONE;
 		bool bPIEActive = false;
+		bool bCaptureUIPointer = false;
+		int32 UIPointerEvents = 0;
 	};
 
 	struct FRecorderFinishResult
@@ -101,6 +110,8 @@ namespace MCPPIE
 		bool bTakeRecordAttempted = false;
 		FString TakeRecorderStatus;
 		TArray<FString> Warnings;
+		// ui_input steps written to sequence.json (0 when not captured).
+		int32 UIPointerSteps = 0;
 	};
 
 	class FPIEInputRecorder
@@ -138,6 +149,7 @@ namespace MCPPIE
 
 		FRecorderFinishResult FinaliseCurrent();
 		void ApplyFPSPin(UWorld* PIEWorld);
+		void StopUICapture();
 
 		// Run-extraction encoder: builds sequence.json steps from the row buffer.
 		void BuildSequenceSteps(FSequence& OutSequence) const;
@@ -148,6 +160,10 @@ namespace MCPPIE
 		FPIEFrameSampler Sampler;
 		FPIEMaxFPSPin FPSPin;
 		TWeakObjectPtr<UWorld> TargetWorld;
+		TWeakObjectPtr<APlayerController> TargetPlayerController;
+		TSharedPtr<FPIEUIPointerCapture> UICapture;
+		// Real time of the first row, the zero point of ui_input delays.
+		double FirstRowRealTime = -1.0;
 		int32 ResolvedPIEInstance = INDEX_NONE;
 		bool bTargetResolved = false;
 		double TargetResolveStartSeconds = 0.0;

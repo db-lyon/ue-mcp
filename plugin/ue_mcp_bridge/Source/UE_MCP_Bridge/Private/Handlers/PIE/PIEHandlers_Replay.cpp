@@ -167,6 +167,7 @@ namespace
 		Cfg.bEncodeGif    = OptionalBool(Params, TEXT("encode_gif"), false);
 		Cfg.bFixedTimestep = OptionalBool(Params, TEXT("fixed_timestep"), false);
 		Cfg.bEject        = OptionalBool(Params, TEXT("eject"), false);
+		Cfg.bLockInput    = OptionalBool(Params, TEXT("lock_input"), false);
 		Cfg.TimeScale     = static_cast<float>(OptionalNumber(Params, TEXT("time_scale"), 1.0));
 		const FString Mode = OptionalString(Params, TEXT("mode"), TEXT("replay")).ToLower();
 		Cfg.bMonitor = (Mode == TEXT("monitor"));

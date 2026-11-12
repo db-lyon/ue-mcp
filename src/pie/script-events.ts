@@ -23,9 +23,12 @@ export type ScriptVerdictSource = "auto" | "action" | "elicitation" | "agent" | 
 
 export interface ScriptExpect {
   value: string;
-  op: "decreasing" | "increasing" | "eq" | "gt" | "lt" | "visible" | "exists";
+  op: "decreasing" | "increasing" | "eq" | "gt" | "lt" | "visible" | "exists" | "triggered";
   target?: number | boolean;
+  /** triggered: 0 or absent waits with no timeout. */
   within_ms?: number;
+  /** triggered only: the player whose input is watched, 0 the editor's own player, 1..N a remote player. */
+  client?: number;
 }
 
 export interface ScriptStep {
