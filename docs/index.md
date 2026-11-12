@@ -1,6 +1,6 @@
 # UE-MCP
 
-**Unreal Engine Model Context Protocol Server.** It lets AI assistants drive the Unreal Editor through <!-- count:tools -->30<!-- /count --> category tools covering <!-- count:actions -->2116+<!-- /count --> actions.
+**Unreal Engine Model Context Protocol Server.** It lets AI assistants drive the Unreal Editor through <!-- count:tools -->31<!-- /count --> category tools covering <!-- count:actions -->3706+<!-- /count --> actions.
 
 An MCP client (Claude Code, Claude Desktop, Cursor and others) launches `ue-mcp` for your project. By default that process relays to the project's daemon, a background Node.js process that holds the WebSocket connection to the C++ bridge plugin inside the editor. The daemon outlives editor restarts, serves every MCP client of the project, and serves UE-MCP Studio, the in-editor agent.
 
@@ -45,8 +45,8 @@ Start with **[Getting Started](getting-started.md)**. It assumes no Node.js, MCP
 | `chooser` | ChooserTable columns and rows |
 | `dataflow` | Dataflow graph nodes, pins, variables, templates (UE 5.8+) |
 | `conversation` | Dialogue graph nodes, speakers, entry points (UE 5.8+) |
-| `epic` | The UE 5.8 AI Toolset Registry: discovery and direct calls |
-| `fab` | Fab login, owned-library sync and import |
+| `epic` | The AI Toolset Registry (UE 5.8+): discovery and direct calls |
+| `fab` | Fab login, owned-library sync, import, and opening the fab.com search page at a query |
 | `datasmith` | Inspect, import and reimport Datasmith scenes |
 | `metahuman` | Create, dress and assemble MetaHuman characters |
 | `source_control` | Status, checkout, add, revert, sync, diff and submit through the editor's provider |
@@ -63,7 +63,7 @@ A **plugin system** lets npm packages add actions to the existing categories, so
 - **[Getting Started](getting-started.md)**: zero-to-running walkthrough
 - **[Studio](studio.md)**: the in-editor agent, from install to uninstall
 - **[Architecture](architecture.md)**: the daemon, the server, the bridge plugin and how they connect
-- **[Tool Reference](tool-reference.md)**: all <!-- count:tools -->30<!-- /count --> tools with every action and its parameters
+- **[Tool Reference](tool-reference.md)**: all <!-- count:tools -->31<!-- /count --> tools with every action and its parameters
 - **[Control Rig Animation](control-rig-animation.md)**: rig discovery, solving, keys, baking and verification
 - **[Spatial Instructions](spatial-instructions.md)**: how spatial edits are resolved and verified
 - **[Collection and Input Editing](collection-and-input-editing.md)**: nested collection fields and input mappings
@@ -75,6 +75,7 @@ A **plugin system** lets npm packages add actions to the existing categories, so
 - **[PIE testing](pie.md)**: recording, replay and test scripts
 - **[Flows](flows.md)**: YAML workflows, custom tasks, hooks, rollback
 - **[Checkpoints](checkpoints.md)**: keep or revert changes per checkpoint
+- **[Mutation journal](journal.md)**: revert a group of calls, or every group after one
 - **[Plugins](plugins.md)**: npm packages that add actions to existing categories
 - **[Configuration](configuration.md)**: MCP client setup, the daemon and settings
 - **[ue-mcp.yml Reference](config-file.md)**: every key in the project config file

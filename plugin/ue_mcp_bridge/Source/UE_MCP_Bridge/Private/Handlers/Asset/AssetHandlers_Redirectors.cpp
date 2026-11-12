@@ -119,6 +119,9 @@ TSharedPtr<FJsonValue> FAssetHandlers::FixupRedirectors(const TSharedPtr<FJsonOb
 	const bool bDryRun = OptionalBool(Params, TEXT("dryRun"), false);
 	const bool bSave = OptionalBool(Params, TEXT("save"), true);
 	const bool bAllowProjectWide = OptionalBool(Params, TEXT("allowProjectWide"), false);
+	// #1828: UEditorAssetSubsystem::FixupRedirectors's bDeleteRedirectors. False repoints
+	// and saves the referencers and keeps every redirector stub.
+	const bool bDeleteRedirectors = OptionalBool(Params, TEXT("deleteRedirectors"), true);
 	if (!bHasPaths || !PathsField)
 	{
 		return MCPError(TEXT("Missing 'paths' array: the redirector packages, or the folders holding them, to fix up."));
@@ -265,6 +268,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::FixupRedirectors(const TSharedPtr<FJsonOb
 	auto Result = MCPSuccess();
 	Result->SetBoolField(TEXT("dryRun"), bDryRun);
 	Result->SetBoolField(TEXT("allowProjectWide"), bAllowProjectWide);
+	Result->SetBoolField(TEXT("deleteRedirectors"), bDeleteRedirectors);
 	Result->SetNumberField(TEXT("redirectorCount"), Plans.Num());
 	Result->SetArrayField(TEXT("redirectors"), PlanJson);
 	Result->SetArrayField(TEXT("packagesToLoad"), MCPStringListToJson(PackagesToLoad));
@@ -454,6 +458,13 @@ TSharedPtr<FJsonValue> FAssetHandlers::FixupRedirectors(const TSharedPtr<FJsonOb
 		if (Plan.AllReferencers().Num() > 0)
 		{
 			++FixedCount;
+		}
+		if (!bDeleteRedirectors)
+		{
+			Entry->SetStringField(TEXT("status"), TEXT("kept"));
+			Entry->SetStringField(TEXT("reason"), TEXT("deleteRedirectors=false: nothing references it any more, and it was left in place as asked"));
+			RedirectorStatuses.Add(MakeShared<FJsonValueObject>(Entry));
+			continue;
 		}
 
 		if (UObject* Redirector = MCPLoadAssetObject(Plan.ObjectPath))

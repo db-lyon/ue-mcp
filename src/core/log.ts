@@ -5,7 +5,7 @@
  * line is prefixed with `[ue-mcp]` so it can be filtered in agent transcripts.
  *
  * Levels are filtered by UE_MCP_LOG_LEVEL (debug | info | warn | error).
- * Default is info.
+ * Default is info; a process can lower its own default with setDefaultLogLevel.
  */
 import { readEnv } from "./env.js";
 
@@ -13,8 +13,15 @@ type Level = "debug" | "info" | "warn" | "error";
 
 const LEVELS: Record<Level, number> = { debug: 10, info: 20, warn: 30, error: 40 };
 
+let defaultLevel: Level = "info";
+
+/** The level used when UE_MCP_LOG_LEVEL is unset. A terminal command wants warnings only. */
+export function setDefaultLogLevel(level: Level): void {
+  defaultLevel = level;
+}
+
 function threshold(): number {
-  const envLevel = (readEnv("logLevel") ?? "info").toLowerCase();
+  const envLevel = (readEnv("logLevel") ?? defaultLevel).toLowerCase();
   return LEVELS[envLevel as Level] ?? LEVELS.info;
 }
 

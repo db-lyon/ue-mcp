@@ -31,7 +31,7 @@ async function pieRunning(): Promise<boolean> {
 
 beforeAll(async () => {
   bridge = await getBridge();
-  await callBridge(bridge, "demo_go_home", {});
+  await callBridge(bridge, "demo_go_home", { discardUnsaved: true });
   await callBridge(bridge, "pie_control", { pieAction: "start" });
   for (let i = 0; i < 30 && !playing; i++) {
     playing = await pieRunning();

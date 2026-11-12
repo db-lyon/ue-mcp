@@ -23,6 +23,7 @@
 //     for "Movable" silently matched nothing. Both are computed here.
 
 #include "LevelHandlers.h"
+#include "LevelTrace.h"
 
 #include "HandlerRegistry.h"
 #include "HandlerQuery.h"
@@ -31,6 +32,7 @@
 
 #include "Components/ActorComponent.h"
 #include "Components/BoxComponent.h"
+#include "Components/ChildActorComponent.h"
 #include "Components/DecalComponent.h"
 #include "Components/HierarchicalInstancedStaticMeshComponent.h"
 #include "Components/InstancedStaticMeshComponent.h"
@@ -227,6 +229,8 @@ namespace
 	{
 		FString WorldScope;
 		FString LevelPath;
+		bool bIncludeCollision = false;
+		int32 CollisionChannel = INDEX_NONE;
 		bool bMatchSubclasses = true;
 		FString ComponentNameContains;
 		FString ActorLabelPrefix;
@@ -234,6 +238,7 @@ namespace
 		FString ActorTag;
 		FString FolderPath;
 		FString FolderPathPrefix;
+		bool bIncludeChildActors = false;
 		FString WhereMode;
 		bool bCountOnly = false;
 		FString GroupBy;
@@ -273,6 +278,16 @@ namespace
 	 *  the refusal, or nullptr with OutRequest filled in. */
 	TSharedPtr<FJsonValue> MCPQueryParseRequest(const TSharedPtr<FJsonObject>& Params, FMCPQueryRequest& OutRequest)
 	{
+		OutRequest.bIncludeCollision = OptionalBool(Params, TEXT("includeCollision"), false);
+		const FString CollisionName = OptionalString(Params, TEXT("collisionChannel"));
+		if (!CollisionName.IsEmpty())
+		{
+			ECollisionChannel Channel;
+			FString Resolved;
+			if (!MCPResolveCollisionChannel(CollisionName, Channel, Resolved))
+				return MCPError(FString::Printf(TEXT("Unknown collision channel '%s'"), *CollisionName));
+			OutRequest.CollisionChannel = Channel;
+		}
 		const FString WorldScope = OptionalString(Params, TEXT("world"), TEXT("editor"));
 		const FString LevelPath = OptionalString(Params, TEXT("levelPath"));
 
@@ -285,6 +300,7 @@ namespace
 		const FString ActorTag = OptionalString(Params, TEXT("actorTag"));
 		const FString FolderPath = OptionalString(Params, TEXT("folderPath"));
 		const FString FolderPathPrefix = OptionalString(Params, TEXT("folderPathPrefix"));
+		const bool bIncludeChildActors = OptionalBool(Params, TEXT("includeChildActors"), false);
 
 		const FString WhereMode = OptionalString(Params, TEXT("whereMode"), TEXT("all")).ToLower();
 		if (WhereMode != TEXT("all") && WhereMode != TEXT("any"))
@@ -409,13 +425,29 @@ namespace
 		// A predicate on `shadow.effectiveCastShadow` with `shadow` left out of
 		// `fields` would resolve to an absent field and match nothing, and a
 		// confident zero is the worst answer this action can give. So a path that
-		// names a field group turns that group on.
+		// names a field group turns that group on. props.X and actorProps.X
+		// likewise project X, so filtering on a property needs no second list.
 		{
-			auto EnableGroupNamedBy = [&Fields](const FString& Path)
+			auto EnableGroupNamedBy = [&Fields, &ProjectedProperties, &ProjectedActorProperties](const FString& Path)
 			{
 				FString Head;
 				FString Tail;
-				MCPQueryApplyFieldName(Path.Split(TEXT("."), &Head, &Tail) ? Head : Path, Fields);
+				if (!Path.Split(TEXT("."), &Head, &Tail))
+				{
+					MCPQueryApplyFieldName(Path, Fields);
+					return;
+				}
+				if (Head == TEXT("props"))
+				{
+					ProjectedProperties.AddUnique(Tail);
+					return;
+				}
+				if (Head == TEXT("actorProps"))
+				{
+					ProjectedActorProperties.AddUnique(Tail);
+					return;
+				}
+				MCPQueryApplyFieldName(Head, Fields);
 			};
 			for (const MCPQuery::FPredicate& Predicate : Predicates) EnableGroupNamedBy(Predicate.Field);
 			for (const FString& CountPath : CountByPaths) EnableGroupNamedBy(CountPath);
@@ -456,6 +488,7 @@ namespace
 		OutRequest.ActorTag = ActorTag;
 		OutRequest.FolderPath = FolderPath;
 		OutRequest.FolderPathPrefix = FolderPathPrefix;
+		OutRequest.bIncludeChildActors = bIncludeChildActors;
 		OutRequest.WhereMode = WhereMode;
 		OutRequest.bCountOnly = bCountOnly;
 		OutRequest.GroupBy = GroupBy;
@@ -550,6 +583,22 @@ namespace
 		Row->SetStringField(TEXT("folderPath"), ActorFolder);
 		Row->SetStringField(TEXT("componentName"), ComponentName);
 		Row->SetStringField(TEXT("componentClass"), Component->GetClass()->GetName());
+		if (Request.bIncludeCollision) MCPTrace::EmitCollision(Row, Primitive, Request.CollisionChannel);
+
+		// #1656: a child actor has no label of its own worth filtering on, so
+		// its row names the actor and ChildActorComponent that spawned it.
+		if (Actor->IsChildActor())
+		{
+			if (const UChildActorComponent* ParentComponent = Actor->GetParentComponent())
+			{
+				Row->SetStringField(TEXT("childActorComponent"), ParentComponent->GetName());
+			}
+			if (const AActor* ParentActor = Actor->GetParentActor())
+			{
+				Row->SetStringField(TEXT("parentActorLabel"), ParentActor->GetActorLabel());
+				Row->SetStringField(TEXT("parentActorPath"), ParentActor->GetPathName());
+			}
+		}
 
 		FVector WorldScale = FVector::OneVector;
 		bool bHasTransform = false;
@@ -816,6 +865,9 @@ namespace
 			TickObject->SetBoolField(TEXT("componentCanEverTick"), Component->PrimaryComponentTick.bCanEverTick);
 			TickObject->SetBoolField(TEXT("componentTickEnabled"), Component->PrimaryComponentTick.IsTickFunctionEnabled());
 			TickObject->SetNumberField(TEXT("componentTickInterval"), Component->PrimaryComponentTick.TickInterval);
+			// bIsActive is transient, so no property read reaches it (#1656).
+			TickObject->SetBoolField(TEXT("componentActive"), Component->IsActive());
+			TickObject->SetBoolField(TEXT("autoActivate"), Component->bAutoActivate);
 			TickObject->SetBoolField(TEXT("actorCanEverTick"), Actor->PrimaryActorTick.bCanEverTick);
 			TickObject->SetBoolField(TEXT("actorTickEnabled"), Actor->PrimaryActorTick.IsTickFunctionEnabled());
 			TickObject->SetNumberField(TEXT("actorTickInterval"), Actor->PrimaryActorTick.TickInterval);
@@ -975,38 +1027,56 @@ namespace
 		}
 
 		// ── Requested UPROPERTY projection ──────────────────────────────
-		if (ProjectedProperties.Num() > 0)
+		// Both projections take dotted paths into structs and array elements
+		// (AttachEndTo.ComponentProperty, Items[2].Mesh). A name that resolves
+		// to nothing is listed with its reason rather than dropped, because an
+		// absent key otherwise reads like an unset value (#1530).
+		auto Project = [](UObject* Root, const TArray<FString>& Names,
+			TSharedPtr<FJsonObject>& OutValues, TSharedPtr<FJsonObject>& OutMissing)
 		{
-			TSharedPtr<FJsonObject> PropsObject = MakeShared<FJsonObject>();
-			for (const FString& PropertyName : ProjectedProperties)
-			{
-				FProperty* Property = Component->GetClass()->FindPropertyByName(FName(*PropertyName));
-				if (!Property)
-				{
-					continue;
-				}
-				PropsObject->SetField(PropertyName,
-					MCPQuery::PropertyToJson(Property, Property->ContainerPtrToValuePtr<void>(Component)));
-			}
-			Row->SetObjectField(TEXT("props"), PropsObject);
-		}
-
-		// ── #1303: owning actor projection, Blueprint variables included ─
-		if (Request.ProjectedActorProperties.Num() > 0)
-		{
-			TSharedPtr<FJsonObject> ActorPropsObject = MakeShared<FJsonObject>();
-			for (const FString& PropertyName : Request.ProjectedActorProperties)
+			OutValues = MakeShared<FJsonObject>();
+			for (const FString& PropertyName : Names)
 			{
 				FProperty* Property = nullptr;
 				void* ValueAddr = nullptr;
 				UObject* LeafOwner = nullptr;
 				FString PathError;
-				if (MCPJsonProperty::ResolveDottedPath(Actor, PropertyName, Property, ValueAddr, LeafOwner, PathError))
+				if (MCPJsonProperty::ResolveDottedPath(Root, PropertyName, Property, ValueAddr, LeafOwner, PathError))
 				{
-					ActorPropsObject->SetField(PropertyName, MCPQuery::PropertyToJson(Property, ValueAddr));
+					OutValues->SetField(PropertyName, MCPQuery::PropertyToJson(Property, ValueAddr));
+					continue;
 				}
+				if (!OutMissing.IsValid())
+				{
+					OutMissing = MakeShared<FJsonObject>();
+				}
+				OutMissing->SetStringField(PropertyName, PathError);
 			}
+		};
+
+		if (ProjectedProperties.Num() > 0)
+		{
+			TSharedPtr<FJsonObject> PropsObject;
+			TSharedPtr<FJsonObject> MissingObject;
+			Project(Component, ProjectedProperties, PropsObject, MissingObject);
+			Row->SetObjectField(TEXT("props"), PropsObject);
+			if (MissingObject.IsValid())
+			{
+				Row->SetObjectField(TEXT("missingProps"), MissingObject);
+			}
+		}
+
+		// ── #1303: owning actor projection, Blueprint variables included ─
+		if (Request.ProjectedActorProperties.Num() > 0)
+		{
+			TSharedPtr<FJsonObject> ActorPropsObject;
+			TSharedPtr<FJsonObject> MissingObject;
+			Project(Actor, Request.ProjectedActorProperties, ActorPropsObject, MissingObject);
 			Row->SetObjectField(TEXT("actorProps"), ActorPropsObject);
+			if (MissingObject.IsValid())
+			{
+				Row->SetObjectField(TEXT("missingActorProps"), MissingObject);
+			}
 		}
 
 		bOutHasTransform = bHasTransform;
@@ -1141,14 +1211,26 @@ namespace
 				continue;
 			}
 
+			// #1656: with includeChildActors, a child actor is selected by the
+			// top-level actor that owns it, since its own label is generated.
+			AActor* SelectorActor = Actor;
+			if (Request.bIncludeChildActors)
+			{
+				while (AActor* ParentActor = SelectorActor->GetParentActor())
+				{
+					SelectorActor = ParentActor;
+				}
+			}
+
 			const FString ActorLabel = Actor->GetActorLabel();
-			if (!ActorLabelPrefix.IsEmpty() && !ActorLabel.StartsWith(ActorLabelPrefix, ESearchCase::CaseSensitive)) continue;
-			if (!ActorLabelContains.IsEmpty() && !ActorLabel.Contains(ActorLabelContains, ESearchCase::IgnoreCase)) continue;
-			if (!ActorTag.IsEmpty() && !Actor->ActorHasTag(FName(*ActorTag))) continue;
+			const FString SelectorLabel = SelectorActor == Actor ? ActorLabel : SelectorActor->GetActorLabel();
+			if (!ActorLabelPrefix.IsEmpty() && !SelectorLabel.StartsWith(ActorLabelPrefix, ESearchCase::CaseSensitive)) continue;
+			if (!ActorLabelContains.IsEmpty() && !SelectorLabel.Contains(ActorLabelContains, ESearchCase::IgnoreCase)) continue;
+			if (!ActorTag.IsEmpty() && !SelectorActor->ActorHasTag(FName(*ActorTag))) continue;
 
 			const FString ActorFolder = MCPActorFolderPath(Actor);
-			if (!FolderPath.IsEmpty() && !ActorFolder.Equals(FolderPath, ESearchCase::IgnoreCase)) continue;
-			if (!FolderPathPrefix.IsEmpty() && !ActorFolder.StartsWith(FolderPathPrefix, ESearchCase::IgnoreCase)) continue;
+			const FString SelectorFolder = SelectorActor == Actor ? ActorFolder : MCPActorFolderPath(SelectorActor);
+			if (!MCPFolderMatches(SelectorFolder, FolderPath, FolderPathPrefix)) continue;
 
 			const bool bOwnerHidden = Actor->IsHidden();
 			const APawn* OwnerPawn = Cast<APawn>(Actor);
@@ -1392,9 +1474,10 @@ TSharedPtr<FJsonValue> FLevelHandlers::QueryComponents(const TSharedPtr<FJsonObj
 {
 	MCP_CHECK_GAME_THREAD();
 	MCPReadParamsAhead(Params, {
+		TEXT("includeCollision"), TEXT("collisionChannel"),
 		TEXT("componentClass"), TEXT("actorClass"), TEXT("matchSubclasses"), TEXT("componentNameContains"),
 		TEXT("actorLabelPrefix"), TEXT("actorLabelContains"), TEXT("actorTag"), TEXT("folderPath"), TEXT("folderPathPrefix"),
-		TEXT("fields"), TEXT("propertyNames"), TEXT("actorPropertyNames"), TEXT("where"), TEXT("whereMode"),
+		TEXT("includeChildActors"), TEXT("fields"), TEXT("propertyNames"), TEXT("actorPropertyNames"), TEXT("where"), TEXT("whereMode"),
 		TEXT("suspectOnly"), TEXT("groupBy"), TEXT("countBy"), TEXT("sampleLimit"), TEXT("countOnly"), TEXT("limit"),
 		TEXT("startIndex"), TEXT("duplicateTransformTolerance"), TEXT("levelPath"), TEXT("world"), TEXT("pieInstance"),
 	});

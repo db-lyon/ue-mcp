@@ -4,6 +4,7 @@ import { SessionRegistry } from "../../src/sessions/session.js";
 import { GuardRegistry } from "../../src/flow/guard.js";
 import { McpError, ErrorCode } from "../../src/core/errors.js";
 import type { ToolDef } from "../../src/core/types.js";
+import { blockText } from "../helpers/content-text.js";
 
 /** Deps for one project-less session, with a dialog guard that allows everything. */
 function depsWithOneSession(): { deps: DispatchDeps; sessions: SessionRegistry } {
@@ -42,7 +43,7 @@ describe("flow tool errors", () => {
       { action: "run", flow: "missing" },
     );
     expect(result.isError).toBe(true);
-    expect(result.content.map((b) => b.text)).toContain("Error [NOT_FOUND]: no such flow");
+    expect(result.content.map((b) => blockText(b))).toContain("Error [NOT_FOUND]: no such flow");
   });
 
   it("name an error that carries no code UNKNOWN, as a category tool does", async () => {
@@ -53,9 +54,9 @@ describe("flow tool errors", () => {
       { bridge: sessions.active.guarded, project: sessions.active.project },
       { action: "run" },
     );
-    expect(result.content.map((b) => b.text)).toContain("Error [UNKNOWN]: boom");
-    expect(result.content.map((b) => b.text)).toEqual(
-      errorResult("UNKNOWN", "boom").content.map((b) => b.text),
+    expect(result.content.map((b) => blockText(b))).toContain("Error [UNKNOWN]: boom");
+    expect(result.content.map((b) => blockText(b))).toEqual(
+      errorResult("UNKNOWN", "boom").content.map((b) => blockText(b)),
     );
   });
 });

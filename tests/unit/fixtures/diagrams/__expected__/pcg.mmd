@@ -1,0 +1,19 @@
+---
+title: "PCG_Forest · PCG graph"
+---
+flowchart LR
+  n_InputNode(["Input"])
+  n_SurfaceSampler_1["Surface Sampler<br/>SurfaceSampler_1"]
+  n_DensityFilter_1["Density Filter<br/>DensityFilter_1"]
+  n_StaticMeshSpawner_1["Static Mesh Spawner<br/>StaticMeshSpawner_1"]
+  n_OutputNode(["Output"])
+  n_InputNode -.->|"Landscape → Surface"| n_SurfaceSampler_1
+  n_SurfaceSampler_1 -.-> n_DensityFilter_1
+  n_DensityFilter_1 -.-> n_StaticMeshSpawner_1
+  n_StaticMeshSpawner_1 -.-> n_OutputNode
+  classDef ue_entry fill:#2a1b0e,stroke:#e8720c,color:#f5f5f4
+  class n_InputNode ue_entry
+  classDef ue_default fill:#181d25,stroke:#3a414c,color:#f5f5f4
+  class n_SurfaceSampler_1,n_DensityFilter_1,n_StaticMeshSpawner_1 ue_default
+  classDef ue_exit fill:#122019,stroke:#34d399,color:#f5f5f4
+  class n_OutputNode ue_exit

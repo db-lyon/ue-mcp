@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "Handlers/PIE/PIEFrameSampler.h"
 #include "Handlers/PIE/PIESequenceFormat.h"
+#include "Handlers/PIE/PIEMaxFPSPin.h"
 #include "UObject/WeakObjectPtrTemplates.h"
 
 class UWorld;
@@ -75,6 +76,13 @@ namespace MCPPIE
 		double ElapsedSeconds = 0.0;
 		int32 TrackedActionCount = 0;
 		FString LastError;
+		// Attach-time problems: unmatched actions, unresolved track_values.
+		TArray<FString> Warnings;
+		// While waiting_for_pawn: no player target yet, or the player's pawn
+		// is missing or has no input component.
+		FString WaitingFor;
+		int32 PIEInstance = INDEX_NONE;
+		bool bPIEActive = false;
 	};
 
 	struct FRecorderFinishResult
@@ -92,6 +100,7 @@ namespace MCPPIE
 		TArray<FMarker> Markers;
 		bool bTakeRecordAttempted = false;
 		FString TakeRecorderStatus;
+		TArray<FString> Warnings;
 	};
 
 	class FPIEInputRecorder
@@ -137,6 +146,7 @@ namespace MCPPIE
 		bool bArmed = false;
 		ERecorderState State = ERecorderState::Idle;
 		FPIEFrameSampler Sampler;
+		FPIEMaxFPSPin FPSPin;
 		TWeakObjectPtr<UWorld> TargetWorld;
 		int32 ResolvedPIEInstance = INDEX_NONE;
 		bool bTargetResolved = false;

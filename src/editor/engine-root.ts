@@ -36,7 +36,7 @@
  */
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { debug, warn } from "../core/log.js";
 import { readEngineRootFromLog } from "./engine-observer.js";
 import { readEnv } from "../core/env.js";
@@ -142,7 +142,7 @@ const WINDOWS_INSTALL_BASES = [
 ];
 
 /** Engine versions probed in the default install locations, newest first. */
-const DEFAULT_VERSIONS = ["5.8", "5.7", "5.6", "5.5", "5.4", "5.3"];
+export const DEFAULT_ENGINE_VERSIONS = ["5.9", "5.8", "5.7", "5.6", "5.5", "5.4", "5.3"];
 
 function pathImpl(platform: NodeJS.Platform): path.PlatformPath {
   return platform === "win32" ? path.win32 : path.posix;
@@ -364,7 +364,7 @@ function defaultInstallRoots(
       probed.push(`${base} (no engine install directory there)`);
       continue;
     }
-    for (const version of DEFAULT_VERSIONS) roots.push(impl.join(base, `UE_${version}`));
+    for (const version of DEFAULT_ENGINE_VERSIONS) roots.push(impl.join(base, `UE_${version}`));
   }
 
   // Linux and macOS source builds live in the home directory with no version
@@ -612,16 +612,24 @@ function findEngineInstall(
   return findLauncherEngine(normalizedAssociation);
 }
 
+/**
+ * The `reg query` argv that reads a registered engine build, or null for an
+ * association that is not a GUID. It runs without a shell, and only a GUID
+ * ever reaches it.
+ */
+export function registryQueryArgs(guid: string): string[] | null {
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(guid)) return null;
+  return ["query", "HKCU\\SOFTWARE\\Epic Games\\Unreal Engine\\Builds", "/v", guid];
+}
+
 function findEngineByGuid(guid: string): string | null {
-  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(guid)) {
+  const args = registryQueryArgs(guid);
+  if (!args) {
     debug("engine-root", `refusing registry lookup for non-GUID engine association '${guid}'`);
     return null;
   }
   try {
-    const output = execSync(
-      `reg query "HKCU\\SOFTWARE\\Epic Games\\Unreal Engine\\Builds" /v "${guid}"`,
-      { windowsHide: true, stdio: "pipe", encoding: "utf-8" },
-    );
+    const output = execFileSync("reg", args, { windowsHide: true, stdio: "pipe", encoding: "utf-8" });
     const match = output.match(/REG_SZ\s+(.+)/);
     if (match) {
       const p = match[1].trim();

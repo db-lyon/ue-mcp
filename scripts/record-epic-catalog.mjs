@@ -15,10 +15,11 @@
  * built from whatever the editor happened to answer with is none of those
  * things, and the 830 of them were carrying an effect nobody had ever looked at.
  *
- * The snapshot is keyed by engine version, because the catalog is Epic's
- * surface and moves on Epic's cadence. `tests/live/epic-catalog-drift.test.ts`
- * compares a live editor against the recorded file and fails when they differ,
- * so the snapshot cannot rot quietly.
+ * One snapshot per engine version, `tests/golden/epic-catalog/<major.minor>.json`,
+ * because the catalog is Epic's surface and moves on Epic's cadence. A run
+ * writes the attached editor's engine and leaves every other snapshot alone.
+ * `tests/live/epic-catalog-drift.test.ts` compares a live editor against the
+ * snapshot for its own engine, so a snapshot cannot rot quietly.
  *
  * Talks to the bridge directly rather than through the server: the server's own
  * enrichment is what this file feeds, so reading it back through that would be
@@ -28,9 +29,9 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { connectTestBridge } from "./bridge-target.mjs";
+import { engineKey, snapshotPath } from "./lib/epic-catalog.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const OUT = path.join(ROOT, "tests", "golden", "epic-catalog.json");
 
 /** The EngineAssociation of the single .uproject in a project directory. */
 function engineAssociationOf(projectDir) {
@@ -55,10 +56,12 @@ async function main() {
   const projectDir = bridge.projectDir;
   console.log(`target confirmed: ${projectDir}`);
 
-  // Off the .uproject the identified editor has open, rather than over the
-  // bridge: the snapshot is keyed by engine version, and the descriptor is the
-  // thing that decides which engine this editor IS.
-  const engine = engineAssociationOf(projectDir);
+  // The engine the editor reports it is running, which a source build names
+  // where its .uproject holds a GUID; the descriptor is the fallback.
+  const caps = await bridge.call("get_bridge_capabilities", {}).catch(() => null);
+  const engine = engineKey(caps?.engineVersion) ?? engineKey(engineAssociationOf(projectDir));
+  if (!engine) throw new Error("The editor reported no engine version and its .uproject names none, so there is no snapshot to write.");
+  const OUT = snapshotPath(engine);
 
   const answered = await bridge.call("epic_list_toolsets", { includeSchemas: true });
   const toolsets = answered?.toolsets ?? [];

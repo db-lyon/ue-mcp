@@ -11,10 +11,11 @@
  * straight through.
  */
 import { runGuarded } from "@db-lyon/flowkit/guard";
-import type { BridgeTarget, IBridge } from "../bridge/bridge.js";
+import type { BridgeCallOptions, BridgeTarget, IBridge } from "../bridge/bridge.js";
 import type { EditorSession } from "../sessions/session.js";
 import { explainEditorDownWithEvidence } from "../dispatch/offline.js";
 import { GuardRegistry, makeCallContext, type ResolveExistingFile } from "./guard.js";
+import { callIsReadOnly, readOnlyGuard } from "./session-access.js";
 import { DialogGuard, ensureGuard, existingGuard } from "../editor/dialog-guard.js";
 
 export type { ResolveExistingFile } from "./guard.js";
@@ -86,6 +87,14 @@ abstract class ForwardingBridge implements IBridge {
     return this.inner.refreshEpicToolsets?.() ?? Promise.resolve(this.inner.epicToolsets ?? null);
   }
 
+  get epicMcpTools(): IBridge["epicMcpTools"] {
+    return this.inner.epicMcpTools;
+  }
+
+  refreshEpicMcpTools(): Promise<readonly string[] | null> {
+    return this.inner.refreshEpicMcpTools?.() ?? Promise.resolve(this.inner.epicMcpTools ?? null);
+  }
+
   connect(timeoutMs?: number): Promise<void> {
     return this.inner.connect(timeoutMs);
   }
@@ -98,7 +107,7 @@ abstract class ForwardingBridge implements IBridge {
     return this.inner.getTarget();
   }
 
-  abstract call(method: string, params?: Record<string, unknown>, timeoutMs?: number): Promise<unknown>;
+  abstract call(method: string, params?: Record<string, unknown>, timeoutMs?: number, options?: BridgeCallOptions): Promise<unknown>;
 }
 
 /**
@@ -122,11 +131,22 @@ export class DialogGatedBridge extends ForwardingBridge {
     method: string,
     params?: Record<string, unknown>,
     timeoutMs?: number,
+    options?: BridgeCallOptions,
   ): Promise<unknown> {
     const blocked = await refuseIfBlocked(this.session, method);
     if (blocked) return blocked;
-    return observeReply(this.session, method, await this.inner.call(method, params, timeoutMs));
+    return observeReply(this.session, method, await this.inner.call(method, params, timeoutMs, options));
   }
+}
+
+/**
+ * The pipeline a read-only session's call runs through: the session's own
+ * guards with the built-in read-only guard ahead of them. Built per call, and
+ * only for a read-only session, because the mode belongs to the caller while
+ * the registry is shared by every client of the editor.
+ */
+function withReadOnlyGuard(registry: GuardRegistry): GuardRegistry {
+  return new GuardRegistry().registerAll([readOnlyGuard, ...registry.list()]) as GuardRegistry;
 }
 
 export class GuardedBridge extends ForwardingBridge {
@@ -154,15 +174,17 @@ export class GuardedBridge extends ForwardingBridge {
     method: string,
     params?: Record<string, unknown>,
     timeoutMs?: number,
+    options?: BridgeCallOptions,
   ): Promise<unknown> {
     try {
       // `runGuarded` is already a pass-through on an empty registry, but building
       // the context is not free and every bridge call lands here. Most servers run
       // with no guards at all, so skip the allocation outright.
-      if (this.registry.size === 0) {
+      const readOnly = callIsReadOnly();
+      if (this.registry.size === 0 && !readOnly) {
         const blocked = await this.guardCall(method);
         if (blocked) return blocked;
-        return this.observe(method, await this.inner.call(method, params, timeoutMs));
+        return this.observe(method, await this.inner.call(method, params, timeoutMs, options));
       }
 
       const ctx = makeCallContext(
@@ -177,7 +199,7 @@ export class GuardedBridge extends ForwardingBridge {
       if (blocked) return blocked;
       return this.observe(
         method,
-        await runGuarded(ctx, this.registry, () => this.inner.call(method, params, timeoutMs)),
+        await runGuarded(ctx, readOnly ? withReadOnlyGuard(this.registry) : this.registry, () => this.inner.call(method, params, timeoutMs, options)),
       );
     } catch (e) {
       // Every route into the editor comes through here (an MCP tool call, a

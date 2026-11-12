@@ -27,6 +27,8 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { spawnSync } from "node:child_process";
+import { UnsafeArgumentError, assertPackageSpec, runNpmSync } from "../core/safe-spawn.js";
+import { UE_PLUGIN_NAME_RE } from "../extensions/package-paths.js";
 import { loadManifest, manifestActionNames, type PluginManifest } from "../extensions/manifest.js";
 import { satisfiesMinimum } from "../extensions/version.js";
 import { findInstalledPackage } from "../extensions/resolver.js";
@@ -129,22 +131,22 @@ function findProjectDir(startDir: string): ProjectInfo {
 }
 
 function runNpm(args: string[], cwd: string): void {
-  // On Windows, npm is `npm.cmd`. Node's child_process with `shell: false`
-  // cannot launch a `.cmd` file directly (it expects a real executable), so
-  // spawnSync returns status=null and an ENOENT-style error. Setting
-  // `shell: true` routes through cmd.exe which resolves the .cmd correctly.
-  // On POSIX `shell: true` is also safe; `npm` is a plain binary.
-  const r = spawnSync("npm", args, {
-    windowsHide: true,
-    cwd,
-    stdio: "inherit",
-    shell: true,
-  });
+  // npm runs under node with no shell, so a package name stays one argument.
+  const r = runNpmSync(args, { cwd, stdio: "inherit" });
   if (r.error) {
     fail(`npm ${args.join(" ")} failed to start: ${r.error.message}`);
   }
   if (r.status !== 0) {
     fail(`npm ${args.join(" ")} exited ${r.status ?? "(killed by signal)"}`);
+  }
+}
+
+/** Exit with a clear message when a name or spec cannot be handed to npm. */
+function checkSpec(spec: string): void {
+  try {
+    assertPackageSpec(spec);
+  } catch (e) {
+    fail(e instanceof UnsafeArgumentError ? e.message : String(e));
   }
 }
 
@@ -307,6 +309,7 @@ function installPackage(proj: ProjectInfo, requested: string, version: string | 
   }
 
   const spec = version ? `${requested}@${version}` : requested;
+  checkSpec(spec);
   note(`installing ${spec}`);
   const before = readDependencies(proj.projectDir);
   runNpm(["install", "--save", spec], proj.projectDir);
@@ -467,7 +470,12 @@ async function cmdUninstall(args: string[], editor: string | undefined): Promise
   // The UE plugin the package deployed: from the install record, or, for a
   // superseded plugin installed before the record existed, from its entry.
   const nativeState = readNativeModulesState(proj.projectDir);
-  const uePluginName = nativeState[name]?.uePluginName ?? supersededByName(name)?.[1].uePluginName;
+  const recorded = nativeState[name]?.uePluginName ?? supersededByName(name)?.[1].uePluginName;
+  // The record is a file in the project, so a name that is not an Unreal name never becomes a folder to delete.
+  if (recorded !== undefined && !UE_PLUGIN_NAME_RE.test(recorded)) {
+    fail(`the install record names ${JSON.stringify(recorded)} as the Unreal plugin, which is not a plugin name. Nothing was removed.`);
+  }
+  const uePluginName = recorded;
   const uproject = findUProject(proj.projectDir);
   const pluginDir = uePluginName ? path.join(proj.projectDir, "Plugins", uePluginName) : null;
   const pluginDirExists = pluginDir !== null && fs.existsSync(pluginDir);
@@ -487,6 +495,7 @@ async function cmdUninstall(args: string[], editor: string | undefined): Promise
   }
 
   // npm goes first: when it fails, the project is left exactly as it was.
+  checkSpec(name);
   runNpm(["uninstall", name], proj.projectDir);
   const removed: string[] = [`package ${name}`];
 
@@ -628,8 +637,13 @@ export function planPluginUpdates(
 
 /** The version behind a package's `latest` dist-tag, or null when npm cannot answer. */
 function npmLatest(name: string, cwd: string): string | null {
-  const r = spawnSync("npm", ["view", name, "version"], { windowsHide: true, cwd, encoding: "utf8", shell: true });
-  const v = (r.stdout ?? "").trim().split(/\r?\n/).pop()?.trim();
+  try {
+    assertPackageSpec(name);
+  } catch {
+    return null;
+  }
+  const r = runNpmSync(["view", name, "version"], { cwd, encoding: "utf8" });
+  const v = String(r.stdout ?? "").trim().split(/\r?\n/).pop()?.trim();
   return r.status === 0 && v ? v : null;
 }
 
@@ -936,7 +950,7 @@ async function cmdPublish(args: string[]): Promise<void> {
   const token = await resolvePublishToken(tokenFlag);
   if (!token && !dryRun) {
     fail(
-      "not logged in. Run `ue-mcp login` - it authorizes this machine with GitHub " +
+      "not logged in. Run `ue-mcp login` - it signs in with an email code or GitHub " +
       "and mints your own publish token, no site secret needed. " +
       "For CI, set UE_MCP_PUBLISH_TOKEN (mint one at " + base + "/account).",
     );

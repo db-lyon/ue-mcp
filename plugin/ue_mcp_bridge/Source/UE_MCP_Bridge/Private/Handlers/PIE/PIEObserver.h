@@ -55,6 +55,8 @@ namespace MCPPIE
 		uint64 LastFrame = 0;
 		// Game seconds since the pawn attached (the run's first observed frame).
 		double ElapsedSeconds = 0.0;
+		// While waiting for the pawn: why the run has not attached yet.
+		FString WaitingFor;
 	};
 
 	// True when the widget and every ancestor are visible and it is rooted in the viewport or a Slate parent.
@@ -66,6 +68,13 @@ namespace MCPPIE
 
 	// Name equals Path, or Path's last dotted segment, ignoring case.
 	bool TrackedValuePathMatches(const FString& Path, const FString& Name);
+
+	// The player pawn's sampled state under its recording.csv column names
+	// (pos_x, vel_z, rot_yaw, speed2d, ...): a script reads them with no
+	// profile or tracked value (#1657).
+	const TArray<FString>& PawnChannelNames();
+	bool IsPawnChannelName(const FString& Name);
+	bool ReadPawnChannel(const FCSVRow& Row, const FString& Name, double& OutValue);
 
 	struct FObserverStatus
 	{
@@ -103,6 +112,11 @@ namespace MCPPIE
 		bool bTargetResolved = false;
 		double TargetResolveStartSeconds = 0.0;
 		FString TargetResolveError;
+		// Set once the player resolves; the pawn attach timeout counts from here.
+		double PawnWaitStartSeconds = 0.0;
+		// PIE game time the pawn was first seen without an input component.
+		double InputComponentWaitStartGameSeconds = -1.0;
+		FString AttachError;
 		FPIEFrameSampler Sampler;
 		FCSVHeader CSVHdr;
 		FString CSVHeaderStr;

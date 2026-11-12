@@ -3,7 +3,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { CLI_COMMANDS, formatTopLevelUsage, routeTopLevel, runCliCommand } from "../../src/cli/cli-commands.js";
-import { formatUsage, isHelpRequest, preflight, runCli, unknownFlags, type CliUsage } from "../../src/cli/cli-main.js";
+import { formatUsage, hasFetchExitAbort, isHelpRequest, preflight, runCli, unknownFlags, type CliUsage } from "../../src/cli/cli-main.js";
 
 // #1226: --help must print usage and exit 0 without touching anything, and a
 // mistyped flag must be refused before a command reaches its default work.
@@ -144,5 +144,18 @@ describe("ue-mcp with no command", () => {
   it("names every command in the top-level usage", () => {
     const text = formatTopLevelUsage();
     for (const c of CLI_COMMANDS) expect(text).toContain(c.name);
+  });
+});
+
+// #1442: Windows builds whose exit aborts after fetch get the exit guard.
+describe("hasFetchExitAbort", () => {
+  it("matches the Windows builds without the upstream fix", () => {
+    for (const v of ["23.0.0", "24.0.0", "24.19.0", "25.2.1", "26.6.0"]) expect(hasFetchExitAbort(v, "win32"), v).toBe(true);
+    for (const v of ["22.23.4", "24.20.0", "24.22.0", "26.7.0", "27.0.0"]) expect(hasFetchExitAbort(v, "win32"), v).toBe(false);
+  });
+
+  it("never applies off Windows", () => {
+    expect(hasFetchExitAbort("24.19.0", "linux")).toBe(false);
+    expect(hasFetchExitAbort("24.19.0", "darwin")).toBe(false);
   });
 });

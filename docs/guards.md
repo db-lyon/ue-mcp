@@ -1,6 +1,6 @@
 # Guards
 
-A guard gates every bridge call, not only a plugin's own actions. Guards are declared in a plugin manifest or in a project's `ue-mcp.yml`, in the same shape. They run in an ordered pipeline around each bridge call: a `before` hook can deny the call or act on it (for example check a file out), and an `after` hook can observe or replace the result. Source control, access policy, audit and rate limiting are all guards.
+A guard gates every bridge call. Guards are declared in the `guards:` section of a project's `ue-mcp.yml` and need no plugin. A plugin can ship guards too, declared in the same shape in its manifest. They run in an ordered pipeline around each bridge call: a `before` hook can deny the call or act on it (for example check a file out), and an `after` hook can observe or replace the result. Source control, access policy, audit and rate limiting are all guards.
 
 ## Declaring a guard
 
@@ -52,7 +52,7 @@ guards:
       class_path: guards/AskFirst
 ```
 
-The <!-- count:nativeToolActions -->830<!-- /count --> actions that wrap Unreal's own toolsets all dispatch through the bridge method `epic_call_tool`. Their scope is decided from the method and the tool named in its arguments, so `gas(epic_list_attributes)` is in `reads` and `widget(epic_add_widget)` is in `mutations`, as each one declares.
+The <!-- count:nativeToolActions -->2185<!-- /count --> actions that wrap Unreal's own toolsets all dispatch through the bridge method `epic_call_tool`. Their scope is decided from the method and the tool named in its arguments, so `gas(epic_list_attributes)` is in `reads` and `widget(epic_add_widget)` is in `mutations`, as each one declares.
 
 `writes` and `mutations` are computed only when a guard asks, so a read pays nothing for them. The `source_control_*` calls are never in `writes`: they are the operations a source control guard would make itself.
 
@@ -62,6 +62,31 @@ The <!-- count:nativeToolActions -->830<!-- /count --> actions that wrap Unreal'
 - **`after`** runs after a successful call and cannot deny it. Returning data replaces the call's result. A failure or a throw is logged and the result stands.
 
 `before` hooks run in `order`, `after` hooks in reverse order. A denial stops the remaining `before` hooks and the call.
+
+## Letting a person override a denial
+
+`allowsOverride: true` turns a guard's denial into a question. When its `before` hook denies a call, ue-mcp asks the person who made the call through an MCP elicitation form instead of failing it:
+
+> Guard policy blocked blueprint(create): checked out by alice. Allow this call?
+
+```yaml
+guards:
+  policy:
+    scope: writes
+    allowsOverride: true
+    before:
+      class_path: guards/PolicyGuard
+```
+
+- **Allow this call** runs that one call. The next denial asks again.
+- **Allow for this session** runs it and lets the same action through this guard, on this editor, until ue-mcp restarts.
+- **Deny**, a declined or cancelled form, a client that does not advertise elicitation, or a form that fails all return the normal `WRITE_BLOCKED`.
+
+Only a deliberate denial is offered. A `before` hook that throws is still a denial with no question, because it never decided. A call from a daemon extension is put to that extension's own `elicit`, and an HTTP flow run has no person to ask, so it is denied.
+
+The form carries machine-readable fields under `_meta["ue-mcp/guard"]`, so a client can render it as its own card: `guard`, `method` (the bridge method), `subject` (the `category.action` asked for, when known), `call` (the label in the message), `reason` and `paths`. Each override is logged by the server under the `guard` component.
+
+Changing `allowsOverride` needs a restart of ue-mcp, like `scope` and `order`.
 
 ## Writing a guard
 
@@ -131,7 +156,7 @@ The `options` of guards declared in YAML reload when a config file changes. The 
 
 - Malformed YAML, an invalid declaration or a file read error keeps the last valid options and logs a warning. A read error is retried after five seconds.
 - Removing a layer, guard or hook keeps the last valid options until restart.
-- Adding or removing guards or hooks, or changing `class_path`, `scope` or `order`, needs a restart of ue-mcp. Until then the previous configuration stays and a warning is logged. Plugin manifest changes also need a restart.
+- Adding or removing guards or hooks, or changing `class_path`, `scope`, `order` or `allowsOverride`, needs a restart of ue-mcp. Until then the previous configuration stays and a warning is logged. Plugin manifest changes also need a restart.
 - At startup, an unreadable or malformed global file is ignored with a warning. An invalid project config stops startup.
 
 ## Source control

@@ -19,6 +19,7 @@
 #include "Dom/JsonValue.h"
 #include "UObject/EnumProperty.h"
 #include "UObject/UnrealType.h"
+#include "HandlerPropertyPath.h"
 
 namespace MCPQuery
 {
@@ -106,38 +107,65 @@ namespace MCPQuery
 
 	/**
 	 * Resolve a dotted UPROPERTY path such as `CullDistance.Max` on a UObject,
-	 * walking nested structs. Returns an invalid pointer when any segment does
-	 * not exist, which is how a caller distinguishes "the property is null"
-	 * from "this class does not have that property".
+	 * walking nested structs and array elements (`Items[3]`, `Items[Id=Foo]`).
+	 * Returns an invalid pointer when any segment does not exist, which is how
+	 * a caller distinguishes "the property is null" from "this class does not
+	 * have that property". OutResolvedPath is the path with every selector
+	 * replaced by its numeric index; OutError says why a selector failed.
 	 */
-	inline TSharedPtr<FJsonValue> ReadDottedProperty(UObject* Object, const FString& Path, FString& OutResolvedType)
+	inline TSharedPtr<FJsonValue> ReadDottedProperty(UObject* Object, const FString& Path, FString& OutResolvedType,
+		FString* OutResolvedPath = nullptr, FString* OutError = nullptr)
 	{
 		OutResolvedType.Reset();
+		if (OutResolvedPath) OutResolvedPath->Reset();
+		if (OutError) OutError->Reset();
 		if (!Object || Path.IsEmpty())
 		{
 			return nullptr;
 		}
 
 		TArray<FString> Segments;
-		Path.ParseIntoArray(Segments, TEXT("."), true);
+		FString PathError;
+		if (!MCPJsonProperty::SplitPropertyPath(Path, Segments, PathError))
+		{
+			if (OutError) *OutError = PathError;
+			return nullptr;
+		}
 
-		UStruct* CurrentStruct = Object->GetClass();
-		const void* CurrentContainer = Object;
+		TArray<FString> Resolved;
+		const UStruct* CurrentStruct = Object->GetClass();
+		void* CurrentContainer = Object;
 		for (int32 Index = 0; Index < Segments.Num(); ++Index)
 		{
 			if (!CurrentStruct || !CurrentContainer)
 			{
 				return nullptr;
 			}
-			FProperty* Property = CurrentStruct->FindPropertyByName(FName(*Segments[Index]));
+			MCPJsonProperty::FPropertyPathSegment Segment;
+			FString SegmentError;
+			if (!MCPJsonProperty::ParsePropertyPathSegment(Segments[Index], Segment, SegmentError))
+			{
+				if (OutError) *OutError = SegmentError;
+				return nullptr;
+			}
+			FProperty* Property = CurrentStruct->FindPropertyByName(FName(*Segment.Name));
 			if (!Property)
 			{
 				return nullptr;
 			}
-			const void* ValuePtr = Property->ContainerPtrToValuePtr<void>(CurrentContainer);
+			void* ValuePtr = Property->ContainerPtrToValuePtr<void>(CurrentContainer);
+			int32 ElementIndex = INDEX_NONE;
+			if (!MCPJsonProperty::SelectPathElement(Property, CurrentContainer, ValuePtr, Segment, Path, ElementIndex, SegmentError))
+			{
+				if (OutError) *OutError = SegmentError;
+				return nullptr;
+			}
+			Resolved.Add(Segment.bHasIndex || Segment.bHasKey
+				? FString::Printf(TEXT("%s[%d]"), *Segment.Name, ElementIndex) : Segment.Name);
 			if (Index == Segments.Num() - 1)
 			{
 				OutResolvedType = Property->GetCPPType();
+				if (OutResolvedPath) *OutResolvedPath = FString::Join(Resolved, TEXT("."));
 				return PropertyToJson(Property, ValuePtr);
 			}
 			const FStructProperty* StructProp = CastField<FStructProperty>(Property);
@@ -149,6 +177,12 @@ namespace MCPQuery
 			}
 			CurrentStruct = StructProp->Struct;
 			CurrentContainer = ValuePtr;
+			if (CurrentStruct == FInstancedStruct::StaticStruct())
+			{
+				FInstancedStruct* Instance = static_cast<FInstancedStruct*>(ValuePtr);
+				CurrentStruct = Instance->GetScriptStruct();
+				CurrentContainer = Instance->GetMutableMemory();
+			}
 		}
 		return nullptr;
 	}
@@ -167,8 +201,9 @@ namespace MCPQuery
 		TArray<FString> Segments;
 		Path.ParseIntoArray(Segments, TEXT("."), true);
 		TSharedPtr<FJsonValue> Current = MakeShared<FJsonValueObject>(Row);
-		for (const FString& Segment : Segments)
+		for (int32 Index = 0; Index < Segments.Num(); ++Index)
 		{
+			const FString& Segment = Segments[Index];
 			if (!Current.IsValid())
 			{
 				return nullptr;
@@ -195,7 +230,26 @@ namespace MCPQuery
 			// FJsonObject::Values is not keyed by FString on UE 5.8, so Find(FString)
 			// does not resolve. TryGetField takes an FStringView and is the
 			// supported lookup regardless of the map's key type.
-			Current = Current->AsObject()->TryGetField(Segment);
+			const TSharedPtr<FJsonObject> Object = Current->AsObject();
+			TSharedPtr<FJsonValue> Next = Object->TryGetField(Segment);
+			// A projected property path is stored under its whole dotted name
+			// (props["AttachEndTo.ComponentProperty"]), so when one segment is not
+			// a key, the longest run of the remaining segments that is wins (#1530).
+			for (int32 Last = Segments.Num() - 1; !Next.IsValid() && Last > Index; --Last)
+			{
+				FString Joined = Segment;
+				for (int32 Part = Index + 1; Part <= Last; ++Part)
+				{
+					Joined += TEXT(".");
+					Joined += Segments[Part];
+				}
+				Next = Object->TryGetField(Joined);
+				if (Next.IsValid())
+				{
+					Index = Last;
+				}
+			}
+			Current = Next;
 		}
 		return Current;
 	}

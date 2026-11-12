@@ -13,6 +13,14 @@ const workflowActions = [
   "bake_control_rig_edit",
 ] as const;
 
+// The Sequencer bake options both AnimSequence bakes declare (#1642).
+const bakeExportOptions = [
+  "setRetargetSourceAsset", "interpolation", "curveInterpolation", "recordInWorldSpace",
+  "evaluateAllSkeletalMeshComponents", "exportTransforms", "exportMorphTargets", "exportAttributeCurves",
+  "exportMaterialCurves", "skipCurvesWithZeroValue", "includeAnimationNames", "excludeAnimationNames",
+  "removeExcludedCurves", "warmUpFrames", "delayBeforeStart", "bakeTimecode", "timecodeRate", "startFrame", "endFrame",
+];
+
 describe("animation Control Rig edit workflow", () => {
   it("filters read metadata without narrowing begin, skip, or unfiltered session responses", () => {
     const source = readHandlerFile("AnimationHandlers_ControlRigSequencer.cpp");
@@ -56,7 +64,9 @@ describe("animation Control Rig edit workflow", () => {
     );
 
     expect(source).toContain("const float RawTimelinePlayRate = static_cast<float>(1.0 / SourceRateScale)");
-    expect(source).toContain("AnimationSection->Params.PlayRate = RawTimelinePlayRate");
+    expect(source).toContain("AnimationSection->Params.PlayRate = SessionPlayRate");
+    expect(source).toContain("MCPControlRigStepSampling::SessionPlayRate(");
+    expect(source).toContain("RawTimelinePlayRate, SourceAnimation->Interpolation,");
     expect(nativeTest).toContain("SourceAnimation->RateScale = 3.06608796f");
     expect(nativeTest).toContain("for (int32 Frame = 0; Frame <= 40; ++Frame)");
     expect(nativeTest).toContain("Section->MapTimeToAnimation(FFrameTime(Frame), DisplayRate)");
@@ -600,6 +610,7 @@ describe("animation Control Rig edit workflow", () => {
     expect(animationTool.actions.bake_control_rig_edit.mapParams).toBeUndefined();
     expect(handlerSpecs.bake_control_rig_edit.params.map((p) => p.name)).toEqual([
       "sequencePath", "bindingTag", "outputAssetPath", "frameRate", "reduceKeys", "tolerance", "createLink", "onConflict",
+      ...bakeExportOptions,
     ]);
     expect(animationTool.schema.reduceKeys.safeParse(true).success).toBe(false);
     await animationTool.handler(ctx, {
@@ -623,6 +634,21 @@ describe("animation Control Rig edit workflow", () => {
       createLink: false,
       onConflict: "error",
     }, undefined);
+  });
+
+  it("bakes name the bound mesh as the retarget source unless told not to (#1642)", () => {
+    const source = readHandlerFile("AnimationHandlers_ControlRigSequencer.cpp");
+    expect(source).toContain('Out.bSetRetargetSourceAsset = OptionalBool(Params, TEXT("setRetargetSourceAsset"), true)');
+    expect(source).toContain("Output->SetRetargetSourceAsset(Mesh)");
+    expect(source).toContain("SessionSource ? SessionSource->Interpolation : EAnimInterpolationType::Linear");
+    expect(handlerSpecs.bake_sequence_animation.params.map((p) => p.name)).toEqual([
+      "sequencePath", "bindingTag", "bindingGuid", "bindingName", "outputAssetPath", "frameRate", "onConflict",
+      ...bakeExportOptions,
+    ]);
+    expect(handlerSpecs.bake_sequence_animation.choices).toEqual([
+      { mode: "exactlyOne", branches: [["bindingTag"], ["bindingGuid"], ["bindingName"]] },
+    ]);
+    expect(animationTool.actions.bake_sequence_animation.bridge).toBe("bake_sequence_animation");
   });
 
   it("declares the AnimSequence-only analysis contract in its C++ spec, without edit-session fields (#1057)", async () => {

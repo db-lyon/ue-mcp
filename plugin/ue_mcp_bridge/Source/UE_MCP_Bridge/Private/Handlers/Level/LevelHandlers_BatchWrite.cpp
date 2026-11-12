@@ -26,6 +26,7 @@
 // would be worse than no batch at all.
 
 #include "LevelHandlers.h"
+#include "LevelSpawnFinalize.h"
 
 #include "Components/ActorComponent.h"
 #include "Components/MeshComponent.h"
@@ -141,17 +142,7 @@ namespace
 		{
 			return false;
 		}
-		if (!Selector.FolderPath.IsEmpty() &&
-			!MCPActorFolderPath(Actor).Equals(Selector.FolderPath, ESearchCase::IgnoreCase))
-		{
-			return false;
-		}
-		if (!Selector.FolderPathPrefix.IsEmpty() &&
-			!MCPActorFolderPath(Actor).StartsWith(Selector.FolderPathPrefix, ESearchCase::IgnoreCase))
-		{
-			return false;
-		}
-		return true;
+		return MCPActorInFolder(Actor, Selector.FolderPath, Selector.FolderPathPrefix);
 	}
 
 	/** Every actor the selector picks, in a deterministic order. */
@@ -1173,6 +1164,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::SpawnActorsBatch(const TSharedPtr<FJsonOb
 		};
 		ApplyProperties(SharedProperties ? *SharedProperties : nullptr);
 		ApplyProperties(Plan.Properties);
+		MCPSpawnFinalize::FinishEditorSpawn(Actor);
 		if (PropertyRows.Num() > 0)
 		{
 			Row->SetArrayField(TEXT("properties"), PropertyRows);

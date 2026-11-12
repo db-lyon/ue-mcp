@@ -1,5 +1,8 @@
 {
   "wallClockS": 600,
   "defaultTestMs": 20000,
-  "tests": {}
+  "tests": {
+    "tests/live/pie-script-running-session.test.ts > script_run into a running PIE session ends the run with the reason when the controller possesses no pawn": 45000,
+    "tests/live/localization.test.ts > localization gathers the target into a manifest and compiles it into LocRes per culture": 240000
+  }
 }

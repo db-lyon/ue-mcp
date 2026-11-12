@@ -43,6 +43,7 @@
 #include "HandlerUtils.h"
 #include "PhysicsEngine/BodySetup.h"
 #include "UObject/Package.h"
+#include "UObject/UObjectHash.h"
 
 namespace
 {
@@ -192,6 +193,56 @@ namespace
 			OutAxis = FVector::ZeroVector;
 		}
 		return bOverlapping;
+	}
+
+	/**
+	 * The saved property values of an actor and every subobject it owns, as
+	 * text, visited in path order, so references read as paths and rebuilt
+	 * components compare by name and value (#1547). Property text rather than
+	 * native serialization: a component loaded from disk and the same component
+	 * built fresh can serialize different native bytes (a SplineComponent does)
+	 * while every saved value is identical.
+	 */
+	FString MCPRefreshSnapshotActor(AActor* Actor)
+	{
+		FString Snapshot;
+		if (!IsValid(Actor))
+		{
+			return Snapshot;
+		}
+		TArray<UObject*> Objects;
+		GetObjectsWithOuter(Actor, Objects, /*bIncludeNestedObjects*/ true);
+		Objects.RemoveAll([](const UObject* Object)
+		{
+			return !IsValid(Object) || Object->HasAnyFlags(RF_Transient);
+		});
+		Objects.Sort([](const UObject& A, const UObject& B) { return A.GetPathName() < B.GetPathName(); });
+		Objects.Insert(Actor, 0);
+
+		for (UObject* Object : Objects)
+		{
+			Snapshot += Object->GetPathName();
+			Snapshot += TEXT("|");
+			Snapshot += Object->GetClass()->GetPathName();
+			Snapshot += TEXT("\n");
+			for (TFieldIterator<FProperty> It(Object->GetClass()); It; ++It)
+			{
+				if (It->HasAnyPropertyFlags(CPF_Transient))
+				{
+					continue;
+				}
+				for (int32 Index = 0; Index < It->ArrayDim; ++Index)
+				{
+					FString Value;
+					It->ExportText_InContainer(Index, Value, Object, nullptr, nullptr, PPF_None);
+					Snapshot += It->GetName();
+					Snapshot += TEXT("=");
+					Snapshot += Value;
+					Snapshot += TEXT("\n");
+				}
+			}
+		}
+		return Snapshot;
 	}
 
 	TSharedPtr<FJsonObject> MCPRefreshDescribeBounds(const FBoxSphereBounds& Bounds)
@@ -392,6 +443,13 @@ TSharedPtr<FJsonValue> FLevelHandlers::RerunConstruction(const TSharedPtr<FJsonO
 	int32 WithoutScript = 0;
 	TArray<FString> Failed;
 	TArray<FString> Samples;
+	TArray<FString> Changed;
+	TArray<FString> Unchanged;
+	// Per package: was it dirty before this call, and did any target in it
+	// come out different. A rerun that reproduces the same output must not
+	// leave the package dirty, or the next save rewrites the file (#1547).
+	TMap<UPackage*, bool> PackageWasDirty;
+	TSet<UPackage*> PackagesWithChanges;
 
 #if WITH_EDITOR
 	for (AActor* Actor : Targets)
@@ -413,15 +471,58 @@ TSharedPtr<FJsonValue> FLevelHandlers::RerunConstruction(const TSharedPtr<FJsonO
 		{
 			++WithoutScript;
 		}
+		UPackage* Package = Actor->GetPackage();
+		if (Package && !PackageWasDirty.Contains(Package))
+		{
+			PackageWasDirty.Add(Package, Package->IsDirty());
+		}
+		const FString Before = MCPRefreshSnapshotActor(Actor);
 		Actor->Modify();
 		Actor->RerunConstructionScripts();
 		++Reran;
+		const FString ActorLabel = Actor->GetActorLabel();
+		if (MCPRefreshSnapshotActor(Actor) == Before)
+		{
+			Unchanged.Add(ActorLabel);
+		}
+		else
+		{
+			Changed.Add(ActorLabel);
+			if (Package)
+			{
+				PackagesWithChanges.Add(Package);
+			}
+		}
 		if (Samples.Num() < MCPRefreshMaxSamples)
 		{
 			Samples.Add(FString::Printf(TEXT("%s (%s)"), *Actor->GetActorLabel(), *Actor->GetClass()->GetName()));
 		}
 	}
+
+	TArray<FString> DirtiedPackages;
+	TArray<FString> RestoredCleanPackages;
+	for (const TPair<UPackage*, bool>& Entry : PackageWasDirty)
+	{
+		UPackage* Package = Entry.Key;
+		if (!IsValid(Package) || Entry.Value)
+		{
+			continue;
+		}
+		if (PackagesWithChanges.Contains(Package))
+		{
+			DirtiedPackages.Add(Package->GetName());
+		}
+		else if (Package->IsDirty())
+		{
+			Package->SetDirtyFlag(false);
+			RestoredCleanPackages.Add(Package->GetName());
+		}
+	}
+	DirtiedPackages.Sort();
+	RestoredCleanPackages.Sort();
 #else
+	TArray<FString> DirtiedPackages;
+	TArray<FString> RestoredCleanPackages;
 	for (AActor* Actor : Targets)
 	{
 		Failed.Add(FString::Printf(
@@ -452,11 +553,30 @@ TSharedPtr<FJsonValue> FLevelHandlers::RerunConstruction(const TSharedPtr<FJsonO
 	Result->SetArrayField(TEXT("failed"), MCPStringListToJson(Failed));
 	Result->SetArrayField(TEXT("missingLabels"), MCPStringListToJson(MissingLabels));
 	Result->SetArrayField(TEXT("samples"), MCPStringListToJson(Samples));
-	if (Reran > 0)
+	auto CappedList = [](TArray<FString> List)
 	{
-		MCPSetUpdated(Result);
+		if (List.Num() > MCPRefreshMaxResultRows)
+		{
+			List.SetNum(MCPRefreshMaxResultRows);
+		}
+		return MCPStringListToJson(List);
+	};
+	Result->SetNumberField(TEXT("changedCount"), Changed.Num());
+	Result->SetNumberField(TEXT("unchangedCount"), Unchanged.Num());
+	Result->SetArrayField(TEXT("changed"), CappedList(Changed));
+	Result->SetArrayField(TEXT("unchanged"), CappedList(Unchanged));
+	Result->SetArrayField(TEXT("dirtiedPackages"), CappedList(DirtiedPackages));
+	Result->SetArrayField(TEXT("restoredCleanPackages"), CappedList(RestoredCleanPackages));
+	Result->SetBoolField(TEXT("updated"), !Changed.IsEmpty());
+	if (!Changed.IsEmpty())
+	{
 		Result->SetStringField(TEXT("saveNote"),
-			TEXT("Reconstructed actors leave the level dirty and it is NOT saved. Call level(save) when you are done."));
+			TEXT("Actors whose construction output changed leave their packages dirty (dirtiedPackages) and nothing is saved. Call level(save) when you are done."));
+	}
+	else if (Reran > 0)
+	{
+		Result->SetStringField(TEXT("saveNote"),
+			TEXT("Every rerun reproduced the actor's existing state, so no package was left dirty by this call."));
 	}
 	// Rerunning a construction script rebuilds an actor's generated components
 	// from its class and its instance properties. What it replaced was the

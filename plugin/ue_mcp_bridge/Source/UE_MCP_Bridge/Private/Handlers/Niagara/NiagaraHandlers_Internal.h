@@ -12,6 +12,9 @@
 #include "NiagaraScriptSource.h"
 #include "NiagaraGraph.h"
 #include "NiagaraCommon.h"
+#include "Dom/JsonObject.h"
+
+class UNiagaraNodeFunctionCall;
 
 namespace MCPNiagara
 {
@@ -142,4 +145,20 @@ namespace MCPNiagara
 		}
 		return bKnown;
 	}
+
+	/** The modules wired into Slot's output node, in stack order. The four
+	 *  emitter scripts share one graph, so walking every node of it lists each
+	 *  module under every context and dynamic inputs as if they were modules.
+	 *  Defined in NiagaraHandlers_StackEdits.cpp. */
+	void OrderedModulesOfSlot(const FStackSlot& Slot, TArray<UNiagaraNodeFunctionCall*>& Out);
+
+	/** One module input's current value as "value" plus "valueSource": local
+	 *  (rapid-iteration parameter or override pin), linked (a dynamic input or
+	 *  parameter link drives it, so there is no plain value), or moduleDefault.
+	 *  Reads the storage FNiagaraStackFunctionInputBinder::GetData reads, which
+	 *  NiagaraEditor does not export. 5.5 and later only.
+	 *  Defined in NiagaraHandlers_StackEdits.cpp. */
+	TSharedPtr<FJsonObject> ReadModuleInputValue(
+		const FStackSlot& Slot, const FString& UniqueEmitterName,
+		UNiagaraNodeFunctionCall& FC, const FNiagaraVariable& Input);
 }

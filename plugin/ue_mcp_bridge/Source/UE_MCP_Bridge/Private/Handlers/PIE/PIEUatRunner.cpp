@@ -12,6 +12,7 @@
 #include "Dom/JsonValue.h"
 #include "Editor.h"
 #include "HandlerWorld.h"
+#include "HandlerPlaySession.h"
 #include "Engine/Engine.h"
 #include "Engine/World.h"
 #include "Engine/GameViewportClient.h"
@@ -217,6 +218,137 @@ namespace MCPPIE
 			}
 			return true;
 		}
+
+		// ── Play settings journal ───────────────────────────────────────────
+
+		/** The Play settings a run overrides, as they were before it. */
+		struct FUatPlaySettings
+		{
+			int32 NetMode = static_cast<int32>(PIE_Standalone);
+			int32 Clients = 1;
+			bool bOneProcess = true;
+			FString LaunchParameters;
+		};
+
+		/**
+		 * Written before a run touches the settings and deleted once they are restored and saved. The editor saves
+		 * the Play settings to EditorPerProjectUserSettings.ini while a run has them overridden, so a run the editor
+		 * never finished (crash, forced quit) left them there; Init restores from this file on the next start.
+		 */
+		FString UatPlaySettingsJournalPath()
+		{
+			return FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir() / TEXT("UE_MCP") / TEXT("pie-uat-play-settings.json"));
+		}
+
+		void WriteUatPlaySettingsJournal(const FUatPlaySettings& S)
+		{
+			TSharedRef<FJsonObject> O = MakeShared<FJsonObject>();
+			O->SetNumberField(TEXT("playNetMode"), S.NetMode);
+			O->SetNumberField(TEXT("playNumberOfClients"), S.Clients);
+			O->SetBoolField(TEXT("runUnderOneProcess"), S.bOneProcess);
+			O->SetStringField(TEXT("additionalLaunchParameters"), S.LaunchParameters);
+			FString Text;
+			const TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&Text);
+			FJsonSerializer::Serialize(O, Writer);
+			const FString Path = UatPlaySettingsJournalPath();
+			IFileManager::Get().MakeDirectory(*FPaths::GetPath(Path), true);
+			if (!FFileHelper::SaveStringToFile(Text, *Path))
+			{
+				UE_LOG(LogMCPPIE, Warning, TEXT("[UAT] could not write %s; Play settings will not be restored if the editor stops mid-run"), *Path);
+			}
+		}
+
+		bool ReadUatPlaySettingsJournal(FUatPlaySettings& Out)
+		{
+			FString Text;
+			if (!FFileHelper::LoadFileToString(Text, *UatPlaySettingsJournalPath())) return false;
+			TSharedPtr<FJsonObject> O;
+			if (!FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Text), O) || !O.IsValid()) return false;
+			double N = 0;
+			if (!O->TryGetNumberField(TEXT("playNetMode"), N)) return false;
+			Out.NetMode = static_cast<int32>(N);
+			if (!O->TryGetNumberField(TEXT("playNumberOfClients"), N)) return false;
+			Out.Clients = static_cast<int32>(N);
+			if (!O->TryGetBoolField(TEXT("runUnderOneProcess"), Out.bOneProcess)) return false;
+			return O->TryGetStringField(TEXT("additionalLaunchParameters"), Out.LaunchParameters);
+		}
+
+		/** Applies the settings and saves them, so the ini holds them too, then drops the journal. */
+		void ApplyUatPlaySettings(const FUatPlaySettings& S)
+		{
+			ULevelEditorPlaySettings* PS = GetMutableDefault<ULevelEditorPlaySettings>();
+			PS->SetPlayNetMode(static_cast<EPlayNetMode>(S.NetMode));
+			PS->SetPlayNumberOfClients(S.Clients);
+			PS->SetRunUnderOneProcess(S.bOneProcess);
+			PS->AdditionalLaunchParameters = S.LaunchParameters;
+			PS->SaveConfig();
+			IFileManager::Get().Delete(*UatPlaySettingsJournalPath(), false, true, true);
+		}
+	}
+
+	FString StripUatLaunchParameters(const FString& LaunchParameters)
+	{
+		static const FString MaxFps = TEXT("t.MaxFPS ");
+		static const FString Idle = TEXT(",t.IdleWhenNotForeground 0");
+		static const FString ExecOpen = TEXT("-ExecCmds=\"");
+		FString S = LaunchParameters;
+		int32 Removed = 0;
+		int32 From = 0;
+		for (;;)
+		{
+			const int32 At = S.Find(MaxFps, ESearchCase::CaseSensitive, ESearchDir::FromStart, From);
+			if (At == INDEX_NONE) break;
+			int32 End = At + MaxFps.Len();
+			const int32 DigitsAt = End;
+			while (S.IsValidIndex(End) && FChar::IsDigit(S[End])) ++End;
+			if (End == DigitsAt || S.Mid(End, Idle.Len()) != Idle)
+			{
+				From = At + 1;
+				continue;
+			}
+			End += Idle.Len();
+			if (S.IsValidIndex(End) && S[End] == TEXT(','))
+			{
+				// Joined in front of other commands.
+				S.RemoveAt(At, End + 1 - At);
+			}
+			else if (S.IsValidIndex(End) && S[End] == TEXT('"') && At >= ExecOpen.Len() && S.Mid(At - ExecOpen.Len(), ExecOpen.Len()) == ExecOpen)
+			{
+				// The whole entry was ours; take the space before it too.
+				int32 Start = At - ExecOpen.Len();
+				if (Start > 0 && FChar::IsWhitespace(S[Start - 1])) --Start;
+				S.RemoveAt(Start, End + 1 - Start);
+			}
+			else if (At > 0 && S[At - 1] == TEXT(','))
+			{
+				// Last in a list someone else started.
+				S.RemoveAt(At - 1, End - (At - 1));
+			}
+			else
+			{
+				From = At + 1;
+				continue;
+			}
+			++Removed;
+			From = 0;
+		}
+
+		// One -RenderOffscreen went in with each entry; drop that many, from the end, each with the space before it.
+		static const FString Offscreen = TEXT("-RenderOffscreen");
+		for (int32 At = S.Len() - Offscreen.Len(); At >= 0 && Removed > 0; --At)
+		{
+			const int32 End = At + Offscreen.Len();
+			if (S.Mid(At, Offscreen.Len()).Equals(Offscreen, ESearchCase::IgnoreCase)
+				&& (At == 0 || FChar::IsWhitespace(S[At - 1]))
+				&& (End == S.Len() || FChar::IsWhitespace(S[End])))
+			{
+				const int32 Start = (At > 0) ? At - 1 : At;
+				S.RemoveAt(Start, End - Start);
+				At = FMath::Min(At, S.Len() - Offscreen.Len() + 1);
+				--Removed;
+			}
+		}
+		return S.TrimStartAndEnd();
 	}
 
 	// ── Runner ──────────────────────────────────────────────────────────────
@@ -278,7 +410,9 @@ namespace MCPPIE
 			PS->GetPlayNetMode(SavedNetMode);
 			PS->GetPlayNumberOfClients(SavedClients);
 			PS->GetRunUnderOneProcess(SavedOneProcess);
-			SavedLaunchParameters = PS->AdditionalLaunchParameters;
+			// A run before #1526 could leave its own parameters behind; never treat those as the user's.
+			SavedLaunchParameters = StripUatLaunchParameters(PS->AdditionalLaunchParameters);
+			WriteUatPlaySettingsJournal(SavedSettings());
 
 			PS->SetPlayNetMode(bListen ? PIE_ListenServer : PIE_Client);
 			PS->SetPlayNumberOfClients(Players);
@@ -313,18 +447,23 @@ namespace MCPPIE
 				PS->AdditionalLaunchParameters = (LaunchParams + TEXT(" -RenderOffscreen")).TrimStart();
 			}
 
-			FRequestPlaySessionParams Params;
-			GEditor->RequestPlaySession(Params);
+			MCPPlaySession::Request(/*bNeedsEditorWorld=*/true);
 			return true;
+		}
+
+		FUatPlaySettings SavedSettings() const
+		{
+			FUatPlaySettings S;
+			S.NetMode = static_cast<int32>(SavedNetMode);
+			S.Clients = SavedClients;
+			S.bOneProcess = SavedOneProcess;
+			S.LaunchParameters = SavedLaunchParameters;
+			return S;
 		}
 
 		void RestoreSettings()
 		{
-			ULevelEditorPlaySettings* PS = GetMutableDefault<ULevelEditorPlaySettings>();
-			PS->SetPlayNetMode(SavedNetMode);
-			PS->SetPlayNumberOfClients(SavedClients);
-			PS->SetRunUnderOneProcess(SavedOneProcess);
-			PS->AdditionalLaunchParameters = SavedLaunchParameters;
+			ApplyUatPlaySettings(SavedSettings());
 		}
 
 		int32 RemoteCount() const { return bListen ? Players - 1 : Players; }
@@ -440,10 +579,32 @@ namespace MCPPIE
 				const int32 Count = CountMatches(Lines, Rule.Pattern, &Samples);
 				const bool bOk = Count >= Rule.Min && (Rule.Max < 0 || Count <= Rule.Max);
 				bPass &= bOk;
-				R.Details.Add(FString::Printf(TEXT("%s expect %s /%s/ %s: %d match(es)%s"),
+				// A miss says what was searched, and whether the line exists
+				// before the step began, where only since:"run" looks.
+				FString Why;
+				if (!bOk)
+				{
+					Why = FString::Printf(TEXT(" in %d line(s) %s"), Lines.Num(),
+						Rule.bSinceRun ? TEXT("since the run began") : *FString::Printf(TEXT("since the step began (window_ms %.0f)"), Step.WindowMs));
+					if (!Rule.bSinceRun)
+					{
+						FUatRule Whole = Rule;
+						Whole.bSinceRun = true;
+						TArray<FString> RunLines;
+						LinesSinceMark(Whole, RunLines);
+						TArray<FString> Earlier;
+						const int32 RunCount = CountMatches(RunLines, Rule.Pattern, &Earlier);
+						if (RunCount > Count)
+						{
+							Why += FString::Printf(TEXT("; %d match(es) earlier in the run, which since:\"run\" counts, e.g. %s"),
+								RunCount - Count, *Earlier[0].Left(200));
+						}
+					}
+				}
+				R.Details.Add(FString::Printf(TEXT("%s expect %s /%s/ %s: %d match(es)%s%s"),
 					bOk ? TEXT("ok  ") : TEXT("MISS"), *Rule.Log, *Rule.Pattern,
 					Rule.Max >= 0 ? *FString::Printf(TEXT("[%d..%d]"), Rule.Min, Rule.Max) : *FString::Printf(TEXT("[>=%d]"), Rule.Min),
-					Count, Samples.Num() ? *FString::Printf(TEXT(" e.g. %s"), *Samples[0].Left(200)) : TEXT("")));
+					Count, *Why, Samples.Num() ? *FString::Printf(TEXT(" e.g. %s"), *Samples[0].Left(200)) : TEXT("")));
 			}
 			for (const FUatRule& Rule : Step.Forbid)
 			{
@@ -779,7 +940,28 @@ namespace MCPPIE
 	FPIEUatRunner::FPIEUatRunner() : Impl(MakeUnique<FImpl>()) {}
 	FPIEUatRunner::~FPIEUatRunner() = default;
 
-	void FPIEUatRunner::Init() {}
+	void FPIEUatRunner::Init()
+	{
+		if (IsRunning()) return;
+		FUatPlaySettings Leaked;
+		if (!ReadUatPlaySettingsJournal(Leaked))
+		{
+			IFileManager::Get().Delete(*UatPlaySettingsJournalPath(), false, true, true);
+			// No journal: drop only the parameters a run before the journal existed left behind.
+			ULevelEditorPlaySettings* PS = GetMutableDefault<ULevelEditorPlaySettings>();
+			const FString Clean = StripUatLaunchParameters(PS->AdditionalLaunchParameters);
+			if (Clean != PS->AdditionalLaunchParameters)
+			{
+				PS->AdditionalLaunchParameters = Clean;
+				PS->SaveConfig();
+				UE_LOG(LogMCPPIE, Log, TEXT("[UAT] removed acceptance-run launch parameters an earlier run left in the Play settings"));
+			}
+			return;
+		}
+		Leaked.LaunchParameters = StripUatLaunchParameters(Leaked.LaunchParameters);
+		ApplyUatPlaySettings(Leaked);
+		UE_LOG(LogMCPPIE, Log, TEXT("[UAT] restored the Play settings an unfinished acceptance run had overridden"));
+	}
 
 	void FPIEUatRunner::Shutdown()
 	{

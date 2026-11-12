@@ -114,6 +114,32 @@ describe("Niagara systems and emitters", () => {
     expect((await call("validate_niagara_system", { systemPath: SYSTEM })).valid).toBe(true);
   }, 120_000);
 
+  it("every system read takes the system under either systemPath or assetPath (#1551)", async () => {
+    const byAssetPath = await call("validate_niagara_system", { assetPath: SYSTEM });
+    expect(byAssetPath.valid).toBe(true);
+    const infoBySystemPath = await call("get_niagara_info", { systemPath: SYSTEM });
+    const infoByAssetPath = await call("get_niagara_info", { assetPath: SYSTEM });
+    expect(infoBySystemPath.emitters).toEqual(infoByAssetPath.emitters);
+    const renderersByAsset = await call("list_emitter_renderers", { assetPath: SYSTEM, emitterName: EMITTER });
+    expect(renderersByAsset.renderers).toEqual(await renderers());
+    const params = await call("list_niagara_system_parameters", { assetPath: SYSTEM });
+    expect(params.parameters).toEqual((await call("list_niagara_system_parameters", { systemPath: SYSTEM })).parameters);
+  }, 120_000);
+
+  it("set_emitter_property renames the emitter, and its rollback renames it back by the new name", async () => {
+    const renamed = await call("set_emitter_property", { ...onEmitter, propertyName: "name", value: "BCovRenamed" });
+    expect(renamed.newEmitterName).toBe("BCovRenamed");
+    expect(renamed.previousValue).toBe(EMITTER);
+    expect(await emitterNames(SYSTEM)).toEqual(["BCovRenamed"]);
+
+    const rollback = renamed.rollback as { method: string; payload: Json };
+    expect(rollback.method).toBe("set_emitter_property");
+    expect(rollback.payload.emitterName).toBe("BCovRenamed");
+    const restored = await call(rollback.method, rollback.payload);
+    expect(restored.newEmitterName).toBe(EMITTER);
+    expect(await emitterNames(SYSTEM)).toEqual([EMITTER]);
+  }, 120_000);
+
   it("get_niagara_compiled_hlsl reports the GPU script only after set_emitter_property moves the sim target", async () => {
     const cpu = await call("get_niagara_compiled_hlsl", onEmitter);
     expect(String(cpu.note)).toContain("CPU-sim");
@@ -163,6 +189,22 @@ describe("Niagara modules and inputs", () => {
     expect(mod.inputs.some((i) => i.name === "SpawnRate")).toBe(true);
   }, 120_000);
 
+  it("get_emitter_info reads an emitter inside a system by systemPath and emitterName (#1552)", async () => {
+    const info = await call("get_emitter_info", onEmitter);
+    expect(info.emitterName).toBe(EMITTER);
+    expect(info.systemPath).toBe(SYSTEM);
+    const props = info.properties as Array<{ name: string; value?: unknown }>;
+    expect(props.find((p) => p.name === "SimTarget")?.value).toBeDefined();
+    const modules = info.modules as Array<{ stackContext: string; moduleName: string }>;
+    expect(modules.some((m) => m.stackContext === "EmitterUpdate" && m.moduleName === "SpawnRate")).toBe(true);
+    // The four emitter scripts share one graph; each module belongs to one context only.
+    expect(modules.filter((m) => m.moduleName === "SpawnRate")).toHaveLength(1);
+
+    // A system path given as assetPath addresses the same emitter.
+    const byAsset = await call("get_emitter_info", { assetPath: SYSTEM, emitterName: EMITTER });
+    expect(byAsset.emitterName).toBe(EMITTER);
+  }, 120_000);
+
   it("spawn_niagara_actor places a NiagaraActor and set_niagara_parameter keeps its override", async () => {
     const spawned = await call("spawn_niagara_actor", { systemPath: SYSTEM, label: ACTOR, location: { x: 0, y: 8000, z: 100 } });
     expect(spawned.actorLabel).toBe(ACTOR);
@@ -180,6 +222,15 @@ describe("Niagara modules and inputs", () => {
     const set = await call("set_niagara_module_input", { ...onEmitter, stackContext: "EmitterUpdate", moduleName: "SpawnRate", inputName: "SpawnRate", value: 0 });
     expect(set.pinsUpdated).toBe(1);
     expect(await peakParticles()).toBe(0);
+
+    // list_niagara_module_inputs reads the value back, once, from its own context (#1552).
+    const listed = await call("list_niagara_module_inputs", { ...onEmitter, moduleName: "SpawnRate" });
+    const mods = listed.modules as Array<{ stackContext: string; inputs: Array<{ name: string; value?: unknown; valueSource?: string }> }>;
+    expect(mods).toHaveLength(1);
+    expect(mods[0].stackContext).toBe("EmitterUpdate");
+    const rate = mods[0].inputs.find((i) => i.name === "SpawnRate");
+    expect(rate?.valueSource).toBe("local");
+    expect(rate?.value).toBe(0);
   }, 240_000);
 
   it("set_niagara_dynamic_input wires a script into SpawnRate and remove_niagara_dynamic_input unwires it", async () => {

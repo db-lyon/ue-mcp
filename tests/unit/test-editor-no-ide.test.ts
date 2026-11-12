@@ -9,6 +9,11 @@ import * as path from "node:path";
 import { describe, expect, it } from "vitest";
 import { NO_BACKGROUND_THROTTLE_ARG, NO_IDE_ARG, TEST_EDITOR_ARGS } from "../../scripts/test-editor-args.mjs";
 import { readUeMcpConfig } from "../../src/config/project.js";
+import {
+  NO_BACKGROUND_THROTTLE_ARG as SERVER_NO_BACKGROUND_THROTTLE_ARG,
+  NO_IDE_ARG as SERVER_NO_IDE_ARG,
+  buildEditorLaunchArgs,
+} from "../../src/editor/launch-args.js";
 
 const ROOT = path.resolve(__dirname, "..", "..");
 const read = (rel: string) => fs.readFileSync(path.join(ROOT, rel), "utf8");
@@ -38,9 +43,13 @@ describe("test editors open no IDE", () => {
   });
 
   it("start_editor and restart_editor pass the project's launchArgs, and tests/ue_mcp sets it", () => {
-    expect(read("src/editor/editor-control.ts")).toMatch(
-      /spawnOutsideTree\(editorExe, \[project\.projectPath, \.\.\.\(project\.config\.editor\?\.launchArgs \?\? \[\]\)\]/,
-    );
-    expect(readUeMcpConfig(path.join(ROOT, "tests", "ue_mcp")).editor?.launchArgs).toContain(NO_IDE_ARG);
+    const configLaunchArgs = readUeMcpConfig(path.join(ROOT, "tests", "ue_mcp")).editor?.launchArgs;
+    expect(configLaunchArgs).toContain(NO_IDE_ARG);
+    expect(buildEditorLaunchArgs("P.uproject", { window: "normal", ide: "allow", configLaunchArgs })).toContain(NO_IDE_ARG);
+  });
+
+  it("the server's launch arguments are the ones the test tooling passes", () => {
+    expect(SERVER_NO_IDE_ARG).toBe(NO_IDE_ARG);
+    expect(SERVER_NO_BACKGROUND_THROTTLE_ARG).toBe(NO_BACKGROUND_THROTTLE_ARG);
   });
 });

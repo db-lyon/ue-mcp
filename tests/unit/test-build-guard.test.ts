@@ -33,6 +33,12 @@ function createFakeEngine(name: string): string {
 }
 
 describe("UE-MCP test engine build guard", () => {
+  it("caps parallel actions when UE_MCP_MAX_PARALLEL_ACTIONS is set", () => {
+    const engineRoot = createFakeEngine("capped");
+    expect(createTestBuildPlan({ UE_MCP_TEST_ENGINE_ROOT: engineRoot, UE_MCP_MAX_PARALLEL_ACTIONS: "2" }).buildArgs).toContain("-MaxParallelActions=2");
+    expect(createTestBuildPlan({ UE_MCP_TEST_ENGINE_ROOT: engineRoot }).buildArgs.some((a: string) => a.startsWith("-MaxParallelActions"))).toBe(false);
+  });
+
   it("blocks engine writes by default on the fixed test target", () => {
     const engineRoot = createFakeEngine("dedicated");
     const plan = createTestBuildPlan({ UE_MCP_TEST_ENGINE_ROOT: engineRoot });
@@ -178,5 +184,84 @@ describe("UE-MCP test engine build guard", () => {
 
     expect(plan.allowEngineChanges).toBe(false);
     expect(plan.buildArgs).toContain("-NoEngineChanges");
+  });
+});
+
+describe("UE_ROOT", () => {
+  it("selects the engine named by UE_ROOT", () => {
+    const engineRoot = createFakeEngine("ue-root-only");
+    const engine = resolveTestEngine({ UE_ROOT: engineRoot });
+
+    expect(engine.engineRoot).toBe(engineRoot);
+    expect(engine.engineRootSource).toBe("UE_ROOT");
+  });
+
+  it("prefers UE_MCP_TEST_ENGINE_ROOT over UE_ROOT", () => {
+    const pinnedRoot = createFakeEngine("ue-root-pinned");
+    const ueRoot = createFakeEngine("ue-root-env");
+    const engine = resolveTestEngine({
+      UE_MCP_TEST_ENGINE_ROOT: pinnedRoot,
+      UE_ROOT: ueRoot,
+    });
+
+    expect(engine.engineRoot).toBe(pinnedRoot);
+    expect(engine.engineRootSource).toBe("UE_MCP_TEST_ENGINE_ROOT");
+  });
+
+  it("prefers UE_ROOT over UE_BUILD_TOOL_PATH", () => {
+    const ueRoot = createFakeEngine("ue-root-wins");
+    const buildToolRoot = createFakeEngine("build-tool-loses");
+    const engine = resolveTestEngine({
+      UE_ROOT: ueRoot,
+      UE_BUILD_TOOL_PATH: engineExecutables(buildToolRoot).buildTool,
+    });
+
+    expect(engine.engineRoot).toBe(ueRoot);
+    expect(engine.engineRootSource).toBe("UE_ROOT");
+  });
+
+  it("fails loudly when UE_ROOT has no build tool, without falling back", () => {
+    const fallbackRoot = createFakeEngine("ue-root-fallback");
+    expect(() => resolveTestEngine({
+      UE_ROOT: path.join(temporaryRoot, "missing-ue-root"),
+      UE_BUILD_TOOL_PATH: engineExecutables(fallbackRoot).buildTool,
+    })).toThrow("UE_ROOT does not point at a usable Unreal engine");
+  });
+
+  it("rejects a UE_ROOT inside a protected root", () => {
+    const protectedRoot = path.join(temporaryRoot, "protected-ue-root");
+    fs.mkdirSync(protectedRoot);
+    const engineRoot = createFakeEngine(path.join("protected-ue-root", "engine"));
+
+    expect(() => resolveTestEngine({
+      UE_ROOT: engineRoot,
+      UE_MCP_PROTECTED_ENGINE_ROOTS: protectedRoot,
+    })).toThrow("UE_MCP_PROTECTED_ENGINE_ROOTS");
+  });
+
+  it("keeps -NoEngineChanges on a plan built from UE_ROOT", () => {
+    const engineRoot = createFakeEngine("ue-root-plan");
+    const plan = createTestBuildPlan({ UE_ROOT: engineRoot });
+
+    expect(plan.buildArgs.filter((argument: string) => argument === "-NoEngineChanges")).toHaveLength(1);
+  });
+});
+
+describe("the engine a test build picks with nothing pinned", () => {
+  it("tries the engine the test project names before the newest install", async () => {
+    const { engineRootCandidates } = await import("../../scripts/build-utils.js");
+    const roots = engineRootCandidates({}, "win32", "5.8").map((c: { engineRoot: string }) => path.win32.basename(c.engineRoot));
+    expect(roots[0]).toBe("UE_5.8");
+    expect(roots.slice(1, 3)).toEqual(["UE_5.9", "UE_5.8"]);
+  });
+
+  it("keeps the newest-first order when the project names no launcher version", async () => {
+    const { engineRootCandidates } = await import("../../scripts/build-utils.js");
+    expect(path.win32.basename(engineRootCandidates({}, "win32", null)[0].engineRoot)).toBe("UE_5.9");
+  });
+
+  it("still lets an explicit pin win", async () => {
+    const { engineRootCandidates } = await import("../../scripts/build-utils.js");
+    expect(engineRootCandidates({ UE_MCP_TEST_ENGINE_ROOT: "D:/UE_5.7" }, "win32", "5.8")[0].source).toBe("UE_MCP_TEST_ENGINE_ROOT");
   });
 });

@@ -4,6 +4,8 @@ import { McpError, ErrorCode, type McpErrorDetails } from "../core/errors.js";
 import { debug } from "../core/log.js";
 import { taskEffect } from "../surface/action-effects.js";
 import { SESSION_ID } from "./lock-owner.js";
+import { NEVER_LOCKED } from "./lock-actions.js";
+import { BATCH_TASK, batchCallsOf } from "./batch-steps.js";
 import type { ToolDef } from "../core/types.js";
 
 // Per-asset exclusive locking, orchestrated from the dispatch layer. The lock
@@ -49,18 +51,6 @@ function looksLikeAssetPath(v: unknown): v is string {
 }
 
 /**
- * The lock-management actions themselves, which must never take a lock.
- *
- * They change the editor's lock registry, so they declare `mutate` and the
- * routing gate is right to treat them as one. Locking is a different question:
- * taking an asset lock around `asset(lock)` would have this module acquire a
- * lock in order to acquire a lock. The exclusion was invisible before because
- * "lock" and "unlock" simply were not in the verb list; it is stated here
- * rather than left to an omission nobody could see.
- */
-const NEVER_LOCKED = new Set(["asset.lock", "asset.unlock", "asset.unlock_all", "asset.list_locks"]);
-
-/**
  * Decide whether a task mutates an asset and which asset path(s) it touches.
  *
  * The mutation half is the action's DECLARED effect, and `unknown` counts: an
@@ -86,6 +76,25 @@ export function classifyAction(
   graph?: readonly ToolDef[],
 ): ActionClassification {
   if (NEVER_LOCKED.has(taskName)) return { mutates: false, paths: [] };
+  // editor(batch) runs its steps as one game-thread job, so it holds the
+  // locks of ALL of them for the whole job: the union is taken up front and
+  // released at the end, and a step's lock is never dropped while a later
+  // step still runs. A batch of reads takes nothing. With no steps to read
+  // there is nothing to be more precise than the declaration, which says
+  // `mutate`, and the empty path list keeps that from locking anything.
+  if (taskName === BATCH_TASK) {
+    const calls = batchCallsOf(params);
+    if (calls.length === 0) return { mutates: true, paths: [] };
+    const union = new Set<string>();
+    let mutates = false;
+    for (const call of calls) {
+      const step = classifyAction(`${call.category}.${call.method}`, call.args ?? {}, graph);
+      if (!step.mutates) continue;
+      mutates = true;
+      for (const p of step.paths) union.add(p);
+    }
+    return { mutates, paths: [...union] };
+  }
   if (taskEffect(taskName, graph).effect === "read") return { mutates: false, paths: [] };
 
   const paths = new Set<string>();

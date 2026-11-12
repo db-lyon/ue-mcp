@@ -165,20 +165,22 @@ static FString WAnim_AnimationNameList(UWidgetBlueprint* BP)
 static TSharedPtr<FJsonValue> WAnim_CommitBlueprint(
 	UWidgetBlueprint* BP,
 	const FString& AssetPath,
-	const TSharedPtr<FJsonObject>& Result)
+	const TSharedPtr<FJsonObject>& Result,
+	const MCPWidgetGuidMap::FCompileBaseline& CompileBaseline)
 {
 	BP->MarkPackageDirty();
 
-	const MCPWidgetGuidMap::FSyncReport GuidSync = MCPWidgetGuidMap::CompileChecked(BP);
-	if (!GuidSync.bCompiled)
+	const MCPWidgetGuidMap::FSyncReport GuidSync = MCPWidgetGuidMap::CompileChecked(BP, CompileBaseline);
+	if (GuidSync.WasRefused())
 	{
 		return MCPWidgetGuidMap::BlockedError(AssetPath, GuidSync);
 	}
 
 	FString SaveError;
-	const bool bSaved = SaveAssetPackageChecked(BP, SaveError);
+	const bool bSaved = MCPWidgetGuidMap::SaveIfCompiled(BP, GuidSync, SaveError);
 	MCPSetWidgetGuidOutcome(Result, GuidSync, AssetPath);
 	MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveError);
+	MCPSetWidgetCompileOutcome(Result, BP, AssetPath, GuidSync, TEXT("The widget animation edit was applied"));
 	return nullptr;
 }
 
@@ -476,6 +478,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::CreateWidgetAnimation(const TSharedPtr<F
 	TSharedPtr<FJsonValue> ResolveError;
 	UWidgetBlueprint* WidgetBP = MCPWidget::ResolveWidgetBlueprintOrError(AssetPath, ResolveError);
 	if (!WidgetBP) return ResolveError;
+	const MCPWidgetGuidMap::FCompileBaseline CompileBaseline = MCPWidgetGuidMap::CaptureBaseline(WidgetBP);
 
 	if (DurationSeconds <= 0.0)
 	{
@@ -533,7 +536,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::CreateWidgetAnimation(const TSharedPtr<F
 	Payload->SetStringField(TEXT("animationName"), NewAnim->GetName());
 	MCPSetRollback(Result, TEXT("delete_widget_animation"), Payload);
 
-	if (auto Err = WAnim_CommitBlueprint(WidgetBP, AssetPath, Result)) return Err;
+	if (auto Err = WAnim_CommitBlueprint(WidgetBP, AssetPath, Result, CompileBaseline)) return Err;
 
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetStringField(TEXT("animationName"), NewAnim->GetName());
@@ -556,6 +559,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::DeleteWidgetAnimation(const TSharedPtr<F
 	TSharedPtr<FJsonValue> ResolveError;
 	UWidgetBlueprint* WidgetBP = MCPWidget::ResolveWidgetBlueprintOrError(AssetPath, ResolveError);
 	if (!WidgetBP) return ResolveError;
+	const MCPWidgetGuidMap::FCompileBaseline CompileBaseline = MCPWidgetGuidMap::CaptureBaseline(WidgetBP);
 
 	UWidgetAnimation* Anim = WAnim_FindAnimation(WidgetBP, AnimationName);
 	if (!Anim)
@@ -609,7 +613,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::DeleteWidgetAnimation(const TSharedPtr<F
 			TEXT("track(s), their sections and every key are NOT restored - re-author them with ")
 			TEXT("widget(add_animation_track) and widget(add_animation_key)."), TrackCount));
 
-	if (auto Err = WAnim_CommitBlueprint(WidgetBP, AssetPath, Result)) return Err;
+	if (auto Err = WAnim_CommitBlueprint(WidgetBP, AssetPath, Result, CompileBaseline)) return Err;
 
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetStringField(TEXT("animationName"), RemovedName);
@@ -787,6 +791,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::AddWidgetAnimationTrack(const TSharedPtr
 	TSharedPtr<FJsonValue> ResolveError;
 	UWidgetBlueprint* WidgetBP = MCPWidget::ResolveWidgetBlueprintOrError(AssetPath, ResolveError);
 	if (!WidgetBP) return ResolveError;
+	const MCPWidgetGuidMap::FCompileBaseline CompileBaseline = MCPWidgetGuidMap::CaptureBaseline(WidgetBP);
 	if (!WidgetBP->WidgetTree) return MCPWidget::MissingWidgetTreeError(AssetPath);
 
 	UWidgetAnimation* Anim = WAnim_FindAnimation(WidgetBP, AnimationName);
@@ -899,7 +904,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::AddWidgetAnimationTrack(const TSharedPtr
 	Payload->SetStringField(TEXT("propertyName"), PropertyName);
 	MCPSetRollback(Result, TEXT("remove_widget_animation_track"), Payload);
 
-	if (auto Err = WAnim_CommitBlueprint(WidgetBP, AssetPath, Result)) return Err;
+	if (auto Err = WAnim_CommitBlueprint(WidgetBP, AssetPath, Result, CompileBaseline)) return Err;
 
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetStringField(TEXT("animationName"), Anim->GetName());
@@ -937,6 +942,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::RemoveWidgetAnimationTrack(const TShared
 	TSharedPtr<FJsonValue> ResolveError;
 	UWidgetBlueprint* WidgetBP = MCPWidget::ResolveWidgetBlueprintOrError(AssetPath, ResolveError);
 	if (!WidgetBP) return ResolveError;
+	const MCPWidgetGuidMap::FCompileBaseline CompileBaseline = MCPWidgetGuidMap::CaptureBaseline(WidgetBP);
 
 	UWidgetAnimation* Anim = WAnim_FindAnimation(WidgetBP, AnimationName);
 	if (!Anim || !Anim->GetMovieScene())
@@ -1007,7 +1013,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::RemoveWidgetAnimationTrack(const TShared
 		FString::Printf(TEXT("An empty track and section for the same property. The %d key(s) on it are ")
 			TEXT("NOT restored - re-add them with widget(add_animation_key)."), KeyCount));
 
-	if (auto Err = WAnim_CommitBlueprint(WidgetBP, AssetPath, Result)) return Err;
+	if (auto Err = WAnim_CommitBlueprint(WidgetBP, AssetPath, Result, CompileBaseline)) return Err;
 
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetStringField(TEXT("trackClass"), TrackClassName);
@@ -1047,6 +1053,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::AddWidgetAnimationKey(const TSharedPtr<F
 	TSharedPtr<FJsonValue> ResolveError;
 	UWidgetBlueprint* WidgetBP = MCPWidget::ResolveWidgetBlueprintOrError(AssetPath, ResolveError);
 	if (!WidgetBP) return ResolveError;
+	const MCPWidgetGuidMap::FCompileBaseline CompileBaseline = MCPWidgetGuidMap::CaptureBaseline(WidgetBP);
 
 	UWidgetAnimation* Anim = WAnim_FindAnimation(WidgetBP, AnimationName);
 	if (!Anim || !Anim->GetMovieScene())
@@ -1140,7 +1147,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::AddWidgetAnimationKey(const TSharedPtr<F
 		MCPSetRollback(Result, TEXT("remove_widget_animation_key"), Payload);
 	}
 
-	if (auto Err = WAnim_CommitBlueprint(WidgetBP, AssetPath, Result)) return Err;
+	if (auto Err = WAnim_CommitBlueprint(WidgetBP, AssetPath, Result, CompileBaseline)) return Err;
 
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetStringField(TEXT("animationName"), Anim->GetName());
@@ -1175,6 +1182,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::RemoveWidgetAnimationKey(const TSharedPt
 	TSharedPtr<FJsonValue> ResolveError;
 	UWidgetBlueprint* WidgetBP = MCPWidget::ResolveWidgetBlueprintOrError(AssetPath, ResolveError);
 	if (!WidgetBP) return ResolveError;
+	const MCPWidgetGuidMap::FCompileBaseline CompileBaseline = MCPWidgetGuidMap::CaptureBaseline(WidgetBP);
 
 	UWidgetAnimation* Anim = WAnim_FindAnimation(WidgetBP, AnimationName);
 	if (!Anim || !Anim->GetMovieScene())
@@ -1266,7 +1274,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::RemoveWidgetAnimationKey(const TSharedPt
 	Result->SetStringField(TEXT("rollbackRestores"),
 		TEXT("The key time and value. Hand-edited tangents are recomputed by AutoSetTangents, not restored."));
 
-	if (auto Err = WAnim_CommitBlueprint(WidgetBP, AssetPath, Result)) return Err;
+	if (auto Err = WAnim_CommitBlueprint(WidgetBP, AssetPath, Result, CompileBaseline)) return Err;
 
 	Result->SetNumberField(TEXT("time"), Time);
 	Result->SetNumberField(TEXT("frame"), Frame.Value);
@@ -1292,6 +1300,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::AddWidgetAnimationEventKey(const TShared
 	TSharedPtr<FJsonValue> ResolveError;
 	UWidgetBlueprint* WidgetBP = MCPWidget::ResolveWidgetBlueprintOrError(AssetPath, ResolveError);
 	if (!WidgetBP) return ResolveError;
+	const MCPWidgetGuidMap::FCompileBaseline CompileBaseline = MCPWidgetGuidMap::CaptureBaseline(WidgetBP);
 
 	UWidgetAnimation* Anim = WAnim_FindAnimation(WidgetBP, AnimationName);
 	if (!Anim || !Anim->GetMovieScene())
@@ -1411,7 +1420,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::AddWidgetAnimationEventKey(const TShared
 		MCPSetRollback(Result, TEXT("remove_widget_animation_event_key"), Payload);
 	}
 
-	if (auto Err = WAnim_CommitBlueprint(WidgetBP, AssetPath, Result)) return Err;
+	if (auto Err = WAnim_CommitBlueprint(WidgetBP, AssetPath, Result, CompileBaseline)) return Err;
 
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetStringField(TEXT("animationName"), Anim->GetName());
@@ -1444,6 +1453,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::RemoveWidgetAnimationEventKey(const TSha
 	TSharedPtr<FJsonValue> ResolveError;
 	UWidgetBlueprint* WidgetBP = MCPWidget::ResolveWidgetBlueprintOrError(AssetPath, ResolveError);
 	if (!WidgetBP) return ResolveError;
+	const MCPWidgetGuidMap::FCompileBaseline CompileBaseline = MCPWidgetGuidMap::CaptureBaseline(WidgetBP);
 
 	UWidgetAnimation* Anim = WAnim_FindAnimation(WidgetBP, AnimationName);
 	if (!Anim || !Anim->GetMovieScene())
@@ -1514,7 +1524,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::RemoveWidgetAnimationEventKey(const TSha
 			TEXT("Nothing: the removed key had no bound function, so there is no endpoint to re-add."));
 	}
 
-	if (auto Err = WAnim_CommitBlueprint(WidgetBP, AssetPath, Result)) return Err;
+	if (auto Err = WAnim_CommitBlueprint(WidgetBP, AssetPath, Result, CompileBaseline)) return Err;
 
 	Result->SetNumberField(TEXT("time"), Time);
 	Result->SetStringField(TEXT("removedFunctionName"), PreviousFunction);
@@ -1545,6 +1555,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::BindWidgetAnimationEvent(const TSharedPt
 	TSharedPtr<FJsonValue> ResolveError;
 	UWidgetBlueprint* WidgetBP = MCPWidget::ResolveWidgetBlueprintOrError(AssetPath, ResolveError);
 	if (!WidgetBP) return ResolveError;
+	const MCPWidgetGuidMap::FCompileBaseline CompileBaseline = MCPWidgetGuidMap::CaptureBaseline(WidgetBP);
 
 	UWidgetAnimation* Anim = WAnim_FindAnimation(WidgetBP, AnimationName);
 	if (!Anim)
@@ -1622,7 +1633,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::BindWidgetAnimationEvent(const TSharedPt
 	MCPSetRollback(Result, TEXT("unbind_widget_animation_event"), Payload);
 
 	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(WidgetBP);
-	if (auto Err = WAnim_CommitBlueprint(WidgetBP, AssetPath, Result)) return Err;
+	if (auto Err = WAnim_CommitBlueprint(WidgetBP, AssetPath, Result, CompileBaseline)) return Err;
 
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetStringField(TEXT("animationName"), Anim->GetName());
@@ -1650,6 +1661,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::UnbindWidgetAnimationEvent(const TShared
 	TSharedPtr<FJsonValue> ResolveError;
 	UWidgetBlueprint* WidgetBP = MCPWidget::ResolveWidgetBlueprintOrError(AssetPath, ResolveError);
 	if (!WidgetBP) return ResolveError;
+	const MCPWidgetGuidMap::FCompileBaseline CompileBaseline = MCPWidgetGuidMap::CaptureBaseline(WidgetBP);
 
 	const EWidgetAnimationEvent Action = EventName.Equals(TEXT("Started"), ESearchCase::IgnoreCase)
 		? EWidgetAnimationEvent::Started : EWidgetAnimationEvent::Finished;
@@ -1717,7 +1729,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::UnbindWidgetAnimationEvent(const TShared
 	}
 
 	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(WidgetBP);
-	if (auto Err = WAnim_CommitBlueprint(WidgetBP, AssetPath, Result)) return Err;
+	if (auto Err = WAnim_CommitBlueprint(WidgetBP, AssetPath, Result, CompileBaseline)) return Err;
 
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetStringField(TEXT("removedNodeName"), NodeName);
@@ -1744,6 +1756,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::SetWidgetNavigation(const TSharedPtr<FJs
 	TSharedPtr<FJsonValue> ResolveError;
 	UWidgetBlueprint* WidgetBP = MCPWidget::ResolveWidgetBlueprintOrError(AssetPath, ResolveError);
 	if (!WidgetBP) return ResolveError;
+	const MCPWidgetGuidMap::FCompileBaseline CompileBaseline = MCPWidgetGuidMap::CaptureBaseline(WidgetBP);
 	if (!WidgetBP->WidgetTree) return MCPWidget::MissingWidgetTreeError(AssetPath);
 
 	// One shape for both the single and the bulk case: `rules` is an array of
@@ -1898,7 +1911,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::SetWidgetNavigation(const TSharedPtr<FJs
 
 	if (Changed > 0)
 	{
-		if (auto Err = WAnim_CommitBlueprint(WidgetBP, AssetPath, Result)) return Err;
+		if (auto Err = WAnim_CommitBlueprint(WidgetBP, AssetPath, Result, CompileBaseline)) return Err;
 	}
 
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
@@ -1926,6 +1939,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::ClearWidgetNavigation(const TSharedPtr<F
 	TSharedPtr<FJsonValue> ResolveError;
 	UWidgetBlueprint* WidgetBP = MCPWidget::ResolveWidgetBlueprintOrError(AssetPath, ResolveError);
 	if (!WidgetBP) return ResolveError;
+	const MCPWidgetGuidMap::FCompileBaseline CompileBaseline = MCPWidgetGuidMap::CaptureBaseline(WidgetBP);
 	if (!WidgetBP->WidgetTree) return MCPWidget::MissingWidgetTreeError(AssetPath);
 
 	UWidget* Widget = MCPWidget::FindWidgetByName(WidgetBP->WidgetTree, WidgetName);
@@ -1985,7 +1999,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::ClearWidgetNavigation(const TSharedPtr<F
 
 	if (Cleared > 0)
 	{
-		if (auto Err = WAnim_CommitBlueprint(WidgetBP, AssetPath, Result)) return Err;
+		if (auto Err = WAnim_CommitBlueprint(WidgetBP, AssetPath, Result, CompileBaseline)) return Err;
 	}
 
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
@@ -2011,6 +2025,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::RestoreWidgetNavigation(const TSharedPtr
 	TSharedPtr<FJsonValue> ResolveError;
 	UWidgetBlueprint* WidgetBP = MCPWidget::ResolveWidgetBlueprintOrError(AssetPath, ResolveError);
 	if (!WidgetBP) return ResolveError;
+	const MCPWidgetGuidMap::FCompileBaseline CompileBaseline = MCPWidgetGuidMap::CaptureBaseline(WidgetBP);
 	if (!WidgetBP->WidgetTree) return MCPWidget::MissingWidgetTreeError(AssetPath);
 
 	int32 Restored = 0;
@@ -2079,7 +2094,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::RestoreWidgetNavigation(const TSharedPtr
 
 	if (Restored > 0)
 	{
-		if (auto Err = WAnim_CommitBlueprint(WidgetBP, AssetPath, Result)) return Err;
+		if (auto Err = WAnim_CommitBlueprint(WidgetBP, AssetPath, Result, CompileBaseline)) return Err;
 	}
 
 	Result->SetStringField(TEXT("assetPath"), AssetPath);

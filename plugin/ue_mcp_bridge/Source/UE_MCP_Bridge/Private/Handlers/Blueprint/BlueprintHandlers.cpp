@@ -153,7 +153,9 @@ void FBlueprintHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("componentName"), EType::String, TEXT("Name of the new component (default: componentClass)")),
 		SpecOnConflict,
 		MCPParam::Optional(TEXT("parentComponent"), EType::String, TEXT("SCS parent component for the hierarchy")),
+		MCPParam::Optional(TEXT("parentSocket"), EType::String, TEXT("Bone or socket on parentComponent to attach to (the details panel's Parent Socket)")),
 		MCPParam::Optional(TEXT("childActorClass"), EType::String, TEXT("ChildActorClass for an added ChildActorComponent: a Blueprint path with or without _C, or a C++ class")),
+		MCPParam::Optional(TEXT("asRoot"), EType::Boolean, TEXT("Make this scene component the Blueprint's root: it replaces DefaultSceneRoot, whose children move under it, or takes the current root as its child. Applies to an existing component of this name too. Not combinable with parentComponent or parentSocket")),
 	});
 	Registry.RegisterHandler(TEXT("add_blueprint_interface"), &AddBlueprintInterface, {
 		MCPParam::Required(TEXT("blueprintPath"), EType::String, TEXT("Blueprint asset path")),
@@ -274,6 +276,13 @@ void FBlueprintHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		SpecNodeId,
 		MCPParam::Optional(TEXT("deferCompile"), EType::Boolean, TEXT("Skip this write's compile (default false) so a sequence of node writes compiles once, with blueprint(compile), at the end")),
 	});
+	// #1487: opens the editor, so the contract test must not call it.
+	Registry.RegisterHandler(TEXT("focus_blueprint_node"), &FocusNode, {
+		SpecAssetPath,
+		MCPParam::Optional(TEXT("graphName"), EType::String, TEXT("Graph name or the selector list_graphs reports; narrows a node name. Default: every graph")),
+		SpecGraphSelector,
+		SpecNodeId,
+	}, MCPSpec::ContractExempt(TEXT("Opens the Blueprint editor and moves editor focus")));
 	Registry.RegisterHandler(TEXT("refresh_node"), &RefreshNode, {
 		SpecAssetPath,
 		SpecGraphName,
@@ -311,6 +320,20 @@ void FBlueprintHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		SpecPropertyName,
 		SpecValue,
 	});
+	Registry.RegisterHandlerWithTimeout(TEXT("set_blueprint_component_properties_batch"), &SetComponentPropertiesBatch, 600.0f, {
+		MCPParam::Optional(TEXT("items"), EType::Array, TEXT("Explicit [{assetPath, componentName, properties:{name:value}}]; mutually exclusive with directory")).Items(EType::Object).WithFields({
+			MCPParam::RequiredField(TEXT("assetPath"), EType::String, TEXT("Blueprint asset path")),
+			MCPParam::RequiredField(TEXT("componentName"), EType::String, TEXT("Component instance name, property name or unambiguous class")),
+			MCPParam::RequiredField(TEXT("properties"), EType::Object, TEXT("Property name to JSON value or Unreal export text; null clears references")),
+		}),
+		MCPParam::Optional(TEXT("directory"), EType::String, TEXT("Select Blueprint assets under this content path instead of items")),
+		MCPParam::Optional(TEXT("classFilter"), EType::String, TEXT("Directory mode: only Blueprints deriving from this actor class")),
+		MCPParam::Optional(TEXT("componentName"), EType::String, TEXT("Directory mode: component instance name, property name or unambiguous component class")),
+		MCPParam::Optional(TEXT("properties"), EType::Object, TEXT("Directory mode: property map applied to each matching Blueprint")),
+		MCPParam::Optional(TEXT("recursive"), EType::Boolean, TEXT("Directory mode: include subdirectories (default true)")),
+		MCPParam::Optional(TEXT("maxBlueprints"), EType::Integer, TEXT("Maximum candidate Blueprints, default 200, maximum 2000; overflow refuses the batch")).Range(1, 2000),
+		MCPParam::Optional(TEXT("dryRun"), EType::Boolean, TEXT("Validate values on transient copies without editing, compiling or saving (default false)")),
+	});
 	// #442: dedicated OverrideMaterials writer that takes a materialPaths array
 	// directly, avoiding any value coercion concerns on the generic path.
 	Registry.RegisterHandler(TEXT("set_component_override_materials"), &SetComponentOverrideMaterials, {
@@ -325,6 +348,12 @@ void FBlueprintHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Required(TEXT("trackName"), EType::String, TEXT("Track name within the timeline")),
 		MCPParam::Optional(TEXT("trackType"), EType::String, TEXT("float (default), vector, color or event")),
 		MCPParam::Optional(TEXT("keyframes"), EType::Array, TEXT("[{time, value}]: value is a number for float and event, {x,y,z} for vector, {r,g,b,a} for color")).Items(EType::Object),
+		MCPParam::Optional(TEXT("curveAssetPath"), EType::String, TEXT("Existing curve asset to bind instead of keyframes: CurveFloat for float and event, CurveVector for vector, CurveLinearColor for color")),
+	});
+	// #1654: the inverse of creating a timeline, as the editor's own removal does it.
+	Registry.RegisterHandler(TEXT("remove_timeline"), &RemoveTimeline, {
+		SpecAssetPath,
+		MCPParam::Required(TEXT("timelineName"), EType::String, TEXT("Timeline name, as add_timeline_track and the Timeline node show it")),
 	});
 	Registry.RegisterHandler(TEXT("set_capsule_size"), &SetCapsuleSize, {
 		SpecAssetPath,
@@ -351,6 +380,8 @@ void FBlueprintHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Required(TEXT("parameterName"), EType::String, TEXT("Parameter name")),
 		MCPParam::Optional(TEXT("parameterType"), EType::String, TEXT("Parameter type in the add_variable vocabulary, containers included (default float)")),
 		MCPParam::Optional(TEXT("isOutput"), EType::Boolean, TEXT("An output parameter rather than an input (default false)")),
+		MCPParam::Optional(TEXT("isReference"), EType::Boolean, TEXT("Pass by reference (default false)")),
+		MCPParam::Optional(TEXT("isConst"), EType::Boolean, TEXT("Const parameter (default false)")),
 	});
 	Registry.RegisterHandler(TEXT("set_variable_default"), &SetVariableDefault, {
 		SpecAssetPath,
@@ -460,7 +491,7 @@ void FBlueprintHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		SpecValue,
 	});
 	Registry.RegisterHandler(TEXT("get_cdo_properties"), &GetCdoProperties, {
-		MCPParam::Required(TEXT("className"), EType::String, TEXT("C++ class name or path")),
+		MCPParam::Required(TEXT("className"), EType::String, TEXT("C++ class name or path, or a Blueprint asset path (reads its generated class)")).Alias(TEXT("assetPath")),
 		MCPParam::Optional(TEXT("propertyNames"), EType::Array, TEXT("Property names to read (omit for all)")).Items(EType::String),
 	});
 	Registry.RegisterHandler(TEXT("compare_class_defaults"), &CompareClassDefaults, {
@@ -1906,6 +1937,12 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::ReadBlueprint(const TSharedPtr<FJsonO
 				CompObj->SetStringField(TEXT("parent"), (*ParentPtr)->GetVariableName().ToString());
 			}
 
+			// The bone or socket on the parent this component attaches to.
+			if (!Node->AttachToName.IsNone())
+			{
+				CompObj->SetStringField(TEXT("parentSocket"), Node->AttachToName.ToString());
+			}
+
 			// Transform for SceneComponents
 			if (USceneComponent* SceneComp = Cast<USceneComponent>(Template))
 			{
@@ -2141,6 +2178,107 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddVariable(const TSharedPtr<FJsonObj
 	}
 }
 
+namespace MCPSceneRootAuthoring
+{
+	/** A root node that is this Blueprint's own scene root: a scene template not attached to an inherited component. */
+	bool IsOwnSceneRoot(const USCS_Node* Node)
+	{
+		return Node && Cast<USceneComponent>(Node->ComponentTemplate) && Node->ParentComponentOrVariableName.IsNone();
+	}
+
+	/** Names the inherited scene root that owns this Blueprint's hierarchy, or empty when the Blueprint owns its root (#1478). */
+	FString FindInheritedSceneRoot(const UBlueprint* Blueprint)
+	{
+		UClass* ParentClass = Blueprint ? Blueprint->ParentClass.Get() : nullptr;
+		for (UBlueprintGeneratedClass* BPGC = Cast<UBlueprintGeneratedClass>(ParentClass); BPGC; BPGC = Cast<UBlueprintGeneratedClass>(BPGC->GetSuperClass()))
+		{
+			if (!BPGC->SimpleConstructionScript) continue;
+			for (const USCS_Node* Node : BPGC->SimpleConstructionScript->GetRootNodes())
+			{
+				if (IsOwnSceneRoot(Node)) return FString::Printf(TEXT("%s (from %s)"), *Node->GetVariableName().ToString(), *BPGC->GetName());
+			}
+		}
+		for (UClass* Cls = ParentClass; Cls; Cls = Cls->GetSuperClass())
+		{
+			if (Cls->HasAnyClassFlags(CLASS_Native))
+			{
+				const AActor* CDO = Cast<AActor>(Cls->GetDefaultObject(false));
+				if (CDO && CDO->GetRootComponent()) return FString::Printf(TEXT("%s (native, from %s)"), *CDO->GetRootComponent()->GetName(), *Cls->GetName());
+				break;
+			}
+		}
+		return FString();
+	}
+
+	/**
+	 * Make NewRoot the scene root of the Blueprint's own SCS, as the editor does
+	 * when a scene component is made the root: DefaultSceneRoot is dropped and its
+	 * children move under NewRoot; any other root becomes NewRoot's child.
+	 * Returns an empty string on success, otherwise why the hierarchy read back
+	 * afterwards does not show NewRoot as the root.
+	 */
+	FString MakeSceneRoot(USimpleConstructionScript* SCS, USCS_Node* NewRoot, TArray<FString>& OutReplaced, bool& bOutDefaultRootRemoved, bool& bOutUnchanged)
+	{
+		bOutDefaultRootRemoved = false;
+		bOutUnchanged = false;
+		if (!SCS || !NewRoot) return TEXT("component node not found");
+		if (!Cast<USceneComponent>(NewRoot->ComponentTemplate)) return TEXT("only a scene component can be the root");
+
+		USCS_Node* DefaultRoot = SCS->GetDefaultSceneRootNode();
+		TArray<USCS_Node*> OldRoots;
+		for (USCS_Node* Node : SCS->GetRootNodes())
+		{
+			if (Node != NewRoot && IsOwnSceneRoot(Node)) OldRoots.Add(Node);
+		}
+		if (OldRoots.Num() == 0 && SCS->GetRootNodes().Contains(NewRoot) && IsOwnSceneRoot(NewRoot))
+		{
+			bOutUnchanged = true;
+			return FString();
+		}
+
+		SCS->Modify();
+		NewRoot->Modify();
+		// Off its current parent (or the root set) first, so no old root still holds it.
+		SCS->RemoveNode(NewRoot, false);
+		NewRoot->AttachToName = NAME_None;
+
+		for (USCS_Node* OldRoot : OldRoots)
+		{
+			OldRoot->Modify();
+			OutReplaced.Add(OldRoot->GetVariableName().ToString());
+			if (OldRoot == DefaultRoot)
+			{
+				const TArray<USCS_Node*> Children = OldRoot->GetChildNodes();
+				for (USCS_Node* Child : Children)
+				{
+					OldRoot->RemoveChildNode(Child, false);
+					NewRoot->AddChildNode(Child, false);
+				}
+				bOutDefaultRootRemoved = true;
+			}
+			SCS->RemoveNode(OldRoot, false);
+		}
+
+		SCS->AddNode(NewRoot);
+		for (USCS_Node* OldRoot : OldRoots)
+		{
+			if (OldRoot != DefaultRoot) NewRoot->AddChildNode(OldRoot);
+		}
+		SCS->ValidateSceneRootNodes();
+
+		// Read the hierarchy back rather than trusting the calls above.
+		if (!SCS->GetRootNodes().Contains(NewRoot)) return TEXT("the new component is not in the root set afterwards");
+		for (const USCS_Node* Node : SCS->GetRootNodes())
+		{
+			if (Node != NewRoot && IsOwnSceneRoot(Node))
+			{
+				return FString::Printf(TEXT("'%s' is still a scene root beside it"), *Node->GetVariableName().ToString());
+			}
+		}
+		return FString();
+	}
+}
+
 TSharedPtr<FJsonValue> FBlueprintHandlers::AddComponent(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath;
@@ -2156,6 +2294,13 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddComponent(const TSharedPtr<FJsonOb
 	// same call. Both are read before the load can fail (#1057).
 	const FString ParentComponent = OptionalString(Params, TEXT("parentComponent"));
 	const FString ChildActorClassPath = OptionalString(Params, TEXT("childActorClass"));
+	const FString ParentSocket = OptionalString(Params, TEXT("parentSocket"));
+	// #1478: asRoot replaces DefaultSceneRoot (or the current root) with this component.
+	const bool bAsRoot = OptionalBool(Params, TEXT("asRoot"), false);
+	if (bAsRoot && (!ParentComponent.IsEmpty() || !ParentSocket.IsEmpty()))
+	{
+		return MCPError(TEXT("asRoot cannot be combined with parentComponent or parentSocket: the root has no parent"));
+	}
 
 	UBlueprint* Blueprint = LoadBlueprint(AssetPath);
 	if (!Blueprint)
@@ -2163,8 +2308,24 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddComponent(const TSharedPtr<FJsonOb
 		return BlueprintNotFoundError(AssetPath);
 	}
 
+	if (bAsRoot)
+	{
+		if (!Blueprint->SimpleConstructionScript)
+		{
+			return MCPError(TEXT("asRoot needs an Actor Blueprint: this one has no SimpleConstructionScript"));
+		}
+		const FString InheritedRoot = MCPSceneRootAuthoring::FindInheritedSceneRoot(Blueprint);
+		if (!InheritedRoot.IsEmpty())
+		{
+			return MCPError(FString::Printf(TEXT(
+				"asRoot refused: the root is the inherited component %s, which a child Blueprint cannot replace. "
+				"Attach the component under it with parentComponent, or change the root in the parent class."),
+				*InheritedRoot));
+		}
+	}
+
 	// Idempotency: existing SCS component with same name short-circuits.
-	if (MCPFindSCSNode(Blueprint->SimpleConstructionScript, ComponentName))
+	if (USCS_Node* ExistingNode = MCPFindSCSNode(Blueprint->SimpleConstructionScript, ComponentName))
 	{
 			if (OnConflict == TEXT("error"))
 			{
@@ -2175,6 +2336,39 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddComponent(const TSharedPtr<FJsonOb
 			Existing->SetStringField(TEXT("path"), AssetPath);
 			Existing->SetStringField(TEXT("componentName"), ComponentName);
 			Existing->SetStringField(TEXT("componentClass"), ComponentClass);
+			if (bAsRoot)
+			{
+				// The component exists, and asRoot still has to hold for it.
+				TArray<FString> Replaced;
+				bool bDefaultRootRemoved = false;
+				bool bUnchanged = false;
+				const FString RootError = MCPSceneRootAuthoring::MakeSceneRoot(Blueprint->SimpleConstructionScript, ExistingNode, Replaced, bDefaultRootRemoved, bUnchanged);
+				if (!RootError.IsEmpty())
+				{
+					return MCPError(FString::Printf(TEXT("Component '%s' exists but could not be made the root: %s"), *ComponentName, *RootError));
+				}
+				Existing->SetBoolField(TEXT("isRoot"), true);
+				if (bUnchanged)
+				{
+					Existing->SetBoolField(TEXT("unchanged"), true);
+				}
+				else
+				{
+					FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
+					FKismetEditorUtilities::CompileBlueprint(Blueprint);
+					FString SaveError;
+					const bool bSaved = SaveAssetPackageChecked(Blueprint, SaveError);
+					MCPNoteSaveOutcome(Existing, AssetPath, bSaved, SaveError);
+					MCPSetUpdated(Existing);
+					TArray<TSharedPtr<FJsonValue>> ReplacedJson;
+					for (const FString& Name : Replaced) ReplacedJson.Add(MakeShared<FJsonValueString>(Name));
+					Existing->SetArrayField(TEXT("replacedRoots"), ReplacedJson);
+					Existing->SetBoolField(TEXT("defaultSceneRootRemoved"), bDefaultRootRemoved);
+					MCPSetNoRollback(Existing, TEXT(
+						"No single action restores the previous root: the engine recreates DefaultSceneRoot only when no scene "
+						"root remains, and reparent_component cannot move a component back to the root."));
+				}
+			}
 			return MCPResult(Existing);
 	}
 
@@ -2200,9 +2394,17 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddComponent(const TSharedPtr<FJsonOb
 	{
 		return MCPError(FString::Printf(TEXT("Component class not found: %s. Try the short name (e.g. 'StaticMeshComponent') or the full path ('/Script/Engine.StaticMeshComponent')."), *ComponentClass));
 	}
+	if (bAsRoot && !CompClass->IsChildOf(USceneComponent::StaticClass()))
+	{
+		return MCPError(FString::Printf(TEXT("asRoot needs a scene component; %s is not one"), *CompClass->GetName()));
+	}
 
 	// Try using SubobjectDataSubsystem (UE5 method)
 	bool bSuccess = false;
+	FString AppliedParentSocket;
+	FString AsRootError;
+	TArray<FString> ReplacedRoots;
+	bool bDefaultRootRemoved = false;
 	if (USubobjectDataSubsystem* Subsystem = GEngine->GetEngineSubsystem<USubobjectDataSubsystem>())
 	{
 		// Get blueprint handles using K2 function
@@ -2246,6 +2448,23 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddComponent(const TSharedPtr<FJsonOb
 					Subsystem->RenameSubobject(NewHandle, FText::FromString(ComponentName));
 				}
 
+				// The SCS node's AttachToName is what the details panel's Parent
+				// Socket writes, so a weapon or prop mesh can sit on a bone of the
+				// parent skeletal mesh from the moment it is added. The node is
+				// looked up by the variable name the new handle ended up with.
+				if (!ParentSocket.IsEmpty())
+				{
+					const FSubobjectData* NewData = NewHandle.GetData();
+					const FString NewVariableName = NewData ? NewData->GetVariableName().ToString() : ComponentName;
+					USCS_Node* Node = MCPFindSCSNode(Blueprint->SimpleConstructionScript, NewVariableName);
+					if (Node)
+					{
+						Node->Modify();
+						Node->AttachToName = FName(*ParentSocket);
+						AppliedParentSocket = ParentSocket;
+					}
+				}
+
 				// #526: when adding a ChildActorComponent, let callers set its
 				// ChildActorClass in the same call. Accepts a Blueprint asset path
 				// (with or without the _C generated-class suffix) or a C++ class.
@@ -2277,12 +2496,40 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddComponent(const TSharedPtr<FJsonOb
 				}
 
 				bSuccess = true;
+
+				if (bAsRoot)
+				{
+					const FSubobjectData* NewData = NewHandle.GetData();
+					const FString NewVariableName = NewData ? NewData->GetVariableName().ToString() : ComponentName;
+					USCS_Node* NewNode = MCPFindSCSNode(Blueprint->SimpleConstructionScript, NewVariableName);
+					bool bUnchanged = false;
+					AsRootError = MCPSceneRootAuthoring::MakeSceneRoot(Blueprint->SimpleConstructionScript, NewNode, ReplacedRoots, bDefaultRootRemoved, bUnchanged);
+					if (!AsRootError.IsEmpty())
+					{
+						// The component was only wanted as the root, so it does not stay anywhere else.
+						if (NewNode && Blueprint->SimpleConstructionScript->GetAllNodes().Contains(NewNode))
+						{
+							Blueprint->SimpleConstructionScript->RemoveNode(NewNode);
+						}
+						bSuccess = false;
+					}
+				}
 			}
 		}
 	}
 
+	if (!AsRootError.IsEmpty())
+	{
+		FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
+		return MCPError(FString::Printf(TEXT("Component '%s' could not be made the root, so it was not added: %s"), *ComponentName, *AsRootError));
+	}
+
 	if (bSuccess)
 	{
+		if (bAsRoot)
+		{
+			FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
+		}
 		FKismetEditorUtilities::CompileBlueprint(Blueprint);
 		// Save asset
 		FString SaveError;
@@ -2294,6 +2541,25 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddComponent(const TSharedPtr<FJsonOb
 		Result->SetStringField(TEXT("path"), AssetPath);
 		Result->SetStringField(TEXT("componentClass"), ComponentClass);
 		Result->SetStringField(TEXT("componentName"), ComponentName);
+		if (!AppliedParentSocket.IsEmpty())
+		{
+			Result->SetStringField(TEXT("parentSocket"), AppliedParentSocket);
+		}
+		else if (!ParentSocket.IsEmpty())
+		{
+			Result->SetStringField(TEXT("warning"), FString::Printf(TEXT("parentSocket '%s' was not written: the new component's SCS node was not found"), *ParentSocket));
+		}
+		if (bAsRoot)
+		{
+			Result->SetBoolField(TEXT("isRoot"), true);
+			TArray<TSharedPtr<FJsonValue>> ReplacedJson;
+			for (const FString& Name : ReplacedRoots) ReplacedJson.Add(MakeShared<FJsonValueString>(Name));
+			Result->SetArrayField(TEXT("replacedRoots"), ReplacedJson);
+			Result->SetBoolField(TEXT("defaultSceneRootRemoved"), bDefaultRootRemoved);
+			Result->SetStringField(TEXT("rollbackNote"), TEXT(
+				"remove_component takes the component away; the components it adopted as the root stay in the Blueprint, "
+				"and the engine brings DefaultSceneRoot back only when no scene root is left."));
+		}
 
 		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
 		Payload->SetStringField(TEXT("path"), AssetPath);
@@ -3208,12 +3474,23 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::RemoveComponent(const TSharedPtr<FJso
 		return MCPResult(Noop);
 	}
 
+	// #1478: DefaultSceneRoot is the placeholder the engine keeps while nothing
+	// else is the root, and the subobject editor refuses to delete it.
+	if (TargetNode == SCS->GetDefaultSceneRootNode())
+	{
+		return MCPError(FString::Printf(TEXT(
+			"'%s' is the DefaultSceneRoot placeholder, which the engine does not delete. Make another scene component "
+			"the root with add_component(asRoot=true), which drops DefaultSceneRoot and moves its children under the new root."),
+			*ComponentName));
+	}
+
 	// Read the identity the inverse needs BEFORE the node is destroyed: which
 	// class to re-add, under which SCS parent, and how much of the node the
 	// re-add cannot bring back.
 	const FString RemovedClassPath = TargetNode->ComponentTemplate->GetClass()->GetPathName();
 	const FString RemovedVariableName = TargetNode->GetVariableName().ToString();
-	const int32 RemovedChildCount = TargetNode->GetChildNodes().Num();
+	const FString RemovedParentSocket = TargetNode->AttachToName.IsNone() ? FString() : TargetNode->AttachToName.ToString();
+	const TArray<USCS_Node*> RemovedChildren = TargetNode->GetChildNodes();
 	FString RemovedParentName;
 	bool bParentAddressable = false;
 	bool bParentIsNative = false;
@@ -3255,30 +3532,34 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::RemoveComponent(const TSharedPtr<FJso
 			TArray<FSubobjectDataHandle> ProbeHandles;
 			ParentProbe->K2_GatherSubobjectDataForBlueprint(Blueprint, ProbeHandles);
 			const UObject* ParentTemplate = ParentNode->ComponentTemplate;
-			int32 NameMatches = 0;
+			// The gather can hand back one template under several handles (UE 5.8
+			// lists each SCS component twice), so distinct objects are counted.
+			TSet<const UObject*> NameMatches;
 			bool bFirstMatchIsParent = false;
 			for (const FSubobjectDataHandle& ProbeHandle : ProbeHandles)
 			{
 				const FSubobjectData* ProbeData = ProbeHandle.GetData();
 				if (!ProbeData) continue;
-				UObject* ProbeObject = const_cast<UObject*>(ProbeData->GetObject());
+				const UObject* ProbeObject = ProbeData->GetObject();
 				if (!ProbeObject) continue;
 				const FString ProbeName = ProbeObject->GetName();
 				if (ProbeName == RemovedParentName || ProbeName.StartsWith(RemovedParentName))
 				{
-					if (NameMatches == 0)
+					if (NameMatches.IsEmpty())
 					{
 						bFirstMatchIsParent = (ProbeObject == ParentTemplate);
 					}
-					++NameMatches;
+					NameMatches.Add(ProbeObject);
 				}
 			}
-			bParentAddressable = (NameMatches == 1 && bFirstMatchIsParent);
+			bParentAddressable = (NameMatches.Num() == 1 && bFirstMatchIsParent);
 		}
 	}
 
-	// Remove via SubobjectDataSubsystem if available
-	bool bRemoved = false;
+	// Remove via SubobjectDataSubsystem, the editor's own delete. When it finds
+	// the component and refuses, that refusal is the answer (#1478): the direct
+	// SCS removal below is only for a component the subsystem cannot address.
+	bool bSubsystemAddressed = false;
 	if (USubobjectDataSubsystem* Subsystem = GEngine->GetEngineSubsystem<USubobjectDataSubsystem>())
 	{
 		TArray<FSubobjectDataHandle> Handles;
@@ -3290,23 +3571,49 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::RemoveComponent(const TSharedPtr<FJso
 			const FSubobjectData* Data = Handle.GetData();
 			if (Data && Data->GetComponentTemplate() == TargetNode->ComponentTemplate)
 			{
+				bSubsystemAddressed = true;
+				if (!Data->CanDelete())
+				{
+					return MCPError(FString::Printf(TEXT("The engine refuses to delete component '%s'; nothing was removed."), *ComponentName));
+				}
 				TArray<FSubobjectDataHandle> ToDelete;
 				ToDelete.Add(Handle);
-				int32 Removed = Subsystem->DeleteSubobjects(ContextHandle, ToDelete, Blueprint);
-				bRemoved = (Removed > 0);
+				Subsystem->DeleteSubobjects(ContextHandle, ToDelete, Blueprint);
 				break;
 			}
 		}
 	}
-
-	// Fallback: direct SCS removal
-	if (!bRemoved)
+	if (!bSubsystemAddressed)
 	{
 		SCS->RemoveNode(TargetNode);
-		bRemoved = true;
 	}
 
-	if (bRemoved)
+	// Read the result back from the hierarchy itself instead of trusting either path.
+	TSet<const USCS_Node*> Reachable;
+	{
+		TArray<const USCS_Node*> Stack;
+		for (const USCS_Node* Root : SCS->GetRootNodes()) Stack.Add(Root);
+		while (Stack.Num() > 0)
+		{
+			const USCS_Node* Node = Stack.Pop();
+			if (!Node || Reachable.Contains(Node)) continue;
+			Reachable.Add(Node);
+			for (const USCS_Node* Child : Node->GetChildNodes()) Stack.Add(Child);
+		}
+	}
+	const bool bRemoved = !Reachable.Contains(TargetNode);
+	if (!bRemoved)
+	{
+		return MCPError(FString::Printf(TEXT("Component '%s' is still in the Blueprint after the delete; the engine refused it and nothing was removed."), *ComponentName));
+	}
+	TArray<FString> ChildrenKept;
+	TArray<FString> ChildrenRemoved;
+	for (USCS_Node* Child : RemovedChildren)
+	{
+		if (!Child) continue;
+		(Reachable.Contains(Child) ? ChildrenKept : ChildrenRemoved).Add(Child->GetVariableName().ToString());
+	}
+
 	{
 		FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
 		FKismetEditorUtilities::CompileBlueprint(Blueprint);
@@ -3330,6 +3637,10 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::RemoveComponent(const TSharedPtr<FJso
 		if (bParentAddressable)
 		{
 			Payload->SetStringField(TEXT("parentComponent"), RemovedParentName);
+			if (!RemovedParentSocket.IsEmpty())
+			{
+				Payload->SetStringField(TEXT("parentSocket"), RemovedParentSocket);
+			}
 		}
 		MCPSetRollback(Result, TEXT("add_component"), Payload);
 		Result->SetStringField(TEXT("previousParent"), RemovedParentName);
@@ -3337,17 +3648,30 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::RemoveComponent(const TSharedPtr<FJso
 		Result->SetBoolField(TEXT("previousParentIsNative"), bParentIsNative);
 		Result->SetBoolField(TEXT("hadParent"), !RemovedParentName.IsEmpty());
 		Result->SetBoolField(TEXT("rollbackLossy"), true);
+		TArray<TSharedPtr<FJsonValue>> KeptJson;
+		for (const FString& Name : ChildrenKept) KeptJson.Add(MakeShared<FJsonValueString>(Name));
+		TArray<TSharedPtr<FJsonValue>> RemovedJson;
+		for (const FString& Name : ChildrenRemoved) RemovedJson.Add(MakeShared<FJsonValueString>(Name));
+		Result->SetArrayField(TEXT("childrenKept"), KeptJson);
+		Result->SetArrayField(TEXT("childrenRemoved"), RemovedJson);
 
 		FString LossyNote = FString::Printf(TEXT(
 			"add_component re-adds a default-constructed '%s' named '%s'. Every property override on the removed "
 			"template is gone, and any Blueprint node that referenced the component is not restored by re-adding it."),
 			*RemovedClassPath, *RemovedVariableName);
-		if (RemovedChildCount > 0)
+		if (ChildrenRemoved.Num() > 0)
 		{
 			LossyNote += FString::Printf(TEXT(
-				" The %d component(s) parented under it went with it: the inverse restores one component, not the "
-				"subtree."),
-				RemovedChildCount);
+				" The %d component(s) parented under it went with it (childrenRemoved): the inverse restores one "
+				"component, not the subtree."),
+				ChildrenRemoved.Num());
+		}
+		if (ChildrenKept.Num() > 0)
+		{
+			LossyNote += FString::Printf(TEXT(
+				" The %d component(s) parented under it stayed in the Blueprint, moved by the engine (childrenKept), "
+				"and the re-added component does not take them back."),
+				ChildrenKept.Num());
 		}
 		if (bParentIsNative)
 		{
@@ -3370,10 +3694,6 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::RemoveComponent(const TSharedPtr<FJso
 		}
 		Result->SetStringField(TEXT("rollbackNote"), LossyNote);
 		return MCPResult(Result);
-	}
-	else
-	{
-		return MCPError(TEXT("Failed to remove component"));
 	}
 }
 

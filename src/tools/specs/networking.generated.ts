@@ -9,6 +9,77 @@ import { makeSpecBp, type HandlerSpecs } from "../../surface/handler-spec.js";
 
 /** The recorded contract of every spec'd networking handler. */
 export const handlerSpecs: HandlerSpecs = {
+  "audit_replication": {
+    "category": "networking",
+    "params": [
+      {
+        "name": "path",
+        "type": "string",
+        "required": false,
+        "description": "Scope: a content path for Blueprints (default /Game) or a /Script/<Module> path for native classes; filters both"
+      },
+      {
+        "name": "className",
+        "type": "string",
+        "required": false,
+        "description": "Only this class and its subclasses: a native class name or path, or a Blueprint asset path"
+      },
+      {
+        "name": "includeNative",
+        "type": "boolean",
+        "required": false,
+        "description": "Audit native classes (default true)"
+      },
+      {
+        "name": "includeBlueprints",
+        "type": "boolean",
+        "required": false,
+        "description": "Audit Blueprint classes (default true)"
+      },
+      {
+        "name": "includeEngine",
+        "type": "boolean",
+        "required": false,
+        "description": "Also audit engine and engine-plugin native classes, not only project modules and project plugins (default false)"
+      },
+      {
+        "name": "requireServerValidation",
+        "type": "boolean",
+        "required": false,
+        "description": "Report every Server RPC without WithValidation (default false)"
+      },
+      {
+        "name": "onlyWithFindings",
+        "type": "boolean",
+        "required": false,
+        "description": "Keep only the classes that have findings (default false)"
+      },
+      {
+        "name": "maxBlueprints",
+        "type": "integer",
+        "required": false,
+        "description": "Cap on Blueprints loaded (default 500, max 5000)"
+      },
+      {
+        "name": "limit",
+        "type": "integer",
+        "required": false,
+        "description": "Class rows to return inline (default 200, max 5000); totals stay complete"
+      },
+      {
+        "name": "dumpToFile",
+        "type": "boolean",
+        "required": false,
+        "description": "Write every row to a JSON file instead of returning them inline"
+      },
+      {
+        "name": "outputPath",
+        "type": "string",
+        "required": false,
+        "description": "Absolute or Saved-relative JSON path for the dump (default Saved/UE_MCP/Audits/replication_audit.json)"
+      }
+    ]
+  },
   "configure_net_cull_distance": {
     "category": "networking",
     "params": [
@@ -221,6 +292,7 @@ export const handlerSpecs: HandlerSpecs = {
 
 /** The Params: clause of each spec'd bridge method. */
 export const paramsClauses: Readonly<Record<string, string>> = {
+  audit_replication: "Params: path?, className?, includeNative?, includeBlueprints?, includeEngine?, requireServerValidation?, onlyWithFindings?, maxBlueprints?, limit?, dumpToFile?, outputPath?",
   configure_net_cull_distance: "Params: blueprintPath, netCullDistanceSquared?",
   configure_net_update_frequency: "Params: blueprintPath, netUpdateFrequency?, minNetUpdateFrequency?",
   get_networking_info: "Params: blueprintPath",
@@ -238,19 +310,30 @@ export const paramsClauses: Readonly<Record<string, string>> = {
 export const schema: Record<string, z.ZodType> = {
   alwaysRelevant: z.boolean().optional().describe("bAlwaysRelevant (default false)"),
   blueprintPath: z.string().optional().describe("Actor Blueprint asset path"),
+  className: z.string().optional().describe("Only this class and its subclasses: a native class name or path, or a Blueprint asset path"),
   dormancy: z.string().optional().describe("DORM_Never | DORM_Awake | DORM_DormantAll | DORM_DormantPartial | DORM_Initial"),
+  dumpToFile: z.boolean().optional().describe("Write every row to a JSON file instead of returning them inline"),
+  includeBlueprints: z.boolean().optional().describe("Audit Blueprint classes (default true)"),
+  includeEngine: z.boolean().optional().describe("Also audit engine and engine-plugin native classes, not only project modules and project plugins (default false)"),
+  includeNative: z.boolean().optional().describe("Audit native classes (default true)"),
+  limit: z.number().int().optional().describe("Class rows to return inline (default 200, max 5000); totals stay complete"),
   loadOnClient: z.boolean().optional().describe("bNetLoadOnClient (default true)"),
+  maxBlueprints: z.number().int().optional().describe("Cap on Blueprints loaded (default 500, max 5000)"),
   minNetUpdateFrequency: z.number().optional().describe("MinNetUpdateFrequency in updates per second (omit to leave it)"),
   netCullDistanceSquared: z.number().optional().describe("NetCullDistanceSquared (default 225000000)"),
   netPriority: z.number().optional().describe("NetPriority (default 1.0)"),
   netUpdateFrequency: z.number().optional().describe("NetUpdateFrequency in updates per second (omit to leave it)"),
   onlyRelevantToOwner: z.boolean().optional().describe("bOnlyRelevantToOwner (default false)"),
+  onlyWithFindings: z.boolean().optional().describe("Keep only the classes that have findings (default false)"),
+  outputPath: z.string().optional().describe("Absolute or Saved-relative JSON path for the dump (default Saved/UE_MCP/Audits/replication_audit.json)"),
+  path: z.string().optional().describe("Scope: a content path for Blueprints (default /Game) or a /Script/<Module> path for native classes; filters both"),
   propertyName: z.string().optional().describe("Alias for variableName"),
   replicated: z.boolean().optional().describe("Shorthand: true is Replicated, false is None"),
   replicateMovement: z.boolean().optional().describe("Replicate movement (default false)"),
   replicates: z.boolean().optional().describe("Replicate the actor (default false)"),
   replicationType: z.string().optional().describe("None | Replicated | RepNotify (default None). Wins over replicated and repNotify"),
   repNotify: z.boolean().optional().describe("Shorthand: true is RepNotify, and wins over replicated"),
+  requireServerValidation: z.boolean().optional().describe("Report every Server RPC without WithValidation (default false)"),
   variableName: z.string().optional().describe("Blueprint variable name"),
 };
 

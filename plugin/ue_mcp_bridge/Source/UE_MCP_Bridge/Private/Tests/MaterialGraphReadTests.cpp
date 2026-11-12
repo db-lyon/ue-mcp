@@ -5,6 +5,7 @@
 #include "Materials/Material.h"
 #include "Materials/MaterialExpressionAdd.h"
 #include "Materials/MaterialExpressionConstant.h"
+#include "Materials/MaterialExpressionCustom.h"
 #include "Misc/AutomationTest.h"
 #include "Misc/Guid.h"
 #include "UObject/Package.h"
@@ -116,6 +117,84 @@ bool FMaterialGraphReadTest::RunTest(const FString& Parameters)
 	TestEqual(TEXT("opt-in list wiring"), WiredList->GetArrayField(TEXT("expressions"))[1]->AsObject()->GetArrayField(TEXT("inputs")).Num(), 2);
 	TestFalse(TEXT("reads do not dirty the package"), Package->IsDirty());
 	TestNull(TEXT("reads do not create a material editor graph"), Material->MaterialGraph.Get());
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FMaterialGraphReadCustomNodeTest,
+	"UE.MCP.Material.GraphRead.CustomNodeCode",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMaterialGraphReadCustomNodeTest::RunTest(const FString& Parameters)
+{
+	// #1645: a graph read carries each Custom node's HLSL and declarations, so
+	// parity against a source file needs no per-node follow-up call.
+	UPackage* Package = CreatePackage(*FString::Printf(TEXT("/Temp/MCPGraphCustom_%s"), *FGuid::NewGuid().ToString(EGuidFormats::Digits)));
+	TStrongObjectPtr<UMaterial> Material(NewObject<UMaterial>(Package, TEXT("Material"), RF_Transient));
+	auto* Source = NewObject<UMaterialExpressionConstant>(Material.Get(), NAME_None, RF_Transient);
+	auto* Custom = NewObject<UMaterialExpressionCustom>(Material.Get(), NAME_None, RF_Transient);
+	Material->GetExpressionCollection().AddExpression(Source);
+	Material->GetExpressionCollection().AddExpression(Custom);
+	Custom->Code = TEXT("return Density * 2;");
+	Custom->Description = TEXT("Doubler");
+	Custom->OutputType = CMOT_Float3;
+	Custom->Inputs.Empty();
+	FCustomInput Input;
+	Input.InputName = TEXT("Density");
+	Input.Input.Connect(0, Source);
+	Custom->Inputs.Add(Input);
+	FCustomOutput Extra;
+	Extra.OutputName = TEXT("Mask");
+	Extra.OutputType = CMOT_Float1;
+	Custom->AdditionalOutputs.Add(Extra);
+	FCustomDefine Define;
+	Define.DefineName = TEXT("USE_FAST");
+	Define.DefineValue = TEXT("1");
+	Custom->AdditionalDefines.Add(Define);
+	Custom->IncludeFilePaths.Add(TEXT("/Project/Shaders/Common.ush"));
+	Package->SetDirtyFlag(false);
+
+	FMCPHandlerRegistry Registry;
+	FMaterialHandlers::RegisterHandlers(Registry);
+	auto Request = MakeShared<FJsonObject>();
+	Request->SetStringField(TEXT("materialPath"), Material->GetPathName());
+	const auto Value = Registry.ExecuteHandler(TEXT("read_material_graph"), Request);
+	if (!TestTrue(TEXT("graph read returns an object"), Value.IsValid() && Value->Type == EJson::Object)) return false;
+	const auto Result = Value->AsObject();
+	if (!TestTrue(TEXT("graph read succeeds"), Result->GetBoolField(TEXT("success")))) return false;
+	const auto& Rows = Result->GetArrayField(TEXT("expressions"));
+	if (!TestEqual(TEXT("two nodes"), Rows.Num(), 2)) return false;
+	TestFalse(TEXT("a non-Custom node has no custom block"), Rows[0]->AsObject()->HasField(TEXT("custom")));
+	const auto CustomRow = Rows[1]->AsObject();
+	const TSharedPtr<FJsonObject>* CustomObj = nullptr;
+	if (!TestTrue(TEXT("Custom node carries its custom block"), CustomRow->TryGetObjectField(TEXT("custom"), CustomObj) && CustomObj)) return false;
+	TestEqual(TEXT("code"), (*CustomObj)->GetStringField(TEXT("code")), FString(TEXT("return Density * 2;")));
+	TestEqual(TEXT("description"), (*CustomObj)->GetStringField(TEXT("description")), FString(TEXT("Doubler")));
+	TestEqual(TEXT("output type"), (*CustomObj)->GetStringField(TEXT("outputType")), FString(TEXT("float3")));
+	const auto& InputNames = (*CustomObj)->GetArrayField(TEXT("inputNames"));
+	if (TestEqual(TEXT("one input name"), InputNames.Num(), 1))
+	{
+		TestEqual(TEXT("input name"), InputNames[0]->AsString(), FString(TEXT("Density")));
+	}
+	const auto& Outputs = (*CustomObj)->GetArrayField(TEXT("additionalOutputs"));
+	if (TestEqual(TEXT("one additional output"), Outputs.Num(), 1))
+	{
+		TestEqual(TEXT("additional output name"), Outputs[0]->AsObject()->GetStringField(TEXT("name")), FString(TEXT("Mask")));
+		TestEqual(TEXT("additional output type"), Outputs[0]->AsObject()->GetStringField(TEXT("outputType")), FString(TEXT("float1")));
+	}
+	const auto& Defines = (*CustomObj)->GetArrayField(TEXT("additionalDefines"));
+	if (TestEqual(TEXT("one define"), Defines.Num(), 1))
+	{
+		TestEqual(TEXT("define name"), Defines[0]->AsObject()->GetStringField(TEXT("name")), FString(TEXT("USE_FAST")));
+		TestEqual(TEXT("define value"), Defines[0]->AsObject()->GetStringField(TEXT("value")), FString(TEXT("1")));
+	}
+	TestEqual(TEXT("include path"), (*CustomObj)->GetArrayField(TEXT("includeFilePaths")).Num(), 1);
+	const auto& Inputs = CustomRow->GetArrayField(TEXT("inputs"));
+	if (TestEqual(TEXT("Custom input pin listed"), Inputs.Num(), 1))
+	{
+		TestEqual(TEXT("Custom input wired to the constant"), Inputs[0]->AsObject()->GetIntegerField(TEXT("connectedExpressionIndex")), 0);
+	}
+	TestFalse(TEXT("read does not dirty the package"), Package->IsDirty());
 	return true;
 }
 

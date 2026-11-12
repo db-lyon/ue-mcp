@@ -1,0 +1,21 @@
+---
+title: "BT_Enemy · Behavior Tree"
+---
+flowchart TB
+  n_ROOT(["ROOT<br/>blackboard: BB_Enemy"])
+  n_Root[["Selector<br/>service: Set Default Focus"]]
+  n_Root_Children_0[["Sequence<br/>if: Has Target"]]
+  n_Root_Children_0_Children_0["Move To<br/>MoveTo: TargetActor"]
+  n_Root_Children_0_Children_1["Attack"]
+  n_Root_Children_1["Wait<br/>Wait: 5.0s"]
+  n_ROOT --> n_Root
+  n_Root -->|"1"| n_Root_Children_0
+  n_Root_Children_0 -->|"1"| n_Root_Children_0_Children_0
+  n_Root_Children_0 -->|"2"| n_Root_Children_0_Children_1
+  n_Root -->|"2"| n_Root_Children_1
+  classDef ue_entry fill:#2a1b0e,stroke:#e8720c,color:#f5f5f4
+  class n_ROOT ue_entry
+  classDef ue_composite fill:#132033,stroke:#60a5fa,color:#f5f5f4
+  class n_Root,n_Root_Children_0 ue_composite
+  classDef ue_task fill:#181d25,stroke:#3a414c,color:#f5f5f4
+  class n_Root_Children_0_Children_0,n_Root_Children_0_Children_1,n_Root_Children_1 ue_task

@@ -147,11 +147,43 @@ export interface ProjectionResult<T> {
   notFound: string[];
   /** Whether anything was actually filtered. */
   applied: boolean;
+  /** The result's own top-level keys, so an unmatched path can be checked against its shape. */
+  available?: string[];
+}
+
+/** Top-level keys of a result; for an array, those of its objects. */
+function topLevelKeys(value: unknown): string[] {
+  const rows = Array.isArray(value) ? value : [value];
+  const keys = new Set<string>();
+  for (const row of rows) if (isPlainObject(row)) for (const k of Object.keys(row)) keys.add(k);
+  return [...keys];
+}
+
+/** Strip one pair of matching quotes a client left around a path. */
+function unquote(path: string): string {
+  const quote = path[0];
+  if (path.length < 2 || (quote !== '"' && quote !== "'") || path[path.length - 1] !== quote) return path;
+  return path.slice(1, -1).trim();
+}
+
+/**
+ * The paths one string names. A client that JSON-encodes its arguments sends
+ * `["a","b"]` or `"a"` as text (#1546); the brackets and quotes are encoding,
+ * never part of a path, so they come off before the comma split (#1335).
+ */
+function pathsOf(text: string): string[] {
+  let body = text.trim();
+  if (body.startsWith("[") && body.endsWith("]")) body = body.slice(1, -1);
+  return body
+    .split(",")
+    .map((v) => unquote(v.trim()))
+    .filter((v) => v !== "");
 }
 
 /**
  * Read the selection out of a parameter bag. A string, bare or in the array,
- * is a comma-separated list of paths: "a.b,c" is two paths, never one (#1335).
+ * is a comma-separated list of paths: "a.b,c" is two paths, never one (#1335),
+ * and a JSON-encoded list is read as the list it encodes (#1546).
  */
 export function takeFieldSelection(
   params: Record<string, unknown>,
@@ -161,9 +193,7 @@ export function takeFieldSelection(
     const items = typeof value === "string" ? [value] : Array.isArray(value) ? value : [];
     const out = items
       .filter((v): v is string => typeof v === "string")
-      .flatMap((v) => v.split(","))
-      .map((v) => v.trim())
-      .filter((v) => v !== "");
+      .flatMap(pathsOf);
     return out.length > 0 ? out : undefined;
   };
   return { selection: { select: asList(select), omit: asList(omit) }, rest };
@@ -183,7 +213,7 @@ export function projectResult<T>(result: T, selection: FieldSelection): Projecti
     return { result, notFound: [], applied: false };
   }
   if (result === null || typeof result !== "object") {
-    return { result, notFound: [...(select ?? []), ...(omit ?? [])], applied: false };
+    return { result, notFound: [...(select ?? []), ...(omit ?? [])], applied: false, available: [] };
   }
 
   const matched = new Set<string>();
@@ -202,15 +232,16 @@ export function projectResult<T>(result: T, selection: FieldSelection): Projecti
 
   const requested = [...(select ?? []), ...(omit ?? [])];
   const notFound = requested.filter((path) => !matched.has(path));
+  const available = notFound.length > 0 ? topLevelKeys(result) : undefined;
 
   // Nothing matched at all: the caller almost certainly misspelled every path,
   // and returning an empty object would look like an empty answer from the
   // editor rather than a filter that did not fit.
   if (matched.size === 0) {
-    return { result, notFound, applied: false };
+    return { result, notFound, applied: false, available };
   }
 
-  return { result: value as T, notFound, applied: true };
+  return { result: value as T, notFound, applied: true, available };
 }
 
 /**
@@ -226,9 +257,10 @@ export function attachFieldReport<T>(result: T, projection: ProjectionResult<T>)
     ...record,
     fieldsNotFound: {
       paths: projection.notFound,
+      ...(projection.available ? { available: projection.available } : {}),
       note: projection.applied
         ? "These select/omit paths matched nothing in the result and were ignored."
-        : "No select/omit path matched anything, so the unfiltered result is returned.",
+        : "No select/omit path matched anything, so the unfiltered result is returned. available lists the result's top-level keys.",
     },
   } as T;
 }

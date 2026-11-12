@@ -3,9 +3,17 @@
 #include "Blueprint/UserWidget.h"
 #include "Blueprint/WidgetBlueprintGeneratedClass.h"
 #include "Blueprint/WidgetTree.h"
+#include "Components/BoxComponent.h"
 #include "Components/CanvasPanel.h"
 #include "Components/ProgressBar.h"
+#include "Components/StaticMeshComponent.h"
+#include "Engine/Blueprint.h"
+#include "Engine/BlueprintGeneratedClass.h"
+#include "Engine/SCS_Node.h"
+#include "Engine/SimpleConstructionScript.h"
+#include "Engine/StaticMesh.h"
 #include "Framework/Application/SlateApplication.h"
+#include "GameFramework/Actor.h"
 #include "K2Node_CallFunction.h"
 #include "Kismet/KismetSystemLibrary.h"
 #include "Kismet2/BlueprintEditorUtils.h"
@@ -15,13 +23,17 @@
 #include "HandlerPackageSave.h"
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
+#include "Handlers/Diff/CheckpointThumbnail.h"
 #include "Handlers/Diff/DiffHandlers.h"
 #include "Handlers/Diff/DiffHandlers_Revision.h"
+#include "IImageWrapper.h"
+#include "IImageWrapperModule.h"
 #include "MCPScopedTestMount.h"
 #include "Materials/Material.h"
 #include "Materials/MaterialExpressionConstant.h"
 #include "Materials/MaterialExpressionScalarParameter.h"
 #include "Misc/AutomationTest.h"
+#include "Misc/FileHelper.h"
 #include "Misc/PackageName.h"
 #include "Misc/Paths.h"
 #include "UObject/Package.h"
@@ -455,6 +467,185 @@ bool FMCPCheckpointRevisionDateTest::RunTest(const FString& Parameters)
 	TestEqual(TEXT("no time: the fallback"), MCPCheckpointRevision(TEXT("Current"), FString(), Fallback).Date, Fallback);
 	TestEqual(TEXT("an unreadable time: the fallback"), MCPCheckpointRevision(TEXT("B"), TEXT("yesterday"), Fallback).Date, Fallback);
 	TestNotEqual(TEXT("never the unset date"), MCPCheckpointRevision(TEXT("B"), FString(), Fallback).Date, FDateTime());
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FMCPCheckpointBlankThumbnailTest,
+	"UE.MCP.Diff.CheckpointAsset.BlankRenderIsNoPicture",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMCPCheckpointBlankThumbnailTest::RunTest(const FString& Parameters)
+{
+	TArray<uint8> Black;
+	Black.SetNumZeroed(4 * 4 * 4);
+	TestTrue(TEXT("an all-black render is no picture"), MCPCkDiffIsBlankImage(Black, 4, 4));
+	TArray<uint8> NearBlack = Black;
+	NearBlack[5] = 2;
+	TestTrue(TEXT("readback noise at black is still no picture"), MCPCkDiffIsBlankImage(NearBlack, 4, 4));
+	TArray<uint8> OnePixel = Black;
+	OnePixel[4 * 9 + 1] = 40;
+	TestFalse(TEXT("one coloured pixel is a picture"), MCPCkDiffIsBlankImage(OnePixel, 4, 4));
+	TArray<uint8> AlphaOnly = Black;
+	AlphaOnly[3] = 255;
+	TestTrue(TEXT("alpha alone is no picture"), MCPCkDiffIsBlankImage(AlphaOnly, 4, 4));
+	TArray<uint8> Grey;
+	Grey.Init(128, 4 * 4 * 4);
+	TestTrue(TEXT("a flat background is no picture"), MCPCkDiffIsBlankImage(Grey, 4, 4));
+	TestTrue(TEXT("no pixels is no picture"), MCPCkDiffIsBlankImage(TArray<uint8>(), 0, 0));
+	TestTrue(TEXT("fewer bytes than the size says is no picture"), MCPCkDiffIsBlankImage(OnePixel, 8, 8));
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FMCPCheckpointBlueprintThumbnailTest,
+	"UE.MCP.Diff.CheckpointAsset.ActorBlueprintThumbnailsRender",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMCPCheckpointBlueprintThumbnailTest::RunTest(const FString& Parameters)
+{
+	FMCPScopedTestMount Mount(TEXT("/UEMCPCkThumbTest/"), TEXT("UEMCPCkThumbTest"));
+	const FString DiffDir = FPaths::ConvertRelativePathToFull(FPaths::Combine(FPaths::DiffDir(), TEXT("UE_MCP_CkDiffTest")));
+	ON_SCOPE_EXIT { IFileManager::Get().DeleteDirectory(*DiffDir, false, true); };
+
+	// An Actor Blueprint of engine basic shapes, as an agent builds one (#178).
+	UPackage* Package = CreatePackage(TEXT("/UEMCPCkThumbTest/BP_CkThumbGate"));
+	UBlueprint* Blueprint = FKismetEditorUtilities::CreateBlueprint(AActor::StaticClass(), Package, TEXT("BP_CkThumbGate"), BPTYPE_Normal,
+		UBlueprint::StaticClass(), UBlueprintGeneratedClass::StaticClass());
+	if (!TestNotNull(TEXT("the Blueprint is created"), Blueprint)) return false;
+	UStaticMesh* Cube = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Cube.Cube"));
+	if (!TestNotNull(TEXT("the engine cube loads"), Cube)) return false;
+	USCS_Node* Pillar = Blueprint->SimpleConstructionScript->CreateNode(UStaticMeshComponent::StaticClass(), TEXT("Pillar"));
+	Cast<UStaticMeshComponent>(Pillar->ComponentTemplate)->SetStaticMesh(Cube);
+	Cast<UStaticMeshComponent>(Pillar->ComponentTemplate)->SetRelativeScale3D(FVector(0.8, 0.8, 4.4));
+	Blueprint->SimpleConstructionScript->AddNode(Pillar);
+	FKismetEditorUtilities::CompileBlueprint(Blueprint);
+	FString Reason;
+	if (!TestTrue(TEXT("first version saves"), SaveAssetPackageChecked(Blueprint, Reason))) { AddError(Reason); return false; }
+	const FString Before = CkDiffTestSnapshot(Package, TEXT("BP_CkThumbGate-before"));
+
+	USCS_Node* Trigger = Blueprint->SimpleConstructionScript->CreateNode(UBoxComponent::StaticClass(), TEXT("Trigger"));
+	Cast<UBoxComponent>(Trigger->ComponentTemplate)->SetBoxExtent(FVector(700, 280, 150));
+	Blueprint->SimpleConstructionScript->AddNode(Trigger);
+	FKismetEditorUtilities::CompileBlueprint(Blueprint);
+	if (!TestTrue(TEXT("second version saves"), SaveAssetPackageChecked(Blueprint, Reason))) { AddError(Reason); return false; }
+	const FString After = CkDiffTestSnapshot(Package, TEXT("BP_CkThumbGate-after"));
+
+	FString Original;
+	FPackageName::TryConvertLongPackageNameToFilename(Package->GetName(), Original, FPackageName::GetAssetPackageExtension());
+	FMCPHandlerRegistry Registry;
+	FDiffHandlers::RegisterHandlers(Registry);
+	TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+	Params->SetStringField(TEXT("originalFile"), Original);
+	Params->SetStringField(TEXT("fromFile"), Before);
+	Params->SetStringField(TEXT("toFile"), After);
+	Params->SetStringField(TEXT("fromThumbnail"), DiffDir / TEXT("bp-before.png"));
+	Params->SetStringField(TEXT("toThumbnail"), DiffDir / TEXT("bp-after.png"));
+	Params->SetStringField(TEXT("fromGraphPicture"), DiffDir / TEXT("bp-graph-before.png"));
+	Params->SetStringField(TEXT("toGraphPicture"), DiffDir / TEXT("bp-graph-after.png"));
+	const TSharedPtr<FJsonObject> Diff = CkDiffTestCall(*this, Registry, TEXT("checkpoint_diff_asset"), Params);
+	if (!Diff.IsValid() || !TestTrue(TEXT("diff succeeds"), Diff->GetBoolField(TEXT("success")))) return false;
+	// A component change shows in the class picture, so no graph is drawn for it (#1569).
+	TestFalse(TEXT("a component change has no graph picture"), Diff->GetObjectField(TEXT("after"))->HasField(TEXT("graphPicture")));
+
+	// Each version is drawn from the Blueprint loaded for diff, and the picture shows something.
+	IImageWrapperModule& Images = FModuleManager::LoadModuleChecked<IImageWrapperModule>(FName("ImageWrapper"));
+	for (const TCHAR* Side : { TEXT("before"), TEXT("after") })
+	{
+		const TSharedPtr<FJsonObject> Thumb = Diff->GetObjectField(Side)->GetObjectField(TEXT("thumbnail"));
+		if (!TestEqual(FString::Printf(TEXT("%s thumbnail rendered"), Side), Thumb->GetStringField(TEXT("source")), FString(TEXT("rendered"))))
+		{
+			AddError(FString::Printf(TEXT("%s: %s"), Side, *Thumb->GetStringField(TEXT("error"))));
+			continue;
+		}
+		TArray<uint8> Png;
+		TArray<uint8> Raw;
+		TSharedPtr<IImageWrapper> Reader = Images.CreateImageWrapper(EImageFormat::PNG);
+		const bool bDecoded = FFileHelper::LoadFileToArray(Png, *Thumb->GetStringField(TEXT("file")))
+			&& Reader.IsValid() && Reader->SetCompressed(Png.GetData(), Png.Num()) && Reader->GetRaw(ERGBFormat::BGRA, 8, Raw);
+		if (TestTrue(FString::Printf(TEXT("%s thumbnail decodes"), Side), bDecoded))
+		{
+			TestFalse(FString::Printf(TEXT("%s thumbnail is not black"), Side),
+				MCPCkDiffIsBlankImage(Raw, int32(Reader->GetWidth()), int32(Reader->GetHeight())));
+		}
+	}
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FMCPCheckpointBlueprintGraphPictureTest,
+	"UE.MCP.Diff.CheckpointAsset.GraphOnlyChangeDrawsTheGraph",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMCPCheckpointBlueprintGraphPictureTest::RunTest(const FString& Parameters)
+{
+	FMCPScopedTestMount Mount(TEXT("/UEMCPCkGraphPicTest/"), TEXT("UEMCPCkGraphPicTest"));
+	const FString DiffDir = FPaths::ConvertRelativePathToFull(FPaths::Combine(FPaths::DiffDir(), TEXT("UE_MCP_CkDiffTest")));
+	ON_SCOPE_EXIT { IFileManager::Get().DeleteDirectory(*DiffDir, false, true); };
+
+	UPackage* Package = CreatePackage(TEXT("/UEMCPCkGraphPicTest/BP_CkGraphPic"));
+	UBlueprint* Blueprint = FKismetEditorUtilities::CreateBlueprint(AActor::StaticClass(), Package, TEXT("BP_CkGraphPic"), BPTYPE_Normal,
+		UBlueprint::StaticClass(), UBlueprintGeneratedClass::StaticClass());
+	if (!TestNotNull(TEXT("the Blueprint is created"), Blueprint)) return false;
+	FKismetEditorUtilities::CompileBlueprint(Blueprint);
+	FString Reason;
+	if (!TestTrue(TEXT("first version saves"), SaveAssetPackageChecked(Blueprint, Reason))) { AddError(Reason); return false; }
+	const FString Before = CkDiffTestSnapshot(Package, TEXT("BP_CkGraphPic-before"));
+
+	// Only the event graph changes: a Print String node, as in the report (#1569).
+	UEdGraph* Graph = FBlueprintEditorUtils::FindEventGraph(Blueprint);
+	if (!TestNotNull(TEXT("the Blueprint has an event graph"), Graph)) return false;
+	UK2Node_CallFunction* Call = NewObject<UK2Node_CallFunction>(Graph);
+	Call->CreateNewGuid();
+	Call->FunctionReference.SetExternalMember(GET_FUNCTION_NAME_CHECKED(UKismetSystemLibrary, PrintString), UKismetSystemLibrary::StaticClass());
+	Call->NodePosX = 400;
+	Call->NodePosY = 200;
+	Graph->AddNode(Call, false, false);
+	Call->PostPlacedNewNode();
+	Call->AllocateDefaultPins();
+	FKismetEditorUtilities::CompileBlueprint(Blueprint);
+	if (!TestTrue(TEXT("second version saves"), SaveAssetPackageChecked(Blueprint, Reason))) { AddError(Reason); return false; }
+	const FString After = CkDiffTestSnapshot(Package, TEXT("BP_CkGraphPic-after"));
+
+	FString Original;
+	FPackageName::TryConvertLongPackageNameToFilename(Package->GetName(), Original, FPackageName::GetAssetPackageExtension());
+	FMCPHandlerRegistry Registry;
+	FDiffHandlers::RegisterHandlers(Registry);
+	TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+	Params->SetStringField(TEXT("originalFile"), Original);
+	Params->SetStringField(TEXT("fromFile"), Before);
+	Params->SetStringField(TEXT("toFile"), After);
+	Params->SetStringField(TEXT("fromGraphPicture"), DiffDir / TEXT("graph-before.png"));
+	Params->SetStringField(TEXT("toGraphPicture"), DiffDir / TEXT("graph-after.png"));
+	const TSharedPtr<FJsonObject> Diff = CkDiffTestCall(*this, Registry, TEXT("checkpoint_diff_asset"), Params);
+	if (!Diff.IsValid() || !TestTrue(TEXT("diff succeeds"), Diff->GetBoolField(TEXT("success")))) return false;
+
+	// Both versions of the event graph are drawn, and the two pictures differ where the node was added.
+	IImageWrapperModule& Images = FModuleManager::LoadModuleChecked<IImageWrapperModule>(FName("ImageWrapper"));
+	TArray<uint8> Raws[2];
+	int32 Index = 0;
+	for (const TCHAR* Side : { TEXT("before"), TEXT("after") })
+	{
+		const TSharedPtr<FJsonObject>* Pic = nullptr;
+		if (!TestTrue(FString::Printf(TEXT("%s has a graph picture"), Side), Diff->GetObjectField(Side)->TryGetObjectField(TEXT("graphPicture"), Pic))) return false;
+		TestFalse(FString::Printf(TEXT("%s names the graph it pictures"), Side), (*Pic)->GetStringField(TEXT("graph")).IsEmpty());
+		FString File;
+		if (!(*Pic)->TryGetStringField(TEXT("file"), File))
+		{
+			AddError(FString::Printf(TEXT("%s graph picture: %s"), Side, *(*Pic)->GetStringField(TEXT("error"))));
+			return false;
+		}
+		TArray<uint8> Png;
+		TSharedPtr<IImageWrapper> Reader = Images.CreateImageWrapper(EImageFormat::PNG);
+		const bool bDecoded = FFileHelper::LoadFileToArray(Png, *File)
+			&& Reader.IsValid() && Reader->SetCompressed(Png.GetData(), Png.Num()) && Reader->GetRaw(ERGBFormat::BGRA, 8, Raws[Index]);
+		if (!TestTrue(FString::Printf(TEXT("%s graph picture decodes"), Side), bDecoded)) return false;
+		TestFalse(FString::Printf(TEXT("%s graph picture shows something"), Side),
+			MCPCkDiffIsBlankImage(Raws[Index], int32(Reader->GetWidth()), int32(Reader->GetHeight())));
+		++Index;
+	}
+	TestTrue(TEXT("after names the added node"), Diff->GetObjectField(TEXT("after"))->GetObjectField(TEXT("graphPicture"))->GetNumberField(TEXT("changedNodes")) >= 1);
+	TestTrue(TEXT("the two versions are drawn differently"), Raws[0] != Raws[1]);
 	return true;
 }
 

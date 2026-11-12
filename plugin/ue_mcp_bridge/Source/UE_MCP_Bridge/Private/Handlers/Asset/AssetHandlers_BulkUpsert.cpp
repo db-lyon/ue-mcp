@@ -230,10 +230,14 @@ bool ApplyPreparedProperties(
 			LeafOwner->Modify();
 		}
 		FString SetError;
-		if (!MCPJsonProperty::SetJsonOnProperty(
+		// Owner passed for the same reason as bulk_set_asset_properties. Only
+		// here, not in the preflight pass, which writes into a transient staging
+		// duplicate whose subobjects are thrown away with it.
+		if (!MCPJsonProperty::SetJsonOnPropertyWithOwner(
 			Property,
 			ValueAddress,
 			Prepared.RequestedValue,
+			LeafOwner ? LeafOwner : Asset,
 			SetError))
 		{
 			OutError = FString::Printf(TEXT("Failed to set '%s': %s"), *Prepared.Name, *SetError);

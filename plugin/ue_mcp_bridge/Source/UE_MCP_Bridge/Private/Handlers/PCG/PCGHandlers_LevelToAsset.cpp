@@ -141,7 +141,11 @@ TSharedPtr<FJsonValue> FPCGHandlers::ExportLevelToAsset(const TSharedPtr<FJsonOb
 	ExportParams.bOpenSaveDialog = false;
 	ExportParams.AssetName = AssetName;
 	ExportParams.AssetPath = AssetFolder;
-	ExportParams.bSaveOnExportEnded = bSave;
+	// The exporter's own save goes through FEditorFileUtils::PromptForCheckoutAndSave,
+	// and since 5.9 CreateAsset returns null whenever that does not report success,
+	// which an unattended editor's prompt path does not. The export is kept in
+	// memory and saved here, where a refusal comes back with its reason.
+	ExportParams.bSaveOnExportEnded = false;
 
 	UPackage* Package = UPCGAssetExporterUtils::CreateAsset(Exporter, ExportParams);
 	if (!Package)
@@ -149,7 +153,16 @@ TSharedPtr<FJsonValue> FPCGHandlers::ExportLevelToAsset(const TSharedPtr<FJsonOb
 		return MCPError(FString::Printf(TEXT("Exporting '%s' to '%s' failed; the editor log names the reason (LogPCG, LogPCGEditor)."), *Forms.PackagePath, *AssetObjectPath));
 	}
 
-	const UPCGDataAsset* Asset = FindObject<UPCGDataAsset>(Package, *AssetName);
+	UPCGDataAsset* Asset = FindObject<UPCGDataAsset>(Package, *AssetName);
+	if (bSave)
+	{
+		FString SaveError;
+		if (!Asset || !SaveAssetPackageChecked(Asset, SaveError))
+		{
+			return MCPError(FString::Printf(TEXT("'%s' was exported but not saved: %s"), *AssetObjectPath,
+				Asset ? *SaveError : TEXT("the exported package holds no PCG data asset of that name")));
+		}
+	}
 	auto Result = MCPSuccess();
 	if (bExisted)
 	{
@@ -213,8 +226,26 @@ TSharedPtr<FJsonValue> FPCGHandlers::UpdateLevelAssets(const TSharedPtr<FJsonObj
 
 	FPCGAssetExporterParameters UpdateParams;
 	UpdateParams.bOpenSaveDialog = false;
-	UpdateParams.bSaveOnExportEnded = bSave;
+	// Saved below rather than by the exporter, for the reason ExportLevelToAsset gives.
+	UpdateParams.bSaveOnExportEnded = false;
 	UPCGAssetExporterUtils::UpdateAssets(Assets, UpdateParams);
+	if (bSave)
+	{
+		TArray<FString> SaveErrors;
+		for (const FAssetData& Data : Assets)
+		{
+			FString SaveError;
+			UObject* Updated = Data.GetAsset();
+			if (!Updated || !SaveAssetPackageChecked(Updated, SaveError))
+			{
+				SaveErrors.Add(FString::Printf(TEXT("%s: %s"), *Data.GetObjectPathString(), Updated ? *SaveError : TEXT("not loaded")));
+			}
+		}
+		if (SaveErrors.Num() > 0)
+		{
+			return MCPError(FString::Printf(TEXT("Updated in memory but not saved: %s"), *FString::Join(SaveErrors, TEXT("; "))));
+		}
+	}
 
 	auto Result = MCPSuccess();
 	MCPSetUpdated(Result);

@@ -115,6 +115,12 @@ class FEditorHandlers
 public:
 	// Register all editor handlers
 	static void RegisterHandlers(class FMCPHandlerRegistry& Registry);
+	// Release preview worlds and tick callbacks before the module unloads.
+	static void ShutdownMeshStudioRenders();
+	// Write one config property of a config class default object to its ini and
+	// read it back from the file (#1566). False when Object is not a config class
+	// default or the property is not a config property; Result is untouched then.
+	static bool PersistConfigProperty(UObject* Object, const FString& PropertyPath, const TSharedPtr<FJsonObject>& Result);
 
 private:
 	// Handler implementations
@@ -134,6 +140,9 @@ private:
 	static TSharedPtr<FJsonValue> GetProperty(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> DescribeObject(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SetConfig(const TSharedPtr<FJsonObject>& Params);
+	// Maps & Modes project settings, typed, in EditorHandlers_ProjectSettings.cpp (#1566).
+	static TSharedPtr<FJsonValue> GetMapsSettings(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> SetMapsSettings(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> GetViewportInfo(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> HitTestViewportPixel(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> GetRuntimeValues(const TSharedPtr<FJsonObject>& Params);
@@ -141,6 +150,15 @@ private:
 	static TSharedPtr<FJsonValue> GetOutputLog(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SearchLog(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> GetMessageLog(const TSharedPtr<FJsonObject>& Params);
+	// #1828: Map Check runs and messages. EditorHandlers_MapCheck.cpp.
+	static void RegisterMapCheckHandlers(class FMCPHandlerRegistry& Registry);
+	static TSharedPtr<FJsonValue> RunMapCheck(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> LogMapCheckMessage(const TSharedPtr<FJsonObject>& Params);
+	// #1828: Python additional search paths. EditorHandlers_PythonPaths.cpp.
+	static void RegisterPythonPathHandlers(class FMCPHandlerRegistry& Registry);
+	static TSharedPtr<FJsonValue> AddPythonPath(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> RemovePythonPath(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> ListPythonPaths(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> GetBuildStatus(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> PieControl(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> PieStartIgnoringBlueprintErrors(const TSharedPtr<FJsonObject>& Params);
@@ -157,6 +175,7 @@ private:
 	// makes a screenshot comparable between runs.
 	static TSharedPtr<FJsonValue> GetViewportState(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SetViewMode(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> SetBufferVisualization(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SetViewportExposure(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SetViewportView(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SetGameView(const TSharedPtr<FJsonObject>& Params);
@@ -189,10 +208,17 @@ private:
 	static TSharedPtr<FJsonValue> EndProfileRegion(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> AddTraceBookmark(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> GetFrameTiming(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> GetShaderCompileStatus(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> TriggerHitch(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> LaunchStandaloneGame(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> GetStandaloneStatus(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> StopStandaloneGame(const TSharedPtr<FJsonObject>& Params);
+	// Reading a recorded .utrace back through TraceServices, in
+	// EditorHandlers_TraceAnalysis.cpp.
+	static TSharedPtr<FJsonValue> AnalyzeInsightsTrace(const TSharedPtr<FJsonObject>& Params);
+	// The CSV profiler with a named capture, in EditorHandlers_CsvProfile.cpp.
+	static TSharedPtr<FJsonValue> StartCsvProfile(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> StopCsvProfile(const TSharedPtr<FJsonObject>& Params);
 
 	static TSharedPtr<FJsonValue> ReloadHandlers(const TSharedPtr<FJsonObject>& Params);
 	// #378: flush dirty packages and report per-package success/failure
@@ -202,6 +228,9 @@ private:
 	static TSharedPtr<FJsonValue> GetWorldState(const TSharedPtr<FJsonObject>& Params);
 	// Gracefully close the editor after dirty-package and PIE safety checks.
 	static TSharedPtr<FJsonValue> RequestEditorShutdown(const TSharedPtr<FJsonObject>& Params);
+	// Clear the dirty flag on named packages nobody can save, so a close does
+	// not stop on them; real content only with allowContent.
+	static TSharedPtr<FJsonValue> DiscardDirty(const TSharedPtr<FJsonObject>& Params);
 	// PIE runtime inspection/control (#739/#756/#757/#761/#764/#770/#777/#778).
 	static TSharedPtr<FJsonValue> ListPIEInstances(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> InvokeObjectFunction(const TSharedPtr<FJsonObject>& Params);
@@ -246,6 +275,9 @@ private:
 	static TSharedPtr<FJsonValue> SetPiePaused(const TSharedPtr<FJsonObject>& Params);
 	// #148: Headless SceneCapture2D → PNG (works when editor is unfocused)
 	static TSharedPtr<FJsonValue> CaptureScenePng(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> RenderMeshStudio(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> GetMeshStudioRender(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> CancelMeshStudioRender(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SetRealtime(const TSharedPtr<FJsonObject>& Params);
 	// #228/#229: PIE pawn lookup + UFUNCTION invocation for PIE actors
 	static TSharedPtr<FJsonValue> GetPiePawn(const TSharedPtr<FJsonObject>& Params);

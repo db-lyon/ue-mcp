@@ -18,7 +18,8 @@ const CUBE = "BCov_Editor_SeqCube";
 const BASE_Z = 200;
 
 type Json = Record<string, unknown>;
-type Track = { class: string; name?: string };
+type Section = { class: string; isActive: boolean; startSeconds?: number; endSeconds?: number };
+type Track = { class: string; name?: string; displayName?: string; sections?: Section[] };
 type Binding = { name: string; tracks: Track[] };
 const body = (r: TestResult): Json => (r.result && typeof r.result === "object" ? (r.result as Json) : {});
 const succeeded = (r: TestResult): boolean => r.ok && body(r).success !== false;
@@ -93,6 +94,14 @@ describe("sequence authoring", () => {
 
   it("set_sequence_keyframes writes keys get_sequence_channel_keys reads back", async () => {
     await call("add_sequence_section", { sequencePath: SEQ, trackType: "Transform", actorLabel: CUBE, startSeconds: 0, endSeconds: 3 });
+    // Without includeSectionDetails each track still lists its sections' range and activity (#1644).
+    const listed = (await info()).bindings as Binding[];
+    const transform = listed.find((b) => b.name === CUBE)!.tracks.find((t) => t.class.includes("Transform"))!;
+    expect(transform.displayName, JSON.stringify(transform)).toBeTruthy();
+    const section = transform.sections!.find((x) => Math.abs(Number(x.endSeconds) - 3) < 0.001);
+    expect(section, JSON.stringify(transform.sections)).toBeDefined();
+    expect(Number(section!.startSeconds)).toBeCloseTo(0, 3);
+    expect(section!.isActive).toBe(true);
     await call("set_sequence_keyframes", {
       sequencePath: SEQ, trackType: "Transform", actorLabel: CUBE, channel: "Location.Z",
       keyframes: [{ seconds: 0, value: BASE_Z }, { seconds: 1, value: BASE_Z + 500 }], interpolation: "linear",

@@ -136,6 +136,8 @@ private:
 	static TSharedPtr<FJsonValue> BuildTree(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> RemoveWidget(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> MoveWidget(const TSharedPtr<FJsonObject>& Params);
+	// #1679: rename in place, moving every name-keyed reference with it.
+	static TSharedPtr<FJsonValue> RenameWidget(const TSharedPtr<FJsonObject>& Params);
 	// #365: root-widget swap + "Wrap With" container insertion. Required to
 	// reshape an existing WBP root without rebuilding the whole tree.
 	static TSharedPtr<FJsonValue> SetRoot(const TSharedPtr<FJsonObject>& Params);

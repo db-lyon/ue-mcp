@@ -2,6 +2,7 @@
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
 #include "HandlerSourceControl.h"
+#include "HandlerDiffPackage.h"
 
 #include "ISourceControlModule.h"
 #include "ISourceControlProvider.h"
@@ -11,6 +12,7 @@
 #include "ISourceControlChangelistState.h"
 #include "SourceControlOperations.h"
 #include "SourceControlHelpers.h"
+#include "AssetDefinition.h"
 #include "AssetToolsModule.h"
 #include "IAssetTools.h"
 #include "HAL/FileManager.h"
@@ -1053,6 +1055,10 @@ TSharedPtr<FJsonValue> FSourceControlHandlers::Revert(const TSharedPtr<FJsonObje
 			const FString File = State->GetFilename();
 			FString Copy;
 			if (!State->IsDeleted() || FPaths::FileExists(File) || !RestoreFrom->TryGetStringField(File, Copy)) continue;
+			// Copies come only from the stash mark_for_delete writes under Saved.
+			FString StashCopy, StashError;
+			if (!MCPResolvePathInside(Copy, { FPaths::ProjectSavedDir() }, StashCopy, StashError)) continue;
+			Copy = StashCopy;
 			if (FPaths::FileExists(Copy) && IFileManager::Get().Copy(*File, *Copy) == COPY_OK) Restored.Add(File);
 		}
 		if (Restored.Num() > 0) Provider->Execute(ISourceControlOperation::Create<FMarkForAdd>(), Restored);
@@ -1082,6 +1088,7 @@ TSharedPtr<FJsonValue> FSourceControlHandlers::Diff(const TSharedPtr<FJsonObject
 	FString InPath;
 	if (auto Err = RequireString(Params, TEXT("path"), InPath)) return Err;
 	const bool bOpenEditor = OptionalBool(Params, TEXT("openEditor"), false);
+	const FString WantedRevision = OptionalString(Params, TEXT("revision"), FString());
 	const int32 Context = FMath::Clamp(OptionalInt(Params, TEXT("contextLines"), 3), 0, 50);
 	const int32 MaxLines = FMath::Clamp(OptionalInt(Params, TEXT("maxLines"), 400), 1, 20000);
 
@@ -1114,10 +1121,11 @@ TSharedPtr<FJsonValue> FSourceControlHandlers::Diff(const TSharedPtr<FJsonObject
 	{
 		return MCPError(FString::Printf(TEXT("The %s provider returned no history for '%s', so it cannot be diffed here."), *Provider->GetName().ToString(), *Path.File));
 	}
-	const TSharedPtr<ISourceControlRevision, ESPMode::ThreadSafe> Revision = State->GetHistoryItem(0);
+	FString FindError;
+	const TSharedPtr<ISourceControlRevision, ESPMode::ThreadSafe> Revision = MCPDiffPackage::FindRevision(*State, WantedRevision, FindError);
 	if (!Revision.IsValid())
 	{
-		return MCPError(TEXT("The provider's latest revision entry is empty, so there is nothing to diff against."));
+		return MCPError(FString::Printf(TEXT("'%s': %s"), *Path.File, *FindError));
 	}
 	TSharedPtr<FJsonObject> Against = MakeShared<FJsonObject>();
 	Against->SetStringField(TEXT("revision"), Revision->GetRevision());
@@ -1146,8 +1154,49 @@ TSharedPtr<FJsonValue> FSourceControlHandlers::Diff(const TSharedPtr<FJsonObject
 		{
 			return MCPError(FString::Printf(TEXT("'%s' holds no asset the editor can open a diff for."), *Path.File));
 		}
+		// The revision is loaded into a /Temp package, kept while the diff window shows it and unloaded when it closes (#1483).
+		MCPDiffPackage::FRevisionPackage Old = MCPDiffPackage::LoadRevision(Revision.ToSharedRef(), Path.PackageName);
+		if (!Old.Error.IsEmpty()) return MCPError(Old.Error);
+		FRevisionInfo OldRevision;
+		OldRevision.Revision = Old.Revision;
+		OldRevision.Changelist = Old.CheckInIdentifier;
+		OldRevision.Date = Old.Date;
+		FRevisionInfo NewRevision;
+		NewRevision.Revision = TEXT("");
+		NewRevision.Date = FDateTime::UtcNow();
+
+		TSet<SWindow*> Before;
+		if (FSlateApplication::IsInitialized())
+		{
+			TArray<TSharedRef<SWindow>> All;
+			FSlateApplication::Get().GetAllVisibleWindowsOrdered(All);
+			for (const TSharedRef<SWindow>& W : All) Before.Add(&W.Get());
+		}
 		FAssetToolsModule& AssetTools = FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools"));
-		AssetTools.Get().DiffAgainstDepot(Asset, Path.PackageName, Asset->GetName());
+		AssetTools.Get().DiffAssets(Old.Asset, Asset, OldRevision, NewRevision);
+		TSharedPtr<SWindow> Window;
+		if (FSlateApplication::IsInitialized())
+		{
+			TArray<TSharedRef<SWindow>> All;
+			FSlateApplication::Get().GetAllVisibleWindowsOrdered(All);
+			for (const TSharedRef<SWindow>& W : All)
+			{
+				if (!Before.Contains(&W.Get())) { Window = W; break; }
+			}
+		}
+		if (Window.IsValid())
+		{
+			MCPDiffPackage::KeepUntilClosed(Window.ToSharedRef(), { Old.Package });
+			Window->BringToFront(true);
+			Result->SetStringField(TEXT("windowTitle"), Window->GetTitle().ToString());
+			Result->SetBoolField(TEXT("unloadsOnClose"), true);
+			Result->SetArrayField(TEXT("tempPackages"), MCPDiffPackage::PackageNames({ Old.Package }));
+		}
+		else
+		{
+			// An external text diff tool, which has read both sides already.
+			MCPDiffPackage::Unload({ Old.Package });
+		}
 		Result->SetBoolField(TEXT("editorDiffOpened"), true);
 		return MCPResult(Result);
 	}
@@ -1600,7 +1649,8 @@ void FSourceControlHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("restoreFrom"), EType::Object, TEXT("File to saved copy, as mark_for_delete's rollback carries it: a deleted file the provider cannot revert is put back from its copy and marked for add")),
 	}, MCPSpec::ContractExempt(TEXT("Reverts files in the configured provider when called")));
 	Registry.RegisterHandlerWithTimeout(TEXT("source_control_diff"), &Diff, 120.0f, {
-		MCPParam::Required(TEXT("path"), EType::String, TEXT("One asset path or file to diff against its latest repository revision")),
+		MCPParam::Required(TEXT("path"), EType::String, TEXT("One asset path or file to diff against a repository revision")),
+		MCPParam::Optional(TEXT("revision"), EType::String, TEXT("Revision to diff against: the provider's id, a unique prefix of 7 or more characters of it, its number, or head, as source_control(history) lists them (default head)")),
 		MCPParam::Optional(TEXT("openEditor"), EType::Boolean, TEXT("For a package, open the editor's asset diff window (default false)")),
 		MCPParam::Optional(TEXT("contextLines"), EType::Integer, TEXT("Unchanged lines around each text change (default 3)")),
 		MCPParam::Optional(TEXT("maxLines"), EType::Integer, TEXT("Most diff lines to return (default 400); truncated says when cut")),

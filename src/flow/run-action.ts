@@ -1,15 +1,17 @@
 import type { TaskResult } from "@db-lyon/flowkit";
 import type { ActionSpec, BridgeActionSpec, CategoryOptions } from "../core/types.js";
 import { stripAction } from "../surface/routing-params.js";
-import { prepareCall, finishCall, forwardToBridge, withLiveContract, type CallPreparation } from "../dispatch/call-pipeline.js";
+import { prepareCall, finishCall, forwardToBridge, withLiveContract, type CallPreparation, type CallPipeline } from "../dispatch/call-pipeline.js";
 import { McpError, ErrorCode } from "../core/errors.js";
 import type { FlowContext } from "./context.js";
 import { liftRollback } from "./rollback.js";
 import { applyHandlerOutcome } from "./handler-outcome.js";
 import { ensureGuard } from "../editor/dialog-guard.js";
-import { paramMapperOf } from "../surface/epic-input.js";
+import { epicSuccessorFor, paramMapperOf } from "../surface/epic-input.js";
+import { epicEngineRefusal } from "../surface/epic-engines.js";
 import { actionAccepts } from "../surface/action-schema.js";
-import type { IBridge } from "../bridge/bridge.js";
+import type { BridgeCallOptions, IBridge } from "../bridge/bridge.js";
+import { attachInlineImages } from "../dispatch/inline-image.js";
 
 /**
  * Refuse a handler-backed call while a modal is up, through the one guard.
@@ -60,6 +62,8 @@ export function actionPreparation(
       ? { params: spec.paramSpec, choices: spec.paramChoices, strict: spec.strictParams }
       : undefined,
     accepts: actionAccepts(spec),
+    epicTool: spec.kind === "bridge" ? spec.epicTool : undefined,
+    imageOutputs: spec.imageOutputs,
   };
 }
 
@@ -79,10 +83,13 @@ export async function runAction(
   options: Record<string, unknown>,
   prep?: CallPreparation,
 ): Promise<TaskResult> {
-  if (spec.kind === "bridge") return runBridge(ctx, name, spec.bridge, paramMapperOf(spec), spec.timeoutMs, options, prep, spec.followUp);
+  if (spec.kind === "bridge") return runBridge(ctx, name, spec.bridge, paramMapperOf(spec), spec.timeoutMs, options, prep, spec);
   if (spec.kind === "handler") return runHandler(ctx, name, spec.handler, options, prep);
   throw new McpError(ErrorCode.NO_HANDLER, `Action '${name}' has no handler or bridge method`);
 }
+
+/** What a bridge action may run around its call: intercept before it, followUp after it. */
+export type BridgeHooks = Pick<BridgeActionSpec, "followUp" | "intercept">;
 
 export async function runBridge(
   ctx: FlowContext,
@@ -92,20 +99,42 @@ export async function runBridge(
   timeoutMs: number | undefined,
   rawOptions: Record<string, unknown>,
   prep?: CallPreparation,
-  followUp?: BridgeActionSpec["followUp"],
+  hooks?: BridgeHooks,
 ): Promise<TaskResult> {
   // `action` is the dispatcher's, not a bridge parameter. Stripped before the
   // mapper, since a mapper that forwards its input verbatim would carry it.
   const options = stripAction(rawOptions);
+  // A wrapped engine tool the attached engine's recorded registry lacks is refused unsent.
+  const engineVersion = ctx.bridge?.capabilities?.engineVersion;
+  const refused = epicEngineRefusal(name, prep?.epicTool, engineVersion);
+  if (refused) return applyHandlerOutcome(ctx, refused, { success: true, data: { ...refused } });
+  // A wrapped tool the attached engine replaced goes to its successor, whichever
+  // route built the mapper.
+  if (epicSuccessorFor(prep?.epicTool, engineVersion)) mapParams = paramMapperOf({ epicTool: prep?.epicTool }, engineVersion);
   // The routing parameters come off, the paths are repaired, and the category
   // folds its accepted spellings into the canonical ones.
   const pipeline = prepareCall(options, withLiveContract(prep, ctx.bridge.capabilities?.pluginHandlerSpecs));
   const params = forwardToBridge(pipeline, pipeline.params, mapParams, name);
   // The caller's budget wins over the action's authored one: an action that
   // declares 120s is stating a floor it needs, not a ceiling.
-  const sent = await ctx.bridge.call(method, params, pipeline.timeoutMs ?? timeoutMs);
-  const answered = followUp ? await followUp(ctx, params, sent) : sent;
-  const raw = finishCall(answered, pipeline);
+  const hookCtx = pipeline.timeoutMs === undefined
+    ? ctx
+    : { ...ctx, callTimeoutMs: pipeline.timeoutMs, bridge: withCallTimeout(ctx.bridge, pipeline.timeoutMs) };
+  const intercepted = hooks?.intercept ? await hooks.intercept(hookCtx, params) : undefined;
+  let answered: unknown;
+  if (intercepted !== undefined) {
+    answered = intercepted;
+  } else {
+    // Progress and cancellation reach the editor for a handler that defers its answer.
+    const live = ctx.onProgress || ctx.signal ? { onProgress: ctx.onProgress, signal: ctx.signal } : undefined;
+    const sent = live
+      ? await ctx.bridge.call(method, params, pipeline.timeoutMs ?? timeoutMs, live)
+      : await ctx.bridge.call(method, params, pipeline.timeoutMs ?? timeoutMs);
+    const followUpParams = pipeline.timeoutMs === undefined ? params : { ...params, timeoutMs: pipeline.timeoutMs };
+    const followUpCtx = pipeline.timeoutMs === undefined ? ctx : { ...ctx, callTimeoutMs: pipeline.timeoutMs };
+    answered = hooks?.followUp ? await hooks.followUp(followUpCtx, followUpParams, sent) : sent;
+  }
+  const raw = await withInlineImages(ctx, finishCall(answered, pipeline), answered, pipeline, prep);
   if (typeof raw !== "object" || raw === null) {
     return applyHandlerOutcome(ctx, answered, { success: true, data: { result: raw } });
   }
@@ -128,6 +157,27 @@ export async function runBridge(
 }
 
 /**
+ * The images an action wrote, added to its projected result when the caller
+ * passed `inline`. Read off the unprojected answer, so a narrow `select`
+ * does not hide the path, and added after the projection, so it does not
+ * filter the images away.
+ */
+async function withInlineImages(
+  ctx: FlowContext,
+  shown: unknown,
+  answered: unknown,
+  pipeline: CallPipeline,
+  prep: CallPreparation | undefined,
+): Promise<unknown> {
+  if (!pipeline.inline || !prep?.imageOutputs) return shown;
+  const host = (ctx.bridge as { host?: unknown } | undefined)?.host;
+  return attachInlineImages(shown, answered, prep.imageOutputs, pipeline.inline, {
+    projectDir: ctx.project?.projectDir,
+    bridgeHost: typeof host === "string" ? host : undefined,
+  });
+}
+
+/**
  * The bridge as an in-process handler sees it: a call that names no budget of
  * its own gets the caller's, so every handler honours timeoutMs (#1339).
  */
@@ -136,7 +186,8 @@ export function withCallTimeout<B extends { call: IBridge["call"] }>(bridge: B, 
   return new Proxy(bridge, {
     get(target, key) {
       if (key === "call") {
-        return (method: string, params?: Record<string, unknown>, ms?: number) => target.call(method, params, ms ?? timeoutMs);
+        return (method: string, params?: Record<string, unknown>, ms?: number, options?: BridgeCallOptions) =>
+          target.call(method, params, ms ?? timeoutMs, options);
       }
       const value = Reflect.get(target, key, target);
       return typeof value === "function" ? value.bind(target) : value;
@@ -164,7 +215,7 @@ export async function runHandler(
     return { success: false, data: refusal, error: refusalError(name, refusal) };
   }
   const answered = await fn(callCtx, pipeline.params);
-  const data = finishCall(answered, pipeline);
+  const data = await withInlineImages(ctx, finishCall(answered, pipeline), answered, pipeline, prep);
   // A handler reports a refusal by RETURNING `{ success: false }`, so the
   // verdict is read off `answered`, where a `select` cannot hide it.
   return applyHandlerOutcome(ctx, answered, {

@@ -148,8 +148,12 @@ export function searchToolGraph(tools: SearchableTool[], query: string, limit = 
       // A moved action's old address is the same action; search names the canonical one.
       if (spec?.movedTo) continue;
       const desc = spec?.description ?? "";
-      const nameWords = wordsOf(actionName);
-      const descWords = wordsOf(desc);
+      // A wrapped Epic action's `__<toolset>` suffix and its "[Epic <toolset>]"
+      // description prefix say where the tool comes from, not what it does, so
+      // neither scores as the action's own words: "create data table" must not
+      // rank epic_create__data_table_toolset above asset.create_datatable.
+      const nameWords = wordsOf(actionName.replace(/__.*$/, ""));
+      const descWords = wordsOf(desc.replace(/^\[Epic [^\]]*\]\s*/, ""));
       const nameSet = new Set(joinedWords(nameWords));
       const toolSet = new Set(joinedWords(wordsOf(tool.name)));
       const textSet = new Set(joinedWords(descWords));

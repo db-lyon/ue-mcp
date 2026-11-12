@@ -5,7 +5,9 @@
  * withheld from what is advertised and discovered. Nothing is withheld while
  * no plugin has published its method list. An `epic_*` action is withheld the
  * same way when the editor's toolset registry lacks the toolset it wraps, once
- * that list is known (#1323). The views built here are read views: dispatch
+ * that list is known (#1323), and an action that runs a tool Epic's Unreal
+ * MCP plugin serves (`mcpTool`) when the editor's list of those lacks it
+ * (#1824). The views built here are read views: dispatch
  * keeps the full graph and refuses a withheld call by name.
  */
 import type { ActionSpec, ToolContext, ToolDef } from "../core/types.js";
@@ -18,41 +20,49 @@ import { searchToolGraph } from "./context/tool-search.js";
 /** Marks a set that also carries the editor's live toolset names. */
 const EPIC_TOOLSETS_KNOWN = "\u0000epic-toolsets";
 const EPIC_TOOLSET_PREFIX = "\u0000epic-toolset:";
+/** Marks a set that also carries the tools Epic's Unreal MCP plugin serves (#1824). */
+const EPIC_MCP_TOOLS_KNOWN = "\u0000epic-mcp-tools";
+const EPIC_MCP_TOOL_PREFIX = "\u0000epic-mcp-tool:";
 
-type RegisteredSource = Pick<IBridge, "registeredActions"> & { readonly epicToolsets?: readonly string[] | null };
+type RegisteredSource = Pick<IBridge, "registeredActions"> & {
+  readonly epicToolsets?: readonly string[] | null;
+  readonly epicMcpTools?: readonly string[] | null;
+};
 
-const setCache = new WeakMap<readonly string[], ReadonlySet<string>>();
-const toolsetCache = new WeakMap<readonly string[], WeakMap<readonly string[], ReadonlySet<string>>>();
+/** Stands in for an unknown list as a cache key. */
+const UNKNOWN: readonly string[] = [];
+const setCache = new WeakMap<readonly string[], WeakMap<readonly string[], WeakMap<readonly string[], ReadonlySet<string>>>>();
 
 /**
  * The registered methods as a set, or null when there is nothing to filter by.
- * With `toolsets`, the set also says which engine toolsets the editor has.
+ * With `toolsets`, the set also says which engine toolsets the editor has; with
+ * `mcpTools`, which tools Epic's Unreal MCP plugin serves.
  */
 export function registeredSet(
   actions: readonly string[] | null | undefined,
   toolsets?: readonly string[] | null,
+  mcpTools?: readonly string[] | null,
 ): ReadonlySet<string> | null {
   if (!actions || actions.length === 0) return null;
-  if (toolsets) {
-    let byToolsets = toolsetCache.get(actions);
-    if (!byToolsets) toolsetCache.set(actions, (byToolsets = new WeakMap()));
-    let set = byToolsets.get(toolsets);
-    if (!set) {
-      set = new Set([...actions, EPIC_TOOLSETS_KNOWN, ...toolsets.map((t) => EPIC_TOOLSET_PREFIX + t)]);
-      byToolsets.set(toolsets, set);
-    }
-    return set;
-  }
-  let set = setCache.get(actions);
+  const toolsetKey = toolsets ?? UNKNOWN;
+  const mcpKey = mcpTools ?? UNKNOWN;
+  let byToolsets = setCache.get(actions);
+  if (!byToolsets) setCache.set(actions, (byToolsets = new WeakMap()));
+  let byMcp = byToolsets.get(toolsetKey);
+  if (!byMcp) byToolsets.set(toolsetKey, (byMcp = new WeakMap()));
+  let set = byMcp.get(mcpKey);
   if (!set) {
-    set = new Set(actions);
-    setCache.set(actions, set);
+    const entries = [...actions];
+    if (toolsets) entries.push(EPIC_TOOLSETS_KNOWN, ...toolsets.map((t) => EPIC_TOOLSET_PREFIX + t));
+    if (mcpTools) entries.push(EPIC_MCP_TOOLS_KNOWN, ...mcpTools.map((t) => EPIC_MCP_TOOL_PREFIX + t));
+    set = new Set(entries);
+    byMcp.set(mcpKey, set);
   }
   return set;
 }
 
 export function registeredMethodsOf(bridge: RegisteredSource | undefined): ReadonlySet<string> | null {
-  return registeredSet(bridge?.registeredActions, bridge?.epicToolsets);
+  return registeredSet(bridge?.registeredActions, bridge?.epicToolsets, bridge?.epicMcpTools);
 }
 
 /** Every editor's registered methods together. Null when any editor has published none. */
@@ -65,19 +75,32 @@ export function registeredUnion(bridges: readonly RegisteredSource[]): ReadonlyS
   for (const s of sets) for (const m of s!) union.add(m);
   // A toolset is only judged absent when every editor's list is known.
   if (!sets.every((s) => s!.has(EPIC_TOOLSETS_KNOWN))) union.delete(EPIC_TOOLSETS_KNOWN);
+  if (!sets.every((s) => s!.has(EPIC_MCP_TOOLS_KNOWN))) union.delete(EPIC_MCP_TOOLS_KNOWN);
   return union;
 }
 
-/** The engine toolset a wrapped action needs and the editor lacks, if any. */
+/** The MCP tool a `mcpTool` action needs and the editor's known list lacks, if any (#1824). */
+export function absentMcpTool(spec: ActionSpec | undefined, have: ReadonlySet<string> | null): string | undefined {
+  if (!have || spec?.kind !== "bridge" || !spec.mcpTool || !have.has(EPIC_MCP_TOOLS_KNOWN)) return undefined;
+  return have.has(EPIC_MCP_TOOL_PREFIX + spec.mcpTool.name) ? undefined : spec.mcpTool.name;
+}
+
+/**
+ * The engine toolset a wrapped action needs and the editor lacks, if any. An
+ * action whose tool a newer engine renamed is present when the editor has
+ * either the tool's own toolset or a successor's.
+ */
 export function absentToolset(spec: ActionSpec | undefined, have: ReadonlySet<string> | null): string | undefined {
   if (!have || spec?.kind !== "bridge" || !have.has(EPIC_TOOLSETS_KNOWN)) return undefined;
   const toolset = spec.epicTool?.toolset;
-  return toolset && !have.has(EPIC_TOOLSET_PREFIX + toolset) ? toolset : undefined;
+  if (!toolset) return undefined;
+  const reachable = [toolset, ...(spec.epicTool?.successors ?? []).map((s) => s.toolset)];
+  return reachable.some((t) => have.has(EPIC_TOOLSET_PREFIX + t)) ? undefined : toolset;
 }
 
 export function isWithheld(spec: ActionSpec | undefined, have: ReadonlySet<string> | null): boolean {
   if (!have || spec?.kind !== "bridge") return false;
-  return !have.has(spec.bridge) || absentToolset(spec, have) !== undefined;
+  return !have.has(spec.bridge) || absentToolset(spec, have) !== undefined || absentMcpTool(spec, have) !== undefined;
 }
 
 /**
@@ -127,10 +150,32 @@ export function epicToolsetsOf(graph: readonly ToolDef[]): string[] {
   const toolsets = new Set<string>();
   for (const tool of graph) {
     for (const spec of Object.values(tool.actions)) {
-      if (spec.kind === "bridge" && spec.epicTool?.toolset) toolsets.add(spec.epicTool.toolset);
+      if (spec.kind !== "bridge" || !spec.epicTool?.toolset) continue;
+      toolsets.add(spec.epicTool.toolset);
+      for (const s of spec.epicTool.successors ?? []) toolsets.add(s.toolset);
     }
   }
   return [...toolsets].sort();
+}
+
+/** Whether this task runs a tool Epic's Unreal MCP plugin serves (#1824). */
+export function runsEpicMcpTool(graph: readonly ToolDef[], task: string): boolean {
+  const dot = task.indexOf(".");
+  const spec = graph.find((t) => t.name === task.slice(0, dot))?.actions[task.slice(dot + 1)];
+  return spec?.kind === "bridge" && !!spec.mcpTool;
+}
+
+/**
+ * The refusal for an action whose MCP tool the editor does not serve: the
+ * engine plugin that registers it is off or not loaded.
+ */
+export function absentMcpToolMessage(task: string, tool: string, plugin: string): string {
+  return (
+    `${task} runs the MCP tool '${tool}', which the ${plugin} plugin registers with Epic's Unreal MCP plugin. `
+    + `The running editor does not serve it, so it is withheld from this server's surface and the call was not sent. `
+    + `Enable ${plugin} (and ModelContextProtocol) in the .uproject and restart the editor; `
+    + `epic(list_mcp_tools) lists the MCP tools this editor serves.`
+  );
 }
 
 /** Whether this task is a generated action wrapping an engine toolset. */
@@ -177,5 +222,7 @@ export function withheldTarget(
   if (!isWithheld(spec, have) || spec?.kind !== "bridge") return null;
   const toolset = absentToolset(spec, have);
   if (toolset && have.has(spec.bridge)) return absentToolsetMessage(graph, task, toolset, spec.description);
+  const mcpTool = absentMcpTool(spec, have);
+  if (mcpTool && have.has(spec.bridge)) return absentMcpToolMessage(task, mcpTool, spec.mcpTool!.plugin);
   return unregisteredActionMessage(task, spec.bridge, bridge?.registeredActions?.length ?? have.size);
 }

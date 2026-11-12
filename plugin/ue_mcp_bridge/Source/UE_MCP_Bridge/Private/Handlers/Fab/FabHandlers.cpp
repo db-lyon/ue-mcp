@@ -1,4 +1,6 @@
 #include "FabHandlers.h"
+#include "FabLibrary.h"
+#include "FabDownloads.h"
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
 
@@ -6,6 +8,10 @@
 #include "UObject/UObjectHash.h"
 #include "Misc/PackageName.h"
 #include "Engine/Engine.h"
+#include "HAL/PlatformProcess.h"
+#include "Interfaces/IPluginManager.h"
+#include "Misc/Paths.h"
+#include "Runtime/Launch/Resources/Version.h"
 
 #ifndef WITH_FAB_PLUGIN
 #define WITH_FAB_PLUGIN 0
@@ -20,14 +26,72 @@
 
 static const TCHAR* FabModuleName = TEXT("Fab");
 
-// The Fab plugin is an engine editor plugin, enabled by default on 5.8 but not
-// guaranteed to be present or loaded (disabled, or an older engine). Every
-// action funnels through this so callers get a clear message instead of a
-// crash or an "Unknown method".
+// The Fab plugin is not part of the engine install. The Epic Games Launcher
+// delivers it as its own catalog item, "Fab UE Plugin" (app FabPlugin_<x.y>,
+// flagged to install with the engine), into Engine/Plugins/Fab. A UE 5.9
+// install can come without it (#1889), a source build never has it, and a
+// project can disable it. Every action funnels through IsFabModuleLoaded so
+// callers get a clear message instead of a crash or an "Unknown method".
 static bool IsFabModuleLoaded()
 {
 	return FModuleManager::Get().IsModuleLoaded(FabModuleName);
 }
+
+// Why Fab cannot answer, as one sentence naming what is missing and how to get
+// it. Distinguishes a plugin that is not installed in this engine from one that
+// is installed but disabled or not loaded.
+static FString FabUnavailableReason()
+{
+	const FString EngineVersion = FString::Printf(TEXT("%d.%d"), ENGINE_MAJOR_VERSION, ENGINE_MINOR_VERSION);
+	TSharedPtr<IPlugin> Plugin = IPluginManager::Get().FindPlugin(FabModuleName);
+	if (!Plugin.IsValid())
+	{
+		return FString::Printf(
+			TEXT("The Fab plugin is not installed in this engine (looked for %s). Unreal Engine %s does not bundle it: the Epic Games Launcher installs it as "
+				 "the separate 'Fab UE Plugin' item (FabPlugin_%s). In the launcher open Unreal Engine > Library, find Fab UE Plugin, choose Install to Engine "
+				 "and pick %s, then restart the editor. A source-built engine needs the plugin copied into Engine/Plugins/Fab."),
+			*FPaths::ConvertRelativePathToFull(FPaths::Combine(FPaths::EnginePluginsDir(), TEXT("Fab"))),
+			*EngineVersion, *EngineVersion, *EngineVersion);
+	}
+	if (!Plugin->IsEnabled())
+	{
+		return FString::Printf(
+			TEXT("The Fab plugin is installed (%s) but this project disables it. Enable Fab in Edit > Plugins (or set \"Enabled\": true for Fab in the .uproject) and restart the editor."),
+			*FPaths::ConvertRelativePathToFull(Plugin->GetBaseDir()));
+	}
+	return FString::Printf(
+		TEXT("The Fab plugin is installed and enabled (%s) but its module is not loaded. Restart the editor; if it still does not load, check the log for Fab module load errors."),
+		*FPaths::ConvertRelativePathToFull(Plugin->GetBaseDir()));
+}
+
+// The refusal every Fab action returns while the module is not loaded:
+// errorCode PLUGIN_NOT_AVAILABLE, the reason, and the plugin's state.
+static TSharedPtr<FJsonValue> FabUnavailableError()
+{
+	TSharedPtr<FJsonObject> Obj = MCPErrorObject(FabUnavailableReason());
+	Obj->SetStringField(TEXT("errorCode"), TEXT("PLUGIN_NOT_AVAILABLE"));
+	TSharedPtr<IPlugin> Plugin = IPluginManager::Get().FindPlugin(FabModuleName);
+	Obj->SetBoolField(TEXT("pluginInstalled"), Plugin.IsValid());
+	Obj->SetBoolField(TEXT("pluginEnabled"), Plugin.IsValid() && Plugin->IsEnabled());
+	return MakeShared<FJsonValueObject>(Obj);
+}
+
+// The same check and refusal for the handlers defined in FabDownloads.cpp.
+bool FFabHandlers::IsFabLoaded() { return IsFabModuleLoaded(); }
+TSharedPtr<FJsonValue> FFabHandlers::UnavailableError() { return FabUnavailableError(); }
+
+// The refusal of an action that needs the native Fab API when this build of
+// the bridge was compiled without it, although the module is loaded now. Only
+// defined where it is called, so a build with Fab has no unused function.
+#if !WITH_FAB_PLUGIN
+static TSharedPtr<FJsonValue> FabNativeApiMissingError(const TCHAR* What)
+{
+	return MCPErrorWithCode(TEXT("PLUGIN_NOT_AVAILABLE"), FString::Printf(
+		TEXT("%s needs the Fab plugin's native API, and this build of the bridge was compiled without it because the Fab plugin was not in the engine "
+			 "when the bridge was built. Rebuild the UE_MCP_Bridge plugin now that Fab is installed."),
+		What));
+}
+#endif
 
 // Run one of the Fab plugin's registered console commands (Fab.Login,
 // Fab.Logout, Fab.ClearCache, Fab.TEDS.MyFolderIntegration, ...). These are
@@ -54,6 +118,23 @@ static bool HasFabBrowserApiInstance()
 	return Instances.Num() > 0;
 }
 
+// Percent-encode one query string value as UTF-8, keeping only the RFC 3986
+// unreserved characters. Core has no URL encoder outside the HTTP module.
+static FString FabEncodeQueryValue(const FString& Value)
+{
+	FString Out;
+	const FTCHARToUTF8 Utf8(*Value);
+	for (int32 i = 0; i < Utf8.Length(); ++i)
+	{
+		const uint8 Byte = static_cast<uint8>(Utf8.Get()[i]);
+		const bool bUnreserved = (Byte >= 'A' && Byte <= 'Z') || (Byte >= 'a' && Byte <= 'z')
+			|| (Byte >= '0' && Byte <= '9') || Byte == '-' || Byte == '_' || Byte == '.' || Byte == '~';
+		if (bUnreserved) Out.AppendChar(static_cast<TCHAR>(Byte));
+		else Out += FString::Printf(TEXT("%%%02X"), Byte);
+	}
+	return Out;
+}
+
 // ─── Actions ──────────────────────────────────────────────────────────────
 
 TSharedPtr<FJsonValue> FFabHandlers::Status(const TSharedPtr<FJsonObject>& Params)
@@ -65,12 +146,29 @@ TSharedPtr<FJsonValue> FFabHandlers::Status(const TSharedPtr<FJsonObject>& Param
 	// native Fab API in this build, vs. console-command-only.
 	Res->SetBoolField(TEXT("nativeApiLinked"), WITH_FAB_PLUGIN ? true : false);
 	Res->SetBoolField(TEXT("fabWindowOpened"), HasFabBrowserApiInstance());
+	TSharedPtr<IPlugin> Plugin = IPluginManager::Get().FindPlugin(FabModuleName);
+	Res->SetBoolField(TEXT("pluginInstalled"), Plugin.IsValid());
+	Res->SetBoolField(TEXT("pluginEnabled"), Plugin.IsValid() && Plugin->IsEnabled());
+	if (Plugin.IsValid())
+	{
+		Res->SetStringField(TEXT("pluginDir"), FPaths::ConvertRelativePathToFull(Plugin->GetBaseDir()));
+		Res->SetStringField(TEXT("pluginVersion"), Plugin->GetDescriptor().VersionName);
+	}
+	Res->SetObjectField(TEXT("librarySync"), MCPFab::Library().Describe());
+	MCPFab::FSession Session; FString AuthError;
+	Res->SetBoolField(TEXT("authenticated"), bLoaded && MCPFab::ReadSession(Session, AuthError));
 
 	if (!bLoaded)
 	{
-		Res->SetStringField(TEXT("note"), TEXT("Fab plugin module not loaded. It ships enabled by default on UE 5.8; enable it in the editor's Plugins panel if missing."));
+		// Still a successful read: status reports the state, and the reason is
+		// the same sentence every other Fab action refuses with.
+		Res->SetStringField(TEXT("errorCode"), TEXT("PLUGIN_NOT_AVAILABLE"));
+		Res->SetStringField(TEXT("note"), FString::Printf(TEXT("Fab plugin module not loaded. %s"), *FabUnavailableReason()));
 		return MCPResult(Res);
 	}
+#if !WITH_FAB_PLUGIN
+	Res->SetStringField(TEXT("note"), TEXT("The Fab module is loaded, but this build of the bridge was compiled without the Fab plugin's native API, so list_cached, cache_info and import_file refuse until the bridge is rebuilt with Fab installed."));
+#endif
 
 #if WITH_FAB_PLUGIN
 	Res->SetStringField(TEXT("cacheLocation"), FFabAssetsCache::GetCacheLocation());
@@ -82,21 +180,30 @@ TSharedPtr<FJsonValue> FFabHandlers::Status(const TSharedPtr<FJsonObject>& Param
 
 TSharedPtr<FJsonValue> FFabHandlers::Login(const TSharedPtr<FJsonObject>& Params)
 {
-	if (!IsFabModuleLoaded()) return MCPError(TEXT("Fab plugin not loaded"));
+	if (!IsFabModuleLoaded()) return FabUnavailableError();
+	// Already signed in: say so instead of putting a sign-in window in front of
+	// the user for an account they are already using.
+	{
+		MCPFab::FSession Existing; FString NoSession;
+		if (MCPFab::ReadSession(Existing, NoSession))
+		{
+			auto Already = MCPSuccess();
+			Already->SetBoolField(TEXT("authenticated"), true);
+			Already->SetBoolField(TEXT("unchanged"), true);
+			Already->SetStringField(TEXT("note"), TEXT("A Fab session is already active, so no sign-in window was opened. Call fab(sync_library) next."));
+			MCPSetNoRollback(Already, TEXT("Nothing changed: the existing session was left as it was."));
+			return MCPResult(Already);
+		}
+	}
 	// Fab.Login opens the EOS account-portal login flow. Asynchronous: this
 	// returns once the flow is triggered, not once the user has authenticated.
 	if (!RunFabConsoleCommand(TEXT("Fab.Login")))
 		return MCPError(TEXT("Failed to invoke Fab.Login console command"));
 	auto Res = MCPSuccess();
 	Res->SetStringField(TEXT("note"), TEXT("Login flow triggered. Complete authentication in the account-portal window if prompted; call fab(status) afterward."));
-	// No idempotency flag, and the reason is stated rather than left as an
-	// absence: the Fab module publishes no authentication or library-sync state
-	// this build can read, so nothing here can measure whether the call changed
-	// anything. A fabricated unchanged=false would be a claim, not a reading.
+	// Opening the portal cannot establish whether authentication will finish.
 	Res->SetBoolField(TEXT("idempotencyObservable"), false);
-	Res->SetStringField(TEXT("idempotencyNote"),
-		TEXT("Whether an account was already signed in, and whether this flow ends in one being signed in, are both decided outside this call. Nothing in the Fab module reports that state back, so this call cannot say whether it changed "
-			 "anything. fab(status) is the closest reading available and does not cover it."));
+	Res->SetStringField(TEXT("idempotencyNote"), TEXT("The portal returns before authentication completes. Poll status.authenticated to observe the resulting native session; this call cannot attribute a later login to itself."));
 
 	// No inverse. This opens the EOS account-portal flow and returns before
 	// anything has authenticated, so it creates no state of its own to undo.
@@ -112,19 +219,15 @@ TSharedPtr<FJsonValue> FFabHandlers::Login(const TSharedPtr<FJsonObject>& Params
 
 TSharedPtr<FJsonValue> FFabHandlers::Logout(const TSharedPtr<FJsonObject>& Params)
 {
-	if (!IsFabModuleLoaded()) return MCPError(TEXT("Fab plugin not loaded"));
+	if (!IsFabModuleLoaded()) return FabUnavailableError();
 	if (!RunFabConsoleCommand(TEXT("Fab.Logout")))
 		return MCPError(TEXT("Failed to invoke Fab.Logout console command"));
+	MCPFab::ResetLibrary();
+	FString ClearError; MCPFab::PublishLibrary({}, ClearError);
 	auto Res = MCPSuccess();
-	Res->SetStringField(TEXT("note"), TEXT("Persistent Fab auth cleared."));
-	// No idempotency flag, and the reason is stated rather than left as an
-	// absence: the Fab module publishes no authentication or library-sync state
-	// this build can read, so nothing here can measure whether the call changed
-	// anything. A fabricated unchanged=false would be a claim, not a reading.
+	Res->SetStringField(TEXT("note"), TEXT("Native Fab logout requested. Poll status.authenticated for completion."));
 	Res->SetBoolField(TEXT("idempotencyObservable"), false);
-	Res->SetStringField(TEXT("idempotencyNote"),
-		TEXT("Whether a session was there to clear is not readable from here. Nothing in the Fab module reports that state back, so this call cannot say whether it changed "
-			 "anything. fab(status) is the closest reading available and does not cover it."));
+	Res->SetStringField(TEXT("idempotencyNote"), TEXT("EOS finishes logout asynchronously. Poll status.authenticated until false; this call cannot yet measure completion."));
 
 	// No inverse. Logging back in means the user authenticating in the EOS
 	// account portal; fab(login) only opens that window and cannot restore the
@@ -138,40 +241,28 @@ TSharedPtr<FJsonValue> FFabHandlers::Logout(const TSharedPtr<FJsonObject>& Param
 
 TSharedPtr<FJsonValue> FFabHandlers::SyncLibrary(const TSharedPtr<FJsonObject>& Params)
 {
-	if (!IsFabModuleLoaded()) return MCPError(TEXT("Fab plugin not loaded"));
-	// Loads the user's owned Fab library ("My Folder") into TEDS so it surfaces
-	// in the Content Browser. Optional batch size controls how many items are
-	// pulled per sync request.
-	const int32 BatchSize = OptionalInt(Params, TEXT("batchSize"), 0);
-	const FString Command = BatchSize > 0
-		? FString::Printf(TEXT("Fab.TEDS.MyFolderIntegration %d"), BatchSize)
-		: FString(TEXT("Fab.TEDS.MyFolderIntegration"));
-	if (!RunFabConsoleCommand(Command))
-		return MCPError(TEXT("Failed to invoke Fab.TEDS.MyFolderIntegration console command"));
+	if (!IsFabModuleLoaded()) return FabUnavailableError();
+	const int32 BatchSize = OptionalInt(Params, TEXT("batchSize"), 100);
+	FString Error;
+	{
+		MCPFab::FSession Session;
+		if (!MCPFab::ReadSession(Session, Error))
+			return MCPErrorWithCode(TEXT("FAB_NOT_SIGNED_IN"), Error + TEXT(" Then call fab(sync_library) again."));
+	}
+	if (!MCPFab::StartLibrarySync(BatchSize, Error)) return MCPError(Error);
 	auto Res = MCPSuccess();
-	Res->SetStringField(TEXT("note"), TEXT("Library sync queued. Owned Fab items load into the Content Browser asynchronously; requires an active Fab login."));
-	// No idempotency flag, and the reason is stated rather than left as an
-	// absence: the Fab module publishes no authentication or library-sync state
-	// this build can read, so nothing here can measure whether the call changed
-	// anything. A fabricated unchanged=false would be a claim, not a reading.
+	Res->SetObjectField(TEXT("librarySync"), MCPFab::Library().Describe());
 	Res->SetBoolField(TEXT("idempotencyObservable"), false);
-	Res->SetStringField(TEXT("idempotencyNote"),
-		TEXT("The sync runs asynchronously and its results land in the Content Browser after this call has returned. Nothing in the Fab module reports that state back, so this call cannot say whether it changed "
-			 "anything. fab(status) is the closest reading available and does not cover it."));
-
-	// No inverse. This loads what the user already owns into the editor's TEDS
-	// index so the Content Browser can show it. Nothing un-lists a library, and
-	// the listing is rebuilt from the account on the next sync anyway.
+	Res->SetStringField(TEXT("idempotencyNote"), TEXT("Completion is observed asynchronously through librarySync; starting does not establish a changed snapshot."));
+	Res->SetStringField(TEXT("note"), TEXT("Sync started. Poll fab(status).librarySync for complete or failed; the previous snapshot is retained on failure."));
 	Res->SetBoolField(TEXT("rollbackPossible"), false);
-	Res->SetStringField(TEXT("rollbackNote"),
-		TEXT("Syncing populates an in-editor index of the library the account already owns. There is no call that "
-			 "un-lists it, and nothing on disk or in the project changed."));
+	Res->SetStringField(TEXT("rollbackNote"), TEXT("Updates an in-editor index of already-owned content; no project files are changed."));
 	return MCPResult(Res);
 }
 
 TSharedPtr<FJsonValue> FFabHandlers::ListCached(const TSharedPtr<FJsonObject>& Params)
 {
-	if (!IsFabModuleLoaded()) return MCPError(TEXT("Fab plugin not loaded"));
+	if (!IsFabModuleLoaded()) return FabUnavailableError();
 #if WITH_FAB_PLUGIN
 	auto Res = MCPSuccess();
 	const TArray<FString> Cached = FFabAssetsCache::GetCachedAssets();
@@ -185,13 +276,13 @@ TSharedPtr<FJsonValue> FFabHandlers::ListCached(const TSharedPtr<FJsonObject>& P
 	Res->SetStringField(TEXT("cacheLocation"), FFabAssetsCache::GetCacheLocation());
 	return MCPResult(Res);
 #else
-	return MCPError(TEXT("Fab native API not linked in this build (Fab plugin absent at build time). Cache listing unavailable."));
+	return FabNativeApiMissingError(TEXT("Listing the Fab download cache"));
 #endif
 }
 
 TSharedPtr<FJsonValue> FFabHandlers::CacheInfo(const TSharedPtr<FJsonObject>& Params)
 {
-	if (!IsFabModuleLoaded()) return MCPError(TEXT("Fab plugin not loaded"));
+	if (!IsFabModuleLoaded()) return FabUnavailableError();
 #if WITH_FAB_PLUGIN
 	auto Res = MCPSuccess();
 	Res->SetStringField(TEXT("cacheLocation"), FFabAssetsCache::GetCacheLocation());
@@ -200,13 +291,14 @@ TSharedPtr<FJsonValue> FFabHandlers::CacheInfo(const TSharedPtr<FJsonObject>& Pa
 	Res->SetNumberField(TEXT("count"), FFabAssetsCache::GetCachedAssets().Num());
 	return MCPResult(Res);
 #else
-	return MCPError(TEXT("Fab native API not linked in this build (Fab plugin absent at build time). Cache info unavailable."));
+	return FabNativeApiMissingError(TEXT("Reading the Fab download cache"));
 #endif
 }
 
 TSharedPtr<FJsonValue> FFabHandlers::ClearCache(const TSharedPtr<FJsonObject>& Params)
 {
-	if (!IsFabModuleLoaded()) return MCPError(TEXT("Fab plugin not loaded"));
+	if (MCPFab::HasActiveDownloads()) return MCPError(TEXT("Pause or cancel active download jobs before clearing their cache."));
+	if (!IsFabModuleLoaded()) return FabUnavailableError();
 
 	// Read the cache size first so the result can say whether this call actually
 	// deleted anything. Only available when the native API is linked; without it
@@ -247,7 +339,7 @@ TSharedPtr<FJsonValue> FFabHandlers::ImportFile(const TSharedPtr<FJsonObject>& P
 	FString Destination;
 	if (auto Err = RequireString(Params, TEXT("destination"), Destination)) return Err;
 
-	if (!IsFabModuleLoaded()) return MCPError(TEXT("Fab plugin not loaded"));
+	if (!IsFabModuleLoaded()) return FabUnavailableError();
 #if WITH_FAB_PLUGIN
 	if (!FPaths::FileExists(Source))
 		return MCPError(FString::Printf(TEXT("Source file not found on disk: %s"), *Source));
@@ -331,8 +423,51 @@ TSharedPtr<FJsonValue> FFabHandlers::ImportFile(const TSharedPtr<FJsonObject>& P
 	}
 	return MCPResult(Res);
 #else
-	return MCPError(TEXT("Fab native API not linked in this build (Fab plugin absent at build time). Import unavailable."));
+	return FabNativeApiMissingError(TEXT("Importing through the Fab pipeline"));
 #endif
+}
+
+FFabHandlers::FUrlLauncher FFabHandlers::UrlLauncherOverride;
+
+void FFabHandlers::SetUrlLauncherForTesting(FUrlLauncher Launcher)
+{
+	UrlLauncherOverride = MoveTemp(Launcher);
+}
+
+TSharedPtr<FJsonValue> FFabHandlers::OpenSearch(const TSharedPtr<FJsonObject>& Params)
+{
+	// Builds fab.com's own search page URL and hands it to the user's browser.
+	// No request goes to Fab and no listing data is read: Fab publishes no
+	// search API and its terms forbid automated access (#1485).
+	FString Query;
+	if (auto Err = RequireString(Params, TEXT("query"), Query)) return Err;
+	const FString ListingType = OptionalString(Params, TEXT("listingType"));
+	const FString AssetFormat = OptionalString(Params, TEXT("assetFormat"), TEXT("unreal-engine"));
+	const bool bFree = OptionalBool(Params, TEXT("free"), false);
+	const bool bOpen = OptionalBool(Params, TEXT("open"), true);
+
+	FString Url = FString::Printf(TEXT("https://www.fab.com/search?q=%s"), *FabEncodeQueryValue(Query));
+	if (!ListingType.IsEmpty()) Url += TEXT("&listing_types=") + FabEncodeQueryValue(ListingType);
+	if (!AssetFormat.IsEmpty()) Url += TEXT("&asset_formats=") + FabEncodeQueryValue(AssetFormat);
+	if (bFree) Url += TEXT("&is_free=1");
+
+	auto Res = MCPSuccess();
+	Res->SetStringField(TEXT("url"), Url);
+	if (!bOpen)
+	{
+		Res->SetBoolField(TEXT("opened"), false);
+		return MCPResult(Res);
+	}
+
+	FString LaunchError;
+	if (UrlLauncherOverride) UrlLauncherOverride(Url, LaunchError);
+	else FPlatformProcess::LaunchURL(*Url, nullptr, &LaunchError);
+	if (!LaunchError.IsEmpty())
+	{
+		return MCPError(FString::Printf(TEXT("Could not open %s in the default browser: %s"), *Url, *LaunchError));
+	}
+	Res->SetBoolField(TEXT("opened"), true);
+	return MCPResult(Res);
 }
 
 // ─── Registration ──────────────────────────────────────────────────────────
@@ -351,8 +486,38 @@ void FFabHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("fab_logout"), &Logout, {},
 		MCPSpec::ContractExempt(TEXT("Takes no parameters and clears the stored Fab credentials when called")));
 	Registry.RegisterHandler(TEXT("fab_sync_library"), &SyncLibrary, {
-		MCPParam::Optional(TEXT("batchSize"), EType::Integer, TEXT("Library items to pull per sync request (default the plugin's own)")),
+		MCPParam::Optional(TEXT("batchSize"), EType::Integer, TEXT("Library items per request, 1-1000 (default 100)")),
 	}, MCPSpec::ContractExempt(TEXT("Queues a Fab library sync whatever the batch size")));
+	Registry.RegisterHandler(TEXT("fab_list_owned"), &ListOwned, {
+		MCPParam::Optional(TEXT("query"), EType::String, TEXT("Filter owned item titles, no catalog requests")),
+		MCPParam::Optional(TEXT("offset"), EType::Integer, TEXT("Result offset (default 0)")),
+		MCPParam::Optional(TEXT("limit"), EType::Integer, TEXT("Result limit, 1-200 (default 50)")),
+	});
+	Registry.RegisterHandler(TEXT("fab_download"), &Download, {
+		MCPParam::Required(TEXT("listingId"), EType::String, TEXT("Owned Fab listing UUID")),
+		MCPParam::Optional(TEXT("engineVersion"), EType::String, TEXT("UE version from the listing's projectVersions, e.g. 5.8 (default this editor's)")),
+		MCPParam::Optional(TEXT("platform"), EType::String, TEXT("Target platform from projectVersions, e.g. Windows or Mac (default this editor's)")),
+		MCPParam::Optional(TEXT("outputDirectory"), EType::String, TEXT("Absolute pack output directory (default native Fab cache/UE-MCP/listing/artifact)")),
+		MCPParam::Optional(TEXT("verifyOnly"), EType::Boolean, TEXT("SHA verify existing files without repairing or downloading (default false)")),
+	});
+	Registry.RegisterHandler(TEXT("fab_download_status"), &DownloadStatus, {
+		MCPParam::Optional(TEXT("jobId"), EType::String, TEXT("Job identifier; omit to list all editor-session jobs")),
+	});
+	Registry.RegisterHandler(TEXT("fab_pause_download"), &PauseDownload, {
+		MCPParam::Required(TEXT("jobId"), EType::String, TEXT("Active download job identifier")),
+	});
+	Registry.RegisterHandler(TEXT("fab_resume_download"), &ResumeDownload, {
+		MCPParam::Required(TEXT("jobId"), EType::String, TEXT("Paused, failed or cancelled job identifier; obtains a fresh distribution signature")),
+	});
+	Registry.RegisterHandler(TEXT("fab_cancel_download"), &CancelDownload, {
+		MCPParam::Required(TEXT("jobId"), EType::String, TEXT("Job to cancel; verified files and native staging remain resumable")),
+	});
+	Registry.RegisterHandler(TEXT("fab_install_pack"), &InstallPack, {
+		MCPParam::Required(TEXT("jobId"), EType::String, TEXT("Completed, SHA-verified asset-pack download to copy into project Content, preserving paths")),
+	});
+	Registry.RegisterHandler(TEXT("fab_remove_installation"), &RemoveInstallation, {
+		MCPParam::Required(TEXT("jobId"), EType::String, TEXT("Remove only unchanged, unloaded files that this job created in project Content")),
+	});
 	Registry.RegisterHandler(TEXT("fab_list_cached"), &ListCached, {});
 	Registry.RegisterHandler(TEXT("fab_cache_info"), &CacheInfo, {});
 	Registry.RegisterHandler(TEXT("fab_clear_cache"), &ClearCache, {},
@@ -361,4 +526,11 @@ void FFabHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Required(TEXT("source"), EType::String, TEXT("Absolute path of the source file on disk")).Alias(TEXT("sourceFile")),
 		MCPParam::Required(TEXT("destination"), EType::String, TEXT("Destination content path, e.g. /Game/Fab/Imported")).Alias(TEXT("destPath")),
 	});
+	Registry.RegisterHandler(TEXT("fab_open_search"), &OpenSearch, {
+		MCPParam::Required(TEXT("query"), EType::String, TEXT("Search text")),
+		MCPParam::Optional(TEXT("listingType"), EType::String, TEXT("Listing type filter, e.g. 3d-model, material, tool-and-plugin")),
+		MCPParam::Optional(TEXT("assetFormat"), EType::String, TEXT("Asset format filter (default unreal-engine; empty string drops the filter)")),
+		MCPParam::Optional(TEXT("free"), EType::Boolean, TEXT("Only free listings (default false)")),
+		MCPParam::Optional(TEXT("open"), EType::Boolean, TEXT("Open the page in the default browser (default true); false only returns the URL")),
+	}, MCPSpec::ContractExempt(TEXT("Opens the fab.com search page in the default browser when called")));
 }

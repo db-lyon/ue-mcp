@@ -90,8 +90,26 @@ describe("sequencer binding actions (#1356, #1232)", () => {
   });
 
   it("asks each runtime player, not the editor, what a binding resolved to", () => {
-    const runtime = body(bindings, "GetRuntimeBindings");
+    const runtime = body(bindings, "GetRuntimeBindings", "GetBindingComponents");
     expect(runtime).toContain("Player->GetBoundObjects(");
     expect(runtime).toContain("TransformOrigin");
+  });
+});
+
+describe("sequence binding components (#1640)", () => {
+  it("advertises a read action with its C++ parameters", () => {
+    expect(editorTool.actions.get_sequence_binding_components.description).toContain("Params: sequencePath (or assetPath, or path), bindingGuid?, bindingName?, componentClass?, propertyNames?");
+    expect(classifyAction("editor.get_sequence_binding_components", { sequencePath: "/Game/S" }).mutates).toBe(false);
+  });
+
+  it("reads spawnable templates and possessed actors without opening or evaluating the sequence", () => {
+    const read = body(bindings, "GetBindingComponents");
+    expect(read).toContain("Spawnable->GetObjectTemplate()");
+    expect(read).toContain("ActorTemplate");
+    expect(read).toContain("LocateInWorld(Sequence, MovieScene, Guid, World)");
+    expect(read).not.toContain("OpenEditorForAsset");
+    expect(read).not.toContain("ForceUpdate");
+    expect(bindings).toContain('TEXT("bHoldout")');
+    expect(bindings).toContain("GetActualComponentTemplate(ActualClass)");
   });
 });

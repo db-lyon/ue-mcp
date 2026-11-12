@@ -6,7 +6,7 @@
  * By default the run is sharded: scripts/live-sharded-run.mjs copies
  * tests/ue_mcp once per shard, launches an editor on each with the flags its
  * files declare (`// @live-editor <kind>`), splits the files by measured
- * time, and merges the results under the run's time budgets. It starts and
+ * time, and merges the results, reporting the run's time goals. It starts and
  * stops those editors itself, and never touches any other project.
  *
  * Attach mode drives the tests/ue_mcp editor that is already running, through
@@ -113,6 +113,10 @@ if (!ATTACH) {
     process.exit(1);
   }
 }
+
+// The attached editor shares the developer's per-user layout; close what the run opens in it.
+const { guardUserLayoutsUntilExit } = await import("./user-layout-guard.mjs");
+guardUserLayoutsUntilExit((msg) => console.error(`[live] ${msg}`));
 
 const HOST = process.env.UE_MCP_LIVE_HOST ?? process.env.UE_MCP_TEST_HOST ?? "127.0.0.1";
 const CONNECT_TIMEOUT_MS = 5000;

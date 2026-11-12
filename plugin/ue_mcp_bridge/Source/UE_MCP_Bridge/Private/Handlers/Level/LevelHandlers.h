@@ -56,6 +56,8 @@ private:
 	// #585 project a world point onto the navmesh
 	static TSharedPtr<FJsonValue> NavProjectPoint(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SelectActors(const TSharedPtr<FJsonObject>& Params);
+	// #1656 select a component, redirecting out of child actors as the editor does
+	static TSharedPtr<FJsonValue> SelectComponent(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SpawnLight(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SetLightProperties(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SpawnVolume(const TSharedPtr<FJsonObject>& Params);
@@ -79,6 +81,9 @@ private:
 	static TSharedPtr<FJsonValue> GetActorsByComponentClass(const TSharedPtr<FJsonObject>& Params);
 	// Aggregate loaded static-mesh usage in one bounded, read-only world scan.
 	static TSharedPtr<FJsonValue> SummarizeStaticMeshUsage(const TSharedPtr<FJsonObject>& Params);
+	// Read-only scene performance audit over the loaded level or a box.
+	// LevelHandlers_PerfAudit.cpp.
+	static TSharedPtr<FJsonValue> AuditLevelPerformance(const TSharedPtr<FJsonObject>& Params);
 	// v0.7.19 issue #146 - actor class histogram (counts by class name)
 	static TSharedPtr<FJsonValue> CountActorsByClass(const TSharedPtr<FJsonObject>& Params);
 	// v0.7.19 issue #150 - RuntimeVirtualTextureVolume / component summary
@@ -103,6 +108,9 @@ private:
 	static TSharedPtr<FJsonValue> DeleteExactLabeledActorsInLevels(const TSharedPtr<FJsonObject>& Params);
 	// #767: bulk-assign World Outliner folder paths in one transaction.
 	static TSharedPtr<FJsonValue> SetActorFolderPath(const TSharedPtr<FJsonObject>& Params);
+	// #1529: create and remove World Outliner folders, each the other's rollback.
+	static TSharedPtr<FJsonValue> CreateOutlinerFolder(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> DeleteOutlinerFolder(const TSharedPtr<FJsonObject>& Params);
 	// #746: World Partition actor descriptors - see unloaded actors and stream
 	// them in, instead of every actor query silently reporting zero for them.
 	static TSharedPtr<FJsonValue> ListActorDescs(const TSharedPtr<FJsonObject>& Params);
@@ -112,6 +120,8 @@ private:
 	static TSharedPtr<FJsonValue> RemoveActorTag(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SetActorTags(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> ListActorTags(const TSharedPtr<FJsonObject>& Params);
+	// #1574: rename an actor's object name, keeping its label
+	static TSharedPtr<FJsonValue> RenameActorObject(const TSharedPtr<FJsonObject>& Params);
 	// #205: actor attach/detach + mobility
 	static TSharedPtr<FJsonValue> AttachActor(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> DetachActor(const TSharedPtr<FJsonObject>& Params);
@@ -134,8 +144,11 @@ private:
 	// #264: explicit per-instance batch spawn (mesh+transform per actor)
 	static TSharedPtr<FJsonValue> PlaceActorsBatch(const TSharedPtr<FJsonObject>& Params);
 	// #420: raycast + #419 snap-to-floor (spatial level operations)
+	static TSharedPtr<FJsonValue> ShapeTrace(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> LineTrace(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> BulkLineTrace(const TSharedPtr<FJsonObject>& Params);
+	// #1564: actors whose bounds meet a world-space box
+	static TSharedPtr<FJsonValue> ActorsInBox(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SnapActorToFloor(const TSharedPtr<FJsonObject>& Params);
 	// #453: per-actor motion snapshot for telemetry / driving probes.
 	static TSharedPtr<FJsonValue> ReadActorMotion(const TSharedPtr<FJsonObject>& Params);
@@ -206,4 +219,34 @@ private:
 	static TSharedPtr<FJsonValue> SpawnTransientActor(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> DestroyTransientActor(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> ListTransientActors(const TSharedPtr<FJsonObject>& Params);
+
+	// #1828: World Partition setup through UWorldPartitionSubsystem. LevelHandlers_WorldPartitionSubsystem.cpp.
+	static void RegisterWorldPartitionSubsystemHandlers(class FMCPHandlerRegistry& Registry);
+	static TSharedPtr<FJsonValue> SetWorldPartitionStreaming(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> SetRuntimeHashClass(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> ListRuntimePartitions(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> GetRuntimePartition(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> AddRuntimePartition(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> RemoveRuntimePartition(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> RenameRuntimePartition(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> SetRuntimePartitionProperties(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> ListHLODSetups(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> AddHLODSetup(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> RemoveHLODSetup(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> SetHLODSetupLayers(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> BuildHLODActors(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> BuildWorldPartitionHLODs(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> DeleteWorldPartitionHLODs(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> GetHLODStats(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> GetWorldPartitionMiniMap(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> CreateWorldPartitionMiniMap(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> BuildWorldPartitionMiniMap(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> CheckWorldPartitionErrors(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> RepairWorldPartitionErrors(const TSharedPtr<FJsonObject>& Params);
+
+	// #1828: actor replacement and brush rebuilds through UEditorActorSubsystem. LevelHandlers_ReplaceActors.cpp.
+	static void RegisterActorReplaceHandlers(class FMCPHandlerRegistry& Registry);
+	static TSharedPtr<FJsonValue> ReplaceActorsWithClass(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> ReplaceActorsWithAsset(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> RebuildBrush(const TSharedPtr<FJsonObject>& Params);
 };

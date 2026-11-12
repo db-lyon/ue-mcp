@@ -8,6 +8,23 @@ For a single nested field in a struct array, `asset(set_property)` accepts a key
 
 The selector must match exactly one element. `asset(read_properties)` accepts the same path. See [Property paths](tool-reference.md#property-paths) for the selector rules. Use `asset(bulk_set_properties)` for several keyed field writes with preflight and read-back.
 
+`bulk_read_properties` rows report `resolvedPropertyNames` and `missingReasons` for keyed selectors.
+## Add or remove one array element
+
+`asset(append_array_elements)` adds values to the end of a TArray and leaves the existing elements alone. With `unique=true` a value the array already holds is skipped and listed in `skippedElements`; when every value is already there, nothing is written or saved. To add a map name to an allow-list on several data assets, call it once per asset:
+
+```json
+{"action":"append_array_elements","assetPath":"/Game/Data/DA_BuildList_Spikes","propertyName":"OnlyInMaps","elements":["/Game/Maps/SurvivalArena"],"unique":true}
+```
+
+`asset(remove_array_elements)` takes out elements by `indices` or by value with `elements`, keeping the order of the rest. Every index must exist, or nothing is removed. A value removes every element equal to it; a value that matches nothing removes nothing.
+
+```json
+{"action":"remove_array_elements","assetPath":"/Game/Data/DA_BuildList_Spikes","propertyName":"OnlyInMaps","elements":["/Game/Maps/OldArena"]}
+```
+
+Both actions save by default, return `value` read back from the asset, and carry a rollback that restores the whole array with the same `save` option. Values compare the way the property type compares them, so `FString` and `FName` entries match without regard to case. Replace one element with `asset(set_property)` and an indexed path such as `OnlyInMaps[1]`.
+
 ## Update or clone a collection entry
 
 `asset(edit_collection_entry)` selects an existing struct with `entryKey`. For a struct array, also supply `keyField`. For a map, the key is converted using the map's reflected key type. Omit `newKey` to update the selected entry; supply an unused `newKey` to clone it. Existing destinations and ambiguous array keys are refused.
@@ -44,8 +61,10 @@ Every source must exist before the call; a later clone cannot use a destination 
 
 Supply reflected settings fields in `playerMappableKeySettings`, or use the existing `mappingName`, `displayName` and `displayCategory` parameters. Omitted fields retain their values. A new settings object needs a non-empty `Name` or `mappingName`. Set `playerMappableKeySettings` to null to clear the local object. Setting only the behavior preserves the local object. `dryRun` validates without writing; `save` defaults to true. Rollback addresses the same mapping index, so replay it before reordering mappings. Clearing an override may recreate its object on rollback; clearing a custom settings subclass requires editor undo.
 
+To let a settings menu list and rebind every key of a context on its own row (a keyboard key and a gamepad key on one action, for example), call this once per row from `read_imc`, each with its own `mappingName` and with `settingBehavior` set to `OverrideSettings`. Enhanced Input numbers the key slots of a shared name across mappings, so rows that share a name rebind together. A row left on `InheritSettingsFromAction` keeps reporting the action's settings, whatever its local object holds.
+
 InputAction-level settings use `inputActionPath` instead of `imcPath` and `mappingIndex`. To duplicate an InputAction together with its triggers, modifiers and settings, use `asset(duplicate)` with `sourcePath`, `destinationPath` and `onConflict="error"`, then inspect it with `gameplay(read_input_action)`.
 
 ## Static editor functions
 
-`reflection(reflect_class)` describes a project's reflected functions. Call a static BlueprintCallable function with `editor(invoke_static_function)` using `className`, `functionName` and an `args` object keyed by reflected parameter names. The class can be a component or another reflected class, as well as a function library. Use the reflected C++ function spelling. Return and output parameters appear under `returnValues`. These calls can have arbitrary side effects; persistence and undo depend on the called function.
+`reflection(reflect_class)` describes a project's reflected functions. Call a static BlueprintCallable function with `editor(invoke_static_function)` using `className`, `functionName` and an `args` object keyed by reflected parameter names. The class can be a component or another reflected class, as well as a function library. Use the reflected C++ function spelling. Return and output parameters appear under `returnValues`. These calls can have arbitrary side effects; persistence and undo depend on the called function. The reply reads the target world again after the call: `worldPath` names the world that is current when the call returns, and `worldReplaced` is true (with `previousWorldPath`) when the call loaded another level or otherwise swapped the world.

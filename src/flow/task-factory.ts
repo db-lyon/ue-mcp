@@ -2,9 +2,8 @@ import type { TaskResult, TaskConstructor } from "@db-lyon/flowkit";
 import { UeMcpTask } from "../task.js";
 import { stripEditorTarget } from "../surface/target-params.js";
 import type { CallPreparation } from "../dispatch/call-pipeline.js";
-import type { BridgeActionSpec } from "../core/types.js";
 import type { FlowContext } from "./context.js";
-import { runBridge, runHandler } from "./run-action.js";
+import { runBridge, runHandler, type BridgeHooks } from "./run-action.js";
 
 /**
  * Create a TaskConstructor for a bridge-delegation action.
@@ -20,7 +19,7 @@ export function bridgeTaskClass(
   mapParams?: (p: Record<string, unknown>) => Record<string, unknown>,
   timeoutMs?: number,
   prep?: CallPreparation,
-  followUp?: BridgeActionSpec["followUp"],
+  hooks?: BridgeHooks,
 ): TaskConstructor {
   class FactoryBridgeTask extends UeMcpTask {
     get taskName() { return name; }
@@ -28,7 +27,7 @@ export function bridgeTaskClass(
       // `editor` addresses a session; on this route it is never a bridge
       // parameter, so it comes off before the mapper can forward it.
       const options = stripEditorTarget(this.options as Record<string, unknown>);
-      return runBridge(this.ctx, name, method, mapParams, timeoutMs, options, prep, followUp);
+      return runBridge(this.ctx, name, method, mapParams, timeoutMs, options, prep, hooks);
     }
   }
   Object.defineProperty(FactoryBridgeTask, "name", { value: `BridgeTask_${name}` });

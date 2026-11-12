@@ -238,6 +238,16 @@ function declaredItems(tool: ToolDef, action: string): SigItem[] {
 
 /** The structured items of one action's signature, from the best source it has. */
 function signatureItems(tool: ToolDef, action: string, spec: ActionSpec): SigItem[] {
+  const items = sourceItems(tool, action, spec);
+  // An image-writing action takes `inline`, which dispatch consumes rather
+  // than the editor, so no recorded spec lists it.
+  if (spec.imageOutputs && !items.some((i) => i.kind === "param" && i.param.label === "inline")) {
+    return [...items, { kind: "param", param: { label: "inline", type: "b/i", required: false } }];
+  }
+  return items;
+}
+
+function sourceItems(tool: ToolDef, action: string, spec: ActionSpec): SigItem[] {
   if (spec.paramSpec) return specItems(spec.paramSpec, spec.paramChoices);
   if (spec.kind === "bridge" && spec.epicSchema) return epicItems(spec.epicSchema);
   try {

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Dom/JsonValue.h"
 
 class UWorld;
 class APlayerController;
@@ -35,5 +36,10 @@ namespace MCPPIE
 
 		bool ResolvePlayerInWorld(UWorld* World, int32 LocalPlayerIndex,
 			FPlayerTarget& OutTarget, FString& OutError);
+
+		// Every running PIE/Game world as {pie_instance, net_mode, players:
+		// [{local_player, controller, pawn}]}, so a caller waiting on a player
+		// can see which pie_instance has one.
+		TArray<TSharedPtr<FJsonValue>> DescribePlayWorlds();
 	}
 }

@@ -1,0 +1,39 @@
+---
+title: "BP_Door · EventGraph"
+---
+flowchart LR
+  n_Fq3kWm8xQkW2b1yZt0aJcg(["Event BeginPlay"])
+  n_Kd8_pLq2Z0uX_9vB3nYwRA{"Branch<br/>IfThenElse"}
+  n_Hh2mN4cV1EaT7sQ0xJ5uKw("Is Locked<br/>VariableGet")
+  n_Pp0aZ9yX8wV7uT6sR5qQ4w["Print String"]
+  n_Mm1bY2xW3vU4tS5rQ6pO7w[["Open Door<br/>Composite"]]
+  n_Ll9cX8wV7uT6sR5qP4oN3w["Play Sound 2D"]
+  n_Zz7dW6vU5tS4rQ3pO2nM1w(["On #quot;Knock#quot; #lt;Door#gt;#59; #35;1 #124; test<br/>CustomEvent"])
+  subgraph g_graph_Open_Door["Collapsed graph: Open Door"]
+    direction LR
+    n_Tn1aB2cD3eF4gH5iJ6kL7w(["Inputs<br/>Tunnel"])
+    n_Tl8mN9oP0qR1sT2uV3wX4w["Set Relative Rotation"]
+    n_To5yZ6aB7cD8eF9gH0iJ1w(["Outputs<br/>Tunnel"])
+  end
+  n_Fq3kWm8xQkW2b1yZt0aJcg --> n_Kd8_pLq2Z0uX_9vB3nYwRA
+  n_Kd8_pLq2Z0uX_9vB3nYwRA -->|"True"| n_Pp0aZ9yX8wV7uT6sR5qQ4w
+  n_Kd8_pLq2Z0uX_9vB3nYwRA -->|"False"| n_Mm1bY2xW3vU4tS5rQ6pO7w
+  n_Mm1bY2xW3vU4tS5rQ6pO7w -->|"Finished"| n_Ll9cX8wV7uT6sR5qP4oN3w
+  n_Zz7dW6vU5tS4rQ3pO2nM1w --> n_Pp0aZ9yX8wV7uT6sR5qQ4w
+  n_Hh2mN4cV1EaT7sQ0xJ5uKw -.->|"IsLocked → Condition"| n_Kd8_pLq2Z0uX_9vB3nYwRA
+  n_Hh2mN4cV1EaT7sQ0xJ5uKw -.->|"IsLocked → InString"| n_Pp0aZ9yX8wV7uT6sR5qQ4w
+  n_Tn1aB2cD3eF4gH5iJ6kL7w --> n_Tl8mN9oP0qR1sT2uV3wX4w
+  n_Tl8mN9oP0qR1sT2uV3wX4w --> n_To5yZ6aB7cD8eF9gH0iJ1w
+  n_Mm1bY2xW3vU4tS5rQ6pO7w -->|"expands"| n_Tn1aB2cD3eF4gH5iJ6kL7w
+  classDef ue_entry fill:#2a1b0e,stroke:#e8720c,color:#f5f5f4
+  class n_Fq3kWm8xQkW2b1yZt0aJcg,n_Zz7dW6vU5tS4rQ3pO2nM1w,n_Tn1aB2cD3eF4gH5iJ6kL7w ue_entry
+  classDef ue_branch fill:#1f1a2b,stroke:#a78bfa,color:#f5f5f4
+  class n_Kd8_pLq2Z0uX_9vB3nYwRA ue_branch
+  classDef ue_variable fill:#161b22,stroke:#4b5563,color:#a1a1aa
+  class n_Hh2mN4cV1EaT7sQ0xJ5uKw ue_variable
+  classDef ue_default fill:#181d25,stroke:#3a414c,color:#f5f5f4
+  class n_Pp0aZ9yX8wV7uT6sR5qQ4w,n_Ll9cX8wV7uT6sR5qP4oN3w,n_Tl8mN9oP0qR1sT2uV3wX4w ue_default
+  classDef ue_collapsed fill:#132033,stroke:#60a5fa,color:#f5f5f4,stroke-dasharray:4 3
+  class n_Mm1bY2xW3vU4tS5rQ6pO7w ue_collapsed
+  classDef ue_exit fill:#122019,stroke:#34d399,color:#f5f5f4
+  class n_To5yZ6aB7cD8eF9gH0iJ1w ue_exit

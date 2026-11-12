@@ -637,6 +637,8 @@ void FGameplayHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Required(TEXT("end"), EType::Vec3, TEXT("Query end (world point)")),
 		MCPParam::Optional(TEXT("pathfindingContext"), EType::String, TEXT("Actor label whose navigation agent and filter the query uses")),
 		MCPParam::Optional(TEXT("pathfindingContextPath"), EType::String, TEXT("Full object path of the pathfinding context actor; alternative to pathfindingContext")),
+		MCPParam::Optional(TEXT("world"), EType::String, TEXT("editor (default) | pie | game | auto; pie queries the running session's navmesh, including after a level change")),
+		MCPParam::Optional(TEXT("pieInstance"), EType::Number, TEXT("PIE instance id; omitted selects the active PIE world")),
 	});
 	Registry.RegisterHandler(TEXT("list_nav_invokers"), &ListNavInvokers, {});
 	Registry.RegisterHandler(TEXT("get_behavior_tree_info"), &GetBehaviorTreeInfo, {
@@ -2314,8 +2316,11 @@ TSharedPtr<FJsonValue> FGameplayHandlers::FindNavPath(const TSharedPtr<FJsonObje
 	const FVector End = OptionalVec3(Params, TEXT("end"));
 	const FString ContextLabel = OptionalString(Params, TEXT("pathfindingContext"));
 	const bool bHasContextPath = HasParam(Params, TEXT("pathfindingContextPath"));
+	const FString WorldScope = OptionalString(Params, TEXT("world"), TEXT("editor"));
 
-	REQUIRE_EDITOR_WORLD(World);
+	// A PIE world has its own navigation system, which is the one a running pawn walks on (#1565).
+	UWorld* World = ResolveWorldFromParams(Params, *WorldScope);
+	if (!World) return MCPError(FString::Printf(TEXT("World not available for scope '%s'. Start PIE first for world=pie."), *WorldScope));
 
 	UNavigationSystemV1* NavSys = FNavigationSystem::GetCurrent<UNavigationSystemV1>(World);
 	if (!NavSys) return MCPError(TEXT("Navigation system unavailable"));
@@ -2340,6 +2345,8 @@ TSharedPtr<FJsonValue> FGameplayHandlers::FindNavPath(const TSharedPtr<FJsonObje
 	auto Result = MCPSuccess();
 	Result->SetObjectField(TEXT("start"), MCPVec3ToJsonObject(Start));
 	Result->SetObjectField(TEXT("end"), MCPVec3ToJsonObject(End));
+	Result->SetStringField(TEXT("world"), MCPDescribeWorldType(World));
+	Result->SetStringField(TEXT("map"), UWorld::RemovePIEPrefix(World->GetOutermost()->GetName()));
 	if (!Path)
 	{
 		Result->SetBoolField(TEXT("valid"), false);

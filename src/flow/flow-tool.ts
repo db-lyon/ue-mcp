@@ -12,7 +12,8 @@ import type {
 import type { FlowContext } from "./context.js";
 import { FlowStepKeySchema, type FlowConfig } from "./schema.js";
 import type { ToolDef, ToolContext, ActionSpec } from "../core/types.js";
-import { actionEnum } from "../surface/category-tool.js";
+import { actionEnum, SELECT_PARAM, OMIT_PARAM } from "../surface/category-tool.js";
+import { takeFieldSelection, projectResult, attachFieldReport } from "../surface/context/field-select.js";
 import { McpError, ErrorCode } from "../core/errors.js";
 import { nearestActions } from "../surface/action-schema.js";
 import { unknownRecord } from "../surface/context/call-envelope.js";
@@ -42,6 +43,7 @@ import { taskEffect } from "../surface/action-effects.js";
 import { LOCAL_ACTIONS } from "../dispatch/offline.js";
 import { EDITOR_OPERATION_TASKS } from "./editor-op-task.js";
 import { deriveFlowInputs } from "./flow-inputs.js";
+import { withStepApproval } from "./step-approval.js";
 
 /**
  * Name a failed rollback by the bridge method it tried to call. Every record
@@ -138,6 +140,8 @@ export function createFlowTool(
       skip: z.array(z.string()).optional().describe("run: step names or numbers to skip"),
       params: unknownRecord().optional().describe("run: runtime options merged into every step's options (highest priority)"),
       rollback_on_failure: z.boolean().optional().describe("run: invoke inverse tasks in reverse order on failure"),
+      select: SELECT_PARAM,
+      omit: OMIT_PARAM,
     },
     actions,
     handler: async (ctx, params) => {
@@ -153,7 +157,12 @@ export function createFlowTool(
             + ` Available: ${available.join(", ")}.`,
         );
       }
-      return spec.handler(ctx, params);
+      // select/omit narrow what the flow tool answers, as they do on every
+      // category tool. They are the caller's, so no step ever receives them.
+      const { selection, rest } = takeFieldSelection(params);
+      const answered = await spec.handler(ctx, rest);
+      const projection = projectResult(answered, selection);
+      return attachFieldReport(projection.result, projection);
     },
   };
   return def;
@@ -232,7 +241,9 @@ async function runFlow(
   const policy: EditorLossPolicy = def?.on_editor_loss ?? "resume";
   const snapshot: SnapshotHolder = {};
   const guard = makeLossGuard(ctx, policy, def?.editor_loss_timeout_seconds, snapshot);
-  const runner = makeRunner(guard ? guard.wrap(registry) : registry, config, ctx, runId, flowName, snapshot, guard);
+  const guarded = guard ? guard.wrap(registry) : registry;
+  const approved = ctx.flowStepApproval ? withStepApproval(guarded, ctx.flowStepApproval, runId, flowName) : guarded;
+  const runner = makeRunner(approved, config, ctx, runId, flowName, snapshot, guard);
   try {
     // Under on_editor_loss: rollback a failed run unwinds, unless the caller said otherwise.
     const rollback = rollback_on_failure ?? (policy === "rollback" ? true : undefined);
