@@ -7,6 +7,8 @@
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
 #include "MaterialDomain.h"
+#include "MaterialShared.h"
+#include "UObject/UObjectIterator.h"
 #include "Materials/Material.h"
 #include "Materials/MaterialInstance.h"
 #include "Materials/MaterialInstanceConstant.h"
@@ -3610,6 +3612,53 @@ TSharedPtr<FJsonValue> FMaterialHandlers::SetMaterialStaticSwitch(const TSharedP
 	return MCPResult(Result);
 }
 
+namespace
+{
+	// #1441: what the renderer will draw for a material and its loaded instances
+	// that compile their own shader maps. A finished resource without a valid
+	// shader map renders as the default material. Read without blocking: a
+	// resource still compiling is reported as such, not waited on.
+	TSharedPtr<FJsonObject> DescribeMaterialShaderState(UMaterial* Material)
+	{
+		TSharedPtr<FJsonObject> State = MakeShared<FJsonObject>();
+		const FMaterialResource* Resource = Material ? Material->GetMaterialResource(GMaxRHIShaderPlatform) : nullptr;
+		const bool bFinished = Resource && Resource->IsCompilationFinished();
+		State->SetBoolField(TEXT("compiling"), Resource && !bFinished);
+		if (bFinished)
+		{
+			State->SetBoolField(TEXT("validShaderMap"), Resource->HasValidGameThreadShaderMap());
+			TArray<TSharedPtr<FJsonValue>> Errors;
+			for (const FString& Error : Resource->GetCompileErrors()) Errors.Add(MakeShared<FJsonValueString>(Error));
+			State->SetArrayField(TEXT("resourceCompileErrors"), Errors);
+		}
+
+		TArray<TSharedPtr<FJsonValue>> Fallbacks;
+		int32 PermutationChildren = 0;
+		int32 ChildrenCompiling = 0;
+		for (TObjectIterator<UMaterialInstance> It; It; ++It)
+		{
+			UMaterialInstance* Instance = *It;
+			if (!Instance || !Instance->bHasStaticPermutationResource || !Instance->IsChildOf(Material)) continue;
+			++PermutationChildren;
+			const FMaterialResource* ChildResource = Instance->GetMaterialResource(GMaxRHIShaderPlatform);
+			if (!ChildResource) continue;
+			if (!ChildResource->IsCompilationFinished()) { ++ChildrenCompiling; continue; }
+			if (!ChildResource->HasValidGameThreadShaderMap())
+			{
+				Fallbacks.Add(MakeShared<FJsonValueString>(Instance->GetPathName()));
+			}
+		}
+		State->SetNumberField(TEXT("staticPermutationChildren"), PermutationChildren);
+		State->SetNumberField(TEXT("childrenCompiling"), ChildrenCompiling);
+		State->SetArrayField(TEXT("childrenWithoutShaderMap"), Fallbacks);
+		if (!bFinished || ChildrenCompiling > 0)
+		{
+			State->SetStringField(TEXT("note"), TEXT("Shaders were still compiling when this call returned. editor(get_shader_compile_status, waitUntilIdle=true) waits for them."));
+		}
+		return State;
+	}
+}
+
 TSharedPtr<FJsonValue> FMaterialHandlers::SetExpressionValue(const TSharedPtr<FJsonObject>& Params)
 {
 	// Read by the branch the node's class selects, after the graph load. x and y
@@ -3646,6 +3695,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::SetExpressionValue(const TSharedPtr<FJ
 
 	FString ExpressionClass = Expression->GetClass()->GetName();
 	bool bValueSet = false;
+	bool bTextureChanged = false;
 
 	auto Result = MCPSuccess();
 
@@ -3800,9 +3850,22 @@ TSharedPtr<FJsonValue> FMaterialHandlers::SetExpressionValue(const TSharedPtr<FJ
 				{
 					RollbackBlockedReason = TEXT("The TextureSample had no texture before this call, and set_expression_value cannot clear one: an empty texturePath is rejected as an unloadable asset.");
 				}
+				// #1441: the property-edit path a native texture swap takes. The
+				// node's PostEditChangeProperty re-derives the sampler type and
+				// texture-reference state that a bare field write leaves stale.
+				FProperty* TextureProp = TexSampleExpr->GetClass()->FindPropertyByName(TEXT("Texture"));
+				TexSampleExpr->Modify();
+				TexSampleExpr->PreEditChange(TextureProp);
 				TexSampleExpr->Texture = Texture;
+				FPropertyChangedEvent TextureChanged(TextureProp, EPropertyChangeType::ValueSet);
+				TexSampleExpr->PostEditChangeProperty(TextureChanged);
 				bValueSet = true;
+				bTextureChanged = true;
 				Result->SetStringField(TEXT("texturePath"), Texture->GetPathName());
+				if (const UEnum* SamplerEnum = StaticEnum<EMaterialSamplerType>())
+				{
+					Result->SetStringField(TEXT("samplerType"), SamplerEnum->GetNameStringByValue(static_cast<int64>(TexSampleExpr->SamplerType.GetValue())));
+				}
 			}
 			else
 			{
@@ -3906,7 +3969,18 @@ TSharedPtr<FJsonValue> FMaterialHandlers::SetExpressionValue(const TSharedPtr<FJ
 				FString PreviousValueText;
 				Prop->ExportText_Direct(PreviousValueText, ValuePtr, ValuePtr, Expression, PPF_None);
 
+				// Wrapped in the node's own edit notifications, as a details-panel
+				// edit is, so nodes that derive state from a property (a texture
+				// node's sampler type, a Noise node's outputs) rebuild it.
+				Expression->Modify();
+				Expression->PreEditChange(Prop);
 				const TCHAR* ImportResult = Prop->ImportText_Direct(*ValueStr, ValuePtr, Expression, PPF_None);
+				FPropertyChangedEvent PropertyChanged(Prop, EPropertyChangeType::ValueSet);
+				Expression->PostEditChangeProperty(PropertyChanged);
+				if (ImportResult && CastField<FObjectPropertyBase>(Prop) && Cast<UTexture>(CastField<FObjectPropertyBase>(Prop)->GetObjectPropertyValue(ValuePtr)))
+				{
+					bTextureChanged = true;
+				}
 				if (ImportResult)
 				{
 					bValueSet = true;
@@ -3959,7 +4033,27 @@ TSharedPtr<FJsonValue> FMaterialHandlers::SetExpressionValue(const TSharedPtr<FJ
 		return MCPError(FString::Printf(TEXT("Could not set value on expression of type '%s'. For known types provide standard value params; for arbitrary expressions pass 'propertyName' + 'value'."), *ExpressionClass));
 	}
 
-	Target.PostEdit();
+	// #1441: a texture write recompiles through the editor's RecompileMaterial,
+	// which also re-caches child instances with static permutations. It balances
+	// the PreEditChange taken above.
+	if (bTextureChanged && Target.Material)
+	{
+#if UE_MCP_HAS_5_8_API
+		const TArray<FString> CompileErrors = UMaterialEditingLibrary::RecompileMaterial(Target.Material);
+		TArray<TSharedPtr<FJsonValue>> ErrorValues;
+		for (const FString& Error : CompileErrors) ErrorValues.Add(MakeShared<FJsonValueString>(Error));
+		Result->SetArrayField(TEXT("compileErrors"), ErrorValues);
+#else
+		UMaterialEditingLibrary::RecompileMaterial(Target.Material);
+		Result->SetStringField(TEXT("compileErrorsNote"),
+			TEXT("compileErrors is not reported on this engine: UMaterialEditingLibrary::RecompileMaterial returns void before UE 5.8. Read the editor log for its errors."));
+#endif
+		Result->SetObjectField(TEXT("shaderState"), DescribeMaterialShaderState(Target.Material));
+	}
+	else
+	{
+		Target.PostEdit();
+	}
 
 	// #979: the value was written in memory and the package only marked dirty,
 	// so a caller who then asked something else to save it could be told the

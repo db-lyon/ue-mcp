@@ -7,6 +7,7 @@ import * as conversation from "./conversation.generated.js";
 import * as dataflow from "./dataflow.generated.js";
 import * as editor from "./editor.generated.js";
 import * as epic from "./epic.generated.js";
+import * as fab from "./fab.generated.js";
 import * as gameplay from "./gameplay.generated.js";
 import * as gas from "./gas.generated.js";
 import * as level from "./level.generated.js";
@@ -30,6 +31,7 @@ export const EPIC_CATEGORIES = {
   dataflow: dataflow,
   editor: editor,
   epic: epic,
+  fab: fab,
   gameplay: gameplay,
   gas: gas,
   level: level,

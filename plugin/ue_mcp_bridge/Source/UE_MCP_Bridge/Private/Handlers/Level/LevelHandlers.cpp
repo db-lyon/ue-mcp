@@ -647,20 +647,42 @@ void FLevelHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	const FMCPParamSpec SpecDescFilter = MCPParam::Optional(TEXT("filter"), EType::String, TEXT("Case-insensitive substring over label, name, class and path"));
 	const FMCPParamSpec SpecDescClassName = MCPParam::Optional(TEXT("className"), EType::String, TEXT("Actor class filter"));
 	const FMCPParamSpec SpecDescGuids = MCPParam::Optional(TEXT("guids"), EType::Array, TEXT("Exact actor GUIDs")).Items(EType::String);
+	const FMCPParamSpec SpecDescPackages = MCPParam::Optional(TEXT("packages"), EType::Array, TEXT("External actor package paths, full (/Game/__ExternalActors__/...) or their XX/YY/NAME tail; .uasset and backslashes accepted. Unmatched ones are returned as missingPackages")).Items(EType::String);
 	const FMCPParamSpec SpecDescBounds = MCPParam::Optional(TEXT("bounds"), EType::Object, TEXT("{min:{x,y,z}, max:{x,y,z}} intersection test"));
 	const FMCPParamSpec SpecDescLoadedOnly = MCPParam::Optional(TEXT("loadedOnly"), EType::Boolean, TEXT("Only actors currently streamed in"));
 	const FMCPParamSpec SpecDescUnloadedOnly = MCPParam::Optional(TEXT("unloadedOnly"), EType::Boolean, TEXT("Only actors on disk that are not streamed in"));
 	Registry.RegisterHandler(TEXT("list_actor_descs"), &ListActorDescs, {
-		SpecDescFilter, SpecDescClassName, SpecDescGuids, SpecDescBounds, SpecDescLoadedOnly, SpecDescUnloadedOnly,
+		SpecDescFilter, SpecDescClassName, SpecDescGuids, SpecDescPackages, SpecDescBounds, SpecDescLoadedOnly, SpecDescUnloadedOnly,
 		SpecCursor, SpecLimit,
 	});
 	// Its mode check refuses the contract value before anything is pinned.
 	Registry.RegisterHandlerWithTimeout(TEXT("load_actor_descs"), &LoadActorDescs, 300.0f, {
 		MCPParam::Optional(TEXT("mode"), EType::String, TEXT("pin (make resident, default) | unpin (release)")),
-		SpecDescFilter, SpecDescClassName, SpecDescGuids, SpecDescBounds, SpecDescLoadedOnly, SpecDescUnloadedOnly,
+		SpecDescFilter, SpecDescClassName, SpecDescGuids, SpecDescPackages, SpecDescBounds, SpecDescLoadedOnly, SpecDescUnloadedOnly,
 		MCPParam::Optional(TEXT("maxActors"), EType::Integer, TEXT("Refuse to act on more than this many actors (default 256)")),
 		SpecDryRun,
 	});
+	// Editor loader adapters: user loaded regions and location volumes. The
+	// handlers live in LevelHandlers_WorldPartition.cpp next to the descriptors.
+	Registry.RegisterHandler(TEXT("list_loaded_regions"), &ListLoadedRegions, {
+		MCPParam::Optional(TEXT("includeUnloaded"), EType::Boolean, TEXT("Also list regions and location volumes that exist but are not loaded (default false)")),
+		SpecDescBounds,
+		SpecCursor, SpecLimit,
+	});
+	// Contract values name no region and are refused before anything is unloaded.
+	Registry.RegisterHandlerWithTimeout(TEXT("unload_loaded_regions"), &UnloadLoadedRegions, 300.0f, {
+		MCPParam::Optional(TEXT("ids"), EType::Array, TEXT("Region ids from list_loaded_regions")).Items(EType::String),
+		SpecDescBounds,
+		MCPParam::Optional(TEXT("maxRegions"), EType::Integer, TEXT("Refuse to unload more than this many regions (default 8)")),
+		MCPParam::Optional(TEXT("force"), EType::Boolean, TEXT("Unload even when a region holds actors with unsaved changes (default false)")),
+		SpecDryRun,
+	}, MCPSpec::AtLeastOne({ { TEXT("ids") }, { TEXT("bounds") } }));
+	Registry.RegisterHandlerWithTimeout(TEXT("load_region"), &LoadRegion, 300.0f, {
+		MCPParam::Required(TEXT("bounds"), EType::Object, TEXT("{min:{x,y,z}, max:{x,y,z}} box to load")),
+		MCPParam::Optional(TEXT("label"), EType::String, TEXT("Region label (default Loaded Region, the editor's own)")),
+		MCPParam::Optional(TEXT("maxActors"), EType::Integer, TEXT("Refuse to act on more than this many actors (default 256)")),
+		SpecDryRun,
+	}, MCPSpec::ContractExempt(TEXT("Creates a loader adapter and streams actors in; the bounds read is the only thing the contract values reach, and it is checked from source instead")));
 	// #985: LevelHandlers_WorldPartitionSettings.cpp. The streaming knobs and
 	// the runtime cell transformer stack live with the other World Partition
 	// actions rather than in a category of their own.

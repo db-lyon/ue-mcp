@@ -1,5 +1,5 @@
 {
-  "handlerCount": 1394,
+  "handlerCount": 1397,
   "handlers": {
     "actors_in_box": {
       "category": "level",
@@ -24067,6 +24067,13 @@
           "items": "string"
         },
         {
+          "name": "packages",
+          "type": "array",
+          "required": false,
+          "description": "External actor package paths, full (/Game/__ExternalActors__/...) or their XX/YY/NAME tail; .uasset and backslashes accepted. Unmatched ones are returned as missingPackages",
+          "items": "string"
+        },
+        {
           "name": "bounds",
           "type": "object",
           "required": false,
@@ -25062,6 +25069,35 @@
           "type": "integer",
           "required": false,
           "description": "Rows to return on this page (default 500, max 5000)"
+        }
+      ]
+    },
+    "list_loaded_regions": {
+      "category": "level",
+      "params": [
+        {
+          "name": "includeUnloaded",
+          "type": "boolean",
+          "required": false,
+          "description": "Also list regions and location volumes that exist but are not loaded (default false)"
+        },
+        {
+          "name": "bounds",
+          "type": "object",
+          "required": false,
+          "description": "{min:{x,y,z}, max:{x,y,z}} intersection test"
+        },
+        {
+          "name": "cursor",
+          "type": "string",
+          "required": false,
+          "description": "Resume a paged read: pass back the nextCursor from the previous page, unmodified"
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "description": "Rows on this page"
         }
       ]
     },
@@ -26201,6 +26237,13 @@
           "items": "string"
         },
         {
+          "name": "packages",
+          "type": "array",
+          "required": false,
+          "description": "External actor package paths, full (/Game/__ExternalActors__/...) or their XX/YY/NAME tail; .uasset and backslashes accepted. Unmatched ones are returned as missingPackages",
+          "items": "string"
+        },
+        {
           "name": "bounds",
           "type": "object",
           "required": false,
@@ -26258,6 +26301,36 @@
         }
       ],
       "contractExempt": "Ends any play session, collects garbage and swaps the open map before the contract path can fail"
+    },
+    "load_region": {
+      "category": "level",
+      "params": [
+        {
+          "name": "bounds",
+          "type": "object",
+          "required": true,
+          "description": "{min:{x,y,z}, max:{x,y,z}} box to load"
+        },
+        {
+          "name": "label",
+          "type": "string",
+          "required": false,
+          "description": "Region label (default Loaded Region, the editor's own)"
+        },
+        {
+          "name": "maxActors",
+          "type": "integer",
+          "required": false,
+          "description": "Refuse to act on more than this many actors (default 256)"
+        },
+        {
+          "name": "dryRun",
+          "type": "boolean",
+          "required": false,
+          "description": "Report what would change without writing"
+        }
+      ],
+      "contractExempt": "Creates a loader adapter and streams actors in; the bounds read is the only thing the contract values reach, and it is checked from source instead"
     },
     "log_map_check_message": {
       "category": "editor",
@@ -29341,6 +29414,12 @@
           "description": "Idle frames that split input runs (default 6)"
         },
         {
+          "name": "capture_ui_pointer",
+          "type": "boolean",
+          "required": false,
+          "description": "Also record the mouse through Slate (cursor, UMG hover, click, drag, wheel) while the cursor is shown, as ui_input steps (default false)"
+        },
+        {
           "name": "recording_dir",
           "type": "string",
           "required": false,
@@ -29639,6 +29718,12 @@
           "description": "Eject to a spectator camera during replay"
         },
         {
+          "name": "lock_input",
+          "type": "boolean",
+          "required": false,
+          "description": "Block the user's keyboard, mouse and gamepad from the PIE game while the replay runs, so only the recording drives the player; Esc, Shift+F1 and F8 still work, and monitor mode ignores it (default false)"
+        },
+        {
           "name": "time_scale",
           "type": "number",
           "required": false,
@@ -29784,6 +29869,12 @@
           "type": "boolean",
           "required": false,
           "description": "Eject to a spectator camera during replay"
+        },
+        {
+          "name": "lock_input",
+          "type": "boolean",
+          "required": false,
+          "description": "Block the user's keyboard, mouse and gamepad from the PIE game while the replay runs, so only the recording drives the player; Esc, Shift+F1 and F8 still work, and monitor mode ignores it (default false)"
         },
         {
           "name": "time_scale",
@@ -29975,7 +30066,7 @@
           "name": "steps",
           "type": "array",
           "required": true,
-          "description": "Steps, run in order: {instruction, judge: auto|manual (default auto), agent_judgeable (manual steps: false means only a person gives the verdict, default true), resolve_in_pie (true: expect.value and the actors arrange and act name only resolve once PIE runs, so script_create and script_update do not check them), arrange: [{kind: spawn, class, at?, rotation?, scale?} | {kind: set, target, path, value} | {kind: call, target, func, args?}] (run when the step starts), act: [{client?, place: {at, offset?, face?} | {location, yaw?}} | {client?, press: {action, frames?}} | {client?, inject: {action, value}} | {client?, hold: {action, value, ms}} | {client?, tape: {action, values, hz?}} | {client?, console} | {client?, capture} | {wait_ms}] (run after arrange, as uat_run runs a step's do; within_ms counts from its end), expect: {value (tracked value path or last segment, actor id for exists, widget for visible), op: decreasing|increasing|eq|gt|lt|visible|exists, target (number for eq/gt/lt, boolean for visible/exists, default true, optional least change for decreasing/increasing), within_ms}}",
+          "description": "Steps, run in order: {instruction, judge: auto|manual (default auto), agent_judgeable (manual steps: false means only a person gives the verdict, default true), resolve_in_pie (true: expect.value and the actors arrange and act name only resolve once PIE runs, so script_create and script_update do not check them), arrange: [{kind: spawn, class, at?, rotation?, scale?} | {kind: set, target, path, value} | {kind: call, target, func, args?}] (run when the step starts), act: [{client?, place: {at, offset?, face?} | {location, yaw?}} | {client?, press: {action, frames?}} | {client?, inject: {action, value}} | {client?, hold: {action, value, ms}} | {client?, tape: {action, values, hz?}} | {client?, console} | {client?, capture} | {wait_ms}] (run after arrange, as uat_run runs a step's do; within_ms counts from its end), expect: {value (tracked value path or last segment, actor id for exists, widget for visible, Input Action asset path for triggered), op: decreasing|increasing|eq|gt|lt|visible|exists|triggered, target (number for eq/gt/lt, boolean for visible/exists, default true, optional least change for decreasing/increasing; none for triggered), within_ms (triggered: 0 or absent waits with no timeout), client (triggered only: the player whose input is watched, 0 the editor's own player (default), 1..N a remote player, as act counts them)}}. triggered passes on the first fresh trigger of the action after act ends (input still held when the window opens does not count) and records triggered_at_ms and action_value as evidence",
           "items": "object"
         },
         {
@@ -30151,7 +30242,7 @@
           "name": "steps",
           "type": "array",
           "required": false,
-          "description": "Inline steps instead of a script asset: {instruction, judge: auto|manual (default auto), agent_judgeable (manual steps: false means only a person gives the verdict, default true), resolve_in_pie (true: expect.value and the actors arrange and act name only resolve once PIE runs, so script_create and script_update do not check them), arrange: [{kind: spawn, class, at?, rotation?, scale?} | {kind: set, target, path, value} | {kind: call, target, func, args?}] (run when the step starts), act: [{client?, place: {at, offset?, face?} | {location, yaw?}} | {client?, press: {action, frames?}} | {client?, inject: {action, value}} | {client?, hold: {action, value, ms}} | {client?, tape: {action, values, hz?}} | {client?, console} | {client?, capture} | {wait_ms}] (run after arrange, as uat_run runs a step's do; within_ms counts from its end), expect: {value (tracked value path or last segment, actor id for exists, widget for visible), op: decreasing|increasing|eq|gt|lt|visible|exists, target (number for eq/gt/lt, boolean for visible/exists, default true, optional least change for decreasing/increasing), within_ms}}",
+          "description": "Inline steps instead of a script asset: {instruction, judge: auto|manual (default auto), agent_judgeable (manual steps: false means only a person gives the verdict, default true), resolve_in_pie (true: expect.value and the actors arrange and act name only resolve once PIE runs, so script_create and script_update do not check them), arrange: [{kind: spawn, class, at?, rotation?, scale?} | {kind: set, target, path, value} | {kind: call, target, func, args?}] (run when the step starts), act: [{client?, place: {at, offset?, face?} | {location, yaw?}} | {client?, press: {action, frames?}} | {client?, inject: {action, value}} | {client?, hold: {action, value, ms}} | {client?, tape: {action, values, hz?}} | {client?, console} | {client?, capture} | {wait_ms}] (run after arrange, as uat_run runs a step's do; within_ms counts from its end), expect: {value (tracked value path or last segment, actor id for exists, widget for visible, Input Action asset path for triggered), op: decreasing|increasing|eq|gt|lt|visible|exists|triggered, target (number for eq/gt/lt, boolean for visible/exists, default true, optional least change for decreasing/increasing; none for triggered), within_ms (triggered: 0 or absent waits with no timeout), client (triggered only: the player whose input is watched, 0 the editor's own player (default), 1..N a remote player, as act counts them)}}. triggered passes on the first fresh trigger of the action after act ends (input still held when the window opens does not count) and records triggered_at_ms and action_value as evidence",
           "items": "object"
         },
         {
@@ -30335,7 +30426,7 @@
           "name": "steps",
           "type": "array",
           "required": false,
-          "description": "Replacement steps: {instruction, judge: auto|manual (default auto), agent_judgeable (manual steps: false means only a person gives the verdict, default true), resolve_in_pie (true: expect.value and the actors arrange and act name only resolve once PIE runs, so script_create and script_update do not check them), arrange: [{kind: spawn, class, at?, rotation?, scale?} | {kind: set, target, path, value} | {kind: call, target, func, args?}] (run when the step starts), act: [{client?, place: {at, offset?, face?} | {location, yaw?}} | {client?, press: {action, frames?}} | {client?, inject: {action, value}} | {client?, hold: {action, value, ms}} | {client?, tape: {action, values, hz?}} | {client?, console} | {client?, capture} | {wait_ms}] (run after arrange, as uat_run runs a step's do; within_ms counts from its end), expect: {value (tracked value path or last segment, actor id for exists, widget for visible), op: decreasing|increasing|eq|gt|lt|visible|exists, target (number for eq/gt/lt, boolean for visible/exists, default true, optional least change for decreasing/increasing), within_ms}}",
+          "description": "Replacement steps: {instruction, judge: auto|manual (default auto), agent_judgeable (manual steps: false means only a person gives the verdict, default true), resolve_in_pie (true: expect.value and the actors arrange and act name only resolve once PIE runs, so script_create and script_update do not check them), arrange: [{kind: spawn, class, at?, rotation?, scale?} | {kind: set, target, path, value} | {kind: call, target, func, args?}] (run when the step starts), act: [{client?, place: {at, offset?, face?} | {location, yaw?}} | {client?, press: {action, frames?}} | {client?, inject: {action, value}} | {client?, hold: {action, value, ms}} | {client?, tape: {action, values, hz?}} | {client?, console} | {client?, capture} | {wait_ms}] (run after arrange, as uat_run runs a step's do; within_ms counts from its end), expect: {value (tracked value path or last segment, actor id for exists, widget for visible, Input Action asset path for triggered), op: decreasing|increasing|eq|gt|lt|visible|exists|triggered, target (number for eq/gt/lt, boolean for visible/exists, default true, optional least change for decreasing/increasing; none for triggered), within_ms (triggered: 0 or absent waits with no timeout), client (triggered only: the player whose input is watched, 0 the editor's own player (default), 1..N a remote player, as act counts them)}}. triggered passes on the first fresh trigger of the action after act ends (input still held when the window opens does not count) and records triggered_at_ms and action_value as evidence",
           "items": "object"
         },
         {
@@ -30378,7 +30469,7 @@
           "name": "steps",
           "type": "array",
           "required": true,
-          "description": "Steps to check, as script_create takes them: {instruction, judge: auto|manual (default auto), agent_judgeable (manual steps: false means only a person gives the verdict, default true), resolve_in_pie (true: expect.value and the actors arrange and act name only resolve once PIE runs, so script_create and script_update do not check them), arrange: [{kind: spawn, class, at?, rotation?, scale?} | {kind: set, target, path, value} | {kind: call, target, func, args?}] (run when the step starts), act: [{client?, place: {at, offset?, face?} | {location, yaw?}} | {client?, press: {action, frames?}} | {client?, inject: {action, value}} | {client?, hold: {action, value, ms}} | {client?, tape: {action, values, hz?}} | {client?, console} | {client?, capture} | {wait_ms}] (run after arrange, as uat_run runs a step's do; within_ms counts from its end), expect: {value (tracked value path or last segment, actor id for exists, widget for visible), op: decreasing|increasing|eq|gt|lt|visible|exists, target (number for eq/gt/lt, boolean for visible/exists, default true, optional least change for decreasing/increasing), within_ms}}",
+          "description": "Steps to check, as script_create takes them: {instruction, judge: auto|manual (default auto), agent_judgeable (manual steps: false means only a person gives the verdict, default true), resolve_in_pie (true: expect.value and the actors arrange and act name only resolve once PIE runs, so script_create and script_update do not check them), arrange: [{kind: spawn, class, at?, rotation?, scale?} | {kind: set, target, path, value} | {kind: call, target, func, args?}] (run when the step starts), act: [{client?, place: {at, offset?, face?} | {location, yaw?}} | {client?, press: {action, frames?}} | {client?, inject: {action, value}} | {client?, hold: {action, value, ms}} | {client?, tape: {action, values, hz?}} | {client?, console} | {client?, capture} | {wait_ms}] (run after arrange, as uat_run runs a step's do; within_ms counts from its end), expect: {value (tracked value path or last segment, actor id for exists, widget for visible, Input Action asset path for triggered), op: decreasing|increasing|eq|gt|lt|visible|exists|triggered, target (number for eq/gt/lt, boolean for visible/exists, default true, optional least change for decreasing/increasing; none for triggered), within_ms (triggered: 0 or absent waits with no timeout), client (triggered only: the player whose input is watched, 0 the editor's own player (default), 1..N a remote player, as act counts them)}}. triggered passes on the first fresh trigger of the action after act ends (input still held when the window opens does not count) and records triggered_at_ms and action_value as evidence",
           "items": "object"
         },
         {
@@ -50429,6 +50520,55 @@
           "type": "string",
           "required": false,
           "description": "undo (default) | redo"
+        }
+      ]
+    },
+    "unload_loaded_regions": {
+      "category": "level",
+      "params": [
+        {
+          "name": "ids",
+          "type": "array",
+          "required": false,
+          "description": "Region ids from list_loaded_regions",
+          "items": "string"
+        },
+        {
+          "name": "bounds",
+          "type": "object",
+          "required": false,
+          "description": "{min:{x,y,z}, max:{x,y,z}} intersection test"
+        },
+        {
+          "name": "maxRegions",
+          "type": "integer",
+          "required": false,
+          "description": "Refuse to unload more than this many regions (default 8)"
+        },
+        {
+          "name": "force",
+          "type": "boolean",
+          "required": false,
+          "description": "Unload even when a region holds actors with unsaved changes (default false)"
+        },
+        {
+          "name": "dryRun",
+          "type": "boolean",
+          "required": false,
+          "description": "Report what would change without writing"
+        }
+      ],
+      "choices": [
+        {
+          "mode": "atLeastOne",
+          "branches": [
+            [
+              "ids"
+            ],
+            [
+              "bounds"
+            ]
+          ]
         }
       ]
     },

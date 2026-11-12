@@ -52,7 +52,7 @@ guards:
       class_path: guards/AskFirst
 ```
 
-The <!-- count:nativeToolActions -->2185<!-- /count --> actions that wrap Unreal's own toolsets all dispatch through the bridge method `epic_call_tool`. Their scope is decided from the method and the tool named in its arguments, so `gas(epic_list_attributes)` is in `reads` and `widget(epic_add_widget)` is in `mutations`, as each one declares.
+The <!-- count:nativeToolActions -->2190<!-- /count --> actions that wrap Unreal's own toolsets all dispatch through the bridge method `epic_call_tool`. Their scope is decided from the method and the tool named in its arguments, so `gas(epic_list_attributes)` is in `reads` and `widget(epic_add_widget)` is in `mutations`, as each one declares.
 
 `writes` and `mutations` are computed only when a guard asks, so a read pays nothing for them. The `source_control_*` calls are never in `writes`: they are the operations a source control guard would make itself.
 

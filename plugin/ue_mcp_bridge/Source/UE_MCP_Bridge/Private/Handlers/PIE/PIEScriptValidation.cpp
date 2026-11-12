@@ -41,7 +41,7 @@ namespace MCPPIE
 		};
 
 		const TCHAR* const DraftCheckOps[] = {
-			TEXT("decreasing"), TEXT("increasing"), TEXT("eq"), TEXT("gt"), TEXT("lt"), TEXT("visible"), TEXT("exists")
+			TEXT("decreasing"), TEXT("increasing"), TEXT("eq"), TEXT("gt"), TEXT("lt"), TEXT("visible"), TEXT("exists"), TEXT("triggered")
 		};
 
 		FScriptStepIssue DraftCheckIssue(int32 Step, const FString& Field, const FString& Message, const TArray<FString>& Candidates = TArray<FString>())
@@ -663,6 +663,13 @@ namespace MCPPIE
 			const FScriptExpect& E = S.Expect;
 			const FString Op = ScriptExpectOpToString(E.Op);
 			const FString Where = FString::Printf(TEXT("steps[%d]"), I);
+
+			// An Input Action is an asset, so it resolves at draft time whether or not the step resolves in PIE.
+			if (IsScriptTriggerOp(E.Op))
+			{
+				DraftCheckLookup(I, TEXT("expect.value"), TEXT("Input Action"), E.Value, Ctx.ResolveInputAction, FString(), OutIssues);
+				continue;
+			}
 
 			if (IsScriptBooleanOp(E.Op))
 			{

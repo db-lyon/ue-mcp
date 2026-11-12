@@ -2514,6 +2514,13 @@ export const handlerSpecs: HandlerSpecs = {
         "items": "string"
       },
       {
+        "name": "packages",
+        "type": "array",
+        "required": false,
+        "description": "External actor package paths, full (/Game/__ExternalActors__/...) or their XX/YY/NAME tail; .uasset and backslashes accepted. Unmatched ones are returned as missingPackages",
+        "items": "string"
+      },
+      {
         "name": "bounds",
         "type": "object",
         "required": false,
@@ -2619,6 +2626,35 @@ export const handlerSpecs: HandlerSpecs = {
       }
     ]
   },
+  "list_loaded_regions": {
+    "category": "level",
+    "params": [
+      {
+        "name": "includeUnloaded",
+        "type": "boolean",
+        "required": false,
+        "description": "Also list regions and location volumes that exist but are not loaded (default false)"
+      },
+      {
+        "name": "bounds",
+        "type": "object",
+        "required": false,
+        "description": "{min:{x,y,z}, max:{x,y,z}} intersection test"
+      },
+      {
+        "name": "cursor",
+        "type": "string",
+        "required": false,
+        "description": "Resume a paged read: pass back the nextCursor from the previous page, unmodified"
+      },
+      {
+        "name": "limit",
+        "type": "integer",
+        "required": false,
+        "description": "Rows on this page"
+      }
+    ]
+  },
   "list_runtime_partitions": {
     "category": "level",
     "params": []
@@ -2708,6 +2744,13 @@ export const handlerSpecs: HandlerSpecs = {
         "items": "string"
       },
       {
+        "name": "packages",
+        "type": "array",
+        "required": false,
+        "description": "External actor package paths, full (/Game/__ExternalActors__/...) or their XX/YY/NAME tail; .uasset and backslashes accepted. Unmatched ones are returned as missingPackages",
+        "items": "string"
+      },
+      {
         "name": "bounds",
         "type": "object",
         "required": false,
@@ -2765,6 +2808,36 @@ export const handlerSpecs: HandlerSpecs = {
       }
     ],
     "contractExempt": "Ends any play session, collects garbage and swaps the open map before the contract path can fail"
+  },
+  "load_region": {
+    "category": "level",
+    "params": [
+      {
+        "name": "bounds",
+        "type": "object",
+        "required": true,
+        "description": "{min:{x,y,z}, max:{x,y,z}} box to load"
+      },
+      {
+        "name": "label",
+        "type": "string",
+        "required": false,
+        "description": "Region label (default Loaded Region, the editor's own)"
+      },
+      {
+        "name": "maxActors",
+        "type": "integer",
+        "required": false,
+        "description": "Refuse to act on more than this many actors (default 256)"
+      },
+      {
+        "name": "dryRun",
+        "type": "boolean",
+        "required": false,
+        "description": "Report what would change without writing"
+      }
+    ],
+    "contractExempt": "Creates a loader adapter and streams actors in; the bounds read is the only thing the contract values reach, and it is checked from source instead"
   },
   "match_asset_to_blockout": {
     "category": "level",
@@ -6580,6 +6653,55 @@ export const handlerSpecs: HandlerSpecs = {
       }
     ]
   },
+  "unload_loaded_regions": {
+    "category": "level",
+    "params": [
+      {
+        "name": "ids",
+        "type": "array",
+        "required": false,
+        "description": "Region ids from list_loaded_regions",
+        "items": "string"
+      },
+      {
+        "name": "bounds",
+        "type": "object",
+        "required": false,
+        "description": "{min:{x,y,z}, max:{x,y,z}} intersection test"
+      },
+      {
+        "name": "maxRegions",
+        "type": "integer",
+        "required": false,
+        "description": "Refuse to unload more than this many regions (default 8)"
+      },
+      {
+        "name": "force",
+        "type": "boolean",
+        "required": false,
+        "description": "Unload even when a region holds actors with unsaved changes (default false)"
+      },
+      {
+        "name": "dryRun",
+        "type": "boolean",
+        "required": false,
+        "description": "Report what would change without writing"
+      }
+    ],
+    "choices": [
+      {
+        "mode": "atLeastOne",
+        "branches": [
+          [
+            "ids"
+          ],
+          [
+            "bounds"
+          ]
+        ]
+      }
+    ]
+  },
   "update_instance_transform": {
     "category": "level",
     "params": [
@@ -6701,17 +6823,19 @@ export const paramsClauses: Readonly<Record<string, string>> = {
   get_world_partition_settings: "Params: none",
   get_world_settings: "Params: none",
   line_trace: "Params: start?, end?, direction?, distance?, traceComplex?, channel?, ignoreActors?, multi?, world?, pieInstance?",
-  list_actor_descs: "Params: filter?, className?, guids?, bounds?, loadedOnly?, unloadedOnly?, cursor?, limit?",
+  list_actor_descs: "Params: filter?, className?, guids?, packages?, bounds?, loadedOnly?, unloadedOnly?, cursor?, limit?",
   list_actor_tags: "Params: actorLabel?, actorPath?, cursor?, limit?",
   list_blockout: "Params: tag?, includeReplaced?",
   list_hlod_setups: "Params: partitionName",
   list_levels: "Params: cursor?, limit?",
+  list_loaded_regions: "Params: includeUnloaded?, bounds?, cursor?, limit?",
   list_runtime_partitions: "Params: none",
   list_streaming_sublevels: "Params: none",
   list_transient_actors: "Params: world?, pieInstance?, cursor?, limit?",
   list_volumes: "Params: volumeType?, cursor?, limit?",
-  load_actor_descs: "Params: mode?, filter?, className?, guids?, bounds?, loadedOnly?, unloadedOnly?, maxActors?, dryRun?",
+  load_actor_descs: "Params: mode?, filter?, className?, guids?, packages?, bounds?, loadedOnly?, unloadedOnly?, maxActors?, dryRun?",
   load_level: "Params: levelPath, saveFirst? (or saveCurrent), discardUnsaved?",
+  load_region: "Params: bounds, label?, maxActors?, dryRun?",
   match_asset_to_blockout: "Params: actorLabel OR actorPath OR tag, candidateFolder, recursive?, allowRotation?, maxCandidates?, limit?",
   move_actor: "Params: actorLabel?, actorPath?, location?, rotation?, scale?, world?, pieInstance?",
   nav_project_point: "Params: point, extent?, world?, pieInstance?",
@@ -6782,6 +6906,7 @@ export const paramsClauses: Readonly<Record<string, string>> = {
   spawn_volume: "Params: volumeType, onConflict?, label?, location?, extent?, graphPath?",
   summarize_static_mesh_usage: "Params: world?, pieInstance?, maxResults?, includeOccurrences?, maxOccurrences?",
   test_component_overlap: "Params: actorLabelA?, actorPathA?, actorLabelB?, actorPathB?, componentNameA?, componentNameB?, method?, world?, pieInstance?",
+  unload_loaded_regions: "Params: at least one of ids/bounds, maxRegions?, force?, dryRun?",
   update_instance_transform: "Params: actorLabel?, actorPath?, componentName?, index, worldSpace?, location?, rotation?, scale?",
 };
 
@@ -6815,7 +6940,7 @@ export const schema: Record<string, z.ZodType> = {
   axisRotation: z.object({ axis: z.string().describe("forward | right | up"), degrees: z.number().describe("Signed rotation in degrees") }).optional().describe("Quaternion rotation about one frame axis; not with viewRotation"),
   bias: z.number().optional().describe("AutoExposureBias (exposure compensation)"),
   boneNames: z.array(z.string()).optional().describe("Keep vertices weighted to any of these bones; omit to keep every vertex"),
-  bounds: z.record(z.string(), z.unknown()).optional().describe("{min:{x,y,z}, max:{x,y,z}} intersection test"),
+  bounds: z.record(z.string(), z.unknown()).optional().describe("{min:{x,y,z}, max:{x,y,z}} intersection test (list_actor_descs, list_loaded_regions, load_actor_descs, unload_loaded_regions). {min:{x,y,z}, max:{x,y,z}} box to load (load_region)"),
   box: z.object({ min: z.object({ x: z.number(), y: z.number(), z: z.number() }).describe("Box minimum (cm)"), max: z.object({ x: z.number(), y: z.number(), z: z.number() }).describe("Box maximum (cm)") }).optional().describe("Keep vertices whose posed position is inside this box (inclusive), in space"),
   brightness: z.number().optional().describe("Alias for exposure"),
   builderClass: z.string().optional().describe("Brush builder class to rebuild with (default: the brush's current builder)"),
@@ -6856,7 +6981,7 @@ export const schema: Record<string, z.ZodType> = {
   direction: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Ray direction, normalised internally (line_trace, shape_trace). Trace direction (default straight down) (snap_instances_to_surface)"),
   discardUnsaved: z.boolean().optional().describe("Switch even though the open map has unsaved changes, discarding them (default false)"),
   distance: z.number().optional().describe("Ray length when direction is given (default 200000)"),
-  dryRun: z.boolean().optional().describe("Report what would change without writing (batch_set_actor_properties, bulk_set_component_property, load_actor_descs, rename_actor_object, set_actor_hlod_layer, set_component_materials, snap_instances_to_surface). Report what would be removed without removing it (default true) (clear_level_script). Report the verdict per brush without converting (default TRUE) (convert_brushes_to_static_mesh). Report the matches without deleting them (default false) (delete_actors). Preview without deleting (default TRUE) (delete_exact_labeled_actors_in_levels). Report what would be deleted without deleting (default false) (delete_outliner_folder). Inspect and preview the requested transform without writing (default false) (nudge_component). List what would be rebuilt without rebuilding it (default TRUE) (recreate_physics_state). Report what would be removed without removing it (default TRUE) (remove_components_by_class). List the matched components and packages without rebuilding or saving (default TRUE) (resave_mesh_users). Report the matches without moving them (default false) (set_actor_folder_path). Return every computed transform without spawning (spawn_actors_batch)"),
+  dryRun: z.boolean().optional().describe("Report what would change without writing (batch_set_actor_properties, bulk_set_component_property, load_actor_descs, load_region, rename_actor_object, set_actor_hlod_layer, set_component_materials, snap_instances_to_surface, unload_loaded_regions). Report what would be removed without removing it (default true) (clear_level_script). Report the verdict per brush without converting (default TRUE) (convert_brushes_to_static_mesh). Report the matches without deleting them (default false) (delete_actors). Preview without deleting (default TRUE) (delete_exact_labeled_actors_in_levels). Report what would be deleted without deleting (default false) (delete_outliner_folder). Inspect and preview the requested transform without writing (default false) (nudge_component). List what would be rebuilt without rebuilding it (default TRUE) (recreate_physics_state). Report what would be removed without removing it (default TRUE) (remove_components_by_class). List the matched components and packages without rebuilding or saving (default TRUE) (resave_mesh_users). Report the matches without moving them (default false) (set_actor_folder_path). Return every computed transform without spawning (spawn_actors_batch)"),
   dumpToFile: z.boolean().optional().describe("Write every row to a JSON file and return the totals with its path (default false) (audit_level_performance). Write the whole selection to a JSON file and return only the summary (get_skinned_vertices)"),
   duplicateTransformTolerance: z.number().optional().describe("Centimetre bucket for duplicate-transform detection"),
   editorHidden: z.boolean().optional().describe("Only editor-hidden (true) or only visible (false) actors"),
@@ -6882,7 +7007,7 @@ export const schema: Record<string, z.ZodType> = {
   folderPath: z.string().optional().describe("World Outliner folder, matched exactly (batch_set_actor_properties, bulk_set_component_property, delete_actors, get_world_outliner, query_components, remove_components_by_class, set_actor_hlod_layer, set_component_materials). World Outliner folder whose brushes are converted (convert_brushes_to_static_mesh). World Outliner folder to create, such as Props/Lights (create_outliner_folder). World Outliner folder to delete, with the empty folders under it (delete_outliner_folder). World Outliner folder; an empty string moves the actors to the root (set_actor_folder_path)"),
   folderPathPrefix: z.string().optional().describe("World Outliner folder, matched with every folder nested under it"),
   folderPaths: z.array(z.string()).optional().describe("World Outliner folders; combined with folderPath"),
-  force: z.boolean().optional().describe("Bypass EditDefaultsOnly to write per-instance overrides (batch_set_actor_properties). Rebuild actors that are up to date (default false) (build_hlod_actors). Rebuild HLODs that are up to date (default false) (build_world_partition_hlods). Write a package even when it is already clean (default false) (save_level). Bypass EditDefaultsOnly to write a per-instance override (set_actor_property)"),
+  force: z.boolean().optional().describe("Bypass EditDefaultsOnly to write per-instance overrides (batch_set_actor_properties). Rebuild actors that are up to date (default false) (build_hlod_actors). Rebuild HLODs that are up to date (default false) (build_world_partition_hlods). Write a package even when it is already clean (default false) (save_level). Bypass EditDefaultsOnly to write a per-instance override (set_actor_property). Unload even when a region holds actors with unsaved changes (default false) (unload_loaded_regions)"),
   forwardAxis: z.string().optional().describe("X (default) | Y | Z: the mesh axis laid along the spline"),
   frame: z.string().optional().describe("Frame for translation and axis rotation: world | actor (default) | parent | component"),
   fromComponents: z.object({ componentClass: z.string().optional().describe("Component class the components must be"), componentNameContains: z.string().optional().describe("Case-insensitive substring over the component name"), actorLabels: z.array(z.string()).optional().describe("Exact actor editor labels"), labelPrefix: z.string().optional().describe("Case-sensitive prefix over the actor's editor label"), labelContains: z.string().optional().describe("Case-insensitive substring over the actor's editor label"), tag: z.string().optional().describe("Actor must carry this tag"), classFilter: z.string().optional().describe("Actor class, resolved as a class or matched as a substring"), folderPath: z.string().optional().describe("World Outliner folder, matched exactly"), folderPathPrefix: z.string().optional().describe("World Outliner folder, matched with every folder nested under it"), matchSubclasses: z.boolean().optional().describe("Match subclasses of classFilter (default true)"), space: z.string().optional().describe("local (default, the component's own orientation) | world (axis-aligned bounds)"), offset: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Offset added to the computed point"), extentFraction: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Fraction of the box extent added per axis, such as {z: 0.72}"), inheritRotation: z.boolean().optional().describe("Spawn with the component's rotation (default false)") }).optional().describe("One spawn per matched component, placed from its bounds"),
@@ -6901,6 +7026,7 @@ export const schema: Record<string, z.ZodType> = {
   hideFromOutliner: z.boolean().optional().describe("Keep the actor out of the World Outliner (default false)"),
   hlodLayer: z.string().nullable().optional().describe("Build only the HLODs of this HLODLayer asset; omitted or null builds every layer (build_world_partition_hlods). HLODLayer asset path, or null to clear the per-actor override (set_actor_hlod_layer)"),
   hlodLayers: z.array(z.string()).optional().describe("HLODLayer asset paths to assign; empty leaves the setup without layers"),
+  ids: z.array(z.string()).optional().describe("Region ids from list_loaded_regions"),
   ignoreActors: z.array(z.string()).optional().describe("Actor labels to skip"),
   include: z.array(z.string()).optional().describe("Data per vertex: any of positions, weights, triangles (default positions and weights)"),
   includeChildActors: z.boolean().optional().describe("Match a ChildActorComponent's child actor by the actor filters of the top-level actor that owns it (default false)"),
@@ -6913,6 +7039,7 @@ export const schema: Record<string, z.ZodType> = {
   includeReplaced: z.boolean().optional().describe("Also list replacements that carry a restorable blockout record (default false)"),
   includeStreaming: z.boolean().optional().describe("Include World Partition streaming-proxy and HLOD actors (default false)"),
   includeTransforms: z.boolean().optional().describe("Include each actor's location, rotation and scale (default true)"),
+  includeUnloaded: z.boolean().optional().describe("Also list regions and location volumes that exist but are not loaded (default false)"),
   includeValues: z.boolean().optional().describe("Dump UPROPERTY values"),
   includeVolumes: z.boolean().optional().describe("Also convert volume brushes, which are collision rather than visible geometry"),
   index: z.number().int().optional().describe("Instance index"),
@@ -6928,14 +7055,14 @@ export const schema: Record<string, z.ZodType> = {
   interval: z.number().optional().describe("Distance between placements in centimetres (default 200); ignored when count is given"),
   jitter: z.number().optional().describe("Per-axis location jitter"),
   killZ: z.number().optional().describe("KillZ height"),
-  label: z.string().optional().describe("Actor label; an existing actor with this label is reported rather than duplicated (default a free Blockout_<Shape>) (create_blockout). Actor label (default SplineActor); an existing actor with this label is reported rather than duplicated (create_spline_actor). Actor label; an existing actor with this label is reported rather than duplicated (place_actor, spawn_light, spawn_skeletal_mesh_actor, spawn_volume). Actor label (spawn_transient_actor)"),
+  label: z.string().optional().describe("Actor label; an existing actor with this label is reported rather than duplicated (default a free Blockout_<Shape>) (create_blockout). Actor label (default SplineActor); an existing actor with this label is reported rather than duplicated (create_spline_actor). Region label (default Loaded Region, the editor's own) (load_region). Actor label; an existing actor with this label is reported rather than duplicated (place_actor, spawn_light, spawn_skeletal_mesh_actor, spawn_volume). Actor label (spawn_transient_actor)"),
   labelContains: z.string().optional().describe("Case-insensitive substring over the actor's editor label"),
   labelPrefix: z.string().optional().describe("Case-sensitive prefix over the actor's editor label (batch_set_actor_properties, bulk_set_component_property, delete_actors, get_actors_by_class, recreate_physics_state, remove_components_by_class, set_actor_folder_path, set_actor_hlod_layer, set_component_materials). Label prefix for the spawned actors (spawn_actors_batch). Label prefix for the spawned actors (default Grid) (spawn_grid)"),
   levelName: z.string().optional().describe("Streaming sub-level name or package path (remove_streaming_sublevel, set_streaming_sublevel_properties). Loaded sub-level to make current (set_current_edit_level)"),
   levelPath: z.string().optional().describe("Map package to add as a streaming sub-level (add_streaming_sublevel). Map package to open (load_level). Query another map: opened temporarily, refused while anything is dirty, and the open map restored (query_components). Alias for levelName (remove_streaming_sublevel, set_current_edit_level, set_streaming_sublevel_properties)"),
   levels: z.array(z.object({ levelPath: z.string().describe("Long package name of the .umap, such as /Game/Maps/Arena"), actorLabels: z.array(z.string()).describe("Exact editor labels to delete in that map, at most 256, no duplicates"), expectedClassPath: z.string().optional().describe("Actor class every matched actor must be, such as /Script/Engine.StaticMeshActor") })).optional().describe("Per-map targets, at most 16"),
   lightType: z.string().optional().describe("point | spot | directional | rect | sky"),
-  limit: z.number().int().optional().describe("Rows returned (default 200, max 2000) (actors_in_box, query_components). Selected vertices to return inline, 1 to 20000 (default 2000); ignored with dumpToFile (get_skinned_vertices). Rows on this page (get_world_outliner, list_actor_descs, list_actor_tags, list_levels, list_transient_actors, list_volumes). Candidates returned per blockout (default 5) (match_asset_to_blockout)"),
+  limit: z.number().int().optional().describe("Rows returned (default 200, max 2000) (actors_in_box, query_components). Selected vertices to return inline, 1 to 20000 (default 2000); ignored with dumpToFile (get_skinned_vertices). Rows on this page (get_world_outliner, list_actor_descs, list_actor_tags, list_levels, list_loaded_regions, list_transient_actors, list_volumes). Candidates returned per blockout (default 5) (match_asset_to_blockout)"),
   loadedOnly: z.boolean().optional().describe("Only actors currently streamed in"),
   loadingRange: z.number().optional().describe("Streaming loading range in world centimetres"),
   location: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Sub-level offset (add_streaming_sublevel, set_streaming_sublevel_properties). World position of the bottom centre (default origin) (create_blockout). Actor location (default the first point) (create_spline_actor). World location (move_actor, place_actor, spawn_light, spawn_skeletal_mesh_actor, spawn_transient_actor, spawn_volume, update_instance_transform)"),
@@ -6958,6 +7085,7 @@ export const schema: Record<string, z.ZodType> = {
   maxInstances: z.number().int().optional().describe("Cap on instances processed in one call"),
   maxOccurrences: z.number().int().optional().describe("Cap on occurrence examples per mesh"),
   maxPasses: z.number().int().optional().describe("Rebuild passes before giving up on a stable QuadTreeResolution, 2..8 (default 4)"),
+  maxRegions: z.number().int().optional().describe("Refuse to unload more than this many regions (default 8)"),
   maxResults: z.number().int().optional().describe("Rows per list (default 20, max 200); totals cover everything (audit_level_performance). Cap on result rows; full-scan totals are still reported (summarize_static_mesh_usage)"),
   maxSpawn: z.number().int().optional().describe("Refuse a plan larger than this (default 500, max 5000)"),
   meshes: z.array(z.string()).optional().describe("StaticMesh paths to scatter; required unless rebuild is set"),
@@ -6984,6 +7112,7 @@ export const schema: Record<string, z.ZodType> = {
   outerConeAngle: z.number().optional().describe("Spot light outer cone angle"),
   outlierFactor: z.number().optional().describe("How many times above or below the median a texel or lightmap density must be to be an outlier (default 4)"),
   outputPath: z.string().optional().describe("File for dumpToFile; relative paths resolve under Saved/ (default Saved/UE_MCP/PerfAudit/<world>_<time>.json) (audit_level_performance). Output .fbx path (export_actor_fbx). File for dumpToFile; relative paths resolve under Saved/ (default Saved/UE_MCP/SkinnedVertices/) (get_skinned_vertices)"),
+  packages: z.array(z.string()).optional().describe("External actor package paths, full (/Game/__ExternalActors__/...) or their XX/YY/NAME tail; .uasset and backslashes accepted. Unmatched ones are returned as missingPackages"),
   parentComponentName: z.string().optional().describe("Parent SceneComponent instance name; omitted selects the actor root"),
   parentLabel: z.string().optional().describe("Parent actor label; pass parentLabel or parentPath"),
   parentPath: z.string().optional().describe("Parent actor object path"),

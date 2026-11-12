@@ -109,6 +109,7 @@ export const REGISTERED_HANDLER_TIMEOUT_SECONDS: Readonly<Record<string, number>
   invoke_object_functions: 300,
   live_coding_compile: 300,
   load_actor_descs: 300,
+  load_region: 300,
   merge_landscape_edit_layers: 300,
   mesh_boolean: 300,
   metahuman_assemble: 900,
@@ -159,6 +160,7 @@ export const REGISTERED_HANDLER_TIMEOUT_SECONDS: Readonly<Record<string, number>
   summarize_static_mesh_usage: 300,
   transform_skinned_part: 600,
   trigger_hitch: 30,
+  unload_loaded_regions: 300,
 };
 
 /** What the editor will wait for this method, in ms, or undefined for the default. */

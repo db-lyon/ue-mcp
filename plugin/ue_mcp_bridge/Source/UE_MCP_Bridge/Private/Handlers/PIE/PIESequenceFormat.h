@@ -14,7 +14,7 @@ class AActor;
  *
  * A recording lives in <ProjectSavedDir>/MCPRecordings/<id>/ and contains:
  *   - manifest.json   Top-level metadata, action list, markers, file pointers
- *   - sequence.json   Replay-ready step list (input_tape / hold / mark / capture / console)
+ *   - sequence.json   Replay-ready step list (input_tape / hold / mark / capture / console / ui_input)
  *   - recording.csv   Per-frame samples for analysis (pandas/jq friendly)
  *   - drift.json      Per-frame deltas vs source recording (only after a replay)
  *
@@ -117,7 +117,11 @@ namespace MCPPIE
 		Capture,
 		Console,
 		InputTape,
-		Mark
+		Mark,
+		// Cursor / Slate pointer event (#1822). Its delay_ms is on the world's
+		// real-time clock, which keeps running while the game is paused; every
+		// other step's delay is on world time.
+		UIInput
 	};
 
 	FString StepTypeToString(EStepType Type);
@@ -136,6 +140,15 @@ namespace MCPPIE
 		FString Command;
 		FString Label;
 		TArray<FVector> TapeValues;
+		// ui_input: event name (mouse_move, mouse_down, mouse_up,
+		// mouse_double_click, mouse_wheel), viewport-relative position (0..1),
+		// mouse button FKey name, wheel delta and UIModifier bits.
+		FString UIEvent;
+		double PointerX = 0.0;
+		double PointerY = 0.0;
+		FString UIKey;
+		double WheelDelta = 0.0;
+		uint8 UIModifiers = 0;
 	};
 
 	struct FSequence

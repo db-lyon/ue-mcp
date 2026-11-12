@@ -3,15 +3,17 @@ import { categoryTool } from "../surface/category-tool.js";
 import { z } from "zod";
 import { specBp, schema as specSchema } from "./specs/fab.generated.js";
 import { listEpicFabTools } from "./fab-epic.js";
+import { actions as epicActions, schema as epicSchema } from "./epic/fab.generated.js";
 
 // Uses the Fab plugin's own session (the launcher installs it as the "Fab UE
 // Plugin" item) and the engine's native download/import services. Catalog
 // search and import of listings are what Epic's built-in Fab tools do (the
-// plugin's FabToolset, UE 5.9); list_epic_tools finds them, and nothing here
+// plugin's FabToolset, UE 5.9, declared below as epic_* actions from the
+// recorded catalog); list_epic_tools finds them live, and nothing here
 // may tell an agent that the editor cannot do what those tools do.
 export const fabTool: ToolDef = categoryTool(
   "fab",
-  "Fab (Epic marketplace) content in the editor. Searching the Fab catalog and importing listings, free ones included, is what Epic's built-in Fab tools do (the Fab plugin's FabToolset, UE 5.9): list_epic_tools lists the ones this editor has and the epic(call_tool) call that runs each. ue-mcp's own actions add: plugin/login status, login/logout, syncing your owned library into the Content Browser, downloading and verifying owned UE packs with pause/resume, inspecting/clearing the native cache, installing verified Content safely, importing local source files, and opening the fab.com search page at a query.",
+  "Fab (Epic marketplace) content in the editor. Searching the Fab catalog and importing listings, free ones included, is what Epic's built-in Fab tools do (the Fab plugin's FabToolset.FabToolset, UE 5.9). They are declared here as epic_* actions from the recorded catalog, and list_epic_tools lists the ones this editor actually has with the call that runs each. ue-mcp's own actions add: plugin/login status, login/logout, syncing your owned library into the Content Browser, downloading and verifying owned UE packs with pause/resume, inspecting/clearing the native cache, installing verified Content safely, importing local source files, and opening the fab.com search page at a query.",
   {
     list_epic_tools: listEpicFabTools,
     status:       specBp("read", "Report Fab plugin state: authenticated (whether a native Fab session is available), whether the plugin is installed and enabled (pluginDir, pluginVersion), whether the module is loaded, whether the native import/cache API is linked in this build, whether the Fab window has been opened this session, the download cache location/size, and librarySync state with pages, snapshotItems, publishedRows and any sanitized failure. The launcher installs Fab as its own 'Fab UE Plugin' item, so an engine can lack it; then errorCode is PLUGIN_NOT_AVAILABLE and note says what is missing and how to install it, the same reason the other Fab actions refuse with. Call this first.", "fab_status"),
@@ -31,8 +33,10 @@ export const fabTool: ToolDef = categoryTool(
     clear_cache:  specBp("mutate", "Delete the local Fab download cache to reclaim disk. Does not affect assets already imported into the project. Reports unchanged=true when the cache was already empty (where the native Fab API is linked). No inverse: the downloads come back only by downloading them again.", "fab_clear_cache"),
     import_file:  specBp("mutate", "Import a source file into the project through the Fab Interchange import pipeline. Use for owned assets that are downloaded/cached locally, or any local source file (fbx, textures). Single files import synchronously and report the created asset paths; pack/quixel workflows may run asynchronously. A synchronous import rolls back by deleting exactly the assets it created, taken from the paths the importer reported (a force delete, because the imported set references itself). An ASYNCHRONOUS import emits no inverse: its paths are not known yet, and a record naming the destination folder would delete whatever else already lives there.", "fab_import_file"),
     open_search:  specBp("read", "Open fab.com's own search page at a query in the user's default browser. Builds https://www.fab.com/search?q=<query>&listing_types=<listingType>&asset_formats=<assetFormat>&is_free=1, leaving out unset filters. This action itself sends no request to Fab and returns no listing data; to search the catalog and import listings from the editor, use Epic's built-in Fab tools (list_epic_tools). open=false returns the URL without opening it, for showing as a link. Returns url and opened.", "fab_open_search"),
+    ...epicActions,
   },
   {
+    ...epicSchema,
     // #1057: every key the fab handlers declare, generated from their C++
     // registrations.
     ...specSchema,

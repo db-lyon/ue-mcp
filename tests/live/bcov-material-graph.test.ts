@@ -120,6 +120,26 @@ describe("material settings", () => {
     const sample = expressions.find((e) => e.index === connections.BaseColor?.expressionIndex);
     expect(sample?.texturePath).toContain("DefaultTexture");
   }, 120_000);
+
+  it("set_expression_value swaps a TextureSample's texture through the native edit path (#1441)", async () => {
+    const before = await readMaterial(M_TEX);
+    const index = before.connections.BaseColor?.expressionIndex;
+    expect(typeof index).toBe("number");
+    const swapped = await call("set_expression_value", {
+      materialPath: M_TEX,
+      expressionIndex: index,
+      texturePath: "/Engine/EngineMaterials/DefaultNormal",
+    });
+    // The node's own PostEditChangeProperty picks the sampler for the new texture.
+    expect(swapped.samplerType).toBe("SAMPLERTYPE_Normal");
+    const shaderState = swapped.shaderState as Json;
+    expect(shaderState).toBeTruthy();
+    expect(shaderState.childrenWithoutShaderMap).toEqual([]);
+    if (Array.isArray(swapped.compileErrors)) expect(swapped.compileErrors).toEqual([]);
+    const after = await readMaterial(M_TEX);
+    expect(after.expressions.find((e) => e.index === index)?.texturePath).toContain("DefaultNormal");
+    expect(after.connections.BaseColor?.expressionIndex).toBe(index);
+  }, 120_000);
 });
 
 describe("material graph edits", () => {

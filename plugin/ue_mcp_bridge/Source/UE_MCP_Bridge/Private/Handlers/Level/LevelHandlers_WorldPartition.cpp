@@ -41,6 +41,27 @@
 #include "WorldPartition/WorldPartition.h"
 #include "WorldPartition/WorldPartitionActorDescInstance.h"
 #include "WorldPartition/WorldPartitionHelpers.h"
+#include "EditorActorFolders.h"
+#include "UObject/Package.h"
+#include "UObject/UObjectIterator.h"
+#endif
+
+// Editor loaded regions (list_loaded_regions, unload_loaded_regions, load_region).
+//
+// Editor loaded regions, driven exactly as the World Partition editor window drives them
+// (SWorldPartitionEditorGrid2D: CreateRegionFromSelection and UnloadSelectedRegions):
+//   UWorldPartition::GetRegisteredEditorLoaderAdapters(), CreateEditorLoaderAdapter<FLoaderAdapterShape>(World, Box, Label)
+//   and ReleaseEditorLoaderAdapter(UWorldPartitionEditorLoaderAdapter*) (WorldPartition.h, WITH_EDITOR);
+//   IWorldPartitionActorLoaderInterface::ILoaderAdapter::Load(), Unload(), IsLoaded(), GetBoundingBox(),
+//   GetUserCreated() and SetUserCreated() (WorldPartitionActorLoaderInterface.h). Location volumes are
+//   ALocationVolume actors, which implement the same interface.
+#if UE_MCP_HAS_ACTOR_DESC_INSTANCE_API
+#define UE_MCP_HAS_LOADED_REGION_API 1
+#include "WorldPartition/WorldPartitionActorLoaderInterface.h"
+#include "WorldPartition/LoaderAdapter/LoaderAdapterShape.h"
+#include "WorldPartition/WorldPartitionEditorLoaderAdapter.h"
+#else
+#define UE_MCP_HAS_LOADED_REGION_API 0
 #endif
 
 namespace
@@ -66,6 +87,8 @@ namespace
 		bool bActorIsEditorOnly = false;
 		FName ActorPackage;
 		FName ActorPath;
+		/** World Outliner folder, NAME_None at the root. Resolved against the world: see ResolveActorDescFolder. */
+		FName FolderPath;
 		TArray<FSoftObjectPath> DataLayerAssets;
 
 		explicit FMCPActorDescSnapshot(const FWorldPartitionActorDescInstance& Instance)
@@ -100,6 +123,131 @@ namespace
 			{
 				DataLayerAssets.Add(FSoftObjectPath(DataLayerAssetPath.ToString()));
 			}
+		}
+	};
+
+	/**
+	 * The World Outliner folder an actor descriptor sits in, placed the way the
+	 * Outliner places it. A resident actor answers for itself, which stays
+	 * current when a move to another folder is not saved yet and the descriptor
+	 * still holds the old one. An unloaded actor goes through
+	 * FActorFolders::GetActorDescInstanceFolder, the Outliner's own lookup: by
+	 * folder GUID when the level uses actor folder objects, so a renamed folder
+	 * resolves to its current path, otherwise the path the descriptor saved.
+	 */
+	FName ResolveActorDescFolder(UWorld& World, const FWorldPartitionActorDescInstance& Instance)
+	{
+		if (const AActor* Actor = Instance.GetActor(/*bEvenIfPendingKill*/ false))
+		{
+			return Actor->GetFolderPath();
+		}
+		return FActorFolders::GetActorDescInstanceFolder(World, &Instance).GetPath();
+	}
+
+	/**
+	 * The 'packages' filter: external actor package paths, each either a full
+	 * long package name (/Game/__ExternalActors__/Map/A/BC/DEFGHIJ...) matched
+	 * exactly, or a tail of one (A/BC/DEFGHIJ...) matched on whole path
+	 * segments. A .uasset extension or an object name after a dot is dropped and
+	 * backslashes read as slashes, so a file path from source control or an
+	 * object path can be passed as it is. Package names are case-insensitive.
+	 *
+	 * It records which requests some descriptor held, so the caller is told
+	 * which packages this World Partition does not hold at all (deleted, from
+	 * another map, or mistyped) instead of reading an empty result as "not
+	 * loaded".
+	 */
+	struct FMCPDescPackageFilter
+	{
+		/** One entry per distinct request, as the caller wrote it. */
+		TArray<FString> Requested;
+		/** Normalised and lower-cased, parallel to Requested. */
+		TArray<FString> Keys;
+		TArray<bool> Found;
+		TMap<FString, int32> ExactIndex;
+		TMap<FString, int32> TailIndex;
+
+		explicit FMCPDescPackageFilter(const TSharedPtr<FJsonObject>& Params)
+		{
+			const TArray<TSharedPtr<FJsonValue>>* Values = nullptr;
+			if (!Params.IsValid() || !TryGetArrayParam(Params, TEXT("packages"), Values) || !Values) return;
+			for (const TSharedPtr<FJsonValue>& Value : *Values)
+			{
+				FString Raw;
+				if (!Value.IsValid() || !Value->TryGetString(Raw)) continue;
+				const FString Key = Normalize(Raw);
+				if (Key.IsEmpty() || ExactIndex.Contains(Key) || TailIndex.Contains(Key)) continue;
+				const int32 Index = Keys.Add(Key);
+				Requested.Add(Raw.TrimStartAndEnd());
+				Found.Add(false);
+				(Key.StartsWith(TEXT("/")) ? ExactIndex : TailIndex).Add(Key, Index);
+			}
+		}
+
+		static FString Normalize(const FString& Raw)
+		{
+			FString Key = Raw.TrimStartAndEnd().Replace(TEXT("\\"), TEXT("/"));
+			while (Key.Len() > 1 && Key.EndsWith(TEXT("/")))
+			{
+				Key.LeftChopInline(1);
+			}
+			int32 LastSlash = INDEX_NONE;
+			Key.FindLastChar(TEXT('/'), LastSlash);
+			const int32 Dot = Key.Find(TEXT("."), ESearchCase::CaseSensitive, ESearchDir::FromStart, LastSlash + 1);
+			if (Dot != INDEX_NONE)
+			{
+				Key.LeftInline(Dot);
+			}
+			return Key.ToLower();
+		}
+
+		bool IsActive() const { return Keys.Num() > 0; }
+
+		/** True when Package is one of the requested ones; marks every request it satisfies. */
+		bool Matches(FName Package)
+		{
+			const FString Path = Package.ToString().ToLower();
+			bool bMatched = false;
+			if (const int32* Index = ExactIndex.Find(Path))
+			{
+				Found[*Index] = true;
+				bMatched = true;
+			}
+			if (TailIndex.Num() > 0)
+			{
+				// Each tail that starts after a separator, so a request only ever
+				// matches whole segments: "BC/DEF" matches ".../A/BC/DEF" and
+				// "C/DEF" does not.
+				for (int32 Char = 0; Char + 1 < Path.Len(); ++Char)
+				{
+					if (Path[Char] != TEXT('/')) continue;
+					if (const int32* Index = TailIndex.Find(Path.RightChop(Char + 1)))
+					{
+						Found[*Index] = true;
+						bMatched = true;
+					}
+				}
+			}
+			return bMatched;
+		}
+
+		/** The requests no descriptor held, in the order they were given. */
+		TArray<TSharedPtr<FJsonValue>> MissingJson() const
+		{
+			TArray<TSharedPtr<FJsonValue>> Missing;
+			for (int32 Index = 0; Index < Requested.Num(); ++Index)
+			{
+				if (!Found[Index]) Missing.Add(MakeShared<FJsonValueString>(Requested[Index]));
+			}
+			return Missing;
+		}
+
+		/** Sorted, so the same set given in another order is the same paged query. */
+		FString CollectionKey() const
+		{
+			TArray<FString> Sorted = Keys;
+			Sorted.Sort();
+			return FString::Join(Sorted, TEXT(","));
 		}
 	};
 
@@ -145,6 +293,7 @@ namespace
 		Obj->SetStringField(TEXT("classPath"), Desc.Class.ToString());
 		Obj->SetStringField(TEXT("actorPath"), Desc.ActorPath.ToString());
 		Obj->SetStringField(TEXT("package"), Desc.ActorPackage.ToString());
+		Obj->SetStringField(TEXT("folderPath"), Desc.FolderPath.IsNone() ? FString() : Desc.FolderPath.ToString());
 		Obj->SetStringField(TEXT("runtimeGrid"), Desc.RuntimeGrid.ToString());
 		Obj->SetBoolField(TEXT("spatiallyLoaded"), Desc.bIsSpatiallyLoaded);
 		Obj->SetBoolField(TEXT("editorOnly"), Desc.bActorIsEditorOnly);
@@ -189,10 +338,16 @@ namespace
 		return true;
 	}
 
-	/** Descriptors matching the caller's filters, honouring an explicit guid list. */
+	/**
+	 * Descriptors matching the caller's filters, honouring an explicit guid list.
+	 * PackageFilter is applied first, to every descriptor visited (all of them,
+	 * or those in 'bounds'), so what it records as found means "this World
+	 * Partition holds that package", whatever the other filters then keep.
+	 */
 	bool GatherMatchingDescs(
 		const TSharedPtr<FJsonObject>& Params,
 		UWorld* World,
+		FMCPDescPackageFilter& PackageFilter,
 		TArray<FMCPActorDescSnapshot>& OutMatches,
 		FString& OutError)
 	{
@@ -209,9 +364,17 @@ namespace
 		TArray<FMCPActorDescSnapshot> AllDescs;
 		FBox Box(ForceInit);
 		const bool bHasBounds = TryReadBounds(Params, Box);
-		auto Collect = [&AllDescs](const FWorldPartitionActorDescInstance* Instance) -> bool
+		// The instances, parallel to AllDescs, so the folder is resolved only for
+		// the descriptors that survive the filters. They stay valid for the call:
+		// nothing below loads, unloads or collects.
+		TArray<const FWorldPartitionActorDescInstance*> AllInstances;
+		auto Collect = [&AllDescs, &AllInstances](const FWorldPartitionActorDescInstance* Instance) -> bool
 		{
-			if (Instance) AllDescs.Emplace(*Instance);
+			if (Instance)
+			{
+				AllDescs.Emplace(*Instance);
+				AllInstances.Add(Instance);
+			}
 			return true;
 		};
 		if (bHasBounds)
@@ -245,8 +408,10 @@ namespace
 		const bool bUnloadedOnly = OptionalBool(Params, TEXT("unloadedOnly"), false);
 		const TSet<FGuid> LoadedGuids = CollectLoadedActorGuids(World);
 
-		for (const FMCPActorDescSnapshot& Desc : AllDescs)
+		for (int32 DescIndex = 0; DescIndex < AllDescs.Num(); ++DescIndex)
 		{
+			const FMCPActorDescSnapshot& Desc = AllDescs[DescIndex];
+			if (PackageFilter.IsActive() && !PackageFilter.Matches(Desc.ActorPackage)) continue;
 			if (WantedGuids.Num() > 0 && !WantedGuids.Contains(Desc.Guid.ToString().ToLower())) continue;
 			if (!ActorDescMatchesFilter(Desc, LowerFilter)) continue;
 			if (!ClassName.IsEmpty() && !ActorDescClassName(Desc).ToLower().Contains(ClassName)) continue;
@@ -255,7 +420,7 @@ namespace
 			if (bLoadedOnly && !bLoaded) continue;
 			if (bUnloadedOnly && bLoaded) continue;
 
-			OutMatches.Add(Desc);
+			OutMatches.Add_GetRef(Desc).FolderPath = ResolveActorDescFolder(*World, *AllInstances[DescIndex]);
 		}
 		return true;
 	}
@@ -296,11 +461,12 @@ namespace
 		}
 
 		return FString::Printf(
-			TEXT("%s|filter=%s|className=%s|guids=%s|bounds=%s|loadedOnly=%d|unloadedOnly=%d"),
+			TEXT("%s|filter=%s|className=%s|guids=%s|packages=%s|bounds=%s|loadedOnly=%d|unloadedOnly=%d"),
 			Method,
 			*OptionalString(Params, TEXT("filter")).ToLower(),
 			*OptionalString(Params, TEXT("className")).ToLower(),
 			*Guids,
+			*FMCPDescPackageFilter(Params).CollectionKey(),
 			*Bounds,
 			OptionalBool(Params, TEXT("loadedOnly"), false) ? 1 : 0,
 			OptionalBool(Params, TEXT("unloadedOnly"), false) ? 1 : 0);
@@ -316,13 +482,230 @@ namespace
 		return true;
 	}
 #endif // UE_MCP_HAS_ACTOR_DESC_INSTANCE_API
+
+#if UE_MCP_HAS_LOADED_REGION_API
+	constexpr int32 DefaultMaxLoadedRegions = 8;
+	constexpr int32 DefaultMaxRegionActors = 256;
+
+	// GetBoundingBox() is a TOptional<FBox> on the engines that have it on the
+	// adapter at all, and has been a bare FBox on others; both read the same.
+	bool LoadedRegionBoxOf(const FBox& Value, FBox& OutBox)
+	{
+		// An adapter can report a set but empty box (the editor registers such adapters itself); that is no
+		// region, and treating it as one would match every bounds filter that covers the origin.
+		if (!Value.IsValid || Value.GetSize().GetMin() <= KINDA_SMALL_NUMBER) return false;
+		OutBox = Value;
+		return true;
+	}
+
+	template <typename TValue>
+	bool LoadedRegionBoxOf(const TOptional<TValue>& Value, FBox& OutBox)
+	{
+		return Value.IsSet() && LoadedRegionBoxOf(static_cast<const FBox&>(Value.GetValue()), OutBox);
+	}
+
+	bool ReadRegionBounds(IWorldPartitionActorLoaderInterface::ILoaderAdapter* Adapter, FBox& OutBox)
+	{
+		const TOptional<FBox> Bounds = Adapter->GetBoundingBox();
+		return Bounds.IsSet() && LoadedRegionBoxOf(Bounds.GetValue(), OutBox);
+	}
+
+	// What the editor does to a user-created region after Unload(): hand the adapter object back to the
+	// World Partition so the region disappears instead of lingering as an unloaded box.
+	bool ReleaseUserRegion(UWorldPartition* WorldPartition, UObject* Region)
+	{
+		UWorldPartitionEditorLoaderAdapter* EditorAdapter = Cast<UWorldPartitionEditorLoaderAdapter>(Region);
+		if (!WorldPartition || !EditorAdapter || !WorldPartition->GetRegisteredEditorLoaderAdapters().Contains(EditorAdapter)) return false;
+		WorldPartition->ReleaseEditorLoaderAdapter(EditorAdapter);
+		return true;
+	}
+
+	bool LoadedRegionClassIsNamed(const UClass* Class, const TCHAR* Name)
+	{
+		for (const UClass* Walk = Class; Walk; Walk = Walk->GetSuperClass())
+		{
+			if (Walk->GetName() == Name) return true;
+		}
+		return false;
+	}
+
+	/** One editor loader source: a user loaded region, a location volume, or any other implementer. */
+	struct FMCPLoadedRegion
+	{
+		TWeakObjectPtr<UObject> Object;
+		FString Id;
+		FString Kind;
+		FString Label;
+		FString ClassName;
+		bool bLoaded = false;
+		bool bHasBounds = false;
+		FBox Bounds = FBox(ForceInit);
+	};
+
+	/**
+	 * Every IWorldPartitionActorLoaderInterface implementer that belongs to the
+	 * edited world, sorted by id. The user loaded regions are
+	 * UWorldPartitionEditorLoaderAdapter objects and a location volume is an
+	 * actor; both are found the way the engine finds them, through the interface,
+	 * so any other implementer the engine adds is listed without a code change.
+	 * The pinned-actor adapter is a plain ILoaderAdapter owned by the World
+	 * Partition rather than an interface implementer, and is what
+	 * load_actor_descs mode=unpin already releases.
+	 */
+	TArray<FMCPLoadedRegion> GatherLoadedRegions(UWorld* World)
+	{
+		TArray<FMCPLoadedRegion> Regions;
+		// User regions are UWorldPartitionEditorLoaderAdapter objects in the transient package, so they are read
+		// from the World Partition's registry (GetRegisteredEditorLoaderAdapters), not from the world's objects;
+		// location volumes and any other loader actors are actors of the edited world.
+		TArray<UObject*> Sources;
+		if (UWorldPartition* WorldPartition = World ? World->GetWorldPartition() : nullptr)
+		{
+			for (const TObjectPtr<UWorldPartitionEditorLoaderAdapter>& EditorAdapter : WorldPartition->GetRegisteredEditorLoaderAdapters())
+			{
+				if (EditorAdapter) Sources.Add(EditorAdapter.Get());
+			}
+		}
+		for (TActorIterator<AActor> ActorIt(World); ActorIt; ++ActorIt)
+		{
+			if (Cast<IWorldPartitionActorLoaderInterface>(*ActorIt)) Sources.Add(*ActorIt);
+		}
+		for (UObject* Object : Sources)
+		{
+			IWorldPartitionActorLoaderInterface* Loader = Cast<IWorldPartitionActorLoaderInterface>(Object);
+			if (!Loader) continue;
+
+			FMCPLoadedRegion Region;
+			Region.Object = Object;
+			Region.Id = Object->GetPathName();
+			Region.ClassName = Object->GetClass()->GetName();
+
+			// A location volume carries no adapter until it has been loaded once.
+			auto* Adapter = Loader->GetLoaderAdapter();
+			Region.bLoaded = Adapter && Adapter->IsLoaded();
+			if (Adapter) Region.bHasBounds = ReadRegionBounds(Adapter, Region.Bounds);
+
+			const AActor* Actor = Cast<AActor>(Object);
+			Region.Label = Actor ? Actor->GetActorLabel() : Object->GetName();
+			if (!Region.bHasBounds && Actor)
+			{
+				const FBox ActorBox = Actor->GetComponentsBoundingBox(true);
+				if (ActorBox.IsValid)
+				{
+					Region.Bounds = ActorBox;
+					Region.bHasBounds = true;
+				}
+			}
+
+			if (LoadedRegionClassIsNamed(Object->GetClass(), TEXT("LocationVolume"))) Region.Kind = TEXT("locationVolume");
+			else if (LoadedRegionClassIsNamed(Object->GetClass(), TEXT("WorldPartitionEditorLoaderAdapter"))) Region.Kind = TEXT("userRegion");
+			else if (Actor) Region.Kind = TEXT("actor");
+			else Region.Kind = TEXT("other");
+
+			Regions.Add(MoveTemp(Region));
+		}
+		Regions.Sort([](const FMCPLoadedRegion& A, const FMCPLoadedRegion& B) { return A.Id < B.Id; });
+		return Regions;
+	}
+
+	/** Actors spawned in the editor world, by GUID, so a descriptor can be matched to its live actor. */
+	TMap<FGuid, AActor*> CollectLoadedActorsByGuid(UWorld* World)
+	{
+		TMap<FGuid, AActor*> Loaded;
+		if (!World) return Loaded;
+		for (TActorIterator<AActor> It(World); It; ++It)
+		{
+			AActor* Actor = *It;
+			if (!Actor) continue;
+			const FGuid Guid = Actor->GetActorGuid();
+			if (Guid.IsValid()) Loaded.Add(Guid, Actor);
+		}
+		return Loaded;
+	}
+
+	/**
+	 * The spatially loaded actor descriptors whose bounds meet a box: what a
+	 * loader adapter over that box holds. The adapter keeps its own reference
+	 * set and does not expose it, so the footprint is measured from the
+	 * descriptors instead. An always-loaded actor is not held by any region and
+	 * is left out.
+	 */
+	void CollectRegionFootprint(UWorldPartition* WorldPartition, const FBox& Box, TSet<FGuid>& OutGuids)
+	{
+		auto Collect = [&OutGuids](const FWorldPartitionActorDescInstance* Instance) -> bool
+		{
+			if (Instance && Instance->GetIsSpatiallyLoaded()) OutGuids.Add(Instance->GetGuid());
+			return true;
+		};
+		FWorldPartitionHelpers::ForEachIntersectingActorDescInstance(WorldPartition, Box, AActor::StaticClass(), Collect);
+	}
+
+	/** Dirty external packages among the resident actors of a footprint. */
+	void CollectDirtyFootprintPackages(
+		const TSet<FGuid>& Footprint, const TMap<FGuid, AActor*>& LoadedByGuid, TSet<FString>& OutPackages)
+	{
+		for (const FGuid& Guid : Footprint)
+		{
+			AActor* const* Found = LoadedByGuid.Find(Guid);
+			if (!Found || !*Found) continue;
+			// Only an actor with its own package can be lost on its own; one saved
+			// inside the map package is not released by a region.
+			const UPackage* Package = (*Found)->GetExternalPackage();
+			if (Package && Package->IsDirty()) OutPackages.Add(Package->GetName());
+		}
+	}
+
+	int32 CountResident(const TSet<FGuid>& Footprint, const TMap<FGuid, AActor*>& LoadedByGuid)
+	{
+		int32 Resident = 0;
+		for (const FGuid& Guid : Footprint)
+		{
+			if (LoadedByGuid.Contains(Guid)) ++Resident;
+		}
+		return Resident;
+	}
+
+	TSharedPtr<FJsonObject> LoadedRegionBoundsJson(const FBox& Box)
+	{
+		TSharedPtr<FJsonObject> BoundsObj = MakeShared<FJsonObject>();
+		TSharedPtr<FJsonObject> MinObj = MCPVec3ToJsonObject(Box.Min);
+		TSharedPtr<FJsonObject> MaxObj = MCPVec3ToJsonObject(Box.Max);
+		BoundsObj->SetObjectField(TEXT("min"), MinObj);
+		BoundsObj->SetObjectField(TEXT("max"), MaxObj);
+		return BoundsObj;
+	}
+
+	TSharedPtr<FJsonObject> LoadedRegionToJson(
+		const FMCPLoadedRegion& Region, UWorldPartition* WorldPartition, const TMap<FGuid, AActor*>& LoadedByGuid)
+	{
+		TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
+		Obj->SetStringField(TEXT("id"), Region.Id);
+		Obj->SetStringField(TEXT("kind"), Region.Kind);
+		Obj->SetStringField(TEXT("label"), Region.Label);
+		Obj->SetStringField(TEXT("class"), Region.ClassName);
+		Obj->SetBoolField(TEXT("loaded"), Region.bLoaded);
+		Obj->SetBoolField(TEXT("boundsKnown"), Region.bHasBounds);
+		if (Region.bHasBounds)
+		{
+			Obj->SetObjectField(TEXT("bounds"), LoadedRegionBoundsJson(Region.Bounds));
+			TSet<FGuid> Footprint;
+			CollectRegionFootprint(WorldPartition, Region.Bounds, Footprint);
+			TSet<FString> DirtyPackages;
+			CollectDirtyFootprintPackages(Footprint, LoadedByGuid, DirtyPackages);
+			Obj->SetNumberField(TEXT("actorCount"), Footprint.Num());
+			Obj->SetNumberField(TEXT("residentActors"), CountResident(Footprint, LoadedByGuid));
+			Obj->SetNumberField(TEXT("dirtyActorPackages"), DirtyPackages.Num());
+		}
+		return Obj;
+	}
+#endif // UE_MCP_HAS_LOADED_REGION_API
 }
 
 TSharedPtr<FJsonValue> FLevelHandlers::ListActorDescs(const TSharedPtr<FJsonObject>& Params)
 {
 	MCPReadParamsAhead(Params, {
-		TEXT("filter"), TEXT("className"), TEXT("guids"), TEXT("bounds"), TEXT("loadedOnly"), TEXT("unloadedOnly"),
-		TEXT("cursor"), TEXT("limit"),
+		TEXT("filter"), TEXT("className"), TEXT("guids"), TEXT("packages"), TEXT("bounds"), TEXT("loadedOnly"),
+		TEXT("unloadedOnly"), TEXT("cursor"), TEXT("limit"),
 	});
 
 #if UE_MCP_HAS_ACTOR_DESC_INSTANCE_API
@@ -342,9 +725,10 @@ TSharedPtr<FJsonValue> FLevelHandlers::ListActorDescs(const TSharedPtr<FJsonObje
 		return PageErr;
 	}
 
+	FMCPDescPackageFilter PackageFilter(Params);
 	TArray<FMCPActorDescSnapshot> Matches;
 	FString Error;
-	if (!GatherMatchingDescs(Params, World, Matches, Error))
+	if (!GatherMatchingDescs(Params, World, PackageFilter, Matches, Error))
 	{
 		return MCPError(Error);
 	}
@@ -380,6 +764,8 @@ TSharedPtr<FJsonValue> FLevelHandlers::ListActorDescs(const TSharedPtr<FJsonObje
 	Result->SetNumberField(TEXT("matched"), Matches.Num());
 	Result->SetNumberField(TEXT("loadedMatches"), LoadedCount);
 	Result->SetNumberField(TEXT("unloadedMatches"), Matches.Num() - LoadedCount);
+	// On every page: it describes the query, not the page.
+	if (PackageFilter.IsActive()) Result->SetArrayField(TEXT("missingPackages"), PackageFilter.MissingJson());
 	MCPPagination::EmitPage(Page, Rows, TEXT("actorDescs"), Result);
 	Result->SetNumberField(TEXT("returned"), Result->GetIntegerField(TEXT("count")));
 	return MCPResult(Result);
@@ -393,8 +779,8 @@ TSharedPtr<FJsonValue> FLevelHandlers::ListActorDescs(const TSharedPtr<FJsonObje
 TSharedPtr<FJsonValue> FLevelHandlers::LoadActorDescs(const TSharedPtr<FJsonObject>& Params)
 {
 	MCPReadParamsAhead(Params, {
-		TEXT("mode"), TEXT("filter"), TEXT("className"), TEXT("guids"), TEXT("bounds"), TEXT("loadedOnly"),
-		TEXT("unloadedOnly"), TEXT("maxActors"), TEXT("dryRun"),
+		TEXT("mode"), TEXT("filter"), TEXT("className"), TEXT("guids"), TEXT("packages"), TEXT("bounds"),
+		TEXT("loadedOnly"), TEXT("unloadedOnly"), TEXT("maxActors"), TEXT("dryRun"),
 	});
 
 #if UE_MCP_HAS_ACTOR_DESC_INSTANCE_API
@@ -419,9 +805,10 @@ TSharedPtr<FJsonValue> FLevelHandlers::LoadActorDescs(const TSharedPtr<FJsonObje
 		return MCPError(TEXT("The current editor world has no World Partition"));
 	}
 
+	FMCPDescPackageFilter PackageFilter(Params);
 	TArray<FMCPActorDescSnapshot> Matches;
 	FString Error;
-	if (!GatherMatchingDescs(Params, World, Matches, Error))
+	if (!GatherMatchingDescs(Params, World, PackageFilter, Matches, Error))
 	{
 		return MCPError(Error);
 	}
@@ -432,6 +819,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::LoadActorDescs(const TSharedPtr<FJsonObje
 		Empty->SetStringField(TEXT("mode"), Mode);
 		Empty->SetNumberField(TEXT("matched"), 0);
 		Empty->SetNumberField(TEXT("affected"), 0);
+		if (PackageFilter.IsActive()) Empty->SetArrayField(TEXT("missingPackages"), PackageFilter.MissingJson());
 		Empty->SetStringField(TEXT("note"), TEXT("No actor descriptor matched. Use list_actor_descs to see what the map contains."));
 		Empty->SetBoolField(TEXT("changed"), false);
 		Empty->SetBoolField(TEXT("unchanged"), true);
@@ -516,6 +904,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::LoadActorDescs(const TSharedPtr<FJsonObje
 	Result->SetNumberField(TEXT("affected"), bDryRun ? 0 : Changed);
 	Result->SetNumberField(TEXT("residentAfter"), ResidentAfter);
 	Result->SetArrayField(TEXT("actors"), Affected);
+	if (PackageFilter.IsActive()) Result->SetArrayField(TEXT("missingPackages"), PackageFilter.MissingJson());
 	Result->SetNumberField(TEXT("pinStateChanged"), FlippedGuids.Num());
 
 	const bool bChanged = FlippedGuids.Num() > 0;
@@ -541,5 +930,428 @@ TSharedPtr<FJsonValue> FLevelHandlers::LoadActorDescs(const TSharedPtr<FJsonObje
 	return MCPError(TEXT("load_actor_descs needs the World Partition actor descriptor instance API, which is UE 5.5 and newer. On UE 5.4 load the cell from the World Partition editor window instead."));
 #else
 	return MCPError(TEXT("World Partition streaming control is editor-only"));
+#endif
+}
+
+// ---- Editor loaded regions ---------------------------------------------------
+//
+// load_actor_descs(mode=unpin) releases pins and nothing else, so an actor that
+// is resident because the World Partition editor loaded a region (Load Region
+// from Selection, or a region the editor restored when the map was reopened) or
+// a location volume is loaded stays resident. These three actions drive the same
+// loader adapters the editor window does.
+
+#if !UE_MCP_HAS_LOADED_REGION_API
+namespace
+{
+	TSharedPtr<FJsonValue> LoadedRegionsUnavailable(const TCHAR* Action)
+	{
+#if UE_MCP_HAS_ACTOR_DESC_INSTANCE_API
+		return MCPError(FString::Printf(
+			TEXT("%s needs the World Partition editor loader interface (IWorldPartitionActorLoaderInterface), and no header for it was found in this engine build. Unload the region from the World Partition editor window instead."),
+			Action));
+#elif WITH_EDITOR
+		return MCPError(FString::Printf(
+			TEXT("%s needs the World Partition actor descriptor instance API, which is UE 5.5 and newer. On UE 5.4 use the World Partition editor window."),
+			Action));
+#else
+		return MCPError(FString::Printf(TEXT("%s is editor-only"), Action));
+#endif
+	}
+}
+#endif
+
+TSharedPtr<FJsonValue> FLevelHandlers::ListLoadedRegions(const TSharedPtr<FJsonObject>& Params)
+{
+	MCPReadParamsAhead(Params, { TEXT("includeUnloaded"), TEXT("bounds"), TEXT("cursor"), TEXT("limit") });
+
+#if UE_MCP_HAS_LOADED_REGION_API
+	REQUIRE_EDITOR_WORLD(World);
+	TSharedPtr<FJsonValue> Err;
+	if (!RequirePartitionedWorld(World, Err)) return Err;
+	UWorldPartition* WorldPartition = World->GetWorldPartition();
+	if (!WorldPartition)
+	{
+		return MCPError(TEXT("The current editor world has no World Partition"));
+	}
+
+	const bool bIncludeUnloaded = OptionalBool(Params, TEXT("includeUnloaded"), false);
+	FBox Filter(ForceInit);
+	const bool bHasFilter = TryReadBounds(Params, Filter);
+
+	MCPPagination::FPageRequest Page;
+	if (auto PageErr = MCPPagination::ReadPageRequest(
+			Params,
+			FString::Printf(TEXT("list_loaded_regions|includeUnloaded=%d|bounds=%s"),
+				bIncludeUnloaded ? 1 : 0, bHasFilter ? *Filter.ToString() : TEXT("")),
+			/*DefaultLimit*/ 200, /*MaxLimit*/ 2000, Page))
+	{
+		return PageErr;
+	}
+
+	const TMap<FGuid, AActor*> LoadedByGuid = CollectLoadedActorsByGuid(World);
+	const TArray<FMCPLoadedRegion> Regions = GatherLoadedRegions(World);
+
+	int32 LoadedCount = 0;
+	int32 Matched = 0;
+	TArray<MCPPagination::FPageRow> Rows;
+	for (const FMCPLoadedRegion& Region : Regions)
+	{
+		if (Region.bLoaded) ++LoadedCount;
+		if (!Region.bLoaded && !bIncludeUnloaded) continue;
+		if (bHasFilter && (!Region.bHasBounds || !Region.Bounds.Intersect(Filter))) continue;
+		++Matched;
+		// The object path is the anchor: it is what unload_loaded_regions accepts
+		// and it does not change while the editor session lives.
+		Rows.Add({ Region.Id, MakeShared<FJsonValueObject>(LoadedRegionToJson(Region, WorldPartition, LoadedByGuid)) });
+	}
+	// GatherLoadedRegions sorts by id; the sort is repeated here because the
+	// cursor contract is the row order, not an accident of the producer.
+	Rows.Sort([](const MCPPagination::FPageRow& A, const MCPPagination::FPageRow& B)
+		{ return A.Id < B.Id; });
+
+	auto Result = MCPSuccess();
+	Result->SetNumberField(TEXT("matched"), Matched);
+	Result->SetNumberField(TEXT("loadedRegions"), LoadedCount);
+	Result->SetNumberField(TEXT("totalSources"), Regions.Num());
+	MCPPagination::EmitPage(Page, Rows, TEXT("regions"), Result);
+	Result->SetNumberField(TEXT("returned"), Result->GetIntegerField(TEXT("count")));
+	return MCPResult(Result);
+#else
+	return LoadedRegionsUnavailable(TEXT("list_loaded_regions"));
+#endif
+}
+
+TSharedPtr<FJsonValue> FLevelHandlers::UnloadLoadedRegions(const TSharedPtr<FJsonObject>& Params)
+{
+	MCPReadParamsAhead(Params, {
+		TEXT("ids"), TEXT("bounds"), TEXT("maxRegions"), TEXT("force"), TEXT("dryRun"),
+	});
+
+#if UE_MCP_HAS_LOADED_REGION_API
+	REQUIRE_EDITOR_WORLD(World);
+	TSharedPtr<FJsonValue> Err;
+	if (!RequirePartitionedWorld(World, Err)) return Err;
+	UWorldPartition* WorldPartition = World->GetWorldPartition();
+	if (!WorldPartition)
+	{
+		return MCPError(TEXT("The current editor world has no World Partition"));
+	}
+
+	TSet<FString> WantedIds;
+	const TArray<TSharedPtr<FJsonValue>>* IdValues = nullptr;
+	if (TryGetArrayParam(Params, TEXT("ids"), IdValues) && IdValues)
+	{
+		for (const TSharedPtr<FJsonValue>& Value : *IdValues)
+		{
+			FString Id;
+			if (Value.IsValid() && Value->TryGetString(Id) && !Id.IsEmpty()) WantedIds.Add(Id);
+		}
+	}
+	FBox Selection(ForceInit);
+	const bool bHasBounds = TryReadBounds(Params, Selection);
+
+	// A bare call must not unload everything the editor has loaded.
+	if (WantedIds.Num() == 0 && !bHasBounds)
+	{
+		return MCPError(TEXT("Name the regions to unload: 'ids' from list_loaded_regions, 'bounds' as {min:{x,y,z}, max:{x,y,z}}, or both (a region must then match both). Nothing was unloaded."));
+	}
+
+	const bool bDryRun = OptionalBool(Params, TEXT("dryRun"), false);
+	const bool bForce = OptionalBool(Params, TEXT("force"), false);
+	const int32 MaxRegions = FMath::Max(1, OptionalInt(Params, TEXT("maxRegions"), DefaultMaxLoadedRegions));
+
+	const TArray<FMCPLoadedRegion> All = GatherLoadedRegions(World);
+	TSet<FString> KnownIds;
+	for (const FMCPLoadedRegion& Region : All) KnownIds.Add(Region.Id);
+
+	TArray<FString> MissingIds;
+	for (const FString& Id : WantedIds)
+	{
+		if (!KnownIds.Contains(Id)) MissingIds.Add(Id);
+	}
+	MissingIds.Sort();
+
+	TArray<const FMCPLoadedRegion*> Matched;
+	TArray<const FMCPLoadedRegion*> ToUnload;
+	for (const FMCPLoadedRegion& Region : All)
+	{
+		if (WantedIds.Num() > 0 && !WantedIds.Contains(Region.Id)) continue;
+		if (bHasBounds && (!Region.bHasBounds || !Region.Bounds.Intersect(Selection))) continue;
+		Matched.Add(&Region);
+		if (Region.bLoaded) ToUnload.Add(&Region);
+	}
+
+	if (ToUnload.Num() > MaxRegions)
+	{
+		return MCPError(FString::Printf(
+			TEXT("%d loaded regions matched, above the %d limit for a single unload_loaded_regions. Narrow 'ids'/'bounds' or raise 'maxRegions' deliberately. Nothing was unloaded."),
+			ToUnload.Num(), MaxRegions));
+	}
+
+	// What the selected regions hold, measured before anything changes.
+	const TMap<FGuid, AActor*> LoadedBefore = CollectLoadedActorsByGuid(World);
+	TSet<FGuid> Footprint;
+	for (const FMCPLoadedRegion* Region : Matched)
+	{
+		if (Region->bHasBounds) CollectRegionFootprint(WorldPartition, Region->Bounds, Footprint);
+	}
+
+	// Preflight: unloading destroys the live actor, so an actor with unsaved
+	// changes would lose them. Refuse the whole request before touching any region.
+	TSet<FString> DirtyPackages;
+	TArray<FString> DirtyRegionIds;
+	TArray<FString> UnverifiableRegionIds;
+	for (const FMCPLoadedRegion* Region : ToUnload)
+	{
+		if (!Region->bHasBounds)
+		{
+			UnverifiableRegionIds.Add(Region->Id);
+			continue;
+		}
+		TSet<FGuid> RegionFootprint;
+		CollectRegionFootprint(WorldPartition, Region->Bounds, RegionFootprint);
+		TSet<FString> RegionDirty;
+		CollectDirtyFootprintPackages(RegionFootprint, LoadedBefore, RegionDirty);
+		if (RegionDirty.Num() > 0) DirtyRegionIds.Add(Region->Id);
+		DirtyPackages.Append(RegionDirty);
+	}
+	if (!bForce && (DirtyPackages.Num() > 0 || UnverifiableRegionIds.Num() > 0))
+	{
+		TArray<FString> DirtyList = DirtyPackages.Array();
+		DirtyList.Sort();
+		TSharedPtr<FJsonObject> Refusal = MCPErrorObject(FString::Printf(
+			TEXT("%d region(s) hold actors with unsaved changes (%d package(s)) or have no bounds to check them against; unloading would discard those edits. Save them with level(save), or pass force=true to unload anyway. Nothing was unloaded."),
+			DirtyRegionIds.Num() + UnverifiableRegionIds.Num(), DirtyList.Num()));
+		Refusal->SetArrayField(TEXT("dirtyPackages"), MCPStringListToJson(DirtyList));
+		Refusal->SetArrayField(TEXT("dirtyRegionIds"), MCPStringListToJson(DirtyRegionIds));
+		Refusal->SetArrayField(TEXT("unverifiableRegionIds"), MCPStringListToJson(UnverifiableRegionIds));
+		return MCPResult(Refusal);
+	}
+
+	TArray<TSharedPtr<FJsonValue>> RegionEntries;
+	TArray<TSharedPtr<FJsonValue>> AlreadyUnloaded;
+	int32 UnloadedCount = 0;
+	int32 ReleasedCount = 0;
+	for (const FMCPLoadedRegion* Region : Matched)
+	{
+		TSharedPtr<FJsonObject> Entry = MakeShared<FJsonObject>();
+		Entry->SetStringField(TEXT("id"), Region->Id);
+		Entry->SetStringField(TEXT("kind"), Region->Kind);
+		Entry->SetStringField(TEXT("label"), Region->Label);
+		Entry->SetBoolField(TEXT("loadedBefore"), Region->bLoaded);
+		if (Region->bHasBounds) Entry->SetObjectField(TEXT("bounds"), LoadedRegionBoundsJson(Region->Bounds));
+
+		if (!Region->bLoaded)
+		{
+			AlreadyUnloaded.Add(MakeShared<FJsonValueObject>(Entry));
+			continue;
+		}
+
+		bool bUnloaded = false;
+		bool bReleased = false;
+		if (!bDryRun)
+		{
+			UObject* Object = Region->Object.Get();
+			IWorldPartitionActorLoaderInterface* Loader = Object ? Cast<IWorldPartitionActorLoaderInterface>(Object) : nullptr;
+			auto* Adapter = Loader ? Loader->GetLoaderAdapter() : nullptr;
+			if (Adapter)
+			{
+				// Unload() drops the adapter's actor references, which is what lets the
+				// World Partition destroy the actors nothing else holds.
+				Adapter->Unload();
+				bUnloaded = !Adapter->IsLoaded();
+				// The editor also hands a user-created region back to the World Partition,
+				// so the box does not linger as an unloaded region. A location volume is
+				// an actor in the level and stays where it is.
+				if (bUnloaded && Region->Kind == TEXT("userRegion"))
+				{
+					bReleased = ReleaseUserRegion(WorldPartition, Object);
+				}
+			}
+		}
+		if (bUnloaded) ++UnloadedCount;
+		if (bReleased) ++ReleasedCount;
+		Entry->SetBoolField(TEXT("unloaded"), bUnloaded);
+		Entry->SetBoolField(TEXT("released"), bReleased);
+		RegionEntries.Add(MakeShared<FJsonValueObject>(Entry));
+	}
+
+	// Read the world back, so the caller sees what actually left memory rather
+	// than trusting the request.
+	const TMap<FGuid, AActor*> LoadedAfter = CollectLoadedActorsByGuid(World);
+	const int32 ResidentBefore = CountResident(Footprint, LoadedBefore);
+	const int32 ResidentAfter = CountResident(Footprint, LoadedAfter);
+	int32 PinnedAfter = 0;
+	for (const FGuid& Guid : Footprint)
+	{
+		if (LoadedAfter.Contains(Guid) && WorldPartition->IsActorPinned(Guid)) ++PinnedAfter;
+	}
+
+	auto Result = MCPSuccess();
+	Result->SetBoolField(TEXT("dryRun"), bDryRun);
+	Result->SetBoolField(TEXT("forced"), bForce);
+	Result->SetNumberField(TEXT("matchedRegions"), Matched.Num());
+	Result->SetNumberField(TEXT("loadedRegionsMatched"), ToUnload.Num());
+	Result->SetNumberField(TEXT("unloadedRegions"), UnloadedCount);
+	Result->SetNumberField(TEXT("releasedRegions"), ReleasedCount);
+	Result->SetArrayField(TEXT("regions"), RegionEntries);
+	Result->SetArrayField(TEXT("alreadyUnloaded"), AlreadyUnloaded);
+	Result->SetArrayField(TEXT("missingIds"), MCPStringListToJson(MissingIds));
+	Result->SetNumberField(TEXT("footprintActors"), Footprint.Num());
+	Result->SetNumberField(TEXT("residentBefore"), ResidentBefore);
+	Result->SetNumberField(TEXT("residentAfter"), ResidentAfter);
+	Result->SetNumberField(TEXT("residentPinnedAfter"), PinnedAfter);
+	Result->SetNumberField(TEXT("worldActorsBefore"), LoadedBefore.Num());
+	Result->SetNumberField(TEXT("worldActorsAfter"), LoadedAfter.Num());
+	if (DirtyPackages.Num() > 0)
+	{
+		TArray<FString> DirtyList = DirtyPackages.Array();
+		DirtyList.Sort();
+		Result->SetArrayField(TEXT("discardedDirtyPackages"), MCPStringListToJson(DirtyList));
+	}
+	if (ResidentAfter > 0 && !bDryRun)
+	{
+		Result->SetStringField(TEXT("residentNote"),
+			TEXT("Some actors inside the unloaded regions are still resident: another loader holds them (a pin, which residentPinnedAfter counts, or another region or location volume that overlaps), or the editor's streaming does. List them with list_loaded_regions."));
+	}
+	if (MissingIds.Num() > 0)
+	{
+		Result->SetStringField(TEXT("missingIdsNote"),
+			TEXT("These ids named no region in the edited world. Either they were already released (a user region disappears once unloaded) or the id is stale; list_loaded_regions returns the current ones."));
+	}
+
+	const bool bChanged = UnloadedCount > 0;
+	if (bChanged) MCPSetUpdated(Result); else Result->SetBoolField(TEXT("updated"), false);
+	Result->SetBoolField(TEXT("changed"), bChanged);
+	Result->SetBoolField(TEXT("unchanged"), !bChanged);
+	MCPSetNoRollback(Result, bChanged
+		? TEXT("An unloaded user region is released, so its id is gone, and level(load_region) would create a new region over the same bounds with a different id rather than restore the old one; a location volume is loaded again from the World Partition editor. The bounds in 'regions' are what load_region needs, but the call is a new action, not an inverse of this one.")
+		: TEXT("Nothing was unloaded (a dry run, or every matched region was already unloaded), so there is nothing to undo."));
+	return MCPResult(Result);
+#else
+	return LoadedRegionsUnavailable(TEXT("unload_loaded_regions"));
+#endif
+}
+
+TSharedPtr<FJsonValue> FLevelHandlers::LoadRegion(const TSharedPtr<FJsonObject>& Params)
+{
+	MCPReadParamsAhead(Params, { TEXT("bounds"), TEXT("label"), TEXT("maxActors"), TEXT("dryRun") });
+
+#if UE_MCP_HAS_LOADED_REGION_API
+	REQUIRE_EDITOR_WORLD(World);
+	TSharedPtr<FJsonValue> Err;
+	if (!RequirePartitionedWorld(World, Err)) return Err;
+	UWorldPartition* WorldPartition = World->GetWorldPartition();
+	if (!WorldPartition)
+	{
+		return MCPError(TEXT("The current editor world has no World Partition"));
+	}
+
+	FBox Box(ForceInit);
+	if (!TryReadBounds(Params, Box))
+	{
+		return MCPError(TEXT("'bounds' is required, as {min:{x,y,z}, max:{x,y,z}}"));
+	}
+	// The editor's own default name for a region made from a selection.
+	const FString Label = OptionalString(Params, TEXT("label"), TEXT("Loaded Region"));
+	const int32 MaxActors = FMath::Max(1, OptionalInt(Params, TEXT("maxActors"), DefaultMaxRegionActors));
+	const bool bDryRun = OptionalBool(Params, TEXT("dryRun"), false);
+
+	TSet<FGuid> Footprint;
+	CollectRegionFootprint(WorldPartition, Box, Footprint);
+	if (Footprint.Num() > MaxActors)
+	{
+		return MCPError(FString::Printf(
+			TEXT("%d actors fall inside those bounds, above the %d limit for a single load_region. Narrow 'bounds' or raise 'maxActors' deliberately."),
+			Footprint.Num(), MaxActors));
+	}
+
+	const TArray<FMCPLoadedRegion> Before = GatherLoadedRegions(World);
+	TSet<FString> IdsBefore;
+	for (const FMCPLoadedRegion& Region : Before)
+	{
+		IdsBefore.Add(Region.Id);
+		// A loaded user region over the same box is the state asked for.
+		if (Region.bLoaded && Region.Kind == TEXT("userRegion") && Region.bHasBounds
+			&& Region.Bounds.Min.Equals(Box.Min, 1.0) && Region.Bounds.Max.Equals(Box.Max, 1.0))
+		{
+			auto Existing = MCPSuccess();
+			MCPSetExisted(Existing);
+			Existing->SetStringField(TEXT("id"), Region.Id);
+			Existing->SetStringField(TEXT("label"), Region.Label);
+			Existing->SetBoolField(TEXT("loaded"), true);
+			Existing->SetObjectField(TEXT("bounds"), LoadedRegionBoundsJson(Region.Bounds));
+			Existing->SetNumberField(TEXT("actorCount"), Footprint.Num());
+			Existing->SetNumberField(TEXT("residentAfter"), CountResident(Footprint, CollectLoadedActorsByGuid(World)));
+			Existing->SetBoolField(TEXT("changed"), false);
+			Existing->SetBoolField(TEXT("unchanged"), true);
+			MCPSetNoRollback(Existing, TEXT("A loaded region over these bounds already existed, so nothing was created and there is nothing to undo."));
+			return MCPResult(Existing);
+		}
+	}
+
+	if (bDryRun)
+	{
+		auto Preview = MCPSuccess();
+		Preview->SetBoolField(TEXT("dryRun"), true);
+		Preview->SetBoolField(TEXT("wouldCreate"), true);
+		Preview->SetStringField(TEXT("label"), Label);
+		Preview->SetObjectField(TEXT("bounds"), LoadedRegionBoundsJson(Box));
+		Preview->SetNumberField(TEXT("actorCount"), Footprint.Num());
+		Preview->SetNumberField(TEXT("residentBefore"), CountResident(Footprint, CollectLoadedActorsByGuid(World)));
+		Preview->SetBoolField(TEXT("changed"), false);
+		Preview->SetBoolField(TEXT("unchanged"), true);
+		MCPSetNoRollback(Preview, TEXT("Dry run: no region was created, so there is nothing to undo."));
+		return MCPResult(Preview);
+	}
+
+	// Load Region from Selection: a shape adapter over the box, marked as the user's, then loaded
+	// (SWorldPartitionEditorGrid2D::CreateRegionFromSelection).
+	UWorldPartitionEditorLoaderAdapter* EditorAdapter = WorldPartition->CreateEditorLoaderAdapter<FLoaderAdapterShape>(World, Box, Label);
+	auto* Adapter = EditorAdapter ? EditorAdapter->GetLoaderAdapter() : nullptr;
+	if (!Adapter)
+	{
+		return MCPError(TEXT("The World Partition did not create a loader adapter for the region, so nothing was loaded."));
+	}
+	Adapter->SetUserCreated(true);
+	Adapter->Load();
+	const FMCPLoadedRegion* Created = nullptr;
+	const TArray<FMCPLoadedRegion> After = GatherLoadedRegions(World);
+	for (const FMCPLoadedRegion& Region : After)
+	{
+		if (Region.Object.Get() == EditorAdapter)
+		{
+			Created = &Region;
+			break;
+		}
+	}
+	if (!Created)
+	{
+		return MCPError(TEXT("The new region was created and loaded but is not listed among the World Partition's registered loader adapters."));
+	}
+
+	const FString CreatedId = Created->Id;
+	const bool bLoaded = Adapter->IsLoaded();
+	auto Result = MCPSuccess();
+	MCPSetCreated(Result);
+	Result->SetStringField(TEXT("id"), CreatedId);
+	Result->SetStringField(TEXT("kind"), Created->Kind);
+	Result->SetStringField(TEXT("label"), Label);
+	Result->SetBoolField(TEXT("loaded"), bLoaded);
+	Result->SetObjectField(TEXT("bounds"), LoadedRegionBoundsJson(Box));
+	Result->SetNumberField(TEXT("actorCount"), Footprint.Num());
+	Result->SetNumberField(TEXT("residentAfter"), CountResident(Footprint, CollectLoadedActorsByGuid(World)));
+	Result->SetBoolField(TEXT("changed"), true);
+	Result->SetBoolField(TEXT("unchanged"), false);
+
+	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+	TArray<TSharedPtr<FJsonValue>> RollbackIds;
+	RollbackIds.Add(MakeShared<FJsonValueString>(CreatedId));
+	Payload->SetArrayField(TEXT("ids"), RollbackIds);
+	MCPSetRollback(Result, TEXT("unload_loaded_regions"), Payload);
+	return MCPResult(Result);
+#else
+	return LoadedRegionsUnavailable(TEXT("load_region"));
 #endif
 }
