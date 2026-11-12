@@ -15,6 +15,17 @@ struct FSession
 // Credentials remain in the editor's native Fab session, never in MCP results.
 bool ReadSession(FSession& Out, FString& Error);
 FString AccountFromToken(const FString& Token);
+
+// Whether a URL Fab handed back may be fetched: https, or a loopback http
+// server while a test session is installed.
+bool IsFetchableUrl(const FString& Url);
+
+#if WITH_DEV_AUTOMATION_TESTS
+// Test seam: ReadSession answers with this session instead of the Fab
+// plugin's, so a test can run the account flow against a local server. A
+// null pointer restores the real session.
+void SetSessionForTesting(const FSession* Session);
+#endif
 FString LibraryUrl(const FSession& Session, int32 BatchSize, const FString& Cursor);
 
 struct FLibraryState

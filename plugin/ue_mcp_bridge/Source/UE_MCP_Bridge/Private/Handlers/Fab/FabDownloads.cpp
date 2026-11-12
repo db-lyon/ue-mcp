@@ -10,6 +10,7 @@
 #include "HAL/FileManager.h"
 #include "HAL/CriticalSection.h"
 #include "HAL/PlatformProcess.h"
+#include "HAL/PlatformTime.h"
 #include "HAL/PlatformFileManager.h"
 #include "HttpModule.h"
 #include "Interfaces/IHttpRequest.h"
@@ -23,6 +24,7 @@
 #include "Modules/ModuleManager.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
+#include "Runtime/Launch/Resources/Version.h"
 
 #if WITH_FAB_PLUGIN
 #include "Utilities/FabAssetsCache.h"
@@ -70,6 +72,85 @@ namespace DownloadPrivate
 			if (Attribute && Attribute->Type == EJson::Object && Attribute->AsObject()->TryGetStringField(TEXT("ListingIdentifier"), Value) && Value == Id) return true;
 		}
 		return false;
+	}
+
+	// The listing UUID download takes, read the same two ways IsListing matches
+	// it: the listing URL's last segment, or the ListingIdentifier attribute.
+	FString ListingIdOf(const TSharedPtr<FJsonObject>& Item)
+	{
+		FGuid Guid;
+		const TArray<TSharedPtr<FJsonValue>>* Attributes = nullptr;
+		if (Item->TryGetArrayField(TEXT("customAttributes"), Attributes)) for (const auto& Attribute : *Attributes)
+		{
+			FString Value;
+			if (Attribute && Attribute->Type == EJson::Object && Attribute->AsObject()->TryGetStringField(TEXT("ListingIdentifier"), Value)
+				&& FGuid::ParseExact(Value, EGuidFormats::DigitsWithHyphens, Guid)) return Value;
+		}
+		FString Url;
+		if (Item->TryGetStringField(TEXT("url"), Url))
+		{
+			Url.RemoveFromEnd(TEXT("/"));
+			const FString Last = FPaths::GetCleanFilename(Url);
+			if (FGuid::ParseExact(Last, EGuidFormats::DigitsWithHyphens, Guid)) return Last;
+		}
+		return FString();
+	}
+
+	// This editor's engine as Fab names it in projectVersions, e.g. UE_5.8.
+	FString RunningEngine() { return FString::Printf(TEXT("UE_%d.%d"), ENGINE_MAJOR_VERSION, ENGINE_MINOR_VERSION); }
+
+	// This editor's platform as Fab names it in projectVersions.targetPlatforms.
+	FString RunningPlatform()
+	{
+#if PLATFORM_WINDOWS
+		return TEXT("Windows");
+#elif PLATFORM_MAC
+		return TEXT("Mac");
+#else
+		return TEXT("Linux");
+#endif
+	}
+
+	// Every engine/platform pair a listing offers, for an error that names the choices.
+	FString DescribeVersions(const TSharedPtr<FJsonObject>& Item)
+	{
+		TArray<FString> Pairs;
+		const TArray<TSharedPtr<FJsonValue>>* Versions = nullptr;
+		if (Item->TryGetArrayField(TEXT("projectVersions"), Versions)) for (const auto& Version : *Versions)
+		{
+			if (!Version || Version->Type != EJson::Object) continue;
+			const TArray<TSharedPtr<FJsonValue>>* Engines = nullptr;
+			const TArray<TSharedPtr<FJsonValue>>* Platforms = nullptr;
+			if (!Version->AsObject()->TryGetArrayField(TEXT("engineVersions"), Engines) || !Version->AsObject()->TryGetArrayField(TEXT("targetPlatforms"), Platforms)) continue;
+			for (const auto& E : *Engines) for (const auto& P : *Platforms)
+			{
+				FString EngineText, PlatformText;
+				if (E && P && E->TryGetString(EngineText) && P->TryGetString(PlatformText)) Pairs.AddUnique(EngineText + TEXT("/") + PlatformText);
+			}
+		}
+		return Pairs.IsEmpty() ? FString(TEXT("none")) : FString::Join(Pairs, TEXT(", "));
+	}
+
+	// A signed-in session whose owned library this editor has synced, or the
+	// refusal that says which of the two steps is missing.
+	bool RequireSyncedSession(FSession& Out, TSharedPtr<FJsonValue>& OutError)
+	{
+		FString Reason;
+		if (!ReadSession(Out, Reason))
+		{
+			OutError = MCPErrorWithCode(TEXT("FAB_NOT_SIGNED_IN"), FString::Printf(
+				TEXT("%s Sign in to the account that owns the content, then call fab(sync_library)."), *Reason));
+			return false;
+		}
+		// A failed or running resync keeps the previous snapshot, which still answers.
+		if (Out.AccountId != Library().AccountId || (Library().State != TEXT("complete") && Library().Items.IsEmpty()))
+		{
+			OutError = MCPErrorWithCode(TEXT("FAB_LIBRARY_NOT_SYNCED"), FString::Printf(
+				TEXT("The owned library of the signed-in account is not synced in this editor (librarySync.state %s). Call fab(sync_library) and poll fab(status) until librarySync.state is complete."),
+				*Library().State));
+			return false;
+		}
+		return true;
 	}
 
 	bool NoSymlinkParents(const FString& Path)
@@ -257,6 +338,9 @@ namespace DownloadPrivate
 			// BPS requires a bound completion delegate. Job state is observed by
 			// Refresh so callers and worker completion cannot race its lifetime.
 			Installer = Bps.CreateBuildInstaller(MoveTemp(Config), FBuildPatchInstallerDelegate::CreateLambda([](const IBuildInstallerRef&) {}));
+			// Only a signed CDN needs the handler. BPS answers its chunk-URI
+			// requests from its own ticker, so a loopback test server, which a
+			// test pumps without engine frames, takes the plain cloud path.
 			if (ManifestUrl.StartsWith(TEXT("https://"))) Installer->RegisterMessageHandler(Cdn.Get());
 			State = TEXT("downloading");
 			if (!Installer->StartInstallation()) Fail(TEXT("Native BuildPatch installer could not start."));
@@ -264,7 +348,7 @@ namespace DownloadPrivate
 
 		void FetchManifest(const FString& Url)
 		{
-			if (!Url.StartsWith(TEXT("https://"))) { Fail(TEXT("Fab returned a non-HTTPS manifest URL.")); return; }
+			if (!IsFetchableUrl(Url)) { Fail(TEXT("Fab returned a non-HTTPS manifest URL.")); return; }
 			Request = FHttpModule::Get().CreateRequest(); Request->SetVerb(TEXT("GET")); Request->SetURL(Url); Request->SetTimeout(60.0f);
 			Request->SetDelegateThreadPolicy(EHttpRequestDelegateThreadPolicy::CompleteOnGameThread);
 			const TWeakPtr<FJob> Weak = AsShared();
@@ -363,7 +447,12 @@ bool ResolveVersion(const TArray<TSharedPtr<FJsonValue>>& Items, const FString& 
 		for (const auto& Version : *Versions) if (Version && Version->Type == EJson::Object
 			&& DownloadPrivate::ContainsString(Version->AsObject(), TEXT("engineVersions"), Engine)
 			&& DownloadPrivate::ContainsString(Version->AsObject(), TEXT("targetPlatforms"), Platform)) Matches.Add(Version->AsObject());
-		if (Matches.Num() != 1) { Error = TEXT("No unique owned artifact matches engineVersion/platform. Inspect list_owned projectVersions and choose an exact supported version."); return false; }
+		if (Matches.Num() != 1)
+		{
+			Error = FString::Printf(TEXT("%s owned artifact matches %s/%s. This listing offers: %s. Pass engineVersion and platform from that list."),
+				Matches.IsEmpty() ? TEXT("No") : TEXT("More than one"), *Engine, *Platform, *DownloadPrivate::DescribeVersions(Item));
+			return false;
+		}
 		Out.ListingId = ListingId; Out.EngineVersion = Engine; Out.Platform = Platform;
 		if (!Item->TryGetStringField(TEXT("title"), Out.Title) || !Item->TryGetStringField(TEXT("assetId"), Out.AssetId)
 			|| !Item->TryGetStringField(TEXT("assetNamespace"), Out.Namespace) || !Matches[0]->TryGetStringField(TEXT("artifactId"), Out.ArtifactId) || Out.ArtifactId.IsEmpty())
@@ -415,29 +504,51 @@ FString ChunkUrl(const FString& ManifestUrl, const FString& Subdirectory, const 
 
 TSharedPtr<FJsonValue> FFabHandlers::ListOwned(const TSharedPtr<FJsonObject>& Params)
 {
-	MCPFab::FSession Session; FString Error;
-	if (!MCPFab::ReadSession(Session, Error) || Session.AccountId != MCPFab::Library().AccountId) return MCPError(TEXT("Sync the current native Fab account first."));
 	const FString Query = OptionalString(Params, TEXT("query"));
 	const int32 Offset = OptionalInt(Params, TEXT("offset"), 0), Limit = OptionalInt(Params, TEXT("limit"), 50);
 	if (Offset < 0 || Limit < 1 || Limit > 200) return MCPError(TEXT("offset must be nonnegative and limit between 1 and 200."));
+	if (!IsFabLoaded()) return UnavailableError();
+	MCPFab::FSession Session; TSharedPtr<FJsonValue> Refusal;
+	if (!MCPFab::DownloadPrivate::RequireSyncedSession(Session, Refusal)) return Refusal;
 	TArray<TSharedPtr<FJsonValue>> Matches;
 	for (const auto& Item : MCPFab::Library().Items) if (Query.IsEmpty() || Item->AsObject()->GetStringField(TEXT("title")).Contains(Query)) Matches.Add(Item);
+	// Each row is the library item as Fab sent it, plus listingId (what download
+	// takes) and whether this editor's engine and platform are among its versions.
+	const FString Engine = MCPFab::DownloadPrivate::RunningEngine(), Platform = MCPFab::DownloadPrivate::RunningPlatform();
 	TArray<TSharedPtr<FJsonValue>> Page;
-	for (int32 I = Offset; I < Matches.Num() && Page.Num() < Limit; ++I) Page.Add(Matches[I]);
+	for (int32 I = Offset; I < Matches.Num() && Page.Num() < Limit; ++I)
+	{
+		const TSharedPtr<FJsonObject> Source = Matches[I]->AsObject();
+		TSharedPtr<FJsonObject> Row = MakeShared<FJsonObject>(*Source);
+		Row->SetStringField(TEXT("listingId"), MCPFab::DownloadPrivate::ListingIdOf(Source));
+		bool bCompatible = false;
+		const TArray<TSharedPtr<FJsonValue>>* Versions = nullptr;
+		if (Source->TryGetArrayField(TEXT("projectVersions"), Versions)) for (const auto& Version : *Versions)
+		{
+			if (Version && Version->Type == EJson::Object && MCPFab::DownloadPrivate::ContainsString(Version->AsObject(), TEXT("engineVersions"), Engine)
+				&& MCPFab::DownloadPrivate::ContainsString(Version->AsObject(), TEXT("targetPlatforms"), Platform)) bCompatible = true;
+		}
+		Row->SetBoolField(TEXT("availableForThisEditor"), bCompatible);
+		Page.Add(MakeShared<FJsonValueObject>(Row));
+	}
 	auto Result = MCPSuccess(); Result->SetArrayField(TEXT("items"), Page); Result->SetNumberField(TEXT("total"), Matches.Num());
-	Result->SetNumberField(TEXT("offset"), Offset); Result->SetObjectField(TEXT("librarySync"), MCPFab::Library().Describe()); return MCPResult(Result);
+	Result->SetNumberField(TEXT("offset"), Offset); Result->SetStringField(TEXT("engineVersion"), Engine); Result->SetStringField(TEXT("platform"), Platform);
+	Result->SetObjectField(TEXT("librarySync"), MCPFab::Library().Describe()); return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FFabHandlers::Download(const TSharedPtr<FJsonObject>& Params)
 {
-	FString Listing, Engine, Platform;
+	FString Listing;
 	if (auto Err = RequireString(Params, TEXT("listingId"), Listing)) return Err;
-	if (auto Err = RequireString(Params, TEXT("engineVersion"), Engine)) return Err;
-	if (auto Err = RequireString(Params, TEXT("platform"), Platform)) return Err;
+	// Default to this editor's engine and platform: the pack install_pack copies
+	// in has to be one this editor can load.
+	const FString Engine = OptionalString(Params, TEXT("engineVersion"), MCPFab::DownloadPrivate::RunningEngine());
+	const FString Platform = OptionalString(Params, TEXT("platform"), MCPFab::DownloadPrivate::RunningPlatform());
 	const bool bVerify = OptionalBool(Params, TEXT("verifyOnly"), false);
 	FString Output = OptionalString(Params, TEXT("outputDirectory"));
-	MCPFab::FSession Session; FString Error;
-	if (!MCPFab::ReadSession(Session, Error) || Session.AccountId != MCPFab::Library().AccountId) return MCPError(TEXT("Sync the current native Fab account before downloading owned content."));
+	if (!IsFabLoaded()) return UnavailableError();
+	MCPFab::FSession Session; TSharedPtr<FJsonValue> Refusal; FString Error;
+	if (!MCPFab::DownloadPrivate::RequireSyncedSession(Session, Refusal)) return Refusal;
 	auto Job = MakeShared<MCPFab::DownloadPrivate::FJob>();
 	if (!MCPFab::ResolveVersion(MCPFab::Library().Items, Listing, Engine, Platform, Job->Asset, Error)) return MCPError(Error);
 	if (Output.IsEmpty())
@@ -615,7 +726,11 @@ void ShutdownDownloads()
 		{
 			Pair.Value->Installer->UnregisterMessageHandler(Pair.Value->Cdn.Get());
 			Pair.Value->Installer->CancelInstall();
-			while (!Pair.Value->Installer->IsComplete()) FPlatformProcess::Sleep(0.01f);
+			// Bounded: a chunk-URI request still queued for BPS's message pump
+			// is answered only from the core ticker, which does not run while
+			// the module shuts down, and an unbounded wait hung the editor's exit.
+			const double GiveUpAt = FPlatformTime::Seconds() + 5.0;
+			while (!Pair.Value->Installer->IsComplete() && FPlatformTime::Seconds() < GiveUpAt) FPlatformProcess::Sleep(0.01f);
 		}
 	}
 	// Only this category's jobs are cancelled; native Fab downloads remain owned by Fab.
@@ -631,7 +746,11 @@ FString StartFixtureDownload(const IBuildManifestRef& Manifest, const FString& C
 #endif
 #else
 } // namespace MCPFab
-TSharedPtr<FJsonValue> FFabHandlers::ListOwned(const TSharedPtr<FJsonObject>&) { return MCPError(TEXT("Owned content downloads require UE 5.8 or newer.")); }
+TSharedPtr<FJsonValue> FFabHandlers::ListOwned(const TSharedPtr<FJsonObject>&)
+{
+	return MCPUnsupportedEngineError(TEXT("Owned Fab content (list_owned, download and the job actions)"), TEXT("5.8"),
+		TEXT("They read the Fab Content Browser table and drive BuildPatchServices through APIs that first exist in 5.8"));
+}
 TSharedPtr<FJsonValue> FFabHandlers::Download(const TSharedPtr<FJsonObject>& Params) { return ListOwned(Params); }
 TSharedPtr<FJsonValue> FFabHandlers::DownloadStatus(const TSharedPtr<FJsonObject>& Params) { return ListOwned(Params); }
 TSharedPtr<FJsonValue> FFabHandlers::PauseDownload(const TSharedPtr<FJsonObject>& Params) { return ListOwned(Params); }

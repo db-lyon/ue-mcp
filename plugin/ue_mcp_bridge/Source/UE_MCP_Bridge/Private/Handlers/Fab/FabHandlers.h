@@ -22,6 +22,11 @@ public:
 	static void SetUrlLauncherForTesting(FUrlLauncher Launcher);
 
 private:
+	/** Whether the Fab editor module is loaded in this editor. */
+	static bool IsFabLoaded();
+	/** The PLUGIN_NOT_AVAILABLE refusal: what is missing and how to get it. */
+	static TSharedPtr<FJsonValue> UnavailableError();
+
 	static TSharedPtr<FJsonValue> Status(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> Login(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> Logout(const TSharedPtr<FJsonObject>& Params);

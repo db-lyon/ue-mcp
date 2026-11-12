@@ -76,6 +76,10 @@ static TSharedPtr<FJsonValue> FabUnavailableError()
 	return MakeShared<FJsonValueObject>(Obj);
 }
 
+// The same check and refusal for the handlers defined in FabDownloads.cpp.
+bool FFabHandlers::IsFabLoaded() { return IsFabModuleLoaded(); }
+TSharedPtr<FJsonValue> FFabHandlers::UnavailableError() { return FabUnavailableError(); }
+
 // The refusal of an action that needs the native Fab API when this build of
 // the bridge was compiled without it, although the module is loaded now. Only
 // defined where it is called, so a build with Fab has no unused function.
@@ -177,6 +181,20 @@ TSharedPtr<FJsonValue> FFabHandlers::Status(const TSharedPtr<FJsonObject>& Param
 TSharedPtr<FJsonValue> FFabHandlers::Login(const TSharedPtr<FJsonObject>& Params)
 {
 	if (!IsFabModuleLoaded()) return FabUnavailableError();
+	// Already signed in: say so instead of putting a sign-in window in front of
+	// the user for an account they are already using.
+	{
+		MCPFab::FSession Existing; FString NoSession;
+		if (MCPFab::ReadSession(Existing, NoSession))
+		{
+			auto Already = MCPSuccess();
+			Already->SetBoolField(TEXT("authenticated"), true);
+			Already->SetBoolField(TEXT("unchanged"), true);
+			Already->SetStringField(TEXT("note"), TEXT("A Fab session is already active, so no sign-in window was opened. Call fab(sync_library) next."));
+			MCPSetNoRollback(Already, TEXT("Nothing changed: the existing session was left as it was."));
+			return MCPResult(Already);
+		}
+	}
 	// Fab.Login opens the EOS account-portal login flow. Asynchronous: this
 	// returns once the flow is triggered, not once the user has authenticated.
 	if (!RunFabConsoleCommand(TEXT("Fab.Login")))
@@ -226,6 +244,11 @@ TSharedPtr<FJsonValue> FFabHandlers::SyncLibrary(const TSharedPtr<FJsonObject>& 
 	if (!IsFabModuleLoaded()) return FabUnavailableError();
 	const int32 BatchSize = OptionalInt(Params, TEXT("batchSize"), 100);
 	FString Error;
+	{
+		MCPFab::FSession Session;
+		if (!MCPFab::ReadSession(Session, Error))
+			return MCPErrorWithCode(TEXT("FAB_NOT_SIGNED_IN"), Error + TEXT(" Then call fab(sync_library) again."));
+	}
 	if (!MCPFab::StartLibrarySync(BatchSize, Error)) return MCPError(Error);
 	auto Res = MCPSuccess();
 	Res->SetObjectField(TEXT("librarySync"), MCPFab::Library().Describe());
@@ -472,8 +495,8 @@ void FFabHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	});
 	Registry.RegisterHandler(TEXT("fab_download"), &Download, {
 		MCPParam::Required(TEXT("listingId"), EType::String, TEXT("Owned Fab listing UUID")),
-		MCPParam::Required(TEXT("engineVersion"), EType::String, TEXT("Exact supported UE version, e.g. 5.8")),
-		MCPParam::Required(TEXT("platform"), EType::String, TEXT("Exact target platform from projectVersions, e.g. Mac or Windows")),
+		MCPParam::Optional(TEXT("engineVersion"), EType::String, TEXT("UE version from the listing's projectVersions, e.g. 5.8 (default this editor's)")),
+		MCPParam::Optional(TEXT("platform"), EType::String, TEXT("Target platform from projectVersions, e.g. Windows or Mac (default this editor's)")),
 		MCPParam::Optional(TEXT("outputDirectory"), EType::String, TEXT("Absolute pack output directory (default native Fab cache/UE-MCP/listing/artifact)")),
 		MCPParam::Optional(TEXT("verifyOnly"), EType::Boolean, TEXT("SHA verify existing files without repairing or downloading (default false)")),
 	});

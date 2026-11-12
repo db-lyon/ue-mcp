@@ -77,8 +77,33 @@ FString AccountFromToken(const FString& Token)
 	return {};
 }
 
+#if WITH_DEV_AUTOMATION_TESTS
+namespace LibraryPrivate
+{
+	TOptional<FSession> TestSession;
+}
+
+void SetSessionForTesting(const FSession* Session)
+{
+	if (Session) LibraryPrivate::TestSession = *Session;
+	else LibraryPrivate::TestSession.Reset();
+}
+#endif
+
+bool IsFetchableUrl(const FString& Url)
+{
+	if (Url.StartsWith(TEXT("https://"))) return true;
+#if WITH_DEV_AUTOMATION_TESTS
+	if (LibraryPrivate::TestSession.IsSet() && Url.StartsWith(TEXT("http://127.0.0.1:"))) return true;
+#endif
+	return false;
+}
+
 bool ReadSession(FSession& Out, FString& Error)
 {
+#if WITH_DEV_AUTOMATION_TESTS
+	if (LibraryPrivate::TestSession.IsSet()) { Out = LibraryPrivate::TestSession.GetValue(); return true; }
+#endif
 	UClass* SettingsClass = FindObject<UClass>(nullptr, TEXT("/Script/Fab.FabSettings"));
 	UClass* BrowserClass = FindObject<UClass>(nullptr, TEXT("/Script/Fab.FabBrowserApi"));
 	if (!SettingsClass || !BrowserClass) { Error = TEXT("Fab plugin is not loaded."); return false; }
