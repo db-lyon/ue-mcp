@@ -220,6 +220,24 @@ bool FPIEScriptDraftTypingTest::RunTest(const FString& /*Parameters*/)
 	Bare.Instruction = TEXT("walk somewhere");
 	TestTrue(TEXT("an auto step without expect checks nothing"), HasIssue(Check({ Bare, Manual() }), INDEX_NONE, TEXT("steps")));
 
+	// triggered names an Input Action, checked as act's are, and resolve_in_pie does not skip it.
+	FScriptValidationContext WithInput = MakeContext();
+	WithInput.ResolveInputAction = [](const FString& Path) -> FScriptLookup
+	{
+		return Path == TEXT("/Game/Input/IA_Interact.IA_Interact")
+			? Found(EScriptValueKind::Boolean, TEXT("InputAction"))
+			: Missing(TEXT("no Input Action loads from that path"), { TEXT("/Game/Input/IA_Interact.IA_Interact") });
+	};
+	TestEqual(TEXT("a triggered step naming a real action passes"),
+		Check({ Auto(EScriptExpectOp::Triggered, TEXT("/Game/Input/IA_Interact.IA_Interact")) }, false, &WithInput).Num(), 0);
+	FScriptStepDef Typo = Auto(EScriptExpectOp::Triggered, TEXT("/Game/Input/IA_Interactt.IA_Interactt"));
+	Typo.bResolveInPIE = true;
+	Issues = Check({ Typo }, false, &WithInput);
+	TestTrue(TEXT("an unknown action is reported on expect.value"), HasIssue(Issues, 0, TEXT("expect.value")));
+	TestTrue(TEXT("with the closest actions"), Issues.Num() > 0 && Issues[0].Candidates.Contains(TEXT("/Game/Input/IA_Interact.IA_Interact")));
+	TestFalse(TEXT("as a warning, not a refusal"), Issues.Num() > 0 && Issues[0].bBlocksSave);
+	TestFalse(TEXT("a triggered step counts as an auto check"), HasIssue(Issues, INDEX_NONE, TEXT("steps")));
+
 	// Steps that failed to parse are skipped, and the auto-step rule waits for them.
 	TArray<FScriptStepIssue> Skipped;
 	ValidateScriptSteps({ Auto(EScriptExpectOp::Gt, TEXT("Nope"), true, 1.0), Manual() }, false, MakeContext(), Skipped, { 0 });
