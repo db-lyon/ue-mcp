@@ -26,7 +26,7 @@
  */
 import type { EditorSession } from "../sessions/session.js";
 import type { BridgeCallOptions, IBridge } from "../bridge/bridge.js";
-import type { DialogPromptFn, ElicitFn, ElicitPrimitiveSchema, ElicitResult } from "../core/types.js";
+import type { DialogBlock, DialogPromptFn, ElicitFn, ElicitPrimitiveSchema, ElicitResult } from "../core/types.js";
 import type { DialogMode } from "../config/user-state.js";
 import { readEnv } from "../core/env.js";
 import { elicitationNeedsRelay, elicitationUnrenderedNote } from "../dispatch/client-quirks.js";
@@ -56,6 +56,12 @@ export interface BlockingDialog {
    * offer was all or nothing.
    */
   items?: DialogItem[];
+  /**
+   * The body as paragraphs and tables in reading order, without the title or
+   * the button labels (#1891). Only list_dialogs reports it; the status file
+   * and the plugin's refusal carry `message` alone.
+   */
+  blocks?: DialogBlock[];
 }
 
 /**
@@ -156,6 +162,7 @@ export function oneLine(text: string, limit = 220): string {
  * recognise through untouched.
  */
 export function renderDialog(dialog: BlockingDialog): string {
+  if (dialog.blocks && dialog.blocks.length > 0) return renderBlocks(dialog.blocks);
   const raw = dialog.message.split("\n").map((l) => l.trim()).filter((l) => l !== "");
   const buttons = new Set(dialog.buttons.map((b) => b.trim()));
   // The button labels are repeated at the end of the flattened text.
@@ -190,6 +197,45 @@ export function renderDialog(dialog: BlockingDialog): string {
     out.push(line(cols.map((w) => "-".repeat(w))));
     for (const r of rows) out.push(line(r));
   }
+  return out.join("\n");
+}
+
+/**
+ * The same layout as renderDialog's, from the structure the plugin read off the
+ * dialog rather than from a guess at the flattened lines: paragraphs, then each
+ * table under its own column headings, whatever its columns are.
+ */
+function renderBlocks(blocks: DialogBlock[]): string {
+  const out: string[] = [];
+  let prose: string[] = [];
+  const flush = () => {
+    if (prose.length > 0) {
+      if (out.length > 0) out.push("");
+      out.push(prose.join("\n"));
+    }
+    prose = [];
+  };
+  for (const block of blocks) {
+    if (block.type === "paragraph") {
+      prose.push(block.text);
+      continue;
+    }
+    flush();
+    const width = Math.max(block.columns.length, ...block.rows.map((r) => r.length));
+    if (width === 0) continue;
+    const at = (cells: string[], c: number) => cells[c] ?? "";
+    const cols = Array.from({ length: width }, (_, c) =>
+      Math.max(at(block.columns, c).length, ...block.rows.map((r) => at(r, c).length)));
+    const line = (cells: string[]) =>
+      "  " + cols.map((w, c) => at(cells, c).padEnd(w)).join("  ").trimEnd();
+    if (out.length > 0) out.push("");
+    if (block.columns.some((c) => c !== "")) {
+      out.push(line(block.columns));
+      out.push(line(cols.map((w) => "-".repeat(w))));
+    }
+    for (const r of block.rows) out.push(line(r));
+  }
+  flush();
   return out.join("\n");
 }
 
@@ -268,7 +314,15 @@ function asDialog(v: unknown): BlockingDialog | null {
     ...(Array.isArray(r.items) && r.items.length > 0
       ? { items: (r.items as DialogItem[]) }
       : {}),
+    ...(Array.isArray(r.blocks) && r.blocks.length > 0
+      ? { blocks: (r.blocks as DialogBlock[]) }
+      : {}),
   };
+}
+
+/** The rows and blocks one read reported, for comparing two reads of the same dialog. */
+function contentOf(dialog: BlockingDialog): string {
+  return JSON.stringify([dialog.items ?? null, dialog.blocks ?? null]);
 }
 
 /**
@@ -289,18 +343,22 @@ interface AskOutcome {
  * these on its event stream). Observation only: nothing here decides anything.
  *
  *   opened     a dialog is blocking the editor
+ *   updated    the same dialog, read again with content the last event lacked
+ *              (rows, blocks) or with a tick changed: the status file that
+ *              usually reports a dialog first carries its message alone
  *   answered   a button was pressed: by the person through a prompt, or by an
  *              action call (respond_to_dialog)
  *   delegated  the person handed this dialog to the agent
  *   closed     the editor is no longer blocked by it
  */
 export interface DialogEvent {
-  type: "opened" | "answered" | "delegated" | "closed";
+  type: "opened" | "updated" | "answered" | "delegated" | "closed";
   editor: string;
   title: string;
   message: string;
   buttons: string[];
   items?: DialogItem[];
+  blocks?: DialogBlock[];
   /** opened: the mode that applies to it. */
   mode?: DialogMode;
   /** answered: the button pressed, and the route it came by. */
@@ -515,6 +573,7 @@ export class DialogGuard {
       message: dialog.message,
       buttons: dialog.buttons,
       ...(dialog.items ? { items: dialog.items } : {}),
+      ...(dialog.blocks ? { blocks: dialog.blocks } : {}),
       ...extra,
     });
   }
@@ -528,8 +587,23 @@ export class DialogGuard {
   note(dialog: BlockingDialog): void {
     const fresh = !this.blocking || eventIdentity(this.blocking) !== eventIdentity(dialog);
     if (fresh && this.blocking) this.emit("closed", this.blocking);
-    this.blocking = dialog;
-    if (fresh) this.emit("opened", dialog, { mode: DialogGuard.effectiveMode(this.deps.mode(), this.canElicit) });
+    if (fresh) {
+      this.blocking = dialog;
+      this.emit("opened", dialog, { mode: DialogGuard.effectiveMode(this.deps.mode(), this.canElicit) });
+      return;
+    }
+    // The same dialog read again. The status file and the refusal carry no
+    // rows or blocks, so a read from them keeps what list_dialogs reported
+    // rather than erasing it every second; a read that adds or changes them
+    // is reported, because the first event usually came from the status file.
+    const previous = this.blocking!;
+    const merged: BlockingDialog = {
+      ...dialog,
+      ...(!dialog.items && previous.items ? { items: previous.items } : {}),
+      ...(!dialog.blocks && previous.blocks ? { blocks: previous.blocks } : {}),
+    };
+    this.blocking = merged;
+    if (contentOf(merged) !== contentOf(previous)) this.emit("updated", merged);
   }
 
   /**
@@ -922,6 +996,7 @@ export class DialogGuard {
             message: dialog.message,
             buttons: dialog.buttons,
             ...(dialog.items ? { items: dialog.items } : {}),
+            ...(dialog.blocks ? { blocks: dialog.blocks } : {}),
             subject,
             minHumanMs,
           },
