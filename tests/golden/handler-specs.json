@@ -1,5 +1,5 @@
 {
-  "handlerCount": 1384,
+  "handlerCount": 1392,
   "handlers": {
     "actors_in_box": {
       "category": "level",
@@ -17581,10 +17581,67 @@
       "category": "fab",
       "params": []
     },
+    "fab_cancel_download": {
+      "category": "fab",
+      "params": [
+        {
+          "name": "jobId",
+          "type": "string",
+          "required": true,
+          "description": "Job to cancel; verified files and native staging remain resumable"
+        }
+      ]
+    },
     "fab_clear_cache": {
       "category": "fab",
       "params": [],
       "contractExempt": "Takes no parameters and deletes the Fab download cache when called"
+    },
+    "fab_download": {
+      "category": "fab",
+      "params": [
+        {
+          "name": "listingId",
+          "type": "string",
+          "required": true,
+          "description": "Owned Fab listing UUID"
+        },
+        {
+          "name": "engineVersion",
+          "type": "string",
+          "required": false,
+          "description": "UE version from the listing's projectVersions, e.g. 5.8 (default this editor's)"
+        },
+        {
+          "name": "platform",
+          "type": "string",
+          "required": false,
+          "description": "Target platform from projectVersions, e.g. Windows or Mac (default this editor's)"
+        },
+        {
+          "name": "outputDirectory",
+          "type": "string",
+          "required": false,
+          "description": "Absolute pack output directory (default native Fab cache/UE-MCP/listing/artifact)"
+        },
+        {
+          "name": "verifyOnly",
+          "type": "boolean",
+          "required": false,
+          "description": "SHA verify existing files without repairing or downloading (default false)"
+        }
+      ]
+    },
+    "fab_download_status": {
+      "category": "fab",
+      "params": [
+        {
+          "name": "jobId",
+          "type": "string",
+          "required": false,
+          "description": "Job identifier; omit to list all editor-session jobs"
+        }
+      ]
     },
     "fab_import_file": {
       "category": "fab",
@@ -17609,9 +17666,43 @@
         }
       ]
     },
+    "fab_install_pack": {
+      "category": "fab",
+      "params": [
+        {
+          "name": "jobId",
+          "type": "string",
+          "required": true,
+          "description": "Completed, SHA-verified asset-pack download to copy into project Content, preserving paths"
+        }
+      ]
+    },
     "fab_list_cached": {
       "category": "fab",
       "params": []
+    },
+    "fab_list_owned": {
+      "category": "fab",
+      "params": [
+        {
+          "name": "query",
+          "type": "string",
+          "required": false,
+          "description": "Filter owned item titles, no catalog requests"
+        },
+        {
+          "name": "offset",
+          "type": "integer",
+          "required": false,
+          "description": "Result offset (default 0)"
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "description": "Result limit, 1-200 (default 50)"
+        }
+      ]
     },
     "fab_login": {
       "category": "fab",
@@ -17658,6 +17749,39 @@
         }
       ],
       "contractExempt": "Opens the fab.com search page in the default browser when called"
+    },
+    "fab_pause_download": {
+      "category": "fab",
+      "params": [
+        {
+          "name": "jobId",
+          "type": "string",
+          "required": true,
+          "description": "Active download job identifier"
+        }
+      ]
+    },
+    "fab_remove_installation": {
+      "category": "fab",
+      "params": [
+        {
+          "name": "jobId",
+          "type": "string",
+          "required": true,
+          "description": "Remove only unchanged, unloaded files that this job created in project Content"
+        }
+      ]
+    },
+    "fab_resume_download": {
+      "category": "fab",
+      "params": [
+        {
+          "name": "jobId",
+          "type": "string",
+          "required": true,
+          "description": "Paused, failed or cancelled job identifier; obtains a fresh distribution signature"
+        }
+      ]
     },
     "fab_status": {
       "category": "fab",

@@ -41,14 +41,14 @@ export const handlerSpecs: HandlerSpecs = {
       {
         "name": "engineVersion",
         "type": "string",
-        "required": true,
-        "description": "Exact supported UE version, e.g. 5.8"
+        "required": false,
+        "description": "UE version from the listing's projectVersions, e.g. 5.8 (default this editor's)"
       },
       {
         "name": "platform",
         "type": "string",
-        "required": true,
-        "description": "Exact target platform from projectVersions, e.g. Mac or Windows"
+        "required": false,
+        "description": "Target platform from projectVersions, e.g. Windows or Mac (default this editor's)"
       },
       {
         "name": "outputDirectory",
@@ -238,7 +238,7 @@ export const paramsClauses: Readonly<Record<string, string>> = {
   fab_cache_info: "Params: none",
   fab_cancel_download: "Params: jobId",
   fab_clear_cache: "Params: none",
-  fab_download: "Params: listingId, engineVersion, platform, outputDirectory?, verifyOnly?",
+  fab_download: "Params: listingId, engineVersion?, platform?, outputDirectory?, verifyOnly?",
   fab_download_status: "Params: jobId?",
   fab_import_file: "Params: source (or sourceFile), destination (or destPath)",
   fab_install_pack: "Params: jobId",
@@ -260,7 +260,7 @@ export const schema: Record<string, z.ZodType> = {
   batchSize: z.number().int().optional().describe("Library items per request, 1-1000 (default 100)"),
   destination: z.string().optional().describe("Destination content path, e.g. /Game/Fab/Imported"),
   destPath: z.string().optional().describe("Alias for destination"),
-  engineVersion: z.string().optional().describe("Exact supported UE version, e.g. 5.8"),
+  engineVersion: z.string().optional().describe("UE version from the listing's projectVersions, e.g. 5.8 (default this editor's)"),
   free: z.boolean().optional().describe("Only free listings (default false)"),
   jobId: z.string().optional().describe("Job to cancel; verified files and native staging remain resumable (fab_cancel_download). Job identifier; omit to list all editor-session jobs (fab_download_status). Completed, SHA-verified asset-pack download to copy into project Content, preserving paths (fab_install_pack). Active download job identifier (fab_pause_download). Remove only unchanged, unloaded files that this job created in project Content (fab_remove_installation). Paused, failed or cancelled job identifier; obtains a fresh distribution signature (fab_resume_download)"),
   limit: z.number().int().optional().describe("Result limit, 1-200 (default 50)"),
@@ -269,7 +269,7 @@ export const schema: Record<string, z.ZodType> = {
   offset: z.number().int().optional().describe("Result offset (default 0)"),
   open: z.boolean().optional().describe("Open the page in the default browser (default true); false only returns the URL"),
   outputDirectory: z.string().optional().describe("Absolute pack output directory (default native Fab cache/UE-MCP/listing/artifact)"),
-  platform: z.string().optional().describe("Exact target platform from projectVersions, e.g. Mac or Windows"),
+  platform: z.string().optional().describe("Target platform from projectVersions, e.g. Windows or Mac (default this editor's)"),
   query: z.string().optional().describe("Filter owned item titles, no catalog requests (fab_list_owned). Search text (fab_open_search)"),
   source: z.string().optional().describe("Absolute path of the source file on disk"),
   sourceFile: z.string().optional().describe("Alias for source"),
