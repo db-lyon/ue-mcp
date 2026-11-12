@@ -7,6 +7,7 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import * as crypto from "node:crypto";
 import * as fs from "node:fs";
+import * as net from "node:net";
 import * as os from "node:os";
 import * as path from "node:path";
 import { startDaemon, type Daemon } from "../../src/daemon/daemon.js";
@@ -331,6 +332,42 @@ describe("UI bundles", () => {
     const jar = `ue_mcp_token=${"a".repeat(64)}; ue_mcp_token_1=${"b".repeat(64)}; ${cookie}`;
     expect((await fetch(`${base}/v1/health`, { headers: { cookie: jar } })).status).toBe(200);
     expect((await fetch(`${base}/v1/health`, { headers: { cookie: `ue_mcp_token_1=${"b".repeat(64)}` } })).status).toBe(401);
+  });
+
+  it("clears the logins of daemons no longer listening, so restarts cannot grow the jar past the header limit", async () => {
+    // A port held open stands in for another project's daemon that is still running.
+    const live = net.createServer().listen(0, "127.0.0.1");
+    await new Promise<void>((r) => live.once("listening", () => r()));
+    const livePort = (live.address() as net.AddressInfo).port;
+    // A port opened and closed again stands in for a daemon that has exited.
+    const gone = net.createServer().listen(0, "127.0.0.1");
+    await new Promise<void>((r) => gone.once("listening", () => r()));
+    const deadPort = (gone.address() as net.AddressInfo).port;
+    await new Promise<void>((r) => gone.close(() => r()));
+    try {
+      const own = new URL(base).port;
+      // Past Node's default 16 KiB header limit: the login must still be reached.
+      const filler = Array.from({ length: 250 }, (_, i) => `other_${i}=${"c".repeat(64)}`).join("; ");
+      const jar = [
+        `ue_mcp_token=${"a".repeat(64)}`,
+        `ue_mcp_token_${deadPort}=${"b".repeat(64)}`,
+        `ue_mcp_token_${livePort}=${"d".repeat(64)}`,
+        `ue_mcp_token_${own}=${"e".repeat(64)}`,
+        filler,
+      ].join("; ");
+      expect(jar.length).toBeGreaterThan(16 * 1024);
+      const login = await fetch(`${base}/ui/?token=${daemon.token}`, { redirect: "manual", headers: { cookie: jar } });
+      expect(login.status).toBe(302);
+      const set = login.headers.getSetCookie();
+      expect(set[0]).toMatch(new RegExp(`^ue_mcp_token_${own}=${daemon.token};`));
+      const cleared = set.slice(1).map((c) => c.split("=")[0]).sort();
+      expect(cleared).toEqual(["ue_mcp_token", `ue_mcp_token_${deadPort}`].sort());
+      for (const c of set.slice(1)) expect(c).toMatch(/Max-Age=0/);
+      // The jar no longer blocks the API either.
+      expect((await fetch(`${base}/v1/health`, { headers: { cookie: `${jar}; ${set[0].split(";")[0]}` } })).status).toBe(200);
+    } finally {
+      await new Promise<void>((r) => live.close(() => r()));
+    }
   });
 
   it("stops serving an installed bundle that is altered on disk", async () => {

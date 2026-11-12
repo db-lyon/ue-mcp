@@ -22,6 +22,7 @@
  */
 import * as fs from "node:fs";
 import * as http from "node:http";
+import * as net from "node:net";
 import * as path from "node:path";
 import { WebSocketServer } from "ws";
 import { info, warn, error, stampLogs } from "../core/log.js";
@@ -144,6 +145,21 @@ function streamFile(file: string, res: http.ServerResponse): void {
       res.destroy();
     })
     .pipe(res);
+}
+
+/** Whether anything accepts a connection on this loopback port; a closed port refuses at once. */
+function listening(port: number, timeoutMs = 300): Promise<boolean> {
+  if (!Number.isInteger(port) || port < 1 || port > 65535) return Promise.resolve(false);
+  return new Promise((resolve) => {
+    const socket = net.connect({ host: "127.0.0.1", port });
+    const done = (up: boolean): void => {
+      socket.destroy();
+      resolve(up);
+    };
+    socket.setTimeout(timeoutMs, () => done(true));
+    socket.once("connect", () => done(true));
+    socket.once("error", () => done(false));
+  });
 }
 
 export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
@@ -390,6 +406,23 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
   const cookieName = (): string => `ue_mcp_token_${port}`;
   const cookieTokens = (req: http.IncomingMessage): string[] =>
     [...(req.headers.cookie ?? "").matchAll(/(?:^|;\s*)ue_mcp_token(?:_\d+)?=([0-9a-f]+)/g)].map((m) => m[1]);
+  // Every daemon listens on a fresh port, so a browser that outlives daemon
+  // restarts (the Studio window, the editor dock) collects one login per
+  // restart. Nothing expires them, and once the jar passed Node's 16 KiB
+  // header limit every request came back 431. Logging in clears the logins of
+  // daemons no longer listening; one still running keeps its own.
+  const staleCookies = async (req: http.IncomingMessage): Promise<string[]> => {
+    const names = new Set(
+      [...(req.headers.cookie ?? "").matchAll(/(?:^|;\s*)(ue_mcp_token(?:_(\d+))?)=/g)]
+        .filter((m) => m[2] !== String(port))
+        .map((m) => m[1]),
+    );
+    const dead = await Promise.all([...names].map(async (name) => {
+      const p = Number(name.slice("ue_mcp_token_".length));
+      return name === "ue_mcp_token" || !(await listening(p)) ? name : null;
+    }));
+    return dead.filter((n): n is string => n !== null);
+  };
   const authorized = (req: http.IncomingMessage): boolean => {
     if (!hostIsAllowed(req) || !originAllowed(req)) return false;
     const header = req.headers.authorization;
@@ -625,14 +658,21 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
   };
 
   let closing: Promise<void> | null = null;
-  const httpServer = http.createServer((req, res) => {
+  // The header limit is raised so a browser already holding a jar past the
+  // default 16 KiB still reaches the login below, which clears it.
+  const httpServer = http.createServer({ maxHeaderSize: 64 * 1024 }, (req, res) => {
     const first = new URL(req.url ?? "/", "http://127.0.0.1");
     if (req.method === "GET" && (first.pathname === "/ui" || first.pathname === "/ui/") && first.searchParams.get("token") === token
       && hostIsAllowed(req)) {
-      res.writeHead(302, {
-        "set-cookie": `${cookieName()}=${token}; HttpOnly; SameSite=Strict; Path=/`,
-        location: "/ui/",
-      }).end();
+      void staleCookies(req).then((stale) => {
+        res.writeHead(302, {
+          "set-cookie": [
+            `${cookieName()}=${token}; HttpOnly; SameSite=Strict; Path=/`,
+            ...stale.map((name) => `${name}=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0`),
+          ],
+          location: "/ui/",
+        }).end();
+      });
       return;
     }
     if (!authorized(req)) {
