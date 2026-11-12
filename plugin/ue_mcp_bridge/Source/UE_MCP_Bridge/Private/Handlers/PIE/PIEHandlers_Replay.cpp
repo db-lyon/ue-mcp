@@ -5,7 +5,9 @@
 #include "HandlerUtils.h"
 #include "Handlers/PIE/PIEInputReplayer.h"
 #include "Handlers/PIE/PIESequenceFormat.h"
+#include "Handlers/PIE/PIEWorldResolver.h"
 #include "Editor.h"
+#include "HandlerPlaySession.h"
 #include "Editor/EditorEngine.h"
 #include "Misc/Paths.h"
 #include "HAL/FileManager.h"
@@ -45,6 +47,14 @@ namespace
 		{
 			R->SetStringField(TEXT("last_error"), S.LastError);
 		}
+		if (!S.WaitingFor.IsEmpty())
+		{
+			R->SetStringField(TEXT("waiting_for"), S.WaitingFor);
+		}
+		if (S.State == EReplayerState::WaitingForPawn)
+		{
+			R->SetArrayField(TEXT("pie_worlds"), PIEWorldResolver::DescribePlayWorlds());
+		}
 		if (S.bHasLastResult)
 		{
 			TSharedPtr<FJsonObject> Last = MakeShared<FJsonObject>();
@@ -57,6 +67,7 @@ namespace
 			if (!S.LastFrameDir.IsEmpty()) Last->SetStringField(TEXT("frame_dir"), S.LastFrameDir);
 			if (S.LastFrameCount > 0) Last->SetNumberField(TEXT("frame_count"), S.LastFrameCount);
 			if (!S.LastContactSheetPath.IsEmpty()) Last->SetStringField(TEXT("contact_sheet_path"), S.LastContactSheetPath);
+			if (!S.LastReplayCSVPath.IsEmpty()) Last->SetStringField(TEXT("replay_csv_path"), S.LastReplayCSVPath);
 			R->SetObjectField(TEXT("last_result"), Last);
 		}
 	}
@@ -77,6 +88,37 @@ namespace
 		Cfg.SourceRecordingId = OptionalString(Params, TEXT("recording_id"));
 		Cfg.SequencePath = OptionalString(Params, TEXT("sequence_path"));
 		Cfg.SourceDir = OptionalString(Params, TEXT("recording_dir"));
+		if (!Cfg.SequencePath.IsEmpty())
+		{
+			FString Resolved, PathError;
+			if (!MCPResolvePathInside(Cfg.SequencePath, MCPDefaultWritableRoots(), Resolved, PathError))
+			{
+				OutErr = MCPError(PathError);
+				return false;
+			}
+			Cfg.SequencePath = Resolved;
+		}
+		if (!Cfg.SourceDir.IsEmpty())
+		{
+			FString Resolved, PathError;
+			if (!MCPResolvePathInside(Cfg.SourceDir, MCPDefaultWritableRoots(), Resolved, PathError))
+			{
+				OutErr = MCPError(PathError);
+				return false;
+			}
+			Cfg.SourceDir = Resolved;
+		}
+		// Drift, frames and the contact sheet are written into the recording folder.
+		if (!Cfg.SourceRecordingId.IsEmpty() && Cfg.SourceDir.IsEmpty())
+		{
+			const FString Root = DefaultRecordingsRoot();
+			FString Unused, PathError;
+			if (!MCPResolvePathInside(Root / Cfg.SourceRecordingId, { Root }, Unused, PathError))
+			{
+				OutErr = MCPError(PathError);
+				return false;
+			}
+		}
 
 		// Convenience: `recording_dir` alone (no id, no explicit sequence) names
 		// the recording folder directly - "replay this ./path/to/recording".
@@ -167,6 +209,64 @@ namespace
 			}
 		}
 
+		const TSharedPtr<FJsonObject>* Gate = nullptr;
+		if (TryGetObjectParam(Params, TEXT("start_when"), Gate) && Gate && Gate->IsValid())
+		{
+			FString GateErr;
+			if (!ParseReplayStartGate(*Gate, Cfg.StartGate, GateErr))
+			{
+				OutErr = MCPError(GateErr);
+				return false;
+			}
+		}
+
+		return true;
+	}
+}
+
+namespace MCPPIE
+{
+	bool ParseReplayStartGate(const TSharedPtr<FJsonObject>& Obj, FReplayStartGate& Out, FString& OutError)
+	{
+		static const TCHAR* const Known[] = {
+			TEXT("pawn_at_rest"), TEXT("max_speed_cms"), TEXT("hold_ms"), TEXT("log_contains"), TEXT("timeout_ms") };
+		for (const auto& KV : Obj->Values)
+		{
+			const FString Key(KV.Key);
+			bool bKnown = false;
+			for (const TCHAR* K : Known) { bKnown |= Key == K; }
+			if (!bKnown)
+			{
+				OutError = FString::Printf(TEXT("start_when.%s is not a field (pawn_at_rest, max_speed_cms, hold_ms, log_contains, timeout_ms)"), *Key);
+				return false;
+			}
+		}
+		FReplayStartGate G;
+		G.bEnabled = true;
+		Obj->TryGetBoolField(TEXT("pawn_at_rest"), G.bPawnAtRest);
+		double D = 0.0;
+		if (Obj->TryGetNumberField(TEXT("max_speed_cms"), D))
+		{
+			if (D < 0.0) { OutError = TEXT("start_when.max_speed_cms must be 0 or more"); return false; }
+			G.MaxSpeedCms = static_cast<float>(D);
+		}
+		if (Obj->TryGetNumberField(TEXT("hold_ms"), D))
+		{
+			if (D < 0.0) { OutError = TEXT("start_when.hold_ms must be 0 or more"); return false; }
+			G.HoldMs = FMath::RoundToInt(D);
+		}
+		if (Obj->TryGetNumberField(TEXT("timeout_ms"), D))
+		{
+			if (D < 1.0) { OutError = TEXT("start_when.timeout_ms must be 1 or more"); return false; }
+			G.TimeoutMs = FMath::RoundToInt(D);
+		}
+		Obj->TryGetStringField(TEXT("log_contains"), G.LogContains);
+		if (!G.bPawnAtRest && G.LogContains.IsEmpty())
+		{
+			OutError = TEXT("start_when needs pawn_at_rest or log_contains to wait on");
+			return false;
+		}
+		Out = G;
 		return true;
 	}
 }
@@ -230,11 +330,11 @@ TSharedPtr<FJsonValue> FPIEHandlers::PieReplayRun(const TSharedPtr<FJsonObject>&
 
 	// Kick off PIE. RequestPlaySession queues the session for the next editor
 	// tick; the armed replayer attaches from its BeginPIE delegate.
-	FRequestPlaySessionParams PlayParams;
-	GEditor->RequestPlaySession(PlayParams);
+	const MCPPlaySession::FLaunch Launch = MCPPlaySession::Request(/*bNeedsEditorWorld=*/true);
 
 	const FReplayerStatus S = FPIEInputReplayer::Get().GetStatus();
 	auto Result = MCPSuccess();
+	MCPPlaySession::WriteLaunch(Launch, Result);
 	Result->SetBoolField(TEXT("started"), true);
 	Result->SetBoolField(TEXT("auto_stop_pie"), Cfg.bAutoStopPIE);
 	Result->SetStringField(TEXT("message"), Msg);
@@ -315,6 +415,8 @@ TSharedPtr<FJsonValue> FPIEHandlers::PieReplayStatus(const TSharedPtr<FJsonObjec
 TSharedPtr<FJsonValue> FPIEHandlers::PieReplayAnalyze(const TSharedPtr<FJsonObject>& Params)
 {
 	MCP_CHECK_GAME_THREAD();
+	// limit and offset page the result; read before the recording lookup can fail (#1057).
+	MCPReadParamsAhead(Params, { TEXT("limit"), TEXT("offset") });
 	const FString Id = OptionalString(Params, TEXT("recording_id"));
 	const FString RecDir = OptionalString(Params, TEXT("recording_dir"));
 
@@ -341,9 +443,31 @@ TSharedPtr<FJsonValue> FPIEHandlers::PieReplayAnalyze(const TSharedPtr<FJsonObje
 		return MCPError(FString::Printf(TEXT("Could not read drift report at %s: %s"), *DriftPath, *Err));
 	}
 
-	// The serialized report already carries the summary block.
+	// The serialized report already carries the summary block. The per-frame
+	// list can run to thousands of entries, so it is paged (#1657).
+	const int32 Limit = FMath::Max(0, OptionalInt(Params, TEXT("limit"), 50));
+	const int32 Offset = FMath::Max(0, OptionalInt(Params, TEXT("offset"), 0));
 	TSharedRef<FJsonObject> Report = DriftToJson(D);
 	Report->SetStringField(TEXT("drift_report_path"), DriftPath);
+	{
+		const TArray<TSharedPtr<FJsonValue>>* All = nullptr;
+		if (Report->TryGetArrayField(TEXT("frames_over_threshold"), All) && All)
+		{
+			const int32 Total = All->Num();
+			TArray<TSharedPtr<FJsonValue>> Page;
+			for (int32 i = Offset; i < Total && Page.Num() < Limit; ++i)
+			{
+				Page.Add((*All)[i]);
+			}
+			Report->SetNumberField(TEXT("frames_over_threshold_total"), Total);
+			Report->SetNumberField(TEXT("frames_over_threshold_offset"), Offset);
+			if (Offset + Page.Num() < Total)
+			{
+				Report->SetNumberField(TEXT("frames_over_threshold_next_offset"), Offset + Page.Num());
+			}
+			Report->SetArrayField(TEXT("frames_over_threshold"), Page);
+		}
+	}
 
 	// Images bracketing the divergence frame, if frames were captured.
 	if (D.Summary.First.bFound)

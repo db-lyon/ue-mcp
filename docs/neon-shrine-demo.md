@@ -25,7 +25,7 @@ demo(action="cleanup")
 
 Cleanup switches the editor to `/Game/MCP_Home` (creating it on first use), destroys every actor whose label starts with `Demo_` in that level, deletes the demo's materials, Niagara system, PCG graph, level sequence and `DemoLevel`, then deletes `/Game/Demo` when it is empty. It has no inverse; rebuilding means running steps 1 to 19 again.
 
-`demo(action="go_home")` switches the editor to `/Game/MCP_Home` on its own, for use before anything that would leave the editor on an Untitled map.
+`demo(action="go_home")` switches the editor to `/Game/MCP_Home` on its own, for use before anything that would leave the editor on an Untitled map. If the open map has unsaved changes it refuses and names them, leaving the editor where it is; `discardUnsaved=true` drops them and the result lists them under `discardedPackages`. Cleanup drops unsaved changes to the demo level itself, since it deletes that level, and refuses on any other.
 
 ## Steps
 

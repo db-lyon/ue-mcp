@@ -3,11 +3,12 @@
  * built against one EXTENSION_API_VERSION keeps working until that number
  * changes, so anything here changes additively or bumps it.
  */
-import type { DialogPromptFn, ElicitParams, ElicitResult } from "../core/types.js";
+import type { DialogBlock, DialogPromptFn, ElicitParams, ElicitResult } from "../core/types.js";
 import type { DisconnectCause } from "./disconnect.js";
 import type { DaemonEvent } from "./events.js";
 import type { UiBundleInfo, UiManifest } from "./ui-bundles.js";
 import type { ModelProvider } from "../flow/model-provider.js";
+import type { FlowStepApprover } from "../flow/step-approval.js";
 import type { AssetDiff, ChangesResult, CheckpointResult, CheckpointState, NativeDiffResult, RestoreResult } from "../checkpoints/service.js";
 import type { DaemonSkill } from "../extensions/skills-list.js";
 import type { ContextProjection, ContextProjectionOptions } from "../server/context-projection.js";
@@ -141,12 +142,20 @@ export interface CallActionOptions {
    * content, decline or cancel.
    */
   elicit?: (params: ElicitParams) => Promise<ElicitResult>;
+  /**
+   * The access mode this call runs under (feature "callAction.access").
+   * `read-only` refuses an action whose declared effect is `mutate` or
+   * `unknown`, and every state-changing bridge call it would make. Default
+   * read-write.
+   */
+  access?: "read-write" | "read-only";
 }
 
 /**
  * The data of a dialog.* event. `type` names the event: dialog.opened,
- * dialog.answered (button, and via: prompt or action), dialog.delegated,
- * dialog.closed.
+ * dialog.updated (the same dialog, read again with more of its content: rows,
+ * blocks, or a changed tick), dialog.answered (button, and via: prompt or
+ * action), dialog.delegated, dialog.closed.
  */
 export interface DialogEventData {
   editor: string;
@@ -154,6 +163,8 @@ export interface DialogEventData {
   message: string;
   buttons: string[];
   items?: Array<{ index: number; label: string; cells: string[]; checked: boolean }>;
+  /** The body as paragraphs and tables, when the plugin reports it. */
+  blocks?: DialogBlock[];
   mode?: "auto" | "interactive" | "defer";
   button?: string;
   via?: "prompt" | "action";
@@ -221,10 +232,12 @@ export interface DaemonExtensionApi {
    * What this daemon offers beyond EXTENSION_API_VERSION, for feature detection:
    *   "callAction.dialogPrompt"  callAction takes `opts.dialogPrompt` and `opts.dialogWaitMs`
    *   "callAction.elicit"        callAction takes `opts.elicit` for every other form
+   *   "callAction.access"        callAction and context.call take `opts.access`, and `read-only`
+   *                              refuses every call that may change state
    *   "modes"                    `modes` reads and sets this project's feedback and dialog modes
    *   "modes.playtest"           `modes.get` carries `playtest` and `modes.setPlaytest` sets it
-   *   "events.dialog"            dialog.opened, dialog.answered, dialog.delegated and
-   *                              dialog.closed on the event stream (see DialogEventData)
+   *   "events.dialog"            dialog.opened, dialog.updated, dialog.answered, dialog.delegated
+   *                              and dialog.closed on the event stream (see DialogEventData)
    *   "models.provider"          `models.register` supplies the model flow agent steps run on
    *   "events.script"            script.run_started, script.step_started, script.step_acted,
    *                              script.step_passed, script.step_failed, script.verdict_requested,
@@ -245,9 +258,25 @@ export interface DaemonExtensionApi {
    *                              bundles no loaded extension names, never another extension's
    *   "ui.extensions"            `ui.own` gives this extension's own bundle, served at /ui/ext/<name>/
    *   "extension.services"       `services` lets extensions provide and use each other's objects in process
+   *   "flows.stepApproval"       `flows.approveSteps` asks this extension before each task of a run that
+   *                              names it (POST /v1/flows/<name>/run with `stepApproval`)
    * Absent on a daemon older than the field.
    */
   features?: readonly string[];
+
+  /**
+   * Approve each flow step as it runs (feature "flows.stepApproval").
+   * `approveSteps` registers `approver` under this extension's name, replacing
+   * an earlier one, and returns the function that removes it. A run started
+   * with `stepApproval: { approver: <this extension's name>, token }` asks it
+   * before every task it creates, rollbacks excepted, with the task's
+   * resolved options and the run's token; a denial fails that step with the
+   * reason and the task never runs. A run naming an approver that is not
+   * registered fails its first step instead of running unapproved.
+   */
+  flows?: {
+    approveSteps(approver: FlowStepApprover): () => void;
+  };
 
   /** Objects shared with other extensions in process (feature "extension.services"). */
   services?: ExtensionServicesApi;
@@ -433,8 +462,23 @@ export interface DaemonHealth {
    *   "ui.scopedKeys"         a bundle named for a loaded extension is installed and served only
    *                           when signed by a key that extension trusted
    *   "ui.extensions"         GET /ui/ext/<name>/ serves each loaded extension's own bundle, listed
-   *                           in `uiBundles`; `ueMcpExtension.ui.root: false` keeps one off /ui/).
+   *                           in `uiBundles`; `ueMcpExtension.ui.root: false` keeps one off /ui/
+   *   "sessions.access"       GET /v1/sessions lists each MCP session with its access mode, and
+   *                           PUT /v1/sessions/<id>/access sets one to read-only or read-write).
    * Absent on a daemon older than the field.
    */
   features?: readonly string[];
+  /** Open MCP sessions with their access mode (feature "sessions.access"). */
+  sessions?: McpSessionInfo[];
+}
+
+/** One open MCP session on the daemon (feature "sessions.access"). */
+export interface McpSessionInfo {
+  /** Stable for the life of the socket; also sent as `x-ue-mcp-session` on the WebSocket upgrade. */
+  id: string;
+  /** The MCP client's name once it has introduced itself, else what its shim said. */
+  client: string;
+  connectedAt: string;
+  /** `read-only` refuses every call whose declared effect is `mutate` or `unknown`. */
+  access: "read-write" | "read-only";
 }

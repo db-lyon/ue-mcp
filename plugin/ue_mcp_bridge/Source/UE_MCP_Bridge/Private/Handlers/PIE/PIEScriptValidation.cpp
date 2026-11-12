@@ -703,6 +703,9 @@ namespace MCPPIE
 				}
 			}
 
+			// The observer reads a pawn channel off the sampled pawn state.
+			if (!bFromProfile && IsPawnChannelName(E.Value)) continue;
+
 			const FScriptLookup L = Ctx.ResolveValue ? Ctx.ResolveValue(Path) : FScriptLookup();
 			if (!L.bFound)
 			{
@@ -1049,6 +1052,11 @@ namespace MCPPIE
 			PawnObj->SetArrayField(TEXT("components"), ComponentNames);
 		}
 		R->SetObjectField(TEXT("pawn"), PawnObj);
+		{
+			TArray<TSharedPtr<FJsonValue>> Channels;
+			for (const FString& C : PawnChannelNames()) Channels.Add(MakeShared<FJsonValueString>(C));
+			R->SetArrayField(TEXT("pawn_channels"), Channels);
+		}
 		R->SetArrayField(TEXT("values"), Values);
 		R->SetBoolField(TEXT("truncated"), Values.Num() >= Limit);
 

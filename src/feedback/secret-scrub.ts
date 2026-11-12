@@ -7,6 +7,8 @@
 interface SecretRule {
   name: string;
   re: RegExp;
+  /** Redact only the first capture group, keeping the rest of the match. */
+  group?: boolean;
 }
 
 const RULES: SecretRule[] = [
@@ -19,8 +21,18 @@ const RULES: SecretRule[] = [
   { name: "slack-token", re: /\bxox[abprs]-[0-9A-Za-z-]{10,}\b/g },
   // Stripe live/test secret keys.
   { name: "stripe-key", re: /\bsk_(?:live|test)_[A-Za-z0-9]{16,}\b/g },
+  // GitLab personal access tokens.
+  { name: "gitlab-token", re: /\bglpat-[0-9A-Za-z_-]{20,}/g },
+  // npm automation and publish tokens.
+  { name: "npm-token", re: /\bnpm_[A-Za-z0-9]{36}\b/g },
+  // Google API keys.
+  { name: "google-api-key", re: /\bAIza[0-9A-Za-z_-]{35}/g },
+  // SendGrid keys: SG.<id>.<secret>.
+  { name: "sendgrid-key", re: /\bSG\.[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}/g },
   // Anthropic API keys.
   { name: "anthropic-key", re: /\bsk-ant-[A-Za-z0-9_-]{20,}\b/g },
+  // OpenAI project, service-account and admin keys, which carry - and _.
+  { name: "openai-project-key", re: /\bsk-(?:proj|svcacct|admin)-[A-Za-z0-9_-]{20,}/g },
   // OpenAI keys (broad - matches the visible prefix; intentionally narrow on
   // length to keep false positives manageable).
   { name: "openai-key", re: /\bsk-[A-Za-z0-9]{32,}\b/g },
@@ -31,11 +43,15 @@ const RULES: SecretRule[] = [
     name: "private-key",
     re: /-----BEGIN (?:RSA |EC |OPENSSH |DSA |PGP |ENCRYPTED |)?PRIVATE KEY-----[\s\S]*?-----END (?:RSA |EC |OPENSSH |DSA |PGP |ENCRYPTED |)?PRIVATE KEY-----/g,
   },
-  // Generic key/value assignments where the key name screams "secret".
+  // The password in scheme://user:password@host.
+  { name: "url-credentials", re: /\b[a-z][a-z0-9+.-]*:\/\/[^\s:/@]+:([^\s@/]+)@/gi, group: true },
+  // Generic key/value assignments where the key name screams "secret", bare
+  // or quoted as in JSON and YAML ("api_key": "...").
   // Captures up to the next whitespace/quote so multi-word secrets don't leak.
   {
     name: "env-style-secret",
-    re: /\b(?:[A-Z][A-Z0-9_]*?_)?(?:SECRET|TOKEN|API[_-]?KEY|PASSWORD|PASSWD|PRIVATE[_-]?KEY|ACCESS[_-]?KEY|CLIENT[_-]?SECRET|AUTH[_-]?TOKEN|BEARER)[A-Z0-9_]*\s*[:=]\s*["']?([^"'\s]{6,})["']?/gi,
+    re: /\b(?:[A-Z][A-Z0-9_]*?_)?(?:SECRET|TOKEN|API[_-]?KEY|PASSWORD|PASSWD|PRIVATE[_-]?KEY|ACCESS[_-]?KEY|CLIENT[_-]?SECRET|AUTH[_-]?TOKEN|BEARER)[A-Z0-9_]*["']?\s*[:=]\s*["']?([^"'\s]{6,})["']?/gi,
+    group: true,
   },
 ];
 
@@ -51,12 +67,12 @@ export function scrubSecrets(input: string): ScrubResult {
     let count = 0;
     text = text.replace(rule.re, (match, ...args) => {
       count += 1;
-      // For env-style assignments only the value group is sensitive; preserve
-      // the key so reviewers can see which variable was redacted.
-      if (rule.name === "env-style-secret") {
+      // Where only the captured value is sensitive, keep what surrounds it so
+      // reviewers can see which variable or URL was redacted.
+      if (rule.group) {
         const value = args[0] as string;
         const idx = match.lastIndexOf(value);
-        return match.slice(0, idx) + "[REDACTED]";
+        return match.slice(0, idx) + "[REDACTED]" + match.slice(idx + value.length);
       }
       return "[REDACTED]";
     });

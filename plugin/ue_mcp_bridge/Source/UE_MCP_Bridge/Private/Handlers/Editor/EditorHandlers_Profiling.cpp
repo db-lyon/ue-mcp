@@ -9,15 +9,12 @@
 //
 // What is deliberately NOT here, said plainly rather than faked:
 //
-// * READING A .utrace FILE. The engine ships TraceServices and TraceAnalysis
-//   (Engine/Source/Developer/TraceServices, TraceAnalysis) and Unreal Insights
-//   is built on them, so it is not impossible in principle. It is out of reach
-//   for this plugin: both are Developer modules the bridge does not link, and
-//   consuming one means standing up an analysis session with per-provider
-//   readers, which is an application rather than a handler. Every action below
-//   that produces a trace therefore reports the absolute file path, its size
-//   on disk, and the exact UnrealInsights command line that opens it. That is
-//   the handoff, and it is stated instead of implied.
+// * READING A .utrace FILE. That lives in EditorHandlers_TraceAnalysis.cpp
+//   (editor(analyze_trace)), which opens the file through TraceServices, the
+//   module Unreal Insights is built on. Every action below that produces a
+//   trace reports the absolute file path, its size on disk, and the exact
+//   UnrealInsights command line that opens it, for the views a summary does
+//   not cover.
 //
 // * A BACKGROUND-THROTTLE SETTER. UEditorPerformanceSettings::
 //   bThrottleCPUWhenNotForeground and bAllowThrottling are ordinary
@@ -46,6 +43,7 @@
 #include "EditorHandlers.h"
 
 #include "HandlerUtils.h"
+#include "Handlers/Editor/HandlerStandaloneArgs.h"
 
 #include "Editor.h"
 #include "Editor/EditorEngine.h"
@@ -60,6 +58,7 @@
 #include "Misc/App.h"
 #include "Misc/CommandLine.h"
 #include "Misc/DateTime.h"
+#include "Misc/Parse.h"
 #include "Misc/Paths.h"
 #include "Misc/StringBuilder.h"
 #include "ProfilingDebugging/MiscTrace.h"
@@ -287,8 +286,8 @@ namespace
 	}
 
 	/** Describe a .utrace on disk: whether it exists, how big it is, and the
-	 *  command that opens it. This is the whole of the "read the trace"
-	 *  answer, and it is deliberate rather than a placeholder. */
+	 *  command that opens it in Unreal Insights. editor(analyze_trace) reads
+	 *  the same file back as a summary. */
 	void MCPProfilingDescribeTraceFile(TSharedPtr<FJsonObject> Result, const FString& FilePath)
 	{
 		if (FilePath.IsEmpty()) return;
@@ -311,11 +310,9 @@ namespace
 				FString::Printf(TEXT("\"%s\" -OpenTraceFile=\"%s\""), *Insights, *Absolute));
 		}
 		Result->SetStringField(TEXT("analysisNote"),
-			TEXT("The bridge writes .utrace files and reports where they landed; it does not read them back. ")
-			TEXT("Trace analysis lives in the engine's TraceServices/TraceAnalysis Developer modules, which this ")
-			TEXT("plugin does not link, so open the file with the reported openCommand. For numbers inside the ")
-			TEXT("editor without leaving it, use editor(get_frame_timing) and editor(begin_profile_region) / ")
-			TEXT("editor(end_profile_region)."));
+			TEXT("editor(analyze_trace) reads this file back once the trace is stopped: frame-time percentiles, hitches, ")
+			TEXT("worst frames with their timers, top timers, GPU busy time and bookmarks. For every other view, open it ")
+			TEXT("with the reported openCommand."));
 	}
 
 	/** Default destination for a file trace: an absolute, deterministic path
@@ -631,7 +628,9 @@ TSharedPtr<FJsonValue> FEditorHandlers::StartInsightsTrace(const TSharedPtr<FJso
 		}
 		else
 		{
-			FilePath = FPaths::ConvertRelativePathToFull(FilePath);
+			FString Resolved;
+			if (auto Err = MCPRequireWritablePath(FilePath, Resolved)) return Err;
+			FilePath = Resolved;
 			if (!FilePath.EndsWith(TEXT(".utrace"))) FilePath += TEXT(".utrace");
 			IFileManager::Get().MakeDirectory(*FPaths::GetPath(FilePath), /*Tree=*/true);
 		}
@@ -1541,15 +1540,21 @@ TSharedPtr<FJsonValue> FEditorHandlers::LaunchStandaloneGame(const TSharedPtr<FJ
 		}
 		else
 		{
-			TraceFile = FPaths::ConvertRelativePathToFull(TraceFile);
+			if (TraceFile.Contains(TEXT("\""))) return MCPError(TEXT("traceFile must not contain a quote character."));
+			FString Resolved;
+			if (auto Err = MCPRequireWritablePath(TraceFile, Resolved)) return Err;
+			TraceFile = Resolved;
 			if (!TraceFile.EndsWith(TEXT(".utrace"))) TraceFile += TEXT(".utrace");
 			IFileManager::Get().MakeDirectory(*FPaths::GetPath(TraceFile), /*Tree=*/true);
 		}
 		Args += FString::Printf(TEXT(" -trace=%s -tracefile=\"%s\""), *Channels, *TraceFile);
 	}
 
+	// An offscreen editor has no screen to show a game window on either, so
+	// the game inherits -RenderOffScreen unless the caller already passed it.
 	const FString ExtraArgs = OptionalString(Params, TEXT("extraArgs"));
-	if (!ExtraArgs.IsEmpty()) Args += TEXT(" ") + ExtraArgs;
+	Args = MCPStandaloneGameArgs(Args, ExtraArgs, FParse::Param(FCommandLine::Get(), TEXT("RenderOffScreen")));
+	const bool bGameOffScreen = FParse::Param(*Args, TEXT("RenderOffScreen"));
 
 	uint32 ProcessId = 0;
 	FProcHandle Handle = FPlatformProcess::CreateProc(
@@ -1582,6 +1587,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::LaunchStandaloneGame(const TSharedPtr<FJ
 	Result->SetStringField(TEXT("executablePath"), ExePath);
 	Result->SetStringField(TEXT("commandLine"), State.CommandLine);
 	Result->SetStringField(TEXT("projectPath"), ProjectPath);
+	Result->SetBoolField(TEXT("renderOffScreen"), bGameOffScreen);
 	if (!MapName.IsEmpty()) Result->SetStringField(TEXT("mapName"), MapName);
 	if (!Channels.IsEmpty()) Result->SetStringField(TEXT("channels"), Channels);
 	if (!TraceFile.IsEmpty())

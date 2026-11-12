@@ -10,14 +10,18 @@ import * as path from "node:path";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
   BUDGETS,
+  DEFAULT_SEED,
+  ENGINE_SEED,
   TAX_MARKER_FILES,
   applyTaxMarkers,
   budgetProblems,
+  engineCeilingProblems,
   formatTokens,
   measureContextTax,
   parseStamp,
   staleStamps,
 } from "../../scripts/context-tax.mjs";
+import { ENGINE_TOOL_SEARCH_INSTRUCTIONS, ENGINE_TOOL_SEARCH_TOOLS } from "../fixtures/engine-tool-search-surface.mjs";
 
 const REPO = path.resolve(__dirname, "..", "..");
 
@@ -34,6 +38,21 @@ describe("budget arithmetic", () => {
     ]);
   });
 
+  it("fails a default seed one token over the engine's surface", () => {
+    const at = { [DEFAULT_SEED]: { what: "default", tokens: 327, chars: 0 }, [ENGINE_SEED]: { what: "engine", tokens: 327, chars: 0 } };
+    expect(engineCeilingProblems(at)).toEqual([]);
+    expect(engineCeilingProblems({ ...at, [DEFAULT_SEED]: { what: "default", tokens: 328, chars: 0 } })).toEqual([
+      "default: 328 tokens, over the 327 of engine",
+    ]);
+    expect(engineCeilingProblems({ [ENGINE_SEED]: at[ENGINE_SEED] })).toEqual(["default or engine seed: not measured"]);
+  });
+
+  it("measures the engine surface exactly as reconstructed", () => {
+    const payload = JSON.stringify({ instructions: ENGINE_TOOL_SEARCH_INSTRUCTIONS, tools: ENGINE_TOOL_SEARCH_TOOLS });
+    expect(ENGINE_TOOL_SEARCH_TOOLS.map((t) => t.name)).toEqual(["list_toolsets", "describe_toolset", "call_tool"]);
+    expect(payload.length).toBe(1307);
+  });
+
   it("fails a number that was never measured", () => {
     const { search: _search, ...rest } = BUDGETS;
     expect(budgetProblems(rows(rest))).toEqual(["search: not measured"]);
@@ -47,7 +66,7 @@ describe("budget arithmetic", () => {
     expect(parseStamp("~2.1k")).toBe(2_100);
     const measured = rows({ full: 50_798 });
     const text = applyTaxMarkers("seed <!-- tax:full -->~45k<!-- /tax -->, budget <!-- tax:fullBudget -->x<!-- /tax -->", measured);
-    expect(text).toBe("seed <!-- tax:full -->~51k<!-- /tax -->, budget <!-- tax:fullBudget -->~60k<!-- /tax -->");
+    expect(text).toBe("seed <!-- tax:full -->~51k<!-- /tax -->, budget <!-- tax:fullBudget -->~100k<!-- /tax -->");
     expect(staleStamps(text, measured, "doc")).toEqual([]);
     expect(staleStamps("<!-- tax:full -->~45k<!-- /tax -->", measured, "doc")).toEqual(["doc: tax:full says ~45k, measured 50798"]);
   });
@@ -61,6 +80,10 @@ describe("the shipped surface", () => {
 
   it("keeps every seed and discovery answer within its budget", () => {
     expect(budgetProblems(rows)).toEqual([]);
+  });
+
+  it("keeps the default seed at or below the engine's tool-search surface", () => {
+    expect(engineCeilingProblems(rows)).toEqual([]);
   });
 
   it("measures the Epic catalog, which the budgets were set with", () => {

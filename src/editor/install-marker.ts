@@ -111,15 +111,22 @@ export function resolvePluginDir(
   const fallback = defaultPluginDir(projectDir);
   if (hasDescriptor(fallback)) return { dir: fallback, source: "default" };
 
-  const found = scanForDescriptor(path.join(projectDir, "Plugins"), SCAN_DEPTH);
+  const found = scanForDescriptor(path.join(projectDir, "Plugins"), BRIDGE_PLUGIN_NAME, SCAN_DEPTH);
   return found ? { dir: found, source: "scan" } : null;
 }
 
-function hasDescriptor(dir: string): boolean {
-  return fs.existsSync(path.join(dir, `${BRIDGE_PLUGIN_NAME}.uplugin`));
+function hasDescriptor(dir: string, name: string = BRIDGE_PLUGIN_NAME): boolean {
+  return fs.existsSync(path.join(dir, `${name}.uplugin`));
 }
 
-function scanForDescriptor(dir: string, depth: number): string | null {
+/** Where a project holds the plugin `name`: Plugins/<name>, else the first copy a shallow scan of Plugins/ finds. */
+export function findProjectPlugin(projectDir: string, name: string): string | null {
+  const direct = path.join(projectDir, "Plugins", name);
+  if (hasDescriptor(direct, name)) return direct;
+  return scanForDescriptor(path.join(projectDir, "Plugins"), name, SCAN_DEPTH);
+}
+
+function scanForDescriptor(dir: string, name: string, depth: number): string | null {
   if (depth < 0) return null;
   let entries: fs.Dirent[];
   try {
@@ -127,12 +134,12 @@ function scanForDescriptor(dir: string, depth: number): string | null {
   } catch {
     return null;
   }
-  if (entries.some((e) => e.isFile() && e.name.toLowerCase() === `${BRIDGE_PLUGIN_NAME.toLowerCase()}.uplugin`)) {
+  if (entries.some((e) => e.isFile() && e.name.toLowerCase() === `${name.toLowerCase()}.uplugin`)) {
     return dir;
   }
   for (const e of entries) {
     if (!e.isDirectory() || e.name === "Binaries" || e.name === "Intermediate" || e.name === "Source") continue;
-    const hit = scanForDescriptor(path.join(dir, e.name), depth - 1);
+    const hit = scanForDescriptor(path.join(dir, e.name), name, depth - 1);
     if (hit) return hit;
   }
   return null;

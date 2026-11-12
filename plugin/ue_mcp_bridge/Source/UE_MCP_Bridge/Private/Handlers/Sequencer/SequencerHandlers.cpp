@@ -19,6 +19,14 @@
 #include "Tracks/MovieSceneFloatTrack.h"
 #include "Tracks/MovieScene3DTransformTrack.h"
 #include "Tracks/MovieSceneSkeletalAnimationTrack.h"
+#include "Sections/MovieSceneSkeletalAnimationSection.h"
+#include "Animation/AnimSequenceBase.h"
+#if __has_include("Variants/MovieSceneTimeWarpVariant.h")
+#include "Variants/MovieSceneTimeWarpVariant.h"
+#define UE_MCP_SKELANIM_PLAYRATE_IS_TIMEWARP 1
+#else
+#define UE_MCP_SKELANIM_PLAYRATE_IS_TIMEWARP 0
+#endif
 #include "Tracks/MovieSceneCameraCutTrack.h"
 #include "Tracks/MovieScene3DAttachTrack.h"
 #include "Sections/MovieScene3DAttachSection.h"
@@ -65,6 +73,13 @@ void FSequencerHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	{
 		return MCPParam::Optional(TEXT("materialParameterCollection"), EType::String, TEXT("Material Parameter Collection asset a MaterialParameterCollection track animates (required for that track type)"));
 	};
+	auto DisplayRateParam = [](bool bRequired)
+	{
+		FMCPParamSpec Spec = MCPParam::Required(TEXT("displayRate"), EType::Any,
+			TEXT("Display rate: frames per second (24, 30, 60; 23.976, 29.97 and 59.94 map to the NTSC rates) or {numerator, denominator}. Bakes and display frames sample at this rate"));
+		Spec.bRequired = bRequired;
+		return Spec;
+	};
 	auto ActorLabelParam = []()
 	{
 		return MCPParam::Optional(TEXT("actorLabel"), EType::String, TEXT("Actor label. Editor labels are not unique, so a label naming several actors is refused"));
@@ -78,10 +93,11 @@ void FSequencerHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Required(TEXT("name"), EType::String, TEXT("Name of the new Level Sequence asset")),
 		MCPParam::Optional(TEXT("packagePath"), EType::String, TEXT("Destination folder (default /Game/Cinematics)")),
 		MCPParam::Optional(TEXT("onConflict"), EType::String, TEXT("skip (default) returns an existing asset untouched, error refuses")),
+		DisplayRateParam(false),
 	}, MCPSpec::ContractExempt(TEXT("creates a Level Sequence asset")));
 	Registry.RegisterHandler(TEXT("get_sequence_info"), &ReadSequenceInfo, {
 		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("Level Sequence asset path")).Alias(TEXT("path")),
-		MCPParam::Optional(TEXT("includeSectionDetails"), EType::Boolean, TEXT("Include attach sockets and first-key transform values per track")),
+		MCPParam::Optional(TEXT("includeSectionDetails"), EType::Boolean, TEXT("Add each section's blend type, attach socket, first-key transform values and channels with key times. Without it every section still lists its class, range, isActive and rowIndex")),
 	});
 	Registry.RegisterHandler(TEXT("add_sequence_track"), &AddTrack, {
 		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("Level Sequence asset path")).Alias(TEXT("path")),
@@ -125,6 +141,11 @@ void FSequencerHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Required(TEXT("startSeconds"), EType::Number, TEXT("Range start in seconds")),
 		MCPParam::Required(TEXT("endSeconds"), EType::Number, TEXT("Range end in seconds")),
 	});
+	// #1641: the frame grid display frames, scrubbing by frame and bakes use.
+	Registry.RegisterHandler(TEXT("set_sequence_display_rate"), &SetDisplayRate, {
+		SequencePathParam(TEXT("Level Sequence asset path"), true),
+		DisplayRateParam(true),
+	});
 	Registry.RegisterHandler(TEXT("add_sequence_section"), &AddSection, {
 		SequencePathParam(TEXT("Level Sequence asset path"), true),
 		TrackTypeParam(),
@@ -135,6 +156,11 @@ void FSequencerHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("cameraActorLabel"), EType::String, TEXT("Camera actor to bind a CameraCut section to")),
 		MCPParam::Optional(TEXT("cameraActorPath"), EType::String, TEXT("Full object path of the camera actor. Wins over cameraActorLabel")),
 		MPCParam(),
+		// #1641: what a SkeletalAnimation section plays.
+		MCPParam::Optional(TEXT("animation"), EType::String, TEXT("AnimSequence, AnimComposite or AnimStreamable a SkeletalAnimation section plays. Without endSeconds the section spans the clip after offsets and play rate")),
+		MCPParam::Optional(TEXT("startFrameOffset"), EType::Integer, TEXT("SkeletalAnimation only: ticks (the sequence's tick resolution, 24000/s by default) trimmed from the clip's start. Half a display frame samples a Step-interpolated clip inside each key")),
+		MCPParam::Optional(TEXT("endFrameOffset"), EType::Integer, TEXT("SkeletalAnimation only: ticks trimmed from the clip's end")),
+		MCPParam::Optional(TEXT("playRate"), EType::Number, TEXT("SkeletalAnimation only: clip play rate, above 0 (default 1)")),
 	});
 	Registry.RegisterHandler(TEXT("set_sequence_keyframes"), &SetKeyframes, {
 		SequencePathParam(TEXT("Level Sequence asset path"), true),
@@ -217,6 +243,14 @@ void FSequencerHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("sequencePath"), EType::String, TEXT("Report only actors playing this sequence")),
 		MCPParam::Optional(TEXT("actorLabel"), EType::String, TEXT("Report only the LevelSequenceActor with this label or name")),
 	});
+	// #1640: what a binding's components hold, read off the template or the possessed actor.
+	Registry.RegisterHandler(TEXT("get_sequence_binding_components"), &GetBindingComponents, {
+		SequencePathParam(TEXT("Level Sequence asset path"), true),
+		MCPParam::Optional(TEXT("bindingGuid"), EType::String, TEXT("Report only this binding")),
+		MCPParam::Optional(TEXT("bindingName"), EType::String, TEXT("Report only the binding with this name")),
+		MCPParam::Optional(TEXT("componentClass"), EType::String, TEXT("Report only components of this class or a subclass (ImagePlateComponent, CineCameraComponent, PrimitiveComponent)")),
+		MCPParam::Optional(TEXT("propertyNames"), EType::Array, TEXT("Properties or dotted paths to read, in C++ or Python spelling (bHoldout, cast_shadow, LightingChannels.bChannel1); [\"*\"] reads every editable property. Default: the primitive rendering flags (CastShadow, bAffectDynamicIndirectLighting, bVisibleInRayTracing, bHoldout, LightingChannels, custom depth and stencil, visibility)")).Items(EType::String),
+	});
 }
 
 // ─── #548 sequencer authoring helpers ────────────────────────────────
@@ -242,6 +276,70 @@ namespace
 		Sequence->BindPossessableObject(OutGuid, *TargetActor, World);
 		return true;
 	}
+
+	// #1641: a display rate given as frames per second or {numerator, denominator}.
+	// 23.976, 29.97 and 59.94 (any N * 1000/1001) map to the exact NTSC rate.
+	bool ParseDisplayRate(const TSharedPtr<FJsonValue>& Value, FFrameRate& OutRate, FString& OutError)
+	{
+		OutError = TEXT("'displayRate' must be frames per second (e.g. 30 or 29.97) or {numerator, denominator}, both above 0");
+		if (!Value.IsValid()) return false;
+		const TSharedPtr<FJsonObject>* Obj = nullptr;
+		if (Value->TryGetObject(Obj) && Obj && Obj->IsValid())
+		{
+			double Num = 0.0, Den = 0.0;
+			if (!(*Obj)->TryGetNumberField(TEXT("numerator"), Num) || !(*Obj)->TryGetNumberField(TEXT("denominator"), Den)) return false;
+			if (Num < 1.0 || Den < 1.0 || Num > MAX_int32 || Den > MAX_int32 || Num != FMath::RoundToDouble(Num) || Den != FMath::RoundToDouble(Den)) return false;
+			OutRate = FFrameRate(static_cast<int32>(Num), static_cast<int32>(Den));
+			return true;
+		}
+		double Fps = 0.0;
+		if (!Value->TryGetNumber(Fps) || !(Fps > 0.0) || Fps > 1000.0) return false;
+		const double Whole = FMath::RoundToDouble(Fps);
+		if (FMath::Abs(Fps - Whole) < 1e-6)
+		{
+			OutRate = FFrameRate(static_cast<int32>(Whole), 1);
+			return true;
+		}
+		const double NtscBase = FMath::RoundToDouble(Fps * 1.001);
+		if (NtscBase >= 1.0 && FMath::Abs(Fps - NtscBase * 1000.0 / 1001.0) < 0.005)
+		{
+			OutRate = FFrameRate(static_cast<int32>(NtscBase) * 1000, 1001);
+			return true;
+		}
+		OutError = FString::Printf(TEXT("'displayRate' %g is neither a whole frame rate nor an NTSC rate; pass {numerator, denominator}"), Fps);
+		return false;
+	}
+
+	// What a SkeletalAnimation section plays: clip, offsets in ticks and seconds,
+	// and play rate when it is a fixed number (#1641).
+	TSharedPtr<FJsonObject> SkeletalAnimationParamsJson(const UMovieSceneSkeletalAnimationSection& Section, const FFrameRate& TickResolution)
+	{
+		const FMovieSceneSkeletalAnimationParams& P = Section.Params;
+		TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
+		Obj->SetStringField(TEXT("animation"), P.Animation ? P.Animation->GetPathName() : FString());
+		if (P.Animation) Obj->SetNumberField(TEXT("animationLengthSeconds"), P.Animation->GetPlayLength());
+		Obj->SetNumberField(TEXT("startFrameOffset"), P.StartFrameOffset.Value);
+		Obj->SetNumberField(TEXT("endFrameOffset"), P.EndFrameOffset.Value);
+		Obj->SetNumberField(TEXT("startOffsetSeconds"), TickResolution.AsSeconds(FFrameTime(P.StartFrameOffset)));
+		Obj->SetNumberField(TEXT("endOffsetSeconds"), TickResolution.AsSeconds(FFrameTime(P.EndFrameOffset)));
+#if UE_MCP_SKELANIM_PLAYRATE_IS_TIMEWARP
+		if (P.PlayRate.GetType() == EMovieSceneTimeWarpType::FixedPlayRate)
+		{
+			Obj->SetNumberField(TEXT("playRate"), P.PlayRate.AsFixedPlayRate());
+		}
+#else
+		Obj->SetNumberField(TEXT("playRate"), P.PlayRate);
+#endif
+		return Obj;
+	}
+
+	TSharedPtr<FJsonObject> DisplayRateJson(const FFrameRate& Rate)
+	{
+		TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
+		UEMCP::SequencerInfo::SetFrameRateFields(*Obj, Rate);
+		Obj->SetNumberField(TEXT("fps"), Rate.AsDecimal());
+		return Obj;
+	}
 }
 
 TSharedPtr<FJsonValue> FSequencerHandlers::CreateLevelSequence(const TSharedPtr<FJsonObject>& Params)
@@ -251,17 +349,32 @@ TSharedPtr<FJsonValue> FSequencerHandlers::CreateLevelSequence(const TSharedPtr<
 
 	FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/Cinematics"));
 	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
+	// Parsed before the asset exists, so a bad rate creates nothing (#1641).
+	TSharedPtr<FJsonValue> DisplayRateValue = TryGetParam(Params, TEXT("displayRate"));
+	if (DisplayRateValue.IsValid() && DisplayRateValue->IsNull()) DisplayRateValue.Reset();
+	FFrameRate DisplayRate;
+	if (DisplayRateValue.IsValid())
+	{
+		FString RateErr;
+		if (!ParseDisplayRate(DisplayRateValue, DisplayRate, RateErr)) return MCPError(RateErr);
+	}
 
 	auto Created = MCPCreateAssetIdempotentNewObject<ULevelSequence>(Name, PackagePath, OnConflict, TEXT("LevelSequence"));
 	if (Created.EarlyReturn) return Created.EarlyReturn;
 	ULevelSequence* NewSequence = Created.Asset;
 	NewSequence->Initialize();
+	UMovieScene* NewMovieScene = NewSequence->GetMovieScene();
+	if (DisplayRateValue.IsValid() && NewMovieScene)
+	{
+		NewMovieScene->SetDisplayRate(DisplayRate);
+	}
 
 	auto Result = MCPSuccess();
 	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("name"), Name);
 	Result->SetStringField(TEXT("path"), NewSequence->GetPathName());
 	Result->SetStringField(TEXT("packagePath"), PackagePath + TEXT("/") + Name);
+	if (NewMovieScene) Result->SetObjectField(TEXT("displayRate"), DisplayRateJson(NewMovieScene->GetDisplayRate()));
 	MCPSetDeleteAssetRollback(Result, NewSequence->GetPathName());
 
 	return MCPResult(Result);
@@ -345,9 +458,33 @@ TSharedPtr<FJsonValue> FSequencerHandlers::ReadSequenceInfo(const TSharedPtr<FJs
 
 	auto ExtractSectionDetails = [&](UMovieSceneTrack* Track, const TSharedPtr<FJsonObject>& TrackObj)
 	{
-		if (!bIncludeDetails || !Track) return;
+		if (!Track) return;
 
 		const TArray<UMovieSceneSection*>& AllSections = Track->GetAllSections();
+		if (!bIncludeDetails)
+		{
+			// Every section's range and activity, unbudgeted: a few fields per
+			// section, enough to tell what a binding still holds (#1644).
+			TArray<TSharedPtr<FJsonValue>> Summary;
+			for (int32 SectionIndex = 0; SectionIndex < AllSections.Num(); ++SectionIndex)
+			{
+				const UMovieSceneSection* Section = AllSections[SectionIndex];
+				if (!Section) continue;
+				TSharedPtr<FJsonObject> SObj = MakeShared<FJsonObject>();
+				SObj->SetNumberField(TEXT("index"), SectionIndex);
+				SObj->SetStringField(TEXT("class"), Section->GetClass()->GetName());
+				UEMCP::SequencerInfo::SetTimingRangeFields(*SObj, Section->GetTrueRange(), TickResolution, DisplayRate);
+				SObj->SetBoolField(TEXT("isActive"), Section->IsActive());
+				SObj->SetNumberField(TEXT("rowIndex"), Section->GetRowIndex());
+				if (const UMovieSceneSkeletalAnimationSection* AnimSection = Cast<UMovieSceneSkeletalAnimationSection>(Section))
+				{
+					SObj->SetObjectField(TEXT("animation"), SkeletalAnimationParamsJson(*AnimSection, TickResolution));
+				}
+				Summary.Add(MakeShared<FJsonValueObject>(SObj));
+			}
+			TrackObj->SetArrayField(TEXT("sections"), Summary);
+			return;
+		}
 		TArray<TSharedPtr<FJsonValue>> SectionsArr;
 		for (int32 SectionIndex = 0; SectionIndex < AllSections.Num(); ++SectionIndex)
 		{
@@ -382,6 +519,11 @@ TSharedPtr<FJsonValue> FSequencerHandlers::ReadSequenceInfo(const TSharedPtr<FJs
 			}
 			SObj->SetBoolField(TEXT("isActive"), Section->IsActive());
 			SObj->SetNumberField(TEXT("rowIndex"), Section->GetRowIndex());
+
+			if (const UMovieSceneSkeletalAnimationSection* AnimSection = Cast<UMovieSceneSkeletalAnimationSection>(Section))
+			{
+				SObj->SetObjectField(TEXT("animation"), SkeletalAnimationParamsJson(*AnimSection, TickResolution));
+			}
 
 			if (UMovieScene3DAttachSection* Attach = Cast<UMovieScene3DAttachSection>(Section))
 			{
@@ -536,6 +678,10 @@ TSharedPtr<FJsonValue> FSequencerHandlers::ReadSequenceInfo(const TSharedPtr<FJs
 		TSharedPtr<FJsonObject> TrackObj = MakeShared<FJsonObject>();
 		TrackObj->SetStringField(TEXT("name"), Track->GetTrackName().ToString());
 		TrackObj->SetStringField(TEXT("class"), Track->GetClass()->GetName());
+#if WITH_EDITORONLY_DATA
+		// The label Sequencer shows, e.g. the rig name on a Control Rig track.
+		TrackObj->SetStringField(TEXT("displayName"), Track->GetDisplayName().ToString());
+#endif
 		TrackObj->SetNumberField(TEXT("sectionCount"), Track->GetAllSections().Num());
 		ExtractSectionDetails(Track, TrackObj);
 		return TrackObj;
@@ -1213,6 +1359,51 @@ TSharedPtr<FJsonValue> FSequencerHandlers::SetPlaybackRange(const TSharedPtr<FJs
 	return MCPResult(Result);
 }
 
+// set_sequence_display_rate: the frame grid Sequencer shows and bakes sample
+// at. Keys and ranges are stored in ticks, so they keep their times (#1641).
+TSharedPtr<FJsonValue> FSequencerHandlers::SetDisplayRate(const TSharedPtr<FJsonObject>& Params)
+{
+	// Every parameter is read before anything can fail (#1057).
+	FString Path;
+	const bool bHasPath = TryGetStringParam(Params, TEXT("sequencePath"), Path);
+	const TSharedPtr<FJsonValue> RateValue = TryGetParam(Params, TEXT("displayRate"));
+
+	TSharedPtr<FJsonValue> LoadErr;
+	ULevelSequence* Sequence = UEMCP::SequencerTracks::LoadSequence(Path, bHasPath, LoadErr);
+	if (!Sequence) return LoadErr;
+	UMovieScene* MovieScene = Sequence->GetMovieScene();
+	if (!MovieScene) return MCPError(TEXT("Sequence has no MovieScene"));
+
+	if (!RateValue.IsValid()) return MCPError(TEXT("Missing 'displayRate'"));
+	FFrameRate NewRate;
+	FString RateErr;
+	if (!ParseDisplayRate(RateValue, NewRate, RateErr)) return MCPError(RateErr);
+
+	const FFrameRate Previous = MovieScene->GetDisplayRate();
+	const bool bUnchanged = Previous == NewRate;
+	if (!bUnchanged)
+	{
+		MovieScene->Modify();
+		MovieScene->SetDisplayRate(NewRate);
+		Sequence->GetOutermost()->MarkPackageDirty();
+	}
+
+	auto Result = MCPSuccess();
+	MCPSetUpdated(Result);
+	Result->SetStringField(TEXT("sequencePath"), Path);
+	Result->SetObjectField(TEXT("displayRate"), DisplayRateJson(MovieScene->GetDisplayRate()));
+	Result->SetObjectField(TEXT("previousDisplayRate"), DisplayRateJson(Previous));
+	Result->SetBoolField(TEXT("unchanged"), bUnchanged);
+
+	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+	Payload->SetStringField(TEXT("sequencePath"), Path);
+	TSharedPtr<FJsonObject> PreviousObj = MakeShared<FJsonObject>();
+	UEMCP::SequencerInfo::SetFrameRateFields(*PreviousObj, Previous);
+	Payload->SetObjectField(TEXT("displayRate"), PreviousObj);
+	MCPSetRollback(Result, TEXT("set_sequence_display_rate"), Payload);
+	return MCPResult(Result);
+}
+
 // add_sequence_section -- add a section to a track (creating the track if
 // needed), set its start/end in seconds, and for a CameraCut track bind it to
 // a camera actor. Returns the section index and its channel names. (#548)
@@ -1235,6 +1426,13 @@ TSharedPtr<FJsonValue> FSequencerHandlers::AddSection(const TSharedPtr<FJsonObje
 	const bool bHasStart = TryGetNumberParam(Params, TEXT("startSeconds"), StartSeconds);
 	const bool bHasEnd = TryGetNumberParam(Params, TEXT("endSeconds"), EndSeconds);
 	const FString MPCPath = OptionalString(Params, TEXT("materialParameterCollection"));
+	// #1641: what a SkeletalAnimation section plays.
+	const FString AnimationPath = OptionalString(Params, TEXT("animation"));
+	double StartOffsetTicks = 0.0, EndOffsetTicks = 0.0, PlayRate = 1.0;
+	const bool bHasStartOffset = TryGetNumberParam(Params, TEXT("startFrameOffset"), StartOffsetTicks);
+	const bool bHasEndOffset = TryGetNumberParam(Params, TEXT("endFrameOffset"), EndOffsetTicks);
+	const bool bHasPlayRate = TryGetNumberParam(Params, TEXT("playRate"), PlayRate);
+	const bool bHasAnimParams = !AnimationPath.IsEmpty() || bHasStartOffset || bHasEndOffset || bHasPlayRate;
 
 	TSharedPtr<FJsonValue> LoadErr;
 	ULevelSequence* Sequence = UEMCP::SequencerTracks::LoadSequence(Path, bHasPath, LoadErr);
@@ -1245,6 +1443,38 @@ TSharedPtr<FJsonValue> FSequencerHandlers::AddSection(const TSharedPtr<FJsonObje
 	if (TrackTypeErr) return TrackTypeErr;
 	UClass* TrackClass = UEMCP::SequencerTracks::ResolveTrackClass(TrackType);
 	if (!TrackClass) return MCPError(FString::Printf(TEXT("Unknown track type: '%s'. Use %s."), *TrackType, *UEMCP::SequencerTracks::TrackTypeHelp()));
+
+	// Checked before any track or section exists, so a bad value creates nothing.
+	UAnimSequenceBase* Animation = nullptr;
+	double AnimSpanSeconds = 0.0;
+	if (bHasAnimParams)
+	{
+		if (!TrackClass->IsChildOf(UMovieSceneSkeletalAnimationTrack::StaticClass()))
+		{
+			return MCPError(TEXT("animation, startFrameOffset, endFrameOffset and playRate apply only to a SkeletalAnimation track"));
+		}
+		auto IsTickCount = [](double V) { return V >= 0.0 && V <= MAX_int32 && V == FMath::RoundToDouble(V); };
+		if (!IsTickCount(StartOffsetTicks) || !IsTickCount(EndOffsetTicks))
+		{
+			return MCPError(TEXT("startFrameOffset and endFrameOffset are whole tick counts of 0 or more"));
+		}
+		if (!(PlayRate > 0.0)) return MCPError(TEXT("playRate must be above 0"));
+		if (!AnimationPath.IsEmpty())
+		{
+			Animation = LoadAssetByPath<UAnimSequenceBase>(AnimationPath);
+			if (!Animation) return MCPAssetLoadError(AnimationPath, TEXT("AnimSequenceBase"));
+			const FFrameRate TickRate = MovieScene->GetTickResolution();
+			const double ClipSeconds = Animation->GetPlayLength()
+				- TickRate.AsSeconds(FFrameTime(FFrameNumber(static_cast<int32>(StartOffsetTicks))))
+				- TickRate.AsSeconds(FFrameTime(FFrameNumber(static_cast<int32>(EndOffsetTicks))));
+			if (!bHasEnd && ClipSeconds <= 0.0)
+			{
+				return MCPError(FString::Printf(TEXT("The offsets trim all of '%s' (%.4f s); pass smaller offsets or an explicit endSeconds"),
+					*AnimationPath, Animation->GetPlayLength()));
+			}
+			AnimSpanSeconds = ClipSeconds / PlayRate;
+		}
+	}
 
 	// An MPC track is identified by its collection as well as its class (#1407).
 	UMaterialParameterCollection* MPC = nullptr;
@@ -1328,11 +1558,24 @@ TSharedPtr<FJsonValue> FSequencerHandlers::AddSection(const TSharedPtr<FJsonObje
 		Track->AddSection(*Section);
 	}
 
-	const FFrameRate Tick = MovieScene->GetTickResolution();
-	if (bHasStart || bHasEnd)
+	UMovieSceneSkeletalAnimationSection* AnimSection = Cast<UMovieSceneSkeletalAnimationSection>(Section);
+	if (bHasAnimParams && AnimSection)
 	{
+		AnimSection->Modify();
+		if (Animation) AnimSection->Params.Animation = Animation;
+		if (bHasStartOffset) AnimSection->Params.StartFrameOffset = FFrameNumber(static_cast<int32>(StartOffsetTicks));
+		if (bHasEndOffset) AnimSection->Params.EndFrameOffset = FFrameNumber(static_cast<int32>(EndOffsetTicks));
+		// A float before the time-warp variant, a variant assignable from a number after.
+		if (bHasPlayRate) AnimSection->Params.PlayRate = static_cast<float>(PlayRate);
+	}
+
+	const FFrameRate Tick = MovieScene->GetTickResolution();
+	if (bHasStart || bHasEnd || Animation)
+	{
+		// Without endSeconds a clip section spans the clip after offsets and play rate.
+		const double DefaultSpan = Animation ? AnimSpanSeconds : 1.0;
 		const FFrameNumber Start = Tick.AsFrameNumber(StartSeconds);
-		const FFrameNumber End = Tick.AsFrameNumber(bHasEnd ? EndSeconds : StartSeconds + 1.0);
+		const FFrameNumber End = Tick.AsFrameNumber(bHasEnd ? EndSeconds : StartSeconds + DefaultSpan);
 		Section->SetRange(TRange<FFrameNumber>(Start, End));
 	}
 
@@ -1374,6 +1617,10 @@ TSharedPtr<FJsonValue> FSequencerHandlers::AddSection(const TSharedPtr<FJsonObje
 	TSharedPtr<FJsonObject> RangeObj = MakeShared<FJsonObject>();
 	UEMCP::SequencerInfo::SetTimingRangeFields(*RangeObj, Section->GetRange(), Tick, MovieScene->GetDisplayRate());
 	Result->SetObjectField(TEXT("range"), RangeObj);
+	if (AnimSection)
+	{
+		Result->SetObjectField(TEXT("animation"), SkeletalAnimationParamsJson(*AnimSection, Tick));
+	}
 
 	// Same reason as add_sequence_track: nothing in the bridge removes a
 	// MovieScene section, a track, or a possessable binding, and this call can

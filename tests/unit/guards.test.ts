@@ -12,13 +12,14 @@
  */
 import { describe, it, expect, beforeEach } from "vitest";
 import { BaseTask, TaskRegistry, type TaskResult, type TaskConstructor } from "@db-lyon/flowkit";
-import { assertNoLegacyGuardTasks, buildGuards } from "../../src/flow/guards.js";
+import { assertNoLegacyGuardTasks, buildGuards, GUARD_OVERRIDE_META_KEY } from "../../src/flow/guards.js";
+import { withCallAsker } from "../../src/flow/call-elicit.js";
 import { GuardsSchema } from "../../src/flow/guard-schema.js";
 import { GuardRegistry, makeCallContext, type CallContext } from "../../src/flow/guard.js";
 import { GuardedBridge } from "../../src/flow/guarded-bridge.js";
 import { ErrorCode, McpError } from "../../src/core/errors.js";
 import type { IBridge } from "../../src/bridge/bridge.js";
-import type { ToolContext } from "../../src/core/types.js";
+import type { ElicitFn, ElicitParams, ElicitResult, ToolContext } from "../../src/core/types.js";
 
 const target = { projectPath: null, port: 0, portSource: "default" as const, verified: true };
 
@@ -689,6 +690,151 @@ describe("a declaration that cannot work stops the server", () => {
   });
 });
 
+/** An elicitation gate that records each form and answers with `answer`. */
+function asker(answer: ElicitResult | (() => never), advertises = true) {
+  const forms: ElicitParams[] = [];
+  const elicit: ElicitFn = async (params) => {
+    forms.push(params);
+    return typeof answer === "function" ? answer() : answer;
+  };
+  elicit.clientAdvertisesElicitation = () => advertises;
+  return { elicit, forms };
+}
+
+const answering = (decision: string): ElicitResult => ({ action: "accept", content: { decision } });
+
+async function overridable(registry = registryWith({ check: DENY })) {
+  const [guard] = await buildGuards(
+    declare({ policy: { allowsOverride: true, before: { class_path: "check" } } }),
+    deps(registry),
+    SOURCE,
+  );
+  return guard;
+}
+
+describe("a guard that allows overrides (#1639)", () => {
+  it("asks the person and runs the call when they allow it", async () => {
+    const guard = await overridable();
+    const { elicit, forms } = asker(answering("allow"));
+
+    await expect(
+      withCallAsker({ elicit, subject: "blueprint.create" }, () => guard.before!(callCtx("create_blueprint"))),
+    ).resolves.toBeUndefined();
+
+    expect(forms).toHaveLength(1);
+    expect(forms[0].message).toBe("Guard policy blocked blueprint(create): checked out by alice. Allow this call?");
+    expect(forms[0]._meta?.[GUARD_OVERRIDE_META_KEY]).toEqual({
+      guard: "policy",
+      method: "create_blueprint",
+      subject: "blueprint.create",
+      call: "blueprint(create)",
+      reason: "checked out by alice",
+      paths: [],
+    });
+  });
+
+  it("keeps the WRITE_BLOCKED denial when the person denies, declines or cancels", async () => {
+    const guard = await overridable();
+    for (const answer of [answering("deny"), { action: "decline" as const }, { action: "cancel" as const }]) {
+      const { elicit } = asker(answer);
+      await expect(
+        withCallAsker({ elicit, subject: "blueprint.create" }, () => guard.before!(callCtx("create_blueprint"))),
+      ).rejects.toMatchObject({ code: ErrorCode.WRITE_BLOCKED });
+    }
+  });
+
+  it("keeps the denial when the form fails, because no answer is not a yes", async () => {
+    const guard = await overridable();
+    const { elicit } = asker(() => {
+      throw new Error("client went away");
+    });
+    await expect(
+      withCallAsker({ elicit }, () => guard.before!(callCtx("create_blueprint"))),
+    ).rejects.toMatchObject({ code: ErrorCode.WRITE_BLOCKED });
+  });
+
+  it("asks nobody when the client did not advertise elicitation, or there is no caller", async () => {
+    const guard = await overridable();
+    const { elicit, forms } = asker(answering("allow"), false);
+    await expect(
+      withCallAsker({ elicit }, () => guard.before!(callCtx("create_blueprint"))),
+    ).rejects.toMatchObject({ code: ErrorCode.WRITE_BLOCKED });
+    expect(forms).toEqual([]);
+
+    await expect(guard.before!(callCtx("create_blueprint"))).rejects.toMatchObject({ code: ErrorCode.WRITE_BLOCKED });
+  });
+
+  it("remembers allow for this session per call, and asks again for a different one", async () => {
+    const guard = await overridable();
+    const { elicit, forms } = asker(answering("allow_session"));
+    const run = (subject: string, method: string) =>
+      withCallAsker({ elicit, subject }, () => guard.before!(callCtx(method)));
+
+    await run("blueprint.create", "create_blueprint");
+    await run("blueprint.create", "create_blueprint");
+    expect(forms).toHaveLength(1);
+
+    await run("level.spawn_actor", "spawn_actor");
+    expect(forms).toHaveLength(2);
+  });
+
+  it("allows once only once", async () => {
+    const guard = await overridable();
+    const { elicit, forms } = asker(answering("allow"));
+    const run = () => withCallAsker({ elicit, subject: "blueprint.create" }, () => guard.before!(callCtx("create_blueprint")));
+    await run();
+    await run();
+    expect(forms).toHaveLength(2);
+  });
+
+  it("never asks for a guard without the option", async () => {
+    const [guard] = await buildGuards(
+      declare({ policy: { before: { class_path: "check" } } }),
+      deps(registryWith({ check: DENY })),
+      SOURCE,
+    );
+    const { elicit, forms } = asker(answering("allow"));
+    await expect(
+      withCallAsker({ elicit }, () => guard.before!(callCtx("create_blueprint"))),
+    ).rejects.toMatchObject({ code: ErrorCode.WRITE_BLOCKED });
+    expect(forms).toEqual([]);
+  });
+
+  it("does not offer an override for a hook that threw, which never decided", async () => {
+    const reg = new TaskRegistry();
+    reg.register(
+      "check",
+      class extends BaseTask {
+        get taskName() {
+          return "explodes";
+        }
+        async execute(): Promise<TaskResult> {
+          throw new Error("policy service unreachable");
+        }
+      } as unknown as TaskConstructor,
+    );
+    const guard = await overridable(reg);
+    const { elicit, forms } = asker(answering("allow"));
+    await expect(
+      withCallAsker({ elicit }, () => guard.before!(callCtx("create_blueprint"))),
+    ).rejects.toThrow(/guard 'policy' errored/);
+    expect(forms).toEqual([]);
+  });
+
+  it("reaches the editor through the guarded bridge once the person allows it", async () => {
+    const guardRegistry = new GuardRegistry();
+    guardRegistry.register(await overridable());
+    const inner = fakeBridge();
+    const bridge = new GuardedBridge(inner, guardRegistry, resolveExisting);
+    const { elicit } = asker(answering("allow"));
+
+    await expect(
+      withCallAsker({ elicit, subject: "asset.save" }, () => bridge.call("save_asset", { assetPath: "/Game/Foo" })),
+    ).resolves.toEqual({ ok: true });
+    expect(inner.calls).toEqual(["save_asset"]);
+  });
+});
+
 describe("the declaration schema", () => {
   it("refuses a guard with neither hook, which would never run", () => {
     expect(() => declare({ policy: { scope: "writes" } })).toThrow(/before hook, an after hook, or both/);
@@ -706,9 +852,9 @@ describe("the declaration schema", () => {
     expect(() => declare({ "my guard": { before: { class_path: "x" } } })).toThrow(/guard name/i);
   });
 
-  it("defaults scope to all and order to zero", () => {
+  it("defaults scope to all, order to zero and allowsOverride to false", () => {
     const parsed = declare({ policy: { before: { class_path: "x" } } });
-    expect(parsed.policy).toMatchObject({ scope: "all", order: 0 });
+    expect(parsed.policy).toMatchObject({ scope: "all", order: 0, allowsOverride: false });
   });
 });
 

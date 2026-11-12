@@ -4,6 +4,7 @@
 #if WITH_DEV_AUTOMATION_TESTS
 
 #include "HandlerRegistry.h"
+#include "HandlerWorld.h"
 #include "Handlers/Level/LevelHandlers.h"
 #include "Handlers/Level/LevelHandlers_InstanceProjection_Internal.h"
 #include "Components/BoxComponent.h"
@@ -48,10 +49,9 @@ namespace
 				}
 			}
 			GEngine->ShutdownWorldNetDriver(World);
-			World->DestroyWorld(true);
+			MCPDestroyDisposableWorld(World, /*bInformEngineOfWorld=*/true);
 			World->SetPhysicsScene(nullptr);
 			GEngine->DestroyWorldContext(World);
-			World->RemoveFromRoot();
 			World = nullptr;
 		}
 

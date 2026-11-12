@@ -1,4 +1,5 @@
 import WebSocket from "ws";
+import { randomUUID } from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
 
@@ -8,8 +9,11 @@ import { debug, warn } from "../core/log.js";
 import { DEFAULT_BRIDGE_PORT, deriveProjectPort } from "./port.js";
 import { bridgeStateDir, isPidAlive, resolveLiveBridgeAddress } from "./editor-target.js";
 import { syncRequestedPort } from "./requested-port.js";
+import { canvasPortReplacement } from "../integrations/epic/unreal-canvas.js";
 import { packageVersion } from "../core/package-root.js";
 import { readEnv } from "../core/env.js";
+import { bridgeAuthHeaders, watchUpgradeRefusal } from "./bridge-token.js";
+import type { ProgressUpdate } from "../core/types.js";
 
 /**
  * The wire protocol this client speaks. Must match
@@ -149,10 +153,49 @@ export interface BridgeResponse {
  * `timeoutMs` is the caller's explicit budget; the plugin waits at least that
  * long on the game thread instead of its 30s default (#1339).
  */
-export function encodeRequest(id: string, method: string, params?: Record<string, unknown>, timeoutMs?: number): string {
-  return JSON.stringify(timeoutMs === undefined
-    ? { id, method, params: params ?? {} }
-    : { id, method, params: params ?? {}, timeoutMs });
+export function encodeRequest(
+  id: string,
+  method: string,
+  params?: Record<string, unknown>,
+  timeoutMs?: number,
+  extras?: { cancelToken?: string; progress?: boolean },
+): string {
+  const frame: Record<string, unknown> = { id, method, params: params ?? {} };
+  if (timeoutMs !== undefined) frame.timeoutMs = timeoutMs;
+  if (extras?.cancelToken) frame.cancelToken = extras.cancelToken;
+  if (extras?.progress) frame.progress = true;
+  return JSON.stringify(frame);
+}
+
+/**
+ * What a caller can hand one bridge call besides its parameters. A plugin that
+ * defers its answer sends notifications/progress frames while it is awaited and
+ * honours cancel_request; one that answers at once sends nothing, and a cancel
+ * then only stops this side waiting.
+ */
+export interface BridgeCallOptions {
+  onProgress?: (update: ProgressUpdate) => void;
+  signal?: AbortSignal;
+}
+
+/** A notifications/progress frame the plugin sends for a request it is still answering. */
+interface BridgeProgressFrame {
+  method: "notifications/progress";
+  params: { id?: string; progress?: number; total?: number; message?: string };
+}
+
+function isProgressFrame(msg: unknown): msg is BridgeProgressFrame {
+  return !!msg && typeof msg === "object" && (msg as { method?: unknown }).method === "notifications/progress";
+}
+
+/** The error a cancelled call rejects with. The editor may still have run it. */
+function cancelledError(method: string, operationId?: string): McpError {
+  return new McpError(
+    ErrorCode.CANCELLED,
+    `Bridge call '${method}' was cancelled by the client. A handler that had already answered or that cannot be `
+    + "interrupted may have applied its changes; read the state back before running it again.",
+    { outcome: "unknown", method, ...(operationId ? { operationId } : {}) },
+  );
 }
 
 /**
@@ -192,7 +235,14 @@ export function callBridgeOnce(
 ): Promise<BridgeReply> {
   return new Promise<BridgeReply>((resolve) => {
     let settled = false;
-    const ws = new WebSocket(`ws://${host}:${port}`);
+    let headers: Record<string, string>;
+    try {
+      headers = bridgeAuthHeaders(port);
+    } catch {
+      resolve({ answered: false, methodError: false, refused: false, result: null });
+      return;
+    }
+    const ws = new WebSocket(`ws://${host}:${port}`, { headers });
     const finish = (reply: BridgeReply) => {
       if (settled) return;
       settled = true;
@@ -226,6 +276,7 @@ interface PendingRequest {
   timer: ReturnType<typeof setTimeout>;
   /** Kept so an "unknown method" answer can name the method it was about. */
   method: string;
+  onProgress?: (update: ProgressUpdate) => void;
 }
 
 /**
@@ -306,6 +357,23 @@ export function epicToolsetNames(answer: unknown): readonly string[] | null {
   return null;
 }
 
+/**
+ * The tool names in an epic_list_mcp_tools answer: the list when it has one,
+ * empty when Epic's MCP plugin is absent, null when the answer says neither.
+ */
+export function epicMcpToolNames(answer: unknown): readonly string[] | null {
+  if (!answer || typeof answer !== "object" || Array.isArray(answer)) return null;
+  const body = answer as Record<string, unknown>;
+  if (Array.isArray(body.tools)) {
+    if (body.available === false) return [];
+    return body.tools
+      .map((t) => (t && typeof t === "object" ? (t as Record<string, unknown>).name : undefined))
+      .filter((n): n is string => typeof n === "string" && n !== "")
+      .sort();
+  }
+  return null;
+}
+
 export interface IBridge {
   readonly isConnected: boolean;
   /** #821: what the connected bridge reported at handshake, when there is one. */
@@ -322,7 +390,15 @@ export interface IBridge {
   refreshEpicToolsets?(): Promise<readonly string[] | null>;
   /** The toolsets the surface declares, which a read after the handshake waits for (#1538). */
   expectEpicToolsets?(names: readonly string[]): void;
-  call(method: string, params?: Record<string, unknown>, timeoutMs?: number): Promise<unknown>;
+  /**
+   * The tools Epic's Unreal MCP plugin serves beside the registry (plugin and
+   * tool-library tools), or null while unknown. An action that runs one of
+   * them through epic_call_mcp_tool is withheld when it is not listed (#1824).
+   */
+  readonly epicMcpTools?: readonly string[] | null;
+  /** Re-read epicMcpTools from the editor. */
+  refreshEpicMcpTools?(): Promise<readonly string[] | null>;
+  call(method: string, params?: Record<string, unknown>, timeoutMs?: number, options?: BridgeCallOptions): Promise<unknown>;
   connect(timeoutMs?: number): Promise<void>;
   /**
    * Move the connection to another project's editor (#818). Drops the current
@@ -391,6 +467,48 @@ export class EditorBridge implements IBridge {
     return run;
   }
 
+  private mcpTools: readonly string[] | null = null;
+  private mcpToolsInFlight: Promise<readonly string[] | null> | null = null;
+
+  /**
+   * The tools Epic's Unreal MCP plugin serves outside the toolset registry,
+   * or null while unknown. Read once after each handshake: they register when
+   * their modules start, before the bridge answers.
+   */
+  get epicMcpTools(): readonly string[] | null {
+    return this.mcpTools;
+  }
+
+  /**
+   * Read the MCP plugin's tool names. A plugin that is off is an empty list; a
+   * call that fails or a bridge without the method leaves it unknown.
+   */
+  refreshEpicMcpTools(): Promise<readonly string[] | null> {
+    if (this.mcpToolsInFlight) return this.mcpToolsInFlight;
+    if (!this.registered?.includes("epic_list_mcp_tools")) return Promise.resolve(this.mcpTools);
+    const run = (async () => {
+      let names: readonly string[] | null = null;
+      try {
+        names = epicMcpToolNames(await this.call("epic_list_mcp_tools", {}));
+      } catch {
+        names = null;
+      }
+      if (names !== null) {
+        const same = this.mcpTools !== null && names.length === this.mcpTools.length
+          && names.every((n, i) => n === this.mcpTools![i]);
+        if (!same) {
+          this.mcpTools = names;
+          this.notifyRegistered();
+        }
+      }
+      return this.mcpTools;
+    })().finally(() => {
+      this.mcpToolsInFlight = null;
+    });
+    this.mcpToolsInFlight = run;
+    return run;
+  }
+
   expectEpicToolsets(names: readonly string[]): void {
     this.expectedToolsets = [...new Set(names)];
     // Expectations that arrive after the handshake's read start the follow-up themselves.
@@ -452,6 +570,8 @@ export class EditorBridge implements IBridge {
   private connectedState = false;
   /** Whether an editor ever answered, so there is one to wait for. */
   private everConnected = false;
+  /** The last refused upgrade's explanation, so a retry loop warns once rather than every tick. */
+  private lastUpgradeRefusal: string | null = null;
   private readonly connectionListeners = new Set<(change: BridgeConnectionChange) => void>();
 
   /** Called when the socket opens or is lost. Returns the unsubscribe. */
@@ -482,6 +602,7 @@ export class EditorBridge implements IBridge {
     this.registered = actions;
     // Another plugin build may have another registry.
     this.toolsets = null;
+    this.mcpTools = null;
     this.notifyRegistered();
   }
 
@@ -557,6 +678,30 @@ export class EditorBridge implements IBridge {
     }
   }
 
+  /**
+   * Why the last project's pinned port was not used, or null. Set when the
+   * project enables the Unreal Canvas Bridge and the pin is a port it claims.
+   */
+  public canvasPortAvoided: { port: number; reason: string } | null = null;
+
+  /**
+   * Keep a pin off the ports a project's Unreal Canvas Bridge claims (9877 for
+   * its webcam server, 9880 for its viewport stream). The C++ bridge applies
+   * the same rule when it resolves the port, so both halves land on the
+   * derived port. A lockfile port is what an editor bound, so it is left alone.
+   */
+  private avoidCanvasPorts(uprojectPath: string | null): void {
+    this.canvasPortAvoided = null;
+    if (!uprojectPath || (this.portSource !== "explicit" && this.portSource !== "env" && this.portSource !== "config")) return;
+    const swap = canvasPortReplacement(uprojectPath, this.port, deriveProjectPort(path.dirname(uprojectPath)));
+    if (!swap) return;
+    warn("bridge", `Not using the pinned bridge port: ${swap.reason}.`);
+    this.canvasPortAvoided = { port: this.port, reason: swap.reason };
+    this.port = swap.port;
+    this.portSource = "derived";
+    this.unverifiedPin = false;
+  }
+
   get isConnected(): boolean {
     return this.ws?.readyState === WebSocket.OPEN;
   }
@@ -594,6 +739,7 @@ export class EditorBridge implements IBridge {
       this.portSource = "derived";
       debug("bridge", `derived per-project bridge port ${this.port} from ${path.dirname(uprojectPath)}`);
     }
+    this.avoidCanvasPorts(uprojectPath);
     // #817: hand the pin to the editor. An editor launched from Explorer
     // cannot see UE_MCP_PORT or the config merge that produced this number, so
     // without this file a pinned project has its two halves on different ports.
@@ -643,6 +789,7 @@ export class EditorBridge implements IBridge {
       this.port = deriveProjectPort(path.dirname(resolved));
       this.portSource = "derived";
     }
+    this.avoidCanvasPorts(resolved);
 
     // #817: publish the new target's pin, and only its own. An unverified pin
     // was chosen for the project we just left, so writing it into this one
@@ -718,6 +865,16 @@ export class EditorBridge implements IBridge {
     const url = `ws://${this.host}:${this.port}`;
     const generation = this.targetGeneration;
 
+    // The session token the editor published for this port, when it did. No
+    // file means a plugin that predates the token, which takes no header.
+    let headers: Record<string, string>;
+    try {
+      headers = bridgeAuthHeaders(this.port);
+    } catch (e) {
+      throw new McpError(ErrorCode.NOT_CONNECTED, e instanceof Error ? e.message : String(e));
+    }
+    const port = this.port;
+
     // #821: an editor whose bridge failed to bind is running and unreachable at
     // the same time. It leaves a record saying so, and quoting it here is the
     // difference between "start the editor" and "the editor is up, its bridge
@@ -733,10 +890,23 @@ export class EditorBridge implements IBridge {
         reject(new McpError(ErrorCode.BRIDGE_TIMEOUT, explainFailure(`Connection to editor bridge timed out (${url})`)));
       }, timeoutMs);
 
-      const ws = new WebSocket(url);
+      const ws = new WebSocket(url, { headers });
+
+      // A refused upgrade says why. Without this the caller sees ws's bare
+      // "Unexpected server response: 401" and the reconnect loop retries it
+      // at debug level forever. Warned once per distinct reason.
+      watchUpgradeRefusal(ws, port, "Authorization" in headers, (message) => {
+        clearTimeout(timer);
+        if (message !== this.lastUpgradeRefusal) {
+          this.lastUpgradeRefusal = message;
+          warn("bridge", message);
+        }
+        reject(new McpError(ErrorCode.NOT_CONNECTED, message));
+      });
 
       ws.on("open", () => {
         clearTimeout(timer);
+        this.lastUpgradeRefusal = null;
         // The target moved while this handshake was in flight. Installing the
         // socket now would put the bridge back on the project we just left.
         if (this.targetGeneration !== generation) {
@@ -853,7 +1023,8 @@ export class EditorBridge implements IBridge {
     return new McpError(ErrorCode.NOT_CONNECTED, `${base}${cause}${waited}`);
   }
 
-  async call(method: string, params?: Record<string, unknown>, timeoutMs?: number): Promise<unknown> {
+  async call(method: string, params?: Record<string, unknown>, timeoutMs?: number, options?: BridgeCallOptions): Promise<unknown> {
+    if (options?.signal?.aborted) throw cancelledError(method);
     if (!this.isConnected) {
       try {
         await this.ensureConnected();
@@ -866,7 +1037,12 @@ export class EditorBridge implements IBridge {
 
     const id = String(++this.idCounter);
     const explicit = typeof timeoutMs === "number" && Number.isFinite(timeoutMs) && timeoutMs > 0;
-    const frame = encodeRequest(id, method, params, explicit ? resolveBridgeTimeout(method, timeoutMs) : undefined);
+    const signal = options?.signal;
+    const cancelToken = signal ? randomUUID() : undefined;
+    const frame = encodeRequest(id, method, params, explicit ? resolveBridgeTimeout(method, timeoutMs) : undefined, {
+      cancelToken,
+      progress: !!options?.onProgress,
+    });
     // #989: not a flat 30s any more. An explicit per-call budget is honoured,
     // and a method the C++ side registered a longer timeout for is waited out
     // to that limit, so the client stops declaring a failure on a call the
@@ -901,7 +1077,20 @@ export class EditorBridge implements IBridge {
         ));
       }, timeout);
 
-      this.pending.set(id, { resolve, reject, timer, method });
+      this.pending.set(id, { resolve, reject, timer, method, onProgress: options?.onProgress });
+      if (signal && cancelToken) {
+        // The client cancelled: tell the editor on a socket of its own, since
+        // this one's request is the thing being waited on, and stop waiting.
+        const onAbort = (): void => {
+          if (!this.pending.has(id)) return;
+          clearTimeout(timer);
+          this.pending.delete(id);
+          this.rememberAbandoned(id, method);
+          void callBridgeOnce(this.host, this.port, "cancel_request", { cancelToken }, 5000);
+          reject(cancelledError(method, id));
+        };
+        signal.addEventListener("abort", onAbort, { once: true });
+      }
       ws.send(frame, (err) => {
         if (!err) return;
 
@@ -994,6 +1183,11 @@ export class EditorBridge implements IBridge {
           // Read off the handshake's critical path; a failure leaves it unknown.
           this.stopFollowingToolsets();
           queueMicrotask(() => this.followEpicToolsets(ws));
+          // An editor restarted with another plugin set answers with the same
+          // method list, so the MCP tools are read again on every handshake.
+          queueMicrotask(() => {
+            if (this.ws === ws) void this.refreshEpicMcpTools();
+          });
         }
 
         const mismatch = describeProtocolMismatch(capabilities);
@@ -1059,7 +1253,19 @@ export class EditorBridge implements IBridge {
   private setupListeners(ws: WebSocket): void {
     ws.on("message", (data) => {
       try {
-        const msg = JSON.parse(data.toString()) as BridgeResponse;
+        const parsed = JSON.parse(data.toString()) as unknown;
+        if (isProgressFrame(parsed)) {
+          const target = parsed.params?.id !== undefined ? this.pending.get(String(parsed.params.id)) : undefined;
+          if (target?.onProgress && typeof parsed.params.progress === "number") {
+            target.onProgress({
+              progress: parsed.params.progress,
+              ...(typeof parsed.params.total === "number" ? { total: parsed.params.total } : {}),
+              message: typeof parsed.params.message === "string" ? parsed.params.message : "",
+            });
+          }
+          return;
+        }
+        const msg = parsed as BridgeResponse;
         const pending = this.pending.get(msg.id);
         if (!pending) {
           // A reply to a call that already timed out on this side. Nobody is

@@ -17,7 +17,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import type { JSONRPCMessage } from "@modelcontextprotocol/sdk/types.js";
 import { info, warn, error } from "../core/log.js";
 import { packageVersion } from "../core/package-root.js";
-import { DAEMON_API_VERSION, daemonDir, projectKey, readLiveDiscovery, type DaemonDiscovery } from "./discovery.js";
+import { DAEMON_API_VERSION, daemonDir, projectKey, readAnsweringDiscovery, type AnsweringDiscoveryOptions, type DaemonDiscovery } from "./discovery.js";
 import { isOlder } from "./daemon.js";
 import { liveStartLock } from "./start-lock.js";
 import { installedBridge } from "../editor/install-marker.js";
@@ -67,7 +67,7 @@ export function daemonCommand(uproject: string, version: string, npxCli: string 
  * runs the version daemonVersionFor names; when that one cannot start, this
  * package's own runs instead.
  */
-export async function ensureDaemon(uproject: string, wantVersion?: string): Promise<DaemonDiscovery> {
+export async function ensureDaemon(uproject: string, wantVersion?: string, probe: AnsweringDiscoveryOptions = {}): Promise<DaemonDiscovery> {
   const projectDir = path.dirname(path.resolve(uproject));
   const logDir = daemonDir();
   const logFile = path.join(logDir, `${projectKey(projectDir)}.log`);
@@ -79,7 +79,8 @@ export async function ensureDaemon(uproject: string, wantVersion?: string): Prom
   let sawStarter = false;
   const deadline = Date.now() + START_TIMEOUT_MS;
   while (Date.now() < deadline) {
-    const d = readLiveDiscovery(projectDir);
+    // A record proven stale is dropped here, so the spawn below replaces it (#1460).
+    const d = await readAnsweringDiscovery(projectDir, probe);
     if (usable(d)) return d;
     const starting = liveStartLock(projectDir) !== null;
     if (spawnedAt !== null) {

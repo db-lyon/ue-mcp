@@ -74,7 +74,7 @@ async function exists(path: string): Promise<boolean> {
 beforeAll(async () => {
   bridge = await getBridge();
   // MCP_Home is not checked in; demo_go_home creates it on a fresh project and loads it.
-  const home = await callBridge(bridge, "demo_go_home", {});
+  const home = await callBridge(bridge, "demo_go_home", { discardUnsaved: true });
   expect(home.ok && body(home).success !== false, home.error ?? JSON.stringify(home.result)).toBe(true);
   const loaded = await callBridge(bridge, "load_level", { levelPath: MAP });
   expect(loaded.ok, loaded.error).toBe(true);

@@ -64,7 +64,7 @@ afterAll(async () => {
   if (!bridge) return;
   const target = originalMap && originalMap.startsWith("/Game/") && originalMap !== MAP ? originalMap : HOME;
   const back = await callBridge(bridge, "load_level", { levelPath: target, discardUnsaved: true });
-  if (!succeeded(back)) await callBridge(bridge, "demo_go_home", {});
+  if (!succeeded(back)) await callBridge(bridge, "demo_go_home", { discardUnsaved: true });
   await callBridge(bridge, "delete_asset", { assetPath: MAP, force: true });
   disconnectBridge();
 }, 600_000);

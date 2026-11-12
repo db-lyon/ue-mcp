@@ -2,6 +2,7 @@ import { promises as fs, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { userDir } from "../core/user-dir.js";
 import { readEnv } from "../core/env.js";
+import { writePrivateFile } from "../core/private-file.js";
 
 // OAuth Client ID for the ue-mcp-feedback GitHub App. This is NOT a secret -
 // device flow client IDs are designed to be public. Override at runtime via
@@ -68,8 +69,7 @@ export function readUserAuthSync(): UserAuth | null {
 }
 
 export async function writeUserAuth(auth: UserAuth): Promise<void> {
-  await fs.mkdir(authDir(), { recursive: true });
-  await fs.writeFile(authFile(), JSON.stringify(auth, null, 2), { mode: 0o600 });
+  await writePrivateFile(authFile(), JSON.stringify(auth, null, 2));
 }
 
 export async function clearUserAuth(): Promise<void> {
@@ -91,8 +91,7 @@ async function readPending(): Promise<PendingDeviceFlow | null> {
 }
 
 async function writePending(p: PendingDeviceFlow): Promise<void> {
-  await fs.mkdir(authDir(), { recursive: true });
-  await fs.writeFile(pendingFile(), JSON.stringify(p, null, 2), { mode: 0o600 });
+  await writePrivateFile(pendingFile(), JSON.stringify(p, null, 2));
 }
 
 async function clearPending(): Promise<void> {

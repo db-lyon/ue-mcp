@@ -15,6 +15,7 @@ export function userSandboxEnv(home: string): Record<string, string> {
     UE_MCP_USER_STATE: path.join(ueMcp, "state.json"),
     UE_MCP_AUTH_DIR: ueMcp,
     UE_MCP_DAEMON_DIR: path.join(ueMcp, "daemons"),
+    UE_MCP_BRIDGE_TOKEN_DIR: path.join(ueMcp, "bridge"),
     UE_MCP_EXTENSIONS_DIR: path.join(ueMcp, "extensions"),
     UE_MCP_PENDING_DIR: path.join(ueMcp, "pending-feedback"),
     UE_MCP_REGISTRY_CACHE: path.join(ueMcp, "registry-catalog.json"),

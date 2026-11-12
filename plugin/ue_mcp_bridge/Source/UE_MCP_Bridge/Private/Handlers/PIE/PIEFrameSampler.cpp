@@ -43,15 +43,16 @@ namespace MCPPIE
 		}
 
 		// Walk a dotted path from a root UObject down to a leaf FProperty and
-		// return its numeric value as a double. Returns true on success.
-		// Mirrors the dotted-path resolver in EditorHandlers_PIE.cpp but
-		// returns a single double instead of typed JSON.
-		bool ResolvePathToDouble(UObject* Root, const FString& Path, double& OutValue)
+		// return its numeric value as a double. Returns true on success; on
+		// failure OutWhy (when given) names the segment that stopped the walk.
+		bool ResolvePathToDouble(UObject* Root, const FString& Path, double& OutValue, FString* OutWhy = nullptr)
 		{
-			if (!Root || Path.IsEmpty()) return false;
+			auto Fail = [OutWhy](const FString& Why) { if (OutWhy) *OutWhy = Why; return false; };
+			if (!Root) return Fail(TEXT("no object to read from"));
+			if (Path.IsEmpty()) return Fail(TEXT("empty path"));
 			TArray<FString> Parts;
 			Path.ParseIntoArray(Parts, TEXT("."));
-			if (Parts.Num() == 0) return false;
+			if (Parts.Num() == 0) return Fail(TEXT("empty path"));
 
 			UStruct* CurrentStruct = Root->GetClass();
 			const void* CurrentContainer = Root;
@@ -79,7 +80,10 @@ namespace MCPPIE
 						}
 					}
 				}
-				if (!Seg) return false;
+				if (!Seg)
+				{
+					return Fail(FString::Printf(TEXT("no property '%s' on %s"), *Parts[i], *CurrentStruct->GetName()));
+				}
 
 				if (i < Parts.Num() - 1)
 				{
@@ -92,13 +96,13 @@ namespace MCPPIE
 					{
 						UObject* Sub = OP->GetObjectPropertyValue(
 							OP->ContainerPtrToValuePtr<void>(const_cast<void*>(CurrentContainer)));
-						if (!Sub) return false;
+						if (!Sub) return Fail(FString::Printf(TEXT("'%s' is null"), *Parts[i]));
 						CurrentContainer = Sub;
 						CurrentStruct = Sub->GetClass();
 					}
 					else
 					{
-						return false;
+						return Fail(FString::Printf(TEXT("'%s' is a %s and has no fields"), *Parts[i], *Seg->GetCPPType()));
 					}
 				}
 				else
@@ -107,7 +111,7 @@ namespace MCPPIE
 				}
 			}
 
-			if (!Property) return false;
+			if (!Property) return Fail(TEXT("path names a component, not a value"));
 			const void* Value = Property->ContainerPtrToValuePtr<void>(const_cast<void*>(CurrentContainer));
 
 			if (auto* P = CastField<FFloatProperty>(Property))   { OutValue = P->GetPropertyValue(Value); return true; }
@@ -128,7 +132,12 @@ namespace MCPPIE
 					if (auto* I = CastField<FIntProperty>(Under))    { OutValue = I->GetPropertyValue(Value); return true; }
 				}
 			}
-			return false;
+			if (FStructProperty* SP = CastField<FStructProperty>(Property))
+			{
+				return Fail(FString::Printf(TEXT("ends at struct %s; name a numeric field, e.g. %s.X"),
+					*SP->Struct->GetName(), *Path));
+			}
+			return Fail(FString::Printf(TEXT("ends at %s, which is not numeric"), *Property->GetCPPType()));
 		}
 
 		// pie-studio#4 (ue-mcp#756): sample one channel of a named bone or socket
@@ -221,9 +230,42 @@ namespace MCPPIE
 
 	FPIEFrameSampler::FPIEFrameSampler() = default;
 
+	FString FPIEFrameSampler::NormalizeActionPath(const FString& InPath)
+	{
+		FString Path = InPath.TrimStartAndEnd();
+		// Export text: InputAction'/Game/Input/IA_Move.IA_Move'
+		int32 Quote = INDEX_NONE;
+		if (Path.FindChar(TEXT('\''), Quote) && Path.Len() > Quote + 1 && Path.EndsWith(TEXT("'")))
+		{
+			Path = Path.Mid(Quote + 1, Path.Len() - Quote - 2);
+		}
+		FString Name;
+		if (!Path.Split(TEXT("/"), nullptr, &Name, ESearchCase::CaseSensitive, ESearchDir::FromEnd))
+		{
+			return Path;
+		}
+		if (Name.IsEmpty() || Name.Contains(TEXT(".")))
+		{
+			return Path;
+		}
+		return Path + TEXT(".") + Name;
+	}
+
 	void FPIEFrameSampler::SetConfig(const FConfig& InConfig)
 	{
 		Config = InConfig;
+		for (FString& P : Config.ActionPaths)
+		{
+			P = NormalizeActionPath(P);
+		}
+		// Replace, never append: a session armed without track_values must
+		// not inherit the previous session's paths (#1690).
+		SeedTrackedValues();
+	}
+
+	void FPIEFrameSampler::SeedTrackedValues()
+	{
+		TrackedValues.Reset();
 		for (const FString& P : Config.TrackedValuePaths)
 		{
 			FTrackedValueSpec S;
@@ -233,24 +275,34 @@ namespace MCPPIE
 		}
 	}
 
+	TArray<FString> FPIEFrameSampler::GetUnmatchedActionPaths() const
+	{
+		TArray<FString> Out;
+		if (!bAttached) return Out;
+		for (const FString& P : Config.ActionPaths)
+		{
+			const bool bMatched = Tracked.ContainsByPredicate([&P](const FTrackedAction& T) { return T.Path == P; });
+			if (!bMatched) Out.Add(P);
+		}
+		return Out;
+	}
+
 	void FPIEFrameSampler::Reset()
 	{
 		bAttached = false;
+		AttachBlocker.Reset();
+		bBlockedOnInputComponent = false;
 		PawnClassPath.Reset();
 		PIEWorldPath.Reset();
 		Actions.Reset();
 		TrackedValues.Reset();
 		Tracked.Reset();
 		PendingMarkerLabels.Reset();
+		Warnings.Reset();
+		TrackedActorRefs.Reset();
 		PrevPawnLocation = FVector::ZeroVector;
-		// Re-seed TrackedValues from config in case the caller calls AttachToPIE again.
-		for (const FString& P : Config.TrackedValuePaths)
-		{
-			FTrackedValueSpec S;
-			S.Path = P;
-			S.Type = TEXT("double");
-			TrackedValues.Add(S);
-		}
+		// Re-seed from the current config so AttachToPIE can run again.
+		SeedTrackedValues();
 	}
 
 	void FPIEFrameSampler::DiscoverActions(APlayerController* PC, APawn* Pawn)
@@ -284,12 +336,17 @@ namespace MCPPIE
 			Actions.Add(Spec);
 		};
 
-		// Event bindings (BindAction calls on the pawn's EIC).
-		if (UEnhancedInputComponent* EIC = Cast<UEnhancedInputComponent>(Pawn->InputComponent))
+		// Event bindings (BindAction calls) on the pawn's and the controller's
+		// input components.
+		UInputComponent* const InputComponents[] = { Pawn->InputComponent, PC->InputComponent };
+		for (UInputComponent* IC : InputComponents)
 		{
-			for (const TUniquePtr<FEnhancedInputActionEventBinding>& Bind : EIC->GetActionEventBindings())
+			if (UEnhancedInputComponent* EIC = Cast<UEnhancedInputComponent>(IC))
 			{
-				TryAdd(Bind->GetAction());
+				for (const TUniquePtr<FEnhancedInputActionEventBinding>& Bind : EIC->GetActionEventBindings())
+				{
+					TryAdd(Bind->GetAction());
+				}
 			}
 		}
 
@@ -312,14 +369,16 @@ namespace MCPPIE
 		}
 	}
 
-	bool FPIEFrameSampler::AttachToPIE(UWorld* PIEWorld)
+	bool FPIEFrameSampler::AttachToPIE(UWorld* PIEWorld, bool bRequireInputComponent)
 	{
 		if (bAttached)
 		{
 			return true;
 		}
+		bBlockedOnInputComponent = false;
 		if (!PIEWorld)
 		{
+			AttachBlocker = TEXT("no PIE world");
 			return false;
 		}
 
@@ -327,28 +386,141 @@ namespace MCPPIE
 		FString Error;
 		if (!PIEWorldResolver::ResolvePlayerInWorld(PIEWorld, Config.ClientIndex, Target, Error))
 		{
+			AttachBlocker = Error;
 			return false;
 		}
 
 		APlayerController* PC = Target.PlayerController;
 		if (!PC)
 		{
+			AttachBlocker = FString::Printf(TEXT("local player %d has no player controller"), Config.ClientIndex);
 			return false;
 		}
 		APawn* Pawn = PC->GetPawn();
-		if (!Pawn || !Pawn->InputComponent)
+		if (!Pawn)
 		{
+			AttachBlocker = FString::Printf(TEXT("%s in %s possesses no pawn yet"), *PC->GetName(), *PIEWorld->GetName());
 			return false;
 		}
+		if (!Pawn->InputComponent)
+		{
+			AttachBlocker = FString::Printf(TEXT("pawn %s has no input component"), *Pawn->GetName());
+			bBlockedOnInputComponent = true;
+			if (bRequireInputComponent)
+			{
+				return false;
+			}
+			UE_LOG(LogMCPPIE, Warning, TEXT("[PIE-SAMPLER] Attaching to %s without an input component; bound actions are found once it has one"),
+				*Pawn->GetName());
+		}
 
+		AttachBlocker.Reset();
+		bBlockedOnInputComponent = false;
 		PawnClassPath = Pawn->GetClass()->GetPathName();
 		PIEWorldPath = PIEWorld->GetPathName();
 		DiscoverActions(PC, Pawn);
 
 		bAttached = true;
+		Warnings.Reset();
+		for (const FString& Missing : GetUnmatchedActionPaths())
+		{
+			Warnings.Add(FString::Printf(
+				TEXT("actions: '%s' is not bound or mapped for this player, so it is not recorded"), *Missing));
+		}
+		ProbeTrackedValues(PIEWorld, Pawn);
 		UE_LOG(LogMCPPIE, Log, TEXT("[PIE-SAMPLER] Attached: %d actions, %d tracked values, pawn=%s"),
 			Actions.Num(), TrackedValues.Num(), *PawnClassPath);
+		for (const FString& W : Warnings)
+		{
+			UE_LOG(LogMCPPIE, Warning, TEXT("[PIE-SAMPLER] %s"), *W);
+		}
 		return true;
+	}
+
+	AActor* FPIEFrameSampler::FindTrackedActor(UWorld* PIEWorld, const FString& Id)
+	{
+		FTrackedActorRef& Ref = TrackedActorRefs.FindOrAdd(Id);
+		if (AActor* Cached = Ref.Actor.Get())
+		{
+			if (Cached->GetWorld() == PIEWorld) return Cached;
+			Ref.Actor.Reset();
+		}
+		const double Now = FPlatformTime::Seconds();
+		if (Now < Ref.NextRetrySeconds) return nullptr;
+		AActor* Found = FindActorById(PIEWorld, Id);
+		Ref.Actor = Found;
+		Ref.NextRetrySeconds = Found ? 0.0 : Now + 1.0;
+		return Found;
+	}
+
+	bool FPIEFrameSampler::SampleTrackedValue(UWorld* PIEWorld, APawn* Pawn, const FString& Path, double& OutValue, FString* OutWhy)
+	{
+		if (Path.StartsWith(TEXT("sub:")))
+		{
+			FString ClassName, PropPath;
+			if (!Path.RightChop(4).Split(TEXT("."), &ClassName, &PropPath))
+			{
+				if (OutWhy) *OutWhy = TEXT("expected sub:<Class>.<path>");
+				return false;
+			}
+			UObject* SubObj = ResolveSubsystemByName(PIEWorld, ClassName, Config.ClientIndex);
+			if (!SubObj)
+			{
+				if (OutWhy) *OutWhy = FString::Printf(TEXT("no subsystem '%s' in the PIE world"), *ClassName);
+				return false;
+			}
+			return ResolvePathToDouble(SubObj, PropPath, OutValue, OutWhy);
+		}
+		if (Path.StartsWith(TEXT("bone:")) || Path.StartsWith(TEXT("bonecs:")))
+		{
+			const bool bCS = Path.StartsWith(TEXT("bonecs:"));
+			if (ResolveBoneChannel(Pawn, Path.RightChop(bCS ? 7 : 5), bCS, OutValue))
+			{
+				return true;
+			}
+			if (OutWhy) *OutWhy = TEXT("no such bone or socket on the pawn's skeletal mesh, or an unknown channel");
+			return false;
+		}
+		FString PawnWhy;
+		if (ResolvePathToDouble(Pawn, Path, OutValue, &PawnWhy))
+		{
+			return true;
+		}
+		// "<Actor>.<path>": the head names a level actor the same way
+		// tracked_actors and expect {op: exists} do (#1655).
+		FString Head, Rest;
+		if (Path.Split(TEXT("."), &Head, &Rest) && !Rest.IsEmpty())
+		{
+			if (AActor* Actor = FindTrackedActor(PIEWorld, Head))
+			{
+				return ResolvePathToDouble(Actor, Rest, OutValue, OutWhy);
+			}
+		}
+		if (OutWhy)
+		{
+			*OutWhy = Head.IsEmpty()
+				? PawnWhy
+				: FString::Printf(TEXT("%s on the pawn, and no actor in the PIE world is named '%s'"), *PawnWhy, *Head);
+		}
+		return false;
+	}
+
+	void FPIEFrameSampler::ProbeTrackedValues(UWorld* PIEWorld, APawn* Pawn)
+	{
+		for (FTrackedValueSpec& S : TrackedValues)
+		{
+			double Unused = 0.0;
+			FString Why;
+			if (SampleTrackedValue(PIEWorld, Pawn, S.Path, Unused, &Why))
+			{
+				S.Type = TEXT("double");
+				continue;
+			}
+			// Kept as a column, since a subsystem can appear later; the type
+			// says it never resolved so a column of zeros is not read as data.
+			S.Type = TEXT("unresolved");
+			Warnings.Add(FString::Printf(TEXT("track_values: '%s' does not resolve to a number (%s)"), *S.Path, *Why));
+		}
 	}
 
 	FCSVRow FPIEFrameSampler::SampleFrame(UWorld* PIEWorld, uint64 FrameNumber, double GameTime, double DeltaTime)
@@ -503,46 +675,18 @@ namespace MCPPIE
 			}
 		}
 
-		// Tracked reflection values: resolve against the pawn, or against a named
-		// subsystem for "sub:<Class>.<path>" entries (item 2b).
-		for (const FTrackedValueSpec& S : TrackedValues)
+		// Tracked reflection values: resolve against the pawn, a level actor
+		// ("<Actor>.<path>"), or a named subsystem ("sub:<Class>.<path>").
+		// A miss writes 0 to the CSV; the spec's type and the attach warning
+		// say so. A path that resolves later is promoted back to double.
+		for (FTrackedValueSpec& S : TrackedValues)
 		{
 			double Val = 0.0;
-			if (S.Path.StartsWith(TEXT("sub:")))
-			{
-				const FString Rest = S.Path.RightChop(4);
-				FString ClassName, PropPath;
-				if (Rest.Split(TEXT("."), &ClassName, &PropPath))
-				{
-					if (UObject* SubObj = ResolveSubsystemByName(PIEWorld, ClassName, Config.ClientIndex))
-					{
-						if (ResolvePathToDouble(SubObj, PropPath, Val))
-						{
-							Row.TrackedValues.Add(S.Path, Val);
-						}
-					}
-				}
-			}
-			else if (S.Path.StartsWith(TEXT("bone:")))
-			{
-				if (ResolveBoneChannel(Pawn, S.Path.RightChop(5), /*bComponentSpace=*/false, Val))
-				{
-					Row.TrackedValues.Add(S.Path, Val);
-				}
-			}
-			else if (S.Path.StartsWith(TEXT("bonecs:")))
-			{
-				if (ResolveBoneChannel(Pawn, S.Path.RightChop(7), /*bComponentSpace=*/true, Val))
-				{
-					Row.TrackedValues.Add(S.Path, Val);
-				}
-			}
-			else if (ResolvePathToDouble(Pawn, S.Path, Val))
+			if (SampleTrackedValue(PIEWorld, Pawn, S.Path, Val, nullptr))
 			{
 				Row.TrackedValues.Add(S.Path, Val);
+				S.Type = TEXT("double");
 			}
-			// Missing paths silently sample 0; the recorder doesn't fail on
-			// per-frame resolution misses because a subsystem may not yet exist.
 		}
 
 		// Drain queued markers into this frame's edge events.

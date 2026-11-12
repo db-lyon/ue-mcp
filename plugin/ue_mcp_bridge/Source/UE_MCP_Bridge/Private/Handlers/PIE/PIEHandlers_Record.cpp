@@ -5,6 +5,9 @@
 #include "HandlerUtils.h"
 #include "Handlers/PIE/PIEInputRecorder.h"
 #include "Handlers/PIE/PIESequenceFormat.h"
+#include "Handlers/PIE/PIEFrameSampler.h"
+#include "Handlers/PIE/PIEWorldResolver.h"
+#include "InputAction.h"
 #include "HAL/FileManager.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
@@ -25,6 +28,14 @@ namespace
 		return TEXT("idle");
 	}
 
+	void WriteWarnings(TSharedPtr<FJsonObject> R, const TArray<FString>& Warnings)
+	{
+		if (Warnings.Num() == 0) return;
+		TArray<TSharedPtr<FJsonValue>> Arr;
+		for (const FString& W : Warnings) Arr.Add(MakeShared<FJsonValueString>(W));
+		R->SetArrayField(TEXT("warnings"), Arr);
+	}
+
 	void WriteStatusFields(TSharedPtr<FJsonObject> R, const FRecorderStatus& S)
 	{
 		R->SetStringField(TEXT("state"), StateToString(S.State));
@@ -33,10 +44,22 @@ namespace
 		R->SetNumberField(TEXT("current_frame"), S.CurrentFrame);
 		R->SetNumberField(TEXT("elapsed_seconds"), S.ElapsedSeconds);
 		R->SetNumberField(TEXT("tracked_action_count"), S.TrackedActionCount);
+		R->SetBoolField(TEXT("pie_active"), S.bPIEActive);
+		if (S.PIEInstance != INDEX_NONE)
+		{
+			R->SetNumberField(TEXT("pie_instance"), S.PIEInstance);
+		}
 		if (!S.LastError.IsEmpty())
 		{
 			R->SetStringField(TEXT("last_error"), S.LastError);
 		}
+		if (S.State == ERecorderState::WaitingForPawn)
+		{
+			// Which pie_instance has a player with a pawn, to pick one.
+			R->SetStringField(TEXT("waiting_for"), S.WaitingFor);
+			R->SetArrayField(TEXT("pie_worlds"), PIEWorldResolver::DescribePlayWorlds());
+		}
+		WriteWarnings(R, S.Warnings);
 	}
 
 	void WriteFinishFields(TSharedPtr<FJsonObject> R, const FRecorderFinishResult& F)
@@ -67,6 +90,7 @@ namespace
 			Marks.Add(MakeShared<FJsonValueObject>(MO));
 		}
 		R->SetArrayField(TEXT("markers"), Marks);
+		WriteWarnings(R, F.Warnings);
 	}
 }
 
@@ -85,6 +109,18 @@ TSharedPtr<FJsonValue> FPIEHandlers::PieRecordArm(const TSharedPtr<FJsonObject>&
 	if (TryGetArrayParam(Params, TEXT("actions"), ActionsArr))
 	{
 		Cfg.ActionPaths = JsonArrayToStringList(ActionsArr);
+	}
+	// Accept the package path inject_input_* takes as well as the object
+	// path, and refuse a path that names no InputAction instead of arming a
+	// recorder that will silently match nothing (#1690).
+	for (FString& P : Cfg.ActionPaths)
+	{
+		const FString Normalized = FPIEFrameSampler::NormalizeActionPath(P);
+		if (!LoadObject<UInputAction>(nullptr, *Normalized))
+		{
+			return MCPError(FString::Printf(TEXT("actions: '%s' is not an InputAction asset"), *P));
+		}
+		P = Normalized;
 	}
 	const TArray<TSharedPtr<FJsonValue>>* TrackedArr = nullptr;
 	if (TryGetArrayParam(Params, TEXT("track_values"), TrackedArr))
@@ -140,6 +176,18 @@ TSharedPtr<FJsonValue> FPIEHandlers::PieRecordArm(const TSharedPtr<FJsonObject>&
 
 	Cfg.RecordingsRoot = OptionalString(Params, TEXT("recording_dir"));
 	Cfg.Id = OptionalString(Params, TEXT("id"));
+	if (!Cfg.RecordingsRoot.IsEmpty())
+	{
+		FString Resolved;
+		if (auto Err = MCPRequireWritablePath(Cfg.RecordingsRoot, Resolved)) return Err;
+		Cfg.RecordingsRoot = Resolved;
+	}
+	if (!Cfg.Id.IsEmpty())
+	{
+		FString Unused;
+		const FString IdRoot = Cfg.RecordingsRoot.IsEmpty() ? DefaultRecordingsRoot() : Cfg.RecordingsRoot;
+		if (auto Err = MCPRequirePathInside(IdRoot / Cfg.Id, { IdRoot }, Unused)) return Err;
+	}
 
 	FString Err, Msg;
 	if (!FPIEInputRecorder::Get().Arm(Cfg, Err, Msg))
@@ -202,9 +250,10 @@ TSharedPtr<FJsonValue> FPIEHandlers::PieRecordStatus(const TSharedPtr<FJsonObjec
 TSharedPtr<FJsonValue> FPIEHandlers::PieRecordList(const TSharedPtr<FJsonObject>& Params)
 {
 	MCP_CHECK_GAME_THREAD();
-	const FString Root = OptionalString(Params, TEXT("recording_dir"), DefaultRecordingsRoot());
 	const int32 Limit  = OptionalInt(Params, TEXT("limit"), 200);
 	const int32 Offset = OptionalInt(Params, TEXT("offset"), 0);
+	FString Root;
+	if (auto Err = MCPRequireWritablePath(OptionalString(Params, TEXT("recording_dir"), DefaultRecordingsRoot()), Root)) return Err;
 
 	TArray<FString> Dirs;
 	IFileManager::Get().FindFiles(Dirs, *(Root / TEXT("*")), false, true);
@@ -262,7 +311,8 @@ TSharedPtr<FJsonValue> FPIEHandlers::PieRecordRead(const TSharedPtr<FJsonObject>
 	else if (File == TEXT("tracked"))  Filename = TEXT("tracked.jsonl");
 	else return MCPError(FString::Printf(TEXT("Unknown file '%s' (manifest|sequence|csv|drift|tracked)"), *File));
 
-	const FString Path = Root / Id / Filename;
+	FString Path;
+	if (auto Err = MCPRequireWritablePath(Root / Id / Filename, Path)) return Err;
 	FString Raw;
 	if (!FFileHelper::LoadFileToString(Raw, *Path))
 	{
@@ -309,7 +359,12 @@ TSharedPtr<FJsonValue> FPIEHandlers::PieRecordDelete(const TSharedPtr<FJsonObjec
 	if (auto E = RequireString(Params, TEXT("id"), Id)) return E;
 	const bool bConfirm = OptionalBool(Params, TEXT("confirm"), false);
 	const FString Root = OptionalString(Params, TEXT("recording_dir"), DefaultRecordingsRoot());
-	const FString Dir = Root / Id;
+	// Only a recording folder below the root is deleted, never the root or anything outside it.
+	FString RootFull;
+	if (auto Err = MCPRequireWritablePath(Root, RootFull)) return Err;
+	FString Dir;
+	if (auto Err = MCPRequirePathInside(RootFull / Id, { RootFull }, Dir)) return Err;
+	if (FPaths::IsSamePath(Dir, RootFull)) return MCPError(TEXT("id must name one recording folder, not the recordings root."));
 
 	if (!FPaths::DirectoryExists(Dir))
 	{

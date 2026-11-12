@@ -6,6 +6,7 @@ import { startVersionCheck } from "./core/version-check.js";
 import { startFlowHttpServer } from "./flow/http-server.js";
 import { packageVersion } from "./core/package-root.js";
 import { formatTopLevelUsage, routeTopLevel, runCliCommand } from "./cli/cli-commands.js";
+import { guardFetchExitAbort } from "./cli/cli-main.js";
 import { createRuntime } from "./server/runtime.js";
 import { createMcpServer } from "./server/mcp-server.js";
 
@@ -42,6 +43,8 @@ async function main() {
   // kill timeout. A server also serving flows over HTTP stays up for those.
   if (!rt.project.config.http?.enabled) process.stdin.once("end", () => process.exit(0));
 }
+
+guardFetchExitAbort();
 
 // A first argument naming a command runs it; help and stray flags print usage;
 // anything else starts the server.

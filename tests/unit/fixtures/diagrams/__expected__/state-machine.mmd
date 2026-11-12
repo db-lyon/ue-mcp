@@ -1,0 +1,18 @@
+---
+title: "ABP_Hero · Locomotion"
+---
+stateDiagram-v2
+  direction LR
+  state "Idle" as n_Idle
+  n_Idle : A_Idle
+  state "Walk" as n_Walk
+  n_Walk : A_Walk
+  state "Jump" as n_Jump
+  n_Jump : A_Jump
+  state "Fall" as n_Fall
+  n_Idle --> n_Walk : Speed #gt; 10.0 · 0.2s
+  n_Walk --> n_Idle : 0.25s
+  n_Walk --> n_Jump : 0.1s · inertial
+  n_Jump --> n_Fall
+  classDef ue_state fill:#132033,stroke:#60a5fa,color:#f5f5f4
+  class n_Idle,n_Walk,n_Jump,n_Fall ue_state

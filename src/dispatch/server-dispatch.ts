@@ -9,7 +9,12 @@ import type { EditorSession, SessionRegistry } from "../sessions/session.js";
 import type { ElicitFn, ProgressFn, ProgressUpdate, ToolContext, ToolDef } from "../core/types.js";
 import { McpError, ErrorCode } from "../core/errors.js";
 import { debug } from "../core/log.js";
+import { withCallAsker } from "../flow/call-elicit.js";
+import { readOnlyRefusal, type SessionAccessMode } from "../flow/session-access.js";
+import { taskEffect } from "../surface/action-effects.js";
+import { journalFor } from "../journal/journal.js";
 import { unwrapArgsEnvelope, validateCategoryParams } from "../surface/context/call-envelope.js";
+import { microFlowCall } from "../surface/context/micro-context.js";
 import {
   routeEditorCall,
   callSubject,
@@ -28,20 +33,29 @@ import {
 } from "../editor/dialog-guard.js";
 import { connectedEditorOf } from "../editor/editor-control.js";
 import { clientAdvertisesElicitation } from "../editor/dialog-mode.js";
+import { elicitationUnrenderedNote } from "./client-quirks.js";
 import { playtestRefusal } from "../editor/playtest-mode.js";
 import { contestedProject } from "../editor/project-holders.js";
 import { withAssetLocks, type LockingConfig } from "./locking.js";
 import { unknownActionMessage } from "../surface/action-schema.js";
-import { withheldTarget, wrapsEpicTool } from "../surface/registered-surface.js";
+import { runsEpicMcpTool, withheldTarget, wrapsEpicTool } from "../surface/registered-surface.js";
+import { epicEngineRefusalFor } from "../surface/epic-engines.js";
 import { explainMissingAction } from "../sessions/session-surface.js";
+import { disabledActionRefusal } from "../surface/category-state.js";
+import { leaseConflictMessage } from "./leases.js";
+import { leasePathsOf } from "./lease-paths.js";
+import { SESSION_ID } from "./lock-owner.js";
 import type { FlowContext } from "../flow/context.js";
 import type { SessionLoad, SessionLoads } from "../sessions/session-load.js";
 
 type TextBlock = { type: "text"; text: string };
+/** Image or audio a result carries, as MCP content rather than base64 inside its JSON text. */
+export type MediaBlock = { type: "image" | "audio"; data: string; mimeType: string };
+export type ContentBlock = TextBlock | MediaBlock;
 
 /** What a tool callback hands back to the MCP SDK. */
 export interface ToolResult {
-  content: TextBlock[];
+  content: ContentBlock[];
   isError?: true;
 }
 
@@ -49,6 +63,29 @@ export interface ToolResult {
 export interface CallExtra {
   sendNotification?: (n: never) => Promise<void>;
   _meta?: { progressToken?: string | number };
+  /** Aborted by the SDK when the client sends notifications/cancelled for this request. */
+  signal?: AbortSignal;
+}
+
+/**
+ * A result's `media` entries ({type, mimeType, data}) become MCP image and
+ * audio content. Each entry stays in the JSON without its data and says which
+ * content block holds it, so the text still describes the result whole.
+ */
+export function splitMedia(data: unknown): { data: unknown; blocks: MediaBlock[] } {
+  if (!data || typeof data !== "object" || Array.isArray(data)) return { data, blocks: [] };
+  const media = (data as Record<string, unknown>).media;
+  if (!Array.isArray(media)) return { data, blocks: [] };
+  const blocks: MediaBlock[] = [];
+  const kept = media.map((entry) => {
+    if (!entry || typeof entry !== "object") return entry;
+    const { data: payload, ...rest } = entry as Record<string, unknown>;
+    const type = rest.type;
+    if ((type !== "image" && type !== "audio") || typeof payload !== "string" || typeof rest.mimeType !== "string") return entry;
+    blocks.push({ type, data: payload, mimeType: rest.mimeType });
+    return { ...rest, contentBlock: blocks.length };
+  });
+  return blocks.length ? { data: { ...(data as Record<string, unknown>), media: kept }, blocks } : { data, blocks };
 }
 
 /**
@@ -139,12 +176,18 @@ export function buildElicit(mcp: McpServer): ElicitFn {
         "Connected MCP client did not advertise the `elicitation` capability - cannot obtain a deterministic user approval. Upgrade your client (Claude Code >= 2.1.76) or run the action from a client that supports MCP elicitation.",
       );
     }
+    // Advertised but never drawn: the request would wait on a form nobody sees.
+    const unrendered = elicitationUnrenderedNote(mcp.server.getClientVersion());
+    if (unrendered) throw new McpError(ErrorCode.UNKNOWN_ACTION, unrendered);
     const result = await mcp.server.elicitInput(params, { timeout: ELICIT_TIMEOUT_MS });
     return result as Awaited<ReturnType<ElicitFn>>;
   };
   // The function exists whatever the client supports, so its presence proves
-  // nothing. Callers deciding whether the user CAN be asked read this.
-  elicit.clientAdvertisesElicitation = () => !!mcp.server.getClientCapabilities()?.elicitation;
+  // nothing. Callers deciding whether the user CAN be asked read this, and a
+  // client known to drop the forms it advertises cannot be asked (#1459).
+  elicit.clientAdvertisesElicitation = () =>
+    !!mcp.server.getClientCapabilities()?.elicitation &&
+    elicitationUnrenderedNote(mcp.server.getClientVersion()) === null;
   elicit.client = () => mcp.server.getClientVersion();
   return elicit;
 }
@@ -169,6 +212,20 @@ export interface DispatchDeps {
    * caller enforces its own rules.
    */
   gatePlaytest?: boolean;
+  /** The flow route a micro gateway call to the flow category takes. */
+  flow?: { tool: ToolDef; ctx: ToolContext };
+  /**
+   * The calling session's access mode, read on every call. Absent is
+   * read-write. In read-only mode an action whose declared effect is `mutate`
+   * or `unknown` is refused here, and every bridge call it would make is
+   * refused by the read-only guard (#1484).
+   */
+  access?: () => SessionAccessMode;
+  /**
+   * The MCP session calls are attributed to for asset leases. The daemon
+   * gives each connection its own; absent is this process.
+   */
+  leaseHolder?: () => { id: string; label: string };
 }
 
 /** Window actions that can remove the window the dialog gate is holding (#1231). */
@@ -211,6 +268,7 @@ export async function dispatchCategoryCall(
 ): Promise<ToolResult> {
   const { sessions, loads } = deps;
   let rawParams: Record<string, unknown>;
+  let flowParams: Record<string, unknown> | null = null;
   try {
     if (envelope) {
       const flat = unwrapArgsEnvelope(tool, callArgs);
@@ -222,6 +280,7 @@ export async function dispatchCategoryCall(
     } else {
       rawParams = callArgs;
     }
+    flowParams = deps.flow ? microFlowCall(tool, rawParams) : null;
   } catch (e) {
     // Thrown to the SDK, which words it exactly as its own validation did.
     if (e instanceof SdkMcpError) throw e;
@@ -229,6 +288,7 @@ export async function dispatchCategoryCall(
     const code = e instanceof McpError ? e.code : ErrorCode.INVALID_PARAMS;
     return errorResult(code, msg);
   }
+  if (flowParams && deps.flow) return dispatchFlowCall(deps, deps.flow.tool, deps.flow.ctx, flowParams);
   let routed: RoutedCall;
   try {
     routed = routeEditorCall(tool, rawParams, sessions);
@@ -248,6 +308,13 @@ export async function dispatchCategoryCall(
   const untargeted = refuseUntargetedInRegistry(sessions, effectiveTask, routed.targeted, loads.dispatchUnion.tools);
   if (untargeted) return errorResult("INVALID_PARAMS", untargeted);
 
+  // Before the dialog guard and the task: an action served in this process
+  // never reaches the bridge, so the bridge guard alone cannot refuse it.
+  if (deps.access?.() === "read-only") {
+    const refused = readOnlyRefusal(effectiveTask, loads.dispatchUnion.tools);
+    if (refused) return errorResult(ErrorCode.WRITE_BLOCKED, refused, attribution(sessions, session));
+  }
+
   if (deps.gatePlaytest) {
     const refused = playtestRefusal(effectiveTask, session.project.projectDir);
     if (refused) return refusalResult(refused, attribution(sessions, session));
@@ -265,10 +332,13 @@ export async function dispatchCategoryCall(
   const facing = guard.current;
 
   const taskParams = stripAction(params);
+  const leaseHolder = deps.leaseHolder?.() ?? { id: SESSION_ID, label: deps.client()?.name ?? "this server" };
   const flowCtx: FlowContext = {
     ...loads.contextFor(session),
+    leaseHolder,
     elicit: deps.elicit(),
     onProgress: makeProgressReporter(extra),
+    signal: extra?.signal,
     client: deps.client(),
   };
 
@@ -288,6 +358,10 @@ export async function dispatchCategoryCall(
         `${e instanceof Error ? e.message : String(e)}`,
     );
   }
+  // Turned off by this project's `disable:`, named with the command that turns it back on.
+  const turnedOff = disabledActionRefusal(sessionLoad.pristine, sessionLoad.categories, effectiveTask);
+  if (turnedOff) return errorResult(ErrorCode.CATEGORY_DISABLED, turnedOff, attribution(sessions, session));
+
   const sessionRegistry = sessionLoad.registry ?? loads.loadFor(undefined).registry!;
   const refusal = sessions.size > 1
     ? explainMissingAction(
@@ -306,6 +380,11 @@ export async function dispatchCategoryCall(
     return errorResult("NOT_FOUND", unknownActionMessage(action, tool.name, Object.keys(tool.actions)));
   }
 
+  // A wrapped engine tool this engine's recorded registry lacks: named before the
+  // toolset check, which would only say the toolset is absent.
+  const engineRefusal = epicEngineRefusalFor(sessionLoad.registryTools, effectiveTask, session.bridge.capabilities?.engineVersion);
+  if (engineRefusal) return refusalResult(engineRefusal);
+
   // Withheld from the surface because the running plugin lacks its method (6.4).
   // A wrapped engine tool re-reads the editor's toolsets when they are unknown
   // or say it is absent, since a toolset can register after the handshake.
@@ -315,22 +394,46 @@ export async function dispatchCategoryCall(
     await session.bridge.refreshEpicToolsets();
     withheld = withheldTarget(sessionLoad.registryTools, effectiveTask, session.bridge);
   }
+  // The same for an MCP tool an engine plugin registers (#1824).
+  if (runsEpicMcpTool(sessionLoad.registryTools, effectiveTask)
+    && (withheld || session.bridge.epicMcpTools == null) && session.bridge.refreshEpicMcpTools) {
+    await session.bridge.refreshEpicMcpTools();
+    withheld = withheldTarget(sessionLoad.registryTools, effectiveTask, session.bridge);
+  }
   if (withheld) return errorResult("NOT_FOUND", withheld);
 
   const served = attribution(sessions, session);
+
+  // Asset leases (leases.ts): a change to a path another MCP session holds is
+  // refused, naming the holder. While leases are implicit, the change takes a
+  // lease on what it names for this session.
+  const leases = sessions.leases;
+  if (leases?.enforcing) {
+    const leasePaths = leasePathsOf(effectiveTask, subject.params, loads.dispatchUnion.tools);
+    if (leasePaths.length > 0) {
+      const hit = leases.conflict(session.name, leasePaths, leaseHolder.id);
+      if (hit) return errorResult(ErrorCode.ASSET_LEASED, leaseConflictMessage(hit.lease, hit.path, leases.now()), served);
+      if (leases.implicit) leases.acquire(session.name, leasePaths, leaseHolder, undefined, true);
+    }
+  }
   try {
     const task = await sessionRegistry.create(taskName, flowCtx, taskParams);
     // Locks are taken in the editor the call runs in, through the GUARDED
     // bridge, so a lock request made while a modal is up is refused as a dialog.
-    const result = await withAssetLocks(
-      session.guarded,
-      deps.lockingCfg,
-      effectiveTask,
-      subject.params,
-      () => task.run(),
-      session.lockOwnerId,
-      loads.dispatchUnion.tools,
-    );
+    // Every bridge call the task makes answers to this caller, so a guard that
+    // allows overrides asks the person who sent this call and nobody else.
+    // Journaled when the client named a group and the action may change state (#1481).
+    const effect = taskEffect(effectiveTask, loads.dispatchUnion.tools).effect;
+    const result = await journalFor(session).record(effectiveTask, effect, () =>
+      withCallAsker({ elicit: flowCtx.elicit, subject: effectiveTask, access: deps.access }, () => withAssetLocks(
+        session.guarded,
+        deps.lockingCfg,
+        effectiveTask,
+        subject.params,
+        () => task.run(),
+        session.lockOwnerId,
+        loads.dispatchUnion.tools,
+      )));
 
     // A task that failed for its own reasons reports that, not a dialog. A
     // failure DURING a modal is usually caused by it, and the runner returns
@@ -427,10 +530,12 @@ export async function dispatchCategoryCall(
       return { content: [...blocks, ...served] };
     }
 
+    const { data: shown, blocks: media } = splitMedia(result.data);
     return {
       content: [
         ...answeredNote,
-        { type: "text" as const, text: stringify(result.data) },
+        { type: "text" as const, text: stringify(shown) },
+        ...media,
         ...served,
       ],
     };
@@ -487,6 +592,11 @@ export async function dispatchFlowCall(
     );
     if (untargeted) return errorResult("INVALID_PARAMS", untargeted);
 
+    if (deps.access?.() === "read-only") {
+      const refused = readOnlyRefusal(`${flowTool.name}.${String(params.action ?? "")}`, deps.loads.dispatchUnion.tools);
+      if (refused) return errorResult(ErrorCode.WRITE_BLOCKED, refused, attribution(sessions, session));
+    }
+
     // Steps are refused individually at the guarded bridge. This covers a run
     // STARTED while a modal is up, and flow(list)/flow(plan), which never
     // touch the bridge at all.
@@ -496,7 +606,16 @@ export async function dispatchFlowCall(
       "action",
     );
     if (!flowCheck.allow) return refusalResult(flowCheck.refusal, attribution(sessions, session));
-    const result = await flowTool.handler(sessionContext(baseCtx, session), params);
+    const flowTask = `${flowTool.name}.${String(params.action ?? "")}`;
+    // A flow's steps are not journaled one by one, so a run is one entry whose files the checkpoints restore (#1481).
+    const journaled = await journalFor(session).record(flowTask, taskEffect(flowTask, deps.loads.dispatchUnion.tools).effect, async () => ({
+      success: true,
+      data: await withCallAsker(
+        { elicit: deps.elicit(), access: deps.access },
+        () => flowTool.handler(sessionContext(baseCtx, session), params),
+      ),
+    }));
+    const result = journaled.data;
     const text = typeof result === "string" ? result : JSON.stringify(result, null, 2);
     return { content: [{ type: "text" as const, text }, ...attribution(sessions, session)] };
   } catch (e) {

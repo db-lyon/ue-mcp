@@ -163,6 +163,43 @@ describe("widget blueprint tree", () => {
     expect(Number.parseFloat((await fullProps("Row")).RenderOpacity)).toBeCloseTo(0.75, 3);
   }, 120_000);
 
+  it("bulk_set_widget_properties writes slot.* paths set_widget_property takes and rolls them back (#1632)", async () => {
+    const slotProps = async (widgetName: string): Promise<Record<string, string>> => {
+      const read = await call("get_widget_properties", { assetPath: WBP, widgetName });
+      return (read.widget as { slot: { properties: Record<string, string> } }).slot.properties;
+    };
+    const before = await slotProps("Txt_A");
+
+    const bulk = await call("bulk_set_widget_properties", {
+      assetPath: WBP,
+      properties: [
+        { widgetName: "Txt_A", propertyName: "Slot.Padding", value: { Left: 8, Top: 4, Right: 8, Bottom: 4 } },
+        { widgetName: "Txt_A", propertyName: "slot.HorizontalAlignment", value: "HAlign_Center" },
+        { widgetName: "Txt_B", propertyName: "Slot.Padding.Left", value: 12 },
+        { widgetName: "Txt_A", propertyName: "Slot.NoSuchField", value: 1 },
+      ],
+    });
+    expect(bulk.applied).toBe(3);
+    expect(bulk.failed).toBe(1);
+    const rows = bulk.results as Array<{ ok: boolean; error?: string }>;
+    expect(rows[3].ok).toBe(false);
+    expect(rows[3].error).toContain("NoSuchField");
+
+    const a = await slotProps("Txt_A");
+    expect(a.Padding).toContain("Left=8.0");
+    expect(a.Padding).toContain("Top=4.0");
+    expect(a.HorizontalAlignment).toBe("HAlign_Center");
+    expect((await slotProps("Txt_B")).Padding).toContain("Left=12.0");
+
+    const rollback = bulk.rollback as { method: string; payload: Json };
+    expect(rollback.method).toBe("bulk_set_widget_properties");
+    expect(bulk.rollbackLossy).toBe(false);
+    await call(rollback.method, rollback.payload);
+    const restored = await slotProps("Txt_A");
+    expect(restored.Padding).toBe(before.Padding);
+    expect(restored.HorizontalAlignment).toBe(before.HorizontalAlignment);
+  }, 120_000);
+
   it("list_widget_classes reports native panels and this blueprint's generated class", async () => {
     const native = await call("list_widget_classes", { filter: "Panel", module: "UMG", limit: 500 });
     const classes = native.classes as Array<{ name: string; isPanel: boolean; module: string }>;
@@ -217,6 +254,43 @@ describe("widget blueprint tree", () => {
     expect(cleared.removed).toBe(1);
     expect((await call("list_widget_bindings", { assetPath: WBP })).bindingCount).toBe(0);
   }, 120_000);
+
+  it("rename_widget renames in place, carries its binding and properties, refuses a taken name, and its rollback renames it back", async () => {
+    await call("set_widget_property", { assetPath: WBP, widgetName: "Txt_B", propertyName: "RenderOpacity", value: "0.4" });
+    await call("set_object_property", {
+      objectPath: `${WBP}.${NAME}`,
+      propertyName: "Bindings",
+      value: [{ ObjectName: "Txt_B", PropertyName: "Text", FunctionName: "GetBCovRenameText" }],
+    });
+    const indexBefore = childNames(find(await tree(), "Row")).indexOf("Txt_B");
+    expect(indexBefore).toBeGreaterThanOrEqual(0);
+
+    const taken = await callBridge(bridge, "rename_widget", { assetPath: WBP, widgetName: "Txt_B", newName: "Txt_A" });
+    expect(succeeded(taken)).toBe(false);
+    expect(find(await tree(), "Txt_B")).toBeDefined();
+
+    const renamed = await call("rename_widget", { assetPath: WBP, widgetName: "Txt_B", newName: "Txt_Renamed" });
+    expect(renamed.renamed).toBe(true);
+    expect(renamed.oldName).toBe("Txt_B");
+    expect(renamed.widgetName).toBe("Txt_Renamed");
+    expect((renamed.referencesUpdated as Json).propertyBindings).toBe(1);
+
+    const t = await tree();
+    expect(find(t, "Txt_B")).toBeUndefined();
+    expect(childNames(find(t, "Row"))[indexBefore]).toBe("Txt_Renamed");
+    expect(Number.parseFloat((await fullProps("Txt_Renamed")).RenderOpacity)).toBeCloseTo(0.4, 3);
+    const bindings = (await call("list_widget_bindings", { assetPath: WBP })).bindings as Json[];
+    expect(bindings.map((b) => b.widgetName)).toEqual(["Txt_Renamed"]);
+
+    const replay = await call("rename_widget", { assetPath: WBP, widgetName: "Txt_B", newName: "Txt_Renamed" });
+    expect(replay.renamed).toBe(false);
+
+    const rollback = renamed.rollback as { method: string; payload: Json };
+    expect(rollback.method).toBe("rename_widget");
+    await call(rollback.method, rollback.payload);
+    expect(childNames(find(await tree(), "Row"))[indexBefore]).toBe("Txt_B");
+    await call("clear_widget_binding", { assetPath: WBP, widgetName: "Txt_B" });
+  }, 180_000);
 
   it("audit_widget_accessibility flags a font below the minimum and clears once it is raised", async () => {
     const flagged = (audit: Json) => (audit.smallFonts as Array<{ widgetName: string }>).some((f) => f.widgetName === "Txt_A");

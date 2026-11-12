@@ -708,6 +708,24 @@ export class ShadowRepo {
     return true;
   }
 
+  /**
+   * The bytes of a path as of checkpoint `id`, written to `dest`, for diffing the
+   * project now against it (#1487). Unlike exportAt it counts the copy a save
+   * recorded before overwriting the file that no checkpoint has folded in yet.
+   * `absent`: the path did not exist then. `unrecorded`: nothing recorded it.
+   */
+  async exportAsOf(id: string, key: string, dest: string): Promise<{ checkpoint: CheckpointInfo; state: "written" | "absent" | "unrecorded" }> {
+    if (!this.exists()) throw new CheckpointError(400, "This project has no checkpoint history yet");
+    const chain = await this.chain();
+    const i = await this.resolve(chain, id);
+    const checkpoint = this.info(chain[i]);
+    const at = await this.stateAt(chain, i, fold(key), this.firstPending());
+    if (!at) return { checkpoint, state: "unrecorded" };
+    if (at.state === null) return { checkpoint, state: "absent" };
+    await this.writeState(at.state, dest);
+    return { checkpoint, state: "written" };
+  }
+
   private async writeState(oid: string, dest: string): Promise<void> {
     const s = await this.readState(oid);
     fs.mkdirSync(path.dirname(dest), { recursive: true });

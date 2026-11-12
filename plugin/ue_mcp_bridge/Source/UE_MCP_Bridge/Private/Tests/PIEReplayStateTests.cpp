@@ -83,4 +83,31 @@ bool FPIEReplayStateScrubTest::RunTest(const FString& /*Parameters*/)
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FPIEReplayRecordingIdContainedTest,
+	"UE.MCP.PIE.Replay.RecordingIdStaysInsideRecordings",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FPIEReplayRecordingIdContainedTest::RunTest(const FString& /*Parameters*/)
+{
+	// A replay writes drift.json, frames and a contact sheet into the recording folder.
+	auto ErrorFor = [](const FString& Id)
+	{
+		TSharedPtr<FJsonObject> P = MakeShared<FJsonObject>();
+		P->SetStringField(TEXT("recording_id"), Id);
+		const TSharedPtr<FJsonValue> Res = FPIEHandlers::PieReplayArm(P);
+		const TSharedPtr<FJsonObject> O = Res.IsValid() ? Res->AsObject() : nullptr;
+		FString Error;
+		if (O.IsValid()) O->TryGetStringField(TEXT("error"), Error);
+		return Error;
+	};
+
+	TestTrue(TEXT("an id that climbs out of the recordings folder is refused"),
+		ErrorFor(TEXT("../../ue-mcp-escape")).Contains(TEXT("outside the folders")));
+	TestFalse(TEXT("an id inside it is not refused for its path"),
+		ErrorFor(FString::Printf(TEXT("missing_%s"), *FGuid::NewGuid().ToString(EGuidFormats::Digits))).Contains(TEXT("outside the folders")));
+	FPIEHandlers::PieReplayDisarm(MakeShared<FJsonObject>());
+	return true;
+}
+
 #endif // WITH_DEV_AUTOMATION_TESTS

@@ -1,0 +1,31 @@
+{
+  "success": true,
+  "path": "/Game/Characters/ABP_Hero",
+  "graphName": "Transition",
+  "transition": { "transitionGuid": "6A1F2C3D-4B5E-4F60-8172-93A4B5C6D7E8", "fromState": "Idle", "toState": "Walk", "stateMachine": "Locomotion" },
+  "nodes": [
+    {
+      "id": "A0000000-0000-0000-0000-000000000001", "class": "AnimGraphNode_TransitionResult", "title": "Result", "posX": 400, "posY": 0,
+      "pins": [
+        { "name": "bCanEnterTransition", "type": "bool", "direction": "Input", "defaultValue": "", "connected": true, "linkedTo": [{ "nodeId": "A0000000-0000-0000-0000-000000000002", "pin": "ReturnValue" }] }
+      ]
+    },
+    {
+      "id": "A0000000-0000-0000-0000-000000000002", "class": "K2Node_PromotableOperator", "title": ">", "posX": 200, "posY": 0,
+      "pins": [
+        { "name": "A", "type": "real", "direction": "Input", "defaultValue": "", "connected": true, "linkedTo": [{ "nodeId": "A0000000-0000-0000-0000-000000000003", "pin": "Speed" }] },
+        { "name": "B", "type": "real", "direction": "Input", "defaultValue": "10.0", "connected": false, "linkedTo": [] },
+        { "name": "ReturnValue", "type": "bool", "direction": "Output", "defaultValue": "", "connected": true, "linkedTo": [{ "nodeId": "A0000000-0000-0000-0000-000000000001", "pin": "bCanEnterTransition" }] }
+      ]
+    },
+    {
+      "id": "A0000000-0000-0000-0000-000000000003", "class": "K2Node_VariableGet", "title": "Speed", "posX": 0, "posY": 0,
+      "pins": [
+        { "name": "Speed", "type": "real", "direction": "Output", "defaultValue": "", "connected": true, "linkedTo": [{ "nodeId": "A0000000-0000-0000-0000-000000000002", "pin": "A" }] },
+        { "name": "self", "type": "object", "direction": "Input", "defaultValue": "", "connected": false, "linkedTo": [] }
+      ]
+    }
+  ],
+  "nodeCount": 3,
+  "totalNodeCount": 3
+}

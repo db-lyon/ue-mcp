@@ -1,5 +1,6 @@
 #include "Handlers/PIE/PIEStepActions.h"
 
+#include "HandlerPathGuard.h"
 #include "Handlers/PIE/PIELog.h"
 #include "Handlers/PIE/PIERemotePlayers.h"
 #include "MCPPIEInputInjector.h"
@@ -110,6 +111,13 @@ namespace MCPPIE
 				return false;
 			}
 			for (const TSharedPtr<FJsonValue>& V : *Values) { Out.Values.Add(StepActionVector(V)); }
+			double Hz = 60;
+			if ((*Body)->TryGetNumberField(TEXT("hz"), Hz) && (Hz < 1 || Hz > 1000))
+			{
+				Err = FString::Printf(TEXT("a tape's hz must be 1 to 1000, not %g"), Hz);
+				return false;
+			}
+			Out.Hz = FMath::RoundToInt(Hz);
 			return true;
 		}
 		if (O->TryGetObjectField(TEXT("press"), Body))
@@ -259,7 +267,7 @@ namespace MCPPIE
 		{
 		case FStepAction::EKind::Tape:
 		{
-			const FString Id = FPIEInputInjector::StartTape(Input, A.Values, 60, FString(), Err);
+			const FString Id = FPIEInputInjector::StartTape(Input, A.Values, A.Hz, FString(), Err);
 			if (Id.IsEmpty())
 			{
 				return false;
@@ -376,7 +384,8 @@ namespace MCPPIE
 	{
 		const FString Label = A.Command.IsEmpty() ? FString::FromInt(Captures.Num() + 1) : A.Command;
 		const FString File = FString::Printf(TEXT("captures/step%02d_client%d_%s.jpg"), StepNumber, A.Client, *Label);
-		const FString Path = CaptureRoot / File;
+		FString Path;
+		if (!MCPResolvePathInside(CaptureRoot / File, { CaptureRoot }, Path, Err)) return false;
 		if (A.Client > 0)
 		{
 			UMCPPIERemoteControl* Remote = PIERemotePlayers::Find(A.Client, Err);

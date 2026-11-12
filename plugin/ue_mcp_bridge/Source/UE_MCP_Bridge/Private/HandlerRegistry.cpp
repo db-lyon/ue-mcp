@@ -660,8 +660,24 @@ float FMCPHandlerRegistry::GetHandlerTimeout(const FString& MethodName) const
 	return UEMCP::GetExternalHandlerTimeout(MethodName);
 }
 
+namespace
+{
+	// Per thread: a handler runs on the game thread, a test may run one
+	// wherever it likes, and neither must see the other's registry.
+	thread_local FMCPHandlerRegistry* GExecutingHandlerRegistry = nullptr;
+}
+
+FMCPHandlerRegistry* FMCPHandlerRegistry::Executing()
+{
+	return GExecutingHandlerRegistry;
+}
+
 TSharedPtr<FJsonValue> FMCPHandlerRegistry::ExecuteHandler(const FString& MethodName, const TSharedPtr<FJsonObject>& Params)
 {
+	// Restored on the way out, so a batch step's own dispatch nests and a
+	// handler that returns leaves the slot as it found it.
+	TGuardValue<FMCPHandlerRegistry*> ExecutingScope(GExecutingHandlerRegistry, this);
+
 	// Try C++ handler first
 	if (const FHandlerFunction* Handler = CppHandlers.Find(MethodName))
 	{

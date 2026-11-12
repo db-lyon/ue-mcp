@@ -129,7 +129,7 @@ afterAll(async () => {
   sb.cleanup();
 });
 
-const flow = (args: Record<string, unknown>) => server.call("flow", args);
+const flow = (args: Record<string, unknown>) => server.callFlow(args);
 
 describe("the flow tool", () => {
   it("lists built-in, plugin and ue-mcp.yml flows", async () => {

@@ -25,6 +25,8 @@ static bool WriteDrift(const FString& Folder, float PosCm, int32 Errors)
 	D.MaxPositionDriftCm = PosCm;
 	D.MaxVelocityDriftCms = 20.f;
 	D.MaxRotationDriftDeg = 1.f;
+	// test_run fails a replay that compared no frame.
+	D.FramesCompared = 60;
 	D.Summary.bValid = true;
 	D.Summary.ErrorsDuringRun = Errors;
 	FString Err;

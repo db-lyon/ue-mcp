@@ -45,6 +45,7 @@ namespace
 		/** PropertyName with every [Field=Value] selector replaced by the index
 		 *  preflight matched. Empty when the path selected nothing by key. */
 		FString IndexedPath;
+		FString ResolvedPropertyName;
 		TSharedPtr<FJsonValue> RequestedValue;
 		TSharedPtr<FJsonValue> PreviousValue;
 		FString PreviousText;
@@ -80,6 +81,7 @@ namespace
 	{
 		TSharedPtr<FJsonObject> Readback = MakeShared<FJsonObject>();
 		Readback->SetStringField(TEXT("propertyName"), Prepared.PropertyName);
+		if (!Prepared.ResolvedPropertyName.IsEmpty()) Readback->SetStringField(TEXT("resolvedPropertyName"), Prepared.ResolvedPropertyName);
 		if (!Prepared.IndexedPath.IsEmpty()) Readback->SetStringField(TEXT("indexedPath"), Prepared.IndexedPath);
 		Readback->SetBoolField(TEXT("ok"), Prepared.Error.IsEmpty());
 		if (!Prepared.Error.IsEmpty())
@@ -100,6 +102,7 @@ namespace
 	{
 		TSharedPtr<FJsonObject> Readback = MakeShared<FJsonObject>();
 		Readback->SetStringField(TEXT("propertyName"), Prepared.PropertyName);
+		if (!Prepared.ResolvedPropertyName.IsEmpty()) Readback->SetStringField(TEXT("resolvedPropertyName"), Prepared.ResolvedPropertyName);
 		Readback->SetBoolField(TEXT("ok"), false);
 		Readback->SetStringField(TEXT("error"), Prepared.Error);
 		Readback->SetBoolField(TEXT("changed"), false);
@@ -254,12 +257,13 @@ TSharedPtr<FJsonValue> FAssetHandlers::BulkSetAssetProperties(const TSharedPtr<F
 				}
 				else
 				{
+					PreparedProperty.ResolvedPropertyName = PathInfo.IndexedPath;
 					if (PathInfo.bUsedKeySelector) PreparedProperty.IndexedPath = PathInfo.IndexedPath;
 					// Dry-fit the value against a scratch copy of the property so a
 					// bad payload is caught without touching the live asset.
 					void* TemporaryValue = FMemory::Malloc(Property->GetSize(), Property->GetMinAlignment());
 					Property->InitializeValue(TemporaryValue);
-					Property->CopyCompleteValue(TemporaryValue, ValueAddress);
+					Property->CopySingleValue(TemporaryValue, ValueAddress);
 					FString SetError;
 					const bool bValidValue = MCPJsonProperty::SetJsonOnProperty(Property, TemporaryValue, Pair.Value, SetError);
 					FString ProposedText;
@@ -421,7 +425,12 @@ TSharedPtr<FJsonValue> FAssetHandlers::BulkSetAssetProperties(const TSharedPtr<F
 				if (LeafOwner && LeafOwner != PreparedAsset.Asset) LeafOwner->Modify();
 
 				FString SetError;
-				if (!MCPJsonProperty::SetJsonOnProperty(Property, ValueAddress, PreparedProperty.RequestedValue, SetError))
+				// The owner makes an Instanced property take its own copy and lets
+				// {instanceClass, properties} create a subobject. The preflight
+				// write above goes into temporary storage and stays ownerless: a
+				// copy made there would be discarded and leave an orphan behind.
+				if (!MCPJsonProperty::SetJsonOnPropertyWithOwner(Property, ValueAddress, PreparedProperty.RequestedValue,
+					LeafOwner ? LeafOwner : PreparedAsset.Asset, SetError))
 				{
 					PreparedProperty.Error = FString::Printf(TEXT("Apply failed after preflight for '%s.%s': %s"),
 						*PreparedAsset.AssetPath, *PreparedProperty.PropertyName, *SetError);

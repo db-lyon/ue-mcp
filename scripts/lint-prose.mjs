@@ -27,6 +27,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
+import { engineRangeText } from "./lib/engine-range.mjs";
 
 export const ALLOW_MARKER = "lint-prose-allow";
 
@@ -178,7 +179,7 @@ export const RULES = [
   {
     id: "range-hedge",
     scope: "tracked",
-    why: "The engine range is 5.4 to 5.8. Never annotate it with which versions were compiled, tested or gated.",
+    why: `The engine range is ${engineRangeText()}. Never annotate it with which versions were compiled, tested or gated.`,
     // Deliberately narrow, and it will miss rewordings.
     //
     // The obvious generalisation, any assurance verb near a version number,
@@ -190,7 +191,8 @@ export const RULES = [
     // gaps.
     test: (line) => {
       const lower = line.toLowerCase();
-      if (!/5\.[4-8]\s*(to|-|through|and)\s*5\.[4-8]/.test(lower)) return null;
+      // Any span of 5.x versions, so the rule follows the range as it moves.
+      if (!/5\.\d\s*(to|-|through|and)\s*5\.\d/.test(lower)) return null;
       // Only when the SPAN itself is being qualified.
       for (const hedge of [
         "compiled and verified",

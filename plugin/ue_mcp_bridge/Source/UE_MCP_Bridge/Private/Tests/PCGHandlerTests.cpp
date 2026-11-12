@@ -74,7 +74,7 @@ namespace PCGHandlerTests
 		{
 			if (!World) return;
 			GEditor->GetEditorWorldContext().SetCurrentWorld(OriginalWorld);
-			World->DestroyWorld(false);
+			MCPDestroyDisposableWorld(World);
 		}
 	};
 }
@@ -204,7 +204,6 @@ bool FMCPPCGSpawnerSelectorTest::RunTest(const FString& Parameters)
 	WriteSettings(TEXT("MeshSelectorType"), MakeShared<FJsonValueString>(TEXT("/Script/PCG.PCGMeshSelectorByAttribute")));
 	UObject* BeforeBadMesh = Spawner->MeshSelectorParameters;
 	Graph->GetOutermost()->SetDirtyFlag(false);
-	AddExpectedError(TEXT("LoadAsset failed"), EAutomationExpectedErrorFlags::Contains, 0);
 	Entry->SetStringField(TEXT("mesh"), TEXT("/Engine/BasicShapes/MissingMesh.MissingMesh"));
 	TestFalse(TEXT("invalid mesh is refused"), Succeeded(Call(Registry, TEXT("set_static_mesh_spawner_meshes"), MeshParams)));
 	TestTrue(TEXT("invalid mesh preserves selector and type"), Spawner->MeshSelectorParameters == BeforeBadMesh
