@@ -159,6 +159,31 @@ describe("fab local state", () => {
     expect(await assetsUnder()).toEqual([]);
   }, 60_000);
 
+  it("each owned-content step names the step missing before it", async () => {
+    // A shard editor has no Fab account signed in. Without the plugin the
+    // answer is PLUGIN_NOT_AVAILABLE; with it, the first missing step.
+    const status = await call("fab_status", {});
+    const listingId = "7b1f0c4e-2d3a-4c5b-9e8f-0a1b2c3d4e5f";
+    const steps = [
+      await callBridge(bridge, "fab_sync_library", {}),
+      await callBridge(bridge, "fab_list_owned", {}),
+      await callBridge(bridge, "fab_download", { listingId }),
+    ];
+    if (status.pluginLoaded === false) {
+      for (const r of steps) expect(body(r).errorCode, JSON.stringify(r.result)).toBe("PLUGIN_NOT_AVAILABLE");
+      return;
+    }
+    if (status.authenticated === true) return; // a developer editor that is signed in has nothing to refuse
+    for (const r of steps) {
+      expect(succeeded(r), JSON.stringify(r.result)).toBe(false);
+      expect(body(r).errorCode, JSON.stringify(r.result)).toBe("FAB_NOT_SIGNED_IN");
+      expect(String(body(r).error)).toContain("fab(sync_library)");
+    }
+    // Nothing started: no job exists for the listing.
+    const jobs = await call("fab_download_status", {});
+    expect((jobs.jobs as Array<{ listingId: string }>).some((j) => j.listingId === listingId)).toBe(false);
+  }, 60_000);
+
   it("fab_open_search builds the fab.com search URL from each filter without opening it", async () => {
     // open:false only: the live suite runs unattended, so nothing here launches
     // a browser. The open path is UE.MCP.Fab.OpenSearch.LaunchesTheSearchUrl.
