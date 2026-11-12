@@ -13,10 +13,67 @@ export const handlerSpecs: HandlerSpecs = {
     "category": "fab",
     "params": []
   },
+  "fab_cancel_download": {
+    "category": "fab",
+    "params": [
+      {
+        "name": "jobId",
+        "type": "string",
+        "required": true,
+        "description": "Job to cancel; verified files and native staging remain resumable"
+      }
+    ]
+  },
   "fab_clear_cache": {
     "category": "fab",
     "params": [],
     "contractExempt": "Takes no parameters and deletes the Fab download cache when called"
+  },
+  "fab_download": {
+    "category": "fab",
+    "params": [
+      {
+        "name": "listingId",
+        "type": "string",
+        "required": true,
+        "description": "Owned Fab listing UUID"
+      },
+      {
+        "name": "engineVersion",
+        "type": "string",
+        "required": false,
+        "description": "UE version from the listing's projectVersions, e.g. 5.8 (default this editor's)"
+      },
+      {
+        "name": "platform",
+        "type": "string",
+        "required": false,
+        "description": "Target platform from projectVersions, e.g. Windows or Mac (default this editor's)"
+      },
+      {
+        "name": "outputDirectory",
+        "type": "string",
+        "required": false,
+        "description": "Absolute pack output directory (default native Fab cache/UE-MCP/listing/artifact)"
+      },
+      {
+        "name": "verifyOnly",
+        "type": "boolean",
+        "required": false,
+        "description": "SHA verify existing files without repairing or downloading (default false)"
+      }
+    ]
+  },
+  "fab_download_status": {
+    "category": "fab",
+    "params": [
+      {
+        "name": "jobId",
+        "type": "string",
+        "required": false,
+        "description": "Job identifier; omit to list all editor-session jobs"
+      }
+    ]
   },
   "fab_import_file": {
     "category": "fab",
@@ -41,9 +98,43 @@ export const handlerSpecs: HandlerSpecs = {
       }
     ]
   },
+  "fab_install_pack": {
+    "category": "fab",
+    "params": [
+      {
+        "name": "jobId",
+        "type": "string",
+        "required": true,
+        "description": "Completed, SHA-verified asset-pack download to copy into project Content, preserving paths"
+      }
+    ]
+  },
   "fab_list_cached": {
     "category": "fab",
     "params": []
+  },
+  "fab_list_owned": {
+    "category": "fab",
+    "params": [
+      {
+        "name": "query",
+        "type": "string",
+        "required": false,
+        "description": "Filter owned item titles, no catalog requests"
+      },
+      {
+        "name": "offset",
+        "type": "integer",
+        "required": false,
+        "description": "Result offset (default 0)"
+      },
+      {
+        "name": "limit",
+        "type": "integer",
+        "required": false,
+        "description": "Result limit, 1-200 (default 50)"
+      }
+    ]
   },
   "fab_login": {
     "category": "fab",
@@ -91,6 +182,39 @@ export const handlerSpecs: HandlerSpecs = {
     ],
     "contractExempt": "Opens the fab.com search page in the default browser when called"
   },
+  "fab_pause_download": {
+    "category": "fab",
+    "params": [
+      {
+        "name": "jobId",
+        "type": "string",
+        "required": true,
+        "description": "Active download job identifier"
+      }
+    ]
+  },
+  "fab_remove_installation": {
+    "category": "fab",
+    "params": [
+      {
+        "name": "jobId",
+        "type": "string",
+        "required": true,
+        "description": "Remove only unchanged, unloaded files that this job created in project Content"
+      }
+    ]
+  },
+  "fab_resume_download": {
+    "category": "fab",
+    "params": [
+      {
+        "name": "jobId",
+        "type": "string",
+        "required": true,
+        "description": "Paused, failed or cancelled job identifier; obtains a fresh distribution signature"
+      }
+    ]
+  },
   "fab_status": {
     "category": "fab",
     "params": []
@@ -102,7 +226,7 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "batchSize",
         "type": "integer",
         "required": false,
-        "description": "Library items to pull per sync request (default the plugin's own)"
+        "description": "Library items per request, 1-1000 (default 100)"
       }
     ],
     "contractExempt": "Queues a Fab library sync whatever the batch size"
@@ -112,12 +236,20 @@ export const handlerSpecs: HandlerSpecs = {
 /** The Params: clause of each spec'd bridge method. */
 export const paramsClauses: Readonly<Record<string, string>> = {
   fab_cache_info: "Params: none",
+  fab_cancel_download: "Params: jobId",
   fab_clear_cache: "Params: none",
+  fab_download: "Params: listingId, engineVersion?, platform?, outputDirectory?, verifyOnly?",
+  fab_download_status: "Params: jobId?",
   fab_import_file: "Params: source (or sourceFile), destination (or destPath)",
+  fab_install_pack: "Params: jobId",
   fab_list_cached: "Params: none",
+  fab_list_owned: "Params: query?, offset?, limit?",
   fab_login: "Params: none",
   fab_logout: "Params: none",
   fab_open_search: "Params: query, listingType?, assetFormat?, free?, open?",
+  fab_pause_download: "Params: jobId",
+  fab_remove_installation: "Params: jobId",
+  fab_resume_download: "Params: jobId",
   fab_status: "Params: none",
   fab_sync_library: "Params: batchSize?",
 };
@@ -125,15 +257,23 @@ export const paramsClauses: Readonly<Record<string, string>> = {
 /** Every key the spec'd fab handlers declare, aliases included. */
 export const schema: Record<string, z.ZodType> = {
   assetFormat: z.string().optional().describe("Asset format filter (default unreal-engine; empty string drops the filter)"),
-  batchSize: z.number().int().optional().describe("Library items to pull per sync request (default the plugin's own)"),
+  batchSize: z.number().int().optional().describe("Library items per request, 1-1000 (default 100)"),
   destination: z.string().optional().describe("Destination content path, e.g. /Game/Fab/Imported"),
   destPath: z.string().optional().describe("Alias for destination"),
+  engineVersion: z.string().optional().describe("UE version from the listing's projectVersions, e.g. 5.8 (default this editor's)"),
   free: z.boolean().optional().describe("Only free listings (default false)"),
+  jobId: z.string().optional().describe("Job to cancel; verified files and native staging remain resumable (fab_cancel_download). Job identifier; omit to list all editor-session jobs (fab_download_status). Completed, SHA-verified asset-pack download to copy into project Content, preserving paths (fab_install_pack). Active download job identifier (fab_pause_download). Remove only unchanged, unloaded files that this job created in project Content (fab_remove_installation). Paused, failed or cancelled job identifier; obtains a fresh distribution signature (fab_resume_download)"),
+  limit: z.number().int().optional().describe("Result limit, 1-200 (default 50)"),
+  listingId: z.string().optional().describe("Owned Fab listing UUID"),
   listingType: z.string().optional().describe("Listing type filter, e.g. 3d-model, material, tool-and-plugin"),
+  offset: z.number().int().optional().describe("Result offset (default 0)"),
   open: z.boolean().optional().describe("Open the page in the default browser (default true); false only returns the URL"),
-  query: z.string().optional().describe("Search text"),
+  outputDirectory: z.string().optional().describe("Absolute pack output directory (default native Fab cache/UE-MCP/listing/artifact)"),
+  platform: z.string().optional().describe("Target platform from projectVersions, e.g. Windows or Mac (default this editor's)"),
+  query: z.string().optional().describe("Filter owned item titles, no catalog requests (fab_list_owned). Search text (fab_open_search)"),
   source: z.string().optional().describe("Absolute path of the source file on disk"),
   sourceFile: z.string().optional().describe("Alias for source"),
+  verifyOnly: z.boolean().optional().describe("SHA verify existing files without repairing or downloading (default false)"),
 };
 
 /** Declare an action for a spec'd bridge method: effect, summary, method. */
