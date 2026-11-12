@@ -647,17 +647,18 @@ void FLevelHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	const FMCPParamSpec SpecDescFilter = MCPParam::Optional(TEXT("filter"), EType::String, TEXT("Case-insensitive substring over label, name, class and path"));
 	const FMCPParamSpec SpecDescClassName = MCPParam::Optional(TEXT("className"), EType::String, TEXT("Actor class filter"));
 	const FMCPParamSpec SpecDescGuids = MCPParam::Optional(TEXT("guids"), EType::Array, TEXT("Exact actor GUIDs")).Items(EType::String);
+	const FMCPParamSpec SpecDescPackages = MCPParam::Optional(TEXT("packages"), EType::Array, TEXT("External actor package paths, full (/Game/__ExternalActors__/...) or their XX/YY/NAME tail; .uasset and backslashes accepted. Unmatched ones are returned as missingPackages")).Items(EType::String);
 	const FMCPParamSpec SpecDescBounds = MCPParam::Optional(TEXT("bounds"), EType::Object, TEXT("{min:{x,y,z}, max:{x,y,z}} intersection test"));
 	const FMCPParamSpec SpecDescLoadedOnly = MCPParam::Optional(TEXT("loadedOnly"), EType::Boolean, TEXT("Only actors currently streamed in"));
 	const FMCPParamSpec SpecDescUnloadedOnly = MCPParam::Optional(TEXT("unloadedOnly"), EType::Boolean, TEXT("Only actors on disk that are not streamed in"));
 	Registry.RegisterHandler(TEXT("list_actor_descs"), &ListActorDescs, {
-		SpecDescFilter, SpecDescClassName, SpecDescGuids, SpecDescBounds, SpecDescLoadedOnly, SpecDescUnloadedOnly,
+		SpecDescFilter, SpecDescClassName, SpecDescGuids, SpecDescPackages, SpecDescBounds, SpecDescLoadedOnly, SpecDescUnloadedOnly,
 		SpecCursor, SpecLimit,
 	});
 	// Its mode check refuses the contract value before anything is pinned.
 	Registry.RegisterHandlerWithTimeout(TEXT("load_actor_descs"), &LoadActorDescs, 300.0f, {
 		MCPParam::Optional(TEXT("mode"), EType::String, TEXT("pin (make resident, default) | unpin (release)")),
-		SpecDescFilter, SpecDescClassName, SpecDescGuids, SpecDescBounds, SpecDescLoadedOnly, SpecDescUnloadedOnly,
+		SpecDescFilter, SpecDescClassName, SpecDescGuids, SpecDescPackages, SpecDescBounds, SpecDescLoadedOnly, SpecDescUnloadedOnly,
 		MCPParam::Optional(TEXT("maxActors"), EType::Integer, TEXT("Refuse to act on more than this many actors (default 256)")),
 		SpecDryRun,
 	});
