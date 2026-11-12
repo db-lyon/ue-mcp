@@ -7799,6 +7799,11 @@
           "suite": "live",
           "file": "tests/live/epic-toolset-toggle.test.ts",
           "test": "epic_set_toolset_enabled turns a toolset off in the live registry and the config, and back on"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/fab-epic-tools.test.ts",
+          "test": "reaches the Fab tool through the call list_epic_tools names"
         }
       ]
     },
@@ -8584,6 +8589,16 @@
           "suite": "live",
           "file": "tests/live/bcov-fab.test.ts",
           "test": "without the Fab plugin the Fab actions refuse with PLUGIN_NOT_AVAILABLE and the install step"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/fab-epic-tools.test.ts",
+          "test": "lists FabToolset.FabToolset with its five tools, each with its schema and its fab action"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/fab-epic-tools.test.ts",
+          "test": "reaches the Fab tool through the call list_epic_tools names"
         }
       ]
     },
