@@ -207,6 +207,10 @@ private:
 	// #915: rebuild collision after mesh data changed under it. Stale collision
 	// makes line_trace report a miss through solid geometry.
 	static TSharedPtr<FJsonValue> RecreatePhysicsState(const TSharedPtr<FJsonObject>& Params);
+	// Rebuild the collision of every loaded component using the named meshes,
+	// SplineMeshComponent copies included, and save exactly the packages that
+	// own those actors.
+	static TSharedPtr<FJsonValue> ResaveMeshUsers(const TSharedPtr<FJsonObject>& Params);
 	// #914: geometric overlap between two components, with the unscaled local
 	// bounds a caller needs to reason about the answer.
 	static TSharedPtr<FJsonValue> TestComponentOverlap(const TSharedPtr<FJsonObject>& Params);

@@ -36,6 +36,9 @@
 #include "StaticMeshResources.h"
 #include "Materials/MaterialInterface.h"
 #include "PhysicsEngine/BodySetup.h"
+#include "Components/StaticMeshComponent.h"
+#include "Components/SplineMeshComponent.h"
+#include "UObject/UObjectIterator.h"
 #include "AI/Navigation/NavCollisionBase.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
@@ -1281,6 +1284,233 @@ TSharedPtr<FJsonValue> FAssetHandlers::ReadImportSources(const TSharedPtr<FJsonO
 // ---------------------------------------------------------------------------
 
 
+namespace
+{
+	const TCHAR* MCPCollisionTraceFlagName(ECollisionTraceFlag Flag)
+	{
+		switch (Flag)
+		{
+		case CTF_UseDefault:          return TEXT("CTF_UseDefault");
+		case CTF_UseSimpleAndComplex: return TEXT("CTF_UseSimpleAndComplex");
+		case CTF_UseSimpleAsComplex:  return TEXT("CTF_UseSimpleAsComplex");
+		case CTF_UseComplexAsSimple:  return TEXT("CTF_UseComplexAsSimple");
+		default:                      return TEXT("Unknown");
+		}
+	}
+
+	/** The trace flag a caller named, with or without the CTF_ prefix. False for a name that is none of the four. */
+	bool MCPParseCollisionTraceFlag(const FString& Spec, ECollisionTraceFlag& Out)
+	{
+		FString Name = Spec.TrimStartAndEnd();
+		Name.RemoveFromStart(TEXT("CTF_"), ESearchCase::IgnoreCase);
+		if (Name.Equals(TEXT("UseDefault"), ESearchCase::IgnoreCase))          { Out = CTF_UseDefault; return true; }
+		if (Name.Equals(TEXT("UseSimpleAndComplex"), ESearchCase::IgnoreCase)) { Out = CTF_UseSimpleAndComplex; return true; }
+		if (Name.Equals(TEXT("UseSimpleAsComplex"), ESearchCase::IgnoreCase))  { Out = CTF_UseSimpleAsComplex; return true; }
+		if (Name.Equals(TEXT("UseComplexAsSimple"), ESearchCase::IgnoreCase))  { Out = CTF_UseComplexAsSimple; return true; }
+		return false;
+	}
+
+	/** Every box, sphere and capsule on a body setup, in the shapes[] form set_mesh_simple_collision takes, so a read
+	 *  can be handed straight back as a write. Boxes first, then spheres, then capsules. */
+	TArray<TSharedPtr<FJsonValue>> MCPSimpleCollisionShapesToJson(const FKAggregateGeom& Geom)
+	{
+		TArray<TSharedPtr<FJsonValue>> Shapes;
+		for (const FKBoxElem& Box : Geom.BoxElems)
+		{
+			TSharedPtr<FJsonObject> Shape = MakeShared<FJsonObject>();
+			Shape->SetStringField(TEXT("type"), TEXT("box"));
+			Shape->SetObjectField(TEXT("center"), MCPVec3ToJsonObject(Box.Center));
+			Shape->SetObjectField(TEXT("rotation"), MCPRotatorToJsonObject(Box.Rotation));
+			Shape->SetObjectField(TEXT("extent"), MCPVec3ToJsonObject(FVector(Box.X, Box.Y, Box.Z)));
+			Shapes.Add(MakeShared<FJsonValueObject>(Shape));
+		}
+		for (const FKSphereElem& Sphere : Geom.SphereElems)
+		{
+			TSharedPtr<FJsonObject> Shape = MakeShared<FJsonObject>();
+			Shape->SetStringField(TEXT("type"), TEXT("sphere"));
+			Shape->SetObjectField(TEXT("center"), MCPVec3ToJsonObject(Sphere.Center));
+			Shape->SetNumberField(TEXT("radius"), Sphere.Radius);
+			Shapes.Add(MakeShared<FJsonValueObject>(Shape));
+		}
+		for (const FKSphylElem& Capsule : Geom.SphylElems)
+		{
+			TSharedPtr<FJsonObject> Shape = MakeShared<FJsonObject>();
+			Shape->SetStringField(TEXT("type"), TEXT("capsule"));
+			Shape->SetObjectField(TEXT("center"), MCPVec3ToJsonObject(Capsule.Center));
+			Shape->SetObjectField(TEXT("rotation"), MCPRotatorToJsonObject(Capsule.Rotation));
+			Shape->SetNumberField(TEXT("radius"), Capsule.Radius);
+			Shape->SetNumberField(TEXT("length"), Capsule.Length);
+			Shapes.Add(MakeShared<FJsonValueObject>(Shape));
+		}
+		return Shapes;
+	}
+
+	/** Elements the shapes[] form cannot express: convex hulls, tapered capsules, level sets. */
+	int32 MCPSimpleCollisionOtherCount(const FKAggregateGeom& Geom)
+	{
+		return Geom.GetElementCount() - Geom.BoxElems.Num() - Geom.SphereElems.Num() - Geom.SphylElems.Num();
+	}
+
+	/** The boxes, spheres and capsules to fixed precision, in the order MCPSimpleCollisionShapesToJson lists them.
+	 *  Equal strings mean the primitive shapes are the same to a hundredth of a centimetre or degree. */
+	FString MCPSimpleCollisionSignature(const FKAggregateGeom& Geom)
+	{
+		FString Out;
+		for (const FKBoxElem& Box : Geom.BoxElems)
+		{
+			Out += FString::Printf(TEXT("box(%.2f,%.2f,%.2f|%.2f,%.2f,%.2f|%.2f,%.2f,%.2f) "),
+				Box.Center.X, Box.Center.Y, Box.Center.Z, Box.Rotation.Pitch, Box.Rotation.Yaw, Box.Rotation.Roll,
+				(double)Box.X, (double)Box.Y, (double)Box.Z);
+		}
+		for (const FKSphereElem& Sphere : Geom.SphereElems)
+		{
+			Out += FString::Printf(TEXT("sphere(%.2f,%.2f,%.2f|%.2f) "),
+				Sphere.Center.X, Sphere.Center.Y, Sphere.Center.Z, (double)Sphere.Radius);
+		}
+		for (const FKSphylElem& Capsule : Geom.SphylElems)
+		{
+			Out += FString::Printf(TEXT("capsule(%.2f,%.2f,%.2f|%.2f,%.2f,%.2f|%.2f,%.2f) "),
+				Capsule.Center.X, Capsule.Center.Y, Capsule.Center.Z,
+				Capsule.Rotation.Pitch, Capsule.Rotation.Yaw, Capsule.Rotation.Roll,
+				(double)Capsule.Radius, (double)Capsule.Length);
+		}
+		return Out;
+	}
+
+	TSharedPtr<FJsonObject> MCPSimpleCollisionCounts(const FKAggregateGeom& Geom)
+	{
+		TSharedPtr<FJsonObject> Counts = MakeShared<FJsonObject>();
+		Counts->SetNumberField(TEXT("box"), Geom.BoxElems.Num());
+		Counts->SetNumberField(TEXT("sphere"), Geom.SphereElems.Num());
+		Counts->SetNumberField(TEXT("capsule"), Geom.SphylElems.Num());
+		Counts->SetNumberField(TEXT("convex"), Geom.ConvexElems.Num());
+		Counts->SetNumberField(TEXT("other"), MCPSimpleCollisionOtherCount(Geom) - Geom.ConvexElems.Num());
+		return Counts;
+	}
+
+	/** Parse shapes[] into the primitives to add, refusing the first entry that is not a complete shape. A field
+	 *  that does not belong to the shape's type is refused rather than ignored, so a sphere sent an extent does
+	 *  not come back as a different sphere than the caller meant. */
+	bool MCPParseSimpleCollisionShapes(const TArray<TSharedPtr<FJsonValue>>& Values, FKAggregateGeom& Out, FString& OutError)
+	{
+		for (int32 Index = 0; Index < Values.Num(); ++Index)
+		{
+			const TSharedPtr<FJsonObject> Shape = Values[Index].IsValid() ? Values[Index]->AsObject() : nullptr;
+			const FString At = FString::Printf(TEXT("shapes[%d]"), Index);
+			if (!Shape.IsValid())
+			{
+				OutError = FString::Printf(TEXT("%s is not an object."), *At);
+				return false;
+			}
+			FString Type;
+			Shape->TryGetStringField(TEXT("type"), Type);
+			Type = Type.ToLower();
+			if (Type != TEXT("box") && Type != TEXT("sphere") && Type != TEXT("capsule"))
+			{
+				OutError = FString::Printf(TEXT("%s.type must be box, sphere or capsule, not '%s'."), *At, *Type);
+				return false;
+			}
+
+			FVector Center = FVector::ZeroVector;
+			const TSharedPtr<FJsonObject>* CenterObject = nullptr;
+			if (!Shape->TryGetObjectField(TEXT("center"), CenterObject) || !CenterObject || !ReadVec3FieldsStrict(*CenterObject, Center))
+			{
+				OutError = FString::Printf(TEXT("%s.center is required as {x, y, z}."), *At);
+				return false;
+			}
+
+			FRotator Rotation = FRotator::ZeroRotator;
+			const TSharedPtr<FJsonObject>* RotationObject = nullptr;
+			if (Shape->TryGetObjectField(TEXT("rotation"), RotationObject) && RotationObject)
+			{
+				if (Type == TEXT("sphere"))
+				{
+					OutError = FString::Printf(TEXT("%s is a sphere, which has no rotation."), *At);
+					return false;
+				}
+				if (!ReadRotatorFieldsStrict(*RotationObject, Rotation))
+				{
+					OutError = FString::Printf(TEXT("%s.rotation must be {pitch, yaw, roll}."), *At);
+					return false;
+				}
+			}
+
+			const bool bHasExtent = Shape->HasField(TEXT("extent"));
+			double Radius = 0.0;
+			const bool bHasRadius = Shape->TryGetNumberField(TEXT("radius"), Radius);
+			double Length = 0.0;
+			const bool bHasLength = Shape->TryGetNumberField(TEXT("length"), Length);
+
+			if (Type == TEXT("box"))
+			{
+				if (bHasRadius || bHasLength)
+				{
+					OutError = FString::Printf(TEXT("%s is a box: give it extent, not radius or length."), *At);
+					return false;
+				}
+				FVector Extent = FVector::ZeroVector;
+				const TSharedPtr<FJsonObject>* ExtentObject = nullptr;
+				if (!Shape->TryGetObjectField(TEXT("extent"), ExtentObject) || !ExtentObject || !ReadVec3FieldsStrict(*ExtentObject, Extent))
+				{
+					OutError = FString::Printf(TEXT("%s.extent is required for a box as {x, y, z}, the full lengths along each axis."), *At);
+					return false;
+				}
+				if (Extent.X <= 0.0 || Extent.Y <= 0.0 || Extent.Z <= 0.0)
+				{
+					OutError = FString::Printf(TEXT("%s.extent must be positive on every axis."), *At);
+					return false;
+				}
+				FKBoxElem Box;
+				Box.Center = Center;
+				Box.Rotation = Rotation;
+				Box.X = static_cast<decltype(Box.X)>(Extent.X);
+				Box.Y = static_cast<decltype(Box.Y)>(Extent.Y);
+				Box.Z = static_cast<decltype(Box.Z)>(Extent.Z);
+				Out.BoxElems.Add(Box);
+				continue;
+			}
+
+			if (bHasExtent)
+			{
+				OutError = FString::Printf(TEXT("%s is a %s: extent is for boxes only."), *At, *Type);
+				return false;
+			}
+			if (!bHasRadius || Radius <= 0.0)
+			{
+				OutError = FString::Printf(TEXT("%s.radius is required and must be positive."), *At);
+				return false;
+			}
+
+			if (Type == TEXT("sphere"))
+			{
+				if (bHasLength)
+				{
+					OutError = FString::Printf(TEXT("%s is a sphere: length is for capsules only."), *At);
+					return false;
+				}
+				FKSphereElem Sphere;
+				Sphere.Center = Center;
+				Sphere.Radius = static_cast<decltype(Sphere.Radius)>(Radius);
+				Out.SphereElems.Add(Sphere);
+				continue;
+			}
+
+			if (!bHasLength || Length < 0.0)
+			{
+				OutError = FString::Printf(TEXT("%s.length is required for a capsule and must not be negative."), *At);
+				return false;
+			}
+			FKSphylElem Capsule;
+			Capsule.Center = Center;
+			Capsule.Rotation = Rotation;
+			Capsule.Radius = static_cast<decltype(Capsule.Radius)>(Radius);
+			Capsule.Length = static_cast<decltype(Capsule.Length)>(Length);
+			Out.SphylElems.Add(Capsule);
+		}
+		return true;
+	}
+}
+
 // ---------------------------------------------------------------------------
 // v1.0.0-rc.3 - #177 get_mesh_collision
 // ---------------------------------------------------------------------------
@@ -1297,16 +1527,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::GetMeshCollision(const TSharedPtr<FJsonOb
 		return MCPError(FString::Printf(TEXT("No BodySetup found on mesh: %s"), *AssetPath));
 	}
 
-	// Collision trace flag as string
-	FString TraceFlag;
-	switch (BodySetup->CollisionTraceFlag)
-	{
-	case CTF_UseDefault:             TraceFlag = TEXT("CTF_UseDefault"); break;
-	case CTF_UseSimpleAndComplex:    TraceFlag = TEXT("CTF_UseSimpleAndComplex"); break;
-	case CTF_UseSimpleAsComplex:     TraceFlag = TEXT("CTF_UseSimpleAsComplex"); break;
-	case CTF_UseComplexAsSimple:     TraceFlag = TEXT("CTF_UseComplexAsSimple"); break;
-	default:                         TraceFlag = TEXT("Unknown"); break;
-	}
+	const FString TraceFlag = MCPCollisionTraceFlagName(BodySetup->CollisionTraceFlag);
 
 	const FKAggregateGeom& AggGeom = BodySetup->AggGeom;
 
@@ -1331,6 +1552,11 @@ TSharedPtr<FJsonValue> FAssetHandlers::GetMeshCollision(const TSharedPtr<FJsonOb
 	Result->SetNumberField(TEXT("numBoxElems"), NumBox);
 	Result->SetNumberField(TEXT("numSphereElems"), NumSphere);
 	Result->SetNumberField(TEXT("numSphylElems"), NumSphyl);
+	// The boxes, spheres and capsules in the form set_mesh_simple_collision
+	// takes, and the GUID a SplineMeshComponent compares to decide whether its
+	// copy of this collision is stale.
+	Result->SetArrayField(TEXT("shapes"), MCPSimpleCollisionShapesToJson(AggGeom));
+	Result->SetStringField(TEXT("bodySetupGuid"), BodySetup->BodySetupGuid.ToString(EGuidFormats::DigitsWithHyphens));
 
 	// NavCollision info (#167)
 	Result->SetBoolField(TEXT("bCanEverAffectNavigation"), Mesh->bHasNavigationData);
@@ -1342,6 +1568,253 @@ TSharedPtr<FJsonValue> FAssetHandlers::GetMeshCollision(const TSharedPtr<FJsonOb
 	else
 	{
 		Result->SetBoolField(TEXT("hasNavCollision"), false);
+	}
+
+	return MCPResult(Result);
+}
+
+// ---------------------------------------------------------------------------
+// asset(set_mesh_simple_collision)
+//
+// Write a StaticMesh's simple collision from explicit dimensions: the half
+// asset(generate_mesh_collision) cannot do, since that one derives shapes from
+// the mesh. Before this a caller had to write AggGeom through execute_python.
+//
+// The write follows the editor's own collision tools (StaticMeshEditorSubsystem
+// and GeomFitUtils): Modify the body setup, write AggGeom, InvalidatePhysicsData
+// for a new BodySetupGuid, rebuild the cooked shapes, PostEditChange the mesh,
+// and recreate the physics state of every component using it.
+//
+// The GUID is the step a direct AggGeom write misses. A SplineMeshComponent
+// keeps its own deformed copy of the mesh's body setup and rebuilds it in
+// OnCreatePhysicsState only when the GUID it cached differs from the mesh's, so
+// with the GUID unchanged every spline user keeps the old collision.
+// ---------------------------------------------------------------------------
+TSharedPtr<FJsonValue> FAssetHandlers::SetMeshSimpleCollision(const TSharedPtr<FJsonObject>& Params)
+{
+	MCP_CHECK_GAME_THREAD();
+	// Every parameter is read before a check below can refuse (#1057).
+	MCPReadParamsAhead(Params, {
+		TEXT("assetPath"), TEXT("shapes"), TEXT("replace"), TEXT("collisionTraceFlag"), TEXT("save"), TEXT("dryRun") });
+
+	FString AssetPath;
+	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
+	const TArray<TSharedPtr<FJsonValue>>* ShapeValues = nullptr;
+	if (!TryGetArrayParam(Params, TEXT("shapes"), ShapeValues) || !ShapeValues)
+	{
+		return MCPError(TEXT("'shapes' is required: an array of {type, center, ...}. An empty array with replace=true removes every simple shape."));
+	}
+	const bool bReplace = OptionalBool(Params, TEXT("replace"), true);
+	const FString TraceFlagSpec = OptionalString(Params, TEXT("collisionTraceFlag"));
+	const bool bSave = OptionalBool(Params, TEXT("save"), true);
+	const bool bDryRun = OptionalBool(Params, TEXT("dryRun"), false);
+
+	constexpr int32 MaxShapes = 256;
+	if (ShapeValues->Num() > MaxShapes)
+	{
+		return MCPError(FString::Printf(TEXT("%d shapes is over the limit of %d. Nothing was changed."), ShapeValues->Num(), MaxShapes));
+	}
+	FKAggregateGeom Requested;
+	FString ShapeError;
+	if (!MCPParseSimpleCollisionShapes(*ShapeValues, Requested, ShapeError))
+	{
+		return MCPError(ShapeError + TEXT(" Nothing was changed."));
+	}
+	ECollisionTraceFlag RequestedTraceFlag = CTF_UseDefault;
+	const bool bSetTraceFlag = !TraceFlagSpec.IsEmpty();
+	if (bSetTraceFlag && !MCPParseCollisionTraceFlag(TraceFlagSpec, RequestedTraceFlag))
+	{
+		return MCPError(FString::Printf(
+			TEXT("Unknown collisionTraceFlag '%s'. Use UseDefault, UseSimpleAndComplex, UseSimpleAsComplex or UseComplexAsSimple. Nothing was changed."),
+			*TraceFlagSpec));
+	}
+
+	if (MCPIsProtectedAssetPath(AssetPath)) return MCPProtectedPathError(AssetPath);
+	UObject* AssetObject = MCPLoadAssetObject(AssetPath);
+	UStaticMesh* Mesh = Cast<UStaticMesh>(AssetObject);
+	if (!Mesh)
+	{
+		return AssetObject
+			? MCPAssetWrongTypeError(AssetPath, AssetObject, TEXT("StaticMesh"))
+			: MCPAssetNotFoundError(AssetPath, TEXT("Mesh"));
+	}
+	// A read-only or protected package is refused before the body setup is touched (#932).
+	if (bSave && !bDryRun)
+	{
+		if (auto Blocked = MCPAssetWriteBlockedError(Mesh, AssetPath, TEXT("set this mesh's collision"))) return Blocked;
+	}
+
+	UBodySetup* Setup = Mesh->GetBodySetup();
+	const FKAggregateGeom EmptyGeom;
+	const FKAggregateGeom& Previous = Setup ? Setup->AggGeom : EmptyGeom;
+	const TArray<TSharedPtr<FJsonValue>> PreviousShapes = MCPSimpleCollisionShapesToJson(Previous);
+	const TSharedPtr<FJsonObject> PreviousCounts = MCPSimpleCollisionCounts(Previous);
+	const int32 PreviousShapeCount = Previous.GetElementCount();
+	const int32 PreviousOtherCount = MCPSimpleCollisionOtherCount(Previous);
+	const FString PreviousSignature = MCPSimpleCollisionSignature(Previous);
+	const ECollisionTraceFlag PreviousTraceFlag = Setup ? Setup->CollisionTraceFlag.GetValue() : CTF_UseDefault;
+	const FString PreviousGuid = Setup ? Setup->BodySetupGuid.ToString(EGuidFormats::DigitsWithHyphens) : FString();
+
+	const int32 RequestedCount = Requested.GetElementCount();
+	const bool bTraceFlagChanges = bSetTraceFlag && RequestedTraceFlag != PreviousTraceFlag;
+	// Replacing with exactly the primitives already there, and nothing else
+	// present, writes the collision that is already on the mesh.
+	const bool bShapesChange = bReplace
+		? (PreviousOtherCount > 0 || MCPSimpleCollisionSignature(Requested) != PreviousSignature)
+		: RequestedCount > 0;
+	const bool bChanges = bShapesChange || bTraceFlagChanges;
+
+	auto Result = MCPSuccess();
+	Result->SetStringField(TEXT("assetPath"), AssetPath);
+	Result->SetBoolField(TEXT("replace"), bReplace);
+	Result->SetNumberField(TEXT("previousShapeCount"), PreviousShapeCount);
+	Result->SetObjectField(TEXT("previousCounts"), PreviousCounts);
+	Result->SetArrayField(TEXT("previousShapes"), PreviousShapes);
+	Result->SetStringField(TEXT("previousCollisionTraceFlag"), MCPCollisionTraceFlagName(PreviousTraceFlag));
+	Result->SetStringField(TEXT("previousBodySetupGuid"), PreviousGuid);
+	Result->SetStringField(TEXT("splineMeshNote"),
+		TEXT("A SplineMeshComponent keeps its own copy of this collision and rebuilds it only when the mesh's BodySetupGuid ")
+		TEXT("differs from the one it cached. This action changes the GUID and recreates the physics state of every loaded ")
+		TEXT("component using the mesh, so loaded spline copies are rebuilt in memory; their actor packages are not saved. ")
+		TEXT("level(resave_mesh_users) rebuilds and saves them."));
+
+	if (!bChanges)
+	{
+		MCPSetExisted(Result);
+		Result->SetBoolField(TEXT("changed"), false);
+		Result->SetNumberField(TEXT("shapeCount"), PreviousShapeCount);
+		Result->SetArrayField(TEXT("shapes"), PreviousShapes);
+		Result->SetStringField(TEXT("collisionTraceFlag"), MCPCollisionTraceFlagName(PreviousTraceFlag));
+		Result->SetStringField(TEXT("bodySetupGuid"), PreviousGuid);
+		Result->SetBoolField(TEXT("guidChanged"), false);
+		Result->SetBoolField(TEXT("saved"), false);
+		Result->SetStringField(TEXT("unchangedReason"), FString::Printf(
+			TEXT("'%s' already carries these shapes and trace flag, so nothing was written."), *AssetPath));
+		return MCPResult(Result);
+	}
+
+	if (bDryRun)
+	{
+		Result->SetBoolField(TEXT("dryRun"), true);
+		Result->SetBoolField(TEXT("changed"), false);
+		Result->SetBoolField(TEXT("wouldChange"), true);
+		Result->SetNumberField(TEXT("wouldShapeCount"), (bReplace ? 0 : PreviousShapeCount) + RequestedCount);
+		Result->SetArrayField(TEXT("requestedShapes"), MCPSimpleCollisionShapesToJson(Requested));
+		Result->SetStringField(TEXT("wouldCollisionTraceFlag"),
+			MCPCollisionTraceFlagName(bSetTraceFlag ? RequestedTraceFlag : PreviousTraceFlag));
+		return MCPResult(Result);
+	}
+
+	if (!Setup)
+	{
+		Mesh->CreateBodySetup();
+		Setup = Mesh->GetBodySetup();
+		if (!Setup)
+		{
+			return MCPError(FString::Printf(TEXT("'%s' has no body setup and one could not be created. Nothing was changed."), *AssetPath));
+		}
+	}
+
+	Mesh->Modify();
+	Setup->Modify();
+	if (bReplace)
+	{
+		Setup->AggGeom.EmptyElements();
+	}
+	Setup->AggGeom.BoxElems.Append(Requested.BoxElems);
+	Setup->AggGeom.SphereElems.Append(Requested.SphereElems);
+	Setup->AggGeom.SphylElems.Append(Requested.SphylElems);
+	if (bSetTraceFlag)
+	{
+		Setup->CollisionTraceFlag = RequestedTraceFlag;
+	}
+	// A new BodySetupGuid and the cooked data flushed, then the shapes rebuilt.
+	Setup->InvalidatePhysicsData();
+	Setup->CreatePhysicsMeshes();
+
+	// What the editor's collision tools set, so a reimport keeps hand-authored
+	// collision. Written through reflection, as it is an editor-facing flag.
+	bool bMarkedCustomized = false;
+	if (FBoolProperty* Customized = FindFProperty<FBoolProperty>(UStaticMesh::StaticClass(), TEXT("bCustomizedCollision")))
+	{
+		Customized->SetPropertyValue_InContainer(Mesh, true);
+		bMarkedCustomized = true;
+	}
+
+	// The StaticMeshEditorSubsystem path: rebuild the mesh so its render and
+	// navigation state follow the new collision.
+	Mesh->PostEditChange();
+	Mesh->MarkPackageDirty();
+
+	// What GeomFitUtils' RefreshCollisionChange does for the editor's tools:
+	// rebuild the body of every component already simulating this mesh. On a
+	// SplineMeshComponent the rebuild sees the new GUID and recreates its copy.
+	int32 ComponentsRefreshed = 0;
+	int32 SplineComponentsRefreshed = 0;
+	for (TObjectIterator<UStaticMeshComponent> It; It; ++It)
+	{
+		UStaticMeshComponent* Component = *It;
+		if (!IsValid(Component) || Component->HasAnyFlags(RF_ClassDefaultObject | RF_ArchetypeObject)) continue;
+		if (Component->GetStaticMesh() != Mesh || !Component->IsPhysicsStateCreated()) continue;
+		Component->RecreatePhysicsState();
+		++ComponentsRefreshed;
+		if (Component->IsA<USplineMeshComponent>()) ++SplineComponentsRefreshed;
+	}
+
+	UBodySetup* NewSetup = Mesh->GetBodySetup();
+	const FKAggregateGeom& Written = NewSetup ? NewSetup->AggGeom : EmptyGeom;
+	const FString NewGuid = NewSetup ? NewSetup->BodySetupGuid.ToString(EGuidFormats::DigitsWithHyphens) : FString();
+
+	MCPSetUpdated(Result);
+	Result->SetBoolField(TEXT("changed"), true);
+	Result->SetNumberField(TEXT("shapeCount"), Written.GetElementCount());
+	Result->SetObjectField(TEXT("counts"), MCPSimpleCollisionCounts(Written));
+	Result->SetArrayField(TEXT("shapes"), MCPSimpleCollisionShapesToJson(Written));
+	Result->SetStringField(TEXT("collisionTraceFlag"),
+		MCPCollisionTraceFlagName(NewSetup ? NewSetup->CollisionTraceFlag.GetValue() : CTF_UseDefault));
+	Result->SetStringField(TEXT("bodySetupGuid"), NewGuid);
+	Result->SetBoolField(TEXT("guidChanged"), NewGuid != PreviousGuid);
+	Result->SetBoolField(TEXT("markedCustomized"), bMarkedCustomized);
+	Result->SetNumberField(TEXT("componentsRefreshed"), ComponentsRefreshed);
+	Result->SetNumberField(TEXT("splineMeshComponentsRefreshed"), SplineComponentsRefreshed);
+
+	if (bSave)
+	{
+		FString SaveReason;
+		const bool bSaved = SaveAssetPackageChecked(Mesh, SaveReason);
+		MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveReason);
+		Result->SetBoolField(TEXT("persisted"), bSaved);
+	}
+	else
+	{
+		Result->SetBoolField(TEXT("saved"), false);
+		Result->SetBoolField(TEXT("persisted"), false);
+	}
+	UPackage* Package = Mesh->GetOutermost();
+	Result->SetBoolField(TEXT("packageDirty"), Package && Package->IsDirty());
+
+	if (PreviousOtherCount > 0)
+	{
+		MCPSetNoRollback(Result, FString::Printf(
+			TEXT("'%s' carried %d convex hull, tapered capsule or level set element(s) beside its boxes, spheres and capsules. ")
+				TEXT("shapes[] has no form for those, so set_mesh_simple_collision cannot put them back, and no other action ")
+				TEXT("restores an exact hull. asset(generate_mesh_collision) rebuilds hulls from the mesh, which is a new answer rather than the old one."),
+			*AssetPath, PreviousOtherCount));
+	}
+	else
+	{
+		// Self-inverse: the previous primitives, written as a replacement, with
+		// the previous trace flag and the original call's save choice.
+		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+		Payload->SetStringField(TEXT("assetPath"), AssetPath);
+		Payload->SetArrayField(TEXT("shapes"), PreviousShapes);
+		Payload->SetBoolField(TEXT("replace"), true);
+		Payload->SetStringField(TEXT("collisionTraceFlag"), MCPCollisionTraceFlagName(PreviousTraceFlag));
+		Payload->SetBoolField(TEXT("save"), bSave);
+		MCPSetRollback(Result, TEXT("set_mesh_simple_collision"), Payload);
+		Result->SetStringField(TEXT("rollbackNote"),
+			TEXT("The inverse writes the previous boxes, spheres and capsules and trace flag back. It produces a new BodySetupGuid ")
+			TEXT("rather than the old one, and leaves the mesh marked as customized collision."));
 	}
 
 	return MCPResult(Result);

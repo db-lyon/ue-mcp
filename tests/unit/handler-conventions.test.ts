@@ -106,7 +106,9 @@ const BASELINE = {
   // through MCPSetNoRollback.
   // 191: level(unload_loaded_regions) destroys the actors a region held and releases a user region, so
   // load_region would make a new region rather than put the old one back.
-  mutationsWithoutRollback: 191,
+  // 192: level(resave_mesh_users) rebuilds collision copies from the current mesh and overwrites actor packages
+  // on disk, and the bridge has no action that restores a previous package file.
+  mutationsWithoutRollback: 192,
   // Zero, and held there by a flat assertion. Every mutation with no inverse
   // now says so in its own result body with the reason, which is the half a
   // caller can act on.

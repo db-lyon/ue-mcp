@@ -74,7 +74,7 @@ const READ_REFERENCES = new Set([
   "animAssetPath", "animBlueprintClassPath", "animSequencePath", "attenuationPath",
   "chooserPath", "compatibleSkeletonPath", "compatibleSkeletonPaths", "concurrencyPath",
   "controlRigPath", "databasePath", "emitterPath", "enumPath", "graphPath",
-  "interfacePath", "levelPath", "materialPath", "meshPath", "mirrorDataTablePath",
+  "interfacePath", "levelPath", "materialPath", "meshPath", "meshPaths", "mirrorDataTablePath",
   "newInputActionPath", "newParentPath", "normalizationSetPath", "parentPath",
   "rvtPath", "rvtPaths", "soundWavePath", "sourceAnimationPath", "sourceAssetPath",
   "templatePath", "texturePath", "toolPath",

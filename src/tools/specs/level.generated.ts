@@ -4145,6 +4145,48 @@ export const handlerSpecs: HandlerSpecs = {
       }
     ]
   },
+  "resave_mesh_users": {
+    "category": "level",
+    "params": [
+      {
+        "name": "meshPaths",
+        "type": "array",
+        "required": true,
+        "description": "StaticMesh asset paths whose loaded users to rebuild and save, matched by object path, case-insensitive (at most 256)",
+        "items": "string"
+      },
+      {
+        "name": "componentClass",
+        "type": "string",
+        "required": false,
+        "description": "any (default, every StaticMeshComponent and subclass) | StaticMeshComponent (all but spline meshes) | SplineMeshComponent"
+      },
+      {
+        "name": "recreateCollision",
+        "type": "boolean",
+        "required": false,
+        "description": "Recreate each match's physics state, and rebuild a SplineMeshComponent's collision copy from the current mesh even when the GUID did not change (default true)"
+      },
+      {
+        "name": "save",
+        "type": "boolean",
+        "required": false,
+        "description": "Save the packages of the matched actors and no others (default true)"
+      },
+      {
+        "name": "dryRun",
+        "type": "boolean",
+        "required": false,
+        "description": "List the matched components and packages without rebuilding or saving (default TRUE)"
+      },
+      {
+        "name": "maxActors",
+        "type": "integer",
+        "required": false,
+        "description": "Refuse to act on more than this many actors (default 256)"
+      }
+    ]
+  },
   "resolve_actor": {
     "category": "level",
     "params": [
@@ -6819,6 +6861,7 @@ export const paramsClauses: Readonly<Record<string, string>> = {
   replace_actors_with_class: "Params: actorLabels, className",
   replace_blockout: "Params: actorLabel OR actorPath OR tag OR actorPaths, assetPath?, candidateFolder?, recursive?, allowRotation?, maxCandidates?, fit?, yawOffset?",
   rerun_construction_scripts: "Params: at least one of actorLabels/className, matchSubclasses?, world?, pieInstance?",
+  resave_mesh_users: "Params: meshPaths, componentClass?, recreateCollision?, save?, dryRun?, maxActors?",
   resolve_actor: "Params: internalName",
   restore_blockout: "Params: actorLabel OR actorPath OR actorPaths",
   restore_component_relative_transform: "Params: actorLabel OR actorPath, componentName, relativeTransform, world?, pieInstance?",
@@ -6918,7 +6961,7 @@ export const schema: Record<string, z.ZodType> = {
   collisionProfile: z.string().optional().describe("Collision profile for the pieces, e.g. BlockAll or NoCollision"),
   color: z.record(z.string(), z.unknown()).optional().describe("Alias for fogInscatteringColor (set_fog_properties). Colour {r, g, b} in 0-255 (set_light_properties, spawn_light)"),
   commitDeletes: z.boolean().optional().describe("Save through the editor's dirty-package save, which deletes the packages of deleted World Partition actors (default false)"),
-  componentClass: z.string().optional().describe("Component class: short name or full path (add_component_to_actor). Component class name, exact or substring (get_actors_by_component_class). Case-insensitive substring over the component class name (get_component_tree). Component class, resolved as a class or matched as a substring (query_components). Primitive component class to rebuild (recreate_physics_state). Component class to remove (remove_components_by_class)"),
+  componentClass: z.string().optional().describe("Component class: short name or full path (add_component_to_actor). Component class name, exact or substring (get_actors_by_component_class). Case-insensitive substring over the component class name (get_component_tree). Component class, resolved as a class or matched as a substring (query_components). Primitive component class to rebuild (recreate_physics_state). Component class to remove (remove_components_by_class). any (default, every StaticMeshComponent and subclass) | StaticMeshComponent (all but spline meshes) | SplineMeshComponent (resave_mesh_users)"),
   componentName: z.string().optional().describe("Name of the new component (add_component_to_actor). Component instance name (add_hismc_instances, add_instances, get_component_details, get_instance_transforms, remove_instance, set_component_property, snap_instances_to_surface, update_instance_transform). Spline component, when the actor has several (default the first) (build_spline_meshes, scatter_along_spline). Component name looked up on every matched actor (bulk_set_component_property). Only this component, by instance name (get_component_tree). Component holding the post-process settings, when the actor is not a PostProcessVolume (get_post_process_settings, set_fixed_exposure, set_post_process_settings). Skinned mesh component (default: the first on the actor); a leader-pose follower reads as drawn (get_skinned_vertices). Spline component, when the actor has several (get_spline_info). Exact SceneComponent instance name (nudge_component, restore_component_relative_transform). Component to remove (remove_component_from_actor). Component instance name, on the actor or on one of its child actors (select_component). Mesh component (default: the actor's first mesh component) (set_component_materials). Skinned mesh component (default: the first on the actor) (set_component_skeletal_mesh). Spline component, when the actor has several; matched exactly (set_spline_points)"),
   componentNameA: z.string().optional().describe("Component on actor A; omitted selects its root"),
   componentNameB: z.string().optional().describe("Component on actor B; omitted selects its root"),
@@ -6938,7 +6981,7 @@ export const schema: Record<string, z.ZodType> = {
   direction: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Ray direction, normalised internally (line_trace, shape_trace). Trace direction (default straight down) (snap_instances_to_surface)"),
   discardUnsaved: z.boolean().optional().describe("Switch even though the open map has unsaved changes, discarding them (default false)"),
   distance: z.number().optional().describe("Ray length when direction is given (default 200000)"),
-  dryRun: z.boolean().optional().describe("Report what would change without writing (batch_set_actor_properties, bulk_set_component_property, load_actor_descs, load_region, rename_actor_object, set_actor_hlod_layer, set_component_materials, snap_instances_to_surface, unload_loaded_regions). Report what would be removed without removing it (default true) (clear_level_script). Report the verdict per brush without converting (default TRUE) (convert_brushes_to_static_mesh). Report the matches without deleting them (default false) (delete_actors). Preview without deleting (default TRUE) (delete_exact_labeled_actors_in_levels). Report what would be deleted without deleting (default false) (delete_outliner_folder). Inspect and preview the requested transform without writing (default false) (nudge_component). List what would be rebuilt without rebuilding it (default TRUE) (recreate_physics_state). Report what would be removed without removing it (default TRUE) (remove_components_by_class). Report the matches without moving them (default false) (set_actor_folder_path). Return every computed transform without spawning (spawn_actors_batch)"),
+  dryRun: z.boolean().optional().describe("Report what would change without writing (batch_set_actor_properties, bulk_set_component_property, load_actor_descs, load_region, rename_actor_object, set_actor_hlod_layer, set_component_materials, snap_instances_to_surface, unload_loaded_regions). Report what would be removed without removing it (default true) (clear_level_script). Report the verdict per brush without converting (default TRUE) (convert_brushes_to_static_mesh). Report the matches without deleting them (default false) (delete_actors). Preview without deleting (default TRUE) (delete_exact_labeled_actors_in_levels). Report what would be deleted without deleting (default false) (delete_outliner_folder). Inspect and preview the requested transform without writing (default false) (nudge_component). List what would be rebuilt without rebuilding it (default TRUE) (recreate_physics_state). Report what would be removed without removing it (default TRUE) (remove_components_by_class). List the matched components and packages without rebuilding or saving (default TRUE) (resave_mesh_users). Report the matches without moving them (default false) (set_actor_folder_path). Return every computed transform without spawning (spawn_actors_batch)"),
   dumpToFile: z.boolean().optional().describe("Write every row to a JSON file and return the totals with its path (default false) (audit_level_performance). Write the whole selection to a JSON file and return only the summary (get_skinned_vertices)"),
   duplicateTransformTolerance: z.number().optional().describe("Centimetre bucket for duplicate-transform detection"),
   editorHidden: z.boolean().optional().describe("Only editor-hidden (true) or only visible (false) actors"),
@@ -7048,6 +7091,7 @@ export const schema: Record<string, z.ZodType> = {
   meshes: z.array(z.string()).optional().describe("StaticMesh paths to scatter; required unless rebuild is set"),
   meshFolder: z.string().optional().describe("Content folder for the generated shape meshes (default /Game/Blockout/Meshes)"),
   meshPath: z.string().optional().describe("Alias for assetPath (get_nanite_info, set_nanite_settings). The older spelling of skeletalMesh (spawn_skeletal_mesh_actor)"),
+  meshPaths: z.array(z.string()).optional().describe("StaticMesh asset paths whose loaded users to rebuild and save, matched by object path, case-insensitive (at most 256)"),
   method: z.string().optional().describe("OBB (oriented, default) | AABB (axis-aligned world bounds)"),
   min: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Box minimum corner, world space (actors_in_box). Grid lower bound (spawn_grid)"),
   minWeight: z.number().optional().describe("With boneNames, keep a vertex only when its summed weight on the selected bones is at least this (0 < minWeight <= 1; default any positive weight)"),
@@ -7088,6 +7132,7 @@ export const schema: Record<string, z.ZodType> = {
   radius: z.number().optional().describe("Distance from nearPoint in cm, above 0; needs nearPoint (get_skinned_vertices). Positive sphere or capsule radius in cm (shape_trace)"),
   rebuild: z.boolean().optional().describe("Reuse the parameters stored by the last run of this generator; passed parameters override them"),
   recaptureSky: z.boolean().optional().describe("Recapture a SkyLight after the change"),
+  recreateCollision: z.boolean().optional().describe("Recreate each match's physics state, and rebuild a SplineMeshComponent's collision copy from the current mesh even when the GUID did not change (default true)"),
   recursive: z.boolean().optional().describe("Include subfolders of candidateFolder (default true)"),
   recursiveFolder: z.boolean().optional().describe("Also take brushes in folders nested under folderPath (default true)"),
   reference: z.string().optional().describe("Alias for referenceLabel"),
@@ -7105,7 +7150,7 @@ export const schema: Record<string, z.ZodType> = {
   rotation: z.object({ pitch: z.number(), yaw: z.number(), roll: z.number() }).optional().describe("World rotation; a ramp and stairs climb toward the actor's +X (create_blockout). World rotation (move_actor, place_actor, spawn_light, spawn_skeletal_mesh_actor, spawn_transient_actor, update_instance_transform). DirectionalLight sun angle (set_light_properties)"),
   runtimeHashClass: z.string().optional().describe("Runtime hash class: WorldPartitionRuntimeHashSet, WorldPartitionRuntimeSpatialHash, or a /Script path"),
   sampleLimit: z.number().int().optional().describe("Sample labels per group (default 5, max 25)"),
-  save: z.boolean().optional().describe("Save only the current level after a successful clear and compile (default false) (clear_level_script). Save the level after a committed removal (default false) (remove_components_by_class)"),
+  save: z.boolean().optional().describe("Save only the current level after a successful clear and compile (default false) (clear_level_script). Save the level after a committed removal (default false) (remove_components_by_class). Save the packages of the matched actors and no others (default true) (resave_mesh_users)"),
   saveCurrent: z.boolean().optional().describe("Alias for saveFirst"),
   saveFirst: z.boolean().optional().describe("Save the open map and its dirty external actor packages before switching (default false)"),
   scale: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Mesh scale; the forwardAxis component scales the default spacing, the other two the cross-section (build_spline_meshes). Actor scale (move_actor, place_actor, spawn_skeletal_mesh_actor, spawn_transient_actor, update_instance_transform)"),

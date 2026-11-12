@@ -1,5 +1,5 @@
 {
-  "handlerCount": 1395,
+  "handlerCount": 1397,
   "handlers": {
     "actors_in_box": {
       "category": "level",
@@ -37671,6 +37671,48 @@
         }
       ]
     },
+    "resave_mesh_users": {
+      "category": "level",
+      "params": [
+        {
+          "name": "meshPaths",
+          "type": "array",
+          "required": true,
+          "description": "StaticMesh asset paths whose loaded users to rebuild and save, matched by object path, case-insensitive (at most 256)",
+          "items": "string"
+        },
+        {
+          "name": "componentClass",
+          "type": "string",
+          "required": false,
+          "description": "any (default, every StaticMeshComponent and subclass) | StaticMeshComponent (all but spline meshes) | SplineMeshComponent"
+        },
+        {
+          "name": "recreateCollision",
+          "type": "boolean",
+          "required": false,
+          "description": "Recreate each match's physics state, and rebuild a SplineMeshComponent's collision copy from the current mesh even when the GUID did not change (default true)"
+        },
+        {
+          "name": "save",
+          "type": "boolean",
+          "required": false,
+          "description": "Save the packages of the matched actors and no others (default true)"
+        },
+        {
+          "name": "dryRun",
+          "type": "boolean",
+          "required": false,
+          "description": "List the matched components and packages without rebuilding or saving (default TRUE)"
+        },
+        {
+          "name": "maxActors",
+          "type": "integer",
+          "required": false,
+          "description": "Refuse to act on more than this many actors (default 256)"
+        }
+      ]
+    },
     "reset_retarget_pose": {
       "category": "animation",
       "params": [
@@ -43596,6 +43638,91 @@
           "type": "boolean",
           "required": false,
           "description": "Remove the mesh's NavCollision"
+        }
+      ]
+    },
+    "set_mesh_simple_collision": {
+      "category": "asset",
+      "params": [
+        {
+          "name": "assetPath",
+          "type": "string",
+          "required": true,
+          "description": "StaticMesh asset path"
+        },
+        {
+          "name": "shapes",
+          "type": "array",
+          "required": true,
+          "description": "Shapes to write, at most 256: [{type, center, rotation?, extent (box), radius (sphere, capsule), length (capsule)}]",
+          "items": "object",
+          "fields": [
+            {
+              "name": "type",
+              "type": "string",
+              "required": true,
+              "description": "box | sphere | capsule",
+              "enum": [
+                "box",
+                "sphere",
+                "capsule"
+              ]
+            },
+            {
+              "name": "center",
+              "type": "vec3",
+              "required": true,
+              "description": "Shape centre in the mesh's local space, in cm"
+            },
+            {
+              "name": "rotation",
+              "type": "rotator",
+              "required": false,
+              "description": "Shape rotation (box and capsule; default none)"
+            },
+            {
+              "name": "extent",
+              "type": "vec3",
+              "required": false,
+              "description": "Box only: FULL lengths along X, Y and Z, the FKBoxElem X/Y/Z values, not half extents"
+            },
+            {
+              "name": "radius",
+              "type": "number",
+              "required": false,
+              "description": "Sphere and capsule radius, in cm"
+            },
+            {
+              "name": "length",
+              "type": "number",
+              "required": false,
+              "description": "Capsule only: the straight section between the hemispheres, so the full height is length + 2 x radius"
+            }
+          ]
+        },
+        {
+          "name": "replace",
+          "type": "boolean",
+          "required": false,
+          "description": "Remove every existing simple shape, convex hulls included, before writing (default true); false appends"
+        },
+        {
+          "name": "collisionTraceFlag",
+          "type": "string",
+          "required": false,
+          "description": "UseDefault | UseSimpleAndComplex | UseSimpleAsComplex | UseComplexAsSimple, with or without the CTF_ prefix (default unchanged)"
+        },
+        {
+          "name": "save",
+          "type": "boolean",
+          "required": false,
+          "description": "Save the mesh (default true)"
+        },
+        {
+          "name": "dryRun",
+          "type": "boolean",
+          "required": false,
+          "description": "Preflight and report without writing (default false)"
         }
       ]
     },

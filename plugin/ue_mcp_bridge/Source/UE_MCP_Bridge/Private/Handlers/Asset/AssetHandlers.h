@@ -10,6 +10,11 @@ public:
 	// Register all asset handlers
 	static void RegisterHandlers(class FMCPHandlerRegistry& Registry);
 
+	// asset(save, assetPaths)'s targeted save, for a handler in another
+	// category that must write exactly the packages it changed and no others.
+	// Same rows and statuses (saved, notDirty, failed, refused) as that action.
+	static TSharedPtr<FJsonValue> SaveNamedPackages(const TArray<TSharedPtr<FJsonValue>>& PathValues);
+
 private:
 	// Handler implementations
 	static TSharedPtr<FJsonValue> ListAssets(const TSharedPtr<FJsonObject>& Params);
@@ -243,6 +248,8 @@ private:
 	// #593: list bones (names + rest-pose transforms) from a SkeletalMesh/Skeleton asset.
 	static TSharedPtr<FJsonValue> ListSkeletonBones(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> GetMeshCollision(const TSharedPtr<FJsonObject>& Params);
+	// Write explicit box, sphere and capsule shapes into a StaticMesh's body setup.
+	static TSharedPtr<FJsonValue> SetMeshSimpleCollision(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> MoveFolder(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SetMeshNav(const TSharedPtr<FJsonObject>& Params);
 	// #212: create empty content browser folders
