@@ -1,6 +1,16 @@
 # Owned Fab content
 
-The `fab` category takes content you own on Fab from your library into the project without leaving the conversation: sign in, sync your library, find the item, download it, install it. Searching and buying stay on fab.com; `fab(open_search)` opens fab.com's search page at a query for that.
+The `fab` category takes content you own on Fab from your library into the project without leaving the conversation: sign in, sync your library, find the item, download it, install it. `fab(open_search)` opens fab.com's search page at a query.
+
+## Searching the catalog with Epic's built-in Fab tools
+
+On UE 5.9 the Fab UE Plugin carries its own toolset, `FabToolset`, in Unreal's Toolset Registry: the tools Epic's Unreal MCP server and AI Assistant use to search the Fab catalog, find free assets and import listings. ue-mcp extends those tools rather than replacing them, and every one of them stays callable while ue-mcp is enabled.
+
+- `fab(list_epic_tools)` lists the Fab tools the connected editor has, from the registry and from Epic's Unreal MCP plugin, each with the call that runs it. `includeSchemas: true` adds each tool's input schema.
+- Run a registry tool with `epic(call_tool, {tool: "<qualified name>", input: {...}})`, and an MCP plugin tool with `epic(call_mcp_tool, {tool, input})`.
+- When the editor has none, `available` is false and `note` says why: usually the Fab UE Plugin is missing or too old for that engine (`fab(status)` reports it), or the Toolset Registry is off.
+
+No catalog ue-mcp is generated from has recorded the Fab toolset, so it has no `epic_*` actions of its own; the same holds for any toolset a launcher plugin or a newer engine adds, and `epic(list_toolsets)` lists every one of them.
 
 ## Before you start
 

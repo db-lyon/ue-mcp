@@ -5,6 +5,7 @@
 
 /** Pattern to category, first match wins. A toolset matching none belongs to `epic`. */
 export const EPIC_TOOLSET_ROUTES: ReadonlyArray<readonly [RegExp, string]> = [
+  [/(?:^|[._])fab(?!ric)/i, "fab"],
   [/levelsequence|templatesequence|sequencevalidator|deformergraph|optimus/i, "animation"],
   [/pcgeditor/i, "pcg"],
   [/environmentquery|navmesh|inputtoolset/i, "gameplay"],

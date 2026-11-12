@@ -584,7 +584,8 @@ export function formatDoctor(d: DoctorReport): string {
   if (epicMcp?.runsBeside) {
     notes.push(
       `Epic's Unreal MCP server starts with this project's editor on ${epicMcp.url}, beside ue-mcp. ` +
-      `An agent given both sees two tool surfaces for the same editor; ue-mcp's epic category already wraps Epic's toolsets. ` +
+      `Both read the same Toolset Registry, so they can run together: ue-mcp reaches every registered toolset too, ` +
+      `including ones it has no epic_* action for, through epic(list_toolsets) and epic(call_tool). ` +
       `\`ue-mcp init --yes --no-unreal-mcp-autostart\` stops it starting for this project, and \`--unreal-mcp-port <n>\` moves it.`,
     );
   }
