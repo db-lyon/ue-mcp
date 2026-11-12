@@ -74,8 +74,9 @@ describe("the Save Content prompt as structure (#1891)", () => {
       // The dirty map is a row: its name, its package, its class.
       const map = table.rows.find((r: string[]) => r[2] === "/Script/Engine.World");
       expect(map, JSON.stringify(table.rows)).toBeDefined();
-      expect(map[1].startsWith("/Game/")).toBe(true);
-      expect(map[1].endsWith(`/${map[0]}`)).toBe(true);
+      // A shard editor opens an unsaved map, whose package is under /Temp.
+      expect(map[1].startsWith("/"), JSON.stringify(table.rows)).toBe(true);
+      expect(map[1].endsWith(`/${map[0]}`), JSON.stringify(table.rows)).toBe(true);
 
       // Each row's tick, and the item respond_to_dialog would take for it.
       expect(table.checked).toHaveLength(table.rows.length);

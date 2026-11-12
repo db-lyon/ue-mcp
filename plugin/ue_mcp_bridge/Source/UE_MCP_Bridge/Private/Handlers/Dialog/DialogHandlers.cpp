@@ -1640,6 +1640,24 @@ namespace MCPDialogStructure
 		return nullptr;
 	}
 
+	/** Every shown descendant of this type, depth first, not looking inside a match. */
+	static void CollectShown(const TSharedRef<SWidget>& Widget, const FName& Type, TArray<TSharedRef<SWidget>>& Out)
+	{
+		FChildren* Children = Widget->GetChildren();
+		if (!Children) return;
+		for (int32 i = 0; i < Children->Num(); ++i)
+		{
+			const TSharedRef<SWidget> Child = Children->GetChildAt(i);
+			if (!IsShown(Child)) continue;
+			if (Child->GetType() == Type)
+			{
+				Out.Add(Child);
+				continue;
+			}
+			CollectShown(Child, Type, Out);
+		}
+	}
+
 	static FBlock ReadTable(const TSharedRef<SWidget>& View)
 	{
 		FBlock Table;
@@ -1659,11 +1677,24 @@ namespace MCPDialogStructure
 			}
 		}
 
-		const TSharedPtr<SWidget> Panel = FindFirst(View, TEXT("SListPanel"));
-		FChildren* RowWidgets = Panel.IsValid() ? Panel->GetChildren() : nullptr;
-		for (int32 r = 0; RowWidgets && r < RowWidgets->Num(); ++r)
+		// Every shown SListPanel's rows, in order. A table view holds two: the
+		// pinned-items panel first, collapsed and empty unless rows are pinned,
+		// then the panel of ordinary rows.
+		TArray<TSharedRef<SWidget>> Panels;
+		CollectShown(View, TEXT("SListPanel"), Panels);
+		TArray<TSharedRef<SWidget>> RowWidgets;
+		for (const TSharedRef<SWidget>& Panel : Panels)
 		{
-			const TSharedRef<SWidget> Row = RowWidgets->GetChildAt(r);
+			if (FChildren* Children = Panel->GetChildren())
+			{
+				for (int32 i = 0; i < Children->Num(); ++i)
+				{
+					RowWidgets.Add(Children->GetChildAt(i));
+				}
+			}
+		}
+		for (const TSharedRef<SWidget>& Row : RowWidgets)
+		{
 			if (!IsShown(Row)) continue;
 
 			// A multi-column row lays its cells out as the slots of one
