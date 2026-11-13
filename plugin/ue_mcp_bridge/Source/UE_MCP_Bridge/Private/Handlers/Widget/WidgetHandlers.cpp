@@ -443,6 +443,7 @@ void FWidgetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Required(TEXT("widgetClass"), EType::String, TEXT("Widget class: a short name (TextBlock, CanvasPanel), a full path, or a Widget Blueprint path")).Alias(TEXT("typeName")),
 		MCPParam::Optional(TEXT("widgetName"), EType::String, TEXT("Name of a widget inside the tree (#798)")).Alias(TEXT("name")),
 		MCPParam::Optional(TEXT("parentWidgetName"), EType::String, TEXT("Name of the parent panel widget (#798)")),
+		MCPParam::Optional(TEXT("childIndex"), EType::Integer, TEXT("Sibling index to insert at within the parent panel, 0 to its current child count (default: append). Refused when out of range or when the widget becomes the root (#1440)")),
 	});
 	Registry.RegisterHandler(TEXT("build_tree"), &BuildTree, {
 		AssetPath(),
@@ -1101,6 +1102,10 @@ TSharedPtr<FJsonValue> FWidgetHandlers::AddWidget(const TSharedPtr<FJsonObject>&
 
 	FString ParentWidgetName = OptionalString(Params, TEXT("parentWidgetName"));
 
+	// #1440: an absent childIndex appends; a given one is honoured or refused.
+	const bool bHasChildIndex = HasParam(Params, TEXT("childIndex"));
+	const int32 RequestedChildIndex = OptionalInt(Params, TEXT("childIndex"), INDEX_NONE);
+
 	// ── Load the WidgetBlueprint ──
 	TSharedPtr<FJsonValue> ResolveError;
 	UWidgetBlueprint* WidgetBP = MCPWidget::ResolveWidgetBlueprintOrError(AssetPath, ResolveError);
@@ -1150,9 +1155,57 @@ TSharedPtr<FJsonValue> FWidgetHandlers::AddWidget(const TSharedPtr<FJsonObject>&
 			if (UPanelWidget* ExistingParent = Existing->GetParent())
 			{
 				ExistingResult->SetStringField(TEXT("parentWidgetName"), ExistingParent->GetName());
+				ExistingResult->SetNumberField(TEXT("childIndex"), ExistingParent->GetChildIndex(Existing));
 			}
 			ExistingResult->SetBoolField(TEXT("isRoot"), WidgetBP->WidgetTree->RootWidget == Existing);
 			return MCPResult(ExistingResult);
+		}
+	}
+
+	// ── Resolve the parent panel and validate childIndex before anything is built ──
+	UPanelWidget* TargetPanel = nullptr;
+	if (!ParentWidgetName.IsEmpty())
+	{
+		UWidget* ParentRaw = MCPWidget::FindWidgetByName(WidgetBP->WidgetTree, ParentWidgetName);
+		if (!ParentRaw)
+		{
+			return MCPError(FString::Printf(TEXT("Parent widget '%s' not found"), *ParentWidgetName));
+		}
+		TargetPanel = Cast<UPanelWidget>(ParentRaw);
+		if (!TargetPanel)
+		{
+			return MCPError(FString::Printf(TEXT("Parent widget '%s' (%s) is not a panel widget and cannot have children"), *ParentWidgetName, *ParentRaw->GetClass()->GetName()));
+		}
+	}
+	else if (WidgetBP->WidgetTree->RootWidget != nullptr)
+	{
+		TargetPanel = Cast<UPanelWidget>(WidgetBP->WidgetTree->RootWidget);
+		if (!TargetPanel)
+		{
+			return MCPError(TEXT("Root widget is not a panel. Specify parentWidgetName or set a panel as root first."));
+		}
+	}
+
+	if (bHasChildIndex)
+	{
+		if (!TargetPanel)
+		{
+			return MCPError(FString::Printf(
+				TEXT("childIndex %d cannot be honoured: '%s' has no root, so the new widget becomes the root and has no siblings. ")
+				TEXT("Omit childIndex, or add a panel first and pass it as parentWidgetName."), RequestedChildIndex, *AssetPath));
+		}
+		const int32 SiblingCount = TargetPanel->GetChildrenCount();
+		if (RequestedChildIndex < 0 || RequestedChildIndex > SiblingCount)
+		{
+			return MCPError(FString::Printf(
+				TEXT("childIndex %d is out of range for '%s', which has %d child(ren): pass 0 to %d, or omit it to append. Nothing was added."),
+				RequestedChildIndex, *TargetPanel->GetName(), SiblingCount, SiblingCount));
+		}
+		if (!TargetPanel->CanHaveMultipleChildren() && SiblingCount > 0)
+		{
+			return MCPError(FString::Printf(
+				TEXT("'%s' (%s) holds a single child and already has one, so nothing can be inserted at childIndex %d."),
+				*TargetPanel->GetName(), *TargetPanel->GetClass()->GetName(), RequestedChildIndex));
 		}
 	}
 
@@ -1167,46 +1220,43 @@ TSharedPtr<FJsonValue> FWidgetHandlers::AddWidget(const TSharedPtr<FJsonObject>&
 
 	// ── Place in hierarchy ──
 	bool bIsRoot = false;
-	if (!ParentWidgetName.IsEmpty())
+	int32 PlacedChildIndex = INDEX_NONE;
+	if (TargetPanel)
 	{
-		// Find specified parent
-		UWidget* ParentRaw = MCPWidget::FindWidgetByName(WidgetBP->WidgetTree, ParentWidgetName);
-
-		if (!ParentRaw)
+		// A refused placement must not leave the new widget owned by the tree,
+		// where the compiler would still generate a variable for it (#728).
+		auto DiscardNewWidget = [&]()
 		{
-			return MCPError(FString::Printf(TEXT("Parent widget '%s' not found"), *ParentWidgetName));
-		}
-
-		UPanelWidget* ParentPanel = Cast<UPanelWidget>(ParentRaw);
-		if (!ParentPanel)
-		{
-			return MCPError(FString::Printf(TEXT("Parent widget '%s' (%s) is not a panel widget and cannot have children"), *ParentWidgetName, *ParentRaw->GetClass()->GetName()));
-		}
-
-		UPanelSlot* Slot = ParentPanel->AddChild(NewWidget);
+			if (NewWidget->GetParent()) NewWidget->GetParent()->RemoveChild(NewWidget);
+			int32 Discarded = 0;
+			MCPWidgetGuidMap::EvictUnreachableWidgets(WidgetBP, Discarded);
+		};
+		UPanelSlot* Slot = TargetPanel->AddChild(NewWidget);
 		if (!Slot)
 		{
-			return MCPError(FString::Printf(TEXT("Failed to add '%s' as child of '%s'"), *NewWidget->GetName(), *ParentWidgetName));
+			DiscardNewWidget();
+			return MCPError(FString::Printf(TEXT("Failed to add '%s' as child of '%s'"), *NewWidget->GetName(), *TargetPanel->GetName()));
+		}
+		// AddChild appends on every panel class; move it to the requested slot
+		// the same way reorder_child does (#1440).
+		if (bHasChildIndex && TargetPanel->GetChildIndex(NewWidget) != RequestedChildIndex)
+		{
+			TargetPanel->ShiftChild(RequestedChildIndex, NewWidget);
+		}
+		PlacedChildIndex = TargetPanel->GetChildIndex(NewWidget);
+		if (bHasChildIndex && PlacedChildIndex != RequestedChildIndex)
+		{
+			DiscardNewWidget();
+			return MCPError(FString::Printf(
+				TEXT("'%s' (%s) placed the new widget at index %d instead of childIndex %d, so it was taken back out. Nothing was added."),
+				*TargetPanel->GetName(), *TargetPanel->GetClass()->GetName(), PlacedChildIndex, RequestedChildIndex));
 		}
 	}
-	else if (WidgetBP->WidgetTree->RootWidget == nullptr)
+	else
 	{
 		// No root yet - make this the root widget
 		WidgetBP->WidgetTree->RootWidget = NewWidget;
 		bIsRoot = true;
-	}
-	else
-	{
-		// Root exists, try to add as child of root if it's a panel
-		UPanelWidget* RootPanel = Cast<UPanelWidget>(WidgetBP->WidgetTree->RootWidget);
-		if (RootPanel)
-		{
-			RootPanel->AddChild(NewWidget);
-		}
-		else
-		{
-			return MCPError(TEXT("Root widget is not a panel. Specify parentWidgetName or set a panel as root first."));
-		}
 	}
 
 	// ── Save ──
@@ -1256,6 +1306,11 @@ TSharedPtr<FJsonValue> FWidgetHandlers::AddWidget(const TSharedPtr<FJsonObject>&
 	if (!ParentWidgetName.IsEmpty())
 	{
 		Result->SetStringField(TEXT("parentWidgetName"), ParentWidgetName);
+	}
+	if (TargetPanel)
+	{
+		Result->SetStringField(TEXT("parent"), TargetPanel->GetName());
+		Result->SetNumberField(TEXT("childIndex"), PlacedChildIndex);
 	}
 	MCPSetWidgetGuidOutcome(Result, GuidSync, AssetPath);
 	MCPWidgetClassDefaults::Report(Result, RestoredDefaults);
@@ -1340,6 +1395,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::RemoveWidget(const TSharedPtr<FJsonObjec
 	const FString RemovedClassPath = FoundWidget->GetClass()->GetPathName();
 	const UPanelWidget* RemovedParent = FoundWidget->GetParent();
 	const FString RemovedParentName = RemovedParent ? RemovedParent->GetName() : FString();
+	const int32 RemovedChildIndex = RemovedParent ? RemovedParent->GetChildIndex(FoundWidget) : INDEX_NONE;
 	const bool bRemovedWasRoot = (WidgetBP->WidgetTree->RootWidget == FoundWidget);
 	int32 RemovedChildCount = 0;
 	if (const UPanelWidget* RemovedPanel = Cast<UPanelWidget>(FoundWidget))
@@ -1404,9 +1460,9 @@ TSharedPtr<FJsonValue> FWidgetHandlers::RemoveWidget(const TSharedPtr<FJsonObjec
 	Result->SetNumberField(TEXT("removedChildCount"), RemovedChildCount);
 	MCPSetWidgetGuidOutcome(Result, GuidSync, AssetPath);
 
-	// add_widget puts a widget of the same class back under the same parent and
-	// under the same name: the removal evicted the old object into the transient
-	// package, so the name is free again. What it cannot put back is the state
+	// add_widget puts a widget of the same class back under the same parent, at
+	// the same sibling index and under the same name: the removal evicted the
+	// old object into the transient package, so the name is free again. What it cannot put back is the state
 	// that lived on the removed widget - its property values, its slot layout,
 	// its bindings and its whole subtree, all of which went with it. An empty
 	// parentWidgetName means "no parent", which is what add_widget needs to see
@@ -1418,6 +1474,10 @@ TSharedPtr<FJsonValue> FWidgetHandlers::RemoveWidget(const TSharedPtr<FJsonObjec
 	if (!RemovedParentName.IsEmpty())
 	{
 		Payload->SetStringField(TEXT("parentWidgetName"), RemovedParentName);
+		if (RemovedChildIndex != INDEX_NONE)
+		{
+			Payload->SetNumberField(TEXT("childIndex"), RemovedChildIndex);
+		}
 	}
 	MCPSetRollback(Result, TEXT("add_widget"), Payload);
 	Result->SetBoolField(TEXT("rollbackLossy"), true);

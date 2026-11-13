@@ -3531,6 +3531,12 @@
           "type": "string",
           "required": false,
           "description": "Name of the parent panel widget (#798)"
+        },
+        {
+          "name": "childIndex",
+          "type": "integer",
+          "required": false,
+          "description": "Sibling index to insert at within the parent panel, 0 to its current child count (default: append). Refused when out of range or when the widget becomes the root (#1440)"
         }
       ]
     },
