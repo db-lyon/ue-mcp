@@ -731,7 +731,9 @@ FString FMCPBridgeServer::ProcessMessage(const FString& Message, const TFunction
 		return CreateJsonRpcError(Request, -32600, TEXT("Invalid Request"));
 	}
 
-	UE_LOG(LogMCPBridge, Log, TEXT("[UE-MCP] Processing method: %s"), *Method);
+	// One line per request floods the Output Log (Studio polls list_dialogs and pie_script_read every few seconds).
+	// Verbose keeps it out of the log by default; `log LogMCPBridge Verbose` in the console brings it back.
+	UE_LOG(LogMCPBridge, Verbose, TEXT("[UE-MCP] Processing method: %s"), *Method);
 
 	TSharedPtr<FJsonObject> Params;
 	if (Request->HasField(TEXT("params")))
