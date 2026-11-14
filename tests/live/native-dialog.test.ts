@@ -43,24 +43,57 @@ afterAll(async () => {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-/** execute_python through the server's gate: rule out whatever it names, then run. */
-async function runPython(code: string, taskSummary: string): Promise<LiveCallResult> {
-  const first = await server.call("editor", { action: "execute_python", code, taskSummary });
-  const text = first.blocks.join("\n");
-  const m = /\{"ruledOut":\[.*?\]\}/.exec(text);
-  if (!m) return first;
-  const template = (JSON.parse(m[0]) as { ruledOut: Array<{ action: string; reason: string }> }).ruledOut;
-  const ruledOut = template.map((r) => ({ action: r.action, reason: "It does not raise a native Win32 message box, which this test needs." }));
-  return server.call("editor", { action: "execute_python", code, taskSummary, ruledOut, timeoutMs: 120_000 });
+/** The ruledOut array a gate refusal hands back, wherever in the result it sits (prose, or a JSON error string). */
+function ruledOutTemplate(result: LiveCallResult): Array<{ action: string }> | null {
+  const texts: string[] = [...result.blocks];
+  for (const b of result.blocks) {
+    try {
+      const parsed = JSON.parse(b) as Record<string, unknown>;
+      for (const v of Object.values(parsed)) if (typeof v === "string") texts.push(v);
+    } catch {
+      // Prose, already in the list.
+    }
+  }
+  for (const t of texts) {
+    const at = t.indexOf('{"ruledOut":');
+    if (at < 0) continue;
+    // The object ends at the first "]}" that parses.
+    for (let end = t.indexOf("]}", at); end >= 0; end = t.indexOf("]}", end + 1)) {
+      try {
+        return (JSON.parse(t.slice(at, end + 2)) as { ruledOut: Array<{ action: string }> }).ruledOut;
+      } catch {
+        // Not the end yet.
+      }
+    }
+  }
+  return null;
 }
 
-async function nativeListed(timeoutMs = 30_000): Promise<any> {
+/** execute_python through the server's gate: rule out whatever it names, then run. */
+async function runPython(code: string, taskSummary: string): Promise<LiveCallResult> {
+  const ruledOut: Array<{ action: string; reason: string }> = [];
+  for (let round = 0; round < 4; round++) {
+    const r = await server.call("editor", { action: "execute_python", code, taskSummary, ...(ruledOut.length ? { ruledOut } : {}), timeoutMs: 120_000 });
+    const template = ruledOutTemplate(r);
+    if (!template) return r;
+    for (const t of template) {
+      if (!ruledOut.some((x) => x.action === t.action)) {
+        ruledOut.push({ action: t.action, reason: "It does not raise a native Win32 message box, which this test needs." });
+      }
+    }
+  }
+  throw new Error("execute_python stayed gated after ruling out every candidate");
+}
+
+async function nativeListed(raised: { settled: string | null }, timeoutMs = 30_000): Promise<any> {
   const deadline = Date.now() + timeoutMs;
   for (;;) {
     const listed = resultJson<any>(await server.call("editor", { action: "list_dialogs" }));
     const d = listed?.dialogs?.[0];
     if (d?.native && d.title === TITLE) return d;
-    if (Date.now() > deadline) throw new Error(`no native dialog listed: ${JSON.stringify(listed)}`);
+    if (Date.now() > deadline || (raised.settled !== null && !/nativeDialog/.test(raised.settled))) {
+      throw new Error(`no native dialog listed: ${JSON.stringify(listed)}; the call that raises it answered: ${raised.settled ?? "(still waiting)"}`);
+    }
     await sleep(250);
   }
 }
@@ -78,8 +111,10 @@ describe("a native message box in the editor", () => {
     ].join("\n");
     const startedAt = Date.now();
     const pending = runPython(code, "raise a native Win32 message box on the game thread for the native dialog live test");
+    const raised: { settled: string | null } = { settled: null };
+    pending.then((r) => (raised.settled = r.blocks.join("\n")), (e) => (raised.settled = String(e)));
 
-    const dialog = await nativeListed();
+    const dialog = await nativeListed(raised);
     expect(dialog).toMatchObject({ title: TITLE, buttons: ["OK", "Cancel"], detectedBy: "nativeWindow", blocksGameThread: true });
     expect(dialog.message).toContain(TEXT);
     expect(dialog.native).toMatchObject({ kind: "message" });
