@@ -182,12 +182,41 @@ export function parseWatcherLine(line: string): RawNativeDialog[] | null {
   }
 }
 
-/** Log lines that describe the GPU's state at a device loss: breadcrumbs, DRED, Aftermath, the removal reason. */
-export function gpuStateLines(logText: string, limit = 40): string[] {
-  const lines = logText.split(/\r?\n/);
-  const re = /GPU crash|GPU hang|Device ?Removed|DEVICE_(?:REMOVED|HUNG|RESET)|DRED|Aftermath|Breadcrumb|GPU state|PageFault|Page fault|GetDeviceRemovedReason|LogD3D1[12]RHI: Error|LogRHI: Error|LogVulkanRHI: Error|TDR/i;
-  const hits = lines.filter((l) => re.test(l)).map((l) => l.trimEnd());
-  return hits.slice(-limit);
+/** Where a log entry begins: `[2026.11.14-16.39.25:790][468]`. Lines without it continue the entry above. */
+const LOG_ENTRY = /^\[\d{4}\.\d{2}\.\d{2}-\d{2}\.\d{2}\.\d{2}:\d{3}\]/;
+/** The entry the RHI writes when it finds the device gone. */
+const GPU_LOSS = /GPU crash detected|GPU hang detected|Device \d* ?Removed|DXGI_ERROR_DEVICE_(?:REMOVED|HUNG|RESET)|VK_ERROR_DEVICE_LOST/i;
+/** The entries that describe the GPU's state after it: the RHI's errors, DRED, Aftermath, breadcrumbs. */
+const GPU_STATE = /LogD3D1[12]RHI: Error|LogRHI: Error|LogVulkanRHI: Error|LogNvidiaAftermath|LogAMD\w*|DRED|Breadcrumb|PageFault|GPU crash|GPU hang/i;
+
+/**
+ * The GPU's state at a device loss, from the editor log: the RHI's report of
+ * the loss and the entries after it (the removal reason, active breadcrumbs,
+ * DRED, Aftermath, video memory), each with its continuation lines. Starts at
+ * the last loss in the text; empty when there is none.
+ */
+export function gpuStateLines(logText: string, limit = 60): string[] {
+  const entries: string[][] = [];
+  for (const line of logText.split(/\r?\n/)) {
+    if (LOG_ENTRY.test(line) || entries.length === 0) entries.push([line]);
+    else entries[entries.length - 1].push(line);
+  }
+  // The RHI's own report opens the section; a later call that failed on the
+  // removed device also names the loss, so it is the fallback, not the start.
+  const lastWhere = (re: RegExp): number => {
+    for (let i = entries.length - 1; i >= 0; i--) if (re.test(entries[i].join("\n"))) return i;
+    return -1;
+  };
+  const reported = lastWhere(/GPU crash detected|GPU hang detected/i);
+  const start = reported >= 0 ? reported : lastWhere(GPU_LOSS);
+  if (start < 0) return [];
+  const out: string[] = [];
+  for (const entry of entries.slice(start)) {
+    if (!GPU_STATE.test(entry[0]) && !GPU_LOSS.test(entry.join("\n"))) continue;
+    for (const line of entry) if (line.trim() !== "") out.push(line.trimEnd());
+    if (out.length >= limit) break;
+  }
+  return out.slice(0, limit);
 }
 
 /** The GPU state lines from the end of the project's log, or [] when there are none. */

@@ -150,6 +150,37 @@ describe("GPU state from the log", () => {
     expect(lines.some((l) => /LogSlate/.test(l))).toBe(false);
   });
 
+  it("keeps each entry's continuation lines, as a 5.8 D3D12 device loss writes them", () => {
+    // The shape of a real report: the loss with its reason on the next line, the active
+    // breadcrumbs, an allocation that failed on the removed device, then DRED and memory.
+    const REAL = [
+      "[2026.11.14-16.39.25:716][466]LogWorld: UWorld::CleanupWorld for Untitled, bSessionEnded=true",
+      "[2026.11.14-16.39.25:790][468]LogD3D12RHI: Error: GPU crash detected:",
+      "\t- Device 0 Removed: DXGI_ERROR_DRIVER_INTERNAL_ERROR",
+      "",
+      "[2026.11.14-16.39.25:791][468]LogRHI: Error: Active GPU breadcrumbs:",
+      "",
+      "\tDevice 0, Pipeline Graphics: (In: 0x821ccd7e, Out: 0x821ccd7d)",
+      "\t\t(ID: 0x821ccd7e) [     Active]\t\t\tFRDGBuilder::SubmitBufferUploads",
+      "[2026.11.14-16.39.25:792][468]LogD3D12RHI: Display: D3D12 CreateReservedResource failed with params:",
+      "\tResource Width: 2147483648",
+      "[2026.11.14-16.39.25:792][468]LogD3D12RHI: Error: Adapter->CreateReservedResource( Desc, ... )",
+      " with error DXGI_ERROR_DEVICE_REMOVED",
+      "[2026.11.14-16.39.28:801][468]LogNvidiaAftermath: Warning: Timed out while waiting for Aftermath to start the GPU crash dump.",
+      "[2026.11.14-16.39.28:801][468]LogD3D12RHI: Error: DRED: No breadcrumb head found.",
+      "[2026.11.14-16.39.28:801][468]LogD3D12RHI: Error: \tLocal Budget:\t9285.00 MB",
+      "[2026.11.14-17.03.46:333][468]LogMCPBridge: [UE-MCP] Client connected from 127.0.0.1:54043",
+    ].join("\r\n");
+    const lines = gpuStateLines(REAL);
+    expect(lines[0]).toMatch(/GPU crash detected/);
+    expect(lines[1]).toMatch(/Device 0 Removed: DXGI_ERROR_DRIVER_INTERNAL_ERROR/);
+    expect(lines).toContain("\t\t(ID: 0x821ccd7e) [     Active]\t\t\tFRDGBuilder::SubmitBufferUploads");
+    expect(lines).toContain(" with error DXGI_ERROR_DEVICE_REMOVED");
+    expect(lines.some((l) => /Aftermath/.test(l))).toBe(true);
+    expect(lines.some((l) => /Local Budget/.test(l))).toBe(true);
+    expect(lines.some((l) => /LogWorld|LogMCPBridge|CreateReservedResource failed with params/.test(l))).toBe(false);
+  });
+
   it("reads them from Saved/Logs/<Project>.log and puts them in the details", () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ue-mcp-native-log-"));
     const uproject = path.join(dir, "Vale.uproject");
