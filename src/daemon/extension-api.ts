@@ -167,7 +167,51 @@ export interface DialogEventData {
   blocks?: DialogBlock[];
   mode?: "auto" | "interactive" | "defer";
   button?: string;
-  via?: "prompt" | "action";
+  /** `person`: pressed by a person directly, through `nativeDialogs.press` or POST /v1/dialogs/native/press. */
+  via?: "prompt" | "action" | "person";
+  /**
+   * Set when the dialog is a native Win32 window of the editor process (feature
+   * "dialogs.native"): a GPU device loss, an assert box, a startup prompt. The
+   * bridge cannot answer while one is up; it is read and pressed from outside.
+   */
+  native?: NativeDialogInfo;
+}
+
+/** What a native dialog is, beyond its title, text and buttons (feature "dialogs.native"). */
+export interface NativeDialogInfo {
+  /** The window handle, as a decimal string. */
+  hwnd: string;
+  /** The editor process that owns it. */
+  pid: number;
+  kind: "gpu-crash" | "assert" | "ensure" | "missing-modules" | "crash" | "message";
+  /** One plain sentence on what it means and what answering it does. */
+  summary: string;
+  /** Lines from the editor log that explain it, such as the GPU state after a device loss. */
+  details?: string[];
+}
+
+/** One native dialog an editor of this project shows, as `nativeDialogs.list` and GET /v1/dialogs/native give it. */
+export interface NativeDialogView extends NativeDialogInfo {
+  /** The editor session it belongs to. */
+  editor: string;
+  title: string;
+  message: string;
+  /** Each static text control, in window order. */
+  text: string[];
+  /** Button labels in window order. */
+  buttons: string[];
+  /** The window does not answer the window manager. */
+  hung: boolean;
+}
+
+/** What one press of a native dialog's button did. */
+export interface NativeDialogPressResult {
+  /** The press reached the window. */
+  pressed: boolean;
+  /** The window was gone within a few seconds of the press. */
+  closed: boolean;
+  button?: string;
+  error?: string;
 }
 
 /**
@@ -260,9 +304,27 @@ export interface DaemonExtensionApi {
    *   "extension.services"       `services` lets extensions provide and use each other's objects in process
    *   "flows.stepApproval"       `flows.approveSteps` asks this extension before each task of a run that
    *                              names it (POST /v1/flows/<name>/run with `stepApproval`)
+   *   "dialogs.native"           native Win32 dialogs the editor process shows are dialog.* events with
+   *                              `native` set, block calls like any modal, are put to `dialogPrompt`, and
+   *                              `nativeDialogs` lists and presses them
    * Absent on a daemon older than the field.
    */
   features?: readonly string[];
+
+  /**
+   * Native Win32 dialogs the editors of this project show (feature
+   * "dialogs.native"), read from outside the editor process: a GPU device
+   * loss, an assert or ensure box, a startup prompt. `press` is a person's
+   * answer, made whatever the dialog mode: it presses the named button of the
+   * window with that handle, after checking the window still belongs to an
+   * editor of this project, and reports dialog.answered with via "person".
+   * Give an agent's answer through callAction("editor", "respond_to_dialog"),
+   * which the dialog mode governs.
+   */
+  nativeDialogs?: {
+    list(): NativeDialogView[];
+    press(hwnd: string, button: string, opts?: { pid?: number }): Promise<NativeDialogPressResult>;
+  };
 
   /**
    * Approve each flow step as it runs (feature "flows.stepApproval").
@@ -464,7 +526,9 @@ export interface DaemonHealth {
    *   "ui.extensions"         GET /ui/ext/<name>/ serves each loaded extension's own bundle, listed
    *                           in `uiBundles`; `ueMcpExtension.ui.root: false` keeps one off /ui/
    *   "sessions.access"       GET /v1/sessions lists each MCP session with its access mode, and
-   *                           PUT /v1/sessions/<id>/access sets one to read-only or read-write).
+   *                           PUT /v1/sessions/<id>/access sets one to read-only or read-write
+   *   "dialogs.native"        GET /v1/dialogs/native lists the native Win32 dialogs this project's editors
+   *                           show, and POST /v1/dialogs/native/press {hwnd, button, pid?} presses one).
    * Absent on a daemon older than the field.
    */
   features?: readonly string[];

@@ -121,6 +121,7 @@ function recordingEnv(sandbox: string, host: string, port: number): NodeJS.Proce
   env.UE_MCP_USER_STATE = path.join(sandbox, "state.json");
   env.UE_MCP_AUTH_DIR = path.join(sandbox, "auth");
   env.UE_MCP_DISABLE_UPDATE_CHECK = "1";
+  env.UE_MCP_NATIVE_DIALOGS = "off";
   env.UE_MCP_LOG_LEVEL = "error";
   // The full strategy, pinned. Micro is the default since #1172, and it
   // advertises one gateway whose schema names no action at all; full is the

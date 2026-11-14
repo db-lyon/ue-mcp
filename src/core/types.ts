@@ -121,6 +121,18 @@ export interface DialogPromptRequest extends ElicitParams {
     items?: Array<{ index: number; label: string; cells: string[]; checked: boolean }>;
     /** The body as paragraphs and tables, when the plugin reports it; `message` otherwise. */
     blocks?: DialogBlock[];
+    /**
+     * Set for a native Win32 dialog of the editor process (a GPU device loss,
+     * an assert box): its window handle, process, kind, a plain summary, and
+     * any log lines that explain it.
+     */
+    native?: {
+      hwnd: string;
+      pid: number;
+      kind: "gpu-crash" | "assert" | "ensure" | "missing-modules" | "crash" | "message";
+      summary: string;
+      details?: string[];
+    };
     /** The `category.action` whose call met the dialog. */
     subject: string;
     /** An answer sooner than this many milliseconds is not taken as a person's. */

@@ -1,5 +1,5 @@
 {
-  "recordedAt": "2026-11-10",
+  "recordedAt": "2026-11-14",
   "source": "seconds per test file, from vitest JSON reports. Refresh with scripts/vitest-weights.mjs.",
   "files": {
     "tests/integration/agent-guides.test.ts": 20.4,
@@ -35,6 +35,7 @@
     "tests/integration/init-interactive.test.ts": 27.5,
     "tests/integration/inline-image.test.ts": 5.8,
     "tests/integration/journal.test.ts": 29.7,
+    "tests/integration/native-dialogs.test.ts": 9.9,
     "tests/integration/npx-age-gate.test.ts": 25.5,
     "tests/integration/package-exports.test.ts": 10.8,
     "tests/integration/playtest-flow.test.ts": 15.3,

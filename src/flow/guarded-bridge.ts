@@ -60,6 +60,148 @@ export function observeReply<T>(session: EditorSession | undefined, method: stri
   return result;
 }
 
+/** A press keyword, as respond_to_dialog takes it, to the labels that carry its meaning. */
+const RESPONSE_LABELS: Record<string, string[]> = {
+  ok: ["OK"],
+  yes: ["Yes", "OK"],
+  no: ["No", "Cancel"],
+  cancel: ["Cancel"],
+  retry: ["Retry", "Try Again"],
+  continue: ["Continue"],
+  ignore: ["Ignore"],
+  abort: ["Abort"],
+};
+
+/**
+ * list_dialogs and respond_to_dialog, answered here while the editor process
+ * shows a native Win32 dialog.
+ *
+ * The plugin cannot see such a box and cannot answer while it is up, so both
+ * would wait out their timeout. The window scan sees it from outside, and the
+ * press goes to that window by handle. Returns undefined when no native dialog
+ * is up, and the call goes to the editor as usual.
+ */
+export async function serveNativeDialog(
+  session: EditorSession | undefined,
+  method: string,
+  params: Record<string, unknown> | undefined,
+): Promise<Record<string, unknown> | undefined> {
+  if (!session || (method !== "list_dialogs" && method !== "respond_to_dialog")) return undefined;
+  const guard = existingGuard(session) ?? (await ensureGuard(session));
+  const dialog = guard.nativeDialog();
+  if (!dialog?.native) return undefined;
+  if (method === "list_dialogs") {
+    return {
+      success: true,
+      native: true,
+      dialogs: [{
+        title: dialog.title,
+        message: dialog.message,
+        messageTruncated: false,
+        buttons: dialog.buttons,
+        choices: dialog.choices,
+        blocksGameThread: true,
+        detectedBy: "nativeWindow",
+        native: dialog.native,
+      }],
+      windows: [],
+    };
+  }
+  const p = params ?? {};
+  const buttonsList = dialog.buttons.map((b) => `"${b}"`).join(", ");
+  if (typeof p.dialogAction === "string" && p.dialogAction !== "") {
+    return {
+      success: false,
+      error: `"${dialog.title}" is a native Windows dialog, which is answered with one of its own buttons (${buttonsList}), not closed. Pass buttonLabel.`,
+    };
+  }
+  let label: string | undefined;
+  if (typeof p.buttonLabel === "string" && p.buttonLabel !== "") label = p.buttonLabel;
+  else if (typeof p.buttonIndex === "number") label = dialog.buttons[p.buttonIndex];
+  else if (typeof p.response === "string") {
+    const wanted = RESPONSE_LABELS[p.response.toLowerCase()] ?? [p.response];
+    label = wanted.map((w) => dialog.buttons.find((b) => b.toLowerCase() === w.toLowerCase())).find((b) => b !== undefined);
+  }
+  if (!label) return { success: false, error: `Name one of the dialog's buttons with buttonLabel: ${buttonsList}.` };
+  const r = await guard.pressNativeButton(dialog, label, null);
+  if (!r.pressed) return { success: false, answered: true, native: true, error: r.error ?? "The press did not reach the dialog." };
+  return {
+    success: true,
+    answered: true,
+    native: true,
+    pressed: r.button ?? label,
+    closed: r.closed,
+    ...(dialog.native.kind === "gpu-crash"
+      ? { note: "The editor's GPU device was lost, so the editor exits now. Start it again once it has gone." }
+      : {}),
+  };
+}
+
+/**
+ * A call already sent to the editor, raced against a native dialog appearing.
+ *
+ * A native dialog parks the editor where the bridge cannot answer, so a call
+ * in flight would otherwise wait out its whole timeout. When one appears, the
+ * caller is told now, with the dialog, marked `inFlight` because the call had
+ * already been sent and may still run once the dialog is answered.
+ *
+ * Modal-safe methods are raced too: the plugin answers them from Slate's modal
+ * loop, which does not run inside a Win32 box. A list_dialogs in flight (a UI
+ * polls it every few seconds) is answered with the native dialog instead.
+ */
+export function raceNativeDialog<T>(
+  session: EditorSession | undefined,
+  method: string,
+  call: Promise<T>,
+  params?: Record<string, unknown>,
+): Promise<T | Record<string, unknown>> {
+  if (!session) return call;
+  const guard = existingGuard(session);
+  if (!guard) return call;
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const off = guard.onNativeDialog((dialog) => {
+      if (settled) return;
+      settled = true;
+      off();
+      // The bridge may still answer, or fail when the editor exits; neither is anyone's to handle now.
+      call.catch(() => undefined);
+      if (method === "list_dialogs") {
+        void serveNativeDialog(session, method, params).then((listed) => resolve(listed ?? { success: true, dialogs: [], windows: [] }), reject);
+        return;
+      }
+      const refusal = guard.refusal(method, dialog, { canElicit: false });
+      resolve({
+        ...refusal,
+        inFlight: true,
+        error:
+          `'${method}' had already been sent to the editor when a native dialog appeared, so whether it ran is not known. `
+          + String(refusal.error ?? ""),
+      });
+    });
+    call.then(
+      (v) => {
+        if (settled) return;
+        settled = true;
+        off();
+        resolve(v);
+      },
+      (e) => {
+        if (settled) return;
+        settled = true;
+        off();
+        reject(e);
+      },
+    );
+  });
+}
+
+/** A reply that came from the editor, as opposed to one this file made while a native dialog was up. */
+function fromEditor(result: unknown): boolean {
+  return !(typeof result === "object" && result !== null && (result as { inFlight?: unknown }).inFlight === true
+    && (result as { nativeDialog?: unknown }).nativeDialog === true);
+}
+
 /**
  * An IBridge that forwards the connection lifecycle to the bridge it wraps.
  * Subclasses decide only what `call` does.
@@ -135,7 +277,10 @@ export class DialogGatedBridge extends ForwardingBridge {
   ): Promise<unknown> {
     const blocked = await refuseIfBlocked(this.session, method);
     if (blocked) return blocked;
-    return observeReply(this.session, method, await this.inner.call(method, params, timeoutMs, options));
+    const native = await serveNativeDialog(this.session, method, params);
+    if (native) return native;
+    const reply = await raceNativeDialog(this.session, method, this.inner.call(method, params, timeoutMs, options), params);
+    return fromEditor(reply) ? observeReply(this.session, method, reply) : reply;
   }
 }
 
@@ -181,10 +326,16 @@ export class GuardedBridge extends ForwardingBridge {
       // the context is not free and every bridge call lands here. Most servers run
       // with no guards at all, so skip the allocation outright.
       const readOnly = callIsReadOnly();
+      const send = async (): Promise<unknown> => {
+        const native = await serveNativeDialog(this.session, method, params);
+        if (native) return native;
+        return raceNativeDialog(this.session, method, this.inner.call(method, params, timeoutMs, options), params);
+      };
       if (this.registry.size === 0 && !readOnly) {
         const blocked = await this.guardCall(method);
         if (blocked) return blocked;
-        return this.observe(method, await this.inner.call(method, params, timeoutMs, options));
+        const reply = await send();
+        return fromEditor(reply) ? this.observe(method, reply) : reply;
       }
 
       const ctx = makeCallContext(
@@ -197,10 +348,8 @@ export class GuardedBridge extends ForwardingBridge {
       );
       const blocked = await this.guardCall(method);
       if (blocked) return blocked;
-      return this.observe(
-        method,
-        await runGuarded(ctx, readOnly ? withReadOnlyGuard(this.registry) : this.registry, () => this.inner.call(method, params, timeoutMs, options)),
-      );
+      const reply = await runGuarded(ctx, readOnly ? withReadOnlyGuard(this.registry) : this.registry, send);
+      return fromEditor(reply) ? this.observe(method, reply) : reply;
     } catch (e) {
       // Every route into the editor comes through here (an MCP tool call, a
       // flow step, the micro gateway), so this is the one place a missing
