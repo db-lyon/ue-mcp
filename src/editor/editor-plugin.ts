@@ -31,6 +31,23 @@ export interface InstalledEditorPlugin {
   dir: string;
   /** False when that version was already in place. */
   changed: boolean;
+  /**
+   * The build has no binaries for this platform but carries the plugin's source,
+   * so Unreal compiles it in the project when the project opens.
+   */
+  compiles: boolean;
+}
+
+/** The plugin carries its C++ source: a module under Source/ with its .Build.cs. */
+function hasSource(pluginDir: string): boolean {
+  const source = path.join(pluginDir, "Source");
+  if (!fs.existsSync(source)) return false;
+  for (const module of fs.readdirSync(source, { withFileTypes: true })) {
+    if (!module.isDirectory()) continue;
+    const dir = path.join(source, module.name);
+    if (fs.readdirSync(dir).some((f) => f.endsWith(".Build.cs"))) return true;
+  }
+  return false;
 }
 
 interface Descriptor {
@@ -101,7 +118,10 @@ export async function installEditorPlugin(channelUrl: string, uproject: string, 
     const found = descriptorIn(path.join(work, "x"));
     if (!found || !/^[A-Za-z0-9_]+$/.test(found.name)) throw new Error(`${build.url} holds no plugin descriptor`);
     const platform = unrealPlatform();
-    if (!fs.existsSync(path.join(found.dir, "Binaries", platform))) {
+    // A build made on another platform still installs when it carries the plugin's source:
+    // Unreal compiles it in the project when it opens, as the bridge's source install does.
+    const compiles = !fs.existsSync(path.join(found.dir, "Binaries", platform));
+    if (compiles && !hasSource(found.dir)) {
       throw new Error(`${found.title} ${channel.version} has no build for ${platform}`);
     }
 
@@ -114,7 +134,7 @@ export async function installEditorPlugin(channelUrl: string, uproject: string, 
       fs.cpSync(found.dir, staging, { recursive: true });
       swapIn(staging, target);
     }
-    return { name: found.name, title: found.title, version: channel.version, dir: target, changed };
+    return { name: found.name, title: found.title, version: channel.version, dir: target, changed, compiles };
   } finally {
     fs.rmSync(work, { recursive: true, force: true });
   }
