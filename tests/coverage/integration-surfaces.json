@@ -422,6 +422,11 @@
       "summary": "project(get_status) carries unrealMcpServer (URL, where auto-start and port came from) while Epic's Unreal MCP server is set to start with the project's editor, and leaves it out otherwise"
     },
     {
+      "id": "server.native-dialogs",
+      "group": "server",
+      "summary": "a native Win32 dialog of the project's editor process refuses calls with what it means, and editor(list_dialogs) and editor(respond_to_dialog) read and press it from outside the editor; another project's dialog is never counted"
+    },
+    {
       "id": "server.bridge-port.unreal-canvas",
       "group": "server",
       "summary": "a server started on a project that enables the Unreal Canvas Bridge never targets 9877 or 9880: a pin on either falls back to the derived per-project port, and no requested.json asks the editor to bind it"
@@ -660,6 +665,11 @@
       "id": "daemon.events",
       "group": "daemon",
       "summary": "the daemon streams tool calls and editor events on /v1/events"
+    },
+    {
+      "id": "daemon.native-dialogs",
+      "group": "daemon",
+      "summary": "the daemon reports native Win32 dialogs of the editor process on /v1/events and GET /v1/dialogs/native, and POST /v1/dialogs/native/press presses one by window handle"
     },
     {
       "id": "daemon.script-events",

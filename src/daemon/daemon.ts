@@ -18,6 +18,8 @@
  *   GET  /v1/context/projection  what a strategy and category scope advertise, see context-projection.ts
  *   GET  /v1/actions    each action's effect and destructive flag, see action-effects.ts
  *   GET  /v1/sessions   open MCP sessions and their access mode; PUT /v1/sessions/<id>/access sets it
+ *   GET  /v1/dialogs/native         native Win32 dialogs this project's editors show
+ *   POST /v1/dialogs/native/press   press one by window handle and button label
  *   WS   /v1/mcp        one MCP session per socket
  */
 import * as fs from "node:fs";
@@ -61,13 +63,15 @@ import { resolvePlaytestMode } from "../editor/playtest-mode.js";
 import { EXTENSION_API_VERSION, type DaemonExtensionApi, type DaemonHealth, type EditorStatus, type McpSessionInfo, type RefusedExtension } from "./extension-api.js";
 import { randomUUID } from "node:crypto";
 import { SessionAccess, parseSessionAccessMode, SESSION_ACCESS_MODES } from "../flow/session-access.js";
-import { existingGuard, onDialogEvent } from "../editor/dialog-guard.js";
+import { ensureGuard, existingGuard, nativeAsBlocking, onDialogEvent } from "../editor/dialog-guard.js";
+import { nativeDialogInfo, nativeDialogsForProject } from "../editor/native-dialogs.js";
+import type { NativeDialogPressResult, NativeDialogView } from "./extension-api.js";
 
 /** What this daemon's extension API offers beyond its version number. */
-export const EXTENSION_FEATURES: readonly string[] = ["callAction.dialogPrompt", "callAction.elicit", "callAction.access", "checkpoints", "checkpoints.assetDiff", "events.dialog", "events.script", "models.provider", "modes", "modes.playtest", "skills", "context.projection", "actions.effects", "extension.versions", "ui.scopedKeys", "ui.extensions", "extension.services", "flows.stepApproval"];
+export const EXTENSION_FEATURES: readonly string[] = ["callAction.dialogPrompt", "callAction.elicit", "callAction.access", "checkpoints", "checkpoints.assetDiff", "events.dialog", "events.script", "models.provider", "modes", "modes.playtest", "skills", "context.projection", "actions.effects", "extension.versions", "ui.scopedKeys", "ui.extensions", "extension.services", "flows.stepApproval", "dialogs.native"];
 
 /** What this daemon's HTTP API offers beyond DAEMON_API_VERSION, reported by /v1/health. */
-export const DAEMON_FEATURES: readonly string[] = ["checkpoints", "checkpoints.assetDiff", "skills", "context.projection", "actions.effects", "install.pendingBuild", "editor.rebuild", "ui.scopedKeys", "ui.extensions", "flows.stepApproval", "sessions.access", "journal", "tools.categories", "leases"];
+export const DAEMON_FEATURES: readonly string[] = ["checkpoints", "checkpoints.assetDiff", "skills", "context.projection", "actions.effects", "install.pendingBuild", "editor.rebuild", "ui.scopedKeys", "ui.extensions", "flows.stepApproval", "sessions.access", "journal", "tools.categories", "leases", "dialogs.native"];
 import { extensionsDir, loadExtensions, matchRoute, normalizeResponse, type LoadedExtension } from "./extensions.js";
 import { installedCopies, recordedVersion, versionsOf } from "./extension-versions.js";
 import { UiBundleStore, contentType, type UiBundleOwner } from "./ui-bundles.js";
@@ -182,6 +186,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
         buttons: open.buttons,
         ...(open.items ? { items: open.items } : {}),
         ...(open.blocks ? { blocks: open.blocks } : {}),
+        ...(open.native ? { native: open.native } : {}),
         mode: guard.mode,
       });
     }
@@ -502,6 +507,32 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
   // Flow tasks editor.restart and editor.rebuild go through the same announced operations.
   rt.sessions.editorOperation = async (op) => (await editorOp(op)) as { steps: Array<{ step: string; ok: boolean; result: string }> };
 
+  // ── Native dialogs ──────────────────────────────────────────────
+  // Win32 boxes the editor process shows, read from outside it by the window
+  // scan the dialog guard uses, so a UI can show and answer one while the
+  // bridge cannot answer anything.
+  const nativeDialogList = (): NativeDialogView[] =>
+    rt.sessions.list().flatMap((s) =>
+      nativeDialogsForProject(s.project.projectPath).map((d) => ({
+        editor: s.name,
+        ...nativeDialogInfo(d),
+        title: d.title,
+        message: d.text.join("\n"),
+        text: d.text,
+        buttons: d.buttons,
+        hung: d.hung,
+      })));
+  const pressNativeDialogFor = async (hwnd: string, button: string, pid?: number): Promise<NativeDialogPressResult> => {
+    for (const s of rt.sessions.list()) {
+      const d = nativeDialogsForProject(s.project.projectPath).find((x) => x.hwnd === String(hwnd));
+      if (!d) continue;
+      if (pid !== undefined && pid !== d.pid) return { pressed: false, closed: false, error: "That dialog belongs to another process than the one named." };
+      const guard = existingGuard(s) ?? (await ensureGuard(s));
+      return guard.pressNativeButton(nativeAsBlocking(d), button, "person");
+    }
+    return { pressed: false, closed: false, error: "No native dialog with that handle is open in an editor of this project." };
+  };
+
   // ── Context projection ──────────────────────────────────────────
   const projector = new ContextProjector(rt);
   const actionEffects = (categories?: string[]) => actionEffectInfo(enabledGraph(rt), rt.loads.dispatchUnion.tools, categories);
@@ -544,6 +575,10 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
         return { isError: !!r.isError, content: r.content };
       },
       features: EXTENSION_FEATURES,
+      nativeDialogs: {
+        list: () => nativeDialogList(),
+        press: (hwnd, button, o) => pressNativeDialogFor(hwnd, button, o?.pid),
+      },
       services: services.forOwner(name),
       versions: () => ({
         loaded: pkg.version,
@@ -789,6 +824,22 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
         }
         json(res, 200, { id, access: session.access.mode });
       }, (e) => json(res, 400, { error: e instanceof Error ? e.message : String(e) }));
+      return;
+    }
+    if (req.method === "GET" && url.pathname === "/v1/dialogs/native") {
+      return json(res, 200, { dialogs: nativeDialogList() });
+    }
+    if (req.method === "POST" && url.pathname === "/v1/dialogs/native/press") {
+      readBody(req)
+        .then(async (body) => {
+          const b = (body ?? {}) as { hwnd?: unknown; button?: unknown; pid?: unknown };
+          if ((typeof b.hwnd !== "string" && typeof b.hwnd !== "number") || typeof b.button !== "string" || b.button === "") {
+            return json(res, 400, { error: "hwnd (the window handle from GET /v1/dialogs/native) and button (one of its labels) are required" });
+          }
+          const result = await pressNativeDialogFor(String(b.hwnd), b.button, typeof b.pid === "number" ? b.pid : undefined);
+          json(res, result.pressed ? 200 : 409, result);
+        })
+        .catch((e) => json(res, 400, { error: e instanceof Error ? e.message : String(e) }));
       return;
     }
     if (req.method === "POST" && url.pathname === "/v1/shutdown") {
