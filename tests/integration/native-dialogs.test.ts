@@ -76,10 +76,10 @@ describe("the in-process server", () => {
 
       fs.writeFileSync(fixture, JSON.stringify([gpuBox(project)]));
       const sent = (method: string) => bridge.calls.filter((c) => c.method === method).length;
-      const refused = await waitFor(async () => {
+      const refused = (await waitFor(async () => {
         const r = json<Record<string, unknown>>(await server.call("level", { action: "get_outliner", limit: 1 }));
         return r.nativeDialog === true ? r : null;
-      }, 20_000, "the native dialog to be seen");
+      }, 20_000, "the native dialog to be seen"))!;
       expect(refused).toMatchObject({ dialogBlocking: true, dialogKind: "gpu-crash", dialogTitle: "Error", buttons: ["OK"], dialogMode: "auto" });
       expect(String(refused.dialogSummary)).toMatch(/GPU device was lost/);
       expect(refused.dialogDetails).toEqual(expect.arrayContaining([expect.stringMatching(/DXGI_ERROR_DEVICE_REMOVED/)]));
@@ -137,10 +137,10 @@ describe("the daemon", () => {
     );
 
     fs.writeFileSync(fixture, JSON.stringify([gpuBox(project, "5151")]));
-    const listed = await waitFor(async () => {
+    const listed = (await waitFor(async () => {
       const r = (await call(d, "GET", "/v1/dialogs/native")).body as { dialogs: Array<Record<string, unknown>> };
       return r.dialogs.length > 0 ? r.dialogs : null;
-    }, 20_000, "the route to list the dialog");
+    }, 20_000, "the route to list the dialog"))!;
     expect(listed[0]).toMatchObject({ editor: "Vale", hwnd: "5151", pid: 4321, title: "Error", buttons: ["OK"], kind: "gpu-crash", hung: false });
     expect(listed[0].details).toEqual(expect.arrayContaining([expect.stringMatching(/BasePass/)]));
 
