@@ -47,6 +47,7 @@ const PER_SESSION: Record<string, string> = {
   "bridge/editor-target.ts": "Resolves one project's bridge from its own port lockfile.",
   "cli/editor-flag.ts": "Turns --editor into the project a one-shot command acts on.",
   "editor/engine-observer.ts": "Observes the editor process that has one project open.",
+  "editor/native-dialogs.ts": "Lists and presses the native dialogs of the editor process that has the project it is handed open, by that process's command line.",
   "editor/engine-root.ts": "Resolves the engine one project builds, launches and reads source from, out of that project's own layout and config.",
   "config/project.ts": "One ProjectContext per session, with that project's config cascade.",
   "sessions/project-switch.ts": "Moves one session's project and socket together.",

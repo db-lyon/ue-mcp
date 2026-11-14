@@ -103,6 +103,8 @@ export class Sandbox {
       UE_MCP_REGISTRY_CACHE: path.join(this.home, ".ue-mcp", "registry-catalog.json"),
       UE_MCP_VERSION_CACHE: path.join(this.home, ".ue-mcp", "version-check.json"),
       UE_MCP_DISABLE_UPDATE_CHECK: "1",
+      // No scan of the developer's real editor windows; a test that wants native dialogs passes a fixture.
+      UE_MCP_NATIVE_DIALOGS: "off",
       UE_MCP_LOG_LEVEL: "error",
       UE_MCP_REGISTRY: DEAD_ORIGIN,
       UE_MCP_AUTH_URL: DEAD_ORIGIN,

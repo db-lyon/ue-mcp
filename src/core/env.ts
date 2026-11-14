@@ -50,6 +50,10 @@ export const ENV_VARS = {
   dialogPolicy: "UE_MCP_DIALOG_POLICY",
   /** Set on a launched editor so the bridge echoes the parameters it received. */
   paramEcho: "UE_MCP_PARAM_ECHO",
+  /** off turns off the scan for native Win32 dialogs the editor process shows. Unset means on, on Windows. */
+  nativeDialogs: "UE_MCP_NATIVE_DIALOGS",
+  /** JSON file of native dialog windows that stands in for the window scan, on any platform, for tests. */
+  nativeDialogFixture: "UE_MCP_NATIVE_DIALOG_FIXTURE",
 
   // ── Daemon ─────────────────────────────────────────────────────────
   /** daemon or in-process; wins over `server.mode` in ue-mcp.yml. Unset means daemon. */
