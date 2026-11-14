@@ -180,6 +180,17 @@ A daemon extension that runs actions in process answers the dialogs its own call
 
 What a dialog says comes in two forms. `message` is every text in the dialog on its own line, in widget order, buttons included. `blocks` (from `editor(list_dialogs)`, on the prompt and on the events once it has been read) is the same body as a person reads it: `{ type: "paragraph", text }` for text, with texts laid side by side joined into one, and `{ type: "table", columns, rows, checked?, items? }` for a list or tree view, with the visible column headings and one row of cells per row. `checked` holds each row's checkbox state (null for a row without one) and `items` the row's index in `items`, which `respond_to_dialog` takes. The title and the button labels are never in `blocks`; the buttons are in `buttons`. Only shown widgets are read, and a list view reports the rows it has generated, which are the ones on screen. A client that draws `blocks` falls back to `message` when they are absent, as they are from a plugin built before them.
 
+### Native Windows dialogs
+
+Some prompts never reach Slate: the RHI's "GPU Crashed or D3D Device Removed" box, assert and ensure boxes, and the startup "modules are missing, rebuild them now?" prompt are plain Win32 windows of the editor process. While one is up the bridge cannot answer anything, so ue-mcp reads them from outside the editor: a window scan lists each one's title, text and buttons from its own child controls, and ties it to the project by the `.uproject` on the editor's command line. A dialog of another project's editor is never counted.
+
+- Every call is refused naming it, like any modal, with `nativeDialog: true`, `dialogKind` (`gpu-crash`, `assert`, `ensure`, `missing-modules`, `crash` or `message`), `dialogSummary`, and for a GPU device loss `dialogDetails`, the GPU state lines from `Saved/Logs/<Project>.log`.
+- A call already waiting on the editor when one appears returns at once with the same refusal and `inFlight: true`: it had been sent, so whether it ran is not known.
+- `editor(list_dialogs)` lists it with `detectedBy: "nativeWindow"` and `native` `{ hwnd, pid, kind, summary, details }`. `editor(respond_to_dialog)` presses the named button on that window by handle (WM_COMMAND with the button's control id, never focus or keys), under the mode rule above. A native dialog is answered with one of its buttons, never closed.
+- The daemon publishes it as `dialog.*` events with `native` set, lists it at `GET /v1/dialogs/native`, and `POST /v1/dialogs/native/press` `{ hwnd, button, pid? }` presses one as a person's answer (`dialog.answered` with `via: "person"`). Extensions get the same as `api.nativeDialogs.list()` and `press()` (feature `dialogs.native`).
+
+The scan runs on Windows. `UE_MCP_NATIVE_DIALOGS=off` turns it off.
+
 ### Playtest mode
 
 Who starts playtest runs (`pie(action="script_run")` and `pie(action="script_replay")`): a person or an agent.
