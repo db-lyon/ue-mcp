@@ -227,6 +227,24 @@ describe("the bridge boundary while a native dialog is up", () => {
     }
   });
 
+  it("answers a list_dialogs already waiting on the editor with the native dialog", async () => {
+    // A UI polls list_dialogs; one sent a moment before the box goes up would
+    // otherwise wait out its timeout, because the plugin answers it from
+    // Slate's modal loop, which a Win32 box does not run.
+    let up: BlockingDialog[] = [];
+    const { session, guard, guarded } = boundary(() => up);
+    try {
+      const pending = guarded.call("list_dialogs", {});
+      await new Promise((r) => setTimeout(r, 20));
+      up = [GPU];
+      await guard.refresh();
+      const r = (await pending) as { dialogs: Array<Record<string, unknown>> };
+      expect(r.dialogs[0]).toMatchObject({ title: "Error", detectedBy: "nativeWindow", native: { hwnd: "4242" } });
+    } finally {
+      forgetGuard(session);
+    }
+  });
+
   it("goes to the editor as usual when no native dialog is up", async () => {
     const { session, bridge, guarded } = boundary(() => [], { call: vi.fn(async () => ({ success: true, dialogs: [] })) });
     try {

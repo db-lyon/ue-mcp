@@ -16,7 +16,7 @@ import type { EditorSession } from "../sessions/session.js";
 import { explainEditorDownWithEvidence } from "../dispatch/offline.js";
 import { GuardRegistry, makeCallContext, type ResolveExistingFile } from "./guard.js";
 import { callIsReadOnly, readOnlyGuard } from "./session-access.js";
-import { DialogGuard, ensureGuard, existingGuard, isModalSafeMethod } from "../editor/dialog-guard.js";
+import { DialogGuard, ensureGuard, existingGuard } from "../editor/dialog-guard.js";
 
 export type { ResolveExistingFile } from "./guard.js";
 
@@ -143,15 +143,19 @@ export async function serveNativeDialog(
  * A native dialog parks the editor where the bridge cannot answer, so a call
  * in flight would otherwise wait out its whole timeout. When one appears, the
  * caller is told now, with the dialog, marked `inFlight` because the call had
- * already been sent and may still run once the dialog is answered. Modal-safe
- * methods are not raced: they are how the dialog is read and answered.
+ * already been sent and may still run once the dialog is answered.
+ *
+ * Modal-safe methods are raced too: the plugin answers them from Slate's modal
+ * loop, which does not run inside a Win32 box. A list_dialogs in flight (a UI
+ * polls it every few seconds) is answered with the native dialog instead.
  */
 export function raceNativeDialog<T>(
   session: EditorSession | undefined,
   method: string,
   call: Promise<T>,
+  params?: Record<string, unknown>,
 ): Promise<T | Record<string, unknown>> {
-  if (!session || isModalSafeMethod(method)) return call;
+  if (!session) return call;
   const guard = existingGuard(session);
   if (!guard) return call;
   return new Promise((resolve, reject) => {
@@ -162,6 +166,10 @@ export function raceNativeDialog<T>(
       off();
       // The bridge may still answer, or fail when the editor exits; neither is anyone's to handle now.
       call.catch(() => undefined);
+      if (method === "list_dialogs") {
+        void serveNativeDialog(session, method, params).then((listed) => resolve(listed ?? { success: true, dialogs: [], windows: [] }), reject);
+        return;
+      }
       const refusal = guard.refusal(method, dialog, { canElicit: false });
       resolve({
         ...refusal,
@@ -271,7 +279,7 @@ export class DialogGatedBridge extends ForwardingBridge {
     if (blocked) return blocked;
     const native = await serveNativeDialog(this.session, method, params);
     if (native) return native;
-    const reply = await raceNativeDialog(this.session, method, this.inner.call(method, params, timeoutMs, options));
+    const reply = await raceNativeDialog(this.session, method, this.inner.call(method, params, timeoutMs, options), params);
     return fromEditor(reply) ? observeReply(this.session, method, reply) : reply;
   }
 }
@@ -321,7 +329,7 @@ export class GuardedBridge extends ForwardingBridge {
       const send = async (): Promise<unknown> => {
         const native = await serveNativeDialog(this.session, method, params);
         if (native) return native;
-        return raceNativeDialog(this.session, method, this.inner.call(method, params, timeoutMs, options));
+        return raceNativeDialog(this.session, method, this.inner.call(method, params, timeoutMs, options), params);
       };
       if (this.registry.size === 0 && !readOnly) {
         const blocked = await this.guardCall(method);

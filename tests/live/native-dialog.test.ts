@@ -88,7 +88,13 @@ async function runPython(code: string, taskSummary: string): Promise<LiveCallRes
 async function nativeListed(raised: { settled: string | null }, timeoutMs = 30_000): Promise<any> {
   const deadline = Date.now() + timeoutMs;
   for (;;) {
-    const listed = resultJson<any>(await server.call("editor", { action: "list_dialogs" }));
+    const r = await server.call("editor", { action: "list_dialogs" });
+    let listed: any;
+    try {
+      listed = resultJson<any>(r);
+    } catch {
+      throw new Error(`list_dialogs did not answer while the box went up: ${r.blocks.join("\n")}`);
+    }
     const d = listed?.dialogs?.[0];
     if (d?.native && d.title === TITLE) return d;
     if (Date.now() > deadline || (raised.settled !== null && !/nativeDialog/.test(raised.settled))) {
