@@ -489,7 +489,9 @@ export async function dispatchCategoryCall(
           : guard.refusal(effectiveTask, blocking);
         // A refusal means nothing ran. Anything else had already started when
         // the dialog appeared, so it may have applied part of its work.
-        const started = fromPlugin === null;
+        // A call that was already in flight when a native dialog appeared was
+        // answered by the server, not refused by the plugin: it had started too.
+        const started = fromPlugin === null || fromPlugin.inFlight === true;
         return refusalResult(
           started
             ? {

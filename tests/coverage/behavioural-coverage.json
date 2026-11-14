@@ -13059,6 +13059,11 @@
           "suite": "live",
           "file": "tests/live/ergonomics.test.ts",
           "test": "says nothing about repairs on a call that needed none"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/native-dialog.test.ts",
+          "test": "is seen with its buttons, refuses calls, tells a waiting call at once, and is closed by pressing OK"
         }
       ]
     },
@@ -13352,6 +13357,11 @@
           "suite": "live",
           "file": "tests/live/dialog-structure.test.ts",
           "test": "reports the caption as a paragraph and the package list as a table with its ticks"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/native-dialog.test.ts",
+          "test": "is seen with its buttons, refuses calls, tells a waiting call at once, and is closed by pressing OK"
         },
         {
           "suite": "live",
@@ -22103,6 +22113,11 @@
           "suite": "live",
           "file": "tests/live/dialog-structure.test.ts",
           "test": "reports the caption as a paragraph and the package list as a table with its ticks"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/native-dialog.test.ts",
+          "test": "is seen with its buttons, refuses calls, tells a waiting call at once, and is closed by pressing OK"
         },
         {
           "suite": "live",
