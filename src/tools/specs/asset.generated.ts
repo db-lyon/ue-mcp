@@ -1774,6 +1774,39 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "string",
         "required": false,
         "description": "skip (default) returns an existing asset; error refuses"
+      },
+      {
+        "name": "csvString",
+        "type": "string",
+        "required": false,
+        "description": "CSV text to fill the new table from, read by the engine's CSV importer"
+      },
+      {
+        "name": "filePath",
+        "type": "string",
+        "required": false,
+        "description": ".csv file to fill the new table from",
+        "aliases": [
+          "csvPath"
+        ]
+      },
+      {
+        "name": "ignoreExtraFields",
+        "type": "boolean",
+        "required": false,
+        "description": "With csvString or filePath: ignore CSV columns the row struct lacks, as the DataTable Options dialog's Ignore Extra Fields"
+      },
+      {
+        "name": "ignoreMissingFields",
+        "type": "boolean",
+        "required": false,
+        "description": "With csvString or filePath: accept rows missing row-struct fields, as the dialog's Ignore Missing Fields"
+      },
+      {
+        "name": "importKeyField",
+        "type": "string",
+        "required": false,
+        "description": "With csvString or filePath: the column whose values name the rows, as the dialog's Import Key Field"
       }
     ]
   },
@@ -3749,6 +3782,30 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "boolean",
         "required": false,
         "description": "Suppress interactive dialogs (default true)"
+      },
+      {
+        "name": "rowStruct",
+        "type": "string",
+        "required": false,
+        "description": "For a .csv: the DataTable row struct the DataTable Options dialog would ask for (default: the row struct of a DataTable already at the destination). An unattended .csv import with neither is refused"
+      },
+      {
+        "name": "ignoreExtraFields",
+        "type": "boolean",
+        "required": false,
+        "description": "For a .csv with rowStruct: ignore CSV columns the row struct lacks, as the dialog's Ignore Extra Fields"
+      },
+      {
+        "name": "ignoreMissingFields",
+        "type": "boolean",
+        "required": false,
+        "description": "For a .csv with rowStruct: accept rows missing row-struct fields, as the dialog's Ignore Missing Fields"
+      },
+      {
+        "name": "importKeyField",
+        "type": "string",
+        "required": false,
+        "description": "For a .csv with rowStruct: the column whose values name the rows, as the dialog's Import Key Field"
       }
     ]
   },
@@ -5209,6 +5266,58 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "string",
         "required": false,
         "description": "JSON text to replace the table from"
+      },
+      {
+        "name": "csvString",
+        "type": "string",
+        "required": false,
+        "description": "CSV text to replace the table from, read by the engine's CSV importer"
+      },
+      {
+        "name": "filePath",
+        "type": "string",
+        "required": false,
+        "description": ".csv (or .json) file to replace the table from",
+        "aliases": [
+          "csvPath"
+        ]
+      },
+      {
+        "name": "ignoreExtraFields",
+        "type": "boolean",
+        "required": false,
+        "description": "CSV only: ignore columns the row struct lacks, as the DataTable Options dialog's Ignore Extra Fields"
+      },
+      {
+        "name": "ignoreMissingFields",
+        "type": "boolean",
+        "required": false,
+        "description": "CSV only: accept rows missing row-struct fields, as the dialog's Ignore Missing Fields"
+      },
+      {
+        "name": "importKeyField",
+        "type": "string",
+        "required": false,
+        "description": "CSV only: the column whose values name the rows, as the dialog's Import Key Field"
+      }
+    ],
+    "choices": [
+      {
+        "mode": "exactlyOne",
+        "branches": [
+          [
+            "jsonString"
+          ],
+          [
+            "jsonPath"
+          ],
+          [
+            "csvString"
+          ],
+          [
+            "filePath"
+          ]
+        ]
       }
     ]
   },
@@ -7025,7 +7134,7 @@ export const paramsClauses: Readonly<Record<string, string>> = {
   create_curvetable: "Params: name, packagePath?, onConflict?",
   create_customizable_object: "Params: name, packagePath?, onConflict?, save?",
   create_data_asset: "Params: name, className (or class), packagePath?, properties?, onConflict?",
-  create_datatable: "Params: name, rowStruct, packagePath?, onConflict?",
+  create_datatable: "Params: name, rowStruct, packagePath?, onConflict?, csvString?, filePath? (or csvPath), ignoreExtraFields?, ignoreMissingFields?, importKeyField?",
   create_folder: "Params: at least one of path/paths",
   create_font: "Params: name, packagePath?, fontFaces, typefaceNames?, onConflict?",
   create_interchange_pipeline: "Params: assetPath OR name, packagePath?, meshType?, options?, onConflict?",
@@ -7071,7 +7180,7 @@ export const paramsClauses: Readonly<Record<string, string>> = {
   get_texture_info: "Params: assetPath (or path) OR assetPaths",
   import_animation: "Params: filePath (or filename) OR filePaths, name? (or assetName), packagePath? (or destinationPath), skeletonPath, importCustomAttribute?, removeRedundantKeys?, importSettings?",
   import_curvetable: "Params: assetPath (or path), jsonString?, csvString?, filePath? (or jsonPath, or csvPath), format?, interpMode?",
-  import_file: "Params: filePath (or filename), packagePath (or destinationPath), name? (or assetName), factoryClass?, factoryProperties?, replaceExisting?, save?, automated?",
+  import_file: "Params: filePath (or filename), packagePath (or destinationPath), name? (or assetName), factoryClass?, factoryProperties?, replaceExisting?, save?, automated?, rowStruct?, ignoreExtraFields?, ignoreMissingFields?, importKeyField?",
   import_font: "Params: filePath (or filename), name? (or assetName), packagePath? (or destinationPath), onConflict?, hinting?, loadingPolicy?, createFont?",
   import_skeletal_mesh: "Params: filePath (or filename), name? (or assetName), packagePath? (or destinationPath), skeletonPath?, importMaterials?, importTextures?, importUniformScale?, importMorphTargets?, createPhysicsAsset?, replaceExisting?, importer?, save?, dryRun?",
   import_static_mesh: "Params: filePath (or filename), name? (or assetName), packagePath? (or destinationPath), combineMeshes?, importMaterials?, importTextures?, generateLightmapUVs?, importUniformScale?",
@@ -7110,7 +7219,7 @@ export const paramsClauses: Readonly<Record<string, string>> = {
   read_uv_channels: "Params: assetPath (or path), lodIndex?, channels?, includeIslands?, includeOverlap?, rasterSize?",
   recenter_pivot: "Params: assetPath (or path) OR assetPaths",
   reimport_asset: "Params: assetPath (or path), filePath? (or filename), preserveSettings?, save?",
-  reimport_datatable: "Params: assetPath (or path), jsonPath?, jsonString?",
+  reimport_datatable: "Params: assetPath (or path), jsonString OR jsonPath OR csvString OR filePath (or csvPath), ignoreExtraFields?, ignoreMissingFields?, importKeyField?",
   reindex_assets_fts: "Params: directory?",
   reload_package: "Params: assetPath (or path)",
   remove_asset_array_elements: "Params: assetPath (or path), propertyName, indices OR elements, save?",
@@ -7221,8 +7330,8 @@ export const schema: Record<string, z.ZodType> = {
   countOnly: z.boolean().optional().describe("Return the aggregates without rows"),
   createFont: z.boolean().optional().describe("Also create <name>_Font, a runtime Font whose Default typeface is this face (default false)"),
   createPhysicsAsset: z.boolean().optional().describe("Create a PhysicsAsset (default false)"),
-  csvPath: z.string().optional().describe("Alias for filePath (import_curvetable, import_stringtable). CSV file; a relative path resolves against the project directory (import_stringtable_csv)"),
-  csvString: z.string().optional().describe("CSV rows to replace the table from"),
+  csvPath: z.string().optional().describe("Alias for filePath (create_datatable, import_curvetable, import_stringtable, reimport_datatable). CSV file; a relative path resolves against the project directory (import_stringtable_csv)"),
+  csvString: z.string().optional().describe("CSV text to fill the new table from, read by the engine's CSV importer (create_datatable). CSV rows to replace the table from (import_curvetable). CSV text to replace the table from, read by the engine's CSV importer (reimport_datatable)"),
   cursor: z.string().optional().describe("Resume a paged read: pass back the nextCursor from the previous page, unmodified"),
   curveType: z.string().optional().describe("simple | rich (default: the table's type, or rich for cubic)"),
   data: z.record(z.string(), z.unknown()).optional().describe("Alias for row"),
@@ -7259,7 +7368,7 @@ export const schema: Record<string, z.ZodType> = {
   fieldName: z.string().optional().describe("Member by friendly or internal name; add_field names the new member with it (edit_user_defined_struct). Member by friendly or internal name (rename_struct_field). Row-struct field to write (set_datatable_cell)"),
   fields: z.record(z.string(), z.unknown()).optional().describe("Alias for row"),
   filename: z.string().optional().describe("Alias for filePath"),
-  filePath: z.string().optional().describe("Alias for outputPath (export_texture). Source FBX on disk; exclusive with filePaths (import_animation). JSON or CSV file to replace the table from (import_curvetable). Source file on disk (import_file, import_skeletal_mesh, import_static_mesh, import_texture). Font file on disk: .ttf, .otf, .ttc or .otc (import_font). CSV file to merge into the table (import_stringtable). Alias for csvPath (import_stringtable_csv). New source file to record and reimport from (reimport_asset)"),
+  filePath: z.string().optional().describe(".csv file to fill the new table from (create_datatable). Alias for outputPath (export_texture). Source FBX on disk; exclusive with filePaths (import_animation). JSON or CSV file to replace the table from (import_curvetable). Source file on disk (import_file, import_skeletal_mesh, import_static_mesh, import_texture). Font file on disk: .ttf, .otf, .ttc or .otc (import_font). CSV file to merge into the table (import_stringtable). Alias for csvPath (import_stringtable_csv). New source file to record and reimport from (reimport_asset). .csv (or .json) file to replace the table from (reimport_datatable)"),
   filePaths: z.array(z.string()).optional().describe("Batch: up to 200 FBX files imported into one folder with the same settings"),
   fillHoles: z.boolean().optional().describe("Cap each piece where the plane cut it (default true) (apply_mesh_fracture). Close the holes the cut opens (default true) (mesh_boolean)"),
   fillMethod: z.string().optional().describe("Automatic (default) | MinimalFill | PolygonTriangulation | TriangleFan | PlanarProjection"),
@@ -7286,10 +7395,13 @@ export const schema: Record<string, z.ZodType> = {
   height: z.number().int().optional().describe("Pixel height, 1-8192 (default 512)"),
   hinting: z.string().optional().describe("Default (default) | Auto | AutoLight | Monochrome | None"),
   hullTargetFaceCount: z.number().int().optional().describe("Faces to simplify each hull down to (default 25)"),
+  ignoreExtraFields: z.boolean().optional().describe("With csvString or filePath: ignore CSV columns the row struct lacks, as the DataTable Options dialog's Ignore Extra Fields (create_datatable). For a .csv with rowStruct: ignore CSV columns the row struct lacks, as the dialog's Ignore Extra Fields (import_file). CSV only: ignore columns the row struct lacks, as the DataTable Options dialog's Ignore Extra Fields (reimport_datatable)"),
+  ignoreMissingFields: z.boolean().optional().describe("With csvString or filePath: accept rows missing row-struct fields, as the dialog's Ignore Missing Fields (create_datatable). For a .csv with rowStruct: accept rows missing row-struct fields, as the dialog's Ignore Missing Fields (import_file). CSV only: accept rows missing row-struct fields, as the dialog's Ignore Missing Fields (reimport_datatable)"),
   ignoreRedirectorReferencers: z.boolean().optional().describe("Do not count a redirector stub as a referencer (default true)"),
   imageSize: z.number().optional().describe("PNG edge length (default 1024, max 4096)"),
   importCustomAttribute: z.boolean().optional().describe("Import FBX custom attributes as curves (default true)"),
   importer: z.enum(["auto","interchange","legacy"]).optional().describe("auto uses Interchange on 5.8 and later, legacy on older versions; interchange passes an explicit pipeline stack"),
+  importKeyField: z.string().optional().describe("With csvString or filePath: the column whose values name the rows, as the dialog's Import Key Field (create_datatable). For a .csv with rowStruct: the column whose values name the rows, as the dialog's Import Key Field (import_file). CSV only: the column whose values name the rows, as the dialog's Import Key Field (reimport_datatable)"),
   importMaterials: z.boolean().optional().describe("Import materials (default true)"),
   importMorphTargets: z.boolean().optional().describe("Import morph targets (default true)"),
   importSettings: z.record(z.string(), z.unknown()).optional().describe("FbxAnimSequenceImportData or FbxImportUI fields by UPROPERTY name or dotted path"),
@@ -7443,7 +7555,7 @@ export const schema: Record<string, z.ZodType> = {
   rowName: z.string().optional().describe("Row to key (add_curvetable_key). Row to add (add_curvetable_row). Row to append or overwrite (add_datatable_row, set_datatable_row, update_datatable_row). Row to read (get_curvetable_keys, get_datatable_row). Row to remove (remove_curvetable_row). Single row to remove (remove_datatable_row). Alias for oldName (rename_curvetable_row, rename_datatable_row). Row whose keys to replace (set_curvetable_keys). Existing row to edit (set_datatable_cell)"),
   rowNames: z.array(z.string()).optional().describe("Exact row names to return, in this order; names the table lacks are listed in missingRowNames (read_datatable). Rows to remove in one transaction, including clone rollback (remove_datatable_row)"),
   rows: z.record(z.string(), z.unknown()).optional().describe("Rows to upsert: {rowName: {field: value}}"),
-  rowStruct: z.string().optional().describe("Row struct, e.g. /Script/Module.MyRow or a UserDefinedStruct path"),
+  rowStruct: z.string().optional().describe("Row struct, e.g. /Script/Module.MyRow or a UserDefinedStruct path (create_datatable). For a .csv: the DataTable row struct the DataTable Options dialog would ask for (default: the row struct of a DataTable already at the destination). An unattended .csv import with neither is refused (import_file)"),
   sampleLimit: z.number().int().optional().describe("Sample asset names per group (default 5, max 25)"),
   save: z.boolean().optional().describe("Save the asset after the edit (default true) (add_graph_node, connect_graph_pins, disconnect_graph_pins, remove_graph_node). Save the package after the write (default true) (append_asset_array_elements, remove_asset_array_elements, set_asset_property). Save the written asset (default true) (apply_mesh_fracture, apply_mesh_hole_fill, apply_mesh_mirror, apply_mesh_remesh, apply_mesh_simplify, generate_mesh_collision, mesh_boolean). Save the changed packages (default true) (bulk_set_asset_properties, bulk_upsert_data_assets). Save the table after editing (default true) (clone_datatable_rows). Save the new asset (default true) (create_customizable_object). Save the owning package (default true) (create_subobject). Save the package after editing (default true) (edit_collection_entry). Save what changed (default true) (fix_asset_hygiene). Save the repointed referencers (default true); false leaves them dirty in memory and keeps every redirector they reference (fixup_redirectors). Save the mesh (default true) (generate_lightmap_uvs, set_mesh_simple_collision, set_uv_channel_count, transform_uvs, unwrap_uvs). Save each changed mesh (default true) (generate_skeletal_mesh_lods, set_mesh_materials_batch). Save each imported asset and report saved per asset (default true; false leaves them dirty) (import_file). Save all imported assets (default false) (import_skeletal_mesh). Save the table (default true) (import_stringtable_csv). Save changed assets (default true) (import_texture_batch). Save the reimported asset's package (default false: it is left dirty) (reimport_asset). Save after removing rows (default true) (remove_datatable_row). Save the mesh after the rebuild (default true) (scale_mesh_geometry, set_static_mesh_build_settings, transform_skinned_part). Save the package (default true); false leaves it dirty (set_curve_keys). Save the package after the write (default false) (set_datatable_cells). Save changed textures (default false; otherwise leave the packages dirty) (set_texture_settings)"),
   saveContentPackages: z.boolean().optional().describe("Include content packages (default true)"),
