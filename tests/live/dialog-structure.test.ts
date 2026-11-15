@@ -53,7 +53,14 @@ describe("the Save Content prompt as structure (#1891)", () => {
     }));
     resultJson<any>(await server.call("editor", { action: "request_editor_shutdown", requireClean: false }));
     try {
-      const [dialog] = await waitForDialogs("some");
+      let [dialog] = await waitForDialogs("some");
+      // The package list generates its rows when Slate first paints the
+      // window, which can be a frame after the window is on the modal stack,
+      // so a read that early sees the headings and no rows.
+      for (const deadline = Date.now() + 20_000; !String(dialog.message).includes("/Script/Engine.World") && Date.now() < deadline;) {
+        await new Promise((r) => setTimeout(r, 250));
+        [dialog] = await waitForDialogs("some");
+      }
       expect(dialog.title).toBe("Save Content");
       // The flat text is still there for a client that reads only that.
       expect(typeof dialog.message).toBe("string");
