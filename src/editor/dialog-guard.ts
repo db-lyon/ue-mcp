@@ -44,6 +44,26 @@ export interface DialogItem {
   checked: boolean;
 }
 
+/** One drop-down picker of a dialog. */
+export interface DialogCombo {
+  index: number;
+  label: string;
+  value: string;
+  enabled: boolean;
+  /** False for a picker that builds its menu only when it opens. */
+  optionsReadable: boolean;
+  options: string[];
+}
+
+/** One editable text box of a dialog. */
+export interface DialogTextField {
+  index: number;
+  label: string;
+  value: string;
+  readOnly: boolean;
+  enabled: boolean;
+}
+
 export interface BlockingDialog {
   title: string;
   message: string;
@@ -63,6 +83,12 @@ export interface BlockingDialog {
    * and the plugin's refusal carry `message` alone.
    */
   blocks?: DialogBlock[];
+  /**
+   * The dialog's drop-down pickers and text boxes, as list_dialogs reports
+   * them; respond_to_dialog's combos and textFields take their indices.
+   */
+  combos?: DialogCombo[];
+  textFields?: DialogTextField[];
   /**
    * Set for a native Win32 dialog the editor process shows (a GPU device loss,
    * an assert box), read from outside the process because the bridge cannot
@@ -340,12 +366,24 @@ function asDialog(v: unknown): BlockingDialog | null {
     ...(Array.isArray(r.blocks) && r.blocks.length > 0
       ? { blocks: (r.blocks as DialogBlock[]) }
       : {}),
+    ...(Array.isArray(r.combos) && r.combos.length > 0
+      ? { combos: (r.combos as DialogCombo[]) }
+      : {}),
+    ...(Array.isArray(r.textFields) && r.textFields.length > 0
+      ? { textFields: (r.textFields as DialogTextField[]) }
+      : {}),
   };
 }
 
-/** The rows and blocks one read reported, for comparing two reads of the same dialog. */
+/** The rows, blocks and field values one read reported, for comparing two reads of the same dialog. */
 function contentOf(dialog: BlockingDialog): string {
-  return JSON.stringify([dialog.items ?? null, dialog.blocks ?? null, dialog.native?.details ?? null]);
+  return JSON.stringify([
+    dialog.items ?? null,
+    dialog.blocks ?? null,
+    dialog.native?.details ?? null,
+    dialog.combos?.map((c) => c.value) ?? null,
+    dialog.textFields?.map((f) => f.value) ?? null,
+  ]);
 }
 
 /**

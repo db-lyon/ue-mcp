@@ -5322,6 +5322,26 @@
           "suite": "live",
           "file": "tests/live/bcov-asset-a-tables.test.ts",
           "test": "add_datatable_row writes a row get_datatable_row reads back"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/datatable-csv-import.test.ts",
+          "test": "fills the new table from csvString through the engine importer"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/datatable-csv-import.test.ts",
+          "test": "refuses an extra column when ignoreExtraFields is off, and says which"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/datatable-csv-import.test.ts",
+          "test": "replaces the rows from a .csv filePath with the dialog's three options"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/datatable-csv-import.test.ts",
+          "test": "reports the importer's problems instead of hiding them"
         }
       ]
     },
@@ -9298,6 +9318,21 @@
         },
         {
           "suite": "live",
+          "file": "tests/live/datatable-csv-import.test.ts",
+          "test": "imports into a DataTable with rowStruct and no dialog"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/datatable-csv-import.test.ts",
+          "test": "replaces the rows from a .csv filePath with the dialog's three options"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/dialog-fields.test.ts",
+          "test": "lists the pickers, checkboxes and text field, sets them, and applies the import"
+        },
+        {
+          "suite": "live",
           "file": "tests/live/material-niagara-font.test.ts",
           "test": "imports a font face with no dialog and builds a composite font from two faces"
         }
@@ -12305,6 +12340,21 @@
           "suite": "live",
           "file": "tests/live/bcov-asset-a-import.test.ts",
           "test": "import_file imports PNGs that get_texture_info, compare_textures and export_texture read"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/datatable-csv-import.test.ts",
+          "test": "imports into a DataTable with rowStruct and no dialog"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/datatable-csv-import.test.ts",
+          "test": "refuses an unattended .csv import with no row type instead of producing nothing"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/dialog-fields.test.ts",
+          "test": "lists the pickers, checkboxes and text field, sets them, and applies the import"
         }
       ]
     },
@@ -13007,6 +13057,11 @@
         },
         {
           "suite": "live",
+          "file": "tests/live/datatable-csv-import.test.ts",
+          "test": "refuses an unattended .csv import with no row type instead of producing nothing"
+        },
+        {
+          "suite": "live",
           "file": "tests/live/dialog-gate.test.ts",
           "test": "defer withholds the press calls on a plain asset read"
         },
@@ -13332,6 +13387,11 @@
           "suite": "live",
           "file": "tests/live/bcov-asset-b-misc.test.ts",
           "test": "save_all_dirty writes a package left dirty by an unsaved edit"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/dialog-fields.test.ts",
+          "test": "lists the pickers, checkboxes and text field, sets them, and applies the import"
         },
         {
           "suite": "live",
@@ -19040,6 +19100,26 @@
           "suite": "live",
           "file": "tests/live/bcov-asset-b-tables.test.ts",
           "test": "set_datatable_row appends a row and update_datatable_row merges into it"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/datatable-csv-import.test.ts",
+          "test": "fills the new table from csvString through the engine importer"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/datatable-csv-import.test.ts",
+          "test": "imports into a DataTable with rowStruct and no dialog"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/datatable-csv-import.test.ts",
+          "test": "replaces the rows from a .csv filePath with the dialog's three options"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/dialog-fields.test.ts",
+          "test": "lists the pickers, checkboxes and text field, sets them, and applies the import"
         }
       ]
     },
@@ -20485,6 +20565,16 @@
           "suite": "live",
           "file": "tests/live/bcov-asset-b-tables.test.ts",
           "test": "reimport_datatable replaces the table from JSON"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/datatable-csv-import.test.ts",
+          "test": "refuses an extra column when ignoreExtraFields is off, and says which"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/datatable-csv-import.test.ts",
+          "test": "replaces the rows from a .csv filePath with the dialog's three options"
         }
       ]
     },
@@ -22089,6 +22179,11 @@
       "registeredIn": "DialogHandlers.cpp",
       "status": "covered",
       "tests": [
+        {
+          "suite": "live",
+          "file": "tests/live/dialog-fields.test.ts",
+          "test": "lists the pickers, checkboxes and text field, sets them, and applies the import"
+        },
         {
           "suite": "live",
           "file": "tests/live/dialog-gate.test.ts",

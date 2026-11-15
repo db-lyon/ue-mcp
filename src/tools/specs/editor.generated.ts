@@ -2961,6 +2961,54 @@ export const handlerSpecs: HandlerSpecs = {
             "description": "Whether the row ends up ticked"
           }
         ]
+      },
+      {
+        "name": "combos",
+        "type": "array",
+        "required": false,
+        "description": "The dialog's pickers to set before anything else, through each picker's own list; indices and options come from list_dialogs, and the value each picker then shows is checked",
+        "items": "object",
+        "fields": [
+          {
+            "name": "index",
+            "type": "number",
+            "required": true,
+            "description": "Picker index from list_dialogs"
+          },
+          {
+            "name": "option",
+            "type": "string",
+            "required": false,
+            "description": "Option to select, by its label, matched exactly first, then ignoring case"
+          },
+          {
+            "name": "optionIndex",
+            "type": "number",
+            "required": false,
+            "description": "Option to select, by its index in the picker's options"
+          }
+        ]
+      },
+      {
+        "name": "textFields",
+        "type": "array",
+        "required": false,
+        "description": "The dialog's text fields to set after the pickers, each committed as Enter commits it; indices come from list_dialogs",
+        "items": "object",
+        "fields": [
+          {
+            "name": "index",
+            "type": "number",
+            "required": true,
+            "description": "Text field index from list_dialogs"
+          },
+          {
+            "name": "text",
+            "type": "string",
+            "required": true,
+            "description": "The text the field ends up holding"
+          }
+        ]
       }
     ],
     "choices": [
@@ -2975,6 +3023,12 @@ export const handlerSpecs: HandlerSpecs = {
           ],
           [
             "dialogAction"
+          ],
+          [
+            "combos"
+          ],
+          [
+            "textFields"
           ]
         ]
       }
@@ -4455,7 +4509,7 @@ export const paramsClauses: Readonly<Record<string, string>> = {
   render_mesh_studio: "Params: captures, outputDir, resolution?, viewDirection?, lightingPreset?, cubemapPath?, captureMode?, fullyLoadTextures?",
   render_sequence_frames: "Params: sequencePath (or assetPath, or path), startFrame?, endFrame?, startSeconds?, endSeconds?, frameStep?, maxFrames?, width?, height?, outputDir?, format?, cameraActorLabel?, cameraActorPath?, location?, rotation?, fov?, fullyLoadTextures?",
   resolve_sequence_bindings: "Params: sequencePath (or assetPath, or path), bindingGuid?, bindingName?",
-  respond_to_dialog: "Params: at least one of buttonLabel/buttonIndex/dialogAction, items?",
+  respond_to_dialog: "Params: at least one of buttonLabel/buttonIndex/dialogAction/combos/textFields, items?",
   restore_runtime_visibility: "Params: rollbackToken, world?, pieInstance?",
   run_automation_tests: "Params: filter?, maxTests?, latentTimeoutSeconds?",
   run_map_check: "Params: maxMessages?, severity?",
@@ -4548,6 +4602,7 @@ export const schema: Record<string, z.ZodType> = {
   clearExisting: z.boolean().optional().describe("Delete the channel's keys before writing (default false)"),
   clientWindowHeight: z.number().optional().describe("Height of each additional multiplayer client window"),
   clientWindowWidth: z.number().optional().describe("Width of each additional multiplayer client window"),
+  combos: z.array(z.object({ index: z.number().describe("Picker index from list_dialogs"), option: z.string().optional().describe("Option to select, by its label, matched exactly first, then ignoring case"), optionIndex: z.number().optional().describe("Option to select, by its index in the picker's options") })).optional().describe("The dialog's pickers to set before anything else, through each picker's own list; indices and options come from list_dialogs, and the value each picker then shows is checked"),
   command: z.string().optional().describe("Console command to run (execute_command). Full console command; wins over name (run_stat_command)"),
   commitDeletes: z.boolean().optional().describe("Use the editor's dirty-package save, which deletes the packages of deleted World Partition actors and reports written and deleted files (default false)"),
   component: z.string().optional().describe("Component subobject name to call the function on instead of the actor"),
@@ -4751,6 +4806,7 @@ export const schema: Record<string, z.ZodType> = {
   target: z.string().optional().describe("auto (default) | pie | editor | window (capture_screenshot). gameinstance | gamemode | gamestate | playercontroller | playerpawn | subsystem (get_object_properties, invoke_object_function, set_object_property). editor (default) for a level viewport, pie for the running game viewport (set_buffer_visualization)"),
   templateLevel: z.string().optional().describe("Level to copy; omit, Empty or None for a blank level"),
   text: z.string().optional().describe("Headline of the toast"),
+  textFields: z.array(z.object({ index: z.number().describe("Text field index from list_dialogs"), text: z.string().describe("The text the field ends up holding") })).optional().describe("The dialog's text fields to set after the pickers, each committed as Enter commits it; indices come from list_dialogs"),
   threads: z.enum(["game","all"]).optional().describe("game (default): timers on the game thread only | all: every CPU thread"),
   timerSort: z.enum(["inclusive","exclusive"]).optional().describe("Order of topTimers: inclusive (default) or exclusive time"),
   timersPerFrame: z.number().int().optional().describe("Timers listed per worst frame, by exclusive time (default 5, max 20)"),

@@ -52,7 +52,13 @@
 #include "Widgets/Text/SRichTextBlock.h"
 #include "Widgets/Input/SButton.h"
 #include "Widgets/Input/SCheckBox.h"
+#include "Widgets/Input/SMenuAnchor.h"
+#include "Widgets/Input/SEditableText.h"
 #include "Widgets/Views/SHeaderRow.h"
+#include "Widgets/Views/STableViewBase.h"
+#include "Layout/ArrangedChildren.h"
+#include "Types/SlateAttributeMetaData.h"
+#include "Misc/EngineVersionComparison.h"
 
 // Static member definitions
 TArray<FDialogHandlers::FDialogPolicy> FDialogHandlers::Policies;
@@ -391,7 +397,16 @@ void FDialogHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 			MCPParam::RequiredField(TEXT("index"), EType::Number, TEXT("Row index from list_dialogs")),
 			MCPParam::RequiredField(TEXT("checked"), EType::Boolean, TEXT("Whether the row ends up ticked")),
 		}),
-	}, MCPSpec::AtLeastOne({ { TEXT("buttonLabel") }, { TEXT("buttonIndex") }, { TEXT("dialogAction") } })
+		MCPParam::Optional(TEXT("combos"), EType::Array, TEXT("The dialog's pickers to set before anything else, through each picker's own list; indices and options come from list_dialogs, and the value each picker then shows is checked")).Items(EType::Object).WithFields({
+			MCPParam::RequiredField(TEXT("index"), EType::Number, TEXT("Picker index from list_dialogs")),
+			MCPParam::OptionalField(TEXT("option"), EType::String, TEXT("Option to select, by its label, matched exactly first, then ignoring case")),
+			MCPParam::OptionalField(TEXT("optionIndex"), EType::Number, TEXT("Option to select, by its index in the picker's options")),
+		}),
+		MCPParam::Optional(TEXT("textFields"), EType::Array, TEXT("The dialog's text fields to set after the pickers, each committed as Enter commits it; indices come from list_dialogs")).Items(EType::Object).WithFields({
+			MCPParam::RequiredField(TEXT("index"), EType::Number, TEXT("Text field index from list_dialogs")),
+			MCPParam::RequiredField(TEXT("text"), EType::String, TEXT("The text the field ends up holding")),
+		}),
+	}, MCPSpec::AtLeastOne({ { TEXT("buttonLabel") }, { TEXT("buttonIndex") }, { TEXT("dialogAction") }, { TEXT("combos") }, { TEXT("textFields") } })
 		.ContractExempt(TEXT("presses a button on the active modal dialog")));
 
 	// #1231: every open modal and floating window, not only the one the gate
@@ -1597,6 +1612,16 @@ namespace MCPDialogStructure
 		return Widget->GetVisibility().IsVisible();
 	}
 
+	/**
+	 * Is this widget a push button: SButton or one of the editor's SButton
+	 * subclasses? The DataTable Options dialog's Apply is an SPrimaryButton,
+	 * and matching SButton alone left it out of the dialog's buttons.
+	 */
+	static bool IsButtonType(const FName& Type)
+	{
+		return Type == TEXT("SButton") || Type == TEXT("SPrimaryButton") || Type == TEXT("SSimpleButton");
+	}
+
 	static bool IsTableView(const FName& Type)
 	{
 		const FString Name = Type.ToString();
@@ -1778,7 +1803,7 @@ namespace MCPDialogStructure
 			if (!IsShown(Widget)) return;
 			const FName Type = Widget->GetType();
 			// A button's label is one of the dialog's choices, reported as such.
-			if (Type == TEXT("SButton")) return;
+			if (IsButtonType(Type)) return;
 			if (IsTableView(Type))
 			{
 				Flush();
@@ -1830,11 +1855,462 @@ namespace MCPDialogStructure
 	}
 }
 
-TSharedPtr<SWindow> FDialogHandlers::CollectActiveModal(FString& OutTitle, FString& OutMessage, TArray<FModalButton>& OutButtons, TArray<FModalItem>* OutItems, EMCPPromptKind* OutKind)
+/**
+ * A modal's drop-down pickers and editable text fields.
+ *
+ * list_dialogs reports them as `combos` and `textFields` beside the buttons and
+ * the tickable rows, and respond_to_dialog sets them before its press. Every
+ * change goes through the widget's own handlers, so the dialog's state really
+ * changes and not only what it shows:
+ *
+ *   picker  the option's row in the picker's own list is clicked, which selects
+ *           it there, and the selection is then committed the way a keyboard
+ *           user commits it: Enter on the list, which SComboBox handles. A
+ *           picker that commits only when its menu is closed by its button
+ *           (the DataTable Options dialog's row type picker) gets its menu
+ *           opened and its button clicked. Either way the value the picker then
+ *           shows is read back, and a selection that did not take is an error.
+ *   text    the text goes into the field's edit buffer and is committed with
+ *           Enter, which raises the field's OnTextCommitted: the delegate a
+ *           details panel writes its property from.
+ *
+ * A picker's options are the labels of its list rows. A closed menu is never
+ * painted, so Slate has not generated those rows; they are generated here by
+ * ticking the menu's own widgets at a size that holds every row, which is what
+ * opening the menu would do. A picker that builds its menu only when it opens
+ * has no list to read, and says so (optionsReadable false) rather than guess.
+ *
+ * Named namespace, for the unity build (see MCPDialogPolicy above).
+ */
+namespace MCPDialogFields
+{
+	using MCPDialogStructure::IsShown;
+
+	/** Never instantiated: a derived type is what may name SMenuAnchor's
+	 *  protected MenuContent, the picker's static menu. */
+	struct FMenuAnchorAccess : public SMenuAnchor
+	{
+		static TSharedPtr<SWidget> MenuContentOf(SMenuAnchor& Anchor)
+		{
+			return Anchor.*(&FMenuAnchorAccess::MenuContent);
+		}
+	};
+
+	/** Is this widget an SMenuAnchor: SComboButton, SComboBox<T> and their kin? */
+	static bool IsMenuAnchor(const TSharedRef<SWidget>& Widget)
+	{
+#if UE_VERSION_OLDER_THAN(5, 8, 0)
+		// Before 5.8 SMenuAnchor declares no widget class, so the type name is
+		// all there is, and only names known to be SMenuAnchor subclasses are
+		// trusted with the cast that reading the menu needs.
+		const FString Type = Widget->GetType().ToString();
+		return Type.StartsWith(TEXT("SComboBox<")) || Type == TEXT("SComboBox") || Type == TEXT("SComboButton")
+			|| Type == TEXT("SDataTableStructComboBox");
+#else
+		return Widget->GetWidgetClass().GetWidgetType() == SMenuAnchor::StaticWidgetClass().GetWidgetType();
+#endif
+	}
+
+	/** Is this widget an SEditableText, the editing half of a text box? */
+	static bool IsEditableText(const TSharedRef<SWidget>& Widget)
+	{
+#if UE_VERSION_OLDER_THAN(5, 8, 0)
+		return Widget->GetType() == TEXT("SEditableText");
+#else
+		return Widget->GetWidgetClass().GetWidgetType() == SEditableText::StaticWidgetClass().GetWidgetType();
+#endif
+	}
+
+	static TSharedPtr<SWidget> MenuOf(const TSharedRef<SWidget>& Anchor)
+	{
+		return FMenuAnchorAccess::MenuContentOf(static_cast<SMenuAnchor&>(Anchor.Get()));
+	}
+
+	/** Every descendant of this type, shown or not, not looking inside a match. */
+	static void CollectAll(const TSharedRef<SWidget>& Widget, const FName& Type, TArray<TSharedRef<SWidget>>& Out, int32 Depth = 0)
+	{
+		if (Depth > 64) return;
+		FChildren* Children = Widget->GetChildren();
+		if (!Children) return;
+		for (int32 i = 0; i < Children->Num(); ++i)
+		{
+			const TSharedRef<SWidget> Child = Children->GetChildAt(i);
+			if (Child->GetType() == Type)
+			{
+				Out.Add(Child);
+				continue;
+			}
+			CollectAll(Child, Type, Out, Depth + 1);
+		}
+	}
+
+	/** Does this menu anchor's static menu hold a list of options? */
+	static bool HasOptionList(const TSharedRef<SWidget>& Anchor)
+	{
+		const TSharedPtr<SWidget> Menu = MenuOf(Anchor);
+		if (!Menu.IsValid()) return false;
+		TArray<TSharedRef<SWidget>> Panels;
+		CollectAll(Menu.ToSharedRef(), TEXT("SListPanel"), Panels);
+		return Panels.Num() > 0;
+	}
+
+	/**
+	 * Is this a picker list_dialogs reports? A menu anchor whose menu is a list
+	 * of options, or one named as a combo whose menu is built only on opening.
+	 * A plain menu anchor (a "..." button's context menu) is not a field.
+	 */
+	static bool IsPicker(const TSharedRef<SWidget>& Widget)
+	{
+		if (!IsMenuAnchor(Widget)) return false;
+		if (HasOptionList(Widget)) return true;
+		// A combo that builds its menu on opening, such as a details panel's
+		// enum property (an SComboButton inside SPropertyEditorCombo), is a
+		// field even though it has no list to read. A bare SComboButton with
+		// no such owner is a details row's "..." menu, not a question.
+		TSharedPtr<SWidget> Owner = Widget->GetParentWidget();
+		for (int32 Depth = 0; Owner.IsValid() && Depth < 2; ++Depth)
+		{
+			if (Owner->GetType().ToString().Contains(TEXT("Combo"))) return true;
+			Owner = Owner->GetParentWidget();
+		}
+		return Widget->GetType().ToString().StartsWith(TEXT("SComboBox"));
+	}
+
+	/**
+	 * Refresh the bound attributes of a widget and everything under it. Slate
+	 * refreshes them on its next paint, so a read in the same call as a change
+	 * would otherwise see the value from before it.
+	 */
+	static void RefreshAttributes(const TSharedRef<SWidget>& Widget, int32 Depth = 0)
+	{
+		if (Depth > 64) return;
+		FSlateAttributeMetaData::UpdateAllAttributes(Widget.Get(), FSlateAttributeMetaData::EInvalidationPermission::AllowInvalidationIfConstructed);
+		if (FChildren* Children = Widget->GetChildren())
+		{
+			for (int32 i = 0; i < Children->Num(); ++i)
+			{
+				RefreshAttributes(Children->GetChildAt(i), Depth + 1);
+			}
+		}
+	}
+
+	/** Enabled the way a click finds it: the widget and every ancestor, freshly evaluated. */
+	static bool IsEffectivelyEnabled(const TSharedRef<SWidget>& Widget)
+	{
+		TSharedPtr<SWidget> Current = Widget;
+		for (int32 Depth = 0; Current.IsValid() && Depth < 128; ++Depth)
+		{
+			FSlateAttributeMetaData::UpdateAllAttributes(*Current, FSlateAttributeMetaData::EInvalidationPermission::AllowInvalidationIfConstructed);
+			if (!Current->IsEnabled()) return false;
+			Current = Current->GetParentWidget();
+		}
+		return true;
+	}
+
+	/** The shown text under a widget, joined: what a picker displays. */
+	static FString ShownText(const TSharedRef<SWidget>& Widget)
+	{
+		TArray<FString> Texts;
+		MCPDialogStructure::GatherText(Widget, Texts);
+		return FString::Join(Texts, TEXT(" "));
+	}
+
+	static bool IsControl(const TSharedRef<SWidget>& Widget)
+	{
+		const FName Type = Widget->GetType();
+		return MCPDialogStructure::IsButtonType(Type) || Type == TEXT("SCheckBox") || IsMenuAnchor(Widget) || IsEditableText(Widget);
+	}
+
+	/** Does this branch hold a control? A label never comes out of one. */
+	static bool HoldsControl(const TSharedRef<SWidget>& Widget, int32 Depth = 0)
+	{
+		if (IsControl(Widget)) return true;
+		if (Depth > 32) return false;
+		if (FChildren* Children = Widget->GetChildren())
+		{
+			for (int32 i = 0; i < Children->Num(); ++i)
+			{
+				if (HoldsControl(Children->GetChildAt(i), Depth + 1)) return true;
+			}
+		}
+		return false;
+	}
+
+	/** The shown texts of a branch outside any control, in walk order. */
+	static void GatherLabelText(const TSharedRef<SWidget>& Widget, TArray<FString>& Out, int32 Depth = 0)
+	{
+		if (Depth > 64 || !IsShown(Widget) || IsControl(Widget)) return;
+		if (Widget->GetType() == TEXT("STextBlock"))
+		{
+			const FString Text = MCPDialogStructure::TextOf(Widget);
+			if (!Text.IsEmpty()) Out.Add(Text);
+		}
+		if (FChildren* Children = Widget->GetChildren())
+		{
+			for (int32 i = 0; i < Children->Num(); ++i)
+			{
+				GatherLabelText(Children->GetChildAt(i), Out, Depth + 1);
+			}
+		}
+	}
+
+	/** Does this control carry its own text, as SNew(SCheckBox)[SNew(STextBlock)] does? */
+	static bool HasOwnText(const TSharedRef<SWidget>& Control)
+	{
+		TArray<FString> Texts;
+		MCPDialogStructure::GatherText(Control, Texts);
+		return Texts.Num() > 0;
+	}
+
+	/**
+	 * The text that labels a control from before it, or empty.
+	 *
+	 * Climbing from the control: in a row (SHorizontalBox, SSplitter) the last
+	 * text laid before the control's branch, which is how a details panel puts
+	 * a property's name beside its value; in a column (SVerticalBox) the slot
+	 * directly above, when that slot is only text, which is how the DataTable
+	 * Options dialog puts "Import As" over its picker. A list row, a header row
+	 * and a column whose slot above is anything else end the climb, so a label
+	 * is never borrowed from a neighbouring row.
+	 */
+	static FString LabelFor(const TSharedRef<SWidget>& Control)
+	{
+		TSharedRef<SWidget> Branch = Control;
+		for (int32 Depth = 0; Depth < 24; ++Depth)
+		{
+			const TSharedPtr<SWidget> Parent = Branch->GetParentWidget();
+			if (!Parent.IsValid()) break;
+			const FName Type = Parent->GetType();
+			if (Type == TEXT("SListPanel") || Type == TEXT("SHeaderRow")) break;
+			const bool bRow = Type == TEXT("SHorizontalBox") || Type == TEXT("SSplitter");
+			const bool bColumn = Type == TEXT("SVerticalBox");
+			if (bRow || bColumn)
+			{
+				FString Found;
+				bool bAnyBefore = false;
+				if (FChildren* Children = Parent->GetChildren())
+				{
+					for (int32 i = 0; i < Children->Num(); ++i)
+					{
+						const TSharedRef<SWidget> Child = Children->GetChildAt(i);
+						if (Child == Branch) break;
+						if (!IsShown(Child)) continue;
+						TArray<FString> Texts;
+						GatherLabelText(Child, Texts);
+						if (bRow)
+						{
+							if (Texts.Num() > 0) Found = Texts.Last();
+						}
+						else
+						{
+							bAnyBefore = true;
+							Found = (Texts.Num() > 0 && !HoldsControl(Child)) ? Texts.Last() : FString();
+						}
+					}
+				}
+				if (!Found.IsEmpty()) return Found;
+				// A column lends only its slot directly above; past one that
+				// is not a label, the text belongs to something else.
+				if (bColumn && bAnyBefore) break;
+			}
+			Branch = Parent.ToSharedRef();
+		}
+		return FString();
+	}
+
+	/** Tick a widget and everything it arranges, as a paint pass would. */
+	static void TickSubtree(const TSharedRef<SWidget>& Widget, const FGeometry& Geometry, double Now, int32 Depth)
+	{
+		if (Depth > 64) return;
+		Widget->Tick(Geometry, Now, 0.0f);
+		FArrangedChildren Arranged(EVisibility::Visible);
+		Widget->ArrangeChildren(Geometry, Arranged);
+		for (int32 i = 0; i < Arranged.Num(); ++i)
+		{
+			const FArrangedWidget& Child = Arranged[i];
+			TickSubtree(Child.Widget, Child.Geometry, Now, Depth + 1);
+		}
+	}
+
+	struct FOption
+	{
+		FString Label;
+		TSharedPtr<SWidget> Row;
+	};
+
+	/**
+	 * A picker's options: the shown rows of the list in its static menu, with
+	 * their labels. False when the picker has no such list.
+	 */
+	static bool ReadOptions(const TSharedRef<SWidget>& Anchor, TArray<FOption>& Out)
+	{
+		Out.Reset();
+		if (!IsMenuAnchor(Anchor)) return false;
+		const TSharedPtr<SWidget> Menu = MenuOf(Anchor);
+		if (!Menu.IsValid() || !HasOptionList(Anchor)) return false;
+
+		// The rows exist only once the list has ticked at a size; a size that
+		// holds every row generates all of them, as an open menu would.
+		Menu->SlatePrepass(1.0f);
+		TickSubtree(Menu.ToSharedRef(), FGeometry::MakeRoot(FVector2D(640.0, 200000.0), FSlateLayoutTransform()),
+			FSlateApplication::Get().GetCurrentTime(), 0);
+
+		TArray<TSharedRef<SWidget>> Panels;
+		CollectAll(Menu.ToSharedRef(), TEXT("SListPanel"), Panels);
+		for (const TSharedRef<SWidget>& Panel : Panels)
+		{
+			FChildren* Rows = Panel->GetChildren();
+			if (!Rows) continue;
+			for (int32 i = 0; i < Rows->Num(); ++i)
+			{
+				const TSharedRef<SWidget> Row = Rows->GetChildAt(i);
+				if (!IsShown(Row)) continue;
+				const FString Label = ShownText(Row).TrimStartAndEnd();
+				if (Label.IsEmpty()) continue;
+				FOption Option;
+				Option.Label = Label;
+				Option.Row = Row;
+				Out.Add(MoveTemp(Option));
+			}
+		}
+		return true;
+	}
+
+	/** The list view a row belongs to: the nearest ancestor that is a table view. */
+	static TSharedPtr<SWidget> ListOf(const TSharedRef<SWidget>& Row)
+	{
+		TSharedPtr<SWidget> Current = Row->GetParentWidget();
+		for (int32 Depth = 0; Current.IsValid() && Depth < 16; ++Depth)
+		{
+#if UE_VERSION_OLDER_THAN(5, 8, 0)
+			const FString Type = Current->GetType().ToString();
+			if (Type.Contains(TEXT("ListView")) || Type.Contains(TEXT("ListType")) || Type.Contains(TEXT("TreeView")))
+#else
+			if (Current->GetWidgetClass().GetWidgetType() == STableViewBase::StaticWidgetClass().GetWidgetType()
+				|| Current->GetWidgetClass().GetWidgetType() == FName(TEXT("SListView"))
+				|| Current->GetWidgetClass().GetWidgetType() == FName(TEXT("STreeView")))
+#endif
+			{
+				return Current;
+			}
+			Current = Current->GetParentWidget();
+		}
+		return nullptr;
+	}
+
+	/** Is the picker now showing this option? Read freshly, not from the last paint. */
+	static bool Shows(const TSharedRef<SWidget>& Anchor, const FString& Label)
+	{
+		RefreshAttributes(Anchor);
+		return ShownText(Anchor).TrimStartAndEnd() == Label;
+	}
+
+	/**
+	 * Select one option of a picker through its own list and commit it. True
+	 * when the picker then shows the option; OutRoute names the way it took.
+	 */
+	static bool SelectOption(const TSharedRef<SWidget>& Anchor, const FOption& Option, FString& OutRoute)
+	{
+		if (Shows(Anchor, Option.Label))
+		{
+			OutRoute = TEXT("alreadySelected");
+			return true;
+		}
+
+		// A click on the row selects it in the list, as a person's click does.
+		// A combo row signals that selection when the button comes back up,
+		// which needs a mouse capture only a real click has, so the selection
+		// is committed by the keyboard route below.
+		TSet<FKey> Pressed;
+		Pressed.Add(EKeys::LeftMouseButton);
+		const FPointerEvent Down(0, FVector2D::ZeroVector, FVector2D::ZeroVector, Pressed, EKeys::LeftMouseButton, 0.0f, FModifierKeysState());
+		Option.Row->OnMouseButtonDown(Option.Row->GetTickSpaceGeometry(), Down);
+		if (Shows(Anchor, Option.Label))
+		{
+			OutRoute = TEXT("click");
+			return true;
+		}
+
+		// Enter on the list commits its selection: SComboBox's own key handler.
+		if (const TSharedPtr<SWidget> List = ListOf(Option.Row.ToSharedRef()))
+		{
+			const FKeyEvent Enter(EKeys::Enter, FModifierKeysState(), 0, false, 0, 0);
+			List->OnKeyDown(List->GetTickSpaceGeometry(), Enter);
+			if (Shows(Anchor, Option.Label))
+			{
+				OutRoute = TEXT("enter");
+				return true;
+			}
+		}
+
+		// A picker that commits when its button closes its open menu: open
+		// it, click the button, and make sure the menu ends up closed.
+		SMenuAnchor& Menu = static_cast<SMenuAnchor&>(Anchor.Get());
+		const TSharedPtr<SWidget> Button = MCPDialogStructure::FindFirst(Anchor, TEXT("SButton"));
+		if (Button.IsValid())
+		{
+			if (!Menu.IsOpen())
+			{
+				Menu.SetIsOpen(true, false);
+			}
+			if (Menu.IsOpen())
+			{
+				StaticCastSharedPtr<SButton>(Button)->SimulateClick();
+			}
+			if (Menu.IsOpen())
+			{
+				Menu.SetIsOpen(false);
+			}
+			if (Shows(Anchor, Option.Label))
+			{
+				OutRoute = TEXT("menuButton");
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/** Put text in a field and commit it with Enter, raising its OnTextCommitted. */
+	static void CommitText(const TSharedRef<SWidget>& Editable, const FString& Text)
+	{
+		SEditableText& Edit = static_cast<SEditableText&>(Editable.Get());
+		Edit.SetEditableText(FText::FromString(Text));
+		const FKeyEvent Enter(EKeys::Enter, FModifierKeysState(), 0, false, 0, 0);
+		Editable->OnKeyDown(Editable->GetTickSpaceGeometry(), Enter);
+	}
+
+	static FString TextOfField(const TSharedRef<SWidget>& Editable)
+	{
+		return static_cast<SEditableText&>(Editable.Get()).GetText().ToString();
+	}
+
+	/** The type a person would name the field by: its text box, when it has one. */
+	static FString FieldWidgetType(const TSharedRef<SWidget>& Editable)
+	{
+		TSharedPtr<SWidget> Current = Editable->GetParentWidget();
+		for (int32 Depth = 0; Current.IsValid() && Depth < 6; ++Depth)
+		{
+			const FString Type = Current->GetType().ToString();
+			if (Type.EndsWith(TEXT("TextBox")) || Type.EndsWith(TEXT("SearchBox")))
+			{
+				return Type;
+			}
+			Current = Current->GetParentWidget();
+		}
+		return Editable->GetType().ToString();
+	}
+}
+
+TSharedPtr<SWindow> FDialogHandlers::CollectActiveModal(FString& OutTitle, FString& OutMessage, TArray<FModalButton>& OutButtons, TArray<FModalItem>* OutItems, EMCPPromptKind* OutKind, FModalFields* OutFields)
 {
 	OutTitle.Empty();
 	OutMessage.Empty();
 	OutButtons.Empty();
+	if (OutFields)
+	{
+		OutFields->Combos.Empty();
+		OutFields->TextFields.Empty();
+	}
 	if (OutKind)
 	{
 		*OutKind = EMCPPromptKind::NotAPrompt;
@@ -1858,6 +2334,12 @@ TSharedPtr<SWindow> FDialogHandlers::CollectActiveModal(FString& OutTitle, FStri
 	// the row before it, and without this the last row of Save Content carried
 	// "Save Selected", "Don't Save" and "Cancel" as its own cells (#1076).
 	int32 ButtonDepth = 0;
+	// How many collapsed or hidden widgets the walk is inside: a field nobody
+	// can see is not one of the dialog's questions.
+	int32 HiddenDepth = 0;
+	// How many pickers the walk is inside. A picker's own button opens its
+	// menu; it is not one of the dialog's answers.
+	int32 PickerDepth = 0;
 
 	TFunction<void(const TSharedRef<SWidget>&)> TraverseWidgets = [&](const TSharedRef<SWidget>& Widget)
 	{
@@ -1872,22 +2354,66 @@ TSharedPtr<SWindow> FDialogHandlers::CollectActiveModal(FString& OutTitle, FStri
 				// checkbox then its cells, so text after a checkbox belongs to
 				// that checkbox until the next one starts a new row. That is
 				// what pairs "L_MoverPawnTest" with the box that saves it.
-				if (OutItems && OutItems->Num() > 0 && ButtonDepth == 0)
+				if (OutItems && OutItems->Num() > 0 && ButtonDepth == 0 && OutItems->Last().bOwnsFollowingText)
 				{
 					OutItems->Last().Cells.Add(Text);
 				}
 			}
 		}
 
-		if (OutItems && Widget->GetType() == TEXT("SCheckBox"))
+		const bool bShown = MCPDialogStructure::IsShown(Widget);
+		// A collapsed checkbox (a details row's unused edit condition) is not
+		// one of the dialog's questions.
+		if (OutItems && Widget->GetType() == TEXT("SCheckBox") && bShown && HiddenDepth == 0)
 		{
 			FModalItem Item;
 			Item.Box = StaticCastSharedRef<SCheckBox>(Widget);
 			Item.bChecked = Item.Box->IsChecked();
+			// A box with no text of its own, labelled from before it in its
+			// row, is a field: a details panel's bool property lays its name
+			// to the left. The text after such a box is the next field's, not
+			// this one's cells.
+			if (!MCPDialogFields::HasOwnText(Widget))
+			{
+				Item.FieldLabel = MCPDialogFields::LabelFor(Widget);
+				if (!Item.FieldLabel.IsEmpty())
+				{
+					Item.Cells.Add(Item.FieldLabel);
+					Item.bOwnsFollowingText = false;
+				}
+			}
 			OutItems->Add(Item);
 		}
 
-		if (Widget->GetType() == TEXT("SButton"))
+		const bool bPicker = MCPDialogFields::IsPicker(Widget);
+		if (OutFields && HiddenDepth == 0 && bShown)
+		{
+			if (bPicker)
+			{
+				FModalCombo Combo;
+				Combo.Anchor = Widget;
+				Combo.Label = MCPDialogFields::LabelFor(Widget);
+				Combo.Value = MCPDialogFields::ShownText(Widget).TrimStartAndEnd();
+				Combo.bEnabled = MCPDialogFields::IsEffectivelyEnabled(Widget);
+				OutFields->Combos.Add(MoveTemp(Combo));
+			}
+			else if (MCPDialogFields::IsEditableText(Widget))
+			{
+				SEditableText& Edit = static_cast<SEditableText&>(Widget.Get());
+				FModalTextField Field;
+				Field.Editable = Widget;
+				Field.WidgetType = MCPDialogFields::FieldWidgetType(Widget);
+				Field.Label = MCPDialogFields::LabelFor(Widget);
+				Field.Value = Edit.GetText().ToString();
+				Field.Hint = Edit.GetHintText().ToString();
+				Field.bReadOnly = Edit.IsTextReadOnly();
+				Field.bEnabled = MCPDialogFields::IsEffectivelyEnabled(Widget);
+				OutFields->TextFields.Add(MoveTemp(Field));
+			}
+		}
+
+		const bool bIsButton = MCPDialogStructure::IsButtonType(Widget->GetType());
+		if (bIsButton && PickerDepth == 0)
 		{
 			FModalButton Entry;
 			Entry.Button = StaticCastSharedRef<SButton>(Widget);
@@ -1906,11 +2432,21 @@ TSharedPtr<SWindow> FDialogHandlers::CollectActiveModal(FString& OutTitle, FStri
 					}
 				}
 			}
+			// An SPrimaryButton lays an icon and its text side by side, so its
+			// label is deeper than a direct child.
+			if (Entry.Label.IsEmpty())
+			{
+				if (const TSharedPtr<SWidget> Text = MCPDialogStructure::FindFirst(Widget, TEXT("STextBlock")))
+				{
+					Entry.Label = StaticCastSharedPtr<STextBlock>(Text)->GetText().ToString();
+				}
+			}
 			OutButtons.Add(Entry);
 		}
 
-		const bool bIsButton = Widget->GetType() == TEXT("SButton");
 		if (bIsButton) ++ButtonDepth;
+		if (!bShown) ++HiddenDepth;
+		if (bPicker) ++PickerDepth;
 		FChildren* Children = Widget->GetChildren();
 		if (Children)
 		{
@@ -1919,6 +2455,8 @@ TSharedPtr<SWindow> FDialogHandlers::CollectActiveModal(FString& OutTitle, FStri
 				TraverseWidgets(Children->GetChildAt(i));
 			}
 		}
+		if (bPicker) --PickerDepth;
+		if (!bShown) --HiddenDepth;
 		if (bIsButton) --ButtonDepth;
 	};
 
@@ -1991,8 +2529,9 @@ TSharedPtr<FJsonValue> FDialogHandlers::ListDialogs(const TSharedPtr<FJsonObject
 	FString Message;
 	TArray<FModalButton> Buttons;
 	TArray<FModalItem> Items;
+	FModalFields Fields;
 	EMCPPromptKind Kind = EMCPPromptKind::NotAPrompt;
-	const TSharedPtr<SWindow> Modal = CollectActiveModal(Title, Message, Buttons, &Items, &Kind);
+	const TSharedPtr<SWindow> Modal = CollectActiveModal(Title, Message, Buttons, &Items, &Kind, &Fields);
 	const bool bHasDialog = Modal.IsValid();
 
 	// Every open modal and floating window, as the ids the window actions take,
@@ -2043,6 +2582,9 @@ TSharedPtr<FJsonValue> FDialogHandlers::ListDialogs(const TSharedPtr<FJsonObject
 				? FString::Printf(TEXT("editor(action='respond_to_dialog', buttonLabel=\"%s\")"), *Button.Label)
 				: FString::Printf(TEXT("editor(action='respond_to_dialog', buttonLabel='%s')"), *Button.Label);
 			Choice->SetStringField(TEXT("respondWith"), RespondWith);
+			// A disabled button is one a person cannot press either, such as
+			// the DataTable Options dialog's Apply before a row type is chosen.
+			Choice->SetBoolField(TEXT("enabled"), Button.Button.IsValid() && MCPDialogFields::IsEffectivelyEnabled(Button.Button.ToSharedRef()));
 			ChoicesJsonArray.Add(MakeShared<FJsonValueObject>(Choice));
 		}
 		// The per-item choices, when the dialog offers any. "Save Selected"
@@ -2068,6 +2610,63 @@ TSharedPtr<FJsonValue> FDialogHandlers::ListDialogs(const TSharedPtr<FJsonObject
 			ItemsJsonArray.Add(MakeShared<FJsonValueObject>(ItemObj));
 		}
 		DialogObj->SetArrayField(TEXT("items"), ItemsJsonArray);
+
+		// The pickers and text fields, each with what labels it, what it holds
+		// now and, for a picker, the options it offers. respond_to_dialog's
+		// combos and textFields take these indices.
+		TArray<TSharedPtr<FJsonValue>> CombosJson;
+		for (int32 ComboIndex = 0; ComboIndex < Fields.Combos.Num(); ++ComboIndex)
+		{
+			const FModalCombo& Combo = Fields.Combos[ComboIndex];
+			TSharedPtr<FJsonObject> ComboObj = MakeShared<FJsonObject>();
+			ComboObj->SetNumberField(TEXT("index"), ComboIndex);
+			ComboObj->SetStringField(TEXT("label"), Combo.Label);
+			ComboObj->SetStringField(TEXT("value"), Combo.Value);
+			ComboObj->SetBoolField(TEXT("enabled"), Combo.bEnabled);
+			ComboObj->SetStringField(TEXT("widgetType"), Combo.Anchor->GetType().ToString());
+			TArray<MCPDialogFields::FOption> Options;
+			const bool bReadable = MCPDialogFields::ReadOptions(Combo.Anchor.ToSharedRef(), Options);
+			ComboObj->SetBoolField(TEXT("optionsReadable"), bReadable);
+			TArray<TSharedPtr<FJsonValue>> OptionsJson;
+			for (const MCPDialogFields::FOption& Option : Options)
+			{
+				OptionsJson.Add(MakeShared<FJsonValueString>(Option.Label));
+			}
+			ComboObj->SetArrayField(TEXT("options"), OptionsJson);
+			if (!bReadable)
+			{
+				ComboObj->SetStringField(TEXT("optionsNote"),
+					TEXT("This picker builds its menu only when it opens, so it has no option list to read or select from."));
+			}
+			CombosJson.Add(MakeShared<FJsonValueObject>(ComboObj));
+		}
+		DialogObj->SetArrayField(TEXT("combos"), CombosJson);
+
+		TArray<TSharedPtr<FJsonValue>> TextFieldsJson;
+		for (int32 FieldIndex = 0; FieldIndex < Fields.TextFields.Num(); ++FieldIndex)
+		{
+			const FModalTextField& Field = Fields.TextFields[FieldIndex];
+			TSharedPtr<FJsonObject> FieldObj = MakeShared<FJsonObject>();
+			FieldObj->SetNumberField(TEXT("index"), FieldIndex);
+			FieldObj->SetStringField(TEXT("label"), Field.Label);
+			FieldObj->SetStringField(TEXT("value"), Field.Value);
+			if (!Field.Hint.IsEmpty()) FieldObj->SetStringField(TEXT("hint"), Field.Hint);
+			FieldObj->SetBoolField(TEXT("readOnly"), Field.bReadOnly);
+			FieldObj->SetBoolField(TEXT("enabled"), Field.bEnabled);
+			FieldObj->SetStringField(TEXT("widgetType"), Field.WidgetType);
+			TextFieldsJson.Add(MakeShared<FJsonValueObject>(FieldObj));
+		}
+		DialogObj->SetArrayField(TEXT("textFields"), TextFieldsJson);
+
+		// Items also carry the label laid before them, when a box is a field
+		// rather than a row: a details panel's bool property.
+		for (int32 ItemIndex = 0; ItemIndex < Items.Num(); ++ItemIndex)
+		{
+			if (!Items[ItemIndex].FieldLabel.IsEmpty())
+			{
+				ItemsJsonArray[ItemIndex]->AsObject()->SetStringField(TEXT("fieldLabel"), Items[ItemIndex].FieldLabel);
+			}
+		}
 
 		// The same body as `message`, structured (#1891): paragraphs and tables
 		// in reading order, with the title and the button labels left out.
@@ -2195,11 +2794,18 @@ TSharedPtr<FJsonValue> FDialogHandlers::RespondToDialog(const TSharedPtr<FJsonOb
 		return MCPError(TEXT("Slate not initialized"));
 	}
 
+	// Every parameter is read before anything can fail (#1057).
+	const TArray<TSharedPtr<FJsonValue>>* RequestedCombos = nullptr;
+	TryGetArrayParam(Params, TEXT("combos"), RequestedCombos);
+	const TArray<TSharedPtr<FJsonValue>>* RequestedTextFields = nullptr;
+	TryGetArrayParam(Params, TEXT("textFields"), RequestedTextFields);
+
 	FString Title;
 	FString Message;
 	TArray<FModalButton> Buttons;
 	TArray<FModalItem> Items;
-	TSharedPtr<SWindow> ActiveModal = CollectActiveModal(Title, Message, Buttons, &Items);
+	FModalFields Fields;
+	TSharedPtr<SWindow> ActiveModal = CollectActiveModal(Title, Message, Buttons, &Items, nullptr, &Fields);
 	if (!ActiveModal.IsValid())
 	{
 		// Still a failure: nothing was pressed on this call, and a caller
@@ -2245,7 +2851,180 @@ TSharedPtr<FJsonValue> FDialogHandlers::RespondToDialog(const TSharedPtr<FJsonOb
 			*Buttons[TargetIndex].Label, *Title, *JoinLabels(Buttons)));
 	}
 
+	// The pickers and text fields are resolved in full before any of them is
+	// touched, against the indices list_dialogs reported, so a bad index or an
+	// option the picker does not offer changes nothing.
+	struct FComboPlan
+	{
+		int32 Index = INDEX_NONE;
+		MCPDialogFields::FOption Option;
+	};
+	struct FTextPlan
+	{
+		int32 Index = INDEX_NONE;
+		FString Text;
+	};
+	TArray<FComboPlan> ComboPlans;
+	TArray<FTextPlan> TextPlans;
+	if (RequestedCombos)
+	{
+		for (const TSharedPtr<FJsonValue>& Entry : *RequestedCombos)
+		{
+			const TSharedPtr<FJsonObject>* ComboObj = nullptr;
+			if (!Entry.IsValid() || !Entry->TryGetObject(ComboObj) || !ComboObj)
+			{
+				return MCPError(TEXT("Each combos entry is an object: {index, option} or {index, optionIndex}."));
+			}
+			int32 Index = INDEX_NONE;
+			if (!(*ComboObj)->TryGetNumberField(TEXT("index"), Index) || !Fields.Combos.IsValidIndex(Index))
+			{
+				return MCPError(FString::Printf(
+					TEXT("This dialog has %d picker(s), so combos index %d does not name one. Read them with list_dialogs."),
+					Fields.Combos.Num(), Index));
+			}
+			const FModalCombo& Combo = Fields.Combos[Index];
+			if (!Combo.bEnabled)
+			{
+				return MCPError(FString::Printf(TEXT("Picker %d ('%s') is disabled, so a person could not change it either."),
+					Index, *Combo.Label));
+			}
+			TArray<MCPDialogFields::FOption> Options;
+			if (!MCPDialogFields::ReadOptions(Combo.Anchor.ToSharedRef(), Options))
+			{
+				return MCPError(FString::Printf(
+					TEXT("Picker %d ('%s') builds its menu only when it opens, so it has no option list to select from."),
+					Index, *Combo.Label));
+			}
+			FString OptionLabel;
+			int32 OptionIndex = INDEX_NONE;
+			const bool bByLabel = (*ComboObj)->TryGetStringField(TEXT("option"), OptionLabel);
+			const bool bByIndex = (*ComboObj)->TryGetNumberField(TEXT("optionIndex"), OptionIndex);
+			int32 Chosen = INDEX_NONE;
+			if (bByLabel)
+			{
+				Chosen = Options.IndexOfByPredicate([&](const MCPDialogFields::FOption& O) { return O.Label.Equals(OptionLabel, ESearchCase::CaseSensitive); });
+				if (Chosen == INDEX_NONE)
+				{
+					Chosen = Options.IndexOfByPredicate([&](const MCPDialogFields::FOption& O) { return O.Label.Equals(OptionLabel, ESearchCase::IgnoreCase); });
+				}
+			}
+			else if (bByIndex && Options.IsValidIndex(OptionIndex))
+			{
+				Chosen = OptionIndex;
+			}
+			if (Chosen == INDEX_NONE)
+			{
+				TArray<FString> Labels;
+				for (int32 i = 0; i < Options.Num() && i < 100; ++i) Labels.Add(Options[i].Label);
+				return MCPError(FString::Printf(
+					TEXT("Picker %d ('%s') has no option %s. It offers %d: [%s]%s"),
+					Index, *Combo.Label,
+					bByLabel ? *FString::Printf(TEXT("'%s'"), *OptionLabel) : *FString::Printf(TEXT("at index %d"), OptionIndex),
+					Options.Num(), *FString::Join(Labels, TEXT(", ")), Options.Num() > 100 ? TEXT(" ...") : TEXT("")));
+			}
+			FComboPlan Plan;
+			Plan.Index = Index;
+			Plan.Option = Options[Chosen];
+			ComboPlans.Add(MoveTemp(Plan));
+		}
+	}
+	if (RequestedTextFields)
+	{
+		for (const TSharedPtr<FJsonValue>& Entry : *RequestedTextFields)
+		{
+			const TSharedPtr<FJsonObject>* FieldObj = nullptr;
+			if (!Entry.IsValid() || !Entry->TryGetObject(FieldObj) || !FieldObj)
+			{
+				return MCPError(TEXT("Each textFields entry is an object: {index, text}."));
+			}
+			FTextPlan Plan;
+			if (!(*FieldObj)->TryGetNumberField(TEXT("index"), Plan.Index) || !Fields.TextFields.IsValidIndex(Plan.Index))
+			{
+				return MCPError(FString::Printf(
+					TEXT("This dialog has %d text field(s), so textFields index %d does not name one. Read them with list_dialogs."),
+					Fields.TextFields.Num(), Plan.Index));
+			}
+			if (!(*FieldObj)->TryGetStringField(TEXT("text"), Plan.Text))
+			{
+				return MCPError(FString::Printf(TEXT("textFields entry %d has no text."), Plan.Index));
+			}
+			const FModalTextField& Field = Fields.TextFields[Plan.Index];
+			if (Field.bReadOnly || !Field.bEnabled)
+			{
+				return MCPError(FString::Printf(TEXT("Text field %d ('%s') is %s, so a person could not type in it either."),
+					Plan.Index, *Field.Label, Field.bReadOnly ? TEXT("read-only") : TEXT("disabled")));
+			}
+			TextPlans.Add(MoveTemp(Plan));
+		}
+	}
+	const bool bSetsFields = ComboPlans.Num() > 0 || TextPlans.Num() > 0;
+
+	// A named button that is not there is refused before any field changes.
+	if (bSetsFields && (!ButtonLabel.IsEmpty() || ButtonIndex >= 0) && !Buttons.IsValidIndex(TargetIndex))
+	{
+		return MCPError(FString::Printf(
+			TEXT("Button not found on dialog '%s', so no field was set. Pass buttonLabel as one of [%s], or buttonIndex between 0 and %d, or omit both to set the fields alone."),
+			*Title, *JoinLabels(Buttons), FMath::Max(0, Buttons.Num() - 1)));
+	}
+
 	auto Result = MCPSuccess();
+
+	// Pickers first: choosing one can change which other fields the dialog
+	// shows (Import As decides whether a row type is asked for at all).
+	if (ComboPlans.Num() > 0)
+	{
+		TArray<TSharedPtr<FJsonValue>> AppliedJson;
+		for (const FComboPlan& Plan : ComboPlans)
+		{
+			const FModalCombo& Combo = Fields.Combos[Plan.Index];
+			FString Route;
+			const bool bTook = MCPDialogFields::SelectOption(Combo.Anchor.ToSharedRef(), Plan.Option, Route);
+			TSharedPtr<FJsonObject> Applied = MakeShared<FJsonObject>();
+			Applied->SetNumberField(TEXT("index"), Plan.Index);
+			Applied->SetStringField(TEXT("label"), Combo.Label);
+			Applied->SetStringField(TEXT("option"), Plan.Option.Label);
+			Applied->SetStringField(TEXT("previousValue"), Combo.Value);
+			Applied->SetStringField(TEXT("value"), MCPDialogFields::ShownText(Combo.Anchor.ToSharedRef()).TrimStartAndEnd());
+			Applied->SetBoolField(TEXT("committed"), bTook);
+			if (bTook) Applied->SetStringField(TEXT("route"), Route);
+			AppliedJson.Add(MakeShared<FJsonValueObject>(Applied));
+			if (!bTook)
+			{
+				Result->SetArrayField(TEXT("combosApplied"), AppliedJson);
+				Result->SetBoolField(TEXT("success"), false);
+				Result->SetStringField(TEXT("error"), FString::Printf(
+					TEXT("Picker %d ('%s') did not take '%s': it still shows '%s'. No button was pressed."),
+					Plan.Index, *Combo.Label, *Plan.Option.Label, *MCPDialogFields::ShownText(Combo.Anchor.ToSharedRef()).TrimStartAndEnd()));
+				return MCPResult(Result);
+			}
+		}
+		Result->SetArrayField(TEXT("combosApplied"), AppliedJson);
+	}
+
+	if (TextPlans.Num() > 0)
+	{
+		TArray<TSharedPtr<FJsonValue>> AppliedJson;
+		for (const FTextPlan& Plan : TextPlans)
+		{
+			const FModalTextField& Field = Fields.TextFields[Plan.Index];
+			MCPDialogFields::CommitText(Field.Editable.ToSharedRef(), Plan.Text);
+			MCPDialogFields::RefreshAttributes(Field.Editable.ToSharedRef());
+			const FString After = MCPDialogFields::TextOfField(Field.Editable.ToSharedRef());
+			TSharedPtr<FJsonObject> Applied = MakeShared<FJsonObject>();
+			Applied->SetNumberField(TEXT("index"), Plan.Index);
+			Applied->SetStringField(TEXT("label"), Field.Label);
+			Applied->SetStringField(TEXT("text"), Plan.Text);
+			Applied->SetStringField(TEXT("previousValue"), Field.Value);
+			Applied->SetStringField(TEXT("value"), After);
+			if (After != Plan.Text)
+			{
+				Applied->SetStringField(TEXT("note"),
+					TEXT("The field shows something other than the text committed to it: the dialog's own handler normalised or refused the value."));
+			}
+			AppliedJson.Add(MakeShared<FJsonValueObject>(Applied));
+		}
+		Result->SetArrayField(TEXT("textFieldsApplied"), AppliedJson);
+	}
 
 	// The per-item ticks go on BEFORE the button, in this one call.
 	//
@@ -2292,6 +3071,21 @@ TSharedPtr<FJsonValue> FDialogHandlers::RespondToDialog(const TSharedPtr<FJsonOb
 			AppliedJson.Add(MakeShared<FJsonValueObject>(Applied));
 		}
 		Result->SetArrayField(TEXT("itemsApplied"), AppliedJson);
+	}
+
+	// A button a person could not press is not pressed either: the DataTable
+	// Options dialog keeps Apply disabled until a row type is chosen, and
+	// SimulateClick would run its handler regardless. Read after the fields
+	// above were set, freshly, since setting them is what enables it.
+	if (Buttons.IsValidIndex(TargetIndex) && Buttons[TargetIndex].Button.IsValid()
+		&& !MCPDialogFields::IsEffectivelyEnabled(Buttons[TargetIndex].Button.ToSharedRef()))
+	{
+		Result->SetBoolField(TEXT("success"), false);
+		Result->SetStringField(TEXT("error"), FString::Printf(
+			TEXT("'%s' on dialog '%s' is disabled, so it was not pressed. The dialog enables it once what it needs is set: read its combos, textFields and items with list_dialogs."),
+			*Buttons[TargetIndex].Label, *Title));
+		Result->SetBoolField(TEXT("alreadyClosed"), false);
+		return MCPResult(Result);
 	}
 
 	if (TargetIndex >= 0 && TargetIndex < Buttons.Num())
@@ -2346,6 +3140,17 @@ TSharedPtr<FJsonValue> FDialogHandlers::RespondToDialog(const TSharedPtr<FJsonOb
 				     "resumed on its unanswered-prompt path and no action re-raises a destroyed modal, so the "
 				     "question cannot be put back to be answered differently."),
 				*Title));
+		}
+		else if (bSetsFields && ButtonLabel.IsEmpty() && ButtonIndex < 0 && Action.IsEmpty())
+		{
+			// Fields set and no button named: the dialog stays up for the next
+			// call to read what changed and press a button.
+			Result->SetBoolField(TEXT("pressed"), false);
+			Result->SetBoolField(TEXT("alreadyClosed"), false);
+			Result->SetStringField(TEXT("note"), FString::Printf(
+				TEXT("Set the fields and pressed nothing; '%s' is still open. Read it again with list_dialogs and press a button with respond_to_dialog."),
+				*Title));
+			MCPSetNoRollback(Result, TEXT("The fields were set through the dialog's own widgets, which keep no record of what they held before beyond the previousValue each entry reports."));
 		}
 		else
 		{

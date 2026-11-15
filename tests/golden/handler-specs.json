@@ -12653,6 +12653,39 @@
           "type": "string",
           "required": false,
           "description": "skip (default) returns an existing asset; error refuses"
+        },
+        {
+          "name": "csvString",
+          "type": "string",
+          "required": false,
+          "description": "CSV text to fill the new table from, read by the engine's CSV importer"
+        },
+        {
+          "name": "filePath",
+          "type": "string",
+          "required": false,
+          "description": ".csv file to fill the new table from",
+          "aliases": [
+            "csvPath"
+          ]
+        },
+        {
+          "name": "ignoreExtraFields",
+          "type": "boolean",
+          "required": false,
+          "description": "With csvString or filePath: ignore CSV columns the row struct lacks, as the DataTable Options dialog's Ignore Extra Fields"
+        },
+        {
+          "name": "ignoreMissingFields",
+          "type": "boolean",
+          "required": false,
+          "description": "With csvString or filePath: accept rows missing row-struct fields, as the dialog's Ignore Missing Fields"
+        },
+        {
+          "name": "importKeyField",
+          "type": "string",
+          "required": false,
+          "description": "With csvString or filePath: the column whose values name the rows, as the dialog's Import Key Field"
         }
       ]
     },
@@ -22467,6 +22500,30 @@
           "type": "boolean",
           "required": false,
           "description": "Suppress interactive dialogs (default true)"
+        },
+        {
+          "name": "rowStruct",
+          "type": "string",
+          "required": false,
+          "description": "For a .csv: the DataTable row struct the DataTable Options dialog would ask for (default: the row struct of a DataTable already at the destination). An unattended .csv import with neither is refused"
+        },
+        {
+          "name": "ignoreExtraFields",
+          "type": "boolean",
+          "required": false,
+          "description": "For a .csv with rowStruct: ignore CSV columns the row struct lacks, as the dialog's Ignore Extra Fields"
+        },
+        {
+          "name": "ignoreMissingFields",
+          "type": "boolean",
+          "required": false,
+          "description": "For a .csv with rowStruct: accept rows missing row-struct fields, as the dialog's Ignore Missing Fields"
+        },
+        {
+          "name": "importKeyField",
+          "type": "string",
+          "required": false,
+          "description": "For a .csv with rowStruct: the column whose values name the rows, as the dialog's Import Key Field"
         }
       ]
     },
@@ -34478,6 +34535,58 @@
           "type": "string",
           "required": false,
           "description": "JSON text to replace the table from"
+        },
+        {
+          "name": "csvString",
+          "type": "string",
+          "required": false,
+          "description": "CSV text to replace the table from, read by the engine's CSV importer"
+        },
+        {
+          "name": "filePath",
+          "type": "string",
+          "required": false,
+          "description": ".csv (or .json) file to replace the table from",
+          "aliases": [
+            "csvPath"
+          ]
+        },
+        {
+          "name": "ignoreExtraFields",
+          "type": "boolean",
+          "required": false,
+          "description": "CSV only: ignore columns the row struct lacks, as the DataTable Options dialog's Ignore Extra Fields"
+        },
+        {
+          "name": "ignoreMissingFields",
+          "type": "boolean",
+          "required": false,
+          "description": "CSV only: accept rows missing row-struct fields, as the dialog's Ignore Missing Fields"
+        },
+        {
+          "name": "importKeyField",
+          "type": "string",
+          "required": false,
+          "description": "CSV only: the column whose values name the rows, as the dialog's Import Key Field"
+        }
+      ],
+      "choices": [
+        {
+          "mode": "exactlyOne",
+          "branches": [
+            [
+              "jsonString"
+            ],
+            [
+              "jsonPath"
+            ],
+            [
+              "csvString"
+            ],
+            [
+              "filePath"
+            ]
+          ]
         }
       ]
     },
@@ -37861,6 +37970,54 @@
               "description": "Whether the row ends up ticked"
             }
           ]
+        },
+        {
+          "name": "combos",
+          "type": "array",
+          "required": false,
+          "description": "The dialog's pickers to set before anything else, through each picker's own list; indices and options come from list_dialogs, and the value each picker then shows is checked",
+          "items": "object",
+          "fields": [
+            {
+              "name": "index",
+              "type": "number",
+              "required": true,
+              "description": "Picker index from list_dialogs"
+            },
+            {
+              "name": "option",
+              "type": "string",
+              "required": false,
+              "description": "Option to select, by its label, matched exactly first, then ignoring case"
+            },
+            {
+              "name": "optionIndex",
+              "type": "number",
+              "required": false,
+              "description": "Option to select, by its index in the picker's options"
+            }
+          ]
+        },
+        {
+          "name": "textFields",
+          "type": "array",
+          "required": false,
+          "description": "The dialog's text fields to set after the pickers, each committed as Enter commits it; indices come from list_dialogs",
+          "items": "object",
+          "fields": [
+            {
+              "name": "index",
+              "type": "number",
+              "required": true,
+              "description": "Text field index from list_dialogs"
+            },
+            {
+              "name": "text",
+              "type": "string",
+              "required": true,
+              "description": "The text the field ends up holding"
+            }
+          ]
         }
       ],
       "choices": [
@@ -37875,6 +38032,12 @@
             ],
             [
               "dialogAction"
+            ],
+            [
+              "combos"
+            ],
+            [
+              "textFields"
             ]
           ]
         }
