@@ -26,6 +26,8 @@
 #include "Factories/TextureFactory.h"
 #include "Factories/ReimportTextureFactory.h"
 #include "Factories/CSVImportFactory.h"
+#include "EditorFramework/AssetImportData.h"
+#include "HandlerLogCapture.h"
 #include "EditorReimportHandler.h"
 #include "Curves/RichCurve.h"
 #include "Curves/SimpleCurve.h"
@@ -877,6 +879,139 @@ TSharedPtr<FJsonValue> FAssetHandlers::ImportAnimation(const TSharedPtr<FJsonObj
 // ships. The factory class is resolved at runtime, so no module dependency.
 // factoryProperties is how a caller turns off a factory's own options dialog,
 // which unattended mode would otherwise cancel along with the import.
+/**
+ * A DataTable's rows from CSV, without the DataTable Options dialog.
+ *
+ * Dropping a .csv on the Content Browser asks for a row type and three import
+ * options in a modal (SCSVImportOptions): Ignore Extra Fields, Ignore Missing
+ * Fields and Import Key Field. These carry the same three as parameters and
+ * hand the text to the engine's own CSV reader, UDataTable::
+ * CreateTableFromCSVString, which is what the dialog's Apply ends in. The
+ * options are set on the table the way the dialog sets them (the factory
+ * copies them onto the new table), so a later reimport keeps them.
+ *
+ * Named namespace, for the unity build: an anonymous one merges with every
+ * other file of the blob.
+ */
+namespace MCPDataTableCsv
+{
+	struct FImportOptions
+	{
+		bool bHasIgnoreExtraFields = false;
+		bool bIgnoreExtraFields = false;
+		bool bHasIgnoreMissingFields = false;
+		bool bIgnoreMissingFields = false;
+		bool bHasImportKeyField = false;
+		FString ImportKeyField;
+
+		bool IsSet() const { return bHasIgnoreExtraFields || bHasIgnoreMissingFields || bHasImportKeyField; }
+	};
+
+	static FImportOptions ReadOptions(const TSharedPtr<FJsonObject>& Params)
+	{
+		FImportOptions Options;
+		Options.bHasIgnoreExtraFields = TryGetBoolParam(Params, TEXT("ignoreExtraFields"), Options.bIgnoreExtraFields);
+		Options.bHasIgnoreMissingFields = TryGetBoolParam(Params, TEXT("ignoreMissingFields"), Options.bIgnoreMissingFields);
+		Options.bHasImportKeyField = TryGetStringParam(Params, TEXT("importKeyField"), Options.ImportKeyField);
+		return Options;
+	}
+
+	/** Set the options on the table, as the dialog's details panel sets them. */
+	static void Apply(UDataTable* Table, const FImportOptions& Options)
+	{
+		if (Options.bHasIgnoreExtraFields) Table->bIgnoreExtraFields = Options.bIgnoreExtraFields;
+		if (Options.bHasIgnoreMissingFields) Table->bIgnoreMissingFields = Options.bIgnoreMissingFields;
+		if (Options.bHasImportKeyField) Table->ImportKeyField = Options.ImportKeyField;
+	}
+
+	/** The options as the table now holds them, for the response. */
+	static TSharedPtr<FJsonObject> Describe(const UDataTable* Table)
+	{
+		TSharedPtr<FJsonObject> Out = MakeShared<FJsonObject>();
+		Out->SetBoolField(TEXT("ignoreExtraFields"), Table->bIgnoreExtraFields);
+		Out->SetBoolField(TEXT("ignoreMissingFields"), Table->bIgnoreMissingFields);
+		Out->SetStringField(TEXT("importKeyField"), Table->ImportKeyField);
+		return Out;
+	}
+
+	/**
+	 * The CSV text a call names: csvString, or a .csv file at filePath. Returns
+	 * an error value on failure; on success OutCsv holds the text and
+	 * OutSourceFile the file it came from, if any.
+	 */
+	static TSharedPtr<FJsonValue> LoadCsv(bool bHasCsvString, const FString& CsvString, bool bHasFilePath, const FString& FilePath,
+		FString& OutCsv, FString& OutSourceFile)
+	{
+		OutSourceFile.Reset();
+		if (bHasCsvString)
+		{
+			OutCsv = CsvString;
+			return nullptr;
+		}
+		if (!bHasFilePath) return MCPError(TEXT("Missing csvString or filePath"));
+		if (!FPaths::GetExtension(FilePath).Equals(TEXT("csv"), ESearchCase::IgnoreCase))
+		{
+			return MCPError(FString::Printf(TEXT("filePath must name a .csv file; got %s"), *FilePath));
+		}
+		if (!FPaths::FileExists(FilePath)) return MCPError(FString::Printf(TEXT("File not found: %s"), *FilePath));
+		if (!FFileHelper::LoadFileToString(OutCsv, *FilePath))
+		{
+			return MCPError(FString::Printf(TEXT("Failed to read file: %s"), *FilePath));
+		}
+		OutSourceFile = FPaths::ConvertRelativePathToFull(FilePath);
+		return nullptr;
+	}
+
+	/** Replace the table's rows from the CSV. Returns the importer's problems. */
+	static TArray<FString> Import(UDataTable* Table, const FString& Csv, const FImportOptions& Options, const FString& SourceFile)
+	{
+		Table->Modify();
+		Apply(Table, Options);
+		TArray<FString> Problems = Table->CreateTableFromCSVString(Csv);
+		if (!SourceFile.IsEmpty() && Table->AssetImportData)
+		{
+			// What the factory records, so asset(reimport_asset) finds the file again.
+			Table->AssetImportData->Update(SourceFile);
+		}
+		Table->MarkPackageDirty();
+		return Problems;
+	}
+
+	static TArray<TSharedPtr<FJsonValue>> ProblemsJson(const TArray<FString>& Problems)
+	{
+		TArray<TSharedPtr<FJsonValue>> Out;
+		for (const FString& Problem : Problems)
+		{
+			Out.Add(MakeShared<FJsonValueString>(Problem));
+		}
+		return Out;
+	}
+
+	/**
+	 * The problems UCSVImportFactory logged for an import: it writes each as
+	 * "<n>:<problem>" to LogCSVImportFactory and, unattended, shows nothing
+	 * else, so the log is the only place they reach.
+	 */
+	static TArray<FString> FactoryProblems(const TArray<FMCPScopedLogCapture::FLine>& Lines)
+	{
+		TArray<FString> Out;
+		for (const FMCPScopedLogCapture::FLine& Line : Lines)
+		{
+			int32 Colon = INDEX_NONE;
+			if (!Line.Message.FindChar(TEXT(':'), Colon) || Colon == 0) continue;
+			const FString Number = Line.Message.Left(Colon);
+			if (!Number.IsNumeric()) continue;
+			Out.Add(Line.Message.Mid(Colon + 1).TrimStartAndEnd());
+		}
+		for (const FMCPScopedLogCapture::FLine& Line : Lines)
+		{
+			// The factory's own refusal, logged as an error, is a problem too.
+			if (Line.Verbosity == TEXT("Error")) Out.AddUnique(Line.Message.TrimStartAndEnd());
+		}
+		return Out;
+	}
+}
+
 TSharedPtr<FJsonValue> FAssetHandlers::ImportFile(const TSharedPtr<FJsonObject>& Params)
 {
 	FString FileName;
@@ -894,6 +1029,8 @@ TSharedPtr<FJsonValue> FAssetHandlers::ImportFile(const TSharedPtr<FJsonObject>&
 	// An import that is never written is lost on editor close, so it saves by default like every create (#1280).
 	const bool bSaveImported = OptionalBool(Params, TEXT("save"), true);
 	const FString AssetName = OptionalString(Params, TEXT("name"));
+	const FString RowStructSpec = OptionalString(Params, TEXT("rowStruct"));
+	const MCPDataTableCsv::FImportOptions CsvOptions = MCPDataTableCsv::ReadOptions(Params);
 
 	DestinationPath.RemoveFromEnd(TEXT("/"));
 	if (MCPIsProtectedAssetPath(DestinationPath)) return MCPProtectedPathError(DestinationPath);
@@ -901,6 +1038,12 @@ TSharedPtr<FJsonValue> FAssetHandlers::ImportFile(const TSharedPtr<FJsonObject>&
 	if (!FPaths::FileExists(FileName))
 	{
 		return MCPError(FString::Printf(TEXT("File not found: %s"), *FileName));
+	}
+
+	const bool bCsvFile = FPaths::GetExtension(FileName).Equals(TEXT("csv"), ESearchCase::IgnoreCase);
+	if ((!RowStructSpec.IsEmpty() || CsvOptions.IsSet()) && !bCsvFile)
+	{
+		return MCPError(TEXT("rowStruct, ignoreExtraFields, ignoreMissingFields and importKeyField describe a .csv import into a DataTable; this file is not a .csv."));
 	}
 
 	UFactory* Factory = nullptr;
@@ -932,6 +1075,76 @@ TSharedPtr<FJsonValue> FAssetHandlers::ImportFile(const TSharedPtr<FJsonObject>&
 		{
 			return MCPError(FString::Printf(TEXT("%s does not import .%s files. It accepts: %s"),
 				*FactoryClass->GetName(), *Ext, *FString::Join(Extensions, TEXT(", "))));
+		}
+	}
+
+	// A .csv into a DataTable. The factory asks for the row type in its
+	// DataTable Options dialog unless it is told it, and unattended import
+	// cancels that dialog and the import with it. So the row type is given
+	// (rowStruct), or taken from the DataTable already at the destination,
+	// and an unattended .csv import with neither is refused here rather than
+	// left to produce nothing.
+	UScriptStruct* CsvRowStruct = nullptr;
+	UDataTable* ExistingCsvTable = nullptr;
+	const bool bCsvFactory = bCsvFile && (!Factory || Factory->IsA<UCSVImportFactory>());
+	if (bCsvFactory)
+	{
+		const FString DestName = AssetName.IsEmpty() ? FPaths::GetBaseFilename(FileName) : AssetName;
+		ExistingCsvTable = LoadAssetByPath<UDataTable>(FString::Printf(TEXT("%s/%s.%s"), *DestinationPath, *DestName, *DestName));
+		if (!RowStructSpec.IsEmpty())
+		{
+			if (!bAutomated)
+			{
+				return MCPError(TEXT("rowStruct answers the DataTable Options dialog and automated=false asks for it: pass one or the other."));
+			}
+			FString ResolveError;
+			CsvRowStruct = MCPResolveScriptStruct(RowStructSpec, &ResolveError);
+			if (!CsvRowStruct)
+			{
+				return MCPError(ResolveError.IsEmpty() ? FString::Printf(TEXT("Row struct not found: %s"), *RowStructSpec) : ResolveError);
+			}
+		}
+		else if (bAutomated && ExistingCsvTable && ExistingCsvTable->RowStruct)
+		{
+			CsvRowStruct = ExistingCsvTable->RowStruct;
+		}
+		if (bAutomated && !CsvRowStruct && !bHasFactoryProperties)
+		{
+			return MCPError(
+				TEXT("A .csv becomes a DataTable only with a row type, which the importer otherwise asks for in its DataTable Options dialog, ")
+				TEXT("and an unattended import cancels that dialog. Pass rowStruct (and ignoreExtraFields, ignoreMissingFields, importKeyField as the dialog offers), ")
+				TEXT("or use asset(create_datatable) or asset(reimport_datatable) with csvString or filePath. For a CurveTable or curve, pass ")
+				TEXT("factoryClass=CSVImportFactory with factoryProperties AutomatedImportSettings."));
+		}
+		if (CsvRowStruct)
+		{
+			if (!Factory)
+			{
+				Factory = NewObject<UCSVImportFactory>(GetTransientPackage());
+			}
+			UCSVImportFactory* CsvFactory = CastChecked<UCSVImportFactory>(Factory);
+			CsvFactory->AutomatedImportSettings.ImportType = ECSVImportType::ECSV_DataTable;
+			CsvFactory->AutomatedImportSettings.ImportRowStruct = CsvRowStruct;
+			if (CsvOptions.IsSet())
+			{
+				// A replaced table's own options win inside the factory, so
+				// they are set on it; a new one takes them from the factory's
+				// option table, as the dialog's details panel hands them over.
+				if (ExistingCsvTable)
+				{
+					ExistingCsvTable->Modify();
+					MCPDataTableCsv::Apply(ExistingCsvTable, CsvOptions);
+				}
+				else
+				{
+					CsvFactory->DataTableImportOptions = NewObject<UDataTable>(CsvFactory);
+					MCPDataTableCsv::Apply(CsvFactory->DataTableImportOptions, CsvOptions);
+				}
+			}
+		}
+		else if (CsvOptions.IsSet())
+		{
+			return MCPError(TEXT("ignoreExtraFields, ignoreMissingFields and importKeyField need rowStruct (or a DataTable at the destination to take it from)."));
 		}
 	}
 	FGCRootScope FactoryRoot(Factory);
@@ -970,7 +1183,13 @@ TSharedPtr<FJsonValue> FAssetHandlers::ImportFile(const TSharedPtr<FJsonObject>&
 	FAssetToolsModule& AssetToolsModule = FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools"));
 	TArray<UAssetImportTask*> Tasks;
 	Tasks.Add(Task);
-	AssetToolsModule.Get().ImportAssetTasks(Tasks);
+	TArray<FString> CsvProblems;
+	{
+		// The CSV importer reports its problems only to the log when unattended.
+		FMCPScopedLogCapture CsvLog({ TEXT("LogCSVImportFactory") });
+		AssetToolsModule.Get().ImportAssetTasks(Tasks);
+		if (bCsvFactory) CsvProblems = MCPDataTableCsv::FactoryProblems(CsvLog.GetLines());
+	}
 
 	TArray<TSharedPtr<FJsonValue>> ImportedPaths;
 	TArray<TSharedPtr<FJsonValue>> ImportedRows;
@@ -1012,12 +1231,27 @@ TSharedPtr<FJsonValue> FAssetHandlers::ImportFile(const TSharedPtr<FJsonObject>&
 		Result->SetBoolField(TEXT("success"), false);
 		Result->SetStringField(TEXT("error"), TEXT("The import produced assets, but at least one could not be saved; its row carries saveError."));
 	}
+	if (CsvRowStruct)
+	{
+		Result->SetStringField(TEXT("rowStruct"), CsvRowStruct->GetPathName());
+	}
+	if (bCsvFactory)
+	{
+		Result->SetArrayField(TEXT("problems"), MCPDataTableCsv::ProblemsJson(CsvProblems));
+		if (CsvProblems.Num() > 0 && ImportedPaths.Num() > 0)
+		{
+			Result->SetBoolField(TEXT("success"), false);
+			Result->SetStringField(TEXT("error"), FString::Printf(
+				TEXT("The CSV import produced the asset but reported %d problem(s); see problems."), CsvProblems.Num()));
+		}
+	}
 	if (ImportedPaths.Num() == 0)
 	{
-		Result->SetStringField(TEXT("error"),
-			TEXT("Import task completed but no assets were produced. A factory that raises its own options dialog is cancelled in ")
-			TEXT("unattended mode: set the property that makes it use the supplied options through factoryProperties. ")
-			TEXT("The output log carries the factory's reason."));
+		Result->SetStringField(TEXT("error"), CsvProblems.Num() > 0
+			? FString::Printf(TEXT("Import produced no assets. The CSV importer said: %s"), *FString::Join(CsvProblems, TEXT(" | ")))
+			: FString(TEXT("Import task completed but no assets were produced. A factory that raises its own options dialog is cancelled in ")
+				TEXT("unattended mode: set the property that makes it use the supplied options through factoryProperties. ")
+				TEXT("The output log carries the factory's reason.")));
 	}
 
 	EmitImportedAssetsRollback(Result, ImportedPaths);
@@ -2109,6 +2343,13 @@ TSharedPtr<FJsonValue> FAssetHandlers::AddCurveTableKey(const TSharedPtr<FJsonOb
 
 TSharedPtr<FJsonValue> FAssetHandlers::CreateDataTable(const TSharedPtr<FJsonObject>& Params)
 {
+	// Every parameter is read before anything can fail (#1057).
+	FString CsvString;
+	const bool bHasCsvString = TryGetStringParam(Params, TEXT("csvString"), CsvString) && !CsvString.IsEmpty();
+	FString CsvFile;
+	const bool bHasCsvFile = TryGetStringParam(Params, TEXT("filePath"), CsvFile) && !CsvFile.IsEmpty();
+	const MCPDataTableCsv::FImportOptions CsvOptions = MCPDataTableCsv::ReadOptions(Params);
+
 	FString Name;
 	if (auto Err = RequireString(Params, TEXT("name"), Name)) return Err;
 
@@ -2117,6 +2358,23 @@ TSharedPtr<FJsonValue> FAssetHandlers::CreateDataTable(const TSharedPtr<FJsonObj
 
 	FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/DataTables"));
 	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
+
+	// Read the CSV before anything is created, so a missing file creates nothing.
+	FString Csv;
+	FString CsvSource;
+	const bool bWithRows = bHasCsvString || bHasCsvFile;
+	if (bHasCsvString && bHasCsvFile)
+	{
+		return MCPError(TEXT("Pass csvString or filePath, not both."));
+	}
+	if (bWithRows)
+	{
+		if (auto Err = MCPDataTableCsv::LoadCsv(bHasCsvString, CsvString, bHasCsvFile, CsvFile, Csv, CsvSource)) return Err;
+	}
+	else if (CsvOptions.IsSet())
+	{
+		return MCPError(TEXT("ignoreExtraFields, ignoreMissingFields and importKeyField shape a CSV import; pass csvString or filePath with them."));
+	}
 
 	// #1088: FTableRowBase and /Script/Engine.FTableRowBase are the spellings
 	// callers copy from headers; the UScriptStruct is named TableRowBase.
@@ -2149,6 +2407,13 @@ TSharedPtr<FJsonValue> FAssetHandlers::CreateDataTable(const TSharedPtr<FJsonObj
 					ExistingObj->SetStringField(TEXT("rowStruct"), Existing->RowStruct ? Existing->RowStruct->GetName() : TEXT(""));
 					ExistingObj->SetNumberField(TEXT("rowCount"), Existing->GetRowMap().Num());
 				}
+				if (bWithRows)
+				{
+					// An existing table keeps its rows: replacing them is reimport_datatable's job, not a skip's.
+					ExistingObj->SetBoolField(TEXT("rowsImported"), false);
+					ExistingObj->SetStringField(TEXT("note"),
+						TEXT("The table already existed, so the CSV was not imported. Replace its rows with asset(reimport_datatable, csvString or filePath)."));
+				}
 			}
 		}
 		return Created.EarlyReturn;
@@ -2162,6 +2427,27 @@ TSharedPtr<FJsonValue> FAssetHandlers::CreateDataTable(const TSharedPtr<FJsonObj
 	Result->SetStringField(TEXT("packagePath"), PackagePath);
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetStringField(TEXT("rowStruct"), ScriptStruct->GetName());
+	if (bWithRows)
+	{
+		const TArray<FString> Problems = MCPDataTableCsv::Import(DataTable, Csv, CsvOptions, CsvSource);
+		Result->SetBoolField(TEXT("rowsImported"), true);
+		Result->SetStringField(TEXT("format"), TEXT("csv"));
+		if (!CsvSource.IsEmpty()) Result->SetStringField(TEXT("sourceFile"), CsvSource);
+		Result->SetObjectField(TEXT("importOptions"), MCPDataTableCsv::Describe(DataTable));
+		Result->SetArrayField(TEXT("problems"), MCPDataTableCsv::ProblemsJson(Problems));
+		if (Problems.Num() > 0)
+		{
+			// The table exists and holds whatever rows the importer managed; the
+			// problems say what it could not read, and the inverse still deletes it.
+			Result->SetBoolField(TEXT("success"), false);
+			Result->SetStringField(TEXT("error"), FString::Printf(
+				TEXT("DataTable created, but the CSV import reported %d problem(s); see problems."), Problems.Num()));
+		}
+		FString SaveError;
+		const bool bSaved = SaveAssetPackageChecked(DataTable, SaveError);
+		Result->SetBoolField(TEXT("saved"), bSaved);
+		if (!bSaved) Result->SetStringField(TEXT("saveError"), SaveError);
+	}
 	Result->SetNumberField(TEXT("rowCount"), DataTable ? DataTable->GetRowMap().Num() : 0);
 
 	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
@@ -2485,16 +2771,75 @@ TSharedPtr<FJsonValue> FAssetHandlers::ReimportDataTable(const TSharedPtr<FJsonO
 	const bool bHasJsonString = TryGetStringParam(Params, TEXT("jsonString"), JsonString) && !JsonString.IsEmpty();
 	FString JsonPath;
 	const bool bHasJsonPath = TryGetStringParam(Params, TEXT("jsonPath"), JsonPath) && !JsonPath.IsEmpty();
+	FString CsvString;
+	const bool bHasCsvString = TryGetStringParam(Params, TEXT("csvString"), CsvString) && !CsvString.IsEmpty();
+	FString FilePath;
+	const bool bHasFilePath = TryGetStringParam(Params, TEXT("filePath"), FilePath) && !FilePath.IsEmpty();
+	const MCPDataTableCsv::FImportOptions CsvOptions = MCPDataTableCsv::ReadOptions(Params);
 
 	FString AssetPath;
 	UDataTable* DataTable = nullptr;
 	if (auto Err = MCPImportLoadTypedAsset(Params, TEXT("DataTable"), AssetPath, DataTable)) return Err;
 
+	// A .json filePath is the JSON route by another name; only a .csv takes the CSV route.
+	const bool bFileIsJson = bHasFilePath && FPaths::GetExtension(FilePath).Equals(TEXT("json"), ESearchCase::IgnoreCase);
+	if (bFileIsJson)
+	{
+		JsonPath = FilePath;
+	}
+	const bool bCsv = bHasCsvString || (bHasFilePath && !bFileIsJson);
+	if (!bCsv && CsvOptions.IsSet())
+	{
+		return MCPError(TEXT("ignoreExtraFields, ignoreMissingFields and importKeyField shape a CSV import; pass csvString or a .csv filePath with them."));
+	}
+
+	if (bCsv)
+	{
+		if (!DataTable->RowStruct)
+		{
+			return MCPError(FString::Printf(TEXT("%s has no row struct, so there is nothing to read CSV columns into."), *AssetPath));
+		}
+		FString Csv;
+		FString CsvSource;
+		if (auto Err = MCPDataTableCsv::LoadCsv(bHasCsvString, CsvString, bHasFilePath, FilePath, Csv, CsvSource)) return Err;
+
+		// The same snapshot the JSON route takes: the importer empties the
+		// table first, so the rows standing now are the only way back.
+		const int32 PriorCsvRowCount = DataTable->GetRowMap().Num();
+		const FString PriorCsvJson = PriorCsvRowCount > 0
+			? DataTable->GetTableAsJSON(EDataTableExportFlags::UseJsonObjectsForStructs)
+			: FString();
+
+		const TArray<FString> Problems = MCPDataTableCsv::Import(DataTable, Csv, CsvOptions, CsvSource);
+
+		auto Result = MCPSuccess();
+		MCPSetUpdated(Result);
+		Result->SetStringField(TEXT("assetPath"), AssetPath);
+		Result->SetStringField(TEXT("format"), TEXT("csv"));
+		if (!CsvSource.IsEmpty()) Result->SetStringField(TEXT("sourceFile"), CsvSource);
+		Result->SetStringField(TEXT("rowStruct"), DataTable->RowStruct->GetName());
+		Result->SetNumberField(TEXT("rowCount"), DataTable->GetRowMap().Num());
+		Result->SetObjectField(TEXT("importOptions"), MCPDataTableCsv::Describe(DataTable));
+		Result->SetArrayField(TEXT("problems"), MCPDataTableCsv::ProblemsJson(Problems));
+		if (Problems.Num() > 0)
+		{
+			Result->SetBoolField(TEXT("success"), false);
+			Result->SetStringField(TEXT("error"), FString::Printf(
+				TEXT("Reimport from CSV reported %d problem(s); see problems. The table holds whatever rows the importer managed."), Problems.Num()));
+		}
+		else
+		{
+			Result->SetStringField(TEXT("message"), TEXT("DataTable reimported from CSV"));
+		}
+		EmitPriorDataTableRollback(Result, AssetPath, PriorCsvJson, PriorCsvRowCount);
+		return MCPResult(Result);
+	}
+
 	// Get JSON string from either inline jsonString or from a file path
 	if (!bHasJsonString)
 	{
 		JsonString.Reset();
-		if (bHasJsonPath)
+		if (bHasJsonPath || bFileIsJson)
 		{
 			if (!FPaths::FileExists(JsonPath))
 			{
@@ -2507,7 +2852,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::ReimportDataTable(const TSharedPtr<FJsonO
 		}
 		else
 		{
-			return MCPError(TEXT("Missing 'jsonString' or 'jsonPath' parameter"));
+			return MCPError(TEXT("Missing a source: pass jsonString, jsonPath, csvString or filePath"));
 		}
 	}
 
@@ -2532,6 +2877,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::ReimportDataTable(const TSharedPtr<FJsonO
 		TSharedPtr<FJsonObject> ErrResult = MakeShared<FJsonObject>();
 		ErrResult->SetBoolField(TEXT("success"), false);
 		ErrResult->SetArrayField(TEXT("errors"), ErrorsArray);
+		ErrResult->SetArrayField(TEXT("problems"), ErrorsArray);
 		ErrResult->SetStringField(TEXT("error"), FString::Printf(TEXT("Reimport completed with %d error(s)"), Errors.Num()));
 		// CreateTableFromJSONString emptied the table before it hit these
 		// errors, so this failure is MORE destructive than the success path.

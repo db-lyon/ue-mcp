@@ -640,6 +640,10 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("replaceExisting"), EType::Boolean, TEXT("Replace an asset already at the destination (default true)")),
 		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save each imported asset and report saved per asset (default true; false leaves them dirty)")),
 		MCPParam::Optional(TEXT("automated"), EType::Boolean, TEXT("Suppress interactive dialogs (default true)")),
+		MCPParam::Optional(TEXT("rowStruct"), EType::String, TEXT("For a .csv: the DataTable row struct the DataTable Options dialog would ask for (default: the row struct of a DataTable already at the destination). An unattended .csv import with neither is refused")),
+		MCPParam::Optional(TEXT("ignoreExtraFields"), EType::Boolean, TEXT("For a .csv with rowStruct: ignore CSV columns the row struct lacks, as the dialog's Ignore Extra Fields")),
+		MCPParam::Optional(TEXT("ignoreMissingFields"), EType::Boolean, TEXT("For a .csv with rowStruct: accept rows missing row-struct fields, as the dialog's Ignore Missing Fields")),
+		MCPParam::Optional(TEXT("importKeyField"), EType::String, TEXT("For a .csv with rowStruct: the column whose values name the rows, as the dialog's Import Key Field")),
 	});
 
 	// Texture handlers
@@ -841,6 +845,11 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Required(TEXT("rowStruct"), EType::String, TEXT("Row struct, e.g. /Script/Module.MyRow or a UserDefinedStruct path")),
 		MCPParam::Optional(TEXT("packagePath"), EType::String, TEXT("Destination folder (default /Game/DataTables)")),
 		MCPParam::Optional(TEXT("onConflict"), EType::String, TEXT("skip (default) returns an existing asset; error refuses")),
+		MCPParam::Optional(TEXT("csvString"), EType::String, TEXT("CSV text to fill the new table from, read by the engine's CSV importer")),
+		MCPParam::Optional(TEXT("filePath"), EType::String, TEXT(".csv file to fill the new table from")).Alias(TEXT("csvPath")),
+		MCPParam::Optional(TEXT("ignoreExtraFields"), EType::Boolean, TEXT("With csvString or filePath: ignore CSV columns the row struct lacks, as the DataTable Options dialog's Ignore Extra Fields")),
+		MCPParam::Optional(TEXT("ignoreMissingFields"), EType::Boolean, TEXT("With csvString or filePath: accept rows missing row-struct fields, as the dialog's Ignore Missing Fields")),
+		MCPParam::Optional(TEXT("importKeyField"), EType::String, TEXT("With csvString or filePath: the column whose values name the rows, as the dialog's Import Key Field")),
 	});
 	Registry.RegisterHandler(TEXT("read_datatable"), &ReadDataTable, {
 		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("DataTable asset path")).Alias(TEXT("path")),
@@ -853,7 +862,12 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("DataTable asset path")).Alias(TEXT("path")),
 		MCPParam::Optional(TEXT("jsonPath"), EType::String, TEXT("JSON file to replace the table from")),
 		MCPParam::Optional(TEXT("jsonString"), EType::String, TEXT("JSON text to replace the table from")),
-	});
+		MCPParam::Optional(TEXT("csvString"), EType::String, TEXT("CSV text to replace the table from, read by the engine's CSV importer")),
+		MCPParam::Optional(TEXT("filePath"), EType::String, TEXT(".csv (or .json) file to replace the table from")).Alias(TEXT("csvPath")),
+		MCPParam::Optional(TEXT("ignoreExtraFields"), EType::Boolean, TEXT("CSV only: ignore columns the row struct lacks, as the DataTable Options dialog's Ignore Extra Fields")),
+		MCPParam::Optional(TEXT("ignoreMissingFields"), EType::Boolean, TEXT("CSV only: accept rows missing row-struct fields, as the dialog's Ignore Missing Fields")),
+		MCPParam::Optional(TEXT("importKeyField"), EType::String, TEXT("CSV only: the column whose values name the rows, as the dialog's Import Key Field")),
+	}, MCPSpec::ExactlyOne({ { TEXT("jsonString") }, { TEXT("jsonPath") }, { TEXT("csvString") }, { TEXT("filePath") } }));
 	// #437: single-row mutation. Append a new row or overwrite an existing one
 	// without exporting and re-importing the whole table.
 	Registry.RegisterHandler(TEXT("set_datatable_row"), &SetDataTableRow, {
