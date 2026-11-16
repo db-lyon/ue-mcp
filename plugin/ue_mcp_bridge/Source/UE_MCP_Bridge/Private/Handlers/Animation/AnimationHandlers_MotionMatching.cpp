@@ -343,7 +343,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::AddPoseSearchSchemaPoseChannel(const 
 	}
 #else
 	UPoseSearchFeatureChannel* Channel = MCPNewPoseSearchChannel(Schema, TEXT("/Script/PoseSearch.PoseSearchFeatureChannel_Pose"));
-	if (!Channel) return MCPError(TEXT("PoseSearchFeatureChannel_Pose class is not loaded - is the PoseSearch plugin enabled?"));
+	if (!Channel) return MCPPluginUnavailableError(TEXT("PoseSearchFeatureChannel_Pose class"), TEXT("PoseSearch"));
 
 	FString PropertyError;
 	if (bHasChannelWeight && !MCPSetChannelProperty(Channel, TEXT("Weight"), MakeShared<FJsonValueNumber>(ChannelWeight), PropertyError))
@@ -438,7 +438,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::AddPoseSearchSchemaTrajectoryChannel(
 	}
 #else
 	UPoseSearchFeatureChannel* Channel = MCPNewPoseSearchChannel(Schema, TEXT("/Script/PoseSearch.PoseSearchFeatureChannel_Trajectory"));
-	if (!Channel) return MCPError(TEXT("PoseSearchFeatureChannel_Trajectory class is not loaded - is the PoseSearch plugin enabled?"));
+	if (!Channel) return MCPPluginUnavailableError(TEXT("PoseSearchFeatureChannel_Trajectory class"), TEXT("PoseSearch"));
 
 	FString PropertyError;
 	if (bHasChannelWeight && !MCPSetChannelProperty(Channel, TEXT("Weight"), MakeShared<FJsonValueNumber>(ChannelWeight), PropertyError))

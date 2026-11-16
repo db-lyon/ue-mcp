@@ -37,7 +37,7 @@ namespace
 	const TCHAR* const LASchemaInputPin = TEXT("InObservationSchema");
 	const TCHAR* const LAResultPin = TEXT("OutObservationSchemaElement");
 	const TCHAR* const LAPluginOffError =
-		TEXT("Learning Agents is not available: enable the Learning Agents plugin (LearningAgents) for this project and restart the editor.");
+		TEXT("Learning Agents is not available: the LearningAgents plugin is not loaded. Enable it with project(enable_plugin, pluginName=\"LearningAgents\"), then restart the editor with editor(restart_editor).");
 
 	UClass* LAFindClass(const TCHAR* Path)
 	{

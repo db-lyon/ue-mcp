@@ -210,7 +210,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::CreateInputAction(const TSharedPtr<FJs
 	UClass* InputActionClass = FindObject<UClass>(nullptr, TEXT("/Script/EnhancedInput.InputAction"));
 	if (!InputActionClass)
 	{
-		return MCPError(TEXT("InputAction class not found. Enable EnhancedInput plugin."));
+		return MCPPluginUnavailableError(TEXT("InputAction class"), TEXT("EnhancedInput"));
 	}
 
 	auto Created = MCPCreateAssetIdempotent<UObject>(Name, PackagePath, OnConflict, TEXT("InputAction"), InputActionClass, nullptr);
@@ -280,7 +280,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::CreateInputMappingContext(const TShare
 	UClass* IMCClass = FindObject<UClass>(nullptr, TEXT("/Script/EnhancedInput.InputMappingContext"));
 	if (!IMCClass)
 	{
-		return MCPError(TEXT("InputMappingContext class not found. Enable EnhancedInput plugin."));
+		return MCPPluginUnavailableError(TEXT("InputMappingContext class"), TEXT("EnhancedInput"));
 	}
 
 	auto Created = MCPCreateAssetIdempotent<UObject>(Name, PackagePath, OnConflict, TEXT("InputMappingContext"), IMCClass, nullptr);

@@ -13,6 +13,7 @@
 #include "Modules/ModuleManager.h"
 #include "HandlerMVVMBackend.h"
 #include "HandlerParams.h"
+#include "HandlerWayForward.h"
 #include "HandlerEngineVersion.h"
 
 #if WITH_UEMCP_MVVM
@@ -838,7 +839,8 @@ namespace UEMCPMVVM
 			UMVVMEditorSubsystem* Editor = Subsystem();
 			if (!Editor || !WidgetBlueprint)
 			{
-				return FMCPMVVMOutcome::Failure(TEXT("The viewmodel editor subsystem is not available in this editor session."));
+				return FMCPMVVMOutcome::Failure(TEXT("The viewmodel editor subsystem is not available in this editor session. ")
+					+ MCPEnablePluginStep(TEXT("ModelViewViewModel")));
 			}
 			if (Operation == TEXT("list_widget_viewmodels")) return ListViewModels(Editor, WidgetBlueprint);
 			if (Operation == TEXT("add_widget_viewmodel")) return AddViewModel(Editor, WidgetBlueprint, Params);

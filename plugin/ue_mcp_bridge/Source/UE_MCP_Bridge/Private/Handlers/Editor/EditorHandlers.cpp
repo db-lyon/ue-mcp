@@ -1254,7 +1254,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::ExecutePython(const TSharedPtr<FJsonObje
 	IPythonScriptPlugin* PythonPlugin = IPythonScriptPlugin::Get();
 	if (!PythonPlugin || !PythonPlugin->IsPythonAvailable())
 	{
-		return MCPError(TEXT("Python scripting is not available"));
+		return MCPError(TEXT("Python scripting is not available: the Python Editor Script Plugin is not running. ") + MCPEnablePluginStep(TEXT("PythonScriptPlugin")));
 	}
 
 	FPythonCommandEx PythonCommand;
@@ -1350,7 +1350,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::RunPythonFile(const TSharedPtr<FJsonObje
 	IPythonScriptPlugin* PythonPlugin = IPythonScriptPlugin::Get();
 	if (!PythonPlugin || !PythonPlugin->IsPythonAvailable())
 	{
-		return MCPError(TEXT("Python scripting is not available"));
+		return MCPError(TEXT("Python scripting is not available: the Python Editor Script Plugin is not running. ") + MCPEnablePluginStep(TEXT("PythonScriptPlugin")));
 	}
 
 	// #995: a project script under Tools/ usually holds several independent
@@ -1523,7 +1523,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::PurgePythonModules(const TSharedPtr<FJso
 	IPythonScriptPlugin* PythonPlugin = IPythonScriptPlugin::Get();
 	if (!PythonPlugin || !PythonPlugin->IsPythonAvailable())
 	{
-		return MCPError(TEXT("Python scripting is not available"));
+		return MCPError(TEXT("Python scripting is not available: the Python Editor Script Plugin is not running. ") + MCPEnablePluginStep(TEXT("PythonScriptPlugin")));
 	}
 
 	// Escape the prefix into a Python single-quoted literal.

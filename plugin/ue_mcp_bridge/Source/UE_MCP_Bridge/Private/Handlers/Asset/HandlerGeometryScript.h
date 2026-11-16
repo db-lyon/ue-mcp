@@ -59,9 +59,8 @@ namespace MCPGeometryScript
 	inline TSharedPtr<FJsonValue> UnavailableError(const FString& Detail, const FString& StillWorks = FString())
 	{
 		FString Message = FString::Printf(
-			TEXT("GeometryScripting plugin not available: %s Enable the 'Geometry Script' plugin ")
-				TEXT("(Edit > Plugins > Geometry Script) and restart the editor, then retry."),
-			*Detail);
+			TEXT("GeometryScripting plugin not available: %s %s"),
+			*Detail, *MCPEnablePluginStep(TEXT("GeometryScripting")));
 		if (!StillWorks.IsEmpty())
 		{
 			Message += TEXT(" ") + StillWorks;

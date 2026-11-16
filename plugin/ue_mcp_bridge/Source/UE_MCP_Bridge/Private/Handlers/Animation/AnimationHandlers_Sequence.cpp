@@ -1508,7 +1508,7 @@ static UClass* ResolveAnimationModifierClass(const FString& NameOrPath, UClass* 
 
 	if (Short.Equals(TEXT("DistanceCurveModifier"), ESearchCase::IgnoreCase))
 	{
-		OutHint = TEXT(" - enable the 'Animation Locomotion Library' plugin (it is off by default) and restart the editor");
+		OutHint = TEXT(" - the 'Animation Locomotion Library' plugin is off by default. ") + MCPEnablePluginStep(TEXT("AnimationLocomotionLibrary"));
 	}
 	return nullptr;
 }

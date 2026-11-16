@@ -1423,7 +1423,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::CreateIKRig(const TSharedPtr<FJsonObj
 	UFactory* Factory = NewObject<UFactory>(GetTransientPackage(), FindObject<UClass>(nullptr, TEXT("/Script/IKRigEditor.IKRigDefinitionFactory")));
 	if (!Factory)
 	{
-		return MCPError(TEXT("IKRigDefinitionFactory not found - is the IKRig plugin enabled?"));
+		return MCPPluginUnavailableError(TEXT("IKRigDefinitionFactory"), TEXT("IKRig"));
 	}
 
 	auto Created = MCPCreateAssetIdempotent<UIKRigDefinition>(Name, PackagePath, OnConflict, TEXT("IKRigDefinition"), Factory);
@@ -1716,12 +1716,12 @@ TSharedPtr<FJsonValue> FAnimationHandlers::CreateIKRetargeter(const TSharedPtr<F
 	UClass* FactoryClass = FindObject<UClass>(nullptr, TEXT("/Script/IKRigEditor.IKRetargetFactory"));
 	if (!FactoryClass)
 	{
-		return MCPError(TEXT("IKRetargetFactory not found - is the IKRig plugin enabled?"));
+		return MCPPluginUnavailableError(TEXT("IKRetargetFactory"), TEXT("IKRig"));
 	}
 	UClass* RetargeterClass = FindObject<UClass>(nullptr, TEXT("/Script/IKRig.IKRetargeter"));
 	if (!RetargeterClass)
 	{
-		return MCPError(TEXT("IKRetargeter class not found"));
+		return MCPPluginUnavailableError(TEXT("IKRetargeter class"), TEXT("IKRig"));
 	}
 	UFactory* Factory = NewObject<UFactory>(GetTransientPackage(), FactoryClass);
 

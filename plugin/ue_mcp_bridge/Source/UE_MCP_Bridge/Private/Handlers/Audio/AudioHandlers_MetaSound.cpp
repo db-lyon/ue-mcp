@@ -133,7 +133,7 @@ namespace
 		IDocumentBuilderRegistry* Registry = IDocumentBuilderRegistry::Get();
 		if (!Registry)
 		{
-			OutError = MCPError(TEXT("The MetaSound document builder registry is not available, so no MetaSound can be authored. Enable the MetaSound plugin."));
+			OutError = MCPError(TEXT("The MetaSound document builder registry is not available, so no MetaSound can be authored. ") + MCPEnablePluginStep(TEXT("Metasound")));
 			return nullptr;
 		}
 		Metasound::Engine::FDocumentBuilderRegistry& EngineRegistry =
@@ -146,7 +146,7 @@ namespace
 		UMetaSoundBuilderSubsystem* Subsystem = UMetaSoundBuilderSubsystem::Get();
 		if (!Subsystem)
 		{
-			OutError = MCPError(TEXT("The MetaSound builder subsystem is not available, so no MetaSound can be authored. Enable the MetaSound plugin."));
+			OutError = MCPError(TEXT("The MetaSound builder subsystem is not available, so no MetaSound can be authored. ") + MCPEnablePluginStep(TEXT("Metasound")));
 			return nullptr;
 		}
 		UMetaSoundSourceBuilder* Builder = Subsystem->AttachSourceBuilderToAsset(Source);
@@ -436,7 +436,7 @@ namespace
 		const bool bOneShot = OptionalBool(Params, TEXT("oneShot"), true);
 
 		UClass* Cls = FindObject<UClass>(nullptr, TEXT("/Script/MetasoundEngine.MetaSoundSource"));
-		if (!Cls) { OutEarly = MCPError(TEXT("MetaSoundSource class not found. Enable the MetaSound plugin.")); return nullptr; }
+		if (!Cls) { OutEarly = MCPPluginUnavailableError(TEXT("MetaSoundSource class"), TEXT("Metasound")); return nullptr; }
 
 		// The factory is not optional. Without it the asset is a shell whose
 		// document holds no interfaces and no graph pages, which is exactly the

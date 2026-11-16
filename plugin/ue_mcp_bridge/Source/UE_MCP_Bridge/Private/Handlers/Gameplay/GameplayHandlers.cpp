@@ -1015,7 +1015,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::CreateSmartObjectDefinition(const TSha
 	UClass* SmartObjectDefClass = FindObject<UClass>(nullptr, TEXT("/Script/SmartObjectsModule.SmartObjectDefinition"));
 	if (!SmartObjectDefClass)
 	{
-		return MCPError(TEXT("SmartObjectDefinition class not found. Enable SmartObjects plugin."));
+		return MCPPluginUnavailableError(TEXT("SmartObjectDefinition class"), TEXT("SmartObjects"));
 	}
 
 	auto Created = MCPCreateAssetIdempotent<UObject>(Name, PackagePath, OnConflict, TEXT("SmartObjectDefinition"), SmartObjectDefClass, nullptr);
@@ -1903,7 +1903,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::CreateStateTree(const TSharedPtr<FJson
 	UClass* STClass = FindObject<UClass>(nullptr, TEXT("/Script/StateTreeModule.StateTree"));
 	if (!STClass)
 	{
-		return MCPError(TEXT("StateTree class not found. Enable StateTree plugin."));
+		return MCPPluginUnavailableError(TEXT("StateTree class"), TEXT("StateTree"));
 	}
 
 	auto Created = MCPCreateAssetIdempotent<UObject>(Name, PackagePath, OnConflict, TEXT("StateTree"), STClass, nullptr);
@@ -3548,7 +3548,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::AddStateTreeComponent(const TSharedPtr
 	UClass* CompClass = LoadClass<UActorComponent>(nullptr, TEXT("/Script/GameplayStateTreeModule.StateTreeComponent"));
 	if (!CompClass)
 	{
-		return MCPError(TEXT("StateTreeComponent not found. Enable the GameplayStateTree plugin."));
+		return MCPPluginUnavailableError(TEXT("StateTreeComponent"), TEXT("GameplayStateTree"));
 	}
 
 	// Idempotency: check for existing component by name/class on the SCS
@@ -3605,7 +3605,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::AddSmartObjectComponent(const TSharedP
 	UClass* CompClass = FindObject<UClass>(nullptr, TEXT("/Script/SmartObjectsModule.SmartObjectComponent"));
 	if (!CompClass)
 	{
-		return MCPError(TEXT("SmartObjectComponent not found. Enable SmartObjects plugin."));
+		return MCPPluginUnavailableError(TEXT("SmartObjectComponent"), TEXT("SmartObjects"));
 	}
 
 	// Idempotency: existing component of this class already on the SCS?

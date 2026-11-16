@@ -180,7 +180,7 @@ namespace
 		IDocumentBuilderRegistry* Registry = IDocumentBuilderRegistry::Get();
 		if (!Registry)
 		{
-			OutError = MCPError(TEXT("The MetaSound document builder registry is not available, so an existing MetaSound cannot be opened for editing. Enable the MetaSound plugin."));
+			OutError = MCPError(TEXT("The MetaSound document builder registry is not available, so an existing MetaSound cannot be opened for editing. ") + MCPEnablePluginStep(TEXT("Metasound")));
 			return false;
 		}
 #else
@@ -189,7 +189,7 @@ namespace
 		UMetaSoundBuilderSubsystem* Subsystem = UMetaSoundBuilderSubsystem::Get();
 		if (!Subsystem)
 		{
-			OutError = MCPError(TEXT("The MetaSound builder subsystem is not available, so an existing MetaSound cannot be opened for editing. Enable the MetaSound plugin."));
+			OutError = MCPError(TEXT("The MetaSound builder subsystem is not available, so an existing MetaSound cannot be opened for editing. ") + MCPEnablePluginStep(TEXT("Metasound")));
 			return false;
 		}
 #endif

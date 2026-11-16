@@ -156,7 +156,7 @@ TSharedPtr<FJsonValue> FAudioHandlers::AddSubmixEffect(const TSharedPtr<FJsonObj
 	else return MCPError(TEXT("effectType must be one of: reverb, eq, dynamics, filter, delay."));
 
 	UClass* PresetClass = FindObject<UClass>(nullptr, *ClassPath);
-	if (!PresetClass) return MCPError(FString::Printf(TEXT("Effect preset class unavailable: %s (plugin not loaded?)"), *ClassPath));
+	if (!PresetClass) return MCPError(FString::Printf(TEXT("Effect preset class unavailable: %s. The plugin that defines it is not loaded: find it with project(list_available_plugins), enable it with project(enable_plugin, pluginName=...), then editor(restart_editor)."), *ClassPath));
 
 	const FString Name = bHasName
 		? RequestedName

@@ -659,7 +659,7 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::CreateNiagaraEmitter(const TSharedPtr<F
 	UClass* EmitterClass = FindObject<UClass>(nullptr, TEXT("/Script/Niagara.NiagaraEmitter"));
 	if (!EmitterClass)
 	{
-		return MCPError(TEXT("NiagaraEmitter class not found - factory not available"));
+		return MCPPluginUnavailableError(TEXT("NiagaraEmitter class"), TEXT("Niagara"));
 	}
 
 	// Build the emitter through UNiagaraEmitterFactoryNew, not a bare NewObject.

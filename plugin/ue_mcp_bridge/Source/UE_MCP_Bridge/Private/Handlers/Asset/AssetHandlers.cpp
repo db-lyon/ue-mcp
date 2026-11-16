@@ -6070,7 +6070,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::CreateInterchangePipeline(const TSharedPt
 	UClass* PipelineClass = FindObject<UClass>(nullptr, TEXT("/Script/InterchangePipelines.InterchangeGenericAssetsPipeline"));
 	if (!PipelineClass)
 	{
-		return MCPError(TEXT("InterchangeGenericAssetsPipeline class not found. Enable the Interchange Editor plugin."));
+		return MCPPluginUnavailableError(TEXT("InterchangeGenericAssetsPipeline class"), TEXT("Interchange"));
 	}
 
 	auto Created = MCPCreateAssetIdempotent<UObject>(Name, PackagePath, OnConflict, TEXT("InterchangePipeline"), PipelineClass, nullptr);

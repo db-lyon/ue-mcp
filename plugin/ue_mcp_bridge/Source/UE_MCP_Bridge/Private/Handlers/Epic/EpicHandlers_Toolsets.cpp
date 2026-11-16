@@ -81,7 +81,8 @@ namespace UEMCPEpicToolsets
 		if (!FModuleManager::Get().IsModuleLoaded(RegistryModule))
 		{
 			OutCode = TEXT("PLUGIN_NOT_AVAILABLE");
-			OutError = TEXT("Epic ToolsetRegistry not available. Requires UE 5.8+ with the ToolsetRegistry plugin enabled in the project.");
+			OutError = TEXT("Epic ToolsetRegistry not available. Requires UE 5.8+ with the ToolsetRegistry plugin enabled in the project. ")
+				+ MCPEnablePluginStep(TEXT("ToolsetRegistry"));
 			return false;
 		}
 		const FString File = FModuleManager::Get().GetModuleFilename(RegistryModule);

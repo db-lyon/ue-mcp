@@ -366,7 +366,7 @@ TSharedPtr<FJsonValue> FGasHandlers::CreateGasBlueprint(
 
 	if (!ParentClass)
 	{
-		return MCPError(FString::Printf(TEXT("%s parent class not found. Enable GameplayAbilities plugin."), *FriendlyType));
+		return MCPError(FString::Printf(TEXT("%s parent class not found: the GameplayAbilities plugin is not loaded. %s"), *FriendlyType, *MCPEnablePluginStep(TEXT("GameplayAbilities"))));
 	}
 
 	UBlueprintFactory* BlueprintFactory = NewObject<UBlueprintFactory>();
@@ -558,7 +558,7 @@ TSharedPtr<FJsonValue> FGasHandlers::AddAbilitySystemComponent(const TSharedPtr<
 	UClass* ASCClass = FindObject<UClass>(nullptr, TEXT("/Script/GameplayAbilities.AbilitySystemComponent"));
 	if (!ASCClass)
 	{
-		return MCPError(TEXT("AbilitySystemComponent not found. Enable GameplayAbilities plugin."));
+		return MCPPluginUnavailableError(TEXT("AbilitySystemComponent"), TEXT("GameplayAbilities"));
 	}
 
 	// Idempotency: existing ASC on the blueprint?
@@ -953,7 +953,7 @@ TSharedPtr<FJsonValue> FGasHandlers::SetAscDefaults(const TSharedPtr<FJsonObject
 	REQUIRE_ASSET(UBlueprint, BP, BPPath);
 
 	UClass* ASCClass = FindObject<UClass>(nullptr, TEXT("/Script/GameplayAbilities.AbilitySystemComponent"));
-	if (!ASCClass) return MCPError(TEXT("AbilitySystemComponent not found. Enable GameplayAbilities plugin."));
+	if (!ASCClass) return MCPPluginUnavailableError(TEXT("AbilitySystemComponent"), TEXT("GameplayAbilities"));
 
 	UClass* AttrSetClass = MCPGas::ResolveClassDerivingFrom(AttrSetSpec, UAttributeSet::StaticClass());
 	if (!AttrSetClass) return MCPError(FString::Printf(TEXT("AttributeSet class not found: %s"), *AttrSetSpec));

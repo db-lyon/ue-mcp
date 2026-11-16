@@ -190,7 +190,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::RebuildWaterZone(const TSharedPtr<FJsonOb
 	REQUIRE_EDITOR_WORLD(World);
 
 	UClass* ZoneClass = MCPWaterZoneClass();
-	if (!ZoneClass) return MCPError(TEXT("WaterZone class not available - enable the Water plugin"));
+	if (!ZoneClass) return MCPPluginUnavailableError(TEXT("WaterZone class"), TEXT("Water"));
 
 	TArray<AActor*> Zones;
 	TSharedPtr<FJsonValue> ResolveErr;
@@ -519,7 +519,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::GetWaterState(const TSharedPtr<FJsonObjec
 
 	UClass* ZoneClass = MCPWaterZoneClass();
 	UClass* BodyClass = LoadClass<UActorComponent>(nullptr, TEXT("/Script/Water.WaterBodyComponent"));
-	if (!ZoneClass || !BodyClass) return MCPError(TEXT("Water classes not available - enable the Water plugin"));
+	if (!ZoneClass || !BodyClass) return MCPPluginUnavailableError(TEXT("Water classes"), TEXT("Water"));
 
 	TArray<TSharedPtr<FJsonValue>> Zones;
 	TArray<TSharedPtr<FJsonValue>> Bodies;
@@ -607,7 +607,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetWaterBodyProperty(const TSharedPtr<FJs
 	UClass* WBClass = LoadClass<UActorComponent>(nullptr, TEXT("/Script/Water.WaterBodyComponent"));
 	if (!WBClass)
 	{
-		return MCPError(TEXT("WaterBodyComponent class not available - enable the Water plugin"));
+		return MCPPluginUnavailableError(TEXT("WaterBodyComponent class"), TEXT("Water"));
 	}
 
 	UActorComponent* WBComp = nullptr;

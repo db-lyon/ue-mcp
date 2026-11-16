@@ -545,7 +545,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::ImportSkeletalMesh(const TSharedPtr<FJson
 	{
 		UClass* PipelineClass = LoadClass<UObject>(nullptr, TEXT("/Script/InterchangePipelines.InterchangeGenericAssetsPipeline"));
 		UClass* OverrideClass = LoadClass<UObject>(nullptr, TEXT("/Script/InterchangeEngine.InterchangePipelineStackOverride"));
-		if (!PipelineClass || !OverrideClass) return MCPError(TEXT("Interchange import is unavailable; enable the Interchange Editor plugin"));
+		if (!PipelineClass || !OverrideClass) return MCPPluginUnavailableError(TEXT("Interchange import"), TEXT("InterchangeEditor"));
 		UObject* Pipeline = NewObject<UObject>(GetTransientPackage(), PipelineClass);
 		UObject* Stack = NewObject<UObject>(GetTransientPackage(), OverrideClass);
 		Roots.Add(MakeUnique<FGCRootScope>(Pipeline));

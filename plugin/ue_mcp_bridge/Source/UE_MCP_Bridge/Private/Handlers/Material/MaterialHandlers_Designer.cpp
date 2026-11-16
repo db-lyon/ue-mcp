@@ -1295,7 +1295,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::CreateMaterialDesigner(const TSharedPt
 	UClass* FactoryClass = FindObject<UClass>(nullptr, TEXT("/Script/DynamicMaterialEditor.DynamicMaterialInstanceFactory"));
 	if (!FactoryClass || !FactoryClass->IsChildOf(UFactory::StaticClass()))
 	{
-		return MCPError(TEXT("Material Designer is not available: DynamicMaterialEditor.DynamicMaterialInstanceFactory is not loaded. Enable the DynamicMaterial plugin and restart the editor."));
+		return MCPError(TEXT("Material Designer is not available: DynamicMaterialEditor.DynamicMaterialInstanceFactory is not loaded. ") + MCPEnablePluginStep(TEXT("DynamicMaterial")));
 	}
 	UFactory* Factory = NewObject<UFactory>(GetTransientPackage(), FactoryClass);
 
