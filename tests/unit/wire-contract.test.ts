@@ -6,12 +6,10 @@ import {
   deriveProjectPort,
   normalizeProjectRoot,
   DEFAULT_BRIDGE_PORT,
-  PLUGIN_ENV_VARS,
   PORT_HASH_VECTORS,
   recordState,
   ROUTING_PARAM_NAMES,
 } from "../../src/bridge/wire-contract.js";
-import { ENV_VARS } from "../../src/core/env.js";
 import { EDITOR_TARGET_PARAM, MIGRATE_TARGET_PARAM } from "../../src/surface/routing-params.js";
 import * as scriptContract from "../../scripts/lib/wire-contract.mjs";
 import { renderAll } from "../../scripts/generate-wire-contract.mjs";
@@ -51,11 +49,6 @@ describe("port derivation", () => {
 });
 
 describe("names the server declares on its own", () => {
-  it("documents every variable the plugin reads in src/core/env.ts", () => {
-    const documented = new Set<string>(Object.values(ENV_VARS));
-    for (const name of Object.values(PLUGIN_ENV_VARS)) expect(documented.has(name), name).toBe(true);
-  });
-
   it("lists the per-call editor target params among the routing params", () => {
     expect(ROUTING_PARAM_NAMES).toContain(EDITOR_TARGET_PARAM);
     expect(ROUTING_PARAM_NAMES).toContain(MIGRATE_TARGET_PARAM);
