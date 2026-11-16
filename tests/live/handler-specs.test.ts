@@ -19,12 +19,13 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, describe, expect, it } from "vitest";
-import { compareHandlerSpecs, type HandlerSpecs } from "../../src/surface/handler-spec.js";
+import { compareHandlerSpecs, type ActionFacts, type HandlerSpecs } from "../../src/surface/handler-spec.js";
 import { closeLiveBridges, liveBridge, liveTarget } from "./harness.js";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const recorded = JSON.parse(fs.readFileSync(path.join(ROOT, "tests", "golden", "handler-specs.json"), "utf8")) as {
   handlers: HandlerSpecs;
+  actionFacts: Record<string, ActionFacts>;
 };
 
 const target = await liveTarget();
@@ -41,6 +42,12 @@ describe("handler specs against the running plugin", () => {
     const drift = compareHandlerSpecs(recorded.handlers, target.capabilities.handlerSpecs);
     expect(drift.checked).toBe(true);
     expect(drift.drifted, "re-record with npm run specs:record, then npm run specs:generate").toEqual([]);
+  });
+
+  it("declares the same action facts the recording holds", () => {
+    const live = (target.capabilities as { actionFacts?: Record<string, ActionFacts> }).actionFacts;
+    expect(live, "the plugin published no actionFacts; rebuild it").toBeDefined();
+    expect(live, "re-record with npm run specs:record").toEqual(recorded.actionFacts);
   });
 
   it("resolves an alias to the declared name before the handler runs", async () => {

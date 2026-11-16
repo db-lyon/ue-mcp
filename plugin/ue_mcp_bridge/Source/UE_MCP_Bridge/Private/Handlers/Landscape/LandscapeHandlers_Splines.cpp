@@ -641,8 +641,8 @@ void FLandscapeSplineHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	FMCPHandlerRegistry::FCategoryScope CategoryScope(Registry, TEXT("landscape"));
 	using EType = EMCPParamType;
 
-	const FMCPParamSpec SpecActorLabel = MCPParam::Optional(TEXT("actorLabel"), EType::String, TEXT("Landscape actor label, when the level has more than one"));
-	const FMCPParamSpec SpecActorPath = MCPParam::Optional(TEXT("actorPath"), EType::String, TEXT("Landscape actor path; wins over actorLabel"));
+	const FMCPParamSpec SpecActorLabel = MCPSharedParam::ActorLabel().Describe(TEXT("Landscape actor label, when the level has more than one"));
+	const FMCPParamSpec SpecActorPath = MCPSharedParam::ActorPath().Describe(TEXT("Landscape actor path; wins over actorLabel"));
 	const FMCPParamSpec SpecLocation = MCPParam::Optional(TEXT("location"), EType::Vec3, TEXT("World location of the control point"));
 	const FMCPParamSpec SpecRotation = MCPParam::Optional(TEXT("rotation"), EType::Rotator, TEXT("World rotation of the tangent at the point"));
 	const FMCPParamSpec SpecWidth = MCPParam::Optional(TEXT("halfWidth"), EType::Number, TEXT("Half-width of the spline at the point, in centimetres (engine default 1000)"));
@@ -674,7 +674,7 @@ void FLandscapeSplineHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("name"), EType::String, TEXT("Object name for the point; an existing point of this name is reported rather than duplicated")),
 		MCPParam::Optional(TEXT("ownerPath"), EType::String, TEXT("Existing spline owner to add the point to: a Landscape, LandscapeStreamingProxy or LandscapeSplineActor, by label or path")),
 		MCPParam::Optional(TEXT("newSplineActor"), EType::Boolean, TEXT("World Partition: put the point in a new LandscapeSplineActor (the default when ownerPath is not given)")),
-		MCPParam::Optional(TEXT("onConflict"), EType::String, TEXT("When name is taken: skip (default) | error")),
+		MCPSharedParam::OnConflict().Describe(TEXT("When name is taken: skip (default) | error")),
 		SpecActorLabel, SpecActorPath,
 	});
 	Registry.RegisterHandler(TEXT("update_landscape_spline_point"), &UpdatePoint, {

@@ -218,11 +218,52 @@ void FDiffHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 			MCPParam::Optional(TEXT("against"), EType::String, TEXT("An earlier state of assetPath to diff from, with assetPath as it is now as the other side: checkpoint:<id> (an editor(checkpoint) id, resolved by the server), revision:<rev>, or a bare id, tried as a checkpoint and then as a source control revision. A revision is the provider's id, a unique prefix of 7 or more characters of it, its number, or head. Give this or otherPath")),
 		}, MCPSpec::ExactlyOne({ { TEXT("otherPath") }, { TEXT("against") } }));
 	}
-	// Internal to editor(list_changes) (#1482): no spec, no category action of its own.
-	Registry.RegisterHandler(TEXT("checkpoint_diff_blueprint"), &FDiffHandlers::DiffCheckpointBlueprint);
-	// Internal to editor(list_changes), diff_checkpoint_asset and open_checkpoint_diff.
-	Registry.RegisterHandlerWithTimeout(TEXT("checkpoint_diff_asset"), &FDiffHandlers::DiffCheckpointAsset, 300.f);
-	Registry.RegisterHandlerWithTimeout(TEXT("checkpoint_open_native_diff"), &FDiffHandlers::OpenCheckpointNativeDiff, 120.f);
+	{
+		using EType = EMCPParamType;
+		const TCHAR* const CheckpointService = TEXT("the server's checkpoint service (src/checkpoints/service.ts)");
+		const FMCPParamSpec OriginalFile = MCPParam::Required(TEXT("originalFile"), EType::String, TEXT("The package's file on disk, under a mounted content folder"));
+		const FMCPParamSpec FromFile = MCPParam::Optional(TEXT("fromFile"), EType::String, TEXT("Stored copy of the earlier version"));
+		const FMCPParamSpec ToFile = MCPParam::Optional(TEXT("toFile"), EType::String, TEXT("Stored copy of the later version; omitted means the file as it is now"));
+		Registry.RegisterHandler(TEXT("checkpoint_diff_blueprint"), &FDiffHandlers::DiffCheckpointBlueprint, {
+			OriginalFile,
+			MCPParam::Required(TEXT("fromFile"), EType::String, TEXT("Stored copy of the earlier version")),
+			ToFile,
+		}, MCPSpec::ServerInternal(CheckpointService));
+		const TArray<FMCPParamField> AssetDiffFields = {
+			MCPParam::RequiredField(TEXT("originalFile"), EType::String, TEXT("The package's file on disk")),
+			MCPParam::OptionalField(TEXT("fromFile"), EType::String, TEXT("Stored copy of the earlier version")),
+			MCPParam::OptionalField(TEXT("toFile"), EType::String, TEXT("Stored copy of the later version")),
+			MCPParam::OptionalField(TEXT("fromThumbnail"), EType::String, TEXT("Where to write the earlier version's thumbnail")),
+			MCPParam::OptionalField(TEXT("toThumbnail"), EType::String, TEXT("Where to write the later version's thumbnail")),
+			MCPParam::OptionalField(TEXT("fromGraphPicture"), EType::String, TEXT("Where to write the earlier version's graph picture")),
+			MCPParam::OptionalField(TEXT("toGraphPicture"), EType::String, TEXT("Where to write the later version's graph picture")),
+			MCPParam::OptionalField(TEXT("maxRecords"), EType::Integer, TEXT("Records kept (default 2000)")).Range(1, 20000),
+		};
+		// One diff per call, or several as items, each unloading its own versions.
+		Registry.RegisterHandlerWithTimeout(TEXT("checkpoint_diff_asset"), &FDiffHandlers::DiffCheckpointAsset, 300.f, {
+			MCPParam::Optional(TEXT("originalFile"), EType::String, TEXT("The package's file on disk, under a mounted content folder")),
+			FromFile,
+			ToFile,
+			MCPParam::Optional(TEXT("fromThumbnail"), EType::String, TEXT("Where to write the earlier version's thumbnail")),
+			MCPParam::Optional(TEXT("toThumbnail"), EType::String, TEXT("Where to write the later version's thumbnail")),
+			MCPParam::Optional(TEXT("fromGraphPicture"), EType::String, TEXT("Where to write the earlier version's graph picture")),
+			MCPParam::Optional(TEXT("toGraphPicture"), EType::String, TEXT("Where to write the later version's graph picture")),
+			MCPParam::Optional(TEXT("maxRecords"), EType::Integer, TEXT("Records kept; more are counted in recordsDropped")).Range(1, 20000).Default(2000),
+			MCPParam::Optional(TEXT("items"), EType::Array, TEXT("Several diffs in one call, each with the fields above")).Items(EType::Object).WithFields(AssetDiffFields),
+		}, MCPSpec::ExactlyOne({ { TEXT("originalFile") }, { TEXT("items") } })
+			.ContractExempt(TEXT("with items it reads each item's fields, never the top-level ones the contract run also sends"))
+			.ServerInternal(CheckpointService));
+		Registry.RegisterHandlerWithTimeout(TEXT("checkpoint_open_native_diff"), &FDiffHandlers::OpenCheckpointNativeDiff, 120.f, {
+			OriginalFile,
+			FromFile,
+			ToFile,
+			MCPParam::Optional(TEXT("current"), EType::Boolean, TEXT("The later side is the package as it is now")).Default(false),
+			MCPParam::Optional(TEXT("fromLabel"), EType::String, TEXT("Label of the earlier side")).Default(TEXT("Before")),
+			MCPParam::Optional(TEXT("toLabel"), EType::String, TEXT("Label of the later side (default After, or Current with current)")),
+			MCPParam::Optional(TEXT("fromTime"), EType::String, TEXT("Time shown for the earlier side")),
+			MCPParam::Optional(TEXT("toTime"), EType::String, TEXT("Time shown for the later side")),
+		}, MCPSpec::ServerInternal(CheckpointService));
+	}
 	{
 		// Exposed as asset(diff), so its spec generates into the asset surface.
 		FMCPHandlerRegistry::FCategoryScope AssetScope(Registry, TEXT("asset"));

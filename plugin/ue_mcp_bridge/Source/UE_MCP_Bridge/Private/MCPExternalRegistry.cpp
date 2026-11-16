@@ -53,7 +53,13 @@ namespace UEMCP
 		Spec.Params = Params;
 		Spec.Choices = Rules.Choices;
 		Spec.ContractExemptReason = Rules.ContractExemptReason;
-		const FString Problem = FMCPHandlerRegistry::ValidateHandlerSpec(Spec);
+		Spec.Facts = Rules.Facts;
+		if (TimeoutSeconds > 0.0f) Spec.Facts.TimeoutSeconds = TimeoutSeconds;
+		// The socket thread runs only the bridge's own handshake reads; a plugin
+		// handler always runs on the game thread.
+		const FString Problem = Spec.Facts.bServedOffGameThread
+			? FString(TEXT("a plugin handler cannot be served off the game thread; drop ServedOffGameThread"))
+			: FMCPHandlerRegistry::ValidateHandlerSpec(Spec);
 		if (!Problem.IsEmpty())
 		{
 			UE_LOG(LogMCPBridge, Error, TEXT("[UE-MCP] External handler '%s' registered without its spec: %s"), *MethodName, *Problem);

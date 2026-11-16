@@ -21,6 +21,19 @@
 
 class UWidgetBlueprint;
 
+/** The MVVM operations the backend performs. The widget handlers own the bridge
+ *  method name each one is exposed as. */
+enum class EMCPMVVMOperation : uint8
+{
+	ListViewModels,
+	AddViewModel,
+	RemoveViewModel,
+	ListBindings,
+	AddBinding,
+	UpdateBinding,
+	RemoveBinding,
+};
+
 /** What one MVVM operation did. The handler maps it onto the response envelope. */
 struct FMCPMVVMOutcome
 {
@@ -49,8 +62,8 @@ struct FMCPMVVMOutcome
 	/** Fields copied onto the response. */
 	TSharedPtr<FJsonObject> Data;
 
-	/** The inverse call, when the operation changed something that has one. */
-	FString RollbackMethod;
+	/** The inverse operation, when the operation changed something that has one. */
+	TOptional<EMCPMVVMOperation> RollbackOperation;
 	TSharedPtr<FJsonObject> RollbackPayload;
 
 	/** Why there is no inverse, when the operation changed something that has none. */
@@ -75,11 +88,10 @@ public:
 	virtual ~IMCPMVVMBackend() = default;
 
 	/**
-	 * Run one operation on a resolved Widget Blueprint. Operation is the bridge
-	 * method name (list_widget_viewmodels, add_widget_viewmodel, ...). Params is
-	 * the dispatch's parameter object; the handler has already read every key.
+	 * Run one operation on a resolved Widget Blueprint. Params is the dispatch's
+	 * parameter object; the handler has already read every key.
 	 */
-	virtual FMCPMVVMOutcome Run(const FString& Operation, UWidgetBlueprint* WidgetBlueprint, const TSharedPtr<FJsonObject>& Params) = 0;
+	virtual FMCPMVVMOutcome Run(EMCPMVVMOperation Operation, UWidgetBlueprint* WidgetBlueprint, const TSharedPtr<FJsonObject>& Params) = 0;
 };
 
 namespace UEMCP

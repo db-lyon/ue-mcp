@@ -332,32 +332,32 @@ void FStateTreeHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Required(TEXT("nodeClass"), EType::String, TEXT("The Blueprint class this node runs, as a class path or a loaded class name")),
 	});
 	Registry.RegisterHandler(TEXT("read_state_tree_runtime"), &ReadRuntime, {
-		MCPParam::Optional(TEXT("actorLabel"), EType::String, TEXT("Label of the actor carrying the running StateTree component (or pass actorPath)")),
-		MCPParam::Optional(TEXT("actorPath"), EType::String, TEXT("Full object path of that actor; unambiguous where a label is not")),
+		MCPSharedParam::ActorLabel().Describe(TEXT("Label of the actor carrying the running StateTree component (or pass actorPath)")),
+		MCPSharedParam::ActorPath().Describe(TEXT("Full object path of that actor; unambiguous where a label is not")),
 		MCPParam::Optional(TEXT("componentName"), EType::String, TEXT("Which StateTree component, when the actor has more than one")),
-		MCPParam::Optional(TEXT("world"), EType::String, TEXT("pie (default), auto, or editor")),
-		MCPParam::Optional(TEXT("pieInstance"), EType::Integer, TEXT("Which PIE instance, when several are running")),
+		MCPSharedParam::World().Describe(TEXT("pie (default), auto, or editor")),
+		MCPSharedParam::PieInstance(),
 		MCPParam::Optional(TEXT("includeDebugStrings"), EType::Boolean, TEXT("Include the engine's own debug dump of the execution state")),
 	});
 	Registry.RegisterHandler(TEXT("send_state_tree_event"), &SendEvent, {
-		MCPParam::Optional(TEXT("actorLabel"), EType::String, TEXT("Label of the actor carrying the running StateTree component (or pass actorPath)")),
-		MCPParam::Optional(TEXT("actorPath"), EType::String, TEXT("Full object path of that actor; unambiguous where a label is not")),
+		MCPSharedParam::ActorLabel().Describe(TEXT("Label of the actor carrying the running StateTree component (or pass actorPath)")),
+		MCPSharedParam::ActorPath().Describe(TEXT("Full object path of that actor; unambiguous where a label is not")),
 		MCPParam::Required(TEXT("eventTag"), EType::String, TEXT("Registered gameplay tag of the event")),
 		MCPParam::Optional(TEXT("componentName"), EType::String, TEXT("Which StateTree component, when the actor has more than one")),
 		MCPParam::Optional(TEXT("origin"), EType::String, TEXT("Who the event says it came from (default ue-mcp)")),
-		MCPParam::Optional(TEXT("world"), EType::String, TEXT("pie (default), auto, or editor")),
-		MCPParam::Optional(TEXT("pieInstance"), EType::Integer, TEXT("Which PIE instance, when several are running")),
+		MCPSharedParam::World().Describe(TEXT("pie (default), auto, or editor")),
+		MCPSharedParam::PieInstance(),
 	});
 	Registry.RegisterHandler(TEXT("request_state_tree_transition"), &RequestTransition, {
-		MCPParam::Optional(TEXT("actorLabel"), EType::String, TEXT("Label of the actor carrying the running StateTree component (or pass actorPath)")),
-		MCPParam::Optional(TEXT("actorPath"), EType::String, TEXT("Full object path of that actor; unambiguous where a label is not")),
+		MCPSharedParam::ActorLabel().Describe(TEXT("Label of the actor carrying the running StateTree component (or pass actorPath)")),
+		MCPSharedParam::ActorPath().Describe(TEXT("Full object path of that actor; unambiguous where a label is not")),
 		MCPParam::Optional(TEXT("targetStateId"), EType::String, TEXT("GUID of the state to transition to (or pass targetStateTag)")),
 		MCPParam::Optional(TEXT("targetStateTag"), EType::String, TEXT("Tag of the state to transition to, UE 5.8 and later")),
 		MCPParam::Optional(TEXT("priority"), EType::String, TEXT("Low, Normal, Medium, High or Critical")),
 		MCPParam::Optional(TEXT("fallback"), EType::String, TEXT("None (default) or NextSelectableSibling")),
 		MCPParam::Optional(TEXT("componentName"), EType::String, TEXT("Which StateTree component, when the actor has more than one")),
-		MCPParam::Optional(TEXT("world"), EType::String, TEXT("pie (default), auto, or editor")),
-		MCPParam::Optional(TEXT("pieInstance"), EType::Integer, TEXT("Which PIE instance, when several are running")),
+		MCPSharedParam::World().Describe(TEXT("pie (default), auto, or editor")),
+		MCPSharedParam::PieInstance(),
 	});
 
 	// Node authoring by ID and binding introspection (StateTreeHandlers_NodesAndBindings.cpp).

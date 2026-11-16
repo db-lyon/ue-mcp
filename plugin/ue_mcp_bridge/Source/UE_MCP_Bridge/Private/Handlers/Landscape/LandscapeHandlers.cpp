@@ -36,6 +36,7 @@
 #include "Materials/MaterialInterface.h"
 #include "EditorScriptingUtilities/Public/EditorAssetLibrary.h"
 #include "RenderingThread.h"
+#include "BridgeRequestContext.h"
 #include "Components/PrimitiveComponent.h"
 #include "PhysicsEngine/BodyInstance.h"
 #include "LandscapeLayerInfoObject.h"
@@ -433,8 +434,8 @@ void FLandscapeHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	// nowhere else; the TS surface for it is generated from a recording of these.
 	// The shared spellings are declared once and listed per handler.
 	using EType = EMCPParamType;
-	const FMCPParamSpec SpecActorLabel = MCPParam::Optional(TEXT("actorLabel"), EType::String, TEXT("Landscape actor label, when the level has more than one"));
-	const FMCPParamSpec SpecActorPath = MCPParam::Optional(TEXT("actorPath"), EType::String, TEXT("Landscape actor object path; wins over actorLabel, which is not unique"));
+	const FMCPParamSpec SpecActorLabel = MCPSharedParam::ActorLabel().Describe(TEXT("Landscape actor label, when the level has more than one"));
+	const FMCPParamSpec SpecActorPath = MCPSharedParam::ActorPath().Describe(TEXT("Landscape actor object path; wins over actorLabel, which is not unique"));
 	const FMCPParamSpec SpecRegion = MCPParam::Optional(TEXT("region"), EType::Object, TEXT("Rectangle {minX, minY, maxX, maxY} in landscape vertex indices, or centimetres with space world. Omit it for the whole landscape"));
 	const FMCPParamSpec SpecSpace = MCPParam::Optional(TEXT("space"), EType::String, TEXT("Units of region: quad (vertex indices, default) | world (centimetres)"));
 	const FMCPParamSpec SpecCenter = MCPParam::Optional(TEXT("center"), EType::Object, TEXT("Brush centre {x, y} in world space"));
@@ -487,7 +488,7 @@ void FLandscapeHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		SpecLayerName,
 		MCPParam::Optional(TEXT("name"), EType::String, TEXT("LayerInfo asset name (default LI_<layerName>)")),
 		MCPParam::Optional(TEXT("packagePath"), EType::String, TEXT("Content folder for the LayerInfo asset (default /Game/Landscape/LayerInfos)")),
-		MCPParam::Optional(TEXT("onConflict"), EType::String, TEXT("When the asset already exists: skip (default) | error")),
+		MCPSharedParam::OnConflict(),
 		MCPParam::Optional(TEXT("physMaterial"), EType::String, TEXT("PhysicalMaterial asset path")),
 		MCPParam::Optional(TEXT("hardness"), EType::Number, TEXT("Layer hardness")),
 	}, MCPSpec::ContractExempt(TEXT("Contract values reach CreatePackage before anything is loaded")));
@@ -2144,10 +2145,11 @@ TSharedPtr<FJsonValue> FLandscapeHandlers::RefreshPhysicalMaterialCollision(cons
 
 	// BuildPhysicalMaterial advances an asynchronous GPU readback. Re-enter the
 	// exported build method after flushing render commands until it finalizes
-	// every matched proxy, or until there is enough time left to return a useful
-	// failure report before the handler's 600-second bridge timeout. Time spent
-	// preparing texture resources counts too.
-	const double BuildDeadline = StartedAt + 420.0;
+	// every matched proxy, or until 70% of the request's budget is spent, which
+	// leaves time to return a useful failure report before the bridge gives up.
+	// Time spent preparing texture resources counts too. 600 s is the declared
+	// timeout, for a call made outside a bridge request.
+	const double BuildDeadline = StartedAt + MCPRequestContext::BudgetSeconds(600.0) * 0.7;
 	bool bBuildTimedOut = false;
 	while (Refreshed > 0)
 	{

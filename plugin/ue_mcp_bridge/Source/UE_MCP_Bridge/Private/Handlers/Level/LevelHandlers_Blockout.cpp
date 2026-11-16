@@ -527,8 +527,8 @@ void FLevelBlockoutHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	FMCPHandlerRegistry::FCategoryScope CategoryScope(Registry, TEXT("level"));
 	using EType = EMCPParamType;
 
-	const FMCPParamSpec SpecActorLabel = MCPParam::Optional(TEXT("actorLabel"), EType::String, TEXT("Blockout actor label"));
-	const FMCPParamSpec SpecActorPath = MCPParam::Optional(TEXT("actorPath"), EType::String, TEXT("Blockout actor path; the unambiguous selector"));
+	const FMCPParamSpec SpecActorLabel = MCPSharedParam::ActorLabel().Describe(TEXT("Blockout actor label"));
+	const FMCPParamSpec SpecActorPath = MCPSharedParam::ActorPath().Describe(TEXT("Blockout actor path; the unambiguous selector"));
 	const FMCPParamSpec SpecTargetTag = MCPParam::Optional(TEXT("tag"), EType::String, TEXT("Act on every blockout actor carrying this tag"));
 	const FMCPParamSpec SpecFolder = MCPParam::Optional(TEXT("candidateFolder"), EType::String, TEXT("Content folder of candidate StaticMeshes, e.g. /Game/Props"));
 	const FMCPParamSpec SpecRecursive = MCPParam::Optional(TEXT("recursive"), EType::Boolean, TEXT("Include subfolders of candidateFolder (default true)"));
@@ -546,7 +546,7 @@ void FLevelBlockoutHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("tag"), EType::String, TEXT("Blockout tag the actor carries (default Blockout)")),
 		MCPParam::Optional(TEXT("material"), EType::String, TEXT("Material override (default the grid material the mesh carries)")),
 		MCPParam::Optional(TEXT("meshFolder"), EType::String, TEXT("Content folder for the generated shape meshes (default /Game/Blockout/Meshes)")),
-		MCPParam::Optional(TEXT("onConflict"), EType::String, TEXT("When label is taken: skip (default) | error")),
+		MCPSharedParam::OnConflict().Describe(TEXT("When label is taken: skip (default) | error")),
 	});
 	Registry.RegisterHandler(TEXT("list_blockout"), &ListBlockout, {
 		MCPParam::Optional(TEXT("tag"), EType::String, TEXT("Blockout tag to list (default Blockout)")),
@@ -567,8 +567,8 @@ void FLevelBlockoutHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("yawOffset"), EType::Number, TEXT("Extra yaw in degrees on top of the blockout's rotation (default the best match's, else 0)")),
 	}, MCPSpec::ExactlyOne({ { TEXT("actorLabel") }, { TEXT("actorPath") }, { TEXT("tag") }, { TEXT("actorPaths") } }));
 	Registry.RegisterHandler(TEXT("restore_blockout"), &RestoreBlockout, {
-		MCPParam::Optional(TEXT("actorLabel"), EType::String, TEXT("Replacement actor label")),
-		MCPParam::Optional(TEXT("actorPath"), EType::String, TEXT("Replacement actor path")),
+		MCPSharedParam::ActorLabel().Describe(TEXT("Replacement actor label")),
+		MCPSharedParam::ActorPath().Describe(TEXT("Replacement actor path")),
 		MCPParam::Optional(TEXT("actorPaths"), EType::Array, TEXT("Replacement actor paths, as replace_blockout returns them")).Items(EType::String),
 	}, MCPSpec::ExactlyOne({ { TEXT("actorLabel") }, { TEXT("actorPath") }, { TEXT("actorPaths") } }));
 }

@@ -112,7 +112,7 @@ void FAnimationHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Required(TEXT("name"), EType::String, TEXT("Skeleton asset name")),
 		MCPParam::Required(TEXT("skeletalMeshPath"), EType::String, TEXT("SkeletalMesh to build the skeleton from; the factory assigns the new skeleton to it")),
 		MCPParam::Optional(TEXT("packagePath"), EType::String, TEXT("Destination folder (default /Game)")),
-		MCPParam::Optional(TEXT("onConflict"), EType::String, TEXT("skip (default) | error. It never overwrites")),
+		MCPSharedParam::OnConflict(),
 	});
 	auto SessionTag = []()
 	{
@@ -268,7 +268,7 @@ void FAnimationHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	});
 	auto OnConflict = [](const TCHAR* Description)
 	{
-		return MCPParam::Optional(TEXT("onConflict"), EType::String, Description);
+		return MCPSharedParam::OnConflict().Describe(Description);
 	};
 	Registry.RegisterHandler(TEXT("create_anim_blueprint"), &CreateAnimBlueprint, {
 		MCPParam::Required(TEXT("name"), EType::String, TEXT("AnimBlueprint asset name")),
@@ -713,7 +713,7 @@ void FAnimationHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("endFrame"), EType::Integer, TEXT("Exclusive edit range end frame (default the source length)")),
 		MCPParam::Optional(TEXT("displayRate"), EType::Number, TEXT("LevelSequence display rate in frames per second (default the source rate)")),
 		MCPParam::Optional(TEXT("bindingTag"), EType::String, TEXT("Stable natural key the later calls address (default derived from the mesh name)")),
-		MCPParam::Optional(TEXT("onConflict"), EType::String, TEXT("skip returns the existing session, error (default) refuses; an existing session is never modified")),
+		MCPSharedParam::OnConflict().Describe(TEXT("skip returns the existing session, error (default) refuses; an existing session is never modified")),
 	}, MCPSpec::ContractExempt(TEXT("UE 5.8+: before 5.8 the handler is a stub that reads nothing, and on 5.8 and later it creates and saves a LevelSequence")));
 	Registry.RegisterHandler(TEXT("read_control_rig_edit"), &ReadControlRigEdit, {
 		EditSequencePath(),
@@ -856,7 +856,7 @@ void FAnimationHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("reduceKeys"), EType::Boolean, TEXT("Key reduction is not supported yet; omit or pass false")).Literal(false),
 		MCPParam::Optional(TEXT("tolerance"), EType::Number, TEXT("Key-reduction tolerance (default 0.001)")),
 		MCPParam::Optional(TEXT("createLink"), EType::Boolean, TEXT("Sequencer links are not supported yet; omit or pass false")).Literal(false),
-		MCPParam::Optional(TEXT("onConflict"), EType::String, TEXT("skip returns an existing output, error (default) refuses; it never overwrites")),
+		MCPSharedParam::OnConflict().Describe(TEXT("skip returns an existing output, error (default) refuses; it never overwrites")),
 	};
 	BakeEditParams.Append(AnimExportOptionParams(TEXT("Bone key interpolation of the output (default the interpolation of the clip the session began from)")));
 	Registry.RegisterHandler(TEXT("bake_control_rig_edit"), &BakeControlRigEdit, BakeEditParams,
@@ -868,7 +868,7 @@ void FAnimationHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("bindingName"), EType::String, TEXT("Display name of the possessable or spawnable binding to bake; must be unique")),
 		MCPParam::Required(TEXT("outputAssetPath"), EType::String, TEXT("Destination AnimSequence asset path")),
 		MCPParam::Optional(TEXT("frameRate"), EType::Number, TEXT("Frames per second of the bake (default the sequence's display rate)")),
-		MCPParam::Optional(TEXT("onConflict"), EType::String, TEXT("skip returns an existing output, error (default) refuses; it never overwrites")).Enum({ TEXT("skip"), TEXT("error") }),
+		MCPSharedParam::OnConflict().Describe(TEXT("skip returns an existing output, error (default) refuses; it never overwrites")).Enum({ TEXT("skip"), TEXT("error") }),
 	};
 	BakeSequenceParams.Append(AnimExportOptionParams(TEXT("Bone key interpolation of the output (default linear)")));
 	Registry.RegisterHandler(TEXT("bake_sequence_animation"), &BakeSequenceAnimation, BakeSequenceParams,
@@ -1164,11 +1164,11 @@ void FAnimationHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	// #419/#420 - live-actor skeletal reads + rebind + preview (moved from Level)
 	auto ActorLabel = []()
 	{
-		return MCPParam::Optional(TEXT("actorLabel"), EType::String, TEXT("Editor label of the actor; pass this or actorPath"));
+		return MCPSharedParam::ActorLabel();
 	};
 	auto ActorPath = []()
 	{
-		return MCPParam::Optional(TEXT("actorPath"), EType::String, TEXT("Full actor object path, the unambiguous selector; wins over actorLabel"));
+		return MCPSharedParam::ActorPath();
 	};
 	auto ComponentName = []()
 	{
@@ -1176,7 +1176,7 @@ void FAnimationHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	};
 	auto WorldScope = []()
 	{
-		return MCPParam::Optional(TEXT("world"), EType::String, TEXT("auto (default, prefers PIE) | pie | game | editor"));
+		return MCPSharedParam::World().Describe(TEXT("auto (default, prefers PIE) | pie | game | editor"));
 	};
 	Registry.RegisterHandler(TEXT("get_bone_transform"), &GetBoneTransform, {
 		ActorLabel(),

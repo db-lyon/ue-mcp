@@ -165,7 +165,10 @@ export function handlersByCategory(snapshot) {
   const problems = specProblems(snapshot.handlers ?? {});
   if (problems.length > 0) throw new Error(`handler-specs.json cannot generate a surface:\n  ${problems.join("\n  ")}`);
   const out = new Map();
+  const facts = snapshot.actionFacts ?? {};
   for (const method of Object.keys(snapshot.handlers).sort()) {
+    // Called by the server itself, never through a tool, so no surface declares it.
+    if (facts[method]?.serverInternal) continue;
     const spec = snapshot.handlers[method];
     const category = spec.category;
     if (!category) throw new Error(`${method}: no category, so no module to generate it into`);

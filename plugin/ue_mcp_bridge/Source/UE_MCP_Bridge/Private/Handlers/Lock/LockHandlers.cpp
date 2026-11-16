@@ -24,9 +24,26 @@ void FLockHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 {
 	// Reports parameters its handlers never read (#1057).
 	FMCPHandlerRegistry::FCategoryScope CategoryScope(Registry, TEXT("lock"));
-	Registry.RegisterHandler(TEXT("acquire_lock"), &FLockHandlers::AcquireLock);
-	Registry.RegisterHandler(TEXT("release_lock"), &FLockHandlers::ReleaseLock);
-	Registry.RegisterHandler(TEXT("release_session_locks"), &FLockHandlers::ReleaseSessionLocks);
+	{
+		using EType = EMCPParamType;
+		// The asset tool's lock, unlock and unlock_all build these calls themselves.
+		const TCHAR* const LockService = TEXT("the server's asset locks (src/dispatch/locking.ts) and asset(lock, unlock, unlock_all)");
+		const FMCPParamSpec Path = MCPParam::Required(TEXT("path"), EType::String, TEXT("Asset path the lock is keyed by")).Alias(TEXT("assetPath"));
+		const FMCPParamSpec SessionId = MCPParam::Required(TEXT("sessionId"), EType::String, TEXT("Session that holds, or asks for, the lock"));
+		Registry.RegisterHandler(TEXT("acquire_lock"), &FLockHandlers::AcquireLock, {
+			Path,
+			SessionId,
+			MCPParam::Optional(TEXT("ttlSeconds"), EType::Number, TEXT("Seconds the lock lasts without renewal")).Default(300.0),
+		}, MCPSpec::ServerInternal(LockService).ContractExempt(TEXT("takes a lock in the editor-wide lock registry")));
+		Registry.RegisterHandler(TEXT("release_lock"), &FLockHandlers::ReleaseLock, {
+			Path,
+			SessionId,
+			MCPParam::Optional(TEXT("force"), EType::Boolean, TEXT("Break the lock whoever holds it")).Default(false),
+		}, MCPSpec::ServerInternal(LockService));
+		Registry.RegisterHandler(TEXT("release_session_locks"), &FLockHandlers::ReleaseSessionLocks, {
+			SessionId,
+		}, MCPSpec::ServerInternal(LockService));
+	}
 	{
 		// Exposed as asset(list_locks), so its spec generates into the asset surface.
 		FMCPHandlerRegistry::FCategoryScope AssetScope(Registry, TEXT("asset"));

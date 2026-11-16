@@ -92,6 +92,27 @@ export interface ParamSpec {
   minimum?: number;
   /** Inclusive upper bound, as minimum. */
   maximum?: number;
+  /** What the handler uses when the parameter is omitted. */
+  default?: boolean | string | number;
+}
+
+/**
+ * How the bridge runs an action, as get_bridge_capabilities.actionFacts
+ * publishes it (FMCPActionFacts). Only what differs from the common case is present.
+ */
+export interface ActionFacts {
+  /** Game-thread budget in seconds; absent is the bridge default. */
+  timeoutSeconds?: number;
+  /** Runs while a modal dialog holds the game thread. */
+  modalSafe?: boolean;
+  /** Answered on the socket thread, before the dialog gate. */
+  servedOffGameThread?: boolean;
+  /** Left out of the parameter echo. */
+  notEchoed?: boolean;
+  /** Why execute_batch refuses to carry it. */
+  refusedInBatch?: string;
+  /** Who calls it instead of a tool. */
+  serverInternal?: string;
 }
 
 /** How many branches of a choice a call supplies. Mirrors EMCPChoiceMode. */

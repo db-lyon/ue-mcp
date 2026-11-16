@@ -786,7 +786,7 @@ void FChooserHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("chooser_create"), &Create, {
 		MCPParam::Required(TEXT("name"), EType::String, TEXT("New ChooserTable asset name")),
 		MCPParam::Optional(TEXT("packagePath"), EType::String, TEXT("Destination folder (default /Game)")),
-		MCPParam::Optional(TEXT("onConflict"), EType::String, TEXT("When the table exists: skip (default, report it) | error")),
+		MCPSharedParam::OnConflict().Describe(TEXT("When the table exists: skip (default, report it) | error")),
 	}, MCPSpec::ContractExempt(TEXT("Creates and saves a ChooserTable under the contract values; nothing it reads fails first")));
 	Registry.RegisterHandler(TEXT("chooser_describe"), &Describe, {
 		TableParam,

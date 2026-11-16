@@ -275,9 +275,8 @@ void FEditorHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	// renamed to its parameter by the registry before the handler runs.
 	// A handler that would run a command, a script, a build, PIE, a trace or a
 	// save under the contract test's values is ContractExempt, and its source is
-	// held to its spec instead. execute_python, request_editor_shutdown and
-	// pie_start_ignoring_blueprint_errors have no bridge action of their own,
-	// so they carry no spec.
+	// held to its spec instead. execute_python and request_editor_shutdown have
+	// no bridge action of their own, so they carry no spec.
 	using EType = EMCPParamType;
 	Registry.RegisterHandler(TEXT("get_shader_compile_status"), &GetShaderCompileStatus, {
 		MCPParam::Optional(TEXT("waitUntilIdle"), EType::Boolean, TEXT("Poll between game-thread ticks until shaders are idle; timeoutMs is the server routing budget (default 60000)")),
@@ -297,19 +296,19 @@ void FEditorHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	};
 	auto ActorLabelParam = []()
 	{
-		return MCPParam::Optional(TEXT("actorLabel"), EType::String, TEXT("Actor label. Editor labels are not unique, so a label naming several actors is refused"));
+		return MCPSharedParam::ActorLabel();
 	};
 	auto ActorPathParam = []()
 	{
-		return MCPParam::Optional(TEXT("actorPath"), EType::String, TEXT("Full actor object path, the unambiguous selector. Wins over actorLabel"));
+		return MCPSharedParam::ActorPath();
 	};
 	auto WorldParam = []()
 	{
-		return MCPParam::Optional(TEXT("world"), EType::String, TEXT("World scope: editor | pie | auto. Each action names its own default"));
+		return MCPSharedParam::World();
 	};
 	auto PieInstanceParam = []()
 	{
-		return MCPParam::Optional(TEXT("pieInstance"), EType::Number, TEXT("PIE world to target: 0 = server/primary, 1..N = clients. See list_pie_instances"));
+		return MCPSharedParam::PieInstance().Describe(TEXT("PIE world to target: 0 = server/primary, 1..N = clients. See list_pie_instances"));
 	};
 	auto ViewportIndexParam = []()
 	{
@@ -336,8 +335,8 @@ void FEditorHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 
 	Registry.RegisterHandler(TEXT("execute_command"), &ExecuteCommand, {
 		MCPParam::Required(TEXT("command"), EType::String, TEXT("Console command to run")),
-		MCPParam::Optional(TEXT("world"), EType::String, TEXT("editor (default) | pie | auto: pie runs it as a PIE player, through that player's console, cheat manager and world")),
-		MCPParam::Optional(TEXT("pieInstance"), EType::Number, TEXT("PIE world to target: 0 = server/primary, 1..N = clients. See list_pie_instances")),
+		MCPSharedParam::World().Describe(TEXT("editor (default) | pie | auto: pie runs it as a PIE player, through that player's console, cheat manager and world")),
+		MCPSharedParam::PieInstance().Describe(TEXT("PIE world to target: 0 = server/primary, 1..N = clients. See list_pie_instances")),
 		MCPParam::Optional(TEXT("playerIndex"), EType::Number, TEXT("Local player whose console runs a PIE command (default 0)")),
 	}, MCPSpec::ContractExempt(TEXT("runs a console command")));
 	Registry.RegisterHandler(TEXT("execute_python"), &ExecutePython);
@@ -444,14 +443,23 @@ void FEditorHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	RegisterMapCheckHandlers(Registry);
 	RegisterPythonPathHandlers(Registry);
 	Registry.RegisterHandler(TEXT("get_build_status"), &GetBuildStatus, NoParams);
+	const FMCPParamSpec WaitForAssetRegistry = MCPParam::Optional(TEXT("waitForAssetRegistry"), EType::Boolean, TEXT("start only: block until the AssetRegistry initial scan completes, since PIE silently no-ops during it on a cold editor (default true)")).Default(true);
+	const FMCPParamSpec AssetRegistryTimeout = MCPParam::Optional(TEXT("assetRegistryTimeoutSeconds"), EType::Number, TEXT("start only: how long to wait for that scan (default 180)")).Default(180.0);
 	Registry.RegisterHandler(TEXT("pie_control"), &PieControl, {
 		MCPParam::Optional(TEXT("pieAction"), EType::String, TEXT("start | stop | status (default status)")),
-		MCPParam::Optional(TEXT("waitForAssetRegistry"), EType::Boolean, TEXT("start only: block until the AssetRegistry initial scan completes, since PIE silently no-ops during it on a cold editor (default true)")),
-		MCPParam::Optional(TEXT("assetRegistryTimeoutSeconds"), EType::Number, TEXT("start only: how long to wait for that scan (default 180)")),
+		WaitForAssetRegistry,
+		AssetRegistryTimeout,
 	}, MCPSpec::ContractExempt(TEXT("starts and stops Play In Editor")));
-	// The Blueprint-error bypass start, called only by the approval-gated
-	// editor(play_in_editor_ignore_blueprint_errors) handler.
-	Registry.RegisterHandler(TEXT("pie_start_ignoring_blueprint_errors"), &PieStartIgnoringBlueprintErrors);
+	// The Blueprint-error bypass start. The server decides whether the caller
+	// may bypass the prompt and names the source; the enum is the list the
+	// bridge recognizes, published so the server never keeps its own copy.
+	Registry.RegisterHandler(TEXT("pie_start_ignoring_blueprint_errors"), &PieStartIgnoringBlueprintErrors, {
+		MCPParam::Required(TEXT("authorizationSource"), EType::String, TEXT("Who authorized the bypass: user_approval (an approval prompt the user accepted) or config (the standing pie.allowIgnoreBlueprintErrors opt-in)"))
+			.Enum({ TEXT("user_approval"), TEXT("config") }),
+		WaitForAssetRegistry,
+		AssetRegistryTimeout,
+	}, MCPSpec::ContractExempt(TEXT("starts Play In Editor"))
+		.ServerInternal(TEXT("editor(play_in_editor_ignore_blueprint_errors), after the server authorizes the launch")));
 	Registry.RegisterHandler(TEXT("capture_screenshot"), &CaptureScreenshot, {
 		MCPParam::Required(TEXT("filename"), EType::String, TEXT("Image path to write; .png is appended without an image extension")).Alias(TEXT("outputPath")),
 		MCPParam::Optional(TEXT("target"), EType::String, TEXT("auto (default) | pie | editor | window")),
@@ -465,8 +473,12 @@ void FEditorHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("viewportType"), EType::String, TEXT("Perspective | Top | Bottom | Left | Right | Front | Back | OrthoFreelook")),
 		MCPParam::Optional(TEXT("orthoZoom"), EType::Number, TEXT("Orthographic zoom, within the engine's own limits")),
 	});
-	Registry.RegisterHandler(TEXT("undo"), &Undo, NoParams, MCPSpec::ContractExempt(TEXT("undoes the last editor transaction")));
-	Registry.RegisterHandler(TEXT("redo"), &Redo, NoParams, MCPSpec::ContractExempt(TEXT("redoes the last undone editor transaction")));
+	// A batch is one undo transaction, so nothing that walks or splits the undo
+	// stack can run inside one.
+	const TCHAR* const UndoInBatch = TEXT("inside a batch it would undo or redo the batch's own earlier steps; call it after the batch");
+	const TCHAR* const TransactionInBatch = TEXT("a batch is already one transaction, and this would split or abort it; leave the batch to record the transaction");
+	Registry.RegisterHandler(TEXT("undo"), &Undo, NoParams, MCPSpec::ContractExempt(TEXT("undoes the last editor transaction")).RefusedInBatch(UndoInBatch));
+	Registry.RegisterHandler(TEXT("redo"), &Redo, NoParams, MCPSpec::ContractExempt(TEXT("redoes the last undone editor transaction")).RefusedInBatch(UndoInBatch));
 	Registry.RegisterHandler(TEXT("get_viewport_state"), &GetViewportState, {
 		ViewportIndexParam(),
 	});
@@ -506,17 +518,17 @@ void FEditorHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	});
 	Registry.RegisterHandler(TEXT("begin_editor_transaction"), &BeginEditorTransaction, {
 		MCPParam::Optional(TEXT("description"), EType::String, TEXT("Undo-stack label for the transaction (default MCP Edit)")).Alias(TEXT("label")),
-	}, MCPSpec::ContractExempt(TEXT("opens an undo transaction")));
+	}, MCPSpec::ContractExempt(TEXT("opens an undo transaction")).RefusedInBatch(TransactionInBatch));
 	Registry.RegisterHandler(TEXT("end_editor_transaction"), &EndEditorTransaction, NoParams,
-		MCPSpec::ContractExempt(TEXT("commits the open undo transaction")));
+		MCPSpec::ContractExempt(TEXT("commits the open undo transaction")).RefusedInBatch(TransactionInBatch));
 	Registry.RegisterHandler(TEXT("cancel_editor_transaction"), &CancelEditorTransaction, {
 		MCPParam::Optional(TEXT("index"), EType::Number, TEXT("Which open transaction to cancel (default 0)")),
-	}, MCPSpec::ContractExempt(TEXT("cancels the open undo transaction and restores what it touched")));
+	}, MCPSpec::ContractExempt(TEXT("cancels the open undo transaction and restores what it touched")).RefusedInBatch(TransactionInBatch));
 	Registry.RegisterHandler(TEXT("get_undo_state"), &GetUndoState, NoParams);
 	Registry.RegisterHandler(TEXT("undo_redo_steps"), &UndoRedoSteps, {
 		MCPParam::Optional(TEXT("steps"), EType::Integer, TEXT("How many steps to apply (default 1)")),
 		MCPParam::Optional(TEXT("direction"), EType::String, TEXT("undo (default) | redo")),
-	});
+	}, MCPSpec::RefusedInBatch(UndoInBatch));
 	Registry.RegisterHandler(TEXT("get_transaction_history"), &GetTransactionHistory, {
 		MCPParam::Optional(TEXT("maxEntries"), EType::Number, TEXT("Cap on entries returned (default 50)")),
 	});
@@ -618,7 +630,7 @@ void FEditorHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("request_editor_shutdown"), &RequestEditorShutdown);
 	Registry.RegisterHandler(TEXT("discard_dirty"), &DiscardDirty, {
 		MCPParam::Required(TEXT("packages"), EType::Array, TEXT("Long package names to clear, as editor(list_dirty_packages) reports them (e.g. /Engine/Maps/Entry). Only these are touched")).Items(EType::String),
-		MCPParam::Optional(TEXT("dryRun"), EType::Boolean, TEXT("Report what would happen to each package and clear nothing (default false)")),
+		MCPSharedParam::DryRun().Describe(TEXT("Report what would happen to each package and clear nothing (default false)")),
 		MCPParam::Optional(TEXT("allowContent"), EType::Boolean, TEXT("Also clear project and plugin content, including never-saved /Temp maps, whose unsaved edits are then lost when the editor closes (default false)")),
 	});
 	Registry.RegisterHandler(TEXT("list_pie_instances"), &ListPIEInstances, NoParams);
@@ -726,7 +738,7 @@ void FEditorHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("outerPath"), EType::String, TEXT("Only objects somewhere under this outer, such as one level or world")),
 		MCPParam::Optional(TEXT("exactClass"), EType::Boolean, TEXT("Match className exactly instead of including subclasses (default false)")),
 		MCPParam::Optional(TEXT("includeDefaults"), EType::Boolean, TEXT("Include class default objects and archetypes (default false)")),
-		MCPParam::Optional(TEXT("world"), EType::String, TEXT("World scope: any (default) | editor | pie. A scoped search includes objects outered to that world's GameInstance or LocalPlayers (UMG widgets, LocalPlayer subsystems)")),
+		MCPSharedParam::World().Describe(TEXT("World scope: any (default) | editor | pie. A scoped search includes objects outered to that world's GameInstance or LocalPlayers (UMG widgets, LocalPlayer subsystems)")),
 		PieInstanceParam(),
 		CursorParam(),
 		LimitParam(TEXT("Objects on this page (default 50, max 1000)")),
@@ -769,7 +781,7 @@ void FEditorHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("create_new_level"), &CreateNewLevel, {
 		MCPParam::Required(TEXT("levelPath"), EType::String, TEXT("Long package path of the new level, e.g. /Game/Maps/MyLevel. Validated before the engine is asked")),
 		MCPParam::Optional(TEXT("templateLevel"), EType::String, TEXT("Level to copy; omit, Empty or None for a blank level")),
-		MCPParam::Optional(TEXT("onConflict"), EType::String, TEXT("When the level exists: skip (default) returns it untouched, error refuses")),
+		MCPSharedParam::OnConflict().Describe(TEXT("When the level exists: skip (default) returns it untouched, error refuses")),
 		MCPParam::Optional(TEXT("worldPartition"), EType::Boolean, TEXT("Create a blank World Partition level with one file per actor (default false); a templateLevel decides this itself")),
 	}, MCPSpec::ContractExempt(TEXT("creates and opens a level")));
 	Registry.RegisterHandler(TEXT("open_asset"), &OpenAsset, {
@@ -859,14 +871,14 @@ void FEditorHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("focusActorPath"), EType::String, TEXT("Full object path of the actor to frame. Wins over focusActorLabel")),
 		MCPParam::Optional(TEXT("focusDirection"), EType::Vec3, TEXT("Framing direction from the focus actor (default front and above)")),
 		MCPParam::Optional(TEXT("focusMargin"), EType::Number, TEXT("Positive bounds fill margin; higher pulls back (default 1.5)")),
-		MCPParam::Optional(TEXT("world"), EType::String, TEXT("World scope: editor (default) | pie")),
+		MCPSharedParam::World().Describe(TEXT("World scope: editor (default) | pie")),
 		PieInstanceParam(),
 		MCPParam::Optional(TEXT("width"), EType::Number, TEXT("Capture width in pixels (default 1280)")),
 		MCPParam::Optional(TEXT("height"), EType::Number, TEXT("Capture height in pixels (default 720)")),
 		MCPParam::Optional(TEXT("fov"), EType::Number, TEXT("Capture FOV in degrees, greater than 0 and less than 180 (default 90)")),
 		MCPParam::Optional(TEXT("fullyLoadTextures"), EType::Boolean, TEXT("Stream textures in and flush the render thread before the capture (default true)")),
 	}, MCPSpec::ContractExempt(TEXT("spawns a capture actor and writes an image file")));
-	Registry.RegisterHandler(TEXT("render_mesh_studio"), &RenderMeshStudio, {
+	Registry.RegisterHandlerWithTimeout(TEXT("render_mesh_studio"), &RenderMeshStudio, 600.0f, {
 		MCPParam::Required(TEXT("captures"), EType::Array, TEXT("1-128 mesh captures, with unique filename-safe ids and exactly one of meshPath or parts")).Items(EType::Object).WithFields({
 			MCPParam::RequiredField(TEXT("id"), EType::String, TEXT("Unique filename stem: letters, digits, underscore or hyphen")),
 			MCPParam::OptionalField(TEXT("meshPath"), EType::String, TEXT("StaticMesh or SkeletalMesh asset path")),
@@ -902,7 +914,7 @@ void FEditorHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	}, MCPSpec::ContractExempt(TEXT("toggles realtime on every level viewport")));
 	Registry.RegisterHandler(TEXT("get_pie_pawn"), &GetPiePawn, {
 		MCPParam::Optional(TEXT("playerIndex"), EType::Number, TEXT("0-based player index (default 0)")),
-		MCPParam::Optional(TEXT("pieInstance"), EType::Number, TEXT("PIE world to read (default: the primary world, or the first client world when the primary is a dedicated server). See list_pie_instances")),
+		MCPSharedParam::PieInstance().Describe(TEXT("PIE world to read (default: the primary world, or the first client world when the primary is a dedicated server). See list_pie_instances")),
 	});
 	Registry.RegisterHandler(TEXT("invoke_function"), &InvokeFunction, {
 		MCPParam::Required(TEXT("functionName"), EType::String, TEXT("BlueprintCallable or Exec UFUNCTION on the actor, or on component")),
@@ -911,7 +923,7 @@ void FEditorHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("component"), EType::String, TEXT("Component subobject name to call the function on instead of the actor")),
 		FunctionArgsParam(),
 		MCPParam::Optional(TEXT("actorArgs"), EType::Object, TEXT("UObject* parameter name -> actor label, resolved against live actors in the selected world")),
-		MCPParam::Optional(TEXT("world"), EType::String, TEXT("editor (default) | pie | auto")),
+		MCPSharedParam::World().Describe(TEXT("editor (default) | pie | auto")),
 		PieInstanceParam(),
 		MCPParam::Optional(TEXT("deferToNextTick"), EType::Boolean, TEXT("Queue the call for the next engine tick, outside the editor script-execution guard, so a replicated UFUNCTION routes normally; return and out values are not reported")),
 	}, MCPSpec::AtLeastOne({ { TEXT("actorLabel") }, { TEXT("actorPath") } }).ContractExempt(TEXT("calls a UFUNCTION")));
@@ -921,7 +933,7 @@ void FEditorHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		FunctionArgsParam(),
 		MCPParam::Optional(TEXT("actorArgs"), EType::Object, TEXT("UObject* parameter name -> actor label, resolved against live actors in the selected world")),
 		MCPParam::Optional(TEXT("worldContextParam"), EType::String, TEXT("UObject* parameter to fill with the selected world; detected from WorldContext metadata and for WorldContextObject when omitted")),
-		MCPParam::Optional(TEXT("world"), EType::String, TEXT("editor (default) | pie | game | auto")),
+		MCPSharedParam::World().Describe(TEXT("editor (default) | pie | game | auto")),
 		PieInstanceParam(),
 	}, MCPSpec::ContractExempt(TEXT("calls a static UFUNCTION")));
 	Registry.RegisterHandler(TEXT("configure_pie"), &ConfigurePie, {

@@ -348,7 +348,7 @@ void FWidgetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	};
 	auto CreateOnConflict = []()
 	{
-		return MCPParam::Optional(TEXT("onConflict"), EType::String, TEXT("When the asset exists: skip (default, report it) | error"));
+		return MCPSharedParam::OnConflict();
 	};
 
 	Registry.RegisterHandler(TEXT("list_widget_blueprints"), &ListWidgetBlueprints, {
@@ -438,23 +438,24 @@ void FWidgetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("run_editor_utility_blueprint"), &RunEditorUtilityBlueprint, {
 		AssetPath(),
 	});
-	Registry.RegisterHandler(TEXT("add_widget"), &AddWidget, {
+	// A tree edit recompiles the Widget Blueprint, which takes long on a large one.
+	Registry.RegisterHandlerWithTimeout(TEXT("add_widget"), &AddWidget, 120.0f, {
 		AssetPath(),
 		MCPParam::Required(TEXT("widgetClass"), EType::String, TEXT("Widget class: a short name (TextBlock, CanvasPanel), a full path, or a Widget Blueprint path")).Alias(TEXT("typeName")),
 		MCPParam::Optional(TEXT("widgetName"), EType::String, TEXT("Name of a widget inside the tree (#798)")).Alias(TEXT("name")),
 		MCPParam::Optional(TEXT("parentWidgetName"), EType::String, TEXT("Name of the parent panel widget (#798)")),
 		MCPParam::Optional(TEXT("childIndex"), EType::Integer, TEXT("Sibling index to insert at within the parent panel, 0 to its current child count (default: append). Refused when out of range or when the widget becomes the root (#1440)")),
 	});
-	Registry.RegisterHandler(TEXT("build_tree"), &BuildTree, {
+	Registry.RegisterHandlerWithTimeout(TEXT("build_tree"), &BuildTree, 120.0f, {
 		AssetPath(),
 		MCPParam::Required(TEXT("tree"), EType::Object, TEXT("One subtree root {widgetClass, widgetName?, properties?, children?}; children nest the same shape. properties take set_widget_property names (slot.* included) with JSON values")),
 		MCPParam::Optional(TEXT("parentWidgetName"), EType::String, TEXT("Panel to build under (default: the root panel, or the tree root when there is none)")),
 	});
-	Registry.RegisterHandler(TEXT("remove_widget"), &RemoveWidget, {
+	Registry.RegisterHandlerWithTimeout(TEXT("remove_widget"), &RemoveWidget, 120.0f, {
 		AssetPath(),
 		WidgetName(),
 	});
-	Registry.RegisterHandler(TEXT("rename_widget"), &RenameWidget, {
+	Registry.RegisterHandlerWithTimeout(TEXT("rename_widget"), &RenameWidget, 120.0f, {
 		AssetPath(),
 		WidgetName(),
 		MCPParam::Required(TEXT("newName"), EType::String, TEXT("New widget name; refused when another widget, variable or function already holds it")),
@@ -504,8 +505,8 @@ void FWidgetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("childName"), EType::String, TEXT("Named child inside the UserWidget (#559)")),
 		MCPParam::Optional(TEXT("childClassFilter"), EType::String, TEXT("Class substring filter for subtree nodes (implies includeSubtree)")),
 		MCPParam::Optional(TEXT("viewportOnly"), EType::Boolean, TEXT("Only widgets currently added to the viewport")),
-		MCPParam::Optional(TEXT("world"), EType::String, TEXT("Runtime world scope: pie (default) | game | auto. The editor world is never a valid target")),
-		MCPParam::Optional(TEXT("pieInstance"), EType::Integer, TEXT("PIE instance id for multi-client sessions")),
+		MCPSharedParam::World().Describe(TEXT("Runtime world scope: pie (default) | game | auto. The editor world is never a valid target")),
+		MCPSharedParam::PieInstance().Describe(TEXT("PIE instance id for multi-client sessions")),
 		MCPParam::Optional(TEXT("maxInstances"), EType::Integer, TEXT("Maximum matching widget instances returned (1 to 500, default 100)")),
 		MCPParam::Optional(TEXT("maxNodesPerInstance"), EType::Integer, TEXT("Maximum root/subtree nodes per instance (1 to 2000, default 250)")),
 	});

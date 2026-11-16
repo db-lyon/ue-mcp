@@ -18,7 +18,7 @@
 // so moving a handler between files is not drift.
 
 import { createHash } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { HANDLERS_DIR, REGISTRATION_RE, listHandlerFiles } from "./cpp-registrations.mjs";
@@ -27,7 +27,10 @@ export const SPEC_SOURCE_FILE = join(
   dirname(fileURLToPath(import.meta.url)), "..", "..", "tests", "golden", "handler-specs.source.json",
 );
 
-const SPEC_LINE_RE = /MCPParam::|MCPSpec::|FMCPParamSpec|FMCPSpecRules|FMCPHandlerSpec/;
+const SPEC_LINE_RE = /MCPParam::|MCPSpec::|MCPSharedParam::|FMCPParamSpec|FMCPSpecRules|FMCPHandlerSpec/;
+
+/** The parameters every category shares, declared outside the handler tree. */
+const SHARED_PARAMS_HEADER = "HandlerSharedParams.h";
 
 const hash = (text) => createHash("sha256").update(text).digest("hex").slice(0, 12);
 
@@ -102,6 +105,12 @@ export function specSourceFingerprint(dir = HANDLERS_DIR) {
       }
       offset += line.length + 1;
     }
+  }
+  const sharedHeader = join(dir, "..", SHARED_PARAMS_HEADER);
+  if (existsSync(sharedHeader)) {
+    // The whole header: a description or a bound on a line of its own changes every handler that uses it.
+    const fragment = normalize(readFileSync(sharedHeader, "utf8").replace(/\r\n/g, "\n"));
+    if (fragment) shared.push(fragment);
   }
   const handlers = Object.fromEntries(
     [...perMethod.keys()].sort().map((method) => [method, hash(perMethod.get(method).join("\n"))]),

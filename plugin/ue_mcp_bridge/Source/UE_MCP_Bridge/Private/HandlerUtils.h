@@ -46,6 +46,7 @@
 #include "HandlerResult.h"
 #include "HandlerWayForward.h"
 #include "HandlerParams.h"
+#include "HandlerSharedParams.h"
 #include "HandlerJsonConvert.h"
 #include "HandlerWorld.h"
 #include "HandlerAssetResolve.h"

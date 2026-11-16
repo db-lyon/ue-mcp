@@ -216,7 +216,7 @@ void FMaterialHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	};
 	auto SpecOnConflict = []()
 	{
-		return MCPParam::Optional(TEXT("onConflict"), EType::String, TEXT("When the asset exists: skip (default, report it) | error"));
+		return MCPSharedParam::OnConflict();
 	};
 	// A material graph or a MaterialFunction graph (#1138): one or the other.
 	const FMCPParamSpec SpecGraphMaterialPath = MCPParam::Optional(TEXT("materialPath"), EType::String, TEXT("Material asset path")).Alias(TEXT("path")).Alias(TEXT("assetPath"));
@@ -226,15 +226,15 @@ void FMaterialHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	// #952: a colour arrives as value or color, shaped {r,g,b,a}, [r,g,b,a] or UE struct text.
 	const FMCPParamSpec SpecColorValue = MCPParam::Optional(TEXT("color"), EType::Color, TEXT("A colour or vector value, instead of value")).Alias(TEXT("colour"));
 	// A placed component's material (#1114, #1131): the asset, or the actor holding it.
-	const FMCPParamSpec SpecActorLabel = MCPParam::Optional(TEXT("actorLabel"), EType::String, TEXT("Label of the actor whose component material to read; a label naming several actors is refused"));
-	const FMCPParamSpec SpecActorPath = MCPParam::Optional(TEXT("actorPath"), EType::String, TEXT("Full object path of that actor; the unambiguous selector"));
+	const FMCPParamSpec SpecActorLabel = MCPSharedParam::ActorLabel().Describe(TEXT("Label of the actor whose component material to read; a label naming several actors is refused"));
+	const FMCPParamSpec SpecActorPath = MCPSharedParam::ActorPath().Describe(TEXT("Full object path of that actor; the unambiguous selector"));
 	const FMCPParamSpec SpecComponentName = MCPParam::Optional(TEXT("componentName"), EType::String, TEXT("Primitive component whose material slot to read (default: the first with material slots)"));
 	const FMCPParamSpec SpecSlotIndex = MCPParam::Optional(TEXT("slotIndex"), EType::Integer, TEXT("Material slot index on the component (default 0)"));
 	const FMCPParamSpec SpecSlotName = MCPParam::Optional(TEXT("slotName"), EType::String, TEXT("Material slot name, instead of slotIndex"));
-	const FMCPParamSpec SpecPieInstance = MCPParam::Optional(TEXT("pieInstance"), EType::Number, TEXT("Which PIE world when several run (0 = server/primary). See editor(list_pie_instances)"));
+	const FMCPParamSpec SpecPieInstance = MCPSharedParam::PieInstance();
 	auto SpecWorld = [](const TCHAR* Description)
 	{
-		return MCPParam::Optional(TEXT("world"), EType::String, Description);
+		return MCPSharedParam::World().Describe(Description);
 	};
 	const FMCPSpecRules ActorChoice = MCPSpec::ExactlyOne({ { TEXT("actorLabel") }, { TEXT("actorPath") } });
 	const FMCPSpecRules AssetOrActorChoice = MCPSpec::ExactlyOne({ { TEXT("assetPath") }, { TEXT("actorLabel") }, { TEXT("actorPath") } });
@@ -338,8 +338,8 @@ void FMaterialHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	}, InstanceReadChoice);
 	Registry.RegisterHandler(TEXT("read_material_parameter_collection"), &ReadMaterialParameterCollection, {
 		SpecAssetPath(TEXT("MaterialParameterCollection asset path")),
-		MCPParam::Optional(TEXT("world"), EType::String, TEXT("World whose live collection instance to read: editor, pie or auto. Omit for the stored defaults only")),
-		MCPParam::Optional(TEXT("pieInstance"), EType::Number, TEXT("Which PIE world when several run (0 = server/primary). See editor(list_pie_instances)")),
+		MCPSharedParam::World().Describe(TEXT("World whose live collection instance to read: editor, pie or auto. Omit for the stored defaults only")),
+		MCPSharedParam::PieInstance(),
 	});
 	Registry.RegisterHandler(TEXT("set_material_instance_parent"), &SetMaterialInstanceParent, {
 		SpecAnyAssetPath(TEXT("MaterialInstanceConstant asset path")),
@@ -443,7 +443,7 @@ void FMaterialHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	});
 	Registry.RegisterHandler(TEXT("delete_orphan_expressions"), &DeleteOrphanExpressions, {
 		SpecGraphAssetPath(),
-		MCPParam::Optional(TEXT("dryRun"), EType::Boolean, TEXT("List the orphans without deleting them (default false)")),
+		MCPSharedParam::DryRun().Describe(TEXT("List the orphans without deleting them (default false)")),
 	});
 	Registry.RegisterHandler(TEXT("render_material_preview"), &RenderMaterialPreview, {
 		SpecGraphAssetPath(),
@@ -547,15 +547,15 @@ void FMaterialHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	});
 	Registry.RegisterHandler(TEXT("add_rvt_volume"), &AddRvtVolume, {
 		SpecRvtPath(),
-		MCPParam::Optional(TEXT("actorLabel"), EType::String, TEXT("Editor label for the new volume (default RVTVolume_<rvt name>)")),
+		MCPSharedParam::ActorLabel().Describe(TEXT("Editor label for the new volume (default RVTVolume_<rvt name>)")),
 		MCPParam::Optional(TEXT("boundsMode"), EType::String, TEXT("writers (cover every primitive writing into this RVT) | alignActor (match one actor's box and rotation)")),
 		MCPParam::Optional(TEXT("boundsAlignActor"), EType::String, TEXT("Actor label or object path whose rotation and bounds the volume aligns to, typically the landscape")),
 	});
 	// The volume by name, or found from the RVT it is bound to.
 	Registry.RegisterHandler(TEXT("set_rvt_volume_bounds"), &SetRvtVolumeBounds, {
 		MCPParam::Optional(TEXT("rvtPath"), EType::String, TEXT("RuntimeVirtualTexture whose one bound volume to refit")).Alias(TEXT("assetPath")),
-		MCPParam::Optional(TEXT("actorLabel"), EType::String, TEXT("Label of the RuntimeVirtualTextureVolume")),
-		MCPParam::Optional(TEXT("actorPath"), EType::String, TEXT("Full object path of the RuntimeVirtualTextureVolume")),
+		MCPSharedParam::ActorLabel().Describe(TEXT("Label of the RuntimeVirtualTextureVolume")),
+		MCPSharedParam::ActorPath().Describe(TEXT("Full object path of the RuntimeVirtualTextureVolume")),
 		MCPParam::Optional(TEXT("boundsMode"), EType::String, TEXT("writers (default: cover every primitive writing into this RVT) | alignActor (match one actor's box and rotation)")),
 		MCPParam::Optional(TEXT("boundsAlignActor"), EType::String, TEXT("Actor label or object path whose rotation and bounds the volume aligns to, typically the landscape")),
 	}, MCPSpec::ExactlyOne({ { TEXT("rvtPath") }, { TEXT("actorLabel") }, { TEXT("actorPath") } }));
@@ -578,8 +578,8 @@ void FMaterialHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	});
 	// rvtPaths wins over rvtPath; assignMode=set with neither clears the list.
 	Registry.RegisterHandler(TEXT("assign_rvt_to_landscape"), &AssignRvtToLandscape, {
-		MCPParam::Optional(TEXT("actorLabel"), EType::String, TEXT("Label of the landscape")),
-		MCPParam::Optional(TEXT("actorPath"), EType::String, TEXT("Full object path of the landscape")),
+		MCPSharedParam::ActorLabel().Describe(TEXT("Label of the landscape")),
+		MCPSharedParam::ActorPath().Describe(TEXT("Full object path of the landscape")),
 		MCPParam::Optional(TEXT("rvtPaths"), EType::Array, TEXT("RuntimeVirtualTexture asset paths")).Items(EType::String),
 		MCPParam::Optional(TEXT("rvtPath"), EType::String, TEXT("One RuntimeVirtualTexture asset path, instead of rvtPaths")),
 		MCPParam::Optional(TEXT("assignMode"), EType::String, TEXT("set (default: replace the list) | add | remove")),

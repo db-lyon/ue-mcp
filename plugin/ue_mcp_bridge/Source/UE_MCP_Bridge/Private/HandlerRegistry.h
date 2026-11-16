@@ -62,6 +62,13 @@ public:
 	// does not fit its type, or empty when it does.
 	static FString ValidateValueShape(const FMCPParamSpec& Param);
 
+	// Why a parameter's default is not a value it accepts, or empty when it is
+	// (or it has none).
+	static FString ValidateDefault(const FMCPParamSpec& Param);
+
+	// Why a set of action facts contradicts itself, or empty when it does not.
+	static FString ValidateFacts(const FMCPActionFacts& Facts);
+
 	// Why one object field does not fit its declared type, or empty when it
 	// does. Owner names what holds it, for the message.
 	static FString ValidateField(const FString& Owner, const FMCPParamField& Field);
@@ -117,6 +124,16 @@ public:
 	// in which case the caller should use its default.
 	float GetHandlerTimeout(const FString& MethodName) const;
 
+	// How the bridge runs MethodName (MCPHandlerSpec.h), core or external. All
+	// defaults for an unknown method.
+	FMCPActionFacts GetActionFacts(const FString& MethodName) const;
+
+	// { method: { timeoutSeconds?, modalSafe?, ... } } for every core handler whose
+	// facts differ from the default, for the capabilities payload.
+	TSharedPtr<FJsonObject> BuildActionFactsJson() const;
+	// The same for external handlers, apart so a core recording never captures them.
+	TSharedPtr<FJsonObject> BuildExternalActionFactsJson() const;
+
 	// Execute a handler
 	TSharedPtr<FJsonValue> ExecuteHandler(const FString& MethodName, const TSharedPtr<FJsonObject>& Params);
 
@@ -130,6 +147,17 @@ public:
 	// Check if handler exists
 	bool HasHandler(const FString& MethodName) const;
 
+	// Why the rollback a result carries cannot run here: its method is not
+	// registered (asked only of a registry holding the whole catalog), or its
+	// payload sends a key that method's spec does not declare. Empty when it can,
+	// or when the result carries none.
+	FString RollbackProblem(const TSharedPtr<FJsonValue>& Result) const;
+
+	// Every built-in category is registered. A test registry holding a few
+	// categories never calls it, so a rollback into a category it lacks is not
+	// reported as unregistered.
+	void MarkCatalogComplete() { bCatalogComplete = true; }
+
 	// Get all registered handler names
 	TArray<FString> GetHandlerNames() const;
 
@@ -140,18 +168,24 @@ private:
 	// C++ handlers
 	TMap<FString, FHandlerFunction> CppHandlers;
 
-	// Per-handler game-thread timeouts (seconds). Absent = use default.
-	TMap<FString, float> HandlerTimeouts;
+	// Action facts of every C++ handler whose facts differ from the default.
+	// Written during registration only, like HandlerSpecs.
+	TMap<FString, FMCPActionFacts> HandlerFacts;
+
+	void SetFacts(const FString& MethodName, const FMCPActionFacts& Facts);
+	static TSharedPtr<FJsonObject> FactsToJson(const FMCPActionFacts& Facts);
 
 	// Category each C++ handler was registered under, when one was set.
 	TMap<FString, FString> HandlerCategories;
 	FString RegistrationCategory;
+	bool bCatalogComplete = false;
 
 	// Declared parameter contracts (#1057). Written during registration only,
 	// so the socket thread may read it for the capabilities payload.
 	TMap<FString, FMCPHandlerSpec> HandlerSpecs;
 
 	void TagCategory(const FString& MethodName);
+	void CheckRollback(const FString& MethodName, const TSharedPtr<FJsonValue>& Result) const;
 
 	static TSharedPtr<FJsonObject> SpecsToJson(const TMap<FString, FMCPHandlerSpec>& Specs, const TMap<FString, FString>& Categories);
 };

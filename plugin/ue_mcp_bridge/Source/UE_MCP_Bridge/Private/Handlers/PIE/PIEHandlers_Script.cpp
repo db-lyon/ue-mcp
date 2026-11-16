@@ -296,7 +296,7 @@ void FPIEHandlers::RegisterScriptHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("map"), EType::String, MapDoc),
 		MCPParam::Optional(TEXT("default_within_ms"), EType::Integer, TEXT("Default auto-step window in game ms (default 5000)")).Min(1),
 		MCPParam::Optional(TEXT("manual_only"), EType::Boolean, ManualOnlyDoc),
-		MCPParam::Optional(TEXT("onConflict"), EType::String, TEXT("When the asset exists: skip (default), update or replace (overwrite it), error")).Enum({
+		MCPSharedParam::OnConflict().Describe(TEXT("When the asset exists: skip (default), update or replace (overwrite it), error")).Enum({
 			TEXT("skip"), TEXT("update"), TEXT("replace"), TEXT("error") }),
 	}, MCPSpec::ContractExempt(TEXT("Creates and saves a script asset")));
 	Registry.RegisterHandler(TEXT("pie_script_read"), &PieScriptRead, {

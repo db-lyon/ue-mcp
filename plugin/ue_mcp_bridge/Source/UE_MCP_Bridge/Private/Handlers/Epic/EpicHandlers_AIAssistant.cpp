@@ -512,7 +512,8 @@ void FEpicHandlers::RegisterAIAssistantHandlers(FMCPHandlerRegistry& Registry)
 	const FMCPParamSpec SpecConversation = MCPParam::Optional(TEXT("conversationId"), EType::String,
 		TEXT("Conversation to use; empty or omitted starts a new one (send_message) or reads the active one (get_conversation)"));
 	const FMCPParamSpec SpecWait = MCPParam::Optional(TEXT("wait"), EType::Boolean,
-		TEXT("Return only once the result is complete (default true); false returns the requestId to poll with get_request"));
+		TEXT("Return only once the result is complete (default true); false returns the requestId to poll with get_request")).Default(true);
+	const FMCPParamSpec SpecWaitTimeout = MCPParam::Optional(TEXT("timeoutSeconds"), EType::Number, TEXT("Longest wait in seconds (send_message default 300, get_conversation default 60)"));
 
 	Registry.RegisterHandler(TEXT("epic_ai_assistant_status"), &FEpicHandlers::AIAssistantStatus, {});
 	Registry.RegisterHandler(TEXT("epic_ai_assistant_send_message"), &FEpicHandlers::AIAssistantSendMessage, {
@@ -521,12 +522,12 @@ void FEpicHandlers::RegisterAIAssistantHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("hiddenContext"), EType::String, TEXT("Context appended to the message but not shown in the panel")),
 		MCPParam::Optional(TEXT("reply"), EType::Boolean, TEXT("Resolve with the assistant's reply text (default true); false resolves as soon as the message is bound to a conversation, with its id")),
 		SpecWait,
-		MCPParam::Optional(TEXT("timeoutSeconds"), EType::Number, TEXT("Longest wait in seconds (send_message default 300, get_conversation default 60)")),
+		SpecWaitTimeout.Default(300.0),
 	}, MCPSpec::ContractExempt(TEXT("opens the AI Assistant panel and sends a message to its backend")));
 	Registry.RegisterHandler(TEXT("epic_ai_assistant_get_conversation"), &FEpicHandlers::AIAssistantGetConversation, {
 		SpecConversation,
 		SpecWait,
-		MCPParam::Optional(TEXT("timeoutSeconds"), EType::Number, TEXT("Longest wait in seconds (send_message default 300, get_conversation default 60)")),
+		SpecWaitTimeout.Default(60.0),
 	}, MCPSpec::ContractExempt(TEXT("opens the AI Assistant panel")));
 	Registry.RegisterHandler(TEXT("epic_ai_assistant_get_request"), &FEpicHandlers::AIAssistantGetRequest, {
 		MCPParam::Required(TEXT("requestId"), EType::Integer, TEXT("requestId from send_message or get_conversation")),

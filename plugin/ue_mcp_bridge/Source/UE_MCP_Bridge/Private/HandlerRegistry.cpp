@@ -33,6 +33,19 @@ void FMCPHandlerRegistry::RegisterHandler(const FString& MethodName, FHandlerFun
 	CppHandlers.Add(MethodName, Handler);
 	TagCategory(MethodName);
 	HandlerSpecs.Remove(MethodName);
+	HandlerFacts.Remove(MethodName);
+}
+
+void FMCPHandlerRegistry::SetFacts(const FString& MethodName, const FMCPActionFacts& Facts)
+{
+	if (Facts.IsDefault())
+	{
+		HandlerFacts.Remove(MethodName);
+	}
+	else
+	{
+		HandlerFacts.Add(MethodName, Facts);
+	}
 }
 
 bool FMCPHandlerRegistry::RegisterHandler(const FString& MethodName, FHandlerFunction Handler, const TArray<FMCPParamSpec>& Params)
@@ -43,10 +56,14 @@ bool FMCPHandlerRegistry::RegisterHandler(const FString& MethodName, FHandlerFun
 bool FMCPHandlerRegistry::RegisterHandler(const FString& MethodName, FHandlerFunction Handler, const TArray<FMCPParamSpec>& Params, const FMCPSpecRules& Rules)
 {
 	RegisterHandler(MethodName, MoveTemp(Handler));
+	// The facts hold whether or not the parameter list is accepted: a refused
+	// spec must not also lose the handler its timeout or its modal safety.
+	SetFacts(MethodName, Rules.Facts);
 	FMCPHandlerSpec Spec;
 	Spec.Params = Params;
 	Spec.Choices = Rules.Choices;
 	Spec.ContractExemptReason = Rules.ContractExemptReason;
+	Spec.Facts = Rules.Facts;
 	const FString Problem = ValidateHandlerSpec(Spec);
 	if (!Problem.IsEmpty())
 	{
@@ -104,6 +121,10 @@ FString FMCPHandlerRegistry::ValidateParamSpecs(const TArray<FMCPParamSpec>& Par
 		{
 			Problem = ValidateValueShape(Param);
 		}
+		if (Problem.IsEmpty())
+		{
+			Problem = ValidateDefault(Param);
+		}
 		if (!Problem.IsEmpty()) return Problem;
 	}
 	return FString();
@@ -157,6 +178,74 @@ FString FMCPHandlerRegistry::ValidateHandlerSpec(const FMCPHandlerSpec& Spec)
 	if (!Spec.ContractExemptReason.IsEmpty() && Spec.ContractExemptReason.TrimStartAndEnd().IsEmpty())
 	{
 		return TEXT("a contract exemption needs a reason");
+	}
+	return ValidateFacts(Spec.Facts);
+}
+
+FString FMCPHandlerRegistry::ValidateFacts(const FMCPActionFacts& Facts)
+{
+	if (Facts.TimeoutSeconds < 0.0f)
+	{
+		return TEXT("a timeout is never negative; 0 is the bridge default");
+	}
+	if (!Facts.RefusedInBatchReason.IsEmpty() && Facts.RefusedInBatchReason.TrimStartAndEnd().IsEmpty())
+	{
+		return TEXT("a batch refusal needs a reason");
+	}
+	if (!Facts.ServerInternalCaller.IsEmpty() && Facts.ServerInternalCaller.TrimStartAndEnd().IsEmpty())
+	{
+		return TEXT("a server-internal action needs to name its caller");
+	}
+	if (Facts.bServedOffGameThread && Facts.TimeoutSeconds > 0.0f)
+	{
+		return TEXT("an action served off the game thread never waits on it, so it has no game-thread timeout");
+	}
+	return FString();
+}
+
+FString FMCPHandlerRegistry::ValidateDefault(const FMCPParamSpec& Param)
+{
+	if (!Param.DefaultValue.IsValid()) return FString();
+	if (Param.bRequired)
+	{
+		return FString::Printf(TEXT("'%s' is required and also declares a default"), *Param.Name);
+	}
+	const EJson Kind = Param.DefaultValue->Type;
+	auto Fits = [Kind](EMCPParamType Type)
+	{
+		switch (Type)
+		{
+		case EMCPParamType::Boolean: return Kind == EJson::Boolean;
+		case EMCPParamType::String:  return Kind == EJson::String;
+		case EMCPParamType::Number:
+		case EMCPParamType::Integer: return Kind == EJson::Number;
+		default:                     return false;
+		}
+	};
+	bool bFits = Fits(Param.Type);
+	for (const EMCPParamType OrType : Param.OrTypes)
+	{
+		bFits = bFits || Fits(OrType);
+	}
+	if (!bFits)
+	{
+		return FString::Printf(TEXT("'%s' declares a default that is not a boolean, string or number of its type"), *Param.Name);
+	}
+	if (Kind == EJson::Number)
+	{
+		const double Value = Param.DefaultValue->AsNumber();
+		if (Param.Type == EMCPParamType::Integer && FMath::Frac(Value) != 0.0)
+		{
+			return FString::Printf(TEXT("'%s' is an integer with a fractional default"), *Param.Name);
+		}
+		if ((Param.Minimum.IsSet() && Value < Param.Minimum.GetValue()) || (Param.Maximum.IsSet() && Value > Param.Maximum.GetValue()))
+		{
+			return FString::Printf(TEXT("'%s' declares a default outside its own range"), *Param.Name);
+		}
+	}
+	if (Kind == EJson::String && Param.EnumValues.Num() > 0 && !Param.EnumValues.Contains(Param.DefaultValue->AsString()))
+	{
+		return FString::Printf(TEXT("'%s' declares a default that is not one of its enum values"), *Param.Name);
 	}
 	return FString();
 }
@@ -534,6 +623,10 @@ TSharedPtr<FJsonObject> FMCPHandlerRegistry::SpecsToJson(const TMap<FString, FMC
 			{
 				Entry->SetField(TEXT("literal"), Param.LiteralValue);
 			}
+			if (Param.DefaultValue.IsValid())
+			{
+				Entry->SetField(TEXT("default"), Param.DefaultValue);
+			}
 			AddValueRules(Entry, Param.EnumValues, Param.Minimum, Param.Maximum);
 			if (Param.Fields.Num() > 0)
 			{
@@ -627,12 +720,10 @@ TSharedPtr<FJsonObject> FMCPHandlerRegistry::ResolveParamAliases(const FMCPHandl
 
 void FMCPHandlerRegistry::RegisterHandlerWithTimeout(const FString& MethodName, FHandlerFunction Handler, float TimeoutSeconds)
 {
-	CppHandlers.Add(MethodName, Handler);
-	TagCategory(MethodName);
-	if (TimeoutSeconds > 0.0f)
-	{
-		HandlerTimeouts.Add(MethodName, TimeoutSeconds);
-	}
+	RegisterHandler(MethodName, MoveTemp(Handler));
+	FMCPActionFacts Facts;
+	Facts.TimeoutSeconds = FMath::Max(TimeoutSeconds, 0.0f);
+	SetFacts(MethodName, Facts);
 }
 
 bool FMCPHandlerRegistry::RegisterHandlerWithTimeout(const FString& MethodName, FHandlerFunction Handler, float TimeoutSeconds, const TArray<FMCPParamSpec>& Params)
@@ -642,22 +733,74 @@ bool FMCPHandlerRegistry::RegisterHandlerWithTimeout(const FString& MethodName, 
 
 bool FMCPHandlerRegistry::RegisterHandlerWithTimeout(const FString& MethodName, FHandlerFunction Handler, float TimeoutSeconds, const TArray<FMCPParamSpec>& Params, const FMCPSpecRules& Rules)
 {
-	const bool bAccepted = RegisterHandler(MethodName, MoveTemp(Handler), Params, Rules);
-	if (TimeoutSeconds > 0.0f)
-	{
-		HandlerTimeouts.Add(MethodName, TimeoutSeconds);
-	}
-	return bAccepted;
+	return RegisterHandler(MethodName, MoveTemp(Handler), Params, Rules.Timeout(FMath::Max(TimeoutSeconds, 0.0f)));
 }
 
 float FMCPHandlerRegistry::GetHandlerTimeout(const FString& MethodName) const
 {
-	if (const float* V = HandlerTimeouts.Find(MethodName))
+	return GetActionFacts(MethodName).TimeoutSeconds;
+}
+
+FMCPActionFacts FMCPHandlerRegistry::GetActionFacts(const FString& MethodName) const
+{
+	if (CppHandlers.Contains(MethodName))
 	{
-		return *V;
+		const FMCPActionFacts* Facts = HandlerFacts.Find(MethodName);
+		return Facts ? *Facts : FMCPActionFacts();
 	}
-	// External (plugin-contributed) handlers may register their own timeout.
-	return UEMCP::GetExternalHandlerTimeout(MethodName);
+	// External (plugin-contributed) handlers declare theirs with the contract, or a timeout alone.
+	FMCPHandlerSpec ExternalSpec;
+	FMCPActionFacts Facts;
+	if (UEMCP::LookupExternalHandlerSpec(MethodName, ExternalSpec))
+	{
+		Facts = ExternalSpec.Facts;
+	}
+	const float ExternalTimeout = UEMCP::GetExternalHandlerTimeout(MethodName);
+	if (ExternalTimeout > 0.0f)
+	{
+		Facts.TimeoutSeconds = ExternalTimeout;
+	}
+	return Facts;
+}
+
+TSharedPtr<FJsonObject> FMCPHandlerRegistry::FactsToJson(const FMCPActionFacts& Facts)
+{
+	// Only what differs from the common case, so most actions publish nothing.
+	TSharedPtr<FJsonObject> Entry = MakeShared<FJsonObject>();
+	if (Facts.TimeoutSeconds > 0.0f) Entry->SetNumberField(TEXT("timeoutSeconds"), Facts.TimeoutSeconds);
+	if (Facts.bModalSafe) Entry->SetBoolField(TEXT("modalSafe"), true);
+	if (Facts.bServedOffGameThread) Entry->SetBoolField(TEXT("servedOffGameThread"), true);
+	if (Facts.bNotEchoed) Entry->SetBoolField(TEXT("notEchoed"), true);
+	if (!Facts.RefusedInBatchReason.IsEmpty()) Entry->SetStringField(TEXT("refusedInBatch"), Facts.RefusedInBatchReason);
+	if (!Facts.ServerInternalCaller.IsEmpty()) Entry->SetStringField(TEXT("serverInternal"), Facts.ServerInternalCaller);
+	return Entry;
+}
+
+TSharedPtr<FJsonObject> FMCPHandlerRegistry::BuildActionFactsJson() const
+{
+	TArray<FString> Methods;
+	HandlerFacts.GetKeys(Methods);
+	Methods.Sort();
+	TSharedPtr<FJsonObject> Out = MakeShared<FJsonObject>();
+	for (const FString& Method : Methods)
+	{
+		Out->SetObjectField(Method, FactsToJson(HandlerFacts.FindChecked(Method)));
+	}
+	return Out;
+}
+
+TSharedPtr<FJsonObject> FMCPHandlerRegistry::BuildExternalActionFactsJson() const
+{
+	TArray<FString> Methods = UEMCP::GetExternalHandlerNames();
+	Methods.Sort();
+	TSharedPtr<FJsonObject> Out = MakeShared<FJsonObject>();
+	for (const FString& Method : Methods)
+	{
+		if (CppHandlers.Contains(Method)) continue;
+		const FMCPActionFacts Facts = GetActionFacts(Method);
+		if (!Facts.IsDefault()) Out->SetObjectField(Method, FactsToJson(Facts));
+	}
+	return Out;
 }
 
 namespace
@@ -692,6 +835,7 @@ TSharedPtr<FJsonValue> FMCPHandlerRegistry::ExecuteHandler(const FString& Method
 		{
 			TSharedPtr<FJsonValue> Result = (*Handler)(Effective);
 			MCPSourceControl::AttachAutoCheckouts(Result, CheckoutMark);
+			CheckRollback(MethodName, Result);
 			return Result;
 		}
 		// #1057: a key the handler never read had no effect, so say so.
@@ -699,6 +843,7 @@ TSharedPtr<FJsonValue> FMCPHandlerRegistry::ExecuteHandler(const FString& Method
 		TSharedPtr<FJsonValue> Result = (*Handler)(Effective);
 		MCPAttachParamsNotRead(Result, ReadScope.Unread());
 		MCPSourceControl::AttachAutoCheckouts(Result, CheckoutMark);
+		CheckRollback(MethodName, Result);
 		return Result;
 	}
 
@@ -729,6 +874,65 @@ TSharedPtr<FJsonValue> FMCPHandlerRegistry::ExecuteHandler(const FString& Method
 	return nullptr;
 }
 
+FString FMCPHandlerRegistry::RollbackProblem(const TSharedPtr<FJsonValue>& Result) const
+{
+	const TSharedPtr<FJsonObject>* Body = nullptr;
+	const TSharedPtr<FJsonObject>* Rollback = nullptr;
+	if (!Result.IsValid() || !Result->TryGetObject(Body) || !(*Body)->TryGetObjectField(TEXT("rollback"), Rollback))
+	{
+		return FString();
+	}
+	FString Inverse;
+	if (!(*Rollback)->TryGetStringField(TEXT("method"), Inverse) || Inverse.IsEmpty())
+	{
+		return TEXT("the rollback names no method");
+	}
+	if (!HasHandler(Inverse))
+	{
+		return bCatalogComplete
+			? FString::Printf(TEXT("the rollback names '%s', which nothing registered"), *Inverse)
+			: FString();
+	}
+	FMCPHandlerSpec ExternalSpec;
+	const FMCPHandlerSpec* Spec = HandlerSpecs.Find(Inverse);
+	if (!Spec && UEMCP::LookupExternalHandlerSpec(Inverse, ExternalSpec))
+	{
+		Spec = &ExternalSpec;
+	}
+	const TSharedPtr<FJsonObject>* Payload = nullptr;
+	if (!Spec || !(*Rollback)->TryGetObjectField(TEXT("payload"), Payload))
+	{
+		return FString();
+	}
+	TSet<FString> Accepted;
+	for (const FMCPParamSpec& Param : Spec->Params)
+	{
+		Accepted.Add(Param.Name);
+		Accepted.Append(Param.Aliases);
+	}
+	for (const auto& Entry : (*Payload)->Values)
+	{
+		// The key type of FJsonObject::Values differs between engine versions.
+		const FString Key(Entry.Key);
+		if (!Accepted.Contains(Key))
+		{
+			return FString::Printf(TEXT("the rollback payload sends '%s', which '%s' does not declare"), *Key, *Inverse);
+		}
+	}
+	return FString();
+}
+
+void FMCPHandlerRegistry::CheckRollback(const FString& MethodName, const TSharedPtr<FJsonValue>& Result) const
+{
+	// The inverse is a method name and a payload built at runtime, so it is held
+	// to the registry here, on every call that returns one. An error log fails
+	// whichever automation test reached it.
+	const FString Problem = RollbackProblem(Result);
+	if (Problem.IsEmpty()) return;
+	UE_LOG(LogMCPBridge, Error, TEXT("[UE-MCP] %s returned a rollback the bridge cannot run: %s"), *MethodName, *Problem);
+	Result->AsObject()->SetStringField(TEXT("rollbackProblem"), Problem);
+}
+
 bool FMCPHandlerRegistry::HasHandler(const FString& MethodName) const
 {
 	if (CppHandlers.Contains(MethodName))
@@ -751,7 +955,7 @@ TArray<FString> FMCPHandlerRegistry::GetHandlerNames() const
 void FMCPHandlerRegistry::Clear()
 {
 	CppHandlers.Empty();
-	HandlerTimeouts.Empty();
+	HandlerFacts.Empty();
 	HandlerCategories.Empty();
 	HandlerSpecs.Empty();
 }

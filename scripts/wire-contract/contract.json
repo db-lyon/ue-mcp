@@ -7,8 +7,8 @@
       "doc": "Wire protocol version, reported by get_bridge_capabilities. Version 1 is every bridge built before the handshake existed; those answer it with Unknown method. Version 2 reassembles messages across reads and frames, answers close and ping frames, validates the upgrade request and serves the handshake. Bump it when a change would make an older client misread the wire."
     },
     "handlerApi": {
-      "value": 2,
-      "doc": "Native handler ABI version for plugins that register their own handlers. Bump it when the handler signature or registration contract changes in a breaking way. 2: external handlers can register a parameter contract (MCPHandlerSpec.h)."
+      "value": 3,
+      "doc": "Native handler ABI version for plugins that register their own handlers. Bump it when the handler signature or registration contract changes in a breaking way. 2: external handlers can register a parameter contract (MCPHandlerSpec.h). 3: the spec structs gain parameter defaults and action facts (FMCPActionFacts: timeout, modal safety, batch refusal, server-internal caller), which changes their layout, so a plugin built against 2 is rebuilt."
     }
   },
 
@@ -28,7 +28,8 @@
       "session-token",
       "deferred-results",
       "cancel-request",
-      "progress-frames"
+      "progress-frames",
+      "action-facts"
     ]
   },
 
@@ -59,6 +60,17 @@
     "maxCalls": {
       "value": 256,
       "doc": "The most steps one editor(batch) call carries. The whole list runs as one game-thread job, so this bounds how long one call holds the editor; a longer edit is two batches."
+    }
+  },
+
+  "timeouts": {
+    "defaultSeconds": {
+      "value": 30,
+      "doc": "How long the bridge waits on the game thread for an action that declares no timeout of its own (FMCPActionFacts::TimeoutSeconds). get_bridge_capabilities.actionFacts lists every action that declares one."
+    },
+    "maxRequestSeconds": {
+      "value": 3600,
+      "doc": "The most a call's timeoutMs can raise its budget to. A larger value is capped here, never refused; work that needs longer is split into several calls, or run through the action's job form and polled where it has one."
     }
   },
 

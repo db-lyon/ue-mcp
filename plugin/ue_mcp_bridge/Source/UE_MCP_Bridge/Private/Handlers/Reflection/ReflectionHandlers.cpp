@@ -78,7 +78,7 @@ void FReflectionHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Required(TEXT("name"), EType::String, TEXT("Enum asset name")),
 		MCPParam::Optional(TEXT("packagePath"), EType::String, TEXT("Folder for the new enum (default /Game)")),
 		MCPParam::Optional(TEXT("entries"), EType::Array, TEXT("Entries to seed: strings, or {name, displayName?} objects")),
-		MCPParam::Optional(TEXT("onConflict"), EType::String, TEXT("When the enum exists: skip (default, report it) | error")),
+		MCPSharedParam::OnConflict().Describe(TEXT("When the enum exists: skip (default, report it) | error")),
 	}, MCPSpec::ContractExempt(TEXT("Creates and saves an enum asset under the contract values; nothing it reads fails first")));
 	Registry.RegisterHandler(TEXT("set_enum_entries"), &SetEnumEntries, {
 		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("Existing UserDefinedEnum asset path")),

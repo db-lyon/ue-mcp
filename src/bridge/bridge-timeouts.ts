@@ -55,6 +55,7 @@ export const TIMEOUT_ENV_VAR = ENV_VARS.bridgeTimeoutMs;
  * come from plugins this repo does not build.
  */
 export const REGISTERED_HANDLER_TIMEOUT_SECONDS: Readonly<Record<string, number>> = {
+  add_widget: 120,
   analyze_insights_trace: 600,
   analyze_landscape_terrain: 120,
   apply_landscape_erosion: 600,
@@ -72,6 +73,7 @@ export const REGISTERED_HANDLER_TIMEOUT_SECONDS: Readonly<Record<string, number>
   batch_set_actor_properties: 300,
   batch_set_foliage_settings_where: 300,
   build_hlod_actors: 1800,
+  build_tree: 120,
   build_world_partition_hlods: 3600,
   build_world_partition_minimap: 3600,
   bulk_read_asset_properties: 300,
@@ -96,6 +98,7 @@ export const REGISTERED_HANDLER_TIMEOUT_SECONDS: Readonly<Record<string, number>
   export_landscape_heightmap: 300,
   fix_asset_hygiene: 300,
   fixup_redirectors: 300,
+  flush_blueprint_component_templates: 120,
   gather_localization_target: 1800,
   generate_mesh_collision: 300,
   generate_skeletal_mesh_lods: 600,
@@ -129,6 +132,9 @@ export const REGISTERED_HANDLER_TIMEOUT_SECONDS: Readonly<Record<string, number>
   recreate_physics_state: 300,
   refresh_landscape_physical_material_collision: 600,
   remove_components_by_class: 300,
+  remove_widget: 120,
+  rename_widget: 120,
+  render_mesh_studio: 600,
   render_sequence_frames: 600,
   rerun_construction_scripts: 300,
   resave_mesh_users: 300,

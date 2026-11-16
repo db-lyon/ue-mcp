@@ -61,7 +61,7 @@ void FFoliageHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Required(TEXT("meshPath"), EType::String, TEXT("StaticMesh the foliage type places")),
 		MCPParam::Optional(TEXT("name"), EType::String, TEXT("Asset name (default FT_<mesh name>)")),
 		MCPParam::Optional(TEXT("packagePath"), EType::String, TEXT("Content folder for the asset (default /Game/Foliage)")),
-		MCPParam::Optional(TEXT("onConflict"), EType::String, TEXT("When the asset already exists: skip (default) | error")),
+		MCPSharedParam::OnConflict().Describe(TEXT("When the asset already exists: skip (default) | error")),
 		MCPParam::Optional(TEXT("settings"), EType::Object, TEXT("Property name to value, applied to the new FoliageType")),
 	});
 	// #988: predicate-driven batch. Scanning and saving hundreds of FoliageType
@@ -106,8 +106,8 @@ void FFoliageHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("radius"), EType::Number, TEXT("Removal sphere radius in centimetres")),
 		MCPParam::Optional(TEXT("all"), EType::Boolean, TEXT("Remove every instance of the type")),
 		MCPParam::Optional(TEXT("matchTolerance"), EType::Number, TEXT("How close an instance must be to a transforms location, in centimetres (default 1)")),
-		MCPParam::Optional(TEXT("actorPath"), EType::String, TEXT("Only this InstancedFoliageActor")),
-		MCPParam::Optional(TEXT("dryRun"), EType::Boolean, TEXT("Report what would be removed without removing it")),
+		MCPSharedParam::ActorPath().Describe(TEXT("Only this InstancedFoliageActor")),
+		MCPSharedParam::DryRun().Describe(TEXT("Report what would be removed without removing it")),
 	});
 	Registry.RegisterHandler(TEXT("get_foliage_instances"), &GetFoliageInstances, {
 		MCPParam::Optional(TEXT("foliageTypePath"), EType::String, TypePathOrName),
@@ -137,15 +137,15 @@ void FFoliageHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	// point outlives the default handler timeout on anything but a small volume.
 	Registry.RegisterHandlerWithTimeout(
 		TEXT("simulate_procedural_foliage"), &SimulateProceduralFoliage, 600.0f, {
-		MCPParam::Optional(TEXT("actorLabel"), EType::String, TEXT("Label of a ProceduralFoliageVolume, or of any actor with a ProceduralFoliageComponent")),
-		MCPParam::Optional(TEXT("actorPath"), EType::String, TEXT("Object path of that actor")),
+		MCPSharedParam::ActorLabel().Describe(TEXT("Label of a ProceduralFoliageVolume, or of any actor with a ProceduralFoliageComponent")),
+		MCPSharedParam::ActorPath().Describe(TEXT("Object path of that actor")),
 		MCPParam::Optional(TEXT("spawnerPath"), EType::String, TEXT("Run every volume in the open level bound to this ProceduralFoliageSpawner")),
 		MCPParam::Optional(TEXT("clearExisting"), EType::Boolean, TEXT("Remove what the component spawned before simulating again (default true)")),
 		MCPParam::Optional(TEXT("skipCollision"), EType::Boolean, TEXT("Skip the type's CollisionWithWorld test (default false)")),
 	});
 	Registry.RegisterHandler(TEXT("clear_procedural_foliage"), &ClearProceduralFoliage, {
-		MCPParam::Optional(TEXT("actorLabel"), EType::String, TEXT("Label of a ProceduralFoliageVolume, or of any actor with a ProceduralFoliageComponent")),
-		MCPParam::Optional(TEXT("actorPath"), EType::String, TEXT("Object path of that actor")),
+		MCPSharedParam::ActorLabel().Describe(TEXT("Label of a ProceduralFoliageVolume, or of any actor with a ProceduralFoliageComponent")),
+		MCPSharedParam::ActorPath().Describe(TEXT("Object path of that actor")),
 		MCPParam::Optional(TEXT("spawnerPath"), EType::String, TEXT("Clear every volume in the open level bound to this ProceduralFoliageSpawner")),
 	});
 }

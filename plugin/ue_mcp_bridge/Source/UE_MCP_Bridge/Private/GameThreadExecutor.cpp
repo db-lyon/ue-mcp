@@ -1,4 +1,5 @@
 #include "GameThreadExecutor.h"
+#include "MCPWireContract.h"
 #include "HAL/PlatformProcess.h"
 #include "HAL/ThreadSafeCounter.h"
 #include "Containers/Ticker.h"
@@ -293,9 +294,22 @@ TSharedPtr<FJsonValue> FMCPGameThreadExecutor::ExecuteOnGameThread(FHandlerFunct
 
 	if (!bCompleted)
 	{
-		return bShuttingDown
-			? MakeExecutorError(TEXT("shutting_down"), TEXT("Editor is shutting down; the request was not run."))
-			: MakeExecutorError(TEXT("timeout"), TEXT("Handler execution timed out"));
+		if (bShuttingDown)
+		{
+			return MakeExecutorError(TEXT("shutting_down"), TEXT("Editor is shutting down; the request was not run."));
+		}
+		// A runner that claimed the work is running it and cannot be stopped; one
+		// that has not will now skip it, since bAbandoned is set.
+		const bool bStarted = State->Claimed.GetValue() != 0;
+		const double Ceiling = UEMCPWire::MaxRequestTimeoutSeconds;
+		const FString Message = bStarted
+			? FString::Printf(TEXT("Handler execution timed out after %.0fs. It started on the game thread and may still complete, so read the state back before retrying. Raise the budget with timeoutMs (capped at %.0fs), or split the work into smaller calls."), TimeoutSeconds, Ceiling)
+			: FString::Printf(TEXT("Handler execution timed out after %.0fs before the game thread reached it, so it did not run. The editor was busy (engineState says with what); retry, or raise the budget with timeoutMs (capped at %.0fs)."), TimeoutSeconds, Ceiling);
+		TSharedPtr<FJsonValue> Error = MakeExecutorError(TEXT("timeout"), *Message);
+		Error->AsObject()->SetBoolField(TEXT("started"), bStarted);
+		Error->AsObject()->SetBoolField(TEXT("mayStillComplete"), bStarted);
+		Error->AsObject()->SetNumberField(TEXT("budgetSeconds"), TimeoutSeconds);
+		return Error;
 	}
 
 	return State->Result;

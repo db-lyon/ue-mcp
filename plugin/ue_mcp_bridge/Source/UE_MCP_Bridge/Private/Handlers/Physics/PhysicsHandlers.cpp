@@ -27,11 +27,11 @@ void FPhysicsHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	using EType = EMCPParamType;
 	auto ActorLabel = []()
 	{
-		return MCPParam::Optional(TEXT("actorLabel"), EType::String, TEXT("Actor editor label; pass actorLabel or actorPath"));
+		return MCPSharedParam::ActorLabel();
 	};
 	auto ActorPath = []()
 	{
-		return MCPParam::Optional(TEXT("actorPath"), EType::String, TEXT("Full actor object path; the unambiguous selector"));
+		return MCPSharedParam::ActorPath();
 	};
 	auto CollisionEnabled = [](const TCHAR* Description)
 	{
@@ -79,8 +79,8 @@ void FPhysicsHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("location"), EType::Vec3, TEXT("World point to apply the impulse at; ignores mode")),
 		MCPParam::Optional(TEXT("velChange"), EType::Boolean, TEXT("Treat the impulse as a velocity change")),
 		MCPParam::Optional(TEXT("accelChange"), EType::Boolean, TEXT("Treat the force as an acceleration change")),
-		MCPParam::Optional(TEXT("world"), EType::String, TEXT("World scope: auto (default) | pie | editor")),
-		MCPParam::Optional(TEXT("pieInstance"), EType::Number, TEXT("PIE world instance (0 = server/primary); omit for the primary world")),
+		MCPSharedParam::World().Describe(TEXT("World scope: auto (default) | pie | editor")),
+		MCPSharedParam::PieInstance().Describe(TEXT("PIE world instance (0 = server/primary); omit for the primary world")),
 	};
 	Registry.RegisterHandler(TEXT("add_impulse"), &AddImpulse, PushSpec, OneActor);
 }
