@@ -14,7 +14,7 @@ import { actionSchema } from "../../src/surface/action-schema.js";
 import { actionSignature } from "../../src/surface/action-signature.js";
 import { contractViolation, specProblems, type HandlerSpecs } from "../../src/surface/handler-spec.js";
 import { validateCategoryParams } from "../../src/surface/context/call-envelope.js";
-import { deployedPlugin, recordedPluginSpecs } from "../../src/bridge/bridge-parity.js";
+import { deployedPlugin, recordedPluginSpecs } from "../../src/tools/project/bridge-parity.js";
 import type { BridgeCapabilities } from "../../src/bridge/bridge.js";
 import type { FlowContext } from "../../src/flow/context.js";
 import type { IBridge } from "../../src/bridge/bridge.js";

@@ -3,8 +3,8 @@ import type { ToolDef, ToolContext } from "../surface/tool-types.js";
 import { categoryTool } from "../surface/category-tool.js";
 import { directive } from "../core/directive.js";
 import { submitFeedback, type SubmitResult } from "../feedback/github-app.js";
-import { readUserAuth } from "../feedback/github-auth.js";
-import { getWorkarounds, clearWorkarounds, type WorkaroundScopeSource } from "../dispatch/workaround-tracker.js";
+import { readUserAuth } from "../github/auth.js";
+import { getWorkarounds, clearWorkarounds, type WorkaroundScopeSource } from "./editor/workaround-tracker.js";
 import { scrubSecrets } from "../feedback/secret-scrub.js";
 import { privacyScrub } from "../feedback/privacy-scrub.js";
 import { deferSubmission, deleteDeferred } from "../feedback/feedback-deferred.js";
@@ -18,7 +18,7 @@ import { getFeedbackMode, type FeedbackMode } from "../config/user-state.js";
 import { clientAdvertisesElicitation } from "../editor/dialog-mode.js";
 import { warn } from "../core/log.js";
 import { routeFeedback, type RoutingDecision } from "../feedback/feedback-routing.js";
-import { CORE_REPO, newIssueUrl, parseRepoSlug, repoSlug, sameRepo, type GitHubRepo } from "../extensions/registry-catalog.js";
+import { CORE_REPO, newIssueUrl, parseRepoSlug, repoSlug, sameRepo, type GitHubRepo } from "../github/repos.js";
 import { readEnv } from "../core/env.js";
 
 /**

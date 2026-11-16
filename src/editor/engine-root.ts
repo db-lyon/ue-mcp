@@ -40,6 +40,8 @@ import { execFileSync } from "node:child_process";
 import { debug, warn } from "../core/log.js";
 import { readEngineRootFromLog } from "./engine-observer.js";
 import { readEnv } from "../core/env.js";
+import { engineMajorMinor } from "./install-marker.js";
+import type { ProjectContext } from "../config/project.js";
 
 /** Where a candidate engine came from. Printed verbatim in failures. */
 export type EngineCandidateSource =
@@ -591,6 +593,18 @@ export function trySelectEngine(lookup: EngineLookup = {}, need: EngineNeed = "b
  */
 export function resolveEngineRoot(lookup: EngineLookup = {}): string | null {
   return trySelectEngine(lookup, "engineRoot")?.engineRoot ?? null;
+}
+
+/** Engine major.minor the project builds against, or its raw association. */
+export function projectEngineVersion(context: ProjectContext): string | null {
+  const assoc = context.engineAssociation;
+  if (assoc && /^\d+\.\d+$/.test(assoc)) return assoc;
+  try {
+    const engine = trySelectEngine(engineLookupFor(context.projectPath, assoc, context.config.editor), "engineRoot");
+    return engineMajorMinor(engine?.engineRoot) ?? assoc;
+  } catch {
+    return assoc;
+  }
 }
 
 /**

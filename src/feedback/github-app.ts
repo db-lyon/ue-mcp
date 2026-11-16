@@ -1,13 +1,22 @@
 import { readEnv } from "../core/env.js";
-import { resolveUserAuth, clearUserAuth, githubApiBase, type PendingDeviceFlow } from "./github-auth.js";
-import {
-  CORE_REPO,
-  feedbackBase,
-  registryBase,
-  repoSlug,
-  sameRepo,
-  type GitHubRepo,
-} from "../extensions/registry-catalog.js";
+import { resolveUserAuth, clearUserAuth, githubApiBase, type PendingDeviceFlow } from "../github/auth.js";
+import { CORE_REPO, repoSlug, sameRepo, type GitHubRepo } from "../github/repos.js";
+import { registryBase } from "../extensions/registry-catalog.js";
+
+/**
+ * Origin of the anonymous feedback signing service.
+ *
+ * Separate from the registry on purpose. Feedback about ue-mcp core has nothing
+ * to do with the plugin catalog, and addressing it through the catalog's
+ * hostname tied two unrelated surfaces together. Both names happen to be served
+ * by the same deployment today, which is an operational detail, not a contract.
+ *
+ * `UE_MCP_FEEDBACK` overrides the origin; `UE_MCP_FEEDBACK_ENDPOINT` overrides
+ * the full URL when the path differs too.
+ */
+export function feedbackBase(): string {
+  return (readEnv("feedback") ?? "https://feedback.ue-mcp.com").replace(/\/+$/, "");
+}
 
 /**
  * Hosted signing endpoints for the anonymous bot path, in the order they are

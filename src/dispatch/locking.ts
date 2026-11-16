@@ -1,4 +1,4 @@
-import { isDialogRefusal } from "../editor/dialog-guard.js";
+import { isDialogRefusal } from "../bridge/dialog-refusal.js";
 import type { IBridge } from "../bridge/bridge.js";
 import { McpError, ErrorCode, type McpErrorDetails } from "../core/errors.js";
 import { debug } from "../core/log.js";
@@ -186,7 +186,7 @@ export async function withAssetLocks<T>(
       // flag, which is the one field a client branches on, and machineErrorBlock
       // dropped the payload entirely because it only reads McpError.
       throw new McpError(
-        ErrorCode.NOT_FOUND,
+        ErrorCode.BRIDGE_ERROR,
         String((res as Record<string, unknown>).error ?? "A modal dialog is blocking the editor."),
         res as unknown as McpErrorDetails,
       );

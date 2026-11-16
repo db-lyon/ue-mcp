@@ -12,7 +12,7 @@
 import * as path from "node:path";
 import { takeEditorTarget, EditorFlagError } from "./editor-flag.js";
 import { getPlaytestModeScopes, getUserStatePath, setPlaytestMode, type PlaytestMode } from "../config/user-state.js";
-import { BOLD, CYAN, DIM, RESET, fail, info, ok } from "./ui/ansi.js";
+import { BOLD, CYAN, DIM, RESET, fail, info, ok } from "../terminal/ansi.js";
 import { projectDirOf } from "../config/uproject-path.js";
 
 function printHelp(): void {

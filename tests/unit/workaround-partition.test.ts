@@ -17,7 +17,7 @@ import {
   clearWorkarounds,
   workaroundCount,
   resetAllWorkarounds,
-} from "../../src/dispatch/workaround-tracker.js";
+} from "../../src/tools/editor/workaround-tracker.js";
 import { SessionRegistry } from "../../src/sessions/session.js";
 import { ProjectFixture } from "../helpers/project-fixture.js";
 
@@ -27,7 +27,7 @@ vi.mock("../../src/feedback/github-app.js", () => ({
 }));
 
 const mockReadUserAuth = vi.fn();
-vi.mock("../../src/feedback/github-auth.js", () => ({
+vi.mock("../../src/github/auth.js", () => ({
   readUserAuth: () => mockReadUserAuth(),
 }));
 

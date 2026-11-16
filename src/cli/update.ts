@@ -7,14 +7,14 @@ import * as path from "node:path";
 import { collectDoctor, formatDoctor } from "./doctor.js";
 import { takeEditorTarget, EditorFlagError } from "./editor-flag.js";
 import { editorOwnsProject, probeEditorProcessList } from "../editor/engine-observer.js";
-import { UE_MCP_LAUNCH } from "../integrations/claude-code/mcp-client-config.js";
+import { UE_MCP_LAUNCH } from "../integrations/mcp-clients/mcp-client-config.js";
 import { distTagForVersion, isNewer, isPrereleaseVersion, resolveUpdateTarget } from "../core/version-check.js";
 import { packageModulePath, packageRoot, packageVersion } from "../core/package-root.js";
 import { findUProject, isUProjectPath } from "../config/uproject-path.js";
 import { installKindOf, installedBridge, resolvePluginDir } from "../editor/install-marker.js";
 import { applyUpdate, newerBridgeMessage, repinClientConfigs } from "../editor/bridge-update.js";
 import { recordPendingBuild } from "../editor/pending-build.js";
-import { RESET, BOLD, RED, CYAN, YELLOW, ok, fail, info as step } from "./ui/ansi.js";
+import { RESET, BOLD, RED, CYAN, YELLOW, ok, fail, info as step } from "../terminal/ansi.js";
 import type { CliUsage } from "./cli-main.js";
 
 /** The version behind the `latest` dist-tag, which is the stable line. */

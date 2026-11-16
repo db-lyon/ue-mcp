@@ -3,14 +3,13 @@ import * as path from "node:path";
 import type { PluginInfo, ToolDef } from "../surface/tool-types.js";
 import {
   CORE_REPO,
-  fetchRegistryCatalog,
   parseGitHubRepo,
   parseRepoSlug,
   repoSlug,
   sameRepo,
   type GitHubRepo,
-  type RegistryPlugin,
-} from "../extensions/registry-catalog.js";
+} from "../github/repos.js";
+import { fetchRegistryCatalog, type RegistryPlugin } from "../extensions/registry-catalog.js";
 
 /**
  * Decide which tracker a feedback report belongs in.

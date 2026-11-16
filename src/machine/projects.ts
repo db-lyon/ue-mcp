@@ -15,7 +15,7 @@ import { getProjectExtensionVersion, getProjectList, updateProjectList } from ".
 import { daemonDir, projectKey, type DaemonDiscovery } from "../daemon/discovery.js";
 import { extensionsDir } from "../daemon/extensions.js";
 import { installedCopies } from "../daemon/extension-versions.js";
-import { projectEngineVersion } from "../editor/deployer.js";
+import { projectEngineVersion } from "../editor/engine-root.js";
 import { installedBridge } from "../editor/install-marker.js";
 
 /** Version of the MachineReport shape. Bump on a breaking change; add fields freely. */

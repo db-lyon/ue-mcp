@@ -73,6 +73,22 @@ export type ClientShape = Pick<McpClient, "configPath" | "format" | "serversKey"
 
 export const serversKeyOf = (client: Pick<McpClient, "serversKey">): string => client.serversKey ?? "mcpServers";
 
+/** Stable ids for `--clients`, mapped to the names detectMcpClients uses. */
+export const CLIENT_IDS: Record<string, string> = {
+  "claude-code": "Claude Code (project)",
+  "claude-code-global": "Claude Code (global)",
+  "claude-desktop": "Claude Desktop",
+  cursor: "Cursor",
+  vscode: "VS Code",
+  gemini: "Gemini CLI",
+  codex: "Codex",
+  "codex-project": "Codex (project)",
+};
+
+export function clientId(name: string): string {
+  return Object.entries(CLIENT_IDS).find(([, n]) => n === name)?.[0] ?? name;
+}
+
 const PROJECT_SCOPED = new Set(["Cursor", "VS Code", "Gemini CLI"]);
 
 /**

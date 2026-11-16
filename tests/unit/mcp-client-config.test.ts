@@ -11,7 +11,7 @@ import {
   writeJsonMcpConfig,
   pinnedVersionOf,
   ueMcpServerArgs,
-} from "../../src/integrations/claude-code/mcp-client-config.js";
+} from "../../src/integrations/mcp-clients/mcp-client-config.js";
 import { findBareNpxConfigs } from "../../src/cli/doctor.js";
 
 let tmpRoot: string;

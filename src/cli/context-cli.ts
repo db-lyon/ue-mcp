@@ -4,7 +4,7 @@ import { projectConfigPath, readConfigDoc, writeConfigDoc } from "../config/ue-m
 import { takeEditorTarget, EditorFlagError } from "./editor-flag.js";
 import { findUProject } from "../config/uproject-path.js";
 import type { ContextStrategy } from "../config/context-strategy.js";
-import { RESET, BOLD, DIM, GREEN, RED, CYAN, YELLOW } from "./ui/ansi.js";
+import { RESET, BOLD, DIM, GREEN, RED, CYAN, YELLOW } from "../terminal/ansi.js";
 
 /**
  * `ue-mcp context [full|lean|micro|status] [project]` - read or set the context

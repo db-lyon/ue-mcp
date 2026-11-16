@@ -79,14 +79,16 @@ src/
 ├── sessions/             # Registry of editors and each session's surface
 ├── surface/              # categoryTool, action specs, schemas, signatures, parameter routing
 │   └── context/          # micro/lean strategies, instructions, tool search
-├── dispatch/             # Per-call routing, editor gate, locks, offline and Python gates
+├── dispatch/             # Per-call routing, editor gate, locks
 ├── codeintel/            # Engine symbol index, C++ parsing, .ini reading, Content index
 ├── checkpoints/          # Checkpoint shadow repository and diffs
 ├── pie/                  # PIE test script watching and events
-├── feedback/             # Feedback routing and filing, GitHub auth, scrubbers
+├── feedback/             # Feedback routing and filing, scrubbers
+├── github/               # GitHub sign-in shared by feedback and the registry, repository URLs
 ├── extensions/           # ue-mcp plugin packages, registry, skills, scaffolding
-├── integrations/claude-code/  # Hooks and MCP client config
-├── cli/                  # CLI commands, --editor parsing, terminal UI (cli/ui/)
+├── integrations/         # MCP client configs (mcp-clients/), Epic's servers (epic/), agent hooks (claude-code/)
+├── terminal/             # Terminal rendering: colours, progress, selection
+├── cli/                  # CLI commands, --editor parsing
 ├── flow/                 # Flow engine (registry, loader, task factory, HTTP)
 └── tools/                # <!-- count:tools -->31<!-- /count --> category tools, one file each
     ├── project/          # project category, split by action group

@@ -3,18 +3,18 @@ import type { ToolDef, ToolContext } from "../surface/tool-types.js";
 import { categoryTool } from "../surface/category-tool.js";
 import { toolGraphOf } from "../surface/target-params.js";
 import { directive, type DirectiveResponse } from "../core/directive.js";
-import { CORE_ISSUES_URL } from "../extensions/registry-catalog.js";
+import { CORE_ISSUES_URL } from "../github/repos.js";
 import { startEditor, stopEditor, restartEditor, resolveOwnedEditor, connectedEditorOf } from "../editor/editor-control.js";
 import { buildProjectAction } from "./project/install.js";
-import { startProgress } from "../cli/ui/progress.js";
+import { startProgress } from "../terminal/progress.js";
 import { clientAdvertisesElicitation } from "../editor/dialog-mode.js";
 import { readEngineState, withBridgeSnapshot, type EngineSnapshot } from "../editor/engine-observer.js";
 import { windowModeOf } from "../editor/launch-args.js";
 import { progressRenderingNote } from "../dispatch/client-quirks.js";
-import { pushWorkaround, workaroundCount } from "../dispatch/workaround-tracker.js";
+import { pushWorkaround, workaroundCount } from "./editor/workaround-tracker.js";
 import { searchToolGraph } from "../surface/context/tool-search.js";
-import { evaluateGate, gateRefusalMessage, relevantCandidates, type GateCandidate } from "../dispatch/python-gate.js";
-import { checkBridgeParity } from "../bridge/bridge-parity.js";
+import { evaluateGate, gateRefusalMessage, relevantCandidates, type GateCandidate } from "./editor/python-gate.js";
+import { checkBridgeParity } from "./project/bridge-parity.js";
 import { absentToolset, registeredMethodsOf } from "../surface/registered-surface.js";
 import { PLUGIN_UPGRADE_POINTER } from "../bridge/bridge.js";
 import { actions as epicActions, schema as epicSchema } from "./epic/editor.generated.js";
@@ -270,7 +270,7 @@ export const editorTool: ToolDef = categoryTool(
           // #938 / #960: matching is spelling-insensitive and rulings persist
           // for the session, so the strings this refusal prints are exactly the
           // strings that satisfy it, and a reworded summary cannot reset the
-          // work already done. See src/dispatch/python-gate.ts.
+          // work already done. See src/tools/editor/python-gate.ts.
           // #1167: a candidate whose bridge method the running plugin does not
           // register cannot do the task, so it is owed no ruling.
           const verdict = evaluateGate(candidates, params.ruledOut, ctx, await notInRunningPlugin(ctx));

@@ -10,7 +10,7 @@
  */
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { serversKeyOf, type ClientShape } from "./mcp-client-config.js";
+import { serversKeyOf, type ClientShape } from "../mcp-clients/mcp-client-config.js";
 
 export const UNREAL_MCP_SERVER_NAME = "unreal-mcp";
 export const UNREAL_MCP_PROXY_NAME = "unreal-mcp-proxy";

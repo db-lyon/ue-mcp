@@ -116,7 +116,7 @@ The server registers the <!-- count:tools -->31<!-- /count --> category tools an
 | `core/errors.ts` | `McpError` and the `ErrorCode` enum |
 | `surface/category-tool.ts` | `categoryTool()`, `bp()`, routing parameter schemas |
 | `surface/target-params.ts` | The per-call `editor` / `toEditor` parameters |
-| `surface/schemas.ts` | Zod schemas for `.uproject`, `.uplugin` and `ue-mcp.yml` |
+| `config/schemas.ts` | Zod schemas for `.uproject`, `.uplugin` and `ue-mcp.yml` |
 | `surface/action-signature.ts` | One-line action signatures and their legend |
 | `surface/context/instructions.ts` | Server instructions, one variant per context strategy |
 | `surface/context/lean-context.ts` | Strategy choice, the lean `catalog`, paged `describe`, signature `search` |
@@ -342,7 +342,7 @@ The plugin runs a raw WebSocket server on a dedicated thread, dispatches each re
 
 ## What works without the editor
 
-Every tool is advertised whether or not an editor is attached. Bridge actions need a running editor; local actions run in Node.js. `src/dispatch/offline.ts` lists which local actions work with the editor down.
+Every tool is advertised whether or not an editor is attached. Bridge actions need a running editor; local actions run in Node.js. `src/flow/offline.ts` lists which local actions work with the editor down.
 
 | Works without an editor | Needs the editor |
 |-------------------------|------------------|

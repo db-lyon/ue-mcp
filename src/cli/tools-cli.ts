@@ -20,7 +20,7 @@ import * as path from "node:path";
 import { findUProject } from "../config/uproject-path.js";
 import { setDefaultLogLevel } from "../core/log.js";
 import { readAnsweringDiscovery, type DaemonDiscovery } from "../daemon/discovery.js";
-import { BOLD, DIM, GREEN, RED, RESET, YELLOW } from "./ui/ansi.js";
+import { BOLD, DIM, GREEN, RED, RESET, YELLOW } from "../terminal/ansi.js";
 import type { CliUsage } from "./cli-main.js";
 
 export const usage: CliUsage = {

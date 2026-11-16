@@ -13,7 +13,7 @@ import {
   liftAgeGateInEntry,
   liftsAgeGate,
   readUeMcpEntry,
-} from "../../src/integrations/claude-code/mcp-client-config.js";
+} from "../../src/integrations/mcp-clients/mcp-client-config.js";
 import {
   findAgeGatedLaunches,
   formatDoctor,

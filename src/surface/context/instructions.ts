@@ -3,7 +3,7 @@ import { SIGNATURE_LEGEND } from "../action-signature.js";
 import { unionKnowledge, type SessionSurface } from "../../sessions/session-surface.js";
 import type { ContextStrategy } from "../../config/context-strategy.js";
 import type { ToolDef } from "../tool-types.js";
-import { CORE_ISSUES_URL } from "../../extensions/registry-catalog.js";
+import { CORE_ISSUES_URL } from "../../github/repos.js";
 
 /**
  * Counts and the category list, derived rather than transcribed (#817, plan

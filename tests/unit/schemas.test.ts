@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { UProjectSchema, UeMcpConfigSchema, UPluginSchema } from "../../src/surface/schemas.js";
+import { UProjectSchema, UeMcpConfigSchema, UPluginSchema } from "../../src/config/schemas.js";
 
 describe("UProjectSchema", () => {
   it("accepts a minimal .uproject", () => {

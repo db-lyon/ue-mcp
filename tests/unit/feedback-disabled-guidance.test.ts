@@ -13,9 +13,9 @@ import {
   composeServerInstructions,
   feedbackAvailable,
 } from "../../src/surface/context/instructions.js";
-import { CORE_ISSUES_URL } from "../../src/extensions/registry-catalog.js";
-import { resetAllWorkarounds } from "../../src/dispatch/workaround-tracker.js";
-import { resetRulings } from "../../src/dispatch/python-gate.js";
+import { CORE_ISSUES_URL } from "../../src/github/repos.js";
+import { resetAllWorkarounds } from "../../src/tools/editor/workaround-tracker.js";
+import { resetRulings } from "../../src/tools/editor/python-gate.js";
 import { ALL_TOOLS } from "../../src/tools.js";
 import type { SessionSurface } from "../../src/sessions/session-surface.js";
 import type { IBridge } from "../../src/bridge/bridge.js";
