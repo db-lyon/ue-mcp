@@ -1278,6 +1278,14 @@ export const EXTENSION_PERMISSIONS = ["registry.account"] as const;
 
 export type ExtensionPermission = (typeof EXTENSION_PERMISSIONS)[number];
 
+/**
+ * Until this ue-mcp version an extension whose manifest has no `permissions`
+ * field at all keeps `registryAccount()`, and the daemon logs once that it must
+ * declare "registry.account". From it, only a declared permission grants it.
+ * An extension that declares `permissions` without "registry.account" never gets it.
+ */
+export const REGISTRY_ACCOUNT_PERMISSION_REQUIRED_FROM = "1.4.20";
+
 export interface ExtensionRequest {
   method: string;
   /** Path below /v1/ext/<name>, e.g. "/sessions/42". */
@@ -1566,9 +1574,10 @@ export interface DaemonExtensionApi {
   /**
    * The ue-mcp account this machine signed in with (`ue-mcp login`), or null.
    * The token authenticates the user to ue-mcp services; never log or display it.
-   * Only an extension whose manifest declares the "registry.account" permission
-   * (`ueMcpExtension.permissions`) gets it; any other gets null, and the daemon
-   * log says which field to declare (feature "permissions").
+   * An extension whose manifest declares `ueMcpExtension.permissions` gets it
+   * only with "registry.account" in the list; one declaring none still gets it
+   * until REGISTRY_ACCOUNT_PERMISSION_REQUIRED_FROM, and the daemon logs once
+   * which field to add (feature "permissions").
    */
   registryAccount(): Promise<{ login: string; token: string; registry: string } | null>;
 

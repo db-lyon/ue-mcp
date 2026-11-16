@@ -36,6 +36,7 @@ import {
   EXTENSION_API_VERSION,
   EXTENSION_FEATURES,
   routePath,
+  REGISTRY_ACCOUNT_PERMISSION_REQUIRED_FROM,
   type CallActionOptions,
   type DaemonDiscovery,
   type DaemonEvent,
@@ -564,8 +565,8 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
   // An extension's bundles are held to its version from activation, when it installs its own UI.
   const uiOwners: UiBundleOwner[] = [];
   const services = new ExtensionServices();
-  /** Extensions already told they lack the "registry.account" permission, so the log says it once. */
-  const refusedAccount = new Set<string>();
+  /** Extensions already told to declare "registry.account", so the log says it once. */
+  const warnedAccount = new Set<string>();
   const uiOwner = (x: { name: string; version: string; uiMin?: string; uiRoot?: false }): UiBundleOwner =>
     ({ name: x.name, version: x.version, ...(x.uiMin ? { uiMin: x.uiMin } : {}), ...(x.uiRoot === false ? { root: false } : {}) });
   const extensions: LoadedExtension[] = await loadExtensions((name, routes, setBusy, pkg): DaemonExtensionApi => {
@@ -666,11 +667,12 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
         };
       })(),
       registryAccount: async () => {
-        if (!pkg.permissions.includes("registry.account")) {
-          if (!refusedAccount.has(name)) {
-            refusedAccount.add(name);
-            warn("extension", `${name} asked for the ue-mcp account without declaring it; registryAccount() answers null. To grant it, the extension's package.json declares "ueMcpExtension": { "permissions": ["registry.account"] }.`);
+        if (!pkg.permissions) {
+          if (!warnedAccount.has(name)) {
+            warnedAccount.add(name);
+            warn("extension", `${name} uses the ue-mcp account without declaring it. Add "ueMcpExtension": { "permissions": ["registry.account"] } to its package.json; from ue-mcp ${REGISTRY_ACCOUNT_PERMISSION_REQUIRED_FROM} registryAccount() answers null without it.`);
           }
+        } else if (!pkg.permissions.includes("registry.account")) {
           return null;
         }
         const auth = await readRegistryAuth();
