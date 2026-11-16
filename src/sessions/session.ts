@@ -35,8 +35,9 @@ import { withoutDialogActuation } from "../editor/dialog-guard.js";
 import { projectDirOf } from "../config/uproject-path.js";
 import type { ToolDef } from "../surface/tool-types.js";
 
-/** Key used for the session that has no project bound. */
-export const DEFAULT_SESSION_KEY = "";
+import { DEFAULT_SESSION_KEY } from "./session-key.js";
+
+export { DEFAULT_SESSION_KEY };
 /** Name of the session that has no project bound. */
 export const DEFAULT_SESSION_NAME = "default";
 

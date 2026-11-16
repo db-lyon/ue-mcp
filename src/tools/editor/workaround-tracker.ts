@@ -15,7 +15,8 @@
  * same partition they always did. The Python gate's remembered rulings are
  * keyed through workaroundScope too, so all three agree by construction.
  */
-import { DEFAULT_SESSION_KEY, type EditorSession } from "../../sessions/session.js";
+import { DEFAULT_SESSION_KEY } from "../../sessions/session-key.js";
+import type { EditorSession } from "../../sessions/session.js";
 
 export interface WorkaroundEntry {
   code: string;
