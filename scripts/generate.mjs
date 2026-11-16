@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 /**
  * Every generated file in the repo, regenerated in dependency order.
  *
