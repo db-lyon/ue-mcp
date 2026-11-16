@@ -1,118 +1,95 @@
 // @session per-session: Resolves the editor session each request names before acting on its checkpoints.
 /**
  * Checkpoints over the daemon's HTTP API (#1482), for a client that brackets
- * each chat turn and lets the user keep or revert its files one by one.
- *
- *   GET    /v1/checkpoints           ?editor&limit   state and history, newest first
- *   PUT    /v1/checkpoints/enabled   { editor?, enabled: true | false | null }
- *   POST   /v1/checkpoints           { editor?, label? }
- *   GET    /v1/checkpoints/changes   ?editor&from&to&assetDiffs&blueprintDiffs
- *   GET    /v1/checkpoints/asset-diff ?editor&from&to&path      one package's asset diff
- *   GET    /v1/checkpoints/thumbnails/<id>.png ?editor           a picture an asset diff names
- *   POST   /v1/checkpoints/native-diff { editor?, path, from, to? }   Unreal's own diff, in the editor
- *   POST   /v1/checkpoints/restore   { editor?, checkpoint, paths?, force? }
- *   DELETE /v1/checkpoints           ?editor
- *
- * `editor` names a session as /v1/health lists it; omitted is the active one.
- * The enabled override lives in the daemon for its lifetime and is never
- * written to a file.
+ * each chat turn and lets the user keep or revert its files one by one. The
+ * routes, with their queries and bodies, are the checkpoints.* entries of
+ * DAEMON_ROUTES. The enabled override lives in the daemon for its lifetime and
+ * is never written to a file.
  */
 import type { SessionRegistry } from "../sessions/session.js";
-import { CheckpointError, checkpointsFor, type SessionCheckpoints } from "../checkpoints/service.js";
+import { checkpointsFor, type SessionCheckpoints } from "../checkpoints/service.js";
+import { StatusError } from "../core/status-error.js";
+import { objectBody, ok, resolveEditorSession, type RouteHandlers } from "./router.js";
 
-export interface RouteResult {
-  status: number;
-  body: unknown;
-  /** A file to send as the body instead, with its content type. */
-  file?: { path: string; type: string };
-}
+type CheckpointRouteName =
+  | "checkpoints.state"
+  | "checkpoints.setEnabled"
+  | "checkpoints.create"
+  | "checkpoints.changes"
+  | "checkpoints.assetDiff"
+  | "checkpoints.thumbnail"
+  | "checkpoints.nativeDiff"
+  | "checkpoints.restore"
+  | "checkpoints.clear";
 
-type Json = Record<string, unknown>;
+const FROM_REQUIRED = "from is required: the checkpoint id to compare against";
+const PATH_REQUIRED = "path is required: the project-relative path of the package";
 
-class RouteError extends Error {
-  constructor(readonly status: number, message: string) {
-    super(message);
-  }
-}
-
-function resolveSession(sessions: SessionRegistry, editor: unknown): SessionCheckpoints {
-  if (editor === undefined || editor === null || editor === "") return checkpointsFor(sessions.active);
-  if (typeof editor !== "string") throw new RouteError(400, "editor is a session name");
-  const session = sessions.find(editor);
-  if (!session) throw new RouteError(404, `No editor session '${editor}'. /v1/health lists them.`);
-  return checkpointsFor(session);
-}
-
-/** The checkpoint routes, or null for a path that is not one. */
-export async function checkpointRoute(
-  sessions: SessionRegistry,
-  method: string,
-  sub: string,
-  query: URLSearchParams,
-  body: unknown,
-): Promise<RouteResult | null> {
-  const b = (body && typeof body === "object" && !Array.isArray(body) ? body : {}) as Json;
-  try {
-    if (sub === "" && method === "GET") {
+export function checkpointRoutes(sessions: SessionRegistry): Pick<RouteHandlers, CheckpointRouteName> {
+  const of = (editor: unknown): SessionCheckpoints => checkpointsFor(resolveEditorSession(sessions, editor));
+  return {
+    "checkpoints.state": async ({ query }) => {
       const limit = Number(query.get("limit") ?? 50);
-      return ok(await resolveSession(sessions, query.get("editor")).state(Number.isFinite(limit) && limit > 0 ? limit : 50));
-    }
-    if (sub === "/enabled" && method === "PUT") {
+      return ok(await of(query.get("editor")).state(Number.isFinite(limit) && limit > 0 ? limit : 50));
+    },
+    "checkpoints.setEnabled": async (r) => {
+      const b = objectBody(await r.body());
       if (!("enabled" in b) || (b.enabled !== null && typeof b.enabled !== "boolean")) {
-        throw new RouteError(400, "enabled is true, false, or null to follow ue-mcp.yml again");
+        throw new StatusError(400, "enabled is true, false, or null to follow ue-mcp.yml again");
       }
-      return ok(await resolveSession(sessions, b.editor).setEnabled(b.enabled as boolean | null));
-    }
-    if (sub === "" && method === "POST") {
-      if (b.label !== undefined && typeof b.label !== "string") throw new RouteError(400, "label is a string");
-      return ok(await resolveSession(sessions, b.editor).create(b.label as string | undefined));
-    }
-    if (sub === "/changes" && method === "GET") {
+      return ok(await of(b.editor).setEnabled(b.enabled as boolean | null));
+    },
+    "checkpoints.create": async (r) => {
+      const b = objectBody(await r.body());
+      if (b.label !== undefined && typeof b.label !== "string") throw new StatusError(400, "label is a string");
+      return ok(await of(b.editor).create(b.label as string | undefined));
+    },
+    "checkpoints.changes": async ({ query }) => {
       const from = query.get("from");
-      if (!from) throw new RouteError(400, "from is required: the checkpoint id to compare against");
-      return ok(await resolveSession(sessions, query.get("editor")).changes(from, query.get("to"), {
+      if (!from) throw new StatusError(400, FROM_REQUIRED);
+      return ok(await of(query.get("editor")).changes(from, query.get("to"), {
         blueprintDiffs: query.get("blueprintDiffs") !== "false",
         assetDiffs: query.get("assetDiffs") !== "false",
       }));
-    }
-    if (sub === "/asset-diff" && method === "GET") {
+    },
+    "checkpoints.assetDiff": async ({ query }) => {
       const from = query.get("from");
       const file = query.get("path");
-      if (!from) throw new RouteError(400, "from is required: the checkpoint id to compare against");
-      if (!file) throw new RouteError(400, "path is required: the project-relative path of the package");
-      return ok(await resolveSession(sessions, query.get("editor")).assetDiff(from, query.get("to"), file));
-    }
-    const thumb = /^\/thumbnails\/([0-9a-f]{40})\.png$/.exec(sub);
-    if (thumb && method === "GET") {
-      const found = resolveSession(sessions, query.get("editor")).thumbnail(thumb[1]);
-      if (!found) throw new RouteError(404, "No such picture");
-      return { status: 200, body: null, file: { path: found.file, type: found.type } };
-    }
-    if (sub === "/native-diff" && method === "POST") {
-      if (typeof b.path !== "string" || !b.path) throw new RouteError(400, "path is required: the project-relative path of the package");
-      if (typeof b.from !== "string" || !b.from) throw new RouteError(400, "from is required: the checkpoint id to compare against");
-      if (b.to !== undefined && b.to !== null && typeof b.to !== "string") throw new RouteError(400, "to is a checkpoint id");
-      return ok(await resolveSession(sessions, b.editor).openNativeDiff(b.path, b.from, (b.to as string | null | undefined) ?? null));
-    }
-    if (sub === "/restore" && method === "POST") {
-      if (typeof b.checkpoint !== "string" || !b.checkpoint) throw new RouteError(400, "checkpoint is required: the id to restore to");
+      if (!from) throw new StatusError(400, FROM_REQUIRED);
+      if (!file) throw new StatusError(400, PATH_REQUIRED);
+      return ok(await of(query.get("editor")).assetDiff(from, query.get("to"), file));
+    },
+    "checkpoints.thumbnail": ({ params, query }) => {
+      // A picture is named by the blob id of the version it shows, so it never changes.
+      const id = /^([0-9a-f]{40})\.png$/.exec(params.file)?.[1];
+      if (!id) return { status: 404 };
+      const found = of(query.get("editor")).thumbnail(id);
+      if (!found) throw new StatusError(404, "No such picture");
+      return {
+        status: 200,
+        headers: { "content-type": found.type, "cache-control": "private, max-age=31536000, immutable", "x-content-type-options": "nosniff" },
+        file: found.file,
+      };
+    },
+    "checkpoints.nativeDiff": async (r) => {
+      const b = objectBody(await r.body());
+      if (typeof b.path !== "string" || !b.path) throw new StatusError(400, PATH_REQUIRED);
+      if (typeof b.from !== "string" || !b.from) throw new StatusError(400, FROM_REQUIRED);
+      if (b.to !== undefined && b.to !== null && typeof b.to !== "string") throw new StatusError(400, "to is a checkpoint id");
+      return ok(await of(b.editor).openNativeDiff(b.path, b.from, (b.to as string | null | undefined) ?? null));
+    },
+    "checkpoints.restore": async (r) => {
+      const b = objectBody(await r.body());
+      if (typeof b.checkpoint !== "string" || !b.checkpoint) throw new StatusError(400, "checkpoint is required: the id to restore to");
       if (b.paths !== undefined && (!Array.isArray(b.paths) || b.paths.some((p) => typeof p !== "string"))) {
-        throw new RouteError(400, "paths is a list of project-relative paths");
+        throw new StatusError(400, "paths is a list of project-relative paths");
       }
-      if (b.force !== undefined && typeof b.force !== "boolean") throw new RouteError(400, "force is a boolean");
-      return ok(await resolveSession(sessions, b.editor).restore(b.checkpoint, {
+      if (b.force !== undefined && typeof b.force !== "boolean") throw new StatusError(400, "force is a boolean");
+      return ok(await of(b.editor).restore(b.checkpoint, {
         paths: b.paths as string[] | undefined,
         force: b.force === true,
       }));
-    }
-    if (sub === "" && method === "DELETE") {
-      return ok(await resolveSession(sessions, query.get("editor")).clear());
-    }
-    return null;
-  } catch (e) {
-    if (e instanceof RouteError || e instanceof CheckpointError) return { status: e.status, body: { error: e.message } };
-    throw e;
-  }
+    },
+    "checkpoints.clear": async ({ query }) => ok(await of(query.get("editor")).clear()),
+  };
 }
-
-const ok = (body: unknown): RouteResult => ({ status: 200, body });

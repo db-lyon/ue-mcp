@@ -30,6 +30,7 @@ import { flowCategoryForCheck } from "../flow/flow-surface.js";
 import { EPIC_TOOL_EFFECTS } from "../tools/epic/effects.js";
 import { DESTRUCTIVE_VERBS, leadingVerb } from "./action-verbs.js";
 import type { ActionEffect, ActionEffectSource, ToolDef } from "./tool-types.js";
+import type { ActionEffectInfo } from "../contract/daemon.js";
 
 export interface ResolvedEffect {
   effect: ActionEffect;
@@ -146,7 +147,6 @@ function indexFor(graph: readonly ToolDef[] = ALL_TOOLS): EffectIndex {
   return index;
 }
 
-
 /** What `${tool}.${action}` declares, or undefined when the graph has no such action. */
 export function declaredActionEffect(
   tool: string,
@@ -175,7 +175,6 @@ export function taskEffect(taskName: string, graph?: readonly ToolDef[]): Resolv
   const { tool, action } = splitTaskName(taskName);
   return actionEffect(tool, action, graph);
 }
-
 
 /**
  * Methods whose effect one of their own ARGUMENTS decides, and how to read it.
@@ -252,18 +251,6 @@ export function bridgeMethodEffect(
 /** Does this effect mean the call may change something? `unknown` counts. */
 export function mayChangeState(effect: ActionEffect): boolean {
   return effect !== "read";
-}
-
-/** One action's effect and whether it destroys something, for a client deciding what to confirm. */
-export interface ActionEffectInfo {
-  category: string;
-  action: string;
-  effect: ActionEffect;
-  /** `declared` on the spec, `inferred` by plugin injection from the name, `undeclared` when nothing claims it. */
-  effectSource: ActionEffectSource | "undeclared";
-  destructive: boolean;
-  /** `declared` on the spec, `lexicon` from the leading verb, `none` for a read (never destructive). */
-  destructiveSource: "declared" | "lexicon" | "none";
 }
 
 /**

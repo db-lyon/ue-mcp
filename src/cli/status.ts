@@ -5,7 +5,8 @@
  * decide what is missing; nothing here writes.
  */
 import { findUProject } from "../config/uproject-path.js";
-import { collectStatus, type StatusReport } from "../integrations/install-status.js";
+import type { StatusReport } from "../contract/daemon.js";
+import { collectStatus } from "../integrations/install-status.js";
 import { selectProject } from "./editor-flag.js";
 import { BOLD, DIM, RESET, fail, ok, warn } from "../terminal/ansi.js";
 import type { CliUsage } from "./cli-main.js";

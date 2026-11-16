@@ -8,7 +8,8 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { isPidAlive } from "../bridge/editor-target.js";
 import { info } from "../core/log.js";
-import { daemonDir, projectKey, readAnsweringDiscovery, readLiveDiscovery, type DaemonDiscovery } from "./discovery.js";
+import type { DaemonDiscovery } from "../contract/daemon.js";
+import { daemonDir, projectKey, readAnsweringDiscovery, readLiveDiscovery } from "./discovery.js";
 
 /** A lock older than this is stale even if its pid is alive, which covers pid reuse. */
 export const START_LOCK_STALE_MS = 5 * 60_000;

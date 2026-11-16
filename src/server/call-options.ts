@@ -1,6 +1,6 @@
 // @session independent: In-process call options, as type declarations. No runtime code.
 import type { ElicitFn } from "../core/elicit.js";
-import type { DialogPromptFn } from "../editor/dialog-types.js";
+import type { DialogPromptFn } from "../contract/daemon.js";
 
 /** Options for one action run in process, by a daemon extension. */
 export interface InProcessCallOptions {

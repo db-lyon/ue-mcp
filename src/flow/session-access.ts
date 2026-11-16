@@ -15,6 +15,7 @@
  * batch whose arguments decide its effect.
  */
 import { McpError, ErrorCode } from "../core/errors.js";
+import { describeRoute } from "../contract/daemon.js";
 import type { ActionEffect, ToolDef } from "../surface/tool-types.js";
 import { bridgeMethodEffect, mayChangeState, taskEffect } from "../surface/action-effects.js";
 import { currentCallAsker } from "./call-elicit.js";
@@ -66,7 +67,7 @@ function refusal(what: string, effect: ActionEffect): string {
     ? "its parameters decide what it does, so it counts as a change"
     : "it is declared to change state";
   return `read-only session mode refuses ${what}: ${why}. Reads still run. `
-    + "The session's access mode is set through the daemon (PUT /v1/sessions/<id>/access).";
+    + `The session's access mode is set through the daemon (${describeRoute("sessions.access", "PUT")}).`;
 }
 
 /**

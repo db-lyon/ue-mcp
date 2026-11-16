@@ -7,7 +7,7 @@
  */
 import * as fs from "node:fs";
 import { readEnv } from "../core/env.js";
-import { isExtensionName } from "./extension-api.js";
+import { isExtensionName } from "./extension-manifest.js";
 
 export interface InstallName {
   /** What output calls it. */

@@ -12,21 +12,8 @@ import { normalizeProjectRoot } from "../bridge/wire-contract.js";
 import { isPidAlive } from "../bridge/editor-target.js";
 import { readEnv } from "../core/env.js";
 import { userDir } from "../core/user-dir.js";
-
-/** Version of the daemon's HTTP and shim protocol. Bump on a breaking change. */
-export const DAEMON_API_VERSION = 1;
-
-export interface DaemonDiscovery {
-  pid: number;
-  port: number;
-  token: string;
-  /** ue-mcp package version the daemon runs. */
-  version: string;
-  apiVersion: number;
-  /** Normalized project root (see normalizeProjectRoot). */
-  projectRoot: string;
-  startedAt: string;
-}
+import { routePath, type DaemonDiscovery } from "../contract/daemon.js";
+import { bearer } from "./client.js";
 
 export function daemonDir(): string {
   return readEnv("daemonDir") ?? path.join(userDir(), "daemons");
@@ -80,7 +67,7 @@ export function discoveryIsStale(d: DaemonDiscovery, timeoutMs = 2000): Promise<
       resolve(stale);
     };
     const req = http.get(
-      { host: "127.0.0.1", port: d.port, path: "/v1/health", headers: { authorization: `Bearer ${d.token}` }, timeout: timeoutMs },
+      { host: "127.0.0.1", port: d.port, path: routePath("health"), headers: bearer(d), timeout: timeoutMs },
       (res) => {
         if (res.statusCode !== 200) {
           res.resume();

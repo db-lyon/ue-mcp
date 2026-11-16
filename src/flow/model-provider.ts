@@ -11,9 +11,12 @@ import Anthropic from "@anthropic-ai/sdk";
 import type { LLMCompletionRequest, LLMCompletionResponse, LLMMessage, LLMProvider } from "@db-lyon/flowkit";
 import { readEnv } from "../core/env.js";
 
-/** The provider contract: flowkit's neutral completion request and response. */
+/**
+ * The provider: flowkit's neutral completion request and response. An
+ * extension registers the contract's ModelProvider, which is checked against
+ * this where the daemon hands it over.
+ */
 export type ModelProvider = LLMProvider;
-export type { LLMCompletionRequest as ModelRequest, LLMCompletionResponse as ModelResponse };
 
 export const NO_MODEL_MESSAGE = "No model is configured for flow agent steps.";
 

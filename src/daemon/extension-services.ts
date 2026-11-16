@@ -6,7 +6,7 @@
  * learns of it through `watch`. A provider's services end when it is disposed.
  */
 import { warn } from "../core/log.js";
-import type { ExtensionServicesApi } from "./extension-api.js";
+import type { ExtensionServicesApi } from "../contract/daemon.js";
 
 interface Watcher {
   owner: string;

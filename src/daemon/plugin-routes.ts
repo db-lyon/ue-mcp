@@ -2,13 +2,7 @@
 /**
  * Managing a project's ue-mcp plugins over the daemon's HTTP API, so a client
  * such as an in-editor panel can browse the registry and install, update or
- * remove plugins without a terminal.
- *
- *   GET  /v1/plugins            the project's plugins: version, status, categories
- *   GET  /v1/plugins/catalog    the registry's published plugins
- *   POST /v1/plugins/install    { name, version? }
- *   POST /v1/plugins/uninstall  { name }
- *   POST /v1/plugins/update     { name? }
+ * remove plugins without a terminal: the plugins.* entries of DAEMON_ROUTES.
  *
  * Install, uninstall and update call extensions/plugin-install.ts, the library
  * `ue-mcp plugin` runs, in this process, one at a time; `output` is the lines
@@ -30,6 +24,7 @@ import {
   type BuiltInCategories,
   type PluginOpLog,
 } from "../extensions/plugin-install.js";
+import type { RouteHandlers, RouteResult } from "./router.js";
 
 export interface InstalledPlugin {
   name: string;
@@ -111,17 +106,14 @@ export interface PluginRouteDeps {
   onChanged?: () => void;
 }
 
-export type PluginRouteResult = { status: number; body: unknown } | null;
+type PluginRouteName = "plugins.list" | "plugins.catalog" | "plugins.install" | "plugins.uninstall" | "plugins.update";
 
-/**
- * Handle one /v1/plugins request; null when the path is not one of these
- * routes. `sub` is the path after /v1/plugins.
- */
-export function pluginRoutes(deps: PluginRouteDeps) {
+/** The /v1/plugins routes for one project. Changes run one at a time. */
+export function pluginRoutes(deps: PluginRouteDeps): Pick<RouteHandlers, PluginRouteName> {
   const ops = deps.ops ?? pluginOps;
   let busy = false;
 
-  const change = async (op: (log: PluginOpLog) => Promise<unknown>): Promise<PluginRouteResult> => {
+  const change = async (op: (log: PluginOpLog) => Promise<unknown>): Promise<RouteResult> => {
     if (busy) return { status: 409, body: { error: "another plugin change is running; wait for it to finish" } };
     busy = true;
     const { log, error, text } = captureLog();
@@ -139,12 +131,12 @@ export function pluginRoutes(deps: PluginRouteDeps) {
     return { status: ok ? 200 : 422, body: result };
   };
 
-  return async (method: string, sub: string, body: unknown): Promise<PluginRouteResult> => {
-    const b = (body ?? {}) as { name?: unknown; version?: unknown };
-    if (method === "GET" && (sub === "" || sub === "/")) {
-      return { status: 200, body: { plugins: listInstalledPlugins(deps.projectDir) } };
-    }
-    if (method === "GET" && sub === "/catalog") {
+  const fields = async (r: { body(): Promise<unknown> }): Promise<{ name?: unknown; version?: unknown }> =>
+    ((await r.body()) ?? {}) as { name?: unknown; version?: unknown };
+
+  return {
+    "plugins.list": () => ({ status: 200, body: { plugins: listInstalledPlugins(deps.projectDir) } }),
+    "plugins.catalog": async () => {
       const catalog = await loadRegistryCatalog({ fetchImpl: deps.fetchImpl, timeoutMs: CATALOG_TIMEOUT_MS });
       if (catalog.source === "none") {
         return {
@@ -158,24 +150,26 @@ export function pluginRoutes(deps: PluginRouteDeps) {
         };
       }
       return { status: 200, body: { plugins: catalog.plugins } };
-    }
-    if (method === "POST" && sub === "/install") {
+    },
+    "plugins.install": async (r) => {
+      const b = await fields(r);
       if (typeof b.name !== "string" || !NAME.test(b.name)) return { status: 400, body: { error: "body must be { name, version? } with a package or registry name" } };
       if (b.version !== undefined && (typeof b.version !== "string" || !VERSION.test(b.version))) return { status: 400, body: { error: "version must be a semver version or range" } };
       const name = b.name;
       const version = typeof b.version === "string" ? b.version : undefined;
       return change((log) => ops.install(deps.projectDir, name, version, log));
-    }
-    if (method === "POST" && sub === "/uninstall") {
+    },
+    "plugins.uninstall": async (r) => {
+      const b = await fields(r);
       if (typeof b.name !== "string" || !NAME.test(b.name)) return { status: 400, body: { error: "body must be { name }" } };
       const name = b.name;
       return change((log) => ops.uninstall(deps.projectDir, name, log));
-    }
-    if (method === "POST" && sub === "/update") {
+    },
+    "plugins.update": async (r) => {
+      const b = await fields(r);
       if (b.name !== undefined && (typeof b.name !== "string" || !NAME.test(b.name))) return { status: 400, body: { error: "name must be a package or registry name" } };
       const name = typeof b.name === "string" ? b.name : undefined;
       return change((log) => ops.update(deps.projectDir, name, log));
-    }
-    return null;
+    },
   };
 }

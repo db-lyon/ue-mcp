@@ -28,6 +28,8 @@ import * as crypto from "node:crypto";
 import git from "isomorphic-git";
 import { unifiedDiff } from "./text-diff.js";
 import { CHECKPOINT_MANIFEST } from "../bridge/wire-contract.js";
+import { StatusError } from "../core/status-error.js";
+import type { ChangeEntry, ChangeKind, ChangeStatus, CheckpointInfo, CheckpointTrigger, RestoreRefusal } from "../contract/daemon.js";
 
 export const DEFAULT_LARGE_FILE_BYTES = 1024 * 1024 * 1024;
 const BRANCH = "refs/heads/checkpoints";
@@ -54,36 +56,6 @@ const TEXT_EXTENSIONS = new Set([
   ".ini", ".h", ".hpp", ".cpp", ".c", ".inl", ".cs", ".uproject", ".uplugin", ".json", ".yml", ".yaml",
   ".txt", ".md", ".py", ".usf", ".ush", ".xml", ".csv", ".js", ".ts", ".toml",
 ]);
-
-export type CheckpointTrigger = "client" | "restore-before" | "restore-after";
-export type ChangeStatus = "added" | "modified" | "deleted";
-export type ChangeKind = "package" | "config" | "source" | "other";
-
-export interface CheckpointInfo {
-  id: string;
-  label: string;
-  createdAt: string;
-  trigger: CheckpointTrigger;
-  files: number;
-}
-
-export interface ChangeEntry {
-  path: string;
-  status: ChangeStatus;
-  kind: ChangeKind;
-  untracked?: true;
-  large?: true;
-  diff?: string;
-  blueprintDiff?: unknown;
-  /** A package's diff from the editor, built on Unreal's own diff code: see asset-diff.ts. */
-  assetDiff?: import("./asset-diff.js").AssetDiff;
-}
-
-export interface RestoreRefusal {
-  path: string;
-  reason: "edited-outside" | "not-recorded" | "write-failed";
-  detail?: string;
-}
 
 /** One file restore will put back, before it is written. */
 export interface RestorePlanEntry {
@@ -803,11 +775,7 @@ export class ShadowRepo {
   }
 }
 
-export class CheckpointError extends Error {
-  constructor(readonly status: number, message: string) {
-    super(message);
-  }
-}
+export class CheckpointError extends StatusError {}
 
 /** Append one record to a pending generation: copy the file's bytes first, or note that it does not exist. */
 export function appendPendingRecord(dir: string, key: string, file: string): void {

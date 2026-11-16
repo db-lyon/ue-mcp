@@ -15,7 +15,7 @@ import {
   type DialogEvent,
   type GuardDeps,
 } from "../../src/editor/dialog-guard.js";
-import type { DialogBlock, DialogPromptRequest } from "../../src/editor/dialog-types.js";
+import type { DialogBlock, DialogPromptRequest } from "../../src/contract/daemon.js";
 
 const BUTTONS = ["Save Selected", "Don't Save", "Cancel"];
 const CHOICES = BUTTONS.map((b) => ({ buttonLabel: b, respondWith: `editor(respond_to_dialog, buttonLabel="${b}")` }));

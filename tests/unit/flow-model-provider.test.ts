@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { modelSource, NO_MODEL_MESSAGE, registerModelProvider, resolveModelProvider } from "../../src/flow/model-provider.js";
-import { EXTENSION_API_MIN_VERSION, EXTENSION_API_VERSION, extensionApiSupported } from "../../src/daemon/extension-api.js";
+import { EXTENSION_API_MIN_VERSION, EXTENSION_API_VERSION, extensionApiSupported } from "../../src/contract/daemon.js";
 import { PLAYTEST_DRAFT_OPTIONS, PLAYTEST_RETRIES, playtestFlow, playtestTasks, SCRIPT_DRAFT_SCHEMA } from "../../src/flow/playtest.js";
 
 const provider = (text: string) => ({ complete: async () => ({ text }) });

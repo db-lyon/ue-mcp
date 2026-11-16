@@ -8,9 +8,8 @@ import {
   nativeDiffOf,
   pictureId,
   summarizeAssetDiff,
-  type AssetDiff,
-  type AssetDiffRecord,
 } from "../../src/checkpoints/asset-diff.js";
+import type { AssetDiff, AssetDiffRecord } from "../../src/contract/daemon.js";
 
 const noPicture = () => undefined;
 

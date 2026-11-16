@@ -1,69 +1,42 @@
 // @session per-session: Resolves the editor session each request names before acting on its journal.
 /**
- * The mutation journal over the daemon's HTTP API (#1481).
- *
- *   GET  /v1/journal              ?editor&group   state, groups, and a group's entries
- *   PUT  /v1/journal/group        { editor?, group: string | null }
- *   POST /v1/journal/revert       { editor?, group }   revert one group
- *   POST /v1/journal/revert-after { editor?, group }   revert every later group
- *
- * `editor` names a session as /v1/health lists it; omitted is the active one.
+ * The mutation journal over the daemon's HTTP API (#1481): the journal.*
+ * entries of DAEMON_ROUTES. A revert restores through the session's
+ * checkpoints, so its refusals carry their status the same way.
  */
 import type { SessionRegistry } from "../sessions/session.js";
-import { JournalError, journalFor, type MutationJournal } from "../journal/journal.js";
-import { CheckpointError } from "../checkpoints/service.js";
+import { journalFor, type MutationJournal } from "../journal/journal.js";
+import { StatusError } from "../core/status-error.js";
+import { objectBody, ok, resolveEditorSession, type RouteHandlers } from "./router.js";
 
-export interface JournalRouteResult {
-  status: number;
-  body: unknown;
-}
+type JournalRouteName = "journal.state" | "journal.setGroup" | "journal.revert" | "journal.revertAfter";
 
-type Json = Record<string, unknown>;
-
-function resolve(sessions: SessionRegistry, editor: unknown): MutationJournal {
-  if (editor === undefined || editor === null || editor === "") return journalFor(sessions.active);
-  if (typeof editor !== "string") throw new JournalError(400, "editor is a session name");
-  const session = sessions.find(editor);
-  if (!session) throw new JournalError(404, `No editor session '${editor}'. /v1/health lists them.`);
-  return journalFor(session);
-}
-
-function requireGroup(b: Json): string {
-  if (typeof b.group !== "string" || b.group.trim() === "") throw new JournalError(400, "group is required: the journal group");
+function requireGroup(b: Record<string, unknown>): string {
+  if (typeof b.group !== "string" || b.group.trim() === "") throw new StatusError(400, "group is required: the journal group");
   return b.group.trim();
 }
 
-/** The journal routes, or null for a path that is not one. */
-export async function journalRoute(
-  sessions: SessionRegistry,
-  method: string,
-  sub: string,
-  query: URLSearchParams,
-  body: unknown,
-): Promise<JournalRouteResult | null> {
-  const b = (body && typeof body === "object" && !Array.isArray(body) ? body : {}) as Json;
-  try {
-    if (sub === "" && method === "GET") {
+export function journalRoutes(sessions: SessionRegistry): Pick<RouteHandlers, JournalRouteName> {
+  const of = (editor: unknown): MutationJournal => journalFor(resolveEditorSession(sessions, editor));
+  return {
+    "journal.state": ({ query }) => {
       const group = query.get("group");
-      return ok(resolve(sessions, query.get("editor")).state(group ? { group } : {}));
-    }
-    if (sub === "/group" && method === "PUT") {
+      return ok(of(query.get("editor")).state(group ? { group } : {}));
+    },
+    "journal.setGroup": async (r) => {
+      const b = objectBody(await r.body());
       if (!("group" in b) || (b.group !== null && typeof b.group !== "string")) {
-        throw new JournalError(400, "group is a string, or null to stop journaling");
+        throw new StatusError(400, "group is a string, or null to stop journaling");
       }
-      return ok(resolve(sessions, b.editor).setGroup(b.group as string | null));
-    }
-    if (sub === "/revert" && method === "POST") {
-      return ok(await resolve(sessions, b.editor).revert(requireGroup(b)));
-    }
-    if (sub === "/revert-after" && method === "POST") {
-      return ok(await resolve(sessions, b.editor).revertAfter(requireGroup(b)));
-    }
-    return null;
-  } catch (e) {
-    if (e instanceof JournalError || e instanceof CheckpointError) return { status: e.status, body: { error: e.message } };
-    throw e;
-  }
+      return ok(of(b.editor).setGroup(b.group as string | null));
+    },
+    "journal.revert": async (r) => {
+      const b = objectBody(await r.body());
+      return ok(await of(b.editor).revert(requireGroup(b)));
+    },
+    "journal.revertAfter": async (r) => {
+      const b = objectBody(await r.body());
+      return ok(await of(b.editor).revertAfter(requireGroup(b)));
+    },
+  };
 }
-
-const ok = (body: unknown): JournalRouteResult => ({ status: 200, body });

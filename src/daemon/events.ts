@@ -3,14 +3,11 @@
  * The daemon's event stream: every event gets the next id, a bounded window is
  * kept, and a reader resumes from the last id it saw (SSE Last-Event-ID). The
  * UI holds no state of its own; this is what it rebuilds from.
+ *
+ * The daemon publishes only the types DAEMON_EVENT_TYPES declares; an
+ * extension's events are named for it (publishFor).
  */
-
-export interface DaemonEvent {
-  id: number;
-  type: string;
-  at: string;
-  data: Record<string, unknown>;
-}
+import type { DaemonEvent, DaemonEventType } from "../contract/daemon.js";
 
 export class EventLog {
   private nextId = 1;
@@ -19,7 +16,16 @@ export class EventLog {
 
   constructor(private readonly capacity = 1000) {}
 
-  publish(type: string, data: Record<string, unknown> = {}): DaemonEvent {
+  publish(type: DaemonEventType, data: Record<string, unknown> = {}): DaemonEvent {
+    return this.append(type, data);
+  }
+
+  /** An extension's event, published as `<owner>.<type>`. */
+  publishFor(owner: string, type: string, data: Record<string, unknown> = {}): DaemonEvent {
+    return this.append(`${owner}.${type}`, data);
+  }
+
+  private append(type: string, data: Record<string, unknown>): DaemonEvent {
     const event: DaemonEvent = { id: this.nextId++, type, at: new Date().toISOString(), data };
     this.kept.push(event);
     if (this.kept.length > this.capacity) this.kept.splice(0, this.kept.length - this.capacity);
