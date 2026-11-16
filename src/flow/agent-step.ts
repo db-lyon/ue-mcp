@@ -6,6 +6,7 @@
  */
 import { AgentPromptTask, AgentTask, type TaskConstructor, type TaskResult } from "@db-lyon/flowkit";
 import { NO_MODEL_MESSAGE, resolveModelProvider } from "./model-provider.js";
+import type { BuiltinTask } from "./builtins.js";
 
 /** Run a model step with the resolved provider on the context, and take it off again after. */
 async function withModel(ctx: { llm?: unknown }, run: () => Promise<TaskResult>): Promise<TaskResult> {
@@ -33,7 +34,7 @@ class ModelAgentPromptTask extends AgentPromptTask {
 }
 
 /** Class paths for flow steps that call a model. */
-export const AGENT_TASK_CLASSES: Record<string, TaskConstructor> = {
-  agent: ModelAgentTask as unknown as TaskConstructor,
-  agent_prompt: ModelAgentPromptTask as unknown as TaskConstructor,
-};
+export const AGENT_BUILTIN_TASKS: readonly BuiltinTask[] = [
+  { name: "agent", task: ModelAgentTask as unknown as TaskConstructor, byClassPath: true },
+  { name: "agent_prompt", task: ModelAgentPromptTask as unknown as TaskConstructor, byClassPath: true },
+];

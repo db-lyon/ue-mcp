@@ -14,9 +14,10 @@
  * Run with flow(run, flowName: "playtest", params: { target, context? }).
  */
 import type { TaskResult, TaskConstructor, OptionSpecs } from "@db-lyon/flowkit";
-import { UeMcpTask } from "./task.js";
-import { runBridge } from "./run-action.js";
-import { ModelAgentTask } from "./agent-step.js";
+import { UeMcpTask } from "../task.js";
+import { runBridge } from "../run-action.js";
+import { ModelAgentTask } from "../agent-step.js";
+import type { BuiltinTask } from "../builtins.js";
 
 /** How many times a refused draft goes back to the model. */
 export const PLAYTEST_RETRIES = 2;
@@ -301,38 +302,41 @@ class PlaytestDraftTask extends ModelAgentTask {
   override get taskName() { return "playtest.draft"; }
 }
 
-export const PLAYTEST_TASK_CLASSES: Record<string, TaskConstructor> = {
-  "playtest.draft": PlaytestDraftTask as unknown as TaskConstructor,
-  "playtest.gather": PlaytestGatherTask as unknown as TaskConstructor,
-  "playtest.check": PlaytestCheckTask as unknown as TaskConstructor,
-  "playtest.save": PlaytestSaveTask as unknown as TaskConstructor,
-};
-
-/** Task definitions for the flow, merged into the built-in defaults. */
-export function playtestTasks(): Record<string, unknown> {
-  return {
-    "playtest.gather": {
-      class_path: "playtest.gather",
+/** The playtest flow's tasks, in the order the default config lists them. */
+export const PLAYTEST_BUILTIN_TASKS: readonly BuiltinTask[] = [
+  {
+    name: "playtest.gather",
+    task: PlaytestGatherTask as unknown as TaskConstructor,
+    definition: {
       group: "playtest",
       description: "Gather a playtest target: its Blueprint, input mappings and the values PIE can watch. Params: target, context?, profile?, name?",
     },
-    "playtest.draft": {
-      class_path: "playtest.draft",
+  },
+  {
+    name: "playtest.draft",
+    task: PlaytestDraftTask as unknown as TaskConstructor,
+    definition: {
       group: "playtest",
       description: "Draft a test script with the flow model: an agent step with no tools, a token budget, answered as the script step schema. Params: prompt",
     },
-    "playtest.check": {
-      class_path: "playtest.check",
+  },
+  {
+    name: "playtest.check",
+    task: PlaytestCheckTask as unknown as TaskConstructor,
+    definition: {
       group: "playtest",
       description: "Check a drafted script with pie(script_validate); a refusal becomes feedback for the next draft.",
     },
-    "playtest.save": {
-      class_path: "playtest.save",
+  },
+  {
+    name: "playtest.save",
+    task: PlaytestSaveTask as unknown as TaskConstructor,
+    definition: {
       group: "playtest",
       description: "Save the checked script with pie(script_create).",
     },
-  };
-}
+  },
+];
 
 /** The flow definition. */
 export function playtestFlow(): Record<string, unknown> {
