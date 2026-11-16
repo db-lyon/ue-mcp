@@ -163,7 +163,7 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::CaptureNiagaraSimCache(const TSharedPtr
 	if (!World) return MCPError(TEXT("The requested world is not available (world=pie needs a running PIE session)"));
 	if (!Actor) return ActorErr;
 
-	if (Frames < 1 || Frames > 120) return MCPError(TEXT("frames must be between 1 and 120"));
+	if (Frames < 1 || Frames > 120) return MCPError(TEXT("frames must be between 1 and 120. To cover a longer run, capture successive windows of 120 frames or fewer."));
 	if (!(TickDelta > 0.0)) return MCPError(TEXT("tickDelta must be greater than 0"));
 
 	FNiagaraSimCacheCreateParameters CreateParams;

@@ -82,7 +82,7 @@ namespace
 		}
 		if (Values->Num() > MaxValues)
 		{
-			OutError = FString::Printf(TEXT("'%s' accepts at most %d values"), Field, MaxValues);
+			OutError = MCPWithSplitNote(FString::Printf(TEXT("'%s' accepts at most %d values"), Field, MaxValues), MaxValues);
 			return false;
 		}
 

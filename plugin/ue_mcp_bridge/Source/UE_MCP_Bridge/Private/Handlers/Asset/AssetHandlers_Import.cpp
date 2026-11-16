@@ -730,7 +730,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::ImportAnimation(const TSharedPtr<FJsonObj
 	if (bHasFile) Files.Add(SingleFile);
 	else Files = JsonArrayToStringList(FilesArr);
 	if (Files.Num() == 0) return MCPError(TEXT("filePaths is empty"));
-	if (Files.Num() > 200) return MCPError(FString::Printf(TEXT("filePaths holds %d files; the limit is 200"), Files.Num()));
+	if (Files.Num() > 200) return MCPBatchTooLargeError(FString::Printf(TEXT("filePaths holds %d files; the limit is 200"), Files.Num()), 200);
 	if (bHasFiles && !AssetName.IsEmpty())
 	{
 		return MCPError(TEXT("name applies to a single filePath; a batch names each asset after its file"));

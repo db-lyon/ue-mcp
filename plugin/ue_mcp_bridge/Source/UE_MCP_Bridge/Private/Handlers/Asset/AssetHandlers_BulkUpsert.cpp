@@ -427,10 +427,10 @@ TSharedPtr<FJsonValue> FAssetHandlers::BulkUpsertDataAssets(const TSharedPtr<FJs
 	}
 	if (Items->Num() > MaxBulkUpsertItems)
 	{
-		return MCPError(FString::Printf(
+		return MCPBatchTooLargeError(FString::Printf(
 			TEXT("'items' exceeds the maximum batch size of %d (received %d)"),
 			MaxBulkUpsertItems,
-			Items->Num()));
+			Items->Num()), MaxBulkUpsertItems);
 	}
 
 	OnConflict.TrimStartAndEndInline();

@@ -478,7 +478,7 @@ namespace
 			if (!IsFrame(Start) || !IsFrame(End) || End <= Start
 				|| End - Start > static_cast<double>(ControlRigSequencerMaxFrames))
 			{
-				OutError = FString::Printf(TEXT("'startFrame' and 'endFrame' must be integers with endFrame after startFrame, at most %d frames apart"), ControlRigSequencerMaxFrames);
+				OutError = FString::Printf(TEXT("'startFrame' and 'endFrame' must be integers with endFrame after startFrame, at most %d frames apart. Split a longer range into several sessions by startFrame/endFrame."), ControlRigSequencerMaxFrames);
 				return false;
 			}
 			Out.bUseCustomTimeRange = true;
@@ -2851,7 +2851,7 @@ namespace
 				Write.Frames.Add(FFrameNumber(Frame));
 			}
 			if (Write.Frames.Num() > ControlRigSequencerMaxFrames)
-				return MCPError(FString::Printf(TEXT("operations[%d].controls[%d] exceeds the %d-frame limit"), OperationIndex, ControlIndex, ControlRigSequencerMaxFrames));
+				return MCPError(FString::Printf(TEXT("operations[%d].controls[%d] exceeds the %d-frame limit. Split it into several operations by startFrame/endFrame."), OperationIndex, ControlIndex, ControlRigSequencerMaxFrames));
 			if (!ControlRigSequencerRegisterWriteFrames(WrittenKeys, ControlName, Write.Frames, OperationIndex, Error))
 				return MCPError(Error);
 

@@ -132,7 +132,7 @@ namespace MeshStudioRender
 
 	static bool ParseItems(const TArray<TSharedPtr<FJsonValue>>& Values, int32 Resolution, TArray<FItem>& Out, FString& Error)
 	{
-		if (Values.Num() < 1 || Values.Num() > 128) { Error = TEXT("captures must contain 1-128 entries"); return false; }
+		if (Values.Num() < 1 || Values.Num() > 128) { Error = MCPWithSplitNote(TEXT("captures must contain 1-128 entries"), 128); return false; }
 		TSet<FString> Ids;
 		for (const TSharedPtr<FJsonValue>& Value : Values)
 		{
@@ -170,7 +170,7 @@ namespace MeshStudioRender
 			{
 				const TArray<TSharedPtr<FJsonValue>>* Parts = nullptr;
 				if (!Object->TryGetArrayField(TEXT("parts"), Parts) || Parts->Num() < 1 || Parts->Num() > 64)
-					Item.InvalidReason = TEXT("parts must contain 1-64 mesh parts");
+					Item.InvalidReason = TEXT("parts must contain 1-64 mesh parts; split a larger set across several captures");
 				else for (const TSharedPtr<FJsonValue>& PartValue : *Parts)
 				{
 					FPart Part;

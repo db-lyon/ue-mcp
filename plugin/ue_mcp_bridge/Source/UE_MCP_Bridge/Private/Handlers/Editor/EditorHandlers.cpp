@@ -4082,7 +4082,8 @@ TSharedPtr<FJsonValue> FEditorHandlers::DiscardDirty(const TSharedPtr<FJsonObjec
 	}
 	if (Requested->Num() > MCPDiscardDirtyMaxPackages)
 	{
-		return MCPError(FString::Printf(TEXT("packages names %d packages; at most %d per call."), Requested->Num(), MCPDiscardDirtyMaxPackages));
+		return MCPError(FString::Printf(TEXT("packages names %d packages; at most %d per call. Split them into several calls of %d or fewer; each call is all or nothing on its own."),
+			Requested->Num(), MCPDiscardDirtyMaxPackages, MCPDiscardDirtyMaxPackages));
 	}
 
 	struct FDiscardEntry

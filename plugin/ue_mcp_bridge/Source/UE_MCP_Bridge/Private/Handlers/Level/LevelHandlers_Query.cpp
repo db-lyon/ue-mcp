@@ -360,8 +360,8 @@ namespace
 		}
 		if (ProjectedProperties.Num() > MCPQueryMaxProjectedProperties)
 		{
-			return MCPError(FString::Printf(
-				TEXT("'propertyNames' exceeds the maximum of %d entries"), MCPQueryMaxProjectedProperties));
+			return MCPBatchTooLargeError(FString::Printf(
+				TEXT("'propertyNames' exceeds the maximum of %d entries"), MCPQueryMaxProjectedProperties), MCPQueryMaxProjectedProperties);
 		}
 		// #1303: the owning actor's properties, Blueprint variables included.
 		TArray<FString> ProjectedActorProperties;
@@ -374,8 +374,8 @@ namespace
 		}
 		if (ProjectedActorProperties.Num() > MCPQueryMaxProjectedProperties)
 		{
-			return MCPError(FString::Printf(
-				TEXT("'actorPropertyNames' exceeds the maximum of %d entries"), MCPQueryMaxProjectedProperties));
+			return MCPBatchTooLargeError(FString::Printf(
+				TEXT("'actorPropertyNames' exceeds the maximum of %d entries"), MCPQueryMaxProjectedProperties), MCPQueryMaxProjectedProperties);
 		}
 
 		// Predicates. Parsing and evaluation live in the shared query header, so
@@ -418,8 +418,8 @@ namespace
 		}
 		if (CountByPaths.Num() > MCPQueryMaxCountByPaths)
 		{
-			return MCPError(FString::Printf(
-				TEXT("'countBy' exceeds the maximum of %d paths"), MCPQueryMaxCountByPaths));
+			return MCPBatchTooLargeError(FString::Printf(
+				TEXT("'countBy' exceeds the maximum of %d paths"), MCPQueryMaxCountByPaths), MCPQueryMaxCountByPaths);
 		}
 
 		// A predicate on `shadow.effectiveCastShadow` with `shadow` left out of

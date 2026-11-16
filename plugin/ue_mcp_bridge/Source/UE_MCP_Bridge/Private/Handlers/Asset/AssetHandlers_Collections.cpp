@@ -250,7 +250,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::CloneDataTableRows(const TSharedPtr<FJson
 	const bool bSave = OptionalBool(Params, TEXT("save"), true);
 	const bool bDryRun = OptionalBool(Params, TEXT("dryRun"), false);
 	if (MissingAsset) return MissingAsset;
-	if (!Rows || Rows->IsEmpty() || Rows->Num() > 500) return MCPError(TEXT("clones must contain 1-500 clone requests"));
+	if (!Rows || Rows->IsEmpty() || Rows->Num() > 500) return MCPBatchTooLargeError(TEXT("clones must contain 1-500 clone requests"), 500);
 	if (MCPIsProtectedAssetPath(AssetPath)) return MCPError(TEXT("Cannot edit a protected asset. ") + MCPProtectedMountWayForward());
 	UDataTable* Table = LoadAssetByPath<UDataTable>(AssetPath);
 	if (!Table || !Table->GetRowStruct()) return MCPError(TEXT("DataTable with a row struct required"));
@@ -349,7 +349,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::RemoveDataTableRows(const TSharedPtr<FJso
 	const bool bSave = OptionalBool(Params, TEXT("save"), true);
 	if (MissingAsset) return MissingAsset;
 	if (RequestedNames && !RowName.IsEmpty()) return MCPError(TEXT("Supply rowName or rowNames, not both"));
-	if (RequestedNames && (RequestedNames->IsEmpty() || RequestedNames->Num() > 500)) return MCPError(TEXT("rowNames must contain 1-500 names"));
+	if (RequestedNames && (RequestedNames->IsEmpty() || RequestedNames->Num() > 500)) return MCPBatchTooLargeError(TEXT("rowNames must contain 1-500 names"), 500);
 	TArray<FName> Names;
 	if (RequestedNames)
 	{

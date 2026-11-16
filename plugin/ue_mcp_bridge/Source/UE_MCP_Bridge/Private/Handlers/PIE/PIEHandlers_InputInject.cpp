@@ -398,8 +398,9 @@ TSharedPtr<FJsonValue> FPIEHandlers::InjectInputTape(const TSharedPtr<FJsonObjec
 	{
 		if (Vals.Num() > UMCPPIERemoteControl::MaxTapeFrames)
 		{
-			return MCPError(FString::Printf(TEXT("inject_input_tape: a relayed tape carries at most %d frames; this one has %d"),
-				UMCPPIERemoteControl::MaxTapeFrames, Vals.Num()));
+			return MCPError(FString::Printf(TEXT("inject_input_tape: a relayed tape carries at most %d frames; this one has %d. ")
+				TEXT("Split it into consecutive inject_input_tape calls of %d frames or fewer."),
+				UMCPPIERemoteControl::MaxTapeFrames, Vals.Num(), UMCPPIERemoteControl::MaxTapeFrames));
 		}
 		const FString Id = DesiredId.IsEmpty() ? MCPPIE::PIERemotePlayers::NewId(TEXT("tape")) : DesiredId;
 		Remote->SendTape(Id, FSoftObjectPath(Action), Vals);

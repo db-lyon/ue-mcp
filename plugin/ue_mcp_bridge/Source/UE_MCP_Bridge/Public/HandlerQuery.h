@@ -410,7 +410,9 @@ namespace MCPQuery
 		}
 		if (WhereValues->Num() > MaxPredicates)
 		{
-			OutError = FString::Printf(TEXT("'where' exceeds the maximum of %d predicates"), MaxPredicates);
+			OutError = FString::Printf(
+				TEXT("'where' exceeds the maximum of %d predicates. Run successive passes instead: query with %d or fewer, then narrow the result by the rest."),
+				MaxPredicates, MaxPredicates);
 			return false;
 		}
 		for (int32 Index = 0; Index < WhereValues->Num(); ++Index)

@@ -115,7 +115,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetComponentPropertiesBatch(const TSh
 	if (bItems && (!ClassFilter.IsEmpty() || !ComponentName.IsEmpty() || bProperties || HasParam(Params, TEXT("recursive"))))
 		return MCPError(TEXT("classFilter, componentName, properties and recursive are directory-mode parameters"));
 	if (bItems && (ItemsParam->Num() == 0 || ItemsParam->Num() > 10000))
-		return MCPError(TEXT("items must contain between 1 and 10000 entries"));
+		return MCPBatchTooLargeError(TEXT("items must contain between 1 and 10000 entries"), 10000);
 
 	UClass* FilterClass = nullptr;
 	TArray<TSharedPtr<FJsonValue>> Requests;

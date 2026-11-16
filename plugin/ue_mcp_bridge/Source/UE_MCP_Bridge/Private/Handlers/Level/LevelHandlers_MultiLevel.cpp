@@ -224,9 +224,9 @@ TSharedPtr<FJsonValue> FLevelHandlers::DeleteExactLabeledActorsInLevels(
 	}
 	if (LevelValues->Num() > MaxLevelRequests)
 	{
-		return MCPError(FString::Printf(
+		return MCPBatchTooLargeError(FString::Printf(
 			TEXT("'levels' exceeds the maximum of %d entries"),
-			MaxLevelRequests));
+			MaxLevelRequests), MaxLevelRequests);
 	}
 
 	TArray<FExactLabelLevelRequest> Requests;
@@ -301,10 +301,10 @@ TSharedPtr<FJsonValue> FLevelHandlers::DeleteExactLabeledActorsInLevels(
 		}
 		if (LabelValues->Num() > MaxLabelsPerLevel)
 		{
-			return MCPError(FString::Printf(
+			return MCPBatchTooLargeError(FString::Printf(
 				TEXT("'levels[%d].actorLabels' exceeds the maximum of %d entries"),
 				LevelIndex,
-				MaxLabelsPerLevel));
+				MaxLabelsPerLevel), MaxLabelsPerLevel);
 		}
 
 		TSet<FString> SeenLabels;

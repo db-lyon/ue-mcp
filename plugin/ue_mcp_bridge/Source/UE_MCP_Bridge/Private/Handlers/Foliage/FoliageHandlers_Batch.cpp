@@ -100,8 +100,8 @@ TSharedPtr<FJsonValue> FFoliageHandlers::BatchSetFoliageSettingsWhere(const TSha
 	}
 	if ((*SettingsObject)->Values.Num() > MCPFoliageBatchMaxSettings)
 	{
-		return MCPError(FString::Printf(
-			TEXT("'settings' exceeds the maximum of %d entries"), MCPFoliageBatchMaxSettings));
+		return MCPBatchTooLargeError(FString::Printf(
+			TEXT("'settings' exceeds the maximum of %d entries"), MCPFoliageBatchMaxSettings), MCPFoliageBatchMaxSettings);
 	}
 
 	// ── The predicate, which is the point of the action ─────────────────────

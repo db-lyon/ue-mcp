@@ -809,7 +809,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::InvokeObjectFunctions(const TSharedPtr<F
 	}
 	if (Calls->Num() > 64)
 	{
-		return MCPError(TEXT("'calls' accepts at most 64 entries"));
+		return MCPBatchTooLargeError(TEXT("'calls' accepts at most 64 entries"), 64);
 	}
 
 	// Reject malformed entries before running any user code. Runtime failures

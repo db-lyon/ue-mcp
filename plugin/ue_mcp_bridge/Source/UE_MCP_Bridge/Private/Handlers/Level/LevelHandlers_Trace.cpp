@@ -381,9 +381,9 @@ TSharedPtr<FJsonValue> FLevelHandlers::BulkLineTrace(const TSharedPtr<FJsonObjec
 	}
 	if (Traces->Num() > MaxBulkLineTraces)
 	{
-		return MCPError(FString::Printf(
+		return MCPBatchTooLargeError(FString::Printf(
 			TEXT("'traces' exceeds the maximum batch size of %d (received %d)"),
-			MaxBulkLineTraces, Traces->Num()));
+			MaxBulkLineTraces, Traces->Num()), MaxBulkLineTraces);
 	}
 
 	TArray<TSharedPtr<FJsonValue>> Results;

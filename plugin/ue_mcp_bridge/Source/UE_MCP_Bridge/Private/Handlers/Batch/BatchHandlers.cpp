@@ -90,7 +90,8 @@ TSharedPtr<FJsonValue> FBatchHandlers::ExecuteBatch(const TSharedPtr<FJsonObject
 	}
 	if (Calls->Num() > MaxBatchCalls)
 	{
-		return MCPError(FString::Printf(TEXT("'ops' holds %d entries and a batch carries at most %d"), Calls->Num(), MaxBatchCalls));
+		return MCPError(FString::Printf(TEXT("'ops' holds %d entries and a batch carries at most %d. Split them into several execute_batch calls of %d or fewer."),
+			Calls->Num(), MaxBatchCalls, MaxBatchCalls));
 	}
 
 	const FString OnError = OptionalString(Params, TEXT("onError"), TEXT("stop"));

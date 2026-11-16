@@ -145,9 +145,9 @@ TSharedPtr<FJsonValue> FAssetHandlers::BulkSetAssetProperties(const TSharedPtr<F
 	}
 	if (Items->Num() > MaxBulkPropertyAssets)
 	{
-		return MCPError(FString::Printf(
+		return MCPBatchTooLargeError(FString::Printf(
 			TEXT("'items' exceeds the maximum batch size of %d (received %d)"),
-			MaxBulkPropertyAssets, Items->Num()));
+			MaxBulkPropertyAssets, Items->Num()), MaxBulkPropertyAssets);
 	}
 
 	TArray<FPreparedAssetWrite> PreparedAssets;

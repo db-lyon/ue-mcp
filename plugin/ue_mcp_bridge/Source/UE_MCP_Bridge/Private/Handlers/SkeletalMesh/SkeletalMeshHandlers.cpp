@@ -283,10 +283,10 @@ namespace
 		}
 		if (Values->Num() > MCPSkinWeightMaxVerticesPerCall)
 		{
-			return MCPError(FString::Printf(
+			return MCPBatchTooLargeError(FString::Printf(
 				TEXT("vertexIndices contains %d entries; the maximum per read is %d"),
 				Values->Num(),
-				MCPSkinWeightMaxVerticesPerCall));
+				MCPSkinWeightMaxVerticesPerCall), MCPSkinWeightMaxVerticesPerCall);
 		}
 
 		TSet<int32> Seen;
@@ -414,10 +414,10 @@ namespace
 		}
 		if (Values->Num() > MCPSkinWeightMaxVerticesPerCall)
 		{
-			return MCPError(FString::Printf(
+			return MCPBatchTooLargeError(FString::Printf(
 				TEXT("edits contains %d vertices; the maximum per call is %d"),
 				Values->Num(),
-				MCPSkinWeightMaxVerticesPerCall));
+				MCPSkinWeightMaxVerticesPerCall), MCPSkinWeightMaxVerticesPerCall);
 		}
 
 		const FReferenceSkeleton& RefSkeleton = Target.Mesh->GetRefSkeleton();

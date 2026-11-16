@@ -240,9 +240,9 @@ TSharedPtr<FJsonValue> FAssetHandlers::SetMeshMaterialsBatch(const TSharedPtr<FJ
 	}
 	if (Assignments->Num() > MaxMeshMaterialAssignments)
 	{
-		return MCPError(FString::Printf(
+		return MCPBatchTooLargeError(FString::Printf(
 			TEXT("'assignments' exceeds the maximum batch size of %d (received %d)"),
-			MaxMeshMaterialAssignments, Assignments->Num()));
+			MaxMeshMaterialAssignments, Assignments->Num()), MaxMeshMaterialAssignments);
 	}
 
 	TArray<FPreparedMeshMaterialAssignment> Prepared;

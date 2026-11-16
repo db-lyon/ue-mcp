@@ -232,8 +232,8 @@ TSharedPtr<FJsonValue> FLevelHandlers::BatchSetActorProperties(const TSharedPtr<
 	}
 	if ((*PropertiesObject)->Values.Num() > MCPBatchMaxProperties)
 	{
-		return MCPError(FString::Printf(
-			TEXT("'properties' exceeds the maximum of %d entries"), MCPBatchMaxProperties));
+		return MCPBatchTooLargeError(FString::Printf(
+			TEXT("'properties' exceeds the maximum of %d entries"), MCPBatchMaxProperties), MCPBatchMaxProperties);
 	}
 
 	FMCPBatchSelector Selector;
