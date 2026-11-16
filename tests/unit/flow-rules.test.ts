@@ -1,5 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { flowNames, namespacedPaths, strayCleanupFlows, DEMO_FLOWS, DEMO_PATHS } from "../../scripts/check-flows.mjs";
+import * as fs from "node:fs";
+import { flowNames, isDemoPath, namespacedPaths, strayCleanupFlows, DEMO_FLOWS, DEMO_PATHS } from "../../scripts/check-flows.mjs";
+
+const FLOW_DATA = new URL("../../src/flow/builtin-flows.json", import.meta.url);
 import { lintText } from "../../scripts/lint-prose.mjs";
 
 const paths = (src: string) =>
@@ -69,18 +72,27 @@ describe("cleanup twins belong to demos only", () => {
   });
 });
 
-describe("reading flow names out of the loader", () => {
+describe("reading flow names out of the flow data", () => {
   it("finds a flow by its description key", () => {
     const src = [
-      "  return {",
-      "    my_flow: {",
-      "      description:",
-      '        "does a thing",',
-      "      steps: {},",
-      "    },",
-      "  };",
+      "{",
+      '  "my_flow": {',
+      '    "description": "does a thing",',
+      '    "steps": {}',
+      "  }",
+      "}",
     ].join("\n");
     expect(flowNames(src)).toEqual(["my_flow"]);
+  });
+
+  it("reads every flow of the shipped data file", () => {
+    const src = fs.readFileSync(FLOW_DATA, "utf8");
+    expect(flowNames(src)).toEqual(Object.keys(JSON.parse(src)));
+  });
+
+  it("treats an asset under a demo path as the demo's own", () => {
+    expect(isDemoPath("/Game/Flows/Beacon/M_Floor")).toBe(true);
+    expect(isDemoPath("/Game/Flows/Other/M_Floor")).toBe(false);
   });
 });
 

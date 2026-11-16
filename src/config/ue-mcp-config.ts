@@ -143,10 +143,16 @@ export interface ConfigLayerFile {
  * overlay, because the server and the editor plugin choose it by different rules.
  */
 export function configLayerFiles(projectDir: string, overlay?: string): ConfigLayerFile[] {
-  const layers: ConfigLayerFile[] = [
-    { target: "global", file: globalConfigPath() },
-    { target: "project", file: projectConfigPath(projectDir) },
-  ];
+  return [{ target: "global", file: globalConfigPath() }, ...projectLayerFiles(projectDir, overlay)];
+}
+
+/**
+ * The cascade without the user-global file: the layers that live in the
+ * project. The flow loader reads the global file on its own, because a bad one
+ * is warned about and ignored while a bad project file is fatal.
+ */
+export function projectLayerFiles(projectDir: string, overlay?: string): ConfigLayerFile[] {
+  const layers: ConfigLayerFile[] = [{ target: "project", file: projectConfigPath(projectDir) }];
   if (overlay) layers.push({ target: "env", file: overlayConfigPath(projectDir, overlay) });
   layers.push({ target: "local", file: localConfigPath(projectDir) });
   return layers;

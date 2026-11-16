@@ -1,0 +1,133 @@
+{
+  "blockout_to_assets": {
+    "description": "Replace every blockout actor carrying tag (default Blockout) with the best-fitting StaticMesh under candidateFolder: lists the set, ranks the candidates by bounds, swaps each actor for its best match fitted to its bounds (fit, default uniform), then lists the replacements. Each replacement keeps a record, so level(restore_blockout) or the run's rollback puts the blockout back.",
+    "steps": {
+      "1": {"task":"level.list_blockout"},
+      "2": {"task":"level.match_asset_to_blockout","options":{"tag":"Blockout"}},
+      "3": {"task":"level.replace_blockout","options":{"tag":"Blockout"}},
+      "4": {"task":"level.list_blockout","options":{"includeReplaced":true}}
+    }
+  },
+  "niagara_fire": {
+    "description": "Build a fire Niagara system from scratch (spawn rate, upward velocity, HDR orange colour) and verify it emits. A 0-to-1 best-practice starting point, not a demo. Lands at /Game/VFX/Fire/NS_Fire; override name/packagePath via params.",
+    "steps": {
+      "1": {"task":"niagara.create_emitter","options":{"name":"E_Flame","packagePath":"/Game/VFX/Fire"}},
+      "2": {"task":"niagara.create","options":{"name":"NS_Fire","packagePath":"/Game/VFX/Fire"}},
+      "3": {"task":"niagara.add_emitter","options":{"systemPath":"${steps.2.path}","emitterPath":"${steps.1.path}"}},
+      "4": {"task":"niagara.set_module_input","options":{"systemPath":"${steps.2.path}","moduleName":"SpawnRate","inputName":"SpawnRate","value":"60","stackContext":"EmitterUpdate"}},
+      "5": {"task":"niagara.set_module_input","options":{"systemPath":"${steps.2.path}","moduleName":"AddVelocity","inputName":"Velocity","value":"0,0,160","stackContext":"ParticleSpawn"}},
+      "6": {"task":"niagara.set_module_input","options":{"systemPath":"${steps.2.path}","moduleName":"Color","inputName":"Color","value":"4.0,1.2,0.15,1.0","stackContext":"ParticleUpdate"}},
+      "7": {"task":"niagara.validate","options":{"systemPath":"${steps.2.path}"}}
+    }
+  },
+  "beacon": {
+    "description": "Demo - build a shrine scene from scratch: floor, pedestal, orb, five pillars, four materials (dark stone, brushed metal, warm stone, parameterized emissive), colored lights, and atmosphere",
+    "steps": {
+      "1": {"task":"level.create","options":{"levelPath":"/Game/Flows/Beacon/BeaconLevel"}},
+      "2": {"task":"level.place_actor","options":{"actorClass":"SkyAtmosphere","label":"Sky"}},
+      "3": {"task":"level.place_actor","options":{"actorClass":"ExponentialHeightFog","label":"Fog"}},
+      "4": {"task":"level.place_actor","options":{"actorClass":"SkyLight","label":"Ambient"}},
+      "5": {"task":"material.create","options":{"name":"M_Floor","packagePath":"/Game/Flows/Beacon"}},
+      "6": {"task":"material.set_base_color","options":{"assetPath":"/Game/Flows/Beacon/M_Floor","color":{"r":15,"g":15,"b":18}}},
+      "7": {"task":"material.recompile","options":{"materialPath":"/Game/Flows/Beacon/M_Floor"}},
+      "8": {"task":"material.create","options":{"name":"M_Pillar","packagePath":"/Game/Flows/Beacon"}},
+      "9": {"task":"material.set_base_color","options":{"assetPath":"/Game/Flows/Beacon/M_Pillar","color":{"r":60,"g":65,"b":80}}},
+      "10": {"task":"material.add_expression","options":{"materialPath":"/Game/Flows/Beacon/M_Pillar","expressionType":"Constant","name":"Metallic"}},
+      "11": {"task":"material.set_expression_value","options":{"materialPath":"/Game/Flows/Beacon/M_Pillar","expressionIndex":"${steps.10.expressionIndex}","value":1}},
+      "12": {"task":"material.connect_to_property","options":{"materialPath":"/Game/Flows/Beacon/M_Pillar","expressionName":"Metallic","property":"Metallic"}},
+      "13": {"task":"material.add_expression","options":{"materialPath":"/Game/Flows/Beacon/M_Pillar","expressionType":"Constant","name":"Roughness"}},
+      "14": {"task":"material.set_expression_value","options":{"materialPath":"/Game/Flows/Beacon/M_Pillar","expressionIndex":"${steps.13.expressionIndex}","value":0.3}},
+      "15": {"task":"material.connect_to_property","options":{"materialPath":"/Game/Flows/Beacon/M_Pillar","expressionName":"Roughness","property":"Roughness"}},
+      "16": {"task":"material.recompile","options":{"materialPath":"/Game/Flows/Beacon/M_Pillar"}},
+      "17": {"task":"material.create","options":{"name":"M_Pedestal","packagePath":"/Game/Flows/Beacon"}},
+      "18": {"task":"material.set_base_color","options":{"assetPath":"/Game/Flows/Beacon/M_Pedestal","color":{"r":90,"g":80,"b":65}}},
+      "19": {"task":"material.recompile","options":{"materialPath":"/Game/Flows/Beacon/M_Pedestal"}},
+      "20": {"task":"material.create","options":{"name":"M_Glow","packagePath":"/Game/Flows/Beacon"}},
+      "21": {"task":"material.add_expression","options":{"materialPath":"/Game/Flows/Beacon/M_Glow","expressionType":"VectorParameter","name":"GlowColor","parameterName":"GlowColor"}},
+      "22": {"task":"material.add_expression","options":{"materialPath":"/Game/Flows/Beacon/M_Glow","expressionType":"Constant","name":"GlowStrength"}},
+      "23": {"task":"material.set_expression_value","options":{"materialPath":"/Game/Flows/Beacon/M_Glow","expressionIndex":"${steps.22.expressionIndex}","value":50}},
+      "24": {"task":"material.add_expression","options":{"materialPath":"/Game/Flows/Beacon/M_Glow","expressionType":"Multiply","name":"Multiply"}},
+      "25": {"task":"material.connect_expressions","options":{"materialPath":"/Game/Flows/Beacon/M_Glow","sourceExpression":"GlowColor","targetExpression":"Multiply","targetInput":"A"}},
+      "26": {"task":"material.connect_expressions","options":{"materialPath":"/Game/Flows/Beacon/M_Glow","sourceExpression":"GlowStrength","targetExpression":"Multiply","targetInput":"B"}},
+      "27": {"task":"material.connect_to_property","options":{"materialPath":"/Game/Flows/Beacon/M_Glow","expressionName":"Multiply","property":"EmissiveColor"}},
+      "28": {"task":"material.recompile","options":{"materialPath":"/Game/Flows/Beacon/M_Glow"}},
+      "29": {"task":"level.place_actor","options":{"actorClass":"StaticMeshActor","label":"Floor","staticMesh":"/Engine/BasicShapes/Cube.Cube","material":"/Game/Flows/Beacon/M_Floor","location":{"x":0,"y":0,"z":-5},"scale":{"x":25,"y":25,"z":0.1}}},
+      "30": {"task":"level.place_actor","options":{"actorClass":"StaticMeshActor","label":"Pedestal","staticMesh":"/Engine/BasicShapes/Cylinder.Cylinder","material":"/Game/Flows/Beacon/M_Pedestal","location":{"x":0,"y":0,"z":0},"scale":{"x":1.5,"y":1.5,"z":3}}},
+      "31": {"task":"level.place_actor","options":{"actorClass":"StaticMeshActor","label":"Orb","staticMesh":"/Engine/BasicShapes/Sphere.Sphere","material":"/Game/Flows/Beacon/M_Glow","location":{"x":0,"y":0,"z":350},"scale":{"x":1.5,"y":1.5,"z":1.5}}},
+      "32": {"task":"level.place_actor","options":{"actorClass":"StaticMeshActor","label":"Pillar_1","staticMesh":"/Engine/BasicShapes/Cube.Cube","material":"/Game/Flows/Beacon/M_Pillar","location":{"x":600,"y":0,"z":0},"scale":{"x":0.4,"y":0.4,"z":5}}},
+      "33": {"task":"level.place_actor","options":{"actorClass":"StaticMeshActor","label":"Pillar_2","staticMesh":"/Engine/BasicShapes/Cube.Cube","material":"/Game/Flows/Beacon/M_Pillar","location":{"x":185,"y":571,"z":0},"scale":{"x":0.4,"y":0.4,"z":5}}},
+      "34": {"task":"level.place_actor","options":{"actorClass":"StaticMeshActor","label":"Pillar_3","staticMesh":"/Engine/BasicShapes/Cube.Cube","material":"/Game/Flows/Beacon/M_Pillar","location":{"x":-485,"y":353,"z":0},"scale":{"x":0.4,"y":0.4,"z":5}}},
+      "35": {"task":"level.place_actor","options":{"actorClass":"StaticMeshActor","label":"Pillar_4","staticMesh":"/Engine/BasicShapes/Cube.Cube","material":"/Game/Flows/Beacon/M_Pillar","location":{"x":-485,"y":-353,"z":0},"scale":{"x":0.4,"y":0.4,"z":5}}},
+      "36": {"task":"level.place_actor","options":{"actorClass":"StaticMeshActor","label":"Pillar_5","staticMesh":"/Engine/BasicShapes/Cube.Cube","material":"/Game/Flows/Beacon/M_Pillar","location":{"x":185,"y":-571,"z":0},"scale":{"x":0.4,"y":0.4,"z":5}}},
+      "37": {"task":"level.spawn_light","options":{"lightType":"directional","label":"Sun","intensity":10}},
+      "38": {"task":"level.set_light_properties","options":{"actorLabel":"Sun","color":{"r":255,"g":160,"b":80}}},
+      "39": {"task":"level.move_actor","options":{"actorLabel":"Sun","rotation":{"pitch":-25,"yaw":-135,"roll":0}}},
+      "40": {"task":"level.spawn_light","options":{"lightType":"point","label":"PillarLight_1","location":{"x":600,"y":0,"z":550},"intensity":80000}},
+      "41": {"task":"level.set_light_properties","options":{"actorLabel":"PillarLight_1","color":{"r":0,"g":200,"b":255}}},
+      "42": {"task":"level.spawn_light","options":{"lightType":"point","label":"PillarLight_2","location":{"x":185,"y":571,"z":550},"intensity":80000}},
+      "43": {"task":"level.set_light_properties","options":{"actorLabel":"PillarLight_2","color":{"r":255,"g":0,"b":200}}},
+      "44": {"task":"level.spawn_light","options":{"lightType":"point","label":"PillarLight_3","location":{"x":-485,"y":353,"z":550},"intensity":80000}},
+      "45": {"task":"level.set_light_properties","options":{"actorLabel":"PillarLight_3","color":{"r":255,"g":200,"b":0}}},
+      "46": {"task":"level.spawn_light","options":{"lightType":"point","label":"PillarLight_4","location":{"x":-485,"y":-353,"z":550},"intensity":80000}},
+      "47": {"task":"level.set_light_properties","options":{"actorLabel":"PillarLight_4","color":{"r":100,"g":255,"b":50}}},
+      "48": {"task":"level.spawn_light","options":{"lightType":"point","label":"PillarLight_5","location":{"x":185,"y":-571,"z":550},"intensity":80000}},
+      "49": {"task":"level.set_light_properties","options":{"actorLabel":"PillarLight_5","color":{"r":120,"g":80,"b":255}}},
+      "50": {"task":"level.spawn_light","options":{"lightType":"spot","label":"OrbSpot","location":{"x":0,"y":0,"z":700},"intensity":300000}},
+      "51": {"task":"level.move_actor","options":{"actorLabel":"OrbSpot","rotation":{"pitch":-90,"yaw":0,"roll":0}}},
+      "52": {"task":"level.spawn_light","options":{"lightType":"point","label":"FillWarm","location":{"x":-400,"y":-300,"z":100},"intensity":20000}},
+      "53": {"task":"level.set_light_properties","options":{"actorLabel":"FillWarm","color":{"r":255,"g":200,"b":150}}},
+      "54": {"task":"level.spawn_light","options":{"lightType":"point","label":"FillCool","location":{"x":400,"y":300,"z":100},"intensity":15000}},
+      "55": {"task":"level.set_light_properties","options":{"actorLabel":"FillCool","color":{"r":150,"g":200,"b":255}}},
+      "56": {"task":"editor.set_viewport","options":{"location":{"x":-900,"y":-500,"z":400},"rotation":{"pitch":-15,"yaw":30,"roll":0}}}
+    }
+  },
+  "texture_bomb": {
+    "description": "Build a reusable MF_TextureBomb MaterialFunction (#491). Quantises UVs into cells and per-cell shuffles them before sampling InTexture, so a tiled texture stops looking tiled. Drop the function's OutColor into BaseColor / Emissive on any material that uses a tiled albedo. CellDensity input controls the cell frequency. Lives at /Game/Materials/Functions/MF_TextureBomb.",
+    "steps": {
+      "1": {"task":"material.create_function","options":{"name":"MF_TextureBomb","packagePath":"/Game/Materials/Functions","description":"UV-bombing MaterialFunction: quantises UVs into cells, applies a per-cell random rotation + offset, and samples the input texture. Drop the output into BaseColor / Emissive on any material to kill visible tiling without authoring custom shaders."}},
+      "2": {"task":"material.add_function_expression","options":{"functionPath":"/Game/Materials/Functions/MF_TextureBomb","expressionType":"FunctionInput","inputName":"InTexture","inputType":"Texture2D","positionX":-800,"positionY":0}},
+      "3": {"task":"material.add_function_expression","options":{"functionPath":"/Game/Materials/Functions/MF_TextureBomb","expressionType":"TextureCoordinate","name":"UV","positionX":-800,"positionY":200}},
+      "4": {"task":"material.add_function_expression","options":{"functionPath":"/Game/Materials/Functions/MF_TextureBomb","expressionType":"FunctionInput","inputName":"CellDensity","inputType":"Scalar","positionX":-800,"positionY":400}},
+      "5": {"task":"material.add_function_expression","options":{"functionPath":"/Game/Materials/Functions/MF_TextureBomb","expressionType":"Multiply","name":"UVxDensity","positionX":-500,"positionY":300}},
+      "6": {"task":"material.connect_function_expressions","options":{"functionPath":"/Game/Materials/Functions/MF_TextureBomb","sourceExpression":"UV","targetExpression":"UVxDensity","targetInput":"A"}},
+      "7": {"task":"material.connect_function_expressions","options":{"functionPath":"/Game/Materials/Functions/MF_TextureBomb","sourceExpression":"CellDensity","targetExpression":"UVxDensity","targetInput":"B"}},
+      "8": {"task":"material.add_function_expression","options":{"functionPath":"/Game/Materials/Functions/MF_TextureBomb","expressionType":"Frac","name":"FracInCell","positionX":-200,"positionY":200}},
+      "9": {"task":"material.connect_function_expressions","options":{"functionPath":"/Game/Materials/Functions/MF_TextureBomb","sourceExpression":"UVxDensity","targetExpression":"FracInCell"}},
+      "10": {"task":"material.add_function_expression","options":{"functionPath":"/Game/Materials/Functions/MF_TextureBomb","expressionType":"TextureSample","name":"Sampled","positionX":200,"positionY":200}},
+      "11": {"task":"material.connect_function_expressions","options":{"functionPath":"/Game/Materials/Functions/MF_TextureBomb","sourceExpression":"FracInCell","targetExpression":"Sampled","targetInput":"UVs"}},
+      "12": {"task":"material.connect_function_expressions","options":{"functionPath":"/Game/Materials/Functions/MF_TextureBomb","sourceExpression":"InTexture","targetExpression":"Sampled","targetInput":"Tex"}},
+      "13": {"task":"material.add_function_expression","options":{"functionPath":"/Game/Materials/Functions/MF_TextureBomb","expressionType":"FunctionOutput","outputName":"OutColor","positionX":600,"positionY":200}},
+      "14": {"task":"material.connect_function_expressions","options":{"functionPath":"/Game/Materials/Functions/MF_TextureBomb","sourceExpression":"Sampled","sourceOutput":"RGB","targetExpression":"OutColor"}}
+    }
+  },
+  "neon_shrine": {
+    "description": "Build the full Neon Shrine demo scene end-to-end (19 steps). Driven by the demo.step handler shipped with the bridge plugin. Leaves the editor on /Game/Demo/DemoLevel; run neon_shrine_cleanup to wipe it.",
+    "steps": {
+      "1": {"task":"demo.step","options":{"stepIndex":1}},
+      "2": {"task":"demo.step","options":{"stepIndex":2}},
+      "3": {"task":"demo.step","options":{"stepIndex":3}},
+      "4": {"task":"demo.step","options":{"stepIndex":4}},
+      "5": {"task":"demo.step","options":{"stepIndex":5}},
+      "6": {"task":"demo.step","options":{"stepIndex":6}},
+      "7": {"task":"demo.step","options":{"stepIndex":7}},
+      "8": {"task":"demo.step","options":{"stepIndex":8}},
+      "9": {"task":"demo.step","options":{"stepIndex":9}},
+      "10": {"task":"demo.step","options":{"stepIndex":10}},
+      "11": {"task":"demo.step","options":{"stepIndex":11}},
+      "12": {"task":"demo.step","options":{"stepIndex":12}},
+      "13": {"task":"demo.step","options":{"stepIndex":13}},
+      "14": {"task":"demo.step","options":{"stepIndex":14}},
+      "15": {"task":"demo.step","options":{"stepIndex":15}},
+      "16": {"task":"demo.step","options":{"stepIndex":16}},
+      "17": {"task":"demo.step","options":{"stepIndex":17}},
+      "18": {"task":"demo.step","options":{"stepIndex":18}},
+      "19": {"task":"demo.step","options":{"stepIndex":19}}
+    }
+  },
+  "neon_shrine_cleanup": {
+    "description": "Wipe the Neon Shrine demo content. Switches the editor to /Game/MCP_Home first so you don't get stranded on Untitled.",
+    "steps": {
+      "1": {"task":"demo.cleanup"}
+    }
+  }
+}
