@@ -1,3 +1,4 @@
+// @session per-session: Routes using the addressed session's plugin set.
 import * as fs from "node:fs";
 import * as path from "node:path";
 import type { PluginInfo, ToolDef } from "../surface/tool-types.js";

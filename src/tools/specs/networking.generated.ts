@@ -1,3 +1,4 @@
+// @session independent: Generated parameter declarations from the recorded C++ specs; data only, with no editor state.
 // GENERATED FILE - do not edit.
 //
 // Written by scripts/generate-handler-specs.mjs from tests/golden/handler-specs.json,

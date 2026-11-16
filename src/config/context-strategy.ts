@@ -1,3 +1,4 @@
+// @session independent: The context strategy names and the resolution of the active one from the environment and config; one answer per process.
 import { readEnv } from "../core/env.js";
 
 /**

@@ -1,3 +1,4 @@
+// @session per-session: Switches categories and toolsets for the one project it is handed, chosen with --project.
 /**
  * `ue-mcp tools list|enable|disable` - turn categories and Unreal toolsets on
  * and off from a terminal (#1827).

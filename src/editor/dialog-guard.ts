@@ -1,3 +1,4 @@
+// @session per-session: One guard per editor: the modal blocking IT, and the decision every route defers to.
 /**
  * The dialog guard. One per editor, one implementation, one decision.
  *

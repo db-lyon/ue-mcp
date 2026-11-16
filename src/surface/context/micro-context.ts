@@ -1,3 +1,4 @@
+// @session independent: Builds the gateway over the graph it is handed and resolves calls through it; holds nothing per editor.
 /**
  * Micro context strategy: collapse the entire surface behind a single gateway
  * tool, mirroring the native MCP toolset gateway (list_toolsets /

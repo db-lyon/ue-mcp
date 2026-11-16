@@ -1,3 +1,4 @@
+// @session per-session: Installs prebuilt binaries into one project's plugin directory.
 /**
  * Prebuilt bridge binaries: where they come from and how they land in a project.
  *

@@ -1,3 +1,4 @@
+// @session independent: Pure text edit of a .uproject Plugins array; the caller names the file.
 /**
  * Edit a .uproject's Plugins array as text, so the file keeps its line
  * endings, indentation and key order. Unreal and source control both diff

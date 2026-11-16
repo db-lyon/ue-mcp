@@ -1,3 +1,4 @@
+// @session independent: Module resolution hooks run in the loader thread; no editor.
 /**
  * Module resolution hooks that answer a plugin's `ue-mcp` and `ue-mcp/*`
  * imports with the running server's own package, so a plugin needs no copy

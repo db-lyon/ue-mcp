@@ -1,3 +1,4 @@
+// @session independent: Edits the Unreal Assistant's per-user AIAssistant.json, which every project on the machine shares. No editor is involved.
 /**
  * Attaching ue-mcp to Epic's Unreal Assistant (the AIAssistant plugin, UE 5.9).
  *

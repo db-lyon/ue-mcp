@@ -1,3 +1,4 @@
+// @session per-session: One guard registry per session; a project's guards do not veto another's calls.
 /**
  * The bridge's binding of flowkit's guard pipeline.
  *

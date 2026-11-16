@@ -1,3 +1,4 @@
+// @session per-session: Writes the saved report into the same per-editor deferred store, tagged with the submitting project.
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { randomBytes } from "node:crypto";

@@ -1,3 +1,4 @@
+// @session independent: A line diff of two strings. No editor or project is involved.
 /**
  * Unified line diffs for the text files a checkpoint records (config, source).
  * Myers' O(ND) algorithm, capped so a rewritten file reports that it changed

@@ -1,3 +1,4 @@
+// @session per-session: One socket, port and lockfile per editor.
 import WebSocket from "ws";
 import { randomUUID } from "node:crypto";
 import * as fs from "node:fs";

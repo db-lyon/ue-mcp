@@ -1,3 +1,4 @@
+// @session independent: Unwraps and validates one call against the tool it names; holds nothing per editor.
 /**
  * The advertised call shape of a category tool: `action` plus `args` (#1172).
  *

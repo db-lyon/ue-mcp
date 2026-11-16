@@ -1,3 +1,4 @@
+// @session independent: Names and reads the process environment; one answer for the whole process.
 /**
  * Every UE_MCP_* environment variable the server and its CLI read, documented
  * once. Values are read at call time, never cached at module load, so a test

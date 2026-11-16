@@ -1,3 +1,4 @@
+// @session per-session: Dispatches each MCP connection's calls through the runtime's sessions.
 /**
  * One MCP server over a runtime: the initialize instructions, every category
  * tool and the flow tool, each dispatched through the runtime's sessions.

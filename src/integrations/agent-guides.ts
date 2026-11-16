@@ -1,3 +1,4 @@
+// @session independent: Writes and removes one delimited block in the instruction files of the project directory it is handed. No editor is involved.
 /**
  * The instruction files other agent clients read from a project: AGENTS.md
  * (Codex, Cursor), GEMINI.md (Gemini CLI) and .github/copilot-instructions.md

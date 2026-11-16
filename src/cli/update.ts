@@ -1,3 +1,4 @@
+// @session per-session: Updates one project's deployed bridge, chosen with --editor.
 import { execFileSync } from "node:child_process";
 import { PLAIN_SEMVER_RE, runNpmSync } from "../core/safe-spawn.js";
 import * as fs from "node:fs";

@@ -1,3 +1,4 @@
+// @session per-session: Applies one project's nativeTools config to its own graph.
 /**
  * Honouring `nativeTools:` now that Unreal's tools are declared rather than
  * injected.

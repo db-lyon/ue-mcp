@@ -1,3 +1,4 @@
+// @session independent: Derives one action's parameter schema from whichever tool graph it is handed; holds nothing of its own.
 /**
  * The live parameter schema for one action.
  *

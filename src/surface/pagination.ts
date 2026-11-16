@@ -1,3 +1,4 @@
+// @session independent: Declares the cursor/limit parameters; the editor holds the collection and the C++ half holds the cursor.
 import { z } from "zod";
 
 /**

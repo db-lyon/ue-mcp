@@ -1,3 +1,4 @@
+// @session per-session: Resolves the dialog handling mode for the project it is handed, from that project's stored preference.
 import { getDialogMode, getUserStatePath, type DialogMode } from "../config/user-state.js";
 import type { ElicitFn } from "../core/elicit.js";
 import { readEnv } from "../core/env.js";

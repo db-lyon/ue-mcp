@@ -1,3 +1,4 @@
+// @session per-session: One project's shadow history, constructed with that project's directory and never another's.
 /**
  * The shadow history behind checkpoints (#1482): a git repository at
  * <project>/Saved/UE_MCP_Bridge/shadow.git, driven by isomorphic-git, that

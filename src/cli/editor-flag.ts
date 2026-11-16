@@ -1,3 +1,4 @@
+// @session per-session: Turns --editor into the project a one-shot command acts on.
 /**
  * `--editor <name-or-path>` for the one-shot CLI subcommands (#817, plan 6.2).
  *

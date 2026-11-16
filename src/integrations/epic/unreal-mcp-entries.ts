@@ -1,3 +1,4 @@
+// @session independent: Finds and removes entries in the client config file it is handed. No editor is involved.
 /**
  * Entries for the editor's built-in MCP server (UE 5.9) in a client config,
  * which init replaces with the ue-mcp entry. Two shapes are recognised:

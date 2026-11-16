@@ -1,3 +1,4 @@
+// @session per-session: Lists the editor processes holding one project, keyed by its path.
 /**
  * Several editor processes holding one .uproject (#1150). get_status names
  * every holder and the one that answers; responses carry the answering pid

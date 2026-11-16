@@ -1,3 +1,4 @@
+// @session per-session: Deploys into one project, chosen with --editor.
 import * as path from "node:path";
 import { ProjectContext } from "../config/project.js";
 import { deploy } from "../editor/deployer.js";

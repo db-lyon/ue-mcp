@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @session per-session: Installs and inspects plugins for one project, chosen with --editor.
 /**
  * CLI for `ue-mcp plugin <subcommand>`.
  *

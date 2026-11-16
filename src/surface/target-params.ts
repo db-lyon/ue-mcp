@@ -1,3 +1,4 @@
+// @session per-session: Injects the per-call editor target and re-points a context at the session it names.
 /**
  * Per-call editor targeting on a tool: injecting and removing the `editor`
  * and `toEditor` parameters, and re-pointing a context at one session.

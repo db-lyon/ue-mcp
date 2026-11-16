@@ -1,3 +1,4 @@
+// @session independent: The pristine tool declaration; per-session graphs are clones of it, built in session-surface.
 /**
  * The registry of all category tools the MCP server exposes.
  *

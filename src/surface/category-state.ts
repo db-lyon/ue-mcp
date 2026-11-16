@@ -1,3 +1,4 @@
+// @session per-session: Reads one project's disable config and applies it to that session's own graph, from that session's pristine copy.
 /**
  * Which of a project's categories are turned off, and in what scope.
  *

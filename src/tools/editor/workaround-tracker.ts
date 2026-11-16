@@ -1,3 +1,4 @@
+// @session per-session: The workaround stack is partitioned per session, because it is posted publicly.
 /**
  * Tracker for execute_python workaround calls, partitioned per editor session.
  *

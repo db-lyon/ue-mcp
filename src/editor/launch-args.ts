@@ -1,3 +1,4 @@
+// @session independent: Pure launch-argument rules: window-mode precedence, extraArgs splitting and argv building for whatever project it is handed.
 /**
  * How an editor launch is shaped: which window mode it runs in, whether it may
  * open an IDE, and what extra arguments reach its command line.

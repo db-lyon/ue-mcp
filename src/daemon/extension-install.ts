@@ -1,3 +1,4 @@
+// @session independent: Installs an extension into the user's extensions directory. No editor is involved.
 /**
  * Installing a daemon extension from a zip: a local file or a URL, checked
  * against a SHA-256 before anything is unpacked. The archive holds the

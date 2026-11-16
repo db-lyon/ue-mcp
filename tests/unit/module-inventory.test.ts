@@ -8,308 +8,30 @@
  * new module that nobody asks the question about, quietly holding one editor's
  * state for all of them.
  *
- * So the answer is written down here, once per module, and a module in neither
- * list fails the build. The lists are:
+ * So each module answers it on its own first line (after a shebang, if any),
+ * and a module without the answer fails the build:
  *
- *   PER_SESSION           Holds per-editor state, is built once per session, or
- *                         is handed a session / project / bridge and answers
- *                         differently for each. It has to be told which editor.
- *   SESSION_INDEPENDENT   Pure logic over its arguments, shared declarations,
- *                         process-wide infrastructure, or user and machine
- *                         scoped state that is deliberately not per editor.
+ *   // @session per-session: <reason>
+ *       Holds per-editor state, is built once per session, or is handed a
+ *       session / project / bridge and answers differently for each. It has to
+ *       be told which editor.
+ *   // @session independent: <reason>
+ *       Pure logic over its arguments, shared declarations, process-wide
+ *       infrastructure, or user and machine scoped state that is deliberately
+ *       not per editor.
  *
- * An entry is an exact path, or a directory prefix when every module under it
- * has the same answer for the same reason. Every module must match exactly one.
+ * Generated modules carry the tag too: their generators write it.
  */
 import { describe, it, expect } from "vitest";
-import { readdirSync, statSync } from "node:fs";
+import { readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const srcDir = join(here, "..", "..", "src");
 
-/** Handed a session, a project or a bridge, or holding state keyed by one. */
-const PER_SESSION: Record<string, string> = {
-  "bridge/bridge.ts": "One socket, port and lockfile per editor.",
-  "editor/dialog-guard.ts": "One guard per editor: the modal blocking IT, and the decision every route defers to.",
-  "editor/dialog-mode.ts": "Resolves the dialog handling mode for the project it is handed, from that project's stored preference.",
-  "editor/playtest-mode.ts": "Resolves the playtest mode for the project it is handed, from that project's stored preference.",
-  "sessions/session.ts": "The registry of editors itself.",
-  "pie/script-watch.ts": "Follows one script run through the ToolContext of the call that started it, so it polls that call's editor.",
-  "pie/drive-wait.ts": "Follows one pawn drive through the ToolContext of the call that started it, so it polls that call's editor.",
-  "sessions/session-surface.ts": "One tool graph per editor, and the union advertised from them.",
-  "config/session-env.ts": "Reports which environment variables flatten the registered editors.",
-  "dispatch/editor-gate.ts": "Routes a call to an editor and refuses an untargeted change.",
-  "surface/target-params.ts": "Injects the per-call editor target and re-points a context at the session it names.",
-  "editor/editor-control.ts": "Starts and stops one project's editor process.",
-  "editor/editor-build.ts": "Builds one project's C++ with the engine and config that project resolves to.",
-  "bridge/editor-target.ts": "Resolves one project's bridge from its own port lockfile.",
-  "cli/editor-flag.ts": "Turns --editor into the project a one-shot command acts on.",
-  "editor/engine-observer.ts": "Observes the editor process that has one project open.",
-  "editor/native-dialogs.ts": "Lists and presses the native dialogs of the editor process that has the project it is handed open, by that process's command line.",
-  "editor/engine-root.ts": "Resolves the engine one project builds, launches and reads source from, out of that project's own layout and config.",
-  "config/project.ts": "One ProjectContext per session, with that project's config cascade.",
-  "sessions/project-switch.ts": "Moves one session's project and socket together.",
-  "editor/project-holders.ts": "Lists the editor processes holding one project, keyed by its path.",
-  "editor/crash-reporter.ts": "Ends the crash reporters left holding one project's binaries, matched by that project's directory.",
-  "bridge/port.ts": "Derives a bridge port from one project's root path.",
-  "bridge/requested-port.ts": "Publishes one project's resolved port pin into that project's own Saved directory.",
-  "editor/deployer.ts": "Attaches and deploys the bridge into one project.",
-  "integrations/epic/unreal-mcp-server.ts": "Reads and writes Epic's Unreal MCP server settings for the one project it is handed.",
-  "integrations/epic/project-status.ts": "Reports Epic's Unreal MCP server, Unreal Assistant and Unreal Canvas for the one ProjectContext it is handed.",
-  "integrations/epic/unreal-canvas.ts": "Reads whether the one .uproject it is handed enables the Unreal Canvas Bridge, and which bridge port to use for it.",
-  "editor/install-marker.ts": "Reads and writes one project's plugin install marker and resolves where that project's plugin lives.",
-  "editor/bridge-binaries.ts": "Installs prebuilt binaries into one project's plugin directory.",
-  "editor/editor-plugin.ts": "Installs an extension's editor plugin into the one project it is handed.",
-  "editor/bridge-update.ts": "Checks for and applies an update to the bridge installed in one project.",
-  "editor/pending-build.ts": "Records and clears a bridge build one project owes after a source update, in that project's plugin directory.",
-  "editor/bridge-tree.ts": "Checks that one project's installed binary bridge is a tree the editor loads without a rebuild.",
-  "editor/legacy-python.ts": "Removes the retired Python bridge from one project's deployed plugin directory.",
-  "cli/init-core.ts": "Plans and applies setup for the one project it is handed.",
-  "cli/status.ts": "Reports the install and editor state of the one project it is handed.",
-  "editor/bridge-freshness.ts": "Compares deployed against compiled inside one project.",
-  "codeintel/content-index.ts": "Walks ONE project's Content tree through that project's own mount table.",
-  "editor/install-check.ts": "Answers whether ONE project can build and load the bridge, from that project's descriptor, plugin directory and engine.",
-  "surface/epic-surface.ts": "Applies one project's nativeTools config to its own graph.",
-  "surface/category-state.ts": "Reads one project's disable config and applies it to that session's own graph, from that session's pristine copy.",
-  "tools/project/categories.ts": "Turns categories and toolsets on and off in the addressed session, its project's config and its editor.",
-  "tools/project/leases.ts": "Takes and lists asset leases in the addressed editor, under the calling session.",
-  "dispatch/leases.ts": "Leases are keyed by the editor session the asset lives in.",
-  "integrations/epic/toolset-settings.ts": "Reads and writes the Toolset Registry setting file of the one project it is handed.",
-  "daemon/tools-routes.ts": "Runs the category, toolset and lease actions in the editor each request names.",
-  "cli/tools-cli.ts": "Switches categories and toolsets for the one project it is handed, chosen with --project.",
-  "surface/registered-surface.ts": "Withholds what one editor's plugin did not register, read off that session's own bridge.",
-  "diagram/action.ts": "Reads through the bridge of the context it is handed and writes under that session's project.",
-  "dispatch/locking.ts": "The lock registry lives in the addressed editor's bridge, under that session's owner id.",
-  "index.ts": "Wires the registry, the per-session loads and the MCP server together.",
-  "server/runtime.ts": "Owns the session registry, each session's load, guards and bridge, and the targeting baked into the tool graph.",
-  "server/mcp-server.ts": "Dispatches each MCP connection's calls through the runtime's sessions.",
-  "server/editor-resources.ts": "Lists and reads MCP resources through the bridge it is handed, the active session's at call time.",
-  "server/context-projection.ts": "Projects the runtime's sessions under another strategy and scope, and dispatches a call to each session through a load built from that session's own surface.",
-  "daemon/daemon.ts": "One daemon per project root: it owns that project's runtime and follows each of its editors.",
-  "daemon/checkpoint-routes.ts": "Resolves the editor session each request names before acting on its checkpoints.",
-  "checkpoints/service.ts": "One checkpoint state per editor session: its toggle, its bridge's save recording and its project's history.",
-  "checkpoints/shadow-repo.ts": "One project's shadow history, constructed with that project's directory and never another's.",
-  "daemon/journal-routes.ts": "Resolves the editor session each request names before acting on its journal.",
-  "journal/journal.ts": "One mutation journal per editor session, kept in that session's project and restoring through that session's bridge and checkpoints.",
-  "daemon/discovery.ts": "Publishes and reads the discovery record of one project root's daemon.",
-  "daemon/start-lock.ts": "Holds the start lock of one project root's daemon, so that project gets one daemon.",
-  "daemon/supersede-watch.ts": "Watches the discovery record of one project root's daemon, so a superseded daemon for that project stops.",
-  "daemon/server-mode.ts": "Reads how the one project it is handed is served, from that project's config.",
-  "daemon/shim.ts": "Relays one MCP client to the daemon of the project it was started for.",
-  "cli/extension-cli.ts": "Installs extensions and restarts the daemon of the project it is handed.",
-  "cli/daemon-cli.ts": "Runs, starts, stops or reports the daemon of the project it is handed.",
-  "sessions/session-load.ts": "One tool graph, task registry and guard pipeline per editor, built from that editor's own project.",
-  "dispatch/server-dispatch.ts": "Routes each call to the editor it addressed and runs it through that editor's registry and guard.",
-  "cli/hook-handler.ts": "Runs against the project the hook payload named.",
-  "integrations/claude-code/hook-session.ts": "Resolves which project a hook invocation is about.",
-  "integrations/claude-code/hook-installer.ts": "Installs the hook for one project.",
-  "tools/editor/workaround-tracker.ts": "The workaround stack is partitioned per session, because it is posted publicly.",
-  "tools/editor/python-gate.ts": "Remembers which candidate actions a session ruled out, partitioned the same way the workaround stack is.",
-  "feedback/privacy-scrub.ts": "Redacts the other registered roots and session names.",
-  "feedback/feedback-routing.ts": "Routes using the addressed session's plugin set.",
-  "feedback/feedback-deferred.ts": "Deferred entries record the editor they came from and are filtered by it.",
-  "feedback/feedback-fallback.ts": "Writes the saved report into the same per-editor deferred store, tagged with the submitting project.",
-  "config/user-state.ts": "Keyed by absolute project root: installed hooks, and the per-project feedback mode.",
-  "integrations/mcp-clients/mcp-client-config.ts": "Writes the project positionals a server is started with.",
-  "integrations/install-status.ts": "Reports the install and editor state of the one project it is handed.",
-  "cli/doctor.ts": "Reports every project the configured invocation names.",
-  "cli/init.ts": "Writes one project's config, chosen with --editor.",
-  "cli/update.ts": "Updates one project's deployed bridge, chosen with --editor.",
-  "cli/uninstall-hooks.ts": "Removes one project's hooks, chosen with --editor.",
-  "cli/resolve.ts": "Runs the issue workflow against one project, chosen with --editor.",
-  "cli/build-cli.ts": "Builds one project, chosen with --editor.",
-  "cli/flow-cli.ts": "Lists, plans and runs the flows of one project, chosen with --editor.",
-  "cli/deploy-cli.ts": "Deploys into one project, chosen with --editor.",
-  "cli/context-cli.ts": "Writes one project's context strategy, chosen with --editor.",
-  "cli/plugin-cli.ts": "Installs and inspects plugins for one project, chosen with --editor.",
-  "cli/feedback-cli.ts": "Scopes the deferred queue and the feedback mode with --editor.",
-  "cli/dialog-cli.ts": "Scopes the dialog handling mode with --editor, one editor at a time.",
-  "cli/playtest-cli.ts": "Scopes the playtest mode with --editor, one editor at a time.",
-  "extensions/skills.ts": "Installs, removes and checks agent skills inside one project directory, recording which package owns each.",
-  "extensions/skills-list.ts": "Lists the skills one project directory can load, reading that project's ownership record.",
-
-  "flow/context.ts": "Carries the session a flow step runs in.",
-  "flow/flow-tool.ts": "Resolves the registry and config of the addressed editor.",
-  "flow/editor-op-task.ts": "Restarts or rebuilds the editor of the session a flow runs in.",
-  "flow/editor-loss.ts":"Follows the connection of the one session's bridge a flow runs against.",
-  "flow/registry.ts": "One task registry per session, built from that project's graph.",
-  "flow/task-factory.ts": "Builds tasks that dispatch on the context's session bridge.",
-  "flow/run-action.ts": "Runs one action on the context's session bridge, for tasks and category handlers alike.",
-  "flow/bridge-task.ts": "Calls the addressed session's bridge.",
-  "flow/guard.ts": "One guard registry per session; a project's guards do not veto another's calls.",
-  "flow/guarded-bridge.ts": "Wraps one session's bridge in that session's guards.",
-  "flow/guards.ts": "Builds pipeline guards from what a plugin or a project declared.",
-  "flow/guard-config.ts": "Owns one session's last valid YAML guard declarations, merged from its project and user-global config layers.",
-  "flow/guard-schema.ts": "What a guard declaration is, shared by the manifest and ue-mcp.yml.",
-  "flow/loader.ts": "Loads each project's own ue-mcp.yml.",
-  "flow/playtest.ts": "Its tasks call the bridge of the session the playtest flow runs in.",
-  "flow/git-snapshot.ts": "Snapshots the repository holding one project, through its bridge.",
-  "flow/http-server.ts": "Resolves an editor per request and refuses an untargeted run.",
-
-  "extensions/loader.ts": "Loads each project's plugins into that session's graph.",
-  "extensions/resolver.ts": "Resolves packages from one project's node_modules.",
-  "extensions/native-deploy.ts": "Deploys a native module into one project.",
-  "extensions/plugin-config-store.ts": "Reads and writes one project's config layers.",
-  "extensions/bridge-api.ts": "Reads the bridge ABI version deployed in one project.",
-};
-
-/** No editor concept, or one deliberate answer for the whole process. */
-const SESSION_INDEPENDENT: Record<string, string> = {
-  "machine/projects.ts": "Machine scoped: every project on this computer and every daemon running, read from user state, Unreal's recent lists and the daemons folder.",
-  "cli/projects-cli.ts": "Prints or edits the machine's project list, which no one editor owns.",
-  "integrations/epic/unreal-mcp-entries.ts": "Finds and removes entries in the client config file it is handed. No editor is involved.",
-  "integrations/epic/unreal-assistant.ts": "Edits the Unreal Assistant's per-user AIAssistant.json, which every project on the machine shares. No editor is involved.",
-  "integrations/agent-guides.ts": "Writes and removes one delimited block in the instruction files of the project directory it is handed. No editor is involved.",
-  "extensions/skill-catalog.ts": "Reads the skills shipped in this package; the same for every editor.",
-  "server/skill-prompts.ts": "Serves the package's shipped skills as prompts and resources; the same for every editor.",
-  "editor/module-owner.ts": "Finds the .uplugin that declares a module under the project and engine roots it is handed. No editor is involved.",
-  "daemon/extension-install.ts": "Installs an extension into the user's extensions directory. No editor is involved.",
-  "daemon/install-names.ts": "The short names install resolves, as data. No editor is involved.",
-  "daemon/extension-versions.ts": "Lays out installed extension versions and picks the one a project records. No editor is involved.",
-  "daemon/plugin-routes.ts": "Lists and changes the plugins of the one project the daemon serves, through the CLI. No editor is involved.",
-  "daemon/ui-bundles.ts": "Verifies, stores and resolves signed UI bundles kept per user. No editor is involved.",
-  "daemon/extension-services.ts": "Holds the objects daemon extensions provide to each other in process. No editor is involved.",
-  "daemon/extensions.ts": "Loads extensions from the user's extensions directory and matches their routes. No editor is involved.",
-  "daemon/extension-api.ts": "The extension contract's types. A leaf with no state.",
-  "surface/context/context-measurement.ts": "The context measurement file format and its validator. Pure logic over a value.",
-  "config/context-strategy.ts": "The context strategy names and the resolution of the active one from the environment and config; one answer per process.",
-  "daemon-api.ts": "The public ue-mcp/daemon entry point: re-exports types and helpers.",
-  "daemon/disconnect.ts": "Classifies a disconnect from the evidence it is handed. Pure logic.",
-  "daemon/events.ts": "A numbered, bounded event log. No editor is involved.",
-  "daemon/editor-step.ts": "Reads one editor operation step's result text. Pure logic over its arguments.",
-  "daemon/activity.ts": "Reads an MCP tools/call into a category and action. Pure logic.",
-  "extensions/package-paths.ts": "Resolves a manifest path inside the package it is handed. Pure path logic over its arguments.",
-  "core/open-url.ts": "Opens a URL in the system browser. No editor is involved.",
-  "core/archive.ts": "Downloads, verifies and unpacks the zip it is handed. Pure plumbing over its arguments.",
-  "core/spawn-outside-tree.ts": "Starts a process through a trampoline that exits. Pure process plumbing over its arguments.",
-  "bridge/bridge-token.ts": "Reads the session token file for the port it is handed. Pure filesystem plumbing over its arguments.",
-  "core/path-guard.ts": "Resolves a path against the folders it is handed and refuses one outside them. Pure logic over its arguments.",
-  "core/private-file.ts": "Writes the owner-only file it is handed. Pure filesystem plumbing over its arguments.",
-  "core/safe-spawn.ts": "Builds argv invocations and checks the values they carry. Pure process plumbing over its arguments.",
-  "daemon/dir-watch.ts": "Watches the one directory it is handed and retries after a failure. Pure filesystem plumbing over its arguments.",
-  "editor/launch-args.ts": "Pure launch-argument rules: window-mode precedence, extraArgs splitting and argv building for whatever project it is handed.",
-  "daemon/ws-transport.ts": "MCP's transport over one WebSocket. No editor is involved.",
-  "surface/action-class.ts": "The verb lexicon's reading of an action NAME, for the actions this package does not declare; the same answer in every editor.",
-  "surface/action-verbs.ts": "The verb lists themselves. A leaf with no imports and no state.",
-  "surface/moved-action.ts": "Builds the deprecated old address of a moved action from its canonical spec; the same answer in every editor.",
-  "surface/routing-params.ts": "The dispatcher's parameter names and the helper that strips `action`. A leaf with no imports and no state.",
-  "surface/action-effects.ts": "Indexes whichever tool graph the caller hands it, one index per graph; an action's effect does not change with the editor it runs in.",
-  "dispatch/lock-owner.ts": "The process-wide fallback lock owner id. A session mints its own through this and holds it itself.",
-  "dispatch/lock-actions.ts": "The names of the lock-management actions; a declaration shared by the locking gate and the batch action.",
-  "dispatch/batch-steps.ts": "Reads the steps off a batch call's parameters for the gates; pure over its arguments.",
-  "flow/offline.ts": "Classifies whichever tool graph it is handed as offline or editor-bound, and builds the editor-down message from a context handed to it; holds nothing per editor.",
-  "surface/action-schema.ts": "Derives one action's parameter schema from whichever tool graph it is handed; holds nothing of its own.",
-  "surface/action-signature.ts": "Renders one action's compact signature from whichever tool graph it is handed; its cache is keyed by the action object, never by editor.",
-  "surface/context/call-envelope.ts": "Unwraps and validates one call against the tool it names; holds nothing per editor.",
-  "bridge/bridge-timeouts.ts": "The call budget table and its resolution; the same answer for every editor.",
-  "surface/asset-path.ts": "Pure Unreal path handling.",
-  "guard-task.ts": "The base class a guard is written against; pure over the call it is handed.",
-  "surface/epic-input.ts": "Pure argument shaping for one wrapped engine tool call; no editor to scope it to.",
-  "surface/epic-engines.ts": "Pure check of a wrapped tool's engines against the engine version it is handed.",
-  "surface/path-params.ts": "Pure separator repair over a parameter bag; the same rule in every editor.",
-  "dispatch/lease-paths.ts": "Pure extraction of the asset paths one call names; the same rule in every editor.",
-  "surface/context/field-select.ts": "Pure projection over whatever result it is handed; no editor to scope it to.",
-  "surface/param-forwarding.ts": "Pure read tracking over one mapper call; nothing per editor.",
-  "surface/handler-spec.ts": "Validates and compares the recorded handler specs it is handed; holds nothing per editor.",
-  "dispatch/call-pipeline.ts": "Composes those two over one call's parameters and result; holds nothing per editor.",
-  "dispatch/inline-image.ts": "Reads the image files a result names and adds them to it; the paths and project folder come from the call's own context.",
-  "core/png.ts": "Decodes, scales and encodes the PNG bytes it is handed. Pure logic over its arguments.",
-  "surface/pagination.ts": "Declares the cursor/limit parameters; the editor holds the collection and the C++ half holds the cursor.",
-  "codeintel/engine-index.ts": "Indexes an ENGINE tree, which projects share; keyed by engine root, not by editor.",
-  "codeintel/cpp-correctness.ts": "Views over that index plus a Build.cs read; takes its paths as arguments.",
-  "codeintel/engine-analysis.ts": "Hierarchy, reference and call queries over the same engine tree and index; every path it reads is an argument.",
-  "github/auth.ts": "GitHub identity for feedback authorship and registry sign-in: per user, not per project.",
-  "github/repos.ts": "GitHub repository names and URLs. Pure logic over its arguments.",
-  "bridge/dialog-refusal.ts": "Recognises the bridge's dialog refusal in whatever answer it is handed. Pure logic.",
-  "cli/auth-cli.ts": "Runs that per-user device flow.",
-  "cli/login-cli.ts": "Registry login, per user.",
-  "extensions/registry-auth.ts": "The plugin registry token, per user.",
-  "extensions/registry-catalog.ts": "The plugin registry itself, which no project owns.",
-  "feedback/github-app.ts": "Posts to the ue-mcp tracker, never to the user's project.",
-  "feedback/secret-scrub.ts": "Pure redaction with no context to scope.",
-  "dispatch/client-quirks.ts": "About the connected MCP client, not about any editor.",
-  "codeintel/ue-ini.ts": "Pure ini utility over whatever directory it is handed.",
-  "codeintel/config-hierarchy.ts": "Reads the config layers of the engine and project directories it is handed. Pure logic over its arguments.",
-  "codeintel/cpp-parser.ts": "Pure header inspection over whatever file it is handed.",
-  "core/errors.ts": "Shared error codes and the McpError shape.",
-  "sessions/session-key.ts": "The default session's key, a constant.",
-  "core/directive.ts": "The directive envelope a handler wraps its result in. A leaf with no imports and no state.",
-  "config/schemas.ts": "Shared schema declarations.",
-  "surface/tool-types.ts": "The category tool contract, as type declarations. No runtime code.",
-  "core/elicit.ts": "The MCP elicitation shape, as type declarations. No runtime code.",
-  "core/progress.ts": "Progress update and display shapes, as type declarations. No runtime code.",
-  "editor/dialog-types.ts": "The dialog prompt shape, as type declarations. No runtime code.",
-  "server/call-options.ts": "In-process call options, as type declarations. No runtime code.",
-  "surface/category-tool.ts": "Builds category tools and their routing parameters; holds nothing per editor.",
-  "core/env.ts": "Names and reads the process environment; one answer for the whole process.",
-  "cli/cli-main.ts": "The command entry contract and the helpers that run one; no editor involved.",
-  "cli/cli-commands.ts": "The table of commands and the dispatcher over it; each command picks its own editor.",
-  "extensions/plugin-scaffold.ts": "Writes a new plugin's files into the directory it is handed; no editor involved.",
-  "task.ts": "The public task-authoring surface, which is types.",
-  "tools.ts": "The pristine tool declaration; per-session graphs are clones of it, built in session-surface.",
-  "surface/context/tool-search.ts": "Searches the graph it is handed.",
-  "surface/context/lean-context.ts": "Pure transforms over a graph. The strategy is one answer per transport, since there is one transport.",
-  "surface/context/micro-context.ts": "Builds the gateway over the graph it is handed and resolves calls through it; holds nothing per editor.",
-  "surface/context/instructions.ts": "The initialize payload is sent once per process and cannot be renegotiated.",
-  "config/ue-mcp-config.ts": "Parses and writes whichever config file it is handed, and the user-global layer that applies to every project by definition.",
-  "core/log.ts": "Process-wide stderr logging.",
-  "core/user-dir.ts": "Where per-user state lives. A leaf with no state.",
-  "config/uproject-path.ts": "Pure path handling for a .uproject or the directory holding one.",
-  "config/uproject-plugins.ts": "Pure text edit of a .uproject Plugins array; the caller names the file.",
-  "core/package-root.ts": "Where this installed package lives and its version; one answer per process.",
-  "core/version-check.ts": "One npm check per process; the upgrade notice is emitted once.",
-  "init.ts": "The ue-mcp-init bin: hands argv to cli/init.ts.",
-  "update.ts": "The ue-mcp-update bin: hands argv to cli/update.ts.",
-  "deploy-cli.ts": "The ue-mcp-deploy bin: hands argv to cli/deploy-cli.ts.",
-  "core/yaml-dump.ts": "Pure YAML serialization of the value it is handed.",
-  "diagram/model.ts": "Shared declaration of the diagram model, plus pure text helpers.",
-  "diagram/select.ts": "Pure focus and node cap over the diagram model it is handed.",
-  "diagram/mermaid.ts": "Pure Mermaid text from the diagram model it is handed.",
-  "diagram/theme.ts": "Shared colour and font constants.",
-  "diagram/svg.ts": "Pure layout and SVG from the diagram model it is handed.",
-  "diagram/adapters.ts": "Pure conversion of a reader answer it is handed into the diagram model.",
-  "diagram/png.ts": "Rasterises the SVG string it is handed; no editor is involved.",
-
-  "flow/events.ts": "One process-wide event bus. Which editor a run belongs to rides on the event, not here.",
-  "pie/script-events.ts": "One process-wide bus for script run events. The run id rides on the event.",
-  "checkpoints/text-diff.ts": "A line diff of two strings. No editor or project is involved.",
-  "checkpoints/asset-diff.ts": "Types and pure conversions of an asset diff the bridge returned. The service that calls the editor passes its answer in.",
-  "extensions/superseded.ts": "A constant list of plugins core replaced. No editor is involved.",
-  "flow/schema.ts": "Shared flow schema declarations.",
-  "flow/model-provider.ts": "One process-wide model for flow agent steps, registered by a daemon extension or read from the environment. No editor is involved.",
-  "flow/step-approval.ts": "Process-wide approvers registered by daemon extensions, asked per task of a run that names one. The run carries its own session; the approver is told no editor.",
-  "flow/call-elicit.ts": "Carries the caller of the call in flight through async context; which editor the call targets is not its concern.",
-  "flow/session-access.ts": "An MCP session's access mode, carried per call; two clients of one editor hold their own, so it is not per editor.",
-  "flow/agent-step.ts": "Puts the resolved model on an agent step's context. No editor is involved.",
-  "flow/rollback.ts": "Pure shaping of a rollback record.",
-  "flow/flow-inputs.ts": "Pure derivation of a flow's inputs from the tool graph and config it is handed.",
-  "flow/handler-outcome.ts": "Pure reading of a handler's own verdict off the body it answered with.",
-  "flow/write-methods.ts": "Pure classification of a bridge call against the recorded handler specs.",
-
-  "extensions/manifest.ts": "Parses and validates a plugin manifest file.",
-  "extensions/injection.ts": "Builds an injection plan from a manifest.",
-  "extensions/provision.ts": "Builds a provided category from a manifest.",
-  "extensions/manifest-params.ts": "Maps a manifest schema onto per-action specs and required checks.",
-  "extensions/publish-listing.ts": "Pure listing choice, derived fields and diff for plugin publish.",
-  "extensions/native-contract.ts": "Maps a native handler's recorded contract onto its action.",
-  "extensions/self-resolve.ts": "Registers the process-wide resolve hook for ue-mcp imports; no editor.",
-  "extensions/self-resolve-hooks.ts": "Module resolution hooks run in the loader thread; no editor.",
-  "extensions/plugin-groups.ts": "Pure group logic over the config it is handed.",
-  "core/semver.ts": "Semver precedence for the minServerVersion gate and the npm upgrade check.",
-  "extensions/plugins-list.ts": "Pure read of the plugins: list from the config file it is handed.",
-  "flow/flow-surface.ts": "Shared declaration of the flow tool's actions and their effects.",
-};
-
-/** Directories where every module has the same answer for the same reason. */
-const PER_SESSION_DIRS: Record<string, string> = {
-  "tools/": "Every category tool is cloned per session and dispatches against the addressed editor.",
-};
-
-const SESSION_INDEPENDENT_DIRS: Record<string, string> = {
-  "terminal/": "Terminal rendering for the CLI and long waits. No editor is involved.",
-};
+const TAG = /^\/\/ @session (per-session|independent): (.*)$/;
+const ANY_TAG = /^\s*\/\/\s*@session\b/;
 
 function listModules(dir: string): string[] {
   const out: string[] = [];
@@ -326,10 +48,15 @@ function listModules(dir: string): string[] {
   return out.sort();
 }
 
-function matches(module: string, exact: Record<string, string>, dirs: Record<string, string>): boolean {
-  if (module in exact) return true;
-  return Object.keys(dirs).some((prefix) => module.startsWith(prefix));
+/** The module's lines, with a leading shebang dropped. */
+function linesOf(module: string): string[] {
+  const lines = readFileSync(join(srcDir, module), "utf8").split(/\r?\n/);
+  return lines[0]?.startsWith("#!") ? lines.slice(1) : lines;
 }
+
+const HOW =
+  "Put `// @session per-session: <reason>` or `// @session independent: <reason>` on the module's " +
+  "first line (after a shebang). The question is whether it has to be told which editor it is acting on (#817).";
 
 describe("module inventory", () => {
   const modules = listModules(srcDir);
@@ -340,54 +67,24 @@ describe("module inventory", () => {
     expect(modules).toContain("tools/asset.ts");
   });
 
-  it("places every module in exactly one list", () => {
-    const unplaced: string[] = [];
-    const doubled: string[] = [];
+  it("has every module answer the session question on its first line, with a reason", () => {
+    const problems: string[] = [];
     for (const module of modules) {
-      const per = matches(module, PER_SESSION, PER_SESSION_DIRS);
-      const independent = matches(module, SESSION_INDEPENDENT, SESSION_INDEPENDENT_DIRS);
-      if (per && independent) doubled.push(module);
-      else if (!per && !independent) unplaced.push(module);
+      const lines = linesOf(module);
+      const m = TAG.exec(lines[0] ?? "");
+      if (!m) problems.push(`${module}: no @session tag on its first line`);
+      else if (m[2].trim().length < 20) problems.push(`${module}: the @session reason is too short to be one`);
+      const extra = lines.slice(1).filter((l) => ANY_TAG.test(l)).length;
+      if (extra > 0) problems.push(`${module}: more than one @session tag`);
     }
-
-    if (unplaced.length > 0) {
-      throw new Error(
-        `${unplaced.length} module(s) under src/ have not been placed:\n` +
-          unplaced.map((m) => `  ${m}`).join("\n") +
-          `\n\nAdd each to PER_SESSION or SESSION_INDEPENDENT in ` +
-          `tests/unit/module-inventory.test.ts with the reason. The question is ` +
-          `whether it has to be told which editor it is acting on (#817).`,
-      );
-    }
-    expect(doubled, "listed in both lists").toEqual([]);
-    expect(unplaced).toEqual([]);
+    expect(problems, [...problems, HOW].join("\n")).toEqual([]);
   });
 
-  it("lists no module that no longer exists", () => {
-    const present = new Set(modules);
-    const ghosts = [...Object.keys(PER_SESSION), ...Object.keys(SESSION_INDEPENDENT)].filter(
-      (m) => !present.has(m),
-    );
-    expect(ghosts, "listed but absent from src/").toEqual([]);
-  });
-
-  it("gives a reason for every placement", () => {
-    const entries = [
-      ...Object.entries(PER_SESSION),
-      ...Object.entries(SESSION_INDEPENDENT),
-      ...Object.entries(PER_SESSION_DIRS),
-      ...Object.entries(SESSION_INDEPENDENT_DIRS),
-    ];
-    const empty = entries.filter(([, reason]) => reason.trim().length < 20);
-    expect(empty.map(([m]) => m), "placed with no usable reason").toEqual([]);
-  });
-
-  it("covers every directory prefix it claims", () => {
-    for (const prefix of [...Object.keys(PER_SESSION_DIRS), ...Object.keys(SESSION_INDEPENDENT_DIRS)]) {
-      expect(
-        modules.some((m) => m.startsWith(prefix)),
-        `${prefix} claims a directory with no modules in it`,
-      ).toBe(true);
-    }
+  it("keeps the known anchors in place", () => {
+    const kind = (module: string) => TAG.exec(linesOf(module)[0] ?? "")?.[1];
+    expect(kind("sessions/session.ts")).toBe("per-session");
+    expect(kind("bridge/bridge.ts")).toBe("per-session");
+    expect(kind("tools/asset.ts")).toBe("per-session");
+    expect(kind("core/log.ts")).toBe("independent");
   });
 });

@@ -1,3 +1,4 @@
+// @session independent: Shared declaration of the flow tool's actions and their effects.
 /**
  * The flow tool's actions, restated as a stand-in category.
  *

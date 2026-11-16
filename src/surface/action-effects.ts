@@ -1,3 +1,4 @@
+// @session independent: Indexes whichever tool graph the caller hands it, one index per graph; an action's effect does not change with the editor it runs in.
 /**
  * The declared effect of an action, read off the tool graph.
  *

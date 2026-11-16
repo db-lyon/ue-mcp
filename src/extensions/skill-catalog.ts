@@ -1,3 +1,4 @@
+// @session independent: Reads the skills shipped in this package; the same for every editor.
 /**
  * The skills that ship with ue-mcp, read as documents: name, description and
  * body from each `skills/<name>/SKILL.md`. The server serves them as MCP

@@ -1,3 +1,4 @@
+// @session independent: Pure read of the plugins: list from the config file it is handed.
 import { readConfigDoc } from "../config/ue-mcp-config.js";
 import { PluginEntrySchema, type PluginEntry } from "../flow/schema.js";
 

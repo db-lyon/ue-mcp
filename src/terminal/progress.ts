@@ -1,3 +1,4 @@
+// @session independent: Terminal rendering for the CLI and long waits. No editor is involved.
 /**
  * A single-line terminal progress bar for long waits (editor startup, builds).
  *

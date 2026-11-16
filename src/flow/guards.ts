@@ -1,3 +1,4 @@
+// @session per-session: Builds pipeline guards from what a plugin or a project declared.
 /**
  * Building guards from what somebody declared.
  *

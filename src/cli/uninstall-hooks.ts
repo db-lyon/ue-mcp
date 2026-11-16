@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @session per-session: Removes one project's hooks, chosen with --editor.
 /**
  * `npx ue-mcp uninstall-hooks` - manual escape hatch.
  *

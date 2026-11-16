@@ -1,3 +1,4 @@
+// @session independent: Reads the session token file for the port it is handed. Pure filesystem plumbing over its arguments.
 /**
  * The bridge's session token, client side.
  *

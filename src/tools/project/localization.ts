@@ -1,3 +1,4 @@
+// @session per-session: Every category tool is cloned per session and dispatches against the addressed editor.
 import { specBp } from "../specs/project.generated.js";
 import type { ActionSpec } from "../../surface/tool-types.js";
 

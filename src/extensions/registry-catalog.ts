@@ -1,3 +1,4 @@
+// @session independent: The plugin registry itself, which no project owns.
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { debug, warn } from "../core/log.js";

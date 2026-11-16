@@ -1,3 +1,4 @@
+// @session independent: Pure focus and node cap over the diagram model it is handed.
 /**
  * Which part of a graph a diagram draws: an optional focus with a depth, then
  * a node cap so a graph of several hundred nodes stays readable.

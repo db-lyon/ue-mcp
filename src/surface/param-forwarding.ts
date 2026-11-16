@@ -1,3 +1,4 @@
+// @session independent: Pure read tracking over one mapper call; nothing per editor.
 /**
  * Which of a call's parameters an action's `mapParams` actually sends (#1057).
  *

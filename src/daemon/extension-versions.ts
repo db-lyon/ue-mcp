@@ -1,3 +1,4 @@
+// @session independent: Lays out installed extension versions and picks the one a project records. No editor is involved.
 /**
  * Daemon extensions side by side by version (#1619). Each version installs to
  * `<extensions>/<name>@<version>/`, and each project records the version it

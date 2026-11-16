@@ -1,3 +1,4 @@
+// @session per-session: Lists and reads MCP resources through the bridge it is handed, the active session's at call time.
 /**
  * MCP resources from the active editor: whatever resource providers are
  * registered with Epic's Unreal MCP plugin, listed and read through the bridge

@@ -1,3 +1,4 @@
+// @session independent: One process-wide model for flow agent steps, registered by a daemon extension or read from the environment. No editor is involved.
 /**
  * The model behind flow agent steps (`class_path: agent` and `agent_prompt`).
  *

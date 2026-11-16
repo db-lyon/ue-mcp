@@ -1,3 +1,4 @@
+// @session independent: A constant list of plugins core replaced. No editor is involved.
 /**
  * Plugins whose functionality now ships in ue-mcp core. The loader skips them,
  * `plugin install` refuses them, and the registry catalog hides them.

@@ -1,3 +1,4 @@
+// @session independent: Pure shaping of a rollback record.
 import type { RollbackRecord } from "@db-lyon/flowkit";
 
 /**

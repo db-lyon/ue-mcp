@@ -1,3 +1,4 @@
+// @session per-session: Owns the session registry, each session's load, guards and bridge, and the targeting baked into the tool graph.
 /**
  * Everything one server process owns once, whatever number of MCP clients
  * talk to it: the editor sessions and their bridges, each session's surface,

@@ -1,3 +1,4 @@
+// @session independent: Validates and compares the recorded handler specs it is handed; holds nothing per editor.
 /**
  * Parameter contracts authored in C++ (#1057).
  *

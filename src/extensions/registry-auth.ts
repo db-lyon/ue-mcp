@@ -1,3 +1,4 @@
+// @session independent: The plugin registry token, per user.
 /**
  * Registry login for `ue-mcp login`.
  *

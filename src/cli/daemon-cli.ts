@@ -1,3 +1,4 @@
+// @session per-session: Runs, starts, stops or reports the daemon of the project it is handed.
 /**
  * `ue-mcp daemon <run|start|stop|status|open> [project] [--json] [--browser]`
  *

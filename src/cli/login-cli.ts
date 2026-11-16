@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @session independent: Registry login, per user.
 /**
  * `ue-mcp login` / `ue-mcp logout` - sign this machine in to the UE-MCP account
  * (the plugin registry user) and cache its token at ~/.ue-mcp/registry.json.

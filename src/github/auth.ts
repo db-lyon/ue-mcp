@@ -1,3 +1,4 @@
+// @session independent: GitHub identity for feedback authorship and registry sign-in: per user, not per project.
 import { promises as fs, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { userDir } from "../core/user-dir.js";

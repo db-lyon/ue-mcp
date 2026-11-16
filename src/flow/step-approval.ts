@@ -1,3 +1,4 @@
+// @session independent: Process-wide approvers registered by daemon extensions, asked per task of a run that names one. The run carries its own session; the approver is told no editor.
 /**
  * Approving each flow step as it runs (feature "flows.stepApproval").
  *

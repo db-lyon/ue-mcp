@@ -1,3 +1,4 @@
+// @session per-session: Reads and writes one project's config layers.
 /**
  * Read/write the `ue-mcp.pluginConfig.<slug>.groups` toggle map across config
  * layers. Backs `ue-mcp plugin config`.

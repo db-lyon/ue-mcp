@@ -1,3 +1,4 @@
+// @session per-session: Reads how the one project it is handed is served, from that project's config.
 /**
  * How `ue-mcp <uproject>` serves: `daemon` relays to the project's daemon,
  * which owns the editor connection and outlives editor restarts; `in-process`

@@ -1,3 +1,4 @@
+// @session per-session: Reports the install and editor state of the one project it is handed.
 /**
  * The install and editor state of one project, read-only: what `ue-mcp status`
  * prints and what the daemon serves to the in-editor UI and the installer.

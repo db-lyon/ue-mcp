@@ -1,3 +1,4 @@
+// @session per-session: Redacts the other registered roots and session names.
 import * as os from "node:os";
 import * as path from "node:path";
 import { findUProject } from "../config/uproject-path.js";

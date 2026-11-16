@@ -1,3 +1,4 @@
+// @session independent: Pure check of a wrapped tool's engines against the engine version it is handed.
 /**
  * Which engines a wrapped Epic tool exists on. Each generated `epic_*` action
  * names the recorded engines that carry it; a call to one on a recorded engine

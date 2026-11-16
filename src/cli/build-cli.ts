@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @session per-session: Builds one project, chosen with --editor.
 import * as path from "node:path";
 import { buildProject } from "../editor/editor-build.js";
 import { takeEditorTarget, EditorFlagError } from "./editor-flag.js";

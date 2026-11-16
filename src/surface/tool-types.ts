@@ -1,3 +1,4 @@
+// @session independent: The category tool contract, as type declarations. No runtime code.
 import type { z } from "zod";
 import type { IBridge } from "../bridge/bridge.js";
 import type { ProjectContext } from "../config/project.js";

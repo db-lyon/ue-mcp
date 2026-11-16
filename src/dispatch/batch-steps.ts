@@ -1,3 +1,4 @@
+// @session independent: Reads the steps off a batch call's parameters for the gates; pure over its arguments.
 /**
  * The shape of an editor(batch) call, as every gate reads it.
  *

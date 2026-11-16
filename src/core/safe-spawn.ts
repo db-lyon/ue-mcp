@@ -1,3 +1,4 @@
+// @session independent: Builds argv invocations and checks the values they carry. Pure process plumbing over its arguments.
 /**
  * Starting child processes without a shell.
  *

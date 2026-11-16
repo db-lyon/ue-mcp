@@ -1,3 +1,4 @@
+// @session per-session: Carries the session a flow step runs in.
 import type { TaskContext } from "@db-lyon/flowkit";
 import type { ToolContext } from "../surface/tool-types.js";
 

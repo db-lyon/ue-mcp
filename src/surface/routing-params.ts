@@ -1,3 +1,4 @@
+// @session independent: The dispatcher's parameter names and the helper that strips `action`. A leaf with no imports and no state.
 /**
  * The per-call editor target (#817). Injected into every category tool only
  * while this server drives more than one editor, so a single-editor client

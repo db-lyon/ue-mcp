@@ -1,3 +1,4 @@
+// @session per-session: Resolves the editor session each request names before acting on its checkpoints.
 /**
  * Checkpoints over the daemon's HTTP API (#1482), for a client that brackets
  * each chat turn and lets the user keep or revert its files one by one.

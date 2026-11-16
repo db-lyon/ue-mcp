@@ -1,3 +1,4 @@
+// @session per-session: One tool graph per editor, and the union advertised from them.
 /**
  * Per-session tool surface (#817, plan items 4.1 and 4.2).
  *

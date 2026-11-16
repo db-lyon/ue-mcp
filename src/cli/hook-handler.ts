@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @session per-session: Runs against the project the hook payload named.
 /**
  * Claude Code hook handler - shipped with ue-mcp so it stays in sync.
  *

@@ -1,3 +1,4 @@
+// @session independent: Pure layout and SVG from the diagram model it is handed.
 /**
  * An SVG drawing of a diagram model, laid out and drawn in this process.
  *

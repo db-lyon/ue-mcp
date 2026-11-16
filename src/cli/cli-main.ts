@@ -1,3 +1,4 @@
+// @session independent: The command entry contract and the helpers that run one; no editor involved.
 /**
  * The contract every `ue-mcp <command>` module implements, and the two helpers
  * that run one: from the `ue-mcp` dispatcher, or as its own package bin.

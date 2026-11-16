@@ -1,3 +1,4 @@
+// @session independent: Generated declarations of the wrapped Epic tools; data only, with no editor state.
 // GENERATED FILE - do not edit.
 //
 // Written by scripts/generate-epic-actions.mjs from tests/golden/epic-catalog/

@@ -1,3 +1,4 @@
+// @session independent: Parses and validates a plugin manifest file.
 import * as fs from "node:fs";
 import { GuardsSchema } from "../flow/guard-schema.js";
 import { FlowStepKeySchema } from "../flow/schema.js";

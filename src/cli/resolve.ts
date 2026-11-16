@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @session per-session: Runs the issue workflow against one project, chosen with --editor.
 /**
  * npx ue-mcp resolve <issue-number>
  *

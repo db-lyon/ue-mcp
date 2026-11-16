@@ -1,3 +1,4 @@
+// @session per-session: Reports which environment variables flatten the registered editors.
 /**
  * Environment variables that flatten every editor into one (#817, plan 6.7).
  *

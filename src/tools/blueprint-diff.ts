@@ -1,3 +1,4 @@
+// @session per-session: Every category tool is cloned per session and dispatches against the addressed editor.
 /**
  * blueprint(diff) with `against` (#1487). A checkpoint lives in this process's
  * shadow history, so the call is answered here: the checkpoint's copy is

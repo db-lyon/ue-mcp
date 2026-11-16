@@ -1,3 +1,4 @@
+// @session independent: Shared flow schema declarations.
 import { z } from "zod";
 import { EngineConfigSchema, FlowDefinitionSchema } from "@db-lyon/flowkit";
 import { GuardsSchema } from "./guard-schema.js";

@@ -1,3 +1,4 @@
+// @session independent: Downloads, verifies and unpacks the zip it is handed. Pure plumbing over its arguments.
 /**
  * Fetching and unpacking the zips ue-mcp installs: extensions, bridge
  * binaries and editor plugins. A download is checked against its SHA-256

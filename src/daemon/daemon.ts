@@ -1,3 +1,4 @@
+// @session per-session: One daemon per project root: it owns that project's runtime and follows each of its editors.
 /**
  * The per-project daemon: one detached process per project root that owns the
  * editor bridge, survives editor restarts, and serves every MCP client (through

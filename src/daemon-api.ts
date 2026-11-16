@@ -1,3 +1,4 @@
+// @session independent: The public ue-mcp/daemon entry point: re-exports types and helpers.
 /**
  * Public surface for building on the ue-mcp daemon: the HTTP and event types a
  * UI reads, the extension contract an in-daemon extension implements, and the

@@ -1,3 +1,4 @@
+// @session per-session: What a guard declaration is, shared by the manifest and ue-mcp.yml.
 import { z } from "zod";
 
 /**

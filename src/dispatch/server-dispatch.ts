@@ -1,3 +1,4 @@
+// @session per-session: Routes each call to the editor it addressed and runs it through that editor's registry and guard.
 /**
  * The per-call pipeline behind every advertised tool: route the call to an
  * editor, gate it, check the dialog guard, run the addressed session's task

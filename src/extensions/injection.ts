@@ -1,3 +1,4 @@
+// @session independent: Builds an injection plan from a manifest.
 import { z } from "zod";
 import type { ToolDef, ActionSpec } from "../surface/tool-types.js";
 import { actionEnum } from "../surface/category-tool.js";

@@ -1,3 +1,4 @@
+// @session independent: Classifies whichever tool graph it is handed as offline or editor-bound, and builds the editor-down message from a context handed to it; holds nothing per editor.
 /**
  * What this server can still do with no editor running, and what it says when
  * something needs one (T16).
