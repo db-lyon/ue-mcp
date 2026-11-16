@@ -400,7 +400,7 @@ TSharedPtr<FJsonValue> FSplineHandlers::SetSplinePoints(const TSharedPtr<FJsonOb
 
 	// Point state is portable through MCP; Undo additionally captures complete component state.
 	TArray<TSharedPtr<FJsonValue>> PrevPoints;
-#if ENGINE_MAJOR_VERSION > 5 || (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 8)
+#if UE_MCP_HAS_5_8_API
 	const FSplineCurves PreviousCurves = SplineComp->GetSplineCurves();
 #else
 	const FSplineCurves PreviousCurves = SplineComp->SplineCurves;

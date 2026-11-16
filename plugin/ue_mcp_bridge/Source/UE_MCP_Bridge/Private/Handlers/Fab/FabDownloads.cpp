@@ -32,7 +32,7 @@
 
 namespace MCPFab
 {
-#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 8
+#if UE_MCP_HAS_5_8_API
 namespace DownloadPrivate
 {
 	bool FileHash(const FString& Path, FSHAHash& Hash)
@@ -97,7 +97,7 @@ namespace DownloadPrivate
 	}
 
 	// This editor's engine as Fab names it in projectVersions, e.g. UE_5.8.
-	FString RunningEngine() { return FString::Printf(TEXT("UE_%d.%d"), ENGINE_MAJOR_VERSION, ENGINE_MINOR_VERSION); }
+	FString RunningEngine() { return TEXT("UE_") + UE_MCP_ENGINE_VERSION_STRING; }
 
 	// This editor's platform as Fab names it in projectVersions.targetPlatforms.
 	FString RunningPlatform()

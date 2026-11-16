@@ -9,13 +9,11 @@
 #include "Engine/SkinnedAssetCommon.h"
 #include "SkeletalMeshEditorSubsystem.h"
 
-#if WITH_EDITORONLY_DATA && UE_MCP_HAS_5_4_API
 #include "BoneWeights.h"
 #include "GPUSkinVertexFactory.h"
 #include "MeshDescription.h"
 #include "ScopedTransaction.h"
 #include "SkeletalMeshAttributes.h"
-#endif
 
 namespace
 {
@@ -128,7 +126,6 @@ namespace
 		return Lod;
 	}
 
-#if WITH_EDITORONLY_DATA && UE_MCP_HAS_5_4_API
 	struct FMCPSkinWeightTarget
 	{
 		USkeletalMesh* Mesh = nullptr;
@@ -673,7 +670,6 @@ namespace
 		Payload->SetBoolField(TEXT("restoreRawWeights"), true);
 		return Payload;
 	}
-#endif // WITH_EDITORONLY_DATA && UE_MCP_HAS_5_4_API
 }
 void FSkeletalMeshHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 {
@@ -785,9 +781,6 @@ TSharedPtr<FJsonValue> FSkeletalMeshHandlers::ReadSkinWeights(const TSharedPtr<F
 {
 	// Read before the target resolves; also on engines that refuse the call (#1057).
 	MCPReadParamsAhead(Params, { TEXT("assetPath"), TEXT("vertexIndices"), TEXT("lodIndex"), TEXT("profileName") });
-#if !(WITH_EDITORONLY_DATA && UE_MCP_HAS_5_4_API)
-	return MCPError(TEXT("read_skeletal_mesh_skin_weights requires an Unreal Editor build on Unreal Engine 5.4 or newer"));
-#else
 	FMCPSkinWeightTarget Target;
 	if (TSharedPtr<FJsonValue> Error = MCPResolveSkinWeightTarget(Params, Target)) return Error;
 
@@ -826,16 +819,12 @@ TSharedPtr<FJsonValue> FSkeletalMeshHandlers::ReadSkinWeights(const TSharedPtr<F
 		TEXT("source MeshDescription weights are normalized and quantized to uint16; rawWeight is exact source storage, while the rebuilt render buffer may use 8-bit weights unless high-precision skin weights are enabled"));
 	Result->SetArrayField(TEXT("vertices"), Vertices);
 	return MCPResult(Result);
-#endif
 }
 
 TSharedPtr<FJsonValue> FSkeletalMeshHandlers::ReadBoneVertexBounds(const TSharedPtr<FJsonObject>& Params)
 {
 	// Read before the target resolves; also on engines that refuse the call (#1057).
 	MCPReadParamsAhead(Params, { TEXT("assetPath"), TEXT("boneNames"), TEXT("minWeight"), TEXT("lodIndex"), TEXT("profileName") });
-#if !(WITH_EDITORONLY_DATA && UE_MCP_HAS_5_4_API)
-	return MCPError(TEXT("read_skeletal_mesh_bone_vertex_bounds requires an Unreal Editor build on Unreal Engine 5.4 or newer"));
-#else
 	FMCPSkinWeightTarget Target;
 	if (TSharedPtr<FJsonValue> Error = MCPResolveSkinWeightTarget(Params, Target)) return Error;
 
@@ -1031,7 +1020,6 @@ TSharedPtr<FJsonValue> FSkeletalMeshHandlers::ReadBoneVertexBounds(const TShared
 		TEXT("componentSpace boxes are source MeshDescription positions in the mesh's bind (reference) pose; boneSpace boxes are the same positions in each bone's bind-pose frame, which is the frame a physics body on that bone uses; bindPose is the bone's component-space reference transform"));
 	Result->SetArrayField(TEXT("bones"), Bones);
 	return MCPResult(Result);
-#endif
 }
 
 TSharedPtr<FJsonValue> FSkeletalMeshHandlers::ReadSkeletalMeshVertices(const TSharedPtr<FJsonObject>& Params)
@@ -1041,9 +1029,6 @@ TSharedPtr<FJsonValue> FSkeletalMeshHandlers::ReadSkeletalMeshVertices(const TSh
 		TEXT("assetPath"), TEXT("boneNames"), TEXT("includeChildBones"), TEXT("minWeight"), TEXT("box"),
 		TEXT("include"), TEXT("offset"), TEXT("limit"), TEXT("dumpToFile"), TEXT("outputPath"),
 		TEXT("lodIndex"), TEXT("profileName") });
-#if !(WITH_EDITORONLY_DATA && UE_MCP_HAS_5_4_API)
-	return MCPError(TEXT("read_skeletal_mesh_vertices requires an Unreal Editor build on Unreal Engine 5.4 or newer"));
-#else
 	FMCPSkinWeightTarget Target;
 	if (TSharedPtr<FJsonValue> Error = MCPResolveSkinWeightTarget(Params, Target)) return Error;
 	const FReferenceSkeleton& RefSkeleton = Target.Mesh->GetRefSkeleton();
@@ -1176,16 +1161,12 @@ TSharedPtr<FJsonValue> FSkeletalMeshHandlers::ReadSkeletalMeshVertices(const TSh
 	return MCPVertexRead::Finish(
 		Result, Vertices, Triangles, Include.bTriangles, Page, TEXT("offset"), Selected.Num(),
 		DefaultDumpPath, TEXT("skeletal mesh vertex dump"));
-#endif
 }
 
 TSharedPtr<FJsonValue> FSkeletalMeshHandlers::SetSkinWeights(const TSharedPtr<FJsonObject>& Params)
 {
 	// Read before the target resolves; also on engines that refuse the call (#1057).
 	MCPReadParamsAhead(Params, { TEXT("assetPath"), TEXT("edits"), TEXT("lodIndex"), TEXT("profileName"), TEXT("restoreRawWeights") });
-#if !(WITH_EDITORONLY_DATA && UE_MCP_HAS_5_4_API)
-	return MCPError(TEXT("set_skeletal_mesh_skin_weights requires an Unreal Editor build on Unreal Engine 5.4 or newer"));
-#else
 	FMCPSkinWeightTarget Target;
 	if (TSharedPtr<FJsonValue> Error = MCPResolveSkinWeightTarget(Params, Target)) return Error;
 
@@ -1349,7 +1330,6 @@ TSharedPtr<FJsonValue> FSkeletalMeshHandlers::SetSkinWeights(const TSharedPtr<FJ
 		MCPSetNoRollback(Result, TEXT("Every selected vertex already held the requested normalized weights, so nothing was written."));
 	}
 	return MCPResult(Result);
-#endif
 }
 
 TSharedPtr<FJsonValue> FSkeletalMeshHandlers::ReadBuildSettings(const TSharedPtr<FJsonObject>& Params)
@@ -1384,10 +1364,9 @@ TSharedPtr<FJsonValue> FSkeletalMeshHandlers::SetOptimizeForInstancing(const TSh
 	// bOptimizeForInstancing is a 5.8 engine feature with no earlier equivalent,
 	// so there is nothing to write and nothing to stand in for it. The action
 	// stays registered and says why, rather than answering "Unknown method".
-	return MCPError(
-		TEXT("set_skeletal_mesh_optimize_for_instancing requires Unreal Engine 5.8 or newer: ")
+	return MCPUnsupportedEngineError(TEXT("set_skeletal_mesh_optimize_for_instancing"), TEXT("5.8"),
 		TEXT("FSkeletalMeshBuildSettings::bOptimizeForInstancing does not exist in this engine, ")
-		TEXT("and no earlier skeletal mesh build setting stands in for it."));
+		TEXT("and no earlier skeletal mesh build setting stands in for it, so there is nothing to set here"));
 #else
 	FString AssetPath;
 	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;

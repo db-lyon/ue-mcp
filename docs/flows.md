@@ -466,12 +466,17 @@ When the third draft is refused, the flow fails with its errors and nothing is s
 
 ## Agent steps
 
-A task with `class_path: agent` (multi-turn, with tools) or `agent_prompt` (one call) runs on a model. The model comes from, in order:
+A task with `class_path: agent` (multi-turn, with tools) or `agent_prompt` (one call) runs on a model: the newest provider a daemon extension registered with `api.models.register(provider)` (feature `models.provider`). ue-mcp ships no model provider of its own, because a model is a third-party service with its own credential (see [What belongs in core](plugins.md#what-belongs-in-core-and-what-belongs-in-a-plugin)). Extensions load in the project's daemon, so agent steps need the default `server.mode: daemon`.
 
-1. A provider a daemon extension registered with `api.models.register(provider)` (feature `models.provider`).
-2. `ANTHROPIC_API_KEY`, with `UE_MCP_FLOW_MODEL` naming the model (default `claude-opus-5-5`) and `ANTHROPIC_BASE_URL` an alternative endpoint.
+The first-party `anthropic` extension runs them on the Anthropic Messages API:
 
-With neither, the step fails with `No model is configured for flow agent steps.`
+```bash
+ue-mcp install anthropic
+```
+
+It reads `ANTHROPIC_API_KEY` from the daemon's environment (set it where your MCP client starts ue-mcp), `UE_MCP_FLOW_MODEL` for the model a step names none of (default `claude-opus-5-5`), and `ANTHROPIC_BASE_URL` for another endpoint. Its source is `extensions/anthropic/` in the ue-mcp repository, and each ue-mcp release attaches it at the same version.
+
+With no provider registered, the step fails with `No model is configured for flow agent steps.` and how to install one.
 
 ```yaml
 tasks:

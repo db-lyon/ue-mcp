@@ -209,7 +209,7 @@ namespace
 		if (!Root || Depth > 8 || Out.Contains(Root)) return;
 		Out.Add(Root);
 
-#if WITH_EDITORONLY_DATA && UE_MCP_HAS_5_5_API
+#if UE_MCP_HAS_5_5_API
 		// Declared nested tables. 5.4's UChooserTable has no NestedChoosers
 		// member at all; there, only the referenced-table walk below applies.
 		for (const TObjectPtr<UChooserTable>& Nested : Root->NestedChoosers)
@@ -242,9 +242,7 @@ namespace
 				}
 			}
 		};
-#if WITH_EDITORONLY_DATA
 		FollowStructArray(Root->ResultsStructs);
-#endif
 		FollowStructArray(Root->ColumnsStructs);
 	}
 
@@ -271,9 +269,7 @@ namespace
 						ScriptStruct->GetName(), OutRefs, 0);
 				}
 			};
-#if WITH_EDITORONLY_DATA
 			WalkArray(Table->ResultsStructs, TEXT("ResultsStructs"));
-#endif
 			WalkArray(Table->ColumnsStructs, TEXT("ColumnsStructs"));
 		}
 	}

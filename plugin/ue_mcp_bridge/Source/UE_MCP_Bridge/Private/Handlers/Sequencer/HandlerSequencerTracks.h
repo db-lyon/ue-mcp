@@ -101,11 +101,7 @@ namespace UEMCP::SequencerTracks
 	inline FString TrackDisplayName(UMovieSceneTrack* Track)
 	{
 		if (!Track) return FString();
-#if WITH_EDITORONLY_DATA
 		return Track->GetDisplayName().ToString();
-#else
-		return Track->GetTrackName().ToString();
-#endif
 	}
 
 	inline TSharedPtr<FJsonObject> DescribeTrack(UMovieSceneTrack* Track)
@@ -399,13 +395,11 @@ namespace UEMCP::SequencerTracks
 				Ref.Kind = ChannelKindOf(TypeName);
 				Ref.Name = Name;
 				Ref.TypeName = TypeName.ToString();
-#if WITH_EDITORONLY_DATA
 				if (MetaData.IsValidIndex(i))
 				{
 					const FString Display = MetaData[i].DisplayText.ToString();
 					if (!Display.IsEmpty() && !Display.Equals(Name, ESearchCase::IgnoreCase)) Ref.Aliases.Add(Display);
 				}
-#endif
 				Out.Add(MoveTemp(Ref));
 			}
 		}

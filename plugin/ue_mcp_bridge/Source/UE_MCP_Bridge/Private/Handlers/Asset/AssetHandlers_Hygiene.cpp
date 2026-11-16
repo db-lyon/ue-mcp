@@ -865,11 +865,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::AuditAssetHygiene(const TSharedPtr<FJsonO
 					Registry.GetAssetPackageDataCopy(Data.PackageName);
 				if (PackageData.IsSet() && PackageData->DiskSize > 0)
 				{
-#if WITH_EDITORONLY_DATA
 					const FString Hash = LexToString(PackageData->GetPackageSavedHash());
-#else
-					const FString Hash = TEXT("");
-#endif
 					if (!Hash.IsEmpty())
 					{
 						ByContentKey.FindOrAdd(FString::Printf(

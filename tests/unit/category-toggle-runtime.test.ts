@@ -229,11 +229,11 @@ describe("asset leases between two clients on one runtime", () => {
       expect(got.isError, got.text).toBe(false);
       expect(JSON.parse(got.text).acquired[0]).toMatchObject({ path: "/Game/BP_Hero", holder: "session-a", mine: true });
 
-      const refused = await b.call("blueprint", { action: "add_variable", args: { blueprintPath: "/Game/BP_Hero.BP_Hero", name: "Speed", type: "float" } });
+      const refused = await b.call("blueprint", { action: "add_variable", args: { assetPath:"/Game/BP_Hero.BP_Hero", name: "Speed", type: "float" } });
       expect(refused.isError).toBe(true);
       expect(refused.text).toMatch(/^Error \[ASSET_LEASED\]: Asset '\/Game\/BP_Hero' is leased by session 'client-session-a' \(session-a\) until /);
       // The holder itself is not refused by its own lease.
-      const own = await a.call("blueprint", { action: "add_variable", args: { blueprintPath: "/Game/BP_Hero", name: "Speed", type: "float" } });
+      const own = await a.call("blueprint", { action: "add_variable", args: { assetPath:"/Game/BP_Hero", name: "Speed", type: "float" } });
       expect(own.text).not.toContain("ASSET_LEASED");
       // A second claim on it is refused too, naming the holder.
       expect((await b.call("project", { action: "acquire_lease", args: { paths: ["/Game/BP_Hero"] } })).text).toContain("client-session-a");
@@ -245,7 +245,7 @@ describe("asset leases between two clients on one runtime", () => {
       // Only the holder can release it.
       expect(JSON.parse((await b.call("project", { action: "release_lease", args: { paths: ["/Game/BP_Hero"] } })).text).releasedCount).toBe(0);
       expect(JSON.parse((await a.call("project", { action: "release_lease", args: {} })).text).releasedCount).toBe(1);
-      const after = await b.call("blueprint", { action: "add_variable", args: { blueprintPath: "/Game/BP_Hero", name: "Speed", type: "float" } });
+      const after = await b.call("blueprint", { action: "add_variable", args: { assetPath:"/Game/BP_Hero", name: "Speed", type: "float" } });
       expect(after.text).not.toContain("ASSET_LEASED");
     } finally {
       await a.close();
@@ -261,16 +261,16 @@ describe("asset leases between two clients on one runtime", () => {
     const b = await connect(rt, "session-b");
     try {
       // One session: a change takes nothing.
-      await a.call("blueprint", { action: "add_variable", args: { blueprintPath: "/Game/BP_Solo", name: "X", type: "float" } });
+      await a.call("blueprint", { action: "add_variable", args: { assetPath:"/Game/BP_Solo", name: "X", type: "float" } });
       expect(rt.sessions.leases.list()).toEqual([]);
       rt.sessions.leases.liveSessions = () => 2;
-      await a.call("blueprint", { action: "add_variable", args: { blueprintPath: "/Game/BP_Shared", name: "X", type: "float" } });
+      await a.call("blueprint", { action: "add_variable", args: { assetPath:"/Game/BP_Shared", name: "X", type: "float" } });
       expect(rt.sessions.leases.list()).toMatchObject([{ path: "/Game/BP_Shared", holder: "session-a", implicit: true }]);
-      const refused = await b.call("blueprint", { action: "add_variable", args: { blueprintPath: "/Game/BP_Shared", name: "Y", type: "float" } });
+      const refused = await b.call("blueprint", { action: "add_variable", args: { assetPath:"/Game/BP_Shared", name: "Y", type: "float" } });
       expect(refused.text).toContain("taken when that session last changed it");
       // A session that ends gives its leases up.
       expect(rt.sessions.leases.releaseHolder("session-a")).toBe(1);
-      expect((await b.call("blueprint", { action: "add_variable", args: { blueprintPath: "/Game/BP_Shared", name: "Y", type: "float" } })).text).not.toContain("ASSET_LEASED");
+      expect((await b.call("blueprint", { action: "add_variable", args: { assetPath:"/Game/BP_Shared", name: "Y", type: "float" } })).text).not.toContain("ASSET_LEASED");
     } finally {
       await a.close();
       await b.close();

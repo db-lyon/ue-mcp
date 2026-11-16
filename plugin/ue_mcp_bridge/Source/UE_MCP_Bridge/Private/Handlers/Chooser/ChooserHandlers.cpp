@@ -74,7 +74,6 @@ static TMap<int32, FString> CollectCellAssignments(const TArray<TSharedPtr<FJson
 // enum columns, an enum) via reflection so the resulting column filters something.
 static void ConfigureColumnInput(FChooserColumnBase* Col, const FString& InputStruct, const FString& BoundProperty, const FString& EnumPath)
 {
-#if WITH_EDITOR
 	if (!InputStruct.IsEmpty())
 	{
 		if (UScriptStruct* InSS = MCPChooserResolveStruct(InputStruct))
@@ -132,7 +131,6 @@ static void ConfigureColumnInput(FChooserColumnBase* Col, const FString& InputSt
 			}
 		}
 	}
-#endif
 }
 
 // ─── Handlers ─────────────────────────────────────────────────────────────
@@ -211,7 +209,6 @@ TSharedPtr<FJsonValue> FChooserHandlers::Describe(const TSharedPtr<FJsonObject>&
 				Col->SetObjectField(TEXT("binding"), BindingJson);
 			}
 		}
-#if WITH_EDITOR
 		// Expose the cell struct type so callers know the text format to author.
 		FArrayProperty* ArrProp = nullptr; void* ColData = nullptr; FString Ignored;
 		if (MCPChooserRowValuesArray(Table->ColumnsStructs[c], ArrProp, ColData, Ignored))
@@ -225,25 +222,21 @@ TSharedPtr<FJsonValue> FChooserHandlers::Describe(const TSharedPtr<FJsonObject>&
 				Col->SetStringField(TEXT("cellType"), ArrProp->Inner->GetCPPType());
 			}
 		}
-#endif
 		Columns.Add(MakeShared<FJsonValueObject>(Col));
 	}
 	Res->SetArrayField(TEXT("columns"), Columns);
 
 	// Fallback result (used when no row matches).
 	Res->SetBoolField(TEXT("hasFallback"), Table->FallbackResult.IsValid());
-#if WITH_EDITORONLY_DATA
 	if (Table->FallbackResult.IsValid())
 	{
 		Res->SetObjectField(TEXT("fallbackResult"), MCPChooserDescribeOutput(Table->FallbackResult));
 	}
-#endif
 	return MCPResult(Res);
 }
 
 TSharedPtr<FJsonValue> FChooserHandlers::AddColumn(const TSharedPtr<FJsonObject>& Params)
 {
-#if WITH_EDITOR
 	FString TablePath;
 	if (auto Err = RequireString(Params, TEXT("table"), TablePath)) return Err;
 	FString ColumnType;
@@ -324,9 +317,6 @@ TSharedPtr<FJsonValue> FChooserHandlers::AddColumn(const TSharedPtr<FJsonObject>
 	}
 	MCPNoteSaveOutcome(Res, Table->GetPathName(), bSaved, SaveError);
 	return MCPResult(Res);
-#else
-	return MCPError(TEXT("chooser column authoring requires an editor build"));
-#endif
 }
 
 TSharedPtr<FJsonValue> FChooserHandlers::ListRows(const TSharedPtr<FJsonObject>& Params)
@@ -345,7 +335,6 @@ TSharedPtr<FJsonValue> FChooserHandlers::ListRows(const TSharedPtr<FJsonObject>&
 	Res->SetNumberField(TEXT("rowCount"), RowCount);
 
 	TArray<TSharedPtr<FJsonValue>> Rows;
-#if WITH_EDITORONLY_DATA
 	for (int32 r = 0; r < RowCount; ++r)
 	{
 		TSharedPtr<FJsonObject> Row = MakeShared<FJsonObject>();
@@ -369,14 +358,12 @@ TSharedPtr<FJsonValue> FChooserHandlers::ListRows(const TSharedPtr<FJsonObject>&
 		Row->SetArrayField(TEXT("cells"), Cells);
 		Rows.Add(MakeShared<FJsonValueObject>(Row));
 	}
-#endif
 	Res->SetArrayField(TEXT("rows"), Rows);
 	return MCPResult(Res);
 }
 
 TSharedPtr<FJsonValue> FChooserHandlers::AddRow(const TSharedPtr<FJsonObject>& Params)
 {
-#if WITH_EDITORONLY_DATA
 	FString TablePath;
 	if (auto Err = RequireString(Params, TEXT("table"), TablePath)) return Err;
 	// Every parameter is read before anything can fail (#1057).
@@ -482,14 +469,10 @@ TSharedPtr<FJsonValue> FChooserHandlers::AddRow(const TSharedPtr<FJsonObject>& P
 		NewRow));
 	MCPNoteSaveOutcome(Res, Table->GetPathName(), bSaved, SaveError);
 	return MCPResult(Res);
-#else
-	return MCPError(TEXT("chooser row authoring requires an editor build"));
-#endif
 }
 
 TSharedPtr<FJsonValue> FChooserHandlers::SetRow(const TSharedPtr<FJsonObject>& Params)
 {
-#if WITH_EDITORONLY_DATA
 	FString TablePath;
 	if (auto Err = RequireString(Params, TEXT("table"), TablePath)) return Err;
 	int32 RowIndex = INDEX_NONE;
@@ -645,14 +628,10 @@ TSharedPtr<FJsonValue> FChooserHandlers::SetRow(const TSharedPtr<FJsonObject>& P
 	}
 	MCPNoteSaveOutcome(Res, Table->GetPathName(), bSaved, SaveError);
 	return MCPResult(Res);
-#else
-	return MCPError(TEXT("chooser row authoring requires an editor build"));
-#endif
 }
 
 TSharedPtr<FJsonValue> FChooserHandlers::DeleteRow(const TSharedPtr<FJsonObject>& Params)
 {
-#if WITH_EDITOR
 	FString TablePath;
 	if (auto Err = RequireString(Params, TEXT("table"), TablePath)) return Err;
 	int32 RowIndex = INDEX_NONE;
@@ -754,9 +733,6 @@ TSharedPtr<FJsonValue> FChooserHandlers::DeleteRow(const TSharedPtr<FJsonObject>
 	}
 	MCPNoteSaveOutcome(Res, Table->GetPathName(), bSaved, SaveError);
 	return MCPResult(Res);
-#else
-	return MCPError(TEXT("chooser row authoring requires an editor build"));
-#endif
 }
 
 void FChooserHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)

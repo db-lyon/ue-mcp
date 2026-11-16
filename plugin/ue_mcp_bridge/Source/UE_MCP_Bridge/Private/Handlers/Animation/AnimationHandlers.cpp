@@ -1990,11 +1990,9 @@ TSharedPtr<FJsonValue> FAnimationHandlers::GetPhysicsAssetConstraints(const TSha
 	{
 		Result->SetStringField(TEXT("skeletalMeshPath"), SkeletalMeshPath);
 	}
-#if WITH_EDITORONLY_DATA
 	// The soft path, not GetPreviewMesh(): reading a constraint table should not
 	// pull a skeletal mesh into memory.
 	Result->SetStringField(TEXT("previewSkeletalMeshPath"), PhysicsAsset->PreviewSkeletalMesh.ToSoftObjectPath().ToString());
-#endif
 	Result->SetNumberField(TEXT("bodyCount"), PhysicsAsset->SkeletalBodySetups.Num());
 	Result->SetNumberField(TEXT("constraintCount"), PhysicsAsset->ConstraintSetup.Num());
 	Result->SetArrayField(TEXT("constraints"), ConstraintsArray);
@@ -2292,10 +2290,8 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetPhysicsAssetConstraintLimits(const
 	int32 ChangedCount = 0;
 	for (UPhysicsConstraintTemplate* Constraint : Order)
 	{
-#if WITH_EDITOR
 		// Copies ProfileInstance into the profile the template serializes.
 		Constraint->UpdateProfileInstance();
-#endif
 		const FConstraintProfileProperties& Old = Before[Constraint];
 		const FConstraintProfileProperties& New = Constraint->DefaultInstance.ProfileInstance;
 		const bool bChanged =

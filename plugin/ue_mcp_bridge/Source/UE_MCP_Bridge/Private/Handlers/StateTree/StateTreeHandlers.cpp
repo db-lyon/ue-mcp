@@ -1546,7 +1546,8 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::SetStateProperty(const TSharedPtr<FJs
 #if UE_MCP_HAS_STATETREE_STATE_DESCRIPTION
 		State->Description = Value;
 #else
-		return MCPError(TEXT("State description is not available in this UE version"));
+		return MCPUnsupportedEngineError(TEXT("A state description"), TEXT("5.6"),
+			TEXT("This engine's FStateTreeState has no Description field; keep the note in the state's name or tag instead"));
 #endif
 	}
 	else if (PropName == TEXT("tag"))
@@ -1579,7 +1580,8 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::SetStateProperty(const TSharedPtr<FJs
 			State->CustomTickRate = FCString::Atof(*Value);
 		}
 #else
-		return MCPError(TEXT("State customTickRate is not available in this UE version"));
+		return MCPUnsupportedEngineError(TEXT("A state customTickRate"), TEXT("5.6"),
+			TEXT("On this engine every state ticks with its StateTree"));
 #endif
 	}
 	else if (PropName == TEXT("color"))

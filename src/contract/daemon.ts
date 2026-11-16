@@ -111,6 +111,7 @@ export const EXTENSION_FEATURES = [
   "extension.services",
   "flows.stepApproval",
   "dialogs.native",
+  "permissions",
 ] as const;
 
 export type ExtensionFeature = (typeof EXTENSION_FEATURES)[number];
@@ -136,6 +137,7 @@ export const EXTENSION_FEATURE_MEMBERS: { readonly [F in ExtensionFeature]: keyo
   "extension.services": "services",
   "flows.stepApproval": "flows",
   "dialogs.native": "nativeDialogs",
+  permissions: "registryAccount",
 };
 
 // ── Routes ────────────────────────────────────────────────────────
@@ -1263,7 +1265,18 @@ export interface ExtensionManifest {
    * `root: false` keeps its bundle off /ui/, served only at /ui/ext/<name>/.
    */
   ui?: { min?: string; root?: boolean };
+  /** What the extension may reach beyond the API every extension gets. See EXTENSION_PERMISSIONS. */
+  permissions?: ExtensionPermission[];
 }
+
+/**
+ * The permissions an extension can declare in `ueMcpExtension.permissions`.
+ * "registry.account": `registryAccount()` hands it the signed-in ue-mcp account
+ * and its bearer token.
+ */
+export const EXTENSION_PERMISSIONS = ["registry.account"] as const;
+
+export type ExtensionPermission = (typeof EXTENSION_PERMISSIONS)[number];
 
 export interface ExtensionRequest {
   method: string;
@@ -1405,6 +1418,8 @@ export interface DaemonExtensionApi {
    *   "dialogs.native"           native Win32 dialogs the editor process shows are dialog.* events with
    *                              `native` set, block calls like any modal, are put to `dialogPrompt`, and
    *                              `nativeDialogs` lists and presses them
+   *   "permissions"              `registryAccount` answers only an extension declaring "registry.account"
+   *                              in `ueMcpExtension.permissions` (EXTENSION_PERMISSIONS)
    * EXTENSION_FEATURE_MEMBERS names the member each one adds to or changes.
    * Absent on a daemon older than the field.
    */
@@ -1445,9 +1460,9 @@ export interface DaemonExtensionApi {
   /**
    * The model behind flow agent steps (`class_path: agent` and `agent_prompt`, and the
    * built-in playtest flow), feature "models.provider", API 2. `register` makes `provider` the
-   * one those steps call, ahead of ANTHROPIC_API_KEY; the newest registration still live wins,
-   * and the function it returns removes it. Without either, an agent step fails with
-   * "No model is configured for flow agent steps."
+   * one those steps call; the newest registration still live wins, and the function it returns
+   * removes it. Core ships no provider, so without a registration an agent step fails with
+   * "No model is configured for flow agent steps." and how to install one.
    */
   models?: {
     register(provider: ModelProvider): () => void;
@@ -1551,6 +1566,9 @@ export interface DaemonExtensionApi {
   /**
    * The ue-mcp account this machine signed in with (`ue-mcp login`), or null.
    * The token authenticates the user to ue-mcp services; never log or display it.
+   * Only an extension whose manifest declares the "registry.account" permission
+   * (`ueMcpExtension.permissions`) gets it; any other gets null, and the daemon
+   * log says which field to declare (feature "permissions").
    */
   registryAccount(): Promise<{ login: string; token: string; registry: string } | null>;
 

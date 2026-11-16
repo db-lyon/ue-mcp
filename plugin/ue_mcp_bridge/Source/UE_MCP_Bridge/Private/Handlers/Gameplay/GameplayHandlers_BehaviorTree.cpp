@@ -419,10 +419,8 @@ TArray<TSharedPtr<FJsonValue>> FGameplayHandlers::DescribeBlackboardKeys(const U
 		KeyObj->SetStringField(TEXT("typeClass"), KeyTypeClass ? KeyTypeClass->GetPathName() : FString());
 		KeyObj->SetBoolField(TEXT("instanceSynced"), Entry.bInstanceSynced != 0);
 		KeyObj->SetStringField(TEXT("owner"), Blackboard->GetPathName());
-#if WITH_EDITORONLY_DATA
 		KeyObj->SetStringField(TEXT("description"), Entry.EntryDescription);
 		KeyObj->SetStringField(TEXT("category"), Entry.EntryCategory.ToString());
-#endif
 		Out.Add(MakeShared<FJsonValueObject>(KeyObj));
 	}
 	return Out;

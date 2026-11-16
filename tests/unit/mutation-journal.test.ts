@@ -7,6 +7,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { MutationJournal, rollbackOf, type JournalHost } from "../../src/journal/journal.js";
+import { editorTool } from "../../src/tools/editor.js";
 
 let dir: string;
 let checkpoints: Array<{ id: string; label: string }>;
@@ -96,8 +97,11 @@ describe("MutationJournal", () => {
   it("never journals its own actions or the checkpoint actions", async () => {
     const j = new MutationJournal(host());
     j.setGroup("t");
-    await j.record("editor.restore", "mutate", inMemory);
-    await j.record("editor.revert_group", "mutate", inMemory);
+    for (const action of ["restore", "revert_group"]) {
+      const spec = editorTool.actions[action];
+      expect(spec.unjournaled, action).toBe(true);
+      await j.record(`editor.${action}`, spec.effect, inMemory, spec);
+    }
     expect(j.state().groups).toEqual([]);
   });
 

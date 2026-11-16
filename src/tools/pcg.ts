@@ -40,6 +40,7 @@ export const pcgTool: ToolDef = categoryTool(
     wait_for_generation: {
       kind: "handler",
       effect: "read",
+      editorBound: "Polls the get_pcg_generation_state bridge method until a generation ends.",
       description: "Block until a PCG component's generation finishes, for a run started by anything (execute, the editor, a project function that defers to the next tick), polling get_generation_state with backoff. With runId, waits for that run; without, for the generation in flight, or one that starts within graceSeconds (default 2), else returns state idle. Partitioned components finish when their local components do. Returns state generated|cancelled|cleaned|not_started|idle|timed_out, durationMs, polls and lastRun; timed_out fails the call (#1365). With runId, a not_started run is final only after graceSeconds, since Generate can defer its start; not_started adds alreadyGenerated and lastFinishUtc. Params: actorLabel?, actorPath?, componentName?, runId?, timeoutSeconds?, graceSeconds?",
       handler: async (ctx, p) => waitForGeneration(ctx, {
         actorLabel: p.actorLabel as string | undefined,

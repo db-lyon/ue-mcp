@@ -77,8 +77,6 @@ const EXCEPTIONS: Record<string, string> = {
     "A guard's public CallContext carries the EditorSession; narrowing it changes the `ue-mcp/guard` contract.",
   "flow/guarded-bridge.ts -> sessions/session.ts":
     "Builds the guard CallContext, which carries the EditorSession; goes with flow/guard.ts.",
-  "flow/write-methods.ts -> tools/specs/index.ts":
-    "Reads the recorded handler specs, which are generated under tools/; the recording belongs below surface.",
   "integrations/claude-code/hook-session.ts -> cli/editor-flag.ts":
     "The hook resolves --editor the way the CLI does; the resolver belongs in config, the flag parsing in cli.",
   "sessions/session-load.ts -> tools.ts":
@@ -87,9 +85,8 @@ const EXCEPTIONS: Record<string, string> = {
     "Effects of flow actions are read from the flow surface; the flow tool should declare them.",
   "surface/action-effects.ts -> tools.ts":
     "The effect index defaults to ALL_TOOLS when handed no graph; callers should hand it one.",
-  "surface/action-effects.ts -> tools/epic/effects.ts":
-    "The generated Epic effect table lives under tools/epic; generated tables the surface reads belong below it.",
-  "surface/epic-engines.ts -> tools/epic/catalog-engines.ts": "As surface/action-effects.ts -> tools/epic/effects.ts.",
+  "surface/epic-engines.ts -> tools/epic/catalog-engines.ts":
+    "The generated Epic engine table lives under tools/epic; generated tables the surface reads belong below it.",
   "surface/target-params.ts -> sessions/session.ts":
     "Type only: re-points a ToolContext at an EditorSession, so it goes with surface/tool-types.ts.",
   "surface/tool-types.ts -> sessions/session.ts":

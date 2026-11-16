@@ -123,7 +123,6 @@ namespace
 	 */
 	UMetaSoundSourceBuilder* MSAuthorAssetBuilder(UMetaSoundSource* Source, TSharedPtr<FJsonValue>& OutError)
 	{
-#if WITH_EDITORONLY_DATA
 		using namespace Metasound::Frontend;
 		if (!Source)
 		{
@@ -156,10 +155,6 @@ namespace
 				TEXT("Could not attach a MetaSound builder to '%s'."), *Source->GetPathName()));
 		}
 		return Builder;
-#endif
-#else
-		OutError = MCPError(TEXT("MetaSound authoring requires an editor build."));
-		return nullptr;
 #endif
 	}
 

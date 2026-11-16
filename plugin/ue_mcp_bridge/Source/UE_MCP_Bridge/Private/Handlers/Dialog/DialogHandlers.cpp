@@ -58,7 +58,6 @@
 #include "Widgets/Views/STableViewBase.h"
 #include "Layout/ArrangedChildren.h"
 #include "Types/SlateAttributeMetaData.h"
-#include "Misc/EngineVersionComparison.h"
 
 // Static member definitions
 TArray<FDialogHandlers::FDialogPolicy> FDialogHandlers::Policies;
@@ -1902,7 +1901,7 @@ namespace MCPDialogFields
 	/** Is this widget an SMenuAnchor: SComboButton, SComboBox<T> and their kin? */
 	static bool IsMenuAnchor(const TSharedRef<SWidget>& Widget)
 	{
-#if UE_VERSION_OLDER_THAN(5, 8, 0)
+#if !UE_MCP_HAS_5_8_API
 		// Before 5.8 SMenuAnchor declares no widget class, so the type name is
 		// all there is, and only names known to be SMenuAnchor subclasses are
 		// trusted with the cast that reading the menu needs.
@@ -1917,7 +1916,7 @@ namespace MCPDialogFields
 	/** Is this widget an SEditableText, the editing half of a text box? */
 	static bool IsEditableText(const TSharedRef<SWidget>& Widget)
 	{
-#if UE_VERSION_OLDER_THAN(5, 8, 0)
+#if !UE_MCP_HAS_5_8_API
 		return Widget->GetType() == TEXT("SEditableText");
 #else
 		return Widget->GetWidgetClass().GetWidgetType() == SEditableText::StaticWidgetClass().GetWidgetType();
@@ -2185,7 +2184,7 @@ namespace MCPDialogFields
 		TSharedPtr<SWidget> Current = Row->GetParentWidget();
 		for (int32 Depth = 0; Current.IsValid() && Depth < 16; ++Depth)
 		{
-#if UE_VERSION_OLDER_THAN(5, 8, 0)
+#if !UE_MCP_HAS_5_8_API
 			const FString Type = Current->GetType().ToString();
 			if (Type.Contains(TEXT("ListView")) || Type.Contains(TEXT("ListType")) || Type.Contains(TEXT("TreeView")))
 #else

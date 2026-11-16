@@ -21,7 +21,7 @@ export const CLI_COMMANDS: readonly CliCommand[] = [
   { name: "init", summary: "Set up ue-mcp in a project", load: () => import("./init.js") },
   {
     name: "install",
-    summary: "Install by name into a project, e.g. ue-mcp install studio",
+    summary: "Install by name into a project, e.g. ue-mcp install anthropic",
     load: () => import("./extension-cli.js").then((m) => ({ run: m.runInstall, usage: m.installUsage })),
   },
   { name: "update", summary: "Update the deployed bridge and the server", load: () => import("./update.js") },

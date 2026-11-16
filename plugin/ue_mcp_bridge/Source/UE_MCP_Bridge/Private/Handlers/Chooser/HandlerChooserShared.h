@@ -36,11 +36,7 @@ inline UChooserTable* MCPChooserLoadTable(const FString& Path)
 // Number of rows in a chooser (implicit: one result struct per row).
 inline int32 MCPChooserRowCount(const UChooserTable* Table)
 {
-#if WITH_EDITORONLY_DATA
 	return Table->ResultsStructs.Num();
-#else
-	return Table->CookedResults.Num();
-#endif
 }
 
 // A short, friendly identifier for a column: the bound property name if the
@@ -66,7 +62,6 @@ inline FString MCPChooserColumnName(FInstancedStruct& ColStruct, int32 ColumnInd
 // column's struct memory. Returns false (with error text) if unavailable.
 inline bool MCPChooserRowValuesArray(FInstancedStruct& ColStruct, FArrayProperty*& OutArr, void*& OutColData, FString& OutError)
 {
-#if WITH_EDITOR
 	FChooserColumnBase* Col = ColStruct.GetMutablePtr<FChooserColumnBase>();
 	const UScriptStruct* SS = ColStruct.GetScriptStruct();
 	if (!Col || !SS) { OutError = TEXT("column has no valid struct"); return false; }
@@ -77,10 +72,6 @@ inline bool MCPChooserRowValuesArray(FInstancedStruct& ColStruct, FArrayProperty
 	OutArr = ArrProp;
 	OutColData = ColStruct.GetMutableMemory();
 	return true;
-#else
-	OutError = TEXT("chooser row authoring requires an editor build");
-	return false;
-#endif
 }
 
 // Export a column's cell at RowIndex to text (round-trippable via ImportText).
@@ -172,7 +163,6 @@ inline TSharedPtr<FJsonObject> MCPChooserDescribeOutput(const FInstancedStruct& 
 	TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
 	const UScriptStruct* SS = Result.GetScriptStruct();
 	Obj->SetStringField(TEXT("resultType"), SS ? SS->GetName() : FString());
-#if WITH_EDITOR
 	if (const FObjectChooserBase* Base = Result.GetPtr<FObjectChooserBase>())
 	{
 #if UE_MCP_HAS_5_5_API
@@ -199,7 +189,6 @@ inline TSharedPtr<FJsonObject> MCPChooserDescribeOutput(const FInstancedStruct& 
 #endif
 		Obj->SetStringField(TEXT("output"), Ref ? Ref->GetPathName() : FString());
 	}
-#endif
 
 	return Obj;
 }
@@ -714,7 +703,7 @@ inline constexpr bool MCPChooserAutoPopulateSupported()
 /** The object a row's result references (null for none). */
 inline UObject* MCPChooserReferencedObject(const FInstancedStruct& Result)
 {
-#if UE_MCP_HAS_5_5_API && WITH_EDITOR
+#if UE_MCP_HAS_5_5_API
 	if (const FObjectChooserBase* Base = Result.GetPtr<FObjectChooserBase>()) return Base->GetReferencedObject();
 #endif
 	return nullptr;
@@ -862,9 +851,7 @@ inline TArray<FString> MCPChooserAvailableTypes(const UScriptStruct* Base)
 	for (TObjectIterator<UScriptStruct> It; It; ++It)
 	{
 		if (*It == Base || !It->IsChildOf(Base)) continue;
-#if WITH_EDITORONLY_DATA
 		if (It->HasMetaData(TEXT("Hidden"))) continue;
-#endif
 		Out.Add(It->GetPathName());
 	}
 	Out.Sort();
@@ -895,9 +882,7 @@ inline const UScriptStruct* MCPChooserFindType(const FString& InTypeName, const 
 		{
 			if (*It == RequiredBase || !It->IsChildOf(RequiredBase)) continue;
 			if (It->GetName().Equals(TypeName, ESearchCase::IgnoreCase) || It->GetName().Equals(Bare, ESearchCase::IgnoreCase)) ByName.Add(*It);
-#if WITH_EDITOR
 			else if (It->GetDisplayNameText().ToString().Equals(TypeName, ESearchCase::IgnoreCase)) ByDisplay.Add(*It);
-#endif
 		}
 		const TArray<const UScriptStruct*>& Matches = ByName.Num() ? ByName : ByDisplay;
 		if (Matches.Num() > 1)
@@ -945,7 +930,6 @@ inline bool MCPChooserMakeResult(UChooserTable* Table, const FString& ResultType
 	}
 	const UScriptStruct* Type = MCPChooserFindType(ResultType, FObjectChooserBase::StaticStruct(), OutError);
 	if (!Type) return false;
-#if WITH_EDITORONLY_DATA
 	if (Type->HasMetaData(TEXT("ResultType")))
 	{
 		const FString Meta = Type->GetMetaData(TEXT("ResultType"));
@@ -955,7 +939,6 @@ inline bool MCPChooserMakeResult(UChooserTable* Table, const FString& ResultType
 			return false;
 		}
 	}
-#endif
 	Out.InitializeAs(Type);
 	return true;
 }
@@ -992,7 +975,7 @@ inline bool MCPChooserFinalize(UChooserTable* Table, FString& OutSaveError)
 		Root->Compile(true);
 		Root->PostEditChange();
 	}
-#if UE_MCP_HAS_5_9_API && WITH_EDITOR
+#if UE_MCP_HAS_5_9_API
 	// An open Chooser Table editor redraws on these, as it does after its own edits.
 	if (Root)
 	{

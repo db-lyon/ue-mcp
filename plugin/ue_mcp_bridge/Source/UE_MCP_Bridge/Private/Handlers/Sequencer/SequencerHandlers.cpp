@@ -21,11 +21,8 @@
 #include "Tracks/MovieSceneSkeletalAnimationTrack.h"
 #include "Sections/MovieSceneSkeletalAnimationSection.h"
 #include "Animation/AnimSequenceBase.h"
-#if __has_include("Variants/MovieSceneTimeWarpVariant.h")
+#if UE_MCP_SKELANIM_PLAYRATE_IS_TIMEWARP
 #include "Variants/MovieSceneTimeWarpVariant.h"
-#define UE_MCP_SKELANIM_PLAYRATE_IS_TIMEWARP 1
-#else
-#define UE_MCP_SKELANIM_PLAYRATE_IS_TIMEWARP 0
 #endif
 #include "Tracks/MovieSceneCameraCutTrack.h"
 #include "Tracks/MovieScene3DAttachTrack.h"
@@ -678,10 +675,8 @@ TSharedPtr<FJsonValue> FSequencerHandlers::ReadSequenceInfo(const TSharedPtr<FJs
 		TSharedPtr<FJsonObject> TrackObj = MakeShared<FJsonObject>();
 		TrackObj->SetStringField(TEXT("name"), Track->GetTrackName().ToString());
 		TrackObj->SetStringField(TEXT("class"), Track->GetClass()->GetName());
-#if WITH_EDITORONLY_DATA
 		// The label Sequencer shows, e.g. the rig name on a Control Rig track.
 		TrackObj->SetStringField(TEXT("displayName"), Track->GetDisplayName().ToString());
-#endif
 		TrackObj->SetNumberField(TEXT("sectionCount"), Track->GetAllSections().Num());
 		ExtractSectionDetails(Track, TrackObj);
 		return TrackObj;

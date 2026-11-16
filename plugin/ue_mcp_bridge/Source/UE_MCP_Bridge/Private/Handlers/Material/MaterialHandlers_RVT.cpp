@@ -390,7 +390,6 @@ namespace
 		RotObj->SetNumberField(TEXT("roll"), Rot.Roll);
 		XformObj->SetObjectField(TEXT("rotation"), RotObj);
 		Result->SetObjectField(TEXT("transform"), XformObj);
-#if WITH_EDITOR
 		Result->SetBoolField(TEXT("snapBoundsToLandscape"), Comp->GetSnapBoundsToLandscape());
 		Result->SetNumberField(TEXT("expandBounds"), Comp->GetExpandBounds());
 		if (AActor* Align = Comp->GetBoundsAlignActor().Get())
@@ -398,7 +397,6 @@ namespace
 			Result->SetStringField(TEXT("boundsAlignActorPath"), Align->GetPathName());
 			Result->SetStringField(TEXT("boundsAlignActorLabel"), Align->GetActorLabel());
 		}
-#endif
 		Result->SetStringField(TEXT("componentSettingsNote"),
 			TEXT("bSnapBoundsToLandscape, ExpandBounds, bHidePrimitives, StreamLowMips and the scalability fields are ")
 			TEXT("UPROPERTYs on the component at componentObjectPath: write them with editor(set_property), then call ")
@@ -694,9 +692,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::AddRvtVolume(const TSharedPtr<FJsonObj
 	{
 		return MCPError(TEXT("Failed to spawn a RuntimeVirtualTextureVolume into the editor world."));
 	}
-#if WITH_EDITOR
 	Volume->SetActorLabel(Label);
-#endif
 
 	URuntimeVirtualTextureComponent* Comp = MCPRvtComponentOf(Volume);
 	if (!Comp)
@@ -855,16 +851,12 @@ TSharedPtr<FJsonValue> FMaterialHandlers::SetRvtVolumeBounds(const TSharedPtr<FJ
 	{
 		AlignActor = MCPResolveActorToken(World, AlignSpec, Error, Selector);
 		if (!AlignActor) return Error;
-#if WITH_EDITOR
 		Comp->SetBoundsAlignActor(AlignActor);
-#endif
 	}
-#if WITH_EDITOR
 	else
 	{
 		AlignActor = Comp->GetBoundsAlignActor().Get();
 	}
-#endif
 
 	if (BoundsMode == TEXT("alignactor") && !AlignActor)
 	{
@@ -905,13 +897,9 @@ TSharedPtr<FJsonValue> FMaterialHandlers::SetRvtVolumeBounds(const TSharedPtr<FJ
 				: TEXT("in the loaded level writes into this RVT")));
 	}
 
-#if WITH_EDITOR
 	const float Expand = Comp->GetExpandBounds();
 	if (Expand > 0.0f) TargetInFrame = TargetInFrame.ExpandBy(Expand);
 	const bool bSnapRequested = Comp->GetSnapBoundsToLandscape();
-#else
-	const bool bSnapRequested = false;
-#endif
 
 	const FTransform Previous = Comp->GetComponentTransform();
 	const FTransform Fitted = MCPRvtSolveVolumeTransform(Comp, Rotation, TargetInFrame);

@@ -1,0 +1,13 @@
+{
+  "name": "ue-mcp-anthropic",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Daemon extension that runs ue-mcp flow agent steps on the Anthropic Messages API, with the key in ANTHROPIC_API_KEY.",
+  "type": "module",
+  "main": "index.js",
+  "license": "MIT",
+  "ueMcpExtension": {
+    "name": "anthropic",
+    "api": { "min": 2, "max": 3 }
+  }
+}

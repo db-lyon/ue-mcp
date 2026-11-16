@@ -77,9 +77,7 @@ namespace UEMCPMVVM
 		TArray<FString> Names;
 		for (int32 Index = 0; Index < Enum->NumEnums() - 1; ++Index)
 		{
-#if WITH_EDITORONLY_DATA
 			if (Enum->HasMetaData(TEXT("Hidden"), Index)) continue;
-#endif
 			Names.Add(Enum->GetNameStringByIndex(Index));
 		}
 		return FString::Join(Names, TEXT(", "));

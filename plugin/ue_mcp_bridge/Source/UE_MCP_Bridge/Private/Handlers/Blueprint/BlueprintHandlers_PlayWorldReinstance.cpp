@@ -9,7 +9,7 @@
 #include "GameFramework/PlayerState.h"
 #include "Containers/Ticker.h"
 #include "Misc/CoreDelegates.h"
-#include "Misc/EngineVersionComparison.h"
+#include "HandlerEngineVersion.h"
 #include "UObject/WeakObjectPtr.h"
 
 // Compiling a pawn Blueprint while play runs reinstances the possessed pawn. The
@@ -90,9 +90,9 @@ void MCPBlueprintPlayWorld::RegisterPossessedPawnRebindGuard()
 		MCPBindCompileEvents();
 		return;
 	}
-#if UE_VERSION_OLDER_THAN(5, 8, 0)
-	FCoreDelegates::OnPostEngineInit.AddStatic(&MCPBindCompileEvents);
-#else
+#if UE_MCP_HAS_5_8_API
 	FCoreDelegates::GetOnPostEngineInit().AddStatic(&MCPBindCompileEvents);
+#else
+	FCoreDelegates::OnPostEngineInit.AddStatic(&MCPBindCompileEvents);
 #endif
 }

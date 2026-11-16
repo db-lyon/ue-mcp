@@ -307,25 +307,17 @@ namespace
 	 */
 	FString ReadTooltip(const UField* Field)
 	{
-#if WITH_EDITOR
 		if (!Field) return FString();
 		// UField::GetMetaData("ToolTip") returns the raw text. Trimming
 		// matches what the editor's tooltip panel does.
 		const FString Raw = Field->GetMetaData(TEXT("ToolTip"));
 		return Raw.TrimStartAndEnd();
-#else
-		return FString();
-#endif
 	}
 
 	FString ReadPropertyTooltip(const FProperty* Prop)
 	{
-#if WITH_EDITOR
 		if (!Prop) return FString();
 		return Prop->GetMetaData(TEXT("ToolTip")).TrimStartAndEnd();
-#else
-		return FString();
-#endif
 	}
 
 	void AddIfNonEmpty(TSharedPtr<FJsonObject> Obj, const TCHAR* Key, const FString& Value)
@@ -410,7 +402,6 @@ namespace
 		TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
 		Obj->SetStringField(TEXT("name"), Prop->GetName());
 		Obj->SetStringField(TEXT("type"), Prop->GetCPPType());
-#if WITH_EDITOR
 		AddIfNonEmpty(Obj, TEXT("tooltip"),       ReadPropertyTooltip(Prop));
 		AddIfNonEmpty(Obj, TEXT("category"),      Prop->GetMetaData(TEXT("Category")));
 		AddIfNonEmpty(Obj, TEXT("displayName"),   Prop->GetMetaData(TEXT("DisplayName")));
@@ -420,7 +411,6 @@ namespace
 		AddIfNonEmpty(Obj, TEXT("uiMin"),         Prop->GetMetaData(TEXT("UIMin")));
 		AddIfNonEmpty(Obj, TEXT("uiMax"),         Prop->GetMetaData(TEXT("UIMax")));
 		AddIfNonEmpty(Obj, TEXT("units"),         Prop->GetMetaData(TEXT("Units")));
-#endif
 		TArray<TSharedPtr<FJsonValue>> Flags = EncodePropertyFlags(Prop);
 		if (Flags.Num() > 0)
 		{
@@ -439,12 +429,10 @@ namespace
 	{
 		TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
 		Obj->SetStringField(TEXT("name"), Func->GetName());
-#if WITH_EDITOR
 		AddIfNonEmpty(Obj, TEXT("tooltip"),     ReadTooltip(Func));
 		AddIfNonEmpty(Obj, TEXT("category"),    Func->GetMetaData(TEXT("Category")));
 		AddIfNonEmpty(Obj, TEXT("displayName"), Func->GetMetaData(TEXT("DisplayName")));
 		AddIfNonEmpty(Obj, TEXT("keywords"),    Func->GetMetaData(TEXT("Keywords")));
-#endif
 
 		TArray<TSharedPtr<FJsonValue>> Params;
 		FString ReturnType;
@@ -501,10 +489,8 @@ TSharedPtr<FJsonValue> FReflectionHandlers::ReflectClass(const TSharedPtr<FJsonO
 	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("className"), Class->GetName());
 	AddIfNonEmpty(Result, TEXT("tooltip"), ReadTooltip(Class));
-#if WITH_EDITOR
 	AddIfNonEmpty(Result, TEXT("displayName"), Class->GetMetaData(TEXT("DisplayName")));
 	AddIfNonEmpty(Result, TEXT("category"),    Class->GetMetaData(TEXT("Category")));
-#endif
 
 	if (Class->GetSuperClass())
 	{
@@ -563,9 +549,7 @@ TSharedPtr<FJsonValue> FReflectionHandlers::ReflectStruct(const TSharedPtr<FJson
 	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("structName"), Struct->GetName());
 	AddIfNonEmpty(Result, TEXT("tooltip"), ReadTooltip(Struct));
-#if WITH_EDITOR
 	AddIfNonEmpty(Result, TEXT("displayName"), Struct->GetMetaData(TEXT("DisplayName")));
-#endif
 
 	TArray<TSharedPtr<FJsonValue>> FieldsArray;
 	for (TFieldIterator<FProperty> PropIt(Struct); PropIt; ++PropIt)
@@ -613,13 +597,11 @@ TSharedPtr<FJsonValue> FReflectionHandlers::ReflectEnum(const TSharedPtr<FJsonOb
 			ValueObj->SetStringField(TEXT("name"), EnumNameStr);
 			ValueObj->SetNumberField(TEXT("value"), Enum->GetValueByIndex(i));
 			ValueObj->SetStringField(TEXT("displayName"), Enum->GetDisplayNameTextByIndex(i).ToString());
-#if WITH_EDITOR
 			// Per-value tooltip - UEnum stores ToolTip metadata per enum
 			// entry, addressable by index. Editor uses the same call to
 			// populate the dropdown tooltips in Details panels.
 			FString ValueTooltip = Enum->GetMetaData(TEXT("ToolTip"), i).TrimStartAndEnd();
 			AddIfNonEmpty(ValueObj, TEXT("tooltip"), ValueTooltip);
-#endif
 			ValuesArray.Add(MakeShared<FJsonValueObject>(ValueObj));
 		}
 	}

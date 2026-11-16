@@ -68,6 +68,7 @@ export const niagaraTool: ToolDef = categoryTool(
     batch: {
       kind: "handler",
       effect: "mutate",
+      editorBound: "Runs a sequence of bridge calls against one Niagara system.",
       description: "Run a sequence of niagara operations against the bridge in order. Fails fast on the first error (returns results up to that point + error). Params: ops:[{action, params}] where action is any niagara subaction listed above.",
       handler: async (ctx, params) => {
         const opsUnknown = params.ops;

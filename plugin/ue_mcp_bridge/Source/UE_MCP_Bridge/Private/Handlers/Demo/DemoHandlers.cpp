@@ -1222,13 +1222,11 @@ TSharedPtr<FJsonObject> FDemoHandlers::StepNiagaraVfx()
 		return DemoStepFailed(Result, TEXT("Could not create Niagara system factory"));
 	}
 
-#if ENGINE_MAJOR_VERSION > 5 || (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 4)
 	UNiagaraSystemFactoryNew* NiagaraFactory = static_cast<UNiagaraSystemFactoryNew*>(Factory);
 	FVersionedNiagaraEmitter VersionedEmitter;
 	VersionedEmitter.Emitter = FountainEmitter;
 	VersionedEmitter.Version = FountainEmitter->GetExposedVersion().VersionGuid;
 	NiagaraFactory->EmittersToAddToNewSystem.Add(VersionedEmitter);
-#endif
 
 	UObject* NSAsset = AssetTools.CreateAsset(
 		TEXT("NS_Demo_Aura"), DemoConstants::MAT_DIR,

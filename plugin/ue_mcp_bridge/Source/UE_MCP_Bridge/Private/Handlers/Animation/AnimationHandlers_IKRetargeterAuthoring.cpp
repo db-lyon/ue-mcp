@@ -681,7 +681,8 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ConfigureIKRetargeter(const TSharedPt
 		TEXT("chainMappings"), TEXT("ops"), TEXT("pose"),
 	});
 #if !UE_MCP_HAS_5_8_API
-	return MCPUnsupportedEngineError(TEXT("configure_ik_retargeter"), TEXT("5.8"));
+	return MCPUnsupportedEngineError(TEXT("configure_ik_retargeter"), TEXT("5.8"),
+		TEXT("On this engine, animation(create_ik_retargeter) sets the source and target rigs when it creates the asset, and the IK Retargeter editor does the rest"));
 #else
 	FString RetargeterPath;
 	if (auto Error = RequireString(Params, TEXT("retargeterPath"), RetargeterPath)) return Error;

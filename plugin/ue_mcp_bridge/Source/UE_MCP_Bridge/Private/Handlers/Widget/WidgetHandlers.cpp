@@ -2270,10 +2270,8 @@ TSharedPtr<FJsonValue> FWidgetHandlers::ListWidgetClasses(const TSharedPtr<FJson
 		// rather than through AddChild, which is why add_widget cannot parent
 		// into one. widget(get_bind_widget_contract) reports what it wants.
 		Obj->SetBoolField(TEXT("acceptsChildren"), bIsPanel);
-#if WITH_EDITOR
 		const FString Category = Row.Class->GetMetaData(TEXT("Category"));
 		if (!Category.IsEmpty()) Obj->SetStringField(TEXT("category"), Category);
-#endif
 		if (bIsPanel)
 		{
 			const FString Hint = SlotHintFor(Row.Class);

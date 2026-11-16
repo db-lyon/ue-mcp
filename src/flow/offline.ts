@@ -17,17 +17,16 @@
  *                    It cannot run without one, so the answer is mechanical and
  *                    covers the overwhelming majority of the surface.
  *   `spec.handler`   a closure that runs inside this Node process. Whether it
- *                    then talks to the editor is a property of the code, not of
- *                    the declaration, so those are enumerated below by hand.
+ *                    then talks to the editor is a property of the code, so
+ *                    each one declares it: `offline` or `editorBound`, with
+ *                    the reason.
  *
- * The hand-written half is deliberate. Deriving it by scanning
- * `handler.toString()` for a bridge reference looks cheaper and is wrong:
- * `asset(migrate)` calls the bridge from a module-level helper the closure only
- * names, so a source scan reads it as editor-free and an agent is told a
- * migrate will work with the editor down. `LOCAL_ACTIONS` records the answer
- * once, and `tests/unit/offline.test.ts` fails when an action is added, removed
- * or renamed without updating it, so the table cannot silently drift away from
- * the graph the server dispatches from.
+ * The declaration is deliberate. Deriving it by scanning `handler.toString()`
+ * for a bridge reference looks cheaper and is wrong: `asset(migrate)` calls the
+ * bridge from a module-level helper the closure only names, so a source scan
+ * reads it as editor-free and an agent is told a migrate will work with the
+ * editor down. `tests/unit/offline.test.ts` fails on a handler action that
+ * declares neither.
  */
 import type { ActionSpec, ToolDef } from "../surface/tool-types.js";
 import { McpError, ErrorCode } from "../core/errors.js";
@@ -54,143 +53,13 @@ export interface ActionVerdict {
 }
 
 /**
- * Every action whose work happens in this process rather than in the editor,
- * with the reason each one is in the list.
- *
- * Keyed `tool.action`. An entry omitted here for an action that has a handler
- * is not assumed either way: it reports `unknown` and says so, because guessing
+ * Whether one action can run with no editor: a bridge action never can, and a
+ * handler-backed action says so in its `offline` or `editorBound` declaration.
+ * One that declares neither reports `unknown` and says so, because guessing
  * "offline" for an unclassified action is the failure this module exists to
  * remove.
  */
-export const LOCAL_ACTIONS: Record<string, string> = {
-  // Session and connection bookkeeping. These describe the connection rather
-  // than using it, which is exactly what a caller needs while it is down.
-  "project.get_status": "Reports the connection state, and reads the editor's own log and status snapshot off disk when there is no live bridge to ask.",
-  "project.set_project": "Retargets path resolution and the bridge socket, then reports whether the new target answered.",
-  "project.list_editors": "Lists registered sessions and probes each bridge port from outside.",
-  "project.use_editor": "Changes which registered session is the default.",
-  "project.add_editor": "Registers a session and attaches the plugin on disk. The connection attempt is allowed to fail.",
-  "project.drop_editor": "Forgets a session and closes its socket. The editor process is left running.",
-
-  // The project on disk: its descriptor, its INI tree and its C++ source.
-  "project.get_info": "Reads the .uproject file.",
-  "project.read_config": "Reads INI files from the project's Config directory.",
-  "project.search_config": "Searches the project's INI files on disk.",
-  "project.resolve_setting": "Reads the engine's and the project's INI files on disk.",
-  "project.explain_setting": "Reads the engine's and the project's INI files on disk.",
-  "project.diff_config_from_default": "Reads the engine's and the project's INI files on disk.",
-  "project.list_config_tags": "Builds the gameplay tag tree from the project's INI files.",
-  "project.read_cpp_header": "Reads a header from the project's Source tree.",
-  "project.read_module": "Reads a module's headers from the project's Source tree.",
-  "project.list_modules": "Enumerates the modules declared under the project's Source roots.",
-  "project.search_cpp": "Searches the project's own C++ on disk.",
-  "project.write_cpp_file": "Writes a file under the project's Source tree.",
-  "project.read_cpp_source": "Reads a .cpp from the project's Source tree.",
-  "project.write_source_file": "Writes into a named module's Public or Private folder.",
-  "project.read_source_file": "Reads from a named module's folder.",
-  "project.add_module_dependency": "Edits a Build.cs dependency array on disk.",
-  "project.add_cpp_member": "Edits a header on disk.",
-  "project.list_files": "Lists files on disk under a directory.",
-  "project.list_content_assets": "Walks the package files under a mount path on disk. It is the one asset query that needs no editor, and it says which questions it cannot answer without one.",
-
-  // The engine tree and the symbol index over it (T14). These read installed
-  // engine headers, which are there whether or not an editor is running.
-  "project.read_engine_header": "Reads an engine header from the installed engine tree.",
-  "project.find_engine_symbol": "Searches the installed engine headers.",
-  "project.list_engine_modules": "Enumerates modules in the installed engine tree.",
-  "project.search_engine_cpp": "Searches the installed engine sources.",
-  "project.build_engine_index": "Scans the installed engine headers into the on-disk symbol index.",
-  "project.verify_symbols": "Answers from the engine symbol index on disk.",
-  "project.suggest_build_deps": "Answers from the engine symbol index and reads the target Build.cs.",
-  "project.find_example_usage": "Searches the installed engine sources.",
-  "project.lint_cpp_header": "Checks a header on disk against the engine symbol index.",
-  "project.class_hierarchy": "Answers from the engine symbol index on disk.",
-  "project.find_references": "Searches the installed engine sources and the project's own.",
-  "project.find_callers": "Searches the installed engine sources and the project's own.",
-  "project.find_callees": "Reads the symbol's own body out of the engine sources.",
-  "project.symbol_context": "Reads the declaration and its surrounding lines off disk.",
-
-  // The surface describing itself. Reads the tool graph this process holds.
-  "project.search_tools": "Searches the tool graph this server holds in memory.",
-  "project.describe_action": "Reads the parameter schema out of the tool graph this server holds in memory.",
-  "project.execute_python_report": "Reads this session's own recorded calls.",
-  "project.list_available_actions": "Classifies the tool graph this server holds in memory.",
-  "project.check_install": "Inspects the project, the engine tree and the deployed plugin on disk.",
-  "project.list_categories": "Reads the tool graph this server holds and the engine's setting file; asks the editor for toolset states only when one is attached.",
-  "project.set_category_enabled": "Writes ue-mcp.yml and rebuilds the surface in this process; with no editor running, the engine's setting file is written instead of calling it.",
-  "project.set_toolset_enabled": "With no editor running, writes the engine's setting file; reaches the editor only when one is attached.",
-  "project.acquire_lease": "Asset leases live in this server process, not in the editor.",
-  "project.release_lease": "Asset leases live in this server process, not in the editor.",
-  "project.list_leases": "Asset leases live in this server process, not in the editor.",
-
-  // Process lifecycle. Starting an editor is the one thing that must work
-  // without one, and building requires the editor to be stopped.
-  "editor.start_editor": "Launches the editor process, then waits for its bridge. It exists for the case where nothing is running.",
-  "editor.stop_editor": "Asks the editor that published this project's port lockfile to quit. With no lockfile it refuses and names the file it checked. With no editor of this project left running, it ends a crash reporter a crashed one left holding the project's binaries.",
-  "editor.restart_editor": "Stops whatever holds this project open and starts it again.",
-  "editor.get_engine_state": "Probes the process table, the editor's log and the plugin's status file from outside. The bridge is consulted only when it is already connected.",
-  "editor.build_project": "Runs UnrealBuildTool out of process, which requires the editor to be STOPPED because it cannot link while an editor holds the module DLLs.",
-  "project.build": "Runs UnrealBuildTool out of process, which requires the editor to be STOPPED because it cannot link while an editor holds the module DLLs.",
-
-  // Checkpoints (#1482). The shadow history is on disk; the editor is consulted only when it is connected.
-  "editor.checkpoint": "Commits the shadow history on disk. A connected editor is asked for its dirty packages and re-armed for save recording.",
-  "editor.list_checkpoints": "Reads the shadow history on disk.",
-  "editor.list_changes": "Diffs checkpoints in the shadow history on disk. Asset diffs are added only when an editor is connected; without one each package says so.",
-  "editor.restore": "Writes files back from the shadow history. A connected editor reloads them; without one there is nothing loaded to reload.",
-  "editor.clear_checkpoints": "Deletes the shadow history on disk.",
-
-  // The mutation journal (#1481) is a file in the project's Saved folder.
-  "editor.journal_group": "Sets which group this server journals calls into. Nothing is sent anywhere.",
-  "editor.list_journal": "Reads the journal file on disk.",
-  "editor.summarize_csv_profile": "Reads a CSV profiler capture from disk; the editor is never called.",
-
-  // Reporting and introspection that never touch the editor.
-  "feedback.submit": "Posts to a GitHub tracker. It needs the network and a user approval prompt, not an editor.",
-  "feedback.route": "Answers where an issue would land from the plugin registry on disk.",
-  "plugins.list": "Reads the plugin set this server loaded.",
-  "plugins.describe": "Reads one loaded plugin's manifest.",
-};
-
-/**
- * Actions that have a handler but still reach the editor, with the reason.
- *
- * Kept separate from `LOCAL_ACTIONS` so both halves are stated rather than one
- * being inferred from the other's absence. Between them they must cover every
- * handler-backed action in the graph, which is what the unit test enforces.
- */
-export const EDITOR_BOUND_LOCAL_ACTIONS: Record<string, string> = {
-  "asset.search": "Wraps the search_assets bridge method, resolving content roots first.",
-  "fab.list_epic_tools": "Calls epic_list_toolsets and epic_list_mcp_tools, which read the editor's Toolset Registry and Unreal MCP plugin, and keeps the Fab tools.",
-  "editor.diff_checkpoint_asset": "Exports two versions from the shadow history and calls checkpoint_diff_asset, which loads them in the editor to diff them.",
-  "editor.open_checkpoint_diff": "Exports versions from the shadow history and calls checkpoint_open_native_diff, which opens Unreal's diff window.",
-  "editor.revert_group": "Replays each entry's rollback descriptor as a bridge call; entries restored from checkpoint snapshots are file writes the editor then reloads.",
-  "editor.revert_after_group": "Replays each entry's rollback descriptor as a bridge call; entries restored from checkpoint snapshots are file writes the editor then reloads.",
-  "blueprint.open_diff_window": "Opens Unreal's diff window through checkpoint_open_native_diff or source_control_diff, both in the editor.",
-  "asset.migrate": "Calls the migrate bridge method from a module-level helper, then rescans the destination editor.",
-  "asset.lock": "Calls the acquire_lock bridge method. The lock registry lives in the editor.",
-  "asset.unlock": "Calls the release_lock bridge method. The lock registry lives in the editor.",
-  "asset.unlock_all": "Calls the release_session_locks bridge method. The lock registry lives in the editor.",
-  "blueprint.author": "Runs a sequence of bridge calls to create and populate a Blueprint.",
-  "blueprint.diagram": "Reads the graph through its reader over the bridge, then draws it in this process.",
-  "animation.diagram": "Reads the graph through its reader over the bridge, then draws it in this process.",
-  "statetree.diagram": "Reads the graph through its reader over the bridge, then draws it in this process.",
-  "gameplay.diagram_behavior_tree": "Reads the graph through its reader over the bridge, then draws it in this process.",
-  "material.diagram": "Reads the graph through its reader over the bridge, then draws it in this process.",
-  "pcg.diagram": "Reads the graph through its reader over the bridge, then draws it in this process.",
-  "asset.diagram": "Reads the graph through its reader over the bridge, then draws it in this process.",
-  "niagara.batch": "Runs a sequence of bridge calls against one Niagara system.",
-  "pcg.wait_for_generation": "Polls the get_pcg_generation_state bridge method until a generation ends.",
-  "editor.execute_python": "Runs Python inside the editor process.",
-  "editor.capture_screenshot_sequence": "Calls the capture_screenshot bridge method once per frame on a fixed interval.",
-  "editor.batch": "Sends its steps to the editor as one execute_batch bridge call, which runs them in one game-thread job.",
-  "editor.play_in_editor_ignore_blueprint_errors": "Starts Play In Editor through the pie_start_ignoring_blueprint_errors bridge method.",
-  "editor.request_editor_shutdown": "Asks the running editor to shut itself down over the bridge.",
-};
-
-/** Where a handler-backed action's classification comes from. */
 export function classifyAvailability(tool: string, action: string, spec: ActionSpec): ActionVerdict {
-  const key = `${tool}.${action}`;
-
   if (spec.bridge) {
     return {
       tool,
@@ -201,11 +70,8 @@ export function classifyAvailability(tool: string, action: string, spec: ActionS
     };
   }
 
-  const local = LOCAL_ACTIONS[key];
-  if (local) return { tool, action, availability: "always", reason: local };
-
-  const bound = EDITOR_BOUND_LOCAL_ACTIONS[key];
-  if (bound) return { tool, action, availability: "editor", reason: bound };
+  if (spec.offline) return { tool, action, availability: "always", reason: spec.offline };
+  if (spec.editorBound) return { tool, action, availability: "editor", reason: spec.editorBound };
 
   return {
     tool,

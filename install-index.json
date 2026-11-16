@@ -1,0 +1,10 @@
+{
+  "anthropic": {
+    "title": "Anthropic model provider",
+    "manifest": "https://github.com/db-lyon/ue-mcp/releases/download/v{version}/ue-mcp-anthropic-{version}-manifest.json"
+  },
+  "studio": {
+    "title": "Studio",
+    "manifest": "https://github.com/db-lyon/ue-mcp-studio/releases/latest/download/latest.json"
+  }
+}

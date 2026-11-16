@@ -63,6 +63,7 @@ export const sourceActions: Record<string, ActionSpec> = {
   read_cpp_header: {
     kind: "handler",
     effect: "read",
+    offline: "Reads a header from the project's Source tree.",
     description: "Parse a .h file. Params: headerPath",
     handler: async (ctx, p) => {
       ctx.project.ensureLoaded();
@@ -75,6 +76,7 @@ export const sourceActions: Record<string, ActionSpec> = {
   read_module: {
     kind: "handler",
     effect: "read",
+    offline: "Reads a module's headers from the project's Source tree.",
     description: "Read module source. Params: moduleName",
     handler: async (ctx, p) => {
       ctx.project.ensureLoaded();
@@ -93,6 +95,7 @@ export const sourceActions: Record<string, ActionSpec> = {
   list_modules: {
     kind: "handler",
     effect: "read",
+    offline: "Enumerates the modules declared under the project's Source roots.",
     description: "List C++ modules. Params: none",
     handler: async (ctx) => {
       ctx.project.ensureLoaded();
@@ -112,6 +115,7 @@ export const sourceActions: Record<string, ActionSpec> = {
   search_cpp: {
     kind: "handler",
     effect: "read",
+    offline: "Searches the project's own C++ on disk.",
     description: "Search .h/.cpp files. Params: query, directory?",
     handler: async (ctx, p) => {
       ctx.project.ensureLoaded();
@@ -163,6 +167,7 @@ export const sourceActions: Record<string, ActionSpec> = {
   list_content_assets: {
     kind: "handler",
     effect: "read",
+    offline: "Walks the package files under a mount path on disk. It is the one asset query that needs no editor, and it says which questions it cannot answer without one.",
     description:
       "List the project's assets from the package files on DISK, which is the one asset query that "
       + "works with no editor running. Takes a mount path (/Game, /Game/Characters, or a plugin's "
@@ -184,6 +189,7 @@ export const sourceActions: Record<string, ActionSpec> = {
   list_files: {
     kind: "handler",
     effect: "read",
+    offline: "Lists files on disk under a directory.",
     description: "List files on disk under a directory, optionally filtered by extension(s) and by name. Runs in the MCP server process (no editor round-trip). Params: directory (inside the project: absolute, or relative to the project dir), extensions? (e.g. ['png','exr'] or 'png'), namePattern? (case-insensitive substring of the file name; maxResults counts matches, so a name search over a large tree is not cut short by files that do not match), recursive? (default false), maxResults? (default 1000) (#608)",
     handler: async (ctx, p) => {
       ctx.project.ensureLoaded();
@@ -234,6 +240,7 @@ export const sourceActions: Record<string, ActionSpec> = {
   write_cpp_file: {
     kind: "handler",
     effect: "mutate",
+    offline: "Writes a file under the project's Source tree.",
     description:
       "Write a .h / .cpp / .inl file under the project's Source/ tree. Used to append UPROPERTYs/UFUNCTIONs or method bodies after create_cpp_class. Writes are scoped to Source/ for safety. Params: path (relative to Source/ or absolute within Source/), content (full file contents). After editing, call live_coding_compile (for existing classes) or build_project (for new classes).",
     handler: async (ctx, p) => {
@@ -266,6 +273,7 @@ export const sourceActions: Record<string, ActionSpec> = {
   read_cpp_source: {
     kind: "handler",
     effect: "read",
+    offline: "Reads a .cpp from the project's Source tree.",
     description: "Read a .cpp file from the project Source/ tree. Companion to read_cpp_header for round-trip edits. Params: sourcePath (relative to Source/ or absolute).",
     handler: async (ctx, p) => {
       ctx.project.ensureLoaded();
@@ -280,6 +288,7 @@ export const sourceActions: Record<string, ActionSpec> = {
   write_source_file: {
     kind: "handler",
     effect: "mutate",
+    offline: "Writes into a named module's Public or Private folder.",
     description:
       "Write a .h/.cpp/.inl into a named module's Public/Private folder (resolves the module dir for you, including plugin modules under Plugins/*/Source/ that write_cpp_file refuses). After a new file, build_project + restart; after a body edit, live_coding_compile. Params: module (module name, default the project's primary module), visibility (Public|Private, default Private), fileName, content.",
     handler: async (ctx, p) => {
@@ -316,6 +325,7 @@ export const sourceActions: Record<string, ActionSpec> = {
   read_source_file: {
     kind: "handler",
     effect: "read",
+    offline: "Reads from a named module's folder.",
     description:
       "Read a .h/.cpp/.inl from a named module's folder (companion to write_source_file; resolves plugin modules too). With no visibility it tries Public then Private then the module root. Params: module, visibility?, fileName.",
     handler: async (ctx, p) => {
@@ -341,6 +351,7 @@ export const sourceActions: Record<string, ActionSpec> = {
   add_module_dependency: {
     kind: "handler",
     effect: "mutate",
+    offline: "Edits a Build.cs dependency array on disk.",
     description:
       "Add a module to a target module's Build.cs dependency array. Params: moduleName (the Build.cs to edit - must exist in the project), dependency (module name to add, e.g. 'UMG'), access? ('public'|'private', default 'private'). Creates the corresponding AddRange block if missing. Rebuild required afterward.",
     handler: async (ctx, p) => {
@@ -403,6 +414,7 @@ export const sourceActions: Record<string, ActionSpec> = {
   add_cpp_member: {
     kind: "handler",
     effect: "mutate",
+    offline: "Edits a header on disk.",
     // #423: append a UPROPERTY / UFUNCTION declaration to an existing UCLASS
     // header in the right access-specifier block. The recurring trap is that
     // raw appending lands the declaration in whatever access section the

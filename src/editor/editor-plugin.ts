@@ -24,7 +24,7 @@ interface PluginChannel {
 }
 
 export interface InstalledEditorPlugin {
-  /** The plugin's folder and descriptor name, e.g. UE_MCP_Studio. */
+  /** The plugin's folder and descriptor name, e.g. UE_MCP_Bridge. */
   name: string;
   /** The descriptor's FriendlyName, else its name. */
   title: string;

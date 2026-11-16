@@ -69,10 +69,6 @@
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 
-// Timing regions reached UE 5.7 in a form these headers confirm. Below that
-// the bracket still measures wall clock; it just does not appear in a trace.
-#define UE_MCP_HAS_TRACE_REGIONS (UE_MCP_HAS_5_7_API && MISCTRACE_ENABLED)
-
 // Every helper here is prefixed MCPProfiling. The module is a unity build, so
 // two .cpp files sharing a blob merge their anonymous namespaces and a helper
 // named the same as one in another handler file is a redefinition (C2084).

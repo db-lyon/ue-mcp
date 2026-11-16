@@ -11,7 +11,7 @@
  * The pipeline, its ordering, and the `guard.<name>.<phase>` task convention
  * live in `@db-lyon/flowkit/guard`, because none of that is about Unreal. What
  * stays here is what is: the shape of a bridge call, and the write
- * classification in `write-methods.ts` that decides which content paths a call
+ * classification in `dispatch/written-paths.ts` that decides which content paths a call
  * is about to modify.
  */
 import {
@@ -25,7 +25,7 @@ import * as fs from "node:fs";
 import type { IBridge } from "../bridge/bridge.js";
 import type { ProjectContext } from "../config/project.js";
 import type { EditorSession } from "../sessions/session.js";
-import { classifyWrite, type WriteClassification } from "./write-methods.js";
+import { classifyWrite, type WriteClassification } from "../dispatch/written-paths.js";
 import { bridgeMethodEffect, mayChangeState } from "../surface/action-effects.js";
 import type { ActionEffect } from "../surface/tool-types.js";
 

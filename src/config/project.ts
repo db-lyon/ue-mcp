@@ -88,7 +88,7 @@ export interface UeMcpConfig {
   /** Optional HTTP surface for flow.run (#144). Disabled by default. */
   http?: {
     enabled?: boolean;
-    /** Default 7723. Bound to 127.0.0.1 only. */
+    /** Default FLOW_HTTP_PORT (core/flow-http-port.ts). Bound to 127.0.0.1 only. */
     port?: number;
     /** Override bind host. Defaults to 127.0.0.1 - do not expose externally. */
     host?: string;
