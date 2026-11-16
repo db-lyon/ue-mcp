@@ -13,7 +13,7 @@
  * `leases` features in /v1/health.
  */
 import type { Runtime } from "../server/runtime.js";
-import type { ToolResult } from "../dispatch/server-dispatch.js";
+import type { ToolResult } from "../server/server-dispatch.js";
 
 export interface RouteResult {
   status: number;
