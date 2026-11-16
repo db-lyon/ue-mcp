@@ -2,7 +2,8 @@
 /**
  * Re-record a golden baseline (#817, plan item 1.10).
  *
- *     npm run golden:record                 the editor-down half
+ *     npm run golden:record                 the editor-down half, and the
+ *                                           declarations of the ue-mcp/daemon export
  *     npm run golden:record -- --connected   the editor-connected half
  *
  * Deliberately the same code path each guard uses: it runs the guard test with
@@ -38,7 +39,7 @@ const result = connected
     )
   : spawnSync(
       process.execPath,
-      [path.join(repoRoot, "node_modules", "vitest", "vitest.mjs"), "run", "tests/unit/golden-editor-down.test.ts"],
+      [path.join(repoRoot, "node_modules", "vitest", "vitest.mjs"), "run", "tests/unit/golden-editor-down.test.ts", "tests/unit/daemon-contract.test.ts"],
       {
         cwd: repoRoot,
         stdio: "inherit",

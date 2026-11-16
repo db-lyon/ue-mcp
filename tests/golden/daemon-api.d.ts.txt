@@ -1,0 +1,1230 @@
+// Recorded by tests/unit/daemon-contract.test.ts (npm run golden:record). Do not edit by hand.
+
+// ── contract/daemon.ts ──
+export declare const DAEMON_API_VERSION = 1;
+export declare const EXTENSION_API_VERSION = 3;
+export declare const EXTENSION_API_MIN_VERSION = 1;
+export interface ApiVersionRange {
+    min: number;
+    max: number;
+}
+export declare function apiVersionsOverlap(a: ApiVersionRange, b: ApiVersionRange): boolean;
+export declare const DAEMON_API_RANGE: ApiVersionRange;
+export declare const EXTENSION_API_RANGE: ApiVersionRange;
+export declare function extensionApiSupported(min: number, max: number): boolean;
+export declare const DAEMON_FEATURES: readonly ["checkpoints", "checkpoints.assetDiff", "skills", "context.projection", "actions.effects", "install.pendingBuild", "editor.rebuild", "ui.scopedKeys", "ui.extensions", "flows.stepApproval", "sessions.access", "journal", "tools.categories", "leases", "dialogs.native"];
+export type DaemonFeature = (typeof DAEMON_FEATURES)[number];
+export declare const DAEMON_FEATURES_BEYOND_ROUTES: {
+    readonly [F in DaemonFeature]?: string;
+};
+export declare const EXTENSION_FEATURES: readonly ["callAction.dialogPrompt", "callAction.elicit", "callAction.access", "checkpoints", "checkpoints.assetDiff", "events.dialog", "events.script", "models.provider", "modes", "modes.playtest", "skills", "context.projection", "actions.effects", "extension.versions", "ui.scopedKeys", "ui.extensions", "extension.services", "flows.stepApproval", "dialogs.native"];
+export type ExtensionFeature = (typeof EXTENSION_FEATURES)[number];
+export declare const EXTENSION_FEATURE_MEMBERS: {
+    readonly [F in ExtensionFeature]: keyof DaemonExtensionApi;
+};
+export type DaemonRouteMethod = "GET" | "POST" | "PUT" | "DELETE" | "ANY" | "WS";
+export interface DaemonRoute {
+    method: DaemonRouteMethod;
+    path: string;
+    feature?: DaemonFeature;
+    summary: string;
+}
+export declare const DAEMON_ROUTES: {
+    readonly health: {
+        readonly method: "GET";
+        readonly path: "/v1/health";
+        readonly feature?: DaemonFeature;
+        readonly summary: string;
+    };
+    readonly events: {
+        readonly method: "GET";
+        readonly path: "/v1/events";
+        readonly feature?: DaemonFeature;
+        readonly summary: string;
+    };
+    readonly install: {
+        readonly method: "GET";
+        readonly path: "/v1/install";
+        readonly feature?: DaemonFeature;
+        readonly summary: string;
+    };
+    readonly "update.check": {
+        readonly method: "GET";
+        readonly path: "/v1/update";
+        readonly feature?: DaemonFeature;
+        readonly summary: string;
+    };
+    readonly "update.apply": {
+        readonly method: "POST";
+        readonly path: "/v1/update/apply";
+        readonly feature?: DaemonFeature;
+        readonly summary: string;
+    };
+    readonly skills: {
+        readonly method: "GET";
+        readonly path: "/v1/skills";
+        readonly feature?: DaemonFeature;
+        readonly summary: string;
+    };
+    readonly actions: {
+        readonly method: "GET";
+        readonly path: "/v1/actions";
+        readonly feature?: DaemonFeature;
+        readonly summary: string;
+    };
+    readonly "context.projection": {
+        readonly method: "GET";
+        readonly path: "/v1/context/projection";
+        readonly feature?: DaemonFeature;
+        readonly summary: string;
+    };
+    readonly "sessions.list": {
+        readonly method: "GET";
+        readonly path: "/v1/sessions";
+        readonly feature?: DaemonFeature;
+        readonly summary: string;
+    };
+    readonly "sessions.access": {
+        readonly method: "ANY";
+        readonly path: "/v1/sessions/:id/access";
+        readonly feature?: DaemonFeature;
+        readonly summary: string;
+    };
+    readonly "sessions.unknown": {
+        readonly method: "ANY";
+        readonly path: "/v1/sessions/*";
+        readonly feature?: DaemonFeature;
+        readonly summary: string;
+    };
+    readonly "dialogs.native": {
+        readonly method: "GET";
+        readonly path: "/v1/dialogs/native";
+        readonly feature?: DaemonFeature;
+        readonly summary: string;
+    };
+    readonly "dialogs.native.press": {
+        readonly method: "POST";
+        readonly path: "/v1/dialogs/native/press";
+        readonly feature?: DaemonFeature;
+        readonly summary: string;
+    };
+    readonly shutdown: {
+        readonly method: "POST";
+        readonly path: "/v1/shutdown";
+        readonly feature?: DaemonFeature;
+        readonly summary: string;
+    };
+    readonly handoff: {
+        readonly method: "POST";
+        readonly path: "/v1/handoff";
+        readonly feature?: DaemonFeature;
+        readonly summary: string;
+    };
+    readonly "editor.start": {
+        readonly method: "POST";
+        readonly path: "/v1/editor/start";
+        readonly feature?: DaemonFeature;
+        readonly summary: string;
+    };
+    readonly "editor.stop": {
+        readonly method: "POST";
+        readonly path: "/v1/editor/stop";
+        readonly feature?: DaemonFeature;
+        readonly summary: string;
+    };
+    readonly "editor.restart": {
+        readonly method: "POST";
+        readonly path: "/v1/editor/restart";
+        readonly feature?: DaemonFeature;
+        readonly summary: string;
+    };
+    readonly "editor.rebuild": {
+        readonly method: "POST";
+        readonly path: "/v1/editor/rebuild";
+        readonly feature?: DaemonFeature;
+        readonly summary: string;
+    };
+    readonly "checkpoints.state": {
+        readonly method: "GET";
+        readonly path: "/v1/checkpoints";
+        readonly feature?: DaemonFeature;
+        readonly summary: string;
+    };
+    readonly "checkpoints.setEnabled": {
+        readonly method: "PUT";
+        readonly path: "/v1/checkpoints/enabled";
+        readonly feature?: DaemonFeature;
+        readonly summary: string;
+    };
+    readonly "checkpoints.create": {
+        readonly method: "POST";
+        readonly path: "/v1/checkpoints";
+        readonly feature?: DaemonFeature;
+        readonly summary: string;
+    };
+    readonly "checkpoints.changes": {
+        readonly method: "GET";
+        readonly path: "/v1/checkpoints/changes";
+        readonly feature?: DaemonFeature;
+        readonly summary: string;
+    };
+    readonly "checkpoints.assetDiff": {
+        readonly method: "GET";
+        readonly path: "/v1/checkpoints/asset-diff";
+        readonly feature?: DaemonFeature;
+        readonly summary: string;
+    };
+    readonly "checkpoints.thumbnail": {
+        readonly method: "GET";
+        readonly path: "/v1/checkpoints/thumbnails/:file";
+        readonly feature?: DaemonFeature;
+        readonly summary: string;
+    };
+    readonly "checkpoints.nativeDiff": {
+        readonly method: "POST";
+        readonly path: "/v1/checkpoints/native-diff";
+        readonly feature?: DaemonFeature;
+        readonly summary: string;
+    };
+    readonly "checkpoints.restore": {
+        readonly method: "POST";
+        readonly path: "/v1/checkpoints/restore";
+        readonly feature?: DaemonFeature;
+        readonly summary: string;
+    };
+    readonly "checkpoints.clear": {
+        readonly method: "DELETE";
+        readonly path: "/v1/checkpoints";
+        readonly feature?: DaemonFeature;
+        readonly summary: string;
+    };
+    readonly "journal.state": {
+        readonly method: "GET";
+        readonly path: "/v1/journal";
+        readonly feature?: DaemonFeature;
+        readonly summary: string;
+    };
+    readonly "journal.setGroup": {
+        readonly method: "PUT";
+        readonly path: "/v1/journal/group";
+        readonly feature?: DaemonFeature;
+        readonly summary: string;
+    };
+    readonly "journal.revert": {
+        readonly method: "POST";
+        readonly path: "/v1/journal/revert";
+        readonly feature?: DaemonFeature;
+        readonly summary: string;
+    };
+    readonly "journal.revertAfter": {
+        readonly method: "POST";
+        readonly path: "/v1/journal/revert-after";
+        readonly feature?: DaemonFeature;
+        readonly summary: string;
+    };
+    readonly "tools.list": {
+        readonly method: "GET";
+        readonly path: "/v1/tools";
+        readonly feature?: DaemonFeature;
+        readonly summary: string;
+    };
+    readonly "tools.categories": {
+        readonly method: "POST";
+        readonly path: "/v1/tools/categories";
+        readonly feature?: DaemonFeature;
+        readonly summary: string;
+    };
+    readonly "tools.toolsets": {
+        readonly method: "POST";
+        readonly path: "/v1/tools/toolsets";
+        readonly feature?: DaemonFeature;
+        readonly summary: string;
+    };
+    readonly "leases.list": {
+        readonly method: "GET";
+        readonly path: "/v1/leases";
+        readonly feature?: DaemonFeature;
+        readonly summary: string;
+    };
+    readonly "tools.unsupported": {
+        readonly method: "ANY";
+        readonly path: "/v1/tools/*";
+        readonly feature?: DaemonFeature;
+        readonly summary: string;
+    };
+    readonly "leases.unsupported": {
+        readonly method: "ANY";
+        readonly path: "/v1/leases";
+        readonly feature?: DaemonFeature;
+        readonly summary: string;
+    };
+    readonly "plugins.list": {
+        readonly method: "GET";
+        readonly path: "/v1/plugins";
+        readonly feature?: DaemonFeature;
+        readonly summary: string;
+    };
+    readonly "plugins.catalog": {
+        readonly method: "GET";
+        readonly path: "/v1/plugins/catalog";
+        readonly feature?: DaemonFeature;
+        readonly summary: string;
+    };
+    readonly "plugins.install": {
+        readonly method: "POST";
+        readonly path: "/v1/plugins/install";
+        readonly feature?: DaemonFeature;
+        readonly summary: string;
+    };
+    readonly "plugins.uninstall": {
+        readonly method: "POST";
+        readonly path: "/v1/plugins/uninstall";
+        readonly feature?: DaemonFeature;
+        readonly summary: string;
+    };
+    readonly "plugins.update": {
+        readonly method: "POST";
+        readonly path: "/v1/plugins/update";
+        readonly feature?: DaemonFeature;
+        readonly summary: string;
+    };
+    readonly flows: {
+        readonly method: "ANY";
+        readonly path: "/v1/flows/*";
+        readonly feature?: DaemonFeature;
+        readonly summary: string;
+    };
+    readonly ext: {
+        readonly method: "ANY";
+        readonly path: "/v1/ext/*";
+        readonly feature?: DaemonFeature;
+        readonly summary: string;
+    };
+    readonly "ui.extension": {
+        readonly method: "GET";
+        readonly path: "/ui/ext/*";
+        readonly feature?: DaemonFeature;
+        readonly summary: string;
+    };
+    readonly ui: {
+        readonly method: "GET";
+        readonly path: "/ui/*";
+        readonly feature?: DaemonFeature;
+        readonly summary: string;
+    };
+    readonly mcp: {
+        readonly method: "WS";
+        readonly path: "/v1/mcp";
+        readonly feature?: DaemonFeature;
+        readonly summary: string;
+    };
+};
+export type DaemonRouteName = keyof typeof DAEMON_ROUTES;
+export declare function describeRoute(name: DaemonRouteName, method?: "GET" | "POST" | "PUT" | "DELETE"): string;
+export declare function routePath(name: DaemonRouteName, params?: Record<string, string>): string;
+export declare const DAEMON_HEADERS: {
+    readonly session: "x-ue-mcp-session";
+    readonly client: "x-ue-mcp-client";
+    readonly access: "x-ue-mcp-access";
+    readonly flowToken: "x-ue-mcp-token";
+};
+export declare const DAEMON_EVENT_TYPES: readonly ["daemon.started", "daemon.stopping", "editor.connected", "editor.disconnected", "editor.operation", "client.connected", "client.disconnected", "call.started", "call.finished", "session.access", "leases.released", "plugins.changed", "update.available", "update.staged", "update.building", "update.applied", "update.failed", "dialog.opened", "dialog.updated", "dialog.answered", "dialog.delegated", "dialog.closed", "flow.run_started", "flow.step_started", "flow.step_completed", "flow.step_failed", "flow.run_completed", "script.run_started", "script.step_started", "script.step_acted", "script.step_passed", "script.step_failed", "script.verdict_requested", "script.verdict", "script.run_finished", "checkpoint.created", "checkpoint.restored", "checkpoints.toggled", "checkpoints.cleared"];
+export type DaemonEventType = (typeof DAEMON_EVENT_TYPES)[number];
+export declare const DAEMON_GAP_EVENT = "gap";
+export interface DaemonEvent {
+    id: number;
+    type: string;
+    at: string;
+    data: Record<string, unknown>;
+}
+export interface DaemonDiscovery {
+    pid: number;
+    port: number;
+    token: string;
+    version: string;
+    apiVersion: number;
+    projectRoot: string;
+    startedAt: string;
+}
+export type ContextStrategy = "full" | "lean" | "micro";
+export type ActionEffect = "read" | "mutate" | "unknown";
+export type ActionEffectSource = "declared" | "inferred";
+export interface ElicitParams {
+    message: string;
+    _meta?: Record<string, unknown>;
+    requestedSchema: {
+        type: "object";
+        properties: Record<string, ElicitPrimitiveSchema>;
+        required?: string[];
+    };
+}
+export type ElicitPrimitiveSchema = {
+    type: "string";
+    title?: string;
+    description?: string;
+    enum?: string[];
+    enumNames?: string[];
+    default?: string;
+} | {
+    type: "number" | "integer";
+    title?: string;
+    description?: string;
+    default?: number;
+} | {
+    type: "boolean";
+    title?: string;
+    description?: string;
+    default?: boolean;
+} | (ElicitMultiSelectBase & {
+    items: {
+        type: "string";
+        enum: string[];
+    };
+}) | (ElicitMultiSelectBase & {
+    items: {
+        anyOf: Array<{
+            const: string;
+            title: string;
+        }>;
+    };
+});
+interface ElicitMultiSelectBase {
+    type: "array";
+    title?: string;
+    description?: string;
+    minItems?: number;
+    maxItems?: number;
+    default?: string[];
+}
+export interface ElicitResult {
+    action: "accept" | "decline" | "cancel";
+    content?: Record<string, string | number | boolean | string[]>;
+}
+export interface ModelToolCall {
+    id: string;
+    name: string;
+    arguments: Record<string, unknown>;
+}
+export interface ModelMessage {
+    role: "system" | "user" | "assistant" | "tool";
+    content: string;
+    toolCalls?: ModelToolCall[];
+    toolCallId?: string;
+    name?: string;
+}
+export interface ModelToolDefinition {
+    name: string;
+    description?: string;
+    parameters: Record<string, unknown>;
+}
+export interface ModelRequest {
+    system?: string;
+    prompt?: string;
+    messages?: ModelMessage[];
+    model?: string;
+    maxTokens?: number;
+    temperature?: number;
+    stop?: string[];
+    schema?: Record<string, unknown>;
+    tools?: ModelToolDefinition[];
+    toolChoice?: "auto" | "none" | "required" | {
+        name: string;
+    };
+    signal?: AbortSignal;
+}
+export interface ModelResponse {
+    text: string;
+    parsed?: unknown;
+    toolCalls?: ModelToolCall[];
+    finishReason?: "stop" | "tool_use" | "length" | (string & {});
+    usage?: {
+        inputTokens?: number;
+        outputTokens?: number;
+    };
+    model?: string;
+}
+export interface ModelProvider {
+    complete(req: ModelRequest): Promise<ModelResponse>;
+}
+export type DialogBlock = {
+    type: "paragraph";
+    text: string;
+} | {
+    type: "table";
+    columns: string[];
+    rows: string[][];
+    checked?: Array<boolean | null>;
+    items?: Array<number | null>;
+};
+export interface DialogPromptRequest extends ElicitParams {
+    dialog: {
+        editor: string;
+        title: string;
+        message: string;
+        buttons: string[];
+        items?: Array<{
+            index: number;
+            label: string;
+            cells: string[];
+            checked: boolean;
+        }>;
+        blocks?: DialogBlock[];
+        native?: {
+            hwnd: string;
+            pid: number;
+            kind: "gpu-crash" | "assert" | "ensure" | "missing-modules" | "crash" | "message";
+            summary: string;
+            details?: string[];
+        };
+        subject: string;
+        minHumanMs: number;
+    };
+}
+export type DialogPromptResult = ElicitResult | {
+    action: "delegate";
+};
+export type DialogPromptFn = (request: DialogPromptRequest) => Promise<DialogPromptResult>;
+export interface DialogEventData {
+    editor: string;
+    title: string;
+    message: string;
+    buttons: string[];
+    items?: Array<{
+        index: number;
+        label: string;
+        cells: string[];
+        checked: boolean;
+    }>;
+    blocks?: DialogBlock[];
+    mode?: "auto" | "interactive" | "defer";
+    button?: string;
+    via?: "prompt" | "action" | "person";
+    native?: NativeDialogInfo;
+}
+export interface NativeDialogInfo {
+    hwnd: string;
+    pid: number;
+    kind: "gpu-crash" | "assert" | "ensure" | "missing-modules" | "crash" | "message";
+    summary: string;
+    details?: string[];
+}
+export interface NativeDialogView extends NativeDialogInfo {
+    editor: string;
+    title: string;
+    message: string;
+    text: string[];
+    buttons: string[];
+    hung: boolean;
+}
+export interface NativeDialogPressResult {
+    pressed: boolean;
+    closed: boolean;
+    button?: string;
+    error?: string;
+}
+export type DisconnectCause = "closed" | "crashed" | "restarting" | "rebuild" | "unknown";
+export interface EditorStatus {
+    name: string;
+    connected: boolean;
+    port: number;
+    pid: number | null;
+    lastDisconnect: {
+        cause: DisconnectCause;
+        detail?: string;
+        at: string;
+    } | null;
+}
+export interface McpSessionInfo {
+    id: string;
+    client: string;
+    connectedAt: string;
+    access: "read-write" | "read-only";
+}
+export interface UiManifest {
+    name: string;
+    version: string;
+    api: {
+        min: number;
+        max: number;
+    };
+    files: Record<string, string>;
+    module?: {
+        entry: string;
+        host: string;
+    };
+}
+export interface UiBundleInfo {
+    name: string;
+    version: string;
+    base: string;
+    module?: {
+        entry: string;
+        host: string;
+    };
+}
+export interface RefusedExtension {
+    name: string;
+    version: string;
+    reason: string;
+    needsUeMcp?: string;
+}
+export interface DaemonHealth {
+    ok: true;
+    pid: number;
+    version: string;
+    apiVersion: number;
+    projectRoot: string;
+    startedAt: string;
+    editors: EditorStatus[];
+    clients: number;
+    inflight: number;
+    lastEventId: number;
+    extensions: Array<{
+        name: string;
+        version: string;
+    }>;
+    refusedExtensions?: RefusedExtension[];
+    ui: string | null;
+    uiBundles?: UiBundleInfo[];
+    features?: readonly string[];
+    sessions?: McpSessionInfo[];
+}
+export type InstallKind = "source" | "binary";
+export interface InstallMarker {
+    kind: InstallKind;
+    engine: string | null;
+    platform: string | null;
+    version: string | null;
+}
+export interface PendingBuild {
+    version: string;
+    at: string;
+    reason: string;
+    failed?: {
+        at: string;
+        message: string;
+    };
+}
+export interface InstallBridgeStatus {
+    deployed: boolean;
+    pluginDir: string | null;
+    installKind: InstallKind | null;
+    enabledInUproject: boolean;
+    packagedVersion: string | null;
+    installedVersion: string | null;
+    versionMatch: boolean | null;
+    compiled: boolean;
+    binaryPath?: string;
+    stale: boolean;
+    pendingBuild: PendingBuild | null;
+}
+export interface ToolchainReport {
+    present: boolean;
+    name: string | null;
+    detail?: string;
+    probed: string[];
+    fix?: string;
+}
+export interface EngineStatus {
+    resolved: boolean;
+    root: string | null;
+    source: string | null;
+    buildTool: string | null;
+}
+export interface InstallProblem {
+    code: "no_engine" | "no_toolchain" | "bridge_not_deployed" | "bridge_not_enabled" | "bridge_never_compiled" | "bridge_build_stale" | "bridge_version_mismatch";
+    what: string;
+    fix: string;
+}
+export interface ClientStatus {
+    id: string;
+    name: string;
+    configPath: string;
+    detected: boolean;
+    configured: boolean;
+    pinned: string | null;
+}
+export interface StatusReport {
+    version: string;
+    node: {
+        version: string;
+        execPath: string;
+    };
+    project: {
+        path: string;
+        name: string;
+        engine: string | null;
+        engineAssociation: string | null;
+    };
+    plugin: InstallBridgeStatus & {
+        dirSource: "instance-record" | "default" | "scan" | null;
+        marker: InstallMarker | null;
+    };
+    editor: {
+        running: boolean;
+        instances: Array<{
+            pid: number;
+            port: number;
+            state: string | null;
+            alive: boolean;
+            startedAt: string | null;
+        }>;
+    };
+    toolchain: ToolchainReport;
+    engine: EngineStatus;
+    config: {
+        path: string;
+        exists: boolean;
+    };
+    clients: ClientStatus[];
+    ok: boolean;
+    problems: InstallProblem[];
+    nextSteps: string[];
+}
+export declare const MACHINE_REPORT_VERSION = 1;
+export interface MachineDaemon {
+    key: string;
+    projectRoot: string;
+    uproject: string | null;
+    pid: number;
+    port: number;
+    version: string;
+    startedAt: string;
+    discovery: string;
+    log: string;
+}
+export interface MachineProject {
+    name: string;
+    uproject: string;
+    dir: string;
+    key: string;
+    source: "recent" | "added";
+    lastOpened: string | null;
+    engine: {
+        association: string | null;
+        version: string | null;
+    };
+    editor: {
+        running: boolean;
+        pids: number[];
+    };
+    ueMcp: {
+        setUp: boolean;
+        bridge: {
+            version: string;
+            kind: "source" | "binary" | null;
+        } | null;
+        config: boolean;
+    };
+    extensions: Record<string, string>;
+    plugins: Array<{
+        name: string;
+        version: string | null;
+    }>;
+    daemon: {
+        discovery: string;
+        log: string;
+        running: MachineDaemon | null;
+    };
+}
+export interface MachineReport {
+    version: typeof MACHINE_REPORT_VERSION;
+    ueMcp: string;
+    daemonDir: string;
+    projects: MachineProject[];
+    daemons: MachineDaemon[];
+}
+export type CheckpointTrigger = "client" | "restore-before" | "restore-after";
+export type ChangeStatus = "added" | "modified" | "deleted";
+export type ChangeKind = "package" | "config" | "source" | "other";
+export interface CheckpointInfo {
+    id: string;
+    label: string;
+    createdAt: string;
+    trigger: CheckpointTrigger;
+    files: number;
+}
+export interface ChangeEntry {
+    path: string;
+    status: ChangeStatus;
+    kind: ChangeKind;
+    untracked?: true;
+    large?: true;
+    diff?: string;
+    blueprintDiff?: unknown;
+    assetDiff?: AssetDiff;
+}
+export interface RestoreRefusal {
+    path: string;
+    reason: "edited-outside" | "not-recorded" | "write-failed";
+    detail?: string;
+}
+export interface CheckpointState {
+    editor: string;
+    enabled: boolean;
+    source: "config" | "session";
+    configured: boolean;
+    repository: string | null;
+    checkpoints: CheckpointInfo[];
+}
+export interface CheckpointResult extends CheckpointInfo {
+    editor: string;
+    changes: ChangeEntry[];
+    dirtyPackages: string[];
+    editorConnected: boolean;
+}
+export interface ChangesResult {
+    editor: string;
+    from: string;
+    to: string | null;
+    changes: ChangeEntry[];
+    assetDiffs?: {
+        limit: number;
+        diffed: number;
+        deferred: string[];
+    };
+}
+export interface NativeDiffResult {
+    editor: string;
+    path: string;
+    opened: "window" | "editor" | "external";
+    windowTitle?: string;
+    tool?: string;
+    revisions?: {
+        before: {
+            label: string;
+            date: string;
+        };
+        after: {
+            label: string;
+            date: string;
+        };
+    };
+    unloadsOnClose?: boolean;
+    tempPackages?: string[];
+}
+export interface RestoreResult {
+    editor: string;
+    checkpoint: string;
+    before: string;
+    after: string;
+    restored: Array<{
+        path: string;
+        action: "written" | "deleted";
+    }>;
+    refused: RestoreRefusal[];
+    reloaded: string[];
+    unloaded: string[];
+    configsReloaded: string[];
+    reopened: string[];
+}
+export interface AssetDiffRecord {
+    displayString: string;
+    diffType: string;
+    category?: string;
+    toolTip?: string;
+    group?: string;
+    hidden?: boolean;
+    path?: string;
+    label?: string;
+    property?: string;
+    before?: string | null;
+    after?: string | null;
+    graph?: string;
+    node1?: AssetDiffNode;
+    node2?: AssetDiffNode;
+    pin1?: {
+        name: string;
+        direction: string;
+        nodeGuid?: string;
+        defaultValue: string;
+        linkedTo: string[];
+    };
+    pin2?: {
+        name: string;
+        direction: string;
+        nodeGuid?: string;
+        defaultValue: string;
+        linkedTo: string[];
+    };
+    properties?: AssetDiffRecord[];
+    facts?: AssetFact[];
+    treeLocation?: number[];
+    owningObjectPath?: string;
+    propertyDiffType?: string;
+}
+export interface AssetDiffNode {
+    guid: string;
+    name: string;
+    class: string;
+    title: string;
+    fullTitle?: string;
+    pins?: AssetDiffNodePin[];
+    propertiesOf?: string;
+    properties?: AssetDiffNodeProperty[];
+    propertiesDropped?: number;
+}
+export interface AssetDiffNodePin {
+    name: string;
+    displayName: string;
+    defaultValue: string;
+    linked: boolean;
+}
+export interface AssetDiffNodeProperty {
+    name: string;
+    displayName: string;
+    value: string;
+    isDefault: boolean;
+}
+export interface AssetDiffSection {
+    category: string;
+    kind: "properties" | "graph" | "components";
+    engineSource: string;
+    entries: AssetDiffRecord[];
+    hiddenChanges?: number;
+    notes?: string[];
+}
+export interface AssetFact {
+    name: string;
+    value: string;
+}
+export type AssetThumbnail = {
+    id: string;
+    url: string;
+    source: "rendered" | "saved" | "graph";
+    note?: string;
+    graph?: string;
+} | {
+    error: string;
+};
+export interface AssetVersion {
+    class: string;
+    objectName?: string;
+    facts: AssetFact[];
+    thumbnail?: AssetThumbnail;
+    classThumbnail?: AssetThumbnail;
+}
+export interface AssetDiff {
+    state: "ready" | "deferred" | "error";
+    error?: string;
+    packageName?: string;
+    assetClass?: string;
+    status?: "added" | "modified" | "deleted";
+    engine?: {
+        tool: string;
+        note: string;
+        native: "window" | "details" | "text";
+        nativeAvailable?: boolean;
+        nativeReason?: string;
+        blueprintTypeDiff?: boolean;
+    };
+    before?: AssetVersion | null;
+    after?: AssetVersion | null;
+    classChanged?: string;
+    sections?: AssetDiffSection[];
+    textDiff?: {
+        format: string;
+        diff: string;
+    };
+    blueprint?: Record<string, unknown>;
+    recordCount?: number;
+    recordsDropped?: number;
+    summary: string;
+    nativeDiff: {
+        available: boolean;
+        reason?: string;
+    };
+}
+export type DaemonSkillOwner = {
+    kind: "ue-mcp";
+    version: string;
+} | {
+    kind: "plugin";
+    package: string;
+    version: string | null;
+} | {
+    kind: "project";
+};
+export type ProjectSkillFolder = ".claude/skills" | ".agents/skills";
+export interface ShadowedSkill {
+    location: "packaged" | "project";
+    folder?: ProjectSkillFolder;
+    dir: string;
+}
+export interface DaemonSkill {
+    id: string;
+    name: string;
+    description: string;
+    dir: string;
+    files: string[];
+    body: string;
+    frontmatter: Record<string, unknown>;
+    tokens: number;
+    owner: DaemonSkillOwner;
+    location: "packaged" | "project";
+    folder?: ProjectSkillFolder;
+    shadows?: ShadowedSkill[];
+    problems: string[];
+}
+export interface ContextProjectionOptions {
+    strategy: ContextStrategy;
+    categories?: string[];
+}
+export interface ProjectedTool {
+    name: string;
+    description: string;
+    inputSchema: Record<string, unknown>;
+    category: string | null;
+}
+export interface ContextProjection {
+    strategy: ContextStrategy;
+    categories: string[];
+    instructions: string;
+    tools: ProjectedTool[];
+    seedTokens: number;
+    estimator: "chars/4";
+}
+export interface ActionEffectInfo {
+    category: string;
+    action: string;
+    effect: ActionEffect;
+    effectSource: ActionEffectSource | "undeclared";
+    destructive: boolean;
+    destructiveSource: "declared" | "lexicon" | "none";
+}
+export type ContextScopeBucket = "1-3" | "4-8" | "9+";
+export interface ContextMeasurementTask {
+    id: string;
+    totalTokens: number;
+    modelCalls: number;
+    discoveryCalls: number;
+    passed: boolean;
+}
+export interface ContextMeasurementRun {
+    model: {
+        vendor: string;
+        model: string;
+    };
+    scope: ContextScopeBucket;
+    strategy: ContextStrategy;
+    seedTokens: number;
+    tasks: ContextMeasurementTask[];
+}
+export interface ContextMeasurement {
+    version: 1;
+    measuredAt: string;
+    ueMcpVersion: string;
+    client?: {
+        name: string;
+        version: string;
+    };
+    runs: ContextMeasurementRun[];
+}
+export type ContextMeasurementParse = {
+    ok: true;
+    value: ContextMeasurement;
+} | {
+    ok: false;
+    errors: string[];
+};
+export interface FlowStepApprovalRequest {
+    runId: string;
+    flowName: string;
+    task: string;
+    phase: string;
+    options: Record<string, unknown>;
+    token: string;
+}
+export type FlowStepDecision = {
+    allow: true;
+} | {
+    allow: false;
+    reason?: string;
+};
+export type FlowStepApprover = (request: FlowStepApprovalRequest) => Promise<FlowStepDecision>;
+export interface ExtensionManifest {
+    name?: string;
+    api?: {
+        min?: number;
+        max?: number;
+    };
+    ueMcp?: string;
+    ui?: {
+        min?: string;
+        root?: boolean;
+    };
+}
+export interface ExtensionRequest {
+    method: string;
+    path: string;
+    params: Record<string, string>;
+    query: Record<string, string>;
+    headers: Record<string, string | string[] | undefined>;
+    body: unknown;
+}
+export interface ExtensionResponse {
+    status?: number;
+    headers?: Record<string, string>;
+    body?: unknown;
+}
+export type ExtensionHandler = (req: ExtensionRequest) => ExtensionResponse | undefined | Promise<ExtensionResponse | undefined>;
+export interface CallActionOptions {
+    dialogPrompt?: DialogPromptFn;
+    dialogWaitMs?: number;
+    elicit?: (params: ElicitParams) => Promise<ElicitResult>;
+    access?: "read-write" | "read-only";
+}
+export interface ContextCallOptions extends CallActionOptions {
+    strategy?: ContextStrategy;
+    categories?: string[];
+}
+export interface ActionResult {
+    isError: boolean;
+    content: Array<{
+        type: string;
+        text?: string;
+    }>;
+}
+export interface ExtensionServicesApi {
+    provide(id: string, impl: unknown): () => void;
+    get<T>(id: string): T | undefined;
+    watch<T>(id: string, cb: (impl: T | undefined) => void): () => void;
+}
+export interface DaemonExtensionApi {
+    apiVersion: number;
+    version: string;
+    projectDir: string;
+    dataDir: string;
+    events: {
+        publish(type: string, data?: Record<string, unknown>): DaemonEvent;
+        subscribe(listener: (e: DaemonEvent) => void): () => void;
+        since(lastId: number): {
+            events: DaemonEvent[];
+            gap: boolean;
+        };
+    };
+    route(method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE", path: string, handler: ExtensionHandler): void;
+    callAction(category: string, action: string, args?: Record<string, unknown>, opts?: CallActionOptions): Promise<ActionResult>;
+    features?: readonly string[];
+    nativeDialogs?: {
+        list(): NativeDialogView[];
+        press(hwnd: string, button: string, opts?: {
+            pid?: number;
+        }): Promise<NativeDialogPressResult>;
+    };
+    flows?: {
+        approveSteps(approver: FlowStepApprover): () => void;
+    };
+    services?: ExtensionServicesApi;
+    models?: {
+        register(provider: ModelProvider): () => void;
+    };
+    checkpoints?: {
+        state(opts?: {
+            editor?: string;
+            limit?: number;
+        }): Promise<CheckpointState>;
+        setEnabled(enabled: boolean | null, opts?: {
+            editor?: string;
+        }): Promise<CheckpointState>;
+        create(label?: string, opts?: {
+            editor?: string;
+        }): Promise<CheckpointResult>;
+        changes(from: string, to?: string, opts?: {
+            editor?: string;
+            assetDiffs?: boolean;
+        }): Promise<ChangesResult>;
+        assetDiff?(from: string, to: string | undefined, path: string, opts?: {
+            editor?: string;
+        }): Promise<AssetDiff>;
+        thumbnail?(id: string, opts?: {
+            editor?: string;
+        }): {
+            file: string;
+            type: string;
+        } | null;
+        openNativeDiff?(path: string, from: string, to?: string, opts?: {
+            editor?: string;
+        }): Promise<NativeDiffResult>;
+        restore(checkpoint: string, opts?: {
+            paths?: string[];
+            force?: boolean;
+            editor?: string;
+        }): Promise<RestoreResult>;
+        clear(opts?: {
+            editor?: string;
+        }): Promise<{
+            editor: string;
+            cleared: true;
+        }>;
+    };
+    skills?: {
+        list(): DaemonSkill[];
+    };
+    context?: {
+        project(opts: ContextProjectionOptions): ContextProjection;
+        call(tool: string, input: Record<string, unknown>, opts?: ContextCallOptions): Promise<ActionResult>;
+    };
+    actions?: {
+        effects(categories?: string[]): ActionEffectInfo[];
+    };
+    versions?(): {
+        loaded: string;
+        recorded: string | null;
+        installed: string[];
+    };
+    editors(): EditorStatus[];
+    editorOperation(op: "start" | "stop" | "restart" | "rebuild"): Promise<Record<string, unknown>>;
+    setBusy(busy: () => boolean): void;
+    ui: {
+        trustKey(pem: string): void;
+        install(dir: string): UiManifest;
+        active(): UiManifest | null;
+        own?(): UiManifest | null;
+    };
+    registryAccount(): Promise<{
+        login: string;
+        token: string;
+        registry: string;
+    } | null>;
+    modes?: {
+        get(): {
+            feedback: {
+                mode: "interactive" | "auto-approve" | "defer";
+                project: boolean;
+            };
+            dialog: {
+                mode: "interactive" | "auto" | "defer" | null;
+                project: boolean;
+            };
+            playtest: {
+                mode: "manual" | "automatic" | null;
+                project: boolean;
+            };
+        };
+        setFeedback(mode: "interactive" | "auto-approve" | "defer" | undefined): void;
+        setDialog(mode: "interactive" | "auto" | "defer" | undefined): void;
+        setPlaytest(mode: "manual" | "automatic" | undefined): void;
+    };
+    log: {
+        info(message: string): void;
+        warn(message: string, detail?: unknown): void;
+    };
+}
+export interface DaemonExtension {
+    activate(api: DaemonExtensionApi): void | {
+        dispose?: () => void | Promise<void>;
+    } | Promise<void | {
+        dispose?: () => void | Promise<void>;
+    }>;
+}
+export {};
+
+// ── helpers exported beside it ──
+export declare const discoveryPath: (projectDir: string) => string;
+export declare const parseContextMeasurement: (value: unknown) => ContextMeasurementParse;
+export declare const readDiscovery: (projectDir: string) => DaemonDiscovery | null;
+export declare const readLiveDiscovery: (projectDir: string, isAlive?: (pid: number) => boolean) => DaemonDiscovery | null;
+export declare const scopeBucket: (categoryCount: number) => ContextScopeBucket;
+export declare const signBundle: (dir: string, meta: { name: string; version: string; api: { min: number; max: number; }; module?: { entry: string; host: string; } | undefined; }, privateKeyPem: string) => UiManifest;
+export declare const verifyBundle: (dir: string, trustedKeys: readonly KeyObject[] | ((name: string) => readonly KeyObject[])) => UiManifest;
