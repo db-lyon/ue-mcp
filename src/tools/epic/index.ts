@@ -1,3 +1,4 @@
+// @session independent: Generated declarations of the wrapped Epic tools; data only, with no editor state.
 // GENERATED FILE - do not edit. See scripts/generate-epic-actions.mjs.
 import * as animation from "./animation.generated.js";
 import * as asset from "./asset.generated.js";

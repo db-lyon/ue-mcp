@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @session per-session: Scopes the deferred queue and the feedback mode with --editor.
 /**
  * `npx ue-mcp feedback <list|show|approve|discard|review>` - review and act on
  * submissions that ue-mcp deferred to disk while running in

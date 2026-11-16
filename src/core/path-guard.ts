@@ -1,3 +1,4 @@
+// @session independent: Resolves a path against the folders it is handed and refuses one outside them. Pure logic over its arguments.
 import * as fs from "node:fs";
 import * as path from "node:path";
 

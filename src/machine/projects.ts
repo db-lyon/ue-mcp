@@ -1,3 +1,4 @@
+// @session independent: Machine scoped: every project on this computer and every daemon running, read from user state, Unreal's recent lists and the daemons folder.
 /**
  * The machine report: this computer's Unreal projects, the ue-mcp state of
  * each, and every daemon running. One read-only JSON document, versioned by

@@ -1,3 +1,4 @@
+// @session independent: Searches the graph it is handed.
 /**
  * Shared tool-registry search used by project(search_tools) AND the
  * execute_python interceptor. Keyword search over every tool + action, with a

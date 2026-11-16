@@ -1,3 +1,4 @@
+// @session per-session: Every category tool is cloned per session and dispatches against the addressed editor.
 import { checkPluginFreshness } from "../../editor/bridge-freshness.js";
 import { checkBridgeParity, deployedPlugin, freshnessWarning, pluginStaleness, recordedPluginSpecs } from "./bridge-parity.js";
 import * as fs from "node:fs";

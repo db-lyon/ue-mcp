@@ -1,3 +1,4 @@
+// @session independent: Rasterises the SVG string it is handed; no editor is involved.
 /**
  * SVG to PNG, through the same rasteriser the overview image is rendered with
  * (scripts/render-overview-image.ts): resvg, no browser.

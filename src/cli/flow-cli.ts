@@ -1,3 +1,4 @@
+// @session per-session: Lists, plans and runs the flows of one project, chosen with --editor.
 /**
  * `ue-mcp flow list|plan|run` - the flow engine from a terminal (#1477).
  *

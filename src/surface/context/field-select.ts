@@ -1,3 +1,4 @@
+// @session independent: Pure projection over whatever result it is handed; no editor to scope it to.
 /**
  * Caller-controlled field selection on any result.
  *

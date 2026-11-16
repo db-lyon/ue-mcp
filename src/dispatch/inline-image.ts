@@ -1,3 +1,4 @@
+// @session independent: Reads the image files a result names and adds them to it; the paths and project folder come from the call's own context.
 /**
  * `inline` on the actions that write an image: the server reads the file the
  * editor wrote, shrinks it to the caller's size, and returns it as MCP image

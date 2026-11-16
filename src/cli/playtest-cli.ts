@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @session per-session: Scopes the playtest mode with --editor, one editor at a time.
 /**
  * `npx ue-mcp playtest mode [manual|automatic|clear] [--editor <name>]`.
  *

@@ -1,3 +1,4 @@
+// @session independent: Puts the resolved model on an agent step's context. No editor is involved.
 /**
  * flowkit's agent tasks with ue-mcp's model resolution in front of them: a
  * provider on the context wins, then a daemon extension's registered provider,

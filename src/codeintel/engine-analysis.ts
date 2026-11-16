@@ -1,3 +1,4 @@
+// @session independent: Hierarchy, reference and call queries over the same engine tree and index; every path it reads is an argument.
 /**
  * Reading the engine the way a maintainer reads it.
  *

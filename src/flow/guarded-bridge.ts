@@ -1,3 +1,4 @@
+// @session per-session: Wraps one session's bridge in that session's guards.
 /**
  * GuardedBridge - runs a `GuardRegistry` pipeline around the editor bridge.
  *

@@ -1,3 +1,4 @@
+// @session per-session: Installs an extension's editor plugin into the one project it is handed.
 /**
  * An editor plugin an extension declares through its manifest's
  * `pluginChannel`. The channel lists one build per engine with its SHA-256:

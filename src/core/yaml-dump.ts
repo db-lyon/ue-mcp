@@ -1,3 +1,4 @@
+// @session independent: Pure YAML serialization of the value it is handed.
 import yaml from "js-yaml";
 
 /**

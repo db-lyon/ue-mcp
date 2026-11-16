@@ -1,3 +1,4 @@
+// @session per-session: Projects the runtime's sessions under another strategy and scope, and dispatches a call to each session through a load built from that session's own surface.
 /**
  * What a client would be handed under one context strategy and a chosen set
  * of categories, and a way to run a call against exactly that surface.

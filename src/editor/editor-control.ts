@@ -1,3 +1,4 @@
+// @session per-session: Starts and stops one project's editor process.
 import * as path from "node:path";
 import { spawnOutsideTree } from "../core/spawn-outside-tree.js";
 import * as net from "net";

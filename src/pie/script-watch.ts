@@ -1,3 +1,4 @@
+// @session per-session: Follows one script run through the ToolContext of the call that started it, so it polls that call's editor.
 /**
  * Following a PIE test script run from the server.
  *

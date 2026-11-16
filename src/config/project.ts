@@ -1,3 +1,4 @@
+// @session per-session: One ProjectContext per session, with that project's config cascade.
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { deepMerge } from "@db-lyon/flowkit";

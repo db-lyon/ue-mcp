@@ -1,3 +1,4 @@
+// @session independent: Shared colour and font constants.
 /**
  * The ue-mcp look, shared by the Mermaid class definitions and the SVG
  * renderer: the dark ground, orange and blue accents and type of the overview

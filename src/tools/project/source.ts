@@ -1,3 +1,4 @@
+// @session per-session: Every category tool is cloned per session and dispatches against the addressed editor.
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { parseHeader, collectFiles, findSourceRoots, resolveModuleDir } from "../../codeintel/cpp-parser.js";

@@ -1,3 +1,4 @@
+// @session per-session: Answers whether ONE project can build and load the bridge, from that project's descriptor, plugin directory and engine.
 /**
  * Whether this project can actually run the bridge, answered before the editor
  * is asked to prove it (T17).

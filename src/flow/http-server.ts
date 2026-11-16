@@ -1,3 +1,4 @@
+// @session per-session: Resolves an editor per request and refuses an untargeted run.
 import * as http from "node:http";
 import { parseStepApproval, type FlowStepApprovalSpec } from "./step-approval.js";
 import { randomBytes, timingSafeEqual } from "node:crypto";

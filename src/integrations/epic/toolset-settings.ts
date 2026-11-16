@@ -1,3 +1,4 @@
+// @session per-session: Reads and writes the Toolset Registry setting file of the one project it is handed.
 /**
  * The Toolset Registry's own on/off switch, written to its settings file while
  * no editor is running.

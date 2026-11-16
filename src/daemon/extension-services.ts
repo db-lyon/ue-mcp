@@ -1,3 +1,4 @@
+// @session independent: Holds the objects daemon extensions provide to each other in process. No editor is involved.
 /**
  * Services extensions provide to each other in process (feature
  * "extension.services"). One provider holds an id at a time. Extensions load

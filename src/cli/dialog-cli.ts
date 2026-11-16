@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @session per-session: Scopes the dialog handling mode with --editor, one editor at a time.
 /**
  * `npx ue-mcp dialog mode [interactive|auto|defer|default] [--editor <name>]`.
  *

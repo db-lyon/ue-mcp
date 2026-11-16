@@ -1,3 +1,4 @@
+// @session per-session: Deploys a native module into one project.
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { UE_PLUGIN_NAME_RE, pathInPackage, staysInside } from "./package-paths.js";

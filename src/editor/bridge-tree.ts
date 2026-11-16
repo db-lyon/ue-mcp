@@ -1,3 +1,4 @@
+// @session per-session: Checks that one project's installed binary bridge is a tree the editor loads without a rebuild.
 /**
  * What an installed binary bridge must look like for the editor to load it
  * without offering a rebuild: every editor module the descriptor lists has its

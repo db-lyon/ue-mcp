@@ -1,3 +1,4 @@
+// @session independent: Opens a URL in the system browser. No editor is involved.
 import { spawn } from "node:child_process";
 
 /**

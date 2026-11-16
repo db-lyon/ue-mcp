@@ -1,3 +1,4 @@
+// @session per-session: Resolves the engine one project builds, launches and reads source from, out of that project's own layout and config.
 /**
  * One resolver for "which engine does this project use" (#959, #961, #962, #974).
  *

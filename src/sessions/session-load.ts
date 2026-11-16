@@ -1,3 +1,4 @@
+// @session per-session: One tool graph, task registry and guard pipeline per editor, built from that editor's own project.
 /**
  * Everything one editor session needs to serve a call, and the set of them a
  * server holds: each session's own tool graph, plugin load, advertised list,

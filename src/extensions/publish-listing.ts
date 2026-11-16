@@ -1,3 +1,4 @@
+// @session independent: Pure listing choice, derived fields and diff for plugin publish.
 /**
  * Pure pieces of `ue-mcp plugin publish`: which registry row a package
  * publishes to, the listing fields its manifest already declares, and the

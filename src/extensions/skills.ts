@@ -1,3 +1,4 @@
+// @session per-session: Installs, removes and checks agent skills inside one project directory, recording which package owns each.
 /**
  * Claude Code skills: the `SKILL.md` guides that ship with ue-mcp and with
  * ue-mcp plugins, copied into `<project>/.claude/skills/` so the harness loads

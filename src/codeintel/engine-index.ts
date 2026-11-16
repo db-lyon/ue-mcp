@@ -1,3 +1,4 @@
+// @session independent: Indexes an ENGINE tree, which projects share; keyed by engine root, not by editor.
 /**
  * A symbol index over the engine source tree.
  *

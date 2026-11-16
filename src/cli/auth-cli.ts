@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @session independent: Runs that per-user device flow.
 /**
  * `npx ue-mcp auth` - interactive GitHub device-flow auth so feedback(submit)
  * can author issues as the user's real GitHub account.

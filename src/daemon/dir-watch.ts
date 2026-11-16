@@ -1,3 +1,4 @@
+// @session independent: Watches the one directory it is handed and retries after a failure. Pure filesystem plumbing over its arguments.
 /**
  * A directory watch that cannot take the daemon down. fs.watch reports a
  * failure after it started (the folder deleted, or EPERM on Windows) as an

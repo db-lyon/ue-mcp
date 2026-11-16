@@ -1,3 +1,4 @@
+// @session independent: The table of commands and the dispatcher over it; each command picks its own editor.
 /**
  * Every `ue-mcp <command>` there is. A first argument naming one of these runs
  * it; anything else starts the server with the arguments as projects. doctor

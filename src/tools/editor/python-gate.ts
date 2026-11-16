@@ -1,3 +1,4 @@
+// @session per-session: Remembers which candidate actions a session ruled out, partitioned the same way the workaround stack is.
 /**
  * The execute_python gate: matching a caller's rulings against the candidate
  * actions a tool search returned (#960, #938).

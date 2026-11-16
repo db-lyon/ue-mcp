@@ -1,3 +1,4 @@
+// @session per-session: Every category tool is cloned per session and dispatches against the addressed editor.
 /**
  * Waiting for a PCG generation to finish (#1365).
  *

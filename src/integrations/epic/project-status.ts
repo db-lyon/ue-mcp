@@ -1,3 +1,4 @@
+// @session per-session: Reports Epic's Unreal MCP server, Unreal Assistant and Unreal Canvas for the one ProjectContext it is handed.
 /**
  * Epic's Unreal MCP server, Unreal Assistant and Unreal Canvas as one project
  * has them, read from files. init, doctor and project(get_status) all report

@@ -1,3 +1,4 @@
+// @session independent: In-process call options, as type declarations. No runtime code.
 import type { ElicitFn } from "../core/elicit.js";
 import type { DialogPromptFn } from "../editor/dialog-types.js";
 

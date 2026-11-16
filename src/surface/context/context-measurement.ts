@@ -1,3 +1,4 @@
+// @session independent: The context measurement file format and its validator. Pure logic over a value.
 /**
  * The file format for context strategy measurements: which strategy costs
  * least, per model vendor and per number of categories a task needs. A client

@@ -1,3 +1,4 @@
+// @session independent: Registers the process-wide resolve hook for ue-mcp imports; no editor.
 import * as module from "node:module";
 import * as path from "node:path";
 import { pathToFileURL } from "node:url";

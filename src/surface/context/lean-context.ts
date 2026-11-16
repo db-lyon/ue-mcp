@@ -1,3 +1,4 @@
+// @session independent: Pure transforms over a graph. The strategy is one answer per transport, since there is one transport.
 import { z } from "zod";
 import type { ActionSpec, ToolDef } from "../tool-types.js";
 import { actionEnum, categoryTool } from "../category-tool.js";

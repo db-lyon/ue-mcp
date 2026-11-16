@@ -1,3 +1,4 @@
+// @session independent: Writes a new plugin's files into the directory it is handed; no editor involved.
 /**
  * The files `ue-mcp plugin create` writes: a plugin scaffold covering every
  * extension shape, with a dormant native C++ module and a pre-publish check.

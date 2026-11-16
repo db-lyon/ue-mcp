@@ -1,3 +1,4 @@
+// @session per-session: Relays one MCP client to the daemon of the project it was started for.
 /**
  * The stdio shim: what an MCP client launches as `ue-mcp <uproject>` when the
  * daemon is on. It finds the project's daemon (starting one if none is

@@ -1,3 +1,4 @@
+// @session per-session: Every category tool is cloned per session and dispatches against the addressed editor.
 /**
  * The Unreal Canvas Bridge answers through Epic's MCP tool result shape: a
  * `content` array of text blocks. Its render tools put a file or directory

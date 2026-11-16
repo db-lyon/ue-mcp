@@ -1,3 +1,4 @@
+// @session per-session: Routes a call to an editor and refuses an untargeted change.
 /**
  * Write gating and response attribution beyond one editor (#817, plan 5.2/5.3).
  *

@@ -1,3 +1,4 @@
+// @session independent: The extension contract's types. A leaf with no state.
 /**
  * The contract between the daemon and its extensions. Public: an extension
  * built against one EXTENSION_API_VERSION keeps working until that number

@@ -1,3 +1,4 @@
+// @session per-session: Observes the editor process that has one project open.
 /**
  * Out-of-process observability for a running (or starting, or wedged) editor.
  *

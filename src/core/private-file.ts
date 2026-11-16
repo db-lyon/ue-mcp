@@ -1,3 +1,4 @@
+// @session independent: Writes the owner-only file it is handed. Pure filesystem plumbing over its arguments.
 import { promises as fs } from "node:fs";
 import * as path from "node:path";
 

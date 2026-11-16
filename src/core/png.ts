@@ -1,3 +1,4 @@
+// @session independent: Decodes, scales and encodes the PNG bytes it is handed. Pure logic over its arguments.
 /**
  * Enough PNG to shrink a capture before it is handed to an agent: decode any
  * non-interlaced PNG to RGBA8, box-filter it down, and encode it again. Built

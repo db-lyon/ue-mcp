@@ -1,3 +1,4 @@
+// @session per-session: One mutation journal per editor session, kept in that session's project and restoring through that session's bridge and checkpoints.
 /**
  * The mutation journal (#1481): every call that may change state, made while
  * a client has named a group, recorded with how to restore what it touched,

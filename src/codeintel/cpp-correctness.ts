@@ -1,3 +1,4 @@
+// @session independent: Views over that index plus a Build.cs read; takes its paths as arguments.
 /**
  * Making written C++ correct before it is built.
  *

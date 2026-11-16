@@ -1,3 +1,4 @@
+// @session per-session: Resolves one project's bridge from its own port lockfile.
 /**
  * Which editor a lifecycle action is allowed to talk to.
  *

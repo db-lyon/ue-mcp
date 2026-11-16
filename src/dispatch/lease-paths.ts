@@ -1,3 +1,4 @@
+// @session independent: Pure extraction of the asset paths one call names; the same rule in every editor.
 /**
  * Which asset paths a call would change, for the lease check.
  *

@@ -1,3 +1,4 @@
+// @session independent: Starts a process through a trampoline that exits. Pure process plumbing over its arguments.
 import { spawn } from "node:child_process";
 import { warn } from "./log.js";
 

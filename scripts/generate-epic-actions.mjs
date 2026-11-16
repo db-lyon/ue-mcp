@@ -426,14 +426,14 @@ function main() {
   for (const [category, bucket] of [...byCategory].sort((a, b) => a[0].localeCompare(b[0]))) {
     bucket.actions.sort((a, b) => a.key.localeCompare(b.key));
     const file = path.join(OUT_DIR, `${category}.generated.ts`);
-    fs.writeFileSync(file, emitCategory(category, bucket));
+    fs.writeFileSync(file, SESSION_TAG + emitCategory(category, bucket));
     written.push([category, bucket.actions.length, bucket.params.size]);
   }
 
   const index = [...byCategory.keys()].sort();
-  fs.writeFileSync(path.join(OUT_DIR, "index.ts"), emitIndex(index));
-  fs.writeFileSync(path.join(OUT_DIR, "catalog-engines.ts"), emitEngines(merged.engines));
-  fs.writeFileSync(path.join(OUT_DIR, "toolset-routes.ts"), emitRoutes(merged.toolsets));
+  fs.writeFileSync(path.join(OUT_DIR, "index.ts"), SESSION_TAG + emitIndex(index));
+  fs.writeFileSync(path.join(OUT_DIR, "catalog-engines.ts"), SESSION_TAG + emitEngines(merged.engines));
+  fs.writeFileSync(path.join(OUT_DIR, "toolset-routes.ts"), SESSION_TAG + emitRoutes(merged.toolsets));
 
   console.log(`generated ${total} actions across ${written.length} categories from UE ${merged.engines.join(", ")}`);
   for (const [cat, n, p] of written) console.log(`  ${cat.padEnd(14)} ${String(n).padStart(4)} actions, ${p} parameters`);
@@ -461,6 +461,9 @@ function loadEffects() {
   }
   return map;
 }
+
+/** The module's placement for tests/unit/module-inventory.test.ts. */
+const SESSION_TAG = "// @session independent: Generated declarations of the wrapped Epic tools; data only, with no editor state.\n";
 
 function emitCategory(category, bucket) {
   const header =

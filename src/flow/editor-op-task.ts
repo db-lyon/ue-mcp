@@ -1,3 +1,4 @@
+// @session per-session: Restarts or rebuilds the editor of the session a flow runs in.
 /**
  * `editor.restart` and `editor.rebuild` as flow tasks, so a flow can change
  * C++, rebuild, relaunch and carry on.

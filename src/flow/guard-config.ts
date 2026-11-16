@@ -1,3 +1,4 @@
+// @session per-session: Owns one session's last valid YAML guard declarations, merged from its project and user-global config layers.
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { readEnv } from "../core/env.js";

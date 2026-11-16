@@ -1,3 +1,4 @@
+// @session per-session: Every category tool is cloned per session and dispatches against the addressed editor.
 /**
  * editor(summarize_csv_profile): read a CSV profiler capture on the server side.
  *

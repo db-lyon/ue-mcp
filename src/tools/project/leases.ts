@@ -1,3 +1,4 @@
+// @session per-session: Takes and lists asset leases in the addressed editor, under the calling session.
 /**
  * Asset leases from the calling session's side: claim, release, list.
  * The registry and the rules are in dispatch/leases.ts.

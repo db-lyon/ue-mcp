@@ -1,3 +1,4 @@
+// @session independent: The names of the lock-management actions; a declaration shared by the locking gate and the batch action.
 /**
  * The lock-management actions themselves, which must never take a lock.
  *

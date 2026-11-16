@@ -1,3 +1,4 @@
+// @session per-session: Every category tool is cloned per session and dispatches against the addressed editor.
 /**
  * blueprint(open_diff_window) (#1483): Unreal's Blueprint Diff window between
  * a Blueprint as it was at a checkpoint or a source control revision (left)

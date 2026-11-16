@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @session per-session: Writes one project's context strategy, chosen with --editor.
 import * as path from "node:path";
 import { projectConfigPath, readConfigDoc, writeConfigDoc } from "../config/ue-mcp-config.js";
 import { takeEditorTarget, EditorFlagError } from "./editor-flag.js";

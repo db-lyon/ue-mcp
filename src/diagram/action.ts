@@ -1,3 +1,4 @@
+// @session per-session: Reads through the bridge of the context it is handed and writes under that session's project.
 /**
  * The `diagram` action each graph category carries.
  *

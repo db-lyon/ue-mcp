@@ -1,3 +1,4 @@
+// @session per-session: Writes one project's config, chosen with --editor.
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as readline from "node:readline";

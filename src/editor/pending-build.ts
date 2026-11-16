@@ -1,3 +1,4 @@
+// @session per-session: Records and clears a bridge build one project owes after a source update, in that project's plugin directory.
 /**
  * A source bridge whose new source is deployed and not yet built (#1593).
  *

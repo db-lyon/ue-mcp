@@ -1,3 +1,4 @@
+// @session independent: The initialize payload is sent once per process and cannot be renegotiated.
 import { ALL_TOOLS } from "../../tools.js";
 import { SIGNATURE_LEGEND } from "../action-signature.js";
 import { unionKnowledge, type SessionSurface } from "../../sessions/session-surface.js";

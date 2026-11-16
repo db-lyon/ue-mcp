@@ -1,3 +1,4 @@
+// @session independent: Verifies, stores and resolves signed UI bundles kept per user. No editor is involved.
 /**
  * UI bundles the daemon serves at /ui/ and /ui/ext/<name>/. A bundle is a directory with a
  * `manifest.json` naming every file and its SHA-256, and `manifest.sig`, an

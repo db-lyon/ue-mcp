@@ -1,3 +1,4 @@
+// @session per-session: Reads and writes one project's plugin install marker and resolves where that project's plugin lives.
 /**
  * The bridge install marker and where the installed plugin lives.
  *

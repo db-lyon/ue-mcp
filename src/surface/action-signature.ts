@@ -1,3 +1,4 @@
+// @session independent: Renders one action's compact signature from whichever tool graph it is handed; its cache is keyed by the action object, never by editor.
 /**
  * One-line action signatures, the unit the compact context seed is built from
  * (#1172).

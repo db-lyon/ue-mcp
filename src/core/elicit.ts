@@ -1,3 +1,4 @@
+// @session independent: The MCP elicitation shape, as type declarations. No runtime code.
 /**
  * Elicit a deterministic, user-mediated form response via the MCP client.
  * The server blocks until the client returns one of accept / decline / cancel.

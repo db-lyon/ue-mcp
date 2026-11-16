@@ -1,3 +1,4 @@
+// @session independent: Pure redaction with no context to scope.
 // Best-effort redaction for strings that get posted to a public GitHub issue
 // via feedback(submit). The agent assembles the body from session state, so
 // we cannot rely on a human reviewer catching pasted credentials before they

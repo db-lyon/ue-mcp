@@ -1,3 +1,4 @@
+// @session independent: One npm check per process; the upgrade notice is emitted once.
 /**
  * Background check for newer ue-mcp releases on npm.
  *

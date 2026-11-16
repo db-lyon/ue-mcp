@@ -1,3 +1,4 @@
+// @session per-session: Compares deployed against compiled inside one project.
 // #785: warn when the compiled bridge plugin is older than the plugin source.
 //
 // `npx ue-mcp update` refreshes the TypeScript side and the plugin SOURCE in

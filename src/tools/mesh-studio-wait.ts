@@ -1,3 +1,4 @@
+// @session per-session: Every category tool is cloned per session and dispatches against the addressed editor.
 import type { ToolContext } from "../surface/tool-types.js";
 
 /** A rendering job progresses on editor frames, outside any bridge call. */

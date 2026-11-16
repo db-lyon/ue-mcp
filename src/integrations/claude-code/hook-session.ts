@@ -1,3 +1,4 @@
+// @session per-session: Resolves which project a hook invocation is about.
 /**
  * Which project a hook invocation is about (#817, plan 6.3).
  *

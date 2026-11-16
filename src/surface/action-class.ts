@@ -1,3 +1,4 @@
+// @session independent: The verb lexicon's reading of an action NAME, for the actions this package does not declare; the same answer in every editor.
 /**
  * The effect of an action nobody declared, guessed from its name.
  *

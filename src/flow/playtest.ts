@@ -1,3 +1,4 @@
+// @session per-session: Its tasks call the bridge of the session the playtest flow runs in.
 /**
  * The built-in `playtest` flow: draft a test script for a target with a model,
  * check it against the level the way pie(script_create) will, hand the

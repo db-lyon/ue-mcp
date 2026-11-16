@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @session per-session: Reports every project the configured invocation names.
 /**
  * `ue-mcp doctor` - diagnose every ue-mcp version source and flag the failure
  * mode nothing else surfaces: a project-local `node_modules/ue-mcp` that

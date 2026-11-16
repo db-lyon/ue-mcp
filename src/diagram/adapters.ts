@@ -1,3 +1,4 @@
+// @session independent: Pure conversion of a reader answer it is handed into the diagram model.
 /**
  * Reader answers to diagram models, one function per graph reader.
  *

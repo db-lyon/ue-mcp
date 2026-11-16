@@ -1,3 +1,4 @@
+// @session per-session: Lists the skills one project directory can load, reading that project's ownership record.
 /**
  * Every skill a client of this project can load, with where it lives and who
  * owns it: ue-mcp's packaged skills, and every skill directory under the

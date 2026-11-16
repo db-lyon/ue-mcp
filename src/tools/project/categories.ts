@@ -1,3 +1,4 @@
+// @session per-session: Turns categories and toolsets on and off in the addressed session, its project's config and its editor.
 /**
  * Turning categories, and Unreal's toolsets, on and off (#1827).
  *

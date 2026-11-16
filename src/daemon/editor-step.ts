@@ -1,3 +1,4 @@
+// @session independent: Reads one editor operation step's result text. Pure logic over its arguments.
 /**
  * Whether one step of a daemon editor operation (start, stop, restart,
  * rebuild) failed, and why.

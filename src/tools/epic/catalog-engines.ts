@@ -1,3 +1,4 @@
+// @session independent: Generated declarations of the wrapped Epic tools; data only, with no editor state.
 // GENERATED FILE - do not edit. See scripts/generate-epic-actions.mjs.
 
 /** Engine versions with a recorded toolset catalog, oldest first. */

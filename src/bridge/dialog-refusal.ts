@@ -1,3 +1,4 @@
+// @session independent: Recognises the bridge's dialog refusal in whatever answer it is handed. Pure logic.
 /**
  * True for the refusal the plugin's own gate emits when a modal dialog blocks
  * the editor: any bridge answer carrying `dialogBlocking: true`. Part of the

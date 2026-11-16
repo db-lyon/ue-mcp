@@ -1,3 +1,4 @@
+// @session independent: Builds category tools and their routing parameters; holds nothing per editor.
 /**
  * Category tool construction: the `categoryTool` dispatcher, the `bp` action
  * builder and the routing parameters every category tool offers.

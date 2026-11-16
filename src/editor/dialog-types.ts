@@ -1,3 +1,4 @@
+// @session independent: The dialog prompt shape, as type declarations. No runtime code.
 import type { ElicitParams, ElicitResult } from "../core/elicit.js";
 
 /**

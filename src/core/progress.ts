@@ -1,3 +1,4 @@
+// @session independent: Progress update and display shapes, as type declarations. No runtime code.
 export interface ProgressUpdate {
   /** Monotonic units done. With `total`, clients render a bar. */
   progress: number;

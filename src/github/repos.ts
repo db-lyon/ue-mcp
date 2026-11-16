@@ -1,3 +1,4 @@
+// @session independent: GitHub repository names and URLs. Pure logic over its arguments.
 /**
  * GitHub repository names and the URLs built from them: the core repository,
  * where a gap is filed by hand, and the parsing and comparison the feedback

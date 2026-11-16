@@ -1,3 +1,4 @@
+// @session per-session: Holds the start lock of one project root's daemon, so that project gets one daemon.
 /**
  * One daemon per project. A starter holds an exclusive lock beside the
  * discovery file from before it starts until it has published, and anyone

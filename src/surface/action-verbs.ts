@@ -1,3 +1,4 @@
+// @session independent: The verb lists themselves. A leaf with no imports and no state.
 /**
  * The verb lexicon: what an action's NAME suggests it does.
  *

@@ -1,3 +1,4 @@
+// @session independent: Pure ini utility over whatever directory it is handed.
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { resolveInside } from "../core/path-guard.js";

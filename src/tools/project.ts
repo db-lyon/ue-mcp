@@ -1,3 +1,4 @@
+// @session per-session: Every category tool is cloned per session and dispatches against the addressed editor.
 import type { ActionSpec, ToolDef } from "../surface/tool-types.js";
 import { categoryTool } from "../surface/category-tool.js";
 import { z } from "zod";

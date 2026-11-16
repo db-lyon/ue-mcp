@@ -1,3 +1,4 @@
+// @session independent: One process-wide bus for script run events. The run id rides on the event.
 /**
  * Live progress of a PIE test script run, one module-level bus for every run in this process.
  *

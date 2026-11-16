@@ -1,3 +1,4 @@
+// @session independent: Pure Unreal path handling.
 import { McpError, ErrorCode } from "../core/errors.js";
 
 /**

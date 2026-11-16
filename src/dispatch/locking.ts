@@ -1,3 +1,4 @@
+// @session per-session: The lock registry lives in the addressed editor's bridge, under that session's owner id.
 import { isDialogRefusal } from "../bridge/dialog-refusal.js";
 import type { IBridge } from "../bridge/bridge.js";
 import { McpError, ErrorCode, type McpErrorDetails } from "../core/errors.js";

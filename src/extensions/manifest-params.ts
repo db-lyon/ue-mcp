@@ -1,3 +1,4 @@
+// @session independent: Maps a manifest schema onto per-action specs and required checks.
 import type { TaskConstructor } from "@db-lyon/flowkit";
 import type { z } from "zod";
 import { McpError, ErrorCode } from "../core/errors.js";

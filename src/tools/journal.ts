@@ -1,3 +1,4 @@
+// @session per-session: Every category tool is cloned per session and dispatches against the addressed editor.
 /**
  * editor(journal_group), list_journal, revert_group and revert_after_group
  * (#1481): the MCP face of src/journal/journal.ts, with the same payloads as

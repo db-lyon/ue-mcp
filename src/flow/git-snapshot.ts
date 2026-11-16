@@ -1,3 +1,4 @@
+// @session per-session: Snapshots the repository holding one project, through its bridge.
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { execFileSync } from "node:child_process";

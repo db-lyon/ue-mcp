@@ -1,3 +1,4 @@
+// @session per-session: One checkpoint state per editor session: its toggle, its bridge's save recording and its project's history.
 /**
  * Checkpoints per editor session (#1482): whether they are on, the bridge's
  * save recording, and the checkpoint, changes, restore and clear operations
