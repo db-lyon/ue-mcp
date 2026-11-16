@@ -10,15 +10,13 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import { parseEditorFlag, takeEditorTarget, selectProject } from "../../src/cli/editor-flag.js";
 import {
-  parseEditorFlag,
   namesForProjects,
   discoverConfiguredEditors,
   resolveEditorFlag,
-  takeEditorTarget,
-  selectProject,
   EditorFlagError,
-} from "../../src/cli/editor-flag.js";
+} from "../../src/integrations/mcp-clients/configured-editors.js";
 import { SessionRegistry } from "../../src/sessions/session.js";
 
 let root: string;

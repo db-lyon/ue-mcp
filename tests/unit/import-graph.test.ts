@@ -77,8 +77,6 @@ const EXCEPTIONS: Record<string, string> = {
     "Builds the guard CallContext, which carries the EditorSession; goes with flow/guard.ts.",
   "flow/write-methods.ts -> tools/specs/index.ts":
     "Reads the recorded handler specs, which are generated under tools/; the recording belongs below surface.",
-  "integrations/claude-code/hook-session.ts -> cli/editor-flag.ts":
-    "The hook resolves --editor the way the CLI does; the resolver belongs in config, the flag parsing in cli.",
   "sessions/session-load.ts -> tools.ts":
     "Each session's surface is cloned from ALL_TOOLS; the declaration should be handed in by the server.",
   "surface/action-effects.ts -> flow/flow-surface.ts":
