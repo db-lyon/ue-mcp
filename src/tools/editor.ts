@@ -11,7 +11,7 @@ import { startProgress } from "../terminal/progress.js";
 import { clientAdvertisesElicitation } from "../editor/dialog-mode.js";
 import { readEngineState, withBridgeSnapshot, type EngineSnapshot } from "../editor/engine-observer.js";
 import { windowModeOf } from "../editor/launch-args.js";
-import { progressRenderingNote } from "../dispatch/client-quirks.js";
+import { progressRenderingNote } from "../core/client-quirks.js";
 import { pushWorkaround, workaroundCount } from "./editor/workaround-tracker.js";
 import { searchToolGraph } from "../surface/context/tool-search.js";
 import { evaluateGate, gateRefusalMessage, relevantCandidates, type GateCandidate } from "./editor/python-gate.js";

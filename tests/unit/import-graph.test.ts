@@ -69,8 +69,6 @@ const EXCEPTIONS: Record<string, string> = {
     "The gate routes over the session registry; it needs a narrow registry interface of its own.",
   "editor/bridge-update.ts -> integrations/mcp-clients/mcp-client-config.ts":
     "Bridge update rewrites the pinned client entries; that step belongs with the update command, not the editor layer.",
-  "editor/dialog-guard.ts -> dispatch/client-quirks.ts":
-    "The client quirk table is moving behind one client-integration interface (Fix 16).",
   "flow/guards.ts -> guard-task.ts":
     "guard-task.ts is the public `ue-mcp/guard` surface; its context names EditorSession, so it moves with flow/guard.ts.",
   "flow/guard.ts -> sessions/session.ts":

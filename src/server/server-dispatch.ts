@@ -36,7 +36,7 @@ import {
 import { isDialogRefusal } from "../bridge/dialog-refusal.js";
 import { connectedEditorOf } from "../editor/editor-control.js";
 import { clientAdvertisesElicitation } from "../editor/dialog-mode.js";
-import { elicitationUnrenderedNote } from "../dispatch/client-quirks.js";
+import { elicitationUnrenderedNote } from "../core/client-quirks.js";
 import { playtestRefusal } from "../editor/playtest-mode.js";
 import { contestedProject } from "../editor/project-holders.js";
 import { withAssetLocks, type LockingConfig } from "../dispatch/locking.js";
