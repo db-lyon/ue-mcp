@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { assetTool } from "../../src/tools/asset.js";
 import { levelTool } from "../../src/tools/level.js";
-import { classifyAction } from "../../src/dispatch/locking.js";
+import { classifyAction } from "../../src/dispatch/written-paths.js";
 import { registeredTimeoutMs } from "../../src/bridge/bridge-timeouts.js";
 import { readHandlerFile } from "../../scripts/lib/cpp-registrations.mjs";
 

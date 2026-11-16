@@ -14,7 +14,7 @@ import { McpError, ErrorCode } from "../core/errors.js";
 import { debug } from "../core/log.js";
 import { withCallAsker } from "../flow/call-elicit.js";
 import { readOnlyRefusal, type SessionAccessMode } from "../flow/session-access.js";
-import { taskEffect } from "../surface/action-effects.js";
+import { actionSpecOf, taskEffect } from "../surface/action-effects.js";
 import { journalFor } from "../journal/journal.js";
 import { unwrapArgsEnvelope, validateCategoryParams } from "../surface/context/call-envelope.js";
 import { microFlowCall } from "../surface/context/micro-context.js";
@@ -231,9 +231,6 @@ export interface DispatchDeps {
   leaseHolder?: () => { id: string; label: string };
 }
 
-/** Window actions that can remove the window the dialog gate is holding (#1231). */
-const WINDOW_PRESS_TASKS = new Set(["editor.press_window_button", "editor.close_window"]);
-
 /** The button a respond_to_dialog call names: its label, its index into the dialog's buttons, or the dismissal. */
 function pressedLabel(params: Record<string, unknown>, dialog: { buttons: string[] } | null): string {
   if (typeof params.buttonLabel === "string" && params.buttonLabel !== "") return params.buttonLabel;
@@ -436,7 +433,7 @@ export async function dispatchCategoryCall(
         () => task.run(),
         session.lockOwnerId,
         loads.dispatchUnion.tools,
-      )));
+      )), actionSpecOf(effectiveTask, loads.dispatchUnion.tools));
 
     // A task that failed for its own reasons reports that, not a dialog. A
     // failure DURING a modal is usually caused by it, and the runner returns
@@ -457,13 +454,9 @@ export async function dispatchCategoryCall(
     if (DialogGuard.actionAllowed(effectiveTask)) {
       // respond_to_dialog may have just cleared it. refresh, not check: check
       // applies the mode and could press a button on the next prompt unasked.
-      if (effectiveTask === "editor.respond_to_dialog" && result.success) {
-        guard.notePress(pressedLabel(subject.params, facing), facing);
-        await guard.refresh();
-      } else if (WINDOW_PRESS_TASKS.has(effectiveTask) && result.success) {
-        // The window pressed or closed may be the one the gate was holding.
-        await guard.refresh();
-      }
+      const refreshes = result.success ? actionSpecOf(effectiveTask, loads.dispatchUnion.tools)?.refreshesDialog : undefined;
+      if (refreshes === "press") guard.notePress(pressedLabel(subject.params, facing), facing);
+      if (refreshes) await guard.refresh();
       const seen = guard.current;
       if (result.success) stampBlockedEditor(result.data, seen, guard.modeFor(seen));
     }

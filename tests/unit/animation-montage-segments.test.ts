@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { animationTool } from "../../src/tools/animation.js";
 import { handlerSpecs } from "../../src/tools/specs/animation.generated.js";
-import { classifyWrite } from "../../src/flow/write-methods.js";
+import { classifyWrite } from "../../src/dispatch/written-paths.js";
 import type { ToolContext } from "../../src/surface/tool-types.js";
 
 describe("animation montage segment actions (#826)", () => {

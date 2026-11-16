@@ -1955,25 +1955,25 @@
         {
           "suite": "integration",
           "file": "tests/integration/playtest-flow.test.ts",
-          "test": "falls back to ANTHROPIC_API_KEY, and fails with the errors once every draft is refused"
+          "test": "runs on a daemon extension's provider through /v1/flows, handing the refusal back once"
         },
         {
           "suite": "integration",
           "file": "tests/integration/playtest-flow.test.ts",
-          "test": "runs on a daemon extension's provider through /v1/flows, handing the refusal back once"
+          "test": "runs on the anthropic extension with ANTHROPIC_API_KEY, and fails with the errors once every draft is refused"
         }
       ]
     },
     {
-      "id": "flow.agent.env-model",
+      "id": "flow.agent.anthropic-extension",
       "group": "flow",
-      "summary": "a flow agent step with no registered provider runs on ANTHROPIC_API_KEY",
+      "summary": "the first-party anthropic daemon extension (extensions/anthropic) registers a provider from ANTHROPIC_API_KEY and flow agent steps run on it",
       "status": "covered",
       "tests": [
         {
           "suite": "integration",
           "file": "tests/integration/playtest-flow.test.ts",
-          "test": "falls back to ANTHROPIC_API_KEY, and fails with the errors once every draft is refused"
+          "test": "runs on the anthropic extension with ANTHROPIC_API_KEY, and fails with the errors once every draft is refused"
         }
       ]
     },

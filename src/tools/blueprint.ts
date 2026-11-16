@@ -90,6 +90,7 @@ export const blueprintTool: ToolDef = categoryTool(
     author: {
       kind: "handler",
       effect: "mutate",
+      editorBound: "Runs a sequence of bridge calls to create and populate a Blueprint.",
       description: "Author a whole Blueprint in one call: optionally create it (parentClass), then add components, variables and function stubs, then compile - one agent-facing action instead of a dozen add_* round-trips. Params: assetPath, parentClass? (create/ensure the BP if given), components? [{componentClass, componentName?, parentComponent?, parentSocket?, childActorClass?, asRoot?}] (asRoot=true makes that scene component the root in place of DefaultSceneRoot), variables? [{name, varType}], functions? [{functionName}], compile? (default true). Returns per-step results + created flag. (#607)",
       handler: async (ctx, p) => {
         const assetPath = p.assetPath as string;

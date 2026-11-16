@@ -3,10 +3,8 @@ import { isDialogRefusal } from "../bridge/dialog-refusal.js";
 import type { IBridge } from "../bridge/bridge.js";
 import { McpError, ErrorCode, type McpErrorDetails } from "../core/errors.js";
 import { debug } from "../core/log.js";
-import { taskEffect } from "../surface/action-effects.js";
 import { SESSION_ID } from "./lock-owner.js";
-import { NEVER_LOCKED } from "./lock-actions.js";
-import { BATCH_TASK, batchCallsOf } from "./batch-steps.js";
+import { classifyAction } from "./written-paths.js";
 import type { ToolDef } from "../surface/tool-types.js";
 
 // Per-asset exclusive locking, orchestrated from the dispatch layer. The lock
@@ -34,101 +32,6 @@ export function resolveLockingConfig(cfg?: { enabled?: boolean; ttlSeconds?: num
   };
 }
 
-
-/** Keys whose string value is an in-editor asset path (not a filesystem source). */
-const PATH_KEYS = [
-  "assetPath", "path", "blueprintPath", "sourcePath", "destinationPath",
-  "targetPath", "materialPath",
-];
-
-export interface ActionClassification {
-  mutates: boolean;
-  /** Distinct asset paths this call would mutate (may be empty even when mutating). */
-  paths: string[];
-}
-
-function looksLikeAssetPath(v: unknown): v is string {
-  return typeof v === "string" && v.length > 0 && v.includes("/");
-}
-
-/**
- * Decide whether a task mutates an asset and which asset path(s) it touches.
- *
- * The mutation half is the action's DECLARED effect, and `unknown` counts: an
- * action whose effect its parameters decide may well write the asset it names,
- * and being wrong costs one serialised call rather than two agents writing the
- * same package.
- *
- * This module used to answer from a verb list of its own and fail OPEN, so an
- * unrecognised verb ran unlocked. That was the right call while the answer was
- * a guess, and it is why `unwrap_uvs` and `fixup_redirectors` never took a
- * lock: neither verb was in the list, and nothing said so out loud. The answer
- * is not a guess any more, so there is nothing left to fail open about, and a
- * name this server does not carry gets the same `mutate` default every other
- * gate gives it.
- *
- * An unextractable path still yields an empty list, so a declared mutation that
- * names no asset runs unlocked exactly as before. That is what keeps this from
- * locking the world: the path, not the verdict, is the narrow part.
- */
-export function classifyAction(
-  taskName: string,
-  params: Record<string, unknown>,
-  graph?: readonly ToolDef[],
-): ActionClassification {
-  if (NEVER_LOCKED.has(taskName)) return { mutates: false, paths: [] };
-  // editor(batch) runs its steps as one game-thread job, so it holds the
-  // locks of ALL of them for the whole job: the union is taken up front and
-  // released at the end, and a step's lock is never dropped while a later
-  // step still runs. A batch of reads takes nothing. With no steps to read
-  // there is nothing to be more precise than the declaration, which says
-  // `mutate`, and the empty path list keeps that from locking anything.
-  if (taskName === BATCH_TASK) {
-    const calls = batchCallsOf(params);
-    if (calls.length === 0) return { mutates: true, paths: [] };
-    const union = new Set<string>();
-    let mutates = false;
-    for (const call of calls) {
-      const step = classifyAction(`${call.category}.${call.method}`, call.args ?? {}, graph);
-      if (!step.mutates) continue;
-      mutates = true;
-      for (const p of step.paths) union.add(p);
-    }
-    return { mutates, paths: [...union] };
-  }
-  if (taskEffect(taskName, graph).effect === "read") return { mutates: false, paths: [] };
-
-  const paths = new Set<string>();
-  for (const key of PATH_KEYS) {
-    if (looksLikeAssetPath(params[key])) paths.add(params[key] as string);
-  }
-  // Batch shapes.
-  if (Array.isArray(params.assetPaths)) {
-    for (const p of params.assetPaths) if (looksLikeAssetPath(p)) paths.add(p);
-  }
-  if (Array.isArray(params.renames)) {
-    for (const r of params.renames) {
-      const rr = r as Record<string, unknown>;
-      if (looksLikeAssetPath(rr?.sourcePath)) paths.add(rr.sourcePath as string);
-      else if (looksLikeAssetPath(rr?.assetPath)) paths.add(rr.assetPath as string);
-    }
-  }
-  if (Array.isArray(params.items)) {
-    for (const item of params.items) {
-      const descriptor = item as Record<string, unknown>;
-      if (looksLikeAssetPath(descriptor?.assetPath)) paths.add(descriptor.assetPath as string);
-    }
-  }
-  // Batch mesh material assignment: the mesh is written, the material is only
-  // read, so only assetPath is locked.
-  if (Array.isArray(params.assignments)) {
-    for (const a of params.assignments) {
-      const entry = a as Record<string, unknown>;
-      if (looksLikeAssetPath(entry?.assetPath)) paths.add(entry.assetPath as string);
-    }
-  }
-  return { mutates: true, paths: [...paths] };
-}
 
 async function releaseAll(bridge: IBridge, paths: string[], ownerId: string): Promise<void> {
   for (const p of paths) {

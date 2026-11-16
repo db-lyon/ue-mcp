@@ -461,6 +461,21 @@ jobs:
             | node scripts/release-binaries.mjs --version "$VERSION" \
               --manifest "/tmp/release-binaries/UE_MCP_Bridge-$VERSION-manifest.json"
 
+      - name: Attach the first-party daemon extensions
+        # extensions/ (for example the anthropic model provider) ships beside
+        # core, not in the npm package: each release carries a zip and release
+        # manifest per extension at its own version, which install-index.json
+        # points `ue-mcp install <name>` at. Built here from the commit being
+        # published; scripts/extension-assets.mjs.
+        if: steps.version.outputs.should_publish == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.version.outputs.local }}
+        run: |
+          set -euo pipefail
+          mapfile -t assets < <(node scripts/extension-assets.mjs --version "$VERSION" --out /tmp/extension-assets)
+          if [ ${#assets[@]} -gt 0 ]; then gh release upload "v$VERSION" "${assets[@]}" --clobber; fi
+
       - name: Prose rules, against what will be published
         if: steps.version.outputs.should_publish == 'true'
         # The generated output, not the source it came from. A banned string

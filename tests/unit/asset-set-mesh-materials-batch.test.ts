@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { assetTool } from "../../src/tools/asset.js";
-import { classifyAction } from "../../src/dispatch/locking.js";
-import { classifyWrite } from "../../src/flow/write-methods.js";
+import { classifyAction } from "../../src/dispatch/written-paths.js";
+import { classifyWrite } from "../../src/dispatch/written-paths.js";
 
 describe("asset.set_mesh_materials_batch", () => {
   it("is exposed through the asset action schema", () => {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { assetTool } from "../../src/tools/asset.js";
-import { classifyAction } from "../../src/dispatch/locking.js";
+import { classifyAction } from "../../src/dispatch/written-paths.js";
 import { readHandlerFile } from "../../scripts/lib/cpp-registrations.mjs";
 
 const handlerSource = readHandlerFile("SkeletalMeshHandlers.cpp");

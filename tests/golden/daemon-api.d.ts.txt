@@ -17,7 +17,7 @@ export type DaemonFeature = (typeof DAEMON_FEATURES)[number];
 export declare const DAEMON_FEATURES_BEYOND_ROUTES: {
     readonly [F in DaemonFeature]?: string;
 };
-export declare const EXTENSION_FEATURES: readonly ["callAction.dialogPrompt", "callAction.elicit", "callAction.access", "checkpoints", "checkpoints.assetDiff", "events.dialog", "events.script", "models.provider", "modes", "modes.playtest", "skills", "context.projection", "actions.effects", "extension.versions", "ui.scopedKeys", "ui.extensions", "extension.services", "flows.stepApproval", "dialogs.native"];
+export declare const EXTENSION_FEATURES: readonly ["callAction.dialogPrompt", "callAction.elicit", "callAction.access", "checkpoints", "checkpoints.assetDiff", "events.dialog", "events.script", "models.provider", "modes", "modes.playtest", "skills", "context.projection", "actions.effects", "extension.versions", "ui.scopedKeys", "ui.extensions", "extension.services", "flows.stepApproval", "dialogs.native", "permissions"];
 export type ExtensionFeature = (typeof EXTENSION_FEATURES)[number];
 export declare const EXTENSION_FEATURE_MEMBERS: {
     readonly [F in ExtensionFeature]: keyof DaemonExtensionApi;
@@ -1053,7 +1053,10 @@ export interface ExtensionManifest {
         min?: string;
         root?: boolean;
     };
+    permissions?: ExtensionPermission[];
 }
+export declare const EXTENSION_PERMISSIONS: readonly ["registry.account"];
+export type ExtensionPermission = (typeof EXTENSION_PERMISSIONS)[number];
 export interface ExtensionRequest {
     method: string;
     path: string;

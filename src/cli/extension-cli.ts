@@ -52,7 +52,7 @@ async function restartDaemon(uproject: string): Promise<boolean> {
  * `uproject`, saying each step as it lands. Returns what --json prints.
  */
 async function install(target: string, sha256: string | undefined, uproject: string | undefined, say: (line: string) => void): Promise<Record<string, unknown>> {
-  const named = isInstallName(target) ? resolveInstallName(target) : null;
+  const named = isInstallName(target) ? await resolveInstallName(target) : null;
   const source = named?.manifest ?? target;
   const manifest = isManifestUrl(source) ? await readExtensionManifest(source) : null;
   const plugin = manifest?.pluginChannel;
@@ -106,7 +106,7 @@ export const usage: CliUsage = {
 /** `ue-mcp install`: the same install, as the command users are shown. */
 export const installUsage: CliUsage = {
   usage: "ue-mcp install <name|zip|url> [project] [flags]",
-  summary: "Install by name into a project, e.g. `ue-mcp install studio`, setting the project up for ue-mcp when it is not.",
+  summary: "Install by name into a project, e.g. `ue-mcp install anthropic`, setting the project up for ue-mcp when it is not. Names come from the install index (install-index.json in the ue-mcp repository).",
   strict: true,
   flags: FLAGS,
 };
