@@ -12,7 +12,7 @@ import { bridgeStateDir, isPidAlive, resolveLiveBridgeAddress } from "./editor-t
 import { syncRequestedPort } from "./requested-port.js";
 import { canvasPortReplacement } from "../integrations/epic/unreal-canvas.js";
 import { packageVersion } from "../core/package-root.js";
-import { readEnv } from "../core/env.js";
+import { resolveSetting } from "../core/env.js";
 import { bridgeAuthHeaders, watchUpgradeRefusal } from "./bridge-token.js";
 import type { ProgressUpdate } from "../core/progress.js";
 
@@ -637,19 +637,11 @@ export class EditorBridge implements IBridge {
     // where the IPv6 stack wins DNS, leaving the client stuck connecting to
     // an empty IPv6 socket while the plugin owns 127.0.0.1:9877.
     // UE_MCP_HOST overrides the default for non-standard topologies.
-    this.host = host ?? readEnv("host") ?? "127.0.0.1";
+    this.host = resolveSetting("bridgeHost", { explicit: host }).value!;
 
-    const envPort = Number.parseInt(readEnv("port") ?? "", 10);
-    if (typeof port === "number" && port > 0) {
-      this.port = port;
-      this.portSource = "explicit";
-    } else if (Number.isFinite(envPort) && envPort > 0) {
-      this.port = envPort;
-      this.portSource = "env";
-    } else {
-      this.port = DEFAULT_BRIDGE_PORT;
-      this.portSource = "default";
-    }
+    const pinned = resolveSetting("bridgePort", { explicit: port });
+    this.port = pinned.value ?? DEFAULT_BRIDGE_PORT;
+    this.portSource = pinned.source === "explicit" || pinned.source === "env" ? pinned.source : "default";
   }
 
   public host: string;
@@ -664,8 +656,8 @@ export class EditorBridge implements IBridge {
    * was, and this is what one project uses to differ when it is unset.
    */
   setConfigHost(host?: string): void {
-    if (readEnv("host")) return;
-    if (typeof host === "string" && host.trim() !== "") this.host = host.trim();
+    const resolved = resolveSetting("bridgeHost", { config: host });
+    if (resolved.source === "config") this.host = resolved.value!;
   }
 
   /**
@@ -673,8 +665,10 @@ export class EditorBridge implements IBridge {
    * explicit constructor arg or UE_MCP_PORT already pinned the port.
    */
   setConfigPort(port?: number): void {
-    if (typeof port === "number" && port > 0 && this.portSource !== "explicit" && this.portSource !== "env") {
-      this.port = port;
+    if (this.portSource === "explicit") return;
+    const resolved = resolveSetting("bridgePort", { config: port });
+    if (resolved.source === "config") {
+      this.port = resolved.value!;
       this.portSource = "config";
     }
   }

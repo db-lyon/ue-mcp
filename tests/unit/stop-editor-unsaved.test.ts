@@ -50,7 +50,8 @@ const observer = await import("../../src/editor/engine-observer.js");
 const { stopEditor } = await import("../../src/editor/editor-control.js");
 const { resolveDialogMode, clientAdvertisesElicitation } = await import("../../src/editor/dialog-mode.js");
 const { bridgeLockfilePath } = await import("../../src/bridge/editor-target.js");
-const { setDialogMode } = await import("../../src/config/user-state.js");
+const { DIALOG_MODE } = await import("../../src/config/modes.js");
+const setDialogMode = DIALOG_MODE.set;
 
 const findInteractiveEditors = vi.mocked(observer.findInteractiveEditors);
 // Stop and ownership also see headless editors; one list stands in for both here.

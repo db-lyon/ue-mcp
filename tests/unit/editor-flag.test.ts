@@ -16,6 +16,7 @@ import {
   discoverConfiguredEditors,
   resolveEditorFlag,
   takeEditorTarget,
+  selectProject,
   EditorFlagError,
 } from "../../src/cli/editor-flag.js";
 import { SessionRegistry } from "../../src/sessions/session.js";
@@ -190,5 +191,30 @@ describe("takeEditorTarget", () => {
     const r = takeEditorTarget(["build", "--editor", "Alpha"], cwd);
     expect(path.resolve(r.projectPath!)).toBe(path.resolve(alpha));
     expect(r.rest).toEqual(["build"]);
+  });
+});
+
+describe("selectProject", () => {
+  it("takes --editor, then --project, then the first positional, in that order for every command", () => {
+    const alpha = makeProject("Alpha");
+    const beta = makeProject("Beta");
+    const cwd = path.join(root, "workspace");
+    writeMcpJson(cwd, [alpha]);
+    const all = { projectFlag: true, positional: true, cwd };
+
+    const byEditor = selectProject(["--editor", "Alpha", "--project", beta, "Gamma.uproject"], all);
+    expect(path.resolve(byEditor.projectPath!)).toBe(path.resolve(alpha));
+    expect(byEditor.label).toBe("Alpha");
+    expect(byEditor.projectRoot).toBe(path.dirname(path.resolve(alpha)));
+    expect(byEditor.rest).toEqual(["Gamma.uproject"]);
+
+    expect(selectProject([`--project=${beta}`, "Gamma.uproject"], all).projectPath).toBe(beta);
+    expect(selectProject(["--json", "Gamma.uproject"], all).projectPath).toBe("Gamma.uproject");
+    expect(selectProject(["--binaries", "x.zip", "Gamma.uproject"], { ...all, valueFlags: new Set(["--binaries"]) }).projectPath).toBe("Gamma.uproject");
+    expect(selectProject(["Gamma.uproject"], { cwd })).toEqual({ projectPath: undefined, projectRoot: null, label: null, rest: ["Gamma.uproject"] });
+  });
+
+  it("refuses a --project with no value, saying what it needs", () => {
+    expect(() => selectProject(["--project"], { projectFlag: true, cwd: root })).toThrow(/--project needs a \.uproject path/);
   });
 });

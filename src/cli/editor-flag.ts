@@ -13,10 +13,15 @@
  * Resolution order is name first, path second, as the plan specifies. A name
  * is the more specific claim: a bare project name that also happens to be a
  * directory in cwd should address the registered editor, not the directory.
+ *
+ * Commands pick their project through selectProject, which puts --editor,
+ * --project and a positional in one order for all of them.
  */
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { isUProjectPath, projectDirOf } from "../config/uproject-path.js";
+import { fail } from "../terminal/ansi.js";
+import { firstPositional } from "./args.js";
 
 export const EDITOR_FLAG = "--editor";
 
@@ -289,4 +294,72 @@ export function takeEditorTarget(
   const { editor, rest } = parseEditorFlag(argv);
   if (editor === undefined) return { rest };
   return { projectPath: resolveEditorFlag(editor, cwd), rest };
+}
+
+/** The project a command acts on, as every command selects it. */
+export interface ProjectSelection {
+  /** What selected it: a .uproject path, a directory, or undefined when nothing did. */
+  projectPath?: string;
+  /** The project root, for per-project state; null when nothing selected one. */
+  projectRoot: string | null;
+  /** The project's name for messages: the .uproject's base name, or the directory's. */
+  label: string | null;
+  /** argv with `--editor <value>` removed (and `--project <value>` when it was read). */
+  rest: string[];
+}
+
+/**
+ * Select the project a one-shot command acts on, with one precedence for every
+ * command: `--editor`, then `--project` when the command takes it, then the
+ * first positional when the command takes one (skipping the values of
+ * `valueFlags`). Nothing selected leaves projectPath undefined, and the
+ * command applies its own fallback (cwd, a walk up, or no project).
+ * Throws EditorFlagError on an --editor value that names nothing.
+ */
+export function selectProject(
+  argv: string[],
+  opts: { projectFlag?: boolean; positional?: boolean; valueFlags?: ReadonlySet<string>; cwd?: string } = {},
+): ProjectSelection {
+  const { projectPath: fromEditor, rest: afterEditor } = takeEditorTarget(argv, opts.cwd);
+  let rest = afterEditor;
+  let projectPath = fromEditor;
+  if (opts.projectFlag) {
+    const i = rest.findIndex((a) => a === "--project" || a.startsWith("--project="));
+    if (i >= 0) {
+      const inline = rest[i].startsWith("--project=");
+      const value = inline ? rest[i].slice("--project=".length) : rest[i + 1];
+      if (!value || value.startsWith("-")) {
+        throw new EditorFlagError("--project needs a .uproject path (or the directory holding one), for example --project ./MyGame.uproject.");
+      }
+      rest = [...rest.slice(0, i), ...rest.slice(i + (inline ? 1 : 2))];
+      projectPath ??= value;
+    }
+  }
+  if (opts.positional && projectPath === undefined) projectPath = firstPositional(rest, opts.valueFlags);
+  return {
+    projectPath,
+    projectRoot: projectPath ? projectDirOf(projectPath) : null,
+    label: projectPath ? projectLabel(projectPath) : null,
+    rest,
+  };
+}
+
+/** The name a project goes by in messages. */
+export function projectLabel(projectPath: string): string {
+  return isUProjectPath(projectPath)
+    ? path.basename(projectPath, path.extname(projectPath))
+    : path.basename(projectPath.replace(/[\\/]+$/, ""));
+}
+
+/**
+ * selectProject for a command whose only answer to a bad --editor is to stop:
+ * prints the reason, which names the registered editors, and exits 1.
+ */
+export function selectProjectOrExit(argv: string[], opts?: Parameters<typeof selectProject>[1]): ProjectSelection {
+  try {
+    return selectProject(argv, opts);
+  } catch (e) {
+    fail(e instanceof EditorFlagError ? e.message : String(e));
+    process.exit(1);
+  }
 }

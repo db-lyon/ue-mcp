@@ -17,7 +17,8 @@ import {
   selectedOverlay,
   writeConfigDoc,
 } from "./ue-mcp-config.js";
-import { setInstalledHooks, setFeedbackMode, type FeedbackMode } from "./user-state.js";
+import { setInstalledHooks } from "./hook-state.js";
+import { FEEDBACK_MODE } from "./modes.js";
 import { resolveUProjectPath } from "./uproject-path.js";
 import { readEnv } from "../core/env.js";
 import type { ContextStrategy } from "./context-strategy.js";
@@ -489,27 +490,17 @@ export class ProjectContext {
 }
 
 /**
- * Load the `ue-mcp:` block with the full layered cascade, each
- * layer deep-merged over the one before (low -> high precedence):
- *
- *     ~/.ue-mcp/config.yml   (user-global, untracked)
- *     <project>/ue-mcp.yml   (project, tracked)
- *     ue-mcp.{env}.yml       (env overlay, when UE_MCP_ENV is set)
- *     ue-mcp.local.yml       (per-machine, untracked)
- *
- * Env vars (UE_MCP_CONTEXT_STRATEGY, ...) still win over the merged result;
- * they are applied where each setting is consumed, not here. Machine *state*
- * (installedHooks, feedback mode) is not config and never merged - it lives in
- * ~/.ue-mcp/state.json.
+ * Load the `ue-mcp:` block with the layered cascade configLayerFiles lists,
+ * each layer deep-merged over the one before. Env vars still win over the
+ * merged result; they are applied where each setting is read (resolveSetting
+ * in core/env.ts), not here. Machine state is not config and is never merged:
+ * it lives in ~/.ue-mcp/state.json.
  */
 function loadLayeredUeMcpBlock(projectDir: string): Record<string, unknown> {
-  const global = readGlobalUeMcpBlock();
-  const project = readUeMcpBlock(projectConfigPath(projectDir));
-
-  const layers: Record<string, unknown>[] = [global, project];
-  for (const layer of configLayerFiles(projectDir, overlayFor(projectDir))) {
-    if (layer.target === "env" || layer.target === "local") layers.push(readUeMcpBlock(layer.file));
-  }
+  const layers = configLayerFiles(projectDir, overlayFor(projectDir)).map((layer) =>
+    // The global layer has its own reader, which warns on a file it cannot parse.
+    layer.target === "global" ? readGlobalUeMcpBlock() : readUeMcpBlock(layer.file),
+  );
 
   return layers.reduce(
     (acc, layer) => deepMerge(acc, layer) as Record<string, unknown>,
@@ -616,10 +607,10 @@ function migrateLegacyFeedbackModeInYaml(projectDir: string): void {
   const block = (doc["ue-mcp"] as Record<string, unknown> | undefined) ?? {};
   const feedback = block.feedback as { mode?: unknown } | undefined;
   if (!feedback || typeof feedback.mode !== "string") return;
-  const mode = feedback.mode;
-  if (mode !== "interactive" && mode !== "auto-approve" && mode !== "defer") return;
+  const mode = FEEDBACK_MODE.parse(feedback.mode);
+  if (!mode) return;
 
-  setFeedbackMode(mode as FeedbackMode);
+  FEEDBACK_MODE.set(mode);
 
   // Strip from yaml.
   delete (block as Record<string, unknown>).feedback;

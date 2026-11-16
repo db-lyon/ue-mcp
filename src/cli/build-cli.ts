@@ -2,22 +2,13 @@
 // @session per-session: Builds one project, chosen with --editor.
 import * as path from "node:path";
 import { buildProject } from "../editor/editor-build.js";
-import { takeEditorTarget, EditorFlagError } from "./editor-flag.js";
+import { selectProjectOrExit } from "./editor-flag.js";
 import { findUProject, isUProjectPath } from "../config/uproject-path.js";
 import { RESET, BOLD, GREEN, RED, CYAN } from "../terminal/ansi.js";
 import type { CliUsage } from "./cli-main.js";
 
 function targetUProject(argv: string[]): string | null {
-  // --editor names one of the editors this server drives; it wins over the
-  // positional, which in turn wins over cwd.
-  let arg: string | undefined;
-  try {
-    const target = takeEditorTarget(argv);
-    arg = target.projectPath ?? target.rest[0];
-  } catch (e) {
-    console.log(`  ${RED}${e instanceof EditorFlagError ? e.message : String(e)}${RESET}`);
-    process.exit(1);
-  }
+  const arg = selectProjectOrExit(argv, { positional: true }).projectPath;
   // A named .uproject is taken as given, so a missing one is reported rather
   // than silently replaced by whatever project cwd holds.
   if (arg && isUProjectPath(arg)) return path.resolve(arg);

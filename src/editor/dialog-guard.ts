@@ -30,7 +30,7 @@ import type { ProjectContext } from "../config/project.js";
 import { isDialogRefusal } from "../bridge/dialog-refusal.js";
 import type { DialogBlock, DialogPromptFn } from "./dialog-types.js";
 import type { ElicitFn, ElicitPrimitiveSchema, ElicitResult } from "../core/elicit.js";
-import type { DialogMode } from "../config/user-state.js";
+import type { DialogMode } from "../config/modes.js";
 import { readEnv } from "../core/env.js";
 import { elicitationNeedsRelay, elicitationUnrenderedNote } from "../dispatch/client-quirks.js";
 import { resolveDialogMode } from "./dialog-mode.js";

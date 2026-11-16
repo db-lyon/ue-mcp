@@ -12,8 +12,8 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { execSync } from "node:child_process";
 
-import { takeEditorTarget, EditorFlagError } from "./editor-flag.js";
-import { distTagForVersion, isNewer } from "../core/version-check.js";
+import { selectProjectOrExit } from "./editor-flag.js";
+import { distTagForVersion, isNewer, npmResolvedLatest } from "../core/version-check.js";
 import {
   NPX_AGE_GATE_OVERRIDE,
   UE_MCP_LAUNCH,
@@ -221,10 +221,6 @@ function readJsonVersion(pkgJsonPath: string): string | null {
   } catch {
     return null;
   }
-}
-
-function registryLatest(): string | null {
-  return safeExec("npm view ue-mcp version");
 }
 
 function npmGlobal(): { version: string | null; dir: string | null } {
@@ -461,7 +457,7 @@ export function collectDoctor(projectArg?: string, cwd: string = process.cwd()):
     );
     return { ...s, servesTarget };
   });
-  const latest = registryLatest();
+  const latest = npmResolvedLatest();
   const effectiveNpxSource = shadow ? "local" : global.version ? "global" : latest ? "registry" : null;
   return {
     selfVersion: packageVersion(),
@@ -695,14 +691,8 @@ export const usage: CliUsage = {
 
 /** Entry point for `ue-mcp doctor [project.uproject] [--editor <name-or-path>]`. */
 export async function run(argv: string[]): Promise<number | void> {
-  let target: { projectPath?: string; rest: string[] };
-  try {
-    target = takeEditorTarget(argv);
-  } catch (e) {
-    console.error(`  ${RED}${e instanceof EditorFlagError ? e.message : String(e)}${RESET}`);
-    process.exit(1);
-  }
-  const projectArg = target.projectPath ?? target.rest.find((a) => !a.startsWith("-"));
+  const target = selectProjectOrExit(argv, { positional: true });
+  const projectArg = target.projectPath;
   const report = collectDoctor(projectArg);
   console.log(formatDoctor(report));
   if (!target.rest.includes("--fix")) return;

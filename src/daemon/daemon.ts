@@ -59,7 +59,7 @@ import { openUrl } from "../core/open-url.js";
 import { handleFlowRoute, hostIsAllowed } from "../flow/http-server.js";
 import { userDir } from "../core/user-dir.js";
 import { readRegistryAuth } from "../extensions/registry-auth.js";
-import { getDialogModeScopes, getFeedbackModeScopes, setDialogMode, setFeedbackMode, setPlaytestMode } from "../config/user-state.js";
+import { DIALOG_MODE, FEEDBACK_MODE, PLAYTEST_MODE } from "../config/modes.js";
 import { resolvePlaytestMode } from "../editor/playtest-mode.js";
 import { EXTENSION_API_VERSION, type DaemonExtensionApi, type DaemonHealth, type EditorStatus, type McpSessionInfo, type RefusedExtension } from "./extension-api.js";
 import { randomUUID } from "node:crypto";
@@ -626,8 +626,8 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
       },
       modes: {
         get: () => {
-          const feedback = getFeedbackModeScopes(projectDir);
-          const dialog = getDialogModeScopes(projectDir);
+          const feedback = FEEDBACK_MODE.scopes(projectDir);
+          const dialog = DIALOG_MODE.scopes(projectDir);
           return {
             // Unset everywhere, feedback asks, as the tool does; a dialog mode left unset follows the client.
             feedback: { mode: feedback.project ?? feedback.user ?? "interactive", project: feedback.project !== undefined },
@@ -635,9 +635,9 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
             playtest: resolvePlaytestMode(projectDir),
           };
         },
-        setFeedback: (mode) => setFeedbackMode(mode, projectDir),
-        setDialog: (mode) => setDialogMode(mode, projectDir),
-        setPlaytest: (mode) => setPlaytestMode(mode, projectDir),
+        setFeedback: (mode) => FEEDBACK_MODE.set(mode, projectDir),
+        setDialog: (mode) => DIALOG_MODE.set(mode, projectDir),
+        setPlaytest: (mode) => PLAYTEST_MODE.set(mode, projectDir),
       },
       checkpoints: (() => {
         const of = (editor?: string) => {

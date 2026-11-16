@@ -31,17 +31,10 @@ import { ensureDaemon } from "../daemon/shim.js";
 import { waitForExit } from "../daemon/supersede-watch.js";
 import { fail, ok, redirectConsoleToStderr, warn } from "../terminal/ansi.js";
 import type { CliUsage } from "./cli-main.js";
+import { flagValue } from "./args.js";
 
 const USAGE = "usage: ue-mcp extension <install <name|zip|url> [--sha256 <hex>] | use <name> <version> | remove <name> | list> [project] [--json]";
 
-/** A value flag's value, written `--name value` or `--name=value`. */
-function flag(argv: string[], name: string): string | undefined {
-  for (let i = 0; i < argv.length; i++) {
-    if (argv[i] === name) return argv[i + 1];
-    if (argv[i].startsWith(`${name}=`)) return argv[i].slice(name.length + 1);
-  }
-  return undefined;
-}
 
 /** Stop the project's daemon and start a new one, so it loads the current extensions. */
 async function restartDaemon(uproject: string): Promise<boolean> {
@@ -128,7 +121,7 @@ export async function run(argv: string[]): Promise<number | void> {
   const out = (v: unknown): void => {
     process.stdout.write(JSON.stringify(v, null, 2) + "\n");
   };
-  const sha256 = flag(argv, "--sha256");
+  const sha256 = flagValue(argv, "--sha256");
   const positional = argv.filter((a, i) => !a.startsWith("--") && argv[i - 1] !== "--sha256");
   const [sub, target] = positional;
   // use takes a version before the project; list takes no target.

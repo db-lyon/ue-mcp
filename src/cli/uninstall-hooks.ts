@@ -13,7 +13,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { uninstallAllRegisteredHooks } from "../integrations/claude-code/hook-installer.js";
 import { BOLD, CYAN, DIM, GREEN, RED, RESET, fail, info, ok, warn } from "../terminal/ansi.js";
-import { takeEditorTarget, EditorFlagError } from "./editor-flag.js";
+import { selectProject } from "./editor-flag.js";
 import type { CliUsage } from "./cli-main.js";
 import { projectDirOf } from "../config/uproject-path.js";
 
@@ -22,10 +22,9 @@ function resolveProjectDir(argv: string[]): string | null {
   // the editors this server drives and wins over it.
   let arg: string | undefined;
   try {
-    const target = takeEditorTarget(argv);
-    arg = target.projectPath ?? target.rest[0];
+    arg = selectProject(argv, { positional: true }).projectPath;
   } catch (e) {
-    fail(e instanceof EditorFlagError ? e.message : String(e));
+    fail(e instanceof Error ? e.message : String(e));
     return null;
   }
   if (arg) {

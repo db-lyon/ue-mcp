@@ -2,7 +2,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { warn as logWarn } from "../../core/log.js";
-import { getInstalledHooks, setInstalledHooks } from "../../config/user-state.js";
+import { getInstalledHooks, setInstalledHooks } from "../../config/hook-state.js";
 
 /**
  * Symmetric install/uninstall for the Claude Code PostToolUse hook that
