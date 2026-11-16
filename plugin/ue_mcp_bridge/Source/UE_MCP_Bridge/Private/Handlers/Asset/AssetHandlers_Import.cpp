@@ -505,7 +505,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::ImportSkeletalMesh(const TSharedPtr<FJson
 	FString Importer = OptionalString(Params, TEXT("importer"), TEXT("auto")).ToLower();
 	if (Importer == TEXT("auto"))
 	{
-#if ENGINE_MAJOR_VERSION > 5 || (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 8)
+#if UE_MCP_HAS_5_8_API
 		Importer = TEXT("interchange");
 #else
 		Importer = TEXT("legacy");
@@ -4056,8 +4056,8 @@ TSharedPtr<FJsonValue> FAssetHandlers::SetStringTableEntry(const TSharedPtr<FJso
 
 	StringTable->Modify(true);
 	// The 3-arg SetSourceString (with a trailing metadata/namespace arg) is UE 5.8+.
-	// 5.7 (and non-editor) take the 2-arg form.
-#if WITH_EDITORONLY_DATA && UE_MCP_HAS_5_8_API
+	// 5.7 takes the 2-arg form.
+#if UE_MCP_HAS_5_8_API
 	StringTable->GetMutableStringTable()->SetSourceString(EntryKey, SourceString, FString());
 #else
 	StringTable->GetMutableStringTable()->SetSourceString(EntryKey, SourceString);
@@ -4530,7 +4530,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::ImportStringTableCsv(const TSharedPtr<FJs
 		}
 		else
 		{
-#if WITH_EDITORONLY_DATA && UE_MCP_HAS_5_8_API
+#if UE_MCP_HAS_5_8_API
 			StringTable->GetMutableStringTable()->SetSourceString(FTextKey(Entry.Key), Entry.Value, FString());
 #else
 			StringTable->GetMutableStringTable()->SetSourceString(FTextKey(Entry.Key), Entry.Value);
@@ -5082,7 +5082,6 @@ TSharedPtr<FJsonValue> FAssetHandlers::CompareTextures(const TSharedPtr<FJsonObj
 
 	const bool bSameDims = A->GetSizeX() == B->GetSizeX() && A->GetSizeY() == B->GetSizeY();
 	const bool bSameFormat = A->GetPixelFormat() == B->GetPixelFormat();
-#if WITH_EDITORONLY_DATA
 #if UE_MCP_HAS_5_5_API
 	const FString IdA = A->Source.GetIdString();
 	const FString IdB = B->Source.GetIdString();
@@ -5094,9 +5093,6 @@ TSharedPtr<FJsonValue> FAssetHandlers::CompareTextures(const TSharedPtr<FJsonObj
 	const FString IdB = B->Source.GetId().ToString();
 #endif
 	const bool bSameSource = (IdA == IdB);
-#else
-	const FString IdA, IdB; const bool bSameSource = false;
-#endif
 	const bool bIdentical = bSameDims && bSameFormat && bSameSource;
 
 	auto Result = MCPSuccess();

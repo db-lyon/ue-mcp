@@ -591,7 +591,7 @@ namespace MeshStudioRender
 				{
 					if (!Material) continue;
 					TArray<UTexture*> Used;
-#if ENGINE_MAJOR_VERSION > 5 || (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 7)
+#if UE_MCP_HAS_5_7_API
 					Material->GetUsedTextures(Used);
 #else
 					Material->GetUsedTextures(Used, EMaterialQualityLevel::High, true, World->GetFeatureLevel(), true);

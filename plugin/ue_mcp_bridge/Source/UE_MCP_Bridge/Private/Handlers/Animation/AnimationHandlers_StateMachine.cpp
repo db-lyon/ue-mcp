@@ -67,12 +67,6 @@
 #include "Dom/JsonValue.h"
 
 
-// UPoseSearchDatabase's GetNumAnimationAssets / GetDatabaseAnimationAsset pair
-// is 5.5 and newer. 5.4 exposes the clip list as the AnimationAssets array of
-// FInstancedStruct with GetAnimationAssetBase, which is what the #else arms
-// below are written against.
-#define UE_MCP_HAS_POSESEARCH_DATABASE_ASSET_API UE_MCP_HAS_5_5_API
-
 #if UE_MCP_HAS_5_8_API
 static TSharedPtr<FJsonObject> AnimationTransformToJson(const FTransform& Value)
 {
@@ -226,12 +220,10 @@ static FPoseSearchClipFlags ParsePoseSearchClipFlags(const TSharedPtr<FJsonObjec
 #if UE_MCP_HAS_POSESEARCH_DATABASE_ASSET_API
 static void ApplyPoseSearchClipFlags(FPoseSearchDatabaseAnimationAsset& Entry, const FPoseSearchClipFlags& Flags)
 {
-#if WITH_EDITORONLY_DATA
 	if (Flags.bEnabled.IsSet()) Entry.bEnabled = Flags.bEnabled.GetValue();
 	if (Flags.bDisableReselection.IsSet()) Entry.bDisableReselection = Flags.bDisableReselection.GetValue();
 	if (Flags.MirrorOption.IsSet()) Entry.MirrorOption = Flags.MirrorOption.GetValue();
 	if (Flags.SamplingRange.IsSet()) Entry.SamplingRange = Flags.SamplingRange.GetValue();
-#endif
 }
 #endif
 

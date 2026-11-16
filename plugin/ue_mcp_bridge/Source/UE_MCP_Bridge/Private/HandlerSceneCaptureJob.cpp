@@ -16,7 +16,7 @@ namespace UEMCP::SceneCapture
 		// Unlike a zero-duration pending view, this expires without requiring
 		// another viewport to submit a view after the capture finishes.
 		// SetupViewInfos copies the view into the current update before expiry.
-#if ENGINE_MAJOR_VERSION > 5 || (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 8)
+#if UE_MCP_HAS_5_8_API
 		Streaming.AddViewInformation(Location, ScreenSize, FovScreenSize, 1.0f, false, WarmStreamingViewDurationSeconds, nullptr, World);
 #else
 		Streaming.AddViewInformation(Location, ScreenSize, FovScreenSize, 1.0f, false, WarmStreamingViewDurationSeconds);

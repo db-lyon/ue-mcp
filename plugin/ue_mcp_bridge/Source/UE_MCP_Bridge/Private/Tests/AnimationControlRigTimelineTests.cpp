@@ -1,4 +1,6 @@
-#if WITH_DEV_AUTOMATION_TESTS && (ENGINE_MAJOR_VERSION > 5 || (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 8))
+#include "HandlerEngineVersion.h"
+
+#if WITH_DEV_AUTOMATION_TESTS && UE_MCP_HAS_5_8_API
 
 #include "Animation/AnimData/IAnimationDataController.h"
 #include "Animation/AnimSequence.h"

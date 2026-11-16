@@ -177,7 +177,7 @@ public class UE_MCP_Bridge : ModuleRules
 			PrivateDependencyModuleNames.Add("StructUtils");
 		}
 
-		if (Target.Version.MajorVersion == 5 && Target.Version.MinorVersion >= 8)
+		if (Target.Version.MajorVersion > 5 || (Target.Version.MajorVersion == 5 && Target.Version.MinorVersion >= 8))
 		{
 			PrivateDependencyModuleNames.Add("TypedElementFramework");
 		}

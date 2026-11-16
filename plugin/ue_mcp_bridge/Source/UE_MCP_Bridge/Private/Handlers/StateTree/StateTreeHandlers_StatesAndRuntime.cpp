@@ -191,10 +191,8 @@ namespace
 			Obj->SetStringField(TEXT("name"), Prop->GetName());
 			Obj->SetStringField(TEXT("type"), Prop->GetCPPType());
 			Obj->SetStringField(TEXT("class"), Prop->GetClass()->GetName());
-#if WITH_EDITOR
 			const FString Tooltip = Prop->GetToolTipText().ToString();
 			if (!Tooltip.IsEmpty()) Obj->SetStringField(TEXT("description"), Tooltip);
-#endif
 			Out.Add(MakeShared<FJsonValueObject>(Obj));
 		}
 		return Out;
@@ -661,11 +659,9 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::ListStateTreeNodeTypes(const TSharedP
 			auto Obj = MakeShared<FJsonObject>();
 			Obj->SetStringField(TEXT("structType"), Candidate->GetName());
 			Obj->SetStringField(TEXT("structPath"), Candidate->GetPathName());
-#if WITH_EDITOR
 			Obj->SetStringField(TEXT("displayName"), Candidate->GetDisplayNameText().ToString());
 			const FString Tooltip = Candidate->GetToolTipText().ToString();
 			if (!Tooltip.IsEmpty()) Obj->SetStringField(TEXT("description"), Tooltip);
-#endif
 			const UStruct* InstType = StateTreeDepthInstanceDataType(Candidate);
 			Obj->SetStringField(TEXT("instanceDataType"), InstType ? InstType->GetName() : TEXT(""));
 			Obj->SetBoolField(TEXT("instanceDataIsClass"), InstType != nullptr && InstType->IsA<UClass>());

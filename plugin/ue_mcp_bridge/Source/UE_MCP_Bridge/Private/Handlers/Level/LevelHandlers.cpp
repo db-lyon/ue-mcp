@@ -1116,11 +1116,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::GetOutliner(const TSharedPtr<FJsonObject>
 			continue;
 		}
 
-#if WITH_EDITOR
 		const bool bEditorHidden = Actor->IsTemporarilyHiddenInEditor();
-#else
-		const bool bEditorHidden = false;
-#endif
 		if (bHasEditorHiddenFilter && bEditorHidden != bEditorHiddenFilterValue)
 		{
 			continue;
@@ -1227,14 +1223,12 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetEditorVisibility(const TSharedPtr<FJso
 		const FString Label = Actor->GetActorLabel();
 		if (!bAll && !TargetLabels.Contains(Label)) continue;
 		Matched++;
-#if WITH_EDITOR
 		if (Actor->IsTemporarilyHiddenInEditor() != bHidden)
 		{
 			Actor->SetIsTemporarilyHiddenInEditor(bHidden);
 			Changed++;
 			Affected.Add(MakeShared<FJsonValueString>(Label));
 		}
-#endif
 	}
 
 	auto Result = MCPSuccess();
@@ -4780,7 +4774,6 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetNaniteSettings(const TSharedPtr<FJsonO
 		TEXT("assetPath"), TEXT("enabled"), TEXT("positionPrecision"),
 	});
 
-#if WITH_EDITOR
 	FString AssetPath;
 	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err; // meshPath is a spec alias (#1057).
 	REQUIRE_ASSET(UStaticMesh, Mesh, AssetPath);
@@ -4869,9 +4862,6 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetNaniteSettings(const TSharedPtr<FJsonO
 			TEXT("The inverse rebuilds the mesh with the previous settings and saves the package again, so the asset returns to its previous Nanite state rather than to its previous file bytes."));
 	}
 	return MCPResult(Result);
-#else
-	return MCPError(TEXT("SetNaniteSettings requires the editor"));
-#endif
 }
 
 // #696: read a UStaticMesh's Nanite state.

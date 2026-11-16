@@ -28,9 +28,6 @@
 #include "UObject/Package.h"
 #include "UObject/UObjectIterator.h"
 
-// ISourceControlProvider::CanExecuteOperation, asked before an operation runs.
-#define UE_MCP_SCC_HAS_CAN_EXECUTE (ENGINE_MAJOR_VERSION > 5 || (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 3))
-
 // ─── Provider progress windows ─────────────────────────────────────────────
 
 namespace MCPSourceControlState
@@ -542,7 +539,6 @@ namespace MCPSourceControlDetail
 	 *  CanExecuteOperation is asked where the engine has it (5.3 and later). */
 	TSharedPtr<FJsonValue> RequireOperation(ISourceControlProvider& Provider, const FSourceControlOperationRef& Operation, const TCHAR* Action)
 	{
-#if UE_MCP_SCC_HAS_CAN_EXECUTE
 		if (!Provider.CanExecuteOperation(Operation))
 		{
 			TSharedPtr<FJsonObject> Error = MCPErrorObject(FString::Printf(
@@ -553,7 +549,6 @@ namespace MCPSourceControlDetail
 			Error->SetStringField(TEXT("operation"), Operation->GetName().ToString());
 			return MCPResult(Error);
 		}
-#endif
 		return nullptr;
 	}
 
@@ -651,7 +646,6 @@ TSharedPtr<FJsonValue> FSourceControlHandlers::GetProvider(const TSharedPtr<FJso
 
 	// Which source_control actions this provider can run, asked of the provider
 	// itself rather than inferred from its name.
-#if UE_MCP_SCC_HAS_CAN_EXECUTE
 	TSharedPtr<FJsonObject> Operations = MakeShared<FJsonObject>();
 	Operations->SetBoolField(TEXT("checkout"), Provider.CanExecuteOperation(ISourceControlOperation::Create<FCheckOut>()));
 	Operations->SetBoolField(TEXT("add"), Provider.CanExecuteOperation(ISourceControlOperation::Create<FMarkForAdd>()));
@@ -662,9 +656,6 @@ TSharedPtr<FJsonValue> FSourceControlHandlers::GetProvider(const TSharedPtr<FJso
 	Operations->SetBoolField(TEXT("history"), Provider.CanExecuteOperation(ISourceControlOperation::Create<FUpdateStatus>()));
 	Operations->SetBoolField(TEXT("connect"), Provider.CanExecuteOperation(ISourceControlOperation::Create<FConnect>()));
 	Result->SetObjectField(TEXT("operations"), Operations);
-#else
-	Result->SetStringField(TEXT("operationsNote"), TEXT("This engine version cannot ask the provider which operations it supports."));
-#endif
 	return MCPResult(Result);
 }
 

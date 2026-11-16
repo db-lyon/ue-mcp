@@ -18,6 +18,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { parseIni } from "../../codeintel/ue-ini.js";
+import { engineHas } from "./engine-features.js";
 
 export const UNREAL_MCP_PLUGIN = "ModelContextProtocol";
 export const UNREAL_MCP_SECTION = "/Script/ModelContextProtocol.ModelContextProtocolSettings";
@@ -59,19 +60,6 @@ export interface UnrealMcpServerStatus {
   runsBeside: boolean;
   /** Ports ue-mcp uses that this server's port collides with, as sentences. */
   portConflicts: string[];
-}
-
-/** Major.minor as a comparable number pair, or null. */
-export function parseEngineVersion(v: string | null | undefined): [number, number] | null {
-  const m = v ? /^(\d+)\.(\d+)/.exec(v) : null;
-  return m ? [Number(m[1]), Number(m[2])] : null;
-}
-
-/** Whether `v` is at least `major.minor`. Null when the version is unknown. */
-export function engineAtLeast(v: string | null | undefined, major: number, minor: number): boolean | null {
-  const p = parseEngineVersion(v);
-  if (!p) return null;
-  return p[0] > major || (p[0] === major && p[1] >= minor);
 }
 
 /** The editor's saved-config folder for a platform, as UE names it. */
@@ -135,7 +123,7 @@ export function readUnrealMcpServer(inputs: UnrealMcpServerInputs, uePorts: { br
   const { uprojectPath, projectDir, engineVersion, engineRoot } = inputs;
   const platform = inputs.platform ?? process.platform;
   const present = enginePluginPresent(engineRoot, UNREAL_MCP_PLUGIN);
-  const recent = engineAtLeast(engineVersion, 5, 8);
+  const recent = engineHas("unrealMcpServer", engineVersion);
   // The project's own version wins: an engine root resolved by fallback can be a newer install.
   if (recent === false || present === false || (present === null && recent !== true)) return null;
 
@@ -162,7 +150,7 @@ export function readUnrealMcpServer(inputs: UnrealMcpServerInputs, uePorts: { br
   if (auto) {
     autoStart = iniBool(auto.value) ?? false;
     autoStartSource = auto.source;
-  } else if (!engineRoot && engineAtLeast(engineVersion, 5, 9)) {
+  } else if (!engineRoot && engineHas("unrealMcpServerAutoStart", engineVersion)) {
     // No engine tree to read: UE 5.9's Base ini is known to turn it on.
     autoStart = true;
     autoStartSource = "engine";
@@ -194,7 +182,7 @@ export function readUnrealMcpServer(inputs: UnrealMcpServerInputs, uePorts: { br
     urlPath,
     url: `http://127.0.0.1:${port}${urlPath}`,
     userIni,
-    section: engineAtLeast(engineVersion, 5, 9) === false ? UNREAL_MCP_SECTION_58 : UNREAL_MCP_SECTION,
+    section: engineHas("unrealMcpServerAutoStart", engineVersion) === false ? UNREAL_MCP_SECTION_58 : UNREAL_MCP_SECTION,
     runsBeside,
     portConflicts,
   };

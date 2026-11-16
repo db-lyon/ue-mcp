@@ -524,11 +524,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::ReadUserDefinedEnum(const TSharedPtr<
 	// UPROPERTYs on the asset (EnumDescription).
 	Res->SetStringField(TEXT("objectPath"), Enum->GetPathName());
 	Res->SetBoolField(TEXT("isUserDefined"), UserEnum != nullptr);
-#if WITH_EDITORONLY_DATA
 	Res->SetStringField(TEXT("description"), UserEnum ? UserEnum->EnumDescription.ToString() : FString());
-#else
-	Res->SetStringField(TEXT("description"), FString());
-#endif
 	Res->SetBoolField(TEXT("bitflags"), UserEnum ? FEnumEditorUtils::IsEnumeratorBitflagsType(UserEnum) : false);
 
 	TArray<TSharedPtr<FJsonValue>> Values;
@@ -846,11 +842,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::ReadUserDefinedStruct(const TSharedPt
 	Res->SetStringField(TEXT("objectPath"), Struct->GetPathName());
 	Res->SetStringField(TEXT("guid"), Struct->Guid.ToString());
 	Res->SetStringField(TEXT("status"), StructStatusName(Struct->Status.GetValue()));
-#if WITH_EDITORONLY_DATA
 	Res->SetStringField(TEXT("errorMessage"), Struct->ErrorMessage);
-#else
-	Res->SetStringField(TEXT("errorMessage"), FString());
-#endif
 	Res->SetStringField(TEXT("tooltip"), FStructureEditorUtils::GetTooltip(Struct));
 
 	FString ValidityMessage;

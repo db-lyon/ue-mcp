@@ -1687,14 +1687,12 @@ TSharedPtr<FJsonValue> FGameplayHandlers::SetActionTriggers(const TSharedPtr<FJs
 		for (UObject* Instance : NewModifiers) Action->Modifiers.Add(Cast<UInputModifier>(Instance));
 	}
 
-#if WITH_EDITOR
 	// A running player caches the instanced triggers off this action, and the
 	// engine tracks which actions changed theirs so it can rebuild those
 	// caches. Writing the array without going through PostEditChange leaves
 	// that bookkeeping stale, so an already-applied context keeps the old
 	// trigger behaviour with no error anywhere.
 	Action->PostEditChange();
-#endif
 	Action->MarkPackageDirty();
 
 	MCPSetExisted(Result);
@@ -2020,9 +2018,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::SetPlayerMappableSettings(const TShare
 	if (bHasDisplayName) Settings->DisplayName = FText::FromString(DisplayName);
 	if (bHasDisplayCategory) Settings->DisplayCategory = FText::FromString(DisplayCategory);
 
-#if WITH_EDITOR
 	Action->PostEditChange();
-#endif
 	auto Result = MCPSuccess();
 	if (bCreated)
 	{

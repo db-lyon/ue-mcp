@@ -3,8 +3,6 @@
 #include "HandlerUtils.h"
 #include "Runtime/Launch/Resources/Version.h"
 
-#define UE_MCP_HAS_PCG_LEVEL_TO_ASSET (ENGINE_MAJOR_VERSION > 5 || (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 5))
-
 #if UE_MCP_HAS_PCG_LEVEL_TO_ASSET
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "Engine/LevelStreaming.h"
@@ -15,7 +13,7 @@
 #include "PCGDataAsset.h"
 #include "PCGLevelToAsset.h"
 #include "UObject/Package.h"
-#if ENGINE_MAJOR_VERSION > 5 || (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 6)
+#if UE_MCP_HAS_PCG_BASE_POINT_DATA
 #include "Data/PCGBasePointData.h"
 #else
 #include "Data/PCGPointData.h"
@@ -25,7 +23,7 @@ namespace
 {
 	int32 MCPPCGPointCount(const UPCGData* Data)
 	{
-#if ENGINE_MAJOR_VERSION > 5 || (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 6)
+#if UE_MCP_HAS_PCG_BASE_POINT_DATA
 		const UPCGBasePointData* Points = Cast<UPCGBasePointData>(Data);
 		return Points ? Points->GetNumPoints() : -1;
 #else

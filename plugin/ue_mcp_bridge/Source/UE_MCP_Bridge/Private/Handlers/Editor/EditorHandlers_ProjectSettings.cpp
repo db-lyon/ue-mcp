@@ -145,10 +145,8 @@ bool FEditorHandlers::PersistConfigProperty(UObject* Object, const FString& Prop
 	if (!Prop || !Prop->HasAnyPropertyFlags(CPF_Config)) return false;
 
 	FString Key = Prop->GetName();
-#if WITH_EDITOR
 	const FString& CVarName = Prop->GetMetaData(TEXT("ConsoleVariable"));
 	if (!CVarName.IsEmpty()) Key = CVarName;
-#endif
 	const FString Section = Class->GetPathName();
 	const bool bDefaultConfig = Class->HasAnyClassFlags(CLASS_DefaultConfig);
 

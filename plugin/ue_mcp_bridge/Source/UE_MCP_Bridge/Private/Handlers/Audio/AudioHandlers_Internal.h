@@ -78,11 +78,7 @@ namespace MCPAudio
 			OldParent->Modify();
 			OldParent->ChildClasses.Remove(Class);
 		}
-#if WITH_EDITOR
 		Class->SetParentClass(NewParent);
-#else
-		Class->ParentClass = NewParent;
-#endif
 		if (NewParent)
 		{
 			NewParent->Modify();
@@ -140,7 +136,6 @@ namespace MCPAudio
 		{
 			Parent->ChildNodes[Index] = nullptr;
 		}
-#if WITH_EDITORONLY_DATA
 		if (UEdGraphNode* GraphNode = Parent->GetGraphNode())
 		{
 			int32 InputIndex = 0;
@@ -157,6 +152,5 @@ namespace MCPAudio
 				break;
 			}
 		}
-#endif
 	}
 }

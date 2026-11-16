@@ -217,8 +217,31 @@ function trackedMarkdown(): string[] {
  * so a page that gains a marker is stamped without being registered anywhere.
  */
 export function markerFiles(): string[] {
-  return trackedMarkdown()
-    .filter((rel) => fs.existsSync(path.join(repo, rel)))
-    .filter((rel) => ANY_COUNT_MARKER.test(fs.readFileSync(path.join(repo, rel), "utf8")))
-    .sort();
+  return [
+    ...trackedMarkdown()
+      .filter((rel) => fs.existsSync(path.join(repo, rel)))
+      .filter((rel) => ANY_COUNT_MARKER.test(fs.readFileSync(path.join(repo, rel), "utf8"))),
+    ...pluginMarkerFiles(),
+  ].sort();
+}
+
+/**
+ * Plugin sources that carry a count marker. A header comment saying which
+ * engines the version gates cover is a claim like any other, and goes stale
+ * the same way, so it is stamped from the same source.
+ */
+export function pluginMarkerFiles(): string[] {
+  const root = path.join(repo, "plugin", "ue_mcp_bridge", "Source");
+  const out: string[] = [];
+  const walk = (dir: string) => {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) walk(full);
+      else if (/\.(h|cpp|cs)$/.test(entry.name) && ANY_COUNT_MARKER.test(fs.readFileSync(full, "utf8"))) {
+        out.push(path.relative(repo, full).split(path.sep).join("/"));
+      }
+    }
+  };
+  if (fs.existsSync(root)) walk(root);
+  return out.sort();
 }

@@ -70,11 +70,7 @@ namespace MCPReflectionSchema
 
 	inline FString SchemaMeta(const FProperty* Prop, const TCHAR* Key)
 	{
-#if WITH_EDITOR
 		return Prop ? Prop->GetMetaData(Key) : FString();
-#else
-		return FString();
-#endif
 	}
 
 	/** Presence of a bare metadata key. EditConditionHides and friends are
@@ -82,11 +78,7 @@ namespace MCPReflectionSchema
 	 *  absent. */
 	inline bool SchemaHasMeta(const FProperty* Prop, const TCHAR* Key)
 	{
-#if WITH_EDITOR
 		return Prop && Prop->HasMetaData(Key);
-#else
-		return false;
-#endif
 	}
 
 	/** The UPROPERTY specifier names for a property's flags. Same vocabulary
@@ -361,9 +353,7 @@ namespace MCPReflectionSchema
 		{
 			const FString Name = Enum->GetNameStringByIndex(i);
 			if (Name.IsEmpty() || Name.EndsWith(TEXT("_MAX"))) continue;
-#if WITH_EDITOR
 			if (Enum->HasMetaData(TEXT("Hidden"), i)) continue;
-#endif
 			TSharedPtr<FJsonObject> Entry = MakeShared<FJsonObject>();
 			Entry->SetStringField(TEXT("name"), Name);
 			Entry->SetNumberField(TEXT("value"), static_cast<double>(Enum->GetValueByIndex(i)));
@@ -544,7 +534,6 @@ namespace MCPReflectionSchema
 			? Prop->GetName()
 			: PathPrefix + TEXT(".") + Prop->GetName());
 
-#if WITH_EDITOR
 		SchemaAddIfNonEmpty(Obj, TEXT("tooltip"),       Prop->GetMetaData(TEXT("ToolTip")).TrimStartAndEnd());
 		SchemaAddIfNonEmpty(Obj, TEXT("category"),      Prop->GetMetaData(TEXT("Category")));
 		SchemaAddIfNonEmpty(Obj, TEXT("displayName"),   Prop->GetMetaData(TEXT("DisplayName")));
@@ -553,7 +542,6 @@ namespace MCPReflectionSchema
 		SchemaAddIfNonEmpty(Obj, TEXT("uiMin"),         Prop->GetMetaData(TEXT("UIMin")));
 		SchemaAddIfNonEmpty(Obj, TEXT("uiMax"),         Prop->GetMetaData(TEXT("UIMax")));
 		SchemaAddIfNonEmpty(Obj, TEXT("units"),         Prop->GetMetaData(TEXT("Units")));
-#endif
 
 		const TArray<TSharedPtr<FJsonValue>> Flags = SchemaEncodePropertyFlags(Prop);
 		if (Flags.Num() > 0) Obj->SetArrayField(TEXT("flags"), Flags);

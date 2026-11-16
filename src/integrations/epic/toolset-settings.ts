@@ -22,7 +22,8 @@
  */
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { editorPlatformDir, engineAtLeast } from "./unreal-mcp-server.js";
+import { editorPlatformDir } from "./unreal-mcp-server.js";
+import { engineHas } from "./engine-features.js";
 
 export const TOOLSET_SETTINGS_SECTION = "/Script/ToolsetRegistry.ToolsetRegistrySettings";
 const KEY = "BlockedNames";
@@ -44,8 +45,8 @@ export function toolsetSettingsFile(
   engineVersion: string | null,
   platform: NodeJS.Platform = process.platform,
 ): ToolsetSettingsFile | { reason: string } {
-  const at59 = engineAtLeast(engineVersion, 5, 9);
-  const at58 = engineAtLeast(engineVersion, 5, 8);
+  const at59 = engineHas("toolsetSettingsInProject", engineVersion);
+  const at58 = engineHas("toolsetRegistry", engineVersion);
   if (at59 === null || at58 === null || !engineVersion) {
     return { reason: `the project's engine version could not be read (EngineAssociation '${engineVersion ?? "none"}'), so it is not known which file the Toolset Registry reads` };
   }

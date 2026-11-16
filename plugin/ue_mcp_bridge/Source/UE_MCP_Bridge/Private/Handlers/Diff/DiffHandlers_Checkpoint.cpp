@@ -77,11 +77,8 @@
 #include "RHIUtilities.h"
 #include "Rendering/SkeletalMeshRenderData.h"
 #include "Rendering/SkeletalMeshLODRenderData.h"
-#if ENGINE_MAJOR_VERSION > 5 || (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 5)
-#define UE_MCP_CKDIFF_HAS_DETAILS_DIFF 1
+#if UE_MCP_HAS_DETAILS_DIFF
 #include "SDetailsDiff.h"
-#else
-#define UE_MCP_CKDIFF_HAS_DETAILS_DIFF 0
 #endif
 #include "Settings/EditorLoadingSavingSettings.h"
 #include "Input/HittestGrid.h"
@@ -629,10 +626,8 @@ namespace
 
 	FString CkDiffActorLabel(const AActor* Actor)
 	{
-#if WITH_EDITOR
 		const FString Label = Actor->GetActorLabel(false);
 		if (!Label.IsEmpty()) return Label;
-#endif
 		return Actor->GetName();
 	}
 
@@ -1752,7 +1747,7 @@ namespace
 	/** Frames drawn so the panel builds its node widgets, measures them and settles its zoom. */
 	constexpr int32 CkDiffGraphPictureFrames = 12;
 	/** SGraphEditor's view location type: Slate positions are floats from 5.6. */
-#if ENGINE_MAJOR_VERSION > 5 || (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 6)
+#if UE_MCP_HAS_5_6_API
 	using FCkDiffGraphViewVector = FVector2f;
 #else
 	using FCkDiffGraphViewVector = FVector2D;
@@ -2144,7 +2139,7 @@ TSharedPtr<FJsonValue> FDiffHandlers::DiffCheckpointAssetOne(const TSharedPtr<FJ
 		{
 			NativeReason = TEXT("An actor package has no asset to show in a diff window.");
 		}
-		else if (Engine.Native == TEXT("details") && !UE_MCP_CKDIFF_HAS_DETAILS_DIFF)
+		else if (Engine.Native == TEXT("details") && !UE_MCP_HAS_DETAILS_DIFF)
 		{
 			NativeReason = TEXT("The details diff window needs UE 5.5 or later.");
 		}
@@ -2355,7 +2350,7 @@ TSharedPtr<FJsonValue> FDiffHandlers::OpenCheckpointNativeDiff(const TSharedPtr<
 		}
 		else if (Engine.Native == TEXT("details"))
 		{
-#if !UE_MCP_CKDIFF_HAS_DETAILS_DIFF
+#if !UE_MCP_HAS_DETAILS_DIFF
 			return MCPErrorWithCode(TEXT("no_native_diff"), TEXT("The details diff window needs UE 5.5 or later"));
 #else
 			SDetailsDiff::CreateDiffWindow(FText::FromString(FString::Printf(TEXT("Diff of %s: %s to %s"), *New->GetName(), *FromLabel, *ToLabel)), Old, New, OldRev, NewRev);
