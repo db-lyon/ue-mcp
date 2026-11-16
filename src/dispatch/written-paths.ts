@@ -1,42 +1,41 @@
-// @session independent: Pure classification of a bridge call against the recorded handler specs.
+// @session independent: Pure classification of a call against the declarations in the graph it is handed.
 /**
- * Write classification for the source-control guard.
+ * Which asset content paths one call writes: the one rule asset locks, asset
+ * leases and the source-control guard all read.
  *
- * The guard needs to know, for a given bridge method + params, which asset
- * content paths the call is about to modify, so it can check them out (or refuse
- * on a human's lock) BEFORE the write reaches disk. This module is the single
- * place that encodes that knowledge.
+ * A call whose declared effect is `read` writes nothing, whatever it was
+ * handed. For any other call the written paths are, in order:
  *
- * A method whose declared effect is `read` writes nothing, whatever it was
- * handed. For any other method the written paths are the union of three layers:
+ *   1. The action's own `writes` declaration, for batches whose paths sit
+ *      inside nested entries and for the few actions whose spec cannot say
+ *      which path is written. It replaces the rest.
+ *   2. The generic keys (PATH_KEYS, PATH_ARRAY_KEYS), read off any call,
+ *      including one this server carries no declaration for.
+ *   3. The action's recorded parameter spec, read under each parameter's name
+ *      and every alias the registry renames to it. See `specWrittenParams`.
  *
- *   1. EXPLICIT extractors, for batches whose paths sit inside nested entries
- *      and for the few methods whose spec cannot say which path is written.
- *   2. The generic keys (PATH_KEYS, PATH_ARRAY_KEYS), read off any method,
- *      including one this server carries no spec for.
- *   3. The method's recorded handler spec (RECORDED_HANDLER_SPECS), read under
- *      each parameter's name and every alias the registry renames to it. See
- *      `specWrittenParams` for which spec'd parameters count as written.
+ * An action that runs steps (`steps`, or a raw method's `steps`) writes the
+ * union of what its steps write. An action that manages asset coordination
+ * itself (`assetCoordination`) writes nothing for this purpose: taking a lock
+ * around asset(lock) would acquire a lock in order to acquire a lock.
  *
- * Classification returns UE content paths (e.g. "/Game/Foo"). Resolving those to
- * on-disk files, and deciding which already exist (modify -> checkout) versus do
- * not (create -> skip, it will be `p4 add`ed later), is the caller's job, so a
- * value that names no existing content file costs nothing.
+ * Only a content path counts: a value that starts with a single slash and a
+ * mount name, not a class path under /Script and not a filesystem root a
+ * `*Path` parameter naming a file on disk would start with.
  *
- * A source control operation (every `source_control_*` method) is classified as
- * writing nothing, whatever paths it names: it is the provider call a guard
- * would make, so intercepting it would check a file out before checking it out,
- * or before reverting or submitting it. See PROVIDER_OPERATION.
+ * A source control operation (every `source_control_*` method) is classified
+ * as writing nothing, whatever paths it names: it is the provider call a guard
+ * would make, so intercepting it would check a file out before checking it
+ * out, or before reverting or submitting it.
  *
- * A path none of the layers names is not checked out: the write then meets
+ * A path none of the layers names is not guarded: the write then meets
  * Unreal's own read-only failure, which is visible and can be checked out by
  * hand. Naming a read input instead takes a lock nobody needed, so a spec'd
  * parameter known only ever to be read is left out (READ_REFERENCES).
  */
-import { bridgeMethodEffect } from "../surface/action-effects.js";
-import type { HandlerSpecs, ParamSpec } from "../surface/handler-spec.js";
-import { RECORDED_HANDLER_SPECS } from "../tools/specs/index.js";
-import type { ToolDef } from "../surface/tool-types.js";
+import { actionSpecOf, bridgeMethodEffect, bridgeMethodSpecs, rawMethodSteps, taskEffect } from "../surface/action-effects.js";
+import type { ParamSpec } from "../surface/handler-spec.js";
+import type { ActionSpec, ToolDef } from "../surface/tool-types.js";
 
 export interface WriteClassification {
   /**
@@ -48,6 +47,13 @@ export interface WriteClassification {
   writes: boolean;
   /** UE content paths the call modifies. Empty when nothing is guardable. */
   contentPaths: string[];
+}
+
+export interface ActionClassification {
+  /** Whether the call may change anything at all (its declared effect is not `read`). */
+  mutates: boolean;
+  /** Distinct asset paths this call would write (may be empty even when mutating). */
+  paths: string[];
 }
 
 /** Single-value params that carry an asset content path. */
@@ -82,88 +88,24 @@ const READ_REFERENCES = new Set([
 ]);
 
 /**
- * Bridge methods that are themselves source control provider operations
- * (checkout, add, mark_for_delete, revert, sync, submit, connect and the rest).
- * They change provider state, not asset content, so no write guard intercepts
- * them. Declared here rather than left to the lowercase `paths` happening to
- * miss PATH_ARRAY_KEYS and ASSET_REFERENCE.
+ * Leading segments that are not an asset: a class path under /Script, and the
+ * filesystem roots a POSIX path starts with.
  */
-const PROVIDER_OPERATION = /^source_control_/;
+const NOT_CONTENT = /^\/(?:Script|home|Users|tmp|var|mnt|opt|usr|etc|private|Volumes|root|srv|dev|proc)\//i;
 
 /** True when the bridge method is a source control provider operation. */
 export function isProviderOperation(method: string): boolean {
-  return PROVIDER_OPERATION.test(method);
+  return /^source_control_/.test(method);
 }
 
-type Extractor = (params: Record<string, unknown>) => string[];
-
-/** Coerce a param to a non-empty string, or null. */
-function str(v: unknown): string | null {
-  return typeof v === "string" && v.length > 0 ? v : null;
+/** A value that names a content path. */
+function isContentPath(v: unknown): v is string {
+  return typeof v === "string" && /^\/[A-Za-z0-9_]/.test(v) && !NOT_CONTENT.test(v);
 }
 
-/** Coerce a param to an array of non-empty strings. */
 function strArray(v: unknown): string[] {
   return Array.isArray(v) ? v.filter((x): x is string => typeof x === "string" && x.length > 0) : [];
 }
-
-/**
- * Explicit extractors, keyed by bare bridge method name. They replace the other
- * two layers for their method.
- */
-const EXPLICIT: Record<string, Extractor> = {
-  // The edit session writes the sequence; the mesh, source animation and rig
-  // it is built from are only read.
-  begin_control_rig_edit: (p) => strArray([p.sequencePath]),
-  // The bake writes its output asset and leaves the edit sequence alone.
-  bake_control_rig_edit: (p) => strArray([p.outputAssetPath]),
-  // Same for a bake of any sequence binding: the LevelSequence is only read.
-  bake_sequence_animation: (p) => strArray([p.outputAssetPath]),
-  // Batch rename: each entry is {sourcePath, destinationPath} or {assetPath, newName}.
-  bulk_rename_assets: (p) => {
-    const out: string[] = [];
-    for (const r of (Array.isArray(p.renames) ? p.renames : []) as Record<string, unknown>[]) {
-      const s = str(r.sourcePath) ?? str(r.assetPath);
-      if (s) out.push(s);
-    }
-    return out;
-  },
-  // Bulk property write: each descriptor owns one asset path.
-  bulk_set_asset_properties: (p) => {
-    const out: string[] = [];
-    for (const item of (Array.isArray(p.items) ? p.items : []) as Record<string, unknown>[]) {
-      const assetPath = str(item.assetPath);
-      if (assetPath) out.push(assetPath);
-    }
-    return out;
-  },
-  // Batch mesh material assignment: the mesh being written is each entry's
-  // assetPath. materialPath is only read, so it is not checked out.
-  set_mesh_materials_batch: (p) => {
-    const out: string[] = [];
-    for (const a of (Array.isArray(p.assignments) ? p.assignments : []) as Record<string, unknown>[]) {
-      const assetPath = str(a.assetPath);
-      if (assetPath) out.push(assetPath);
-    }
-    return out;
-  },
-  // Batch DataAsset upsert: the target package is assembled from each item's
-  // packagePath + name, and never touched at all under dryRun.
-  bulk_upsert_data_assets: (p) => {
-    if (p.dryRun === true) return [];
-    const out: string[] = [];
-    for (const item of (Array.isArray(p.items) ? p.items : []) as Record<string, unknown>[]) {
-      const dir = str(item.packagePath);
-      const name = str(item.name);
-      if (dir && name) out.push(`${dir.replace(/\/+$/, "")}/${name}`);
-    }
-    return out;
-  },
-  // A chooser copy writes the destination table and only reads the source;
-  // with no targetTable the destination is the source table itself.
-  chooser_copy_rows: (p) => strArray([str(p.targetTable) ?? str(p.table) ?? p.assetPath]),
-  chooser_copy_column: (p) => strArray([str(p.targetTable) ?? str(p.table) ?? p.assetPath]),
-};
 
 /** A parameter's name and every alias the registry renames to it. */
 function namesOf(param: ParamSpec): string[] {
@@ -171,98 +113,122 @@ function namesOf(param: ParamSpec): string[] {
 }
 
 /**
- * The spec'd parameters a mutating method writes, as the names they may arrive
- * under. A method whose spec names a primary asset (a parameter called, or
+ * The spec'd parameters a mutating action writes, as the names they may arrive
+ * under. An action whose spec names a primary asset (a parameter called, or
  * aliased as, one of the generic keys) writes that asset and its outputs, and
- * reads every other reference. A method with no primary asset writes each
+ * reads every other reference. An action with no primary asset writes each
  * asset reference it declares, less the READ_REFERENCES.
  */
-export function specWrittenParams(specs: HandlerSpecs, method: string): string[] {
-  const spec = specs[method];
-  if (!spec) return [];
-  const refs = spec.params.filter((p) => ASSET_REFERENCE.test(p.name) && !NOT_AN_ASSET.test(p.name));
-  const primary = spec.params.filter((p) => namesOf(p).some((n) => GENERIC_KEYS.has(n)));
+export function specWrittenParams(params: readonly ParamSpec[]): string[] {
+  const refs = params.filter((p) => ASSET_REFERENCE.test(p.name) && !NOT_AN_ASSET.test(p.name));
+  const primary = params.filter((p) => namesOf(p).some((n) => GENERIC_KEYS.has(n)));
   const written = primary.length > 0
     ? [...primary, ...refs.filter((p) => OUTPUT_REFERENCE.test(p.name))]
     : refs.filter((p) => !READ_REFERENCES.has(p.name));
   return [...new Set(written.flatMap(namesOf))];
 }
 
-const writtenCache = new Map<string, string[]>();
+const writtenCache = new WeakMap<readonly ParamSpec[], string[]>();
 
-function recordedWrittenParams(method: string): string[] {
-  let names = writtenCache.get(method);
+function writtenNames(spec: ActionSpec | undefined): string[] {
+  const params = spec?.paramSpec;
+  if (!params) return [];
+  let names = writtenCache.get(params);
   if (!names) {
-    names = specWrittenParams(RECORDED_HANDLER_SPECS, method);
-    writtenCache.set(method, names);
+    names = specWrittenParams(params);
+    writtenCache.set(params, names);
   }
   return names;
 }
 
+/** The paths a mutating call writes, read off its parameters by its declaration (or by the generic keys alone). */
+function pathsOf(spec: ActionSpec | undefined, params: Record<string, unknown>): string[] {
+  if (spec?.writes) return dedupe(spec.writes(params).filter(isContentPath));
+  const out: unknown[] = [];
+  for (const key of PATH_KEYS) out.push(params[key]);
+  for (const key of PATH_ARRAY_KEYS) out.push(...strArray(params[key]));
+  for (const key of writtenNames(spec)) {
+    const value = params[key];
+    out.push(...(Array.isArray(value) ? value : [value]));
+  }
+  return dedupe(out.filter(isContentPath));
+}
+
 /**
- * Classify a bridge call. Returns the content paths a mutation will touch, or
- * `writes: false` when the call is not a guardable write.
+ * Whether a `category.action` call may change anything, and which asset paths
+ * it writes. Read by asset locking and asset leases.
+ *
+ * The mutation half is the action's DECLARED effect, and `unknown` counts: an
+ * action whose effect its parameters decide may well write the asset it names,
+ * and being wrong costs one serialised call rather than two agents writing the
+ * same package. A name this server does not carry gets the same `mutate`
+ * default every other gate gives it.
+ *
+ * An unextractable path still yields an empty list, so a declared mutation that
+ * names no asset runs unlocked. That is what keeps this from locking the
+ * world: the path, not the verdict, is the narrow part.
+ */
+export function classifyAction(
+  taskName: string,
+  params: Record<string, unknown>,
+  graph?: readonly ToolDef[],
+): ActionClassification {
+  const spec = actionSpecOf(taskName, graph);
+  if (spec?.assetCoordination) return { mutates: false, paths: [] };
+  // A batch runs its steps as one game-thread job, so it holds the paths of
+  // ALL of them for the whole job. A batch of reads takes nothing. With no
+  // steps to read there is nothing to be more precise than the declaration,
+  // and the empty path list keeps that from locking anything.
+  if (spec?.steps) {
+    const steps = spec.steps(params);
+    if (steps.length === 0) return { mutates: spec.effect !== "read", paths: [] };
+    const union = new Set<string>();
+    let mutates = false;
+    for (const step of steps) {
+      const one = classifyAction(step.task, step.params, graph);
+      if (!one.mutates) continue;
+      mutates = true;
+      for (const p of one.paths) union.add(p);
+    }
+    return { mutates, paths: [...union] };
+  }
+  if (taskEffect(taskName, graph).effect === "read") return { mutates: false, paths: [] };
+  return { mutates: true, paths: pathsOf(spec, params) };
+}
+
+/**
+ * Classify a BRIDGE call: the content paths a mutation will touch, or
+ * `writes: false` when the call is not a guardable write. Read by the
+ * source-control guard, which sits on the bridge and sees method names.
  */
 export function classifyWrite(
   method: string,
   params: Record<string, unknown>,
   graph?: readonly ToolDef[],
 ): WriteClassification {
-  if (isProviderOperation(method)) {
-    return { writes: false, contentPaths: [] };
-  }
+  if (isProviderOperation(method)) return { writes: false, contentPaths: [] };
 
   // A batch writes what its steps write, all of it: a source-control guard
   // checking out what a call will touch has to see every path before the job
   // starts, because once it starts nothing else runs until it is done.
-  if (method === "execute_batch") {
-    const contentPaths: string[] = [];
-    for (const entry of Array.isArray(params.ops) ? params.ops : []) {
-      const call = entry as { method?: unknown; params?: unknown } | null;
-      if (!call || typeof call.method !== "string") continue;
-      const stepParams = call.params !== null && typeof call.params === "object" ? (call.params as Record<string, unknown>) : {};
-      contentPaths.push(...classifyWrite(call.method, stepParams, graph).contentPaths);
-    }
-    const deduped = dedupe(contentPaths);
-    return { writes: deduped.length > 0, contentPaths: deduped };
-  }
-
-  const explicit = EXPLICIT[method];
-  if (explicit) {
-    const contentPaths = dedupe(explicit(params));
+  const steps = rawMethodSteps(method, params, graph);
+  if (steps) {
+    const contentPaths = dedupe(steps.flatMap((s) => classifyWrite(s.method, s.params, graph).contentPaths));
     return { writes: contentPaths.length > 0, contentPaths };
   }
 
-  // A declared read writes no content, whatever path it was handed. Anything
-  // else is a candidate, whatever its name looks like. `unknown` is a
-  // candidate for the same reason it gates like a mutation everywhere else.
-  // With the parameters, so a wrapped engine tool is judged by which tool it
-  // is rather than by the one method all of them share.
-  if (bridgeMethodEffect(method, params, graph).effect === "read") {
+  const specs = bridgeMethodSpecs(method, graph);
+  const declared = specs.find((s) => s.writes) ?? specs.find((s) => s.paramSpec) ?? specs[0];
+  // A declared read writes no content, whatever path it was handed. With the
+  // parameters, so a wrapped engine tool is judged by which tool it is rather
+  // than by the one method all of them share.
+  if (!declared?.writes && bridgeMethodEffect(method, params, graph).effect === "read") {
     return { writes: false, contentPaths: [] };
   }
-
-  const contentPaths: string[] = [];
-  for (const key of PATH_KEYS) {
-    const v = str(params[key]);
-    if (v) contentPaths.push(v);
-  }
-  for (const key of PATH_ARRAY_KEYS) {
-    contentPaths.push(...strArray(params[key]));
-  }
-  // Spec'd names carry actor labels and file paths too, so only a rooted
-  // content path counts.
-  for (const key of recordedWrittenParams(method)) {
-    const value = params[key];
-    for (const v of Array.isArray(value) ? strArray(value) : strArray([value])) {
-      if (v.startsWith("/")) contentPaths.push(v);
-    }
-  }
-
-  const deduped = dedupe(contentPaths);
-  return { writes: deduped.length > 0, contentPaths: deduped };
+  const contentPaths = pathsOf(declared, params);
+  return { writes: contentPaths.length > 0, contentPaths };
 }
 
-function dedupe(xs: string[]): string[] {
+function dedupe<T>(xs: T[]): T[] {
   return [...new Set(xs)];
 }

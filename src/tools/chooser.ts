@@ -2,6 +2,8 @@
 import type { ToolDef } from "../surface/tool-types.js";
 import { categoryTool } from "../surface/category-tool.js";
 import { specBp, schema as specSchema } from "./specs/chooser.generated.js";
+// A copy writes the destination table and only reads the source; with no targetTable the destination is the source.
+import { writesParam } from "../dispatch/path-readers.js";
 
 // #685 - ChooserTable (UChooserTable) row authoring. Chooser tables are the
 // data-driven selection layer behind Motion Matching: a chooser maps character
@@ -41,14 +43,14 @@ export const chooserTool: ToolDef = categoryTool(
     delete_column:    specBp("mutate", "Delete a column and its cell in every row.", "chooser_delete_column"),
     move_column:      specBp("mutate", "Move a column so it ends up at newIndex. A randomize column stays last and cannot be moved, and nothing moves after it.", "chooser_move_column"),
     duplicate_column: specBp("mutate", "Duplicate a column with its cells, inserting the copy right after it.", "chooser_duplicate_column"),
-    copy_column:      specBp("mutate", "Copy a column with its cells (matched to rows by index) into another table, a nested chooser, or the same table, before insertIndex. The copy's binding keeps its parameter index, so the target needs compatible parameters.", "chooser_copy_column"),
+    copy_column:      { ...specBp("mutate", "Copy a column with its cells (matched to rows by index) into another table, a nested chooser, or the same table, before insertIndex. The copy's binding keeps its parameter index, so the target needs compatible parameters.", "chooser_copy_column"), writes: writesParam("targetTable", "table", "assetPath") },
     set_column:       specBp("mutate", "Change a column: disable or enable it, change its input type (list_types kind 'input'), and/or bind its input to a parameter (parameterIndex) through a property chain, e.g. ['Speed'] or ['MyStruct','MyFloat']; an empty chain binds the parameter itself. The chain is checked under the editor's binding rules before anything changes.", "chooser_set_column"),
 
     // Rows (#1828).
     delete_rows:      specBp("mutate", "Delete several rows at once, with their cells.", "chooser_delete_rows"),
     move_rows:        specBp("mutate", "Move rows, keeping their order, so they sit before targetIndex (a row index from before the move; rowCount moves them to the end), like dragging rows in the editor. Returns the new index of the first moved row.", "chooser_move_rows"),
     duplicate_rows:   specBp("mutate", "Duplicate rows (results, disabled flags and cells), inserting the copies after the last of them. A nested chooser result is deep copied.", "chooser_duplicate_rows"),
-    copy_rows:        specBp("mutate", "Copy rows into another table, a nested chooser, or the same table, like copy and paste in the editor: cells go into columns matching by type and input name, and a column is added for cells with no match. Nested choosers are deep copied. includeFallback also copies the fallback result and fallback cells.", "chooser_copy_rows"),
+    copy_rows:        { ...specBp("mutate", "Copy rows into another table, a nested chooser, or the same table, like copy and paste in the editor: cells go into columns matching by type and input name, and a column is added for cells with no match. Nested choosers are deep copied. includeFallback also copies the fallback result and fallback cells.", "chooser_copy_rows"), writes: writesParam("targetTable", "table", "assetPath") },
 
     // Cells and the fallback (#1828).
     get_cell:         specBp("read", "Read one cell (column + row) or a column's fallback cell (fallback=true, output columns only), with its cell type.", "chooser_get_cell"),

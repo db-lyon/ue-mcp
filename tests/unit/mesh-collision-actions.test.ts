@@ -10,7 +10,7 @@ import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { registeredTimeoutMs } from "../../src/bridge/bridge-timeouts.js";
-import { classifyWrite } from "../../src/flow/write-methods.js";
+import { classifyWrite } from "../../src/dispatch/written-paths.js";
 import { declaredActionEffect } from "../../src/surface/action-effects.js";
 import { assetTool } from "../../src/tools/asset.js";
 import { levelTool } from "../../src/tools/level.js";

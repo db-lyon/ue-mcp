@@ -156,6 +156,7 @@ export function diagramAction(options: DiagramActionOptions): HandlerActionSpec 
   return {
     kind: "handler",
     effect: "read",
+    editorBound: "Reads the graph through its reader over the bridge, then draws it in this process.",
     description: options.description,
     handler: async (ctx, params) => finishDiagram(ctx, await options.build(ctx, params), params),
   };

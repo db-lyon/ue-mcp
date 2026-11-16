@@ -11,8 +11,8 @@ import type { ToolContext, ActionSpec, HandlerActionSpec } from "../../surface/t
 export const buildProjectAction: HandlerActionSpec = {
   kind: "handler",
   effect: "mutate",
-  // #958: dispatched in process, because UnrealBuildTool cannot link while an
-  // editor holds the module DLLs, so the build that matters runs with it down.
+  // #958
+  offline: "Runs UnrealBuildTool out of process, which requires the editor to be STOPPED because it cannot link while an editor holds the module DLLs.",
   description:
     "Build the project's C++ out of process with UnrealBuildTool. Works with the editor STOPPED, which a full rebuild requires (UBT cannot link while an editor holds the module DLLs). Blocks until the build finishes and returns the compiler output. A link that fails because another process holds an output open names the file and the holder under lockedOutputs, with the remedy in the message. Params: configuration? (default Development), platform? (default the host platform), clean? (#958)",
   handler: async (ctx, p) => {
@@ -33,6 +33,7 @@ export const installActions: Record<string, ActionSpec> = {
   check_install: {
     kind: "handler",
     effect: "read",
+    offline: "Inspects the project, the engine tree and the deployed plugin on disk.",
     description:
       "Answer whether this project can run the bridge at all, from disk, with no editor running and "
       + "nothing compiled. Reports the project kind (a project declaring no native modules of its own "

@@ -82,6 +82,7 @@ const NONE_NOTE =
 export const listEpicFabTools: HandlerActionSpec = {
   kind: "handler",
   effect: "read",
+  editorBound: "Calls epic_list_toolsets and epic_list_mcp_tools, which read the editor's Toolset Registry and Unreal MCP plugin, and keeps the Fab tools.",
   description:
     "List Epic's built-in Fab tools the connected editor has, which search the Fab catalog and import listings "
     + "(the Fab plugin's FabToolset.FabToolset in Unreal's Toolset Registry, UE 5.9, and any Fab tool registered with Epic's Unreal MCP plugin). "

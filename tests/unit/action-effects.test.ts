@@ -18,15 +18,15 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { ALL_TOOLS } from "../../src/tools.js";
 import {
-  RAW_BRIDGE_METHODS,
   UNDECLARED_EFFECT,
+  rawBridgeMethods,
   actionEffect,
   bridgeMethodEffect,
   declaredActionEffect,
   mayChangeState,
 } from "../../src/surface/action-effects.js";
-import { classifyAction } from "../../src/dispatch/locking.js";
-import { classifyWrite } from "../../src/flow/write-methods.js";
+import { classifyAction } from "../../src/dispatch/written-paths.js";
+import { classifyWrite } from "../../src/dispatch/written-paths.js";
 import { refuseUntargetedCall } from "../../src/dispatch/editor-gate.js";
 import type { ActionEffect } from "../../src/surface/tool-types.js";
 
@@ -179,17 +179,18 @@ describe("bridge methods", () => {
     };
     walk(src);
 
+    const raw = rawBridgeMethods();
     const declaredSomewhere = (method: string): boolean =>
-      method in RAW_BRIDGE_METHODS
+      raw.has(method)
       || ALL_TOOLS.some((t) =>
         Object.values(t.actions).some((s) => s.kind === "bridge" && s.bridge === method));
 
     const unlisted = [...found].filter((m) => !declaredSomewhere(m)).sort();
     expect(
       unlisted,
-      "a handler calls these directly and nothing says what they do. Add each to "
-      + "RAW_BRIDGE_METHODS in src/surface/action-effects.ts with its effect, or they are "
-      + "treated as mutations and a read among them is guarded for nothing.",
+      "a handler calls these directly and nothing says what they do. Declare each in the "
+      + "calling action's rawBridgeMethods with its effect, or they are treated as mutations "
+      + "and a read among them is guarded for nothing.",
     ).toEqual([]);
   });
 });
@@ -223,23 +224,18 @@ describe("the three gates agree, because they read one answer", () => {
   });
 
   it("routing and locking never contradict a declared mutation", () => {
-    // Two deliberate exceptions, and both say so out loud now rather than
-    // being an omission from a verb list or a class override that made the
-    // declaration lie to every other consumer.
-    const NEVER_LOCKED = new Set(["asset.lock", "asset.unlock", "asset.unlock_all", "asset.list_locks"]);
-    const ADDRESSES_THE_SERVER = new Set([
-      "project.list_editors", "project.use_editor", "project.add_editor", "project.drop_editor", "feedback.submit",
-    ]);
+    // Two deliberate exceptions, each declared on the action: addressesServer
+    // and assetCoordination.
     const disagreements: string[] = [];
 
     for (const { tool, action, spec } of everyAction()) {
       if (spec.effect === "read") continue;
       const key = `${tool}.${action}`;
-      if (!ADDRESSES_THE_SERVER.has(key)
+      if (!spec.addressesServer
         && refuseUntargetedCall({ taskName: key, ...TWO_EDITORS }) === null) {
         disagreements.push(`${key}: routing gate lets a declared change run untargeted`);
       }
-      if (NEVER_LOCKED.has(key)) continue;
+      if (spec.assetCoordination) continue;
       if (!classifyAction(key, { assetPath: "/Game/Foo" }).mutates) {
         disagreements.push(`${key}: locking does not treat a declared change as one`);
       }
