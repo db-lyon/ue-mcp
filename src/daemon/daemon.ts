@@ -32,7 +32,7 @@ import { info, warn, error, stampLogs } from "../core/log.js";
 import { editorStepFailure } from "./editor-step.js";
 import { readEnv } from "../core/env.js";
 import { packageVersion } from "../core/package-root.js";
-import { normalizeProjectRoot } from "../bridge/port.js";
+import { normalizeProjectRoot } from "../bridge/wire-contract.js";
 import { bridgeInstancesDir, findLiveInstanceRecord, type BridgeInstanceRecord } from "../bridge/editor-target.js";
 import type { EditorSession } from "../sessions/session.js";
 import { createRuntime, type Runtime } from "../server/runtime.js";

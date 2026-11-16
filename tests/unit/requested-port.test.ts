@@ -2,7 +2,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { normalizeProjectRoot } from "../../src/bridge/port.js";
+import { normalizeProjectRoot } from "../../src/bridge/wire-contract.js";
 import {
   clearRequestedPort,
   publishRequestedPort,

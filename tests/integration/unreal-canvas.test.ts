@@ -9,7 +9,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { covers } from "../helpers/covers.js";
-import { deriveProjectPort } from "../../src/bridge/port.js";
+import { deriveProjectPort } from "../../src/bridge/wire-contract.js";
 import { requestedPortPath } from "../../src/bridge/requested-port.js";
 import { McpServer, plain, runCli, Sandbox } from "./harness.js";
 

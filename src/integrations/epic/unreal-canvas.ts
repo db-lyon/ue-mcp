@@ -21,20 +21,14 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { uprojectPluginState } from "./unreal-mcp-server.js";
+import { CANVAS_PLUGIN, CANVAS_RESERVED_PORTS } from "../../bridge/wire-contract.js";
 
-export const UNREAL_CANVAS_BRIDGE_PLUGIN = "UnrealCanvasBridge";
+export { CANVAS_RESERVED_PORTS };
+
+export const UNREAL_CANVAS_BRIDGE_PLUGIN = CANVAS_PLUGIN;
 
 /** A port the Canvas Bridge claims, and what claims it. */
-export interface CanvasReservedPort {
-  port: number;
-  use: string;
-}
-
-/** Keep in step with kCanvasReservedPorts in BridgePortConfig.cpp. */
-export const CANVAS_RESERVED_PORTS: readonly CanvasReservedPort[] = [
-  { port: 9877, use: "the Canvas webcam server (webcam_server.py)" },
-  { port: 9880, use: "the Canvas viewport stream" },
-];
+export type CanvasReservedPort = (typeof CANVAS_RESERVED_PORTS)[number];
 
 /** What claims `port` when the Canvas Bridge is enabled, or undefined when nothing does. */
 export function canvasReservedPort(port: number): CanvasReservedPort | undefined {

@@ -1,7 +1,7 @@
 // @session per-session: Keyed by absolute project root; each feature module reads and writes its own entries.
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { normalizeProjectRoot } from "../bridge/port.js";
+import { normalizeProjectRoot } from "../bridge/wire-contract.js";
 import { warn } from "../core/log.js";
 import { userDir } from "../core/user-dir.js";
 import { readEnv } from "../core/env.js";
