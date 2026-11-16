@@ -21,9 +21,13 @@ const CHOICES = BUTTONS.map((b) => ({ buttonLabel: b, respondWith: `editor(respo
 const listing = (title = "Save Content") => ({ dialogs: [{ title, message: "Save these?", buttons: BUTTONS, choices: CHOICES }] });
 const empty = { dialogs: [] };
 
+// Restored key by key: assigning a plain object to process.env detaches it
+// from the real environment, so a later file in the same worker that sets
+// HOME is not seen by os.homedir().
 const saved = { ...process.env };
 afterEach(() => {
-  process.env = { ...saved };
+  for (const k of Object.keys(process.env)) if (!(k in saved)) delete process.env[k];
+  Object.assign(process.env, saved);
 });
 
 function make(over: Partial<GuardDeps> & { modeIs?: DialogMode } = {}) {
