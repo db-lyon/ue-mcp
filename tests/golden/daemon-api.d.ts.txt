@@ -1057,6 +1057,7 @@ export interface ExtensionManifest {
 }
 export declare const EXTENSION_PERMISSIONS: readonly ["registry.account"];
 export type ExtensionPermission = (typeof EXTENSION_PERMISSIONS)[number];
+export declare const REGISTRY_ACCOUNT_PERMISSION_REQUIRED_FROM = "1.4.20";
 export interface ExtensionRequest {
     method: string;
     path: string;

@@ -74,12 +74,12 @@ interface ExtensionPackage {
   main: string;
   uiMin?: string;
   uiRoot?: false;
-  permissions: ExtensionPermission[];
+  permissions?: ExtensionPermission[];
 }
 
-/** The declared permissions this daemon knows; an unknown one is named in the log and ignored. */
-function declaredPermissions(name: string, declared: unknown): ExtensionPermission[] {
-  if (declared === undefined) return [];
+/** The declared permissions this daemon knows (undefined when the manifest declares none at all); an unknown one is named in the log and ignored. */
+function declaredPermissions(name: string, declared: unknown): ExtensionPermission[] | undefined {
+  if (declared === undefined) return undefined;
   const list = Array.isArray(declared) ? declared : [declared];
   const known = list.filter((p): p is ExtensionPermission => (EXTENSION_PERMISSIONS as readonly unknown[]).includes(p));
   const unknown = list.filter((p) => !known.includes(p as ExtensionPermission));
@@ -149,7 +149,7 @@ function readPackages(root: string, installed: string, refused: RefusedExtension
     const uiMin = typeof pkg.ueMcpExtension?.ui?.min === "string" ? pkg.ueMcpExtension.ui.min : undefined;
     const uiRoot = pkg.ueMcpExtension?.ui?.root === false ? { uiRoot: false as const } : {};
     const permissions = declaredPermissions(name, pkg.ueMcpExtension?.permissions);
-    out.push({ dir: copy.dir, name, version: choice.version, main: path.join(copy.dir, pkg.main!), ...(uiMin ? { uiMin } : {}), ...uiRoot, permissions });
+    out.push({ dir: copy.dir, name, version: choice.version, main: path.join(copy.dir, pkg.main!), ...(uiMin ? { uiMin } : {}), ...uiRoot, ...(permissions ? { permissions } : {}) });
   }
   return out;
 }
@@ -171,7 +171,7 @@ function warnForeignFolders(root: string): void {
 
 /** Load every extension, handing each an API built by `apiFor`. A failing one is named and skipped. */
 export async function loadExtensions(
-  apiFor: (name: string, routes: Route[], setBusy: (fn: () => boolean) => void, pkg: { version: string; uiMin?: string; uiRoot?: false; permissions: readonly ExtensionPermission[] }) => DaemonExtensionApi,
+  apiFor: (name: string, routes: Route[], setBusy: (fn: () => boolean) => void, pkg: { version: string; uiMin?: string; uiRoot?: false; permissions?: readonly ExtensionPermission[] }) => DaemonExtensionApi,
   root: string = extensionsDir(),
   refused: RefusedExtension[] = [],
   installed: string = packageVersion(),
@@ -187,7 +187,7 @@ export async function loadExtensions(
       const activate = mod.activate ?? mod.default?.activate;
       if (typeof activate !== "function") throw new Error("exports no activate(api)");
       const ui = { ...(pkg.uiMin ? { uiMin: pkg.uiMin } : {}), ...(pkg.uiRoot === false ? { uiRoot: false as const } : {}) };
-      const handle = await activate(apiFor(pkg.name, routes, (fn) => (busy = fn), { version: pkg.version, ...ui, permissions: pkg.permissions }));
+      const handle = await activate(apiFor(pkg.name, routes, (fn) => (busy = fn), { version: pkg.version, ...ui, ...(pkg.permissions ? { permissions: pkg.permissions } : {}) }));
       loaded.push({ name: pkg.name, version: pkg.version, ...ui, routes, busy: () => busy(), dispose: handle?.dispose });
       info("extension", `loaded ${pkg.name} ${pkg.version}`);
     } catch (e) {
