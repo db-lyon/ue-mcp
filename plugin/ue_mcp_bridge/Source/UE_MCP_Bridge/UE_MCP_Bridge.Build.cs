@@ -14,8 +14,8 @@ public class UE_MCP_Bridge : ModuleRules
 
 		// Public/ holds only what another module compiles against: the external
 		// handler API (MCPHandlerRegistration.h, MCPHandlerSpec.h, MCPContract.h)
-		// and the parameter, result and engine-version headers the MVVM module
-		// uses. Those include nothing beyond these, so nothing editor-only is
+		// and the parameter, result, way-forward and engine-version headers the
+		// MVVM module uses. Those include nothing beyond these, so nothing editor-only is
 		// forced onto a module that depends on this one.
 		PublicDependencyModuleNames.AddRange(
 			new string[]
