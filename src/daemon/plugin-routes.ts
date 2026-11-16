@@ -1,27 +1,30 @@
-// @session independent: Lists and changes the plugins of the one project the daemon serves, through the CLI. No editor is involved.
+// @session independent: Lists and changes the plugins of the one project the daemon serves. No editor is involved.
 /**
  * Managing a project's ue-mcp plugins over the daemon's HTTP API, so a client
  * such as an in-editor panel can browse the registry and install, update or
- * remove plugins without a terminal.
+ * remove plugins without a terminal: the plugins.* entries of DAEMON_ROUTES.
  *
- *   GET  /v1/plugins            the project's plugins: version, status, categories
- *   GET  /v1/plugins/catalog    the registry's published plugins
- *   POST /v1/plugins/install    { name, version? }
- *   POST /v1/plugins/uninstall  { name }
- *   POST /v1/plugins/update     { name? }
- *
- * Install, uninstall and update run `ue-mcp plugin <command>` in the project,
- * the same code path as the CLI, one at a time. A change takes effect when the
- * server restarts, which the result says.
+ * Install, uninstall and update call extensions/plugin-install.ts, the library
+ * `ue-mcp plugin` runs, in this process, one at a time; `output` is the lines
+ * that command would have printed. A change takes effect when the server
+ * restarts, which the result says.
  */
-import { spawn } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { loadManifest } from "../extensions/manifest.js";
 import { findInstalledPackage } from "../extensions/resolver.js";
 import { readPluginsList } from "../extensions/plugins-list.js";
-import { registryBase } from "../extensions/registry-catalog.js";
-import { isSuperseded } from "../extensions/superseded.js";
+import { loadRegistryCatalog, type RegistryPlugin } from "../extensions/registry-catalog.js";
+import {
+  captureLog,
+  findPluginProject,
+  installPlugin,
+  uninstallPlugin,
+  updatePlugins,
+  type BuiltInCategories,
+  type PluginOpLog,
+} from "../extensions/plugin-install.js";
+import type { RouteHandlers, RouteResult } from "./router.js";
 
 export interface InstalledPlugin {
   name: string;
@@ -35,19 +38,8 @@ export interface InstalledPlugin {
   problems: string[];
 }
 
-export interface CatalogPlugin {
-  slug: string;
-  name: string;
-  packageName?: string;
-  tagline?: string;
-  description?: string;
-  readme?: string;
-  category?: string;
-  tags?: string[];
-  repoUrl?: string;
-  homepageUrl?: string;
-  status?: string;
-}
+/** A row of GET /v1/plugins/catalog: the registry's own row. */
+export type CatalogPlugin = RegistryPlugin;
 
 export interface PluginCommandResult {
   ok: boolean;
@@ -58,36 +50,26 @@ export interface PluginCommandResult {
   restartRequired: boolean;
 }
 
-/** Runs `ue-mcp plugin <args>` in a project folder. */
-export type PluginCommandRunner = (args: string[], cwd: string) => Promise<{ exitCode: number | null; output: string }>;
+/** The plugin changes the routes make, each for the project in `projectDir`. Tests hand in their own. */
+export interface PluginOps {
+  install(projectDir: string, name: string, version: string | undefined, log: PluginOpLog): Promise<unknown>;
+  uninstall(projectDir: string, name: string, log: PluginOpLog): Promise<unknown>;
+  update(projectDir: string, name: string | undefined, log: PluginOpLog): Promise<unknown>;
+}
 
-const COMMAND_TIMEOUT_MS = 10 * 60_000;
-const CATALOG_TTL_MS = 10 * 60_000;
+/** ALL_TOOLS, loaded the first time a change needs it rather than with the daemon. */
+const builtIns = async (): Promise<BuiltInCategories> => (await import("../tools.js")).ALL_TOOLS;
+
+export const pluginOps: PluginOps = {
+  install: async (projectDir, name, version, log) =>
+    installPlugin(findPluginProject(projectDir), name, { version, builtIns: await builtIns(), log }),
+  uninstall: (projectDir, name, log) => uninstallPlugin(findPluginProject(projectDir), name, { log }),
+  update: async (projectDir, name, log) => updatePlugins(findPluginProject(projectDir), name, { builtIns: await builtIns(), log }),
+};
+
 const NAME = /^(@[a-z0-9][\w.-]*\/)?[a-z0-9][\w.-]*$/i;
 const VERSION = /^[\w.^~<>=*+-]+$/;
-
-/** The CLI this daemon was started from, with the same node flags, so a source checkout under tsx runs its own source. */
-const cliArgs = (): string[] => [...process.execArgv, process.argv[1]];
-
-export const runPluginCommand: PluginCommandRunner = (args, cwd) =>
-  new Promise((resolve) => {
-    const child = spawn(process.execPath, [...cliArgs(), "plugin", ...args], { cwd, windowsHide: true, env: process.env });
-    let output = "";
-    const take = (b: Buffer) => {
-      output = (output + b.toString()).slice(-64 * 1024);
-    };
-    child.stdout.on("data", take);
-    child.stderr.on("data", take);
-    const timer = setTimeout(() => child.kill(), COMMAND_TIMEOUT_MS);
-    child.on("close", (code) => {
-      clearTimeout(timer);
-      resolve({ exitCode: code, output });
-    });
-    child.on("error", (e) => {
-      clearTimeout(timer);
-      resolve({ exitCode: null, output: e.message });
-    });
-  });
+const CATALOG_TIMEOUT_MS = 8000;
 
 /** The plugins a project's ue-mcp.yml declares, each read from node_modules. */
 export function listInstalledPlugins(projectDir: string): InstalledPlugin[] {
@@ -118,71 +100,76 @@ export function listInstalledPlugins(projectDir: string): InstalledPlugin[] {
 
 export interface PluginRouteDeps {
   projectDir: string;
-  run?: PluginCommandRunner;
+  ops?: PluginOps;
   fetchImpl?: typeof fetch;
   /** Told after a command changed the project's plugins. */
   onChanged?: () => void;
 }
 
-export type PluginRouteResult = { status: number; body: unknown } | null;
+type PluginRouteName = "plugins.list" | "plugins.catalog" | "plugins.install" | "plugins.uninstall" | "plugins.update";
 
-/**
- * Handle one /v1/plugins request; null when the path is not one of these
- * routes. `sub` is the path after /v1/plugins.
- */
-export function pluginRoutes(deps: PluginRouteDeps) {
-  const run = deps.run ?? runPluginCommand;
-  const fetchImpl = deps.fetchImpl ?? fetch;
-  let catalog: { at: number; plugins: CatalogPlugin[] } | null = null;
+/** The /v1/plugins routes for one project. Changes run one at a time. */
+export function pluginRoutes(deps: PluginRouteDeps): Pick<RouteHandlers, PluginRouteName> {
+  const ops = deps.ops ?? pluginOps;
   let busy = false;
 
-  const command = async (args: string[]): Promise<PluginRouteResult> => {
+  const change = async (op: (log: PluginOpLog) => Promise<unknown>): Promise<RouteResult> => {
     if (busy) return { status: 409, body: { error: "another plugin change is running; wait for it to finish" } };
     busy = true;
+    const { log, error, text } = captureLog();
+    let ok = true;
     try {
-      const r = await run(args, deps.projectDir);
-      const ok = r.exitCode === 0;
-      if (ok) deps.onChanged?.();
-      const result: PluginCommandResult = { ok, exitCode: r.exitCode, output: r.output.trim(), restartRequired: ok };
-      return { status: ok ? 200 : 422, body: result };
+      await op(log);
+    } catch (e) {
+      ok = false;
+      error(e instanceof Error ? e.message : String(e));
     } finally {
       busy = false;
     }
+    if (ok) deps.onChanged?.();
+    const result: PluginCommandResult = { ok, exitCode: ok ? 0 : 1, output: text().trim(), restartRequired: ok };
+    return { status: ok ? 200 : 422, body: result };
   };
 
-  return async (method: string, sub: string, body: unknown): Promise<PluginRouteResult> => {
-    const b = (body ?? {}) as { name?: unknown; version?: unknown };
-    if (method === "GET" && (sub === "" || sub === "/")) {
-      return { status: 200, body: { plugins: listInstalledPlugins(deps.projectDir) } };
-    }
-    if (method === "GET" && sub === "/catalog") {
-      if (!catalog || Date.now() - catalog.at > CATALOG_TTL_MS) {
-        try {
-          const res = await fetchImpl(`${registryBase()}/api/plugins`, { signal: AbortSignal.timeout(8000) });
-          if (!res.ok) return { status: 502, body: { error: `the plugin registry answered ${res.status}` } };
-          const j = (await res.json()) as { plugins?: CatalogPlugin[] };
-          // A plugin now built into core is not offered for install.
-          const plugins = (j.plugins ?? []).filter((p) => !isSuperseded(p.slug) && !(p.packageName && isSuperseded(p.packageName)));
-          catalog = { at: Date.now(), plugins };
-        } catch (e) {
-          if (!catalog) return { status: 502, body: { error: `the plugin registry could not be reached: ${(e as Error).message}` } };
-        }
+  const fields = async (r: { body(): Promise<unknown> }): Promise<{ name?: unknown; version?: unknown }> =>
+    ((await r.body()) ?? {}) as { name?: unknown; version?: unknown };
+
+  return {
+    "plugins.list": () => ({ status: 200, body: { plugins: listInstalledPlugins(deps.projectDir) } }),
+    "plugins.catalog": async () => {
+      const catalog = await loadRegistryCatalog({ fetchImpl: deps.fetchImpl, timeoutMs: CATALOG_TIMEOUT_MS });
+      if (catalog.source === "none") {
+        return {
+          status: 502,
+          body: {
+            error:
+              `the plugin registry could not be reached: ${catalog.error}. ` +
+              "Installing by npm package name still works (POST /v1/plugins/install with { name: \"<package>\" }), " +
+              "and UE_MCP_REGISTRY points ue-mcp at another registry.",
+          },
+        };
       }
       return { status: 200, body: { plugins: catalog.plugins } };
-    }
-    if (method === "POST" && sub === "/install") {
+    },
+    "plugins.install": async (r) => {
+      const b = await fields(r);
       if (typeof b.name !== "string" || !NAME.test(b.name)) return { status: 400, body: { error: "body must be { name, version? } with a package or registry name" } };
       if (b.version !== undefined && (typeof b.version !== "string" || !VERSION.test(b.version))) return { status: 400, body: { error: "version must be a semver version or range" } };
-      return command(["install", b.name, ...(typeof b.version === "string" ? ["--version", b.version] : [])]);
-    }
-    if (method === "POST" && sub === "/uninstall") {
+      const name = b.name;
+      const version = typeof b.version === "string" ? b.version : undefined;
+      return change((log) => ops.install(deps.projectDir, name, version, log));
+    },
+    "plugins.uninstall": async (r) => {
+      const b = await fields(r);
       if (typeof b.name !== "string" || !NAME.test(b.name)) return { status: 400, body: { error: "body must be { name }" } };
-      return command(["uninstall", b.name]);
-    }
-    if (method === "POST" && sub === "/update") {
+      const name = b.name;
+      return change((log) => ops.uninstall(deps.projectDir, name, log));
+    },
+    "plugins.update": async (r) => {
+      const b = await fields(r);
       if (b.name !== undefined && (typeof b.name !== "string" || !NAME.test(b.name))) return { status: 400, body: { error: "name must be a package or registry name" } };
-      return command(["update", ...(typeof b.name === "string" ? [b.name] : [])]);
-    }
-    return null;
+      const name = typeof b.name === "string" ? b.name : undefined;
+      return change((log) => ops.update(deps.projectDir, name, log));
+    },
   };
 }

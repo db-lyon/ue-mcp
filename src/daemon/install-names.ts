@@ -7,6 +7,7 @@
  */
 import * as fs from "node:fs";
 import { readEnv } from "../core/env.js";
+import { isExtensionName } from "./extension-manifest.js";
 
 export interface InstallName {
   /** What output calls it. */
@@ -32,9 +33,9 @@ function index(): Record<string, InstallName> {
   }
 }
 
-/** True when `target` is written as a short name rather than a path or URL. */
+/** True when `target` is written as a short name rather than a path or URL. Short names follow the extension name rule. */
 export function isInstallName(target: string): boolean {
-  return /^[a-z0-9][a-z0-9-]*$/.test(target);
+  return isExtensionName(target);
 }
 
 /** The entry for a short name. Throws, listing the known names, for one that is not in the index. */

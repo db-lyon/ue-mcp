@@ -18,6 +18,7 @@ import type { InProcessCallOptions } from "./call-options.js";
 import type { ToolDef } from "../surface/tool-types.js";
 import { composeServerInstructions } from "../surface/context/instructions.js";
 import type { ContextStrategy } from "../config/context-strategy.js";
+import type { ContextProjection, ContextProjectionOptions, ProjectedTool } from "../contract/daemon.js";
 import { MICRO_GATEWAY_CALL, MICRO_GATEWAY_TOOL } from "../surface/context/micro-context.js";
 import { usesArgsEnvelope } from "../surface/context/call-envelope.js";
 import { injectEditorTarget, injectMigrateTarget } from "../surface/target-params.js";
@@ -28,34 +29,6 @@ import { advertisedPresentation, advertisesFlowTool } from "./mcp-server.js";
 import type { Runtime } from "./runtime.js";
 
 export const CONTEXT_STRATEGIES: readonly ContextStrategy[] = ["micro", "lean", "full"];
-
-export interface ContextProjectionOptions {
-  strategy: ContextStrategy;
-  /** Category names. Omitted means every registered, enabled category. */
-  categories?: string[];
-}
-
-export interface ProjectedTool {
-  name: string;
-  description: string;
-  /** JSON Schema, as tools/list sends it. */
-  inputSchema: Record<string, unknown>;
-  /** The category this tool is, or null for one that is not a category (micro's gateway, lean's catalog, flow). */
-  category: string | null;
-}
-
-export interface ContextProjection {
-  strategy: ContextStrategy;
-  /** The categories in scope after resolving. */
-  categories: string[];
-  /** The initialize instructions this strategy sends, narrowed to the scope when one was given. */
-  instructions: string;
-  /** What tools/list sends, in order. */
-  tools: ProjectedTool[];
-  /** Characters of JSON.stringify({ instructions, tools }) as the server sends them, / 4, rounded. */
-  seedTokens: number;
-  estimator: "chars/4";
-}
 
 /** A request this projection cannot serve: an unknown strategy or category. */
 export class ContextProjectionError extends Error {}

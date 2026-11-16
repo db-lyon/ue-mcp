@@ -41,6 +41,12 @@ const EDITOR_NEEDED =
  */
 export const STEPS = [
   {
+    name: "wire",
+    npm: "generate:wire",
+    cmd: [node, "scripts/generate-wire-contract.mjs"],
+    outputs: ["src/bridge/wire-contract.ts", "scripts/lib/wire-contract.mjs", "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Public/MCPWireContract.h"],
+  },
+  {
     name: "specs:record",
     npm: "specs:record",
     editor: true,
@@ -100,7 +106,7 @@ export const STEPS = [
     name: "golden",
     npm: "golden:record",
     cmd: [node, "scripts/record-golden.mjs"],
-    outputs: ["tests/golden/editor-down.json"],
+    outputs: ["tests/golden/editor-down.json", "tests/golden/daemon-api.d.ts.txt"],
   },
   {
     name: "golden:connected",

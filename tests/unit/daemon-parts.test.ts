@@ -8,10 +8,10 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { classifyDisconnect, ExpectedDisconnect, settleAndClassify } from "../../src/daemon/disconnect.js";
 import { EventLog } from "../../src/daemon/events.js";
-import { isOlder } from "../../src/daemon/daemon.js";
+import { compareVersions } from "../../src/core/semver.js";
 import { resolveServerMode } from "../../src/daemon/server-mode.js";
 import { discoveryPath, readDiscovery, readLiveDiscovery, removeDiscovery, writeDiscovery } from "../../src/daemon/discovery.js";
-import { normalizeProjectRoot } from "../../src/bridge/port.js";
+import { normalizeProjectRoot } from "../../src/bridge/wire-contract.js";
 import type { BridgeInstanceRecord } from "../../src/bridge/editor-target.js";
 
 const record: BridgeInstanceRecord = {
@@ -63,24 +63,25 @@ describe("classifyDisconnect", () => {
 describe("EventLog", () => {
   it("numbers events and resumes after an id", () => {
     const log = new EventLog();
-    log.publish("a");
-    const b = log.publish("b", { x: 1 });
-    log.publish("c");
-    expect(log.since(b.id - 1).events.map((e) => e.type)).toEqual(["b", "c"]);
+    log.publish("daemon.started");
+    const b = log.publishFor("ext", "b", { x: 1 });
+    log.publish("plugins.changed");
+    expect(log.since(b.id - 1).events.map((e) => e.type)).toEqual(["ext.b", "plugins.changed"]);
     expect(log.since(log.lastId).events).toEqual([]);
   });
 
   it("reports a gap when a reader fell behind the kept window", () => {
     const log = new EventLog(2);
-    for (let i = 0; i < 5; i++) log.publish(`e${i}`);
+    for (let i = 0; i < 5; i++) log.publishFor("ext", `e${i}`);
     const r = log.since(1);
     expect(r.gap).toBe(true);
-    expect(r.events.map((e) => e.type)).toEqual(["e3", "e4"]);
+    expect(r.events.map((e) => e.type)).toEqual(["ext.e3", "ext.e4"]);
   });
 });
 
-describe("isOlder", () => {
+describe("version ordering for handoff", () => {
   it("orders releases and prereleases", () => {
+    const isOlder = (a: string, b: string) => compareVersions(a, b) < 0;
     expect(isOlder("1.3.9", "1.3.10")).toBe(true);
     expect(isOlder("1.3.10-beta.2", "1.3.10-beta.16")).toBe(true);
     expect(isOlder("1.3.10-beta.16", "1.3.10")).toBe(true);

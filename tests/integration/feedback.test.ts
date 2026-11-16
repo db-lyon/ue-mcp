@@ -104,7 +104,7 @@ describe("feedback mode", () => {
 
     const overridden = await cli(["mode"], { UE_MCP_FEEDBACK_MODE: "interactive" });
     expect(overridden.stdout).toMatch(/effective:\s+interactive/);
-    expect(overridden.stdout).toContain("UE_MCP_FEEDBACK_MODE env override: interactive");
+    expect(overridden.stdout).toContain("effective: interactive (UE_MCP_FEEDBACK_MODE)");
 
     const before = fs.readFileSync(statePath(), "utf8");
     const bad = await cli(["mode", "sometimes"]);

@@ -28,9 +28,9 @@
 import type { BridgeCallOptions, IBridge } from "../bridge/bridge.js";
 import type { ProjectContext } from "../config/project.js";
 import { isDialogRefusal } from "../bridge/dialog-refusal.js";
-import type { DialogBlock, DialogPromptFn } from "./dialog-types.js";
+import type { DialogBlock, DialogPromptFn } from "../contract/daemon.js";
 import type { ElicitFn, ElicitPrimitiveSchema, ElicitResult } from "../core/elicit.js";
-import type { DialogMode } from "../config/user-state.js";
+import type { DialogMode } from "../config/modes.js";
 import { readEnv } from "../core/env.js";
 import { elicitationNeedsRelay, elicitationUnrenderedNote } from "../dispatch/client-quirks.js";
 import { resolveDialogMode } from "./dialog-mode.js";
@@ -100,18 +100,27 @@ export interface BlockingDialog {
   native?: NativeDialogInfo;
 }
 
+/**
+ * The call that presses `label`. Built here, not by the plugin: the bridge
+ * reports button labels and the tool syntax is this server's.
+ */
+export function respondToDialogCall(label: string): string {
+  return /['’]/.test(label)
+    ? `editor(action='respond_to_dialog', buttonLabel="${label}")`
+    : `editor(action='respond_to_dialog', buttonLabel='${label}')`;
+}
+
+function choicesFor(buttons: readonly string[]): BlockingDialog["choices"] {
+  return buttons.map((b) => ({ buttonLabel: b, respondWith: respondToDialogCall(b) }));
+}
+
 /** A native dialog in the guard's terms, with the same choices a Slate dialog offers. */
 export function nativeAsBlocking(d: NativeDialog): BlockingDialog {
   return {
     title: d.title,
     message: d.text.join("\n"),
     buttons: d.buttons,
-    choices: d.buttons.map((b) => ({
-      buttonLabel: b,
-      respondWith: /['’]/.test(b)
-        ? `editor(action='respond_to_dialog', buttonLabel="${b}")`
-        : `editor(action='respond_to_dialog', buttonLabel='${b}')`,
-    })),
+    choices: choicesFor(d.buttons),
     native: nativeDialogInfo(d),
   };
 }
@@ -351,13 +360,26 @@ function asDialog(v: unknown): BlockingDialog | null {
   if (title === null) return null;
   const message = typeof r.dialogMessage === "string" ? r.dialogMessage
     : typeof r.message === "string" ? r.message : "";
+  const buttons = Array.isArray(r.buttons) ? (r.buttons as unknown[]).filter((b): b is string => typeof b === "string") : [];
+  // The plugin's gate refusal reports labels only, so the call that presses one
+  // is built here when the choice does not carry one. Anything else a choice
+  // carries (enabled) is kept.
+  const reported = Array.isArray(r.choices)
+    ? (r.choices as unknown[]).filter((c): c is Record<string, unknown> =>
+        typeof c === "object" && c !== null && typeof (c as Record<string, unknown>).buttonLabel === "string")
+    : null;
+  const choices = reported
+    ? reported.map((c) => ({
+        ...c,
+        buttonLabel: c.buttonLabel as string,
+        respondWith: typeof c.respondWith === "string" ? c.respondWith : respondToDialogCall(c.buttonLabel as string),
+      }))
+    : choicesFor(buttons);
   return {
     title,
     message,
-    buttons: Array.isArray(r.buttons) ? (r.buttons as string[]) : [],
-    choices: Array.isArray(r.choices)
-      ? (r.choices as Array<{ buttonLabel: string; respondWith: string }>)
-      : [],
+    buttons,
+    choices,
     ...(Array.isArray(r.items) && r.items.length > 0
       ? { items: (r.items as DialogItem[]) }
       : {}),

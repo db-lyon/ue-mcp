@@ -6,6 +6,7 @@ import * as path from "node:path";
 import { z } from "zod";
 import yaml from "js-yaml";
 import { UE_PLUGIN_NAME_RE } from "./package-paths.js";
+import { satisfiesMinimum } from "../core/semver.js";
 
 /**
  * Schema for ue-mcp.plugin.yml, the author-side declaration shipped inside
@@ -293,6 +294,31 @@ export function loadManifest(pkgDir: string): ManifestParseResult {
   const raw = yaml.load(fs.readFileSync(manifestPath, "utf-8")) as unknown;
   const { manifest, dropped } = parseManifest(raw);
   return { manifest, manifestPath, dropped };
+}
+
+/**
+ * The version gates `plugin install` and the server's plugin loader share:
+ * why this ue-mcp, or the bridge deployed in the project, cannot run the
+ * plugin, or null when both can. A bridge that is not deployed yet
+ * (`bridgeApi` null) passes; the caller warns about it.
+ */
+export function pluginVersionRefusal(
+  name: string,
+  manifest: Pick<PluginManifest, "minServerVersion" | "nativeModule">,
+  serverVersion: string,
+  bridgeApi: number | null,
+): string | null {
+  if (manifest.minServerVersion && !satisfiesMinimum(serverVersion, manifest.minServerVersion)) {
+    return (
+      `requires server >= ${manifest.minServerVersion} (have ${serverVersion}). ` +
+      `Update ue-mcp with \`npx ue-mcp update\`, or install an older ${name} with \`ue-mcp plugin install ${name} --version <x.y.z>\`.`
+    );
+  }
+  const native = manifest.nativeModule;
+  if (native && bridgeApi !== null && native.minBridgeApi > bridgeApi) {
+    return `nativeModule requires bridge ABI >= ${native.minBridgeApi} (deployed bridge is ${bridgeApi}). Run \`ue-mcp deploy\` to refresh the bridge.`;
+  }
+  return null;
 }
 
 /**

@@ -339,7 +339,7 @@
     "tests/unit/undeclared-params.test.ts": 0,
     "tests/unit/uproject-path.test.ts": 0,
     "tests/unit/uproject-plugins.test.ts": 0,
-    "tests/unit/user-state.test.ts": 3,
+    "tests/unit/state-store.test.ts": 3,
     "tests/unit/version-check.test.ts": 0.1,
     "tests/unit/vi-mock-paths.test.ts": 0,
     "tests/unit/weighted-shards.test.ts": 0,

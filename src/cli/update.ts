@@ -1,16 +1,17 @@
 // @session per-session: Updates one project's deployed bridge, chosen with --editor.
 import { execFileSync } from "node:child_process";
-import { PLAIN_SEMVER_RE, runNpmSync } from "../core/safe-spawn.js";
+import { runNpmSync } from "../core/safe-spawn.js";
+import { flagValue } from "./args.js";
 import * as fs from "node:fs";
 
 import * as path from "node:path";
 
 import { collectDoctor, formatDoctor } from "./doctor.js";
-import { takeEditorTarget, EditorFlagError } from "./editor-flag.js";
+import { selectProjectOrExit } from "./editor-flag.js";
 import { editorOwnsProject, probeEditorProcessList } from "../editor/engine-observer.js";
 import { UE_MCP_LAUNCH } from "../integrations/mcp-clients/mcp-client-config.js";
-import { distTagForVersion, isNewer, isPrereleaseVersion, resolveUpdateTarget } from "../core/version-check.js";
-import { packageModulePath, packageRoot, packageVersion } from "../core/package-root.js";
+import { distTagForVersion, isNewer, isPrereleaseVersion, npmResolvedLatest, resolveUpdateTarget } from "../core/version-check.js";
+import { packageModulePath, packageRoot, packageVersion, selfCliArgs } from "../core/package-root.js";
 import { findUProject, isUProjectPath } from "../config/uproject-path.js";
 import { installKindOf, installedBridge, resolvePluginDir } from "../editor/install-marker.js";
 import { applyUpdate, newerBridgeMessage, repinClientConfigs } from "../editor/bridge-update.js";
@@ -18,16 +19,6 @@ import { recordPendingBuild } from "../editor/pending-build.js";
 import { RESET, BOLD, RED, CYAN, YELLOW, ok, fail, info as step } from "../terminal/ansi.js";
 import type { CliUsage } from "./cli-main.js";
 
-/** The version behind the `latest` dist-tag, which is the stable line. */
-function getLatestVersion(): string | null {
-  return latestFromNpmView(npmText(["view", "ue-mcp", "version"]));
-}
-
-/** npm's answer, used only when it is a version number, since it becomes an install argument. */
-export function latestFromNpmView(out: string | null): string | null {
-  const v = out?.trim().split(/\r?\n/).pop()?.trim();
-  return v && PLAIN_SEMVER_RE.test(v) ? v : null;
-}
 
 /** npm's stdout, or null when it did not run cleanly. */
 function npmText(args: string[]): string | null {
@@ -111,13 +102,12 @@ async function editorRunningFor(uproject: string): Promise<boolean> {
 }
 
 /**
- * Run `ue-mcp <command>` from THIS package (not npx) so a local shadow can't
- * intercept. The node flags this process runs under (a loader, for one) go to
- * the child too.
+ * Run `ue-mcp <command>` from THIS package's index (not npx, and not the
+ * ue-mcp-update entry this may have started from) so a local shadow can't
+ * intercept.
  */
 function runSelfCommand(command: string, projectArg: string | undefined): boolean {
-  const entry = packageModulePath("index.js");
-  const args = [...process.execArgv, entry, ...command.split(" "), ...(projectArg ? [projectArg] : [])];
+  const args = selfCliArgs([...command.split(" "), ...(projectArg ? [projectArg] : [])], packageModulePath("index.js"));
   try {
     execFileSync(process.execPath, args, { windowsHide: true, stdio: "inherit" });
     return true;
@@ -126,37 +116,15 @@ function runSelfCommand(command: string, projectArg: string | undefined): boolea
   }
 }
 
-/** `--name value` or `--name=value`; undefined when absent. */
-function flagValue(argv: string[], name: string): string | undefined {
-  for (let i = 0; i < argv.length; i++) {
-    if (argv[i] === name) return argv[i + 1];
-    if (argv[i].startsWith(`${name}=`)) return argv[i].slice(name.length + 1);
-  }
-  return undefined;
-}
-
-/** The first argument that is neither a flag nor the value of --binaries. */
-function firstPositional(argv: string[]): string | undefined {
-  for (let i = 0; i < argv.length; i++) {
-    if (argv[i] === "--binaries") i++;
-    else if (!argv[i].startsWith("-")) return argv[i];
-  }
-  return undefined;
-}
+const VALUE_FLAGS = new Set(["--binaries"]);
 
 async function update(argv: string[]) {
-  let target: { projectPath?: string; rest: string[] };
-  try {
-    target = takeEditorTarget(argv);
-  } catch (e) {
-    fail(e instanceof EditorFlagError ? e.message : String(e));
-    process.exit(1);
-  }
+  const target = selectProjectOrExit(argv, { positional: true, valueFlags: VALUE_FLAGS });
   const args = target.rest;
   // The package and the editor plugin are one product, so a bare update carries
   // both. Stopping at npm left editors on an old plugin that answered
   // "Unknown method" for actions the new server advertised.
-  const uproject = targetUProject(target.projectPath ?? firstPositional(args));
+  const uproject = targetUProject(target.projectPath);
   const projectArg = uproject ?? undefined;
   const shouldDeploy = !!uproject && !args.includes("--no-deploy");
   // --build and --deploy are the old opt-ins, now the default; still accepted.
@@ -209,7 +177,7 @@ async function update(argv: string[]) {
   }
   console.log(`  Installed: ${BOLD}${installed}${RESET}`);
 
-  const latest = getLatestVersion();
+  const latest = npmResolvedLatest();
   if (!latest) {
     fail("Could not reach npm registry. Check your network connection.");
     process.exit(1);

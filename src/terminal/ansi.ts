@@ -24,6 +24,12 @@ export const warn = (msg: string): void => console.log(`  ${YELLOW}!${RESET} ${m
 export const fail = (msg: string): void => console.log(`  ${RED}✗${RESET} ${msg}`);
 export const info = (msg: string): void => console.log(`  ${DIM}${msg}${RESET}`);
 
+/** Print a failure to stderr and end the process: for a command that cannot go on. */
+export function die(msg: string, code = 1): never {
+  console.error(`  ${RED}✗${RESET} ${msg}`);
+  process.exit(code);
+}
+
 /** Send console.log to stderr until the returned function runs, so stdout stays one JSON document. */
 export function redirectConsoleToStderr(): () => void {
   const original = console.log;

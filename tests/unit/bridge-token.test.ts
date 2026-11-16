@@ -23,7 +23,6 @@ import {
   bridgeTokenPath,
   readBridgeToken,
 } from "../../src/bridge/bridge-token.js";
-import * as tokenMjs from "../../scripts/lib/bridge-token.mjs";
 import { askOnce } from "../../scripts/bridge-target.mjs";
 
 const MISSING_BODY =
@@ -226,16 +225,6 @@ describe("token file location and checks", () => {
 });
 
 describe("scripts/lib/bridge-token.mjs", () => {
-  it("agrees with the TypeScript module on the path and the headers", () => {
-    const token = "cd".repeat(32);
-    fs.writeFileSync(path.join(tokenDir, "40000.token"), token, { mode: 0o600 });
-    expect(tokenMjs.bridgeTokenDir()).toBe(bridgeTokenDir());
-    expect(tokenMjs.bridgeTokenDir({})).toBe(bridgeTokenDir({}));
-    expect(tokenMjs.bridgeTokenPath(40000)).toBe(bridgeTokenPath(40000));
-    expect(tokenMjs.bridgeAuthHeaders(40000)).toEqual(bridgeAuthHeaders(40000));
-    expect(tokenMjs.bridgeAuthHeaders(40001)).toEqual({});
-  });
-
   it("askOnce sends the token", async () => {
     const f = await fake({ requireToken: true });
     await expect(askOnce(`ws://127.0.0.1:${f.port}`, "ping", {}, 3000)).resolves.toEqual({ ok: true, method: "ping" });

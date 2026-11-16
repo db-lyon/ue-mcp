@@ -416,12 +416,12 @@ export function engineCandidates(lookup: EngineLookup = {}, probed: string[] = [
 
   // 1-5: everything a person configured on purpose.
   pushRoot("UE_MCP_TEST_ENGINE_ROOT", trimmed(readEnv("testEngineRoot", env)), true);
-  pushTool("UE_BUILD_TOOL_PATH", trimmed(env.UE_BUILD_TOOL_PATH));
+  pushTool("UE_BUILD_TOOL_PATH", trimmed(readEnv("buildToolPath", env)));
   pushTool("editor.buildToolPath", trimmed(lookup.configBuildToolPath));
   // An editor binary names its tree, but it is a statement about the editor,
   // not about the build tool: a tree that cannot build is not the user's typo,
   // so these are not treated as explicit build pins.
-  pushRoot("UE_EDITOR_PATH", engineRootFromEnginePath(trimmed(env.UE_EDITOR_PATH) ?? "", platform));
+  pushRoot("UE_EDITOR_PATH", engineRootFromEnginePath(trimmed(readEnv("editorPath", env)) ?? "", platform));
   pushRoot("editor.path", engineRootFromEnginePath(trimmed(lookup.configEditorPath) ?? "", platform));
 
   // 6-7: what the project itself says, which is the half that was missing.

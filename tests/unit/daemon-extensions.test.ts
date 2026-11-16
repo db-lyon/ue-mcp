@@ -12,7 +12,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { startDaemon, type Daemon } from "../../src/daemon/daemon.js";
 import { signBundle, UiBundleStore } from "../../src/daemon/ui-bundles.js";
-import { DAEMON_API_VERSION } from "../../src/daemon/discovery.js";
+import { DAEMON_API_VERSION } from "../../src/contract/daemon.js";
 import { restoreEnv } from "../helpers/env.js";
 import { userSandboxEnv } from "../helpers/user-sandbox.js";
 

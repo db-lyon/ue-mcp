@@ -14,7 +14,7 @@ import {
   canvasPortReplacement,
   readUnrealCanvas,
 } from "../../src/integrations/epic/unreal-canvas.js";
-import { deriveProjectPort } from "../../src/bridge/port.js";
+import { deriveProjectPort } from "../../src/bridge/wire-contract.js";
 import { EditorBridge } from "../../src/bridge/bridge.js";
 import { requestedPortPath } from "../../src/bridge/requested-port.js";
 import { ProjectContext } from "../../src/config/project.js";

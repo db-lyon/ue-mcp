@@ -20,7 +20,7 @@
 // UPROPERTY author would have typed them. Everything this action adds is
 // instance state that reflect_class has no way to know.
 //
-// Paged through Public/HandlerPagination.h, because a UObject with inherited
+// Paged through HandlerPagination.h, because a UObject with inherited
 // properties runs to several hundred rows.
 
 #include "ReflectionHandlers.h"

@@ -6,8 +6,11 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { getPlaytestModeScopes, setPlaytestMode } from "../../src/config/user-state.js";
+import { PLAYTEST_MODE } from "../../src/config/modes.js";
 import { PLAYTEST_GATED_TASKS, playtestRefusal, resolvePlaytestMode } from "../../src/editor/playtest-mode.js";
+
+const getPlaytestModeScopes = (root?: string) => PLAYTEST_MODE.scopes(root);
+const setPlaytestMode = PLAYTEST_MODE.set;
 
 let tmp: string;
 let project: string;

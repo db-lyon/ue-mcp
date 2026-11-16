@@ -1,6 +1,6 @@
 /** #1276: plugin update runs install's full path for every plugin not at its target. */
 import { describe, expect, it } from "vitest";
-import { planPluginUpdates, type PluginUpdateFacts } from "../../src/cli/plugin-cli.js";
+import { planPluginUpdates, type PluginUpdateFacts } from "../../src/extensions/plugin-install.js";
 
 function facts(installed: Record<string, string>, latest: Record<string, string | null>, native: Record<string, string> = {}): PluginUpdateFacts {
   return {

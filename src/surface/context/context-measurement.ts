@@ -8,43 +8,7 @@
  * schemas/context-measurement.schema.json describes the same shape for tools
  * that are not TypeScript; a unit test keeps the two agreeing.
  */
-import type { ContextStrategy } from "../../config/context-strategy.js";
-
-export type ContextScopeBucket = "1-3" | "4-8" | "9+";
-
-export interface ContextMeasurementTask {
-  /** The task's stable id, the same across runs so they can be compared. */
-  id: string;
-  /** Every token the task spent: seed, discovery and work, input and output. */
-  totalTokens: number;
-  /** Model requests the task made. */
-  modelCalls: number;
-  /** Of the tool calls, those that only discovered the surface (search, describe, list). */
-  discoveryCalls: number;
-  passed: boolean;
-}
-
-export interface ContextMeasurementRun {
-  model: { vendor: string; model: string };
-  /** How many categories the run's context was scoped to, bucketed by scopeBucket. */
-  scope: ContextScopeBucket;
-  strategy: ContextStrategy;
-  /** The projection's seedTokens for that strategy and scope. */
-  seedTokens: number;
-  tasks: ContextMeasurementTask[];
-}
-
-export interface ContextMeasurement {
-  version: 1;
-  /** ISO 8601 date-time the measurement was taken. */
-  measuredAt: string;
-  /** The ue-mcp version measured. */
-  ueMcpVersion: string;
-  client?: { name: string; version: string };
-  runs: ContextMeasurementRun[];
-}
-
-export type ContextMeasurementParse = { ok: true; value: ContextMeasurement } | { ok: false; errors: string[] };
+import type { ContextMeasurement, ContextMeasurementParse, ContextScopeBucket } from "../../contract/daemon.js";
 
 const STRATEGIES = ["micro", "lean", "full"];
 const SCOPES = ["1-3", "4-8", "9+"];

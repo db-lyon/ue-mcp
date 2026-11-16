@@ -65,8 +65,11 @@ Every route is on `127.0.0.1` and needs `Authorization: Bearer <token>`. The ser
 | `GET /v1/sessions`, `GET`/`PUT /v1/sessions/<id>/access` | Open MCP sessions and each one's access mode (`read-write` or `read-only`) |
 | `GET /v1/install`, `GET /v1/update`, `POST /v1/update/apply` | Install state and updates |
 | `POST /v1/editor/{start,stop,restart,rebuild}` | Editor operations, announced on the event stream |
-| `/v1/checkpoints` | Checkpoints per editor session (`checkpoint-routes.ts`, see [Checkpoints](checkpoints.md)) |
-| `/v1/plugins` | List, browse, install, update and uninstall ue-mcp plugins (`plugin-routes.ts`) |
+| `/v1/checkpoints` | Checkpoints per editor session (see [Checkpoints](checkpoints.md)) |
+| `/v1/journal` | The mutation journal per editor session: its groups, and reverting them |
+| `/v1/tools`, `/v1/leases` | Turn categories and Unreal toolsets on and off, and list asset leases |
+| `GET /v1/dialogs/native`, `POST /v1/dialogs/native/press` | Native Win32 dialogs an editor of the project shows, and pressing one |
+| `/v1/plugins` | List, browse, install, update and uninstall ue-mcp plugins |
 | `/v1/flows` | List flows, `GET /v1/flows/<name>/plan`, `POST /v1/flows/<name>/run`, `GET /v1/flows/events` |
 | `GET /v1/skills`, `GET /v1/actions`, `GET /v1/context/projection` | Skills, action effects, and what a context strategy advertises |
 | `/v1/ext/<name>/` | Routes an extension registers |
@@ -74,7 +77,7 @@ Every route is on `127.0.0.1` and needs `Authorization: Bearer <token>`. The ser
 | `GET /ui/ext/<name>/` | A loaded extension's own UI bundle, listed in `/v1/health` under `uiBundles` |
 | `POST /v1/shutdown`, `POST /v1/handoff` | Exit now, or once no call is in flight |
 
-`DAEMON_API_VERSION` versions the HTTP API, the events and the shim protocol. `/v1/health` lists additions under `features`. [Configuration: the daemon](configuration.md#the-daemon) covers the CLI and what a client can read.
+The full table, with each route's method, path, query or body and the feature it came with, is `DAEMON_ROUTES` in `src/contract/daemon.ts`. The daemon's router (`src/daemon/router.ts`) walks it in order, and every route has one handler of one shape. `DAEMON_API_VERSION` versions the HTTP API, the events (`DAEMON_EVENT_TYPES`) and the shim protocol. `/v1/health` lists additions under `features`. [Configuration: the daemon](configuration.md#the-daemon) covers the CLI and what a client can read.
 
 ### Extensions and UI bundles
 
@@ -84,7 +87,7 @@ Versions install side by side as `<name>@<version>/`, and each project records t
 
 A UI bundle (`src/daemon/ui-bundles.ts`) lives under `~/.ue-mcp/ui/`. It is served at `/ui/` only when its `manifest.sig` Ed25519 signature verifies against a key an extension trusted and every file matches its SHA-256 in `manifest.json`. A bundle named for a loaded extension is served only at that extension's version or older. A bundle named for a loaded extension verifies only against keys that extension trusted. Each loaded extension's own bundle is also served at `/ui/ext/<name>/`, within its own version window, and `ueMcpExtension.ui.root: false` keeps it off `/ui/`. A manifest's optional `module` (`entry`, `host`) is signed with it and names a file another page loads.
 
-The `ue-mcp/daemon` package export (`src/daemon-api.ts`) carries the types and helpers for building on the daemon: discovery, the extension contract, events, and bundle signing.
+The `ue-mcp/daemon` package export (`src/daemon-api.ts`) carries the types and helpers for building on the daemon: discovery, the extension contract, events, and bundle signing. Its types are declared in `src/contract/daemon.ts`, which imports nothing, so an internal refactor cannot change them by accident; `tests/golden/daemon-api.d.ts.txt` records the declarations, and a change to them fails the unit tests until it is re-recorded (`npm run golden:record`) and reviewed as additive or a version bump.
 
 ### Where Studio attaches
 
@@ -102,6 +105,7 @@ The server registers the <!-- count:tools -->31<!-- /count --> category tools an
 |--------|---------|
 | `index.ts` | Entry: CLI routing, server mode, shim or in-process server |
 | `daemon/` | Daemon, stdio shim, discovery, extensions, UI bundles, HTTP routes |
+| `contract/daemon.ts` | The daemon contract: API versions, features, routes, events, header names and public types |
 | `daemon-api.ts` | The public `ue-mcp/daemon` export |
 | `server/runtime.ts` | Sessions, bridges, flow tool and dispatch, shared by every client |
 | `server/mcp-server.ts` | One `McpServer` over a runtime: instructions, tools, flow |

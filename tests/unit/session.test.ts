@@ -10,7 +10,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { SessionRegistry, sessionKeyFor } from "../../src/sessions/session.js";
-import { deriveProjectPort, DEFAULT_BRIDGE_PORT } from "../../src/bridge/port.js";
+import { deriveProjectPort, DEFAULT_BRIDGE_PORT } from "../../src/bridge/wire-contract.js";
 import { categoryTool } from "../../src/surface/category-tool.js";
 import { injectEditorTarget, removeEditorTarget, stripEditorTarget } from "../../src/surface/target-params.js";
 import { z } from "zod";

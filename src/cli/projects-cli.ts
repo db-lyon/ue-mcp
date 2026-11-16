@@ -7,7 +7,8 @@
  * remove  take one off: an added project is forgotten, a found one is hidden
  */
 import * as path from "node:path";
-import { addProject, machineReport, removeProject, type MachineProject } from "../machine/projects.js";
+import type { MachineProject } from "../contract/daemon.js";
+import { addProject, machineReport, removeProject } from "../machine/projects.js";
 import { BOLD, DIM, RESET, fail, ok } from "../terminal/ansi.js";
 import type { CliUsage } from "./cli-main.js";
 

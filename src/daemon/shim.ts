@@ -17,9 +17,11 @@ import WebSocket from "ws";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import type { JSONRPCMessage } from "@modelcontextprotocol/sdk/types.js";
 import { info, warn, error } from "../core/log.js";
-import { packageVersion } from "../core/package-root.js";
-import { DAEMON_API_VERSION, daemonDir, projectKey, readAnsweringDiscovery, type AnsweringDiscoveryOptions, type DaemonDiscovery } from "./discovery.js";
-import { isOlder } from "./daemon.js";
+import { packageVersion, selfCliArgs } from "../core/package-root.js";
+import { compareVersions } from "../core/semver.js";
+import { apiVersionsOverlap, DAEMON_API_RANGE, DAEMON_HEADERS, routePath, type DaemonDiscovery } from "../contract/daemon.js";
+import { bearer } from "./client.js";
+import { daemonDir, projectKey, readAnsweringDiscovery, type AnsweringDiscoveryOptions } from "./discovery.js";
 import { liveStartLock } from "./start-lock.js";
 import { installedBridge } from "../editor/install-marker.js";
 import { NPX_AGE_GATE_OVERRIDE } from "../integrations/mcp-clients/mcp-client-config.js";
@@ -40,7 +42,7 @@ const DAEMON_LOST = -32001;
  */
 export function daemonVersionFor(projectDir: string, own = packageVersion()): string {
   const bridge = installedBridge(projectDir);
-  return bridge && bridge.kind === "binary" && isOlder(own, bridge.version) ? bridge.version : own;
+  return bridge && bridge.kind === "binary" && compareVersions(own, bridge.version) < 0 ?bridge.version : own;
 }
 
 /** npm's npx entry beside this node, which runs without a shell; null when it is not there. */
@@ -54,10 +56,7 @@ export function npxCliPath(execPath = process.execPath, platform: NodeJS.Platfor
 
 /** The command line that runs the daemon: this entry, or `npx ue-mcp@<version>` for another version. */
 export function daemonCommand(uproject: string, version: string, npxCli: string | null = npxCliPath()): string[] | null {
-  if (version === packageVersion()) {
-    // The same entry this process was started with, so a dev checkout under tsx starts a dev daemon.
-    return [...process.execArgv, process.argv[1], "daemon", "run", path.resolve(uproject)];
-  }
+  if (version === packageVersion()) return selfCliArgs(["daemon", "run", path.resolve(uproject)]);
   if (!npxCli) return null;
   return [npxCli, "-y", NPX_AGE_GATE_OVERRIDE, `ue-mcp@${version}`, "daemon", "run", path.resolve(uproject)];
 }
@@ -74,7 +73,7 @@ export async function ensureDaemon(uproject: string, wantVersion?: string, probe
   const logFile = path.join(logDir, `${projectKey(projectDir)}.log`);
   let want = wantVersion ?? daemonVersionFor(projectDir);
   const usable = (d: DaemonDiscovery | null): d is DaemonDiscovery =>
-    !!d && d.apiVersion === DAEMON_API_VERSION && !isOlder(d.version, want);
+    !!d && apiVersionsOverlap({ min: d.apiVersion, max: d.apiVersion }, DAEMON_API_RANGE) && compareVersions(d.version, want) >= 0;
 
   let spawnedAt: number | null = null;
   let sawStarter = false;
@@ -158,8 +157,8 @@ export async function runShim(uproject: string): Promise<void> {
 
   const connect = async (replay: boolean): Promise<void> => {
     const d = await ensureDaemon(uproject);
-    const socket = new WebSocket(`ws://127.0.0.1:${d.port}/v1/mcp`, {
-      headers: { authorization: `Bearer ${d.token}`, "x-ue-mcp-client": clientName() },
+    const socket = new WebSocket(`ws://127.0.0.1:${d.port}${routePath("mcp")}`, {
+      headers: { ...bearer(d), [DAEMON_HEADERS.client]: clientName() },
     });
     await new Promise<void>((resolve, reject) => {
       socket.once("open", () => resolve());

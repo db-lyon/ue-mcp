@@ -83,7 +83,7 @@ export async function clearRegistryAuth(): Promise<void> {
  */
 export async function resolvePublishToken(flagToken?: string): Promise<string | null> {
   if (flagToken) return flagToken;
-  const env = readEnv("publishToken") ?? process.env.REGISTRY_PUBLISH_TOKEN;
+  const env = readEnv("publishToken") ?? readEnv("registryPublishToken");
   if (env) return env;
   const cached = await readRegistryAuth();
   return cached?.token ?? null;

@@ -7,12 +7,12 @@
 import type { ProjectContext } from "../../config/project.js";
 import { projectEngineVersion } from "../../editor/engine-root.js";
 import { engineLookupFor, resolveEngineRoot } from "../../editor/engine-root.js";
-import { resolveLiveBridgeAddress } from "../../bridge/editor-target.js";
+import { resolveBridgeTarget } from "../../bridge/editor-target.js";
 import { readUnrealMcpServer, type UnrealMcpServerStatus } from "./unreal-mcp-server.js";
 import { readUnrealAssistant, type UnrealAssistantStatus } from "./unreal-assistant.js";
 import { canvasPortReplacement, readUnrealCanvas, type UnrealCanvasStatus } from "./unreal-canvas.js";
-import { deriveProjectPort } from "../../bridge/port.js";
-import { readEnv } from "../../core/env.js";
+import { deriveProjectPort } from "../../bridge/wire-contract.js";
+import { resolveSetting } from "../../core/env.js";
 
 /** The engine tree this project builds and runs with, or null when none resolves. */
 export function projectEngineRoot(project: ProjectContext): string | null {
@@ -44,7 +44,8 @@ export function epicIntegrations(
   const flow = http?.enabled ? http.port ?? 7723 : undefined;
   let liveBridge: number | undefined;
   try {
-    liveBridge = resolveLiveBridgeAddress(project.projectDir)?.port;
+    const target = resolveBridgeTarget(project.projectDir);
+    liveBridge = target.ok ? target.port : undefined;
   } catch {
     liveBridge = undefined;
   }
@@ -71,11 +72,10 @@ export interface BridgePort {
 
 export function bridgePort(project: ProjectContext): BridgePort {
   const derivedPort = deriveProjectPort(project.projectDir!);
-  const envPort = Number.parseInt(readEnv("port") ?? "", 10);
-  const configPort = project.config.bridge?.port;
-  const pinnedBy = Number.isFinite(envPort) && envPort > 0 ? "env" : configPort ? "config" : null;
+  const resolved = resolveSetting("bridgePort", { config: project.config.bridge?.port });
+  const pinnedBy = resolved.source === "env" || resolved.source === "config" ? resolved.source : null;
   if (!pinnedBy) return { port: derivedPort, derivedPort, pinnedBy: null };
-  const pinned = pinnedBy === "env" ? envPort : configPort!;
+  const pinned = resolved.value!;
   const swap = canvasPortReplacement(project.projectPath, pinned, derivedPort);
   if (swap) return { port: swap.port, derivedPort, pinnedBy, avoided: { port: pinned, reason: swap.reason } };
   return { port: pinned, derivedPort, pinnedBy };

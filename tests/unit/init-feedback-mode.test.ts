@@ -7,10 +7,14 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import * as path from "node:path";
 import { apply, feedbackModeOf, plan, type InitChoices } from "../../src/cli/init-core.js";
 import { choicesFromFlags } from "../../src/cli/init.js";
-import { getFeedbackMode, getFeedbackModeScopes, setFeedbackMode } from "../../src/config/user-state.js";
+import { FEEDBACK_MODE } from "../../src/config/modes.js";
 import type { ProbeHooks } from "../../src/editor/install-check.js";
 import { ProjectFixture } from "../helpers/project-fixture.js";
 import { restoreEnv } from "../helpers/env.js";
+
+const getFeedbackMode = (root?: string) => FEEDBACK_MODE.stored(root);
+const getFeedbackModeScopes = (root?: string) => FEEDBACK_MODE.scopes(root);
+const setFeedbackMode = FEEDBACK_MODE.set;
 
 const WITH_TOOLCHAIN: ProbeHooks = { platform: "linux", env: {}, exists: () => true, run: () => "clang version 18" };
 

@@ -11,6 +11,7 @@ import {
   type GitHubRepo,
 } from "../github/repos.js";
 import { fetchRegistryCatalog, type RegistryPlugin } from "../extensions/registry-catalog.js";
+import { pluginSlug } from "../extensions/plugin-groups.js";
 
 /**
  * Decide which tracker a feedback report belongs in.
@@ -250,11 +251,6 @@ function repoUrlFromPkgDir(pkgDir: string): string | undefined {
   }
 }
 
-/** Registry slug for an installed plugin's npm package name. */
-function slugForPackage(pkgName: string): string {
-  return pkgName.replace(/^@[^/]+\//, "").replace(/^ue-mcp-/, "");
-}
-
 /* ── candidate construction ────────────────────────────────────────── */
 
 interface WorkingCandidate extends RouteCandidate {
@@ -291,7 +287,7 @@ function tokensFromRow(row: RegistryPlugin, core: CoreSurface): { strong: Set<st
     });
   };
 
-  const strong = new Set(collect([row.slug, row.name, row.packageName ? slugForPackage(row.packageName) : undefined]));
+  const strong = new Set(collect([row.slug, row.name, row.packageName ? pluginSlug(row.packageName) : undefined]));
   const weak = new Set(collect(row.tags ?? []));
   for (const t of strong) weak.delete(t);
   return { strong, weak };
@@ -342,7 +338,7 @@ function buildCandidates(
   // packages become candidates in their own right.
   for (const p of installed) {
     if (p.status !== "active") continue;
-    const slug = slugForPackage(p.name);
+    const slug = pluginSlug(p.name);
     const key = [...byKey.keys()].find(
       (k) => k === slug.toLowerCase() || byKey.get(k)!.packageName === p.name,
     );

@@ -17,7 +17,7 @@ import {
   recordVersion,
 } from "../../src/daemon/extension-versions.js";
 import { useExtensionVersion, removeExtension } from "../../src/daemon/extension-install.js";
-import { recordedExtensionVersions } from "../../src/config/user-state.js";
+import { recordedExtensionVersions } from "../../src/config/extension-state.js";
 import { restoreEnv } from "../helpers/env.js";
 
 describe("chooseVersion", () => {

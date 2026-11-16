@@ -37,7 +37,7 @@ import { findModuleOwners, type ModuleOwner } from "./module-owner.js";
 import { prepareBridgeForLaunch } from "./bridge-update.js";
 import type { ProgressDisplay, ProgressFn } from "../core/progress.js";
 import { findUProject } from "../config/uproject-path.js";
-import { readEnv } from "../core/env.js";
+import { ENV_VARS, resolveSetting } from "../core/env.js";
 import {
   crashReporterCleanupIsEmpty,
   describeCrashReporterCleanup,
@@ -66,10 +66,8 @@ const NO_EDITOR_BINARY_MSG =
 function findEditorExecutable(project?: ProjectContext): string | null {
   // Same rule as the build tool: the env var is the global default and wins,
   // `editor.path` is how one project names its own binary (#817).
-  const envPath = process.env.UE_EDITOR_PATH;
-  if (envPath) return envPath;
-  const configured = project?.config.editor?.path;
-  if (typeof configured === "string" && configured.trim() !== "") return configured.trim();
+  const pinned = resolveSetting("editorPath", { config: project?.config.editor?.path }).value;
+  if (pinned) return pinned;
 
   const lookup = engineLookupFor(project?.projectPath, project?.engineAssociation, project?.config.editor);
   return trySelectEngine(lookup, "editor")?.editorExecutable ?? null;
@@ -102,18 +100,16 @@ function editorExecutableFailure(project?: ProjectContext): string {
  * that project differs when it is unset (#817).
  */
 function bridgeHost(projectDir?: string | null): string {
-  const env = readEnv("host");
-  if (env) return env;
+  let configured: unknown;
   if (projectDir) {
     try {
-      const configured = readUeMcpConfig(projectDir).bridge?.host;
-      if (typeof configured === "string" && configured.trim() !== "") return configured.trim();
+      configured = readUeMcpConfig(projectDir).bridge?.host;
     } catch {
       // A project whose config cannot be read is not a reason to fail a
       // liveness probe; the default host is the answer it had before.
     }
   }
-  return "127.0.0.1";
+  return resolveSetting("bridgeHost", { config: configured }).value!;
 }
 
 /**
@@ -526,8 +522,8 @@ function describeTimeline(timeline: ReadyPhase[]): string {
 function buildEditorLaunchEnv(dialogPolicy?: string, paramEcho?: boolean): NodeJS.ProcessEnv {
   if (!dialogPolicy && !paramEcho) return process.env;
   const env: NodeJS.ProcessEnv = { ...process.env };
-  if (dialogPolicy) env.UE_MCP_DIALOG_POLICY = dialogPolicy;
-  if (paramEcho) env.UE_MCP_PARAM_ECHO = "1";
+  if (dialogPolicy) env[ENV_VARS.dialogPolicy] = dialogPolicy;
+  if (paramEcho) env[ENV_VARS.paramEcho] = "1";
   return env;
 }
 
@@ -638,13 +634,8 @@ export async function startEditor(
   // proof its editor is up, costs a millisecond, and needs no process table at
   // all. The process probe (seconds, on Windows) only runs when that fails,
   // which is also the only case where its extra detail is worth anything.
-  // A lockfile whose process is gone was left by a crash, and the port it names
-  // can since have been taken by something else, so an answer on it proves
-  // nothing. Discarding it here costs a syscall and keeps a stale file from
-  // refusing a launch forever.
   const target = resolveBridgeTarget(projectDir);
-  const targetIsLive = target.ok && (target.pid === null || isPidAlive(target.pid));
-  if (target.ok && targetIsLive && (await isBridgeAvailable(bridgeHost(projectDir), target.port))) {
+  if (target.ok && (await isBridgeAvailable(bridgeHost(projectDir), target.port))) {
     // No editor was launched, so the verdict is false. The marker says why,
     // and the port says where the one that is already up can be reached. See
     // StartEditorResult.
@@ -1056,7 +1047,19 @@ export async function resolveOwnedEditor(
     }
   }
 
-  const target = resolveBridgeTarget(projectDir);
+  // A port.json whose pid is gone is no address, but stop still reports on it:
+  // the process table below says whether that pid now holds another project,
+  // or whether this project's editor is up under another pid.
+  const resolved = resolveBridgeTarget(projectDir);
+  const target = !resolved.ok && resolved.deadLockfile && resolved.lockfilePath
+    ? {
+        ok: true as const,
+        port: resolved.deadLockfile.port,
+        pid: resolved.deadLockfile.pid,
+        lockfilePath: resolved.lockfilePath,
+        source: "port.json" as const,
+      }
+    : resolved;
   if (!target.ok) {
     const running = await findProjectEditors(projectPath);
     if (running.length === 0) {

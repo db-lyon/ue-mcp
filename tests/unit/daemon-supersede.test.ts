@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
-import type { DaemonDiscovery } from "../../src/daemon/discovery.js";
-import { drainInflight, waitForExit, watchSupersede } from "../../src/daemon/supersede-watch.js";
+import type { DaemonDiscovery } from "../../src/contract/daemon.js";
+import { waitForExit } from "../../src/daemon/client.js";
+import { drainInflight, watchSupersede } from "../../src/daemon/supersede-watch.js";
 
 const record = (pid: number): DaemonDiscovery => ({
   pid,

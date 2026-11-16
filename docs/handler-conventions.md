@@ -35,7 +35,7 @@ Handlers without a natural key (such as `execute_command`) cannot be idempotent 
 Editor labels are **not unique**: copies of a Blueprint share a label, so the
 first match a level iterator reaches depends on streaming order. Every
 actor-targeting handler resolves its target through `MCPResolveActor` in
-`Public/HandlerActorResolve.h`, never through a loop of its own:
+`Private/HandlerActorResolve.h`, never through a loop of its own:
 
 ```cpp
 FString ActorLabel;

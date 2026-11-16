@@ -5,8 +5,9 @@
  * decide what is missing; nothing here writes.
  */
 import { findUProject } from "../config/uproject-path.js";
-import { collectStatus, type StatusReport } from "../integrations/install-status.js";
-import { takeEditorTarget, EditorFlagError } from "./editor-flag.js";
+import type { StatusReport } from "../contract/daemon.js";
+import { collectStatus } from "../integrations/install-status.js";
+import { selectProject } from "./editor-flag.js";
 import { BOLD, DIM, RESET, fail, ok, warn } from "../terminal/ansi.js";
 import type { CliUsage } from "./cli-main.js";
 
@@ -42,9 +43,7 @@ export async function run(argv: string[]): Promise<number | void> {
     process.stdout.write(JSON.stringify(value, null, 2) + "\n");
   };
   try {
-    const target = takeEditorTarget(argv);
-    const named = target.projectPath ?? target.rest.find((a) => !a.startsWith("-"));
-    const uproject = named ?? findUProject(process.cwd());
+    const uproject = selectProject(argv, { positional: true }).projectPath ?? findUProject(process.cwd());
     if (!uproject) {
       const message = "No .uproject found. Run from your project directory or pass the path.";
       if (json) out({ ok: false, error: message });
@@ -56,7 +55,7 @@ export async function run(argv: string[]): Promise<number | void> {
     else printStatus(status);
     return 0;
   } catch (e) {
-    const message = e instanceof EditorFlagError || e instanceof Error ? e.message : String(e);
+    const message = e instanceof Error ? e.message : String(e);
     if (json) out({ ok: false, error: message });
     else fail(message);
     return 1;

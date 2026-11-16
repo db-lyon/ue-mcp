@@ -11,7 +11,7 @@ import { WebSocketServer } from "ws";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { CLIENT_PROTOCOL_VERSION, EditorBridge } from "../../src/bridge/bridge.js";
-import { deriveProjectPort } from "../../src/bridge/port.js";
+import { deriveProjectPort } from "../../src/bridge/wire-contract.js";
 
 /** A stand-in editor that answers every call with its own name. */
 async function fakeEditor(name: string): Promise<{

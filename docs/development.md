@@ -70,6 +70,7 @@ src/
 ├── init.ts, update.ts, deploy-cli.ts  # Other package bins, thin wrappers over cli/
 ├── task.ts, guard-task.ts, daemon-api.ts  # `ue-mcp/task`, `ue-mcp/guard`, `ue-mcp/daemon` exports
 ├── tools.ts              # ALL_TOOLS registry
+├── contract/             # The daemon contract: API versions, features, routes, events, public types
 ├── daemon/               # Daemon, stdio shim, discovery, extensions, UI bundles, HTTP routes
 ├── server/               # Runtime shared by clients, McpServer per client, context projection
 ├── core/                 # Errors, logging, env, shared types, package root, version check
@@ -235,7 +236,7 @@ AssetHandlers_BulkUpsert.cpp(53,6): error C2084: function
 
 The grouping shifts with file count, file order and the adaptive-unity working set, which UBT derives from `git status`, so a duplicate can build on one machine and fail on the next.
 
-Put a helper two files need in a shared header (one of the `Public/Handler*.h` headers that `HandlerUtils.h` gathers), never a copy. Copies also drift apart.
+Put a helper two files need in a shared header (one of the `Handler*.h` headers that `HandlerUtils.h` gathers, under `Private/`), never a copy. Copies also drift apart.
 
 ```bash
 npm run audit:unity      # duplicate file-local definitions, per module

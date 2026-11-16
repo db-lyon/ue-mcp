@@ -39,8 +39,8 @@
  */
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { getUserStatePath } from "../config/user-state.js";
-import { normalizeProjectRoot } from "../bridge/port.js";
+import { getUserStatePath } from "../config/state-store.js";
+import { normalizeProjectRoot } from "../bridge/wire-contract.js";
 
 export type SymbolKind = "class" | "struct" | "enum" | "alias" | "function";
 

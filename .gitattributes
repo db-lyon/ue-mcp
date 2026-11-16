@@ -28,6 +28,8 @@
 *.ini text eol=crlf
 *.cfg text eol=crlf
 *.txt text eol=crlf
+# Written by a unit test with LF, like the TypeScript it records
+tests/golden/daemon-api.d.ts.txt text eol=lf
 *.csv text eol=crlf
 *.tsv text eol=crlf
 *.xml text eol=crlf

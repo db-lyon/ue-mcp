@@ -16,13 +16,15 @@
  * not answering refuses an engine change rather than having its setting file
  * written underneath it.
  */
-import * as http from "node:http";
 import * as path from "node:path";
 import { findUProject } from "../config/uproject-path.js";
 import { setDefaultLogLevel } from "../core/log.js";
-import { readAnsweringDiscovery, type DaemonDiscovery } from "../daemon/discovery.js";
+import type { DaemonDiscovery, DaemonRouteName } from "../contract/daemon.js";
+import { daemonRequest } from "../daemon/client.js";
+import { readAnsweringDiscovery } from "../daemon/discovery.js";
 import { BOLD, DIM, GREEN, RED, RESET, YELLOW } from "../terminal/ansi.js";
 import type { CliUsage } from "./cli-main.js";
+import { selectProject } from "./editor-flag.js";
 
 export const usage: CliUsage = {
   usage: "ue-mcp tools <list|enable|disable> [category|toolset ...] [flags]",
@@ -38,6 +40,7 @@ export const usage: CliUsage = {
     { name: "--native", description: "Categories: only ue-mcp's own actions" },
     { name: "--epic", description: "Categories: only the actions wrapping Unreal's toolsets, and those toolsets in the editor" },
     { name: "--project", value: "<uproject>", description: "The project, instead of the one in the working directory" },
+    { name: "--editor", value: "<name-or-path>", description: "Target one of the editors this server drives" },
     { name: "--json", description: "Print the actions' JSON results only" },
   ],
 };
@@ -61,11 +64,7 @@ export function parseToolsArgs(argv: readonly string[]): ToolsCliArgs {
     if (a === "--native") native = true;
     else if (a === "--epic") epic = true;
     else if (a === "--json") out.json = true;
-    else if (a === "--project" || a.startsWith("--project=")) {
-      const v = a.includes("=") ? a.slice(a.indexOf("=") + 1) : argv[++i];
-      if (!v) throw new ToolsArgError("--project needs a .uproject path.");
-      out.project = v;
-    } else if (a.startsWith("-")) throw new ToolsArgError(`Unknown flag ${a}.`);
+    else if (a.startsWith("-")) throw new ToolsArgError(`Unknown flag ${a}.`);
     else if (out.sub === undefined) out.sub = a;
     else out.names.push(a);
   }
@@ -84,41 +83,22 @@ interface Backend {
 
 type Outcome = { ok: true; data: Record<string, unknown> } | { ok: false; error: string };
 
-function request(d: DaemonDiscovery, method: string, route: string, body?: unknown): Promise<Outcome> {
-  return new Promise((resolve) => {
-    const payload = body === undefined ? undefined : JSON.stringify(body);
-    const req = http.request({
-      host: "127.0.0.1",
-      port: d.port,
-      path: route,
-      method,
-      headers: { authorization: `Bearer ${d.token}`, ...(payload ? { "content-type": "application/json" } : {}) },
-    }, (res) => {
-      const chunks: Buffer[] = [];
-      res.on("data", (c: Buffer) => chunks.push(c));
-      res.on("end", () => {
-        const text = Buffer.concat(chunks).toString("utf-8");
-        let parsed: Record<string, unknown> = {};
-        try {
-          parsed = JSON.parse(text) as Record<string, unknown>;
-        } catch {
-          parsed = { error: text };
-        }
-        if ((res.statusCode ?? 500) >= 400) resolve({ ok: false, error: String(parsed.error ?? `HTTP ${res.statusCode}`) });
-        else resolve({ ok: true, data: parsed });
-      });
-    });
-    req.on("error", (e) => resolve({ ok: false, error: e.message }));
-    if (payload) req.write(payload);
-    req.end();
-  });
+async function request(d: DaemonDiscovery, route: DaemonRouteName, body?: unknown): Promise<Outcome> {
+  try {
+    const res = await daemonRequest(d, route, body === undefined ? {} : { method: "POST", body });
+    const parsed = (res.json && typeof res.json === "object" ? res.json : { error: res.text }) as Record<string, unknown>;
+    if (res.status >= 400) return { ok: false, error: String(parsed.error ?? `HTTP ${res.status}`) };
+    return { ok: true, data: parsed };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
 }
 
 function daemonBackend(d: DaemonDiscovery): Backend {
   return {
-    list: () => request(d, "GET", "/v1/tools"),
-    setCategory: (category, enabled, scope) => request(d, "POST", "/v1/tools/categories", { category, enabled, scope }),
-    setToolsets: (toolsets, enabled) => request(d, "POST", "/v1/tools/toolsets", { toolsets, enabled }),
+    list: () => request(d, "tools.list"),
+    setCategory: (category, enabled, scope) => request(d, "tools.categories", { category, enabled, scope }),
+    setToolsets: (toolsets, enabled) => request(d, "tools.toolsets", { toolsets, enabled }),
     close: async () => undefined,
   };
 }
@@ -188,7 +168,8 @@ function printList(data: Record<string, unknown>): void {
 export async function run(argv: string[]): Promise<number> {
   let args: ToolsCliArgs;
   try {
-    args = parseToolsArgs(argv);
+    const target = selectProject(argv, { projectFlag: true });
+    args = { ...parseToolsArgs(target.rest), project: target.projectPath };
   } catch (e) {
     console.error(`  ${RED}${e instanceof Error ? e.message : String(e)}${RESET}`);
     return 2;

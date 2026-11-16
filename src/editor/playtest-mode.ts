@@ -1,5 +1,6 @@
 // @session per-session: Resolves the playtest mode for the project it is handed, from that project's stored preference.
-import { getPlaytestModeScopes, getUserStatePath, type PlaytestMode } from "../config/user-state.js";
+import { PLAYTEST_MODE, type PlaytestMode } from "../config/modes.js";
+import { getUserStatePath } from "../config/state-store.js";
 
 /**
  * Who starts playtest runs: a person (manual) or an agent (automatic).
@@ -10,9 +11,8 @@ import { getPlaytestModeScopes, getUserStatePath, type PlaytestMode } from "../c
  * api.callAction is not gated here, because it reads the mode itself
  * (modes.get) and enforces its own rules.
  *
- * Stored like the dialog and feedback modes, per project (--editor) or per
- * user in ~/.ue-mcp/state.json, and never in project yaml: whether a person
- * watches each playtest is a choice about how this machine is used.
+ * Stored like every scoped mode (config/modes.ts), per project (--editor) or
+ * per user in ~/.ue-mcp/state.json.
  */
 
 /** The task names a manual mode refuses. */
@@ -27,8 +27,8 @@ export interface ResolvedPlaytestMode {
 
 /** The playtest mode that applies to a project: its own, else the user's, else null. */
 export function resolvePlaytestMode(projectDir?: string | null): ResolvedPlaytestMode {
-  const scopes = getPlaytestModeScopes(projectDir ?? null);
-  return { mode: scopes.project ?? scopes.user ?? null, project: scopes.project !== undefined };
+  const resolved = PLAYTEST_MODE.resolve(projectDir ?? null);
+  return { mode: resolved.value ?? null, project: resolved.source === "project" };
 }
 
 /**

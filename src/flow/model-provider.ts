@@ -9,10 +9,14 @@
  */
 import Anthropic from "@anthropic-ai/sdk";
 import type { LLMCompletionRequest, LLMCompletionResponse, LLMMessage, LLMProvider } from "@db-lyon/flowkit";
+import { readEnv } from "../core/env.js";
 
-/** The provider contract: flowkit's neutral completion request and response. */
+/**
+ * The provider: flowkit's neutral completion request and response. An
+ * extension registers the contract's ModelProvider, which is checked against
+ * this where the daemon hands it over.
+ */
 export type ModelProvider = LLMProvider;
-export type { LLMCompletionRequest as ModelRequest, LLMCompletionResponse as ModelResponse };
 
 export const NO_MODEL_MESSAGE = "No model is configured for flow agent steps.";
 
@@ -37,7 +41,7 @@ export function registerModelProvider(provider: ModelProvider): () => void {
 /** Where the model for the next agent step comes from, without building it. */
 export function modelSource(env: NodeJS.ProcessEnv = process.env): "extension" | "env" | null {
   if (registered.length > 0) return "extension";
-  if (env.ANTHROPIC_API_KEY?.trim()) return "env";
+  if (readEnv("anthropicApiKey", env)?.trim()) return "env";
   return null;
 }
 
@@ -45,7 +49,7 @@ export function modelSource(env: NodeJS.ProcessEnv = process.env): "extension" |
 export function resolveModelProvider(env: NodeJS.ProcessEnv = process.env): ModelProvider | null {
   const last = registered[registered.length - 1];
   if (last) return last.provider;
-  const key = env.ANTHROPIC_API_KEY?.trim();
+  const key = readEnv("anthropicApiKey", env)?.trim();
   if (!key) return null;
   return anthropicProvider(key, env);
 }
@@ -86,13 +90,14 @@ function finishReason(stop: string | null | undefined): string | undefined {
 
 /** A provider over the Anthropic Messages API, for the env-key path. */
 export function anthropicProvider(apiKey: string, env: NodeJS.ProcessEnv = process.env): ModelProvider {
-  const client = new Anthropic({ apiKey, ...(env.ANTHROPIC_BASE_URL ? { baseURL: env.ANTHROPIC_BASE_URL } : {}) });
+  const baseURL = readEnv("anthropicBaseUrl", env);
+  const client = new Anthropic({ apiKey, ...(baseURL ? { baseURL } : {}) });
   return {
     async complete(req: LLMCompletionRequest): Promise<LLMCompletionResponse> {
       const { system, messages } = toAnthropic(req);
       const res = await client.messages.create(
         {
-          model: req.model ?? (env.UE_MCP_FLOW_MODEL?.trim() || DEFAULT_FLOW_MODEL),
+          model: req.model ?? (readEnv("flowModel", env)?.trim() || DEFAULT_FLOW_MODEL),
           max_tokens: req.maxTokens ?? 16000,
           ...(system ? { system } : {}),
           messages,

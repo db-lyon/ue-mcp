@@ -2,7 +2,7 @@
 // @session per-session: Writes one project's context strategy, chosen with --editor.
 import * as path from "node:path";
 import { projectConfigPath, readConfigDoc, writeConfigDoc } from "../config/ue-mcp-config.js";
-import { takeEditorTarget, EditorFlagError } from "./editor-flag.js";
+import { selectProjectOrExit } from "./editor-flag.js";
 import { findUProject } from "../config/uproject-path.js";
 import type { ContextStrategy } from "../config/context-strategy.js";
 import { RESET, BOLD, DIM, GREEN, RED, CYAN, YELLOW } from "../terminal/ansi.js";
@@ -48,18 +48,9 @@ function parseArgs(argv: string[]): ContextArgs {
   if (argv.some((a) => a === "-h" || a === "--help" || a === "help")) {
     return { action: "status", help: true };
   }
-  // Flags were dropped wholesale here, so --editor would have been silently
-  // discarded and the command would have retargeted cwd. Take it first, then
-  // keep the original positional-only behaviour for everything else.
-  let target: { projectPath?: string; rest: string[] };
-  try {
-    target = takeEditorTarget(argv);
-  } catch (e) {
-    console.log(`
-  ${RED}${e instanceof EditorFlagError ? e.message : String(e)}${RESET}
-`);
-    process.exit(1);
-  }
+  // The project positional can come before or after the action, so only
+  // --editor goes through the shared selector; the positionals are read here.
+  const target = selectProjectOrExit(argv);
   const positional = target.rest.filter((a) => !a.startsWith("-"));
   let action: string | undefined;
   let projectArg: string | undefined = target.projectPath;

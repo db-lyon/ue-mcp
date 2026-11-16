@@ -11,7 +11,7 @@ import * as path from "node:path";
 import type { FlowEvent } from "../flow/events.js";
 import { subscribeFlowEvents } from "../flow/events.js";
 import { findUProject, isUProjectPath } from "../config/uproject-path.js";
-import { takeEditorTarget, EditorFlagError } from "./editor-flag.js";
+import { selectProject, EditorFlagError } from "./editor-flag.js";
 import { setDefaultLogLevel } from "../core/log.js";
 import { BOLD, DIM, GREEN, RED, RESET, YELLOW } from "../terminal/ansi.js";
 import type { CliUsage } from "./cli-main.js";
@@ -86,7 +86,7 @@ export function parseFlowArgs(argv: readonly string[]): FlowCliArgs {
 
 /** The project a flow command addresses: --editor first, then the working directory. */
 function targetProject(argv: string[]): { project: string | null; rest: string[] } {
-  const target = takeEditorTarget(argv);
+  const target = selectProject(argv);
   if (target.projectPath) {
     const p = target.projectPath;
     return { project: isUProjectPath(p) ? path.resolve(p) : findUProject(p), rest: target.rest };

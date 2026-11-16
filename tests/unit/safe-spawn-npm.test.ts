@@ -3,7 +3,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { UnsafeArgumentError, assertPackageSpec, findWindowsNpm, npmInvocation, runNpmSync } from "../../src/core/safe-spawn.js";
-import { latestFromNpmView } from "../../src/cli/update.js";
+import { latestFromNpmView } from "../../src/core/version-check.js";
 
 /**
  * `plugin install`, `plugin remove`, `plugin update` and `update` hand npm a

@@ -9,20 +9,25 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   DialogGuard,
   onDialogEvent,
+  respondToDialogCall,
   type DialogEvent,
   type GuardDeps,
 } from "../../src/editor/dialog-guard.js";
-import type { DialogMode } from "../../src/config/user-state.js";
-import type { DialogPromptFn, DialogPromptRequest } from "../../src/editor/dialog-types.js";
+import type { DialogMode } from "../../src/config/modes.js";
+import type { DialogPromptFn, DialogPromptRequest } from "../../src/contract/daemon.js";
 
 const BUTTONS = ["Save Selected", "Don't Save", "Cancel"];
 const CHOICES = BUTTONS.map((b) => ({ buttonLabel: b, respondWith: `editor(respond_to_dialog, buttonLabel="${b}")` }));
 const listing = (title = "Save Content") => ({ dialogs: [{ title, message: "Save these?", buttons: BUTTONS, choices: CHOICES }] });
 const empty = { dialogs: [] };
 
+// Restored key by key: assigning a plain object to process.env detaches it
+// from the real environment, so a later file in the same worker that sets
+// HOME is not seen by os.homedir().
 const saved = { ...process.env };
 afterEach(() => {
-  process.env = { ...saved };
+  for (const k of Object.keys(process.env)) if (!(k in saved)) delete process.env[k];
+  Object.assign(process.env, saved);
 });
 
 function make(over: Partial<GuardDeps> & { modeIs?: DialogMode } = {}) {
@@ -142,6 +147,17 @@ describe("delegate hands one dialog to the agent", () => {
     expect(decision.refusal.dialogMode).toBe("auto");
     expect(decision.refusal.dialogDelegated).toBe(true);
     expect(decision.refusal.choices).toEqual(CHOICES);
+  });
+
+  it("builds the press call itself when the plugin reports only button labels", async () => {
+    process.env.UE_MCP_ELICIT_MIN_HUMAN_MS = "0";
+    const labelsOnly = { dialogs: [{ title: "Save Content", message: "Save these?", buttons: BUTTONS, choices: BUTTONS.map((b) => ({ buttonLabel: b, enabled: true })) }] };
+    const { guard } = make({ prompt: () => answering({ action: "delegate" }), probe: async () => labelsOnly });
+    const decision = await guard.check("editor.stop_editor", "action");
+    if (decision.allow) throw new Error("expected a refusal");
+    expect(decision.refusal.choices).toEqual(
+      BUTTONS.map((b) => ({ buttonLabel: b, enabled: true, respondWith: respondToDialogCall(b) })),
+    );
   });
 
   it("lets the agent's press through for that dialog, which interactive otherwise refuses", async () => {

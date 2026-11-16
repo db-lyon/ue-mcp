@@ -18,29 +18,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { userDir } from "../core/user-dir.js";
 import { compareVersions } from "../core/semver.js";
-
-export interface UiManifest {
-  name: string;
-  version: string;
-  /** Daemon API versions this bundle works with, inclusive. */
-  api: { min: number; max: number };
-  /** Relative path (forward slashes) to lowercase hex SHA-256. */
-  files: Record<string, string>;
-  /**
-   * A module another page loads from /ui/ext/<name>/: `entry` is a file in
-   * `files`, `host` names the page meant to load it. Opaque to the daemon.
-   */
-  module?: { entry: string; host: string };
-}
-
-/** A loaded extension's own bundle, as /v1/health lists it. */
-export interface UiBundleInfo {
-  name: string;
-  version: string;
-  /** Where it is served: /ui/ext/<name>/. */
-  base: string;
-  module?: { entry: string; host: string };
-}
+import { apiVersionsOverlap, type UiBundleInfo, type UiManifest } from "../contract/daemon.js";
 
 export interface UiBundle {
   manifest: UiManifest;
@@ -213,7 +191,7 @@ export class UiBundleStore {
         const dir = path.join(this.root, e.name);
         try {
           const manifest = verifyBundle(dir, this.keysFor);
-          if (manifest.api.min <= this.apiVersion && this.apiVersion <= manifest.api.max) candidates.push({ manifest, dir });
+          if (apiVersionsOverlap(manifest.api, { min: this.apiVersion, max: this.apiVersion })) candidates.push({ manifest, dir });
         } catch {
           // Not ours, tampered, or for a key no extension trusts: never served.
         }

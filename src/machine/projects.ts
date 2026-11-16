@@ -12,58 +12,15 @@ import { isPidAlive, readBridgeInstanceRecords } from "../bridge/editor-target.j
 import { readEnv } from "../core/env.js";
 import { packageVersion } from "../core/package-root.js";
 import { ProjectContext } from "../config/project.js";
-import { getProjectExtensionVersion, getProjectList, updateProjectList } from "../config/user-state.js";
-import { daemonDir, projectKey, type DaemonDiscovery } from "../daemon/discovery.js";
+import { getProjectExtensionVersion } from "../config/extension-state.js";
+import { getProjectList, updateProjectList } from "../config/project-list-state.js";
+import { MACHINE_REPORT_VERSION, type DaemonDiscovery, type MachineDaemon, type MachineProject, type MachineReport } from "../contract/daemon.js";
+import { daemonDir, projectKey } from "../daemon/discovery.js";
 import { extensionsDir } from "../daemon/extensions.js";
 import { installedCopies } from "../daemon/extension-versions.js";
 import { projectEngineVersion } from "../editor/engine-root.js";
 import { installedBridge } from "../editor/install-marker.js";
 
-/** Version of the MachineReport shape. Bump on a breaking change; add fields freely. */
-export const MACHINE_REPORT_VERSION = 1;
-
-export interface MachineDaemon {
-  key: string;
-  /** The project root as the daemon recorded it (normalized: lower case, forward slashes). */
-  projectRoot: string;
-  /** The project's .uproject: a listed project's own, else the one in the recorded folder where the file system finds it. */
-  uproject: string | null;
-  pid: number;
-  port: number;
-  version: string;
-  startedAt: string;
-  discovery: string;
-  log: string;
-}
-
-export interface MachineProject {
-  name: string;
-  uproject: string;
-  dir: string;
-  key: string;
-  source: "recent" | "added";
-  /** When Unreal last opened it, as its recent list says (YYYY.MM.DD-HH.MM.SS), else null. */
-  lastOpened: string | null;
-  engine: { association: string | null; version: string | null };
-  /** An editor with the bridge has this project open: installs and launches wait for it to close. */
-  editor: { running: boolean; pids: number[] };
-  ueMcp: { setUp: boolean; bridge: { version: string; kind: "source" | "binary" | null } | null; config: boolean };
-  /** Daemon extensions this project records, by name: the version it loads. */
-  extensions: Record<string, string>;
-  /** The plugins in the project's own Plugins folder. */
-  plugins: Array<{ name: string; version: string | null }>;
-  daemon: { discovery: string; log: string; running: MachineDaemon | null };
-}
-
-export interface MachineReport {
-  version: typeof MACHINE_REPORT_VERSION;
-  /** The ue-mcp package that wrote the report. */
-  ueMcp: string;
-  /** The folder of daemon discovery files and logs. */
-  daemonDir: string;
-  projects: MachineProject[];
-  daemons: MachineDaemon[];
-}
 
 /** Where Unreal keeps each version's user config. */
 export function recentProjectsDir(): string {

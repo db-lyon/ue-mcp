@@ -65,7 +65,22 @@ describe("installExtension", () => {
     const none = zipExtension("0.1.0", { ueMcpExtension: undefined });
     await expect(installExtension(none.zip, { root })).rejects.toThrow(/not a ue-mcp extension/);
     const future = zipExtension("0.3.0", { ueMcpExtension: { name: "studio", api: { min: 99, max: 99 } } });
-    await expect(installExtension(future.zip, { root })).rejects.toThrow(/needs extension API 99\.\.99/);
+    await expect(installExtension(future.zip, { root })).rejects.toThrow(/needs extension API 99\.\.99.*npx ue-mcp update/);
+  });
+
+  it("refuses an extension that needs a newer ue-mcp, as loading would, unless the floor is set to warn", async () => {
+    const root = path.join(dir, "extensions");
+    const ahead = zipExtension("0.4.0", { ueMcpExtension: { name: "studio", api: { min: 1, max: 1 }, ueMcp: "999.0.0" } });
+    await expect(installExtension(ahead.zip, { root })).rejects.toThrow(/needs ue-mcp 999\.0\.0 or later.*npx ue-mcp update/);
+    expect(fs.existsSync(root) ? fs.readdirSync(root) : []).toEqual([]);
+    const saved = process.env.UE_MCP_EXTENSION_FLOOR;
+    process.env.UE_MCP_EXTENSION_FLOOR = "warn";
+    try {
+      await expect(installExtension(ahead.zip, { root })).resolves.toMatchObject({ name: "studio", version: "0.4.0" });
+    } finally {
+      if (saved === undefined) delete process.env.UE_MCP_EXTENSION_FLOOR;
+      else process.env.UE_MCP_EXTENSION_FLOOR = saved;
+    }
   });
 });
 
