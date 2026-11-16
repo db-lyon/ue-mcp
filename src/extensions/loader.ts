@@ -9,6 +9,7 @@ import type { PluginEntry } from "../flow/schema.js";
 import { warn, info } from "../core/log.js";
 import {
   loadManifest,
+  pluginVersionRefusal,
   type PluginManifest,
   type ManifestInjectAction,
   type ManifestProvidedAction,
@@ -23,7 +24,6 @@ import {
 } from "../surface/handler-spec.js";
 import type { NativeContractExtras } from "./native-contract.js";
 import { resolvePackage, type ResolvedPackage } from "./resolver.js";
-import { satisfiesMinimum } from "../core/semver.js";
 import {
   supersededByName,
   supersededByUePlugin,
@@ -424,28 +424,14 @@ async function loadOne(
   base.minServerVersion = manifest.minServerVersion;
   base.uePluginDependency = manifest.uePluginDependency;
 
-  if (manifest.minServerVersion && !satisfiesMinimum(serverVersion, manifest.minServerVersion)) {
-    return skip(base, `requires server >= ${manifest.minServerVersion} (have ${serverVersion})`);
-  }
-
-  // Native module gate: the plugin ships C++ that registers handlers via
-  // UEMCP::RegisterExternalHandler. Refuse to load if its minBridgeApi
-  // exceeds the bridge ABI currently deployed in this project. We do NOT
-  // hard-fail when bridgeApiVersion is unknown (no bridge deployed yet);
-  // a warning lets users see the manifest but the C++ side won't run
-  // until they `ue-mcp init`/`update` to deploy a bridge.
-  if (manifest.nativeModule) {
-    if (bridgeApiVersion === null) {
-      warn(
-        "plugin",
-        `${entry.name}: declares nativeModule but no UE_MCP_Bridge is deployed yet - run \`ue-mcp init\` or \`ue-mcp deploy\` to deploy the bridge before invoking its native actions`,
-      );
-    } else if (manifest.nativeModule.minBridgeApi > bridgeApiVersion) {
-      return skip(
-        base,
-        `nativeModule requires bridge ABI >= ${manifest.nativeModule.minBridgeApi} (deployed bridge is ${bridgeApiVersion}). Run \`ue-mcp deploy\` to refresh the bridge.`,
-      );
-    }
+  const refusal = pluginVersionRefusal(entry.name, manifest, serverVersion, bridgeApiVersion);
+  if (refusal) return skip(base, refusal);
+  // No bridge deployed yet: the manifest loads, but its C++ side won't run until one is.
+  if (manifest.nativeModule && bridgeApiVersion === null) {
+    warn(
+      "plugin",
+      `${entry.name}: declares nativeModule but no UE_MCP_Bridge is deployed yet - run \`ue-mcp init\` or \`ue-mcp deploy\` to deploy the bridge before invoking its native actions`,
+    );
   }
 
   // #1282: the native module's recorded contracts. A file that is named and

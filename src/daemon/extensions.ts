@@ -35,6 +35,20 @@ export function extensionsDir(): string {
   return readEnv("extensionsDir") ?? path.join(userDir(), "extensions");
 }
 
+type Refusal = NonNullable<ReturnType<typeof extensionRefusal>>;
+
+/**
+ * The version gate install and load share: extensionRefusal, except that
+ * UE_MCP_EXTENSION_FLOOR=warn lets an extension needing a newer ue-mcp through
+ * (a development daemon whose package version trails its code). `waived` is
+ * the refusal let through that way, for the caller to warn about.
+ */
+export function extensionGate(name: string, ext: ExtensionManifest | undefined, installed: string = packageVersion()): { refusal: Refusal | null; waived: Refusal | null } {
+  const refusal = extensionRefusal(name, ext, installed);
+  if (refusal?.needsUeMcp && readEnv("extensionFloor") === "warn") return { refusal: null, waived: refusal };
+  return { refusal, waived: null };
+}
+
 interface Route {
   method: string;
   path: string;
@@ -89,13 +103,12 @@ function readPackages(root: string, installed: string, refused: RefusedExtension
         continue;
       }
       if (!pkg.main) continue;
-      const refusal = extensionRefusal(name, pkg.ueMcpExtension, installed);
-      // warn mode: a development daemon whose package version trails its code.
-      if (refusal && !(refusal.needsUeMcp && readEnv("extensionFloor") === "warn")) {
+      const { refusal, waived } = extensionGate(name, pkg.ueMcpExtension, installed);
+      if (refusal) {
         refusals.set(copy.version, refusal);
         continue;
       }
-      if (refusal) warn("extension", `${refusal.reason}. Loaded anyway (${ENV_VARS.extensionFloor}=warn).`);
+      if (waived) warn("extension", `${waived.reason}. Loaded anyway (${ENV_VARS.extensionFloor}=warn).`);
       const held = usable.get(copy.version);
       if (!held || held.copy.legacy) usable.set(copy.version, { copy, pkg });
     }
