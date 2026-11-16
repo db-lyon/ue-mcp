@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { editorTool } from "../../src/tools/editor.js";
 import { assetTool } from "../../src/tools/asset.js";
-import type { ToolContext } from "../../src/core/types.js";
+import type { ToolContext } from "../../src/surface/tool-types.js";
 
 // {instanceClass, properties} is read by the bridge (SetInstancedSubobject);
 // the server must forward it as an object, unflattened (#1292).

@@ -4,7 +4,7 @@
  * UAIAssistantInstance answers through a UToolCallAsyncResult that completes on later editor ticks, so the bridge
  * returns a requestId and the server polls epic_ai_assistant_get_request until the result is complete or failed.
  */
-import type { ToolContext } from "../core/types.js";
+import type { ToolContext } from "../surface/tool-types.js";
 
 /** Injectable for tests. */
 export interface WaitClock {

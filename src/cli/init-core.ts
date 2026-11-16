@@ -9,6 +9,7 @@ import * as path from "node:path";
 import { EPIC_CATEGORIES } from "../tools/epic/index.js";
 import { projectConfigPath, readConfigDoc, writeConfigDoc } from "../config/ue-mcp-config.js";
 import { ProjectContext } from "../config/project.js";
+import type { ContextStrategy } from "../config/context-strategy.js";
 import { deploy, projectEngineVersion } from "../editor/deployer.js";
 import { installBinaryPlugin, resolveBinarySource, describeBinarySource } from "../editor/bridge-binaries.js";
 import {
@@ -120,8 +121,6 @@ export const CATEGORIES: ToolCategory[] = [
 
 /** Categories that carry wrapped engine tools, read from the generated modules. */
 export const ENRICHABLE_CATEGORIES = Object.keys(EPIC_CATEGORIES).sort();
-
-export type ContextStrategy = "micro" | "lean" | "full";
 
 /** Stable ids for `--clients`, mapped to the names detectMcpClients uses. */
 export const CLIENT_IDS: Record<string, string> = {

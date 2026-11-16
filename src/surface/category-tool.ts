@@ -10,7 +10,7 @@ import { stripAction } from "./routing-params.js";
 import { stripEditorTarget } from "./target-params.js";
 import type { FlowContext } from "../flow/context.js";
 import { runAction, actionPreparation } from "../flow/run-action.js";
-import type { ActionEffect, ActionSpec, BridgeActionSpec, CategoryOptions, ToolDef } from "../core/types.js";
+import type { ActionEffect, ActionSpec, BridgeActionSpec, CategoryOptions, ToolDef } from "./tool-types.js";
 
 /**
  * An independent copy of one tool. Prefers the rebuilder so the copy's

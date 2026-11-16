@@ -3,7 +3,7 @@ import { z } from "zod";
 import { levelTool } from "../../src/tools/level.js";
 import { actionSchema } from "../../src/surface/action-schema.js";
 import { buildMicroGateway } from "../../src/surface/context/micro-context.js";
-import type { ToolContext } from "../../src/core/types.js";
+import type { ToolContext } from "../../src/surface/tool-types.js";
 import { editorTool } from "../../src/tools/editor.js";
 import { projectTool } from "../../src/tools/project.js";
 import { readHandlerFile } from "../../scripts/lib/cpp-registrations.mjs";

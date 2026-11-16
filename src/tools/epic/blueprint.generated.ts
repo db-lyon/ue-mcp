@@ -10,7 +10,7 @@
 // task factory, guards and locks as every hand-written action in this package.
 // Each also carries its input schema, which the compact signatures read (#1172).
 import { z } from "zod";
-import type { ActionSpec } from "../../core/types.js";
+import type { ActionSpec } from "../../surface/tool-types.js";
 import { bp } from "../../surface/category-tool.js";
 
 const S_epic_add_comment_box = {"properties":{"graph":{"type":"object","properties":{"refPath":{}}},"commentText":{"type":"string"},"nodes":{"type":"array","items":{"type":"object","properties":{"refPath":{}}}},"rect":{"type":"object","properties":{"min":{"type":"object","properties":{"x":{"type":"number"},"y":{"type":"number"}}},"max":{"type":"object","properties":{"x":{"type":"number"},"y":{"type":"number"}}},"bIsValid":{"type":"boolean"}}},"padding":{"type":"integer"}},"required":["graph","commentText"]} as const;

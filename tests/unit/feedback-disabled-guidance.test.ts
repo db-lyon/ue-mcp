@@ -19,7 +19,7 @@ import { resetRulings } from "../../src/dispatch/python-gate.js";
 import { ALL_TOOLS } from "../../src/tools.js";
 import type { SessionSurface } from "../../src/sessions/session-surface.js";
 import type { IBridge } from "../../src/bridge/bridge.js";
-import type { ToolContext } from "../../src/core/types.js";
+import type { ToolContext } from "../../src/surface/tool-types.js";
 import type { DirectiveResponse } from "../../src/core/directive.js";
 
 const NAMES_FEEDBACK_CALL = /feedback\(action=|feedback\(submit\)/;

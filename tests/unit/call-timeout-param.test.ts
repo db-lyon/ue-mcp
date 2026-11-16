@@ -12,7 +12,7 @@
  * unexpected key would be the next defect.
  */
 import { describe, expect, it } from "vitest";
-import type { ToolContext, ToolDef } from "../../src/core/types.js";
+import type { ToolContext, ToolDef } from "../../src/surface/tool-types.js";
 import { categoryTool, bp } from "../../src/surface/category-tool.js";
 import { takeTimeout } from "../../src/dispatch/call-pipeline.js";
 import { MAX_BRIDGE_TIMEOUT_MS } from "../../src/bridge/bridge-timeouts.js";

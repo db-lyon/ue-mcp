@@ -3,7 +3,7 @@ import * as path from "node:path";
 import { parseHeader, collectFiles, findSourceRoots, resolveModuleDir } from "../../codeintel/cpp-parser.js";
 import { listContent } from "../../codeintel/content-index.js";
 import { specBp } from "../specs/project.generated.js";
-import type { ToolContext, ActionSpec } from "../../core/types.js";
+import type { ToolContext, ActionSpec } from "../../surface/tool-types.js";
 import { recordBeforeWrite } from "../../checkpoints/service.js";
 import { resolveInside, requireModuleName } from "../../core/path-guard.js";
 

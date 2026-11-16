@@ -3,7 +3,7 @@ import { assetTool } from "../../src/tools/asset.js";
 import { contractViolation } from "../../src/surface/handler-spec.js";
 import { handlerSpecs } from "../../src/tools/specs/asset.generated.js";
 import { classifyAction } from "../../src/dispatch/locking.js";
-import type { ToolContext } from "../../src/core/types.js";
+import type { ToolContext } from "../../src/surface/tool-types.js";
 
 describe("static mesh inspection surface", () => {
   const accepts = (args: Record<string, unknown>) => contractViolation({ ...handlerSpecs.get_static_mesh_geometry, strict: true }, args) === undefined;

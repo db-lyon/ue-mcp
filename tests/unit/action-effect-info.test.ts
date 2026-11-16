@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
 import { ALL_TOOLS } from "../../src/tools.js";
 import { actionDestructive, actionEffectInfo } from "../../src/surface/action-effects.js";
 import { DESTRUCTIVE_VERBS, leadingVerb } from "../../src/surface/action-verbs.js";
-import type { ToolDef } from "../../src/core/types.js";
+import type { ToolDef } from "../../src/surface/tool-types.js";
 
 const info = actionEffectInfo(ALL_TOOLS, ALL_TOOLS);
 const of = (category: string, action: string) => info.find((r) => r.category === category && r.action === action)!;

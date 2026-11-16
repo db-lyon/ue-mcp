@@ -21,7 +21,7 @@ import type { AddressInfo } from "node:net";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { WebSocketServer, type WebSocket as ServerSocket } from "ws";
 import type { EditorProcess } from "../../src/editor/engine-observer.js";
-import type { ElicitFn, ElicitParams, ElicitResult } from "../../src/core/types.js";
+import type { ElicitFn, ElicitParams, ElicitResult } from "../../src/core/elicit.js";
 import { readHandlerFile } from "../../scripts/lib/cpp-registrations.mjs";
 
 vi.mock("../../src/editor/engine-observer.js", async (importOriginal) => {

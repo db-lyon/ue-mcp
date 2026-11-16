@@ -1,5 +1,5 @@
 import { specBp } from "../specs/project.generated.js";
-import type { ActionSpec } from "../../core/types.js";
+import type { ActionSpec } from "../../surface/tool-types.js";
 
 /**
  * The project's localization: its cultures, its localization targets, and a

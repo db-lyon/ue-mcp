@@ -28,7 +28,7 @@ import {
 import { classifyAction } from "../../src/dispatch/locking.js";
 import { classifyWrite } from "../../src/flow/write-methods.js";
 import { refuseUntargetedCall } from "../../src/dispatch/editor-gate.js";
-import type { ActionEffect } from "../../src/core/types.js";
+import type { ActionEffect } from "../../src/surface/tool-types.js";
 
 const EFFECTS: ActionEffect[] = ["read", "mutate", "unknown"];
 

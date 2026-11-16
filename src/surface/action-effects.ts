@@ -28,7 +28,7 @@ import { splitTaskName } from "./action-class.js";
 import { flowCategoryForCheck } from "../flow/flow-surface.js";
 import { EPIC_TOOL_EFFECTS } from "../tools/epic/effects.js";
 import { DESTRUCTIVE_VERBS, leadingVerb } from "./action-verbs.js";
-import type { ActionEffect, ActionEffectSource, ToolDef } from "../core/types.js";
+import type { ActionEffect, ActionEffectSource, ToolDef } from "./tool-types.js";
 
 export interface ResolvedEffect {
   effect: ActionEffect;

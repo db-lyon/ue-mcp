@@ -8,7 +8,7 @@
  */
 import { describe, it, expect } from "vitest";
 import { projectResult, takeFieldSelection, attachFieldReport } from "../../src/surface/context/field-select.js";
-import type { ToolContext } from "../../src/core/types.js";
+import type { ToolContext } from "../../src/surface/tool-types.js";
 import { categoryTool, SELECT_PARAM, OMIT_PARAM, TIMEOUT_PARAM } from "../../src/surface/category-tool.js";
 import { ALL_TOOLS } from "../../src/tools.js";
 

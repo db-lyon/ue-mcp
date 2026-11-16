@@ -3,7 +3,7 @@
  * graph through the existing reader over the bridge and hands the answer to
  * the matching adapter (src/diagram/adapters.ts); rendering is shared.
  */
-import type { HandlerActionSpec, ToolContext } from "../core/types.js";
+import type { HandlerActionSpec, ToolContext } from "../surface/tool-types.js";
 import { DIAGRAM_HELP, diagramAction, readFromBridge } from "../diagram/action.js";
 import {
   assetGraphModel,

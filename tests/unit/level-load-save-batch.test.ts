@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { levelTool } from "../../src/tools/level.js";
 import { handlerSpecs as levelSpecs } from "../../src/tools/specs/level.generated.js";
 import { handlerSpecs as editorSpecs } from "../../src/tools/specs/editor.generated.js";
-import type { ToolContext } from "../../src/core/types.js";
+import type { ToolContext } from "../../src/surface/tool-types.js";
 
 const paramNames = (specs: typeof levelSpecs, handler: string) => specs[handler].params.map((p) => p.name);
 

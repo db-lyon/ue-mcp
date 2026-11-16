@@ -10,7 +10,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { EditorBridge } from "../../src/bridge/bridge.js";
 import { ProjectContext } from "../../src/config/project.js";
 import { sessionActions } from "../../src/tools/project/sessions.js";
-import type { ToolContext } from "../../src/core/types.js";
+import type { ToolContext } from "../../src/surface/tool-types.js";
 
 const dirs: string[] = [];
 let savedEnvPort: string | undefined;

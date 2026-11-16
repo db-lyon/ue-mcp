@@ -23,10 +23,10 @@ import {
   engineRootReplacements,
   projectEpicIntegrations,
   plan,
-  type ContextStrategy,
   type InitChoices,
   type InitResult,
 } from "./init-core.js";
+import type { ContextStrategy } from "../config/context-strategy.js";
 
 /* ------------------------------------------------------------------ */
 /*  Ask for project path with readline                                 */

@@ -13,7 +13,7 @@ import { canvasPortReplacement } from "../integrations/epic/unreal-canvas.js";
 import { packageVersion } from "../core/package-root.js";
 import { readEnv } from "../core/env.js";
 import { bridgeAuthHeaders, watchUpgradeRefusal } from "./bridge-token.js";
-import type { ProgressUpdate } from "../core/types.js";
+import type { ProgressUpdate } from "../core/progress.js";
 
 /**
  * The wire protocol this client speaks. Must match

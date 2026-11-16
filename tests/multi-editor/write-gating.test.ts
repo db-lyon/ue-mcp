@@ -17,7 +17,7 @@ import {
   refuseUntargetedInRegistry,
   editorAttribution,
 } from "../../src/dispatch/editor-gate.js";
-import type { ToolDef } from "../../src/core/types.js";
+import type { ToolDef } from "../../src/surface/tool-types.js";
 import { injectEditorTarget } from "../../src/surface/target-params.js";
 import { assetTool } from "../../src/tools/asset.js";
 import { editorTool } from "../../src/tools/editor.js";

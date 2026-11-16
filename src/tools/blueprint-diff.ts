@@ -5,7 +5,7 @@
  * form, a source control revision included, goes to diff_blueprint, which
  * fetches the revision through the editor's provider.
  */
-import type { BridgeActionSpec, ToolContext } from "../core/types.js";
+import type { BridgeActionSpec, ToolContext } from "../surface/tool-types.js";
 import { checkpointsFor } from "../checkpoints/service.js";
 
 export type DiffAgainst = { kind: "checkpoint"; id: string } | { kind: "revision"; revision: string };

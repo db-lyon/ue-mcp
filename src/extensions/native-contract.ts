@@ -1,5 +1,5 @@
 import type { z } from "zod";
-import type { ActionSpec } from "../core/types.js";
+import type { ActionSpec } from "../surface/tool-types.js";
 import type { HandlerSpec } from "../surface/handler-spec.js";
 
 /** What a native handler with a recorded spec adds to its manifest-shaped action (#1282). */

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { ToolDef, ToolContext } from "../core/types.js";
+import type { ToolDef, ToolContext } from "../surface/tool-types.js";
 import { categoryTool } from "../surface/category-tool.js";
 import { toolGraphOf } from "../surface/target-params.js";
 import { directive, type DirectiveResponse } from "../core/directive.js";

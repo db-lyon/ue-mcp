@@ -10,7 +10,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { EditorProcess } from "../../src/editor/engine-observer.js";
-import type { ToolContext } from "../../src/core/types.js";
+import type { ToolContext } from "../../src/surface/tool-types.js";
 import { readHandlerFile } from "../../scripts/lib/cpp-registrations.mjs";
 
 // No unit test may launch a real editor. An unknown EngineAssociation still

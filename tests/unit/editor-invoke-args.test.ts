@@ -7,7 +7,7 @@ import { editorTool } from "../../src/tools/editor.js";
 import { applyLeanContext } from "../../src/surface/context/lean-context.js";
 import { handlerSpecs } from "../../src/tools/specs/editor.generated.js";
 import { paramZod, zodSignature } from "../../src/surface/handler-spec.js";
-import type { ToolContext, ToolDef } from "../../src/core/types.js";
+import type { ToolContext, ToolDef } from "../../src/surface/tool-types.js";
 import { readHandlerFile } from "../../scripts/lib/cpp-registrations.mjs";
 
 /**

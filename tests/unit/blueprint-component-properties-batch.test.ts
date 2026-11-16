@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { blueprintTool } from "../../src/tools/blueprint.js";
-import type { ToolContext } from "../../src/core/types.js";
+import type { ToolContext } from "../../src/surface/tool-types.js";
 import { actionSchema } from "../../src/surface/action-schema.js";
 import { ROUTING_PARAM_NAMES } from "../../src/surface/routing-params.js";
 import { declaredActionEffect } from "../../src/surface/action-effects.js";

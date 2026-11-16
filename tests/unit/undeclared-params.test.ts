@@ -12,7 +12,7 @@ import { actionAccepts } from "../../src/surface/action-schema.js";
 import { categoryTool } from "../../src/surface/category-tool.js";
 import { flatValidationMessage } from "../../src/surface/context/call-envelope.js";
 import { buildMicroGateway } from "../../src/surface/context/micro-context.js";
-import type { ActionSpec, ToolContext } from "../../src/core/types.js";
+import type { ActionSpec, ToolContext } from "../../src/surface/tool-types.js";
 
 const BP = "/Game/BP_Test";
 

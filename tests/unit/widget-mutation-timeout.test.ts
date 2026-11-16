@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { widgetTool } from "../../src/tools/widget.js";
 import type { IBridge } from "../../src/bridge/bridge.js";
-import type { ToolContext } from "../../src/core/types.js";
+import type { ToolContext } from "../../src/surface/tool-types.js";
 
 /**
  * #799: add_widget and remove_widget compile and save the Widget Blueprint

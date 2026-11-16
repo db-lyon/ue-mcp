@@ -13,7 +13,7 @@
  */
 import { describe, it, expect } from "vitest";
 import { checkBridgeParity, deployedPlugin, freshnessWarning, pluginStaleness, unadvertisedMethods } from "../../src/bridge/bridge-parity.js";
-import type { ToolDef } from "../../src/core/types.js";
+import type { ToolDef } from "../../src/surface/tool-types.js";
 import { categoryTool, bp } from "../../src/surface/category-tool.js";
 import type { BridgeCapabilities } from "../../src/bridge/bridge.js";
 

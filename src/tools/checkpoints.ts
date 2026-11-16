@@ -4,7 +4,7 @@
  * the same payloads as the daemon's /v1/checkpoints routes.
  */
 import { z } from "zod";
-import type { ActionSpec, ToolContext } from "../core/types.js";
+import type { ActionSpec, ToolContext } from "../surface/tool-types.js";
 import { checkpointsFor } from "../checkpoints/service.js";
 
 function sessionOf(ctx: ToolContext) {

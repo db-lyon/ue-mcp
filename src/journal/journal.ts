@@ -16,7 +16,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { warn } from "../core/log.js";
-import type { ActionEffect } from "../core/types.js";
+import type { ActionEffect } from "../surface/tool-types.js";
 import type { EditorSession } from "../sessions/session.js";
 import { checkpointsFor, type RestoreResult } from "../checkpoints/service.js";
 

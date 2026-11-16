@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { ToolDef } from "../core/types.js";
+import type { ToolDef } from "../surface/tool-types.js";
 import { categoryTool } from "../surface/category-tool.js";
 import { actions as epicActions, schema as epicSchema } from "./epic/animation.generated.js";
 import { specBp, schema as specSchema } from "./specs/animation.generated.js";

@@ -6,7 +6,9 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { McpError as SdkMcpError } from "@modelcontextprotocol/sdk/types.js";
 import type { EditorSession, SessionRegistry } from "../sessions/session.js";
-import type { ElicitFn, ProgressFn, ProgressUpdate, ToolContext, ToolDef } from "../core/types.js";
+import type { ElicitFn } from "../core/elicit.js";
+import type { ProgressFn, ProgressUpdate } from "../core/progress.js";
+import type { ToolContext, ToolDef } from "../surface/tool-types.js";
 import { McpError, ErrorCode } from "../core/errors.js";
 import { debug } from "../core/log.js";
 import { withCallAsker } from "../flow/call-elicit.js";

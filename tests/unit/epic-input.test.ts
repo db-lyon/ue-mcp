@@ -13,7 +13,7 @@ import { widgetTool } from "../../src/tools/widget.js";
 import { pcgTool } from "../../src/tools/pcg.js";
 import { actionSignature } from "../../src/surface/action-signature.js";
 import { actionSchema } from "../../src/surface/action-schema.js";
-import type { ToolContext } from "../../src/core/types.js";
+import type { ToolContext } from "../../src/surface/tool-types.js";
 
 const GET_WIDGETS_NAME = "UMGToolSet.UMGToolSet.GetWidgets";
 const GET_WIDGETS: EpicInputSchema = {

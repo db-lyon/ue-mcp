@@ -5,7 +5,7 @@
  * the cheap get_pcg_generation_state instead, which also binds the component's completion delegates: a run started by
  * anything (execute, the editor, a project UFUNCTION that defers to the next tick) is counted once it ends.
  */
-import type { ToolContext } from "../core/types.js";
+import type { ToolContext } from "../surface/tool-types.js";
 
 export type WaitState = "generated" | "cancelled" | "cleaned" | "not_started" | "idle" | "timed_out";
 

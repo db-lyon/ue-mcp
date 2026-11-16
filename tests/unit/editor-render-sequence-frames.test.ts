@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { editorTool } from "../../src/tools/editor.js";
 import { declaredActionEffect } from "../../src/surface/action-effects.js";
-import type { ToolContext } from "../../src/core/types.js";
+import type { ToolContext } from "../../src/surface/tool-types.js";
 
 /**
  * #1098: a frame range renders in one bridge call, so the call needs the long

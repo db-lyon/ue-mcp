@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { assetTool } from "../../src/tools/asset.js";
 import { handlerSpecs } from "../../src/tools/specs/asset.generated.js";
-import type { ToolContext } from "../../src/core/types.js";
+import type { ToolContext } from "../../src/surface/tool-types.js";
 import { readHandlerFile } from "../../scripts/lib/cpp-registrations.mjs";
 
 describe("asset.import_animation batch and readback (#1228)", () => {

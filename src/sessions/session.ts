@@ -33,7 +33,7 @@ import type { CategoryControl } from "../surface/category-state.js";
 import { newLockOwnerId } from "../dispatch/lock-owner.js";
 import { withoutDialogActuation } from "../editor/dialog-guard.js";
 import { projectDirOf } from "../config/uproject-path.js";
-import type { ToolDef } from "../core/types.js";
+import type { ToolDef } from "../surface/tool-types.js";
 
 /** Key used for the session that has no project bound. */
 export const DEFAULT_SESSION_KEY = "";

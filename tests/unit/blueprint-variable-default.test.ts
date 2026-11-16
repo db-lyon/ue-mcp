@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { blueprintTool } from "../../src/tools/blueprint.js";
 import { declaredActionEffect } from "../../src/surface/action-effects.js";
-import type { ToolContext } from "../../src/core/types.js";
+import type { ToolContext } from "../../src/surface/tool-types.js";
 
 describe("blueprint.get_variable_default (#902)", () => {
   it("forwards assetPath and the variable name unchanged", async () => {

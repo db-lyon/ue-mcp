@@ -17,7 +17,7 @@
  * a registry tool, epic(call_mcp_tool) for one the Fab plugin registers with
  * Epic's MCP plugin, and the fab epic_* action when one wraps the tool.
  */
-import type { HandlerActionSpec, ToolContext } from "../core/types.js";
+import type { HandlerActionSpec, ToolContext } from "../surface/tool-types.js";
 import { actions as fabEpicActions } from "./epic/fab.generated.js";
 import { routeEpicToolset } from "./epic/toolset-routes.js";
 

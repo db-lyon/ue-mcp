@@ -125,7 +125,7 @@ const HEADER = `/**
  *   mutate   may change the editor, its project on disk, or its process.
  *   unknown  decided by an argument rather than by the tool. Gated as mutate.
  */
-import type { ActionEffect } from "../../core/types.js";
+import type { ActionEffect } from "../../surface/tool-types.js";
 
 /** Keyed by the tool's fully qualified registry name. */
 export const EPIC_TOOL_EFFECTS: Record<string, ActionEffect> = {

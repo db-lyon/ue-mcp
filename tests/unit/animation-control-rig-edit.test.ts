@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 import { animationTool } from "../../src/tools/animation.js";
 import { handlerSpecs } from "../../src/tools/specs/animation.generated.js";
-import type { ToolContext } from "../../src/core/types.js";
+import type { ToolContext } from "../../src/surface/tool-types.js";
 import { readHandlerFile } from "../../scripts/lib/cpp-registrations.mjs";
 
 const workflowActions = [

@@ -13,9 +13,10 @@
  */
 import { normalizeObjectSchema } from "@modelcontextprotocol/sdk/server/zod-compat.js";
 import { toJsonSchemaCompat } from "@modelcontextprotocol/sdk/server/zod-json-schema-compat.js";
-import type { InProcessCallOptions, ToolDef } from "../core/types.js";
+import type { InProcessCallOptions } from "./call-options.js";
+import type { ToolDef } from "../surface/tool-types.js";
 import { composeServerInstructions } from "../surface/context/instructions.js";
-import type { ContextStrategy } from "../surface/context/lean-context.js";
+import type { ContextStrategy } from "../config/context-strategy.js";
 import { MICRO_GATEWAY_CALL, MICRO_GATEWAY_TOOL } from "../surface/context/micro-context.js";
 import { usesArgsEnvelope } from "../surface/context/call-envelope.js";
 import { injectEditorTarget, injectMigrateTarget } from "../surface/target-params.js";

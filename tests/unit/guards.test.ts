@@ -19,7 +19,8 @@ import { GuardRegistry, makeCallContext, type CallContext } from "../../src/flow
 import { GuardedBridge } from "../../src/flow/guarded-bridge.js";
 import { ErrorCode, McpError } from "../../src/core/errors.js";
 import type { IBridge } from "../../src/bridge/bridge.js";
-import type { ElicitFn, ElicitParams, ElicitResult, ToolContext } from "../../src/core/types.js";
+import type { ElicitFn, ElicitParams, ElicitResult } from "../../src/core/elicit.js";
+import type { ToolContext } from "../../src/surface/tool-types.js";
 
 const target = { projectPath: null, port: 0, portSource: "default" as const, verified: true };
 

@@ -20,7 +20,7 @@ import {
 } from "../../codeintel/engine-analysis.js";
 import { reflectionTool } from "../reflection.js";
 import { movedAction } from "../../surface/moved-action.js";
-import type { ToolContext, ActionSpec } from "../../core/types.js";
+import type { ToolContext, ActionSpec } from "../../surface/tool-types.js";
 import { resolveInside } from "../../core/path-guard.js";
 
 /** The folders an engine-source reader may open: the engine tree and the project. */
