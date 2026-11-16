@@ -20,41 +20,12 @@
  * directive envelopes already use.
  */
 import { requiresExplicitEditor, type ActionClass } from "../surface/action-class.js";
-import { taskEffect } from "../surface/action-effects.js";
+import { actionSpecOf, taskEffect } from "../surface/action-effects.js";
 import type { ToolDef } from "../surface/tool-types.js";
 import { stripEditorTarget } from "../surface/target-params.js";
 import { EDITOR_TARGET_PARAM, stripAction } from "../surface/routing-params.js";
 import { MICRO_GATEWAY_TOOL, MICRO_GATEWAY_CALL, microCallParams } from "../surface/context/micro-context.js";
 import type { EditorSession, SessionRegistry } from "../sessions/session.js";
-
-/**
- * Actions whose subject is the SESSION REGISTRY, not any editor.
- *
- * Three of these really do change something: `add_editor` registers a session
- * and can launch an editor process, `drop_editor` closes a socket, and
- * `use_editor` moves the default target. They declare `mutate`, because that is
- * what they do, and locking and the guard pipeline are right to see them as
- * changes.
- *
- * This gate asks a narrower question: could an untargeted call land in the
- * wrong EDITOR? For these it could not. They never reach a bridge, and they
- * name their subject in their own parameters. Demanding `editor="<name>"` on
- * "register an editor" would be a riddle rather than a safeguard.
- *
- * The exemption used to be spelled as an override in the classifier, which
- * recorded all four as reads. That made every other consumer of the answer
- * wrong in order to make this one right: locking and the guard pipeline were
- * told that launching an editor process observes something. The gate carries
- * its own exception now, and the declaration stays true.
- */
-const ADDRESSES_THE_SERVER = new Set([
-  "project.list_editors",
-  "project.use_editor",
-  "project.add_editor",
-  "project.drop_editor",
-  // Posts an issue to GitHub; it reads no editor and changes none.
-  "feedback.submit",
-]);
 
 export interface UntargetedCall {
   /** `category.action`, already resolved through any gateway indirection. */
@@ -76,7 +47,11 @@ export interface UntargetedCall {
  * between, so there is nothing to refuse.
  */
 export function refuseUntargetedCall(call: UntargetedCall): string | null {
-  if (ADDRESSES_THE_SERVER.has(call.taskName)) return null;
+  // Its subject is the session registry or a service outside every editor
+  // (add_editor, feedback(submit)). It may still declare `mutate`, which is
+  // what locking and the guards should see; it just cannot land in the wrong
+  // editor, so demanding a target would be a riddle rather than a safeguard.
+  if (actionSpecOf(call.taskName, call.graph)?.addressesServer) return null;
   // The action's own declaration, not a reading of its name. A name is only
   // consulted for a task the tool graph does not carry, and the answer there
   // is a flat `mutate` rather than a second opinion about the name.

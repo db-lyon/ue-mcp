@@ -39,8 +39,7 @@ import { McpError, ErrorCode } from "../../core/errors.js";
 import { MAX_BRIDGE_TIMEOUT_MS, resolveBridgeTimeout } from "../../bridge/bridge-timeouts.js";
 import { PLUGIN_UPGRADE_POINTER } from "../../bridge/bridge.js";
 import { prepareCall, finishCall, forwardToBridge, withLiveContract, type CallPipeline } from "../../dispatch/call-pipeline.js";
-import { NEVER_LOCKED } from "../../dispatch/lock-actions.js";
-import { BATCH_TASK, MAX_BATCH_CALLS, type BatchCall } from "../../dispatch/batch-steps.js";
+import { MAX_BATCH_CALLS, batchCallsOf, executeBatchSteps, type BatchCall } from "../../dispatch/batch-steps.js";
 import { DialogGuard, isModalSafeMethod } from "../../editor/dialog-guard.js";
 import { actionPreparation } from "../../flow/run-action.js";
 import { unknownActionMessage } from "../../surface/action-schema.js";
@@ -106,8 +105,8 @@ export type StepAdmission =
  */
 export function admitBatchStep(task: string, spec: ActionSpec): StepAdmission {
   const refused = (why: string): StepAdmission => ({ admitted: false, why });
-  if (task === BATCH_TASK) return refused("is itself a batch; a batch cannot nest");
-  if (NEVER_LOCKED.has(task)) {
+  if (spec.steps) return refused("is itself a batch; a batch cannot nest");
+  if (spec.assetCoordination) {
     return refused("manages the asset locks the batch is run under; take or release locks with their own calls");
   }
   if (UNDO_STACK_ACTIONS.has(task)) {
@@ -157,7 +156,7 @@ export function prepareBatch(ctx: ToolContext, params: Record<string, unknown>):
   if (have && !have.has("execute_batch")) {
     throw new McpError(
       ErrorCode.NOT_FOUND,
-      `${BATCH_TASK} dispatches to bridge method 'execute_batch', which the running plugin does not register `
+      `editor.batch dispatches to bridge method 'execute_batch', which the running plugin does not register `
       + `(${have.size} registered). ${PLUGIN_UPGRADE_POINTER}`,
     );
   }
@@ -334,6 +333,9 @@ function shapeResult(answered: Record<string, unknown>, steps: PreparedStep[], o
 export const batchAction: HandlerActionSpec = {
   kind: "handler",
   effect: "mutate",
+  editorBound: "Sends its steps to the editor as one execute_batch bridge call, which runs them in one game-thread job.",
+  steps: (params) => batchCallsOf(params).map((c) => ({ task: `${c.category}.${c.method}`, params: c.args ?? {} })),
+  rawBridgeMethods: { execute_batch: { effect: "unknown", steps: executeBatchSteps } },
   description:
     "Run several actions as ONE game-thread job in the editor, so no call from any other session can land between them. "
     + "This is the fix for multi-step edits that other agents interleave with: add a variable, add a node and connect its pins "

@@ -51,6 +51,8 @@ export const leaseActions: Record<string, ActionSpec> = {
   acquire_lease: {
     kind: "handler",
     effect: "mutate",
+    offline: "Asset leases live in this server process, not in the editor.",
+    assetCoordination: true,
     description:
       "Claim assets for this session so another agent on the same editor cannot change them until the lease is released, runs out, or this session ends. "
       + "A path another session holds refuses the whole request, naming the holder and when its lease runs out. Calling again renews. "
@@ -76,6 +78,8 @@ export const leaseActions: Record<string, ActionSpec> = {
   release_lease: {
     kind: "handler",
     effect: "mutate",
+    offline: "Asset leases live in this server process, not in the editor.",
+    assetCoordination: true,
     description:
       "Release this session's leases: the paths named, or every lease it holds in this editor when none are. "
       + "Only the holder can release a lease; another session's runs out on its own or when that session ends. Params: paths?",
@@ -90,6 +94,8 @@ export const leaseActions: Record<string, ActionSpec> = {
   list_leases: {
     kind: "handler",
     effect: "read",
+    offline: "Asset leases live in this server process, not in the editor.",
+    assetCoordination: true,
     description:
       "Every live asset lease on this server, which session holds each and when it runs out, plus the lease mode and whether calls take leases implicitly right now. Params: none",
     handler: async (ctx) => {

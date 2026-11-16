@@ -17,7 +17,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { warn } from "../core/log.js";
-import type { ActionEffect } from "../surface/tool-types.js";
+import type { ActionEffect, ActionSpec } from "../surface/tool-types.js";
 import type { EditorSession } from "../sessions/session.js";
 import { checkpointsFor } from "../checkpoints/service.js";
 import type { RestoreResult } from "../contract/daemon.js";
@@ -98,17 +98,6 @@ export interface JournalHost {
   /** Run a rollback descriptor's bridge method through the session's guarded bridge. */
   replay(method: string, payload: Record<string, unknown>): Promise<unknown>;
 }
-
-/** Calls never journaled: the journal's own actions and the checkpoint actions it is built on. */
-export const UNJOURNALED_TASKS: ReadonlySet<string> = new Set([
-  "editor.journal_group",
-  "editor.list_journal",
-  "editor.revert_group",
-  "editor.revert_after_group",
-  "editor.checkpoint",
-  "editor.restore",
-  "editor.clear_checkpoints",
-]);
 
 export class JournalError extends StatusError {}
 
@@ -227,14 +216,16 @@ export class MutationJournal {
 
   /**
    * Run one dispatched call, journaling it when a group is named and its
-   * declared effect may change state. `run` must resolve to the task result.
+   * declared effect may change state and the action is not declared
+   * `unjournaled`. `run` must resolve to the task result.
    */
   async record<R extends { success: boolean; rollback?: unknown; data?: unknown }>(
     task: string,
     effect: ActionEffect,
     run: () => Promise<R>,
+    facts: Pick<ActionSpec, "unjournaled"> = {},
   ): Promise<R> {
-    if (this.current === null || effect === "read" || UNJOURNALED_TASKS.has(task) || !this.host.projectDir) return run();
+    if (this.current === null || effect === "read" || facts.unjournaled || !this.host.projectDir) return run();
     const group = this.current;
     return this.serialize(async () => {
       const snapshots = this.host.checkpointsEnabled();

@@ -350,7 +350,7 @@
     "tests/unit/widget-runtime-instances.test.ts": 0,
     "tests/unit/widget-runtime-interaction.test.ts": 0,
     "tests/unit/workaround-partition.test.ts": 0,
-    "tests/unit/write-methods.test.ts": 0,
+    "tests/unit/written-paths.test.ts": 0,
     "tests/unit/yaml-dump.test.ts": 0
   }
 }
