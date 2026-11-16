@@ -30,7 +30,7 @@ import { PLUGIN_UPGRADE_POINTER } from "../../src/bridge/bridge.js";
 import { ALL_TOOLS } from "../../src/tools.js";
 import { handlerFailure } from "../../src/flow/handler-outcome.js";
 import type { IBridge } from "../../src/bridge/bridge.js";
-import type { ToolContext } from "../../src/core/types.js";
+import type { ToolContext } from "../../src/surface/tool-types.js";
 
 const CANDIDATES: GateCandidate[] = [
   { tool: "editor", action: "invoke_function", description: "Call a UFUNCTION", score: 9 },

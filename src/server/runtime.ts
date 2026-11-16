@@ -11,14 +11,15 @@
 import { SessionRegistry, type EditorSession } from "../sessions/session.js";
 import { ueMcpConfigRejections, describeConfigRejections, type ProjectContext } from "../config/project.js";
 import { attach, attachSummary } from "../editor/deployer.js";
-import { resolveContextStrategy } from "../surface/context/lean-context.js";
+import { resolveContextStrategy } from "../config/context-strategy.js";
 import {
   injectEditorTarget,
   removeEditorTarget,
   injectMigrateTarget,
   removeMigrateTarget,
 } from "../surface/target-params.js";
-import type { InProcessCallOptions, ToolContext, ToolDef } from "../core/types.js";
+import type { InProcessCallOptions } from "./call-options.js";
+import type { ToolContext, ToolDef } from "../surface/tool-types.js";
 import { dispatchCategoryCall, dispatchFlowCall, type DispatchDeps, type ToolResult } from "../dispatch/server-dispatch.js";
 import { DialogGuard, guardFor, sessionGuardDeps } from "../editor/dialog-guard.js";
 import { info, warn, error } from "../core/log.js";
@@ -33,7 +34,7 @@ import { unionSurface } from "../sessions/session-surface.js";
 import { registeredUnion } from "../surface/registered-surface.js";
 import { packageVersion } from "../core/package-root.js";
 import { SessionLoads, type SessionLoad } from "../sessions/session-load.js";
-import type { ContextStrategy } from "../surface/context/lean-context.js";
+import type { ContextStrategy } from "../config/context-strategy.js";
 import { checkpointsFor } from "../checkpoints/service.js";
 
 export interface Runtime {

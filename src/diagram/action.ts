@@ -12,7 +12,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { z } from "zod";
-import type { HandlerActionSpec, ToolContext } from "../core/types.js";
+import type { HandlerActionSpec, ToolContext } from "../surface/tool-types.js";
 import type { DiagramModel } from "./model.js";
 import { toMermaid } from "./mermaid.js";
 import { svgToPng } from "./png.js";

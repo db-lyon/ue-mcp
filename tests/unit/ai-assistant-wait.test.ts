@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { ToolContext } from "../../src/core/types.js";
+import type { ToolContext } from "../../src/surface/tool-types.js";
 import { epicTool } from "../../src/tools/epic.js";
 import { waitForAssistant, type WaitClock } from "../../src/tools/ai-assistant-wait.js";
 

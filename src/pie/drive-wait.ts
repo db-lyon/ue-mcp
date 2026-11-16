@@ -4,7 +4,7 @@
  * The editor applies the drive on later frames, so its handler answers at once with a driveId. With wait (the
  * default) the server polls pie_drive_status until the drive is no longer running and answers with its whole track.
  */
-import type { ToolContext } from "../core/types.js";
+import type { ToolContext } from "../surface/tool-types.js";
 
 /** Injectable for tests. */
 export interface DriveClock {

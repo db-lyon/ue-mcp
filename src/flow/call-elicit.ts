@@ -8,7 +8,7 @@
  * it through every task and bridge signature.
  */
 import { AsyncLocalStorage } from "node:async_hooks";
-import type { ElicitFn } from "../core/types.js";
+import type { ElicitFn } from "../core/elicit.js";
 import type { SessionAccessMode } from "./session-access.js";
 
 export interface CallAsker {

@@ -10,7 +10,7 @@
  */
 import { mergeOptionSpecs, taskClassMetadata } from "@db-lyon/flowkit";
 import type { FlowDefinition, OptionSpec, OptionSpecs, TaskDefinition, TaskRegistry } from "@db-lyon/flowkit";
-import type { ToolDef } from "../core/types.js";
+import type { ToolDef } from "../surface/tool-types.js";
 import { actionSchema, parseParams, ROUTING_PARAMS } from "../surface/action-schema.js";
 
 /** One step that reads an input, addressed as an expanded plan addresses it. */

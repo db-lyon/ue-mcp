@@ -3,6 +3,7 @@ import * as path from "node:path";
 import { projectConfigPath, readConfigDoc, writeConfigDoc } from "../config/ue-mcp-config.js";
 import { takeEditorTarget, EditorFlagError } from "./editor-flag.js";
 import { findUProject } from "../config/uproject-path.js";
+import type { ContextStrategy } from "../config/context-strategy.js";
 import { RESET, BOLD, DIM, GREEN, RED, CYAN, YELLOW } from "./ui/ansi.js";
 
 /**
@@ -81,7 +82,7 @@ function loadYaml(configPath: string): Record<string, unknown> {
   });
 }
 
-function currentStrategy(existing: Record<string, unknown>): "full" | "lean" | "micro" {
+function currentStrategy(existing: Record<string, unknown>): ContextStrategy {
   const block = existing["ue-mcp"] as { context?: { strategy?: string } } | undefined;
   const s = block?.context?.strategy;
   return s === "lean" ? "lean" : s === "full" ? "full" : "micro";

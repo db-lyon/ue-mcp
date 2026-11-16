@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { materialTool } from "../../src/tools/material.js";
 import { handlerSpecs } from "../../src/tools/specs/material.generated.js";
-import type { ToolContext } from "../../src/core/types.js";
+import type { ToolContext } from "../../src/surface/tool-types.js";
 
 describe("material insertion and filtered summary", () => {
   it("refuses ambiguous targets before dispatch", async () => {

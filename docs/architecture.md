@@ -112,7 +112,7 @@ The server registers the <!-- count:tools -->31<!-- /count --> category tools an
 | `dispatch/` | Per-call routing, editor gate, locks, offline and Python gates |
 | `config/project.ts` | `ProjectContext`: paths, `.uproject`, plugin mounts, `ue-mcp.yml` |
 | `codeintel/` | INI reading, C++ parsing, engine symbol index, Content index |
-| `core/types.ts` | `ToolDef`, `ActionSpec` and other shared types |
+| `surface/tool-types.ts` | `ToolDef`, `ActionSpec`, `ToolContext`: the category tool contract |
 | `core/errors.ts` | `McpError` and the `ErrorCode` enum |
 | `surface/category-tool.ts` | `categoryTool()`, `bp()`, routing parameter schemas |
 | `surface/target-params.ts` | The per-call `editor` / `toEditor` parameters |

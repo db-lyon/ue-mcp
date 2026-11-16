@@ -3,7 +3,7 @@
  * names the recorded engines that carry it; a call to one on a recorded engine
  * outside that list is refused before it is sent.
  */
-import type { ToolDef } from "../core/types.js";
+import type { ToolDef } from "./tool-types.js";
 import { engineMinor, type EpicToolRef } from "./epic-input.js";
 import { EPIC_CATALOG_ENGINES } from "../tools/epic/catalog-engines.js";
 

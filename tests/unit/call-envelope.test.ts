@@ -21,7 +21,7 @@ import {
 } from "../../src/surface/context/call-envelope.js";
 import { buildCatalogTool, describeCategory, DESCRIBE_PAGE_CHARS } from "../../src/surface/context/lean-context.js";
 import { buildMicroGateway, resolveMicroCall } from "../../src/surface/context/micro-context.js";
-import type { ToolDef } from "../../src/core/types.js";
+import type { ToolDef } from "../../src/surface/tool-types.js";
 import { bp, categoryTool } from "../../src/surface/category-tool.js";
 import { injectEditorTarget } from "../../src/surface/target-params.js";
 

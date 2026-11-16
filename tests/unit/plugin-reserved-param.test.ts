@@ -4,7 +4,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { loadPlugins } from "../../src/extensions/loader.js";
-import type { ToolDef } from "../../src/core/types.js";
+import type { ToolDef } from "../../src/surface/tool-types.js";
 import { categoryTool } from "../../src/surface/category-tool.js";
 
 const MANIFEST = `

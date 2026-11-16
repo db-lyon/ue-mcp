@@ -164,7 +164,7 @@ See [batch component properties](blueprint-component-properties-batch.md) for ba
 A category is a file in `src/tools/` built with `categoryTool(name, summary, actions, extraSchema?, options?)`, added to `ALL_TOOLS` in `src/tools.ts`:
 
 ```typescript
-import type { ToolDef } from "../core/types.js";
+import type { ToolDef } from "../surface/tool-types.js";
 import { categoryTool } from "../surface/category-tool.js";
 import { specBp, schema as specSchema } from "./specs/myfeature.generated.js";
 

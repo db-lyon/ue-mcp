@@ -1,6 +1,6 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { compareVersions } from "./version.js";
+import { compareVersions } from "../core/semver.js";
 
 /**
  * Resolve an npm package by name (and optional version pin) inside the given

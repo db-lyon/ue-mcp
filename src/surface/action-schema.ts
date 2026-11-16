@@ -22,7 +22,7 @@
  */
 import { z } from "zod";
 import { ROUTING_PARAM_NAMES } from "./routing-params.js";
-import type { ActionEffectSource, ActionSpec, ToolDef } from "../core/types.js";
+import type { ActionEffectSource, ActionSpec, ToolDef } from "./tool-types.js";
 import { paramZod, type ParamSpec, type ValueForm } from "./handler-spec.js";
 import type { ActionClass } from "./action-class.js";
 import { epicForwardedParams, epicPropZod } from "./epic-input.js";

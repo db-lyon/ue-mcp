@@ -9,7 +9,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { deflateSync } from "node:zlib";
 import { afterAll, describe, expect, it } from "vitest";
-import type { ToolContext } from "../../src/core/types.js";
+import type { ToolContext } from "../../src/surface/tool-types.js";
 import { decodePng, downscale, encodePng, jpegSize, pngSize, type RgbaImage } from "../../src/core/png.js";
 import {
   attachInlineImages,

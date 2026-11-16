@@ -1,4 +1,4 @@
-import type { ActionSpec, ToolDef } from "../core/types.js";
+import type { ActionSpec, ToolDef } from "./tool-types.js";
 
 /**
  * The old address of an action that moved to another category, kept for one

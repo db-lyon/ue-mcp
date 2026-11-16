@@ -11,7 +11,7 @@ import { describe, expect, it, vi } from "vitest";
 import { widgetTool } from "../../src/tools/widget.js";
 import { actionAccepts } from "../../src/surface/action-schema.js";
 import { normalizeUnrealAssetPath } from "../../src/surface/asset-path.js";
-import type { ToolContext } from "../../src/core/types.js";
+import type { ToolContext } from "../../src/surface/tool-types.js";
 
 const ASSET = "/Game/_Project/UI/WBP_Example";
 

@@ -14,7 +14,7 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { createRuntime, type Runtime } from "../../src/server/runtime.js";
 import { createMcpServer } from "../../src/server/mcp-server.js";
 import { ContextProjector, ContextProjectionError, CONTEXT_STRATEGIES } from "../../src/server/context-projection.js";
-import type { ContextStrategy } from "../../src/surface/context/lean-context.js";
+import type { ContextStrategy } from "../../src/config/context-strategy.js";
 import { resultText } from "../helpers/content-text.js";
 
 let tmp: string;

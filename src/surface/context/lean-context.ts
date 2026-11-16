@@ -1,11 +1,10 @@
 import { z } from "zod";
-import type { ActionSpec, ToolDef } from "../../core/types.js";
+import type { ActionSpec, ToolDef } from "../tool-types.js";
 import { actionEnum, categoryTool } from "../category-tool.js";
 import { actionSchema } from "../action-schema.js";
 import { registeredMethodsOf, withholdFromTool, withholdUnregistered } from "../registered-surface.js";
 import { searchToolGraph } from "./tool-search.js";
 import { actionSignature } from "../action-signature.js";
-import { readEnv } from "../../core/env.js";
 import { McpError, ErrorCode } from "../../core/errors.js";
 
 /**
@@ -31,22 +30,6 @@ import { McpError, ErrorCode } from "../../core/errors.js";
  * so unknown actions are still rejected up front. Silent param drift is the
  * failure mode this repo works hardest to avoid.
  */
-
-export type ContextStrategy = "full" | "lean" | "micro";
-
-/** The strategy a project gets when it names none (#1172). */
-export const DEFAULT_CONTEXT_STRATEGY: ContextStrategy = "micro";
-
-/**
- * Resolve the active strategy. Env var wins over config so a user can flip it
- * per-session without editing ue-mcp.yml. Anything other than "full"/"lean"
- * (case insensitive) resolves to "micro", the default since #1172: the full
- * surface cost most of a context window before the first call.
- */
-export function resolveContextStrategy(configStrategy?: string): ContextStrategy {
-  const raw = (readEnv("contextStrategy") ?? configStrategy ?? DEFAULT_CONTEXT_STRATEGY).trim().toLowerCase();
-  return raw === "full" ? "full" : raw === "lean" ? "lean" : "micro";
-}
 
 const ACTIONS_MARKER = "\n\nActions:\n";
 

@@ -15,7 +15,7 @@ import { ProjectContext } from "../../src/config/project.js";
 import { categoryTool } from "../../src/surface/category-tool.js";
 import { ALL_TOOLS } from "../../src/tools.js";
 import type { IBridge } from "../../src/bridge/bridge.js";
-import type { ToolDef } from "../../src/core/types.js";
+import type { ToolDef } from "../../src/surface/tool-types.js";
 
 const bridge: IBridge = {
   isConnected: false,

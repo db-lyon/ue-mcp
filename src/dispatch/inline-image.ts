@@ -11,7 +11,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { z } from "zod";
-import type { ActionSpec } from "../core/types.js";
+import type { ActionSpec } from "../surface/tool-types.js";
 import { decodePng, downscale, encodePng, isPng, jpegSize, pngSize } from "../core/png.js";
 
 export const INLINE_PARAM = "inline";

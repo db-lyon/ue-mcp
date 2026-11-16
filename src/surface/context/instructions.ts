@@ -1,8 +1,8 @@
 import { ALL_TOOLS } from "../../tools.js";
 import { SIGNATURE_LEGEND } from "../action-signature.js";
 import { unionKnowledge, type SessionSurface } from "../../sessions/session-surface.js";
-import type { ContextStrategy } from "./lean-context.js";
-import type { ToolDef } from "../../core/types.js";
+import type { ContextStrategy } from "../../config/context-strategy.js";
+import type { ToolDef } from "../tool-types.js";
 import { CORE_ISSUES_URL } from "../../extensions/registry-catalog.js";
 
 /**

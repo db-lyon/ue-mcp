@@ -12,7 +12,7 @@
  */
 import { z } from "zod";
 import { registeredMethodsOf, withholdFromTool, withholdUnregistered } from "../registered-surface.js";
-import type { ActionSpec, ToolDef } from "../../core/types.js";
+import type { ActionSpec, ToolDef } from "../tool-types.js";
 import { categoryTool } from "../category-tool.js";
 import { EDITOR_TARGET_PARAM, stripAction } from "../routing-params.js";
 import { createFlowTool } from "../../flow/flow-tool.js";

@@ -31,7 +31,7 @@ import {
   explainEditorDown,
   offlineActionNames,
 } from "../../src/dispatch/offline.js";
-import type { ToolDef } from "../../src/core/types.js";
+import type { ToolDef } from "../../src/surface/tool-types.js";
 
 /** Every `tool.action` in this package whose work starts in a local handler. */
 function handlerBackedActions(): string[] {

@@ -8,7 +8,7 @@ import { describe, it, expect, vi } from "vitest";
 import { engineMinor, epicEngineRefusal, epicEngineRefusalFor } from "../../src/surface/epic-engines.js";
 import { actionPreparation, runAction } from "../../src/flow/run-action.js";
 import { EPIC_CATALOG_ENGINES } from "../../src/tools/epic/catalog-engines.js";
-import type { ActionSpec, ToolDef } from "../../src/core/types.js";
+import type { ActionSpec, ToolDef } from "../../src/surface/tool-types.js";
 import type { FlowContext } from "../../src/flow/context.js";
 
 const TOOLSET = "aaa_toolset.toolsets.blueprint.NewBlueprintTools";

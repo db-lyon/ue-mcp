@@ -10,7 +10,7 @@
 // task factory, guards and locks as every hand-written action in this package.
 // Each also carries its input schema, which the compact signatures read (#1172).
 import { z } from "zod";
-import type { ActionSpec } from "../../core/types.js";
+import type { ActionSpec } from "../../surface/tool-types.js";
 import { bp } from "../../surface/category-tool.js";
 
 const S_epic_add_blueprint_consideration = {"properties":{"state_tree":{"type":"object","properties":{"refPath":{}}},"state":{"type":"object","properties":{"refPath":{}}},"consideration_class":{"type":"object","properties":{"refPath":{}}}},"required":["state_tree","state","consideration_class"]} as const;

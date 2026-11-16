@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { editorTool } from "../../src/tools/editor.js";
-import type { ElicitFn, ToolContext } from "../../src/core/types.js";
+import type { ElicitFn } from "../../src/core/elicit.js";
+import type { ToolContext } from "../../src/surface/tool-types.js";
 import type { UeMcpConfig } from "../../src/config/project.js";
 
 function makeContext(config: UeMcpConfig, elicit?: ElicitFn) {

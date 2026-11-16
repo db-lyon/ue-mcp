@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import type { ToolContext } from "../../src/core/types.js";
+import type { ToolContext } from "../../src/surface/tool-types.js";
 import { editorTool } from "../../src/tools/editor.js";
 import { declaredActionEffect } from "../../src/surface/action-effects.js";
 import { waitForMeshStudioRender, type MeshStudioClock } from "../../src/tools/mesh-studio-wait.js";

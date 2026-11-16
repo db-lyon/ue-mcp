@@ -6,7 +6,7 @@ import { taskEffect } from "../surface/action-effects.js";
 import { SESSION_ID } from "./lock-owner.js";
 import { NEVER_LOCKED } from "./lock-actions.js";
 import { BATCH_TASK, batchCallsOf } from "./batch-steps.js";
-import type { ToolDef } from "../core/types.js";
+import type { ToolDef } from "../surface/tool-types.js";
 
 // Per-asset exclusive locking, orchestrated from the dispatch layer. The lock
 // registry itself lives in the C++ bridge (the one editor every agent shares);

@@ -1,7 +1,7 @@
 import { deepMerge, type LoadedConfig } from "@db-lyon/flowkit";
 import { FlowConfigSchema, type FlowConfig } from "./schema.js";
 import { configLayerFiles, readConfigDoc, readGlobalConfigDoc, selectedOverlay } from "../config/ue-mcp-config.js";
-import type { ToolDef } from "../core/types.js";
+import type { ToolDef } from "../surface/tool-types.js";
 import { playtestFlow, playtestTasks } from "./playtest.js";
 
 /**

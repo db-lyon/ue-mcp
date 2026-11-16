@@ -9,7 +9,7 @@ import { searchToolGraph } from "../../src/surface/context/tool-search.js";
 import { ALL_TOOLS } from "../../src/tools.js";
 import { handlerSpecs as assetSpecs } from "../../src/tools/specs/asset.generated.js";
 import { handlerSpecs as inputSpecs } from "../../src/tools/specs/gameplay.generated.js";
-import type { ToolContext } from "../../src/core/types.js";
+import type { ToolContext } from "../../src/surface/tool-types.js";
 
 describe("collection and input edits", () => {
   it.each([

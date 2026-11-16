@@ -26,7 +26,7 @@ import type { ProjectContext } from "../config/project.js";
 import type { EditorSession } from "../sessions/session.js";
 import { classifyWrite, type WriteClassification } from "./write-methods.js";
 import { bridgeMethodEffect, mayChangeState } from "../surface/action-effects.js";
-import type { ActionEffect } from "../core/types.js";
+import type { ActionEffect } from "../surface/tool-types.js";
 
 /** Resolve a UE content path to an absolute on-disk file, or null if it does not exist. */
 export type ResolveExistingFile = (contentPath: string) => string | null;

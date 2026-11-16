@@ -7,6 +7,7 @@
  * schemas/context-measurement.schema.json describes the same shape for tools
  * that are not TypeScript; a unit test keeps the two agreeing.
  */
+import type { ContextStrategy } from "../../config/context-strategy.js";
 
 export type ContextScopeBucket = "1-3" | "4-8" | "9+";
 
@@ -26,7 +27,7 @@ export interface ContextMeasurementRun {
   model: { vendor: string; model: string };
   /** How many categories the run's context was scoped to, bucketed by scopeBucket. */
   scope: ContextScopeBucket;
-  strategy: "micro" | "lean" | "full";
+  strategy: ContextStrategy;
   /** The projection's seedTokens for that strategy and scope. */
   seedTokens: number;
   tasks: ContextMeasurementTask[];

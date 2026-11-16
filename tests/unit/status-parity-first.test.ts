@@ -6,7 +6,7 @@ import { describe, it, expect } from "vitest";
 import { sessionActions } from "../../src/tools/project/sessions.js";
 import { ProjectContext } from "../../src/config/project.js";
 import { bp, categoryTool } from "../../src/surface/category-tool.js";
-import type { ToolContext, ToolDef } from "../../src/core/types.js";
+import type { ToolContext, ToolDef } from "../../src/surface/tool-types.js";
 
 const graph: ToolDef[] = [
   categoryTool("alpha", "Alpha", {

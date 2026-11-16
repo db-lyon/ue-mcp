@@ -33,7 +33,7 @@
  */
 import { z } from "zod";
 import { McpError as SdkMcpError } from "@modelcontextprotocol/sdk/types.js";
-import type { ActionSpec, BridgeActionSpec, HandlerActionSpec, ToolContext } from "../../core/types.js";
+import type { ActionSpec, BridgeActionSpec, HandlerActionSpec, ToolContext } from "../../surface/tool-types.js";
 import { McpError, ErrorCode } from "../../core/errors.js";
 import { MAX_BRIDGE_TIMEOUT_MS, resolveBridgeTimeout } from "../../bridge/bridge-timeouts.js";
 import { PLUGIN_UPGRADE_POINTER } from "../../bridge/bridge.js";

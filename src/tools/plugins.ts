@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { ToolDef, PluginInfo } from "../core/types.js";
+import type { ToolDef, PluginInfo } from "../surface/tool-types.js";
 import { categoryTool } from "../surface/category-tool.js";
 import { actions as epicActions, schema as epicSchema } from "./epic/plugins.generated.js";
 

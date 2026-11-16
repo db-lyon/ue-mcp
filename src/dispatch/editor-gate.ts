@@ -20,7 +20,7 @@
  */
 import { requiresExplicitEditor, type ActionClass } from "../surface/action-class.js";
 import { taskEffect } from "../surface/action-effects.js";
-import type { ToolDef } from "../core/types.js";
+import type { ToolDef } from "../surface/tool-types.js";
 import { stripEditorTarget } from "../surface/target-params.js";
 import { EDITOR_TARGET_PARAM, stripAction } from "../surface/routing-params.js";
 import { MICRO_GATEWAY_TOOL, MICRO_GATEWAY_CALL, microCallParams } from "../surface/context/micro-context.js";

@@ -14,7 +14,7 @@ import {
   parseConfigLines,
 } from "../../src/codeintel/config-hierarchy.js";
 import { configActions } from "../../src/tools/project/config.js";
-import type { ToolContext } from "../../src/core/types.js";
+import type { ToolContext } from "../../src/surface/tool-types.js";
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), "ue-mcp-ini-"));
 const engine = path.join(root, "UE");

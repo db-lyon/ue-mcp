@@ -34,7 +34,7 @@ import { findLiveInstanceRecord, isPidAlive, lockfileIsFromThisLaunch, readBridg
 import { oneLine } from "./dialog-guard.js";
 import { findModuleOwners, type ModuleOwner } from "./module-owner.js";
 import { prepareBridgeForLaunch } from "./bridge-update.js";
-import type { ProgressDisplay, ProgressFn } from "../core/types.js";
+import type { ProgressDisplay, ProgressFn } from "../core/progress.js";
 import { findUProject } from "../config/uproject-path.js";
 import { readEnv } from "../core/env.js";
 import {
