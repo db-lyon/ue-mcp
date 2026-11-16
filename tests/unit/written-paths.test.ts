@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { classifyWrite, isProviderOperation, specWrittenParams } from "../../src/flow/write-methods.js";
+import { classifyWrite, isProviderOperation, specWrittenParams } from "../../src/dispatch/written-paths.js";
 import { RECORDED_HANDLER_SPECS } from "../../src/tools/specs/index.js";
 
 describe("classifyWrite", () => {
@@ -203,7 +203,7 @@ describe("classifyWrite", () => {
   it("finds every listed method in the recorded specs, so the cases above test the spec layer", () => {
     for (const method of ["mesh_boolean", "add_virtual_bone", "set_bone_retargeting", "add_blueprint_interface",
       "set_foliage_type_settings", "add_expression_in_function", "set_ik_rig_mesh", "delete_asset_batch"]) {
-      expect(specWrittenParams(RECORDED_HANDLER_SPECS, method).length, method).toBeGreaterThan(0);
+      expect(specWrittenParams(RECORDED_HANDLER_SPECS[method].params).length, method).toBeGreaterThan(0);
     }
   });
 });

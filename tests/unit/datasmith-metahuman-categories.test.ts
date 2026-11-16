@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { datasmithTool } from "../../src/tools/datasmith.js";
 import { metahumanTool } from "../../src/tools/metahuman.js";
 import { ALL_TOOLS } from "../../src/tools.js";
-import { classifyAction } from "../../src/dispatch/locking.js";
+import { classifyAction } from "../../src/dispatch/written-paths.js";
 import { REGISTERED_HANDLER_TIMEOUT_SECONDS as BRIDGE_TIMEOUTS } from "../../src/bridge/bridge-timeouts.js";
 import { readHandlerFile } from "../../scripts/lib/cpp-registrations.mjs";
 

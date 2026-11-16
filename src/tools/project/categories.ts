@@ -302,6 +302,7 @@ export const categoryActions: Record<string, ActionSpec> = {
   list_categories: {
     kind: "handler",
     effect: "read",
+    offline: "Reads the tool graph this server holds and the engine's setting file; asks the editor for toolset states only when one is attached.",
     description:
       "Every category with what is turned on in it: ue-mcp's own actions (native) and the actions wrapping Unreal's toolsets (epic), "
       + "each with its action count, plus the Unreal toolsets the category maps to and, with an editor attached, which of them its Toolset Registry has on. "
@@ -365,6 +366,7 @@ export const categoryActions: Record<string, ActionSpec> = {
   set_category_enabled: {
     kind: "handler",
     effect: "mutate",
+    offline: "Writes ue-mcp.yml and rebuilds the surface in this process; with no editor running, the engine's setting file is written instead of calling it.",
     description:
       "Turn a category on or off for this project, live: the surface is rebuilt and clients get tools/list_changed. "
       + "scope 'native' is ue-mcp's own actions, 'epic' is the actions wrapping Unreal's toolsets AND those toolsets in the editor's Toolset Registry "
@@ -422,6 +424,7 @@ export const categoryActions: Record<string, ActionSpec> = {
   set_toolset_enabled: {
     kind: "handler",
     effect: "mutate",
+    offline: "With no editor running, writes the engine's setting file; reaches the editor only when one is attached.",
     description:
       "Turn Unreal toolsets on or off in the editor's Toolset Registry by name, which is what Epic's own MCP server and the AI Assistant read too. "
       + "Live through the bridge when the editor answers; written to the project's setting file when no editor runs (UE 5.9 Config/DefaultGame.ini, "

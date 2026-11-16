@@ -40,8 +40,7 @@ import {
   type EditorLossPolicy,
   type EditorLossReport,
 } from "./editor-loss.js";
-import { taskEffect } from "../surface/action-effects.js";
-import { LOCAL_ACTIONS } from "./offline.js";
+import { actionSpecOf, taskEffect } from "../surface/action-effects.js";
 import { EDITOR_OPERATION_TASKS } from "./editor-op-task.js";
 import { deriveFlowInputs } from "./flow-inputs.js";
 import { withStepApproval } from "./step-approval.js";
@@ -276,7 +275,7 @@ function makeLossGuard(
     policy,
     timeoutMs: timeoutSeconds ? timeoutSeconds * 1000 : DEFAULT_EDITOR_LOSS_TIMEOUT_MS,
     isReadOnly: (taskName) => taskEffect(taskName, graph).effect === "read",
-    needsEditor: (taskName) => !Object.hasOwn(LOCAL_ACTIONS, taskName) && !EDITOR_OPERATION_TASKS.has(taskName),
+    needsEditor: (taskName) => !actionSpecOf(taskName, graph)?.offline && !EDITOR_OPERATION_TASKS.has(taskName),
     // Filesystem only, and only while the editor is away, so it never holds stale copies.
     restoreWhileDown: () => {
       if (!snapshot.current) return false;

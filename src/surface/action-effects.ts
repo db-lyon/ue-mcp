@@ -27,9 +27,8 @@
 import { ALL_TOOLS } from "../tools.js";
 import { splitTaskName } from "./action-class.js";
 import { flowCategoryForCheck } from "../flow/flow-surface.js";
-import { EPIC_TOOL_EFFECTS } from "../tools/epic/effects.js";
 import { DESTRUCTIVE_VERBS, leadingVerb } from "./action-verbs.js";
-import type { ActionEffect, ActionEffectSource, ToolDef } from "./tool-types.js";
+import type { ActionEffect, ActionEffectSource, ActionSpec, RawBridgeMethod, ToolDef } from "./tool-types.js";
 
 export interface ResolvedEffect {
   effect: ActionEffect;
@@ -59,80 +58,62 @@ export interface ResolvedEffect {
  */
 export const UNDECLARED_EFFECT: ActionEffect = "mutate";
 
-/**
- * Bridge methods a HANDLER calls directly, with what each does.
- *
- * The guard pipeline sits on `IBridge.call`, so it sees bridge method names.
- * Most of them belong to an action and carry that action's declared effect.
- * These do not: they are reached from inside a handler's own body, so no
- * ActionSpec forwards to them and the index below cannot see them.
- *
- * Enumerated rather than defaulted, because two of them are reads, and a read
- * defaulted to `mutate` would put `asset(search)` and `editor(get_engine_state)`
- * in front of every guard scoped to mutations for no reason.
- * `tests/unit/action-effects.test.ts` scans the source for raw `bridge.call`
- * sites and fails when one appears that is not listed here, so this cannot
- * quietly fall behind the code. Same shape as the hand-written halves of
- * `offline.ts`, and for the same reason.
- */
-export const RAW_BRIDGE_METHODS: Readonly<Record<string, ActionEffect>> = {
-  // The lock registry lives in the editor, so taking and dropping a lock
-  // changes it. asset(lock/unlock/unlock_all) reach these.
-  acquire_lock: "mutate",
-  release_lock: "mutate",
-  release_session_locks: "mutate",
-  // Several bridge calls in one game-thread job. editor(batch) reaches it,
-  // and its effect is its steps': ARGUMENT_DECIDES reads them off `ops`,
-  // and this is the answer when there are none to read.
-  execute_batch: "unknown",
-  // Arbitrary python inside the editor process. Its effect is the string it
-  // was handed, which is what `unknown` is for.
-  execute_python: "unknown",
-  // Loads two versions of a package into /Temp for diffing and unloads them,
-  // writing only pictures under Saved. editor(list_changes, diff_checkpoint_asset).
-  checkpoint_diff_asset: "read",
-  // Probes the running editor and reports. editor(get_engine_state).
-  get_engine_state: "read",
-  // Copies assets into another project's Content directory. asset(migrate).
-  migrate: "mutate",
-  // Starts PIE past the Blueprint-error prompt, after the approval gate.
-  // editor(play_in_editor_ignore_blueprint_errors).
-  pie_start_ignoring_blueprint_errors: "mutate",
-  // Asks the editor to quit, saving or discarding its dirty packages first
-  // when told to. editor(request_editor_shutdown).
-  request_editor_shutdown: "mutate",
-  // Resolves content roots and queries the asset registry. asset(search).
-  search_assets: "read",
-};
-
 interface EffectIndex {
-  byAction: Map<string, ActionEffect>;
+  byAction: Map<string, ActionSpec>;
   byBridgeMethod: Map<string, ActionEffect>;
+  /** The actions that forward to each bridge method. */
+  specsByBridgeMethod: Map<string, ActionSpec[]>;
+  /**
+   * Bridge methods a HANDLER calls directly, as the actions calling them
+   * declare in `rawBridgeMethods`. No action forwards to them, so this is the
+   * only place their effect is stated.
+   */
+  rawMethods: Map<string, RawBridgeMethod>;
+  /** Readers of a method's effect off its arguments, from `bridgeEffect`. */
+  deciders: Map<string, Array<(params: Record<string, unknown>) => ActionEffect | undefined>>;
+  /** What each wrapped engine tool does, keyed `method tool` (its qualified name), from the epic_* actions wrapping it. */
+  epicTools: Map<string, ActionEffect>;
 }
 
 /** One index per graph, dropped with the graph. */
 const indexes = new WeakMap<readonly ToolDef[], EffectIndex>();
 
 function build(graph: readonly ToolDef[]): EffectIndex {
-  const byAction = new Map<string, ActionEffect>();
-  const byBridgeMethod = new Map<string, ActionEffect>();
+  const index: EffectIndex = {
+    byAction: new Map(),
+    byBridgeMethod: new Map(),
+    specsByBridgeMethod: new Map(),
+    rawMethods: new Map(),
+    deciders: new Map(),
+    epicTools: new Map(),
+  };
   for (const tool of graph) {
     for (const [action, spec] of Object.entries(tool.actions)) {
-      byAction.set(`${tool.name}.${action}`, spec.effect);
+      index.byAction.set(`${tool.name}.${action}`, spec);
+      for (const [method, raw] of Object.entries(spec.rawBridgeMethods ?? {})) index.rawMethods.set(method, raw);
       if (spec.kind !== "bridge") continue;
-      const seen = byBridgeMethod.get(spec.bridge);
+      const seen = index.byBridgeMethod.get(spec.bridge);
       // One bridge method reached by two actions that declare different
       // effects does not have an effect of its own. `epic_call_tool` is the
       // real case: every one of the wrapped engine tools dispatches through
       // it, and between them they read and write. `unknown` is the honest
       // answer for the METHOD, and it gates exactly like `mutate`.
-      byBridgeMethod.set(
+      index.byBridgeMethod.set(
         spec.bridge,
         seen === undefined || seen === spec.effect ? spec.effect : "unknown",
       );
+      const specs = index.specsByBridgeMethod.get(spec.bridge) ?? [];
+      specs.push(spec);
+      index.specsByBridgeMethod.set(spec.bridge, specs);
+      if (spec.bridgeEffect) {
+        const list = index.deciders.get(spec.bridge) ?? [];
+        list.push(spec.bridgeEffect);
+        index.deciders.set(spec.bridge, list);
+      }
+      if (spec.epicTool) index.epicTools.set(`${spec.bridge} ${spec.epicTool.name}`, spec.effect);
     }
   }
-  return { byAction, byBridgeMethod };
+  return index;
 }
 
 function indexFor(graph: readonly ToolDef[] = ALL_TOOLS): EffectIndex {
@@ -153,7 +134,43 @@ export function declaredActionEffect(
   action: string,
   graph?: readonly ToolDef[],
 ): ActionEffect | undefined {
-  return indexFor(graph).byAction.get(`${tool}.${action}`);
+  return indexFor(graph).byAction.get(`${tool}.${action}`)?.effect;
+}
+
+/**
+ * The declaration of a `category.action` task, or undefined when the graph
+ * has no such action. How a gate reads a per-action fact (`offline`,
+ * `assetCoordination`, `steps`, ...) instead of keeping a list of names.
+ */
+export function actionSpecOf(taskName: string, graph?: readonly ToolDef[]): ActionSpec | undefined {
+  return indexFor(graph).byAction.get(taskName);
+}
+
+/** The actions that forward to a bridge method, empty when none does. */
+export function bridgeMethodSpecs(method: string, graph?: readonly ToolDef[]): readonly ActionSpec[] {
+  return indexFor(graph).specsByBridgeMethod.get(method) ?? [];
+}
+
+/** A bridge method a handler calls directly, as the action calling it declares it. */
+export function rawBridgeMethod(method: string, graph?: readonly ToolDef[]): RawBridgeMethod | undefined {
+  return indexFor(graph).rawMethods.get(method);
+}
+
+/** The bridge calls a raw method runs as one job (execute_batch), or undefined for one that runs none. */
+export function rawMethodSteps(
+  method: string,
+  params: Record<string, unknown>,
+  graph?: readonly ToolDef[],
+): Array<{ method: string; params: Record<string, unknown> }> | undefined {
+  const raw = rawBridgeMethod(method, graph);
+  return raw !== undefined && typeof raw === "object" ? raw.steps(params) : undefined;
+}
+
+/** Every raw bridge method the graph's actions declare, with its effect. */
+export function rawBridgeMethods(graph?: readonly ToolDef[]): ReadonlyMap<string, ActionEffect> {
+  const out = new Map<string, ActionEffect>();
+  for (const [method, raw] of indexFor(graph).rawMethods) out.set(method, typeof raw === "object" ? raw.effect : raw);
+  return out;
 }
 
 /**
@@ -178,52 +195,55 @@ export function taskEffect(taskName: string, graph?: readonly ToolDef[]): Resolv
 
 
 /**
- * Methods whose effect one of their own ARGUMENTS decides, and how to read it.
+ * The effect a method's ARGUMENTS decide, when they are legible.
  *
  * `unknown` means exactly this: the action is not what settles the question, a
  * parameter is. Where that parameter is legible, leaving the answer at
  * `unknown` is not caution, it is refusing to look at evidence in hand.
  *
- * `epic_call_tool` is the case that matters. All 830 wrapped engine tools
- * dispatch through it, so the METHOD has no effect of its own and collapses to
- * `unknown` - which meant a guard scoped to mutations saw every wrapped read,
- * and one scoped to reads saw none of them. The `tool` argument names which
- * tool is being called, and that tool's effect was reviewed and is right here.
+ * `epic_call_tool` is the case that matters. Every wrapped engine tool
+ * dispatches through it, so the METHOD has no effect of its own and collapses
+ * to `unknown`. The `tool` argument names which tool is being called: the
+ * epic_* action wrapping it declares its effect, and epic(call_tool) declares
+ * how to read the rest.
+ *
+ * A raw method that runs steps (execute_batch) does what its steps do. The
+ * strongest step decides, and `unknown` outranks `mutate` here: a guard scoped
+ * to `unknown` exists to put a person in front of the escape hatches, and an
+ * execute_command hidden among declared mutations is still an escape hatch. A
+ * batch of reads reads.
  *
  * `execute_python` and `execute_command` stay `unknown` and always will: their
  * deciding argument is a program, and nothing short of running it answers.
  */
-const ARGUMENT_DECIDES: Readonly<Record<string, (p: Record<string, unknown>, graph?: readonly ToolDef[]) => ActionEffect | undefined>> = {
-  epic_call_tool: (p) => {
-    const tool = typeof p.tool === "string" ? p.tool : undefined;
-    return tool ? EPIC_TOOL_EFFECTS[tool] : undefined;
-  },
-  // A batch does what its steps do. The strongest step decides, and `unknown`
-  // outranks `mutate` here: a guard scoped to `unknown` exists to put a person
-  // in front of the escape hatches, and an execute_command hidden among
-  // declared mutations is still an escape hatch. A batch of reads reads.
-  execute_batch: (p, graph) => {
-    if (!Array.isArray(p.ops)) return undefined;
-    let strongest: ActionEffect = "read";
-    for (const entry of p.ops) {
-      const call = entry as { method?: unknown; params?: unknown } | null;
-      if (!call || typeof call.method !== "string") continue;
-      const params = call.params !== null && typeof call.params === "object" ? (call.params as Record<string, unknown>) : undefined;
-      const { effect } = bridgeMethodEffect(call.method, params, graph);
-      if (effect === "unknown") return "unknown";
-      if (effect === "mutate") strongest = "mutate";
-    }
-    return strongest;
-  },
-};
+function decidedEffect(method: string, params: Record<string, unknown>, graph?: readonly ToolDef[]): ActionEffect | undefined {
+  const index = indexFor(graph);
+  if (typeof params.tool === "string") {
+    const wrapped = index.epicTools.get(`${method} ${params.tool}`);
+    if (wrapped !== undefined) return wrapped;
+  }
+  for (const decide of index.deciders.get(method) ?? []) {
+    const decided = decide(params);
+    if (decided !== undefined) return decided;
+  }
+  const steps = rawMethodSteps(method, params, graph);
+  if (steps === undefined || !Array.isArray(params.ops)) return undefined;
+  let strongest: ActionEffect = "read";
+  for (const step of steps) {
+    const { effect } = bridgeMethodEffect(step.method, step.params, graph);
+    if (effect === "unknown") return "unknown";
+    if (effect === "mutate") strongest = "mutate";
+  }
+  return strongest;
+}
 
 /**
  * What a BRIDGE METHOD does, given the arguments it was called with.
  *
  * Four sources, in order: an argument that decides it, the effects declared by
- * the actions that forward to the method, the hand-written table above for the
- * ones a handler calls directly, and `mutate` for a method this server does not
- * recognise at all.
+ * the actions that forward to the method, the `rawBridgeMethods` an action
+ * declares for the ones its handler calls directly, and `mutate` for a method
+ * this server does not recognise at all.
  *
  * Never undefined. The guard pipeline and the source-control classifier both
  * ask this on every call and neither should be re-deriving a default of its
@@ -239,13 +259,13 @@ export function bridgeMethodEffect(
   graph?: readonly ToolDef[],
 ): ResolvedEffect {
   if (params) {
-    const decided = ARGUMENT_DECIDES[method]?.(params, graph);
+    const decided = decidedEffect(method, params, graph);
     if (decided !== undefined) return { effect: decided, source: "declared" };
   }
   const declared = indexFor(graph).byBridgeMethod.get(method);
   if (declared !== undefined) return { effect: declared, source: "declared" };
-  const raw = RAW_BRIDGE_METHODS[method];
-  if (raw !== undefined) return { effect: raw, source: "declared" };
+  const raw = rawBridgeMethod(method, graph);
+  if (raw !== undefined) return { effect: typeof raw === "object" ? raw.effect : raw, source: "declared" };
   return { effect: UNDECLARED_EFFECT, source: "undeclared" };
 }
 
