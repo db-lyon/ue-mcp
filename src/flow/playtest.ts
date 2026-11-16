@@ -13,7 +13,7 @@
  * Run with flow(run, flowName: "playtest", params: { target, context? }).
  */
 import type { TaskResult, TaskConstructor, OptionSpecs } from "@db-lyon/flowkit";
-import { UeMcpTask } from "../task.js";
+import { UeMcpTask } from "./task.js";
 import { runBridge } from "./run-action.js";
 import { ModelAgentTask } from "./agent-step.js";
 

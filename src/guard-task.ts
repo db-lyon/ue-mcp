@@ -40,7 +40,7 @@
  */
 import type { TaskResult } from "@db-lyon/flowkit";
 import type { EditorSession } from "./sessions/session.js";
-import { UeMcpTask } from "./task.js";
+import { UeMcpTask } from "./flow/task.js";
 
 /**
  * Where the pipeline puts the call being guarded, and the guard's own declared
