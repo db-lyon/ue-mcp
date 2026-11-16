@@ -86,6 +86,7 @@ export const engineActions: Record<string, ActionSpec> = {
   read_engine_header: {
     kind: "handler",
     effect: "read",
+    offline: "Reads an engine header from the installed engine tree.",
     description: "Parse a .h file from the engine source tree. Params: headerPath (relative to Engine/Source, or absolute)",
     handler: async (ctx, p) => {
       const engineRoot = requireEngineRoot(ctx);
@@ -99,6 +100,7 @@ export const engineActions: Record<string, ActionSpec> = {
   find_engine_symbol: {
     kind: "handler",
     effect: "read",
+    offline: "Searches the installed engine headers.",
     description: "Grep engine headers for a symbol. Params: symbol, maxResults?",
     handler: async (ctx, p) => {
       const engineRoot = requireEngineRoot(ctx);
@@ -131,6 +133,7 @@ export const engineActions: Record<string, ActionSpec> = {
   list_engine_modules: {
     kind: "handler",
     effect: "read",
+    offline: "Enumerates modules in the installed engine tree.",
     description: "List modules in Engine/Source/Runtime. Params: none",
     handler: async (ctx) => {
       const engineRoot = requireEngineRoot(ctx);
@@ -145,6 +148,7 @@ export const engineActions: Record<string, ActionSpec> = {
   search_engine_cpp: {
     kind: "handler",
     effect: "read",
+    offline: "Searches the installed engine sources.",
     description: "Search engine .h/.cpp/.inl files across Runtime/Editor/Developer/Plugins. Params: query, tree? (Runtime|Editor|Developer|Plugins|all - default Runtime), subdirectory?, maxResults? (default 500)",
     handler: async (ctx, p) => {
       const engineRoot: string = requireEngineRoot(ctx);
@@ -203,6 +207,7 @@ export const engineActions: Record<string, ActionSpec> = {
   build_engine_index: {
     kind: "handler",
     effect: "mutate",
+    offline: "Scans the installed engine headers into the on-disk symbol index.",
     description:
       "Build or refresh the engine symbol index that verify_symbols, lint_cpp_header and "
       + "suggest_build_deps read. Scans roughly 31,000 headers across Runtime, Editor, Developer "
@@ -233,6 +238,7 @@ export const engineActions: Record<string, ActionSpec> = {
   verify_symbols: {
     kind: "handler",
     effect: "read",
+    offline: "Answers from the engine symbol index on disk.",
     description:
       "Check that engine symbols exist BEFORE writing C++ that uses them, and get back what you "
       + "need to write it: the header to #include, the owning module for Build.cs, the exact "
@@ -254,6 +260,7 @@ export const engineActions: Record<string, ActionSpec> = {
   suggest_build_deps: {
     kind: "handler",
     effect: "mutate",
+    offline: "Answers from the engine symbol index and reads the target Build.cs.",
     description:
       "Given the engine symbols a module uses, report which modules its Build.cs has to depend on "
       + "and which of those it does not list yet, plus the AddRange line to paste. Core and "
@@ -283,6 +290,7 @@ export const engineActions: Record<string, ActionSpec> = {
   find_example_usage: {
     kind: "handler",
     effect: "read",
+    offline: "Searches the installed engine sources.",
     description:
       "Find real call sites for an engine symbol in the engine's own .cpp files, which answers "
       + "'how is this actually used' with code that compiles. Better than a signature for anything "
@@ -309,6 +317,7 @@ export const engineActions: Record<string, ActionSpec> = {
   class_hierarchy: {
     kind: "handler",
     effect: "read",
+    offline: "Answers from the engine symbol index on disk.",
     description:
       "Report what a class derives from and what derives from it, which is the question behind "
       + "'what should I subclass' and 'what already does this'. Ancestors are the full chain up "
@@ -344,6 +353,7 @@ export const engineActions: Record<string, ActionSpec> = {
   find_references: {
     kind: "handler",
     effect: "read",
+    offline: "Searches the installed engine sources and the project's own.",
     description:
       "Find every line in the engine tree that names a symbol, which answers 'how is this woven "
       + "into the engine' and 'what would break if this changed'. Broader than find_callers on "
@@ -373,6 +383,7 @@ export const engineActions: Record<string, ActionSpec> = {
   find_callers: {
     kind: "handler",
     effect: "read",
+    offline: "Searches the installed engine sources and the project's own.",
     description:
       "Find who calls a function, and from which enclosing function, which is how to see the "
       + "conventions around a call before writing one: what is checked first, what is passed, "
@@ -402,6 +413,7 @@ export const engineActions: Record<string, ActionSpec> = {
   find_callees: {
     kind: "handler",
     effect: "read",
+    offline: "Reads the symbol's own body out of the engine sources.",
     description:
       "Report what a function calls, by reading its body and looking every called name back up "
       + "in the engine index. Answers 'what does doing this properly actually involve': the "
@@ -432,6 +444,7 @@ export const engineActions: Record<string, ActionSpec> = {
   symbol_context: {
     kind: "handler",
     effect: "read",
+    offline: "Reads the declaration and its surrounding lines off disk.",
     description:
       "Return the lines of engine source around a declaration, so the API surrounding a symbol "
       + "can be read without opening the file: the sibling overloads, the UPROPERTY above it, the "
@@ -462,6 +475,7 @@ export const engineActions: Record<string, ActionSpec> = {
   lint_cpp_header: {
     kind: "handler",
     effect: "read",
+    offline: "Checks a header on disk against the engine symbol index.",
     description:
       "Check a header you just wrote against the engine it has to build against, and report what "
       + "the compiler would before the compiler runs. Covers the structural mistakes that produce "

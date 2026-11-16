@@ -11,6 +11,7 @@ export const surfaceActions: Record<string, ActionSpec> = {
   search_tools: {
     kind: "handler",
     effect: "read",
+    offline: "Searches the tool graph this server holds in memory.",
     description: "Search every ue-mcp tool + action by keyword or task INTENT (a synonym layer maps 'screenshot'->capture_scene_png, 'tile a texture'->the texture-bomb flow, etc.) and return ranked matches (tool, action, description, score). The first step before editor(execute_python); most tasks already have a dedicated action. Params: query (space-separated keywords/intent), limit? (default 20) (#704)",
     handler: async (_ctx, p) => {
       const query = (p.query as string) ?? "";
@@ -28,6 +29,7 @@ export const surfaceActions: Record<string, ActionSpec> = {
   describe_action: {
     kind: "handler",
     effect: "read",
+    offline: "Reads the parameter schema out of the tool graph this server holds in memory.",
     description:
       "Return the live parameter schema for one action: every parameter it accepts, "
       + "with type, required/optional, description, allowed values and default, plus the "
@@ -88,6 +90,7 @@ export const surfaceActions: Record<string, ActionSpec> = {
   list_available_actions: {
     kind: "handler",
     effect: "read",
+    offline: "Classifies the tool graph this server holds in memory.",
     description:
       "Report which actions this server can serve RIGHT NOW and why the rest cannot. With no editor "
       + "attached the surface is advertised in full but most of it cannot run, and this is the line "
@@ -136,6 +139,7 @@ export const surfaceActions: Record<string, ActionSpec> = {
   execute_python_report: {
     kind: "handler",
     effect: "read",
+    offline: "Reads this session's own recorded calls.",
     description: "Measurement for #704: reads this session's execute_python calls and, for each, runs its taskSummary back through search_tools to flag calls that OVERLAPPED an existing dedicated action ('you used Python for X, but tool Y does X'). Returns totalCalls, overlapping[] and an overlapRate. Params: none (#704)",
     handler: async (ctx) => {
       const entries = getWorkarounds(ctx);

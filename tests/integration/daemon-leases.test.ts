@@ -30,7 +30,7 @@ afterAll(async () => {
 });
 
 const addVariable = (server: McpServer, name: string) =>
-  server.call("tools", { action: "call", category: "blueprint", method: "add_variable", args: { blueprintPath: "/Game/BP_Shared.BP_Shared", name, type: "float" } });
+  server.call("tools", { action: "call", category: "blueprint", method: "add_variable", args: { assetPath: "/Game/BP_Shared.BP_Shared", name, type: "float" } });
 const leases = async () => (await call(d, "GET", "/v1/leases")).body as { count: number; leases: Array<{ path: string; holder: string; implicit: boolean }> };
 const sessions = async () => (await call(d, "GET", "/v1/sessions")).body.sessions as Array<{ id: string }>;
 

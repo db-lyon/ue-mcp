@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { editorTool } from "../../src/tools/editor.js";
-import { classifyAction } from "../../src/dispatch/locking.js";
+import { classifyAction } from "../../src/dispatch/written-paths.js";
 import { readHandlerFile } from "../../scripts/lib/cpp-registrations.mjs";
 
 const channels = readHandlerFile("SequencerHandlers_Channels.cpp");
