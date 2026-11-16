@@ -200,7 +200,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetWorldPartitionStreaming(const TSharedP
 #else
 	if (MCPIsPlayInEditorActive())
 	{
-		return MCPError(TEXT("Streaming is a setup change of the editor world, which cannot be made while a play-in-editor session is running. Stop play and retry."));
+		return MCPError(TEXT("Streaming is a setup change of the editor world, which cannot be made while a play-in-editor session is running. ") + MCPStopPlayInEditorStep());
 	}
 	WorldPartition->SetEnableStreaming(bEnabled);
 	if (World->GetOutermost()) World->GetOutermost()->MarkPackageDirty();
@@ -1020,7 +1020,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::CreateWorldPartitionMiniMap(const TShared
 	AWorldPartitionMiniMap* Existing = FWorldPartitionMiniMapHelper::GetWorldPartitionMiniMap(World, false);
 	if (!Existing && MCPIsPlayInEditorActive())
 	{
-		return MCPError(TEXT("The minimap actor is spawned in the editor world, which cannot be changed while a play-in-editor session is running. Stop play and retry."));
+		return MCPError(TEXT("The minimap actor is spawned in the editor world, which cannot be changed while a play-in-editor session is running. ") + MCPStopPlayInEditorStep());
 	}
 	AWorldPartitionMiniMap* MiniMap = Existing ? Existing : FWorldPartitionMiniMapHelper::GetWorldPartitionMiniMap(World, true);
 	FMCPScopedScriptErrors Errors;

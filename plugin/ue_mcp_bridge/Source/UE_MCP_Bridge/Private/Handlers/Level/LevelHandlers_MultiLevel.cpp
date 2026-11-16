@@ -204,7 +204,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::DeleteExactLabeledActorsInLevels(
 	}
 	if (GEditor->PlayWorld != nullptr || GEditor->bIsSimulatingInEditor)
 	{
-		return MCPError(TEXT("Stop PIE or SIE before deleting actors across levels"));
+		return MCPError(TEXT("Stop PIE or SIE before deleting actors across levels. ") + MCPStopPlayInEditorStep());
 	}
 
 	const bool bDryRun = OptionalBool(Params, TEXT("dryRun"), true);

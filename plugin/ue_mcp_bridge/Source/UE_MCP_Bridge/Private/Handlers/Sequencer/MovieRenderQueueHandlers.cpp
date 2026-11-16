@@ -1019,7 +1019,7 @@ TSharedPtr<FJsonValue> FMovieRenderQueueHandlers::Render(const TSharedPtr<FJsonO
 	}
 	if (GEditor && GEditor->PlayWorld)
 	{
-		return MCPError(TEXT("Play In Editor is running, and the in-editor render needs it. Stop PIE first."));
+		return MCPError(TEXT("Play In Editor is running, and the in-editor render needs it. ") + MCPStopPlayInEditorStep());
 	}
 	UClass* ExecutorClass = MRQFindClass(MRQPIEExecutorClassPath);
 	if (!ExecutorClass) return MCPError(TEXT("The Movie Render Queue PIE executor class is not loaded (MovieRenderPipelineEditor)."));

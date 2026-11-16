@@ -3125,7 +3125,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::ClearLevelScript(const TSharedPtr<FJsonOb
 	const bool bSave = OptionalBool(Params, TEXT("save"), false);
 	if (!bDryRun && bSave && World->GetOutermost()->IsDirty())
 	{
-		return MCPError(TEXT("Current level already has unsaved changes; save or discard them before clear_level_script with save=true"));
+		return MCPError(TEXT("Current level already has unsaved changes; save or discard them before clear_level_script with save=true. ") + MCPSaveOrDiscardStep());
 	}
 	ULevelScriptBlueprint* LevelScript =
 		World->PersistentLevel->GetLevelScriptBlueprint(/*bDontCreate*/ true);

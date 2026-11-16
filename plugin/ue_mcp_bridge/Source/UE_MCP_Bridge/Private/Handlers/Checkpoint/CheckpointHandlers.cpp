@@ -234,7 +234,7 @@ TSharedPtr<FJsonValue> FCheckpointHandlers::PrepareRestore(const TSharedPtr<FJso
 	const TSharedPtr<FJsonValue> FilesValue = TryGetParam(Params, TEXT("files"));
 	if (CheckpointPlaying())
 	{
-		return MCPErrorWithCode(TEXT("pie_running"), TEXT("Restore is refused while Play In Editor runs: stop it first."));
+		return MCPErrorWithCode(TEXT("pie_running"), TEXT("Restore is refused while Play In Editor runs. ") + MCPStopPlayInEditorStep());
 	}
 	TSharedPtr<FJsonObject> Result = MCPSuccess();
 	if (bCheckOnly) return MCPResult(Result);

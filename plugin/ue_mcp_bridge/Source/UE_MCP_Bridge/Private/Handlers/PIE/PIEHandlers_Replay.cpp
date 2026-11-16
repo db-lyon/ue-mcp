@@ -313,7 +313,7 @@ TSharedPtr<FJsonValue> FPIEHandlers::PieReplayRun(const TSharedPtr<FJsonObject>&
 	}
 	if (GEditor->PlayWorld != nullptr)
 	{
-		return MCPError(TEXT("A PIE session is already running; stop it before pie_replay_run"));
+		return MCPError(TEXT("A PIE session is already running; stop it before pie_replay_run. ") + MCPStopPlayInEditorStep());
 	}
 
 	FReplayerArmConfig Cfg;

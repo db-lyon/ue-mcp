@@ -133,7 +133,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::ReplaceActorsWithClass(const TSharedPtr<F
 	if (Labels.Num() == 0) return MCPError(TEXT("Missing 'actorLabels': the actors to replace."));
 	if (MCPIsPlayInEditorActive())
 	{
-		return MCPError(TEXT("Actors in the editor world cannot be replaced while a play-in-editor session is running. Stop play and retry."));
+		return MCPError(TEXT("Actors in the editor world cannot be replaced while a play-in-editor session is running. ") + MCPStopPlayInEditorStep());
 	}
 	REQUIRE_EDITOR_WORLD(World);
 
@@ -195,7 +195,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::ReplaceActorsWithAsset(const TSharedPtr<F
 	if (Labels.Num() == 0) return MCPError(TEXT("Missing 'actorLabels': the actors to replace."));
 	if (MCPIsPlayInEditorActive())
 	{
-		return MCPError(TEXT("Actors in the editor world cannot be replaced while a play-in-editor session is running. Stop play and retry."));
+		return MCPError(TEXT("Actors in the editor world cannot be replaced while a play-in-editor session is running. ") + MCPStopPlayInEditorStep());
 	}
 	REQUIRE_EDITOR_WORLD(World);
 

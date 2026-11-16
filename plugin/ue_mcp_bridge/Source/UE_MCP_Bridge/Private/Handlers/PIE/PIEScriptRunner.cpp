@@ -2189,7 +2189,7 @@ namespace MCPPIE
 		}
 		if (GEditor->PlayWorld)
 		{
-			OutError = TEXT("A PIE session is running; stop it before pie_script_replay");
+			OutError = TEXT("A PIE session is running; stop it before pie_script_replay. ") + MCPStopPlayInEditorStep();
 			return false;
 		}
 

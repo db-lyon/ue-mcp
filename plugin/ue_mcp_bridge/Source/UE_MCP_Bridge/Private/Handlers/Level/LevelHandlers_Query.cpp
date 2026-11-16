@@ -526,7 +526,7 @@ namespace
 			}
 			if (GEditor->PlayWorld != nullptr || GEditor->bIsSimulatingInEditor)
 			{
-				return MCPError(TEXT("Stop PIE or SIE before querying another level"));
+				return MCPError(TEXT("Stop PIE or SIE before querying another level. ") + MCPStopPlayInEditorStep());
 			}
 			if (!WorldScope.Equals(TEXT("editor"), ESearchCase::IgnoreCase))
 			{

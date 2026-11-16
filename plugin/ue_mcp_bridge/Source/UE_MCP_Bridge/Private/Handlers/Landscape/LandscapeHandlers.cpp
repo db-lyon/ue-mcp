@@ -1833,7 +1833,7 @@ TSharedPtr<FJsonValue> FLandscapeHandlers::RefreshPhysicalMaterialCollision(cons
 	}
 	if (GEditor->PlayWorld != nullptr || GEditor->bIsSimulatingInEditor)
 	{
-		return MCPError(TEXT("Stop PIE or SIE before refreshing landscape physical-material collision"));
+		return MCPError(TEXT("Stop PIE or SIE before refreshing landscape physical-material collision. ") + MCPStopPlayInEditorStep());
 	}
 
 	REQUIRE_EDITOR_WORLD(World);

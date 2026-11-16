@@ -77,7 +77,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::ConvertBrushesToStaticMesh(const TSharedP
 	}
 	if (GEditor->PlayWorld != nullptr || GEditor->bIsSimulatingInEditor)
 	{
-		return MCPError(TEXT("Stop PIE or SIE before converting brushes"));
+		return MCPError(TEXT("Stop PIE or SIE before converting brushes. ") + MCPStopPlayInEditorStep());
 	}
 
 	// ── Selection ───────────────────────────────────────────────────────────
