@@ -91,6 +91,17 @@ describe("findEngineGateViolations", () => {
     expect(findEngineGateViolations(root).map((v) => v.kind)).toEqual(["floor-gate"]);
   });
 
+  it("reports an editor guard in an editor-only module, and leaves the runtime module's alone", () => {
+    const root = sourceTree({
+      "Editor/Private/A.cpp": "#if WITH_EDITOR\n#endif\n#if !WITH_EDITORONLY_DATA\n#endif\n// WITH_EDITOR in a comment\n",
+      "UE_MCP_BridgeRuntime/Private/B.cpp": "#if WITH_EDITOR\n#endif\n",
+    });
+    expect(findEngineGateViolations(root).map((v) => `${v.file}:${v.line}:${v.kind}`)).toEqual([
+      "Editor/Private/A.cpp:1:editor-guard",
+      "Editor/Private/A.cpp:3:editor-guard",
+    ]);
+  });
+
   it("reports a Build.cs test that a later major version fails, and accepts the at-least form", () => {
     const root = sourceTree({
       "Mod/Bad.Build.cs": "if (Target.Version.MajorVersion == 5 && Target.Version.MinorVersion >= 8) {}\n",

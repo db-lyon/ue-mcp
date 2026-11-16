@@ -763,7 +763,8 @@ TSharedPtr<FJsonValue> FLevelHandlers::ListActorDescs(const TSharedPtr<FJsonObje
 	Result->SetNumberField(TEXT("returned"), Result->GetIntegerField(TEXT("count")));
 	return MCPResult(Result);
 #else
-	return MCPError(TEXT("list_actor_descs needs the World Partition actor descriptor instance API, which is UE 5.5 and newer. On UE 5.4 use get_outliner or get_actors_by_class, which only see actors that are already streamed in."));
+	return MCPUnsupportedEngineError(TEXT("list_actor_descs"), TEXT("5.5"),
+		TEXT("It needs the World Partition actor descriptor instance API. On this engine, use level(get_outliner) or level(get_actors_by_class), which only see actors that are already streamed in"));
 #endif
 }
 
@@ -918,7 +919,8 @@ TSharedPtr<FJsonValue> FLevelHandlers::LoadActorDescs(const TSharedPtr<FJsonObje
 	}
 	return MCPResult(Result);
 #else
-	return MCPError(TEXT("load_actor_descs needs the World Partition actor descriptor instance API, which is UE 5.5 and newer. On UE 5.4 load the cell from the World Partition editor window instead."));
+	return MCPUnsupportedEngineError(TEXT("load_actor_descs"), TEXT("5.5"),
+		TEXT("It needs the World Partition actor descriptor instance API. On this engine, load the cell from the World Partition editor window"));
 #endif
 }
 
@@ -940,9 +942,8 @@ namespace
 			TEXT("%s needs the World Partition editor loader interface (IWorldPartitionActorLoaderInterface), and no header for it was found in this engine build. Unload the region from the World Partition editor window instead."),
 			Action));
 #else
-		return MCPError(FString::Printf(
-			TEXT("%s needs the World Partition actor descriptor instance API, which is UE 5.5 and newer. On UE 5.4 use the World Partition editor window."),
-			Action));
+		return MCPUnsupportedEngineError(Action, TEXT("5.5"),
+			TEXT("It needs the World Partition actor descriptor instance API. On this engine, use the World Partition editor window"));
 #endif
 	}
 }

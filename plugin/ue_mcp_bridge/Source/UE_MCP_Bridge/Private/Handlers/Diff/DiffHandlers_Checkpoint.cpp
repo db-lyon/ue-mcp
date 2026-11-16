@@ -2351,7 +2351,7 @@ TSharedPtr<FJsonValue> FDiffHandlers::OpenCheckpointNativeDiff(const TSharedPtr<
 		else if (Engine.Native == TEXT("details"))
 		{
 #if !UE_MCP_HAS_DETAILS_DIFF
-			return MCPErrorWithCode(TEXT("no_native_diff"), TEXT("The details diff window needs UE 5.5 or later"));
+			return MCPErrorWithCode(TEXT("no_native_diff"), TEXT("The details diff window needs UE 5.5 or later. On this engine the details-panel property diff records in this result are the same comparison"));
 #else
 			SDetailsDiff::CreateDiffWindow(FText::FromString(FString::Printf(TEXT("Diff of %s: %s to %s"), *New->GetName(), *FromLabel, *ToLabel)), Old, New, OldRev, NewRev);
 			Result->SetStringField(TEXT("opened"), TEXT("window"));

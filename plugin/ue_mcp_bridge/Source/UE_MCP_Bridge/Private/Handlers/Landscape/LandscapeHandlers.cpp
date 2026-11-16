@@ -1824,7 +1824,8 @@ TSharedPtr<FJsonValue> FLandscapeHandlers::RefreshPhysicalMaterialCollision(cons
 	});
 
 #if !UE_MCP_HAS_5_8_API
-	return MCPError(TEXT("Landscape physical-material collision refresh requires Unreal Engine 5.8 or newer"));
+	return MCPUnsupportedEngineError(TEXT("Landscape physical-material collision refresh"), TEXT("5.8"),
+		TEXT("On this engine, Build > Build Landscape Physical Material in the editor rebuilds it"));
 #else
 	const double StartedAt = FPlatformTime::Seconds();
 	if (!GEditor)

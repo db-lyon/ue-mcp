@@ -66,7 +66,8 @@ namespace MCPAudio
 	{
 		return MCPUnsupportedEngineError(
 			FString::Printf(TEXT("audio(%s)"), Action), TEXT("5.5"),
-			TEXT("The MetaSound document model it drives (graph pages and the document builder registry) does not exist in 5.4."));
+			TEXT("The MetaSound document model it drives (graph pages and the document builder registry) does not exist in 5.4. ")
+			TEXT("On 5.4, author the MetaSound in its own editor, or build the sound as a SoundCue through the audio cue actions."));
 	}
 	/** Reparent a sound class on both ends. SetParentClass only drops the class
 	 *  from the old parent's ChildClasses; the new parent's list is ours to fill. */

@@ -57,7 +57,8 @@ namespace
 	TSharedPtr<FJsonValue> NNEUnavailableError()
 	{
 #if WITH_UEMCP_NNE
-		return MCPUnsupportedEngineError(TEXT("The NNE actions"), TEXT("5.5"));
+		return MCPUnsupportedEngineError(TEXT("The NNE actions"), TEXT("5.5"),
+			TEXT("This engine's NNE interfaces predate the runtime API they drive; there is no equivalent to fall back to"));
 #else
 		return MCPError(TEXT("This engine has no NNE module (Engine/Source/Runtime/NNE), so the NNE actions are not available."));
 #endif

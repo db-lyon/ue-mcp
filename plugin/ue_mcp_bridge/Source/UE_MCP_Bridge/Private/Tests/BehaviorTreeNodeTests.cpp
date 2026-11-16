@@ -118,14 +118,12 @@ bool FMCPBehaviorTreeDecoratorConfigTest::RunTest(const FString& Parameters)
 			MakeShared<FJsonValueString>(TEXT("TargetActor")), Error));
 	TestEqual(TEXT("no error writing the selected key"), Error, FString());
 
-#if WITH_EDITORONLY_DATA
 	// The comparison operation is authored data, so the engine declares it
 	// editor-only. It is the field that says whether the branch tests for
 	// "is set" or "is not set".
 	TestTrue(TEXT("basic operation is writable by enumerator name"),
 		FGameplayHandlers::WriteBTNodeProperty(Decorator, TEXT("BasicOperation"),
 			MakeShared<FJsonValueString>(TEXT("NotSet")), Error));
-#endif
 	TestTrue(TEXT("flow abort mode is writable by enumerator name"),
 		FGameplayHandlers::WriteBTNodeProperty(Decorator, TEXT("FlowAbortMode"),
 			MakeShared<FJsonValueString>(TEXT("LowerPriority")), Error));
@@ -144,9 +142,7 @@ bool FMCPBehaviorTreeDecoratorConfigTest::RunTest(const FString& Parameters)
 	TestTrue(TEXT("inverseCondition is reported"), Described->HasField(TEXT("inverseCondition")));
 	TestEqual(TEXT("flowAbortMode"), MCPBTTestGetString(Described, TEXT("flowAbortMode")), FString(TEXT("LowerPriority")));
 	TestEqual(TEXT("notifyObserver"), MCPBTTestGetString(Described, TEXT("notifyObserver")), FString(TEXT("ResultChange")));
-#if WITH_EDITORONLY_DATA
 	TestEqual(TEXT("basicOperation"), MCPBTTestGetString(Described, TEXT("basicOperation")), FString(TEXT("NotSet")));
-#endif
 
 	const TSharedPtr<FJsonObject>* BlackboardKey = nullptr;
 	TestTrue(TEXT("blackboardKey is reported"), Described->TryGetObjectField(TEXT("blackboardKey"), BlackboardKey));

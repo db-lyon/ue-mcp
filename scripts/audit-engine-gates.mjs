@@ -18,6 +18,10 @@
 //   floor-gate      UE_MCP_HAS_5_4_API: the oldest supported engine needs no gate.
 //   major-equals    A Build.cs version test of the form `MajorVersion == N &&
 //                   MinorVersion >= M`, which is false on a later major version.
+//   editor-guard    A preprocessor test of WITH_EDITOR or WITH_EDITORONLY_DATA
+//                   in an Editor-type module, where both are always 1 and the
+//                   #else arm is dead code. Runtime-capable modules are listed
+//                   in RUNTIME_MODULES and keep their guards.
 //
 // A file that genuinely cannot include the header is listed in EXEMPT with the
 // reason, so the exception is visible rather than a silent hole.
@@ -40,6 +44,10 @@ export const EXEMPT = new Map([
   ],
 ]);
 
+/** Modules that also build for runtime targets, where WITH_EDITOR is a real switch. */
+export const RUNTIME_MODULES = new Set(['UE_MCP_BridgeRuntime']);
+
+const EDITOR_GUARD = /^\s*#\s*(?:el)?if(?:n?def)?\b.*\bWITH_EDITOR(?:ONLY_DATA)?\b/;
 const RAW = /\b(ENGINE_MAJOR_VERSION|ENGINE_MINOR_VERSION|UE_VERSION_OLDER_THAN|UE_VERSION_NEWER_THAN)\b/;
 const CPP_DEFINE = /^\s*#\s*define\s+((?:UE_MCP_|MCP_HAS_|WITH_)\w*)/;
 const FLOOR = /\bUE_MCP_HAS_5_4_API\b/;
@@ -82,6 +90,7 @@ export function findEngineGateViolations(sourceRoot = DEFAULT_SOURCE) {
           return;
         }
         if (FLOOR.test(line)) report('floor-gate');
+        if (!RUNTIME_MODULES.has(rel.split('/')[0]) && EDITOR_GUARD.test(line)) report('editor-guard');
         if (exempt) return;
         if (RAW.test(line)) report('raw-version');
         if (file.endsWith('.cpp') && CPP_DEFINE.test(line)) report('cpp-define');
@@ -94,7 +103,8 @@ const ADVICE = {
   'raw-version': 'Gate on a UE_MCP_HAS_* macro from HandlerEngineVersion.h instead.',
   'cpp-define': 'Define the macro in HandlerEngineVersion.h; a #define in a .cpp leaks across the unity blob.',
   'floor-gate': 'The oldest supported engine needs no gate: drop the condition and keep the code.',
-  'major-equals': 'Test "at least" the version, `MajorVersion > N || (MajorVersion == N && MinorVersion >= M)`, so a later major keeps the newer path.',
+  'editor-guard': 'This module only builds for the editor, where the macro is always 1: drop the guard and any #else arm.',
+  'major-equals':'Test "at least" the version, `MajorVersion > N || (MajorVersion == N && MinorVersion >= M)`, so a later major keeps the newer path.',
 };
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

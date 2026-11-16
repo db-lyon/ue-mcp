@@ -1238,9 +1238,8 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::EditStructMetadata(const TSharedPtr<F
 				// the only honest answer, because writing the rest of the field
 				// and dropping the metadata would report a success that left
 				// the ClampMin or EditCondition the caller asked for unset.
-				return MCPError(FString::Printf(
-					TEXT("fields[%d] sets metadata, which requires Unreal Engine 5.5 or newer: 5.4's user-defined struct members do not store metadata. Remove the metadata object to author the rest of the field."),
-					Slot));
+				return MCPUnsupportedEngineError(FString::Printf(TEXT("fields[%d] sets metadata, which"), Slot), TEXT("5.5"),
+					TEXT("5.4's user-defined struct members do not store metadata. Remove the metadata object to author the rest of the field"));
 #endif
 				for (const auto& JsonEntry : (*MetaObj)->Values)
 				{

@@ -617,7 +617,8 @@ TSharedPtr<FJsonValue> FChooserHandlers::SetSignature(const TSharedPtr<FJsonObje
 	{
 		if (!SignatureProp)
 		{
-			return MCPError(TEXT("Inheriting a signature from a ChooserSignature asset needs UE 5.9; this engine's choosers carry their own result type, result class and parameters only"));
+			return MCPUnsupportedEngineError(TEXT("Inheriting a signature from a ChooserSignature asset"), TEXT("5.9"),
+				TEXT("This engine's choosers carry their own result type, result class and parameters only: set those with chooser(set_signature) instead of signaturePath"));
 		}
 		if (!SignaturePath.IsEmpty())
 		{
@@ -1804,7 +1805,8 @@ TSharedPtr<FJsonValue> FChooserHandlers::AutoPopulate(const TSharedPtr<FJsonObje
 	if (bHasColumn && bHasRows) return MCPError(TEXT("Pass column (one column, every row) or rows (those rows, every column), not both; neither fills everything"));
 	if (!MCPChooserAutoPopulateSupported())
 	{
-		return MCPError(TEXT("Auto populate needs FChooserColumnBase::AutoPopulate, which this bridge reaches on UE 5.7 and newer"));
+		return MCPUnsupportedEngineError(TEXT("Auto populate"), TEXT("5.7"),
+			TEXT("It needs FChooserColumnBase::AutoPopulate. On this engine, write the cell values with chooser(set_cell) or chooser(set_row) instead"));
 	}
 
 	TSharedPtr<FJsonValue> ResolveError;

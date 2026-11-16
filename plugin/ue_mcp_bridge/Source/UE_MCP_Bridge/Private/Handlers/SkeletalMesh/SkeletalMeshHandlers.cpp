@@ -1364,10 +1364,9 @@ TSharedPtr<FJsonValue> FSkeletalMeshHandlers::SetOptimizeForInstancing(const TSh
 	// bOptimizeForInstancing is a 5.8 engine feature with no earlier equivalent,
 	// so there is nothing to write and nothing to stand in for it. The action
 	// stays registered and says why, rather than answering "Unknown method".
-	return MCPError(
-		TEXT("set_skeletal_mesh_optimize_for_instancing requires Unreal Engine 5.8 or newer: ")
+	return MCPUnsupportedEngineError(TEXT("set_skeletal_mesh_optimize_for_instancing"), TEXT("5.8"),
 		TEXT("FSkeletalMeshBuildSettings::bOptimizeForInstancing does not exist in this engine, ")
-		TEXT("and no earlier skeletal mesh build setting stands in for it."));
+		TEXT("and no earlier skeletal mesh build setting stands in for it, so there is nothing to set here"));
 #else
 	FString AssetPath;
 	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;

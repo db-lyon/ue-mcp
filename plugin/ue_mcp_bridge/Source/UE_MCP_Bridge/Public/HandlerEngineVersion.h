@@ -217,3 +217,26 @@ inline bool MCPIsForceDisableNanite(const UStaticMeshComponent* Component)
 	return Component->bForceDisableNanite != 0;
 #endif
 }
+
+/** An IK rig's retarget root bone. 5.4 spells the accessor GetRetargetRoot();
+ *  later engines renamed the same accessor over the same FName to GetPelvis().
+ *  The first overload drops out of the overload set when GetPelvis does not
+ *  exist and the second when GetRetargetRoot does not, so whichever the engine
+ *  has is called, without this header including the IK Rig module. */
+template <typename RigType>
+inline auto MCPIKRigRetargetRootBoneImpl(const RigType* Rig, int) -> decltype(Rig->GetPelvis())
+{
+	return Rig->GetPelvis();
+}
+
+template <typename RigType>
+inline auto MCPIKRigRetargetRootBoneImpl(const RigType* Rig, long) -> decltype(Rig->GetRetargetRoot())
+{
+	return Rig->GetRetargetRoot();
+}
+
+template <typename RigType>
+inline FName MCPIKRigRetargetRootBone(const RigType* Rig)
+{
+	return Rig ? MCPIKRigRetargetRootBoneImpl(Rig, 0) : NAME_None;
+}

@@ -784,7 +784,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::AnalyzeInsightsTrace(const TSharedPtr<FJ
 	});
 	return MCPDeferredMarker();
 #else
-	return MCPError(TEXT("editor(analyze_trace) needs UE 5.7 or newer: the TraceServices timing API it reads changed shape before 5.7. ")
-		TEXT("Open the file in Unreal Insights with the openCommand editor(stop_trace) reported."));
+	return MCPUnsupportedEngineError(TEXT("editor(analyze_trace)"), TEXT("5.7"),
+		TEXT("The TraceServices timing API it reads changed shape before 5.7. On this engine, open the file in Unreal Insights with the openCommand editor(stop_trace) reported"));
 #endif
 }

@@ -1716,7 +1716,8 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::RequestTransition(const TSharedPtr<FJ
 			Tag, UStateTree::EStateGameplayTagQueryMethod::MatchesExact);
 		TargetDescription = TagStr;
 #else
-		return MCPError(TEXT("targetStateTag needs UStateTree::GetStateHandleFromGameplayTag, which is UE 5.8 and later. On this engine pass targetStateId instead; statetree(list_states) reports the GUID and statetree(read_state) reports each state's tag, so a tag can be resolved to an id in one extra call."));
+		return MCPUnsupportedEngineError(TEXT("targetStateTag"), TEXT("5.8"),
+			TEXT("It needs UStateTree::GetStateHandleFromGameplayTag. On this engine pass targetStateId instead; statetree(list_states) reports the GUID and statetree(read_state) reports each state's tag, so a tag can be resolved to an id in one extra call"));
 #endif
 	}
 	else

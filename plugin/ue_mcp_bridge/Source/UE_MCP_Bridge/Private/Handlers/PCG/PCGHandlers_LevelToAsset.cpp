@@ -187,7 +187,8 @@ TSharedPtr<FJsonValue> FPCGHandlers::ExportLevelToAsset(const TSharedPtr<FJsonOb
 	}
 	return MCPResult(Result);
 #else
-	return MCPError(TEXT("Exporting a level to a PCG data asset needs UE 5.5 or newer."));
+	return MCPUnsupportedEngineError(TEXT("Exporting a level to a PCG data asset"), TEXT("5.5"),
+		TEXT("PCG Assemblies arrived there. On this engine, sample the level's actors into a graph with the PCG Get Actor Data node instead"));
 #endif
 }
 
@@ -263,6 +264,7 @@ TSharedPtr<FJsonValue> FPCGHandlers::UpdateLevelAssets(const TSharedPtr<FJsonObj
 	MCPSetNoRollback(Result, TEXT("Each asset was overwritten with a fresh export of its source level. No call restores the previous contents; source control holds them."));
 	return MCPResult(Result);
 #else
-	return MCPError(TEXT("Updating PCG data assets from their levels needs UE 5.5 or newer."));
+	return MCPUnsupportedEngineError(TEXT("Updating PCG data assets from their levels"), TEXT("5.5"),
+		TEXT("PCG Assemblies arrived there. On this engine, sample the level's actors into a graph with the PCG Get Actor Data node instead"));
 #endif
 }

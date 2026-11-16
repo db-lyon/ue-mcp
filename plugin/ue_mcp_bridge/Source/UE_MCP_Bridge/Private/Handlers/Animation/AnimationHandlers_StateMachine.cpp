@@ -1496,31 +1496,6 @@ TSharedPtr<FJsonValue> FAnimationHandlers::CreateIKRig(const TSharedPtr<FJsonObj
 
 // ─── #93  read_ik_rig ───────────────────────────────────────────────
 
-// The IK rig's retarget root bone, whatever the accessor is called.
-//
-// 5.4 spells it GetRetargetRoot(); later engines renamed the same accessor over
-// the same FName to GetPelvis(). Which engine did the rename is not something
-// this file has to know: the first overload drops out of the overload set when
-// GetPelvis does not exist, and the second when GetRetargetRoot does not, so
-// whichever the engine has is the one that gets called.
-template <typename RigType>
-static auto MCPIKRigRetargetRootBoneImpl(const RigType* Rig, int) -> decltype(Rig->GetPelvis())
-{
-	return Rig->GetPelvis();
-}
-
-template <typename RigType>
-static auto MCPIKRigRetargetRootBoneImpl(const RigType* Rig, long) -> decltype(Rig->GetRetargetRoot())
-{
-	return Rig->GetRetargetRoot();
-}
-
-template <typename RigType>
-static FName MCPIKRigRetargetRootBone(const RigType* Rig)
-{
-	return Rig ? MCPIKRigRetargetRootBoneImpl(Rig, 0) : NAME_None;
-}
-
 TSharedPtr<FJsonValue> FAnimationHandlers::ReadIKRig(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath;
@@ -2904,7 +2879,8 @@ TSharedPtr<FJsonValue> FAnimationHandlers::RemoveRetargetPose(const TSharedPtr<F
 {
 	MCPReadParamsAhead(Params, { TEXT("retargeterPath"), TEXT("poseName"), TEXT("side") });
 #if !UE_MCP_HAS_5_7_API
-	return MCPUnsupportedEngineError(TEXT("remove_retarget_pose"), TEXT("5.7"));
+	return MCPUnsupportedEngineError(TEXT("remove_retarget_pose"), TEXT("5.7"),
+		TEXT("On this engine, remove the pose in the IK Retargeter editor"));
 #else
 	using namespace MCPRetargetPoseEdit;
 	FString RetargeterPath;
@@ -2983,7 +2959,8 @@ TSharedPtr<FJsonValue> FAnimationHandlers::RenameRetargetPose(const TSharedPtr<F
 {
 	MCPReadParamsAhead(Params, { TEXT("retargeterPath"), TEXT("poseName"), TEXT("newName"), TEXT("side") });
 #if !UE_MCP_HAS_5_7_API
-	return MCPUnsupportedEngineError(TEXT("rename_retarget_pose"), TEXT("5.7"));
+	return MCPUnsupportedEngineError(TEXT("rename_retarget_pose"), TEXT("5.7"),
+		TEXT("On this engine, rename the pose in the IK Retargeter editor"));
 #else
 	using namespace MCPRetargetPoseEdit;
 	FString RetargeterPath;
@@ -3065,7 +3042,8 @@ TSharedPtr<FJsonValue> FAnimationHandlers::BatchRetargetAnimations(const TShared
 		TEXT("prefix"), TEXT("suffix"), TEXT("overwrite"), TEXT("requireCompleteMapping"),
 	});
 #if !UE_MCP_HAS_5_8_API
-	return MCPUnsupportedEngineError(TEXT("batch_retarget_animations"), TEXT("5.8"));
+	return MCPUnsupportedEngineError(TEXT("batch_retarget_animations"), TEXT("5.8"),
+		TEXT("On this engine, use Export Selected Animations in the IK Retargeter editor"));
 #else
 	FString RetargeterPath;
 	if (auto Err = RequireString(Params, TEXT("retargeterPath"), RetargeterPath)) return Err;

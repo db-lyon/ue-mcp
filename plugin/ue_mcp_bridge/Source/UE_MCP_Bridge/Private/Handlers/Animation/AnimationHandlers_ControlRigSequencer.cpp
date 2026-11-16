@@ -11,7 +11,8 @@ namespace
 {
 	TSharedPtr<FJsonValue> ControlRigSequencerUnsupported()
 	{
-		return MCPUnsupportedEngineError(TEXT("Control Rig Sequencer authoring"), TEXT("5.8"));
+		return MCPUnsupportedEngineError(TEXT("Control Rig Sequencer authoring"), TEXT("5.8"),
+			TEXT("On this engine, key Control Rig channels in Sequencer's editor"));
 	}
 }
 
