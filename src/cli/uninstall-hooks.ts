@@ -11,7 +11,7 @@
 
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { AGENT_CLIENT } from "../integrations/mcp-clients/agent-client.js";
+import { uninstallAllRegisteredHooks } from "../integrations/claude-code/hook-installer.js";
 import { BOLD, CYAN, DIM, GREEN, RED, RESET, fail, info, ok, warn } from "../terminal/ansi.js";
 import { selectProject } from "./editor-flag.js";
 import type { CliUsage } from "./cli-main.js";
@@ -45,7 +45,7 @@ function resolveProjectDir(argv: string[]): string | null {
   return null;
 }
 
-async function main(argv: string[]): Promise<void> {
+function main(argv: string[]): void {
   console.log("");
   console.log(`  ${BOLD}${CYAN}ue-mcp uninstall-hooks${RESET}`);
   console.log("");
@@ -57,7 +57,7 @@ async function main(argv: string[]): Promise<void> {
     process.exit(1);
   }
 
-  const result = await AGENT_CLIENT.uninstallAllRegisteredHooks(projectDir);
+  const result = uninstallAllRegisteredHooks(projectDir);
 
   if (result.removed.length === 0 && result.skipped.length === 0) {
     info("No installed hooks recorded in ~/.ue-mcp/state.json. Nothing to remove.");
@@ -84,7 +84,7 @@ export const usage: CliUsage = {
 /** Entry point for `ue-mcp uninstall-hooks [project] [--editor <name-or-path>]`. */
 export async function run(argv: string[]): Promise<number | void> {
   try {
-    await main(argv);
+    main(argv);
   } catch (e) {
     console.error(
       `\n  ${RED}Fatal error: ${e instanceof Error ? e.message : e}${RESET}\n`,

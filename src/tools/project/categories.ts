@@ -303,10 +303,11 @@ export const categoryActions: Record<string, ActionSpec> = {
     kind: "handler",
     effect: "read",
     offline: "Reads the tool graph this server holds and the engine's setting file; asks the editor for toolset states only when one is attached.",
+    params: {},
     description:
       "Every category with what is turned on in it: ue-mcp's own actions (native) and the actions wrapping Unreal's toolsets (epic), "
       + "each with its action count, plus the Unreal toolsets the category maps to and, with an editor attached, which of them its Toolset Registry has on. "
-      + "With no editor, the toolsets the project's setting file blocks. Params: none",
+      + "With no editor, the toolsets the project's setting file blocks.",
     handler: async (ctx) => {
       const view = sessionView(ctx);
       const live = await liveToolsetStates(ctx);
@@ -367,13 +368,20 @@ export const categoryActions: Record<string, ActionSpec> = {
     kind: "handler",
     effect: "mutate",
     offline: "Writes ue-mcp.yml and rebuilds the surface in this process; with no editor running, the engine's setting file is written instead of calling it.",
+    params: {
+      required: ["category", "enabled"],
+      optional: ["scope"],
+      notes: {
+        enabled: "bool",
+        scope: "all|native|epic, default all",
+      },
+    },
     description:
       "Turn a category on or off for this project, live: the surface is rebuilt and clients get tools/list_changed. "
       + "scope 'native' is ue-mcp's own actions, 'epic' is the actions wrapping Unreal's toolsets AND those toolsets in the editor's Toolset Registry "
       + "(changed live through the bridge, or in the project's setting file when no editor runs; refused when an editor runs but its bridge does not answer), "
       + "'all' (default) is both. Written to `disable:` in ue-mcp.yml. A call to an action turned off is refused naming this action. "
-      + "project and epic keep their own actions (only scope 'epic' applies to them). "
-      + "Params: category, enabled (bool), scope? (all|native|epic, default all)",
+      + "project and epic keep their own actions (only scope 'epic' applies to them).",
     handler: async (ctx, p) => {
       const category = requireCategory(ctx, p.category);
       const enabled = requireEnabled(p.enabled);
@@ -425,12 +433,18 @@ export const categoryActions: Record<string, ActionSpec> = {
     kind: "handler",
     effect: "mutate",
     offline: "With no editor running, writes the engine's setting file; reaches the editor only when one is attached.",
+    params: {
+      required: ["toolsets", "enabled"],
+      notes: {
+        toolsets: "names, as epic(list_toolsets) gives them",
+        enabled: "bool",
+      },
+    },
     description:
       "Turn Unreal toolsets on or off in the editor's Toolset Registry by name, which is what Epic's own MCP server and the AI Assistant read too. "
       + "Live through the bridge when the editor answers; written to the project's setting file when no editor runs (UE 5.9 Config/DefaultGame.ini, "
       + "UE 5.8 the per-user EditorPerProjectUserSettings.ini), applied at its next start; refused when an editor runs but its bridge does not answer. "
-      + "The ue-mcp surface is not changed: set_category_enabled with scope 'epic' does both. "
-      + "Params: toolsets (names, as epic(list_toolsets) gives them), enabled (bool)",
+      + "The ue-mcp surface is not changed: set_category_enabled with scope 'epic' does both.",
     handler: async (ctx, p) => {
       const toolsets = readToolsets(p.toolsets);
       const enabled = requireEnabled(p.enabled);

@@ -3,6 +3,7 @@ import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { levelTool } from "../../src/tools/level.js";
+import { actionSchema } from "../../src/surface/action-schema.js";
 import { ALL_TOOLS } from "../../src/tools.js";
 import { REGISTERED_HANDLER_TIMEOUT_SECONDS } from "../../src/bridge/bridge-timeouts.js";
 import { auditHandlers, readRegistrations } from "../../scripts/audit-handler-conventions.mjs";
@@ -53,9 +54,10 @@ describe("editor loaded region actions: the advertised spec", () => {
       { mode: "atLeastOne", branches: [["ids"], ["bounds"]] },
     ]);
     expect(spec("load_region")?.paramSpec?.map((p) => p.name)).toEqual(["bounds", "label", "maxActors", "dryRun"]);
-    expect(levelTool.actions.unload_loaded_regions.description).toContain(
-      "Params: at least one of ids/bounds, maxRegions?, force?, dryRun?",
-    );
+    const unload = actionSchema(levelTool, "unload_loaded_regions");
+    expect(unload.alternatives).toEqual([{ branches: [["ids"], ["bounds"]], required: true }]);
+    expect(unload.params.filter((p) => ["maxRegions", "force", "dryRun"].includes(p.name)).map((p) => p.required))
+      .toEqual([false, false, false]);
   });
 
   it("refuses an unload that names no region before anything is sent", async () => {

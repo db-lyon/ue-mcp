@@ -53,11 +53,18 @@ export const leaseActions: Record<string, ActionSpec> = {
     effect: "mutate",
     offline: "Asset leases live in this server process, not in the editor.",
     assetCoordination: true,
+    params: {
+      required: ["paths"],
+      optional: ["ttlSeconds"],
+      notes: {
+        paths: "asset paths",
+        ttlSeconds: `default from leases.ttlSeconds, 600; max ${MAX_LEASE_TTL_SECONDS}`,
+      },
+    },
     description:
       "Claim assets for this session so another agent on the same editor cannot change them until the lease is released, runs out, or this session ends. "
       + "A path another session holds refuses the whole request, naming the holder and when its lease runs out. Calling again renews. "
-      + "A folder path with a trailing slash covers every asset under it. Off when ue-mcp.yml sets leases.mode: off. "
-      + `Params: paths (asset paths), ttlSeconds? (default from leases.ttlSeconds, 600; max ${MAX_LEASE_TTL_SECONDS})`,
+      + "A folder path with a trailing slash covers every asset under it. Off when ue-mcp.yml sets leases.mode: off.",
     handler: async (ctx, p) => {
       const leases = registry(ctx);
       if (!leases.enforcing) {
@@ -80,9 +87,10 @@ export const leaseActions: Record<string, ActionSpec> = {
     effect: "mutate",
     offline: "Asset leases live in this server process, not in the editor.",
     assetCoordination: true,
+    params: { optional: ["paths"] },
     description:
       "Release this session's leases: the paths named, or every lease it holds in this editor when none are. "
-      + "Only the holder can release a lease; another session's runs out on its own or when that session ends. Params: paths?",
+      + "Only the holder can release a lease; another session's runs out on its own or when that session ends.",
     handler: async (ctx, p) => {
       const leases = registry(ctx);
       const holder = holderOf(ctx);
@@ -96,8 +104,9 @@ export const leaseActions: Record<string, ActionSpec> = {
     effect: "read",
     offline: "Asset leases live in this server process, not in the editor.",
     assetCoordination: true,
+    params: {},
     description:
-      "Every live asset lease on this server, which session holds each and when it runs out, plus the lease mode and whether calls take leases implicitly right now. Params: none",
+      "Every live asset lease on this server, which session holds each and when it runs out, plus the lease mode and whether calls take leases implicitly right now.",
     handler: async (ctx) => {
       const leases = registry(ctx);
       const holder = holderOf(ctx);

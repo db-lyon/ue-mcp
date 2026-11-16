@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { animationTool } from "../../src/tools/animation.js";
+import { actionSchema } from "../../src/surface/action-schema.js";
 import type { ToolContext } from "../../src/surface/tool-types.js";
 import { readHandlerFile } from "../../scripts/lib/cpp-registrations.mjs";
 
@@ -7,8 +8,9 @@ describe("animation.add_transition blend settings (#1149)", () => {
   it("advertises blendDuration and blendLogic", () => {
     const action = animationTool.actions.add_transition;
     expect(action.bridge).toBe("add_transition");
-    expect(action.description).toContain("blendDuration?");
-    expect(action.description).toContain("blendLogic?");
+    const byName = new Map(actionSchema(animationTool, "add_transition").params.map((p) => [p.name, p]));
+    expect(byName.get("blendDuration")?.required).toBe(false);
+    expect(byName.get("blendLogic")?.required).toBe(false);
   });
 
   it("forwards blendDuration and blendLogic to the bridge", async () => {

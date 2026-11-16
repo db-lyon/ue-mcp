@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { parseParams } from "../../src/surface/action-schema.js";
+import { actionAccepts } from "../../src/surface/action-schema.js";
 import { materialTool } from "../../src/tools/material.js";
 import { handlerSpecs } from "../../src/tools/specs/material.generated.js";
 
 describe("material function expression editing (#1138)", () => {
   it("documents functionPath on the expression edit actions", () => {
     for (const action of ["set_expression_value", "set_custom_expression", "delete_expression"]) {
-      const params = parseParams(materialTool.actions[action].description ?? "").params.map((p) => p.name);
+      const params = actionAccepts(materialTool.actions[action])?.takes ?? [];
       expect(params, `${action} documents functionPath`).toContain("functionPath");
       expect(params, `${action} still documents materialPath`).toContain("materialPath");
     }

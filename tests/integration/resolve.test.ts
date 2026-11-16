@@ -10,7 +10,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { covers } from "../helpers/covers.js";
 import { plain, runCli, Sandbox, type CliResult } from "./harness.js";
 import { installShim } from "./feedback-fakes.js";
-import { AGENT_CLIENT } from "../../src/integrations/mcp-clients/agent-client.js";
+import { resolveClaudeArgs } from "../../src/cli/resolve.js";
 
 let sb: Sandbox;
 let gh: ReturnType<typeof installShim>;
@@ -121,7 +121,7 @@ describe("ue-mcp resolve", () => {
     expect(prRequest(work).body).toContain("Resolves #5");
 
     const run = claude.calls().find((c) => c.args[0] !== "--version")!;
-    expect(run.args).toEqual(AGENT_CLIENT.resolveArgs());
+    expect(run.args).toEqual(resolveClaudeArgs());
     expect(run.args).not.toContain("--dangerously-skip-permissions");
     expect(run.stdin).toContain(`Title: ${HOSTILE_TITLE}`);
     expect(run.stdin).toContain(body);

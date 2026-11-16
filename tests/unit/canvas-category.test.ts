@@ -74,7 +74,7 @@ describe("canvas category", () => {
       expect(b.bridge, action).toBe("epic_call_mcp_tool");
       expect(b.mcpTool?.plugin, action).toBe("UnrealCanvasBridge");
       expect(Object.keys(TOOL_INPUTS), action).toContain(b.mcpTool!.name);
-      expect(b.description, action).toMatch(/Params: /);
+      expect(b.params ?? b.paramSpec ?? b.epicSchema, action).toBeDefined();
       expect(runsEpicMcpTool(ALL_TOOLS, `canvas.${action}`)).toBe(true);
     }
   });
