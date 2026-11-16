@@ -1,3 +1,4 @@
+// @session independent: A pure version table; it never reads a project or an editor.
 /**
  * The engine version each Epic integration behaviour starts at, in one table.
  *

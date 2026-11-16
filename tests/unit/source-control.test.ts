@@ -111,14 +111,10 @@ describe("source_control", () => {
     expect(method.indexOf("RequireOperation("), name).toBeLessThan(method.indexOf("Execute("));
   });
 
-  it("asks CanExecuteOperation only on engines that have it, and never names a provider in code", () => {
-    expect(HANDLERS).toMatch(/#define UE_MCP_SCC_HAS_CAN_EXECUTE \(ENGINE_MAJOR_VERSION > 5 \|\| \(ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 3\)\)/);
-    for (const call of HANDLERS.matchAll(/CanExecuteOperation\(/g)) {
-      const guard = HANDLERS.lastIndexOf("#if UE_MCP_SCC_HAS_CAN_EXECUTE", call.index);
-      const close = HANDLERS.indexOf("#endif", guard);
-      expect(guard, "CanExecuteOperation outside the version guard").toBeGreaterThan(-1);
-      expect(close).toBeGreaterThan(call.index!);
-    }
+  it("asks CanExecuteOperation, which every supported engine has, and never names a provider in code", () => {
+    // CanExecuteOperation arrived in 5.3, below the oldest supported engine, so it needs no gate.
+    expect(HANDLERS).toMatch(/CanExecuteOperation\(/);
+    expect(HANDLERS).not.toMatch(/UE_MCP_SCC_HAS_CAN_EXECUTE/);
     // Behaviour follows the provider's answers, not its name.
     expect(HANDLERS).not.toMatch(/GetName\(\)\s*(==|!=|\.Equals|\.ToString\(\)\s*==)/);
   });
