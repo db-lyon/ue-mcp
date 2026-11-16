@@ -1,16 +1,13 @@
-#!/usr/bin/env node
 // @session per-session: Runs against the project the hook payload named.
 /**
- * Claude Code hook handler - shipped with ue-mcp so it stays in sync.
- *
- * Usage (from .claude/settings.json):
- *   "command": "npx ue-mcp hook post-tool-use"
+ * `ue-mcp hook post-tool-use`, the command hook-installer.ts writes into
+ * .claude/settings.json. Shipped with ue-mcp so it stays in sync.
  *
  * Reads the hook payload from stdin, emits JSON to stdout when the
  * agent needs a nudge (e.g. after execute_python workarounds).
  */
 
-import { hookProjectDir, feedbackDisabledForDir, type HookPayload } from "../integrations/claude-code/hook-session.js";
+import { hookProjectDir, feedbackDisabledForDir, type HookPayload } from "./hook-session.js";
 
 interface HookInput extends HookPayload {
   tool_output?: string;

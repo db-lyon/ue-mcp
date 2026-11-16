@@ -3,8 +3,14 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import {
+  CLIENT_IDS,
+  CLIENT_LOCATIONS,
+  clientsNearestFirst,
   detectMcpClients,
   isProjectScopedClient,
+  projectScopedClientsAt,
+  readUeMcpEntry,
+  removeUeMcpEntry,
   upsertCodexMcpServer,
   writeMcpConfig,
   writeCodexMcpConfig,
@@ -182,6 +188,42 @@ describe("Codex MCP client config", () => {
     expect(result).toContain('args = ["-y", "--min-release-age=0", "ue-mcp@latest", "M:/PerforceWorkspace/Territory/Territory.uproject"]');
     expect(result).toContain('cwd = "M:/PerforceWorkspace/Territory"');
     expect(result).toContain("enabled = true");
+  });
+
+  it("reads, replaces and removes the entry under its quoted table name too", () => {
+    const configPath = path.join(tmpRoot, ".codex", "config.toml");
+    fs.mkdirSync(path.dirname(configPath), { recursive: true });
+    fs.writeFileSync(configPath, '[mcp_servers."ue-mcp"]\ncommand = "npx"\nargs = ["-y", "ue-mcp@1.2.3", "C:/G/G.uproject"]\n');
+    const client = { configPath, format: "toml" as const };
+    expect(readUeMcpEntry(client)).toMatchObject({ configured: true, pinned: "1.2.3", project: "C:/G/G.uproject" });
+    expect(upsertCodexMcpServer(fs.readFileSync(configPath, "utf-8"), "C:/G/G.uproject")).not.toContain('"ue-mcp"]');
+    expect(removeUeMcpEntry(client)).toBe(true);
+    expect(fs.readFileSync(configPath, "utf-8")).toBe("");
+  });
+});
+
+describe("client locations", () => {
+  it("derives the ids, the project scope and the per-project files from the one table", () => {
+    expect(Object.keys(CLIENT_IDS)).toEqual(CLIENT_LOCATIONS.map((l) => l.id));
+    for (const l of CLIENT_LOCATIONS) expect(isProjectScopedClient(l.name)).toBe(l.base === "project");
+    expect(projectScopedClientsAt(tmpRoot).map((c) => c.name)).toEqual(
+      ["Claude Code (project)", "Cursor", "VS Code", "Gemini CLI", "Codex (project)"],
+    );
+  });
+
+  it("lists the config files nearest first: project, then home, then app data", () => {
+    process.env.APPDATA = path.join(tmpRoot, "Roaming");
+    const projectDir = path.join(tmpRoot, "P");
+    expect(clientsNearestFirst(projectDir).map((c) => c.configPath)).toEqual([
+      path.join(projectDir, ".mcp.json"),
+      path.join(projectDir, ".cursor", "mcp.json"),
+      path.join(projectDir, ".vscode", "mcp.json"),
+      path.join(projectDir, ".gemini", "settings.json"),
+      path.join(projectDir, ".codex", "config.toml"),
+      path.join(tmpRoot, ".claude", ".mcp.json"),
+      path.join(tmpRoot, ".codex", "config.toml"),
+      path.join(tmpRoot, "Roaming", "Claude", "claude_desktop_config.json"),
+    ]);
   });
 });
 

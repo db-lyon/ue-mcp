@@ -6,6 +6,7 @@
  */
 import { isHelpRequest, runCli, type CliRun, type CliUsage } from "./cli-main.js";
 import { packageVersion } from "../core/package-root.js";
+import { AGENT_CLIENT } from "../integrations/mcp-clients/agent-client.js";
 
 export interface CliCommand {
   name: string;
@@ -31,7 +32,7 @@ export const CLI_COMMANDS: readonly CliCommand[] = [
   { name: "projects", summary: "List this computer's Unreal projects and daemons (--json), add or remove one", load: () => import("./projects-cli.js") },
   { name: "status", summary: "Report one project's install and editor state (--json)", load: () => import("./status.js") },
   { name: "deploy", summary: "Deploy the bridge plugin into a project", load: () => import("./deploy-cli.js") },
-  { name: "hook", summary: "Claude Code hook handler", load: () => import("./hook-handler.js") },
+  { name: "hook", summary: AGENT_CLIENT.hookSummary, load: () => AGENT_CLIENT.loadHookHandler() },
   { name: "uninstall-hooks", summary: "Remove a project's installed hooks", load: () => import("./uninstall-hooks.js") },
   { name: "auth", summary: "Authorize feedback issues as your GitHub account", load: () => import("./auth-cli.js") },
   {

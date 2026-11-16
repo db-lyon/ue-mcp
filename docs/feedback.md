@@ -221,7 +221,7 @@ feedback(action="submit",
 
 `npx ue-mcp init` offers an opt-in Claude Code PostToolUse hook that runs after every `execute_python` call and tells the agent to describe the workaround and offer `feedback(submit)`. Without it, the agent files feedback only when you ask.
 
-The hook lives in `<project>/.claude/settings.json`, and its path is recorded in `~/.ue-mcp/state.json` so a later `init` can find it. Remove installed hooks with:
+The hook lives in `<project>/.claude/settings.json`, and its path is recorded in `~/.ue-mcp/state.json` so a later `init` can find it. It runs `npx -y --min-release-age=0 ue-mcp@latest hook post-tool-use`, which launches the same release the MCP server entry does. Running `init` again updates a hook written in the older `npx ue-mcp hook post-tool-use` form. Remove installed hooks with:
 
 ```bash
 npx ue-mcp uninstall-hooks

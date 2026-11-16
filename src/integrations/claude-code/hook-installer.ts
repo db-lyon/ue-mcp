@@ -3,6 +3,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { warn as logWarn } from "../../core/log.js";
 import { getInstalledHooks, setInstalledHooks } from "../../config/hook-state.js";
+import { MCP_SERVER_ENTRY, UE_MCP_LAUNCH } from "../mcp-clients/mcp-client-config.js";
 
 /**
  * Symmetric install/uninstall for the Claude Code PostToolUse hook that
@@ -20,8 +21,15 @@ import { getInstalledHooks, setInstalledHooks } from "../../config/hook-state.js
  *      doesn't have our matcher is a no-op, not an error.
  */
 
-const MATCHER = "mcp__ue-mcp__editor";
-const COMMAND = "npx ue-mcp hook post-tool-use";
+/** Claude Code names an MCP tool `mcp__<server>__<tool>`. */
+const MATCHER = `mcp__${MCP_SERVER_ENTRY}__editor`;
+/**
+ * Launched the way the server entry is, so the hook runs the same release.
+ * Hooks written earlier as `npx ue-mcp hook post-tool-use` are found by the
+ * matcher, rewritten on install and removed on uninstall.
+ */
+export const HOOK_COMMAND = `${UE_MCP_LAUNCH} hook post-tool-use`;
+const HOOK_COMMAND_PATTERN = /\bue-mcp(@\S+)?\s+hook\s+post-tool-use\b/;
 
 interface ClaudeHookEntry {
   type: string;
@@ -92,14 +100,13 @@ export function installClaudeHooks(
   if (!settings.hooks) settings.hooks = {};
   if (!settings.hooks.PostToolUse) settings.hooks.PostToolUse = [];
 
-  const already = settings.hooks.PostToolUse.some(
-    (h) => h.matcher === MATCHER,
-  );
-  if (!already) {
-    settings.hooks.PostToolUse.push({
-      matcher: MATCHER,
-      hooks: [{ type: "command", command: COMMAND }],
-    });
+  const ours = settings.hooks.PostToolUse.filter((h) => h.matcher === MATCHER);
+  if (ours.length === 0) {
+    settings.hooks.PostToolUse.push({ matcher: MATCHER, hooks: [{ type: "command", command: HOOK_COMMAND }] });
+  }
+  // Bring an earlier launch form up to date, leaving any hook the user added beside it.
+  for (const entry of ours) {
+    entry.hooks = entry.hooks.map((h) => (HOOK_COMMAND_PATTERN.test(h.command) ? { ...h, command: HOOK_COMMAND } : h));
   }
 
   writeSettings(settingsPath, settings);

@@ -1,5 +1,20 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { elicitationNeedsRelay, progressRenderingNote } from "../../src/dispatch/client-quirks.js";
+import { CLIENT_QUIRKS, elicitationNeedsRelay, progressRenderingNote } from "../../src/core/client-quirks.js";
+
+describe("CLIENT_QUIRKS", () => {
+  it("names the upstream report and the removal condition of every entry", () => {
+    for (const quirk of CLIENT_QUIRKS) {
+      expect(quirk.tracking.trim(), quirk.effect).not.toBe("");
+      expect(quirk.removeWhen.trim(), quirk.effect).not.toBe("");
+    }
+  });
+
+  it("matches every entry on some client name", () => {
+    for (const quirk of CLIENT_QUIRKS) {
+      expect((quirk.match.exact?.length ?? 0) + (quirk.match.contains?.length ?? 0), quirk.effect).toBeGreaterThan(0);
+    }
+  });
+});
 
 describe("progressRenderingNote", () => {
   it("explains the collapse on the affected Claude Code versions", () => {

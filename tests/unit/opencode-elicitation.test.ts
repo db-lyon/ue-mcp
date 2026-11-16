@@ -5,7 +5,7 @@
  */
 import { describe, expect, it, vi } from "vitest";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { elicitationUnrenderedNote } from "../../src/dispatch/client-quirks.js";
+import { elicitationUnrenderedNote } from "../../src/core/client-quirks.js";
 import { buildElicit } from "../../src/server/server-dispatch.js";
 import { clientAdvertisesElicitation, resolveDialogMode } from "../../src/editor/dialog-mode.js";
 import { DialogGuard, type GuardDeps } from "../../src/editor/dialog-guard.js";
