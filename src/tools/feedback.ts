@@ -15,7 +15,7 @@ import {
   deleteFallbackReport,
   type FallbackReport,
 } from "../feedback/feedback-fallback.js";
-import { getFeedbackMode, type FeedbackMode } from "../config/user-state.js";
+import { FEEDBACK_MODE, type FeedbackMode } from "../config/modes.js";
 import { clientAdvertisesElicitation } from "../editor/dialog-mode.js";
 import { warn } from "../core/log.js";
 import { routeFeedback, type RoutingDecision } from "../feedback/feedback-routing.js";
@@ -23,30 +23,12 @@ import { CORE_REPO, newIssueUrl, parseRepoSlug, repoSlug, sameRepo, type GitHubR
 import { readEnv } from "../core/env.js";
 
 /**
- * Resolve the active feedback mode. Precedence (highest wins):
- *
- *   1. UE_MCP_FEEDBACK_MODE env var       - per-process override
- *   2. ~/.ue-mcp/state.json, this project - per-project, set via
- *                                            `npx ue-mcp feedback mode <m> --editor <name>`
- *   3. ~/.ue-mcp/state.json preference    - per-user-per-device, set via
- *                                            `npx ue-mcp feedback mode`
- *   4. default "interactive"
- *
- * The project-scoped layer is what makes this per session (#817): one editor
- * can be a long unattended run while the user sits in front of another, and a
- * single per-device answer cannot describe both.
- *
- * Mode is NOT read from ue-mcp.yml. It's a per-user preference that varies
- * across machines and developers (am I at the keyboard, is this an
- * unattended run, etc.) - not project policy. The agent has no surface to
- * change this; it's set by the human running the server.
+ * The feedback mode for this session's project (config/modes.ts). The agent
+ * has no surface to change it; the person running the server sets it with
+ * `ue-mcp feedback mode`.
  */
 function resolveFeedbackMode(ctx: ToolContext): FeedbackMode {
-  const env = (readEnv("feedbackMode") ?? "").trim().toLowerCase();
-  if (env === "auto-approve" || env === "defer" || env === "interactive") return env;
-  const pref = getFeedbackMode(ctx.project?.projectDir ?? null);
-  if (pref) return pref;
-  return "interactive";
+  return FEEDBACK_MODE.resolve(ctx.project?.projectDir ?? null).value ?? "interactive";
 }
 
 const PLACEHOLDER_TITLE_RE =

@@ -14,10 +14,10 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { downloadVerified, extractZip, sha256Of } from "../core/archive.js";
-import { extensionsDir } from "./extensions.js";
-import { EXTENSION_API_MIN_VERSION, EXTENSION_API_VERSION, extensionApiSupported } from "./extension-api.js";
+import { extensionGate, extensionsDir } from "./extensions.js";
+import { isExtensionName, type ExtensionManifest as PackageExtensionField } from "./extension-api.js";
 import { installedCopies, isLeftover, migrateLegacy, pruneVersions, recordVersion, versionDir } from "./extension-versions.js";
-import { clearExtensionRecords } from "../config/user-state.js";
+import { clearExtensionRecords } from "../config/extension-state.js";
 
 /**
  * A release manifest: the archive and its hash, and optionally the channel of
@@ -101,16 +101,15 @@ export async function installExtension(
     const pkgDir = packageRootIn(unpacked);
     if (!pkgDir) throw new Error(`${source} has no package.json at its root`);
     const pkg = JSON.parse(fs.readFileSync(path.join(pkgDir, "package.json"), "utf-8")) as {
-      version?: string; main?: string; ueMcpExtension?: { name?: string; api?: { min?: number; max?: number } };
+      version?: string; main?: string; ueMcpExtension?: PackageExtensionField;
     };
     const name = pkg.ueMcpExtension?.name;
-    if (!name || !/^[a-z0-9][a-z0-9-]*$/.test(name)) throw new Error(`${source} is not a ue-mcp extension (package.json has no valid ueMcpExtension.name)`);
-    if (!pkg.main || !fs.existsSync(path.join(pkgDir, pkg.main))) throw new Error(`${name}: main ${pkg.main ?? "(unset)"} is missing from the archive`);
-    const min = pkg.ueMcpExtension?.api?.min ?? 1;
-    const max = pkg.ueMcpExtension?.api?.max ?? min;
-    if (!extensionApiSupported(min, max)) {
-      throw new Error(`${name} needs extension API ${min}..${max}; this ue-mcp serves ${EXTENSION_API_MIN_VERSION}..${EXTENSION_API_VERSION}`);
+    if (!name || !isExtensionName(name)) {
+      throw new Error(`${source} is not a ue-mcp extension (package.json has no valid ueMcpExtension.name: lowercase letters, digits and hyphens, starting with a letter or digit)`);
     }
+    if (!pkg.main || !fs.existsSync(path.join(pkgDir, pkg.main))) throw new Error(`${name}: main ${pkg.main ?? "(unset)"} is missing from the archive`);
+    const { refusal } = extensionGate(name, pkg.ueMcpExtension);
+    if (refusal) throw new Error(refusal.reason);
 
     const version = pkg.version ?? "0.0.0";
     const root = opts.root ?? extensionsDir();

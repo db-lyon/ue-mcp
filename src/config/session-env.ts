@@ -15,36 +15,35 @@
  * tell them apart. At one editor nothing here runs: there is nothing to
  * flatten and no message to print.
  */
+import { ENV_VARS, SETTINGS, readEnv, type EnvVar } from "../core/env.js";
 
-export interface CollapsingEnvVar {
-  /** The variable that is set. */
-  variable: string;
+interface CollapsingEnvVar {
+  env: EnvVar;
   /** The per-project key that differentiates the sessions when it is unset. */
   configKey: string;
   /** What it decides, in the reader's terms. */
   decides: string;
 }
 
+const modeKey = (name: string): string => `${name} mode (npx ue-mcp ${name} mode <m> --editor <name>)`;
+
 const COLLAPSING: CollapsingEnvVar[] = [
-  // First, because it decides first. engine-root.ts makes this candidate #1,
-  // ahead of UE_BUILD_TOOL_PATH, editor.buildToolPath, UE_EDITOR_PATH and
-  // editor.path, so a value left over from an earlier build session launches
-  // and builds a 5.6 project and a 5.8 project against one engine. Leaving it
-  // out of this list meant the startup output named every variable that did
-  // not decide and stayed silent about the one that did.
+  // First, because it decides first: engine-root.ts makes it candidate #1,
+  // ahead of every editor and build tool setting, so a value left over from an
+  // earlier build session builds a 5.6 project and a 5.8 project against one engine.
   {
-    variable: "UE_MCP_TEST_ENGINE_ROOT",
+    env: "testEngineRoot",
     configKey: "editor.path / editor.buildToolPath",
     decides: "the engine tree every session launches and builds against, ahead of every other engine setting",
   },
-  { variable: "UE_MCP_PORT", configKey: "bridge.port", decides: "the bridge port every session connects on" },
-  { variable: "UE_MCP_HOST", configKey: "bridge.host", decides: "the host every session's bridge is reached on" },
-  { variable: "UE_EDITOR_PATH", configKey: "editor.path", decides: "the editor binary every session launches" },
-  { variable: "UE_BUILD_TOOL_PATH", configKey: "editor.buildToolPath", decides: "the build tool every session compiles with" },
-  { variable: "UE_MCP_ENV", configKey: "env", decides: "the ue-mcp.<env>.yml overlay every session merges" },
-  { variable: "UE_MCP_CONTEXT_STRATEGY", configKey: "context.strategy", decides: "the context strategy for the whole server" },
-  { variable: "UE_MCP_FEEDBACK_MODE", configKey: "feedback mode (npx ue-mcp feedback mode <m> --editor <name>)", decides: "the feedback approval mode every session uses" },
-  { variable: "UE_MCP_DIALOG_MODE", configKey: "dialog mode (npx ue-mcp dialog mode <m> --editor <name>)", decides: "how a modal dialog blocking any session's editor is handled, including whether the agent gets to answer it" },
+  { env: "port", configKey: SETTINGS.bridgePort.config!, decides: "the bridge port every session connects on" },
+  { env: "host", configKey: SETTINGS.bridgeHost.config!, decides: "the host every session's bridge is reached on" },
+  { env: "editorPath", configKey: SETTINGS.editorPath.config!, decides: "the editor binary every session launches" },
+  { env: "buildToolPath", configKey: SETTINGS.buildToolPath.config!, decides: "the build tool every session compiles with" },
+  { env: "env", configKey: "env", decides: "the ue-mcp.<env>.yml overlay every session merges" },
+  { env: "contextStrategy", configKey: "context.strategy", decides: "the context strategy for the whole server" },
+  { env: "feedbackMode", configKey: modeKey("feedback"), decides: "the feedback approval mode every session uses" },
+  { env: "dialogMode", configKey: modeKey("dialog"), decides: "how a modal dialog blocking any session's editor is handled, including whether the agent gets to answer it" },
 ];
 
 /**
@@ -61,10 +60,10 @@ export function collapsingEnvWarnings(
   const names = sessionNames.join(", ");
   const out: string[] = [];
   for (const entry of COLLAPSING) {
-    const value = env[entry.variable];
+    const value = readEnv(entry.env, env);
     if (typeof value !== "string" || value.trim() === "") continue;
     out.push(
-      `${entry.variable}=${value} decides ${entry.decides}, so it applies to all ${sessionNames.length} editors ` +
+      `${ENV_VARS[entry.env]}=${value} decides ${entry.decides}, so it applies to all ${sessionNames.length} editors ` +
         `(${names}) and overrides what any of them configured. Unset it and give each project its own ` +
         `'${entry.configKey}' to tell them apart.`,
     );

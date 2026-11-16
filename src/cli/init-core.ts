@@ -32,7 +32,8 @@ import {
 } from "../extensions/skills.js";
 import { AGENT_GUIDE_FILES, hasGuide, removeGuide, writeGuide } from "../integrations/agent-guides.js";
 import { installClaudeHooks, uninstallClaudeHooks } from "../integrations/claude-code/hook-installer.js";
-import { getFeedbackModeScopes, getInstalledHooks, setFeedbackMode, type FeedbackMode } from "../config/user-state.js";
+import { getInstalledHooks } from "../config/hook-state.js";
+import { FEEDBACK_MODE, type FeedbackMode } from "../config/modes.js";
 import {
   CLIENT_IDS,
   clientId,
@@ -72,7 +73,7 @@ import {
 } from "../integrations/epic/project-status.js";
 import { packageVersion } from "../core/package-root.js";
 import { warn as logWarn } from "../core/log.js";
-import { readEnv } from "../core/env.js";
+import { resolveSetting } from "../core/env.js";
 import { editDisableEntries, isScopeOff, parseDisableEntry, readCategoryState } from "../surface/category-state.js";
 import { readUserAuthSync } from "../github/auth.js";
 
@@ -173,8 +174,6 @@ export interface InitChoices {
   unrealAssistant?: boolean;
 }
 
-export const FEEDBACK_MODES: readonly FeedbackMode[] = ["interactive", "auto-approve", "defer"];
-
 /** The feedback approval mode in effect, and which setting decided it. */
 export interface PlannedFeedbackMode {
   mode: FeedbackMode;
@@ -186,13 +185,10 @@ export interface PlannedFeedbackMode {
 
 /** The effective feedback mode for a project, counting a mode about to be stored for it. */
 export function feedbackModeOf(projectDir: string, set: FeedbackMode | null = null): PlannedFeedbackMode {
-  const env = (readEnv("feedbackMode") ?? "").trim().toLowerCase() as FeedbackMode;
-  if (FEEDBACK_MODES.includes(env)) return { mode: env, scope: "env", set };
-  const scopes = getFeedbackModeScopes(projectDir);
-  const project = set ?? scopes.project;
-  if (project) return { mode: project, scope: "project", set };
-  if (scopes.user) return { mode: scopes.user, scope: "user", set };
-  return { mode: "interactive", scope: "default", set };
+  const scopes = FEEDBACK_MODE.scopes(projectDir);
+  const resolved = resolveSetting("feedbackMode", { project: set ?? scopes.project, user: scopes.user });
+  const scope = resolved.source === "env" || resolved.source === "project" || resolved.source === "user" ? resolved.source : "default";
+  return { mode: resolved.value ?? "interactive", scope, set };
 }
 
 export interface PlannedClient {
@@ -793,8 +789,8 @@ export async function apply(p: InitPlan): Promise<InitResult> {
 
     // 7. The project's feedback approval mode, a per-user setting kept in ~/.ue-mcp/state.json.
     if (p.feedbackMode.set) {
-      const before = getFeedbackModeScopes(projectDir).project;
-      if (before !== p.feedbackMode.set) setFeedbackMode(p.feedbackMode.set, projectDir);
+      const before = FEEDBACK_MODE.scopes(projectDir).project;
+      if (before !== p.feedbackMode.set) FEEDBACK_MODE.set(p.feedbackMode.set, projectDir);
       steps.push({
         id: "feedback-mode",
         status: before === p.feedbackMode.set ? "unchanged" : "changed",

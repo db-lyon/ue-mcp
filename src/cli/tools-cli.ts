@@ -23,6 +23,7 @@ import { setDefaultLogLevel } from "../core/log.js";
 import { readAnsweringDiscovery, type DaemonDiscovery } from "../daemon/discovery.js";
 import { BOLD, DIM, GREEN, RED, RESET, YELLOW } from "../terminal/ansi.js";
 import type { CliUsage } from "./cli-main.js";
+import { selectProject } from "./editor-flag.js";
 
 export const usage: CliUsage = {
   usage: "ue-mcp tools <list|enable|disable> [category|toolset ...] [flags]",
@@ -38,6 +39,7 @@ export const usage: CliUsage = {
     { name: "--native", description: "Categories: only ue-mcp's own actions" },
     { name: "--epic", description: "Categories: only the actions wrapping Unreal's toolsets, and those toolsets in the editor" },
     { name: "--project", value: "<uproject>", description: "The project, instead of the one in the working directory" },
+    { name: "--editor", value: "<name-or-path>", description: "Target one of the editors this server drives" },
     { name: "--json", description: "Print the actions' JSON results only" },
   ],
 };
@@ -61,11 +63,7 @@ export function parseToolsArgs(argv: readonly string[]): ToolsCliArgs {
     if (a === "--native") native = true;
     else if (a === "--epic") epic = true;
     else if (a === "--json") out.json = true;
-    else if (a === "--project" || a.startsWith("--project=")) {
-      const v = a.includes("=") ? a.slice(a.indexOf("=") + 1) : argv[++i];
-      if (!v) throw new ToolsArgError("--project needs a .uproject path.");
-      out.project = v;
-    } else if (a.startsWith("-")) throw new ToolsArgError(`Unknown flag ${a}.`);
+    else if (a.startsWith("-")) throw new ToolsArgError(`Unknown flag ${a}.`);
     else if (out.sub === undefined) out.sub = a;
     else out.names.push(a);
   }
@@ -188,7 +186,8 @@ function printList(data: Record<string, unknown>): void {
 export async function run(argv: string[]): Promise<number> {
   let args: ToolsCliArgs;
   try {
-    args = parseToolsArgs(argv);
+    const target = selectProject(argv, { projectFlag: true });
+    args = { ...parseToolsArgs(target.rest), project: target.projectPath };
   } catch (e) {
     console.error(`  ${RED}${e instanceof Error ? e.message : String(e)}${RESET}`);
     return 2;

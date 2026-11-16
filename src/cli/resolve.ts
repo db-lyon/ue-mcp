@@ -9,16 +9,10 @@
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { takeEditorTarget, EditorFlagError } from "./editor-flag.js";
-import { projectDirOf } from "../config/uproject-path.js";
-import { RESET, BOLD, DIM, RED, CYAN, YELLOW, ok } from "../terminal/ansi.js";
+import { selectProjectOrExit } from "./editor-flag.js";
+import { RESET, BOLD, DIM, RED, CYAN, YELLOW, ok, die as fail } from "../terminal/ansi.js";
 import { commandInvocation, spawnInvocation, spawnInvocationSync } from "../core/safe-spawn.js";
 import type { CliUsage } from "./cli-main.js";
-
-const fail = (msg: string) => {
-  console.error(`  ${RED}✗${RESET} ${msg}`);
-  process.exit(1);
-};
 
 /* ── Helpers ─────────────────────────────────────────────────────── */
 
@@ -120,15 +114,9 @@ async function resolve(argv: string[]): Promise<number> {
   // --editor picks which of this server's editors the workflow runs in. Every
   // git and gh call below inherits the process cwd, so the target is applied
   // by moving there once, before any of them run.
-  let target: { projectPath?: string; rest: string[] };
-  try {
-    target = takeEditorTarget(argv);
-  } catch (e) {
-    fail(e instanceof EditorFlagError ? e.message : String(e));
-    return 1;
-  }
-  if (target.projectPath) {
-    const dir = projectDirOf(target.projectPath);
+  const target = selectProjectOrExit(argv);
+  if (target.projectRoot) {
+    const dir = target.projectRoot;
     try {
       process.chdir(dir);
       ok(`Working in ${dir}`);

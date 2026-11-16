@@ -1255,6 +1255,11 @@
         {
           "suite": "integration",
           "file": "tests/integration/plugin-cli.test.ts",
+          "test": "install undoes npm when the plugin collides with a built-in, and says it cannot be overridden"
+        },
+        {
+          "suite": "integration",
+          "file": "tests/integration/plugin-cli.test.ts",
           "test": "records the package npm installed from a folder, not the path given"
         },
         {

@@ -32,6 +32,7 @@ import { info, warn, error, stampLogs } from "../core/log.js";
 import { editorStepFailure } from "./editor-step.js";
 import { readEnv } from "../core/env.js";
 import { packageVersion } from "../core/package-root.js";
+import { compareVersions } from "../core/semver.js";
 import { normalizeProjectRoot } from "../bridge/port.js";
 import { bridgeInstancesDir, findLiveInstanceRecord, type BridgeInstanceRecord } from "../bridge/editor-target.js";
 import type { EditorSession } from "../sessions/session.js";
@@ -59,7 +60,7 @@ import { openUrl } from "../core/open-url.js";
 import { handleFlowRoute, hostIsAllowed } from "../flow/http-server.js";
 import { userDir } from "../core/user-dir.js";
 import { readRegistryAuth } from "../extensions/registry-auth.js";
-import { getDialogModeScopes, getFeedbackModeScopes, setDialogMode, setFeedbackMode, setPlaytestMode } from "../config/user-state.js";
+import { DIALOG_MODE, FEEDBACK_MODE, PLAYTEST_MODE } from "../config/modes.js";
 import { resolvePlaytestMode } from "../editor/playtest-mode.js";
 import { EXTENSION_API_VERSION, type DaemonExtensionApi, type DaemonHealth, type EditorStatus, type McpSessionInfo, type RefusedExtension } from "./extension-api.js";
 import { randomUUID } from "node:crypto";
@@ -626,8 +627,8 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
       },
       modes: {
         get: () => {
-          const feedback = getFeedbackModeScopes(projectDir);
-          const dialog = getDialogModeScopes(projectDir);
+          const feedback = FEEDBACK_MODE.scopes(projectDir);
+          const dialog = DIALOG_MODE.scopes(projectDir);
           return {
             // Unset everywhere, feedback asks, as the tool does; a dialog mode left unset follows the client.
             feedback: { mode: feedback.project ?? feedback.user ?? "interactive", project: feedback.project !== undefined },
@@ -635,9 +636,9 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
             playtest: resolvePlaytestMode(projectDir),
           };
         },
-        setFeedback: (mode) => setFeedbackMode(mode, projectDir),
-        setDialog: (mode) => setDialogMode(mode, projectDir),
-        setPlaytest: (mode) => setPlaytestMode(mode, projectDir),
+        setFeedback: (mode) => FEEDBACK_MODE.set(mode, projectDir),
+        setDialog: (mode) => DIALOG_MODE.set(mode, projectDir),
+        setPlaytest: (mode) => PLAYTEST_MODE.set(mode, projectDir),
       },
       checkpoints: (() => {
         const of = (editor?: string) => {
@@ -1082,7 +1083,7 @@ export async function runDaemon(projects: string[]): Promise<number> {
     return 2;
   }
   const projectDir = path.dirname(path.resolve(projects[0]));
-  const turn = await waitForStartTurn(projectDir, (d) => !isOlder(d.version, packageVersion()), { isStale: discoveryIsStale });
+  const turn = await waitForStartTurn(projectDir, (d) => compareVersions(d.version, packageVersion()) >= 0, { isStale: discoveryIsStale });
   if (turn.action === "defer") {
     info("daemon", `daemon ${turn.live.version} already running (pid ${turn.live.pid}); not starting another`);
     return 0;
@@ -1149,7 +1150,7 @@ const HANDOFF_DRAIN_MS = 90_000;
 /** A live same-or-newer daemon published by another process, other than `ignorePid`. */
 function rivalDaemon(projectDir: string, version: string, ignorePid?: number): DaemonDiscovery | null {
   const d = readLiveDiscovery(projectDir);
-  return d && d.pid !== process.pid && d.pid !== ignorePid && !isOlder(d.version, version) ? d : null;
+  return d && d.pid !== process.pid && d.pid !== ignorePid && compareVersions(d.version, version) >= 0 ? d : null;
 }
 
 async function requestHandoff(d: DaemonDiscovery): Promise<void> {
@@ -1158,21 +1159,4 @@ async function requestHandoff(d: DaemonDiscovery): Promise<void> {
   } catch (e) {
     warn("daemon", `handoff request to pid ${d.pid} failed`, e);
   }
-}
-
-/** True when a is an older release than b. Prerelease ordering follows semver loosely. */
-export function isOlder(a: string, b: string): boolean {
-  const parse = (v: string) => {
-    const [core, pre] = v.split("-", 2);
-    return { nums: core.split(".").map((n) => Number(n) || 0), pre: pre ?? null };
-  };
-  const x = parse(a);
-  const y = parse(b);
-  for (let i = 0; i < 3; i++) {
-    if ((x.nums[i] ?? 0) !== (y.nums[i] ?? 0)) return (x.nums[i] ?? 0) < (y.nums[i] ?? 0);
-  }
-  if (x.pre === y.pre) return false;
-  if (x.pre === null) return false;
-  if (y.pre === null) return true;
-  return x.pre.localeCompare(y.pre, undefined, { numeric: true }) < 0;
 }

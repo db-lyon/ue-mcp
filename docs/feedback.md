@@ -74,8 +74,10 @@ The mode is a per-user setting kept in `~/.ue-mcp/state.json`, optionally scoped
 npx ue-mcp feedback mode                    # the effective mode and where it came from
 npx ue-mcp feedback mode defer              # set the per-user mode
 npx ue-mcp feedback mode defer --editor MyGame   # set it for one project
-npx ue-mcp feedback mode default            # clear it
+npx ue-mcp feedback mode clear              # clear it (default and unset work too)
 ```
+
+`ue-mcp dialog mode` and `ue-mcp playtest mode` take the same shape: no value prints what applies and where it came from, a value sets it, `clear` clears it, and `--editor <name>` scopes it to one project.
 
 `npx ue-mcp init --feedback-mode <mode>` sets the project's mode, and a daemon extension can set it too. For one run, set `UE_MCP_FEEDBACK_MODE`, which is not written to disk:
 

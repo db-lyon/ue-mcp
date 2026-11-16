@@ -8,7 +8,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { classifyDisconnect, ExpectedDisconnect, settleAndClassify } from "../../src/daemon/disconnect.js";
 import { EventLog } from "../../src/daemon/events.js";
-import { isOlder } from "../../src/daemon/daemon.js";
+import { compareVersions } from "../../src/core/semver.js";
 import { resolveServerMode } from "../../src/daemon/server-mode.js";
 import { discoveryPath, readDiscovery, readLiveDiscovery, removeDiscovery, writeDiscovery } from "../../src/daemon/discovery.js";
 import { normalizeProjectRoot } from "../../src/bridge/port.js";
@@ -79,8 +79,9 @@ describe("EventLog", () => {
   });
 });
 
-describe("isOlder", () => {
+describe("version ordering for handoff", () => {
   it("orders releases and prereleases", () => {
+    const isOlder = (a: string, b: string) => compareVersions(a, b) < 0;
     expect(isOlder("1.3.9", "1.3.10")).toBe(true);
     expect(isOlder("1.3.10-beta.2", "1.3.10-beta.16")).toBe(true);
     expect(isOlder("1.3.10-beta.16", "1.3.10")).toBe(true);

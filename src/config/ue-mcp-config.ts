@@ -136,9 +136,11 @@ export interface ConfigLayerFile {
 }
 
 /**
- * The files of a project's cascade in precedence order, low -> high. The
- * caller names the overlay, because the server and the editor plugin choose
- * it by different rules.
+ * The files of a project's cascade in precedence order, low -> high: the
+ * user-global ~/.ue-mcp/config.yml, the tracked ue-mcp.yml, the
+ * ue-mcp.<env>.yml overlay when one is selected, and the untracked
+ * ue-mcp.local.yml. The one statement of that order. The caller names the
+ * overlay, because the server and the editor plugin choose it by different rules.
  */
 export function configLayerFiles(projectDir: string, overlay?: string): ConfigLayerFile[] {
   const layers: ConfigLayerFile[] = [

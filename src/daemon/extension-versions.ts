@@ -14,7 +14,7 @@ import * as path from "node:path";
 import { compareVersions } from "../core/semver.js";
 import { userDir } from "../core/user-dir.js";
 import { projectKey } from "./discovery.js";
-import { getProjectExtensionVersion, recordedExtensionVersions, setProjectExtensionVersion } from "../config/user-state.js";
+import { getProjectExtensionVersion, recordedExtensionVersions, setProjectExtensionVersion } from "../config/extension-state.js";
 
 /** One installed copy of an extension. */
 export interface ExtensionCopy {

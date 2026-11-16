@@ -12,7 +12,8 @@ import { isPidAlive, readBridgeInstanceRecords } from "../bridge/editor-target.j
 import { readEnv } from "../core/env.js";
 import { packageVersion } from "../core/package-root.js";
 import { ProjectContext } from "../config/project.js";
-import { getProjectExtensionVersion, getProjectList, updateProjectList } from "../config/user-state.js";
+import { getProjectExtensionVersion } from "../config/extension-state.js";
+import { getProjectList, updateProjectList } from "../config/project-list-state.js";
 import { daemonDir, projectKey, type DaemonDiscovery } from "../daemon/discovery.js";
 import { extensionsDir } from "../daemon/extensions.js";
 import { installedCopies } from "../daemon/extension-versions.js";

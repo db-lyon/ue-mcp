@@ -9,10 +9,10 @@
  */
 import * as fs from "node:fs";
 import * as path from "node:path";
-import yaml from "js-yaml";
 import { packageVersion } from "../core/package-root.js";
 import { findInstalledPackage } from "./resolver.js";
 import { CORE_OWNER, listSkills, packagedSkillsRoot, readSkillOwnership } from "./skills.js";
+import { PROJECT_SKILLS_DIR, parseSkillFile } from "./skill-file.js";
 
 /** Who a skill belongs to. */
 export type DaemonSkillOwner =
@@ -21,7 +21,7 @@ export type DaemonSkillOwner =
   | { kind: "project" };
 
 /** The project folders skills are read from, in the order a same-named skill wins. */
-export const PROJECT_SKILL_FOLDERS = [".claude/skills", ".agents/skills"] as const;
+export const PROJECT_SKILL_FOLDERS = [PROJECT_SKILLS_DIR, ".agents/skills"] as const;
 export type ProjectSkillFolder = (typeof PROJECT_SKILL_FOLDERS)[number];
 
 /** A copy of a skill another entry with the same id hides. */
@@ -62,26 +62,6 @@ export interface DaemonSkill {
   shadows?: ShadowedSkill[];
   /** What is wrong with SKILL.md, such as frontmatter that does not parse. Empty when nothing is. */
   problems: string[];
-}
-
-const FRONTMATTER = /^---\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)/;
-
-/** Split SKILL.md into its frontmatter and body without ever throwing. */
-export function parseSkillFile(text: string): { frontmatter: Record<string, unknown>; body: string; problems: string[] } {
-  const m = FRONTMATTER.exec(text);
-  if (!m) return { frontmatter: {}, body: text, problems: ["SKILL.md has no frontmatter block."] };
-  const body = text.slice(m[0].length).replace(/^(?:[ \t]*\r?\n)+/, "");
-  try {
-    const doc = yaml.load(m[1]);
-    if (doc === undefined || doc === null) return { frontmatter: {}, body, problems: ["SKILL.md frontmatter is empty."] };
-    if (typeof doc !== "object" || Array.isArray(doc)) {
-      return { frontmatter: {}, body, problems: ["SKILL.md frontmatter is not a mapping of keys to values."] };
-    }
-    return { frontmatter: doc as Record<string, unknown>, body, problems: [] };
-  } catch (e) {
-    const reason = e instanceof Error ? e.message.split("\n")[0] : String(e);
-    return { frontmatter: {}, body, problems: [`SKILL.md frontmatter is not valid YAML: ${reason}`] };
-  }
 }
 
 function filesBeside(dir: string): string[] {
@@ -179,7 +159,7 @@ export function listDaemonSkills(projectDir: string, opts: { packagedRoot?: stri
   for (const folder of PROJECT_SKILL_FOLDERS) {
     const root = path.join(projectDir, ...folder.split("/"));
     for (const id of listSkills(root)) {
-      add(readSkill(path.join(root, id), id, folder === ".claude/skills" ? ownerOf(id) : { kind: "project" }, "project", folder));
+      add(readSkill(path.join(root, id), id, folder === PROJECT_SKILLS_DIR ? ownerOf(id) : { kind: "project" }, "project", folder));
     }
   }
   const packaged = opts.packagedRoot ?? packagedSkillsRoot();

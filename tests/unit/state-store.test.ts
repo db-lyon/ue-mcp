@@ -22,15 +22,14 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import {
-  getDialogMode,
-  setDialogMode,
-  getFeedbackMode,
-  setFeedbackMode,
-  getInstalledHooks,
-  setInstalledHooks,
-  getUserStatePath,
-} from "../../src/config/user-state.js";
+import { DIALOG_MODE, FEEDBACK_MODE } from "../../src/config/modes.js";
+import { getInstalledHooks, setInstalledHooks } from "../../src/config/hook-state.js";
+import { getUserStatePath } from "../../src/config/state-store.js";
+
+const getDialogMode = (root?: string) => DIALOG_MODE.stored(root);
+const setDialogMode = DIALOG_MODE.set;
+const getFeedbackMode = (root?: string) => FEEDBACK_MODE.stored(root);
+const setFeedbackMode = FEEDBACK_MODE.set;
 
 /**
  * Two spellings of ONE project root, derived from the running platform.

@@ -7,17 +7,18 @@ import { BOLD, CYAN, DIM, GREEN, RED, RESET, fail, info, ok, redirectConsoleToSt
 import { checkboxSelect, singleSelect, type CheckboxItem } from "../terminal/select.js";
 import { runFeedbackAuthStep } from "./auth-cli.js";
 import type { CliUsage } from "./cli-main.js";
-import { getInstalledHooks, type FeedbackMode } from "../config/user-state.js";
+import { getInstalledHooks } from "../config/hook-state.js";
+import { FEEDBACK_MODE, type FeedbackMode } from "../config/modes.js";
+import { flagBool, flagValue, orList } from "./args.js";
 import { coreSkillsInstalled } from "../extensions/skills.js";
 import { detectMcpClients, isProjectScopedClient, ueMcpServerArgs } from "../integrations/mcp-clients/mcp-client-config.js";
 import { describeUnrealMcpEntry, findUnrealMcpEntries, type UnrealMcpEntry } from "../integrations/epic/unreal-mcp-entries.js";
-import { takeEditorTarget, EditorFlagError } from "./editor-flag.js";
+import { selectProjectOrExit } from "./editor-flag.js";
 import { findUProject } from "../config/uproject-path.js";
 import { readCategoryState } from "../surface/category-state.js";
 import {
   CATEGORIES,
   ENRICHABLE_CATEGORIES,
-  FEEDBACK_MODES,
   apply,
   engineConfigRoot,
   engineRootReplacements,
@@ -56,22 +57,6 @@ function askPath(): Promise<string> {
 /*  Machine interface: init --yes [--json]                             */
 /* ------------------------------------------------------------------ */
 
-/** `--name=value` or `--name value`; undefined when absent. */
-function flagValue(argv: string[], name: string): string | undefined {
-  for (let i = 0; i < argv.length; i++) {
-    const a = argv[i];
-    if (a === name) return argv[i + 1];
-    if (a.startsWith(`${name}=`)) return a.slice(name.length + 1);
-  }
-  return undefined;
-}
-
-/** true for --name, false for --no-name, undefined when neither. */
-function flagBool(argv: string[], name: string): boolean | undefined {
-  if (argv.includes(`--no-${name}`)) return false;
-  if (argv.includes(`--${name}`)) return true;
-  return undefined;
-}
 
 const list = (v: string | undefined): string[] | undefined =>
   v === undefined ? undefined : v.split(",").map((x) => x.trim()).filter(Boolean);
@@ -87,8 +72,9 @@ export function choicesFromFlags(argv: string[], projectPath: string): InitChoic
     throw new Error(`--context must be micro, lean or full, not '${context}'`);
   }
   const feedbackMode = flagValue(argv, "--feedback-mode");
-  if (feedbackMode !== undefined && !(FEEDBACK_MODES as readonly string[]).includes(feedbackMode)) {
-    throw new Error(`--feedback-mode must be interactive, auto-approve or defer, not '${feedbackMode}'`);
+  const feedbackModes: readonly string[] = FEEDBACK_MODE.def.values;
+  if (feedbackMode !== undefined && !feedbackModes.includes(feedbackMode)) {
+    throw new Error(`--feedback-mode must be ${orList(feedbackModes)}, not '${feedbackMode}'`);
   }
   const native = flagBool(argv, "native-tools");
   const exclude = list(flagValue(argv, "--native-exclude"));
@@ -175,15 +161,9 @@ async function initNonInteractive(argv: string[], projectPath: string): Promise<
 
 async function init(argv: string[]): Promise<number | void> {
   // 1. Project: --editor, then --project, then the first positional, then cwd, then ask.
-  let initTarget: { projectPath?: string; rest: string[] };
-  try {
-    initTarget = takeEditorTarget(argv);
-  } catch (e) {
-    fail(e instanceof EditorFlagError ? e.message : String(e));
-    return 1;
-  }
+  const initTarget = selectProjectOrExit(argv, { projectFlag: true, positional: true, valueFlags: VALUE_FLAGS });
   const rest = initTarget.rest;
-  let uprojectPath = initTarget.projectPath || flagValue(rest, "--project") || firstPositional(rest) || "";
+  let uprojectPath = initTarget.projectPath || "";
   const machine = rest.includes("--yes") || rest.includes("-y") || rest.includes("--json");
   if (!machine && !process.stdin.isTTY) {
     fail(
@@ -429,17 +409,6 @@ const VALUE_FLAGS = new Set([
   "--unreal-mcp-port",
 ]);
 
-function firstPositional(argv: string[]): string | undefined {
-  for (let i = 0; i < argv.length; i++) {
-    const a = argv[i];
-    if (VALUE_FLAGS.has(a)) {
-      i++;
-      continue;
-    }
-    if (!a.startsWith("-")) return a;
-  }
-  return undefined;
-}
 
 const toggle = (name: string, description: string) => [
   { name: `--${name}`, description },
