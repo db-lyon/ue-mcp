@@ -63,19 +63,19 @@ describe("classifyDisconnect", () => {
 describe("EventLog", () => {
   it("numbers events and resumes after an id", () => {
     const log = new EventLog();
-    log.publish("a");
-    const b = log.publish("b", { x: 1 });
-    log.publish("c");
-    expect(log.since(b.id - 1).events.map((e) => e.type)).toEqual(["b", "c"]);
+    log.publish("daemon.started");
+    const b = log.publishFor("ext", "b", { x: 1 });
+    log.publish("plugins.changed");
+    expect(log.since(b.id - 1).events.map((e) => e.type)).toEqual(["ext.b", "plugins.changed"]);
     expect(log.since(log.lastId).events).toEqual([]);
   });
 
   it("reports a gap when a reader fell behind the kept window", () => {
     const log = new EventLog(2);
-    for (let i = 0; i < 5; i++) log.publish(`e${i}`);
+    for (let i = 0; i < 5; i++) log.publishFor("ext", `e${i}`);
     const r = log.since(1);
     expect(r.gap).toBe(true);
-    expect(r.events.map((e) => e.type)).toEqual(["e3", "e4"]);
+    expect(r.events.map((e) => e.type)).toEqual(["ext.e3", "ext.e4"]);
   });
 });
 

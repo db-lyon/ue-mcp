@@ -19,7 +19,9 @@ import * as path from "node:path";
 import { warn } from "../core/log.js";
 import type { ActionEffect } from "../surface/tool-types.js";
 import type { EditorSession } from "../sessions/session.js";
-import { checkpointsFor, type RestoreResult } from "../checkpoints/service.js";
+import { checkpointsFor } from "../checkpoints/service.js";
+import type { RestoreResult } from "../contract/daemon.js";
+import { StatusError } from "../core/status-error.js";
 
 export interface JournalRollback {
   method: string;
@@ -108,11 +110,7 @@ export const UNJOURNALED_TASKS: ReadonlySet<string> = new Set([
   "editor.clear_checkpoints",
 ]);
 
-export class JournalError extends Error {
-  constructor(readonly status: number, message: string) {
-    super(message);
-  }
-}
+export class JournalError extends StatusError {}
 
 type Line =
   | ({ type: "entry" } & JournalEntry)

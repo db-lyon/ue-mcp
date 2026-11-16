@@ -8,7 +8,8 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { isPidAlive } from "../bridge/editor-target.js";
-import { discoveryPath, readDiscovery, type DaemonDiscovery } from "./discovery.js";
+import type { DaemonDiscovery } from "../contract/daemon.js";
+import { discoveryPath, readDiscovery } from "./discovery.js";
 
 export const SUPERSEDE_CHECK_MS = 5_000;
 
@@ -84,16 +85,6 @@ export async function drainInflight(inflight: () => number, ms: number, sleep = 
   while (inflight() > 0) {
     if (Date.now() >= deadline) return false;
     await sleep(250);
-  }
-  return true;
-}
-
-/** Wait for a process to end, up to `ms`. True when it did. */
-export async function waitForExit(pid: number, ms: number, isAlive: (pid: number) => boolean = isPidAlive, sleep = (t: number) => new Promise((r) => setTimeout(r, t))): Promise<boolean> {
-  const deadline = Date.now() + ms;
-  while (isAlive(pid)) {
-    if (Date.now() >= deadline) return false;
-    await sleep(200);
   }
   return true;
 }

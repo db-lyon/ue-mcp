@@ -23,10 +23,6 @@ import {
   DEFAULT_LARGE_FILE_BYTES,
   ShadowRepo,
   changeKind,
-  type ChangeEntry,
-  type CheckpointInfo,
-  type CheckpointTrigger,
-  type RestoreRefusal,
 } from "./shadow-repo.js";
 import {
   ASSET_DIFF_FORMAT,
@@ -37,13 +33,22 @@ import {
   assetDiffError,
   assetDiffFromBridge,
   graphPictureId,
+} from "./asset-diff.js";
+import {
+  describeRoute,
+  routePath,
   type AssetDiff,
   type AssetThumbnail,
-} from "./asset-diff.js";
+  type ChangeEntry,
+  type ChangesResult,
+  type CheckpointResult,
+  type CheckpointState,
+  type CheckpointTrigger,
+  type NativeDiffResult,
+  type RestoreResult,
+} from "../contract/daemon.js";
 
 export { CheckpointError } from "./shadow-repo.js";
-export type { AssetDiff, AssetDiffNode, AssetDiffNodePin, AssetDiffNodeProperty, AssetDiffRecord, AssetDiffSection, AssetFact, AssetThumbnail, AssetVersion } from "./asset-diff.js";
-export type { ChangeEntry, CheckpointInfo, RestoreRefusal } from "./shadow-repo.js";
 
 /** How many Blueprint packages one list_changes diffs in the editor. */
 const MAX_BLUEPRINT_DIFFS = 25;
@@ -60,62 +65,6 @@ interface DiffJob {
   fromFile: string | null;
   toFile: string | null;
   params: Json;
-}
-
-export interface CheckpointState {
-  editor: string;
-  enabled: boolean;
-  source: "config" | "session";
-  configured: boolean;
-  repository: string | null;
-  checkpoints: CheckpointInfo[];
-}
-
-export interface CheckpointResult extends CheckpointInfo {
-  editor: string;
-  changes: ChangeEntry[];
-  dirtyPackages: string[];
-  editorConnected: boolean;
-}
-
-export interface ChangesResult {
-  editor: string;
-  from: string;
-  to: string | null;
-  changes: ChangeEntry[];
-  /**
-   * Which packages carry an asset diff. Past `limit`, the rest are `deferred`:
-   * their assetDiff says so, and assetDiff(from, to, path) diffs one.
-   */
-  assetDiffs?: { limit: number; diffed: number; deferred: string[] };
-}
-
-export interface NativeDiffResult {
-  editor: string;
-  path: string;
-  /** window: Unreal's diff window; editor: the asset editor on the one version of an added or deleted asset; external: the text diff tool. */
-  opened: "window" | "editor" | "external";
-  windowTitle?: string;
-  tool?: string;
-  /** The label and ISO 8601 date each side of the diff window shows. */
-  revisions?: { before: { label: string; date: string }; after: { label: string; date: string } };
-  /** True when the versions loaded from the history are unloaded once the window or asset editor closes (#1483). */
-  unloadsOnClose?: boolean;
-  /** The /Temp packages those versions were loaded into. */
-  tempPackages?: string[];
-}
-
-export interface RestoreResult {
-  editor: string;
-  checkpoint: string;
-  before: string;
-  after: string;
-  restored: Array<{ path: string; action: "written" | "deleted" }>;
-  refused: RestoreRefusal[];
-  reloaded: string[];
-  unloaded: string[];
-  configsReloaded: string[];
-  reopened: string[];
 }
 
 export type CheckpointEvent =
@@ -228,7 +177,7 @@ export class SessionCheckpoints {
 
   private requireEnabled(): void {
     if (!this.enabled()) {
-      throw new CheckpointError(409, "Checkpoints are off for this session. Set `checkpoints: on` in ue-mcp.yml, or turn them on through the daemon (PUT /v1/checkpoints/enabled).");
+      throw new CheckpointError(409, `Checkpoints are off for this session. Set \`checkpoints: on\` in ue-mcp.yml, or turn them on through the daemon (${describeRoute("checkpoints.setEnabled")}).`);
     }
   }
 
@@ -660,7 +609,7 @@ export class SessionCheckpoints {
   private withUrls(d: AssetDiff): AssetDiff {
     for (const v of [d.before, d.after]) {
       for (const t of [v?.thumbnail, v?.classThumbnail]) {
-        if (t && "id" in t) t.url = `/v1/checkpoints/thumbnails/${t.id}.png?editor=${encodeURIComponent(this.session.name)}`;
+        if (t && "id" in t) t.url = `${routePath("checkpoints.thumbnail", { file: `${t.id}.png` })}?editor=${encodeURIComponent(this.session.name)}`;
       }
     }
     return d;

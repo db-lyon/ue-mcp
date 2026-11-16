@@ -11,6 +11,8 @@ import { info, warn, error as logError } from "../core/log.js";
 import { subscribeFlowEvents, type FlowEvent } from "./events.js";
 import { existingGuard } from "../editor/dialog-guard.js";
 import { readEnv } from "../core/env.js";
+import { hostIsAllowed } from "../core/loopback-host.js";
+import { DAEMON_HEADERS } from "../contract/daemon.js";
 
 type FlowTool = ReturnType<typeof createFlowTool>;
 
@@ -20,12 +22,6 @@ export interface HttpServerOptions {
   token?: string;
 }
 
-const ALLOWED_HOSTS = new Set([
-  "localhost",
-  "127.0.0.1",
-  "[::1]",
-]);
-
 function constantTimeEq(a: string, b: string): boolean {
   const ab = Buffer.from(a, "utf8");
   const bb = Buffer.from(b, "utf8");
@@ -34,23 +30,13 @@ function constantTimeEq(a: string, b: string): boolean {
 }
 
 function extractToken(req: http.IncomingMessage): string | null {
-  const header = req.headers["x-ue-mcp-token"];
+  const header = req.headers[DAEMON_HEADERS.flowToken];
   if (typeof header === "string" && header.length > 0) return header;
   const auth = req.headers["authorization"];
   if (typeof auth === "string" && auth.toLowerCase().startsWith("bearer ")) {
     return auth.slice(7).trim();
   }
   return null;
-}
-
-export function hostIsAllowed(req: http.IncomingMessage): boolean {
-  const host = req.headers.host;
-  if (typeof host !== "string" || host.length === 0) return false;
-  // strip optional :port (handle bracketed IPv6 too)
-  const bare = host.startsWith("[")
-    ? host.slice(0, host.indexOf("]") + 1)
-    : host.replace(/:\d+$/, "");
-  return ALLOWED_HOSTS.has(bare.toLowerCase());
 }
 
 // #144 - expose flow.run, flow.plan, flow.list over loopback HTTP so non-MCP

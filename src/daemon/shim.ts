@@ -19,7 +19,9 @@ import type { JSONRPCMessage } from "@modelcontextprotocol/sdk/types.js";
 import { info, warn, error } from "../core/log.js";
 import { packageVersion, selfCliArgs } from "../core/package-root.js";
 import { compareVersions } from "../core/semver.js";
-import { DAEMON_API_VERSION, daemonDir, projectKey, readAnsweringDiscovery, type AnsweringDiscoveryOptions, type DaemonDiscovery } from "./discovery.js";
+import { apiVersionsOverlap, DAEMON_API_RANGE, DAEMON_HEADERS, routePath, type DaemonDiscovery } from "../contract/daemon.js";
+import { bearer } from "./client.js";
+import { daemonDir, projectKey, readAnsweringDiscovery, type AnsweringDiscoveryOptions } from "./discovery.js";
 import { liveStartLock } from "./start-lock.js";
 import { installedBridge } from "../editor/install-marker.js";
 import { NPX_AGE_GATE_OVERRIDE } from "../integrations/mcp-clients/mcp-client-config.js";
@@ -71,7 +73,7 @@ export async function ensureDaemon(uproject: string, wantVersion?: string, probe
   const logFile = path.join(logDir, `${projectKey(projectDir)}.log`);
   let want = wantVersion ?? daemonVersionFor(projectDir);
   const usable = (d: DaemonDiscovery | null): d is DaemonDiscovery =>
-    !!d && d.apiVersion === DAEMON_API_VERSION && compareVersions(d.version, want) >= 0;
+    !!d && apiVersionsOverlap({ min: d.apiVersion, max: d.apiVersion }, DAEMON_API_RANGE) && compareVersions(d.version, want) >= 0;
 
   let spawnedAt: number | null = null;
   let sawStarter = false;
@@ -155,8 +157,8 @@ export async function runShim(uproject: string): Promise<void> {
 
   const connect = async (replay: boolean): Promise<void> => {
     const d = await ensureDaemon(uproject);
-    const socket = new WebSocket(`ws://127.0.0.1:${d.port}/v1/mcp`, {
-      headers: { authorization: `Bearer ${d.token}`, "x-ue-mcp-client": clientName() },
+    const socket = new WebSocket(`ws://127.0.0.1:${d.port}${routePath("mcp")}`, {
+      headers: { ...bearer(d), [DAEMON_HEADERS.client]: clientName() },
     });
     await new Promise<void>((resolve, reject) => {
       socket.once("open", () => resolve());

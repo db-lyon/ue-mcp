@@ -28,7 +28,7 @@ import { installEditorPlugin } from "../editor/editor-plugin.js";
 import { ensurePluginsEnabled, ensureSetUp } from "./init-core.js";
 import { installedCopies, migrateLegacy, recordedVersion, versionsOf } from "../daemon/extension-versions.js";
 import { ensureDaemon } from "../daemon/shim.js";
-import { waitForExit } from "../daemon/supersede-watch.js";
+import { stopDaemon } from "../daemon/client.js";
 import { fail, ok, redirectConsoleToStderr, warn } from "../terminal/ansi.js";
 import type { CliUsage } from "./cli-main.js";
 import { flagValue } from "./args.js";
@@ -41,9 +41,8 @@ async function restartDaemon(uproject: string): Promise<boolean> {
   const dir = path.dirname(path.resolve(uproject));
   const d = await readAnsweringDiscovery(dir);
   if (!d) return false;
-  await fetch(`http://127.0.0.1:${d.port}/v1/shutdown`, { method: "POST", headers: { authorization: `Bearer ${d.token}` } }).catch(() => undefined);
-  // Wait for the process to end, not just its record: a new daemon started beside a live old one leaves two attached to the editor.
-  await waitForExit(d.pid, 30_000);
+  // The process, not just its record: a new daemon started beside a live old one leaves two attached to the editor.
+  await stopDaemon(d, 30_000);
   await ensureDaemon(uproject);
   return true;
 }

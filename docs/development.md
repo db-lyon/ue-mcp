@@ -70,6 +70,7 @@ src/
 ├── init.ts, update.ts, deploy-cli.ts  # Other package bins, thin wrappers over cli/
 ├── task.ts, guard-task.ts, daemon-api.ts  # `ue-mcp/task`, `ue-mcp/guard`, `ue-mcp/daemon` exports
 ├── tools.ts              # ALL_TOOLS registry
+├── contract/             # The daemon contract: API versions, features, routes, events, public types
 ├── daemon/               # Daemon, stdio shim, discovery, extensions, UI bundles, HTTP routes
 ├── server/               # Runtime shared by clients, McpServer per client, context projection
 ├── core/                 # Errors, logging, env, shared types, package root, version check
