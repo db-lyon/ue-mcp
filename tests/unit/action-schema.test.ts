@@ -245,7 +245,7 @@ describe("actionSchema", () => {
     const tool = categoryTool("example", "Example", {
       pick: {
         ...bp("read", "Pick.", "pick"),
-        params: { optional: ["actorLabel", "actorPath"], choices: [{ branches: [["actorLabel"], ["actorPath"]] }] },
+        params: { optional: ["actorLabel", "actorPath"], choices: [{ mode: "exactlyOne", branches: [["actorLabel"], ["actorPath"]] }] },
       },
     }, { actorLabel: z.string().optional(), actorPath: z.string().optional() });
     const schema = actionSchema(tool, "pick");
