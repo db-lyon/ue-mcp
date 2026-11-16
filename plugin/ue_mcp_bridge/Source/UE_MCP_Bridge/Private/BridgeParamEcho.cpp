@@ -1,4 +1,5 @@
 #include "BridgeParamEcho.h"
+#include "MCPWireContract.h"
 #include "UE_MCP_BridgeModule.h"
 #include "Dom/JsonValue.h"
 #include "HAL/PlatformMisc.h"
@@ -19,7 +20,7 @@ bool FMCPParamEcho::ResolveEnabledFromEnvironment()
 		return true;
 	}
 
-	const FString EnvValue = FPlatformMisc::GetEnvironmentVariable(TEXT("UE_MCP_PARAM_ECHO"));
+	const FString EnvValue = FPlatformMisc::GetEnvironmentVariable(UEMCPWire::EnvVar::ParamEcho);
 	return EnvValue == TEXT("1") || EnvValue.Equals(TEXT("true"), ESearchCase::IgnoreCase)
 		|| EnvValue.Equals(TEXT("yes"), ESearchCase::IgnoreCase);
 }

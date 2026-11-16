@@ -35,6 +35,34 @@ struct FMCPWebSocketFrame
 	TArray<uint8> Payload;
 };
 
+/** The RFC 6455 frame codec: pure functions over a byte buffer (BridgeFrameCodec.cpp). */
+namespace MCPFrameCodec
+{
+	/**
+	 * Decode at most one frame from the front of Buffer.
+	 *
+	 * On Decoded the frame's bytes (header, mask and payload) are consumed from
+	 * Buffer and whatever follows is left in place, so a read that delivered two
+	 * pipelined requests yields both. On NeedMoreData nothing is consumed.
+	 *
+	 * On ProtocolError OutCloseCode carries the status the peer should be closed
+	 * with: 1002 for framing the bridge cannot follow, 1009 when the frame is
+	 * merely too large, so the client can tell a size refusal from a broken stream.
+	 */
+	EMCPFrameDecode Decode(TArray<uint8>& Buffer, FMCPWebSocketFrame& OutFrame, FString& OutError, uint16& OutCloseCode);
+
+	/** Frame a text message for the wire. Server to client, so never masked. */
+	TArray<uint8> CreateTextFrame(const FString& Message);
+
+	/** Frame a control opcode (close, ping, pong) with its payload. */
+	TArray<uint8> CreateControlFrame(EMCPWebSocketOpcode Opcode, const TArray<uint8>& Payload);
+
+	/** The largest message the bridge accepts on one connection, whether it
+	 *  arrives as one frame or as fragments. A message of exactly this size is
+	 *  receivable: the unparsed receive buffer is bounded a frame header higher. */
+	int64 MaxMessageBytes();
+}
+
 namespace MCPWebSocketLimits
 {
 	// #821: a JSON-RPC message can span many TCP reads and many WebSocket

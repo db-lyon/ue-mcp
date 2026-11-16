@@ -9,9 +9,7 @@
 
 namespace
 {
-	// One batch is one game-thread job, so this bounds how long a single call
-	// holds the editor. A longer edit is two batches.
-	constexpr int32 MaxBatchCalls = 256;
+	constexpr int32 MaxBatchCalls = UEMCPWire::MaxBatchCalls;
 
 	// Methods a batch cannot carry. The undo-stack ones would split, abort or
 	// unwind the transaction the batch itself is recording into, and a nested

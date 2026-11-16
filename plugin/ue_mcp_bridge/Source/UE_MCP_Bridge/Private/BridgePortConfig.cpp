@@ -1,6 +1,7 @@
 #include "BridgePortConfig.h"
-#include "BridgeServer.h"
 #include "BridgeStateFiles.h"
+#include "BridgeSessionToken.h"
+#include "MCPWireContract.h"
 #include "UE_MCP_BridgeModule.h"
 #include "HAL/PlatformMisc.h"
 #include "HAL/PlatformProcess.h"
@@ -12,16 +13,10 @@
 #include "Misc/SecureHash.h"
 #include "Interfaces/IPluginManager.h"
 
-// Deterministic per-worktree base port. MUST match src/port.ts byte-for-byte:
-// normalize the project root (forward slashes, no trailing slash, lowercased),
-// SHA-1 the UTF-8 bytes, fold the first 4 bytes into the 49152-65535 ephemeral
-// range. SHA-1 (not SHA-256) because FSHA1 is available on every platform with
-// no extra dependency; the hash only spreads ports, it is not security.
-int32 FMCPBridgeServer::DeriveProjectPort(const FString& ProjectRootDir)
+// The derivation the wire contract's port section describes, held to its
+// test vectors by UE.MCP.Bridge.PortDerivation.
+int32 MCPBridgePortPolicy::DeriveProjectPort(const FString& ProjectRootDir)
 {
-	// One implementation of the normalization, shared with the instance records
-	// and requested.json, all of which compare these strings against the ones
-	// the client writes. Two copies is how the two sides drift apart.
 	const FString Norm = FMCPBridgeStateFiles::NormalizeProjectRoot(ProjectRootDir);
 
 	FTCHARToUTF8 Utf8(*Norm);
@@ -32,9 +27,7 @@ int32 FMCPBridgeServer::DeriveProjectPort(const FString& ProjectRootDir)
 	Sha.GetHash(Hash);
 
 	const uint32 V = ((uint32)Hash[0] << 24) | ((uint32)Hash[1] << 16) | ((uint32)Hash[2] << 8) | (uint32)Hash[3];
-	constexpr uint32 EphemeralBase = 49152;
-	constexpr uint32 EphemeralSpan = 65535u - EphemeralBase + 1u; // 16384
-	return (int32)(EphemeralBase + (V % EphemeralSpan));
+	return (int32)((uint32)UEMCPWire::Port::EphemeralBase + (V % (uint32)UEMCPWire::Port::EphemeralSpan));
 }
 
 // ── ue-mcp.yml: one key, read by hand ────────────────────────────────────────
@@ -437,36 +430,33 @@ namespace
 	/** `~/.ue-mcp/config.yml`, or whatever UE_MCP_GLOBAL_CONFIG points at. */
 	FString UserGlobalConfigPath()
 	{
-		const FString Override = FPlatformMisc::GetEnvironmentVariable(TEXT("UE_MCP_GLOBAL_CONFIG"));
+		const FString Override = FPlatformMisc::GetEnvironmentVariable(UEMCPWire::EnvVar::GlobalConfig);
 		if (!Override.IsEmpty())
 		{
 			return Override;
 		}
 
-		const FString Home = FPlatformProcess::UserHomeDir();
-		if (Home.IsEmpty())
-		{
-			return FString();
-		}
-		return FPaths::Combine(Home, TEXT(".ue-mcp"), TEXT("config.yml"));
+		// The same ~/.ue-mcp the token file lives in, resolved the same way.
+		const FString UserDir = UEMCPBridgeSessionToken::UserMcpDir();
+		return UserDir.IsEmpty() ? FString() : FPaths::Combine(UserDir, TEXT("config.yml"));
 	}
 
 	/**
 	 * `ue-mcp.bridge.port` across the layered config, or INDEX_NONE when no
 	 * layer pins one. The layers and their order are the client's, from
-	 * loadLayeredUeMcpBlock in src/project.ts: user-global, then the tracked
+	 * loadLayeredUeMcpBlock in src/config/project.ts: user-global, then the tracked
 	 * project file, then the optional UE_MCP_ENV overlay, then the untracked
 	 * per-machine file, each winning over the one before. They are visited
 	 * highest-first here so the first hit is the winner.
 	 */
 	int32 ReadConfiguredBridgePort(FString& OutSourceFile)
 	{
-		const FString ProjectRoot = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir());
+		const FString ProjectRoot = FMCPBridgeStateFiles::ProjectRootDir();
 
 		TArray<FString> Layers;
 		Layers.Add(FPaths::Combine(ProjectRoot, TEXT("ue-mcp.local.yml")));
 
-		const FString EnvName = FPlatformMisc::GetEnvironmentVariable(TEXT("UE_MCP_ENV"));
+		const FString EnvName = FPlatformMisc::GetEnvironmentVariable(UEMCPWire::EnvVar::Env);
 		if (!EnvName.IsEmpty())
 		{
 			// The name lands in a filename, so keep it to something that cannot
@@ -505,59 +495,51 @@ namespace
 		return INDEX_NONE;
 	}
 
-	// Ports the Unreal Canvas Bridge (UE 5.9, UnrealCanvasBridge) claims on
-	// loopback: its webcam server's default (Scripts/webcam_server.py) and its
-	// viewport stream's fallback (UnrealCanvasViewportStreamer.h). Keep in step
-	// with CANVAS_RESERVED_PORTS in src/integrations/epic/unreal-canvas.ts.
-	constexpr int32 kCanvasReservedPorts[] = { 9877, 9880 };
-
-	// Read once, on the game thread, the first time the port is resolved. The
-	// plugin set is fixed by then, and the collision walk asks again from the
-	// server thread, where only the cached answer is read.
-	bool CanvasBridgeEnabled()
+	/**
+	 * The ports the Unreal Canvas Bridge (UE 5.9) claims on loopback when the
+	 * project enables it, from the wire contract the client reads too; none when
+	 * it does not. Its servers start after this one, so they are kept free even
+	 * when they are free now.
+	 */
+	TArray<int32> CanvasReservedPorts()
 	{
-		static const bool bEnabled = []()
+		TArray<int32> Ports;
+		const TSharedPtr<IPlugin> Plugin = IPluginManager::Get().FindPlugin(UEMCPWire::CanvasPlugin);
+		if (Plugin.IsValid() && Plugin->IsEnabled())
 		{
-			const TSharedPtr<IPlugin> Plugin = IPluginManager::Get().FindPlugin(TEXT("UnrealCanvasBridge"));
-			return Plugin.IsValid() && Plugin->IsEnabled();
-		}();
-		return bEnabled;
+			Ports.Append(UEMCPWire::CanvasReservedPorts, UE_ARRAY_COUNT(UEMCPWire::CanvasReservedPorts));
+		}
+		return Ports;
 	}
 }
 
-bool FMCPBridgeServer::IsCanvasReservedPort(int32 Port)
+FMCPBridgePortChoice MCPBridgePortPolicy::Resolve()
 {
-	bool bReserved = false;
-	for (const int32 Reserved : kCanvasReservedPorts)
-	{
-		bReserved = bReserved || Reserved == Port;
-	}
-	return bReserved && CanvasBridgeEnabled();
-}
+	// Read here, on the game thread, where the plugin manager may be asked. The
+	// server thread only reads the answer carried in the choice.
+	const TArray<int32> AvoidPorts = CanvasReservedPorts();
 
-FMCPBridgePortChoice FMCPBridgeServer::ResolveConfiguredPort()
-{
 	// A pin on a port the Canvas Bridge claims would take it from that plugin,
 	// or lose it to it, depending on who binds first. Fall back to the derived
 	// port, which is in the ephemeral range, as the client does for the same pin.
-	const auto KeepOffCanvasPorts = [](FMCPBridgePortChoice InChoice) -> FMCPBridgePortChoice
+	const auto Finish = [&AvoidPorts](FMCPBridgePortChoice InChoice) -> FMCPBridgePortChoice
 	{
-		if (!InChoice.bPinned || !IsCanvasReservedPort(InChoice.Port))
+		InChoice.AvoidPorts = AvoidPorts;
+		if (!InChoice.bPinned || !AvoidPorts.Contains(InChoice.Port))
 		{
 			return InChoice;
 		}
-		const int32 Derived = DeriveProjectPort(FPaths::ConvertRelativePathToFull(FPaths::ProjectDir()));
+		const int32 Derived = DeriveProjectPort(FMCPBridgeStateFiles::ProjectRootDir());
 		UE_LOG(LogMCPBridge, Warning,
-			TEXT("[UE-MCP] Port %d (%s) is claimed by the Unreal Canvas Bridge, which this project enables. Using the derived per-project port %d instead."),
+			TEXT("[UE-MCP] Port %d (%s) is claimed by the Unreal Canvas Bridge, which this project enables. Using the derived per-project port %d instead; pin a port outside the Canvas ports to use your own."),
 			InChoice.Port, *InChoice.Source, Derived);
 		FMCPBridgePortChoice Out;
 		Out.Port = Derived;
 		Out.Source = FString::Printf(TEXT("derived from the project path (%s pinned %d, which Unreal Canvas claims)"), *InChoice.Source, InChoice.Port);
 		Out.bPinned = false;
+		Out.AvoidPorts = AvoidPorts;
 		return Out;
 	};
-	// Cache the plugin answer here, on the game thread, before the walk reads it.
-	CanvasBridgeEnabled();
 
 	FMCPBridgePortChoice Choice;
 
@@ -569,11 +551,11 @@ FMCPBridgePortChoice FMCPBridgeServer::ResolveConfiguredPort()
 		Choice.Port = CmdPort;
 		Choice.Source = TEXT("-MCPPort command line");
 		Choice.bPinned = true;
-		return KeepOffCanvasPorts(Choice);
+		return Finish(Choice);
 	}
 
-	// 2. Environment override: UE_MCP_PORT (matches the Node client's env var).
-	const FString EnvPort = FPlatformMisc::GetEnvironmentVariable(TEXT("UE_MCP_PORT"));
+	// 2. Environment override: UE_MCP_PORT (the client's variable too).
+	const FString EnvPort = FPlatformMisc::GetEnvironmentVariable(UEMCPWire::EnvVar::Port);
 	if (!EnvPort.IsEmpty())
 	{
 		const int32 P = FCString::Atoi(*EnvPort);
@@ -583,7 +565,7 @@ FMCPBridgePortChoice FMCPBridgeServer::ResolveConfiguredPort()
 			Choice.Port = P;
 			Choice.Source = TEXT("UE_MCP_PORT environment variable");
 			Choice.bPinned = true;
-			return KeepOffCanvasPorts(Choice);
+			return Finish(Choice);
 		}
 		UE_LOG(LogMCPBridge, Warning,
 			TEXT("[UE-MCP] UE_MCP_PORT is '%s', which is not a port number. Ignoring it."), *EnvPort);
@@ -620,7 +602,7 @@ FMCPBridgePortChoice FMCPBridgeServer::ResolveConfiguredPort()
 			Choice.Port = RequestedPort;
 			Choice.Source = TEXT("requested.json published by the ue-mcp client");
 			Choice.bPinned = true;
-			return KeepOffCanvasPorts(Choice);
+			return Finish(Choice);
 		}
 		if (!RequestDetail.IsEmpty())
 		{
@@ -643,15 +625,15 @@ FMCPBridgePortChoice FMCPBridgeServer::ResolveConfiguredPort()
 		Choice.Port = ConfigPort;
 		Choice.Source = FString::Printf(TEXT("bridge.port in %s"), *FPaths::GetCleanFilename(ConfigFile));
 		Choice.bPinned = true;
-		return KeepOffCanvasPorts(Choice);
+		return Finish(Choice);
 	}
 
 	// 5. Deterministic per-worktree port derived from the project root path.
-	const FString ProjectRoot = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir());
+	const FString ProjectRoot = FMCPBridgeStateFiles::ProjectRootDir();
 	const int32 Derived = DeriveProjectPort(ProjectRoot);
 	UE_LOG(LogMCPBridge, Log, TEXT("[UE-MCP] Derived per-project port %d from %s"), Derived, *ProjectRoot);
 	Choice.Port = Derived;
 	Choice.Source = TEXT("derived from the project path");
 	Choice.bPinned = false;
-	return Choice;
+	return Finish(Choice);
 }

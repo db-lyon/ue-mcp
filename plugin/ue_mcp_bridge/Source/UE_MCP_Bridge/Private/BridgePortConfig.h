@@ -2,7 +2,7 @@
 
 // Which port the bridge binds: the command line, the environment, the client's
 // requested.json, `ue-mcp.bridge.port` from the layered config, or a port derived
-// from the project path. The resolvers are FMCPBridgeServer statics.
+// from the project path. Policy only; the socket server binds what it is handed.
 
 #include "CoreMinimal.h"
 
@@ -27,4 +27,28 @@ struct FMCPBridgePortChoice
 	 * a warning; losing a derived one is routine.
 	 */
 	bool bPinned = false;
+
+	/**
+	 * Ports the collision walk steps over: those the project's Unreal Canvas
+	 * Bridge claims when it is enabled. Resolved with the choice, on the game
+	 * thread, so the server thread never asks the plugin manager.
+	 */
+	TArray<int32> AvoidPorts;
 };
+
+namespace MCPBridgePortPolicy
+{
+	/**
+	 * The port to bind first: -MCPPort= > UE_MCP_PORT > the port the client
+	 * published in requested.json > `ue-mcp.bridge.port` from the layered config
+	 * > the derived port. The client walks the same order (#819). requested.json
+	 * (#817) sits above the config read because it is the same answer computed
+	 * from more inputs (four config layers plus environment, none of which an
+	 * editor launched from Explorer can see). A pin on a Canvas port falls back
+	 * to the derived port. Call on the game thread.
+	 */
+	FMCPBridgePortChoice Resolve();
+
+	/** The per-project port the wire contract derives from a project root. */
+	int32 DeriveProjectPort(const FString& ProjectRootDir);
+}

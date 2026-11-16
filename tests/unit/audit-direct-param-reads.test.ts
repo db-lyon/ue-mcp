@@ -8,7 +8,6 @@ import {
   findDirectReads,
   reportingCategories,
 } from "../../scripts/audit-direct-param-reads.mjs";
-import { ROUTING_PARAM_NAMES } from "../../src/surface/routing-params.js";
 
 const REPO_ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const HANDLER_PARAMS = path.join(
@@ -30,12 +29,10 @@ describe("the #1057 C++ read tracking", () => {
     expect(offenders).toEqual([]);
   });
 
-  it("ignores the same routing names as the server", () => {
+  it("ignores the routing names the generated wire contract declares, as the server does", () => {
     const source = readFileSync(HANDLER_PARAMS, "utf8");
-    const block = source.match(/MCPRoutingParamNames\(\)\s*\{[\s\S]*?Names\s*=\s*\{([\s\S]*?)\};/);
-    expect(block).not.toBeNull();
-    const names = [...block![1].matchAll(/TEXT\("([^"]+)"\)/g)].map((m) => m[1]);
-    expect(names).toEqual(ROUTING_PARAM_NAMES);
+    const body = source.slice(source.indexOf("MCPRoutingParamNames()"));
+    expect(body.slice(0, 400)).toContain("UEMCPWire::RoutingParams");
   });
 });
 

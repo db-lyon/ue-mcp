@@ -388,14 +388,8 @@ FString UEMCPBridgeSessionToken::DescribeRefusal(EMCPBridgeAuthDecision Decision
 	}
 }
 
-FString UEMCPBridgeSessionToken::TokenDirectory()
+FString UEMCPBridgeSessionToken::UserMcpDir()
 {
-	const FString Override = FPlatformMisc::GetEnvironmentVariable(DirectoryEnvVar());
-	if (!Override.IsEmpty())
-	{
-		return MCPSessionToken_TrimDir(Override);
-	}
-
 	// os.homedir() reads USERPROFILE on Windows and HOME elsewhere before it
 	// asks the OS. Read the same variable first so both sides land on one path.
 #if PLATFORM_WINDOWS
@@ -411,12 +405,23 @@ FString UEMCPBridgeSessionToken::TokenDirectory()
 	{
 		return FString();
 	}
-	return MCPSessionToken_TrimDir(FPaths::Combine(Home, TEXT(".ue-mcp"), TEXT("bridge")));
+	return MCPSessionToken_TrimDir(FPaths::Combine(Home, UEMCPWire::Token::UserDirName));
+}
+
+FString UEMCPBridgeSessionToken::TokenDirectory()
+{
+	const FString Override = FPlatformMisc::GetEnvironmentVariable(UEMCPWire::EnvVar::BridgeTokenDir);
+	if (!Override.IsEmpty())
+	{
+		return MCPSessionToken_TrimDir(Override);
+	}
+	const FString UserDir = UserMcpDir();
+	return UserDir.IsEmpty() ? FString() : FPaths::Combine(UserDir, UEMCPWire::Token::DirName);
 }
 
 FString UEMCPBridgeSessionToken::TokenFilePath(const FString& Dir, int32 Port)
 {
-	return FPaths::Combine(MCPSessionToken_TrimDir(Dir), FString::Printf(TEXT("%d.token"), Port));
+	return FPaths::Combine(MCPSessionToken_TrimDir(Dir), FString::Printf(TEXT("%d%s"), Port, UEMCPWire::Token::FileSuffix));
 }
 
 bool UEMCPBridgeSessionToken::WriteTokenFile(const FString& Dir, int32 Port, const FString& Token, FString& OutError)

@@ -346,7 +346,7 @@ TSharedPtr<FJsonValue> FEpicHandlers::ListToolsets(const TSharedPtr<FJsonObject>
 	FString Raw;
 	if (!UEMCPEpic::GetAllSchemas(Raw))
 	{
-		return MCPError(UEMCPEpic::UnavailableMsg);
+		return MCPErrorWithCode(UEMCPWire::BridgeErrorCode::ToolsetRegistryUnavailable, UEMCPEpic::UnavailableMsg);
 	}
 
 	TArray<TSharedPtr<FJsonValue>> Arr;
@@ -415,7 +415,7 @@ TSharedPtr<FJsonValue> FEpicHandlers::DescribeToolset(const TSharedPtr<FJsonObje
 	FString Raw;
 	if (!UEMCPEpic::GetAllSchemas(Raw))
 	{
-		return MCPError(UEMCPEpic::UnavailableMsg);
+		return MCPErrorWithCode(UEMCPWire::BridgeErrorCode::ToolsetRegistryUnavailable, UEMCPEpic::UnavailableMsg);
 	}
 
 	TArray<TSharedPtr<FJsonValue>> Arr;
@@ -451,7 +451,7 @@ TSharedPtr<FJsonValue> FEpicHandlers::CallTool(const TSharedPtr<FJsonObject>& Pa
 
 	if (!UEMCPEpic::RegistryClass())
 	{
-		return MCPError(UEMCPEpic::UnavailableMsg);
+		return MCPErrorWithCode(UEMCPWire::BridgeErrorCode::ToolsetRegistryUnavailable, UEMCPEpic::UnavailableMsg);
 	}
 
 	// Build the JSON input: prefer an `input` object, fall back to `inputJson`.

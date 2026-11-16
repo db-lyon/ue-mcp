@@ -3,6 +3,7 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { ENV_VARS, readEnv, resolveSetting } from "../../src/core/env.js";
+import { PLUGIN_ENV_VARS } from "../../src/bridge/wire-contract.js";
 
 const srcDir = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "src");
 
@@ -34,9 +35,14 @@ describe("core/env.ts", () => {
 
   it("registers every variable the editor plugin reads", () => {
     const pluginDir = join(srcDir, "..", "plugin");
-    const read = sources(pluginDir, [".cpp", ".h"]).flatMap((f) =>
-      [...readFileSync(f, "utf8").matchAll(/GetEnvironmentVariable\(\s*TEXT\("(UE_MCP_[A-Z0-9_]+)"\)/g)].map((m) => m[1]),
-    );
+    // The plugin reads most of them through the generated wire contract
+    // (UEMCPWire::EnvVar), the rest by literal name.
+    const read = [
+      ...Object.values(PLUGIN_ENV_VARS),
+      ...sources(pluginDir, [".cpp", ".h"]).flatMap((f) =>
+        [...readFileSync(f, "utf8").matchAll(/GetEnvironmentVariable\(\s*TEXT\("(UE_MCP_[A-Z0-9_]+)"\)/g)].map((m) => m[1]),
+      ),
+    ];
     expect(read.length).toBeGreaterThan(0);
     expect([...new Set(read)].filter((name) => !registered.has(name))).toEqual([]);
   });

@@ -5,24 +5,45 @@
 #include "Templates/Function.h"
 
 /**
- * Everything the bridge keeps under <Project>/Saved/UE_MCP_Bridge/.
+ * Everything the bridge keeps under <Project>/Saved/UE_MCP_Bridge/, and the one
+ * owner of every record it writes there. File names and field names are the
+ * generated wire contract's (MCPWireContract.h), which the client reads from
+ * the same source.
  *
- * There were two files here before #817 and both of them are single-writer by
- * assumption rather than by construction: `port.json` names one port for the
- * whole project directory, and `bridge-error.json` names one failed start. Two
- * editors of one project therefore had no way to describe themselves, and the
- * second one to boot simply overwrote the first one's address.
- *
- * `instances/<pid>.json` is the fix. Every process writes exactly one file,
- * named after itself, and removes only that file. Nothing is shared, so nothing
- * can be clobbered, and a record left behind by a crash is provably stale
- * rather than indistinguishable from a live one.
+ * `port.json` names one port for the whole project directory and
+ * `bridge-error.json` one failed start, so both are single-writer by
+ * assumption: a second editor of one project has no way to describe itself in
+ * them. `instances/<pid>.json` is single-writer by construction: every process
+ * writes exactly one file, named after itself, and removes only that file, so a
+ * record left behind by a crash is provably stale (#817).
  *
  * `requested.json` runs the other way: the client writes it and the bridge
  * reads it. It exists because the port pin is resolved on the client (four
  * config layers plus environment) and an editor launched from Explorer cannot
  * see that resolution. It carries an integer, not a policy.
  */
+
+/** Who this bridge is, as every record it writes names it. */
+struct FMCPBridgeIdentity
+{
+	/**
+	 * The server object that wrote a record. Pids are recycled and a project can
+	 * be relaunched inside a second, so the pid alone cannot answer "is this the
+	 * record I wrote".
+	 */
+	FString InstanceId;
+	FString StartedAtUtc;
+	uint32 Pid = 0;
+};
+
+/** What port.json says, read with its own reader rather than the instance record's. */
+struct FMCPPortLockfile
+{
+	int32 Port = 0;
+	/** 0 from a bridge built before port.json named its process. */
+	uint32 Pid = 0;
+	FString InstanceId;
+};
 
 /** One editor's record of the bridge it is running, or failed to run. */
 struct FMCPInstanceRecord
@@ -48,7 +69,7 @@ struct FMCPInstanceRecord
 	int32 ProtocolVersion = 0;
 	int32 HandlerApiVersion = 0;
 
-	/** "listening" or "bind-failed". */
+	/** UEMCPWire::BridgeState: listening or bind-failed. */
 	FString State;
 
 	/** Absolute directory of the loaded bridge plugin, forward slashes. */
@@ -66,10 +87,13 @@ class FMCPBridgeStateFiles
 public:
 	/**
 	 * Canonical form of a project root: forward slashes, no trailing slash,
-	 * lowercased. Identical to normalizeProjectRoot in src/port.ts, because the
-	 * two sides compare these strings to each other.
+	 * lowercased. The client normalizes the same way (the contract's port
+	 * section), because the two sides compare these strings to each other.
 	 */
 	static FString NormalizeProjectRoot(const FString& Dir);
+
+	/** This project's root, absolute, as the port derivation and config layers read it. */
+	static FString ProjectRootDir();
 
 	/** This project's normalized root, as the records record it. */
 	static FString ThisProjectRoot();
@@ -82,6 +106,38 @@ public:
 
 	/** <Project>/Saved/UE_MCP_Bridge/requested.json. */
 	static FString RequestedPortPath();
+
+	/** <Project>/Saved/UE_MCP_Bridge/port.json. */
+	static FString PortLockfilePath();
+
+	/** <Project>/Saved/UE_MCP_Bridge/bridge-error.json. */
+	static FString BridgeErrorPath();
+
+	/**
+	 * Publish this bridge as listening on Port. Its own instance record goes
+	 * first, because port.json may decline to name it (another live editor of
+	 * the project owns it) and then the instance record is the only address
+	 * this editor has. Then the stale sweep, then port.json, then the removal of
+	 * a bind-failure record an earlier start left.
+	 */
+	static void PublishListening(const FMCPBridgeIdentity& Self, int32 Port);
+
+	/**
+	 * Leave an on-disk trace for "editor alive, bridge dead": bridge-error.json,
+	 * never port.json (a failed start must not erase a live editor's record),
+	 * and a bind-failed instance record, which no second editor can overwrite.
+	 */
+	static void PublishBindFailure(const FMCPBridgeIdentity& Self, int32 FirstPort, int32 LastPort, int32 ErrorCode);
+
+	/**
+	 * Remove what this bridge published, on every exit including a failed bind:
+	 * port.json only when it carries this instance's id, and its own instance
+	 * record unless that record explains a bind failure.
+	 */
+	static void RetractOwn(const FMCPBridgeIdentity& Self);
+
+	/** Read port.json, or false when it is absent, malformed, or names no port. */
+	static bool ReadPortLockfile(const FString& FilePath, FMCPPortLockfile& Out);
 
 	/**
 	 * Publish JSON by writing a temporary file and renaming it over the target.

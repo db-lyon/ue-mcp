@@ -1,6 +1,5 @@
 #include "BridgeStateFiles.h"
-#include "BridgeServer.h"
-#include "MCPHandlerRegistration.h"
+#include "MCPWireContract.h"
 #include "Misc/EngineVersion.h"
 #include "MCPBridgeStateDir.h"
 #include "MCPEngineStatus.h"
@@ -28,9 +27,14 @@ FString FMCPBridgeStateFiles::NormalizeProjectRoot(const FString& Dir)
 	return Norm;
 }
 
+FString FMCPBridgeStateFiles::ProjectRootDir()
+{
+	return FPaths::ConvertRelativePathToFull(FPaths::ProjectDir());
+}
+
 FString FMCPBridgeStateFiles::ThisProjectRoot()
 {
-	return NormalizeProjectRoot(FPaths::ConvertRelativePathToFull(FPaths::ProjectDir()));
+	return NormalizeProjectRoot(ProjectRootDir());
 }
 
 FString FMCPBridgeStateFiles::StateDir()
@@ -40,12 +44,22 @@ FString FMCPBridgeStateFiles::StateDir()
 
 FString FMCPBridgeStateFiles::InstancesDir()
 {
-	return FPaths::Combine(StateDir(), TEXT("instances"));
+	return FPaths::Combine(StateDir(), UEMCPWire::InstancesDirName);
 }
 
 FString FMCPBridgeStateFiles::RequestedPortPath()
 {
-	return FPaths::Combine(StateDir(), TEXT("requested.json"));
+	return FPaths::Combine(StateDir(), UEMCPWire::StateFile::RequestedPort);
+}
+
+FString FMCPBridgeStateFiles::PortLockfilePath()
+{
+	return FPaths::Combine(StateDir(), UEMCPWire::StateFile::PortLockfile);
+}
+
+FString FMCPBridgeStateFiles::BridgeErrorPath()
+{
+	return FPaths::Combine(StateDir(), UEMCPWire::StateFile::BridgeError);
 }
 
 bool FMCPBridgeStateFiles::PublishJson(const FString& FilePath, const TSharedPtr<FJsonObject>& Payload)
@@ -82,36 +96,37 @@ TSharedPtr<FJsonObject> FMCPBridgeStateFiles::LoadJson(const FString& FilePath)
 
 FString FMCPBridgeStateFiles::InstallKindFor(const FString& PluginDir)
 {
-	const TSharedPtr<FJsonObject> Marker = LoadJson(FPaths::Combine(PluginDir, TEXT(".ue-mcp-install.json")));
+	const TSharedPtr<FJsonObject> Marker = LoadJson(FPaths::Combine(PluginDir, UEMCPWire::InstallMarkerFile));
 	FString Kind;
 	if (Marker.IsValid() && Marker->TryGetStringField(TEXT("kind"), Kind)
-		&& (Kind == TEXT("source") || Kind == TEXT("binary")))
+		&& (Kind == UEMCPWire::InstallKind::Source || Kind == UEMCPWire::InstallKind::Binary))
 	{
 		return Kind;
 	}
-	return FPaths::DirectoryExists(FPaths::Combine(PluginDir, TEXT("Source"))) ? TEXT("source") : TEXT("binary");
+	return FPaths::DirectoryExists(FPaths::Combine(PluginDir, TEXT("Source"))) ? UEMCPWire::InstallKind::Source : UEMCPWire::InstallKind::Binary;
 }
 
 FString FMCPBridgeStateFiles::RecordPath(const FString& InInstancesDir, uint32 Pid)
 {
-	return FPaths::Combine(InInstancesDir, FString::Printf(TEXT("%u.json"), Pid));
+	return FPaths::Combine(InInstancesDir, FString::Printf(TEXT("%u%s"), Pid, UEMCPWire::StateFile::InstanceRecordSuffix));
 }
 
 bool FMCPBridgeStateFiles::WriteInstanceRecord(const FString& InInstancesDir, const FMCPInstanceRecord& Record)
 {
+	namespace F = UEMCPWire::InstanceField;
 	TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
-	Obj->SetNumberField(TEXT("port"), Record.Port);
-	Obj->SetNumberField(TEXT("pid"), (double)Record.Pid);
-	Obj->SetStringField(TEXT("instanceId"), Record.InstanceId);
-	Obj->SetStringField(TEXT("projectRoot"), Record.ProjectRoot);
-	Obj->SetStringField(TEXT("startedAt"), Record.StartedAtUtc);
-	Obj->SetStringField(TEXT("engineVersion"), Record.EngineVersion);
-	Obj->SetNumberField(TEXT("protocolVersion"), Record.ProtocolVersion);
-	Obj->SetNumberField(TEXT("handlerApiVersion"), Record.HandlerApiVersion);
-	Obj->SetStringField(TEXT("state"), Record.State);
-	Obj->SetStringField(TEXT("pluginDir"), Record.PluginDir);
-	Obj->SetStringField(TEXT("installKind"), Record.InstallKind);
-	Obj->SetStringField(TEXT("pluginVersion"), Record.PluginVersion);
+	Obj->SetNumberField(F::Port, Record.Port);
+	Obj->SetNumberField(F::Pid, (double)Record.Pid);
+	Obj->SetStringField(F::InstanceId, Record.InstanceId);
+	Obj->SetStringField(F::ProjectRoot, Record.ProjectRoot);
+	Obj->SetStringField(F::StartedAt, Record.StartedAtUtc);
+	Obj->SetStringField(F::EngineVersion, Record.EngineVersion);
+	Obj->SetNumberField(F::ProtocolVersion, Record.ProtocolVersion);
+	Obj->SetNumberField(F::HandlerApiVersion, Record.HandlerApiVersion);
+	Obj->SetStringField(F::State, Record.State);
+	Obj->SetStringField(F::PluginDir, Record.PluginDir);
+	Obj->SetStringField(F::InstallKind, Record.InstallKind);
+	Obj->SetStringField(F::PluginVersion, Record.PluginVersion);
 
 	const FString FilePath = RecordPath(InInstancesDir, Record.Pid);
 	if (!PublishJson(FilePath, Obj))
@@ -124,6 +139,7 @@ bool FMCPBridgeStateFiles::WriteInstanceRecord(const FString& InInstancesDir, co
 
 bool FMCPBridgeStateFiles::ReadInstanceRecord(const FString& FilePath, FMCPInstanceRecord& OutRecord)
 {
+	namespace F = UEMCPWire::InstanceField;
 	const TSharedPtr<FJsonObject> Parsed = LoadJson(FilePath);
 	if (!Parsed.IsValid())
 	{
@@ -131,35 +147,57 @@ bool FMCPBridgeStateFiles::ReadInstanceRecord(const FString& FilePath, FMCPInsta
 	}
 
 	double NumberValue = 0.0;
-	if (Parsed->TryGetNumberField(TEXT("port"), NumberValue))
+	if (Parsed->TryGetNumberField(F::Port, NumberValue))
 	{
 		OutRecord.Port = (int32)NumberValue;
 	}
-	if (Parsed->TryGetNumberField(TEXT("pid"), NumberValue))
+	if (Parsed->TryGetNumberField(F::Pid, NumberValue))
 	{
 		OutRecord.Pid = (uint32)NumberValue;
 	}
-	if (Parsed->TryGetNumberField(TEXT("protocolVersion"), NumberValue))
+	if (Parsed->TryGetNumberField(F::ProtocolVersion, NumberValue))
 	{
 		OutRecord.ProtocolVersion = (int32)NumberValue;
 	}
-	if (Parsed->TryGetNumberField(TEXT("handlerApiVersion"), NumberValue))
+	if (Parsed->TryGetNumberField(F::HandlerApiVersion, NumberValue))
 	{
 		OutRecord.HandlerApiVersion = (int32)NumberValue;
 	}
 
-	Parsed->TryGetStringField(TEXT("instanceId"), OutRecord.InstanceId);
-	Parsed->TryGetStringField(TEXT("projectRoot"), OutRecord.ProjectRoot);
-	Parsed->TryGetStringField(TEXT("startedAt"), OutRecord.StartedAtUtc);
-	Parsed->TryGetStringField(TEXT("engineVersion"), OutRecord.EngineVersion);
-	Parsed->TryGetStringField(TEXT("state"), OutRecord.State);
-	Parsed->TryGetStringField(TEXT("pluginDir"), OutRecord.PluginDir);
-	Parsed->TryGetStringField(TEXT("installKind"), OutRecord.InstallKind);
-	Parsed->TryGetStringField(TEXT("pluginVersion"), OutRecord.PluginVersion);
+	Parsed->TryGetStringField(F::InstanceId, OutRecord.InstanceId);
+	Parsed->TryGetStringField(F::ProjectRoot, OutRecord.ProjectRoot);
+	Parsed->TryGetStringField(F::StartedAt, OutRecord.StartedAtUtc);
+	Parsed->TryGetStringField(F::EngineVersion, OutRecord.EngineVersion);
+	Parsed->TryGetStringField(F::State, OutRecord.State);
+	Parsed->TryGetStringField(F::PluginDir, OutRecord.PluginDir);
+	Parsed->TryGetStringField(F::InstallKind, OutRecord.InstallKind);
+	Parsed->TryGetStringField(F::PluginVersion, OutRecord.PluginVersion);
 
 	// A record with no pid names no process, so nothing about it can be
 	// verified and nothing about it can be safely reaped either.
 	return OutRecord.Pid > 0;
+}
+
+bool FMCPBridgeStateFiles::ReadPortLockfile(const FString& FilePath, FMCPPortLockfile& Out)
+{
+	namespace F = UEMCPWire::PortLockfileField;
+	const TSharedPtr<FJsonObject> Parsed = LoadJson(FilePath);
+	if (!Parsed.IsValid())
+	{
+		return false;
+	}
+	double NumberValue = 0.0;
+	if (Parsed->TryGetNumberField(F::Pid, NumberValue))
+	{
+		Out.Pid = (uint32)NumberValue;
+	}
+	Parsed->TryGetStringField(F::InstanceId, Out.InstanceId);
+	if (!Parsed->TryGetNumberField(F::Port, NumberValue))
+	{
+		return false;
+	}
+	Out.Port = (int32)NumberValue;
+	return Out.Port > 0 && Out.Port <= 65535;
 }
 
 void FMCPBridgeStateFiles::DeleteOwnInstanceRecord(const FString& InInstancesDir, uint32 Pid, const FString& InstanceId)
@@ -188,11 +226,10 @@ void FMCPBridgeStateFiles::DeleteOwnInstanceRecord(const FString& InInstancesDir
 		return;
 	}
 
-	if (Existing.State == TEXT("bind-failed"))
+	if (Existing.State == UEMCPWire::BridgeState::BindFailed)
 	{
 		// The whole point of that record is to outlive the process that wrote
-		// it. Removing it here would delete the answer to the question the user
-		// is about to ask.
+		// it: it answers the question the user is about to ask.
 		UE_LOG(LogMCPBridge, Log,
 			TEXT("[UE-MCP] Keeping the bind-failed instance record at %s so the failure stays diagnosable."),
 			*FilePath);
@@ -281,7 +318,7 @@ bool FMCPBridgeStateFiles::IsInstanceLive(const FMCPInstanceRecord& Record, int3
 	{
 		return false;
 	}
-	if (Record.State == TEXT("bind-failed") || Record.Port <= 0)
+	if (Record.State == UEMCPWire::BridgeState::BindFailed || Record.Port <= 0)
 	{
 		// Nothing bound, so there is no address to test. The process being alive
 		// is the whole of what this record claims.
@@ -310,7 +347,8 @@ int32 FMCPBridgeStateFiles::ReapStaleInstanceRecords(
 	TFunctionRef<bool(const FMCPInstanceRecord&)> IsLive)
 {
 	TArray<FString> FileNames;
-	IFileManager::Get().FindFiles(FileNames, *FPaths::Combine(InInstancesDir, TEXT("*.json")), /*Files*/ true, /*Directories*/ false);
+	IFileManager::Get().FindFiles(FileNames,
+		*FPaths::Combine(InInstancesDir, FString(TEXT("*")) + UEMCPWire::StateFile::InstanceRecordSuffix), /*Files*/ true, /*Directories*/ false);
 
 	int32 Removed = 0;
 	for (const FString& FileName : FileNames)
@@ -351,6 +389,7 @@ int32 FMCPBridgeStateFiles::ReapStaleInstanceRecords(
 
 int32 FMCPBridgeStateFiles::ReadRequestedPort(const FString& FilePath, const FString& NormalizedProjectRoot, FString& OutDetail)
 {
+	namespace F = UEMCPWire::RequestedPortField;
 	OutDetail.Reset();
 
 	if (FilePath.IsEmpty() || !FPaths::FileExists(FilePath))
@@ -369,9 +408,9 @@ int32 FMCPBridgeStateFiles::ReadRequestedPort(const FString& FilePath, const FSt
 	}
 
 	double PortValue = 0.0;
-	if (!Parsed->TryGetNumberField(TEXT("port"), PortValue))
+	if (!Parsed->TryGetNumberField(F::Port, PortValue))
 	{
-		OutDetail = FString::Printf(TEXT("%s has no numeric 'port', so it was ignored."), *FilePath);
+		OutDetail = FString::Printf(TEXT("%s has no numeric '%s', so it was ignored."), *FilePath, F::Port);
 		return INDEX_NONE;
 	}
 
@@ -383,7 +422,7 @@ int32 FMCPBridgeStateFiles::ReadRequestedPort(const FString& FilePath, const FSt
 	}
 
 	FString RecordedRoot;
-	if (!Parsed->TryGetStringField(TEXT("projectRoot"), RecordedRoot) || RecordedRoot.IsEmpty())
+	if (!Parsed->TryGetStringField(F::ProjectRoot, RecordedRoot) || RecordedRoot.IsEmpty())
 	{
 		OutDetail = FString::Printf(
 			TEXT("%s names no project root, so there is no way to tell whether it was written for this project. Ignoring it."),
@@ -404,198 +443,166 @@ int32 FMCPBridgeStateFiles::ReadRequestedPort(const FString& FilePath, const FSt
 	return Port;
 }
 
-// The port.json lockfile and bind-failure record FMCPBridgeServer publishes.
-
-// #492: per-project port lockfile. Multiple editors can run side-by-side as
-// long as each one's npm client can find the right bridge. Publishing the
-// bound port in <Project>/Saved/UE_MCP_Bridge/port.json (resolved from the
-// .uproject path the client was given) is the cheapest way to do that.
-FString FMCPBridgeServer::GetPortLockfilePath()
-{
-	return FPaths::Combine(FMCPBridgeStateFiles::StateDir(), TEXT("port.json"));
-}
-
-FString FMCPBridgeServer::GetBridgeErrorFilePath()
-{
-	return FPaths::Combine(FMCPBridgeStateFiles::StateDir(), TEXT("bridge-error.json"));
-}
-
 namespace
 {
+	/** This process's own instance record, describing the running plugin. */
+	FMCPInstanceRecord MakeInstanceRecord(const FMCPBridgeIdentity& Self, const TCHAR* State, int32 Port)
+	{
+		FMCPInstanceRecord Record;
+		Record.Port = Port;
+		Record.Pid = Self.Pid;
+		Record.InstanceId = Self.InstanceId;
+		Record.ProjectRoot = FMCPBridgeStateFiles::ThisProjectRoot();
+		Record.StartedAtUtc = Self.StartedAtUtc;
+		Record.EngineVersion = FEngineVersion::Current().ToString();
+		Record.ProtocolVersion = UEMCP_BRIDGE_PROTOCOL_VERSION;
+		Record.HandlerApiVersion = UEMCP_BRIDGE_API_VERSION;
+		Record.State = State;
+
+		// Where this plugin loaded from, so a client never assumes Plugins/UE_MCP_Bridge.
+		if (const TSharedPtr<IPlugin> Plugin = IPluginManager::Get().FindPlugin(UEMCPWire::BridgePluginName))
+		{
+			FString PluginDir = FPaths::ConvertRelativePathToFull(Plugin->GetBaseDir());
+			FPaths::NormalizeDirectoryName(PluginDir);
+			Record.PluginDir = PluginDir;
+			Record.InstallKind = FMCPBridgeStateFiles::InstallKindFor(PluginDir);
+			Record.PluginVersion = Plugin->GetDescriptor().VersionName;
+		}
+		return Record;
+	}
+
+	void PublishInstanceRecord(const FMCPBridgeIdentity& Self, const TCHAR* State, int32 Port)
+	{
+		const FString Dir = FMCPBridgeStateFiles::InstancesDir();
+		if (FMCPBridgeStateFiles::WriteInstanceRecord(Dir, MakeInstanceRecord(Self, State, Port)))
+		{
+			UE_LOG(LogMCPBridge, Log, TEXT("[UE-MCP] Instance record published: %s (state=%s, port=%d)"),
+				*FMCPBridgeStateFiles::RecordPath(Dir, Self.Pid), State, Port);
+		}
+	}
+
 	/** Is the instance that published this port.json still there? Asked only of a
 	 *  record another instance wrote, before publishing over it. */
-	bool PortLockfileOwnerIsLive(const FString& FilePath, int32 OwnBoundPort)
+	bool PortLockfileOwnerIsLive(const FMCPPortLockfile& Owner, int32 OwnBoundPort)
 	{
-		FMCPInstanceRecord Owner;
-		return FMCPBridgeStateFiles::ReadInstanceRecord(FilePath, Owner)
-			&& FMCPBridgeStateFiles::IsInstanceLive(Owner, OwnBoundPort);
+		FMCPInstanceRecord AsRecord;
+		AsRecord.Pid = Owner.Pid;
+		AsRecord.Port = Owner.Port;
+		AsRecord.InstanceId = Owner.InstanceId;
+		AsRecord.State = UEMCPWire::BridgeState::Listening;
+		return FMCPBridgeStateFiles::IsInstanceLive(AsRecord, OwnBoundPort);
 	}
 
-	/** Read the instanceId out of a record, or empty when there is not one. */
-	FString ReadRecordInstanceId(const FString& FilePath)
+	void PublishPortLockfile(const FMCPBridgeIdentity& Self, int32 Port)
 	{
-		const TSharedPtr<FJsonObject> Parsed = FMCPBridgeStateFiles::LoadJson(FilePath);
-		if (!Parsed.IsValid())
-		{
-			return FString();
-		}
-		FString Value;
-		Parsed->TryGetStringField(TEXT("instanceId"), Value);
-		return Value;
-	}
-}
+		namespace F = UEMCPWire::PortLockfileField;
+		const FString FilePath = FMCPBridgeStateFiles::PortLockfilePath();
 
-void FMCPBridgeServer::WritePortLockfile(int32 PortValue)
-{
-	const FString FilePath = GetPortLockfilePath();
-	const FString OurId = InstanceId;
-
-	// #817: the write is owner-checked, the same way the delete already was.
-	// One project directory has one port.json and two editors of that project
-	// have two ports, so the second editor to boot used to publish its own
-	// address over a perfectly healthy first editor's, and every client reading
-	// the file was silently re-aimed at the newcomer. The newcomer's address is
-	// in its own instance record, where it cannot displace anyone.
-	{
-		const TSharedPtr<FJsonObject> Existing = FMCPBridgeStateFiles::LoadJson(FilePath);
-		FString ExistingOwner;
-		if (Existing.IsValid() && Existing->TryGetStringField(TEXT("instanceId"), ExistingOwner)
-			&& !ExistingOwner.IsEmpty() && ExistingOwner != OurId && PortLockfileOwnerIsLive(FilePath, PortValue))
+		// #817: the write is owner-checked, the same way the delete is. One
+		// project directory has one port.json and two editors of that project
+		// have two ports, so publishing unconditionally re-aimed every client at
+		// whichever editor booted second. The newcomer's address is in its own
+		// instance record, where it cannot displace anyone.
+		FMCPPortLockfile Existing;
+		if (FMCPBridgeStateFiles::ReadPortLockfile(FilePath, Existing)
+			&& !Existing.InstanceId.IsEmpty() && Existing.InstanceId != Self.InstanceId
+			&& PortLockfileOwnerIsLive(Existing, Port))
 		{
 			UE_LOG(LogMCPBridge, Warning,
 				TEXT("[UE-MCP] Another editor of this project (instance %s) is still listening and owns %s, so this bridge did not publish over it. This bridge is on port %d and its address is in %s. Clients reading port.json will reach the other editor."),
-				*ExistingOwner, *FilePath, PortValue, *FMCPBridgeStateFiles::RecordPath(FMCPBridgeStateFiles::InstancesDir(), FPlatformProcess::GetCurrentProcessId()));
+				*Existing.InstanceId, *FilePath, Port, *FMCPBridgeStateFiles::RecordPath(FMCPBridgeStateFiles::InstancesDir(), Self.Pid));
 			return;
 		}
-	}
 
-	TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
-	Obj->SetNumberField(TEXT("port"), PortValue);
-	Obj->SetNumberField(TEXT("pid"), (double)FPlatformProcess::GetCurrentProcessId());
-	Obj->SetStringField(TEXT("startedAt"), StartedAtUtc.ToIso8601());
-	// Who wrote this. A pid is not identity: pids are recycled, and two
-	// instances of one project would otherwise be indistinguishable on disk.
-	Obj->SetStringField(TEXT("instanceId"), InstanceId);
-	Obj->SetStringField(TEXT("status"), TEXT("listening"));
-	Obj->SetNumberField(TEXT("protocolVersion"), (double)UEMCP_BRIDGE_PROTOCOL_VERSION);
-	Obj->SetNumberField(TEXT("handlerApiVersion"), (double)UEMCP_BRIDGE_API_VERSION);
+		TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
+		Obj->SetNumberField(F::Port, Port);
+		Obj->SetNumberField(F::Pid, (double)Self.Pid);
+		Obj->SetStringField(F::StartedAt, Self.StartedAtUtc);
+		Obj->SetStringField(F::InstanceId, Self.InstanceId);
+		Obj->SetStringField(F::State, UEMCPWire::BridgeState::Listening);
+		// Clients built before port.json said `state` read this.
+		Obj->SetStringField(F::LegacyState, UEMCPWire::BridgeState::Listening);
+		Obj->SetNumberField(F::ProtocolVersion, (double)UEMCP_BRIDGE_PROTOCOL_VERSION);
+		Obj->SetNumberField(F::HandlerApiVersion, (double)UEMCP_BRIDGE_API_VERSION);
 
-	if (!FMCPBridgeStateFiles::PublishJson(FilePath, Obj))
-	{
-		UE_LOG(LogMCPBridge, Warning, TEXT("[UE-MCP] Failed to write port lockfile: %s"), *FilePath);
-		return;
-	}
+		if (!FMCPBridgeStateFiles::PublishJson(FilePath, Obj))
+		{
+			UE_LOG(LogMCPBridge, Warning, TEXT("[UE-MCP] Failed to write port lockfile: %s"), *FilePath);
+			return;
+		}
 
-	// A previous failed start may have left a bind-failure record. This
-	// instance is listening, so that record no longer describes reality.
-	IFileManager::Get().Delete(*GetBridgeErrorFilePath(), /*RequireExists*/ false, /*EvenReadOnly*/ false, /*Quiet*/ true);
+		// This instance is listening, so a bind-failure record an earlier start
+		// left no longer describes reality.
+		IFileManager::Get().Delete(*FMCPBridgeStateFiles::BridgeErrorPath(), /*RequireExists*/ false, /*EvenReadOnly*/ false, /*Quiet*/ true);
 
-	UE_LOG(LogMCPBridge, Log, TEXT("[UE-MCP] Port lockfile published: %s (port=%d, instance=%s)"),
-		*FilePath, PortValue, *InstanceId);
-}
-
-void FMCPBridgeServer::WriteBindFailureRecord(int32 FirstPort, int32 LastPort, int32 ErrorCode)
-{
-	// Its own path, never port.json: a failed start must not be able to erase
-	// or overwrite the record of an editor that is running perfectly well.
-	const FString FilePath = GetBridgeErrorFilePath();
-
-	TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
-	Obj->SetStringField(TEXT("status"), TEXT("bind-failed"));
-	Obj->SetNumberField(TEXT("pid"), (double)FPlatformProcess::GetCurrentProcessId());
-	Obj->SetStringField(TEXT("startedAt"), StartedAtUtc.ToIso8601());
-	Obj->SetStringField(TEXT("failedAt"), FDateTime::UtcNow().ToIso8601());
-	Obj->SetStringField(TEXT("instanceId"), InstanceId);
-	Obj->SetNumberField(TEXT("firstPortTried"), FirstPort);
-	Obj->SetNumberField(TEXT("lastPortTried"), LastPort);
-	Obj->SetNumberField(TEXT("errorCode"), ErrorCode);
-	Obj->SetStringField(TEXT("detail"), FString::Printf(
-		TEXT("The editor is running but its MCP bridge could not bind a port in [%d, %d]."), FirstPort, LastPort));
-
-	if (!FMCPBridgeStateFiles::PublishJson(FilePath, Obj))
-	{
-		UE_LOG(LogMCPBridge, Warning, TEXT("[UE-MCP] Failed to write bridge error record: %s"), *FilePath);
-	}
-
-	// #817: and again as this instance's own record, so a failed start is
-	// visible in the same place a successful one is. bridge-error.json is one
-	// file per project and a second editor's failure would overwrite the first
-	// editor's; the per-pid record cannot be overwritten by anyone.
-	WriteInstanceRecord(TEXT("bind-failed"), /*PortValue*/ 0);
-}
-
-void FMCPBridgeServer::WriteInstanceRecord(const FString& State, int32 PortValue)
-{
-	FMCPInstanceRecord Record;
-	Record.Port = PortValue;
-	Record.Pid = FPlatformProcess::GetCurrentProcessId();
-	Record.InstanceId = InstanceId;
-	Record.ProjectRoot = FMCPBridgeStateFiles::ThisProjectRoot();
-	Record.StartedAtUtc = StartedAtUtc.ToIso8601();
-	Record.EngineVersion = FEngineVersion::Current().ToString();
-	Record.ProtocolVersion = UEMCP_BRIDGE_PROTOCOL_VERSION;
-	Record.HandlerApiVersion = UEMCP_BRIDGE_API_VERSION;
-	Record.State = State;
-
-	// Where this plugin loaded from, so a client never assumes Plugins/UE_MCP_Bridge.
-	if (const TSharedPtr<IPlugin> Plugin = IPluginManager::Get().FindPlugin(TEXT("UE_MCP_Bridge")))
-	{
-		FString PluginDir = FPaths::ConvertRelativePathToFull(Plugin->GetBaseDir());
-		FPaths::NormalizeDirectoryName(PluginDir);
-		Record.PluginDir = PluginDir;
-		Record.InstallKind = FMCPBridgeStateFiles::InstallKindFor(PluginDir);
-		Record.PluginVersion = Plugin->GetDescriptor().VersionName;
-	}
-
-	if (FMCPBridgeStateFiles::WriteInstanceRecord(FMCPBridgeStateFiles::InstancesDir(), Record))
-	{
-		UE_LOG(LogMCPBridge, Log, TEXT("[UE-MCP] Instance record published: %s (state=%s, port=%d)"),
-			*FMCPBridgeStateFiles::RecordPath(FMCPBridgeStateFiles::InstancesDir(), Record.Pid), *State, PortValue);
+		UE_LOG(LogMCPBridge, Log, TEXT("[UE-MCP] Port lockfile published: %s (port=%d, instance=%s)"),
+			*FilePath, Port, *Self.InstanceId);
 	}
 }
 
-void FMCPBridgeServer::DeleteOwnInstanceRecord()
+void FMCPBridgeStateFiles::PublishListening(const FMCPBridgeIdentity& Self, int32 Port)
 {
-	FMCPBridgeStateFiles::DeleteOwnInstanceRecord(
-		FMCPBridgeStateFiles::InstancesDir(),
-		FPlatformProcess::GetCurrentProcessId(),
-		InstanceId);
-}
+	PublishInstanceRecord(Self, UEMCPWire::BridgeState::Listening, Port);
 
-void FMCPBridgeServer::ReapStaleInstanceRecords()
-{
-	const int32 Removed = FMCPBridgeStateFiles::ReapStaleInstanceRecords(
-		FMCPBridgeStateFiles::InstancesDir(),
-		InstanceId,
-		ServerPort);
+	// Swept here, once, by the next process that can prove them stale rather
+	// than by a timer, so a machine that crashes repeatedly does not accumulate
+	// a directory of dead editors.
+	const int32 Removed = ReapStaleInstanceRecords(InstancesDir(), Self.InstanceId, Port);
 	if (Removed > 0)
 	{
 		UE_LOG(LogMCPBridge, Log, TEXT("[UE-MCP] Removed %d stale bridge instance record(s)."), Removed);
 	}
+
+	PublishPortLockfile(Self, Port);
 }
 
-void FMCPBridgeServer::DeletePortLockfileIfOwned()
+void FMCPBridgeStateFiles::PublishBindFailure(const FMCPBridgeIdentity& Self, int32 FirstPort, int32 LastPort, int32 ErrorCode)
 {
-	const FString FilePath = GetPortLockfilePath();
-	if (!FPaths::FileExists(FilePath))
+	namespace F = UEMCPWire::BridgeErrorField;
+	const FString FilePath = BridgeErrorPath();
+
+	TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
+	Obj->SetStringField(F::State, UEMCPWire::BridgeState::BindFailed);
+	// Clients built before bridge-error.json said `state` read this.
+	Obj->SetStringField(F::LegacyState, UEMCPWire::BridgeState::BindFailed);
+	Obj->SetNumberField(F::Pid, (double)Self.Pid);
+	Obj->SetStringField(F::StartedAt, Self.StartedAtUtc);
+	Obj->SetStringField(F::FailedAt, FDateTime::UtcNow().ToIso8601());
+	Obj->SetStringField(F::InstanceId, Self.InstanceId);
+	Obj->SetNumberField(F::FirstPortTried, FirstPort);
+	Obj->SetNumberField(F::LastPortTried, LastPort);
+	Obj->SetNumberField(F::ErrorCode, ErrorCode);
+	Obj->SetStringField(F::Detail, FString::Printf(
+		TEXT("The editor is running but its MCP bridge could not bind a port in [%d, %d]. Free one of those ports or pin another with bridge.port in ue-mcp.yml (or UE_MCP_PORT), then restart the editor."),
+		FirstPort, LastPort));
+
+	if (!PublishJson(FilePath, Obj))
 	{
-		return;
+		UE_LOG(LogMCPBridge, Warning, TEXT("[UE-MCP] Failed to write bridge error record: %s"), *FilePath);
 	}
 
-	// Only take away a record this instance wrote. Exit() runs on every return
-	// from Run(), including the one where the bind failed, so an editor that
-	// never listened used to delete a live editor's record on its way out.
-	const FString OwnerId = ReadRecordInstanceId(FilePath);
-	const FString OurId = InstanceId;
-	if (OwnerId != OurId)
+	PublishInstanceRecord(Self, UEMCPWire::BridgeState::BindFailed, /*Port*/ 0);
+}
+
+void FMCPBridgeStateFiles::RetractOwn(const FMCPBridgeIdentity& Self)
+{
+	const FString FilePath = PortLockfilePath();
+	if (FPaths::FileExists(FilePath))
 	{
-		UE_LOG(LogMCPBridge, Log, TEXT("[UE-MCP] Leaving port lockfile alone: it belongs to instance %s, not %s"),
-			OwnerId.IsEmpty() ? TEXT("(unknown)") : *OwnerId, *OurId);
-		return;
+		// Only take away a record this instance wrote: an editor that never
+		// listened used to delete a live editor's record on its way out.
+		FMCPPortLockfile Owner;
+		ReadPortLockfile(FilePath, Owner);
+		if (Owner.InstanceId != Self.InstanceId)
+		{
+			UE_LOG(LogMCPBridge, Log, TEXT("[UE-MCP] Leaving port lockfile alone: it belongs to instance %s, not %s"),
+				Owner.InstanceId.IsEmpty() ? TEXT("(unknown)") : *Owner.InstanceId, *Self.InstanceId);
+		}
+		else if (IFileManager::Get().Delete(*FilePath))
+		{
+			UE_LOG(LogMCPBridge, Log, TEXT("[UE-MCP] Port lockfile removed: %s"), *FilePath);
+		}
 	}
 
-	if (IFileManager::Get().Delete(*FilePath))
-	{
-		UE_LOG(LogMCPBridge, Log, TEXT("[UE-MCP] Port lockfile removed: %s"), *FilePath);
-	}
+	DeleteOwnInstanceRecord(InstancesDir(), Self.Pid, Self.InstanceId);
 }
