@@ -11,7 +11,6 @@ TSharedPtr<FJsonValue> FEditorHandlers::GetShaderCompileStatus(const TSharedPtr<
 	const int32 OutstandingJobs = GShaderCompilingManager ? GShaderCompilingManager->GetNumRemainingJobs() : 0;
 	const bool IsCompiling = GShaderCompilingManager && GShaderCompilingManager->IsCompiling();
 	TSet<const FMaterial*> PendingMaterials;
-#if WITH_EDITOR
 	if (GShaderCompilingManager)
 	{
 		// The engine's shader map list is private, so ask each loaded material's
@@ -24,7 +23,6 @@ TSharedPtr<FJsonValue> FEditorHandlers::GetShaderCompileStatus(const TSharedPtr<
 			PendingMaterials.Add(Resource);
 		}
 	}
-#endif
 	// A resource compiles one shader map at a time, so the counts match.
 	const int32 PendingShaderMaps = PendingMaterials.Num();
 	const bool Idle = !IsCompiling && OutstandingJobs == 0 && PendingShaderMaps == 0;

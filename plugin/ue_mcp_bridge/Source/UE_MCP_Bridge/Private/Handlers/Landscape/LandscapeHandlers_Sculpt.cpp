@@ -1143,7 +1143,9 @@ namespace
 		TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
 		Obj->SetBoolField(TEXT("success"), false);
 		Obj->SetStringField(TEXT("error"),
-			TEXT("Landscape region writes need the landscape edit-layer system, which this plugin drives only on UE 5.5 and newer."));
+			TEXT("Landscape region writes require Unreal Engine 5.5 or newer: they need the landscape edit-layer system, which this plugin drives only there. ")
+			TEXT("On this engine, sculpt with Landscape Mode in the editor."));
+		Obj->SetStringField(TEXT("errorCode"), TEXT("unsupported_engine_version"));
 		Obj->SetStringField(TEXT("reason"), TEXT("engineTooOld"));
 		Obj->SetBoolField(TEXT("unsupported"), true);
 		OutError = MakeShared<FJsonValueObject>(Obj);

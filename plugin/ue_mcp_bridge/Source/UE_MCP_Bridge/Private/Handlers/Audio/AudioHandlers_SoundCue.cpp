@@ -32,12 +32,10 @@ namespace
 {
 	USoundNode* FindSoundCueNodeByName(USoundCue* Cue, const FString& NodeName)
 	{
-#if WITH_EDITORONLY_DATA
 		for (USoundNode* N : Cue->AllNodes)
 		{
 			if (N && N->GetName() == NodeName) return N;
 		}
-#endif
 		return nullptr;
 	}
 
@@ -179,10 +177,8 @@ TSharedPtr<FJsonValue> FAudioHandlers::SoundCueConnect(const TSharedPtr<FJsonObj
 		}
 	}
 
-#if WITH_EDITOR
 	Cue->LinkGraphNodesFromSoundNodes();
 	Cue->PostEditChange();
-#endif
 	auto Res = MCPSuccess();
 	MCPSetUpdated(Res);
 	MCPAudio::SaveAndNote(Res, { Cue });
@@ -238,7 +234,6 @@ TSharedPtr<FJsonValue> FAudioHandlers::SoundCueGetGraph(const TSharedPtr<FJsonOb
 	if (!Cue) return MCPAssetLoadError(CuePath, TEXT("SoundCue"));
 
 	TArray<TSharedPtr<FJsonValue>> Nodes;
-#if WITH_EDITORONLY_DATA
 	for (USoundNode* N : Cue->AllNodes)
 	{
 		if (!N) continue;
@@ -253,7 +248,6 @@ TSharedPtr<FJsonValue> FAudioHandlers::SoundCueGetGraph(const TSharedPtr<FJsonOb
 		O->SetArrayField(TEXT("children"), Children);
 		Nodes.Add(MakeShared<FJsonValueObject>(O));
 	}
-#endif
 
 	auto Res = MCPSuccess();
 	Res->SetStringField(TEXT("cuePath"), CuePath);
@@ -372,10 +366,8 @@ TSharedPtr<FJsonValue> FAudioHandlers::SoundCueAuthor(const TSharedPtr<FJsonObje
 		}
 	}
 
-#if WITH_EDITOR
 	Cue->LinkGraphNodesFromSoundNodes();
 	Cue->PostEditChange();
-#endif
 	auto Res = MCPSuccess();
 	MCPSetCreated(Res);
 	MCPAudio::SaveAndNote(Res, { Cue });

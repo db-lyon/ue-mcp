@@ -490,9 +490,7 @@ TSharedPtr<FJsonValue> FCollisionQueryHandlers::ResolveCollisionProfile(const TS
 	Result->SetStringField(TEXT("objectTypeName"), Template.ObjectTypeName.ToString());
 	Result->SetNumberField(TEXT("objectTypeIndex"), ObjectTypeIndex);
 	Result->SetBoolField(TEXT("canModify"), Template.bCanModify);
-#if WITH_EDITORONLY_DATA
 	Result->SetStringField(TEXT("helpMessage"), Template.HelpMessage);
-#endif
 
 	TArray<TSharedPtr<FJsonValue>> Responses;
 	for (const FMCPCollisionChannelInfo& Info : Table)

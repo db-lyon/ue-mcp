@@ -19,14 +19,10 @@
 #include "Runtime/Launch/Resources/Version.h"
 #include <type_traits>
 
-// UPCGComponent::ForEachConstManagedResource and AreManagedResourcesAccessible are public from 5.7.
-// Older engines fall back to the components on the owner tagged as PCG generated.
-#define UE_MCP_HAS_PCG_MANAGED_RESOURCE_ITERATION (ENGINE_MAJOR_VERSION > 5 || (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 7))
 #if UE_MCP_HAS_PCG_MANAGED_RESOURCE_ITERATION
 #include "PCGManagedResource.h"
 #endif
 
-#define UE_MCP_HAS_PCG_NODE_INSPECTION (ENGINE_MAJOR_VERSION > 5 || (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 8))
 #if UE_MCP_HAS_PCG_NODE_INSPECTION
 #include "PCGGraphExecutionInspection.h"
 #include "PCGGraphExecutionStateInterface.h"

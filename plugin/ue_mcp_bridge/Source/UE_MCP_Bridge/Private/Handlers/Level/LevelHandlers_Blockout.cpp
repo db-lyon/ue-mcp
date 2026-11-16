@@ -6,7 +6,7 @@
 // beyond the engine's basic ones, no way to find a blockout again, and no swap.
 // Epic's add_cube adds a box component and needs that engine's toolset;
 // Geometry Script needs its plugin. So the primitives here are built through
-// FMeshDescription, which is engine core and the same on 5.4 to 5.9.
+// FMeshDescription, which is engine core and the same on <!-- count:engineRange -->5.4 to 5.9<!-- /count -->.
 //
 // Every primitive mesh is a 100 cm unit shape with its pivot at the bottom
 // centre, cached as an asset under meshFolder (one per shape, and per step or

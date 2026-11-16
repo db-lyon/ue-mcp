@@ -231,9 +231,7 @@ namespace MCPMaterialDesigner
 		{
 			bool bMatch = Enum->GetNameStringByIndex(Index).Equals(Text, ESearchCase::IgnoreCase)
 				|| Enum->GetDisplayNameTextByIndex(Index).ToString().Equals(Text, ESearchCase::IgnoreCase);
-#if WITH_EDITORONLY_DATA
 			bMatch = bMatch || Enum->GetMetaData(TEXT("ShortName"), Index).Equals(Text, ESearchCase::IgnoreCase);
-#endif
 			if (bMatch)
 			{
 				OutValue = Enum->GetValueByIndex(Index);
@@ -1032,10 +1030,8 @@ TSharedPtr<FJsonValue> FMaterialHandlers::SetMaterialDesignerValue(const TShared
 	// Prefer the component's own setter: it runs the update the Material
 	// Designer UI runs (SetValue, SetOffset, SetText, SetEnabled, ...).
 	TArray<FString> SetterNames;
-#if WITH_EDITORONLY_DATA
 	const FString MetaSetter = Prop->GetMetaData(TEXT("BlueprintSetter"));
 	if (!MetaSetter.IsEmpty()) SetterNames.Add(MetaSetter);
-#endif
 	SetterNames.AddUnique(TEXT("Set") + PropName);
 	if (PropName.Len() > 1 && PropName[0] == TEXT('b') && FChar::IsUpper(PropName[1])) SetterNames.AddUnique(TEXT("Set") + PropName.Mid(1));
 

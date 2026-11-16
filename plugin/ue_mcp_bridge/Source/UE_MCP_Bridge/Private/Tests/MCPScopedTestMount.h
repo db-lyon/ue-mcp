@@ -7,6 +7,7 @@
 #if WITH_DEV_AUTOMATION_TESTS
 
 #include "CoreMinimal.h"
+#include "HandlerEngineVersion.h"
 #include "HAL/FileManager.h"
 #include "HAL/PlatformProcess.h"
 #include "Misc/Guid.h"
@@ -51,7 +52,7 @@ namespace UEMCPTests
 		for (UPackage* Package : Packages)
 		{
 			TArray<UObject*> Objects;
-#if ENGINE_MAJOR_VERSION > 5 || (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 8)
+#if UE_MCP_HAS_5_8_API
 			GetObjectsWithPackage(Package, Objects, EGetObjectsFlags::IncludeNestedObjects);
 #else
 			GetObjectsWithPackage(Package, Objects, /*bIncludeNestedObjects=*/true);

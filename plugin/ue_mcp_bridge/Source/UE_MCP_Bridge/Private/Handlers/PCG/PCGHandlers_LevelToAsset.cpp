@@ -3,8 +3,6 @@
 #include "HandlerUtils.h"
 #include "Runtime/Launch/Resources/Version.h"
 
-#define UE_MCP_HAS_PCG_LEVEL_TO_ASSET (ENGINE_MAJOR_VERSION > 5 || (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 5))
-
 #if UE_MCP_HAS_PCG_LEVEL_TO_ASSET
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "Engine/LevelStreaming.h"
@@ -15,7 +13,7 @@
 #include "PCGDataAsset.h"
 #include "PCGLevelToAsset.h"
 #include "UObject/Package.h"
-#if ENGINE_MAJOR_VERSION > 5 || (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 6)
+#if UE_MCP_HAS_PCG_BASE_POINT_DATA
 #include "Data/PCGBasePointData.h"
 #else
 #include "Data/PCGPointData.h"
@@ -25,7 +23,7 @@ namespace
 {
 	int32 MCPPCGPointCount(const UPCGData* Data)
 	{
-#if ENGINE_MAJOR_VERSION > 5 || (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 6)
+#if UE_MCP_HAS_PCG_BASE_POINT_DATA
 		const UPCGBasePointData* Points = Cast<UPCGBasePointData>(Data);
 		return Points ? Points->GetNumPoints() : -1;
 #else
@@ -189,7 +187,8 @@ TSharedPtr<FJsonValue> FPCGHandlers::ExportLevelToAsset(const TSharedPtr<FJsonOb
 	}
 	return MCPResult(Result);
 #else
-	return MCPError(TEXT("Exporting a level to a PCG data asset needs UE 5.5 or newer."));
+	return MCPUnsupportedEngineError(TEXT("Exporting a level to a PCG data asset"), TEXT("5.5"),
+		TEXT("PCG Assemblies arrived there. On this engine, sample the level's actors into a graph with the PCG Get Actor Data node instead"));
 #endif
 }
 
@@ -265,6 +264,7 @@ TSharedPtr<FJsonValue> FPCGHandlers::UpdateLevelAssets(const TSharedPtr<FJsonObj
 	MCPSetNoRollback(Result, TEXT("Each asset was overwritten with a fresh export of its source level. No call restores the previous contents; source control holds them."));
 	return MCPResult(Result);
 #else
-	return MCPError(TEXT("Updating PCG data assets from their levels needs UE 5.5 or newer."));
+	return MCPUnsupportedEngineError(TEXT("Updating PCG data assets from their levels"), TEXT("5.5"),
+		TEXT("PCG Assemblies arrived there. On this engine, sample the level's actors into a graph with the PCG Get Actor Data node instead"));
 #endif
 }

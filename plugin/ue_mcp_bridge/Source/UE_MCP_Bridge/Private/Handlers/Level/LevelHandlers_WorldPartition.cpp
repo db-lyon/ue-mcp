@@ -31,12 +31,8 @@
 #include "GameFramework/Actor.h"
 #include "UObject/UObjectGlobals.h"
 
-// FWorldPartitionActorDescInstance and the ...ActorDescInstance traversal
-// helpers arrived with the actor-desc container instance rework in UE 5.5. On
-// 5.4 the whole editor implementation below is compiled out and both actions
-// answer with a clear version error instead of failing the build.
-#define UE_MCP_HAS_ACTOR_DESC_INSTANCE_API (WITH_EDITOR && UE_MCP_HAS_5_5_API)
-
+// On 5.4 the whole implementation below is compiled out and the actions answer
+// with a version error instead of failing the build.
 #if UE_MCP_HAS_ACTOR_DESC_INSTANCE_API
 #include "WorldPartition/WorldPartition.h"
 #include "WorldPartition/WorldPartitionActorDescInstance.h"
@@ -55,13 +51,10 @@
 //   IWorldPartitionActorLoaderInterface::ILoaderAdapter::Load(), Unload(), IsLoaded(), GetBoundingBox(),
 //   GetUserCreated() and SetUserCreated() (WorldPartitionActorLoaderInterface.h). Location volumes are
 //   ALocationVolume actors, which implement the same interface.
-#if UE_MCP_HAS_ACTOR_DESC_INSTANCE_API
-#define UE_MCP_HAS_LOADED_REGION_API 1
+#if UE_MCP_HAS_LOADED_REGION_API
 #include "WorldPartition/WorldPartitionActorLoaderInterface.h"
 #include "WorldPartition/LoaderAdapter/LoaderAdapterShape.h"
 #include "WorldPartition/WorldPartitionEditorLoaderAdapter.h"
-#else
-#define UE_MCP_HAS_LOADED_REGION_API 0
 #endif
 
 namespace
@@ -769,10 +762,9 @@ TSharedPtr<FJsonValue> FLevelHandlers::ListActorDescs(const TSharedPtr<FJsonObje
 	MCPPagination::EmitPage(Page, Rows, TEXT("actorDescs"), Result);
 	Result->SetNumberField(TEXT("returned"), Result->GetIntegerField(TEXT("count")));
 	return MCPResult(Result);
-#elif WITH_EDITOR
-	return MCPError(TEXT("list_actor_descs needs the World Partition actor descriptor instance API, which is UE 5.5 and newer. On UE 5.4 use get_outliner or get_actors_by_class, which only see actors that are already streamed in."));
 #else
-	return MCPError(TEXT("World Partition actor descriptors are editor-only"));
+	return MCPUnsupportedEngineError(TEXT("list_actor_descs"), TEXT("5.5"),
+		TEXT("It needs the World Partition actor descriptor instance API. On this engine, use level(get_outliner) or level(get_actors_by_class), which only see actors that are already streamed in"));
 #endif
 }
 
@@ -926,10 +918,9 @@ TSharedPtr<FJsonValue> FLevelHandlers::LoadActorDescs(const TSharedPtr<FJsonObje
 			: TEXT("Every matched actor already had the requested pin state, so nothing changed and there is nothing to undo."));
 	}
 	return MCPResult(Result);
-#elif WITH_EDITOR
-	return MCPError(TEXT("load_actor_descs needs the World Partition actor descriptor instance API, which is UE 5.5 and newer. On UE 5.4 load the cell from the World Partition editor window instead."));
 #else
-	return MCPError(TEXT("World Partition streaming control is editor-only"));
+	return MCPUnsupportedEngineError(TEXT("load_actor_descs"), TEXT("5.5"),
+		TEXT("It needs the World Partition actor descriptor instance API. On this engine, load the cell from the World Partition editor window"));
 #endif
 }
 
@@ -950,12 +941,9 @@ namespace
 		return MCPError(FString::Printf(
 			TEXT("%s needs the World Partition editor loader interface (IWorldPartitionActorLoaderInterface), and no header for it was found in this engine build. Unload the region from the World Partition editor window instead."),
 			Action));
-#elif WITH_EDITOR
-		return MCPError(FString::Printf(
-			TEXT("%s needs the World Partition actor descriptor instance API, which is UE 5.5 and newer. On UE 5.4 use the World Partition editor window."),
-			Action));
 #else
-		return MCPError(FString::Printf(TEXT("%s is editor-only"), Action));
+		return MCPUnsupportedEngineError(Action, TEXT("5.5"),
+			TEXT("It needs the World Partition actor descriptor instance API. On this engine, use the World Partition editor window"));
 #endif
 	}
 }

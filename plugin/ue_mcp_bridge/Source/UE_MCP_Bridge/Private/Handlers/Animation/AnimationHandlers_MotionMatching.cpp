@@ -694,11 +694,9 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetPoseSearchDatabaseSettings(const T
 	// EPoseSearchMode::EventOnly is a later addition to the enum.
 	else if (PrevPoseSearchMode == EPoseSearchMode::EventOnly) PrevPoseSearchModeName = TEXT("EventOnly");
 #endif
-#if WITH_EDITORONLY_DATA
 	const int32 PrevNumberOfPrincipalComponents = Database->NumberOfPrincipalComponents;
 	const FString PrevNormalizationSetPath =
 		Database->NormalizationSet ? Database->NormalizationSet->GetPathName() : FString();
-#endif
 
 	Database->Modify();
 	if (bHasContinuingPoseCostBias) Database->ContinuingPoseCostBias = (float)ContinuingPoseCostBias;
@@ -716,7 +714,6 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetPoseSearchDatabaseSettings(const T
 #endif
 	}
 
-#if WITH_EDITORONLY_DATA
 	if (bHasNumberOfPrincipalComponents) Database->NumberOfPrincipalComponents = NumberOfPrincipalComponents;
 	if (!NormSetPath.IsEmpty())
 	{
@@ -724,7 +721,6 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetPoseSearchDatabaseSettings(const T
 		if (!NormSet) return MCPError(FString::Printf(TEXT("PoseSearchNormalizationSet not found: %s"), *NormSetPath));
 		Database->NormalizationSet = NormSet;
 	}
-#endif
 
 	Database->PostEditChange();
 
@@ -740,17 +736,14 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetPoseSearchDatabaseSettings(const T
 	// echoes: numberOfPrincipalComponents and normalizationSetPath mutate and
 	// save the asset too, and leaving them out of this comparison is how a real
 	// write reports itself as a no-op.
-	bool bUnchanged =
+	const bool bUnchanged =
 		PrevContinuingPoseCostBias == Database->ContinuingPoseCostBias
 		&& PrevBaseCostBias == Database->BaseCostBias
 		&& PrevLoopingCostBias == Database->LoopingCostBias
 		&& PrevKDTreeQueryNumNeighbors == Database->KDTreeQueryNumNeighbors
-		&& PrevPoseSearchMode == Database->PoseSearchMode;
-#if WITH_EDITORONLY_DATA
-	bUnchanged = bUnchanged
+		&& PrevPoseSearchMode == Database->PoseSearchMode
 		&& PrevNumberOfPrincipalComponents == Database->NumberOfPrincipalComponents
 		&& PrevNormalizationSetPath == (Database->NormalizationSet ? Database->NormalizationSet->GetPathName() : FString());
-#endif
 	Res->SetBoolField(TEXT("unchanged"), bUnchanged);
 
 	TSharedPtr<FJsonObject> Rollback = MakeShared<FJsonObject>();
@@ -760,7 +753,6 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetPoseSearchDatabaseSettings(const T
 	Rollback->SetNumberField(TEXT("loopingCostBias"), PrevLoopingCostBias);
 	Rollback->SetNumberField(TEXT("kdTreeQueryNumNeighbors"), PrevKDTreeQueryNumNeighbors);
 	Rollback->SetStringField(TEXT("poseSearchMode"), PrevPoseSearchModeName);
-#if WITH_EDITORONLY_DATA
 	Rollback->SetNumberField(TEXT("numberOfPrincipalComponents"), PrevNumberOfPrincipalComponents);
 	// normalizationSetPath is only written when non-empty, so omitting it when the
 	// database had none leaves the assignment this call made in place. That is the
@@ -769,9 +761,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetPoseSearchDatabaseSettings(const T
 	{
 		Rollback->SetStringField(TEXT("normalizationSetPath"), PrevNormalizationSetPath);
 	}
-#endif
 	MCPSetRollback(Res, TEXT("set_pose_search_database_settings"), Rollback);
-#if WITH_EDITORONLY_DATA
 	const bool bAssignedFirstNormalizationSet =
 		PrevNormalizationSetPath.IsEmpty() && Database->NormalizationSet != nullptr;
 	Res->SetBoolField(TEXT("rollbackLossy"), bAssignedFirstNormalizationSet);
@@ -780,9 +770,6 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetPoseSearchDatabaseSettings(const T
 		Res->SetStringField(TEXT("rollbackNote"),
 			TEXT("The database had no normalization set before this call. set_pose_search_database_settings only writes normalizationSetPath when it is non-empty and has no form that clears one, so the replay restores every other setting and leaves the assignment in place."));
 	}
-#else
-	Res->SetBoolField(TEXT("rollbackLossy"), false);
-#endif
 	return MCPResult(Res);
 }
 

@@ -567,11 +567,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::ActorsInBox(const TSharedPtr<FJsonObject>
 		if (!ClassFilter.IsEmpty() && !Actor->GetClass()->GetName().Contains(ClassFilter, ESearchCase::IgnoreCase)) continue;
 
 		const bool bHiddenInGame = Actor->IsHidden();
-#if WITH_EDITOR
 		const bool bEditorHidden = Actor->IsHiddenEd();
-#else
-		const bool bEditorHidden = false;
-#endif
 		// Hidden means hidden in the world being queried: the viewport for the
 		// editor world, the game for a PIE world.
 		if (!bIncludeHidden && (bGameWorld ? bHiddenInGame : bEditorHidden)) continue;

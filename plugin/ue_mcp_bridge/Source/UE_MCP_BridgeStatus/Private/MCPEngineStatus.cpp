@@ -25,11 +25,12 @@
 #include "Windows/WindowsHWrapper.h"
 #endif
 
-// Same definition as the canonical one in UE_MCP_Bridge/Private/HandlerUtils.h.
-// It is repeated rather than shared because this module loads at
-// PostConfigInit and must not depend on the bridge module, and because the
-// bridge module lists this one as a private dependency, so its public headers
-// cannot reach in the other direction either. Keep the two in step.
+// The same gate as UE_MCP_Bridge/Public/HandlerEngineVersion.h, repeated
+// because this module loads at PostConfigInit and must not depend on the bridge
+// module, and the bridge lists this one as a private dependency, so its public
+// headers cannot reach in the other direction either. This is the one place
+// outside that header allowed to read the engine version macros;
+// tests/unit/engine-gates.test.ts holds the two definitions identical.
 #ifndef UE_MCP_HAS_5_8_API
 #define UE_MCP_HAS_5_8_API ((ENGINE_MAJOR_VERSION > 5) || (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 8))
 #endif

@@ -19,37 +19,21 @@
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 
-#if WITH_UEMCP_NNE && UE_MCP_HAS_5_5_API
-#define UE_MCP_NNE_AVAILABLE 1
+#if UE_MCP_NNE_AVAILABLE
 #include "NNE.h"
 #include "NNEModelData.h"
 #include "NNERuntime.h"
 #include "NNERuntimeCPU.h"
 #include "NNETypes.h"
-#if __has_include("NNERuntimeGPU.h")
+#endif
+#if UE_MCP_NNE_HAS_GPU
 #include "NNERuntimeGPU.h"
-#define UE_MCP_NNE_HAS_GPU 1
 #endif
-#if __has_include("NNERuntimeRDG.h")
+#if UE_MCP_NNE_HAS_RDG
 #include "NNERuntimeRDG.h"
-#define UE_MCP_NNE_HAS_RDG 1
 #endif
-#if __has_include("NNERuntimeNPU.h")
+#if UE_MCP_NNE_HAS_NPU
 #include "NNERuntimeNPU.h"
-#define UE_MCP_NNE_HAS_NPU 1
-#endif
-#else
-#define UE_MCP_NNE_AVAILABLE 0
-#endif
-
-#ifndef UE_MCP_NNE_HAS_GPU
-#define UE_MCP_NNE_HAS_GPU 0
-#endif
-#ifndef UE_MCP_NNE_HAS_RDG
-#define UE_MCP_NNE_HAS_RDG 0
-#endif
-#ifndef UE_MCP_NNE_HAS_NPU
-#define UE_MCP_NNE_HAS_NPU 0
 #endif
 
 namespace
@@ -73,7 +57,8 @@ namespace
 	TSharedPtr<FJsonValue> NNEUnavailableError()
 	{
 #if WITH_UEMCP_NNE
-		return MCPUnsupportedEngineError(TEXT("The NNE actions"), TEXT("5.5"));
+		return MCPUnsupportedEngineError(TEXT("The NNE actions"), TEXT("5.5"),
+			TEXT("This engine's NNE interfaces predate the runtime API they drive; there is no equivalent to fall back to"));
 #else
 		return MCPError(TEXT("This engine has no NNE module (Engine/Source/Runtime/NNE), so the NNE actions are not available."));
 #endif

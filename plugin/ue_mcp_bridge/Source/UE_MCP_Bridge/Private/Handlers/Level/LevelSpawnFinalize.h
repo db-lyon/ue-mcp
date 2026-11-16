@@ -14,11 +14,9 @@ namespace MCPSpawnFinalize
 {
 	inline void FinishEditorSpawn(AActor* Actor)
 	{
-#if WITH_EDITOR
 		if (!GIsEditor || !Actor) return;
 		const UWorld* World = Actor->GetWorld();
 		if (!World || World->IsGameWorld()) return;
 		Actor->InvalidateLightingCache();
-#endif
 	}
 }

@@ -29,7 +29,7 @@ private:
 
 	// #1828: the rest of what the Chooser Table editor can do, in
 	// ChooserHandlers_Authoring.cpp. Implemented against the engine's own
-	// chooser data structures so every engine from 5.4 to 5.9 takes one path.
+	// chooser data structures so every engine from <!-- count:engineRange -->5.4 to 5.9<!-- /count --> takes one path.
 	static TSharedPtr<FJsonValue> ListTypes(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> GetSignature(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SetSignature(const TSharedPtr<FJsonObject>& Params);

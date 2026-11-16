@@ -15,7 +15,6 @@
 #include "Engine/SkeletalMesh.h"
 #include "Engine/SkinnedAssetCommon.h"
 
-#if WITH_EDITORONLY_DATA && UE_MCP_HAS_5_4_API
 #include "Animation/Skeleton.h"
 #include "BoneWeights.h"
 #include "MeshDescription.h"
@@ -25,12 +24,10 @@
 #include "RenderingThread.h"
 #include "ScopedTransaction.h"
 #include "SkeletalMeshAttributes.h"
-#endif
 
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 
-#if WITH_EDITORONLY_DATA && UE_MCP_HAS_5_4_API
 // Named, not anonymous: the module is a unity build and anonymous namespaces
 // from neighbouring files merge.
 namespace MCPSkinnedPart
@@ -247,7 +244,6 @@ namespace MCPSkinnedPart
 		Lod.bWritten = false;
 	}
 }
-#endif // WITH_EDITORONLY_DATA && UE_MCP_HAS_5_4_API
 
 TSharedPtr<FJsonValue> FSkeletalMeshHandlers::TransformSkinnedPart(const TSharedPtr<FJsonObject>& Params)
 {
@@ -255,9 +251,6 @@ TSharedPtr<FJsonValue> FSkeletalMeshHandlers::TransformSkinnedPart(const TShared
 	MCPReadParamsAhead(Params, {
 		TEXT("assetPath"), TEXT("boneName"), TEXT("translation"), TEXT("rotation"), TEXT("space"),
 		TEXT("moveBone"), TEXT("lods"), TEXT("dryRun"), TEXT("save") });
-#if !(WITH_EDITORONLY_DATA && UE_MCP_HAS_5_4_API)
-	return MCPError(TEXT("transform_skinned_part requires an Unreal Editor build on Unreal Engine 5.4 or newer"));
-#else
 	using namespace MCPSkinnedPart;
 
 	FString AssetPath;
@@ -716,5 +709,4 @@ TSharedPtr<FJsonValue> FSkeletalMeshHandlers::TransformSkinnedPart(const TShared
 	}
 	Result->SetBoolField(TEXT("saved"), bSave);
 	return MCPResult(Result);
-#endif
 }

@@ -10,13 +10,13 @@ import {
   UNREAL_MCP_SECTION,
   UNREAL_MCP_SECTION_58,
   describeUnrealMcpServer,
-  engineAtLeast,
   iniBool,
   readUnrealMcpServer,
   setIniValues,
   userIniPath,
   writeUnrealMcpServerSettings,
 } from "../../src/integrations/epic/unreal-mcp-server.js";
+import { EPIC_ENGINE_FEATURES, engineAtLeast, engineHas } from "../../src/integrations/epic/engine-features.js";
 import { ProjectFixture } from "../helpers/project-fixture.js";
 
 let fixture: ProjectFixture;
@@ -153,5 +153,11 @@ describe("helpers", () => {
   it("parses UE bools and compares engine versions", () => {
     expect([iniBool("True"), iniBool("yes"), iniBool("1"), iniBool("False"), iniBool("0"), iniBool(undefined)]).toEqual([true, true, true, false, false, undefined]);
     expect([engineAtLeast("5.9", 5, 9), engineAtLeast("5.10", 5, 9), engineAtLeast("5.8", 5, 9), engineAtLeast(null, 5, 9), engineAtLeast("6.0", 5, 9)]).toEqual([true, true, false, null, true]);
+  });
+
+  it("answers every engine branch from one version table", () => {
+    expect(EPIC_ENGINE_FEATURES.unrealMcpServer).toBe("5.8");
+    expect([engineHas("unrealMcpServer", "5.7"), engineHas("unrealMcpServer", "5.8"), engineHas("unrealMcpServer", "6.0")]).toEqual([false, true, true]);
+    expect([engineHas("unrealAssistantMcp", "5.8"), engineHas("unrealAssistantMcp", "5.9"), engineHas("unrealAssistantMcp", null)]).toEqual([false, true, null]);
   });
 });

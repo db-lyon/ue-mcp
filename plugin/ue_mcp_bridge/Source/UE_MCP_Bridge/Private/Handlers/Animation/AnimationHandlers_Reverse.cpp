@@ -484,9 +484,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ReverseSequence(const TSharedPtr<FJso
 				FailErr = FString::Printf(TEXT("writing the reversed keys of transform curve '%s' failed"), *Curve.GetName().ToString());
 				break;
 			}
-#if WITH_EDITORONLY_DATA
 			Controller.SetCurveColor(CurveId, Curve.Color, false);
-#endif
 			++TransformCurvesReversed;
 		}
 	}

@@ -13,10 +13,6 @@
 #include "Misc/Paths.h"
 #include "Runtime/Launch/Resources/Version.h"
 
-#ifndef WITH_FAB_PLUGIN
-#define WITH_FAB_PLUGIN 0
-#endif
-
 #if WITH_FAB_PLUGIN
 #include "Importers/GenericAssetImporter.h"
 #include "Utilities/FabAssetsCache.h"
@@ -42,7 +38,7 @@ static bool IsFabModuleLoaded()
 // is installed but disabled or not loaded.
 static FString FabUnavailableReason()
 {
-	const FString EngineVersion = FString::Printf(TEXT("%d.%d"), ENGINE_MAJOR_VERSION, ENGINE_MINOR_VERSION);
+	const FString EngineVersion = UE_MCP_ENGINE_VERSION_STRING;
 	TSharedPtr<IPlugin> Plugin = IPluginManager::Get().FindPlugin(FabModuleName);
 	if (!Plugin.IsValid())
 	{

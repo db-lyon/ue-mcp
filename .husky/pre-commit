@@ -14,3 +14,8 @@ node scripts/lint-prose.mjs --staged || exit 1
 if git diff --cached --name-only --diff-filter=ACMR | grep -q '^plugin/.*\.cpp$'; then
   node scripts/audit-unity-collisions.mjs || exit 1
 fi
+
+# Engine-version gates written outside HandlerEngineVersion.h.
+if git diff --cached --name-only --diff-filter=ACMR | grep -qE '^plugin/.*\.(cpp|h|cs)$'; then
+  node scripts/audit-engine-gates.mjs || exit 1
+fi
