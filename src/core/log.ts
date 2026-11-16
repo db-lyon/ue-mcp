@@ -1,3 +1,4 @@
+// @session independent: Process-wide stderr logging.
 /**
  * Structured logging for the ue-mcp server.
  *

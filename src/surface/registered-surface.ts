@@ -1,3 +1,4 @@
+// @session per-session: Withholds what one editor's plugin did not register, read off that session's own bridge.
 /**
  * The surface as the running plugin can serve it (spec 6.4).
  *

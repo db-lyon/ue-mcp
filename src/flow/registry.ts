@@ -1,3 +1,4 @@
+// @session per-session: One task registry per session, built from that project's graph.
 import { TaskRegistry, ShellTask } from "@db-lyon/flowkit";
 import type { TaskConstructor, TaskContextInput } from "@db-lyon/flowkit";
 import type { ToolDef } from "../surface/tool-types.js";

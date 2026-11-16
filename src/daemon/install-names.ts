@@ -1,3 +1,4 @@
+// @session independent: The short names install resolves, as data. No editor is involved.
 /**
  * The short names `ue-mcp install <name>` accepts. Each maps to the release
  * manifest it installs from and the name output shows. Data only: what a

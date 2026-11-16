@@ -1,3 +1,4 @@
+// @session per-session: Attaches and deploys the bridge into one project.
 import * as fs from "node:fs";
 import * as path from "node:path";
 import type { ProjectContext } from "../config/project.js";

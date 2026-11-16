@@ -1,3 +1,4 @@
+// @session independent: Finds the .uplugin that declares a module under the project and engine roots it is handed. No editor is involved.
 import * as fs from "node:fs";
 import * as path from "node:path";
 

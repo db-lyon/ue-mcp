@@ -1,3 +1,4 @@
+// @session per-session: Watches the discovery record of one project root's daemon, so a superseded daemon for that project stops.
 /**
  * A daemon that owns its project's discovery record steps down once the record
  * names another live process: a newer daemon took the project over, and two

@@ -1,3 +1,4 @@
+// @session per-session: Resolves packages from one project's node_modules.
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { compareVersions } from "../core/semver.js";

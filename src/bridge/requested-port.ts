@@ -1,3 +1,4 @@
+// @session per-session: Publishes one project's resolved port pin into that project's own Saved directory.
 /**
  * The port channel that runs client to editor.
  *

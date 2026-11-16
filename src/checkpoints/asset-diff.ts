@@ -1,3 +1,4 @@
+// @session independent: Types and pure conversions of an asset diff the bridge returned. The service that calls the editor passes its answer in.
 /**
  * Asset diffs for checkpoints: each version of a package loaded in the editor
  * with DiffUtils::LoadPackageForDiff, and Unreal's own diff code run on them

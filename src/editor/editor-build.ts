@@ -1,3 +1,4 @@
+// @session per-session: Builds one project's C++ with the engine and config that project resolves to.
 /**
  * Compiling a project's C++ with UnrealBuildTool, out of process.
  *

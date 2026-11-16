@@ -1,3 +1,4 @@
+// @session independent: Posts to the ue-mcp tracker, never to the user's project.
 import { readEnv } from "../core/env.js";
 import { resolveUserAuth, clearUserAuth, githubApiBase, type PendingDeviceFlow } from "../github/auth.js";
 import { CORE_REPO, repoSlug, sameRepo, type GitHubRepo } from "../github/repos.js";

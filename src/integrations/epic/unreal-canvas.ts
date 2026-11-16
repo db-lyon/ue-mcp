@@ -1,3 +1,4 @@
+// @session per-session: Reads whether the one .uproject it is handed enables the Unreal Canvas Bridge, and which bridge port to use for it.
 /**
  * Unreal Canvas (UE 5.9, Engine/Plugins/Developer/UnrealCanvas) as one project
  * has it, read from files alone, and the two TCP ports it claims on loopback.

@@ -1,3 +1,4 @@
+// @session independent: MCP's transport over one WebSocket. No editor is involved.
 /**
  * MCP's Transport over one WebSocket: one JSON-RPC message per text frame.
  * The daemon gives every shim connection its own MCP server on one of these.

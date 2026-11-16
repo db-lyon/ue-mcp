@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @session independent: The ue-mcp-deploy bin: hands argv to cli/deploy-cli.ts.
 // The `ue-mcp-deploy` package bin, also run by `ue-mcp update` as a sibling
 // script. The command itself is cli/deploy-cli.ts.
 import { isMainModule, runCli } from "./cli/cli-main.js";

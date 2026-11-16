@@ -1,3 +1,4 @@
+// @session per-session: Moves one session's project and socket together.
 /**
  * Switching the loaded project (#818).
  *

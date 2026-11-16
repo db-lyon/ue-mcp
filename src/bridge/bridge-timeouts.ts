@@ -1,3 +1,4 @@
+// @session independent: The call budget table and its resolution; the same answer for every editor.
 /**
  * How long the client waits for a bridge call to answer (#989).
  *

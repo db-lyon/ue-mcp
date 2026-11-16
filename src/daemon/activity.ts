@@ -1,3 +1,4 @@
+// @session independent: Reads an MCP tools/call into a category and action. Pure logic.
 /**
  * What an MCP tools/call is, for the activity feed: the category and action
  * it runs, read through the micro gateway (`tools` with action `call`) and the

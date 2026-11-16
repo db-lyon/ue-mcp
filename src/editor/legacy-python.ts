@@ -1,3 +1,4 @@
+// @session per-session: Removes the retired Python bridge from one project's deployed plugin directory.
 import * as fs from "node:fs";
 import * as path from "node:path";
 

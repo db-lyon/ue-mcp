@@ -1,3 +1,4 @@
+// @session per-session: Runs the category, toolset and lease actions in the editor each request names.
 /**
  * The daemon's category, toolset and lease routes (#1827). Each one runs the
  * project action of the same purpose through the runtime, so an HTTP caller

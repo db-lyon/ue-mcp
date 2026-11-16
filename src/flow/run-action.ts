@@ -1,3 +1,4 @@
+// @session per-session: Runs one action on the context's session bridge, for tasks and category handlers alike.
 import type { TaskResult } from "@db-lyon/flowkit";
 import type { ActionSpec, BridgeActionSpec, CategoryOptions } from "../surface/tool-types.js";
 import { stripAction } from "../surface/routing-params.js";

@@ -1,3 +1,4 @@
+// @session per-session: Reads the bridge ABI version deployed in one project.
 import * as fs from "node:fs";
 import * as path from "node:path";
 

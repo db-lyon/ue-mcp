@@ -1,3 +1,4 @@
+// @session independent: Pure reading of a handler's own verdict off the body it answered with.
 import type { RollbackRecord, TaskContext, TaskResult } from "@db-lyon/flowkit";
 
 /**

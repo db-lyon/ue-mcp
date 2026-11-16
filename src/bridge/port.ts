@@ -1,3 +1,4 @@
+// @session per-session: Derives a bridge port from one project's root path.
 import crypto from "node:crypto";
 
 // Deterministic per-project bridge port. Multiple checkouts of a project (or

@@ -1,3 +1,4 @@
+// @session per-session: Every category tool is cloned per session and dispatches against the addressed editor.
 /**
  * editor(checkpoint), list_checkpoints, list_changes, diff_checkpoint_asset,
  * open_checkpoint_diff, restore and clear_checkpoints (#1482): the MCP face of src/checkpoints/service.ts, with

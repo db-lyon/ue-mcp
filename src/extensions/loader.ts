@@ -1,3 +1,4 @@
+// @session per-session: Loads each project's plugins into that session's graph.
 import * as fs from "node:fs";
 import type { GuardDeclarations } from "../flow/guard-schema.js";
 import * as path from "node:path";

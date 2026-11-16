@@ -1,3 +1,4 @@
+// @session independent: Pure Mermaid text from the diagram model it is handed.
 /**
  * Mermaid text for a diagram model: `flowchart` for exec and data graphs,
  * `stateDiagram-v2` for state machines and StateTree.

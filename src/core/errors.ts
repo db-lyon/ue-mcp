@@ -1,3 +1,4 @@
+// @session independent: Shared error codes and the McpError shape.
 /**
  * Structured error codes for the MCP bridge.
  * Allows callers to distinguish error types without string-matching.

@@ -1,3 +1,4 @@
+// @session independent: Reads the config layers of the engine and project directories it is handed. Pure logic over its arguments.
 /**
  * Unreal's config hierarchy, read the way the engine reads it: one category
  * (Engine, Game, Input, ...) is the stack of ini files from the engine's Base

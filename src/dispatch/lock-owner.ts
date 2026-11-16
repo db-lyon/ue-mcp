@@ -1,3 +1,4 @@
+// @session independent: The process-wide fallback lock owner id. A session mints its own through this and holds it itself.
 /**
  * Who holds an asset lock.
  *

@@ -1,3 +1,4 @@
+// @session independent: Terminal rendering for the CLI and long waits. No editor is involved.
 /**
  * ANSI escape-code constants and tiny status helpers.
  *

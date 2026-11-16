@@ -1,3 +1,4 @@
+// @session independent: Pure separator repair over a parameter bag; the same rule in every editor.
 import { isDirectiveResponse } from "../core/directive.js";
 
 /**

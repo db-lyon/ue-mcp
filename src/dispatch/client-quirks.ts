@@ -1,3 +1,4 @@
+// @session independent: About the connected MCP client, not about any editor.
 /**
  * Client-specific rendering limits worth explaining in a tool result.
  *

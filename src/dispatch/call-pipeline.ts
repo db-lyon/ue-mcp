@@ -1,3 +1,4 @@
+// @session independent: Composes those two over one call's parameters and result; holds nothing per editor.
 /**
  * What happens to a call's parameters on the way in, and to its result on the
  * way out, regardless of which route dispatched it.

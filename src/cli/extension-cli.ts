@@ -1,3 +1,4 @@
+// @session per-session: Installs extensions and restarts the daemon of the project it is handed.
 /**
  * `ue-mcp extension <install|use|remove|list>`, and `ue-mcp install`, which
  * is `extension install` under the name users are given.

@@ -1,3 +1,4 @@
+// @session per-session: Calls the addressed session's bridge.
 import type { TaskResult } from "@db-lyon/flowkit";
 import { liftRollback } from "./rollback.js";
 import { applyHandlerOutcome } from "./handler-outcome.js";

@@ -1,3 +1,4 @@
+// @session per-session: Deferred entries record the editor they came from and are filtered by it.
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { randomBytes } from "node:crypto";

@@ -1,3 +1,4 @@
+// @session independent: Serves the package's shipped skills as prompts and resources; the same for every editor.
 /**
  * The shipped skills as MCP prompts and resources. A client that reads
  * neither `.claude/skills` nor an instruction file can still list the

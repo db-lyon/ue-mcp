@@ -1,3 +1,4 @@
+// @session independent: Pure classification of a bridge call against the recorded handler specs.
 /**
  * Write classification for the source-control guard.
  *

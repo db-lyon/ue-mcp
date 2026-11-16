@@ -1,3 +1,4 @@
+// @session independent: Where per-user state lives. A leaf with no state.
 import * as os from "node:os";
 import * as path from "node:path";
 

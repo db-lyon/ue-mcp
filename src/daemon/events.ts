@@ -1,3 +1,4 @@
+// @session independent: A numbered, bounded event log. No editor is involved.
 /**
  * The daemon's event stream: every event gets the next id, a bounded window is
  * kept, and a reader resumes from the last id it saw (SSE Last-Event-ID). The

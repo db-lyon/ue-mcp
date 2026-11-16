@@ -1,3 +1,4 @@
+// @session independent: Lists and changes the plugins of the one project the daemon serves, through the CLI. No editor is involved.
 /**
  * Managing a project's ue-mcp plugins over the daemon's HTTP API, so a client
  * such as an in-editor panel can browse the registry and install, update or

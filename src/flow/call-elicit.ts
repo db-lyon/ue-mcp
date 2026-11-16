@@ -1,3 +1,4 @@
+// @session independent: Carries the caller of the call in flight through async context; which editor the call targets is not its concern.
 /**
  * Who can be asked on behalf of the call in flight.
  *

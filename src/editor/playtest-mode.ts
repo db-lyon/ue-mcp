@@ -1,3 +1,4 @@
+// @session per-session: Resolves the playtest mode for the project it is handed, from that project's stored preference.
 import { getPlaytestModeScopes, getUserStatePath, type PlaytestMode } from "../config/user-state.js";
 
 /**

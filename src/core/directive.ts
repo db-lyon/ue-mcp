@@ -1,3 +1,4 @@
+// @session independent: The directive envelope a handler wraps its result in. A leaf with no imports and no state.
 /* ── Directive response ─────────────────────────────────────────────
  * Handlers can return this to emit a mandatory instruction as a
  * separate MCP content block *before* the tool result.  Because the

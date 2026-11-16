@@ -1,3 +1,4 @@
+// @session independent: The public task-authoring surface, which is types.
 /**
  * Public task-authoring surface for ue-mcp.
  *

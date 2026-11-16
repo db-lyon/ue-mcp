@@ -1,3 +1,4 @@
+// @session per-session: Publishes and reads the discovery record of one project root's daemon.
 /**
  * Where a project's daemon publishes itself: one file per project root under
  * the user config dir, readable only by the user, holding the address and the

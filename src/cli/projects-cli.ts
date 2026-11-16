@@ -1,3 +1,4 @@
+// @session independent: Prints or edits the machine's project list, which no one editor owns.
 /**
  * `ue-mcp projects [list|add <uproject>|remove <uproject>] [--json]`
  *

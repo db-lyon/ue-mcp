@@ -1,3 +1,4 @@
+// @session independent: One process-wide event bus. Which editor a run belongs to rides on the event, not here.
 import type { PlanStep, FlowStepResult } from "@db-lyon/flowkit";
 
 /**

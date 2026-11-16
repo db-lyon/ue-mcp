@@ -1,3 +1,4 @@
+// @session per-session: Ends the crash reporters left holding one project's binaries, matched by that project's directory.
 /**
  * Crash reporters a crashed editor of this project left behind.
  *

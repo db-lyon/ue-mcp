@@ -1,3 +1,4 @@
+// @session per-session: Checks for and applies an update to the bridge installed in one project.
 /**
  * Updating an installed bridge (spec 5.4, 7.3): find the newest release on the
  * install's channel, then apply it whether or not the editor is running.

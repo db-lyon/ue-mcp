@@ -1,3 +1,4 @@
+// @session independent: Parses and writes whichever config file it is handed, and the user-global layer that applies to every project by definition.
 /**
  * Reading and writing ue-mcp.yml and its layers. Every file in the cascade
  * shares one shape (a `ue-mcp:` block plus `tasks:`, `flows:`, `plugins:`),

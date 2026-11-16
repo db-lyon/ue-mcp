@@ -1,3 +1,4 @@
+// @session per-session: Walks ONE project's Content tree through that project's own mount table.
 /**
  * The project's assets, read off disk with no editor running (T16).
  *

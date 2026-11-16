@@ -1,3 +1,4 @@
+// @session per-session: Reads and writes Epic's Unreal MCP server settings for the one project it is handed.
 /**
  * Epic's Unreal MCP server (the ModelContextProtocol plugin, UE 5.8 and later)
  * as it is set up for one project, read from files alone.

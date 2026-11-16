@@ -1,3 +1,4 @@
+// @session per-session: Every category tool is cloned per session and dispatches against the addressed editor.
 /**
  * Epic's built-in Fab tools, found from the fab category.
  *

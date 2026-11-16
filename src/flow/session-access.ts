@@ -1,3 +1,4 @@
+// @session independent: An MCP session's access mode, carried per call; two clients of one editor hold their own, so it is not per editor.
 /**
  * A session's access mode: whether the calls one client sends may change
  * anything (#1484).

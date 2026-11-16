@@ -1,3 +1,4 @@
+// @session per-session: Follows the connection of the one session's bridge a flow runs against.
 /**
  * What a flow does when the editor goes away mid-run (`on_editor_loss`).
  *

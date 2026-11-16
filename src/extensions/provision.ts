@@ -1,3 +1,4 @@
+// @session independent: Builds a provided category from a manifest.
 import { z } from "zod";
 import type { ToolDef, ActionSpec } from "../surface/tool-types.js";
 import { categoryTool } from "../surface/category-tool.js";

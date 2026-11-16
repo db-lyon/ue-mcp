@@ -1,3 +1,4 @@
+// @session per-session: Resolves the editor session each request names before acting on its journal.
 /**
  * The mutation journal over the daemon's HTTP API (#1481).
  *

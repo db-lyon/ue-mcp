@@ -1,3 +1,4 @@
+// @session per-session: Follows one pawn drive through the ToolContext of the call that started it, so it polls that call's editor.
 /**
  * Waiting for a pie(drive_pawn) drive to end (#1565).
  *

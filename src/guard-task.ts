@@ -1,3 +1,4 @@
+// @session independent: The base class a guard is written against; pure over the call it is handed.
 /**
  * Public guard-authoring surface for ue-mcp.
  *

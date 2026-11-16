@@ -1,3 +1,4 @@
+// @session independent: Pure group logic over the config it is handed.
 /**
  * Per-plugin runtime configuration and flow-group logic.
  *

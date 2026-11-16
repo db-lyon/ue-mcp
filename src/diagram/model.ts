@@ -1,3 +1,4 @@
+// @session independent: Shared declaration of the diagram model, plus pure text helpers.
 /**
  * The one graph shape every diagram is drawn from.
  *

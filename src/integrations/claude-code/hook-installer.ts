@@ -1,3 +1,4 @@
+// @session per-session: Installs the hook for one project.
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { warn as logWarn } from "../../core/log.js";

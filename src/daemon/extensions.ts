@@ -1,3 +1,4 @@
+// @session independent: Loads extensions from the user's extensions directory and matches their routes. No editor is involved.
 /**
  * Daemon extensions: modules the daemon loads at startup from the extensions
  * directory, each handed a versioned API. The open daemon is complete without

@@ -1,3 +1,4 @@
+// @session per-session: Lists and presses the native dialogs of the editor process that has the project it is handed open, by that process's command line.
 /**
  * Native Win32 dialogs the editor process shows, seen and answered from outside it.
  *

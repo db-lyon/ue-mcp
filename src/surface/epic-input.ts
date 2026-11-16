@@ -1,3 +1,4 @@
+// @session independent: Pure argument shaping for one wrapped engine tool call; no editor to scope it to.
 /**
  * The argument envelope for a wrapped engine tool.
  *

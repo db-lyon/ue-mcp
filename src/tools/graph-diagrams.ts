@@ -1,3 +1,4 @@
+// @session per-session: Every category tool is cloned per session and dispatches against the addressed editor.
 /**
  * The diagram action of each category with a graph reader. Each reads its
  * graph through the existing reader over the bridge and hands the answer to

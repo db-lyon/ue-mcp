@@ -175,7 +175,9 @@ export function handlersByCategory(snapshot) {
   return out;
 }
 
-const HEADER = `// GENERATED FILE - do not edit.
+// The first line is the module's placement for tests/unit/module-inventory.test.ts.
+const HEADER = `// @session independent: Generated parameter declarations from the recorded C++ specs; data only, with no editor state.
+// GENERATED FILE - do not edit.
 //
 // Written by scripts/generate-handler-specs.mjs from tests/golden/handler-specs.json,
 // which is recorded from the parameter specs the C++ handlers register with

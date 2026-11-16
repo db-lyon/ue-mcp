@@ -1,3 +1,4 @@
+// @session per-session: Every category tool is cloned per session and dispatches against the addressed editor.
 import { buildProject } from "../../editor/editor-build.js";
 import { inspectInstall } from "../../editor/install-check.js";
 import { specBp } from "../specs/project.generated.js";

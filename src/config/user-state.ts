@@ -1,3 +1,4 @@
+// @session per-session: Keyed by absolute project root: installed hooks, and the per-project feedback mode.
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { normalizeProjectRoot } from "../bridge/port.js";

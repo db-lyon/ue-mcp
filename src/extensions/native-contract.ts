@@ -1,3 +1,4 @@
+// @session independent: Maps a native handler's recorded contract onto its action.
 import type { z } from "zod";
 import type { ActionSpec } from "../surface/tool-types.js";
 import type { HandlerSpec } from "../surface/handler-spec.js";

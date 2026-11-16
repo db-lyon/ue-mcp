@@ -1,3 +1,4 @@
+// @session per-session: Leases are keyed by the editor session the asset lives in.
 /**
  * Asset leases: several agents sharing one editor without editing the same
  * asset at once.

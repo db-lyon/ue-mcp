@@ -1,3 +1,4 @@
+// @session independent: Classifies a disconnect from the evidence it is handed. Pure logic.
 /**
  * Why the editor went away, decided from evidence rather than guessed.
  *

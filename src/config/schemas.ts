@@ -1,3 +1,4 @@
+// @session independent: Shared schema declarations.
 import { z } from "zod";
 
 // Shapes of the project and tooling files the user can hand-edit, validated

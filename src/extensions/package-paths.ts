@@ -1,3 +1,4 @@
+// @session independent: Resolves a manifest path inside the package it is handed. Pure path logic over its arguments.
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { isInside as inside, UE_IDENTIFIER_RE } from "../core/path-guard.js";

@@ -1,3 +1,4 @@
+// @session per-session: Resolves the registry and config of the addressed editor.
 import { z } from "zod";
 import { FlowRunner } from "@db-lyon/flowkit";
 import type {

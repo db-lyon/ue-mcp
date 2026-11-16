@@ -1,3 +1,4 @@
+// @session per-session: The registry of editors itself.
 /**
  * Editor sessions - one server, an arbitrary number of editors (#817).
  *

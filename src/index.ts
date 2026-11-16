@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @session per-session: Wires the registry, the per-session loads and the MCP server together.
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { error, info, warn } from "./core/log.js";
 import { resolveServerMode } from "./daemon/server-mode.js";

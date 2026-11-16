@@ -1,3 +1,4 @@
+// @session independent: Pure derivation of a flow's inputs from the tool graph and config it is handed.
 /**
  * The parameters a run of a flow may pass, derived from its steps (#1508).
  *

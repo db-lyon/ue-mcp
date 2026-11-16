@@ -1,3 +1,4 @@
+// @session independent: Semver precedence for the minServerVersion gate and the npm upgrade check.
 /**
  * Semver precedence, shared by the minServerVersion gate and the npm upgrade
  * check. Accepts X, X.Y or X.Y.Z with an optional prerelease; build metadata

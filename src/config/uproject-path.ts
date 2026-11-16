@@ -1,3 +1,4 @@
+// @session independent: Pure path handling for a .uproject or the directory holding one.
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { McpError, ErrorCode } from "../core/errors.js";

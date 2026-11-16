@@ -1,3 +1,4 @@
+// @session per-session: Every category tool is cloned per session and dispatches against the addressed editor.
 /**
  * Does the plugin we reached actually implement what we advertise? (#1021)
  *

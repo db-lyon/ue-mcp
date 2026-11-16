@@ -1,3 +1,4 @@
+// @session per-session: Plans and applies setup for the one project it is handed.
 /**
  * `ue-mcp init` as two pure steps: plan() reads the machine and the project
  * and says what would change, apply() makes those changes. The interactive
