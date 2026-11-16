@@ -265,7 +265,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::SaveLevel(const TSharedPtr<FJsonObject>& 
 	// an agent redoing work it never lost.
 	if (GEditor && (GEditor->PlayWorld != nullptr || GEditor->bIsSimulatingInEditor))
 	{
-		return MCPError(TEXT("Play In Editor is running; stop it before saving the level. Saving during PIE is what produced an unexplained failure before."));
+		return MCPError(TEXT("Play In Editor is running; stop it before saving the level. Saving during PIE is what produced an unexplained failure before. ") + MCPStopPlayInEditorStep());
 	}
 
 	// Landscape edits land in edit layers and reach the saved heightmaps and weightmaps through a merge that runs on

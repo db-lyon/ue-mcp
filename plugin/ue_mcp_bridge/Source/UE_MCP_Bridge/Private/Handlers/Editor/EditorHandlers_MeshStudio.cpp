@@ -132,7 +132,7 @@ namespace MeshStudioRender
 
 	static bool ParseItems(const TArray<TSharedPtr<FJsonValue>>& Values, int32 Resolution, TArray<FItem>& Out, FString& Error)
 	{
-		if (Values.Num() < 1 || Values.Num() > 128) { Error = TEXT("captures must contain 1-128 entries"); return false; }
+		if (Values.Num() < 1 || Values.Num() > 128) { Error = MCPWithSplitNote(TEXT("captures must contain 1-128 entries"), 128); return false; }
 		TSet<FString> Ids;
 		for (const TSharedPtr<FJsonValue>& Value : Values)
 		{
@@ -170,7 +170,7 @@ namespace MeshStudioRender
 			{
 				const TArray<TSharedPtr<FJsonValue>>* Parts = nullptr;
 				if (!Object->TryGetArrayField(TEXT("parts"), Parts) || Parts->Num() < 1 || Parts->Num() > 64)
-					Item.InvalidReason = TEXT("parts must contain 1-64 mesh parts");
+					Item.InvalidReason = TEXT("parts must contain 1-64 mesh parts; split a larger set across several captures");
 				else for (const TSharedPtr<FJsonValue>& PartValue : *Parts)
 				{
 					FPart Part;
@@ -717,8 +717,8 @@ TSharedPtr<FJsonValue> FEditorHandlers::RenderMeshStudio(const TSharedPtr<FJsonO
 	FVector Direction = OptionalVec3(Params, TEXT("viewDirection"), FVector(1.0, -1.35, 0.9));
 	const TArray<TSharedPtr<FJsonValue>>* ItemValues = nullptr;
 	if (!TryGetArrayParam(Params, TEXT("captures"), ItemValues) || !ItemValues) return MCPError(TEXT("captures is required and must be an array"));
-	if (!GEditor || !GEditor->GetEditorWorldContext().World()) return MCPError(TEXT("Editor world not available"));
-	if (GEditor->PlayWorld || GEditor->bIsSimulatingInEditor) return MCPError(TEXT("render_mesh_studio is refused during PIE or simulation"));
+	if (!GEditor || !GEditor->GetEditorWorldContext().World()) return MCPError(MCPEditorWorldUnavailableMessage());
+	if (GEditor->PlayWorld || GEditor->bIsSimulatingInEditor) return MCPError(TEXT("render_mesh_studio is refused during PIE or simulation. ") + MCPStopPlayInEditorStep());
 	if (!FApp::CanEverRender() || GUsingNullRHI) return MCPError(TEXT("render_mesh_studio requires a rendering editor (no null RHI)"));
 	if (Active.IsValid()) return MCPError(TEXT("A mesh studio render is already running; wait for it or cancel_mesh_studio_render"));
 	if (!FMath::IsFinite(ResolutionValue) || ResolutionValue < 64 || ResolutionValue > 4096 || FMath::FloorToDouble(ResolutionValue) != ResolutionValue)

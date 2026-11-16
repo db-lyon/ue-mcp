@@ -113,7 +113,7 @@ TSharedPtr<FJsonValue> FSkeletalMeshHandlers::GenerateSkeletalMeshLods(const TSh
 		Paths.Sort();
 	}
 	if (Paths.Num() == 0) return MCPError(TEXT("No SkeletalMesh to process"));
-	if (Paths.Num() > MaxMeshes) return MCPError(FString::Printf(TEXT("%d meshes matched; the limit is %d per call"), Paths.Num(), MaxMeshes));
+	if (Paths.Num() > MaxMeshes) return MCPError(FString::Printf(TEXT("%d meshes matched; the limit is %d per call. Split the work into several calls of %d or fewer meshes, each on a narrower directory or an explicit list of paths."), Paths.Num(), MaxMeshes, MaxMeshes));
 
 	TArray<USkeletalMesh*> Meshes;
 	for (const FString& Path : Paths)

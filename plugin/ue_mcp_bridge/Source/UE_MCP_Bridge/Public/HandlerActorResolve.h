@@ -11,6 +11,7 @@
 #include "GameFramework/Actor.h"
 #include "Components/SceneComponent.h"
 #include "HandlerResult.h"
+#include "HandlerWayForward.h"
 #include "HandlerParams.h"
 
 // ── Actor selection ──────────────────────────────────────────────────────────
@@ -345,7 +346,7 @@ inline AActor* MCPResolveActorToken(
 	OutError.Reset();
 	if (!World)
 	{
-		OutError = MCPError(TEXT("Editor world not available"));
+		OutError = MCPError(MCPEditorWorldUnavailableMessage());
 		return nullptr;
 	}
 	TArray<AActor*> Matches;
@@ -410,7 +411,7 @@ inline AActor* MCPResolveActor(
 
 	if (!World)
 	{
-		OutError = MCPError(TEXT("Editor world not available"));
+		OutError = MCPError(MCPEditorWorldUnavailableMessage());
 		return nullptr;
 	}
 

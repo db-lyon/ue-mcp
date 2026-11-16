@@ -209,7 +209,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ConfigureIKRig(const TSharedPtr<FJson
 	}
 	if (MCPIsProtectedAssetPath(RigPath))
 	{
-		return Error(TEXT("protected_asset"), FString::Printf(TEXT("Protected asset cannot be modified: %s"), *RigPath));
+		return Error(TEXT("protected_asset"), FString::Printf(TEXT("Protected asset cannot be modified: %s. %s"), *RigPath, *MCPProtectedMountWayForward()));
 	}
 
 	FString AutoSetup;
@@ -253,7 +253,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ConfigureIKRig(const TSharedPtr<FJson
 		const TArray<TSharedPtr<FJsonValue>>* Values = nullptr;
 		if (!TryGetArrayParam(Params, TEXT("chains"), Values) || !Values || Values->Num() > MaxChains)
 		{
-			return Error(TEXT("invalid_params"), FString::Printf(TEXT("'chains' must be an array with at most %d entries"), MaxChains));
+			return Error(TEXT("invalid_params"), MCPWithSplitNote(FString::Printf(TEXT("'chains' must be an array with at most %d entries; chains are upserted"), MaxChains), MaxChains));
 		}
 		for (int32 Index = 0; Index < Values->Num(); ++Index)
 		{
@@ -312,7 +312,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ConfigureIKRig(const TSharedPtr<FJson
 		const TArray<TSharedPtr<FJsonValue>>* GoalValues = nullptr;
 		if (!Object->TryGetArrayField(TEXT("goals"), GoalValues) || !GoalValues || GoalValues->Num() > MaxGoals)
 		{
-			return Error(TEXT("invalid_params"), FString::Printf(TEXT("fullBodyIK.goals must be an array with at most %d entries"), MaxGoals));
+			return Error(TEXT("invalid_params"), MCPWithSplitNote(FString::Printf(TEXT("fullBodyIK.goals must be an array with at most %d entries; goals are upserted"), MaxGoals), MaxGoals));
 		}
 		TSet<FName> RequestedGoalNames;
 		for (int32 Index = 0; Index < GoalValues->Num(); ++Index)
@@ -361,7 +361,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ConfigureIKRig(const TSharedPtr<FJson
 		const TArray<TSharedPtr<FJsonValue>>* Values = nullptr;
 		if (!TryGetArrayParam(Params, TEXT("exclusions"), Values) || !Values || Values->Num() > MaxExclusions)
 		{
-			return Error(TEXT("invalid_params"), FString::Printf(TEXT("'exclusions' must be an array with at most %d entries"), MaxExclusions));
+			return Error(TEXT("invalid_params"), MCPWithSplitNote(FString::Printf(TEXT("'exclusions' must be an array with at most %d entries; exclusions are upserted"), MaxExclusions), MaxExclusions));
 		}
 		for (int32 Index = 0; Index < Values->Num(); ++Index)
 		{

@@ -6688,6 +6688,11 @@
           "test": "UE.MCP.Reflection.Struct.NativeFPrefix"
         },
         {
+          "suite": "automation",
+          "file": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Tests/WayForwardTests.cpp",
+          "test": "UE.MCP.WayForward.ProtectedMountNamesTheCopyRoute"
+        },
+        {
           "suite": "live",
           "file": "tests/live/addressing.test.ts",
           "test": "refuses an untargeted change and names both editors"
@@ -8006,6 +8011,11 @@
           "suite": "automation",
           "file": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Tests/BatchHandlerTests.cpp",
           "test": "UE.MCP.Bridge.Batch.StopsOnError"
+        },
+        {
+          "suite": "automation",
+          "file": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Tests/WayForwardTests.cpp",
+          "test": "UE.MCP.WayForward.BatchCapSaysHowToSplit"
         },
         {
           "suite": "live",
@@ -12870,6 +12880,11 @@
           "suite": "automation",
           "file": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Tests/ViewShapeTraceTests.cpp",
           "test": "UE.MCP.Level.ShapeTrace.Geometry"
+        },
+        {
+          "suite": "automation",
+          "file": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Tests/WayForwardTests.cpp",
+          "test": "UE.MCP.WayForward.MissingPlayWorldNamesHowToGetOne"
         }
       ]
     },

@@ -1254,7 +1254,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::ExecutePython(const TSharedPtr<FJsonObje
 	IPythonScriptPlugin* PythonPlugin = IPythonScriptPlugin::Get();
 	if (!PythonPlugin || !PythonPlugin->IsPythonAvailable())
 	{
-		return MCPError(TEXT("Python scripting is not available"));
+		return MCPError(TEXT("Python scripting is not available: the Python Editor Script Plugin is not running. ") + MCPEnablePluginStep(TEXT("PythonScriptPlugin")));
 	}
 
 	FPythonCommandEx PythonCommand;
@@ -1350,7 +1350,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::RunPythonFile(const TSharedPtr<FJsonObje
 	IPythonScriptPlugin* PythonPlugin = IPythonScriptPlugin::Get();
 	if (!PythonPlugin || !PythonPlugin->IsPythonAvailable())
 	{
-		return MCPError(TEXT("Python scripting is not available"));
+		return MCPError(TEXT("Python scripting is not available: the Python Editor Script Plugin is not running. ") + MCPEnablePluginStep(TEXT("PythonScriptPlugin")));
 	}
 
 	// #995: a project script under Tools/ usually holds several independent
@@ -1523,7 +1523,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::PurgePythonModules(const TSharedPtr<FJso
 	IPythonScriptPlugin* PythonPlugin = IPythonScriptPlugin::Get();
 	if (!PythonPlugin || !PythonPlugin->IsPythonAvailable())
 	{
-		return MCPError(TEXT("Python scripting is not available"));
+		return MCPError(TEXT("Python scripting is not available: the Python Editor Script Plugin is not running. ") + MCPEnablePluginStep(TEXT("PythonScriptPlugin")));
 	}
 
 	// Escape the prefix into a Python single-quoted literal.
@@ -3202,7 +3202,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::CaptureScreenshot(const TSharedPtr<FJson
 
 	if (Target == TEXT("pie") && !PieWorld)
 	{
-		return MCPError(TEXT("No PIE world is running"));
+		return MCPError(TEXT("No PIE world is running. ") + MCPStartPlayInEditorStep());
 	}
 
 	if (bUsePie && PieWorld)
@@ -4082,7 +4082,8 @@ TSharedPtr<FJsonValue> FEditorHandlers::DiscardDirty(const TSharedPtr<FJsonObjec
 	}
 	if (Requested->Num() > MCPDiscardDirtyMaxPackages)
 	{
-		return MCPError(FString::Printf(TEXT("packages names %d packages; at most %d per call."), Requested->Num(), MCPDiscardDirtyMaxPackages));
+		return MCPError(FString::Printf(TEXT("packages names %d packages; at most %d per call. Split them into several calls of %d or fewer; each call is all or nothing on its own."),
+			Requested->Num(), MCPDiscardDirtyMaxPackages, MCPDiscardDirtyMaxPackages));
 	}
 
 	struct FDiscardEntry
@@ -5160,7 +5161,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::CaptureScenePng(const TSharedPtr<FJsonOb
 	// framed shot reflects the running game.
 	const FString WorldScope = OptionalString(Params, TEXT("world"), TEXT("editor"));
 	UWorld* World = ResolveWorldFromParams(Params, *WorldScope);
-	if (!World) return MCPError(FString::Printf(TEXT("World not available for scope '%s'"), *WorldScope));
+	if (!World) return MCPWorldUnavailableError(WorldScope);
 
 	// #966: both capture actions take both names. filename reaches this one
 	// as outputPath, renamed by the registry (#1057).

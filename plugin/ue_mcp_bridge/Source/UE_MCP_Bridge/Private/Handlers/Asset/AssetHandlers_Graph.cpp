@@ -1377,7 +1377,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::CompileCustomizableObject(const TSharedPt
 	UClass* ObjectClass = FindObject<UClass>(nullptr, TEXT("/Script/CustomizableObject.CustomizableObject"));
 	if (!ObjectClass)
 	{
-		return MCPError(TEXT("Mutable plugin not available: the CustomizableObject module is not loaded. Enable the Mutable plugin and restart the editor."));
+		return MCPError(TEXT("Mutable plugin not available: the CustomizableObject module is not loaded. ") + MCPEnablePluginStep(TEXT("Mutable")));
 	}
 
 	TSharedPtr<FJsonValue> LoadError;
@@ -1393,7 +1393,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::CompileCustomizableObject(const TSharedPt
 	UFunction* Compile = ObjectClass->FindFunctionByName(TEXT("Compile"));
 	if (!SyncCompile && !Compile)
 	{
-		return MCPError(TEXT("Mutable plugin not available: neither CompileCustomizableObjectSynchronously nor CustomizableObject::Compile is registered. Is the CustomizableObjectEditor module loaded?"));
+		return MCPError(TEXT("Mutable plugin not available: neither CompileCustomizableObjectSynchronously nor CustomizableObject::Compile is registered, so the CustomizableObjectEditor module is not loaded. ") + MCPEnablePluginStep(TEXT("Mutable")));
 	}
 
 	auto Result = MCPSuccess();
@@ -1530,7 +1530,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::CreateCustomizableObject(const TSharedPtr
 	UClass* ObjectClass = FindObject<UClass>(nullptr, TEXT("/Script/CustomizableObject.CustomizableObject"));
 	if (!ObjectClass)
 	{
-		return MCPError(TEXT("Mutable plugin not available: the CustomizableObject module is not loaded. Enable the Mutable plugin and restart the editor."));
+		return MCPError(TEXT("Mutable plugin not available: the CustomizableObject module is not loaded. ") + MCPEnablePluginStep(TEXT("Mutable")));
 	}
 
 	const FString AssetPath = PackagePath + TEXT("/") + Name;
@@ -1632,7 +1632,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::CreateCustomizableObject(const TSharedPtr
 	}
 	if (!Created)
 	{
-		return MCPError(TEXT("Mutable plugin not available: neither CustomizableObjectFactory nor NewCustomizableObject could create the asset. Is the CustomizableObjectEditor module loaded?"));
+		return MCPError(TEXT("Mutable plugin not available: neither CustomizableObjectFactory nor NewCustomizableObject could create the asset, so the CustomizableObjectEditor module is not loaded. ") + MCPEnablePluginStep(TEXT("Mutable")));
 	}
 
 	auto Result = MCPSuccess();

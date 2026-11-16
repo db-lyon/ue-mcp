@@ -197,7 +197,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::ValidateAssets(const TSharedPtr<FJsonObj
 	UEditorValidatorSubsystem* ValidatorSubsystem = GEditor->GetEditorSubsystem<UEditorValidatorSubsystem>();
 	if (!ValidatorSubsystem)
 	{
-		return MCPError(TEXT("EditorValidatorSubsystem is not available"));
+		return MCPPluginUnavailableError(TEXT("EditorValidatorSubsystem"), TEXT("DataValidation"));
 	}
 
 	const bool bHasAssetPaths = HasParam(Params, TEXT("assetPaths"));

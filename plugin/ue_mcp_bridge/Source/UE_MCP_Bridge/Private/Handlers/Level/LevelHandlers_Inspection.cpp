@@ -86,7 +86,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::SummarizeStaticMeshUsage(const TSharedPtr
 	UWorld* World = ResolveWorldFromParams(Params, *WorldScope);
 	if (!World)
 	{
-		return MCPError(FString::Printf(TEXT("World not available for scope '%s'"), *WorldScope));
+		return MCPWorldUnavailableError(WorldScope);
 	}
 
 	const int32 MaxResults = FMath::Clamp(

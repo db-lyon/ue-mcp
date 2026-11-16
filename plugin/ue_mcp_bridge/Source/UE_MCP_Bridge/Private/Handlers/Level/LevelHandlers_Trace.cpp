@@ -137,9 +137,7 @@ namespace MCPTrace
 		UWorld* World = ResolveWorldFromParams(Params, *Scope);
 		if (!World)
 		{
-			OutError = MCPError(FString::Printf(
-				TEXT("World not available for scope '%s'. world='pie' needs a running PIE session; see editor(list_pie_instances)."),
-				*Scope));
+			OutError = MCPWorldUnavailableError(Scope);
 		}
 		return World;
 	}
@@ -383,9 +381,9 @@ TSharedPtr<FJsonValue> FLevelHandlers::BulkLineTrace(const TSharedPtr<FJsonObjec
 	}
 	if (Traces->Num() > MaxBulkLineTraces)
 	{
-		return MCPError(FString::Printf(
+		return MCPBatchTooLargeError(FString::Printf(
 			TEXT("'traces' exceeds the maximum batch size of %d (received %d)"),
-			MaxBulkLineTraces, Traces->Num()));
+			MaxBulkLineTraces, Traces->Num()), MaxBulkLineTraces);
 	}
 
 	TArray<TSharedPtr<FJsonValue>> Results;

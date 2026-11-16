@@ -135,8 +135,8 @@ TSharedPtr<FJsonValue> FAssetBulkReadHandlers::BulkReadAssetProperties(const TSh
 	}
 	if (PropertyPaths.Num() > MCPBulkReadMaxProperties)
 	{
-		return MCPError(FString::Printf(
-			TEXT("'propertyNames' exceeds the maximum of %d entries"), MCPBulkReadMaxProperties));
+		return MCPBatchTooLargeError(FString::Printf(
+			TEXT("'propertyNames' exceeds the maximum of %d entries"), MCPBulkReadMaxProperties), MCPBulkReadMaxProperties);
 	}
 
 	// ── Selection ───────────────────────────────────────────────────────────
@@ -155,8 +155,8 @@ TSharedPtr<FJsonValue> FAssetBulkReadHandlers::BulkReadAssetProperties(const TSh
 	}
 	if (ExplicitPaths.Num() > MCPBulkReadMaxExplicitPaths)
 	{
-		return MCPError(FString::Printf(
-			TEXT("'assetPaths' exceeds the maximum of %d entries"), MCPBulkReadMaxExplicitPaths));
+		return MCPBatchTooLargeError(FString::Printf(
+			TEXT("'assetPaths' exceeds the maximum of %d entries"), MCPBulkReadMaxExplicitPaths), MCPBulkReadMaxExplicitPaths);
 	}
 
 	const bool bRecursive = OptionalBool(Params, TEXT("recursive"), true);
@@ -223,8 +223,8 @@ TSharedPtr<FJsonValue> FAssetBulkReadHandlers::BulkReadAssetProperties(const TSh
 	}
 	if (CountByPaths.Num() > MCPBulkReadMaxCountByPaths)
 	{
-		return MCPError(FString::Printf(
-			TEXT("'countBy' exceeds the maximum of %d paths"), MCPBulkReadMaxCountByPaths));
+		return MCPBatchTooLargeError(FString::Printf(
+			TEXT("'countBy' exceeds the maximum of %d paths"), MCPBulkReadMaxCountByPaths), MCPBulkReadMaxCountByPaths);
 	}
 
 	const bool bCountOnly = OptionalBool(Params, TEXT("countOnly"), false);

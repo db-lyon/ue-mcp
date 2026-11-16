@@ -927,8 +927,10 @@ TSharedPtr<FJsonValue> FAssetHandlers::AuditAssetHygiene(const TSharedPtr<FJsonO
 	{
 		Result->SetStringField(TEXT("scanTruncatedNote"), FString::Printf(
 			TEXT("%d assets are in scope and %d were scanned, so the counts below describe the scanned subset ")
-				TEXT("and not the project. Narrow 'directories', add a 'classNames' filter, or raise 'maxAssets'."),
-			TotalInScope, Assets.Num()));
+				TEXT("and not the project. %s"),
+			TotalInScope, Assets.Num(),
+			*MCPRaiseOrSplitNote(TEXT("maxAssets"), Scope.MaxAssets, MCPHygMaxMaxAssets,
+				TEXT("Narrow 'directories' or add a 'classNames' filter, and cover the rest with further calls."))));
 	}
 
 	if (bWantUnreferenced)
@@ -1236,8 +1238,8 @@ TSharedPtr<FJsonValue> FAssetHandlers::FixAssetHygiene(const TSharedPtr<FJsonObj
 		{
 			Reject(Item, MCPHygStatusProtected, FString::Printf(
 				TEXT("Refusing to mutate protected mount: %s. Engine, /Script/, /Memory/ and /Temp/ are ")
-					TEXT("read-only through the bridge."),
-				*Item.PackageName));
+					TEXT("read-only through the bridge. %s"),
+				*Item.PackageName, *MCPProtectedMountWayForward()));
 			Plan.Add(MoveTemp(Item));
 			continue;
 		}
@@ -1357,7 +1359,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::FixAssetHygiene(const TSharedPtr<FJsonObj
 			if (MCPIsProtectedAssetPath(Item.NewPackagePath))
 			{
 				Reject(Item, MCPHygStatusProtected, FString::Printf(
-					TEXT("The destination '%s' is on a protected mount."), *Item.NewPackagePath));
+					TEXT("The destination '%s' is on a protected mount, which cannot be overridden. Pick a destination under /Game or a plugin content folder."), *Item.NewPackagePath));
 				Plan.Add(MoveTemp(Item));
 				continue;
 			}

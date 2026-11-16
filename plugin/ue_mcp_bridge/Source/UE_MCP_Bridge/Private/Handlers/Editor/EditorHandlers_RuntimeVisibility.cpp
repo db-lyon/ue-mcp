@@ -20,6 +20,12 @@ namespace
 {
 	constexpr int32 MCPRuntimeVisibilityDefaultMaxTargets = 64;
 	constexpr int32 MCPRuntimeVisibilityAbsoluteMaxTargets = 256;
+
+	FString MCPRuntimeVisibilityRaiseOrSplit(int32 MaxTargets)
+	{
+		return MCPRaiseOrSplitNote(TEXT("maxTargets"), MaxTargets, MCPRuntimeVisibilityAbsoluteMaxTargets,
+			TEXT("Split the work across several calls, each with a narrower actorLabels, actorPaths or actorClass selector or fewer componentNames."));
+	}
 	constexpr int32 MCPRuntimeVisibilityMaxExplicitActors = 64;
 	constexpr int32 MCPRuntimeVisibilityMaxComponentFilters = 64;
 	constexpr int32 MCPRuntimeVisibilityMaxRollbackSnapshots = 64;
@@ -76,7 +82,7 @@ namespace
 		}
 		if (Values->Num() > MaxValues)
 		{
-			OutError = FString::Printf(TEXT("'%s' accepts at most %d values"), Field, MaxValues);
+			OutError = MCPWithSplitNote(FString::Printf(TEXT("'%s' accepts at most %d values"), Field, MaxValues), MaxValues);
 			return false;
 		}
 
@@ -334,7 +340,7 @@ namespace
 		}
 		if (!OutWorld || !OutContext)
 		{
-			return MCPError(TEXT("PIE world not available (or no such pieInstance). See editor(list_pie_instances)."));
+			return MCPError(TEXT("PIE world not available (or no such pieInstance). ") + MCPStartPlayInEditorStep());
 		}
 		return nullptr;
 	}
@@ -451,8 +457,8 @@ TSharedPtr<FJsonValue> FEditorHandlers::SetRuntimeVisibility(const TSharedPtr<FJ
 				if (SelectedActors.Num() > MaxTargets)
 				{
 					return MCPError(FString::Printf(
-						TEXT("Actor selector matched more than maxTargets=%d actors; narrow the class or raise the bound deliberately"),
-						MaxTargets));
+						TEXT("Actor selector matched more than maxTargets=%d actors. %s"),
+						MaxTargets, *MCPRuntimeVisibilityRaiseOrSplit(MaxTargets)));
 				}
 			}
 		}
@@ -510,7 +516,8 @@ TSharedPtr<FJsonValue> FEditorHandlers::SetRuntimeVisibility(const TSharedPtr<FJ
 					ComponentTargets, Component, true, ActorTargetCount, MaxTargets))
 				{
 					return MCPError(FString::Printf(
-						TEXT("Visibility request exceeds maxTargets=%d while expanding components"), MaxTargets));
+						TEXT("Visibility request exceeds maxTargets=%d while expanding components. %s"),
+						MaxTargets, *MCPRuntimeVisibilityRaiseOrSplit(MaxTargets)));
 				}
 				if (bPropagateToChildren)
 				{
@@ -518,8 +525,8 @@ TSharedPtr<FJsonValue> FEditorHandlers::SetRuntimeVisibility(const TSharedPtr<FJ
 						ComponentTargets, Component, ActorTargetCount, MaxTargets))
 					{
 						return MCPError(FString::Printf(
-							TEXT("Visibility request exceeds maxTargets=%d while expanding component descendants"),
-							MaxTargets));
+							TEXT("Visibility request exceeds maxTargets=%d while expanding component descendants. %s"),
+							MaxTargets, *MCPRuntimeVisibilityRaiseOrSplit(MaxTargets)));
 					}
 				}
 			}
@@ -530,8 +537,8 @@ TSharedPtr<FJsonValue> FEditorHandlers::SetRuntimeVisibility(const TSharedPtr<FJ
 	if (TargetCount > MaxTargets)
 	{
 		return MCPError(FString::Printf(
-			TEXT("Visibility request resolves to %d targets, above maxTargets=%d. Narrow selectors or raise the bound deliberately."),
-			TargetCount, MaxTargets));
+			TEXT("Visibility request resolves to %d targets, above maxTargets=%d. %s"),
+			TargetCount, MaxTargets, *MCPRuntimeVisibilityRaiseOrSplit(MaxTargets)));
 	}
 
 	TArray<FMCPRuntimeVisibilityTarget> Targets;

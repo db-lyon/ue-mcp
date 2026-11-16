@@ -72,7 +72,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::RenameActorObject(const TSharedPtr<FJsonO
 			return MCPError(TEXT("Pass either renames[] or a single actorLabel/actorPath with newName, not both."));
 		}
 		if (RenamesArr->Num() == 0) return MCPError(TEXT("renames is empty"));
-		if (RenamesArr->Num() > 512) return MCPError(TEXT("renames holds more than 512 entries"));
+		if (RenamesArr->Num() > 512) return MCPBatchTooLargeError(TEXT("renames holds more than 512 entries"), 512);
 		for (int32 i = 0; i < RenamesArr->Num(); ++i)
 		{
 			const TSharedPtr<FJsonObject>* Obj = nullptr;

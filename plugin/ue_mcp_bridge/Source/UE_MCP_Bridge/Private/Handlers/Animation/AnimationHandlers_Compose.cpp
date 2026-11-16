@@ -145,8 +145,16 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ComposePoseSequence(const TSharedPtr<
 		return MCPError(TEXT("onConflict must be 'skip' or 'error'; compose_pose_sequence never overwrites"));
 	}
 	if (!bHasSources || SourcesArr->Num() == 0) return MCPError(TEXT("sources must be a non-empty array of {assetPath, frame?|time?}"));
-	if (SourcesArr->Num() > MaxSources) return MCPError(FString::Printf(TEXT("sources holds %d entries; the limit is %d"), SourcesArr->Num(), MaxSources));
-	if (bHasLayers && LayersArr->Num() > MaxLayers) return MCPError(FString::Printf(TEXT("layers holds %d entries; the limit is %d"), LayersArr->Num(), MaxLayers));
+	if (SourcesArr->Num() > MaxSources)
+	{
+		return MCPError(FString::Printf(TEXT("sources holds %d entries; the limit is %d. Compose in stages: build intermediate sequences from %d or fewer sources each, then compose those."),
+			SourcesArr->Num(), MaxSources, MaxSources));
+	}
+	if (bHasLayers && LayersArr->Num() > MaxLayers)
+	{
+		return MCPError(FString::Printf(TEXT("layers holds %d entries; the limit is %d. Compose in stages: apply %d or fewer layers, then layer the result again."),
+			LayersArr->Num(), MaxLayers, MaxLayers));
+	}
 	if (NumFramesParam < 1.0 || NumFramesParam > MaxFrames || NumFramesParam != FMath::FloorToDouble(NumFramesParam))
 	{
 		return MCPError(FString::Printf(TEXT("numFrames must be a whole number from 1 to %d"), MaxFrames));

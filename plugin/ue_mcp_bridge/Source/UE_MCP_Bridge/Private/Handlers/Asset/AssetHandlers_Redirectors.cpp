@@ -151,7 +151,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::FixupRedirectors(const TSharedPtr<FJsonOb
 		if (MCPIsProtectedAssetPath(RequestedPath))
 		{
 			return MCPError(FString::Printf(
-				TEXT("'%s' is on a protected mount (/Engine/, /Script/, /Memory/, /Temp/), which the bridge never rewrites or deletes."),
+				TEXT("'%s' is on a protected mount (/Engine/, /Script/, /Memory/, /Temp/), which the bridge never rewrites or deletes. This cannot be overridden."),
 				*RequestedPath));
 		}
 

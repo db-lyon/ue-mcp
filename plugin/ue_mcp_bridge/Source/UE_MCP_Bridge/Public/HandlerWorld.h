@@ -18,6 +18,7 @@
 #include "Misc/Paths.h"
 #include "Templates/UniquePtr.h"
 #include "HandlerResult.h"
+#include "HandlerWayForward.h"
 #include "HandlerParams.h"
 
 /** Is a play-in-editor or simulate session running right now?
@@ -36,7 +37,7 @@ inline FString MCPPlayInEditorLoadNote()
 	if (!MCPIsPlayInEditorActive()) return FString();
 	return TEXT(" A play-in-editor session is running, which changes how assets load: ")
 		TEXT("the editor's own asset loader refuses every call while in play mode. ")
-		TEXT("Stop play with editor(action=\"play_in_editor\", pieAction=\"stop\") and retry before treating this as an asset problem.");
+		+ MCPStopPlayInEditorStep() + TEXT(" Do that before treating this as an asset problem.");
 }
 
 /** A precondition refusal for an editor-world action while PIE is running,
@@ -46,9 +47,8 @@ inline TSharedPtr<FJsonValue> MCPRefuseDuringPlayInEditor(const TCHAR* ActionNam
 	if (!MCPIsPlayInEditorActive()) return nullptr;
 	return MCPError(FString::Printf(
 		TEXT("%s cannot run while a play-in-editor session is running: the editor's asset loader refuses every call in play mode, ")
-		TEXT("so the sequence would read as missing and captures would not follow the playhead. ")
-		TEXT("Stop play with editor(action=\"play_in_editor\", pieAction=\"stop\") and retry."),
-		ActionName));
+		TEXT("so the sequence would read as missing and captures would not follow the playhead. %s"),
+		ActionName, *MCPStopPlayInEditorStep()));
 }
 
 /** Get the editor world, or nullptr if not available. */
@@ -94,13 +94,14 @@ inline bool MCPLoadMapIfNeeded(const FString& InMap, FString& OutError)
 	}
 	if (MCPIsPlayInEditorActive())
 	{
-		OutError = FString::Printf(TEXT("play-in-editor is running in %s; stop it so the run can open %s"),
-			Current ? *Current->GetName() : TEXT("another level"), *Map);
+		OutError = FString::Printf(TEXT("play-in-editor is running in %s; stop it so the run can open %s. %s"),
+			Current ? *Current->GetName() : TEXT("another level"), *Map, *MCPStopPlayInEditorStep());
 		return false;
 	}
 	if (Current && Current->IsDirty())
 	{
-		OutError = FString::Printf(TEXT("map %s has unsaved changes; save or discard them before a run opens %s"), *Current->GetName(), *Map);
+		OutError = FString::Printf(TEXT("map %s has unsaved changes; save or discard them before a run opens %s. %s"),
+			*Current->GetName(), *Map, *MCPSaveOrDiscardStep());
 		return false;
 	}
 	OutError = MCPCheckMapExists(Map);
@@ -333,4 +334,4 @@ inline TArray<FString> MCPSweepAbandonedTempWorlds(const TSet<FName>& Before)
 /** Get the editor world or return an error response. */
 #define REQUIRE_EDITOR_WORLD(WorldVar) \
 	UWorld* WorldVar = GetEditorWorld(); \
-	if (!WorldVar) return MCPError(TEXT("Editor world not available"));
+	if (!WorldVar) return MCPError(MCPEditorWorldUnavailableMessage());

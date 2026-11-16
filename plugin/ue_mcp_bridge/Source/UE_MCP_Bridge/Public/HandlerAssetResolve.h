@@ -438,8 +438,8 @@ inline bool MCPIsProtectedAssetPath(const FString& Path)
 inline TSharedPtr<FJsonValue> MCPProtectedPathError(const FString& Path)
 {
 	return MCPError(FString::Printf(
-		TEXT("Refusing to mutate protected mount: %s. Engine, /Script/, /Memory/, /Temp/ are read-only via the bridge."),
-		*Path));
+		TEXT("Refusing to mutate protected mount: %s. Engine, /Script/, /Memory/, /Temp/ are read-only via the bridge. %s"),
+		*Path, *MCPProtectedMountWayForward()));
 }
 
 /** Load an asset of a known type by path. Returns nullptr when the path names

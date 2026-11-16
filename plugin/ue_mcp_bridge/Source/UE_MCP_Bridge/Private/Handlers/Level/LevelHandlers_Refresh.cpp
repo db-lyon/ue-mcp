@@ -372,7 +372,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::RerunConstruction(const TSharedPtr<FJsonO
 	UWorld* World = ResolveWorldFromParams(Params, *WorldScope);
 	if (!World)
 	{
-		return MCPError(FString::Printf(TEXT("World not available for scope '%s'"), *WorldScope));
+		return MCPWorldUnavailableError(WorldScope);
 	}
 
 	TArray<FString> ActorLabels;
@@ -603,7 +603,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::RecreatePhysicsState(const TSharedPtr<FJs
 	UWorld* World = ResolveWorldFromParams(Params, *WorldScope);
 	if (!World)
 	{
-		return MCPError(FString::Printf(TEXT("World not available for scope '%s'"), *WorldScope));
+		return MCPWorldUnavailableError(WorldScope);
 	}
 
 	TArray<FString> ActorLabels;
@@ -711,8 +711,10 @@ TSharedPtr<FJsonValue> FLevelHandlers::RecreatePhysicsState(const TSharedPtr<FJs
 	{
 		Result->SetBoolField(TEXT("success"), false);
 		Result->SetStringField(TEXT("error"), FString::Printf(
-			TEXT("Matched %d components, over maxComponents (%d). Narrow the bounds or raise it deliberately."),
-			Targets.Num(), MaxComponents));
+			TEXT("Matched %d components, over maxComponents (%d). %s"),
+			Targets.Num(), MaxComponents,
+			*MCPRaiseOrSplitNote(TEXT("maxComponents"), MaxComponents, MCPRefreshHardMaxComponents,
+				TEXT("Split the work across several calls with smaller bounds."))));
 		return MCPResult(Result);
 	}
 
@@ -954,8 +956,10 @@ TSharedPtr<FJsonValue> FLevelHandlers::ResaveMeshUsers(const TSharedPtr<FJsonObj
 	{
 		Result->SetBoolField(TEXT("success"), false);
 		Result->SetStringField(TEXT("error"), FString::Printf(
-			TEXT("Matched %d actors, over maxActors (%d). Nothing was rebuilt or saved. Narrow meshPaths or componentClass, or raise maxActors deliberately."),
-			Users.Num(), MaxActors));
+			TEXT("Matched %d actors, over maxActors (%d). Nothing was rebuilt or saved. %s"),
+			Users.Num(), MaxActors,
+			*MCPRaiseOrSplitNote(TEXT("maxActors"), MaxActors, MCPRefreshMaxActors,
+				TEXT("Split the work across several calls, each with fewer meshPaths or a narrower componentClass."))));
 		return MCPResult(Result);
 	}
 
@@ -1208,7 +1212,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::TestComponentOverlap(const TSharedPtr<FJs
 	UWorld* World = ResolveWorldFromParams(Params, *WorldScope);
 	if (!World)
 	{
-		return MCPError(FString::Printf(TEXT("World not available for scope '%s'"), *WorldScope));
+		return MCPWorldUnavailableError(WorldScope);
 	}
 
 	FString ActorLabelA;

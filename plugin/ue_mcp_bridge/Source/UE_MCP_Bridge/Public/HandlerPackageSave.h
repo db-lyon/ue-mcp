@@ -93,8 +93,8 @@ inline bool MCPPackageWriteBlocked(UObject* Asset, FString& OutReason)
 	if (MCPIsProtectedAssetPath(PackageName))
 	{
 		OutReason = FString::Printf(
-			TEXT("'%s' is on a protected mount, which the bridge never writes to."),
-			*PackageName);
+			TEXT("'%s' is on a protected mount, which the bridge never writes to. %s"),
+			*PackageName, *MCPProtectedMountWayForward());
 		return true;
 	}
 

@@ -145,9 +145,9 @@ TSharedPtr<FJsonValue> FAssetHandlers::BulkSetAssetProperties(const TSharedPtr<F
 	}
 	if (Items->Num() > MaxBulkPropertyAssets)
 	{
-		return MCPError(FString::Printf(
+		return MCPBatchTooLargeError(FString::Printf(
 			TEXT("'items' exceeds the maximum batch size of %d (received %d)"),
-			MaxBulkPropertyAssets, Items->Num()));
+			MaxBulkPropertyAssets, Items->Num()), MaxBulkPropertyAssets);
 	}
 
 	TArray<FPreparedAssetWrite> PreparedAssets;
@@ -195,8 +195,8 @@ TSharedPtr<FJsonValue> FAssetHandlers::BulkSetAssetProperties(const TSharedPtr<F
 		if (MCPIsProtectedAssetPath(AssetPath))
 		{
 			RejectItem(BulkStatusProtected, FString::Printf(
-				TEXT("Refusing to mutate protected mount: %s. Engine, /Script/, /Memory/, /Temp/ are read-only via the bridge."),
-				*AssetPath));
+				TEXT("Refusing to mutate protected mount: %s. Engine, /Script/, /Memory/, /Temp/ are read-only via the bridge. %s"),
+				*AssetPath, *MCPProtectedMountWayForward()));
 			PreparedAssets.Add(MoveTemp(PreparedAsset));
 			continue;
 		}

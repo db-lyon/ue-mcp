@@ -38,7 +38,7 @@ TSharedPtr<FJsonValue> FPIEHandlers::GetPieAnimState(const TSharedPtr<FJsonObjec
 	FWorldContext* PIEContext = GEditor->GetPIEWorldContext();
 	if (!PIEContext || !PIEContext->World())
 	{
-		return MCPError(TEXT("No PIE world available. Is Play-In-Editor running?"));
+		return MCPError(MCPNoPlayWorldMessage());
 	}
 
 	UWorld* PIEWorld = PIEContext->World();
@@ -124,7 +124,7 @@ TSharedPtr<FJsonValue> FPIEHandlers::GetPieAnimProperties(const TSharedPtr<FJson
 	UWorld* PIEWorld = GetPIEWorld();
 	if (!PIEWorld)
 	{
-		return MCPError(TEXT("No PIE world available. Is Play-In-Editor running?"));
+		return MCPError(MCPNoPlayWorldMessage());
 	}
 
 	TSharedPtr<FJsonValue> ResolveErr;

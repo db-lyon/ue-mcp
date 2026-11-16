@@ -33,7 +33,7 @@
 namespace
 {
 	const TCHAR* const MRQPluginOffError =
-		TEXT("Movie Render Queue is not available: enable the Movie Render Pipeline plugin (MovieRenderPipeline) for this project and restart the editor.");
+		TEXT("Movie Render Queue is not available: the MovieRenderPipeline plugin is not loaded. Enable it with project(enable_plugin, pluginName=\"MovieRenderPipeline\"), then restart the editor with editor(restart_editor).");
 
 	const TCHAR* const MRQSubsystemClassPath = TEXT("/Script/MovieRenderPipelineEditor.MoviePipelineQueueSubsystem");
 	const TCHAR* const MRQJobClassPath = TEXT("/Script/MovieRenderPipelineCore.MoviePipelineExecutorJob");
@@ -1019,10 +1019,10 @@ TSharedPtr<FJsonValue> FMovieRenderQueueHandlers::Render(const TSharedPtr<FJsonO
 	}
 	if (GEditor && GEditor->PlayWorld)
 	{
-		return MCPError(TEXT("Play In Editor is running, and the in-editor render needs it. Stop PIE first."));
+		return MCPError(TEXT("Play In Editor is running, and the in-editor render needs it. ") + MCPStopPlayInEditorStep());
 	}
 	UClass* ExecutorClass = MRQFindClass(MRQPIEExecutorClassPath);
-	if (!ExecutorClass) return MCPError(TEXT("The Movie Render Queue PIE executor class is not loaded (MovieRenderPipelineEditor)."));
+	if (!ExecutorClass) return MCPPluginUnavailableError(TEXT("The Movie Render Queue PIE executor class (MovieRenderPipelineEditor)"), TEXT("MovieRenderPipeline"));
 
 	const TArray<UObject*> Jobs = MRQJobs(Queue);
 	TSharedRef<FMRQRenderSession> Session = MakeShared<FMRQRenderSession>();

@@ -546,7 +546,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetFogProperties(const TSharedPtr<FJsonOb
 
 	FString WorldScope = OptionalString(Params, TEXT("world"), TEXT("editor"));
 	UWorld* World = ResolveWorldFromParams(Params, *WorldScope);
-	if (!World) return MCPError(TEXT("World not available"));
+	if (!World) return MCPWorldUnavailableError(WorldScope);
 
 	// #983: a named selector goes through the shared resolver, so a duplicated
 	// label is refused with the candidate paths rather than tuning whichever

@@ -292,7 +292,7 @@ namespace
 		}
 		if (MCPIsProtectedAssetPath(PackageName))
 		{
-			OutError = FString::Printf(TEXT("Refusing to create or edit protected asset path '%s'"), *PackageName);
+			OutError = FString::Printf(TEXT("Refusing to create or edit protected asset path '%s'. %s"), *PackageName, *MCPProtectedMountWayForward());
 			return false;
 		}
 		OutName = FPackageName::GetLongPackageAssetName(PackageName);
@@ -478,7 +478,7 @@ namespace
 			if (!IsFrame(Start) || !IsFrame(End) || End <= Start
 				|| End - Start > static_cast<double>(ControlRigSequencerMaxFrames))
 			{
-				OutError = FString::Printf(TEXT("'startFrame' and 'endFrame' must be integers with endFrame after startFrame, at most %d frames apart"), ControlRigSequencerMaxFrames);
+				OutError = FString::Printf(TEXT("'startFrame' and 'endFrame' must be integers with endFrame after startFrame, at most %d frames apart. Split a longer range into several sessions by startFrame/endFrame."), ControlRigSequencerMaxFrames);
 				return false;
 			}
 			Out.bUseCustomTimeRange = true;
@@ -2851,7 +2851,7 @@ namespace
 				Write.Frames.Add(FFrameNumber(Frame));
 			}
 			if (Write.Frames.Num() > ControlRigSequencerMaxFrames)
-				return MCPError(FString::Printf(TEXT("operations[%d].controls[%d] exceeds the %d-frame limit"), OperationIndex, ControlIndex, ControlRigSequencerMaxFrames));
+				return MCPError(FString::Printf(TEXT("operations[%d].controls[%d] exceeds the %d-frame limit. Split it into several operations by startFrame/endFrame."), OperationIndex, ControlIndex, ControlRigSequencerMaxFrames));
 			if (!ControlRigSequencerRegisterWriteFrames(WrittenKeys, ControlName, Write.Frames, OperationIndex, Error))
 				return MCPError(Error);
 
@@ -4558,7 +4558,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ApplyControlRigEdits(const TSharedPtr
 	if (auto Error = RequireString(Params, TEXT("sequencePath"), SequencePath)) return Error;
 	if (MCPIsProtectedAssetPath(SequencePath))
 	{
-		return MCPError(FString::Printf(TEXT("Protected asset cannot be modified: %s"), *SequencePath));
+		return MCPError(FString::Printf(TEXT("Protected asset cannot be modified: %s. %s"), *SequencePath, *MCPProtectedMountWayForward()));
 	}
 	ULevelSequence* Sequence = Cast<ULevelSequence>(MCPLoadAssetObject(SequencePath));
 	if (!Sequence) return MCPError(FString::Printf(TEXT("LevelSequence not found: %s"), *SequencePath));

@@ -516,7 +516,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::ImportSkeletalMesh(const TSharedPtr<FJson
 	if (!FPaths::FileExists(FileName)) return MCPError(TEXT("File not found: ") + FileName);
 	const FString Destination = DestinationPath / AssetName;
 	if (AssetName.IsEmpty() || AssetName.Contains(TEXT("/")) || AssetName.Contains(TEXT(".")) || !FPackageName::IsValidLongPackageName(Destination)) return MCPError(TEXT("Invalid mesh destination: ") + Destination);
-	if (MCPIsProtectedAssetPath(Destination)) return MCPError(TEXT("Cannot import to a protected mount"));
+	if (MCPIsProtectedAssetPath(Destination)) return MCPError(TEXT("Cannot import to a protected mount. This cannot be overridden; import into /Game or a plugin content folder."));
 	if (UObject* Existing = MCPLoadAssetObject(Destination))
 	{
 		if (!bReplaceExisting) return MCPError(TEXT("Destination exists and replaceExisting is false: ") + Destination);
@@ -545,7 +545,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::ImportSkeletalMesh(const TSharedPtr<FJson
 	{
 		UClass* PipelineClass = LoadClass<UObject>(nullptr, TEXT("/Script/InterchangePipelines.InterchangeGenericAssetsPipeline"));
 		UClass* OverrideClass = LoadClass<UObject>(nullptr, TEXT("/Script/InterchangeEngine.InterchangePipelineStackOverride"));
-		if (!PipelineClass || !OverrideClass) return MCPError(TEXT("Interchange import is unavailable; enable the Interchange Editor plugin"));
+		if (!PipelineClass || !OverrideClass) return MCPPluginUnavailableError(TEXT("Interchange import"), TEXT("InterchangeEditor"));
 		UObject* Pipeline = NewObject<UObject>(GetTransientPackage(), PipelineClass);
 		UObject* Stack = NewObject<UObject>(GetTransientPackage(), OverrideClass);
 		Roots.Add(MakeUnique<FGCRootScope>(Pipeline));
@@ -730,7 +730,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::ImportAnimation(const TSharedPtr<FJsonObj
 	if (bHasFile) Files.Add(SingleFile);
 	else Files = JsonArrayToStringList(FilesArr);
 	if (Files.Num() == 0) return MCPError(TEXT("filePaths is empty"));
-	if (Files.Num() > 200) return MCPError(FString::Printf(TEXT("filePaths holds %d files; the limit is 200"), Files.Num()));
+	if (Files.Num() > 200) return MCPBatchTooLargeError(FString::Printf(TEXT("filePaths holds %d files; the limit is 200"), Files.Num()), 200);
 	if (bHasFiles && !AssetName.IsEmpty())
 	{
 		return MCPError(TEXT("name applies to a single filePath; a batch names each asset after its file"));
@@ -1464,7 +1464,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::ImportTextureBatch(const TSharedPtr<FJson
 		const FString Name = OptionalString(*Item, TEXT("name"), FPaths::GetBaseFilename(FilePath));
 		const FString Destination = Folder / Name;
 		if (Name.IsEmpty() || Name.Contains(TEXT("/")) || Name.Contains(TEXT(".")) || !FPackageName::IsValidLongPackageName(Destination)) return MCPError(TEXT("Invalid texture destination: ") + Destination);
-		if (MCPIsProtectedAssetPath(Destination)) return MCPError(TEXT("Cannot import to a protected mount: ") + Destination);
+		if (MCPIsProtectedAssetPath(Destination)) return MCPError(TEXT("Cannot import to a protected mount: ") + Destination + TEXT(". This cannot be overridden; import into /Game or a plugin content folder."));
 		if (UObject* Existing = MCPLoadAssetObject(Destination))
 		{
 			if (auto Blocked = MCPAssetWriteBlockedError(Existing, Destination, TEXT("import texture"))) return Blocked;
@@ -4431,8 +4431,8 @@ TSharedPtr<FJsonValue> FAssetHandlers::ImportStringTableCsv(const TSharedPtr<FJs
 	if (MCPIsProtectedAssetPath(AssetPath))
 	{
 		return MCPError(FString::Printf(
-			TEXT("'%s' is on a protected mount (/Engine/, /Script/, /Memory/, /Temp/), which the bridge never writes to."),
-			*AssetPath));
+			TEXT("'%s' is on a protected mount (/Engine/, /Script/, /Memory/, /Temp/), which the bridge never writes to. %s"),
+			*AssetPath, *MCPProtectedMountWayForward()));
 	}
 
 	if (MissingCsvPath) return MissingCsvPath;

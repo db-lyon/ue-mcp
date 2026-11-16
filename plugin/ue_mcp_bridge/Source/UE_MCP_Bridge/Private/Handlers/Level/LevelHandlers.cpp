@@ -1033,7 +1033,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::GetOutliner(const TSharedPtr<FJsonObject>
 
 	FString WorldScope = OptionalString(Params, TEXT("world"), TEXT("editor"));
 	UWorld* World = ResolveWorldFromParams(Params, *WorldScope);
-	if (!World) return MCPError(FString::Printf(TEXT("World not available for scope '%s'"), *WorldScope));
+	if (!World) return MCPWorldUnavailableError(WorldScope);
 
 	FString ClassFilter = OptionalString(Params, TEXT("classFilter"));
 	FString NameFilter = OptionalString(Params, TEXT("nameFilter"));
@@ -1273,7 +1273,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::PlaceActor(const TSharedPtr<FJsonObject>&
 	// instead of silently landing in the editor world.
 	const FString WorldScope = OptionalString(Params, TEXT("world"), TEXT("editor"));
 	UWorld* World = ResolveWorldFromParams(Params, *WorldScope);
-	if (!World) return MCPError(TEXT("World not available"));
+	if (!World) return MCPWorldUnavailableError(WorldScope);
 
 	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
 	const FString Label = OptionalString(Params, TEXT("label"));
@@ -2130,7 +2130,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::MoveActor(const TSharedPtr<FJsonObject>& 
 	// instance name PIE shows.
 	const FString WorldScope = OptionalString(Params, TEXT("world"), TEXT("editor"));
 	UWorld* World = ResolveWorldFromParams(Params, *WorldScope);
-	if (!World) return MCPError(TEXT("World not available"));
+	if (!World) return MCPWorldUnavailableError(WorldScope);
 
 	// LabelOrName, not label alone: a caller often has an internal name rather
 	// than a label, because a PIE-spawned actor has no label worth guessing.
@@ -2227,7 +2227,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::AimActorAt(const TSharedPtr<FJsonObject>&
 
 	FString WorldScope = OptionalString(Params, TEXT("world"), TEXT("editor"));
 	UWorld* World = ResolveWorldFromParams(Params, *WorldScope);
-	if (!World) return MCPError(TEXT("World not available"));
+	if (!World) return MCPWorldUnavailableError(WorldScope);
 
 	TSharedPtr<FJsonValue> ActorErr;
 	AActor* Actor = MCPResolveActor(World, Params, ActorErr);
@@ -2329,7 +2329,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::NavProjectPoint(const TSharedPtr<FJsonObj
 
 	const FString WorldScope = OptionalString(Params, TEXT("world"), TEXT("editor"));
 	UWorld* World = ResolveWorldFromParams(Params, *WorldScope);
-	if (!World) return MCPError(TEXT("World not available"));
+	if (!World) return MCPWorldUnavailableError(WorldScope);
 
 	UNavigationSystemV1* Nav = UNavigationSystemV1::GetCurrent(World);
 	if (!Nav) return MCPError(TEXT("No navigation system in this world (add a NavMeshBoundsVolume and build navigation)"));
@@ -3125,7 +3125,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::ClearLevelScript(const TSharedPtr<FJsonOb
 	const bool bSave = OptionalBool(Params, TEXT("save"), false);
 	if (!bDryRun && bSave && World->GetOutermost()->IsDirty())
 	{
-		return MCPError(TEXT("Current level already has unsaved changes; save or discard them before clear_level_script with save=true"));
+		return MCPError(TEXT("Current level already has unsaved changes; save or discard them before clear_level_script with save=true. ") + MCPSaveOrDiscardStep());
 	}
 	ULevelScriptBlueprint* LevelScript =
 		World->PersistentLevel->GetLevelScriptBlueprint(/*bDontCreate*/ true);
@@ -3277,9 +3277,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetComponentProperty(const TSharedPtr<FJs
 	UWorld* World = ResolveWorldFromParams(Params, *WorldScope);
 	if (!World)
 	{
-		return MCPError(WorldScope == TEXT("pie")
-			? TEXT("PIE not running (or no such pieInstance). See editor(list_pie_instances).")
-			: TEXT("Editor world not available"));
+		return MCPWorldUnavailableError(WorldScope);
 	}
 	const bool bRuntimeWorld = World->IsGameWorld();
 
@@ -3624,7 +3622,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::GetComponentDetails(const TSharedPtr<FJso
 
 	const FString WorldScope = OptionalString(Params, TEXT("world"), TEXT("editor"));
 	UWorld* World = ResolveWorldFromParams(Params, *WorldScope);
-	if (!World) return MCPError(FString::Printf(TEXT("World not available for scope '%s'"), *WorldScope));
+	if (!World) return MCPWorldUnavailableError(WorldScope);
 
 	FMCPActorSelector ActorSel;
 	ActorSel.Match = EMCPActorMatch::LabelNameOrPath;
@@ -3915,7 +3913,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::GetActorsByClass(const TSharedPtr<FJsonOb
 
 	FString WorldScope = OptionalString(Params, TEXT("world"), TEXT("editor"));
 	UWorld* World = ResolveWorldFromParams(Params, *WorldScope);
-	if (!World) return MCPError(TEXT("World not available"));
+	if (!World) return MCPWorldUnavailableError(WorldScope);
 
 	// #675: resolve className to an actual UClass so Blueprint subclasses of a
 	// native base match (IsChildOf), not just actors whose class-name string
@@ -3989,7 +3987,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::GetActorsByComponentClass(const TSharedPt
 
 	FString WorldScope = OptionalString(Params, TEXT("world"), TEXT("editor"));
 	UWorld* World = ResolveWorldFromParams(Params, *WorldScope);
-	if (!World) return MCPError(TEXT("World not available"));
+	if (!World) return MCPWorldUnavailableError(WorldScope);
 
 	TArray<TSharedPtr<FJsonValue>> Out;
 	for (TActorIterator<AActor> It(World); It; ++It)
@@ -4038,7 +4036,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::CountActorsByClass(const TSharedPtr<FJson
 
 	FString WorldScope = OptionalString(Params, TEXT("world"), TEXT("editor"));
 	UWorld* World = ResolveWorldFromParams(Params, *WorldScope);
-	if (!World) return MCPError(TEXT("World not available"));
+	if (!World) return MCPWorldUnavailableError(WorldScope);
 
 	const int32 TopN = OptionalInt(Params, TEXT("topN"), 0);
 
@@ -4093,7 +4091,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::GetRVTSummary(const TSharedPtr<FJsonObjec
 
 	FString WorldScope = OptionalString(Params, TEXT("world"), TEXT("editor"));
 	UWorld* World = ResolveWorldFromParams(Params, *WorldScope);
-	if (!World) return MCPError(TEXT("World not available"));
+	if (!World) return MCPWorldUnavailableError(WorldScope);
 
 	TArray<TSharedPtr<FJsonValue>> VolumesArr;
 	TSet<FString> UniqueTextures;
@@ -4165,7 +4163,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::GetActorBounds(const TSharedPtr<FJsonObje
 
 	const FString WorldScope = OptionalString(Params, TEXT("world"), TEXT("editor"));
 	UWorld* World = ResolveWorldFromParams(Params, *WorldScope);
-	if (!World) return MCPError(FString::Printf(TEXT("World not available for scope '%s'"), *WorldScope));
+	if (!World) return MCPWorldUnavailableError(WorldScope);
 
 	FMCPActorSelector ActorSel;
 	ActorSel.Match = EMCPActorMatch::LabelNameOrPath;
@@ -4281,7 +4279,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetActorProperty(const TSharedPtr<FJsonOb
 	UWorld* World = ResolveWorldFromParams(Params, *WorldScope);
 	if (!World)
 	{
-		return MCPError(FString::Printf(TEXT("World not available for scope '%s'"), *WorldScope));
+		return MCPWorldUnavailableError(WorldScope);
 	}
 
 	AActor* TargetActor = nullptr;

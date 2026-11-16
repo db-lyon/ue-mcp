@@ -464,7 +464,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::ListMassTypes(const TSharedPtr<FJsonOb
 	UClass* ProcessorBase = MCPResolveClass(MassProcessorClassPath);
 	if (!TraitBase && !ProcessorBase)
 	{
-		return MCPError(TEXT("Mass is unavailable: neither /Script/MassSpawner.MassEntityTraitBase nor /Script/MassEntity.MassProcessor resolved. Enable the MassGameplay and MassEntity plugins, restart the editor, then retry."));
+		return MCPError(TEXT("Mass is unavailable: neither /Script/MassSpawner.MassEntityTraitBase nor /Script/MassEntity.MassProcessor resolved. Enable them with project(enable_plugin, pluginName=\"MassGameplay\") and project(enable_plugin, pluginName=\"MassEntity\"), restart the editor with editor(restart_editor), then retry."));
 	}
 
 	const bool bWantTraits = (Kind == TEXT("all") || Kind == TEXT("traits"));
@@ -473,8 +473,8 @@ TSharedPtr<FJsonValue> FGameplayHandlers::ListMassTypes(const TSharedPtr<FJsonOb
 	TArray<TSharedPtr<FJsonValue>> Traits;
 	TArray<TSharedPtr<FJsonValue>> Processors;
 	TArray<FString> Unavailable;
-	if (bWantTraits && !TraitBase) Unavailable.Add(TEXT("MassSpawner (traits): enable the MassGameplay plugin"));
-	if (bWantProcessors && !ProcessorBase) Unavailable.Add(TEXT("MassEntity (processors): enable the MassEntity plugin"));
+	if (bWantTraits && !TraitBase) Unavailable.Add(TEXT("MassSpawner (traits): ") + MCPEnablePluginStep(TEXT("MassGameplay")));
+	if (bWantProcessors && !ProcessorBase) Unavailable.Add(TEXT("MassEntity (processors): ") + MCPEnablePluginStep(TEXT("MassEntity")));
 
 	for (TObjectIterator<UClass> It; It; ++It)
 	{
@@ -1079,7 +1079,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::QueryZoneGraph(const TSharedPtr<FJsonO
 	UClass* DataClass = MCPResolveClass(ZoneGraphDataClassPath);
 	if (!DataClass)
 	{
-		return MCPError(TEXT("ZoneGraph is unavailable: /Script/ZoneGraph.ZoneGraphData did not resolve. Enable the ZoneGraph plugin and restart the editor."));
+		return MCPError(TEXT("ZoneGraph is unavailable: /Script/ZoneGraph.ZoneGraphData did not resolve. ") + MCPEnablePluginStep(TEXT("ZoneGraph")));
 	}
 
 	if (!World) return MCPError(TEXT("No world available; pass world=editor or world=pie with a running session"));

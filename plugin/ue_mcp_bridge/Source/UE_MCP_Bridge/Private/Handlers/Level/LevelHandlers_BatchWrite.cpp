@@ -232,8 +232,8 @@ TSharedPtr<FJsonValue> FLevelHandlers::BatchSetActorProperties(const TSharedPtr<
 	}
 	if ((*PropertiesObject)->Values.Num() > MCPBatchMaxProperties)
 	{
-		return MCPError(FString::Printf(
-			TEXT("'properties' exceeds the maximum of %d entries"), MCPBatchMaxProperties));
+		return MCPBatchTooLargeError(FString::Printf(
+			TEXT("'properties' exceeds the maximum of %d entries"), MCPBatchMaxProperties), MCPBatchMaxProperties);
 	}
 
 	FMCPBatchSelector Selector;
@@ -1065,8 +1065,10 @@ TSharedPtr<FJsonValue> FLevelHandlers::SpawnActorsBatch(const TSharedPtr<FJsonOb
 	{
 		Result->SetBoolField(TEXT("success"), false);
 		Result->SetStringField(TEXT("error"), FString::Printf(
-			TEXT("The plan produced %d spawns, over maxSpawn (%d). Narrow the selector or raise maxSpawn deliberately."),
-			Planned.Num(), MaxSpawn));
+			TEXT("The plan produced %d spawns, over maxSpawn (%d). %s"),
+			Planned.Num(), MaxSpawn,
+			*MCPRaiseOrSplitNote(TEXT("maxSpawn"), MaxSpawn, MCPBatchHardMaxSpawn,
+				TEXT("Split the work across several calls, each covering part of the spline range or a narrower selector."))));
 		Result->SetNumberField(TEXT("maxSpawn"), MaxSpawn);
 		return MCPResult(Result);
 	}

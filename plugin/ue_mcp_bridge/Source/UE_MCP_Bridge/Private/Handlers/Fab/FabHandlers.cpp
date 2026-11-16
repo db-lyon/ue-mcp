@@ -56,11 +56,11 @@ static FString FabUnavailableReason()
 	if (!Plugin->IsEnabled())
 	{
 		return FString::Printf(
-			TEXT("The Fab plugin is installed (%s) but this project disables it. Enable Fab in Edit > Plugins (or set \"Enabled\": true for Fab in the .uproject) and restart the editor."),
-			*FPaths::ConvertRelativePathToFull(Plugin->GetBaseDir()));
+			TEXT("The Fab plugin is installed (%s) but this project disables it. %s"),
+			*FPaths::ConvertRelativePathToFull(Plugin->GetBaseDir()), *MCPEnablePluginStep(TEXT("Fab")));
 	}
 	return FString::Printf(
-		TEXT("The Fab plugin is installed and enabled (%s) but its module is not loaded. Restart the editor; if it still does not load, check the log for Fab module load errors."),
+		TEXT("The Fab plugin is installed and enabled (%s) but its module is not loaded. Restart the editor with editor(restart_editor); if it still does not load, check the log for Fab module load errors."),
 		*FPaths::ConvertRelativePathToFull(Plugin->GetBaseDir()));
 }
 

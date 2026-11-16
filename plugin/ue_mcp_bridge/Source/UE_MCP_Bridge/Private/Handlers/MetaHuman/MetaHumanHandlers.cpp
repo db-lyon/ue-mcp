@@ -353,7 +353,7 @@ TSharedPtr<FJsonValue> FMetaHumanHandlers::CreateCharacter(const TSharedPtr<FJso
 	if (NameErr) return NameErr;
 	UClass* Cls = FindClass(CharacterClass);
 	UClass* FactoryCls = FindClass(FactoryClass);
-	if (!Cls || !FactoryCls) return MCPError(TEXT("MetaHuman plugin not available: the MetaHumanCharacter asset class or its factory is not loaded"));
+	if (!Cls || !FactoryCls) return MCPError(TEXT("MetaHuman plugin not available: the MetaHumanCharacter asset class or its factory is not loaded. ") + MCPEnablePluginStep(TEXT("MetaHumanCharacter")));
 	UFactory* Factory = NewObject<UFactory>(GetTransientPackage(), FactoryCls);
 
 	auto Created = MCPCreateAssetIdempotent<UObject>(Name, PackagePath, OnConflict, TEXT("MetaHumanCharacter"), Cls, Factory);

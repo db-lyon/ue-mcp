@@ -359,8 +359,10 @@ TSharedPtr<FJsonValue> FLandscapeHandlers::Sculpt(const TSharedPtr<FJsonObject>&
 	if (VertexCount > MaxVertices)
 	{
 		return MCPError(FString::Printf(
-			TEXT("Brush covers %lld vertices, above the %lld limit. Reduce 'radius' or raise 'maxVertices' deliberately."),
-			VertexCount, MaxVertices));
+			TEXT("Brush covers %lld vertices, above the %lld limit. %s"),
+			VertexCount, MaxVertices,
+			*MCPRaiseOrSplitNote(TEXT("maxVertices"), MaxVertices, 64'000'000,
+				TEXT("Reduce 'radius', or tile the area with several smaller brush calls."))));
 	}
 	TArray<uint16> Heights;
 	Heights.SetNumZeroed(Width * Height);
@@ -560,8 +562,10 @@ TSharedPtr<FJsonValue> FLandscapeHandlers::PaintLayer(const TSharedPtr<FJsonObje
 	if (VertexCount > MaxVertices)
 	{
 		return MCPError(FString::Printf(
-			TEXT("Brush covers %lld vertices, above the %lld limit. Reduce 'radius' or raise 'maxVertices' deliberately."),
-			VertexCount, MaxVertices));
+			TEXT("Brush covers %lld vertices, above the %lld limit. %s"),
+			VertexCount, MaxVertices,
+			*MCPRaiseOrSplitNote(TEXT("maxVertices"), MaxVertices, 64'000'000,
+				TEXT("Reduce 'radius', or tile the area with several smaller brush calls."))));
 	}
 	TArray<uint8> Weights;
 	Weights.SetNumZeroed(Width * Height);
@@ -969,8 +973,10 @@ namespace
 			Obj->SetBoolField(TEXT("success"), false);
 			Obj->SetStringField(TEXT("error"), FString::Printf(
 				TEXT("The region covers %lld vertices (%dx%d), above the %lld limit this call runs with. ")
-				TEXT("Shrink 'region', or raise 'maxVertices' deliberately - the cost is linear in vertices and the whole rectangle is held in memory."),
-				Out.Count(), Out.Width(), Out.Height(), MaxVertices));
+				TEXT("The cost is linear in vertices and the whole rectangle is held in memory. %s"),
+				Out.Count(), Out.Width(), Out.Height(), MaxVertices,
+				*MCPRaiseOrSplitNote(TEXT("maxVertices"), MaxVertices, 64000000,
+					TEXT("Tile the area: split 'region' into smaller rectangles, one call each."))));
 			Obj->SetStringField(TEXT("reason"), TEXT("regionTooLarge"));
 			Obj->SetNumberField(TEXT("vertexCount"), (double)Out.Count());
 			Obj->SetNumberField(TEXT("maxVertices"), (double)MaxVertices);
@@ -2262,8 +2268,10 @@ TSharedPtr<FJsonValue> FLandscapeHandlers::ApplyErosion(const TSharedPtr<FJsonOb
 		Obj->SetBoolField(TEXT("success"), false);
 		Obj->SetStringField(TEXT("error"), FString::Printf(
 			TEXT("%d iterations over %lld vertices is %lld cell-steps, above the %lld budget this call runs with. ")
-			TEXT("Erosion is O(vertices x iterations) on the game thread, so shrink 'region', drop 'iterations', or raise 'maxWork' knowing the editor is blocked for the duration."),
-			Iterations, Region.Count(), Work, MaxWork));
+			TEXT("Erosion is O(vertices x iterations) on the game thread and blocks the editor for the duration. %s"),
+			Iterations, Region.Count(), Work, MaxWork,
+			*MCPRaiseOrSplitNote(TEXT("maxWork"), MaxWork, 400000000,
+				TEXT("Tile the area: split 'region' into smaller rectangles, or run fewer 'iterations' per call and repeat."))));
 		Obj->SetStringField(TEXT("reason"), TEXT("workBudgetExceeded"));
 		Obj->SetNumberField(TEXT("cellSteps"), (double)Work);
 		Obj->SetNumberField(TEXT("maxWork"), (double)MaxWork);
@@ -4163,9 +4171,10 @@ TSharedPtr<FJsonValue> FLandscapeHandlers::PlanRealWorldLandscape(const TSharedP
 	if (Candidates.Num() == 0)
 	{
 		return MCPError(FString::Printf(
-			TEXT("No legal landscape configuration fits %.0f by %.0f quads within maxComponents %d. ")
-			TEXT("Raise 'maxComponents', or raise 'metersPerQuad' so the same ground needs fewer quads."),
-			TargetQuadsX, TargetQuadsY, MaxComponents));
+			TEXT("No legal landscape configuration fits %.0f by %.0f quads within maxComponents %d. %s"),
+			TargetQuadsX, TargetQuadsY, MaxComponents,
+			*MCPRaiseOrSplitNote(TEXT("maxComponents"), MaxComponents, 16384,
+				TEXT("Raise 'metersPerQuad' so the same ground needs fewer quads, or cover the ground with several landscapes."))));
 	}
 	// Closest fit wins; a tie goes to the one with fewer, larger components,
 	// which is what the engine renders and streams more cheaply.

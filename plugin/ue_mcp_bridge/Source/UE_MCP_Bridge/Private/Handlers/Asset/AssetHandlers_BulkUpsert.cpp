@@ -104,7 +104,7 @@ bool ParseAssetIdentity(
 	const FString LongPackageName = OutItem.PackagePath + TEXT("/") + OutItem.Name;
 	if (MCPIsProtectedAssetPath(LongPackageName))
 	{
-		OutError = FString::Printf(TEXT("Refusing to mutate protected package '%s'"), *LongPackageName);
+		OutError = FString::Printf(TEXT("Refusing to mutate protected package '%s'. %s"), *LongPackageName, *MCPProtectedMountWayForward());
 		return false;
 	}
 	OutItem.AssetPath = LongPackageName + TEXT(".") + OutItem.Name;
@@ -427,10 +427,10 @@ TSharedPtr<FJsonValue> FAssetHandlers::BulkUpsertDataAssets(const TSharedPtr<FJs
 	}
 	if (Items->Num() > MaxBulkUpsertItems)
 	{
-		return MCPError(FString::Printf(
+		return MCPBatchTooLargeError(FString::Printf(
 			TEXT("'items' exceeds the maximum batch size of %d (received %d)"),
 			MaxBulkUpsertItems,
-			Items->Num()));
+			Items->Num()), MaxBulkUpsertItems);
 	}
 
 	OnConflict.TrimStartAndEndInline();

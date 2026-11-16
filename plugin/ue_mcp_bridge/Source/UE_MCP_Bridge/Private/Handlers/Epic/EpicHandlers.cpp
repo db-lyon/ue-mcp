@@ -168,7 +168,8 @@ namespace UEMCPEpic
 	}
 
 	static const FString UnavailableMsg =
-		TEXT("Epic ToolsetRegistry not available. Requires UE 5.8+ with the ToolsetRegistry plugin enabled in the project.");
+		TEXT("Epic ToolsetRegistry not available. Requires UE 5.8+ with the ToolsetRegistry plugin enabled in the project. On 5.8 or newer: ")
+		+ MCPEnablePluginStep(TEXT("ToolsetRegistry"));
 
 	// outputSchema per qualified tool name. Game thread only. Re-read when a tool
 	// is missing, since a toolset can register after the first call.
@@ -310,7 +311,8 @@ TSharedPtr<FJsonValue> FEpicHandlers::Status(const TSharedPtr<FJsonObject>& Para
 	{
 		Res->SetBoolField(TEXT("available"), false);
 		Res->SetStringField(TEXT("reason"),
-			TEXT("ToolsetRegistry plugin not loaded (requires UE 5.8+ with the plugin enabled)"));
+			TEXT("ToolsetRegistry plugin not loaded (requires UE 5.8+ with the plugin enabled). On 5.8 or newer: ")
+				+ MCPEnablePluginStep(TEXT("ToolsetRegistry")));
 		Res->SetNumberField(TEXT("toolsetCount"), 0);
 		return MCPResult(Res);
 	}

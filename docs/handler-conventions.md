@@ -157,6 +157,22 @@ MCPCheckActorLabelExists(World, Label, OnConflict, FriendlyType?)
 // or writes an asset. Shared, never copied: see "File-local helpers and the
 // unity build" in development.md.
 MCPIsProtectedAssetPath(Path)
+MCPProtectedPathError(Path)                   // the refusal, with the copy-to-/Game route
+
+// The way forward a refusal names (Public/HandlerWayForward.h). A refusal
+// that stops the caller says what to call next; these write that sentence
+// once, so the advice cannot drift between handlers. Never hand-write one.
+MCPWorldUnavailableError(Scope)               // world=pie with no PIE running
+MCPEditorWorldUnavailableMessage()
+MCPNoPlayWorldMessage()
+MCPStopPlayInEditorStep()                     // editor(play_in_editor, pieAction="stop")
+MCPSaveOrDiscardStep()                        // level(save) / editor(save_dirty) / editor(discard_dirty)
+MCPPluginUnavailableError(What, PluginName)   // project(enable_plugin) + editor(restart_editor)
+MCPEnablePluginStep(PluginName)
+MCPRaiseOrSplitNote(Param, Current, Ceiling, HowToSplit) // "raise" only below the ceiling
+MCPHardCeilingNote(Param, Ceiling, HowToSplit)
+MCPBatchTooLargeError(Message, MaxPerCall)    // "split into several calls of N or fewer"
+MCPWithSplitNote(Message, MaxPerCall)
 
 // Actor lookup
 FindActorByLabel(World, Label)                // canonical label lookup

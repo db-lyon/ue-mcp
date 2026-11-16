@@ -31,7 +31,9 @@ struct FMCPAssetCreate
 /** Probe-then-create using AssetTools. Honors onConflict ("skip" returns
  *  the Existed record, "error" returns an MCPError). On success returns
  *  the newly created asset cast to TAsset; the caller is responsible for
- *  SaveAssetPackage() and assembling the result JSON. */
+ *  SaveAssetPackage() and assembling the result JSON. OwningPlugin names the
+ *  plugin AssetClass comes from, so a null class is refused with the call
+ *  that enables it. */
 template <typename TAsset>
 inline FMCPAssetCreate<TAsset> MCPCreateAssetIdempotent(
 	const FString& Name,
@@ -39,7 +41,8 @@ inline FMCPAssetCreate<TAsset> MCPCreateAssetIdempotent(
 	const FString& OnConflict,
 	const FString& AssetTypeLabel,
 	UClass* AssetClass,
-	UFactory* Factory)
+	UFactory* Factory,
+	const TCHAR* OwningPlugin = nullptr)
 {
 	FMCPAssetCreate<TAsset> Out;
 
@@ -51,7 +54,12 @@ inline FMCPAssetCreate<TAsset> MCPCreateAssetIdempotent(
 
 	if (!AssetClass)
 	{
-		Out.EarlyReturn = MCPError(FString::Printf(TEXT("%s class is unavailable (plugin not loaded?)"), *AssetTypeLabel));
+		Out.EarlyReturn = OwningPlugin
+			? MCPPluginUnavailableError(AssetTypeLabel + TEXT(" class"), OwningPlugin)
+			: MCPError(FString::Printf(
+				TEXT("%s class is unavailable: the plugin or module that defines it is not loaded. ")
+				TEXT("Find it with project(list_available_plugins), enable it with project(enable_plugin, pluginName=...), then editor(restart_editor)."),
+				*AssetTypeLabel));
 		return Out;
 	}
 

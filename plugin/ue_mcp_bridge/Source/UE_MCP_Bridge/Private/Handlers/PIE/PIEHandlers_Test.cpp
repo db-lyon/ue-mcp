@@ -201,7 +201,7 @@ TSharedPtr<FJsonValue> FPIEHandlers::PieTestRun(const TSharedPtr<FJsonObject>& P
 	if (bAutoRun && !bDriftExists)
 	{
 		if (!GEditor) return MCPError(TEXT("test_run auto_run requires the editor"));
-		if (GEditor->PlayWorld != nullptr) return MCPError(TEXT("A PIE session is already running; stop it before test_run"));
+		if (GEditor->PlayWorld != nullptr) return MCPError(TEXT("A PIE session is already running; stop it before test_run. ") + MCPStopPlayInEditorStep());
 
 		FReplayerArmConfig Cfg;
 		Cfg.SourceDir = Source;

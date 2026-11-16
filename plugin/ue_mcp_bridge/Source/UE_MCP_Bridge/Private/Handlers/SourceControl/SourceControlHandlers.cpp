@@ -1375,7 +1375,7 @@ TSharedPtr<FJsonValue> FSourceControlHandlers::MarkForDelete(const TSharedPtr<FJ
 	}
 	if (Unsaved.Num() > 0)
 	{
-		TSharedPtr<FJsonObject> Error = MCPErrorObject(TEXT("Some files have unsaved edits in the editor, which a delete would orphan. Save or discard them first. Nothing was marked for delete."));
+		TSharedPtr<FJsonObject> Error = MCPErrorObject(TEXT("Some files have unsaved edits in the editor, which a delete would orphan. Nothing was marked for delete. ") + MCPSaveOrDiscardStep());
 		Error->SetArrayField(TEXT("unsavedInEditor"), MCPStringListToJson(Unsaved));
 		return MCPResult(Error);
 	}

@@ -1423,7 +1423,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::CreateIKRig(const TSharedPtr<FJsonObj
 	UFactory* Factory = NewObject<UFactory>(GetTransientPackage(), FindObject<UClass>(nullptr, TEXT("/Script/IKRigEditor.IKRigDefinitionFactory")));
 	if (!Factory)
 	{
-		return MCPError(TEXT("IKRigDefinitionFactory not found - is the IKRig plugin enabled?"));
+		return MCPPluginUnavailableError(TEXT("IKRigDefinitionFactory"), TEXT("IKRig"));
 	}
 
 	auto Created = MCPCreateAssetIdempotent<UIKRigDefinition>(Name, PackagePath, OnConflict, TEXT("IKRigDefinition"), Factory);
@@ -1716,12 +1716,12 @@ TSharedPtr<FJsonValue> FAnimationHandlers::CreateIKRetargeter(const TSharedPtr<F
 	UClass* FactoryClass = FindObject<UClass>(nullptr, TEXT("/Script/IKRigEditor.IKRetargetFactory"));
 	if (!FactoryClass)
 	{
-		return MCPError(TEXT("IKRetargetFactory not found - is the IKRig plugin enabled?"));
+		return MCPPluginUnavailableError(TEXT("IKRetargetFactory"), TEXT("IKRig"));
 	}
 	UClass* RetargeterClass = FindObject<UClass>(nullptr, TEXT("/Script/IKRig.IKRetargeter"));
 	if (!RetargeterClass)
 	{
-		return MCPError(TEXT("IKRetargeter class not found"));
+		return MCPPluginUnavailableError(TEXT("IKRetargeter class"), TEXT("IKRig"));
 	}
 	UFactory* Factory = NewObject<UFactory>(GetTransientPackage(), FactoryClass);
 
@@ -2538,7 +2538,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetIKRigMesh(const TSharedPtr<FJsonOb
 	if (auto Err = RequireString(Params, TEXT("meshPath"), MeshPath)) return Err;
 	if (MCPIsProtectedAssetPath(RigPath))
 	{
-		return MCPError(FString::Printf(TEXT("Protected asset cannot be modified: %s"), *RigPath));
+		return MCPError(FString::Printf(TEXT("Protected asset cannot be modified: %s. %s"), *RigPath, *MCPProtectedMountWayForward()));
 	}
 
 	UIKRigDefinition* IKRig = LoadAssetByPath<UIKRigDefinition>(RigPath);
@@ -2599,7 +2599,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetIKRetargeterRig(const TSharedPtr<F
 	const FString Side = OptionalString(Params, TEXT("side"), TEXT("target"));
 	if (MCPIsProtectedAssetPath(RetargeterPath))
 	{
-		return MCPError(FString::Printf(TEXT("Protected asset cannot be modified: %s"), *RetargeterPath));
+		return MCPError(FString::Printf(TEXT("Protected asset cannot be modified: %s. %s"), *RetargeterPath, *MCPProtectedMountWayForward()));
 	}
 	if (!Side.Equals(TEXT("source"), ESearchCase::IgnoreCase)
 		&& !Side.Equals(TEXT("target"), ESearchCase::IgnoreCase))
@@ -2733,7 +2733,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::AutoAlignRetargetPose(const TSharedPt
 	const FString Side = OptionalString(Params, TEXT("side"), TEXT("target"));
 	if (MCPIsProtectedAssetPath(RetargeterPath))
 	{
-		return MCPError(FString::Printf(TEXT("Protected asset cannot be modified: %s"), *RetargeterPath));
+		return MCPError(FString::Printf(TEXT("Protected asset cannot be modified: %s. %s"), *RetargeterPath, *MCPProtectedMountWayForward()));
 	}
 	// ParseSourceOrTarget maps anything that is not 'source' to Target, so an
 	// unrecognised side used to succeed silently and then be echoed into a
@@ -2805,7 +2805,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ResetRetargetPose(const TSharedPtr<FJ
 	const FString Side = OptionalString(Params, TEXT("side"), TEXT("target"));
 	if (MCPIsProtectedAssetPath(RetargeterPath))
 	{
-		return MCPError(FString::Printf(TEXT("Protected asset cannot be modified: %s"), *RetargeterPath));
+		return MCPError(FString::Printf(TEXT("Protected asset cannot be modified: %s. %s"), *RetargeterPath, *MCPProtectedMountWayForward()));
 	}
 	// ParseSourceOrTarget maps anything that is not 'source' to Target, so an
 	// unrecognised side used to succeed silently and then be echoed into a
@@ -2881,7 +2881,7 @@ namespace MCPRetargetPoseEdit
 	{
 		if (MCPIsProtectedAssetPath(RetargeterPath))
 		{
-			return MCPError(FString::Printf(TEXT("Protected asset cannot be modified: %s"), *RetargeterPath));
+			return MCPError(FString::Printf(TEXT("Protected asset cannot be modified: %s. %s"), *RetargeterPath, *MCPProtectedMountWayForward()));
 		}
 		if (!Side.Equals(TEXT("source"), ESearchCase::IgnoreCase) && !Side.Equals(TEXT("target"), ESearchCase::IgnoreCase))
 		{
@@ -3145,7 +3145,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::BatchRetargetAnimations(const TShared
 	const FString TargetPath = OptionalString(Params, TEXT("outputPath"));
 	if (!TargetPath.IsEmpty() && MCPIsProtectedAssetPath(TargetPath))
 	{
-		return MCPError(FString::Printf(TEXT("Protected output path is not allowed: %s"), *TargetPath));
+		return MCPError(FString::Printf(TEXT("Protected output path is not allowed: %s. This cannot be overridden; write the output under /Game or a plugin content folder."), *TargetPath));
 	}
 	if (TargetPath.IsEmpty()) { Inputs.bUseSourcePath = true; }
 	else { Inputs.TargetPath = TargetPath; }
@@ -3166,7 +3166,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::BatchRetargetAnimations(const TShared
 		}
 		if (TargetPath.IsEmpty() && MCPIsProtectedAssetPath(P))
 		{
-			return MCPError(FString::Printf(TEXT("Cannot create a retargeted asset beside protected source path: %s"), *P));
+			return MCPError(FString::Printf(TEXT("Cannot create a retargeted asset beside protected source path: %s. This cannot be overridden; pass an output folder under /Game or a plugin content folder."), *P));
 		}
 		UAnimSequence* Anim = LoadAssetByPath<UAnimSequence>(P);
 		if (!Anim)

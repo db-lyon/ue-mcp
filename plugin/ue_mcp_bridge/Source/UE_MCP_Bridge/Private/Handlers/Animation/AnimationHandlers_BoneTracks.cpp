@@ -198,8 +198,8 @@ TSharedPtr<FJsonValue> FAnimationHandlers::TransformBoneTracks(const TSharedPtr<
 
 	if (!bHasPaths || PathsArr->Num() == 0) return MCPError(TEXT("assetPaths must be a non-empty array of AnimSequence paths"));
 	if (!bHasOps || OpsArr->Num() == 0) return MCPError(TEXT("trackOps must be a non-empty array"));
-	if (PathsArr->Num() > MaxAssets) return MCPError(FString::Printf(TEXT("assetPaths holds %d entries; the limit is %d"), PathsArr->Num(), MaxAssets));
-	if (OpsArr->Num() > MaxOps) return MCPError(FString::Printf(TEXT("trackOps holds %d entries; the limit is %d"), OpsArr->Num(), MaxOps));
+	if (PathsArr->Num() > MaxAssets) return MCPBatchTooLargeError(FString::Printf(TEXT("assetPaths holds %d entries; the limit is %d"), PathsArr->Num(), MaxAssets), MaxAssets);
+	if (OpsArr->Num() > MaxOps) return MCPBatchTooLargeError(FString::Printf(TEXT("trackOps holds %d entries; the limit is %d"), OpsArr->Num(), MaxOps), MaxOps);
 
 	// Parse and load everything before any sequence is written.
 	TMap<FString, UAnimSequence*> Donors;

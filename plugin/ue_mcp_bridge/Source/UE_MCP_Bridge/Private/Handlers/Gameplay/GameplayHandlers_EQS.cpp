@@ -681,7 +681,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::RunEqsQuery(const TSharedPtr<FJsonObje
 
 	if (!World)
 	{
-		return MCPError(FString::Printf(TEXT("World '%s' not available."), *WorldScope));
+		return MCPWorldUnavailableError(WorldScope);
 	}
 
 	UEnvQueryManager* Manager = UEnvQueryManager::GetCurrent(World);

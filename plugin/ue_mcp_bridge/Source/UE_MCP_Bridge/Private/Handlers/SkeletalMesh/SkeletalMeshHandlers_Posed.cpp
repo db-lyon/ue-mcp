@@ -32,9 +32,7 @@ TSharedPtr<FJsonValue> FSkeletalMeshHandlers::GetSkinnedVertices(const TSharedPt
 	UWorld* World = ResolveWorldFromParams(Params, *WorldScope);
 	if (!World)
 	{
-		return MCPError(WorldScope == TEXT("pie")
-			? TEXT("PIE not running (or no such pieInstance). See editor(list_pie_instances).")
-			: TEXT("Editor world not available"));
+		return MCPWorldUnavailableError(WorldScope);
 	}
 	FMCPActorSelector ActorSel;
 	ActorSel.Match = EMCPActorMatch::LabelNameOrPath;
