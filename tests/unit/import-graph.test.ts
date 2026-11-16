@@ -70,10 +70,6 @@ const EXCEPTIONS: Record<string, string> = {
     "Bridge update rewrites the pinned client entries; that step belongs with the update command, not the editor layer.",
   "editor/dialog-guard.ts -> dispatch/client-quirks.ts":
     "The client quirk table is moving behind one client-integration interface (Fix 16).",
-  "flow/bridge-task.ts -> task.ts":
-    "task.ts is the public `ue-mcp/task` authoring surface the flow engine implements; its body moves into flow/ with task.ts re-exporting it.",
-  "flow/playtest.ts -> task.ts": "As flow/bridge-task.ts -> task.ts.",
-  "flow/task-factory.ts -> task.ts": "As flow/bridge-task.ts -> task.ts.",
   "flow/guards.ts -> guard-task.ts":
     "guard-task.ts is the public `ue-mcp/guard` surface; its context names EditorSession, so it moves with flow/guard.ts.",
   "flow/guard.ts -> sessions/session.ts":
@@ -93,9 +89,8 @@ const EXCEPTIONS: Record<string, string> = {
   "surface/action-effects.ts -> tools/epic/effects.ts":
     "The generated Epic effect table lives under tools/epic; generated tables the surface reads belong below it.",
   "surface/epic-engines.ts -> tools/epic/catalog-engines.ts": "As surface/action-effects.ts -> tools/epic/effects.ts.",
-  "surface/category-state.ts -> sessions/session.ts":
-    "Type only: category state is applied per EditorSession; a narrow session shape removes it.",
-  "surface/target-params.ts -> sessions/session.ts": "Type only, as surface/category-state.ts.",
+  "surface/target-params.ts -> sessions/session.ts":
+    "Type only: re-points a ToolContext at an EditorSession, so it goes with surface/tool-types.ts.",
   "surface/tool-types.ts -> sessions/session.ts":
     "Type only: ToolContext.session hands handlers the whole EditorSession.",
   "surface/category-tool.ts -> flow/context.ts":

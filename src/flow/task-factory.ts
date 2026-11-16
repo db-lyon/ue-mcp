@@ -1,6 +1,6 @@
 // @session per-session: Builds tasks that dispatch on the context's session bridge.
 import type { TaskResult, TaskConstructor } from "@db-lyon/flowkit";
-import { UeMcpTask } from "../task.js";
+import { UeMcpTask } from "./task.js";
 import { stripEditorTarget } from "../surface/target-params.js";
 import type { CallPreparation } from "../dispatch/call-pipeline.js";
 import type { FlowContext } from "./context.js";

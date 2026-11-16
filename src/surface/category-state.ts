@@ -21,7 +21,6 @@
  * `nativeTools.enabled: false` still means every category's Epic actions.
  */
 import type { ActionSpec, ToolDef } from "./tool-types.js";
-import type { EditorSession } from "../sessions/session.js";
 import { actionEnum } from "./category-tool.js";
 
 export type CategoryScope = "all" | "native" | "epic";
@@ -234,12 +233,13 @@ export function removeActions(tool: ToolDef, doomed: readonly string[]): void {
 /**
  * Read and change one session's category state at runtime. Installed on the
  * session registry by whatever built the surfaces; absent where none was built.
+ * `Session` is the registry's session type, named by the registry.
  */
-export interface CategoryControl {
+export interface CategoryControl<Session> {
   /** The session's graph as built, its current state, and its live categories. */
-  view(session: EditorSession): { pristine: PristineGraph; categories: CategoryState; tools: readonly ToolDef[] } | undefined;
+  view(session: Session): { pristine: PristineGraph; categories: CategoryState; tools: readonly ToolDef[] } | undefined;
   /** Apply a new state: the surface is rebuilt and every client re-advertised. */
-  apply(session: EditorSession, state: CategoryState): Promise<void>;
+  apply(session: Session, state: CategoryState): Promise<void>;
 }
 
 /** The command that turns one scope of a category back on, as a call and as a terminal line. */
