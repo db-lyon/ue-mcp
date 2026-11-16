@@ -57,7 +57,10 @@ jobs:
         run: npm run audit
 
       - name: Release gates
-        # Patch-only bumps, stamped counts that match the surface, and a docs
+        # Patch-only bumps, generated files that match their sources (the
+        # `generated` gate runs `npm run generate -- --check`; the steps that
+        # record from a live editor cannot run here and are covered by
+        # tests/unit/handler-spec-source.test.ts and the live tests), and a docs
         # change beside any surface change. Each of these used to be a rule
         # somebody had to remember before bumping, and each was broken at
         # least once by somebody who had read it.
@@ -130,6 +133,7 @@ jobs:
         run: |
           npx tsx scripts/generate-default-config.ts
           npx tsx scripts/generate-tool-metadata.ts
+          npx tsx scripts/stamp-package.ts
           npx tsx scripts/surface-counts.mts > surface-counts.txt
           # The generators also stamp tracked files. Any change here would
           # ship a package.json or descriptor that differs from the commit.
@@ -313,6 +317,7 @@ jobs:
           npx tsc
           npx tsx scripts/generate-default-config.ts
           npx tsx scripts/generate-tool-metadata.ts
+          npx tsx scripts/stamp-package.ts
           npx tsx scripts/surface-counts.mts > surface-counts.txt
           node -e "import('./dist/tools.js').then(()=>console.log('dist loads')).catch(e=>{console.error(e.message);process.exit(1)})"
 

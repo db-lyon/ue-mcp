@@ -38,7 +38,7 @@ describe("the committed inventory", () => {
     const committed = fs.readFileSync(path.join(REPO_ROOT, INVENTORY_FILE), "utf8");
     expect(
       committed === serializeInventory(inventory),
-      `${INVENTORY_FILE} is stale. Run npm run coverage:behavioural and commit what it changes.`,
+      `${INVENTORY_FILE} is stale. Run npm run generate and commit what it changes.`,
     ).toBe(true);
   });
 

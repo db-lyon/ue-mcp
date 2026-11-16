@@ -390,7 +390,7 @@ A handler declares its parameters at registration, and the TypeScript surface is
 - **A key a shared helper reads only on some paths is read ahead.** `MCPReadParamsAhead(Params, { ... })` at the top of the handler names every declared key, so the read set is the spec whatever path a call takes; the helpers still read each key where they use it.
 - **A timeout override takes the spec too.** `RegisterHandlerWithTimeout(name, fn, seconds, { ... })` registers both, and the TS action spreads `specBp(...)` and adds its `timeoutMs`.
 - **Never a routing name.** `action`, `timeoutMs`, `select`, `omit`, `editor` and `toEditor` are refused at registration and again by the generator.
-- **Change a spec, then re-record.** `npm run specs:record` against `tests/ue_mcp`, then `npm run specs:generate`, and commit the recording and the generated module together with the C++.
+- **Change a spec, then re-record.** Rebuild, open the editor on `tests/ue_mcp`, run `npm run generate -- --editor`, and commit the recording, its source fingerprint and the generated modules together with the C++. CI fails on a spec change that was not re-recorded.
 
 ## Checking a handler
 

@@ -224,13 +224,15 @@ The contract travels one way:
 
 1. **The registry** validates the spec at registration. It refuses the routing names (`action`, `timeoutMs`, `select`, `omit`, `editor`, `toEditor`), a name declared twice, an item type on anything but an array, a value shape that does not fit its type, and a choice naming an undeclared or required parameter. A refused spec is logged and dropped; the handler still registers. At dispatch it renames each alias to its parameter's name, so the handler reads declared names only.
 2. **The bridge** publishes every spec in `get_bridge_capabilities.handlerSpecs`.
-3. **`npm run specs:record`** writes that answer from a `tests/ue_mcp` editor to `tests/golden/handler-specs.json`.
+3. **`npm run specs:record`** writes that answer from a `tests/ue_mcp` editor to `tests/golden/handler-specs.json`, with a fingerprint of the C++ spec source beside it in `handler-specs.source.json`.
 4. **`npm run specs:generate`** renders the recording into `src/tools/specs/<category>.generated.ts`: one zod entry per name and alias, and each method's `Params:` clause.
+
+`npm run generate -- --editor` runs both, then every generator downstream of them.
 5. **The category** declares the action with `specBp(effect, summary, method)`. Only the summary and effect are hand-written. A rename is an alias in the spec. `prepareCall` refuses a call that does not satisfy the spec's choices before anything is sent, on the MCP and flow routes alike.
 
 The advertised surface always comes from the recording, so the startup contract does not depend on which plugin answered. With an editor connected, `project(get_status)` reports any difference from the recording under `deployedPlugin.handlerSpecDrift`.
 
-Four tests hold the chain: `tests/unit/handler-specs.test.ts` (the generated modules match the recording, and every bridge action takes its parameters from a spec), `tests/live/handler-specs.test.ts` (the running plugin publishes what was recorded), the C++ test `UE.MCP.Bridge.HandlerSpec.Contract` (each spec'd handler, called with every declared parameter, reads exactly those), and `tests/unit/handler-spec-exempt.test.ts` (a contract-exempt handler's source reads exactly what its spec declares).
+Five tests hold the chain: `tests/unit/handler-spec-source.test.ts` (the recording was made from the spec source as it stands, so CI sees a spec edit nobody re-recorded), `tests/unit/handler-specs.test.ts` (the generated modules match the recording, and every bridge action takes its parameters from a spec), `tests/live/handler-specs.test.ts` (the running plugin publishes what was recorded), the C++ test `UE.MCP.Bridge.HandlerSpec.Contract` (each spec'd handler, called with every declared parameter, reads exactly those), and `tests/unit/handler-spec-exempt.test.ts` (a contract-exempt handler's source reads exactly what its spec declares).
 
 ##### What a spec can say
 

@@ -7,7 +7,7 @@
  *
  * Usage:
  *   node scripts/check-release-gates.mjs version-delta   patch-only bumps
- *   node scripts/check-release-gates.mjs count-markers   stamped counts are current
+ *   node scripts/check-release-gates.mjs generated       every editor-free generated file is current
  *   node scripts/check-release-gates.mjs docs-freshness  handlers moved, docs did not
  *   node scripts/check-release-gates.mjs context-tax     every seed within its budget, the default
  *                                                        at or below the engine's tool-search surface
@@ -204,37 +204,26 @@ function checkVersionDelta() {
 }
 
 /**
- * The stamped counts in CLAUDE.md and the docs are generated. If regenerating
- * them changes anything, they were stamped from a surface that has since moved
- * and every number a reader trusts is stale.
+ * Every generated file CI can regenerate (no editor needed) is current:
+ * scripts/generate.mjs --check runs those steps and fails when one changed a
+ * file. Compared before and after rather than demanding a clean tree, because
+ * this runs mid-branch, where an untracked file says nothing about staleness.
  */
-function checkCountMarkers() {
-  // Compared before and after rather than demanding a clean tree: this runs
-  // mid-branch, where an untracked file is normal and says nothing about
-  // whether the stamped numbers are current.
-  const before = new Set(git("status", "--porcelain").split("\n").filter(Boolean));
+function checkGenerated() {
   try {
-    execFileSync("npm", ["run", "--silent", "generate:metadata"], {
+    const out = execFileSync(process.execPath, ["scripts/generate.mjs", "--check"], {
       cwd: REPO,
+      encoding: "utf8",
       stdio: ["ignore", "pipe", "pipe"],
-      shell: process.platform === "win32",
     });
+    console.log(`generated       - ${out.trim().split("\n").at(-1).replace(/^\[generate\]\s*/, "")}`);
+    return 0;
   } catch (e) {
-    console.error(`count-markers   - could not regenerate: ${e.message}`);
+    const detail = `${e.stdout ?? ""}${e.stderr ?? e.message}`
+      .split("\n").filter((l) => l.trim() && !/^\[generate\] [\w:]+ \(\d/.test(l)).map((l) => `      ${l}`).join("\n");
+    console.error(`generated       - generated files are stale or a generator failed:\n${detail}`);
     return 1;
   }
-  const after = git("status", "--porcelain").split("\n").filter(Boolean);
-  const moved = after.filter((line) => !before.has(line));
-  if (moved.length > 0) {
-    console.error(
-      "count-markers   - regenerating changed these, so the stamped numbers were stale:\n"
-        + moved.map((l) => `      ${l}`).join("\n")
-        + "\n    Run `npm run generate:metadata` and commit what it changes.",
-    );
-    return 1;
-  }
-  console.log("count-markers   - stamped counts match the surface");
-  return 0;
 }
 
 /**
@@ -445,7 +434,7 @@ function checkIntegrationCoverage() {
 
 const GATES = {
   "version-delta": checkVersionDelta,
-  "count-markers": checkCountMarkers,
+  "generated": checkGenerated,
   "docs-freshness": checkDocsFreshness,
   "context-tax": checkContextTax,
   "behavioural-coverage": checkBehaviouralCoverage,

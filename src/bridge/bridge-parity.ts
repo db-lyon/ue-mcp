@@ -158,7 +158,8 @@ export function deployedPlugin(
       ? `${drift.length} handler parameter spec(s) differ between the running plugin and the recording this server `
         + `advertises from: ${drift.slice(0, NAMED).join(", ")}${drift.length > NAMED ? `, and ${drift.length - NAMED} more` : ""}. `
         + "Either the plugin is behind this package (rebuild it), or the specs changed and need "
-        + "npm run specs:record then npm run specs:generate (for a plugin's handlers, ue-mcp plugin record-specs)."
+        + "re-recording: in the ue-mcp repo, npm run generate -- --editor (runs specs:record, then regenerates everything after it); "
+        + "for a plugin's handlers, ue-mcp plugin record-specs."
         + (pluginDrift.length > 0
           ? " Calls to the drifted plugin handlers are checked against the contract the running module registered."
           : "")

@@ -493,7 +493,7 @@ function main(argv: string[]): number {
     const problems = inventoryProblems(inventory, inputs);
     const committed = fs.existsSync(target) ? fs.readFileSync(target, "utf8") : "";
     if (committed !== serializeInventory(inventory)) {
-      problems.push(`${INVENTORY_FILE} is stale. Run npm run coverage:behavioural and commit what it changes.`);
+      problems.push(`${INVENTORY_FILE} is stale. Run npm run generate and commit what it changes.`);
     }
     if (problems.length > 0) {
       for (const p of problems) console.error(`behavioural-coverage: ${p}`);

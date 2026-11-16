@@ -32,7 +32,7 @@ describe("the committed integration inventory", () => {
     const committed = fs.readFileSync(path.join(REPO_ROOT, INTEGRATION_INVENTORY_FILE), "utf8");
     expect(
       committed === serializeSurfaceInventory(inventory),
-      `${INTEGRATION_INVENTORY_FILE} is stale. Run npm run coverage:integration and commit what it changes.`,
+      `${INTEGRATION_INVENTORY_FILE} is stale. Run npm run generate and commit what it changes.`,
     ).toBe(true);
   });
 
