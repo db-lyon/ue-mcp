@@ -5,8 +5,9 @@ import type { ToolDef } from "../core/types.js";
 import { playtestFlow, playtestTasks } from "./playtest.js";
 
 /**
- * Build the defaults object from tool definitions.
- * This is the runtime equivalent of scripts/generate-default-config.ts.
+ * The defaults every flow config starts from. scripts/generate-default-config.ts
+ * dumps exactly this as dist/ue-mcp.default.yml, and
+ * tests/unit/default-config.test.ts fails if the two ever differ.
  */
 export function buildDefaults(tools: ToolDef[]): Record<string, unknown> {
   const tasks: Record<string, unknown> = {};
