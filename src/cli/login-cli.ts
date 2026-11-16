@@ -5,7 +5,8 @@
  * (the plugin registry user) and cache its token at ~/.ue-mcp/registry.json.
  *
  * The account signs in with an email address and a one-time code, or with the
- * GitHub device flow. Studio and `ue-mcp plugin publish` read the cached token.
+ * GitHub device flow. `ue-mcp plugin publish` and daemon extensions granted the
+ * "registry.account" permission read the cached token.
  */
 import { createInterface, type Interface } from "node:readline";
 import {
@@ -112,7 +113,8 @@ const HELP = `Usage: ue-mcp login [--email <address> | --github] [--force]
        ue-mcp logout
 
 Signs this machine in to your UE-MCP account and caches the account token in
-~/.ue-mcp/registry.json. Studio and \`ue-mcp plugin publish\` use it.
+~/.ue-mcp/registry.json. \`ue-mcp plugin publish\` and daemon extensions that
+declare the "registry.account" permission use it.
 
   --email <address>  Sign in with an email address. The registry emails a
                      6-digit code; type it when asked. No password.
