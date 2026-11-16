@@ -1,0 +1,148 @@
+// ── Behaviour over the contract ───────────────────────────────────────────
+//
+// The rules both the shipped server and the plain-node scripts apply to the
+// values above. The plugin applies the same rules in C++ and is held to them by
+// PORT_HASH_VECTORS in its automation tests.
+
+/** Canonical form of a project root: forward slashes, no trailing slash, lowercase. */
+export function normalizeProjectRoot(dir: string): string {
+  return String(dir).replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
+}
+
+/** The port the bridge derives for a project root when nothing pins one. */
+export function deriveProjectPort(projectRootDir: string): number {
+  const h = createHash("sha1").update(normalizeProjectRoot(projectRootDir), "utf8").digest();
+  const v = ((h[0] << 24) | (h[1] << 16) | (h[2] << 8) | h[3]) >>> 0;
+  return PORT_EPHEMERAL_BASE + (v % PORT_EPHEMERAL_SPAN);
+}
+
+/** The directory the bridge and the client exchange records in, for one project root. */
+export function bridgeStateDir(projectDir: string): string {
+  return path.join(projectDir, ...STATE_DIR_SEGMENTS);
+}
+
+/** port.json, for one project root. */
+export function bridgeLockfilePath(projectDir: string): string {
+  return path.join(bridgeStateDir(projectDir), STATE_FILES.portLockfile);
+}
+
+/** instances/, where every live bridge publishes its own record, for one project root. */
+export function bridgeInstancesDir(projectDir: string): string {
+  return path.join(bridgeStateDir(projectDir), INSTANCES_DIR_NAME);
+}
+
+/** bridge-error.json, for one project root. */
+export function bridgeErrorPath(projectDir: string): string {
+  return path.join(bridgeStateDir(projectDir), STATE_FILES.bridgeError);
+}
+
+/** requested.json, for one project root. */
+export function requestedPortPath(projectDir: string): string {
+  return path.join(bridgeStateDir(projectDir), STATE_FILES.requestedPort);
+}
+
+/**
+ * The state a record reports. port.json and bridge-error.json said `status`
+ * before they said `state`, and a bridge built then still writes only that.
+ */
+export function recordState(record: Record<string, unknown>): BridgeState | null {
+  const value = typeof record.state === "string" ? record.state : record.status;
+  return value === BRIDGE_STATE.listening || value === BRIDGE_STATE.bindFailed ? value : null;
+}
+
+/** A token file that exists but must not be used. */
+export class BridgeTokenError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "BridgeTokenError";
+  }
+}
+
+const TOKEN_PATTERN = new RegExp(`^[0-9a-f]{${TOKEN.bytes * 2}}$`);
+
+/** `UE_MCP_BRIDGE_TOKEN_DIR`, else `~/.ue-mcp/bridge`. */
+export function bridgeTokenDir(env: NodeJS.ProcessEnv = process.env): string {
+  const override = env[PLUGIN_ENV_VARS.bridgeTokenDir];
+  return override ? override : path.join(os.homedir(), TOKEN.userDirName, TOKEN.dirName);
+}
+
+/** The token file for the bridge on `port`. */
+export function bridgeTokenPath(port: number, env: NodeJS.ProcessEnv = process.env): string {
+  return path.join(bridgeTokenDir(env), `${port}${TOKEN.fileSuffix}`);
+}
+
+/**
+ * The token the editor on `port` published, or null when there is no file (a
+ * plugin that predates the token, which still accepts a connection without one).
+ * Throws BridgeTokenError for a file that exists but is not usable: one that is
+ * not a regular file, on POSIX one another user owns or others can read, or one
+ * that does not hold a token.
+ */
+export function readBridgeToken(port: number, env: NodeJS.ProcessEnv = process.env): string | null {
+  const file = bridgeTokenPath(port, env);
+  let stat: fs.Stats;
+  try {
+    stat = fs.lstatSync(file);
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code === "ENOENT") return null;
+    throw new BridgeTokenError(`Could not read the bridge session token at ${file}: ${(e as Error).message}`);
+  }
+  if (!stat.isFile()) throw new BridgeTokenError(`The bridge session token at ${file} is not a regular file.`);
+  if (process.platform !== "win32") {
+    const uid = process.getuid?.();
+    if (uid !== undefined && stat.uid !== uid) {
+      throw new BridgeTokenError(`The bridge session token at ${file} is owned by uid ${stat.uid}, not this user (${uid}). Refusing to use it.`);
+    }
+    if ((stat.mode & 0o077) !== 0) {
+      throw new BridgeTokenError(
+        `The bridge session token at ${file} is readable by other users (mode ${(stat.mode & 0o777).toString(8)}). ` +
+          `Restart the editor so it rewrites the file as 600.`,
+      );
+    }
+  }
+  const token = fs.readFileSync(file, "utf8").trim();
+  if (!TOKEN_PATTERN.test(token)) throw new BridgeTokenError(`The bridge session token at ${file} does not hold a token.`);
+  return token;
+}
+
+/** Headers for an upgrade to the bridge on `port`: the bearer token when one is published, else none. */
+export function bridgeAuthHeaders(port: number, env: NodeJS.ProcessEnv = process.env): Record<string, string> {
+  const token = readBridgeToken(port, env);
+  return token ? { Authorization: `${TOKEN.authScheme} ${token}` } : {};
+}
+
+/**
+ * Explain a refused upgrade in terms the reader can act on. `sentToken` is
+ * whether the request carried one; `schemeHeader` is the value of the header
+ * a UE-MCP bridge identifies itself with, undefined when it was absent.
+ */
+export function describeBridgeRefusal(opts: {
+  port: number;
+  status: number;
+  body: string;
+  sentToken: boolean;
+  schemeHeader?: string | string[];
+  env?: NodeJS.ProcessEnv;
+}): string {
+  const { port, status, sentToken } = opts;
+  const body = opts.body.trim();
+  const plugin = body ? ` The editor said: ${body}` : "";
+  const file = bridgeTokenPath(port, opts.env);
+  if (status !== 401) {
+    return `The editor bridge on port ${port} refused the connection with HTTP ${status}.${plugin}`;
+  }
+  if (opts.schemeHeader === undefined) {
+    return `Port ${port} answered 401 and did not identify itself as a UE-MCP bridge.${plugin}`;
+  }
+  if (!sentToken) {
+    return (
+      `The editor bridge on port ${port} requires a session token, and there is none at ${file}. ` +
+      `The editor writes it there when its bridge starts. Run this client as the same OS user as the editor, ` +
+      `and give both the same ${PLUGIN_ENV_VARS.bridgeTokenDir} if either sets it.${plugin}`
+    );
+  }
+  return (
+    `The editor bridge on port ${port} rejected the session token in ${file}. ` +
+    `The file is stale or was written by another editor on that port; restart the editor if this persists.${plugin}`
+  );
+}
