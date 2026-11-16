@@ -11,33 +11,16 @@
  * problem.
  */
 import { readEnv } from "../core/env.js";
+import { parseVersion, satisfiesMinimum } from "../core/semver.js";
 
 export interface ClientInfo {
   name: string;
   version?: string;
 }
 
-/** "2.1.116" -> [2, 1, 116]; missing or odd parts sort low. */
-function parseVersion(version: string | undefined): number[] {
-  if (!version) return [0, 0, 0];
-  return version
-    .split(".")
-    .slice(0, 3)
-    .map((part) => {
-      const n = Number.parseInt(part, 10);
-      return Number.isFinite(n) ? n : 0;
-    });
-}
-
-function atLeast(version: string | undefined, target: number[]): boolean {
-  const actual = parseVersion(version);
-  for (let i = 0; i < target.length; i++) {
-    const a = actual[i] ?? 0;
-    const t = target[i] ?? 0;
-    if (a > t) return true;
-    if (a < t) return false;
-  }
-  return true;
+/** A missing or unparseable version is never at least anything. */
+function atLeast(version: string | undefined, target: string): boolean {
+  return !!version && parseVersion(version) !== null && satisfiesMinimum(version, target);
 }
 
 /**
@@ -54,8 +37,8 @@ function atLeast(version: string | undefined, target: number[]): boolean {
  * Returns a one-line explanation, or null when the client renders progress
  * normally. Delete this once no one is plausibly running an affected build.
  */
-const CLAUDE_CODE_COLLAPSE_FIRST = [2, 1, 116];
-const CLAUDE_CODE_COLLAPSE_FIXED_IN = [2, 1, 153];
+const CLAUDE_CODE_COLLAPSE_FIRST = "2.1.116";
+const CLAUDE_CODE_COLLAPSE_FIXED_IN = "2.1.153";
 
 export function progressRenderingNote(client: ClientInfo | undefined): string | null {
   if (!client) return null;
@@ -134,7 +117,7 @@ export function elicitationNeedsRelay(client: ClientInfo | undefined): boolean {
  * Returns why this client cannot be shown a form despite advertising it, or
  * null when its forms render.
  */
-const OPENCODE_FORMS_FIXED_IN = [2, 1, 4];
+const OPENCODE_FORMS_FIXED_IN = "2.1.4";
 
 export function elicitationUnrenderedNote(client: ClientInfo | undefined): string | null {
   if (!client || client.name.toLowerCase() !== "opencode") return null;

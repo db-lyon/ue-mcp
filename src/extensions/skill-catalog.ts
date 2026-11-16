@@ -7,8 +7,8 @@
  */
 import * as fs from "node:fs";
 import * as path from "node:path";
-import yaml from "js-yaml";
 import { listSkills, packagedSkillsRoot } from "./skills.js";
+import { parseSkillFile } from "./skill-file.js";
 
 export interface ShippedSkill {
   /** The directory name, which is also the frontmatter name. */
@@ -26,21 +26,13 @@ export function skillResourceUri(name: string): string {
   return `skill://ue-mcp/${name}`;
 }
 
-/** Split a SKILL.md into its frontmatter fields and its body. */
+/** A SKILL.md's `name` and `description` and its body. */
 export function parseSkill(text: string): { name?: string; description?: string; body: string } {
-  const m = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/.exec(text);
-  if (!m) return { body: text };
-  let front: unknown;
-  try {
-    front = yaml.load(m[1]);
-  } catch {
-    front = undefined;
-  }
-  const fields = front && typeof front === "object" ? (front as Record<string, unknown>) : {};
+  const { frontmatter: fields, body } = parseSkillFile(text);
   return {
     ...(typeof fields.name === "string" ? { name: fields.name } : {}),
     ...(typeof fields.description === "string" ? { description: fields.description.trim() } : {}),
-    body: text.slice(m[0].length).replace(/^\s+/, ""),
+    body: body.replace(/^\s+/, ""),
   };
 }
 

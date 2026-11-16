@@ -18,6 +18,10 @@ describe("pluginSlug", () => {
   it("only strips a leading prefix, not an interior match", () => {
     expect(pluginSlug("ue-mcp-ue-mcp-x")).toBe("ue-mcp-x");
   });
+  it("drops a scope, as the registry slug and feedback routing need", () => {
+    expect(pluginSlug("@team/ue-mcp-recipes")).toBe("recipes");
+    expect(pluginSlug("@team/tools")).toBe("tools");
+  });
 });
 
 describe("flowGroup", () => {

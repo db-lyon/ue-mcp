@@ -11,7 +11,7 @@ import { selectProjectOrExit } from "./editor-flag.js";
 import { editorOwnsProject, probeEditorProcessList } from "../editor/engine-observer.js";
 import { UE_MCP_LAUNCH } from "../integrations/mcp-clients/mcp-client-config.js";
 import { distTagForVersion, isNewer, isPrereleaseVersion, npmResolvedLatest, resolveUpdateTarget } from "../core/version-check.js";
-import { packageModulePath, packageRoot, packageVersion } from "../core/package-root.js";
+import { packageModulePath, packageRoot, packageVersion, selfCliArgs } from "../core/package-root.js";
 import { findUProject, isUProjectPath } from "../config/uproject-path.js";
 import { installKindOf, installedBridge, resolvePluginDir } from "../editor/install-marker.js";
 import { applyUpdate, newerBridgeMessage, repinClientConfigs } from "../editor/bridge-update.js";
@@ -102,13 +102,12 @@ async function editorRunningFor(uproject: string): Promise<boolean> {
 }
 
 /**
- * Run `ue-mcp <command>` from THIS package (not npx) so a local shadow can't
- * intercept. The node flags this process runs under (a loader, for one) go to
- * the child too.
+ * Run `ue-mcp <command>` from THIS package's index (not npx, and not the
+ * ue-mcp-update entry this may have started from) so a local shadow can't
+ * intercept.
  */
 function runSelfCommand(command: string, projectArg: string | undefined): boolean {
-  const entry = packageModulePath("index.js");
-  const args = [...process.execArgv, entry, ...command.split(" "), ...(projectArg ? [projectArg] : [])];
+  const args = selfCliArgs([...command.split(" "), ...(projectArg ? [projectArg] : [])], packageModulePath("index.js"));
   try {
     execFileSync(process.execPath, args, { windowsHide: true, stdio: "inherit" });
     return true;

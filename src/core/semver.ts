@@ -1,7 +1,8 @@
-// @session independent: Semver precedence for the minServerVersion gate and the npm upgrade check.
+// @session independent: The one semver precedence every version comparison in ue-mcp uses.
 /**
- * Semver precedence, shared by the minServerVersion gate and the npm upgrade
- * check. Accepts X, X.Y or X.Y.Z with an optional prerelease; build metadata
+ * Semver precedence, the one comparison for every version gate: plugin and
+ * extension minimums, the npm upgrade check, daemon succession and client
+ * quirks. Accepts X, X.Y or X.Y.Z with an optional prerelease; build metadata
  * is ignored, as semver requires.
  */
 
