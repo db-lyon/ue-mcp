@@ -128,7 +128,6 @@ namespace UEMCP::SequencerBindings
 		const FString Wanted = MappedName.IsEmpty() ? Child.GetName() : MappedName;
 		if (UActorComponent* ByName = MCPFindComponentByName<UActorComponent>(Actor, Wanted)) return ByName;
 		if (!MappedName.IsEmpty()) return nullptr;
-#if WITH_EDITORONLY_DATA
 		const UClass* ChildClass = Child.GetPossessedObjectClass();
 		if (ChildClass)
 		{
@@ -143,7 +142,6 @@ namespace UEMCP::SequencerBindings
 			}
 			return Only;
 		}
-#endif
 		return nullptr;
 	}
 
@@ -350,9 +348,7 @@ TSharedPtr<FJsonValue> FSequencerHandlers::ResolveBindings(const TSharedPtr<FJso
 		if (const FMovieScenePossessable* P = MovieScene->FindPossessable(Guid))
 		{
 			if (P->GetParent().IsValid()) Obj->SetStringField(TEXT("parentGuid"), P->GetParent().ToString());
-#if WITH_EDITORONLY_DATA
 			if (const UClass* Cls = P->GetPossessedObjectClass()) Obj->SetStringField(TEXT("possessedClass"), Cls->GetName());
-#endif
 		}
 		TArray<TSharedPtr<FJsonValue>> Bound;
 		const TArray<UObject*> Objects = Type == TEXT("possessable") ? LocateInWorld(Sequence, MovieScene, Guid, World) : TArray<UObject*>();
@@ -444,9 +440,7 @@ TSharedPtr<FJsonValue> FSequencerHandlers::RebindPossessable(const TSharedPtr<FJ
 
 	Sequence->UnbindPossessableObjects(Guid);
 	Sequence->BindPossessableObject(Guid, *Actor, World);
-#if WITH_EDITORONLY_DATA
 	Possessable->SetPossessedObjectClass(Actor->GetClass());
-#endif
 	if (bRename)
 	{
 		const FString NewName = Actor->GetActorLabel();
@@ -454,9 +448,7 @@ TSharedPtr<FJsonValue> FSequencerHandlers::RebindPossessable(const TSharedPtr<FJ
 #if !UE_MCP_HAS_5_7_API
 		if (FMovieSceneBinding* Binding = MovieScene->FindBinding(Guid)) Binding->SetName(NewName);
 #endif
-#if WITH_EDITORONLY_DATA
 		MovieScene->SetObjectDisplayName(Guid, FText::FromString(NewName));
-#endif
 	}
 
 	// Children: each component possessable follows its component on the new actor.
@@ -489,9 +481,7 @@ TSharedPtr<FJsonValue> FSequencerHandlers::RebindPossessable(const TSharedPtr<FJ
 			}
 			Sequence->UnbindPossessableObjects(ChildGuid);
 			Sequence->BindPossessableObject(ChildGuid, *Comp, Actor);
-#if WITH_EDITORONLY_DATA
 			Child.SetPossessedObjectClass(Comp->GetClass());
-#endif
 			const TArray<UObject*> Located = LocateInWorld(Sequence, MovieScene, ChildGuid, World);
 			const bool bVerified = Located.Contains(Comp);
 			C->SetStringField(TEXT("component"), Comp->GetName());

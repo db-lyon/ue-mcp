@@ -69,7 +69,6 @@ namespace
 			|| Status == ENiagaraScriptCompileStatus::NCS_ComputeUpToDateWithWarnings;
 	}
 
-#if WITH_EDITORONLY_DATA
 	/** One compile event, with the guids that address the node and pin it came
 	 *  from. Those are what turn a message into somewhere to look. */
 	TSharedPtr<FJsonObject> NiagaraCompileLocalEventToJson(const FNiagaraCompileEvent& Event)
@@ -159,18 +158,12 @@ namespace
 		}
 		return Row;
 	}
-#endif // WITH_EDITORONLY_DATA
 }
 
 TSharedPtr<FJsonValue> FNiagaraHandlers::CompileSystem(const TSharedPtr<FJsonObject>& Params)
 {
 	MCP_CHECK_GAME_THREAD();
 
-#if !WITH_EDITORONLY_DATA
-	return MCPError(TEXT(
-		"niagara(compile) needs editor-only data: compile status and compile events are stripped from a "
-		"cooked build, so there is nothing to report."));
-#else
 	FString SystemPath;
 	if (auto Err = RequireString(Params, TEXT("systemPath"), SystemPath)) return Err;
 
@@ -296,5 +289,4 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::CompileSystem(const TSharedPtr<FJsonObj
 		"package dirty. No authored state changed, so there is nothing to restore, and no bridge call un-translates "
 		"a script back to its previous build."));
 	return MCPResult(Result);
-#endif // WITH_EDITORONLY_DATA
 }

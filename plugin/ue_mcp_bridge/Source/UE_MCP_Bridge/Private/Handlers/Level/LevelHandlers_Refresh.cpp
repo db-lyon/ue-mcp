@@ -451,7 +451,6 @@ TSharedPtr<FJsonValue> FLevelHandlers::RerunConstruction(const TSharedPtr<FJsonO
 	TMap<UPackage*, bool> PackageWasDirty;
 	TSet<UPackage*> PackagesWithChanges;
 
-#if WITH_EDITOR
 	for (AActor* Actor : Targets)
 	{
 		if (!IsValid(Actor))
@@ -520,15 +519,6 @@ TSharedPtr<FJsonValue> FLevelHandlers::RerunConstruction(const TSharedPtr<FJsonO
 	}
 	DirtiedPackages.Sort();
 	RestoredCleanPackages.Sort();
-#else
-	TArray<FString> DirtiedPackages;
-	TArray<FString> RestoredCleanPackages;
-	for (AActor* Actor : Targets)
-	{
-		Failed.Add(FString::Printf(
-			TEXT("%s: RerunConstructionScripts is editor-only"), *Actor->GetActorLabel()));
-	}
-#endif
 
 	TArray<FString> MissingLabels;
 	for (const FString& Label : ActorLabels)

@@ -51,13 +51,6 @@
 #include "Runtime/Launch/Resources/Version.h"
 #include <functional>
 
-#define UE_MCP_HAS_STATIC_FIND_OBJECT_FLAGS (ENGINE_MAJOR_VERSION > 5 || (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 7))
-
-// UPCGSubsystem::ForAllRegisteredLocalComponents answers how many local
-// components a partitioned component owns. Set to 0 on an engine where it is
-// not exported, and get_pcg_component_details reports localComponentsKnown:false.
-#define UE_MCP_HAS_PCG_LOCAL_COMPONENT_QUERY 1
-
 namespace
 {
 	// A PCG node type is a UPCGSettings subclass, named any way MCPResolveClass
@@ -2607,14 +2600,10 @@ TSharedPtr<FJsonValue> FPCGHandlers::SetStaticMeshSpawnerMeshes(const TSharedPtr
 
 	WeightedSelector->Modify();
 	WeightedSelector->MeshEntries = MoveTemp(Rebuilt);
-#if WITH_EDITOR
 	WeightedSelector->RefreshDisplayNames();
-#endif
 
-#if WITH_EDITOR
 	// Without the change notification, components using this graph keep their last generation until forced.
 	SpawnerSettings->PostEditChange();
-#endif
 	FoundNode->PostEditChange();
 	Graph->PostEditChange();
 

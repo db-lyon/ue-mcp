@@ -517,7 +517,6 @@ TSharedPtr<FJsonValue> FMaterialHandlers::BuildMaterial(const TSharedPtr<FJsonOb
 		bool bVirtualTexture = Slot.Texture->VirtualTextureStreaming != 0
 			|| Slot.Texture->IsCurrentlyVirtualTextured();
 		int32 UdimBlocks = 1;
-#if WITH_EDITORONLY_DATA
 		if (Slot.Texture->Source.IsValid())
 		{
 			UdimBlocks = Slot.Texture->Source.GetNumBlocks();
@@ -534,7 +533,6 @@ TSharedPtr<FJsonValue> FMaterialHandlers::BuildMaterial(const TSharedPtr<FJsonOb
 		{
 			bVirtualTexture = true;
 		}
-#endif
 		if (UdimBlocks > 1)
 		{
 			bVirtualTexture = true;

@@ -289,7 +289,7 @@ The plugin runs a raw WebSocket server on a dedicated thread, dispatches each re
 | `HandlerPackageSave.h` | `SaveAssetPackage`, `SaveAssetPackageChecked`, `MCPPackageWriteBlocked`, `MCPNoteSaveOutcome` |
 | `HandlerJsonConvert.h` | Vector, rotator, colour, quaternion, transform and string-list JSON builders |
 | `HandlerObjectUtils.h` | Property export, file dumps, `FGCRootScope`, subobject walks, component and collision lookup |
-| `HandlerEngineVersion.h` | The `UE_MCP_HAS_5_x_API` gates and engine API shims |
+| `HandlerEngineVersion.h` | Every engine-version gate (`UE_MCP_HAS_5_x_API`) and feature macro, and the engine API shims |
 | `HandlerAssetCreate.h` | `MCPCreateAssetIdempotent<T>` |
 
 ### Handler groups

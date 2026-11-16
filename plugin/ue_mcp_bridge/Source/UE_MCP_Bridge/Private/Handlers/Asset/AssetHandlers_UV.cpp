@@ -158,15 +158,8 @@ TSharedPtr<FJsonValue> MCPUvResolveTarget(const TSharedPtr<FJsonObject>& Params,
 	}
 	else if (USkeletalMesh* SK = Cast<USkeletalMesh>(Object))
 	{
-#if WITH_EDITORONLY_DATA
 		Out.SkeletalMesh = SK;
 		Out.LodCount = SK->GetNumSourceModels();
-#else
-		return MCPUvUnsupported(AssetPath, TEXT("skeletal_uv_unsupported_engine"), FString::Printf(
-			TEXT("'%s' is a SkeletalMesh and USkeletalMesh::GetMeshDescription is not available in this engine build, ")
-				TEXT("so its UVs cannot be authored through the bridge. StaticMesh assets are supported."),
-			*AssetPath));
-#endif
 	}
 	else
 	{
@@ -182,7 +175,6 @@ TSharedPtr<FJsonValue> MCPUvResolveTarget(const TSharedPtr<FJsonObject>& Params,
 			Out.LodIndex, *AssetPath, Out.LodCount, FMath::Max(Out.LodCount - 1, 0)));
 	}
 
-#if WITH_EDITORONLY_DATA
 	if (Out.StaticMesh)
 	{
 		Out.Desc = Out.StaticMesh->GetMeshDescription(Out.LodIndex);
@@ -191,7 +183,6 @@ TSharedPtr<FJsonValue> MCPUvResolveTarget(const TSharedPtr<FJsonObject>& Params,
 	{
 		Out.Desc = Out.SkeletalMesh->GetMeshDescription(Out.LodIndex);
 	}
-#endif
 
 	if (!Out.Desc)
 	{
@@ -248,7 +239,6 @@ TSharedPtr<FJsonValue> MCPUvBadChannel(
  *  Returns false with OutError set; never leaves a half-committed asset. */
 bool MCPUvCommit(const FMCPUvTarget& Target, bool bRebuild, FString& OutError)
 {
-#if WITH_EDITOR
 	if (Target.StaticMesh)
 	{
 		Target.StaticMesh->Modify();
@@ -280,7 +270,6 @@ bool MCPUvCommit(const FMCPUvTarget& Target, bool bRebuild, FString& OutError)
 		Target.SkeletalMesh->MarkPackageDirty();
 		return true;
 	}
-#endif
 	OutError = TEXT("no editable mesh description on this asset");
 	return false;
 }
@@ -679,7 +668,6 @@ void MCPUvWriteAssetHeader(const TSharedPtr<FJsonObject>& Out, const FMCPUvTarge
 	Out->SetNumberField(TEXT("vertexInstanceCount"), Target.Desc->VertexInstances().Num());
 	Out->SetNumberField(TEXT("polygonGroupCount"), Target.Desc->PolygonGroups().Num());
 
-#if WITH_EDITORONLY_DATA
 	if (Target.StaticMesh)
 	{
 		Out->SetNumberField(TEXT("lightmapCoordinateIndex"), Target.StaticMesh->GetLightMapCoordinateIndex());
@@ -707,7 +695,6 @@ void MCPUvWriteAssetHeader(const TSharedPtr<FJsonObject>& Out, const FMCPUvTarge
 		Out->SetStringField(TEXT("lightmapNote"),
 			TEXT("SkeletalMesh assets carry no LightMapCoordinateIndex; lightmap UVs are a StaticMesh concept."));
 	}
-#endif
 }
 
 /** Which channels a read should report, defaulting to all of them. Requested
@@ -2110,7 +2097,6 @@ TSharedPtr<FJsonValue> FAssetHandlers::GenerateLightmapUvs(const TSharedPtr<FJso
 		return Blocked;
 	}
 
-#if WITH_EDITORONLY_DATA
 	UStaticMesh* Mesh = Target.StaticMesh;
 	if (Mesh->GetNumSourceModels() <= Target.LodIndex)
 	{
@@ -2338,10 +2324,6 @@ TSharedPtr<FJsonValue> FAssetHandlers::GenerateLightmapUvs(const TSharedPtr<FJso
 				TEXT("the editor closes. Call asset(save) for it, or repeat with save=true."));
 	}
 	return MCPResult(Result);
-#else
-	return MCPUvUnsupported(Target.AssetPath, TEXT("editor_only"),
-		TEXT("Lightmap UV generation needs editor-only mesh build data, which this build does not have."));
-#endif
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

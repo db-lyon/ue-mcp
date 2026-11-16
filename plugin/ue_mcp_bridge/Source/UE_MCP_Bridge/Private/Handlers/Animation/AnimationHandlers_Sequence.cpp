@@ -145,13 +145,11 @@ namespace
 			NotifyObj->SetStringField(TEXT("name"), NotifyEvent.NotifyName.ToString());
 			NotifyObj->SetNumberField(TEXT("triggerTime"), NotifyEvent.GetTriggerTime());
 			NotifyObj->SetNumberField(TEXT("duration"), NotifyEvent.GetDuration());
-#if WITH_EDITORONLY_DATA
 			NotifyObj->SetNumberField(TEXT("trackIndex"), NotifyEvent.TrackIndex);
 			if (AnimSeq->AnimNotifyTracks.IsValidIndex(NotifyEvent.TrackIndex))
 			{
 				NotifyObj->SetStringField(TEXT("trackName"), AnimSeq->AnimNotifyTracks[NotifyEvent.TrackIndex].TrackName.ToString());
 			}
-#endif
 			if (NotifyEvent.Notify)
 			{
 				NotifyObj->SetStringField(TEXT("class"), NotifyEvent.Notify->GetClass()->GetName());

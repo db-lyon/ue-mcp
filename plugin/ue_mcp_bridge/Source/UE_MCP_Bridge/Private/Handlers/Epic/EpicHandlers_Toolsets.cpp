@@ -71,7 +71,7 @@ namespace UEMCPEpicToolsets
 	{
 #if !UE_MCP_HAS_5_8_API
 		OutCode = TEXT("unsupported_engine_version");
-		OutError = TEXT("Toolset toggles require Unreal Engine 5.8 or newer, where the ToolsetRegistry plugin first ships");
+		OutError = TEXT("Toolset toggles require Unreal Engine 5.8 or newer, where the ToolsetRegistry plugin first ships. This engine has no toolsets to toggle; ue-mcp's own actions are unaffected");
 		return false;
 #elif !(PLATFORM_WINDOWS && defined(_MSC_VER))
 		OutCode = TEXT("unsupported_platform");

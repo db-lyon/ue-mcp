@@ -189,9 +189,8 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ConfigureIKRig(const TSharedPtr<FJson
 		TEXT("chains"), TEXT("fullBodyIK"), TEXT("exclusions"),
 	});
 #if !UE_MCP_HAS_5_8_API
-	return UE_MCP_IKRigAuthoring::Error(
-		TEXT("unsupported_engine_version"),
-		TEXT("IK Rig authoring requires Unreal Engine 5.8 or newer"));
+	return MCPUnsupportedEngineError(TEXT("IK Rig authoring"), TEXT("5.8"),
+		TEXT("On this engine, animation(create_ik_rig) sets the retarget root and chains when it creates a rig, and animation(read_ik_rig) reads one back"));
 #else
 	using namespace UE_MCP_IKRigAuthoring;
 	using UE_MCP_IKRigAuthoring::Error;

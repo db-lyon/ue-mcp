@@ -1,7 +1,7 @@
 #if WITH_DEV_AUTOMATION_TESTS
 #include "CoreMinimal.h"
-#include "Runtime/Launch/Resources/Version.h"
-#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 8
+#include "HandlerEngineVersion.h"
+#if UE_MCP_HAS_5_8_API
 
 #include "Handlers/Fab/FabDownloads.h"
 #include "Handlers/Fab/FabHandlers.h"
@@ -61,7 +61,7 @@ namespace MCPFabEndToEnd
 		}
 	};
 
-	FString Engine() { return FString::Printf(TEXT("UE_%d.%d"), ENGINE_MAJOR_VERSION, ENGINE_MINOR_VERSION); }
+	FString Engine() { return TEXT("UE_") + UE_MCP_ENGINE_VERSION_STRING; }
 
 	FString Platform()
 	{

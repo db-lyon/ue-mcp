@@ -27,7 +27,7 @@ public class UE_MCP_BridgeMVVM : ModuleRules
 			"UE_MCP_Bridge",
 		});
 
-		// Present in every engine the bridge supports (5.4 to 5.9). Checked anyway
+		// Present in every engine the bridge supports (<!-- count:engineRange -->5.4 to 5.9<!-- /count -->). Checked anyway
 		// so an engine built without it still compiles this module, as a stub
 		// that tells the handlers the plugin is unavailable.
 		bool bMVVMPresent = System.IO.File.Exists(System.IO.Path.Combine(
