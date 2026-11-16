@@ -19,7 +19,7 @@
  * and any write through set_category_enabled moves it into `disable:`.
  * `nativeTools.enabled: false` still means every category's Epic actions.
  */
-import type { ActionSpec, ToolDef } from "../core/types.js";
+import type { ActionSpec, ToolDef } from "./tool-types.js";
 import type { EditorSession } from "../sessions/session.js";
 import { actionEnum } from "./category-tool.js";
 

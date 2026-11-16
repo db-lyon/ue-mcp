@@ -18,7 +18,7 @@ import {
 import { actionEnumValues, bp, categoryTool } from "../../src/surface/category-tool.js";
 import { buildMicroGateway } from "../../src/surface/context/micro-context.js";
 import { applyLeanContext } from "../../src/surface/context/lean-context.js";
-import type { ToolContext, ToolDef } from "../../src/core/types.js";
+import type { ToolContext, ToolDef } from "../../src/surface/tool-types.js";
 import { epicToolsetNames } from "../../src/bridge/bridge.js";
 
 function graph(): ToolDef[] {

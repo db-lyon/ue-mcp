@@ -14,7 +14,7 @@
  * batch whose arguments decide its effect.
  */
 import { McpError, ErrorCode } from "../core/errors.js";
-import type { ActionEffect, ToolDef } from "../core/types.js";
+import type { ActionEffect, ToolDef } from "../surface/tool-types.js";
 import { bridgeMethodEffect, mayChangeState, taskEffect } from "../surface/action-effects.js";
 import { currentCallAsker } from "./call-elicit.js";
 import { mutationScope, type BridgeGuard, type CallContext } from "./guard.js";

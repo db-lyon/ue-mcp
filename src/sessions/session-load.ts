@@ -6,7 +6,7 @@
 import * as path from "node:path";
 import type { EditorSession, SessionRegistry } from "./session.js";
 import type { ProjectContext } from "../config/project.js";
-import type { PluginInfo, ToolContext, ToolDef } from "../core/types.js";
+import type { PluginInfo, ToolContext, ToolDef } from "../surface/tool-types.js";
 import { McpError, ErrorCode } from "../core/errors.js";
 import { info, warn } from "../core/log.js";
 import { ALL_TOOLS } from "../tools.js";
@@ -19,7 +19,8 @@ import {
 } from "../surface/category-state.js";
 import { epicToolsetsOf } from "../surface/registered-surface.js";
 import { baseGraphFor, unionSurface, type SessionSurface, type UnionSurface } from "./session-surface.js";
-import { applyLeanContext, type ContextStrategy } from "../surface/context/lean-context.js";
+import { applyLeanContext } from "../surface/context/lean-context.js";
+import type { ContextStrategy } from "../config/context-strategy.js";
 import { buildMicroGateway } from "../surface/context/micro-context.js";
 import { buildFlowRegistry } from "../flow/registry.js";
 import { assertNoLegacyGuardTasks, buildGuards } from "../flow/guards.js";

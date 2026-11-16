@@ -1,4 +1,4 @@
-import type { ToolContext } from "../core/types.js";
+import type { ToolContext } from "../surface/tool-types.js";
 
 export interface CaptureSequenceClock {
   now(): number;

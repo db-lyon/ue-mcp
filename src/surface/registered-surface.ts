@@ -10,7 +10,7 @@
  * (#1824). The views built here are read views: dispatch
  * keeps the full graph and refuses a withheld call by name.
  */
-import type { ActionSpec, ToolContext, ToolDef } from "../core/types.js";
+import type { ActionSpec, ToolContext, ToolDef } from "./tool-types.js";
 import type { IBridge } from "../bridge/bridge.js";
 import { PLUGIN_UPGRADE_POINTER } from "../bridge/bridge.js";
 import { actionEnum } from "./category-tool.js";

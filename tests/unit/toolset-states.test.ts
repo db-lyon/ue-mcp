@@ -3,7 +3,7 @@
  * the answer the bridge handler actually builds (EpicHandlers_Toolsets.cpp).
  */
 import { describe, expect, it } from "vitest";
-import type { ToolContext } from "../../src/core/types.js";
+import type { ToolContext } from "../../src/surface/tool-types.js";
 import { GET_TOOLSETS_METHOD, liveToolsetStates, parseToolsetStates } from "../../src/tools/project/categories.js";
 
 /** The handler's answer: per-toolset objects plus the registry's lists. */

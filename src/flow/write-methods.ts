@@ -35,7 +35,7 @@
 import { bridgeMethodEffect } from "../surface/action-effects.js";
 import type { HandlerSpecs, ParamSpec } from "../surface/handler-spec.js";
 import { RECORDED_HANDLER_SPECS } from "../tools/specs/index.js";
-import type { ToolDef } from "../core/types.js";
+import type { ToolDef } from "../surface/tool-types.js";
 
 export interface WriteClassification {
   /**

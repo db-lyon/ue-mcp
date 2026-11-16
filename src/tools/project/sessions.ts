@@ -10,7 +10,7 @@ import { CLIENT_PROTOCOL_VERSION, describeProtocolMismatch } from "../../bridge/
 import { readLogState, readEngineSnapshot } from "../../editor/engine-observer.js";
 import { switchProject, isTargetDiverged } from "../../sessions/project-switch.js";
 import { ueMcpConfigRejections, describeConfigRejections } from "../../config/project.js";
-import type { ToolContext, ActionSpec } from "../../core/types.js";
+import type { ToolContext, ActionSpec } from "../../surface/tool-types.js";
 import type { EditorSession } from "../../sessions/session.js";
 import { toolGraphOf } from "../../surface/target-params.js";
 import { startProgress } from "../../cli/ui/progress.js";

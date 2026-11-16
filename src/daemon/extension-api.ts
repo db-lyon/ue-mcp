@@ -3,7 +3,8 @@
  * built against one EXTENSION_API_VERSION keeps working until that number
  * changes, so anything here changes additively or bumps it.
  */
-import type { DialogBlock, DialogPromptFn, ElicitParams, ElicitResult } from "../core/types.js";
+import type { DialogBlock, DialogPromptFn } from "../editor/dialog-types.js";
+import type { ElicitParams, ElicitResult } from "../core/elicit.js";
 import type { DisconnectCause } from "./disconnect.js";
 import type { DaemonEvent } from "./events.js";
 import type { UiBundleInfo, UiManifest } from "./ui-bundles.js";
@@ -13,6 +14,7 @@ import type { AssetDiff, ChangesResult, CheckpointResult, CheckpointState, Nativ
 import type { DaemonSkill } from "../extensions/skills-list.js";
 import type { ContextProjection, ContextProjectionOptions } from "../server/context-projection.js";
 import type { ActionEffectInfo } from "../surface/action-effects.js";
+import type { ContextStrategy } from "../config/context-strategy.js";
 import { isNewer } from "../core/version-check.js";
 
 export type { ActionEffectInfo } from "../surface/action-effects.js";
@@ -220,7 +222,7 @@ export interface NativeDialogPressResult {
  * `categories` to every category.
  */
 export interface ContextCallOptions extends CallActionOptions {
-  strategy?: "micro" | "lean" | "full";
+  strategy?: ContextStrategy;
   categories?: string[];
 }
 

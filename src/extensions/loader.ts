@@ -3,7 +3,7 @@ import type { GuardDeclarations } from "../flow/guard-schema.js";
 import * as path from "node:path";
 import { pathToFileURL } from "node:url";
 import type { TaskConstructor, TaskDefinition, FlowDefinition } from "@db-lyon/flowkit";
-import type { ToolDef } from "../core/types.js";
+import type { ToolDef } from "../surface/tool-types.js";
 import type { PluginEntry } from "../flow/schema.js";
 import { warn, info } from "../core/log.js";
 import {
@@ -22,7 +22,7 @@ import {
 } from "../surface/handler-spec.js";
 import type { NativeContractExtras } from "./native-contract.js";
 import { resolvePackage, type ResolvedPackage } from "./resolver.js";
-import { satisfiesMinimum } from "./version.js";
+import { satisfiesMinimum } from "../core/semver.js";
 import {
   supersededByName,
   supersededByUePlugin,

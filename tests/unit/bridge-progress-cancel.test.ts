@@ -4,7 +4,7 @@ import { WebSocketServer, type WebSocket } from "ws";
 import { describe, expect, it } from "vitest";
 import { EditorBridge } from "../../src/bridge/bridge.js";
 import { ErrorCode } from "../../src/core/errors.js";
-import type { ProgressUpdate } from "../../src/core/types.js";
+import type { ProgressUpdate } from "../../src/core/progress.js";
 
 type Frame = Record<string, unknown>;
 

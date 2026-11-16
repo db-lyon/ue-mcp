@@ -1,6 +1,6 @@
 import { TaskRegistry, ShellTask } from "@db-lyon/flowkit";
 import type { TaskConstructor, TaskContextInput } from "@db-lyon/flowkit";
-import type { ToolDef } from "../core/types.js";
+import type { ToolDef } from "../surface/tool-types.js";
 import type { FlowContext } from "./context.js";
 import { BridgeTask } from "./bridge-task.js";
 import { editorOperationTask } from "./editor-op-task.js";

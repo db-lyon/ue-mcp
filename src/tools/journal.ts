@@ -4,7 +4,7 @@
  * the daemon's /v1/journal routes.
  */
 import { z } from "zod";
-import type { ActionSpec, ToolContext } from "../core/types.js";
+import type { ActionSpec, ToolContext } from "../surface/tool-types.js";
 import { journalFor } from "../journal/journal.js";
 
 function journalOf(ctx: ToolContext) {

@@ -10,7 +10,7 @@
  * classifier does not list. A filesystem path or a drive path never matches,
  * because a content path starts with a single slash and a mount name.
  */
-import type { ToolDef } from "../core/types.js";
+import type { ToolDef } from "../surface/tool-types.js";
 import { classifyAction } from "./locking.js";
 import { isPathParam } from "../surface/path-params.js";
 import { normalizeLeasePath } from "./leases.js";

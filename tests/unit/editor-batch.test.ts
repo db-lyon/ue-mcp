@@ -12,7 +12,7 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import type { IBridge } from "../../src/bridge/bridge.js";
-import type { ToolContext, ToolDef } from "../../src/core/types.js";
+import type { ToolContext, ToolDef } from "../../src/surface/tool-types.js";
 import { McpError, ErrorCode } from "../../src/core/errors.js";
 import { bp, categoryTool } from "../../src/surface/category-tool.js";
 import { injectEditorTarget } from "../../src/surface/target-params.js";

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { blueprintTool } from "../../src/tools/blueprint.js";
 import { handlerSpecs } from "../../src/tools/specs/blueprint.generated.js";
-import type { ToolContext } from "../../src/core/types.js";
+import type { ToolContext } from "../../src/surface/tool-types.js";
 import { readHandlerFile } from "../../scripts/lib/cpp-registrations.mjs";
 
 describe("blueprint.read_graph on AnimBP transition rules (#1321)", () => {

@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { assetTool } from "../../src/tools/asset.js";
 import { actionSchema } from "../../src/surface/action-schema.js";
 import { handlerSpecs } from "../../src/tools/specs/asset.generated.js";
-import type { ToolContext } from "../../src/core/types.js";
+import type { ToolContext } from "../../src/surface/tool-types.js";
 
 describe("asset.export DataTables", () => {
   it("exposes the optional format in the action's schema and description", () => {

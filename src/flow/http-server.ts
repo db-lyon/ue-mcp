@@ -2,7 +2,7 @@ import * as http from "node:http";
 import { parseStepApproval, type FlowStepApprovalSpec } from "./step-approval.js";
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import type { createFlowTool } from "./flow-tool.js";
-import type { ToolContext } from "../core/types.js";
+import type { ToolContext } from "../surface/tool-types.js";
 import { sessionContext } from "../surface/target-params.js";
 import { EDITOR_TARGET_PARAM } from "../surface/routing-params.js";
 import { refuseUntargetedCall } from "../dispatch/editor-gate.js";

@@ -11,7 +11,7 @@ import type {
 } from "@db-lyon/flowkit";
 import type { FlowContext } from "./context.js";
 import { FlowStepKeySchema, type FlowConfig } from "./schema.js";
-import type { ToolDef, ToolContext, ActionSpec } from "../core/types.js";
+import type { ToolDef, ToolContext, ActionSpec } from "../surface/tool-types.js";
 import { actionEnum, SELECT_PARAM, OMIT_PARAM } from "../surface/category-tool.js";
 import { takeFieldSelection, projectResult, attachFieldReport } from "../surface/context/field-select.js";
 import { McpError, ErrorCode } from "../core/errors.js";

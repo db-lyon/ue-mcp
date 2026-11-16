@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { ToolContext, ToolDef } from "../core/types.js";
+import type { ToolContext, ToolDef } from "../surface/tool-types.js";
 import { categoryTool } from "../surface/category-tool.js";
 import { EDITOR_TARGET_PARAM } from "../surface/routing-params.js";
 import { handlerFailure } from "../flow/handler-outcome.js";

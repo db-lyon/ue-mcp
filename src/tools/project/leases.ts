@@ -3,7 +3,7 @@
  * The registry and the rules are in dispatch/leases.ts.
  */
 import { z } from "zod";
-import type { ActionSpec, ToolContext } from "../../core/types.js";
+import type { ActionSpec, ToolContext } from "../../surface/tool-types.js";
 import { McpError, ErrorCode } from "../../core/errors.js";
 import { SESSION_ID } from "../../dispatch/lock-owner.js";
 import { MAX_LEASE_TTL_SECONDS, type Lease, type LeaseHolder, type LeaseRegistry } from "../../dispatch/leases.js";

@@ -20,7 +20,7 @@
  * baked, which is what makes turning the surface off survivable rather than a
  * dead end.
  */
-import type { ToolDef } from "../core/types.js";
+import type { ToolDef } from "./tool-types.js";
 import { applyCategoryState, readCategoryState, snapshotGraph } from "./category-state.js";
 
 export interface NativeToolsConfig {

@@ -1,6 +1,6 @@
 import * as fs from "node:fs";
 import { z } from "zod";
-import type { ActionSpec, ToolDef } from "../core/types.js";
+import type { ActionSpec, ToolDef } from "../surface/tool-types.js";
 import { bp, categoryTool } from "../surface/category-tool.js";
 import { shapeCanvasAnswer, type CanvasResultShape } from "./canvas-results.js";
 

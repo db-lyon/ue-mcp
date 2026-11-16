@@ -9,7 +9,8 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as path from "node:path";
-import type { ToolContext, ElicitFn } from "../../src/core/types.js";
+import type { ToolContext } from "../../src/surface/tool-types.js";
+import type { ElicitFn } from "../../src/core/elicit.js";
 import {
   pushWorkaround,
   getWorkarounds,

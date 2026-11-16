@@ -6,7 +6,7 @@ import {
   parseManifest,
   manifestActionNames,
 } from "../../src/extensions/manifest.js";
-import { satisfiesMinimum, compareVersions } from "../../src/extensions/version.js";
+import { satisfiesMinimum, compareVersions } from "../../src/core/semver.js";
 
 describe("PluginManifestSchema", () => {
   it("accepts a minimal manifest", () => {

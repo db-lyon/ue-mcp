@@ -13,7 +13,7 @@ import {
   type GuardDeps,
 } from "../../src/editor/dialog-guard.js";
 import type { DialogMode } from "../../src/config/user-state.js";
-import type { DialogPromptFn, DialogPromptRequest } from "../../src/core/types.js";
+import type { DialogPromptFn, DialogPromptRequest } from "../../src/editor/dialog-types.js";
 
 const BUTTONS = ["Save Selected", "Don't Save", "Cancel"];
 const CHOICES = BUTTONS.map((b) => ({ buttonLabel: b, respondWith: `editor(respond_to_dialog, buttonLabel="${b}")` }));

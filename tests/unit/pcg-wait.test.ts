@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { ToolContext } from "../../src/core/types.js";
+import type { ToolContext } from "../../src/surface/tool-types.js";
 import { pcgTool } from "../../src/tools/pcg.js";
 import { waitAfterRegenerate, waitForGeneration, type WaitClock } from "../../src/tools/pcg-wait.js";
 import { handlerSpecs } from "../../src/tools/specs/pcg.generated.js";
