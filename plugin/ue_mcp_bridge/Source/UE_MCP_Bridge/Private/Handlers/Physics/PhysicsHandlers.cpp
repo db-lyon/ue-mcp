@@ -975,7 +975,7 @@ TSharedPtr<FJsonValue> FPhysicsHandlers::AddImpulse(const TSharedPtr<FJsonObject
 
 	const FString WorldScope = OptionalString(Params, TEXT("world"), TEXT("auto"));
 	UWorld* World = ResolveWorldFromParams(Params, *WorldScope);
-	if (!World) return MCPError(TEXT("World not available"));
+	if (!World) return MCPWorldUnavailableError(WorldScope);
 
 	FMCPActorSelector ActorSel;
 	ActorSel.Match = EMCPActorMatch::LabelNameOrPath;

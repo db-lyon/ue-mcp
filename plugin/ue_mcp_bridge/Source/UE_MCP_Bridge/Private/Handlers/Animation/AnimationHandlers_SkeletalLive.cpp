@@ -245,7 +245,7 @@ namespace
 		}
 		if (Candidates.Num() == 0)
 		{
-			return MCPError(FString::Printf(TEXT("World not available for scope '%s'"), *RequestedScope));
+			return MCPWorldUnavailableError(RequestedScope);
 		}
 		return MakeSkeletalActorNotFoundError(ActorToken, RequestedScope, Candidates);
 	}

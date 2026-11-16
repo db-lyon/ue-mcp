@@ -1982,7 +1982,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::GetStateTreeRuntime(const TSharedPtr<F
 	// Read before the world or actor lookup can fail (#1057).
 	const FString CompName = OptionalString(Params, TEXT("componentName"));
 	UWorld* World = ResolveWorldFromParams(Params, *WorldScope);
-	if (!World) return MCPError(FString::Printf(TEXT("World not available for scope '%s'"), *WorldScope));
+	if (!World) return MCPWorldUnavailableError(WorldScope);
 
 	FMCPActorSelector ActorSel;
 	ActorSel.Match = EMCPActorMatch::LabelNameOrPath;
@@ -2320,7 +2320,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::FindNavPath(const TSharedPtr<FJsonObje
 
 	// A PIE world has its own navigation system, which is the one a running pawn walks on (#1565).
 	UWorld* World = ResolveWorldFromParams(Params, *WorldScope);
-	if (!World) return MCPError(FString::Printf(TEXT("World not available for scope '%s'. Start PIE first for world=pie."), *WorldScope));
+	if (!World) return MCPWorldUnavailableError(WorldScope);
 
 	UNavigationSystemV1* NavSys = FNavigationSystem::GetCurrent<UNavigationSystemV1>(World);
 	if (!NavSys) return MCPError(TEXT("Navigation system unavailable"));

@@ -372,7 +372,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::RerunConstruction(const TSharedPtr<FJsonO
 	UWorld* World = ResolveWorldFromParams(Params, *WorldScope);
 	if (!World)
 	{
-		return MCPError(FString::Printf(TEXT("World not available for scope '%s'"), *WorldScope));
+		return MCPWorldUnavailableError(WorldScope);
 	}
 
 	TArray<FString> ActorLabels;
@@ -603,7 +603,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::RecreatePhysicsState(const TSharedPtr<FJs
 	UWorld* World = ResolveWorldFromParams(Params, *WorldScope);
 	if (!World)
 	{
-		return MCPError(FString::Printf(TEXT("World not available for scope '%s'"), *WorldScope));
+		return MCPWorldUnavailableError(WorldScope);
 	}
 
 	TArray<FString> ActorLabels;
@@ -1208,7 +1208,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::TestComponentOverlap(const TSharedPtr<FJs
 	UWorld* World = ResolveWorldFromParams(Params, *WorldScope);
 	if (!World)
 	{
-		return MCPError(FString::Printf(TEXT("World not available for scope '%s'"), *WorldScope));
+		return MCPWorldUnavailableError(WorldScope);
 	}
 
 	FString ActorLabelA;

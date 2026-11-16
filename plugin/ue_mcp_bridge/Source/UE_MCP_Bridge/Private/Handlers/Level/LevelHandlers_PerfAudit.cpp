@@ -249,7 +249,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::AuditLevelPerformance(const TSharedPtr<FJ
 	UWorld* World = ResolveWorldFromParams(Params, *WorldScope);
 	if (!World)
 	{
-		return MCPError(FString::Printf(TEXT("World not available for scope '%s'"), *WorldScope));
+		return MCPWorldUnavailableError(WorldScope);
 	}
 
 	const bool bHasMin = HasParam(Params, TEXT("regionMin"));

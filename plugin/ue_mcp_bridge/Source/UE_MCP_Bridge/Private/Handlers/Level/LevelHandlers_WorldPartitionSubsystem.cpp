@@ -66,7 +66,7 @@ namespace
 	{
 		if (!World)
 		{
-			OutError = MCPError(TEXT("Editor world not available"));
+			OutError = MCPError(MCPEditorWorldUnavailableMessage());
 			return nullptr;
 		}
 		UWorldPartitionSubsystem* Subsystem = World->GetSubsystem<UWorldPartitionSubsystem>();

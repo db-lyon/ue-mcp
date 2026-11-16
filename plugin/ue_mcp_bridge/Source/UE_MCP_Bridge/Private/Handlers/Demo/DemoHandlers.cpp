@@ -1048,7 +1048,7 @@ TSharedPtr<FJsonObject> FDemoHandlers::StepMoonlight()
 	UWorld* World = GetEditorWorld();
 	if (!World)
 	{
-		return DemoStepFailed(Result, TEXT("Editor world not available"));
+		return DemoStepFailed(Result, MCPEditorWorldUnavailableMessage());
 	}
 
 	FTransform SpawnTransform(FRotator(-30.0, 210.0, 0.0), FVector::ZeroVector);
@@ -1083,7 +1083,7 @@ TSharedPtr<FJsonObject> FDemoHandlers::StepSkyLight()
 	UWorld* World = GetEditorWorld();
 	if (!World)
 	{
-		return DemoStepFailed(Result, TEXT("Editor world not available"));
+		return DemoStepFailed(Result, MCPEditorWorldUnavailableMessage());
 	}
 
 	FTransform SpawnTransform(FRotator::ZeroRotator, FVector(0.0, 0.0, 500.0));
@@ -1117,7 +1117,7 @@ TSharedPtr<FJsonObject> FDemoHandlers::StepFog()
 	UWorld* World = GetEditorWorld();
 	if (!World)
 	{
-		return DemoStepFailed(Result, TEXT("Editor world not available"));
+		return DemoStepFailed(Result, MCPEditorWorldUnavailableMessage());
 	}
 
 	FTransform SpawnTransform(FRotator::ZeroRotator, FVector::ZeroVector);
@@ -1152,7 +1152,7 @@ TSharedPtr<FJsonObject> FDemoHandlers::StepPostProcess()
 	UWorld* World = GetEditorWorld();
 	if (!World)
 	{
-		return DemoStepFailed(Result, TEXT("Editor world not available"));
+		return DemoStepFailed(Result, MCPEditorWorldUnavailableMessage());
 	}
 
 	FTransform SpawnTransform(FRotator::ZeroRotator, FVector::ZeroVector);
@@ -1192,7 +1192,7 @@ TSharedPtr<FJsonObject> FDemoHandlers::StepNiagaraVfx()
 	UWorld* World = GetEditorWorld();
 	if (!World)
 	{
-		return DemoStepFailed(Result, TEXT("Editor world not available"));
+		return DemoStepFailed(Result, MCPEditorWorldUnavailableMessage());
 	}
 
 	// Clean up any existing asset
@@ -1289,7 +1289,7 @@ TSharedPtr<FJsonObject> FDemoHandlers::StepPcgScatter()
 	UWorld* World = GetEditorWorld();
 	if (!World)
 	{
-		return DemoStepFailed(Result, TEXT("Editor world not available"));
+		return DemoStepFailed(Result, MCPEditorWorldUnavailableMessage());
 	}
 
 	// Spawn PCG Volume on floor
@@ -1333,7 +1333,7 @@ TSharedPtr<FJsonObject> FDemoHandlers::StepOrbitRings()
 	UWorld* World = GetEditorWorld();
 	if (!World)
 	{
-		return DemoStepFailed(Result, TEXT("Editor world not available"));
+		return DemoStepFailed(Result, MCPEditorWorldUnavailableMessage());
 	}
 
 	UMaterialInterface* GlowMat = LoadDemoMat(TEXT("M_Demo_Glow"));
@@ -1410,7 +1410,7 @@ TSharedPtr<FJsonObject> FDemoHandlers::StepLevelSequence()
 	UWorld* World = GetEditorWorld();
 	if (!World)
 	{
-		return DemoStepFailed(Result, TEXT("Editor world not available"));
+		return DemoStepFailed(Result, MCPEditorWorldUnavailableMessage());
 	}
 
 	// Create LevelSequence asset

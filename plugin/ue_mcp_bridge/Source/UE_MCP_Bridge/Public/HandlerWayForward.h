@@ -23,14 +23,14 @@ inline FString MCPProtectedMountWayForward()
  *  editor world back. */
 inline FString MCPStopPlayInEditorStep()
 {
-	return TEXT("Stop play with editor(play_in_editor, pieAction=stop) and retry.");
+	return TEXT("Stop play with editor(play_in_editor, pieAction=\"stop\") and retry.");
 }
 
 /** The step that starts a play-in-editor session, and where to find the
  *  instance ids when one is already running. */
 inline FString MCPStartPlayInEditorStep()
 {
-	return TEXT("Start one with editor(play_in_editor, pieAction=start); ")
+	return TEXT("Start one with editor(play_in_editor, pieAction=\"start\"); ")
 		TEXT("editor(list_pie_instances) lists the running PIE worlds and their pieInstance ids.");
 }
 
@@ -46,7 +46,7 @@ inline FString MCPWorldUnavailableMessage(const FString& Scope)
 {
 	return FString::Printf(
 		TEXT("World not available for scope '%s'. world='pie' needs a running PIE session: start one with ")
-		TEXT("editor(play_in_editor, pieAction=start), or pass world='editor' to act on the editor world. ")
+		TEXT("editor(play_in_editor, pieAction=\"start\"), or pass world='editor' to act on the editor world. ")
 		TEXT("editor(list_pie_instances) lists the running PIE worlds and their pieInstance ids."),
 		*Scope);
 }

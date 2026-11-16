@@ -3202,7 +3202,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::CaptureScreenshot(const TSharedPtr<FJson
 
 	if (Target == TEXT("pie") && !PieWorld)
 	{
-		return MCPError(TEXT("No PIE world is running"));
+		return MCPError(TEXT("No PIE world is running. ") + MCPStartPlayInEditorStep());
 	}
 
 	if (bUsePie && PieWorld)
@@ -5160,7 +5160,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::CaptureScenePng(const TSharedPtr<FJsonOb
 	// framed shot reflects the running game.
 	const FString WorldScope = OptionalString(Params, TEXT("world"), TEXT("editor"));
 	UWorld* World = ResolveWorldFromParams(Params, *WorldScope);
-	if (!World) return MCPError(FString::Printf(TEXT("World not available for scope '%s'"), *WorldScope));
+	if (!World) return MCPWorldUnavailableError(WorldScope);
 
 	// #966: both capture actions take both names. filename reaches this one
 	// as outputPath, renamed by the registry (#1057).

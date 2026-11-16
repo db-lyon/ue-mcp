@@ -334,7 +334,7 @@ namespace
 		}
 		if (!OutWorld || !OutContext)
 		{
-			return MCPError(TEXT("PIE world not available (or no such pieInstance). See editor(list_pie_instances)."));
+			return MCPError(TEXT("PIE world not available (or no such pieInstance). ") + MCPStartPlayInEditorStep());
 		}
 		return nullptr;
 	}

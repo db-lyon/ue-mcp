@@ -2981,7 +2981,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::ListRuntimeWidgets(const TSharedPtr<FJso
 	UWorld* World = ResolveWidgetRuntimeWorld();
 	if (!World)
 	{
-		return MCPError(TEXT("No PIE world available. Is Play-In-Editor running?"));
+		return MCPError(MCPNoPlayWorldMessage());
 	}
 
 	TArray<MCPPagination::FPageRow> Rows;
@@ -3043,7 +3043,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::GetRuntimeWidget(const TSharedPtr<FJsonO
 	UWorld* World = ResolveWidgetRuntimeWorld();
 	if (!World)
 	{
-		return MCPError(TEXT("No PIE world available. Is Play-In-Editor running?"));
+		return MCPError(MCPNoPlayWorldMessage());
 	}
 
 	if (WidgetName.IsEmpty() && ClassFilter.IsEmpty())
@@ -3230,7 +3230,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::AddWidgetToViewport(const TSharedPtr<FJs
 	UWorld* World = ResolveWidgetRuntimeWorld();
 	if (!World)
 	{
-		return MCPError(TEXT("No PIE world available. Start Play-In-Editor first (editor pie_control action=play)."));
+		return MCPError(MCPNoPlayWorldMessage());
 	}
 
 	// Resolve the WidgetBlueprint's generated UUserWidget class.
@@ -3297,7 +3297,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::InvokeRuntimeWidgetFunction(const TShare
 	UWorld* World = ResolveWidgetRuntimeWorld();
 	if (!World)
 	{
-		return MCPError(TEXT("No PIE world available. Is Play-In-Editor running?"));
+		return MCPError(MCPNoPlayWorldMessage());
 	}
 
 	if (WidgetName.IsEmpty() && ClassFilter.IsEmpty())
@@ -3443,7 +3443,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::GetRuntimeDelegates(const TSharedPtr<FJs
 	UWorld* World = ResolveWidgetRuntimeWorld();
 	if (!World)
 	{
-		return MCPError(TEXT("No PIE world available. Is Play-In-Editor running?"));
+		return MCPError(MCPNoPlayWorldMessage());
 	}
 
 	if (WidgetName.IsEmpty() && ClassFilter.IsEmpty())

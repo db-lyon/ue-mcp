@@ -1513,7 +1513,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::QueryComponents(const TSharedPtr<FJsonObj
 
 	if (!World)
 	{
-		return MCPError(FString::Printf(TEXT("World not available for scope '%s'"), *WorldScope));
+		return MCPWorldUnavailableError(WorldScope);
 	}
 
 	FMCPQueryScan Scan;

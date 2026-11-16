@@ -77,7 +77,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::SpawnTransientActor(const TSharedPtr<FJso
 	UWorld* World = ResolveWorldFromParams(Params, *WorldScope);
 	if (!World)
 	{
-		return MCPError(FString::Printf(TEXT("World not available for scope '%s'"), *WorldScope));
+		return MCPWorldUnavailableError(WorldScope);
 	}
 
 	FString ActorClassSpec;
@@ -326,7 +326,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::DestroyTransientActor(const TSharedPtr<FJ
 	UWorld* World = ResolveWorldFromParams(Params, *WorldScope);
 	if (!World)
 	{
-		return MCPError(FString::Printf(TEXT("World not available for scope '%s'"), *WorldScope));
+		return MCPWorldUnavailableError(WorldScope);
 	}
 
 	const FString ActorPath = OptionalString(Params, TEXT("actorPath"));
@@ -480,7 +480,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::ListTransientActors(const TSharedPtr<FJso
 	UWorld* World = ResolveWorldFromParams(Params, *WorldScope);
 	if (!World)
 	{
-		return MCPError(FString::Printf(TEXT("World not available for scope '%s'"), *WorldScope));
+		return MCPWorldUnavailableError(WorldScope);
 	}
 
 	// T3: paged. This stopped at MCPTransientMaxListed and reported `truncated`

@@ -717,8 +717,8 @@ TSharedPtr<FJsonValue> FEditorHandlers::RenderMeshStudio(const TSharedPtr<FJsonO
 	FVector Direction = OptionalVec3(Params, TEXT("viewDirection"), FVector(1.0, -1.35, 0.9));
 	const TArray<TSharedPtr<FJsonValue>>* ItemValues = nullptr;
 	if (!TryGetArrayParam(Params, TEXT("captures"), ItemValues) || !ItemValues) return MCPError(TEXT("captures is required and must be an array"));
-	if (!GEditor || !GEditor->GetEditorWorldContext().World()) return MCPError(TEXT("Editor world not available"));
-	if (GEditor->PlayWorld || GEditor->bIsSimulatingInEditor) return MCPError(TEXT("render_mesh_studio is refused during PIE or simulation"));
+	if (!GEditor || !GEditor->GetEditorWorldContext().World()) return MCPError(MCPEditorWorldUnavailableMessage());
+	if (GEditor->PlayWorld || GEditor->bIsSimulatingInEditor) return MCPError(TEXT("render_mesh_studio is refused during PIE or simulation. ") + MCPStopPlayInEditorStep());
 	if (!FApp::CanEverRender() || GUsingNullRHI) return MCPError(TEXT("render_mesh_studio requires a rendering editor (no null RHI)"));
 	if (Active.IsValid()) return MCPError(TEXT("A mesh studio render is already running; wait for it or cancel_mesh_studio_render"));
 	if (!FMath::IsFinite(ResolutionValue) || ResolutionValue < 64 || ResolutionValue > 4096 || FMath::FloorToDouble(ResolutionValue) != ResolutionValue)

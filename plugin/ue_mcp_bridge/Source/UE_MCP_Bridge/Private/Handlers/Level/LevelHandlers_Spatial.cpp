@@ -195,9 +195,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::NudgeComponent(const TSharedPtr<FJsonObje
 	UWorld* World = ResolveWorldFromParams(Params, *WorldScope);
 	if (!World)
 	{
-		return MCPError(WorldScope == TEXT("pie")
-			? TEXT("PIE not running (or no such pieInstance). See editor(list_pie_instances).")
-			: TEXT("Editor world not available"));
+		return MCPWorldUnavailableError(WorldScope);
 	}
 
 	FMCPActorSelector ActorSel;
@@ -504,9 +502,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::RestoreComponentRelativeTransform(const T
 	UWorld* World = ResolveWorldFromParams(Params, *WorldScope);
 	if (!World)
 	{
-		return MCPError(WorldScope == TEXT("pie")
-			? TEXT("PIE not running (or no such pieInstance). See editor(list_pie_instances).")
-			: TEXT("Editor world not available"));
+		return MCPWorldUnavailableError(WorldScope);
 	}
 
 	FMCPActorSelector ActorSel;

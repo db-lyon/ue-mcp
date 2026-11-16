@@ -137,9 +137,7 @@ namespace MCPTrace
 		UWorld* World = ResolveWorldFromParams(Params, *Scope);
 		if (!World)
 		{
-			OutError = MCPError(FString::Printf(
-				TEXT("World not available for scope '%s'. world='pie' needs a running PIE session; see editor(list_pie_instances)."),
-				*Scope));
+			OutError = MCPWorldUnavailableError(Scope);
 		}
 		return World;
 	}
