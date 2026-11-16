@@ -17,7 +17,7 @@ import { downloadVerified, extractZip, sha256Of } from "../core/archive.js";
 import { extensionsDir } from "./extensions.js";
 import { EXTENSION_API_MIN_VERSION, EXTENSION_API_VERSION, extensionApiSupported } from "./extension-api.js";
 import { installedCopies, isLeftover, migrateLegacy, pruneVersions, recordVersion, versionDir } from "./extension-versions.js";
-import { clearExtensionRecords } from "../config/user-state.js";
+import { clearExtensionRecords } from "../config/extension-state.js";
 
 /**
  * A release manifest: the archive and its hash, and optionally the channel of

@@ -1,7 +1,7 @@
 // @session per-session: Resolves the dialog handling mode for the project it is handed, from that project's stored preference.
-import { getDialogMode, getUserStatePath, type DialogMode } from "../config/user-state.js";
+import { DIALOG_MODE, type DialogMode } from "../config/modes.js";
+import { getUserStatePath } from "../config/state-store.js";
 import type { ElicitFn } from "../core/elicit.js";
-import { readEnv } from "../core/env.js";
 
 /**
  * The dialog handling mode that applied, and why it applied.
@@ -38,27 +38,18 @@ export function clientAdvertisesElicitation(elicit?: ElicitFn): boolean {
 }
 
 /**
- * Resolve the dialog handling mode. Precedence (highest wins), the same shape
- * the feedback approval mode uses:
- *
- *   1. UE_MCP_DIALOG_MODE env var         - per-process override
- *   2. ~/.ue-mcp/state.json, this project - per-project, `dialog.mode`
- *   3. ~/.ue-mcp/state.json preference    - per-user-per-device, `dialog.mode`
- *   4. default: "interactive" when the connected client advertised MCP
- *      elicitation, otherwise "defer"
+ * Resolve the dialog handling mode with the scoped-mode precedence (the env
+ * var, this project's stored mode, the per-user one), then the default:
+ * "interactive" when the connected client advertised MCP elicitation,
+ * otherwise "defer".
  *
  * THE DEFAULT NEVER RESOLVES TO "auto". A dialog is a question for a person,
- * and with no channel to that person the safe answer is to suspend and say so,
- * never to let something decide it because asking was inconvenient. "auto" is
- * reachable only by being named, in the env var or in the stored preference.
+ * and with no channel to that person the safe answer is to suspend and say so.
+ * "auto" is reachable only by being named, in the env var or the stored mode.
  *
- * An unrecognised env value is ignored rather than guessed at, and the fact
- * that it was ignored travels in `source` so a typo does not silently change
- * how dialogs are handled.
- *
- * Mode is NOT read from ue-mcp.yml, for the reason the feedback mode is not:
- * whether a person is at the keyboard to answer a modal is a property of the
- * machine and the session, not project policy a collaborator should inherit.
+ * An unrecognised env value is ignored rather than guessed at, and that it was
+ * ignored travels in `source` so a typo does not silently change how dialogs
+ * are handled.
  */
 export function resolveDialogMode(opts: {
   projectDir?: string | null;
@@ -66,15 +57,15 @@ export function resolveDialogMode(opts: {
   canElicit: boolean;
   env?: NodeJS.ProcessEnv;
 }): ResolvedDialogMode {
-  const raw = (readEnv("dialogMode", opts.env) ?? "").trim().toLowerCase();
-  if (raw === "interactive" || raw === "auto" || raw === "defer") {
-    return { mode: raw, source: `UE_MCP_DIALOG_MODE=${raw}` };
+  const resolved = DIALOG_MODE.resolve(opts.projectDir ?? null, opts.env);
+  if (resolved.source === "env" && resolved.value) {
+    return { mode: resolved.value, source: `${DIALOG_MODE.envName}=${resolved.value}` };
   }
-  const ignored = raw === "" ? "" : ` (UE_MCP_DIALOG_MODE="${raw}" names no mode and was ignored)`;
+  const ignored =
+    resolved.ignoredEnv === undefined ? "" : ` (${DIALOG_MODE.envName}="${resolved.ignoredEnv.toLowerCase()}" names no mode and was ignored)`;
 
-  const stored = getDialogMode(opts.projectDir ?? null);
-  if (stored) {
-    return { mode: stored, source: `dialog.mode in ${getUserStatePath()}${ignored}` };
+  if (resolved.value) {
+    return { mode: resolved.value, source: `dialog.mode in ${getUserStatePath()}${ignored}` };
   }
 
   return opts.canElicit

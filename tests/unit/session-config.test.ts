@@ -14,7 +14,10 @@ import { readUeMcpConfig } from "../../src/config/project.js";
 import { EditorBridge } from "../../src/bridge/bridge.js";
 import { collapsingEnvWarnings } from "../../src/config/session-env.js";
 import { envWarningsFor } from "../../src/tools/project.js";
-import { getFeedbackMode, setFeedbackMode } from "../../src/config/user-state.js";
+import { FEEDBACK_MODE } from "../../src/config/modes.js";
+
+const getFeedbackMode = (root?: string) => FEEDBACK_MODE.stored(root);
+const setFeedbackMode = FEEDBACK_MODE.set;
 
 let root: string;
 const saved: Record<string, string | undefined> = {};

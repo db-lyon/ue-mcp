@@ -12,7 +12,7 @@ import {
   type DialogEvent,
   type GuardDeps,
 } from "../../src/editor/dialog-guard.js";
-import type { DialogMode } from "../../src/config/user-state.js";
+import type { DialogMode } from "../../src/config/modes.js";
 import type { DialogPromptFn, DialogPromptRequest } from "../../src/editor/dialog-types.js";
 
 const BUTTONS = ["Save Selected", "Don't Save", "Cancel"];

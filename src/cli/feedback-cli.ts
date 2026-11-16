@@ -11,7 +11,6 @@
  */
 
 import * as readline from "node:readline";
-import * as path from "node:path";
 import {
   deleteDeferred,
   getPendingDir,
@@ -20,7 +19,8 @@ import {
   type DeferredFeedback,
 } from "../feedback/feedback-deferred.js";
 import { deleteFallbackReport } from "../feedback/feedback-fallback.js";
-import { takeEditorTarget, EditorFlagError } from "./editor-flag.js";
+import { selectProjectOrExit } from "./editor-flag.js";
+import { modeHelpLines, modeValueLines, runModeSubcommand } from "./mode-cli.js";
 import { submitFeedback } from "../feedback/github-app.js";
 import {
   CORE_REPO,
@@ -29,12 +29,7 @@ import {
   repoSlug,
   type GitHubRepo,
 } from "../github/repos.js";
-import {
-  getFeedbackMode,
-  setFeedbackMode,
-  getUserStatePath,
-  type FeedbackMode,
-} from "../config/user-state.js";
+import { FEEDBACK_MODE } from "../config/modes.js";
 import {
   BOLD,
   CYAN,
@@ -48,8 +43,6 @@ import {
   ok,
   warn,
 } from "../terminal/ansi.js";
-import { isUProjectPath, projectDirOf } from "../config/uproject-path.js";
-import { readEnv } from "../core/env.js";
 
 function printHelp(): void {
   console.log("");
@@ -58,75 +51,15 @@ function printHelp(): void {
   console.log(`  Review submissions deferred while \`feedback.mode = "defer"\` was active.`);
   console.log(`  Pending submissions are stored in: ${DIM}${getPendingDir()}${RESET}`);
   console.log("");
-  console.log(`  ${BOLD}mode${RESET}              Print the current feedback approval mode`);
-  console.log(`  ${BOLD}mode${RESET} <mode>       Set the mode (interactive | auto-approve | defer)`);
-  console.log(`  ${BOLD}list${RESET}              List every pending submission (id, project, title)`);
+  for (const line of modeHelpLines(FEEDBACK_MODE)) console.log(line);
+  console.log(`  ${BOLD}list${RESET}            List every pending submission (id, project, title)`);
   console.log(`  ${BOLD}show${RESET} <id>         Print the full body and metadata for one entry`);
   console.log(`  ${BOLD}approve${RESET} <id>      POST the entry to GitHub, then delete it locally`);
   console.log(`  ${BOLD}discard${RESET} <id>      Delete the entry without posting`);
   console.log(`  ${BOLD}review${RESET}            Walk the queue one entry at a time, approve/discard/skip per item ${DIM}(experimental)${RESET}`);
   console.log("");
-}
-
-/**
- * Print or set the feedback approval mode.
- *
- * With `--editor` the preference is scoped to that project (#817), which is the
- * per-session equivalent of UE_MCP_FEEDBACK_MODE: one editor can be a long
- * unattended run while the user sits in front of another. Without it, the
- * user-wide preference is read and written exactly as before.
- */
-function cmdMode(arg: string | undefined, projectRoot: string | null, editorLabel: string | null): void {
-  const scope = editorLabel ? `editor '${editorLabel}'` : "per-user";
-  if (arg === undefined) {
-    const env = (readEnv("feedbackMode") ?? "").trim().toLowerCase();
-    const scoped = projectRoot ? getFeedbackMode(projectRoot) : undefined;
-    const pref = getFeedbackMode();
-    const effective: FeedbackMode =
-      env === "interactive" || env === "auto-approve" || env === "defer"
-        ? env
-        : scoped ?? pref ?? "interactive";
-
-    console.log("");
-    console.log(`  ${BOLD}effective:${RESET} ${effective}`);
-    if (projectRoot) {
-      console.log(`  ${DIM}${scope}: ${scoped ?? "(not set; falls back to the per-user preference)"}${RESET}`);
-    }
-    console.log(`  ${DIM}preference (~/.ue-mcp/state.json): ${pref ?? "(not set; default interactive)"}${RESET}`);
-    if (env === "interactive" || env === "auto-approve" || env === "defer") {
-      console.log(`  ${DIM}UE_MCP_FEEDBACK_MODE env override: ${env}${RESET}`);
-    }
-    console.log("");
-    console.log(`  ${DIM}Set with: npx ue-mcp feedback mode <interactive|auto-approve|defer> [--editor <name>]${RESET}`);
-    console.log(`  ${DIM}Clear preference: npx ue-mcp feedback mode default${RESET}`);
-    console.log("");
-    return;
-  }
-
-  if (arg === "default" || arg === "clear" || arg === "unset") {
-    setFeedbackMode(undefined, projectRoot);
-    ok(
-      projectRoot
-        ? `Cleared the mode for ${scope}. It falls back to the per-user preference.`
-        : `Cleared mode preference. Effective mode will default to "interactive" until set again or overridden by UE_MCP_FEEDBACK_MODE.`,
-    );
-    info(getUserStatePath());
-    return;
-  }
-
-  if (arg !== "interactive" && arg !== "auto-approve" && arg !== "defer") {
-    fail(`Unknown mode "${arg}". Allowed: interactive, auto-approve, defer, default.`);
-    process.exit(1);
-  }
-  setFeedbackMode(arg, projectRoot);
-  ok(
-    projectRoot
-      ? `Feedback mode for ${scope} set to "${arg}" (per-user, stored in ~/.ue-mcp/state.json).`
-      : `Feedback mode set to "${arg}" (per-user, stored in ~/.ue-mcp/state.json).`,
-  );
-  if (readEnv("feedbackMode")) {
-    warn(`UE_MCP_FEEDBACK_MODE=${readEnv("feedbackMode")} is set in your env and will override this preference for processes started from that shell.`);
-  }
+  for (const line of modeValueLines(FEEDBACK_MODE)) console.log(line);
+  console.log("");
 }
 
 /**
@@ -136,21 +69,6 @@ function cmdMode(arg: string | undefined, projectRoot: string | null, editorLabe
  * the flag filters what is shown rather than pointing somewhere else.
  */
 let editorFilter: string | null = null;
-
-function setEditorFilter(projectPath?: string): void {
-  if (!projectPath) {
-    editorFilter = null;
-    return;
-  }
-  editorFilter = isUProjectPath(projectPath)
-    ? path.basename(projectPath, path.extname(projectPath))
-    : path.basename(projectPath.replace(/[\/]+$/, ""));
-}
-
-/** The project root a --editor value resolved to, for per-project preferences. */
-function projectRootOf(projectPath?: string): string | null {
-  return projectPath ? projectDirOf(projectPath) : null;
-}
 
 /** The deferred entries in scope: all of them, or one editor's. */
 function listDeferred(): DeferredFeedback[] {
@@ -445,21 +363,17 @@ async function main(argv: string[]): Promise<void> {
   // this server's editors. The store itself is user-scoped (feedback files
   // against the ue-mcp tracker, not the project), so the flag is a filter
   // rather than a different location.
-  let target: { projectPath?: string; rest: string[] };
-  try {
-    target = takeEditorTarget(argv);
-  } catch (e) {
-    fail(e instanceof EditorFlagError ? e.message : String(e));
-    process.exit(1);
-  }
-  setEditorFilter(target.projectPath);
+  const target = selectProjectOrExit(argv);
+  editorFilter = target.label;
   const sub = target.rest[0];
   const id = target.rest[1];
 
   switch (sub) {
-    case "mode":
-      cmdMode(id, projectRootOf(target.projectPath), editorFilter);
+    case "mode": {
+      const code = runModeSubcommand(FEEDBACK_MODE, id, target);
+      if (code !== 0) process.exit(code);
       return;
+    }
     case "list":
       cmdList();
       return;

@@ -66,7 +66,8 @@ import {
 import { resolvePublishToken } from "../extensions/registry-auth.js";
 import { EditorBridge } from "../bridge/bridge.js";
 import { recordedSpecsProblems, type HandlerSpecs } from "../surface/handler-spec.js";
-import { parseEditorFlag, resolveEditorFlag, EditorFlagError } from "./editor-flag.js";
+import { parseEditorFlag, resolveEditorFlag, selectProject, EditorFlagError, type ProjectSelection } from "./editor-flag.js";
+import { firstPositional } from "./args.js";
 import { formatUsage, type CliUsage } from "./cli-main.js";
 import { packageVersion } from "../core/package-root.js";
 import { deriveDefaultPrefix, deriveUePluginName, writeScaffold } from "../extensions/plugin-scaffold.js";
@@ -827,10 +828,14 @@ async function fetchCatalog(base: string): Promise<RegistryRow[]> {
  */
 async function cmdRecordSpecs(args: string[]): Promise<void> {
   const check = args.includes("--check");
-  const projectIdx = args.indexOf("--project");
-  const project = projectIdx >= 0 ? args[projectIdx + 1] : undefined;
-  const positional = args.filter((a, i) => !a.startsWith("--") && (projectIdx < 0 || i !== projectIdx + 1));
-  const dir = path.resolve(positional[0] ?? process.cwd());
+  let target: ProjectSelection;
+  try {
+    target = selectProject(args, { projectFlag: true });
+  } catch (e) {
+    fail(e instanceof Error ? e.message : String(e));
+  }
+  const project = target.projectPath;
+  const dir = path.resolve(firstPositional(target.rest) ?? process.cwd());
   if (!project || !project.endsWith(".uproject") || !fs.existsSync(project)) {
     fail("record-specs needs --project <path to the .uproject of a running editor that loads this plugin's native module>");
   }
