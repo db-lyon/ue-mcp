@@ -6,8 +6,18 @@ import * as path from "node:path";
 import { McpError, ErrorCode } from "../core/errors.js";
 import { resolveBridgeTimeout, TIMEOUT_ENV_VAR } from "./bridge-timeouts.js";
 import { debug, warn } from "../core/log.js";
-import { DEFAULT_BRIDGE_PORT, deriveProjectPort } from "./port.js";
-import { bridgeStateDir, isPidAlive, resolveLiveBridgeAddress } from "./editor-target.js";
+import {
+  BRIDGE_ERROR_CODES,
+  BRIDGE_STATE,
+  bridgeErrorPath,
+  DEFAULT_BRIDGE_PORT,
+  deriveProjectPort,
+  JSON_RPC_ERRORS,
+  PROTOCOL_VERSION,
+  RECORD_FIELDS,
+  recordState,
+} from "./wire-contract.js";
+import { isPidAlive, resolveBridgeTarget } from "./editor-target.js";
 import { syncRequestedPort } from "./requested-port.js";
 import { canvasPortReplacement } from "../integrations/epic/unreal-canvas.js";
 import { packageVersion } from "../core/package-root.js";
@@ -16,15 +26,14 @@ import { bridgeAuthHeaders, watchUpgradeRefusal } from "./bridge-token.js";
 import type { ProgressUpdate } from "../core/progress.js";
 
 /**
- * The wire protocol this client speaks. Must match
- * UEMCP_BRIDGE_PROTOCOL_VERSION in the plugin's MCPHandlerRegistration.h.
+ * The wire protocol this client speaks, from the generated wire contract.
  *
  * The plugin is compiled by the user, and `attach` is deliberately
  * non-destructive, so an npm upgrade routinely leaves a new client talking to
- * an arbitrarily old binary. Comparing these two numbers is how that gets
- * named instead of surfacing as an unexplained "Unknown method".
+ * an arbitrarily old binary. Comparing this with the plugin's answer is how
+ * that gets named instead of surfacing as an unexplained "Unknown method".
  */
-export const CLIENT_PROTOCOL_VERSION = 2;
+export const CLIENT_PROTOCOL_VERSION = PROTOCOL_VERSION;
 
 /** Answer to get_bridge_capabilities, or what we infer when there is none. */
 export interface BridgeCapabilities {
@@ -94,8 +103,7 @@ export function describeProtocolMismatch(
   if (theirs < ours) {
     return (
       `The Unreal bridge plugin speaks protocol version ${theirs}, this ue-mcp client (v${packageVersion()}) speaks version ${ours}.` +
-      `${missing}${built}` +
-      ` Rebuild the plugin against the current package: run 'ue-mcp update --build' in the project (or 'ue-mcp deploy' then 'ue-mcp build'), then restart the editor.`
+      `${missing}${built} ${PLUGIN_UPGRADE_POINTER}`
     );
   }
   return (
@@ -108,6 +116,8 @@ export function describeProtocolMismatch(
 
 /** What the bridge leaves behind when the editor started but the bridge did not. */
 export interface BridgeErrorRecord {
+  state?: string;
+  /** What a bridge built before `state` writes instead. */
   status?: string;
   pid?: number;
   failedAt?: string;
@@ -133,12 +143,11 @@ function readJsonFile<T>(file: string): T | null {
  */
 export function readBridgeErrorRecord(uprojectPath: string | null): BridgeErrorRecord | null {
   if (!uprojectPath) return null;
-  const parsed = readJsonFile<BridgeErrorRecord>(
-    path.join(bridgeStateDir(path.dirname(uprojectPath)), "bridge-error.json"),
-  );
-  if (!parsed || parsed.status !== "bind-failed") return null;
+  const parsed = readJsonFile<BridgeErrorRecord & Record<string, unknown>>(bridgeErrorPath(path.dirname(uprojectPath)));
+  if (!parsed || recordState(parsed) !== BRIDGE_STATE.bindFailed) return null;
   // A record from an editor that has since exited describes nothing current.
-  if (typeof parsed.pid === "number" && parsed.pid > 0 && !isPidAlive(parsed.pid)) return null;
+  const pid = parsed[RECORD_FIELDS.bridgeError.pid];
+  if (typeof pid === "number" && pid > 0 && !isPidAlive(pid)) return null;
   return parsed;
 }
 
@@ -353,6 +362,8 @@ export function epicToolsetNames(answer: unknown): readonly string[] | null {
       .filter((n): n is string => typeof n === "string" && n !== "")
       .sort();
   }
+  if (body.success === false && body.errorCode === BRIDGE_ERROR_CODES.toolsetRegistryUnavailable) return [];
+  // A bridge built before the errorCode says so only in its text.
   if (body.success === false && typeof body.error === "string" && /ToolsetRegistry not available/i.test(body.error)) return [];
   return null;
 }
@@ -776,8 +787,8 @@ export class EditorBridge implements IBridge {
     // port.json a crashed editor left behind names a port that may since
     // belong to anything, and taking it here marked the target verified, which
     // is exactly the #818 guess this refusal exists to prevent.
-    const live = resolveLiveBridgeAddress(path.dirname(resolved));
-    if (live) {
+    const live = resolveBridgeTarget(path.dirname(resolved));
+    if (live.ok) {
       this.port = live.port;
       this.portSource = "lockfile";
     } else if (typeof configPort === "number" && configPort > 0) {
@@ -823,18 +834,13 @@ export class EditorBridge implements IBridge {
     // port it advertises over the default. Lets multiple editors run side-
     // by-side without their npm clients colliding on 9877.
     //
-    // D6: resolved through the SAME rule the lifecycle path applies. The pid
-    // named by port.json is checked for liveness, because a record a crashed
-    // editor left behind is not evidence about a running one and clearing the
-    // #818 pin refusal on it dials a port that may belong to somebody else.
-    // And when port.json is gone - which is what happens to the survivor when
-    // one of two editors of a project quits - the editor's own
-    // instances/<pid>.json still names its port, so ordinary tool calls now
-    // find the editor that editor(stop_editor) could already resolve.
-    const live = resolveLiveBridgeAddress(
+    // D6: resolved through the SAME rule the lifecycle path applies
+    // (resolveBridgeTarget): a port.json naming a dead pid is no address, and
+    // without one a live instance record still finds the editor.
+    const live = resolveBridgeTarget(
       this.projectPathForLockfile ? path.dirname(this.projectPathForLockfile) : null,
     );
-    if (live) {
+    if (live.ok) {
       if (live.port !== this.port) {
         debug(
           "bridge",
@@ -1208,7 +1214,7 @@ export class EditorBridge implements IBridge {
         }
         if (msg.id !== id) return;
         if (msg.error || !msg.result) {
-          // -32601 from a bridge that has never heard of the handshake. That
+          // Method-not-found from a bridge that has never heard of the handshake. That
           // silence is itself the answer: it predates the protocol version.
           finish({ ...LEGACY_CAPABILITIES });
           return;
@@ -1289,12 +1295,12 @@ export class EditorBridge implements IBridge {
         clearTimeout(pending.timer);
 
         if (msg.error) {
-          // #821: -32601 against an older plugin used to read as a typo. Say
-          // which side is behind, and name both versions.
+          // #821: method-not-found against an older plugin used to read as a
+          // typo. Say which side is behind, and name both versions.
           // #1167: with the protocols in agreement it is still a missing
           // handler, so the upgrade pointer goes on either way.
           const mismatch =
-            msg.error.code === -32601
+            msg.error.code === JSON_RPC_ERRORS.methodNotFound
               ? describeProtocolMismatch(this.capabilities, pending.method) ?? describeUnregisteredMethod(pending.method)
               : null;
           pending.reject(

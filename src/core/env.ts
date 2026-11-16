@@ -50,6 +50,8 @@ export const ENV_VARS = {
   dialogPolicy: "UE_MCP_DIALOG_POLICY",
   /** Set on a launched editor so the bridge echoes the parameters it received. */
   paramEcho: "UE_MCP_PARAM_ECHO",
+  /** Read by the plugin only: `auto` checks a file out of source control before a handler writes it. */
+  checkoutMode: "UE_MCP_CHECKOUT_MODE",
   /** off turns off the scan for native Win32 dialogs the editor process shows. Unset means on, on Windows. */
   nativeDialogs: "UE_MCP_NATIVE_DIALOGS",
   /** JSON file of native dialog windows that stands in for the window scan, on any platform, for tests. */

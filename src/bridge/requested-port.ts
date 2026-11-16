@@ -23,14 +23,12 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { debug } from "../core/log.js";
-import { normalizeProjectRoot } from "./port.js";
-import { bridgeStateDir } from "./editor-target.js";
+import { normalizeProjectRoot, requestedPortPath } from "./wire-contract.js";
+import type { BridgePortSource } from "./bridge.js";
 
-/** Where the client publishes the pin, for one project root. */
-export function requestedPortPath(projectDir: string): string {
-  return path.join(bridgeStateDir(projectDir), "requested.json");
-}
+export { requestedPortPath } from "./wire-contract.js";
 
+/** The fields of RECORD_FIELDS.requestedPort in the generated wire contract. */
 export interface RequestedPortRecord {
   port: number;
   /** Normalized, so the bridge can compare it without re-normalizing. */
@@ -109,7 +107,7 @@ export function clearRequestedPort(projectDir: string): void {
 export function syncRequestedPort(
   projectDir: string,
   port: number,
-  source: "lockfile" | "config" | "derived" | "explicit" | "env" | "default",
+  source: BridgePortSource,
 ): void {
   if (source === "explicit" || source === "env" || source === "config") {
     publishRequestedPort(projectDir, port, source);

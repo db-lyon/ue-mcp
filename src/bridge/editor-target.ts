@@ -23,20 +23,18 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 
-/** The directory the bridge and this server exchange state files in, for one project root. */
-export function bridgeStateDir(projectDir: string): string {
-  return path.join(projectDir, "Saved", "UE_MCP_Bridge");
-}
+import {
+  BRIDGE_STATE,
+  bridgeInstancesDir,
+  bridgeLockfilePath,
+  INSTALL_KIND,
+  RECORD_FIELDS,
+  recordState,
+  STATE_FILES,
+  type BridgeState,
+} from "./wire-contract.js";
 
-/** The path the bridge publishes its bound port to, for one project root. */
-export function bridgeLockfilePath(projectDir: string): string {
-  return path.join(bridgeStateDir(projectDir), "port.json");
-}
-
-/** Where every live bridge publishes its own address, one file per process. */
-export function bridgeInstancesDir(projectDir: string): string {
-  return path.join(bridgeStateDir(projectDir), "instances");
-}
+export { bridgeInstancesDir, bridgeLockfilePath, bridgeStateDir } from "./wire-contract.js";
 
 /**
  * One editor's own published address, from `instances/<pid>.json`.
@@ -50,8 +48,8 @@ export interface BridgeInstanceRecord {
   port: number;
   pid: number;
   instanceId: string | null;
-  /** "listening" or "bind-failed". A bind-failed record names no reachable port. */
-  state: string | null;
+  /** A bind-failed record names no reachable port. Null for a state this client does not know. */
+  state: BridgeState | null;
   startedAt: string | null;
   /** Where the running bridge plugin loaded from. Null on plugins that predate the field. */
   pluginDir: string | null;
@@ -78,26 +76,29 @@ export function readBridgeInstanceRecords(projectDir: string): BridgeInstanceRec
     return [];
   }
 
+  const F = RECORD_FIELDS.instance;
+  const str = (v: unknown): string | null => (typeof v === "string" && v !== "" ? v : null);
   const records: BridgeInstanceRecord[] = [];
   for (const name of names) {
-    if (!name.toLowerCase().endsWith(".json")) continue;
+    if (!name.toLowerCase().endsWith(STATE_FILES.instanceRecordSuffix)) continue;
     const recordPath = path.join(dir, name);
     try {
       const stat = fs.statSync(recordPath);
       const parsed = JSON.parse(fs.readFileSync(recordPath, "utf-8")) as Record<string, unknown>;
-      const pid = parsed.pid;
-      const port = parsed.port;
+      const pid = parsed[F.pid];
+      const port = parsed[F.port];
       if (typeof pid !== "number" || !Number.isInteger(pid) || pid <= 0) continue;
       if (typeof port !== "number" || !Number.isInteger(port) || port <= 0 || port > 65535) continue;
+      const installKind = parsed[F.installKind];
       records.push({
         port,
         pid,
-        instanceId: typeof parsed.instanceId === "string" ? parsed.instanceId : null,
-        state: typeof parsed.state === "string" ? parsed.state : null,
-        startedAt: typeof parsed.startedAt === "string" ? parsed.startedAt : null,
-        pluginDir: typeof parsed.pluginDir === "string" && parsed.pluginDir !== "" ? parsed.pluginDir : null,
-        installKind: parsed.installKind === "source" || parsed.installKind === "binary" ? parsed.installKind : null,
-        pluginVersion: typeof parsed.pluginVersion === "string" && parsed.pluginVersion !== "" ? parsed.pluginVersion : null,
+        instanceId: typeof parsed[F.instanceId] === "string" ? (parsed[F.instanceId] as string) : null,
+        state: recordState(parsed),
+        startedAt: typeof parsed[F.startedAt] === "string" ? (parsed[F.startedAt] as string) : null,
+        pluginDir: str(parsed[F.pluginDir]),
+        installKind: installKind === INSTALL_KIND.source || installKind === INSTALL_KIND.binary ? installKind : null,
+        pluginVersion: str(parsed[F.pluginVersion]),
         recordPath,
         writtenAtMs: stat.mtimeMs,
       });
@@ -123,18 +124,17 @@ export function readBridgeLockfileIn(projectDir: string): BridgeLockfile | null 
   const file = bridgeLockfilePath(projectDir);
   try {
     const stat = fs.statSync(file);
-    const parsed = JSON.parse(fs.readFileSync(file, "utf-8")) as {
-      port?: unknown;
-      pid?: unknown;
-      startedAt?: unknown;
-    };
-    if (typeof parsed.port !== "number" || !Number.isInteger(parsed.port) || parsed.port <= 0 || parsed.port > 65535) {
+    const F = RECORD_FIELDS.portLockfile;
+    const parsed = JSON.parse(fs.readFileSync(file, "utf-8")) as Record<string, unknown>;
+    const port = parsed[F.port];
+    const pid = parsed[F.pid];
+    if (typeof port !== "number" || !Number.isInteger(port) || port <= 0 || port > 65535) {
       return null;
     }
     return {
-      port: parsed.port,
-      pid: typeof parsed.pid === "number" && parsed.pid > 0 ? parsed.pid : null,
-      startedAt: typeof parsed.startedAt === "string" ? parsed.startedAt : null,
+      port,
+      pid: typeof pid === "number" && pid > 0 ? pid : null,
+      startedAt: typeof parsed[F.startedAt] === "string" ? (parsed[F.startedAt] as string) : null,
       writtenAtMs: stat.mtimeMs,
     };
   } catch {
@@ -160,6 +160,8 @@ export type BridgeAddress =
       lockfilePath: string | null;
       /** Names the lockfile path, so the reader can go and look at it. */
       reason: string;
+      /** The port.json that was there but names a process that is gone: what a crash leaves behind. */
+      deadLockfile?: BridgeLockfile;
     };
 
 /**
@@ -180,7 +182,7 @@ export function findLiveInstanceRecord(
 ): BridgeInstanceRecord | null {
   for (const record of readBridgeInstanceRecords(projectDir)) {
     // A bind-failed record exists to explain a failure, not to be dialled.
-    if (record.state === "bind-failed") continue;
+    if (record.state === BRIDGE_STATE.bindFailed) continue;
     if (!alive(record.pid)) continue;
     return record;
   }
@@ -192,13 +194,25 @@ export function findLiveInstanceRecord(
  * file that was checked. Never returns a port that this project did not
  * publish for itself.
  *
- * The shared lockfile is still the first answer, and callers still check the
- * pid it names for themselves. When there is no lockfile at all, a live
- * instance record for this project is a strictly better answer than a refusal:
- * the editor published it, for this project, and it names a port nobody else
- * can overwrite (#934).
+ * One liveness rule for every caller (#934, D6): the data path (connect) and
+ * the lifecycle path (start, stop, restart) used to read these files with
+ * different rules and got opposite answers for one editor.
  *
- * `isAlive` is injected so the fallback is testable without real pids.
+ *   - port.json is the first answer while the process it names is alive. A
+ *     lockfile that names no pid is honoured: older plugin builds publish none,
+ *     and refusing them would refuse a healthy editor for an old binary. One
+ *     whose process is gone was left by a crash, and its port may since belong
+ *     to anything; it is returned as `deadLockfile` on the failure, never as an
+ *     address.
+ *   - Without a live port.json, a live instance record for this project names
+ *     a port nobody else can overwrite. Two editors of one project share one
+ *     port.json, and the one that quits removes it, so the survivor is found
+ *     here.
+ *
+ * Callers that act on a process (stop) still confirm the pid holds this
+ * project; liveness says nothing about which project a process has open.
+ *
+ * `isAlive` is injected so the rule is testable without real pids.
  */
 export function resolveBridgeTarget(
   projectDir?: string | null,
@@ -216,7 +230,7 @@ export function resolveBridgeTarget(
 
   const lockfilePath = bridgeLockfilePath(projectDir);
   const lockfile = readBridgeLockfileIn(projectDir);
-  if (lockfile) {
+  if (lockfile && (lockfile.pid === null || isAlive(lockfile.pid))) {
     return {
       ok: true,
       port: lockfile.port,
@@ -240,6 +254,18 @@ export function resolveBridgeTarget(
     };
   }
 
+  if (lockfile) {
+    return {
+      ok: false,
+      lockfilePath,
+      deadLockfile: lockfile,
+      reason:
+        `${lockfilePath} names port ${lockfile.port} and pid ${lockfile.pid}, which is no longer running, and there is no ` +
+        `live instance record under ${bridgeInstancesDir(projectDir)}. A clean exit removes port.json, so the editor that ` +
+        "wrote it crashed and no editor of this project is listening now. Start it with editor(action='start_editor').",
+    };
+  }
+
   return {
     ok: false,
     lockfilePath,
@@ -249,53 +275,6 @@ export function resolveBridgeTarget(
       "editor is running for this project or its bridge never started. " +
       "Lifecycle actions do not guess a port, because a guessed port reaches whichever editor happens to hold it.",
   };
-}
-
-/** A published bridge address that a live process is standing behind. */
-export interface LiveBridgeAddress {
-  port: number;
-  /** The editor process holding it, or null on plugin builds that publish none. */
-  pid: number | null;
-  source: "port.json" | "instance-record";
-  /** Set when port.json could not answer and an instance record did. */
-  recordPath?: string;
-}
-
-/**
- * The port a LIVE editor of this project published (#934, D6).
- *
- * The data path (EditorBridge.connect) and the lifecycle path (stop / restart)
- * used to disagree about this in both directions, and both directions hurt:
- *
- *   - connect() took port.json on the strength of the port number alone, so a
- *     record a crashed editor left behind cleared the #818 pin refusal and the
- *     client dialled a port that may since belong to something else.
- *   - connect() had no instances/<pid>.json fallback, so with two editors of
- *     one project the one that quits deletes the shared port.json and the
- *     survivor becomes invisible to ordinary tool calls while editor(stop_editor)
- *     resolves it perfectly well. Two subsystems, one editor, opposite answers.
- *
- * A lockfile that names NO pid is still honoured: older plugin builds publish
- * none, and refusing them would refuse a healthy editor for having an old
- * binary. The pid check only ever discards a record whose named process is
- * demonstrably gone.
- *
- * `isAlive` is injected so this is testable without real pids.
- */
-export function resolveLiveBridgeAddress(
-  projectDir?: string | null,
-  isAlive: (pid: number) => boolean = isPidAlive,
-): LiveBridgeAddress | null {
-  if (!projectDir) return null;
-  const lockfile = readBridgeLockfileIn(projectDir);
-  if (lockfile && (lockfile.pid === null || isAlive(lockfile.pid))) {
-    return { port: lockfile.port, pid: lockfile.pid, source: "port.json" };
-  }
-  const record = findLiveInstanceRecord(projectDir, isAlive);
-  if (record) {
-    return { port: record.port, pid: record.pid, source: "instance-record", recordPath: record.recordPath };
-  }
-  return null;
 }
 
 /**

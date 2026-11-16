@@ -6,7 +6,7 @@
 import type { ProjectContext } from "../../config/project.js";
 import { projectEngineVersion } from "../../editor/deployer.js";
 import { engineLookupFor, resolveEngineRoot } from "../../editor/engine-root.js";
-import { resolveLiveBridgeAddress } from "../../bridge/editor-target.js";
+import { resolveBridgeTarget } from "../../bridge/editor-target.js";
 import { readUnrealMcpServer, type UnrealMcpServerStatus } from "./unreal-mcp-server.js";
 import { readUnrealAssistant, type UnrealAssistantStatus } from "./unreal-assistant.js";
 import { readUnrealCanvas, type UnrealCanvasStatus } from "./unreal-canvas.js";
@@ -41,7 +41,8 @@ export function epicIntegrations(
   const flow = http?.enabled ? http.port ?? 7723 : undefined;
   let liveBridge: number | undefined;
   try {
-    liveBridge = resolveLiveBridgeAddress(project.projectDir)?.port;
+    const target = resolveBridgeTarget(project.projectDir);
+    liveBridge = target.ok ? target.port : undefined;
   } catch {
     liveBridge = undefined;
   }

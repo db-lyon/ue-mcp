@@ -9,6 +9,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   DialogGuard,
   onDialogEvent,
+  respondToDialogCall,
   type DialogEvent,
   type GuardDeps,
 } from "../../src/editor/dialog-guard.js";
@@ -142,6 +143,17 @@ describe("delegate hands one dialog to the agent", () => {
     expect(decision.refusal.dialogMode).toBe("auto");
     expect(decision.refusal.dialogDelegated).toBe(true);
     expect(decision.refusal.choices).toEqual(CHOICES);
+  });
+
+  it("builds the press call itself when the plugin reports only button labels", async () => {
+    process.env.UE_MCP_ELICIT_MIN_HUMAN_MS = "0";
+    const labelsOnly = { dialogs: [{ title: "Save Content", message: "Save these?", buttons: BUTTONS, choices: BUTTONS.map((b) => ({ buttonLabel: b, enabled: true })) }] };
+    const { guard } = make({ prompt: () => answering({ action: "delegate" }), probe: async () => labelsOnly });
+    const decision = await guard.check("editor.stop_editor", "action");
+    if (decision.allow) throw new Error("expected a refusal");
+    expect(decision.refusal.choices).toEqual(
+      BUTTONS.map((b) => ({ buttonLabel: b, enabled: true, respondWith: respondToDialogCall(b) })),
+    );
   });
 
   it("lets the agent's press through for that dialog, which interactive otherwise refuses", async () => {

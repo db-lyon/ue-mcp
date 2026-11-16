@@ -25,7 +25,7 @@ import * as path from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import * as log from "../core/log.js";
-import { bridgeStateDir } from "../bridge/editor-target.js";
+import { bridgeStateDir, STATE_FILES } from "../bridge/wire-contract.js";
 
 const execFileAsync = promisify(execFile);
 const IS_WINDOWS = process.platform === "win32";
@@ -837,7 +837,11 @@ function instanceStatusFiles(dir: string): string[] {
   try {
     return fs
       .readdirSync(dir)
-      .filter((name) => /^status\.\d+\.json$/i.test(name))
+      .filter((name) => {
+        const lower = name.toLowerCase();
+        if (!lower.startsWith(STATE_FILES.instanceStatusPrefix) || !lower.endsWith(STATE_FILES.instanceRecordSuffix)) return false;
+        return /^\d+$/.test(lower.slice(STATE_FILES.instanceStatusPrefix.length, -STATE_FILES.instanceRecordSuffix.length));
+      })
       .map((name) => {
         const file = path.join(dir, name);
         let mtimeMs = 0;
@@ -866,7 +870,7 @@ export function readEngineSnapshot(projectPath: string | null | undefined): Engi
     const snapshot = readSnapshotFile(file);
     if (snapshot) return snapshot;
   }
-  return readSnapshotFile(path.join(dir, "status.json"));
+  return readSnapshotFile(path.join(dir, STATE_FILES.sharedStatus));
 }
 
 // ---------------------------------------------------------------------------

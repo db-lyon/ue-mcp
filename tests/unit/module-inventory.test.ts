@@ -53,7 +53,7 @@ const PER_SESSION: Record<string, string> = {
   "sessions/project-switch.ts": "Moves one session's project and socket together.",
   "editor/project-holders.ts": "Lists the editor processes holding one project, keyed by its path.",
   "editor/crash-reporter.ts": "Ends the crash reporters left holding one project's binaries, matched by that project's directory.",
-  "bridge/port.ts": "Derives a bridge port from one project's root path.",
+  "bridge/wire-contract.ts": "Generated wire contract: derives a bridge port and state-file paths from the project root it is handed.",
   "bridge/requested-port.ts": "Publishes one project's resolved port pin into that project's own Saved directory.",
   "editor/deployer.ts": "Attaches and deploys the bridge into one project.",
   "integrations/epic/unreal-mcp-server.ts": "Reads and writes Epic's Unreal MCP server settings for the one project it is handed.",

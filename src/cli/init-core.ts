@@ -65,7 +65,7 @@ import { epicIntegrations, projectEngineRoot, type EpicIntegrations } from "../i
 import { packageVersion } from "../core/package-root.js";
 import { warn as logWarn } from "../core/log.js";
 import { readEnv } from "../core/env.js";
-import { deriveProjectPort } from "../bridge/port.js";
+import { deriveProjectPort } from "../bridge/wire-contract.js";
 import { editDisableEntries, isScopeOff, parseDisableEntry, readCategoryState } from "../surface/category-state.js";
 import { readUserAuthSync } from "../feedback/github-auth.js";
 

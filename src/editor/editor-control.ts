@@ -637,13 +637,8 @@ export async function startEditor(
   // proof its editor is up, costs a millisecond, and needs no process table at
   // all. The process probe (seconds, on Windows) only runs when that fails,
   // which is also the only case where its extra detail is worth anything.
-  // A lockfile whose process is gone was left by a crash, and the port it names
-  // can since have been taken by something else, so an answer on it proves
-  // nothing. Discarding it here costs a syscall and keeps a stale file from
-  // refusing a launch forever.
   const target = resolveBridgeTarget(projectDir);
-  const targetIsLive = target.ok && (target.pid === null || isPidAlive(target.pid));
-  if (target.ok && targetIsLive && (await isBridgeAvailable(bridgeHost(projectDir), target.port))) {
+  if (target.ok && (await isBridgeAvailable(bridgeHost(projectDir), target.port))) {
     // No editor was launched, so the verdict is false. The marker says why,
     // and the port says where the one that is already up can be reached. See
     // StartEditorResult.
@@ -1055,7 +1050,19 @@ export async function resolveOwnedEditor(
     }
   }
 
-  const target = resolveBridgeTarget(projectDir);
+  // A port.json whose pid is gone is no address, but stop still reports on it:
+  // the process table below says whether that pid now holds another project,
+  // or whether this project's editor is up under another pid.
+  const resolved = resolveBridgeTarget(projectDir);
+  const target = !resolved.ok && resolved.deadLockfile && resolved.lockfilePath
+    ? {
+        ok: true as const,
+        port: resolved.deadLockfile.port,
+        pid: resolved.deadLockfile.pid,
+        lockfilePath: resolved.lockfilePath,
+        source: "port.json" as const,
+      }
+    : resolved;
   if (!target.ok) {
     const running = await findProjectEditors(projectPath);
     if (running.length === 0) {

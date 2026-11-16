@@ -9,12 +9,7 @@
 /** The task name of the batch action. */
 export const BATCH_TASK = "editor.batch";
 
-/**
- * The most steps one batch carries. The whole list runs as one game-thread
- * job, so this bounds how long the editor is held by a single call; a longer
- * edit is two batches. Mirrored by MaxBatchCalls in BatchHandlers.cpp.
- */
-export const MAX_BATCH_CALLS = 256;
+export { MAX_BATCH_CALLS } from "../bridge/wire-contract.js";
 
 /** One step as the caller writes it. */
 export interface BatchCall {

@@ -20,6 +20,7 @@ import { fileURLToPath } from "url";
 import WebSocket from "ws";
 import { bridgeSocketOptions, watchUpgradeRefusal } from "./lib/bridge-token.mjs";
 import { listRegistrations } from "./lib/cpp-registrations.mjs";
+import { JSON_RPC_ERRORS } from "./lib/wire-contract.mjs";
 import { closeEditorTabWindows, guardUserLayoutsUntilExit } from "./user-layout-guard.mjs";
 import {
   assertLoopbackHost,
@@ -292,7 +293,7 @@ function rpcCall(ws, method, id) {
         const code = msg.error.code;
         const message = (msg.error.message || "").toLowerCase();
         const isUnknown =
-          code === -32601 || message.includes("method not found") || message.includes("unknown method");
+          code === JSON_RPC_ERRORS.methodNotFound || message.includes("method not found") || message.includes("unknown method");
         if (isUnknown) {
           resolve({ status: "FAILURE", reason: "unknown method", detail: msg.error.message });
         } else {

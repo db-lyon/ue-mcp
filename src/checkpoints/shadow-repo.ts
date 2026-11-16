@@ -26,6 +26,7 @@ import * as path from "node:path";
 import * as crypto from "node:crypto";
 import git from "isomorphic-git";
 import { unifiedDiff } from "./text-diff.js";
+import { CHECKPOINT_MANIFEST } from "../bridge/wire-contract.js";
 
 export const DEFAULT_LARGE_FILE_BYTES = 1024 * 1024 * 1024;
 const BRANCH = "refs/heads/checkpoints";
@@ -265,21 +266,28 @@ export class ShadowRepo {
     for (const dir of this.pendingGenerations()) {
       if (skip.has(path.resolve(dir))) continue;
       dirs.push(dir);
-      const manifest = path.join(dir, "manifest.jsonl");
+      const manifest = path.join(dir, CHECKPOINT_MANIFEST.file);
       if (!fs.existsSync(manifest)) continue;
+      const F = CHECKPOINT_MANIFEST.fields;
       for (const line of fs.readFileSync(manifest, "utf-8").split(/\r?\n/)) {
         if (!line.trim()) continue;
-        let r: { path?: unknown; existed?: unknown; copy?: unknown };
+        let r: Record<string, unknown>;
         try {
           r = JSON.parse(line);
         } catch {
           continue; // A line cut short by a crash.
         }
-        if (typeof r.path !== "string") continue;
-        const key = relativeKey(this.projectDir, r.path);
+        // A line from a newer writer may mean something this reader cannot restore.
+        const version = typeof r[F.version] === "number" ? (r[F.version] as number) : 1;
+        if (version > CHECKPOINT_MANIFEST.version) continue;
+        const file = r[F.path];
+        if (typeof file !== "string") continue;
+        const key = relativeKey(this.projectDir, file);
         if (!key || isExcludedPath(key)) continue;
-        const copy = r.existed === true && typeof r.copy === "string" ? path.resolve(dir, r.copy) : null;
-        records.push({ path: key, existed: r.existed === true && copy !== null && fs.existsSync(copy), copy });
+        const existed = r[F.existed] === true;
+        const copyName = r[F.copy];
+        const copy = existed && typeof copyName === "string" ? path.resolve(dir, copyName) : null;
+        records.push({ path: key, existed: existed && copy !== null && fs.existsSync(copy), copy });
       }
     }
     return { records, dirs };
@@ -803,7 +811,7 @@ export class CheckpointError extends Error {
 /** Append one record to a pending generation: copy the file's bytes first, or note that it does not exist. */
 export function appendPendingRecord(dir: string, key: string, file: string): void {
   fs.mkdirSync(dir, { recursive: true });
-  const manifest = path.join(dir, "manifest.jsonl");
+  const manifest = path.join(dir, CHECKPOINT_MANIFEST.file);
   let existed = false;
   let copy: string | null = null;
   try {
@@ -816,7 +824,9 @@ export function appendPendingRecord(dir: string, key: string, file: string): voi
     copy = `${n}.bin`;
     fs.copyFileSync(file, path.join(dir, copy));
   }
-  fs.appendFileSync(manifest, `${JSON.stringify({ path: key, existed, ...(copy ? { copy } : {}) })}\n`);
+  const F = CHECKPOINT_MANIFEST.fields;
+  const line = { [F.version]: CHECKPOINT_MANIFEST.version, [F.path]: key, [F.existed]: existed, ...(copy ? { [F.copy]: copy } : {}) };
+  fs.appendFileSync(manifest, `${JSON.stringify(line)}\n`);
 }
 
 function isBinary(buf: Buffer): boolean {
