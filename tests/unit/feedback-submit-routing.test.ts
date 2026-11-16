@@ -46,6 +46,7 @@ vi.mock("../../src/github/auth.js", () => ({
 }));
 
 const { feedbackTool } = await import("../../src/tools/feedback.js");
+const { ALL_TOOLS } = await import("../../src/tools.js");
 const { clearCoreSurfaceCache } = await import("../../src/feedback/feedback-routing.js");
 
 const RECORDER_REPO = { owner: "db-lyon", repo: "sample-recorder" };
@@ -78,6 +79,8 @@ function makeCtx(elicit?: ElicitFn, plugins: PluginInfo[] = []): ToolContext {
     project: { projectName: null, projectDir: null, config: {} } as never,
     elicit,
     getPlugins: () => plugins,
+    // The categories a report is labelled with come from the session's graph.
+    getToolGraph: () => ALL_TOOLS,
   };
 }
 

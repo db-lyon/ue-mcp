@@ -81,5 +81,5 @@ export const pcgTool: ToolDef = categoryTool(
     ...diagramSchema({ ...epicSchema, ...specSchema }),
     runId: z.number().optional().describe("wait_for_generation: the runId execute or force_regenerate returned"),
     graceSeconds: z.number().optional().describe("wait_for_generation: with no runId and nothing generating, how long to wait for a deferred start (default 2)"),
-  },
+  }, { label: { description: "procedural content graphs", requiredPlugins: ["PCG"], keywords: ["procedural"] } },
 );

@@ -139,5 +139,5 @@ export const niagaraTool: ToolDef = categoryTool(
     // actions, and tests/unit/handler-specs.test.ts holds the two to one type.
     ...specSchema,
     ops: z.array(z.record(z.string(), z.unknown())).optional().describe("For batch: [{action, params}]"),
-  },
+  }, { label: { text: "vfx (niagara)", description: "VFX systems, emitters, modules", requiredPlugins: ["Niagara"], keywords: ["vfx", "emitter", "particle"] } },
 );

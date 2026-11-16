@@ -137,5 +137,5 @@ export const widgetTool: ToolDef = categoryTool(
     widgetDisplayName: z.string().optional().describe("Alias for widgetName. Use widgetName (#798)"),
     parentWidget: z.string().optional().describe("Alias for parentWidgetName. Use parentWidgetName (#798)"),
   },
-  { normalizeParams: normalizeWidgetParams, paramGroups: WIDGET_PARAM_GROUPS },
+  { label: { text: "ui (widgets)", description: "UMG widgets, editor utility widgets", keywords: ["umg", "ui", "editor utility"] }, normalizeParams: normalizeWidgetParams, paramGroups: WIDGET_PARAM_GROUPS },
 );

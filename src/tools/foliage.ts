@@ -37,5 +37,5 @@ export const foliageTool: ToolDef = categoryTool(
     // #1057: every foliage action is spec'd, so every key comes from the C++
     // registrations through the generated module.
     ...specSchema,
-  },
+  }, { label: { description: "instanced foliage placement and types" } },
 );
