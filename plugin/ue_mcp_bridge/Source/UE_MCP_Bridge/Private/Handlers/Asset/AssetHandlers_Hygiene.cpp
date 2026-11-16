@@ -927,8 +927,10 @@ TSharedPtr<FJsonValue> FAssetHandlers::AuditAssetHygiene(const TSharedPtr<FJsonO
 	{
 		Result->SetStringField(TEXT("scanTruncatedNote"), FString::Printf(
 			TEXT("%d assets are in scope and %d were scanned, so the counts below describe the scanned subset ")
-				TEXT("and not the project. Narrow 'directories', add a 'classNames' filter, or raise 'maxAssets'."),
-			TotalInScope, Assets.Num()));
+				TEXT("and not the project. %s"),
+			TotalInScope, Assets.Num(),
+			*MCPRaiseOrSplitNote(TEXT("maxAssets"), Scope.MaxAssets, MCPHygMaxMaxAssets,
+				TEXT("Narrow 'directories' or add a 'classNames' filter, and cover the rest with further calls."))));
 	}
 
 	if (bWantUnreferenced)

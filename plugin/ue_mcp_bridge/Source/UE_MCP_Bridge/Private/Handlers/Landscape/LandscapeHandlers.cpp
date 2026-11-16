@@ -1849,7 +1849,8 @@ TSharedPtr<FJsonValue> FLandscapeHandlers::RefreshPhysicalMaterialCollision(cons
 	const int32 MaxActors = OptionalInt(Params, TEXT("maxActors"), 256);
 	if (MaxActors < 1 || MaxActors > 1024)
 	{
-		return MCPError(TEXT("'maxActors' must be between 1 and 1024"));
+		return MCPError(TEXT("'maxActors' must be between 1 and 1024. ")
+			+ MCPHardCeilingNote(TEXT("maxActors"), 1024, TEXT("Split the work across several calls, each narrowed by actorLabels, guids or bounds.")));
 	}
 	if (OptionalBool(Params, TEXT("save"), false))
 	{
@@ -1943,8 +1944,10 @@ TSharedPtr<FJsonValue> FLandscapeHandlers::RefreshPhysicalMaterialCollision(cons
 	if (Matches.Num() > MaxActors)
 	{
 		return MCPError(FString::Printf(
-			TEXT("%d loaded LandscapeStreamingProxy actors matched, above the maxActors limit of %d. Narrow actorLabels/guids/bounds or raise maxActors deliberately."),
-			Matches.Num(), MaxActors));
+			TEXT("%d loaded LandscapeStreamingProxy actors matched, above the maxActors limit of %d. %s"),
+			Matches.Num(), MaxActors,
+			*MCPRaiseOrSplitNote(TEXT("maxActors"), MaxActors, 1024,
+				TEXT("Split the work across several calls, each narrowed by actorLabels, guids or bounds."))));
 	}
 	for (ALandscapeStreamingProxy* Proxy : Matches)
 	{

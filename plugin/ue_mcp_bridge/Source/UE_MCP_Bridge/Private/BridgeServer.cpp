@@ -39,6 +39,9 @@ namespace
 	// half-closing their sockets before giving up and saying so.
 	constexpr double kConnectionCloseGraceSeconds = 2.0;
 	constexpr double kConnectionDrainTimeoutSeconds = 10.0;
+
+	// The most a frame-level timeoutMs can raise a request's budget to.
+	constexpr double kMaxRequestTimeoutSeconds = 3600.0;
 }
 
 FMCPConnectionUnlist::FMCPConnectionUnlist(FMCPBridgeServer& InServer, FMCPSocketHandle InHandle)
@@ -852,7 +855,7 @@ FString FMCPBridgeServer::ProcessMessage(const FString& Message, const TFunction
 	double RequestedTimeoutMs = 0.0;
 	if (Request->TryGetNumberField(TEXT("timeoutMs"), RequestedTimeoutMs) && RequestedTimeoutMs > 0.0)
 	{
-		const float RequestedSeconds = (float)FMath::Min(RequestedTimeoutMs / 1000.0, 3600.0);
+		const float RequestedSeconds = (float)FMath::Min(RequestedTimeoutMs / 1000.0, kMaxRequestTimeoutSeconds);
 		const float BaseSeconds = PerHandlerTimeout > 0.0f ? PerHandlerTimeout : FMCPGameThreadExecutor::DefaultTimeoutSeconds;
 		PerHandlerTimeout = FMath::Max(BaseSeconds, RequestedSeconds);
 	}
@@ -1025,7 +1028,11 @@ TSharedPtr<FJsonValue> FMCPBridgeServer::AwaitDeferredAnswer(
 		const double Now = FPlatformTime::Seconds();
 		if (Now >= DeadlineSeconds)
 		{
-			return Stopped(TEXT("timeout"), FString::Printf(TEXT("'%s' did not finish within its time budget; it was cancelled. Raise the budget with timeoutMs."), *Method));
+			return Stopped(TEXT("timeout"), FString::Printf(
+				TEXT("'%s' did not finish within its time budget; it was cancelled. Raise the budget with timeoutMs, up to %lld ")
+				TEXT("(a hard ceiling: a larger value is capped there). Work that needs longer must be split into several smaller calls, ")
+				TEXT("or run through the action's job form and polled where it has one."),
+				*Method, (int64)(kMaxRequestTimeoutSeconds * 1000.0)));
 		}
 		if (!bWantsProgress) continue;
 

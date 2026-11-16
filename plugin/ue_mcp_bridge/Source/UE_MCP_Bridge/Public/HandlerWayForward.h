@@ -103,6 +103,19 @@ inline FString MCPHardCeilingNote(const TCHAR* ParamName, int64 Ceiling, const F
 		ParamName, Ceiling, *HowToSplit);
 }
 
+/** For a refusal at a caller-set bound: raising it is offered only while it
+ *  is below its ceiling, so the advice never loops back to the same refusal.
+ *  At the ceiling it says so, and how to split the work instead. */
+inline FString MCPRaiseOrSplitNote(const TCHAR* ParamName, int64 Current, int64 Ceiling, const FString& HowToSplit)
+{
+	if (Current < Ceiling)
+	{
+		const FString Split = HowToSplit.Left(1).ToLower() + HowToSplit.Mid(1);
+		return FString::Printf(TEXT("Raise %s (up to %lld, its hard ceiling), or %s"), ParamName, Ceiling, *Split);
+	}
+	return MCPHardCeilingNote(ParamName, Ceiling, HowToSplit);
+}
+
 /** The sentence a batch-size refusal ends with. */
 inline FString MCPSplitIntoCallsNote(int64 MaxPerCall)
 {

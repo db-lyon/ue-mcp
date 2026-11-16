@@ -106,7 +106,11 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetComponentPropertiesBatch(const TSh
 	const bool bRecursive = OptionalBool(Params, TEXT("recursive"), true);
 	const int32 MaxBlueprints = OptionalInt(Params, TEXT("maxBlueprints"), 200);
 	const bool bDryRun = OptionalBool(Params, TEXT("dryRun"), false);
-	if (MaxBlueprints < 1 || MaxBlueprints > 2000) return MCPError(TEXT("maxBlueprints must be between 1 and 2000"));
+	if (MaxBlueprints < 1 || MaxBlueprints > 2000)
+	{
+		return MCPError(TEXT("maxBlueprints must be between 1 and 2000. ")
+			+ MCPHardCeilingNote(TEXT("maxBlueprints"), 2000, TEXT("Split the work across several calls on subdirectories, or pass the Blueprints as items.")));
+	}
 	if (bItems == !Directory.IsEmpty()) return MCPError(TEXT("Pass items OR directory + componentName + properties"));
 	if (bItems && (!ClassFilter.IsEmpty() || !ComponentName.IsEmpty() || bProperties || HasParam(Params, TEXT("recursive"))))
 		return MCPError(TEXT("classFilter, componentName, properties and recursive are directory-mode parameters"));
@@ -139,7 +143,13 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetComponentPropertiesBatch(const TSh
 		Registry.GetAssets(Filter, Assets);
 		// Bound candidate loads, before filtering. Refuse overflow rather than
 		// applying a truncated selection whose remainder a caller might miss.
-		if (Assets.Num() > MaxBlueprints) return MCPError(TEXT("Directory exceeds maxBlueprints; narrow directory or raise the limit"));
+		if (Assets.Num() > MaxBlueprints)
+		{
+			return MCPError(FString::Printf(TEXT("Directory holds %d Blueprints, over maxBlueprints (%d), counted before classFilter. %s"),
+				Assets.Num(), MaxBlueprints,
+				*MCPRaiseOrSplitNote(TEXT("maxBlueprints"), MaxBlueprints, 2000,
+					TEXT("Split the work across several calls on subdirectories (recursive=false narrows each one), or pass the Blueprints as items."))));
+		}
 		Assets.Sort([](const FAssetData& A, const FAssetData& B) { return A.GetObjectPathString() < B.GetObjectPathString(); });
 		for (const FAssetData& Asset : Assets)
 		{
