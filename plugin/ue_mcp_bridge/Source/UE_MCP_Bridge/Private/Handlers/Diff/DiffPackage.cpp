@@ -1,4 +1,4 @@
-// MCPDiffPackage (Public/HandlerDiffPackage.h): revision loading and the lifetime of diff packages.
+// MCPDiffPackage (HandlerDiffPackage.h): revision loading and the lifetime of diff packages.
 
 #include "HandlerDiffPackage.h"
 #include "HandlerLogCapture.h"
