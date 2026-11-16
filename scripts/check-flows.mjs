@@ -12,7 +12,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const LOADER = path.join(REPO, "src", "flow", "loader.ts");
+const LOADER = path.join(REPO, "src", "flow", "builtin-flows.json");
 
 /**
  * Flows that exist to be run, looked at and removed.
@@ -33,15 +33,20 @@ const TOOL_NAMESPACES = ["/Game/Flows", "/Game/MCP", "/Game/UEMCP", "/Game/Bridg
  */
 export const DEMO_PATHS = new Set(["/Game/Flows/Beacon", "/Game/MCP_Home"]);
 
-/** Every flow name declared in the loader, in source order. */
+/** A demo path, or an asset under one: the flow data spells each asset out in full. */
+export function isDemoPath(p) {
+  return DEMO_PATHS.has(p) || [...DEMO_PATHS].some((demo) => p.startsWith(`${demo}/`));
+}
+
+/** Every flow name declared in the built-in flow data, in file order. */
 export function flowNames(source) {
   const names = [];
-  // A flow is a key in the returned record whose value opens with `description:`.
-  const re = /^\s{4}([a-z0-9_]+):\s*\{\s*$/gm;
+  // A flow is a key of the top-level object whose value opens with "description".
+  const re = /^ {2}"([a-z0-9_]+)": \{\s*$/gm;
   let m;
   while ((m = re.exec(source)) !== null) {
     const after = source.slice(m.index, m.index + 400);
-    if (/\n\s{6}description:/.test(after)) names.push(m[1]);
+    if (/\n {4}"description":/.test(after)) names.push(m[1]);
   }
   return names;
 }
@@ -95,7 +100,7 @@ function main() {
   }
 
   for (const hit of namespacedPaths(source)) {
-    if (DEMO_PATHS.has(hit.path)) continue;
+    if (isDemoPath(hit.path)) continue;
     bad++;
     console.error(`check:flows - ${LOADER}:${hit.line} defaults into ${hit.namespace}.`);
     console.error(`    ${hit.text}`);
