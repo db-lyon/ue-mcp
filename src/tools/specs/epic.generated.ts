@@ -263,25 +263,6 @@ export const handlerSpecs: HandlerSpecs = {
   }
 };
 
-/** The Params: clause of each spec'd bridge method. */
-export const paramsClauses: Readonly<Record<string, string>> = {
-  epic_ai_assistant_get_conversation: "Params: conversationId?, wait?, timeoutSeconds?",
-  epic_ai_assistant_get_events: "Params: sinceSeq?, conversationId?",
-  epic_ai_assistant_get_request: "Params: requestId",
-  epic_ai_assistant_send_message: "Params: message, conversationId?, hiddenContext?, reply?, wait?, timeoutSeconds?",
-  epic_ai_assistant_status: "Params: none",
-  epic_call_mcp_tool: "Params: tool, input?, inputJson?",
-  epic_call_tool: "Params: toolset, tool, input?, inputJson?",
-  epic_describe_toolset: "Params: toolset",
-  epic_get_toolset_states: "Params: nameFilter?",
-  epic_list_mcp_resources: "Params: none",
-  epic_list_mcp_tools: "Params: nameFilter?, includeSchemas?, includeRegistryAdapters?",
-  epic_list_toolsets: "Params: nameFilter?, includeSchemas?",
-  epic_read_mcp_resource: "Params: uri",
-  epic_set_toolset_enabled: "Params: toolsets, enabled",
-  epic_status: "Params: none",
-};
-
 /** Every key the spec'd epic handlers declare, aliases included. */
 export const schema: Record<string, z.ZodType> = {
   conversationId: z.string().optional().describe("Conversation to use; empty or omitted starts a new one (send_message) or reads the active one (get_conversation) (epic_ai_assistant_get_conversation, epic_ai_assistant_send_message). Return only this conversation's updates (epic_ai_assistant_get_events)"),
@@ -305,4 +286,4 @@ export const schema: Record<string, z.ZodType> = {
 };
 
 /** Declare an action for a spec'd bridge method: effect, summary, method. */
-export const specBp = makeSpecBp(paramsClauses, handlerSpecs);
+export const specBp = makeSpecBp(handlerSpecs);

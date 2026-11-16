@@ -92,7 +92,6 @@
     "tests/unit/asset-skeletal-mesh-lods.test.ts": 0,
     "tests/unit/asset-split-packages.test.ts": 0,
     "tests/unit/audit-direct-param-reads.test.ts": 0.6,
-    "tests/unit/audit-params.test.ts": 0.7,
     "tests/unit/audit-unity-collisions.test.ts": 0.2,
     "tests/unit/auth-device-flow.test.ts": 0,
     "tests/unit/behavioural-coverage.test.ts": 0,

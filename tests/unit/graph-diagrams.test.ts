@@ -297,7 +297,9 @@ describe("the diagram actions", () => {
     for (const [category, action] of where) {
       const spec = ALL_TOOLS.find((t) => t.name === category)?.actions[action];
       expect(spec, `${category}.${action}`).toMatchObject({ kind: "handler", effect: "read" });
-      expect(spec?.description).toMatch(/Params: .*format\?, focus\?, depth\?, maxNodes\?, outputPath\?$/);
+      expect(spec?.params?.optional, `${category}.${action}`).toEqual(
+        expect.arrayContaining(["format", "focus", "depth", "maxNodes", "outputPath"]),
+      );
     }
   });
 

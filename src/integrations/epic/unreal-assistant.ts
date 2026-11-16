@@ -32,13 +32,14 @@
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { MCP_SERVER_ENTRY, ueMcpServerArgs, type ServerLaunch } from "../mcp-clients/mcp-client-config.js";
+import { ueMcpServerArgs, type ServerLaunch } from "../mcp-clients/mcp-client-config.js";
 import { REPLACED_BACKUP_SUFFIX, UNREAL_MCP_SERVER_NAME } from "./unreal-mcp-entries.js";
 import { enginePluginPresent, uprojectPluginState } from "./unreal-mcp-server.js";
 import { engineHas } from "./engine-features.js";
 
 export const UNREAL_ASSISTANT_PLUGIN = "AIAssistant";
 export const ASSISTANT_CONFIG_FILENAME = "AIAssistant.json";
+export const UE_MCP_ASSISTANT_SERVER_NAME = "ue-mcp";
 const RESTRICTED = ["NotForLicensees", "NoRedist", "LimitedAccess"];
 
 export interface UnrealAssistantInputs {
@@ -151,7 +152,7 @@ export function readUnrealAssistant(inputs: UnrealAssistantInputs): UnrealAssist
   const configPath = user.find((f) => fs.existsSync(f)) ?? user[user.length - 1];
   const { value, invalid } = readJsonObject(configPath);
   const servers = Array.isArray(value?.mcp_servers) ? (value!.mcp_servers as unknown[]) : [];
-  const entry = servers.find((s): s is McpDescriptor => isDescriptor(s) && s.name === MCP_SERVER_ENTRY) ?? null;
+  const entry = servers.find((s): s is McpDescriptor => isDescriptor(s) && s.name === UE_MCP_ASSISTANT_SERVER_NAME) ?? null;
   return {
     available: true,
     reason: null,
@@ -165,7 +166,7 @@ export function readUnrealAssistant(inputs: UnrealAssistantInputs): UnrealAssist
 
 /** The ACP stdio descriptor that launches ue-mcp for a project, as the client configs do. */
 export function ueMcpAssistantDescriptor(uprojectPath: string, launch: ServerLaunch = {}): McpDescriptor {
-  return { name: MCP_SERVER_ENTRY, command: launch.command ?? "npx", args: ueMcpServerArgs(uprojectPath, launch), env: [] };
+  return { name: UE_MCP_ASSISTANT_SERVER_NAME, command: launch.command ?? "npx", args: ueMcpServerArgs(uprojectPath, launch), env: [] };
 }
 
 /** The descriptor the engine sends for its own server when the list is absent. */
@@ -228,7 +229,7 @@ export function detachUnrealAssistant(configPath: string): AssistantWrite {
   const { value } = readJsonObject(configPath);
   if (!value || !Array.isArray(value.mcp_servers)) return { changed: false, backup: null };
   const all = value.mcp_servers as unknown[];
-  const rest = all.filter((s) => !(isDescriptor(s) && s.name === MCP_SERVER_ENTRY));
+  const rest = all.filter((s) => !(isDescriptor(s) && s.name === UE_MCP_ASSISTANT_SERVER_NAME));
   if (rest.length === all.length) return { changed: false, backup: null };
   const onlyDefault = rest.length === 1 && isDescriptor(rest[0]) && rest[0].name === UNREAL_MCP_SERVER_NAME && rest[0].type === "http";
   const next: Record<string, unknown> = { ...value };

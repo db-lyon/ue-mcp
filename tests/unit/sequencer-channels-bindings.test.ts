@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { editorTool } from "../../src/tools/editor.js";
+import { actionAccepts } from "../../src/surface/action-schema.js";
 import { classifyAction } from "../../src/dispatch/written-paths.js";
 import { readHandlerFile } from "../../scripts/lib/cpp-registrations.mjs";
 
@@ -17,10 +18,12 @@ function body(source: string, fn: string, next?: string): string {
 describe("sequencer channel actions (#1407)", () => {
   it("advertises the channel actions with their C++ parameters", () => {
     const read = editorTool.actions.get_sequence_channel_keys;
-    expect(read.description).toContain("Params: sequencePath (or assetPath, or path), trackType?, trackName?, trackIndex?");
-    expect(read.description).toContain("sampleStartFrame?");
+    const readNames = actionAccepts(read)?.takes ?? [];
+    expect(readNames).toEqual(expect.arrayContaining(["sequencePath", "trackType", "trackName", "trackIndex", "sampleStartFrame"]));
     const write = editorTool.actions.set_sequence_channel_keys;
-    expect(write.description).toContain("channel, keyframes?, interpolation?, clearExisting?, defaultValue?, clearDefault?, parameterType?");
+    expect(actionAccepts(write)?.takes).toEqual(expect.arrayContaining([
+      "channel", "keyframes", "interpolation", "clearExisting", "defaultValue", "clearDefault", "parameterType",
+    ]));
     expect(editorTool.schema.parameterType.safeParse("color").success).toBe(true);
     expect(editorTool.schema.materialParameterCollection.safeParse("/Game/MPC_Ocean").success).toBe(true);
   });
@@ -71,7 +74,9 @@ describe("sequencer channel actions (#1407)", () => {
 
 describe("sequencer binding actions (#1356, #1232)", () => {
   it("advertises rebind, resolve and runtime bindings", () => {
-    expect(editorTool.actions.rebind_possessable.description).toContain("bindingGuid?, bindingName?, actorLabel?, actorPath?, includeChildren?, componentMap?, renameBinding?");
+    expect(actionAccepts(editorTool.actions.rebind_possessable)?.takes).toEqual(expect.arrayContaining([
+      "bindingGuid", "bindingName", "actorLabel", "actorPath", "includeChildren", "componentMap", "renameBinding",
+    ]));
     expect(classifyAction("editor.resolve_sequence_bindings", { sequencePath: "/Game/S" }).mutates).toBe(false);
     expect(classifyAction("editor.get_sequence_runtime_bindings", {}).mutates).toBe(false);
     expect(classifyAction("editor.rebind_possessable", { sequencePath: "/Game/S", bindingName: "Cam", actorLabel: "Cam" }).mutates).toBe(true);
@@ -98,7 +103,9 @@ describe("sequencer binding actions (#1356, #1232)", () => {
 
 describe("sequence binding components (#1640)", () => {
   it("advertises a read action with its C++ parameters", () => {
-    expect(editorTool.actions.get_sequence_binding_components.description).toContain("Params: sequencePath (or assetPath, or path), bindingGuid?, bindingName?, componentClass?, propertyNames?");
+    expect(actionAccepts(editorTool.actions.get_sequence_binding_components)?.takes).toEqual(
+      expect.arrayContaining(["sequencePath", "bindingGuid", "bindingName", "componentClass", "propertyNames"]),
+    );
     expect(classifyAction("editor.get_sequence_binding_components", { sequencePath: "/Game/S" }).mutates).toBe(false);
   });
 

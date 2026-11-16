@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { levelTool } from "../../src/tools/level.js";
+import { actionAccepts } from "../../src/surface/action-schema.js";
 
 // A spec'd action has no mapper and forwards its bag as sent (#1057).
 const forwarded = (action: string, params: Record<string, unknown>) =>
@@ -21,7 +22,7 @@ describe("level.spawn_transient_actor properties (#1103)", () => {
 
   it("documents the per-property report", () => {
     const description = levelTool.actions.spawn_transient_actor.description ?? "";
-    expect(description).toContain("properties?");
+    expect(actionAccepts(levelTool.actions.spawn_transient_actor)?.takes).toContain("properties");
     expect(description).toContain("properties[]");
   });
 });

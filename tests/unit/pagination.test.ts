@@ -1,89 +1,25 @@
 /**
  * The TypeScript half of cursor pagination (T3).
  *
- * Two properties matter here, and each of them is a real failure this repo
- * has already paid for once:
- *
- *   1. `cursor` and `limit` are DECLARED wherever they are documented. The MCP
- *      layer strips keys a category's flat zod bag does not declare, so a
- *      documented-but-undeclared parameter arrives as `undefined` and the call
- *      returns an ordinary success for a page that was never paged.
- *   2. `paged()` puts the two names INSIDE the `Params:` clause, because that
- *      clause is what `describe_action` and the drift test read. Appending
- *      after a `Returns` section would document them somewhere nothing looks.
+ * `cursor` and `limit` are DECLARED wherever they are documented. The MCP
+ * layer strips keys a category's flat zod bag does not declare, so a
+ * documented-but-undeclared parameter arrives as `undefined` and the call
+ * returns an ordinary success for a page that was never paged.
  */
 import { describe, it, expect } from "vitest";
 import { z } from "zod";
-import { CURSOR_PARAM, PAGINATION_PARAM_NAMES, paged } from "../../src/surface/pagination.js";
-import { parseParams } from "../../src/surface/action-schema.js";
+import { CURSOR_PARAM } from "../../src/surface/pagination.js";
+import { actionAccepts, actionSchema } from "../../src/surface/action-schema.js";
 import { reflectionTool } from "../../src/tools/reflection.js";
 import { paramMapperOf } from "../../src/surface/epic-input.js";
 
 describe("pagination parameter declarations", () => {
-  it("pages on cursor and limit", () => {
-    expect([...PAGINATION_PARAM_NAMES]).toEqual(["cursor", "limit"]);
-  });
-
   it("accepts an omitted cursor", () => {
     expect(CURSOR_PARAM.parse(undefined)).toBeUndefined();
   });
 
   it("describes the cursor, since the description is the agent's only guide", () => {
     expect((CURSOR_PARAM as unknown as { description?: string }).description ?? "").not.toEqual("");
-  });
-});
-
-describe("paged()", () => {
-  it("adds both names to the end of an existing Params clause", () => {
-    const out = paged("List gameplay tags. Params: filter?");
-    expect(parseParams(out).params.map((p) => p.name)).toEqual(["filter", "cursor", "limit"]);
-  });
-
-  it("adds only the missing name when the action already documents one", () => {
-    const out = paged("List classes. Params: parentFilter?, limit?");
-    expect(parseParams(out).params.map((p) => p.name)).toEqual(["parentFilter", "limit", "cursor"]);
-    // `limit` is documented once, not twice.
-    expect(out.match(/\blimit\b/g)).toHaveLength(1);
-  });
-
-  it("inserts before a Returns section rather than after it", () => {
-    const out = paged(
-      "Enumerate modules. Params: filter? (case-insensitive substring), loadedOnly? (default false)."
-      + " Returns modules[{name, loaded}] + totalLoaded",
-    );
-    expect(parseParams(out).params.map((p) => p.name)).toEqual(["filter", "loadedOnly", "cursor", "limit"]);
-    expect(out.indexOf("cursor?")).toBeLessThan(out.indexOf("Returns"));
-  });
-
-  it("inserts before a trailing issue reference, which is prose and not a parameter", () => {
-    const out = paged("Enumerate modules. Params: filter?, loadedOnly? (#689)");
-    expect(parseParams(out).params.map((p) => p.name)).toEqual(["filter", "loadedOnly", "cursor", "limit"]);
-    expect(out.trimEnd().endsWith("(#689)")).toBe(true);
-  });
-
-  it("keeps a bracketed comma attached to the parameter it documents", () => {
-    const out = paged("Do a thing. Params: mode? (one of a, b, c)");
-    expect(parseParams(out).params.map((p) => p.name)).toEqual(["mode", "cursor", "limit"]);
-  });
-
-  it("adds a Params clause when the description has none", () => {
-    const out = paged("List everything.");
-    expect(parseParams(out).params.map((p) => p.name)).toEqual(["cursor", "limit"]);
-  });
-
-  it("stays readable when the action it wraps documented `Params: none`", () => {
-    // The two names land BEHIND the word `none`, which reads oddly and is the
-    // shape a good few paged actions carry (`pcg.list_graphs` among them). It
-    // is only a wording problem: the clause continues, so the reader has to
-    // continue with it, and the paging parameters are advertised either way.
-    const out = paged("List every graph. Params: none");
-    expect(out).toContain("Params: none, cursor?, limit?");
-    expect(parseParams(out).params.map((p) => p.name)).toEqual(["cursor", "limit"]);
-  });
-
-  it("is idempotent, so re-wrapping a description cannot document a name twice", () => {
-    const once = paged("List gameplay tags. Params: filter?");
-    expect(paged(once)).toBe(once);
   });
 });
 
@@ -99,7 +35,7 @@ describe("the reflection category, which is the first adopter", () => {
     for (const action of pagedActions) {
       const spec = reflectionTool.actions[action];
       expect(spec, `${action} is registered`).toBeDefined();
-      const documented = parseParams(spec.description ?? "").params.map((p) => p.name);
+      const documented = actionAccepts(spec)?.takes ?? [];
       expect(documented, `${action} documents cursor`).toContain("cursor");
       expect(documented, `${action} documents limit`).toContain("limit");
     }
@@ -123,13 +59,15 @@ describe("the reflection category, which is the first adopter", () => {
   });
 
   it("declares every parameter reflect_instance documents", () => {
-    const documented = parseParams(reflectionTool.actions.reflect_instance.description ?? "").params;
+    const documented = actionSchema(reflectionTool, "reflect_instance").params
+      .filter((p) => p.sources.includes("documented"));
     expect(documented.length).toBeGreaterThan(0);
-    for (const { name } of documented) {
+    const declared = actionAccepts(reflectionTool.actions.reflect_instance)?.takes ?? [];
+    for (const name of declared) {
       expect(reflectionTool.schema[name], `reflect_instance's '${name}' is declared`).toBeDefined();
     }
     // objectPath is the one required selector; everything else narrows.
-    expect(documented.find((p) => p.name === "objectPath")?.optional).toBe(false);
+    expect(documented.find((p) => p.name === "objectPath")?.required).toBe(true);
   });
 
   it("forwards list_structs' package and name filters to the bridge (#1088)", () => {
@@ -139,9 +77,7 @@ describe("the reflection category, which is the first adopter", () => {
     expect(reflectionTool.schema.filter).toBeDefined();
     // Spec'd (#1057): no mapParams, so the bag reaches the bridge as sent.
     expect(spec.mapParams).toBeUndefined();
-    expect(parseParams(spec.description ?? "").params.map((p) => p.name)).toEqual(
-      expect.arrayContaining(["package", "filter"]),
-    );
+    expect(actionAccepts(spec)?.takes).toEqual(expect.arrayContaining(["package", "filter"]));
   });
 
   it("keeps limit a positive whole number now that pagination owns it", () => {

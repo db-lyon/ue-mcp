@@ -6,8 +6,8 @@
 // effects file and regenerate; to pick up a new engine's toolsets, re-record
 // the catalog and regenerate.
 //
-// These are ordinary actions. They carry a declared effect, real parameters and
-// a Params: clause, they are in ALL_TOOLS, and they dispatch through the same
+// These are ordinary actions. They carry a declared effect and real
+// parameters, they are in ALL_TOOLS, and they dispatch through the same
 // task factory, guards and locks as every hand-written action in this package.
 // Each also carries its input schema, which the compact signatures read (#1172).
 import { z } from "zod";
@@ -33,37 +33,37 @@ export const actions: Record<string, ActionSpec> = {
   epic_get_class: {
     epicSchema: S_epic_get_class,
     epicTool: { toolset: "editor_toolset.toolsets.object.ObjectTools", name: "editor_toolset.toolsets.object.ObjectTools.get_class", engines: ["5.8"], successors: [{ toolset: "EditorToolset.ObjectToolset", name: "EditorToolset.ObjectToolset.GetClass", engines: ["5.9"], schema: S_epic_get_class__1 }] },
-    ...bp("read", "[Epic editor_toolset.toolsets.object.ObjectTools] Returns the class of an Unreal object. Params: instance. On UE 5.9 it calls EditorToolset.ObjectToolset.GetClass (Params: instance).", "epic_call_tool"),
+    ...bp("read", "[Epic editor_toolset.toolsets.object.ObjectTools] Returns the class of an Unreal object. On UE 5.9 it calls EditorToolset.ObjectToolset.GetClass.", "epic_call_tool"),
   },
   epic_get_properties: {
     epicSchema: S_epic_get_properties,
     epicTool: { toolset: "editor_toolset.toolsets.object.ObjectTools", name: "editor_toolset.toolsets.object.ObjectTools.get_properties", engines: ["5.8"], successors: [{ toolset: "EditorToolset.ObjectToolset", name: "EditorToolset.ObjectToolset.GetProperties", engines: ["5.9"], schema: S_epic_get_properties__1 }] },
-    ...bp("read", "[Epic editor_toolset.toolsets.object.ObjectTools] Returns the values of one or more properties on an object. Params: instance, properties. On UE 5.9 it calls EditorToolset.ObjectToolset.GetProperties (Params: instance, properties).", "epic_call_tool"),
+    ...bp("read", "[Epic editor_toolset.toolsets.object.ObjectTools] Returns the values of one or more properties on an object. On UE 5.9 it calls EditorToolset.ObjectToolset.GetProperties.", "epic_call_tool"),
   },
   epic_get_property_schema: {
     epicSchema: S_epic_get_property_schema,
     epicTool: { toolset: "EditorToolset.ObjectToolset", name: "EditorToolset.ObjectToolset.GetPropertySchema", engines: ["5.9"] },
-    ...bp("read", "[Epic EditorToolset.ObjectToolset] Returns a JSON Schema of the properties on an object, with each property's type and description. Much larger than ListProperties, so find the property there and come here only when its type is needed. A schema describes types rather than an instance, so Root cannot carry a subscript. Available on UE 5.9; absent from UE 5.8. Params: instance, root?, maxDepth?", "epic_call_tool"),
+    ...bp("read", "[Epic EditorToolset.ObjectToolset] Returns a JSON Schema of the properties on an object, with each property's type and description. Much larger than ListProperties, so find the property there and come here only when its type is needed. A schema describes types rather than an instance, so Root cannot carry a subscript. Available on UE 5.9; absent from UE 5.8.", "epic_call_tool"),
   },
   epic_list_properties: {
     epicSchema: S_epic_list_properties,
     epicTool: { toolset: "editor_toolset.toolsets.object.ObjectTools", name: "editor_toolset.toolsets.object.ObjectTools.list_properties", engines: ["5.8"], successors: [{ toolset: "EditorToolset.ObjectToolset", name: "EditorToolset.ObjectToolset.ListProperties", engines: ["5.9"], schema: S_epic_list_properties__1 }] },
-    ...bp("read", "[Epic editor_toolset.toolsets.object.ObjectTools] Returns a list of properties that are on the specified object. Params: instance. On UE 5.9 it calls EditorToolset.ObjectToolset.ListProperties (Params: instance, root?, nameFilter?, maxDepth?).", "epic_call_tool"),
+    ...bp("read", "[Epic editor_toolset.toolsets.object.ObjectTools] Returns a list of properties that are on the specified object. On UE 5.9 it calls EditorToolset.ObjectToolset.ListProperties.", "epic_call_tool"),
   },
   epic_reset_properties: {
     epicSchema: S_epic_reset_properties,
     epicTool: { toolset: "editor_toolset.toolsets.object.ObjectTools", name: "editor_toolset.toolsets.object.ObjectTools.reset_properties", engines: ["5.8"], successors: [{ toolset: "EditorToolset.ObjectToolset", name: "EditorToolset.ObjectToolset.ResetProperties", engines: ["5.9"], schema: S_epic_reset_properties__1 }] },
-    ...bp("mutate", "[Epic editor_toolset.toolsets.object.ObjectTools] Resets one or more properties on an object to their default values, removing any per-instance overrides. Params: instance, properties. On UE 5.9 it calls EditorToolset.ObjectToolset.ResetProperties (Params: instance, properties).", "epic_call_tool"),
+    ...bp("mutate", "[Epic editor_toolset.toolsets.object.ObjectTools] Resets one or more properties on an object to their default values, removing any per-instance overrides. On UE 5.9 it calls EditorToolset.ObjectToolset.ResetProperties.", "epic_call_tool"),
   },
   epic_search_subclasses: {
     epicSchema: S_epic_search_subclasses,
     epicTool: { toolset: "editor_toolset.toolsets.object.ObjectTools", name: "editor_toolset.toolsets.object.ObjectTools.search_subclasses", engines: ["5.8"], successors: [{ toolset: "EditorToolset.ObjectToolset", name: "EditorToolset.ObjectToolset.SearchSubclasses", engines: ["5.9"], schema: S_epic_search_subclasses__1, rename: {"base_class":"baseClass","class_name":"className"} }] },
-    ...bp("read", "[Epic editor_toolset.toolsets.object.ObjectTools] Finds all subclasses of a given class. Params: base_class, class_name. On UE 5.9 it calls EditorToolset.ObjectToolset.SearchSubclasses (Params: baseClass, className?).", "epic_call_tool"),
+    ...bp("read", "[Epic editor_toolset.toolsets.object.ObjectTools] Finds all subclasses of a given class. On UE 5.9 it calls EditorToolset.ObjectToolset.SearchSubclasses.", "epic_call_tool"),
   },
   epic_set_properties: {
     epicSchema: S_epic_set_properties,
     epicTool: { toolset: "editor_toolset.toolsets.object.ObjectTools", name: "editor_toolset.toolsets.object.ObjectTools.set_properties", engines: ["5.8"], successors: [{ toolset: "EditorToolset.ObjectToolset", name: "EditorToolset.ObjectToolset.SetProperties", engines: ["5.9"], schema: S_epic_set_properties__1 }] },
-    ...bp("mutate", "[Epic editor_toolset.toolsets.object.ObjectTools] Sets the values of properties on an object. Params: instance, values. On UE 5.9 it calls EditorToolset.ObjectToolset.SetProperties (Params: instance, values).", "epic_call_tool"),
+    ...bp("mutate", "[Epic editor_toolset.toolsets.object.ObjectTools] Sets the values of properties on an object. On UE 5.9 it calls EditorToolset.ObjectToolset.SetProperties.", "epic_call_tool"),
   },
 };
 

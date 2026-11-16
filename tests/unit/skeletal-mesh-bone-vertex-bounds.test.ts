@@ -10,7 +10,9 @@ describe("skeletal mesh bone vertex bounds", () => {
     expect(assetTool.schema.action.safeParse("read_skeletal_mesh_bone_vertex_bounds").success).toBe(true);
     const read = assetTool.actions.read_skeletal_mesh_bone_vertex_bounds;
     expect(read.mapParams).toBeUndefined();
-    expect(read.description).toContain("Params: assetPath, boneNames?, minWeight?, lodIndex?, profileName?");
+    expect(read.paramSpec?.map((p) => `${p.name}${p.required ? "" : "?"}`)).toEqual(
+      ["assetPath", "boneNames?", "minWeight?", "lodIndex?", "profileName?"],
+    );
     expect(assetTool.schema.boneNames.safeParse(["spine_01", "head"]).success).toBe(true);
     expect(assetTool.schema.minWeight.safeParse(0.5).success).toBe(true);
   });

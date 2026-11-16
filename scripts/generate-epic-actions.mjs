@@ -237,23 +237,6 @@ function reservedArgs(inputSchema) {
   return Object.keys(inputSchema?.properties ?? {}).filter((n) => RESERVED_TOP_LEVEL.has(n));
 }
 
-/** The `Params:` clause every action on this surface is required to carry.
- *  A reserved argument is named in a parenthetical, which the parser reads as
- *  prose rather than as a promised key. */
-function paramsClause(inputSchema) {
-  const props = Object.keys(inputSchema?.properties ?? {});
-  if (props.length === 0) return "Params: none";
-  const required = new Set(inputSchema?.required ?? []);
-  const reserved = reservedArgs(inputSchema);
-  const plain = props
-    .filter((n) => !RESERVED_TOP_LEVEL.has(n))
-    .map((n) => (required.has(n) ? n : `${n}?`));
-  if (reserved.length > 0) {
-    plain.push(`input? (carries ${reserved.join(", ")}, which cannot be sent at the top level)`);
-  }
-  return `Params: ${plain.join(", ")}`;
-}
-
 /* ── parameter types ────────────────────────────────────────────────────── */
 
 function isAssetRef(prop) {
@@ -399,14 +382,13 @@ function main() {
   }
 
   // Descriptions last, once every successor is known: availability is the union
-  // of the engines the action reaches, and each successor names its own params.
+  // of the engines the action reaches. The parameters are the input schema the
+  // action carries, which describe_action and the signature read.
   for (const bucket of byCategory.values()) {
     for (const a of bucket.actions) {
       const reach = [...a.engines, ...a.successors.flatMap((s) => s.engines)];
-      const later = a.successors
-        .map((s) => `On UE ${s.engines.join(", ")} it calls ${s.tool} (${paramsClause(s.input)}).`)
-        .join(" ");
-      a.description = `[Epic ${a.toolset}] ${a.summary} ${availabilityClause(reach, merged.engines)}${paramsClause(a.input)}${later ? `. ${later}` : ""}`
+      const later = a.successors.map((s) => `On UE ${s.engines.join(", ")} it calls ${s.tool}.`).join(" ");
+      a.description = `[Epic ${a.toolset}] ${a.summary} ${availabilityClause(reach, merged.engines)}${later}`
         .replace(/\s+/g, " ").trim();
     }
   }
@@ -474,8 +456,8 @@ function emitCategory(category, bucket) {
 // effects file and regenerate; to pick up a new engine's toolsets, re-record
 // the catalog and regenerate.
 //
-// These are ordinary actions. They carry a declared effect, real parameters and
-// a Params: clause, they are in ALL_TOOLS, and they dispatch through the same
+// These are ordinary actions. They carry a declared effect and real
+// parameters, they are in ALL_TOOLS, and they dispatch through the same
 // task factory, guards and locks as every hand-written action in this package.
 // Each also carries its input schema, which the compact signatures read (#1172).
 import { z } from "zod";

@@ -87,7 +87,13 @@ export const engineActions: Record<string, ActionSpec> = {
     kind: "handler",
     effect: "read",
     offline: "Reads an engine header from the installed engine tree.",
-    description: "Parse a .h file from the engine source tree. Params: headerPath (relative to Engine/Source, or absolute)",
+    params: {
+      required: ["headerPath"],
+      notes: {
+        headerPath: "relative to Engine/Source, or absolute",
+      },
+    },
+    description: "Parse a .h file from the engine source tree.",
     handler: async (ctx, p) => {
       const engineRoot = requireEngineRoot(ctx);
       const headerPath = p.headerPath as string;
@@ -101,7 +107,8 @@ export const engineActions: Record<string, ActionSpec> = {
     kind: "handler",
     effect: "read",
     offline: "Searches the installed engine headers.",
-    description: "Grep engine headers for a symbol. Params: symbol, maxResults?",
+    params: { required: ["symbol"], optional: ["maxResults"] },
+    description: "Grep engine headers for a symbol.",
     handler: async (ctx, p) => {
       const engineRoot = requireEngineRoot(ctx);
       const engineSource = path.join(engineRoot, "Engine", "Source", "Runtime");
@@ -134,7 +141,8 @@ export const engineActions: Record<string, ActionSpec> = {
     kind: "handler",
     effect: "read",
     offline: "Enumerates modules in the installed engine tree.",
-    description: "List modules in Engine/Source/Runtime. Params: none",
+    params: {},
+    description: "List modules in Engine/Source/Runtime.",
     handler: async (ctx) => {
       const engineRoot = requireEngineRoot(ctx);
       const runtimeDir = path.join(engineRoot, "Engine", "Source", "Runtime");
@@ -149,7 +157,15 @@ export const engineActions: Record<string, ActionSpec> = {
     kind: "handler",
     effect: "read",
     offline: "Searches the installed engine sources.",
-    description: "Search engine .h/.cpp/.inl files across Runtime/Editor/Developer/Plugins. Params: query, tree? (Runtime|Editor|Developer|Plugins|all - default Runtime), subdirectory?, maxResults? (default 500)",
+    params: {
+      required: ["query"],
+      optional: ["tree", "subdirectory", "maxResults"],
+      notes: {
+        tree: "Runtime|Editor|Developer|Plugins|all - default Runtime",
+        maxResults: "default 500",
+      },
+    },
+    description: "Search engine .h/.cpp/.inl files across Runtime/Editor/Developer/Plugins.",
     handler: async (ctx, p) => {
       const engineRoot: string = requireEngineRoot(ctx);
       const query = (p.query as string)?.toLowerCase();
@@ -208,6 +224,12 @@ export const engineActions: Record<string, ActionSpec> = {
     kind: "handler",
     effect: "mutate",
     offline: "Scans the installed engine headers into the on-disk symbol index.",
+    params: {
+      optional: ["refresh"],
+      notes: {
+        refresh: "rebuild even when a valid cache exists",
+      },
+    },
     description:
       "Build or refresh the engine symbol index that verify_symbols, lint_cpp_header and "
       + "suggest_build_deps read. Scans roughly 31,000 headers across Runtime, Editor, Developer "
@@ -217,7 +239,7 @@ export const engineActions: Record<string, ActionSpec> = {
       + "this is a one-time cost per engine install: expect several minutes cold (first touch of "
       + "each file goes through the virus scanner on Windows) and a few seconds warm. The other "
       + "actions build it on demand, so this is only needed to refresh after an engine upgrade or "
-      + "to pay the cost deliberately. Params: refresh? (rebuild even when a valid cache exists)",
+      + "to pay the cost deliberately.",
     timeoutMs: 1_800_000,
     handler: async (ctx: ToolContext, p: Record<string, unknown>) => {
       const { index, source, cacheFile, buildMs } = requireEngineIndex(ctx, p.refresh === true);
@@ -239,6 +261,12 @@ export const engineActions: Record<string, ActionSpec> = {
     kind: "handler",
     effect: "read",
     offline: "Answers from the engine symbol index on disk.",
+    params: {
+      required: ["names"],
+      notes: {
+        names: "string[] or comma-separated string, max 200",
+      },
+    },
     description:
       "Check that engine symbols exist BEFORE writing C++ that uses them, and get back what you "
       + "need to write it: the header to #include, the owning module for Build.cs, the exact "
@@ -248,8 +276,7 @@ export const engineActions: Record<string, ActionSpec> = {
       + "name that does not resolve comes back with close spellings; a member miss on a class that "
       + "does exist says so, which separates a misspelled method from a misspelled class. The "
       + "aggregate includes[] and modules[] are the whole edit you need to make. Builds the index "
-      + "on first use, which can take several minutes on a cold filesystem. "
-      + "Params: names (string[] or comma-separated string, max 200)",
+      + "on first use, which can take several minutes on a cold filesystem.",
     timeoutMs: 1_800_000,
     handler: async (ctx: ToolContext, p: Record<string, unknown>) => {
       const names = nameList(p.names, "names");
@@ -266,9 +293,16 @@ export const engineActions: Record<string, ActionSpec> = {
       + "and which of those it does not list yet, plus the AddRange line to paste. Core and "
       + "CoreUObject are omitted because every module already has them. buildCsPath defaults to "
       + "the Build.cs owning modulePath, or the project's first module. Pair with "
-      + "add_module_dependency, which performs the edit. "
-      + "Params: names (string[] or comma-separated string), buildCsPath? (absolute), modulePath? "
-      + "(a file or directory whose owning Build.cs to use)",
+      + "add_module_dependency, which performs the edit.",
+    params: {
+      required: ["names"],
+      optional: ["buildCsPath", "modulePath"],
+      notes: {
+        names: "string[] or comma-separated string",
+        buildCsPath: "absolute",
+        modulePath: "a file or directory whose owning Build.cs to use",
+      },
+    },
     timeoutMs: 1_800_000,
     handler: async (ctx: ToolContext, p: Record<string, unknown>) => {
       const names = nameList(p.names, "names");
@@ -291,6 +325,15 @@ export const engineActions: Record<string, ActionSpec> = {
     kind: "handler",
     effect: "read",
     offline: "Searches the installed engine sources.",
+    params: {
+      required: ["symbol"],
+      optional: ["limit", "trees"],
+      notes: {
+        symbol: "bare or Class::Member",
+        limit: "default 10",
+        trees: "Runtime|Editor|Developer, default Runtime",
+      },
+    },
     description:
       "Find real call sites for an engine symbol in the engine's own .cpp files, which answers "
       + "'how is this actually used' with code that compiles. Better than a signature for anything "
@@ -299,8 +342,7 @@ export const engineActions: Record<string, ActionSpec> = {
       + "from the Epic launcher ships headers WITHOUT .cpp sources, so on those there are no engine "
       + "call sites to find; the result says so via engineSourcesAvailable and falls back to inline "
       + "code in headers and to this project's own Source tree, rather than returning an empty list "
-      + "that reads as 'nothing uses this'. "
-      + "Params: symbol (bare or Class::Member), limit? (default 10), trees? (Runtime|Editor|Developer, default Runtime)",
+      + "that reads as 'nothing uses this'.",
     timeoutMs: 600_000,
     handler: async (ctx: ToolContext, p: Record<string, unknown>) => {
       const symbol = (p.symbol as string | undefined)?.trim();
@@ -329,10 +371,17 @@ export const engineActions: Record<string, ActionSpec> = {
       + "files, so it is fast once the index exists, and builds it on first use, which can take "
       + "several minutes on a cold filesystem. A base the index cannot resolve (a template, a "
       + "macro-generated type) stops the walk and is reported as unresolvedAncestor rather than "
-      + "silently ending the chain. "
-      + "Params: symbol (class or struct name, prefix optional), direction? "
-      + "(ancestors|descendants|both, default both), depth? (generations of descendants, default "
-      + "1), limit? (max descendants, default 100)",
+      + "silently ending the chain.",
+    params: {
+      required: ["symbol"],
+      optional: ["direction", "depth", "limit"],
+      notes: {
+        symbol: "class or struct name, prefix optional",
+        direction: "ancestors|descendants|both, default both",
+        depth: "generations of descendants, default 1",
+        limit: "max descendants, default 100",
+      },
+    },
     timeoutMs: 1_800_000,
     handler: async (ctx: ToolContext, p: Record<string, unknown>) => {
       const symbol = (p.symbol as string | undefined)?.trim();
@@ -363,10 +412,17 @@ export const engineActions: Record<string, ActionSpec> = {
       + "line, text and owning module. An engine installed from the Epic launcher ships headers "
       + "WITHOUT .cpp sources, so engineSourcesAvailable says whether implementation files could "
       + "be searched at all and the note says what was searched instead. Scans files rather than "
-      + "the index, so a rare name on a cold filesystem is slow. "
-      + "Params: symbol (bare or Class::Member), limit? (max sites, default 40), trees? "
-      + "(Runtime|Editor|Developer|Plugins|all, default Runtime), includeProject? (also search "
-      + "this project's Source and Plugins, default true)",
+      + "the index, so a rare name on a cold filesystem is slow.",
+    params: {
+      required: ["symbol"],
+      optional: ["limit", "trees", "includeProject"],
+      notes: {
+        symbol: "bare or Class::Member",
+        limit: "max sites, default 40",
+        trees: "Runtime|Editor|Developer|Plugins|all, default Runtime",
+        includeProject: "also search this project's Source and Plugins, default true",
+      },
+    },
     timeoutMs: 600_000,
     handler: async (ctx: ToolContext, p: Record<string, unknown>) => {
       const symbol = (p.symbol as string | undefined)?.trim();
@@ -393,10 +449,17 @@ export const engineActions: Record<string, ActionSpec> = {
       + "it sits inside. An engine installed from the Epic launcher ships headers WITHOUT .cpp "
       + "sources, so on those there are no engine call sites to find: engineSourcesAvailable "
       + "reports that and the search falls back to inline code in headers and to this project's "
-      + "own Source tree, rather than returning an empty list that reads as 'nothing calls this'. "
-      + "Params: symbol (bare or Class::Method), limit? (max sites, default 25), trees? "
-      + "(Runtime|Editor|Developer|Plugins|all, default Runtime), includeProject? (also search "
-      + "this project's Source and Plugins, default true)",
+      + "own Source tree, rather than returning an empty list that reads as 'nothing calls this'.",
+    params: {
+      required: ["symbol"],
+      optional: ["limit", "trees", "includeProject"],
+      notes: {
+        symbol: "bare or Class::Method",
+        limit: "max sites, default 25",
+        trees: "Runtime|Editor|Developer|Plugins|all, default Runtime",
+        includeProject: "also search this project's Source and Plugins, default true",
+      },
+    },
     timeoutMs: 600_000,
     handler: async (ctx: ToolContext, p: Record<string, unknown>) => {
       const symbol = (p.symbol as string | undefined)?.trim();
@@ -423,9 +486,16 @@ export const engineActions: Record<string, ActionSpec> = {
       + "read is reported with its file and line range. An engine installed from the Epic "
       + "launcher ships headers WITHOUT .cpp sources, so only functions whose body is inline in a "
       + "header can be read there; engineSourcesAvailable and the note say so instead of "
-      + "returning an empty list. Builds the index on first use. "
-      + "Params: symbol (Class::Method, or a bare exported free function), limit? (max callees, "
-      + "default 100), trees? (which trees to test for sources, default Runtime)",
+      + "returning an empty list. Builds the index on first use.",
+    params: {
+      required: ["symbol"],
+      optional: ["limit", "trees"],
+      notes: {
+        symbol: "Class::Method, or a bare exported free function",
+        limit: "max callees, default 100",
+        trees: "which trees to test for sources, default Runtime",
+      },
+    },
     timeoutMs: 1_800_000,
     handler: async (ctx: ToolContext, p: Record<string, unknown>) => {
       const symbol = (p.symbol as string | undefined)?.trim();
@@ -454,9 +524,16 @@ export const engineActions: Record<string, ActionSpec> = {
       + "exactly as verify_symbols does. When the declaration opens a body that closes inside the "
       + "window the result ends at the closing brace instead of mid-type, and reports "
       + "bodyEndLine. Builds the index on first use, which can take several minutes on a cold "
-      + "filesystem. "
-      + "Params: symbol (bare or Class::Member), contextBefore? (lines before the declaration, "
-      + "default 8), contextAfter? (lines after, default 40)",
+      + "filesystem.",
+    params: {
+      required: ["symbol"],
+      optional: ["contextBefore", "contextAfter"],
+      notes: {
+        symbol: "bare or Class::Member",
+        contextBefore: "lines before the declaration, default 8",
+        contextAfter: "lines after, default 40",
+      },
+    },
     timeoutMs: 1_800_000,
     handler: async (ctx: ToolContext, p: Record<string, unknown>) => {
       const symbol = (p.symbol as string | undefined)?.trim();
@@ -476,6 +553,14 @@ export const engineActions: Record<string, ActionSpec> = {
     kind: "handler",
     effect: "read",
     offline: "Checks a header on disk against the engine symbol index.",
+    params: {
+      required: ["path"],
+      optional: ["buildCsPath"],
+      notes: {
+        path: "absolute, or relative to the project Source/",
+        buildCsPath: "defaults to the owning module's",
+      },
+    },
     description:
       "Check a header you just wrote against the engine it has to build against, and report what "
       + "the compiler would before the compiler runs. Covers the structural mistakes that produce "
@@ -484,8 +569,7 @@ export const engineActions: Record<string, ActionSpec> = {
       + "engine-facing ones (a symbol that does not exist, one used without its include, one whose "
       + "module is missing from Build.cs, one the engine deprecated). A forward declaration counts "
       + "as satisfying an include, since in a header it usually is. Run this after write_cpp_file "
-      + "and before build_project. "
-      + "Params: path (absolute, or relative to the project Source/), buildCsPath? (defaults to the owning module's)",
+      + "and before build_project.",
     timeoutMs: 1_800_000,
     handler: async (ctx: ToolContext, p: Record<string, unknown>) => {
       ctx.project.ensureLoaded();

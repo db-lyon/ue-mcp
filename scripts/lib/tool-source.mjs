@@ -1,21 +1,13 @@
 // Reading the category tools out of src/tools/*.ts, for the audits that
 // compare the shipped surface against docs/tool-reference.md.
 //
-// Two audits used to parse those files with their own regex, and both were
-// blind in ways that made them report zero:
+// The audits used to parse those files with their own regex, and were blind
+// in ways that made them report zero: `categoryTool\(\s*"[^"]+",\s*"[^"]*",\s*\{`
+// failed on any category whose description contained an escaped quote, so
+// foliage read as src=0 and its fifteen documented actions were reported as
+// EXTRA.
 //
-//   audit-docs   `categoryTool\(\s*"[^"]+",\s*"[^"]*",\s*\{` failed on any
-//                category whose description contained an escaped quote, so
-//                foliage read as src=0 and its fifteen documented actions were
-//                reported as EXTRA.
-//   audit-params captured only the FIRST string literal of a `description:`,
-//                so every multi-line or concatenated description lost its
-//                `Params:` clause. Fifteen actions were reported as the docs
-//                inventing parameters the source did not declare, and the
-//                audit meant to enforce the TS/C++ parameter-name rule was
-//                blind for that entire class.
-//
-// Both come from pattern-matching TypeScript rather than reading it. So this
+// That comes from pattern-matching TypeScript rather than reading it. So this
 // masks the source instead: string, template and regex literal CONTENTS are
 // blanked while the delimiters and every character position are kept, which
 // leaves the braces, parens and commas that are real code standing on their
@@ -262,46 +254,22 @@ function resolveImportedActions(categoryFile, localName) {
     // Read in the module that declares it, as for a generated action: the
     // span points into that file, not the category's.
     description: describeValue(modulePath, src, masked, a.start, a.end, specBuilders),
-    paged: /(?:^|[^\w$])paged\s*\(/.test(masked.slice(a.start, a.end)),
     external: true,
   }));
 }
 
 /**
- * The generated `Params:` clause of every spec'd bridge method in a category
- * (#1057), read out of `src/tools/specs/<category>.generated.ts`.
- *
- * An action declared with `specBp(effect, summary, method)` carries only its
- * summary in the category source; the clause is appended from the recorded
- * C++ spec at load time. Reading it from the generated module is what keeps
- * those actions in front of the same audits as the rest.
- */
-function readSpecClauses(specsDir, category) {
-  const generated = path.join(specsDir, `${category}.generated.ts`);
-  const clauses = new Map();
-  if (!fs.existsSync(generated)) return clauses;
-  const src = fs.readFileSync(generated, "utf8").replace(/\r\n/g, "\n");
-  const decl = src.indexOf("export const paramsClauses");
-  if (decl === -1) return clauses;
-  const body = src.slice(decl, src.indexOf("\n};", decl));
-  for (const m of body.matchAll(/^\s+([a-z_][a-z0-9_]*): ("(?:[^"\\]|\\.)*"),$/gm)) {
-    clauses.set(m[1], JSON.parse(m[2]));
-  }
-  return clauses;
-}
-
-/**
- * Every spec builder a category file imports, as local name to the clauses of
- * the category it came from. A tool can expose a handler another category
- * registered, importing that category's builder under its own name:
+ * The local names of every spec builder a category file imports. A tool can
+ * expose a handler another category registered, importing that category's
+ * builder under its own name:
  * `import { specBp as reflectionSpecBp } from "./specs/reflection.generated.js"`.
  * A group module one directory down imports from `../specs/`.
  */
-function readSpecBuilders(categoryFile, src) {
-  const builders = new Map();
+function readSpecBuilders(_categoryFile, src) {
+  const builders = new Set();
   for (const m of src.matchAll(/import\s*\{([^}]*)\}\s*from\s*"((?:\.|\.\.)\/specs)\/([a-z_]+)\.generated\.js"/g)) {
     const binding = m[1].match(/(?:^|,)\s*specBp(?:\s+as\s+([A-Za-z_$][\w$]*))?\s*(?:,|$)/);
-    if (binding) builders.set(binding[1] ?? "specBp", readSpecClauses(path.resolve(path.dirname(categoryFile), m[2]), m[3]));
+    if (binding) builders.add(binding[1] ?? "specBp");
   }
   return builders;
 }
@@ -459,22 +427,6 @@ export function readCategory(file) {
       // with a native action's prose.
       description: a.generated || a.external ? a.description : describeValue(file, src, masked, a.start, a.end, specBuilders),
       generated: a.generated === true,
-      // `paged()` rewrites the description at runtime to add `cursor?, limit?`
-      // to its Params clause, so the generated doc row lists two parameters the
-      // literal in the source does not. Recorded as a fact about the action
-      // rather than replayed here: reimplementing that string surgery in a
-      // second place is a copy that would drift the first time the wrapper
-      // changed, and the only thing a caller of this needs to know is that the
-      // two names are expected.
-      // Same offset problem as the description: a spread-resolved action's
-      // span is into the generated module, so testing this file at those
-      // offsets reports whatever native action happens to sit there. A
-      // generated action never uses `paged()`, so the answer is simply no.
-      paged: a.generated
-        ? false
-        : a.external
-          ? a.paged
-          : /(?:^|[^\w$])paged\s*\(/.test(masked.slice(a.start, a.end)),
     })),
   };
 }
@@ -500,20 +452,16 @@ export function readCategory(file) {
  * wrapped in a helper such as `paged(...)`, so the whole argument span is read
  * for literals rather than the first one matched.
  */
-function describeAction(src, masked, start, end, specBuilders = new Map()) {
+function describeAction(src, masked, start, end, specBuilders = new Set()) {
   const head = masked.slice(start, end);
   // specBp("effect", "summary", "method"), under whichever name the file
-  // imported it: the summary, then the clause that builder's generated spec
-  // module appends for that method at load time (#1057).
-  for (const [builder, specClauses] of specBuilders) {
+  // imported it: the summary.
+  for (const builder of specBuilders) {
     const spec = head.match(new RegExp(`(?:^|[^\\w$])${builder.replace(/\$/g, "\\$")}\\s*\\(`));
     if (!spec) continue;
     const args = topLevelArgs(masked, start + spec.index + spec[0].length - 1);
     if (!args || args.length < 3) return "";
-    const summary = concatenatedLiterals(src, masked, args[1][0], args[1][1]);
-    const method = concatenatedLiterals(src, masked, args[2][0], args[2][1]);
-    const clause = specClauses.get(method);
-    return clause === undefined ? summary : `${summary} ${clause}`;
+    return concatenatedLiterals(src, masked, args[1][0], args[1][1]);
   }
   const bp = head.match(/(?:^|[^\w$])bp\s*\(/);
   if (bp) {

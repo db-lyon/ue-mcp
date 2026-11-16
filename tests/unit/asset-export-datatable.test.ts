@@ -15,7 +15,7 @@ describe("asset.export DataTables", () => {
     });
     expect(handlerSpecs.export_asset.params.find((p) => p.name === "format")?.description)
       .toContain("json | csv");
-    for (const word of ["DataTable", "CompositeDataTable", "rowCount", "bytes", "format?"]) {
+    for (const word of ["DataTable", "CompositeDataTable", "rowCount", "bytes"]) {
       expect(schema.description).toContain(word);
     }
     for (const format of [undefined, "json", "csv", "RGBA16F"]) {

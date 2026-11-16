@@ -309,7 +309,7 @@ export const PLAYTEST_BUILTIN_TASKS: readonly BuiltinTask[] = [
     task: PlaytestGatherTask as unknown as TaskConstructor,
     definition: {
       group: "playtest",
-      description: "Gather a playtest target: its Blueprint, input mappings and the values PIE can watch. Params: target, context?, profile?, name?",
+      description: "Gather a playtest target: its Blueprint, input mappings and the values PIE can watch.",
     },
   },
   {
@@ -317,7 +317,8 @@ export const PLAYTEST_BUILTIN_TASKS: readonly BuiltinTask[] = [
     task: PlaytestDraftTask as unknown as TaskConstructor,
     definition: {
       group: "playtest",
-      description: "Draft a test script with the flow model: an agent step with no tools, a token budget, answered as the script step schema. Params: prompt",
+      description: "Draft a test script with the flow model: an agent step with no tools, a token budget, answered as the script step schema.",
+      options_schema: { prompt: { type: "string", required: true } },
     },
   },
   {

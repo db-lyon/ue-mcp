@@ -3,9 +3,8 @@
 /**
  * npx ue-mcp resolve <issue-number>
  *
- * Fetches a GitHub issue, creates a branch, launches the agent client
- * (AGENT_CLIENT) to implement the fix, then pushes and opens a PR. Never
- * merges to main.
+ * Fetches a GitHub issue, creates a branch, launches Claude Code to
+ * implement the fix, then pushes and opens a PR.  Never merges to main.
  */
 import * as fs from "node:fs";
 import * as os from "node:os";
@@ -14,7 +13,6 @@ import { selectProjectOrExit } from "./editor-flag.js";
 import { RESET, BOLD, DIM, RED, CYAN, YELLOW, ok, die as fail } from "../terminal/ansi.js";
 import { commandInvocation, spawnInvocation, spawnInvocationSync } from "../core/safe-spawn.js";
 import type { CliUsage } from "./cli-main.js";
-import { AGENT_CLIENT } from "../integrations/mcp-clients/agent-client.js";
 
 /* ── Helpers ─────────────────────────────────────────────────────── */
 
@@ -33,6 +31,36 @@ function runCmd(cmd: string, args: string[], stdio: "pipe" | "ignore" = "pipe"):
 /** The issue number argument, digits only. */
 export function parseIssueNumber(arg: string | undefined): number | null {
   return arg && /^[1-9]\d{0,9}$/.test(arg) ? Number(arg) : null;
+}
+
+/**
+ * What claude may do while it works an issue: read and edit files in the
+ * repository and run the exact verify and commit commands the prompt asks
+ * for. dontAsk denies everything else without a prompt, since nobody is
+ * there to answer one, and no MCP server from the user's config is loaded.
+ */
+export const RESOLVE_ALLOWED_TOOLS = [
+  "Read",
+  "Glob",
+  "Grep",
+  "Edit",
+  "Write",
+  "Bash(npx tsc --noEmit)",
+  "Bash(git status)",
+  "Bash(git diff:*)",
+  "Bash(git add:*)",
+  "Bash(git commit:*)",
+] as const;
+
+/** The claude command line resolve runs; the prompt goes on stdin. */
+export function resolveClaudeArgs(): string[] {
+  return [
+    "--print",
+    "--permission-mode", "dontAsk",
+    "--strict-mcp-config",
+    "--allowedTools", ...RESOLVE_ALLOWED_TOOLS,
+    "--disallowedTools", "WebFetch", "WebSearch",
+  ];
 }
 
 /** A fence longer than any backtick run in the text, so the text cannot close it. */
@@ -112,8 +140,7 @@ async function resolve(argv: string[]): Promise<number> {
 
   // Prerequisites
   if (!hasCommand("gh")) fail("gh CLI is required. Install: https://cli.github.com");
-  const agent = AGENT_CLIENT;
-  if (!hasCommand(agent.command)) fail(`${agent.name} is required. Install: ${agent.installHint}`);
+  if (!hasCommand("claude")) fail("Claude Code is required. Install: npm i -g @anthropic-ai/claude-code");
 
   try {
     runCmd("git", ["rev-parse", "--git-dir"]);
@@ -174,12 +201,13 @@ async function resolve(argv: string[]): Promise<number> {
   console.log("");
 
   const prompt = buildResolvePrompt(issueNum, issue);
+  const claudeArgs = resolveClaudeArgs();
 
-  console.log(`  ${DIM}Launching ${agent.name}...${RESET}`);
+  console.log(`  ${DIM}Launching Claude Code...${RESET}`);
   console.log("");
 
   const exitCode = await new Promise<number | null>((resolve) => {
-    const child = spawnInvocation(commandInvocation(agent.command, agent.resolveArgs()), { stdio: ["pipe", "inherit", "inherit"] });
+    const child = spawnInvocation(commandInvocation("claude", claudeArgs), { stdio: ["pipe", "inherit", "inherit"] });
     child.stdin!.write(prompt);
     child.stdin!.end();
     child.on("exit", resolve);
@@ -189,7 +217,7 @@ async function resolve(argv: string[]): Promise<number> {
   console.log("");
 
   if (exitCode !== 0) {
-    console.log(`  ${DIM}${agent.shortName} exited with code ${exitCode}. Branch ${branch} preserved.${RESET}`);
+    console.log(`  ${DIM}Claude exited with code ${exitCode}. Branch ${branch} preserved.${RESET}`);
     console.log("");
     return exitCode ?? 1;
   }

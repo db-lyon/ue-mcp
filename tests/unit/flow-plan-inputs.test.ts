@@ -27,10 +27,16 @@ const bridge: IBridge = {
 
 const noop = async () => ({});
 const assetTool = categoryTool("asset", "Test-only category.", {
-  create: { kind: "handler", effect: "mutate", description: "Create. Params: name, packagePath?, mode?", handler: noop },
-  rename: { kind: "handler", effect: "mutate", description: "Rename. Params: path, newName, mode?", handler: noop },
-  tag: { kind: "handler", effect: "mutate", description: "Tag. Params: path, count?", handler: noop },
-  remove: { kind: "handler", effect: "mutate", description: "Remove. Params: path OR packagePath, mode?", handler: noop },
+  create: { kind: "handler", effect: "mutate", description: "Create.", params: { required: ["name"], optional: ["packagePath", "mode"] }, handler: noop },
+  rename: { kind: "handler", effect: "mutate", description: "Rename.", params: { required: ["path", "newName"], optional: ["mode"] }, handler: noop },
+  tag: { kind: "handler", effect: "mutate", description: "Tag.", params: { required: ["path"], optional: ["count"] }, handler: noop },
+  remove: {
+    kind: "handler",
+    effect: "mutate",
+    description: "Remove.",
+    params: { optional: ["path", "packagePath", "mode"], choices: [{ mode: "exactlyOne", branches: [["path"], ["packagePath"]] }] },
+    handler: noop,
+  },
 }, {
   name: z.string().optional().describe("Asset name"),
   packagePath: z.string().optional().describe("Content folder"),
@@ -40,7 +46,7 @@ const assetTool = categoryTool("asset", "Test-only category.", {
   count: z.number().optional().describe("How many"),
 });
 const levelTool = categoryTool("level", "Test-only category.", {
-  tag: { kind: "handler", effect: "mutate", description: "Tag. Params: count?", handler: noop },
+  tag: { kind: "handler", effect: "mutate", description: "Tag.", params: { optional: ["count"] }, handler: noop },
 }, {
   count: z.string().optional().describe("Tag text"),
 });
@@ -164,13 +170,19 @@ describe("flow inputs", () => {
     expect(inputs.count.steps).toEqual([{ path: "on_start/1", task: "asset.tag", flow: "loop" }]);
   });
 
-  it("falls back to a task description's Params clause when nothing else declares it", async () => {
+  it("reads a configured task's options_schema, and never its description", async () => {
     const cfg = config({
-      tasks: { run_it: { class_path: "shell", description: "Run a shell command. Params: command, cwd?, timeout?" } },
+      tasks: {
+        run_it: {
+          class_path: "shell",
+          description: "Run a shell command. Params: command, cwd?, timeout?",
+          options_schema: { command: { type: "string", required: true }, cwd: { type: "string" } },
+        },
+      },
       flows: { f: { steps: { "1": { task: "run_it", options: { command: "echo" } } } } },
     });
     const inputs = await inputsOf(cfg, "f");
-    expect(inputs.map((i) => [i.name, i.type, i.required])).toEqual([["cwd", "any", false], ["timeout", "any", false]]);
+    expect(inputs.map((i) => [i.name, i.type, i.required])).toEqual([["cwd", "string", false]]);
   });
 
   it("is on the flow(plan) response", async () => {

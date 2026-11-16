@@ -1117,8 +1117,9 @@ export const feedbackTool: ToolDef = categoryTool(
       effect: "mutate",
       offline: "Posts to a GitHub tracker. It needs the network and a user approval prompt, not an editor.",
       addressesServer: true,
+      params: { required: ["title", "summary"], optional: ["pythonWorkaround", "idealTool", "author", "repo", "confirmToken"] },
       description:
-        "Submit feedback about a tool gap (missing action, wrong behavior, crash, or a case you had to work around). Provide a specific title and a summary; pythonWorkaround and idealTool are optional enrichment, not prerequisites. Checks the plugin registry first and files against the owning plugin's repo when one matches, then blocks on an MCP elicitation prompt that asks the USER (not the agent) to approve or decline the exact payload - and to override the tracker - before anything is posted to GitHub. If the client cannot show that form (it never advertised elicitation, it throws, or it auto-answers in milliseconds without rendering anything), nothing is lost: the report is written to disk and the result carries a prefilled GitHub issue URL for the user to click. Params: title, summary, pythonWorkaround?, idealTool?, author?, repo?, confirmToken?",
+        "Submit feedback about a tool gap (missing action, wrong behavior, crash, or a case you had to work around). Provide a specific title and a summary; pythonWorkaround and idealTool are optional enrichment, not prerequisites. Checks the plugin registry first and files against the owning plugin's repo when one matches, then blocks on an MCP elicitation prompt that asks the USER (not the agent) to approve or decline the exact payload - and to override the tracker - before anything is posted to GitHub. If the client cannot show that form (it never advertised elicitation, it throws, or it auto-answers in milliseconds without rendering anything), nothing is lost: the report is written to disk and the result carries a prefilled GitHub issue URL for the user to click.",
       handler: submit,
     },
 
@@ -1126,8 +1127,9 @@ export const feedbackTool: ToolDef = categoryTool(
       kind: "handler",
       effect: "read",
       offline: "Answers where an issue would land from the plugin registry on disk.",
+      params: { required: ["title", "summary"], optional: ["idealTool", "repo"] },
       description:
-        "Dry run the tracker routing for a report without posting anything. Returns the repo the issue would be filed against, the matched plugin (if any), and why. Params: title, summary, idealTool?, repo?. Use it when you are unsure whether a gap belongs to ue-mcp core or to an installed/published plugin.",
+        "Dry run the tracker routing for a report without posting anything. Returns the repo the issue would be filed against, the matched plugin (if any), and why. Use it when you are unsure whether a gap belongs to ue-mcp core or to an installed/published plugin.",
       handler: async (ctx: ToolContext, params: Record<string, unknown>) => {
         const title = (params.title as string | undefined) ?? "";
         const summary = (params.summary as string | undefined) ?? "";

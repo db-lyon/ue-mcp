@@ -6,8 +6,8 @@
 // effects file and regenerate; to pick up a new engine's toolsets, re-record
 // the catalog and regenerate.
 //
-// These are ordinary actions. They carry a declared effect, real parameters and
-// a Params: clause, they are in ALL_TOOLS, and they dispatch through the same
+// These are ordinary actions. They carry a declared effect and real
+// parameters, they are in ALL_TOOLS, and they dispatch through the same
 // task factory, guards and locks as every hand-written action in this package.
 // Each also carries its input schema, which the compact signatures read (#1172).
 import { z } from "zod";
@@ -27,37 +27,37 @@ export const actions: Record<string, ActionSpec> = {
   epic_get_all_nodes: {
     epicSchema: S_epic_get_all_nodes,
     epicTool: { toolset: "conversation_toolset.toolsets.conversation.ConversationTools", name: "conversation_toolset.toolsets.conversation.ConversationTools.get_all_nodes", engines: ["5.8","5.9"] },
-    ...bp("read", "[Epic conversation_toolset.toolsets.conversation.ConversationTools] Returns all reachable nodes in the conversation. Use ObjectTools.get_class and get_properties on each node to inspect type and properties. Each node's GUID is available via its compiled_node_guid attribute. Params: conversation", "epic_call_tool"),
+    ...bp("read", "[Epic conversation_toolset.toolsets.conversation.ConversationTools] Returns all reachable nodes in the conversation. Use ObjectTools.get_class and get_properties on each node to inspect type and properties. Each node's GUID is available via its compiled_node_guid attribute.", "epic_call_tool"),
   },
   epic_get_node_by_guid: {
     epicSchema: S_epic_get_node_by_guid,
     epicTool: { toolset: "conversation_toolset.toolsets.conversation.ConversationTools", name: "conversation_toolset.toolsets.conversation.ConversationTools.get_node_by_guid", engines: ["5.8","5.9"] },
-    ...bp("read", "[Epic conversation_toolset.toolsets.conversation.ConversationTools] Returns a conversation node by its GUID. Params: conversation, guid", "epic_call_tool"),
+    ...bp("read", "[Epic conversation_toolset.toolsets.conversation.ConversationTools] Returns a conversation node by its GUID.", "epic_call_tool"),
   },
   epic_get_node_connections: {
     epicSchema: S_epic_get_node_connections,
     epicTool: { toolset: "conversation_toolset.toolsets.conversation.ConversationTools", name: "conversation_toolset.toolsets.conversation.ConversationTools.get_node_connections", engines: ["5.8","5.9"] },
-    ...bp("read", "[Epic conversation_toolset.toolsets.conversation.ConversationTools] Returns output connection GUIDs for a conversation node. Params: node", "epic_call_tool"),
+    ...bp("read", "[Epic conversation_toolset.toolsets.conversation.ConversationTools] Returns output connection GUIDs for a conversation node.", "epic_call_tool"),
   },
   epic_get_node_guids: {
     epicSchema: S_epic_get_node_guids,
     epicTool: { toolset: "conversation_toolset.toolsets.conversation.ConversationTools", name: "conversation_toolset.toolsets.conversation.ConversationTools.get_node_guids", engines: ["5.8","5.9"] },
-    ...bp("read", "[Epic conversation_toolset.toolsets.conversation.ConversationTools] Returns GUIDs of all reachable nodes, in map iteration order. Use with get_node_by_guid to look up specific nodes. Params: conversation", "epic_call_tool"),
+    ...bp("read", "[Epic conversation_toolset.toolsets.conversation.ConversationTools] Returns GUIDs of all reachable nodes, in map iteration order. Use with get_node_by_guid to look up specific nodes.", "epic_call_tool"),
   },
   epic_get_sub_nodes: {
     epicSchema: S_epic_get_sub_nodes,
     epicTool: { toolset: "conversation_toolset.toolsets.conversation.ConversationTools", name: "conversation_toolset.toolsets.conversation.ConversationTools.get_sub_nodes", engines: ["5.8","5.9"] },
-    ...bp("read", "[Epic conversation_toolset.toolsets.conversation.ConversationTools] Returns sub-nodes (requirements, choices) attached to a task node. Params: node", "epic_call_tool"),
+    ...bp("read", "[Epic conversation_toolset.toolsets.conversation.ConversationTools] Returns sub-nodes (requirements, choices) attached to a task node.", "epic_call_tool"),
   },
   epic_list_entry_points: {
     epicSchema: S_epic_list_entry_points,
     epicTool: { toolset: "conversation_toolset.toolsets.conversation.ConversationTools", name: "conversation_toolset.toolsets.conversation.ConversationTools.list_entry_points", engines: ["5.8","5.9"] },
-    ...bp("read", "[Epic conversation_toolset.toolsets.conversation.ConversationTools] Returns entry points (FConversationEntryList structs). Params: conversation", "epic_call_tool"),
+    ...bp("read", "[Epic conversation_toolset.toolsets.conversation.ConversationTools] Returns entry points (FConversationEntryList structs).", "epic_call_tool"),
   },
   epic_list_speakers: {
     epicSchema: S_epic_list_speakers,
     epicTool: { toolset: "conversation_toolset.toolsets.conversation.ConversationTools", name: "conversation_toolset.toolsets.conversation.ConversationTools.list_speakers", engines: ["5.8","5.9"] },
-    ...bp("read", "[Epic conversation_toolset.toolsets.conversation.ConversationTools] Returns speaker/participant information. Params: conversation", "epic_call_tool"),
+    ...bp("read", "[Epic conversation_toolset.toolsets.conversation.ConversationTools] Returns speaker/participant information.", "epic_call_tool"),
   },
 };
 

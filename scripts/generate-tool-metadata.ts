@@ -36,33 +36,6 @@ function writeCountsJson(counts: Counts): string {
   return out;
 }
 
-/** Take the source description and split it into (description, keyParams).
- *  Source descriptions follow the convention "<sentence>. Params: <list>"
- *  (with optional trailing prose after the params). Returns the prefix as
- *  description and the params text up to a sensible stop. */
-function splitDescription(raw: string | undefined): { desc: string; params: string } {
-  if (!raw) return { desc: "", params: "" };
-  const marker = ". Params: ";
-  const idx = raw.indexOf(marker);
-  if (idx < 0) return { desc: raw.trim().replace(/\.$/, ""), params: "" };
-  const desc = raw.slice(0, idx).trim();
-  const rest = raw.slice(idx + marker.length).trim();
-  // Trim trailing prose after the params list. Heuristic: end at the first
-  // ". " that occurs at depth 0 in (), [], {}.
-  let depth = 0;
-  let end = rest.length;
-  for (let i = 0; i < rest.length - 1; i++) {
-    const ch = rest[i];
-    if (ch === "(" || ch === "[" || ch === "{") depth++;
-    else if (ch === ")" || ch === "]" || ch === "}") depth--;
-    else if (ch === "." && rest[i + 1] === " " && depth === 0) {
-      end = i;
-      break;
-    }
-  }
-  return { desc, params: rest.slice(0, end).trim().replace(/\.$/, "") };
-}
-
 /**
  * Replace em dashes with hyphens (CLAUDE.md style rule for public artifacts).
  * The literal in the pattern is the character being stripped, so it is the one
@@ -99,14 +72,11 @@ function regenerateToolReference(counts: Counts): string {
     lines.push("| Action | Description |");
     lines.push("|--------|-------------|");
     for (const [actionName, spec] of Object.entries(t.actions)) {
-      const { desc, params } = splitDescription(spec.description);
       // The signature is the one the server advertises (#1172), built from the
-      // recorded spec or schema rather than parsed out of the prose clause.
+      // action's declaration; the row's other cell is its description.
       const left = "`" + cell(actionSignature(t, actionName)) + "`";
-      // Escape each part exactly once. Escaping the already-escaped `merged`
-      // again double-escaped pipes (`\\|`) and broke the MDX table renderer.
-      const merged = params ? `${cell(desc)}. Params: \`${cell(params)}\`` : cell(desc);
-      lines.push(`| ${left} | ${merged || "-"} |`);
+      const desc = cell((spec.description ?? "").trim().replace(/\.$/, ""));
+      lines.push(`| ${left} | ${desc || "-"} |`);
     }
     lines.push("");
     lines.push("---");

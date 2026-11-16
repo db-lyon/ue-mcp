@@ -280,7 +280,10 @@ describe("buildMicroGateway", () => {
 
 describe("compact discovery for spatial requests", () => {
   const tools = [categoryTool("level", "Spatial tools", {
-    nudge_component: bp("read", "Adjust a component. Params: componentName, axisRotation?", "nudge_component"),
+    nudge_component: {
+      ...bp("read", "Adjust a component.", "nudge_component"),
+      params: { required: ["componentName"], optional: ["axisRotation"] },
+    },
     irrelevant: bp("read", "Something else. Params: none", "irrelevant"),
   }, {
     componentName: z.string().optional(),

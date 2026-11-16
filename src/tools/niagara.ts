@@ -69,7 +69,8 @@ export const niagaraTool: ToolDef = categoryTool(
       kind: "handler",
       effect: "mutate",
       editorBound: "Runs a sequence of bridge calls against one Niagara system.",
-      description: "Run a sequence of niagara operations against the bridge in order. Fails fast on the first error (returns results up to that point + error). Params: ops:[{action, params}] where action is any niagara subaction listed above.",
+      params: { required: ["ops"] },
+      description: "Run a sequence of niagara operations against the bridge in order. Fails fast on the first error (returns results up to that point + error).",
       handler: async (ctx, params) => {
         const opsUnknown = params.ops;
         if (!Array.isArray(opsUnknown)) throw new Error("'ops' must be an array of {action, params}");

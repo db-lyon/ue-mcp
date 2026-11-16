@@ -242,6 +242,14 @@ interface ActionSpecBase {
    */
   paramSpec?: readonly ParamSpec[];
   /**
+   * The parameters of an action declared here in TypeScript rather than by a
+   * C++ spec: which names it takes, which of them are required, its required
+   * choices, and a per-action note for a name where the category's shared
+   * description is not enough. Types come from the category's zod shape. The
+   * accepted keys, describe_action and the signature are computed from it.
+   */
+  params?: ParamDecl;
+  /**
    * The spec's required choices (`actorLabel OR actorPath`). The flat category
    * shape cannot express them, so every dispatch route checks them before the
    * call is sent.
@@ -329,6 +337,15 @@ interface ActionSpecBase {
    * it below every domain action, so it is found only when nothing else fits.
    */
   escapeHatch?: boolean;
+}
+
+/** The parameters of a TypeScript-declared action (see ActionSpecBase.params). */
+export interface ParamDecl {
+  required?: readonly string[];
+  /** Includes every member of a choice: the choice, not the member, is what is required. */
+  optional?: readonly string[];
+  choices?: readonly ParamChoice[];
+  notes?: Readonly<Record<string, string>>;
 }
 
 /** A bridge method a handler calls directly: its effect, or its effect and the bridge calls it runs. */

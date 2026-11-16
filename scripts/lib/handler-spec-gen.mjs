@@ -3,9 +3,7 @@
 // tests/unit/handler-specs.test.ts, which asserts the checked-in files are what
 // the recording renders to. Run under tsx, so the validation is the server's own.
 
-import { specProblems, paramsClause, formsMessage } from "../../src/surface/handler-spec.js";
-
-export { paramsClause };
+import { specProblems, formsMessage } from "../../src/surface/handler-spec.js";
 
 const ZOD_BY_TYPE = {
   string: "z.string()",
@@ -187,7 +185,6 @@ const HEADER = `// @session independent: Generated parameter declarations from t
 /** The generated module for one category. */
 export function renderCategoryModule(category, handlers) {
   const specs = Object.fromEntries(handlers);
-  const clauses = handlers.map(([method, spec]) => `  ${method}: ${JSON.stringify(paramsClause(spec))},`);
   const keys = categoryKeys(handlers).map(
     ({ key, expr, description }) => `  ${key}: ${expr}.optional().describe(${JSON.stringify(description)}),`,
   );
@@ -198,18 +195,13 @@ import { makeSpecBp, type HandlerSpecs } from "../../surface/handler-spec.js";
 /** The recorded contract of every spec'd ${category} handler. */
 export const handlerSpecs: HandlerSpecs = ${JSON.stringify(specs, null, 2)};
 
-/** The Params: clause of each spec'd bridge method. */
-export const paramsClauses: Readonly<Record<string, string>> = {
-${clauses.join("\n")}
-};
-
 /** Every key the spec'd ${category} handlers declare, aliases included. */
 export const schema: Record<string, z.ZodType> = {
 ${keys.join("\n")}
 };
 
 /** Declare an action for a spec'd bridge method: effect, summary, method. */
-export const specBp = makeSpecBp(paramsClauses, handlerSpecs);
+export const specBp = makeSpecBp(handlerSpecs);
 `;
 }
 
