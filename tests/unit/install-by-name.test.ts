@@ -9,11 +9,15 @@ import * as http from "node:http";
 import * as os from "node:os";
 import * as path from "node:path";
 import { execFileSync } from "node:child_process";
-import { isInstallName, resolveInstallName } from "../../src/daemon/install-names.js";
+import { fileURLToPath } from "node:url";
+import { isInstallName, OFFICIAL_INSTALL_INDEX, resolveInstallName } from "../../src/daemon/install-names.js";
+import { packageVersion } from "../../src/core/package-root.js";
+import { assetNames, extensionSources } from "../../scripts/extension-assets.mjs";
 import { readExtensionManifest } from "../../src/daemon/extension-install.js";
 import { installEditorPlugin } from "../../src/editor/editor-plugin.js";
 import { unrealPlatform } from "../../src/editor/install-marker.js";
 
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const tar = process.platform === "win32" ? path.join(process.env.SystemRoot ?? "C:\\Windows", "System32", "tar.exe") : "tar";
 let dir: string;
 const savedIndex = process.env.UE_MCP_INSTALL_INDEX;
@@ -61,13 +65,33 @@ function pluginZip(version: string, platform = unrealPlatform()): { zip: Buffer;
 }
 
 describe("install names", () => {
-  it("resolves studio to its release manifest and refuses an unknown name", () => {
-    delete process.env.UE_MCP_INSTALL_INDEX;
-    expect(resolveInstallName("studio")).toEqual({
-      title: "Studio",
-      manifest: "https://github.com/db-lyon/ue-mcp-studio/releases/latest/download/latest.json",
+  const repoIndex = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "..", "install-index.json"), "utf8")) as Record<string, { title: string; manifest: string }>;
+
+  it("reads the published index from this repository's main branch, so core names no entry", () => {
+    expect(OFFICIAL_INSTALL_INDEX).toBe("https://raw.githubusercontent.com/db-lyon/ue-mcp/main/install-index.json");
+    const source = fs.readFileSync(path.join(__dirname, "..", "..", "src", "daemon", "install-names.ts"), "utf8");
+    for (const name of Object.keys(repoIndex)) expect(source).not.toMatch(new RegExp(`\\b${name}\\b`));
+  });
+
+  it("publishes every first-party extension under its own name, at the asset the release attaches", () => {
+    for (const src of extensionSources()) {
+      const pkg = JSON.parse(fs.readFileSync(path.join(src, "package.json"), "utf8")) as { name: string; ueMcpExtension: { name: string } };
+      const entry = repoIndex[pkg.ueMcpExtension.name];
+      expect(entry, pkg.ueMcpExtension.name).toBeDefined();
+      expect(entry.manifest).toBe(`https://github.com/db-lyon/ue-mcp/releases/download/v{version}/${assetNames(pkg.name, "{version}").manifest}`);
+    }
+    for (const entry of Object.values(repoIndex)) expect(entry.manifest).toMatch(/^https:\/\/.*\.json$/);
+  });
+
+  it("resolves a name from an index served over http, filling in this ue-mcp's version", async () => {
+    await serving({ "/index.json": { ...repoIndex, probe: { manifest: "https://example.invalid/v{version}/m-{version}.json" } } }, async (base) => {
+      process.env.UE_MCP_INSTALL_INDEX = `${base}/index.json`;
+      expect(await resolveInstallName("studio")).toEqual(repoIndex.studio);
+      expect(await resolveInstallName("probe")).toEqual({ title: "probe", manifest: `https://example.invalid/v${packageVersion()}/m-${packageVersion()}.json` });
+      await expect(resolveInstallName("toString")).rejects.toThrow(/not something ue-mcp can install by name \(known: anthropic, probe, studio\)/);
+      process.env.UE_MCP_INSTALL_INDEX = `${base}/gone.json`;
+      await expect(resolveInstallName("studio")).rejects.toThrow(/could not be read: HTTP 404\. Install from the release manifest URL or zip instead/);
     });
-    expect(() => resolveInstallName("toString")).toThrow(/not something ue-mcp can install by name \(known: studio\)/);
   });
 
   it("tells a name from a path or URL", () => {
@@ -75,14 +99,16 @@ describe("install names", () => {
     for (const t of ["studio.zip", "./studio", "https://x/latest.json", "C:\\a\\b.zip", "Studio"]) expect(isInstallName(t)).toBe(false);
   });
 
-  it("reads the index UE_MCP_INSTALL_INDEX names instead, and says when it cannot", () => {
+  it("reads the index UE_MCP_INSTALL_INDEX names instead, and says when it cannot", async () => {
     const file = path.join(dir, "index.json");
     fs.writeFileSync(file, JSON.stringify({ probe: { manifest: "http://127.0.0.1:1/m.json" } }));
     process.env.UE_MCP_INSTALL_INDEX = file;
-    expect(resolveInstallName("probe")).toEqual({ title: "probe", manifest: "http://127.0.0.1:1/m.json" });
-    expect(() => resolveInstallName("studio")).toThrow(/known: probe/);
+    expect(await resolveInstallName("probe")).toEqual({ title: "probe", manifest: "http://127.0.0.1:1/m.json" });
+    await expect(resolveInstallName("studio")).rejects.toThrow(/known: probe/);
+    fs.writeFileSync(file, "{ not json");
+    await expect(resolveInstallName("probe")).rejects.toThrow(/UE_MCP_INSTALL_INDEX .* is not readable JSON/);
     process.env.UE_MCP_INSTALL_INDEX = path.join(dir, "missing.json");
-    expect(() => resolveInstallName("probe")).toThrow(/UE_MCP_INSTALL_INDEX .* is not readable JSON/);
+    await expect(resolveInstallName("probe")).rejects.toThrow(/UE_MCP_INSTALL_INDEX .* could not be read/);
   });
 });
 
