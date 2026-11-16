@@ -101,7 +101,7 @@ const PER_SESSION: Record<string, string> = {
   "cli/extension-cli.ts": "Installs extensions and restarts the daemon of the project it is handed.",
   "cli/daemon-cli.ts": "Runs, starts, stops or reports the daemon of the project it is handed.",
   "sessions/session-load.ts": "One tool graph, task registry and guard pipeline per editor, built from that editor's own project.",
-  "dispatch/server-dispatch.ts": "Routes each call to the editor it addressed and runs it through that editor's registry and guard.",
+  "server/server-dispatch.ts": "Routes each call to the editor it addressed and runs it through that editor's registry and guard.",
   "cli/hook-handler.ts": "Runs against the project the hook payload named.",
   "integrations/claude-code/hook-session.ts": "Resolves which project a hook invocation is about.",
   "integrations/claude-code/hook-installer.ts": "Installs the hook for one project.",

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { splitMedia } from "../../src/dispatch/server-dispatch.js";
+import { splitMedia } from "../../src/server/server-dispatch.js";
 
 describe("splitMedia", () => {
   it("moves image and audio data into content blocks and leaves a pointer in the JSON", () => {

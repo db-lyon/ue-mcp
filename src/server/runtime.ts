@@ -20,7 +20,7 @@ import {
 } from "../surface/target-params.js";
 import type { InProcessCallOptions } from "./call-options.js";
 import type { ToolContext, ToolDef } from "../surface/tool-types.js";
-import { dispatchCategoryCall, dispatchFlowCall, type DispatchDeps, type ToolResult } from "../dispatch/server-dispatch.js";
+import { dispatchCategoryCall, dispatchFlowCall, type DispatchDeps, type ToolResult } from "./server-dispatch.js";
 import { DialogGuard, guardFor, sessionGuardDeps } from "../editor/dialog-guard.js";
 import { info, warn, error } from "../core/log.js";
 import { GuardRegistry } from "../flow/guard.js";
