@@ -19,7 +19,7 @@ import {
   resolveWindowMode,
   splitEditorArgs,
 } from "../../src/editor/launch-args.js";
-import { UeMcpConfigSchema } from "../../src/surface/schemas.js";
+import { UeMcpConfigSchema } from "../../src/config/schemas.js";
 
 describe("resolveWindowMode", () => {
   it("prefers the per-call value, then the project config, then normal", () => {

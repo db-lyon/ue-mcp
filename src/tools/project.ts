@@ -1,4 +1,4 @@
-import type { ActionSpec, ToolDef } from "../core/types.js";
+import type { ActionSpec, ToolDef } from "../surface/tool-types.js";
 import { categoryTool } from "../surface/category-tool.js";
 import { z } from "zod";
 import { CURSOR_PARAM } from "../surface/pagination.js";

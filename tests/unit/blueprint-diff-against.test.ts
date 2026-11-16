@@ -14,7 +14,7 @@ import { interceptCheckpointDiff, resolveAgainst } from "../../src/tools/bluepri
 import { runBridge } from "../../src/flow/run-action.js";
 import type { FlowContext } from "../../src/flow/context.js";
 import { blueprintTool } from "../../src/tools/blueprint.js";
-import type { ToolContext } from "../../src/core/types.js";
+import type { ToolContext } from "../../src/surface/tool-types.js";
 
 let dir: string;
 

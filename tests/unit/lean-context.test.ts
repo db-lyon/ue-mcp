@@ -1,13 +1,9 @@
 import { describe, it, expect, afterEach } from "vitest";
 import { z } from "zod";
-import type { ToolDef, ToolContext } from "../../src/core/types.js";
+import type { ToolDef, ToolContext } from "../../src/surface/tool-types.js";
 import { actionEnumValues, categoryTool, bp } from "../../src/surface/category-tool.js";
-import {
-  resolveContextStrategy,
-  splitDescription,
-  buildCatalogTool,
-  applyLeanContext,
-} from "../../src/surface/context/lean-context.js";
+import { resolveContextStrategy } from "../../src/config/context-strategy.js";
+import { splitDescription, buildCatalogTool, applyLeanContext } from "../../src/surface/context/lean-context.js";
 import { buildMicroGateway } from "../../src/surface/context/micro-context.js";
 import { searchToolGraph } from "../../src/surface/context/tool-search.js";
 import { actionSignature } from "../../src/surface/action-signature.js";

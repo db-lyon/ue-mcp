@@ -6,7 +6,9 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { McpError as SdkMcpError } from "@modelcontextprotocol/sdk/types.js";
 import type { EditorSession, SessionRegistry } from "../sessions/session.js";
-import type { ElicitFn, ProgressFn, ProgressUpdate, ToolContext, ToolDef } from "../core/types.js";
+import type { ElicitFn } from "../core/elicit.js";
+import type { ProgressFn, ProgressUpdate } from "../core/progress.js";
+import type { ToolContext, ToolDef } from "../surface/tool-types.js";
 import { McpError, ErrorCode } from "../core/errors.js";
 import { debug } from "../core/log.js";
 import { withCallAsker } from "../flow/call-elicit.js";
@@ -21,30 +23,30 @@ import {
   refuseUntargetedInRegistry,
   editorAttribution,
   type RoutedCall,
-} from "./editor-gate.js";
+} from "../dispatch/editor-gate.js";
 import { isDirectiveResponse } from "../core/directive.js";
 import { EDITOR_TARGET_PARAM, stripAction } from "../surface/routing-params.js";
 import { stripEditorTarget, sessionContext } from "../surface/target-params.js";
 import {
   DialogGuard,
   type GuardDecision,
-  isDialogRefusal,
   stampBlockedEditor,
 } from "../editor/dialog-guard.js";
+import { isDialogRefusal } from "../bridge/dialog-refusal.js";
 import { connectedEditorOf } from "../editor/editor-control.js";
 import { clientAdvertisesElicitation } from "../editor/dialog-mode.js";
-import { elicitationUnrenderedNote } from "./client-quirks.js";
+import { elicitationUnrenderedNote } from "../dispatch/client-quirks.js";
 import { playtestRefusal } from "../editor/playtest-mode.js";
 import { contestedProject } from "../editor/project-holders.js";
-import { withAssetLocks, type LockingConfig } from "./locking.js";
+import { withAssetLocks, type LockingConfig } from "../dispatch/locking.js";
 import { unknownActionMessage } from "../surface/action-schema.js";
 import { runsEpicMcpTool, withheldTarget, wrapsEpicTool } from "../surface/registered-surface.js";
 import { epicEngineRefusalFor } from "../surface/epic-engines.js";
 import { explainMissingAction } from "../sessions/session-surface.js";
 import { disabledActionRefusal } from "../surface/category-state.js";
-import { leaseConflictMessage } from "./leases.js";
-import { leasePathsOf } from "./lease-paths.js";
-import { SESSION_ID } from "./lock-owner.js";
+import { leaseConflictMessage } from "../dispatch/leases.js";
+import { leasePathsOf } from "../dispatch/lease-paths.js";
+import { SESSION_ID } from "../dispatch/lock-owner.js";
 import type { FlowContext } from "../flow/context.js";
 import type { SessionLoad, SessionLoads } from "../sessions/session-load.js";
 

@@ -12,8 +12,11 @@
  * context with no session resolves to the empty key, which is also the key the
  * project-less default session uses and the one the bare module-level
  * functions read, so a single-editor server and a direct caller land on the
- * same partition they always did.
+ * same partition they always did. The Python gate's remembered rulings are
+ * keyed through workaroundScope too, so all three agree by construction.
  */
+import { DEFAULT_SESSION_KEY } from "../../sessions/session-key.js";
+import type { EditorSession } from "../../sessions/session.js";
 
 export interface WorkaroundEntry {
   code: string;
@@ -25,13 +28,12 @@ export interface WorkaroundEntry {
   suggestedTool?: string;
 }
 
-/** Anything carrying an editor session. Structural so this module needs no
- *  import of the session or context types. */
+/** Anything carrying an editor session, such as a ToolContext. */
 export interface WorkaroundScopeSource {
-  session?: { key: string } | undefined;
+  session?: Pick<EditorSession, "key"> | undefined;
 }
 
-const DEFAULT_SCOPE = "";
+const DEFAULT_SCOPE = DEFAULT_SESSION_KEY;
 
 const stacks = new Map<string, WorkaroundEntry[]>();
 

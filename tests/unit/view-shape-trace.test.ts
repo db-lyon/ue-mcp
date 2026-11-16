@@ -4,7 +4,7 @@ import { pieTool } from "../../src/tools/pie.js";
 import { declaredActionEffect } from "../../src/surface/action-effects.js";
 import { z } from "zod";
 import { paramZod } from "../../src/surface/handler-spec.js";
-import type { ActionSpec } from "../../src/core/types.js";
+import type { ActionSpec } from "../../src/surface/tool-types.js";
 
 function parseTraceParams(action: ActionSpec, params: Record<string, unknown>) {
   if (action.kind !== "bridge" || !action.paramSpec) throw new Error("Missing parameter spec");

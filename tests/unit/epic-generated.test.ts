@@ -203,7 +203,7 @@ describe("the committed modules match their inputs", () => {
     expect(
       changed,
       "These generated modules do not match what the generator produces from the recorded "
-      + "catalog and the reviewed effects. Run `npm run epic:generate` and commit the result; "
+      + "catalog and the reviewed effects. Run `npm run generate` and commit the result; "
       + "do not hand-edit a generated file.",
     ).toEqual([]);
   }, 60_000);

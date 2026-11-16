@@ -18,7 +18,7 @@ import { deriveProjectPort } from "../../src/bridge/port.js";
 import { EditorBridge } from "../../src/bridge/bridge.js";
 import { requestedPortPath } from "../../src/bridge/requested-port.js";
 import { ProjectContext } from "../../src/config/project.js";
-import { bridgePort } from "../../src/cli/init-core.js";
+import { bridgePort } from "../../src/integrations/epic/project-status.js";
 import { formatDoctor, type DoctorReport } from "../../src/cli/doctor.js";
 import { ProjectFixture } from "../helpers/project-fixture.js";
 

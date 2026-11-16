@@ -7,8 +7,8 @@ import {
   removeUnrealMcpEntries,
   REPLACED_BACKUP_SUFFIX,
   sourceBuildConfigRoot,
-} from "../../src/integrations/claude-code/unreal-mcp-entries.js";
-import { readUeMcpEntry, writeMcpConfig, type McpClient } from "../../src/integrations/claude-code/mcp-client-config.js";
+} from "../../src/integrations/epic/unreal-mcp-entries.js";
+import { readUeMcpEntry, writeMcpConfig, type McpClient } from "../../src/integrations/mcp-clients/mcp-client-config.js";
 import { proxyMcpJson, UNREAL_CLIENT_FIXTURES, UNREAL_URL } from "../helpers/unreal-mcp-fixtures.js";
 
 let dir: string;

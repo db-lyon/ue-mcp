@@ -1,7 +1,7 @@
 import type { TaskConstructor } from "@db-lyon/flowkit";
 import type { z } from "zod";
 import { McpError, ErrorCode } from "../core/errors.js";
-import type { ActionSpec } from "../core/types.js";
+import type { ActionSpec } from "../surface/tool-types.js";
 import { paramsClause, type ParamSpec } from "../surface/handler-spec.js";
 import type { ManifestSchemaField } from "./manifest.js";
 

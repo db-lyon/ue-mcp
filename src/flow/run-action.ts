@@ -1,5 +1,5 @@
 import type { TaskResult } from "@db-lyon/flowkit";
-import type { ActionSpec, BridgeActionSpec, CategoryOptions } from "../core/types.js";
+import type { ActionSpec, BridgeActionSpec, CategoryOptions } from "../surface/tool-types.js";
 import { stripAction } from "../surface/routing-params.js";
 import { prepareCall, finishCall, forwardToBridge, withLiveContract, type CallPreparation, type CallPipeline } from "../dispatch/call-pipeline.js";
 import { McpError, ErrorCode } from "../core/errors.js";

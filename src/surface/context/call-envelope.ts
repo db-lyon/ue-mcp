@@ -24,7 +24,7 @@ import { z } from "zod";
 import { getParseErrorMessage, normalizeObjectSchema, safeParse as sdkSafeParse } from "@modelcontextprotocol/sdk/server/zod-compat.js";
 import { McpError as SdkMcpError, ErrorCode as SdkErrorCode } from "@modelcontextprotocol/sdk/types.js";
 import { EDITOR_TARGET_PARAM, MIGRATE_TARGET_PARAM, ROUTING_PARAM_NAMES } from "../routing-params.js";
-import type { ToolDef } from "../../core/types.js";
+import type { ToolDef } from "../tool-types.js";
 import { McpError, ErrorCode } from "../../core/errors.js";
 import { actionAccepts, undeclaredMessage } from "../action-schema.js";
 

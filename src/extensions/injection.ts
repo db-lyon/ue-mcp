@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { ToolDef, ActionSpec } from "../core/types.js";
+import type { ToolDef, ActionSpec } from "../surface/tool-types.js";
 import { actionEnum } from "../surface/category-tool.js";
 import { compileSchemaFields, type ManifestInjectAction } from "./manifest.js";
 import { inferActionEffect } from "../surface/action-class.js";

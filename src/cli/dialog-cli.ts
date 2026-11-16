@@ -21,7 +21,7 @@ import {
   getUserStatePath,
   type DialogMode,
 } from "../config/user-state.js";
-import { BOLD, CYAN, DIM, RESET, fail, info, ok, warn } from "./ui/ansi.js";
+import { BOLD, CYAN, DIM, RESET, fail, info, ok, warn } from "../terminal/ansi.js";
 import { projectDirOf } from "../config/uproject-path.js";
 import { readEnv } from "../core/env.js";
 

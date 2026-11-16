@@ -17,7 +17,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { callBridge, disconnectBridge, getBridge, type TestResult } from "../setup.js";
 import type { EditorBridge } from "../../src/bridge/bridge.js";
-import type { ToolContext } from "../../src/core/types.js";
+import type { ToolContext } from "../../src/surface/tool-types.js";
 import { isFabToolName, listEpicFabTools } from "../../src/tools/fab-epic.js";
 
 type Json = Record<string, unknown>;

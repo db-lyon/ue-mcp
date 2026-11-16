@@ -9,7 +9,9 @@ import * as path from "node:path";
 import { EPIC_CATEGORIES } from "../tools/epic/index.js";
 import { projectConfigPath, readConfigDoc, writeConfigDoc } from "../config/ue-mcp-config.js";
 import { ProjectContext } from "../config/project.js";
-import { deploy, projectEngineVersion } from "../editor/deployer.js";
+import type { ContextStrategy } from "../config/context-strategy.js";
+import { deploy } from "../editor/deployer.js";
+import { projectEngineVersion } from "../editor/engine-root.js";
 import { installBinaryPlugin, resolveBinarySource, describeBinarySource } from "../editor/bridge-binaries.js";
 import {
   defaultPluginDir,
@@ -31,6 +33,8 @@ import { AGENT_GUIDE_FILES, hasGuide, removeGuide, writeGuide } from "../integra
 import { installClaudeHooks, uninstallClaudeHooks } from "../integrations/claude-code/hook-installer.js";
 import { getFeedbackModeScopes, getInstalledHooks, setFeedbackMode, type FeedbackMode } from "../config/user-state.js";
 import {
+  CLIENT_IDS,
+  clientId,
   detectMcpClients,
   isProjectScopedClient,
   readUeMcpEntry,
@@ -38,14 +42,14 @@ import {
   projectScopedClientsAt,
   type McpClient,
   type ServerLaunch,
-} from "../integrations/claude-code/mcp-client-config.js";
+} from "../integrations/mcp-clients/mcp-client-config.js";
 import {
   describeUnrealMcpEntry,
   findUnrealMcpEntries,
   removeUnrealMcpEntries,
   sourceBuildConfigRoot,
   type UnrealMcpEntry,
-} from "../integrations/claude-code/unreal-mcp-entries.js";
+} from "../integrations/epic/unreal-mcp-entries.js";
 import { protectedEngineRoots } from "../editor/engine-root.js";
 import {
   writeUnrealMcpServerSettings,
@@ -59,14 +63,17 @@ import {
   ueMcpAssistantDescriptor,
   type UnrealAssistantStatus,
 } from "../integrations/epic/unreal-assistant.js";
-import { canvasPortReplacement } from "../integrations/epic/unreal-canvas.js";
-import { epicIntegrations, projectEngineRoot, type EpicIntegrations } from "../integrations/epic/project-status.js";
+import {
+  bridgePort,
+  projectEngineRoot,
+  projectEpicIntegrations,
+  type BridgePort,
+} from "../integrations/epic/project-status.js";
 import { packageVersion } from "../core/package-root.js";
 import { warn as logWarn } from "../core/log.js";
 import { readEnv } from "../core/env.js";
-import { deriveProjectPort } from "../bridge/port.js";
 import { editDisableEntries, isScopeOff, parseDisableEntry, readCategoryState } from "../surface/category-state.js";
-import { readUserAuthSync } from "../feedback/github-auth.js";
+import { readUserAuthSync } from "../github/auth.js";
 
 /* ------------------------------------------------------------------ */
 /*  Tool categories                                                    */
@@ -121,24 +128,6 @@ export const CATEGORIES: ToolCategory[] = [
 /** Categories that carry wrapped engine tools, read from the generated modules. */
 export const ENRICHABLE_CATEGORIES = Object.keys(EPIC_CATEGORIES).sort();
 
-export type ContextStrategy = "micro" | "lean" | "full";
-
-/** Stable ids for `--clients`, mapped to the names detectMcpClients uses. */
-export const CLIENT_IDS: Record<string, string> = {
-  "claude-code": "Claude Code (project)",
-  "claude-code-global": "Claude Code (global)",
-  "claude-desktop": "Claude Desktop",
-  cursor: "Cursor",
-  vscode: "VS Code",
-  gemini: "Gemini CLI",
-  codex: "Codex",
-  "codex-project": "Codex (project)",
-};
-
-export function clientId(name: string): string {
-  return Object.entries(CLIENT_IDS).find(([, n]) => n === name)?.[0] ?? name;
-}
-
 /* ------------------------------------------------------------------ */
 /*  Choices and plan                                                   */
 /* ------------------------------------------------------------------ */
@@ -183,32 +172,6 @@ export interface InitChoices {
   unrealAssistant?: boolean;
 }
 
-/** The bridge port a project uses, and what decided it. */
-export interface BridgePort {
-  port: number;
-  /** What the project path derives, which is the port when nothing pins one. */
-  derivedPort: number;
-  /** "env" for UE_MCP_PORT, "config" for ue-mcp.bridge.port, null when derived. */
-  pinnedBy: "env" | "config" | null;
-  /**
-   * A pinned port this project's Unreal Canvas Bridge claims, which the bridge
-   * does not use; `port` is then the derived one (unreal-canvas.ts).
-   */
-  avoided?: { port: number; reason: string };
-}
-
-export function bridgePort(project: ProjectContext): BridgePort {
-  const derivedPort = deriveProjectPort(project.projectDir!);
-  const envPort = Number.parseInt(readEnv("port") ?? "", 10);
-  const configPort = project.config.bridge?.port;
-  const pinnedBy = Number.isFinite(envPort) && envPort > 0 ? "env" : configPort ? "config" : null;
-  if (!pinnedBy) return { port: derivedPort, derivedPort, pinnedBy: null };
-  const pinned = pinnedBy === "env" ? envPort : configPort!;
-  const swap = canvasPortReplacement(project.projectPath, pinned, derivedPort);
-  if (swap) return { port: swap.port, derivedPort, pinnedBy, avoided: { port: pinned, reason: swap.reason } };
-  return { port: pinned, derivedPort, pinnedBy };
-}
-
 export const FEEDBACK_MODES: readonly FeedbackMode[] = ["interactive", "auto-approve", "defer"];
 
 /** The feedback approval mode in effect, and which setting decided it. */
@@ -251,12 +214,6 @@ export interface PlannedClient {
  */
 export function engineConfigRoot(project: ProjectContext): string | null {
   return sourceBuildConfigRoot(projectEngineRoot(project), project.projectDir!);
-}
-
-/** Epic's Unreal MCP server and Unreal Assistant for a project, counting the bridge port init gives it. */
-export function projectEpicIntegrations(project: ProjectContext, engineRoot?: string | null): EpicIntegrations {
-  const bridge = bridgePort(project);
-  return epicIntegrations(project, bridge.port, engineRoot === undefined ? projectEngineRoot(project) : engineRoot, bridge.avoided?.port);
 }
 
 function insideDir(child: string, dir: string): boolean {

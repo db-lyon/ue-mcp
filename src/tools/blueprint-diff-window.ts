@@ -5,7 +5,7 @@
  * reads it (#1487). The earlier version is loaded into a /Temp package that
  * the bridge unloads when the window closes.
  */
-import type { ActionSpec, ToolContext } from "../core/types.js";
+import type { ActionSpec, ToolContext } from "../surface/tool-types.js";
 import { blueprintPackageKey, checkpointsFor } from "../checkpoints/service.js";
 import { resolveAgainst } from "./blueprint-diff.js";
 

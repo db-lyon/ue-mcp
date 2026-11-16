@@ -25,7 +25,7 @@
  *      change applies when the editor next starts.
  */
 import { z } from "zod";
-import type { ActionSpec, ToolContext, ToolDef } from "../../core/types.js";
+import type { ActionSpec, ToolContext, ToolDef } from "../../surface/tool-types.js";
 import { McpError, ErrorCode } from "../../core/errors.js";
 import { projectConfigPath, readConfigDoc, writeConfigDoc } from "../../config/ue-mcp-config.js";
 import { readUeMcpConfig } from "../../config/project.js";
@@ -42,7 +42,7 @@ import {
 } from "../../surface/category-state.js";
 import { EPIC_TOOLSETS_BY_CATEGORY, routeEpicToolset } from "../epic/toolset-routes.js";
 import { readBlockedNames, setBlockedNames, toolsetSettingsFile } from "../../integrations/epic/toolset-settings.js";
-import { projectEngineVersion } from "../../editor/deployer.js";
+import { projectEngineVersion } from "../../editor/engine-root.js";
 import { findLiveInstanceRecord } from "../../bridge/editor-target.js";
 import { editorOwnsProject, probeEditorProcessList } from "../../editor/engine-observer.js";
 

@@ -17,7 +17,7 @@ import { ALL_TOOLS } from "../../src/tools.js";
 import { EPIC_TOOLSETS_BY_CATEGORY, routeEpicToolset } from "../../src/tools/epic/toolset-routes.js";
 import { isFabToolName, listEpicFabTools } from "../../src/tools/fab-epic.js";
 import { microGuide, SERVER_INSTRUCTIONS, SERVER_INSTRUCTIONS_LEAN } from "../../src/surface/context/instructions.js";
-import type { ToolContext } from "../../src/core/types.js";
+import type { ToolContext } from "../../src/surface/tool-types.js";
 
 type Answer = unknown | ((params: Record<string, unknown>) => unknown);
 

@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import fs from "node:fs";
 import { editorTool } from "../../src/tools/editor.js";
 import { actionSchema } from "../../src/surface/action-schema.js";
-import type { ToolContext } from "../../src/core/types.js";
+import type { ToolContext } from "../../src/surface/tool-types.js";
 
 describe("editor warm scene capture contract", () => {
   it("forwards a warm start and a status/cancel request without requiring an output path for status", async () => {

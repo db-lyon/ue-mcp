@@ -13,7 +13,7 @@ import * as path from "node:path";
 import { downloadVerified, extractZip } from "../core/archive.js";
 import { isNewer } from "../core/version-check.js";
 import { ProjectContext } from "../config/project.js";
-import { projectEngineVersion } from "./deployer.js";
+import { projectEngineVersion } from "./engine-root.js";
 import { findProjectPlugin, unrealPlatform } from "./install-marker.js";
 import { stagingDir, swapIn } from "./bridge-binaries.js";
 

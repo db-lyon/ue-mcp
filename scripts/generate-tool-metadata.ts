@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * Generate tool metadata from `ALL_TOOLS` (the single source of truth).
+ * Generate the docs metadata from `ALL_TOOLS`.
  *
  * Outputs:
  *   1. `dist/tool-counts.json` - consumed by the landing site to render
@@ -10,170 +10,24 @@
  *      (everything before the first `## `) is preserved from the existing
  *      file; every tool section is rebuilt from source so undocumented
  *      actions can never accumulate.
- *   3. `docs/assets/ue-mcp-overview.png`, the README's overview image, via
- *      scripts/render-overview-image.ts.
- *   4. Marker substitution - any file containing
- *      `<!-- count:tools -->...<!-- /count -->` or
- *      `<!-- count:actions -->...<!-- /count -->` has the inner span
- *      rewritten with the current numbers. Lets README / other docs stay
- *      authoritative without templating the whole file.
+ *   3. Every `<!-- count:<name> -->...<!-- /count -->` marker in the tracked
+ *      Markdown files, found by scanning (scripts/lib/tool-counts.ts).
  *
- * Run: tsx scripts/generate-tool-metadata.ts
+ * The package version, the npm and plugin descriptions and the overview image
+ * are stamped by scripts/stamp-package.ts. `npm run generate:metadata` runs
+ * both; `npm run generate` runs every generator in order.
  */
 
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { ALL_TOOLS, enumerateBridgeActions } from "../src/tools.js";
+import { ALL_TOOLS } from "../src/tools.js";
 import { actionSignature } from "../src/surface/action-signature.js";
-import { loadMergedCatalog } from "./lib/epic-catalog.mjs";
-import { SUPPORTED_ENGINE_RANGE, compareEngines, engineRangeText } from "./lib/engine-range.mjs";
+import { applyCountMarkers, computeCounts, markerFiles, type Counts } from "./lib/tool-counts.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repo = path.resolve(here, "..");
-
-/** Every wrapped Epic tool is spelled `epic_<name>`; nothing else is. */
-const EPIC_ACTION_PREFIX = "epic_";
-
-export interface Counts {
-  tools: number;
-  /** Every action the server advertises, ue-mcp's own AND the wrapped Epic
-   *  tools. This is a TOTAL, not an addend: since commit 023d86d4 the `epic_*`
-   *  actions are declared in `ALL_TOOLS` like any other, so quoting this
-   *  number next to `nativeToolActions` with an "also" or a "plus" claims a
-   *  surface larger, by every wrapped Epic tool, than the one that ships. */
-  actions: number;
-  /** ue-mcp's own actions: `actions` minus the wrapped Epic tools. This is the
-   *  number to quote when the copy names Epic's tools separately. */
-  ownActions: number;
-  bridgeActions: number;
-  localActions: number;
-  perTool: Record<string, number>;
-  /** Official Unreal ToolsetRegistry toolsets ue-mcp wraps, across every recorded engine. */
-  nativeToolsets: number;
-  /** Official Epic tools wrapped across those toolsets, counted inside
-   *  `actions`. */
-  nativeToolActions: number;
-  /** The newest engine with a recorded Epic catalog, and the number of Epic
-   *  tools that one engine's registry offers. Public copy quotes
-   *  `nativeToolActions`, every Epic tool ue-mcp wraps across engines; these
-   *  are for a reader that wants the single-engine figure. */
-  nativeEngine: string;
-  nativeEngineToolActions: number;
-  /** The supported engine range, oldest to newest, as declared in
-   *  scripts/lib/engine-range.mjs. */
-  engineRange: { min: string; max: string };
-  generatedAt: string;
-  version: string;
-}
-
-/**
- * Count the wrapped Epic tools.
- *
- * The tool total comes from `ALL_TOOLS`, the same graph the server advertises,
- * so it cannot disagree with what a client is handed. The toolset total comes
- * from the recorded catalogs, merged across engine versions, which are the only
- * place that grouping is written down, and the two are cross-checked.
- *
- * This used to read `assets/epic-catalog.snapshot.json` inside a `try` that
- * returned zeros. The catalog moved to `tests/golden/epic-catalog.json` when
- * the wrapped tools became declared actions, the read started throwing, the
- * `catch` swallowed it, and `dist/tool-counts.json` published
- * `nativeToolActions: 0` for every release after that - which the landing site
- * rendered, live, as "all 0 of Epic's native 5.8 tools wrapped in-process".
- * A count that silently degrades to zero is worse than one that fails the
- * build, so a missing or disagreeing catalog now throws.
- */
-function computeNativeCounts(): { nativeToolsets: number; nativeToolActions: number } {
-  const epicSpecs = ALL_TOOLS.flatMap((t) => Object.entries(t.actions).filter(([a]) => a.startsWith(EPIC_ACTION_PREFIX)));
-  const declared = epicSpecs.length;
-  // Engine tools reached: an action whose tool a newer engine renamed reaches
-  // that successor too, under the same action name, so the catalog is checked
-  // against actions plus their successors.
-  const reached = epicSpecs.reduce(
-    (n, [, spec]) => n + 1 + (spec.kind === "bridge" ? spec.epicTool?.successors?.length ?? 0 : 0),
-    0,
-  );
-  const toolsets = (loadMergedCatalog() as { toolsets: Array<{ tools?: unknown[] }> }).toolsets;
-  const recorded = toolsets.reduce((n, t) => n + (t.tools?.length ?? 0), 0);
-  if (recorded !== reached || declared === 0) {
-    throw new Error(
-      `Wrapped Epic tool count disagrees: ALL_TOOLS reaches ${reached} engine tools through ${declared} ` +
-        `${EPIC_ACTION_PREFIX}* actions, tests/golden/epic-catalog/ records ${recorded} across its engines. ` +
-        `Run \`npm run epic:generate\` (or re-record the catalog) before regenerating metadata.`,
-    );
-  }
-  return { nativeToolsets: toolsets.length, nativeToolActions: declared };
-}
-
-/**
- * The newest engine's recorded Epic catalog. Reads either layout: one file per
- * engine under `tests/golden/epic-catalog/<major.minor>.json`, or the single
- * `tests/golden/epic-catalog.json`, which names its engine in
- * `engineAssociation`.
- */
-export function newestEpicCatalog(): { engine: string; toolActions: number } {
-  const golden = path.join(repo, "tests", "golden");
-  const dir = path.join(golden, "epic-catalog");
-  const files = fs.existsSync(dir)
-    ? fs.readdirSync(dir).filter((f) => /^\d+\.\d+\.json$/.test(f)).map((f) => path.join(dir, f))
-    : [path.join(golden, "epic-catalog.json")];
-  const catalogs = files.map((f) => {
-    const c = JSON.parse(fs.readFileSync(f, "utf8")) as {
-      engineAssociation?: string;
-      toolsets?: Array<{ tools?: unknown[] }>;
-    };
-    const engine = /^(\d+)\.(\d+)/.exec(String(c.engineAssociation ?? ""));
-    if (!engine) throw new Error(`${path.relative(repo, f)} does not name its engine in engineAssociation.`);
-    return {
-      engine: `${Number(engine[1])}.${Number(engine[2])}`,
-      toolActions: (c.toolsets ?? []).reduce((n, t) => n + (t.tools?.length ?? 0), 0),
-    };
-  });
-  const newest = catalogs.sort((a, b) => compareEngines(a.engine, b.engine)).at(-1);
-  if (!newest || newest.toolActions === 0) throw new Error("No recorded Epic catalog with any tools in tests/golden.");
-  return newest;
-}
-
-export function computeCounts(): Counts {
-  const perTool: Record<string, number> = {};
-  let total = 0;
-  for (const t of ALL_TOOLS) {
-    const n = Object.keys(t.actions).length;
-    perTool[t.name] = n;
-    total += n;
-  }
-  const bridge = enumerateBridgeActions().length;
-  const pkg = JSON.parse(fs.readFileSync(path.join(repo, "package.json"), "utf8"));
-  const native = computeNativeCounts();
-  const newest = newestEpicCatalog();
-  // The range is declared in scripts/lib/engine-range.mjs. A catalog recorded
-  // from an engine past it means the range was not moved with it, and the
-  // overview image would show Epic's tools for an engine the copy calls
-  // unsupported.
-  if (compareEngines(newest.engine, SUPPORTED_ENGINE_RANGE.max) > 0) {
-    throw new Error(
-      `tests/golden holds an Epic catalog for UE ${newest.engine}, past the supported range ` +
-        `${engineRangeText()}. Move SUPPORTED_ENGINE_RANGE in scripts/lib/engine-range.mjs.`,
-    );
-  }
-  return {
-    tools: ALL_TOOLS.length,
-    actions: total,
-    ownActions: total - native.nativeToolActions,
-    bridgeActions: bridge,
-    localActions: total - bridge,
-    perTool,
-    nativeToolsets: native.nativeToolsets,
-    nativeToolActions: native.nativeToolActions,
-    nativeEngine: newest.engine,
-    nativeEngineToolActions: newest.toolActions,
-    engineRange: { min: SUPPORTED_ENGINE_RANGE.min, max: SUPPORTED_ENGINE_RANGE.max },
-    generatedAt: new Date().toISOString(),
-    version: pkg.version,
-  };
-}
 
 function writeCountsJson(counts: Counts): string {
   const out = path.join(repo, "dist", "tool-counts.json");
@@ -265,70 +119,15 @@ function regenerateToolReference(counts: Counts): string {
   }
   lines.push("");
 
-  // Update the count marker inside the regenerated intro before writing.
-  const body = lines.join("\n");
-  const stamped = applyCountMarkers(body, counts);
+  const stamped = applyCountMarkers(lines.join("\n"), counts);
   fs.writeFileSync(file, stamped);
   return file;
 }
 
-export function applyCountMarkers(text: string, counts: Counts): string {
-  return text
-    .replace(/<!--\s*count:tools\s*-->[^<]*<!--\s*\/count\s*-->/g, `<!-- count:tools -->${counts.tools}<!-- /count -->`)
-    .replace(/<!--\s*count:actions\s*-->[^<]*<!--\s*\/count\s*-->/g, `<!-- count:actions -->${counts.actions}+<!-- /count -->`)
-    // ue-mcp's own actions, for the sentences that also name Epic's wrapped
-    // tools. `count:actions` is the total and already contains them.
-    .replace(
-      /<!--\s*count:ownActions\s*-->[^<]*<!--\s*\/count\s*-->/g,
-      `<!-- count:ownActions -->${counts.ownActions}+<!-- /count -->`,
-    )
-    .replace(
-      /<!--\s*count:nativeToolActions\s*-->[^<]*<!--\s*\/count\s*-->/g,
-      `<!-- count:nativeToolActions -->${counts.nativeToolActions}<!-- /count -->`,
-    )
-    // The actions that dispatch to the C++ bridge, which is what the smoke
-    // suite exercises and therefore the number CLAUDE.md quotes for it.
-    .replace(
-      /<!--\s*count:bridgeActions\s*-->[^<]*<!--\s*\/count\s*-->/g,
-      `<!-- count:bridgeActions -->${counts.bridgeActions}<!-- /count -->`,
-    )
-    // The supported engine range ("5.4 to 5.9") and its newest engine, from
-    // scripts/lib/engine-range.mjs.
-    .replace(
-      /<!--\s*count:engineRange\s*-->[^<]*<!--\s*\/count\s*-->/g,
-      `<!-- count:engineRange -->${engineRangeText(counts.engineRange)}<!-- /count -->`,
-    )
-    .replace(
-      /<!--\s*count:engineMax\s*-->[^<]*<!--\s*\/count\s*-->/g,
-      `<!-- count:engineMax -->${counts.engineRange.max}<!-- /count -->`,
-    );
-}
-
-// Any doc that states a tool or action count belongs here, marker and all. A
-// file left off the list has to be corrected by hand every time the surface
-// grows, which is how docs/configuration.md came to say "all 22 category
-// tools" twice while the server advertised twenty-four.
-export const MARKER_FILES = [
-  ".github/RELEASE_TEMPLATE.md",
-  "CLAUDE.md",
-  "README.md",
-  "docs/index.md",
-  "docs/architecture.md",
-  "docs/configuration.md",
-  "docs/development.md",
-  "docs/flows.md",
-  "docs/getting-started.md",
-  "docs/guards.md",
-  "docs/release-notes-style.md",
-  "docs/tool-reference.md",
-  "docs/troubleshooting.md",
-];
-
 function applyMarkersToFiles(counts: Counts): string[] {
   const updated: string[] = [];
-  for (const rel of MARKER_FILES) {
+  for (const rel of markerFiles()) {
     const file = path.join(repo, rel);
-    if (!fs.existsSync(file)) continue;
     const before = fs.readFileSync(file, "utf8");
     const after = applyCountMarkers(before, counts);
     if (after !== before) {
@@ -339,67 +138,11 @@ function applyMarkersToFiles(counts: Counts): string[] {
   return updated;
 }
 
-/** Sync the npm package description so npmjs.org shows the right number. */
-function updatePackageDescription(counts: Counts): boolean {
-  const file = path.join(repo, "package.json");
-  const raw = fs.readFileSync(file, "utf8");
-  const pkg = JSON.parse(raw);
-  const desc = `Unreal Engine MCP server - ${counts.tools} tools, ${counts.actions}+ actions for AI-driven editor control`;
-  if (pkg.description === desc) return false;
-  pkg.description = desc;
-  // Preserve trailing newline if present.
-  const trailing = raw.endsWith("\n") ? "\n" : "";
-  fs.writeFileSync(file, JSON.stringify(pkg, null, 2) + trailing);
-  return true;
-}
-
-/**
- * Keep the .uplugin in step with package.json.
- *
- * This is ONE product in ONE repo: the npm package carries the plugin source
- * and a user compiles it from that tarball. A plugin reporting a different
- * version from the package that shipped it is telling the user their install
- * is something it is not. It had drifted to 0.3.0 against a 1.3.0 package,
- * and its description still advertised 185 tools against more than a
- * thousand.
- *
- * VersionName tracks the package exactly, prerelease suffix and all, since UE
- * treats it as a free-form display string. The integer `Version` is Epic's own
- * install-ordering field and is deliberately left alone.
- */
-export function findUpluginPath(): string | null {
-  const dir = path.join(repo, "plugin", "ue_mcp_bridge");
-  if (!fs.existsSync(dir)) return null;
-  const hit = fs.readdirSync(dir).find((f) => f.toLowerCase().endsWith(".uplugin"));
-  return hit ? path.join(dir, hit) : null;
-}
-
-function updatePluginDescriptor(counts: Counts): boolean {
-  // Resolved by scanning rather than by name. The working tree and the git
-  // index had disagreed on the case of this filename, which Windows hides and
-  // a case-sensitive filesystem does not, so a hardcoded spelling silently
-  // skipped the file on Linux and shipped a stale descriptor.
-  const file = findUpluginPath();
-  if (!file) return false;
-  const raw = fs.readFileSync(file, "utf8");
-  const plugin = JSON.parse(raw);
-  const pkg = JSON.parse(fs.readFileSync(path.join(repo, "package.json"), "utf8"));
-  const desc = `C++ WebSocket bridge for UE-MCP, providing ${counts.bridgeActions}+ editor actions over the MCP protocol`;
-  if (plugin.VersionName === pkg.version && plugin.Description === desc) return false;
-  plugin.VersionName = pkg.version;
-  plugin.Description = desc;
-  const trailing = raw.endsWith("\n") ? "\n" : "";
-  fs.writeFileSync(file, JSON.stringify(plugin, null, "\t") + trailing);
-  return true;
-}
-
-async function main(): Promise<void> {
+function main(): void {
   const counts = computeCounts();
   const json = writeCountsJson(counts);
   const ref = regenerateToolReference(counts);
   const updated = applyMarkersToFiles(counts);
-  const pkgChanged = updatePackageDescription(counts);
-  const upluginChanged = updatePluginDescriptor(counts);
 
   console.log(`tools=${counts.tools} actions=${counts.actions} (bridge=${counts.bridgeActions}, local=${counts.localActions})`);
   console.log(
@@ -409,20 +152,6 @@ async function main(): Promise<void> {
   console.log(`wrote ${path.relative(repo, json)}`);
   console.log(`wrote ${path.relative(repo, ref)}`);
   if (updated.length) console.log(`stamped markers in: ${updated.join(", ")}`);
-  if (pkgChanged) console.log(`updated package.json description`);
-  if (upluginChanged) console.log(`updated UE_MCP_Bridge.uplugin version and description`);
-  // Loaded here rather than at the top so importing `computeCounts` stays
-  // free of the native renderer.
-  const { renderOverviewImage } = await import("./render-overview-image.js");
-  const image = await renderOverviewImage(counts);
-  console.log(image.rendered ? `rendered ${image.png}` : `${image.png} already shows these counts`);
 }
 
-// Only when run as a script. `computeCounts` is imported by
-// tests/unit/tool-counts.test.ts, which must not rewrite the tree to read it.
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  main().catch((e) => {
-    console.error(e);
-    process.exit(1);
-  });
-}
+main();

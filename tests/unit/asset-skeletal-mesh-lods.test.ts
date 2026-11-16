@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { assetTool } from "../../src/tools/asset.js";
 import { handlerSpecs } from "../../src/tools/specs/asset.generated.js";
 import { REGISTERED_HANDLER_TIMEOUT_SECONDS } from "../../src/bridge/bridge-timeouts.js";
-import type { ToolContext } from "../../src/core/types.js";
+import type { ToolContext } from "../../src/surface/tool-types.js";
 import { readHandlerFile } from "../../scripts/lib/cpp-registrations.mjs";
 
 describe("asset.generate_skeletal_mesh_lods (#1372)", () => {

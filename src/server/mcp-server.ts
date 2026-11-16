@@ -10,8 +10,8 @@ import type { z } from "zod";
 import { composeServerInstructions } from "../surface/context/instructions.js";
 import { fullSurfaceDescription } from "../surface/context/lean-context.js";
 import { envelopeInputSchema, envelopeShape, flatInputSchema, strippingInputSchema, usesArgsEnvelope } from "../surface/context/call-envelope.js";
-import type { ToolDef } from "../core/types.js";
-import type { ContextStrategy } from "../surface/context/lean-context.js";
+import type { ToolDef } from "../surface/tool-types.js";
+import type { ContextStrategy } from "../config/context-strategy.js";
 import { withholdFromTool } from "../surface/registered-surface.js";
 import { packageVersion } from "../core/package-root.js";
 import { upgradeNoticeForClient } from "../core/version-check.js";
@@ -22,7 +22,7 @@ import {
   type CallExtra,
   type DispatchDeps,
   type ToolResult,
-} from "../dispatch/server-dispatch.js";
+} from "./server-dispatch.js";
 import type { Runtime } from "./runtime.js";
 import type { SessionAccess } from "../flow/session-access.js";
 import { announceResourceChange, registerEditorResources } from "./editor-resources.js";

@@ -13,7 +13,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { MARKER_FILES, applyCountMarkers, computeCounts } from "../../scripts/generate-tool-metadata.js";
+import { applyCountMarkers, computeCounts, markerFiles } from "../../scripts/lib/tool-counts.js";
 import { SUPPORTED_ENGINE_RANGE, compareEngines } from "../../scripts/lib/engine-range.mjs";
 import { ENGINES as RELEASE_ENGINES } from "../../scripts/release-binaries.mjs";
 import { DEFAULT_ENGINE_VERSIONS } from "../../src/editor/engine-root.js";
@@ -21,7 +21,7 @@ import { EPIC_CATALOG_ENGINES } from "../../src/tools/epic/catalog-engines.js";
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const read = (rel: string) => fs.readFileSync(path.join(repo, rel), "utf8");
-const REGENERATE = "Run `npm run generate:metadata` and commit what it changes.";
+const REGENERATE = "Run `npm run generate` and commit what it changes.";
 
 /** Every tracked Markdown page a reader sees: README and the docs site. */
 function publicPages(): string[] {
@@ -40,9 +40,7 @@ function publicPages(): string[] {
 describe("supported engine range", () => {
   it("is stamped current in every marker the generator owns", () => {
     const counts = computeCounts();
-    const stale = MARKER_FILES.filter((rel) => fs.existsSync(path.join(repo, rel))).filter(
-      (rel) => applyCountMarkers(read(rel), counts) !== read(rel),
-    );
+    const stale = markerFiles().filter((rel) => applyCountMarkers(read(rel), counts) !== read(rel));
     expect(stale, `Stale count or engine-range markers in: ${stale.join(", ")}. ${REGENERATE}`).toEqual([]);
   });
 

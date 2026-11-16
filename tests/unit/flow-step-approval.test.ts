@@ -13,7 +13,7 @@ import { createFlowTool } from "../../src/flow/flow-tool.js";
 import { categoryTool } from "../../src/surface/category-tool.js";
 import { ProjectContext } from "../../src/config/project.js";
 import type { IBridge } from "../../src/bridge/bridge.js";
-import type { ToolContext } from "../../src/core/types.js";
+import type { ToolContext } from "../../src/surface/tool-types.js";
 import { parseStepApproval, registerFlowStepApprover, type FlowStepApprovalRequest, type FlowStepDecision } from "../../src/flow/step-approval.js";
 import { DAEMON_FEATURES, EXTENSION_FEATURES } from "../../src/daemon/daemon.js";
 

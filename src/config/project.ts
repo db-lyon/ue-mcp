@@ -3,7 +3,7 @@ import * as path from "node:path";
 import { deepMerge } from "@db-lyon/flowkit";
 import { McpError, ErrorCode } from "../core/errors.js";
 import { info, warn } from "../core/log.js";
-import { UProjectSchema, UeMcpConfigSchema } from "../surface/schemas.js";
+import { UProjectSchema, UeMcpConfigSchema } from "./schemas.js";
 import { resolveEngineRoot, type EngineLookup } from "../editor/engine-root.js";
 import {
   configLayerFiles,
@@ -19,8 +19,10 @@ import {
 import { setInstalledHooks, setFeedbackMode, type FeedbackMode } from "./user-state.js";
 import { resolveUProjectPath } from "./uproject-path.js";
 import { readEnv } from "../core/env.js";
+import type { ContextStrategy } from "./context-strategy.js";
 
-export interface PluginInfo {
+/** An Unreal plugin with a Content folder, found on disk, and where it mounts. */
+export interface ContentPluginMount {
   name: string;
   contentDir: string;
   mountPoint: string;
@@ -94,7 +96,7 @@ export interface UeMcpConfig {
    *  signatures on demand; `full` lists every action's signature inline. See
    *  lean-context.ts and micro-context.ts. */
   context?: {
-    strategy?: "full" | "lean" | "micro";
+    strategy?: ContextStrategy;
   };
   /** How `ue-mcp <uproject>` serves: `daemon` (default) or `in-process`.
    *  UE_MCP_SERVER_MODE wins. See src/daemon/server-mode.ts. */
@@ -397,11 +399,11 @@ export class ProjectContext {
    * caching for the lifetime of the server is fine because plugin layouts
    * don't change while the editor is running.
    */
-  private _pluginCache: PluginInfo[] | null = null;
+  private _pluginCache: ContentPluginMount[] | null = null;
 
-  discoverPlugins(): PluginInfo[] {
+  discoverPlugins(): ContentPluginMount[] {
     if (this._pluginCache) return this._pluginCache;
-    const plugins: PluginInfo[] = [];
+    const plugins: ContentPluginMount[] = [];
     const seen = new Set<string>();
     function scan(dir: string): void {
       let entries: fs.Dirent[];

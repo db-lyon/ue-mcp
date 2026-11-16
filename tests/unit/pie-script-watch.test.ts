@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import type { ElicitFn, ElicitParams, ElicitResult, ToolContext } from "../../src/core/types.js";
+import type { ElicitFn, ElicitParams, ElicitResult } from "../../src/core/elicit.js";
+import type { ToolContext } from "../../src/surface/tool-types.js";
 import { subscribeScriptEvents, type ScriptEvent } from "../../src/pie/script-events.js";
 import {
   getScriptWatch,

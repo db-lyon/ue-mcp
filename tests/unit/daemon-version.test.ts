@@ -9,7 +9,7 @@ import * as path from "node:path";
 import { daemonCommand, daemonVersionFor, npxCliPath } from "../../src/daemon/shim.js";
 import { writeInstallMarker } from "../../src/editor/install-marker.js";
 import { packageVersion } from "../../src/core/package-root.js";
-import { NPX_AGE_GATE_OVERRIDE } from "../../src/integrations/claude-code/mcp-client-config.js";
+import { NPX_AGE_GATE_OVERRIDE } from "../../src/integrations/mcp-clients/mcp-client-config.js";
 import { ProjectFixture } from "../helpers/project-fixture.js";
 
 let fixture: ProjectFixture;

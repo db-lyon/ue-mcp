@@ -2,15 +2,14 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import type { ProjectContext } from "../config/project.js";
 import { warn } from "../core/log.js";
-import { UPluginSchema } from "../surface/schemas.js";
-import { engineLookupFor, trySelectEngine } from "./engine-root.js";
+import { UPluginSchema } from "../config/schemas.js";
+import { projectEngineVersion } from "./engine-root.js";
 import { packageRoot, packageVersion } from "../core/package-root.js";
 import { removeLegacyPythonContent } from "./legacy-python.js";
 import {
   BRIDGE_PLUGIN_NAME,
   INSTALL_MARKER_NAME,
   defaultPluginDir,
-  engineMajorMinor,
   installKindOf,
   resolvePluginDir,
   unrealPlatform,
@@ -87,18 +86,6 @@ export function deploy(context: ProjectContext): DeployResult {
   }
 
   return result;
-}
-
-/** Engine major.minor the project builds against, or its raw association. */
-export function projectEngineVersion(context: ProjectContext): string | null {
-  const assoc = context.engineAssociation;
-  if (assoc && /^\d+\.\d+$/.test(assoc)) return assoc;
-  try {
-    const engine = trySelectEngine(engineLookupFor(context.projectPath, assoc, context.config.editor), "engineRoot");
-    return engineMajorMinor(engine?.engineRoot) ?? assoc;
-  } catch {
-    return assoc;
-  }
 }
 
 export function deploySummary(r: DeployResult): string {

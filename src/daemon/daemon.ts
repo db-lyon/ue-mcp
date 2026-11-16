@@ -76,7 +76,7 @@ import { extensionsDir, loadExtensions, matchRoute, normalizeResponse, type Load
 import { installedCopies, recordedVersion, versionsOf } from "./extension-versions.js";
 import { UiBundleStore, contentType, type UiBundleOwner } from "./ui-bundles.js";
 import { ExtensionServices } from "./extension-services.js";
-import { collectStatus } from "../cli/status.js";
+import { collectStatus } from "../integrations/install-status.js";
 import { resolvePluginDir } from "../editor/install-marker.js";
 import { editorOwnsProject, probeEditorProcessList } from "../editor/engine-observer.js";
 import { applyUpdate, checkForUpdate, readPendingUpdate, repinClientConfigs, settlePendingUpdate } from "../editor/bridge-update.js";
@@ -94,7 +94,7 @@ import { checkpointsFor, subscribeCheckpointEvents } from "../checkpoints/servic
 import { listDaemonSkills } from "../extensions/skills-list.js";
 import { ContextProjectionError, ContextProjector, enabledGraph } from "../server/context-projection.js";
 import { actionEffectInfo } from "../surface/action-effects.js";
-import type { ContextStrategy } from "../surface/context/lean-context.js";
+import type { ContextStrategy } from "../config/context-strategy.js";
 
 const DEFAULT_IDLE_MS = 30 * 60_000;
 const DEFAULT_WAIT_FOR_EDITOR_SECONDS = 60;

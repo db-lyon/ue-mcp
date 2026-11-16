@@ -2,16 +2,17 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import type { ToolContext, ElicitFn, ElicitResult } from "../../src/core/types.js";
+import type { ToolContext } from "../../src/surface/tool-types.js";
+import type { ElicitFn, ElicitResult } from "../../src/core/elicit.js";
 import { isDirectiveResponse } from "../../src/core/directive.js";
-import { clearWorkarounds } from "../../src/dispatch/workaround-tracker.js";
+import { clearWorkarounds } from "../../src/tools/editor/workaround-tracker.js";
 import {
   buildPrefilledIssueUrl,
   writeFallbackReport,
   findByConfirmToken,
   MaxIssueUrlChars,
 } from "../../src/feedback/feedback-fallback.js";
-import { CORE_REPO } from "../../src/extensions/registry-catalog.js";
+import { CORE_REPO } from "../../src/github/repos.js";
 import { listDeferred } from "../../src/feedback/feedback-deferred.js";
 
 const mockSubmitFeedback = vi.fn();
@@ -20,7 +21,7 @@ vi.mock("../../src/feedback/github-app.js", () => ({
 }));
 
 const mockReadUserAuth = vi.fn();
-vi.mock("../../src/feedback/github-auth.js", () => ({
+vi.mock("../../src/github/auth.js", () => ({
   readUserAuth: () => mockReadUserAuth(),
 }));
 

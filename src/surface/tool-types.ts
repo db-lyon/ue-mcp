@@ -1,181 +1,17 @@
 import type { z } from "zod";
 import type { IBridge } from "../bridge/bridge.js";
 import type { ProjectContext } from "../config/project.js";
+import type { ElicitFn } from "../core/elicit.js";
+import type { ProgressFn } from "../core/progress.js";
 import type { EditorSession, SessionRegistry } from "../sessions/session.js";
-import type { HandlerSpec, ParamChoice, ParamSpec } from "../surface/handler-spec.js";
-import type { EpicInputSchema, EpicToolRef } from "../surface/epic-input.js";
+import type { HandlerSpec, ParamChoice, ParamSpec } from "./handler-spec.js";
+import type { EpicInputSchema, EpicToolRef } from "./epic-input.js";
 
 /**
- * Elicit a deterministic, user-mediated form response via the MCP client.
- * The server blocks until the client returns one of accept / decline / cancel.
- * Returns null when the connected client did not advertise the `elicitation`
- * capability - handlers that rely on this gate must refuse to proceed in
- * that case rather than fall back to an agent-mediated approval.
+ * The contract between the category tools and everything that builds, routes
+ * or runs them: the handler context, the tool and action shapes, and the
+ * plugin records a context exposes.
  */
-export interface ElicitFn {
-  (params: ElicitParams): Promise<ElicitResult>;
-  /**
-   * Whether the CONNECTED client advertised the `elicitation` capability.
-   *
-   * The presence of the function is NOT that answer. The server builds the
-   * gate at startup, before any client has connected, so it always has a
-   * function to hand over and the capability is only knowable once a client is
-   * on the other end. Callers that branch on "can this user actually be asked"
-   * must call this rather than test the function for undefined, which is true
-   * of every client and would silently promote a client that advertised
-   * nothing into the interactive path.
-   *
-   * Absent on a gate built outside the server (tests, embedders), where the
-   * function was handed over deliberately and is taken at face value.
-   */
-  clientAdvertisesElicitation?: () => boolean;
-
-  /**
-   * Who is on the other end, as they named themselves at initialize.
-   *
-   * Read to decide how much the client can be trusted to RENDER, which is a
-   * different question from what it advertised support for. Absent on a gate
-   * built outside the server, where nothing knows.
-   */
-  client?: () => { name: string; version?: string } | undefined;
-}
-
-export interface ElicitParams {
-  message: string;
-  /**
-   * Machine-readable context for a client that renders the form as its own
-   * card, keyed by a namespaced name such as `ue-mcp/guard`. Optional; a
-   * client that ignores it still has the message and the form.
-   */
-  _meta?: Record<string, unknown>;
-  requestedSchema: {
-    type: "object";
-    properties: Record<string, ElicitPrimitiveSchema>;
-    required?: string[];
-  };
-}
-
-export type ElicitPrimitiveSchema =
-  | { type: "string"; title?: string; description?: string; enum?: string[]; enumNames?: string[]; default?: string }
-  | { type: "number" | "integer"; title?: string; description?: string; default?: number }
-  | { type: "boolean"; title?: string; description?: string; default?: boolean }
-  | (ElicitMultiSelectBase & { items: { type: "string"; enum: string[] } })
-  | (ElicitMultiSelectBase & { items: { anyOf: Array<{ const: string; title: string }> } });
-
-/** A checkbox group: the answer is the list of ticked values. */
-interface ElicitMultiSelectBase {
-  type: "array";
-  title?: string;
-  description?: string;
-  minItems?: number;
-  maxItems?: number;
-  default?: string[];
-}
-
-export interface ElicitResult {
-  action: "accept" | "decline" | "cancel";
-  content?: Record<string, string | number | boolean | string[]>;
-}
-
-/**
- * One block of an editor dialog's body, in reading order (#1891).
- *
- * The flat `message` is every text widget of the dialog on its own line,
- * buttons and table cells included. `blocks` is the same body as it reads:
- *
- *   paragraph  text outside any table and any button; texts laid side by side
- *              in the dialog are one paragraph.
- *   table      a list or tree view: its visible column headings and one row of
- *              cells per row. `checked` (when any row has a checkbox) holds each
- *              row's state, null for a row without one, and `items` the index of
- *              that row in the dialog's `items`, which respond_to_dialog takes.
- *
- * The dialog's title and its button labels are never part of it.
- */
-export type DialogBlock =
-  | { type: "paragraph"; text: string }
-  | {
-      type: "table";
-      columns: string[];
-      rows: string[][];
-      checked?: Array<boolean | null>;
-      items?: Array<number | null>;
-    };
-
-/**
- * A blocking dialog put to a daemon extension, for a call that extension made.
- *
- * The same form an MCP client is elicited with (`message`, `requestedSchema`,
- * answered with `content.button` and, for a dialog with rows, `content.items`),
- * plus the dialog itself so the extension can draw it rather than parse it.
- */
-export interface DialogPromptRequest extends ElicitParams {
-  dialog: {
-    /** The editor showing it. */
-    editor: string;
-    title: string;
-    message: string;
-    /** In the order the dialog lays them out. */
-    buttons: string[];
-    /** The rows a person can tick, for a dialog that asks per item. */
-    items?: Array<{ index: number; label: string; cells: string[]; checked: boolean }>;
-    /** The body as paragraphs and tables, when the plugin reports it; `message` otherwise. */
-    blocks?: DialogBlock[];
-    /**
-     * Set for a native Win32 dialog of the editor process (a GPU device loss,
-     * an assert box): its window handle, process, kind, a plain summary, and
-     * any log lines that explain it.
-     */
-    native?: {
-      hwnd: string;
-      pid: number;
-      kind: "gpu-crash" | "assert" | "ensure" | "missing-modules" | "crash" | "message";
-      summary: string;
-      details?: string[];
-    };
-    /** The `category.action` whose call met the dialog. */
-    subject: string;
-    /** An answer sooner than this many milliseconds is not taken as a person's. */
-    minHumanMs: number;
-  };
-}
-
-/**
- * The form's three answers, or `delegate`: the person handed this one dialog
- * to the agent, which may then answer it as it would in auto mode.
- */
-export type DialogPromptResult = ElicitResult | { action: "delegate" };
-
-export type DialogPromptFn = (request: DialogPromptRequest) => Promise<DialogPromptResult>;
-
-/** Options for one action run in process, by a daemon extension. */
-export interface InProcessCallOptions {
-  /**
-   * Who a blocking dialog this call meets is put to, in place of an MCP
-   * elicitation form. Without it nobody is asked, and a mode that wants a
-   * person (interactive) applies as defer.
-   */
-  dialogPrompt?: DialogPromptFn;
-  /**
-   * How long this call waits on an open prompt before it returns the dialog
-   * refusal, in milliseconds. The prompt stays up either way, and whatever it
-   * answers later is still pressed. Default 60000.
-   */
-  dialogWaitMs?: number;
-  /**
-   * Who a form this call raises is put to, such as feedback approval, in place
-   * of an MCP client's elicitation. Without it nothing is elicited, and a mode
-   * that wants a person applies as it does for a client without elicitation.
-   */
-  elicit?: ElicitFn;
-  /**
-   * The access mode this call runs under. `read-only` refuses an action whose
-   * declared effect is `mutate` or `unknown`, and every state-changing bridge
-   * call it would make. Default read-write.
-   */
-  access?: "read-write" | "read-only";
-}
-
 export interface ToolContext {
   bridge: IBridge;
   project: ProjectContext;
@@ -248,25 +84,7 @@ export interface ToolContext {
   leaseHolder?: { id: string; label: string };
 }
 
-export interface ProgressUpdate {
-  /** Monotonic units done. With `total`, clients render a bar. */
-  progress: number;
-  total?: number;
-  /** One line describing what is happening right now. */
-  message: string;
-}
-
-export type ProgressFn = (update: ProgressUpdate) => void;
-
-/**
- * A terminal rendering of a long wait, such as `startProgress` in ui/progress.ts.
- * Handed in by the caller, so a module that waits never draws on its own.
- */
-export interface ProgressDisplay {
-  update(state: { fraction: number | null; message: string; detail?: string }): void;
-  stop(finalLine?: string): void;
-}
-
+/** One loaded ue-mcp plugin (an entry of a project's `plugins:` list), active or skipped. */
 export interface PluginInfo {
   name: string;
   version: string;

@@ -11,7 +11,7 @@ import type {
 } from "@db-lyon/flowkit";
 import type { FlowContext } from "./context.js";
 import { FlowStepKeySchema, type FlowConfig } from "./schema.js";
-import type { ToolDef, ToolContext, ActionSpec } from "../core/types.js";
+import type { ToolDef, ToolContext, ActionSpec } from "../surface/tool-types.js";
 import { actionEnum, SELECT_PARAM, OMIT_PARAM } from "../surface/category-tool.js";
 import { takeFieldSelection, projectResult, attachFieldReport } from "../surface/context/field-select.js";
 import { McpError, ErrorCode } from "../core/errors.js";
@@ -40,7 +40,7 @@ import {
   type EditorLossReport,
 } from "./editor-loss.js";
 import { taskEffect } from "../surface/action-effects.js";
-import { LOCAL_ACTIONS } from "../dispatch/offline.js";
+import { LOCAL_ACTIONS } from "./offline.js";
 import { EDITOR_OPERATION_TASKS } from "./editor-op-task.js";
 import { deriveFlowInputs } from "./flow-inputs.js";
 import { withStepApproval } from "./step-approval.js";

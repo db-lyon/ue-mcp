@@ -30,7 +30,7 @@ import { spawnSync } from "node:child_process";
 import { UnsafeArgumentError, assertPackageSpec, runNpmSync } from "../core/safe-spawn.js";
 import { UE_PLUGIN_NAME_RE } from "../extensions/package-paths.js";
 import { loadManifest, manifestActionNames, type PluginManifest } from "../extensions/manifest.js";
-import { satisfiesMinimum } from "../extensions/version.js";
+import { satisfiesMinimum } from "../core/semver.js";
 import { findInstalledPackage } from "../extensions/resolver.js";
 import { pluginSlug, deriveGroups, isGroupEnabled } from "../extensions/plugin-groups.js";
 import {
@@ -39,7 +39,7 @@ import {
   writeLayerGroups,
   type ConfigTarget,
 } from "../extensions/plugin-config-store.js";
-import { checkboxSelect, singleSelect } from "./ui/select.js";
+import { checkboxSelect, singleSelect } from "../terminal/select.js";
 import { readDeployedBridgeApiVersion } from "../extensions/bridge-api.js";
 import {
   deployNativeModule,

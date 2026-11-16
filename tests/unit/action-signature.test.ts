@@ -6,7 +6,7 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import { actionSignature, boundText, SIGNATURE_LEGEND } from "../../src/surface/action-signature.js";
-import type { ActionSpec, ToolDef } from "../../src/core/types.js";
+import type { ActionSpec, ToolDef } from "../../src/surface/tool-types.js";
 import { bp, categoryTool } from "../../src/surface/category-tool.js";
 import type { ParamChoice, ParamSpec } from "../../src/surface/handler-spec.js";
 import { ALL_TOOLS } from "../../src/tools.js";

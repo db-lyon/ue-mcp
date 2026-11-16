@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { ToolContext } from "../../src/core/types.js";
+import type { ToolContext } from "../../src/surface/tool-types.js";
 import { pieTool } from "../../src/tools/pie.js";
 import { driveFollowUp, type DriveClock } from "../../src/pie/drive-wait.js";
 import { handlerSpecs } from "../../src/tools/specs/pie.generated.js";

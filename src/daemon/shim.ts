@@ -21,7 +21,7 @@ import { DAEMON_API_VERSION, daemonDir, projectKey, readAnsweringDiscovery, type
 import { isOlder } from "./daemon.js";
 import { liveStartLock } from "./start-lock.js";
 import { installedBridge } from "../editor/install-marker.js";
-import { NPX_AGE_GATE_OVERRIDE } from "../integrations/claude-code/mcp-client-config.js";
+import { NPX_AGE_GATE_OVERRIDE } from "../integrations/mcp-clients/mcp-client-config.js";
 
 const START_TIMEOUT_MS = 120_000;
 /** How long a spawned daemon has to take the start lock before it counts as dead. */

@@ -3,7 +3,7 @@ import * as path from "node:path";
 import { resolveConfigPath, findIniFiles, parseIni, buildTagTree } from "../../codeintel/ue-ini.js";
 import { specBp } from "../specs/project.generated.js";
 import { specBp as blueprintSpecBp } from "../specs/blueprint.generated.js";
-import type { ActionSpec, ToolContext } from "../../core/types.js";
+import type { ActionSpec, ToolContext } from "../../surface/tool-types.js";
 import {
   checkPlatform,
   configCategory,

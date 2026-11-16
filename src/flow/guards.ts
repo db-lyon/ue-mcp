@@ -12,7 +12,7 @@
  */
 import type { TaskRegistry } from "@db-lyon/flowkit";
 import type { IBridge } from "../bridge/bridge.js";
-import type { ToolContext } from "../core/types.js";
+import type { ToolContext } from "../surface/tool-types.js";
 import type { FlowContext } from "./context.js";
 import {
   mutationScope,

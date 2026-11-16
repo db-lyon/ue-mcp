@@ -10,7 +10,7 @@
 // task factory, guards and locks as every hand-written action in this package.
 // Each also carries its input schema, which the compact signatures read (#1172).
 import { z } from "zod";
-import type { ActionSpec } from "../../core/types.js";
+import type { ActionSpec } from "../../surface/tool-types.js";
 import { bp } from "../../surface/category-tool.js";
 
 const S_epic_add_blackboard_key = {"properties":{"blackboard":{"type":"object","properties":{"refPath":{}}},"keyName":{"type":"string"},"keyType":{"type":"object","properties":{"refPath":{}}},"bInstanceSynced":{"type":"boolean"}},"required":["blackboard","keyName","keyType"]} as const;

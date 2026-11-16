@@ -2,14 +2,14 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import * as readline from "node:readline";
 import { ProjectContext } from "../config/project.js";
-import { BOLD, CYAN, DIM, GREEN, RED, RESET, fail, info, ok, redirectConsoleToStderr, warn } from "./ui/ansi.js";
-import { checkboxSelect, singleSelect, type CheckboxItem } from "./ui/select.js";
+import { BOLD, CYAN, DIM, GREEN, RED, RESET, fail, info, ok, redirectConsoleToStderr, warn } from "../terminal/ansi.js";
+import { checkboxSelect, singleSelect, type CheckboxItem } from "../terminal/select.js";
 import { runFeedbackAuthStep } from "./auth-cli.js";
 import type { CliUsage } from "./cli-main.js";
 import { getInstalledHooks, type FeedbackMode } from "../config/user-state.js";
 import { coreSkillsInstalled } from "../extensions/skills.js";
-import { detectMcpClients, isProjectScopedClient, ueMcpServerArgs } from "../integrations/claude-code/mcp-client-config.js";
-import { describeUnrealMcpEntry, findUnrealMcpEntries, type UnrealMcpEntry } from "../integrations/claude-code/unreal-mcp-entries.js";
+import { detectMcpClients, isProjectScopedClient, ueMcpServerArgs } from "../integrations/mcp-clients/mcp-client-config.js";
+import { describeUnrealMcpEntry, findUnrealMcpEntries, type UnrealMcpEntry } from "../integrations/epic/unreal-mcp-entries.js";
 import { takeEditorTarget, EditorFlagError } from "./editor-flag.js";
 import { findUProject } from "../config/uproject-path.js";
 import { readCategoryState } from "../surface/category-state.js";
@@ -18,15 +18,14 @@ import {
   ENRICHABLE_CATEGORIES,
   FEEDBACK_MODES,
   apply,
-  bridgePort,
   engineConfigRoot,
   engineRootReplacements,
-  projectEpicIntegrations,
   plan,
-  type ContextStrategy,
   type InitChoices,
   type InitResult,
 } from "./init-core.js";
+import { bridgePort, projectEpicIntegrations } from "../integrations/epic/project-status.js";
+import type { ContextStrategy } from "../config/context-strategy.js";
 
 /* ------------------------------------------------------------------ */
 /*  Ask for project path with readline                                 */

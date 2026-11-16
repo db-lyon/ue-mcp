@@ -1,4 +1,4 @@
-import { isDialogRefusal } from "../editor/dialog-guard.js";
+import { isDialogRefusal } from "../bridge/dialog-refusal.js";
 import type { IBridge } from "../bridge/bridge.js";
 import { McpError, ErrorCode, type McpErrorDetails } from "../core/errors.js";
 import { debug } from "../core/log.js";
@@ -6,7 +6,7 @@ import { taskEffect } from "../surface/action-effects.js";
 import { SESSION_ID } from "./lock-owner.js";
 import { NEVER_LOCKED } from "./lock-actions.js";
 import { BATCH_TASK, batchCallsOf } from "./batch-steps.js";
-import type { ToolDef } from "../core/types.js";
+import type { ToolDef } from "../surface/tool-types.js";
 
 // Per-asset exclusive locking, orchestrated from the dispatch layer. The lock
 // registry itself lives in the C++ bridge (the one editor every agent shares);
@@ -186,7 +186,7 @@ export async function withAssetLocks<T>(
       // flag, which is the one field a client branches on, and machineErrorBlock
       // dropped the payload entirely because it only reads McpError.
       throw new McpError(
-        ErrorCode.NOT_FOUND,
+        ErrorCode.BRIDGE_ERROR,
         String((res as Record<string, unknown>).error ?? "A modal dialog is blocking the editor."),
         res as unknown as McpErrorDetails,
       );

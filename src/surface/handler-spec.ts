@@ -14,7 +14,7 @@
  * reported as drift by `project(get_status)`.
  */
 import { z } from "zod";
-import type { ActionEffect, BridgeActionSpec } from "../core/types.js";
+import type { ActionEffect, BridgeActionSpec } from "./tool-types.js";
 import { ROUTING_PARAM_NAMES } from "./routing-params.js";
 
 /** Wire types a spec can declare. Mirrors EMCPParamType in HandlerRegistry.h. */
@@ -448,7 +448,7 @@ export function makeSpecBp(clauses: Readonly<Record<string, string>>, specs: Han
     if (clause === undefined) {
       throw new Error(
         `No recorded parameter spec for bridge method '${bridge}'. Register it with a spec in C++, `
-        + "then run npm run specs:record and npm run specs:generate.",
+        + "rebuild the plugin, then run npm run generate -- --editor with the editor open on tests/ue_mcp.",
       );
     }
     // The literal `bp` builds. Importing `bp` would load category-tool.ts,

@@ -9,7 +9,7 @@
  * re-running the full setup wizard.
  */
 
-import { authFile, pollDeviceFlow, readUserAuth, startDeviceFlow } from "../feedback/github-auth.js";
+import { authFile, pollDeviceFlow, readUserAuth, startDeviceFlow } from "../github/auth.js";
 import {
   BOLD,
   CYAN,
@@ -20,8 +20,8 @@ import {
   info,
   ok,
   warn,
-} from "./ui/ansi.js";
-import { singleSelect } from "./ui/select.js";
+} from "../terminal/ansi.js";
+import { singleSelect } from "../terminal/select.js";
 import { guardFetchExitAbort, isMainModule, type CliUsage } from "./cli-main.js";
 
 /**

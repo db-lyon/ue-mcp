@@ -6,7 +6,8 @@
  * verdict to the person through MCP elicitation when the client can show a form. A step it could not ask about is left
  * for pie(verdict), and is never asked about again in that run.
  */
-import type { ElicitParams, ElicitPrimitiveSchema, ToolContext } from "../core/types.js";
+import type { ElicitParams, ElicitPrimitiveSchema } from "../core/elicit.js";
+import type { ToolContext } from "../surface/tool-types.js";
 import { clientAdvertisesElicitation } from "../editor/dialog-mode.js";
 import { minHumanAnswerMs } from "../editor/dialog-guard.js";
 import {

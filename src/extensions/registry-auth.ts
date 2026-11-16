@@ -8,7 +8,7 @@
  *
  * Publishing to the plugin registry needs a per-author token. Rather than make
  * authors visit the site, mint a token, and paste it into an env var, this runs
- * the GitHub device flow already used for feedback authorship (src/feedback/github-auth.ts) and
+ * the GitHub device flow already used for feedback authorship (src/github/auth.ts) and
  * trades the resulting GitHub identity for a registry token via
  * POST /api/cli/exchange.
  *
@@ -25,7 +25,7 @@ import {
   startDeviceFlow,
   pollDeviceFlow,
   type UserAuth,
-} from "../feedback/github-auth.js";
+} from "../github/auth.js";
 import { registryBase } from "./registry-catalog.js";
 import { readEnv } from "../core/env.js";
 import { writePrivateFile } from "../core/private-file.js";
@@ -67,7 +67,7 @@ export function displayAccount(a: Pick<RegistryAuth, "login" | "method">): strin
   return a.method === "email" ? a.login : `@${a.login}`;
 }
 
-async function writeRegistryAuth(a: RegistryAuth): Promise<void> {
+export async function writeRegistryAuth(a: RegistryAuth): Promise<void> {
   await writePrivateFile(registryFile(), JSON.stringify(a, null, 2));
 }
 
@@ -281,82 +281,4 @@ export function describeEmailError(e: EmailSignInError): string {
 /** True for something shaped like an email address. The registry has the final say. */
 export function looksLikeEmail(s: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s.trim());
-}
-
-/**
- * Email sign-in: send a code, read it with `ask`, verify, and cache the token.
- *
- * `ask` returns the next line the user typed, or null at end of input. A wrong
- * or expired code may be retried up to the registry's limit, and typing "r"
- * sends a new code.
- */
-export async function loginWithEmail(
-  log: (msg: string) => void,
-  opts: { email: string; ask: (question: string) => Promise<string | null>; force?: boolean },
-): Promise<RegistryAuth> {
-  if (!opts.force) {
-    const existing = await readRegistryAuth();
-    if (existing) {
-      log(`Already logged in to ${existing.registry} as ${displayAccount(existing)}.`);
-      log(`Re-run with --force to mint a fresh token.`);
-      return existing;
-    }
-  }
-  const email = opts.email.trim();
-  if (!looksLikeEmail(email)) throw new Error(`not an email address: ${email}`);
-
-  const send = async (): Promise<void> => {
-    try {
-      const { expiresInSeconds } = await startEmailSignIn(email);
-      const minutes = Math.max(1, Math.round(expiresInSeconds / 60));
-      log(`Sent a sign-in code to ${email}. It is valid for ${minutes} minutes.`);
-    } catch (e) {
-      throw e instanceof EmailSignInError ? new Error(describeEmailError(e)) : e;
-    }
-  };
-
-  await send();
-  let wrong = 0;
-  for (;;) {
-    const exhausted = wrong >= EMAIL_CODE_TRIES;
-    const answer = await opts.ask(
-      exhausted
-        ? "That code can no longer be used. Type r to send a new one, or press Enter to stop: "
-        : "Enter the 6-digit code (or r to send a new one): ",
-    );
-    if (answer === null) throw new Error("no code entered");
-    const typed = answer.trim();
-    if (typed.toLowerCase() === "r") {
-      await send();
-      wrong = 0;
-      continue;
-    }
-    if (exhausted) throw new Error("sign-in stopped; run 'ue-mcp login' again");
-    if (typed === "") continue;
-    const code = typed.replace(/\s+/g, "");
-    if (!/^\d{6}$/.test(code)) {
-      log("The code is 6 digits.");
-      continue;
-    }
-    try {
-      const v = await verifyEmailCode(email, code);
-      const auth: RegistryAuth = {
-        token: v.token,
-        login: v.login,
-        email: v.email,
-        method: "email",
-        registry: registryBase(),
-        authorized_at: new Date().toISOString(),
-      };
-      await writeRegistryAuth(auth);
-      if (v.created) log(`Created a UE-MCP account for ${v.email}.`);
-      return auth;
-    } catch (e) {
-      if (!(e instanceof EmailSignInError) || e.status !== 400) {
-        throw e instanceof EmailSignInError ? new Error(describeEmailError(e)) : e;
-      }
-      wrong++;
-      log(e.message);
-    }
-  }
 }

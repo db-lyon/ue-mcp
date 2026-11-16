@@ -20,7 +20,7 @@ import {
   withheldTarget,
   withholdFromTool,
 } from "../../src/surface/registered-surface.js";
-import type { BridgeActionSpec } from "../../src/core/types.js";
+import type { BridgeActionSpec } from "../../src/surface/tool-types.js";
 
 const spec = (action: string) => canvasTool.actions[action] as BridgeActionSpec;
 const envelope = (action: string, p: Record<string, unknown>) => spec(action).mapParams!(p) as { tool: string; input: Record<string, unknown> };

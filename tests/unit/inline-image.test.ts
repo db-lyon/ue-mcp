@@ -9,7 +9,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { deflateSync } from "node:zlib";
 import { afterAll, describe, expect, it } from "vitest";
-import type { ToolContext } from "../../src/core/types.js";
+import type { ToolContext } from "../../src/surface/tool-types.js";
 import { decodePng, downscale, encodePng, jpegSize, pngSize, type RgbaImage } from "../../src/core/png.js";
 import {
   attachInlineImages,
@@ -19,7 +19,7 @@ import {
   DEFAULT_INLINE_EDGE,
   MAX_INLINE_IMAGES,
 } from "../../src/dispatch/inline-image.js";
-import { splitMedia } from "../../src/dispatch/server-dispatch.js";
+import { splitMedia } from "../../src/server/server-dispatch.js";
 import { bp, categoryTool } from "../../src/surface/category-tool.js";
 import { actionSignature } from "../../src/surface/action-signature.js";
 import { editorTool } from "../../src/tools/editor.js";

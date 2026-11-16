@@ -7,9 +7,9 @@ import {
   displayAccount,
   EMAIL_CODE_TRIES,
   fetchAuthMethods,
-  loginWithEmail,
   readRegistryAuth,
 } from "../../src/extensions/registry-auth.js";
+import { loginWithEmail } from "../../src/cli/login-cli.js";
 import { chooseLoginMethod, parseLoginFlags } from "../../src/cli/login-cli.js";
 
 const REGISTRY = "https://registry.test";

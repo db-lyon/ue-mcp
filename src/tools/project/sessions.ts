@@ -1,5 +1,5 @@
 import { checkPluginFreshness } from "../../editor/bridge-freshness.js";
-import { checkBridgeParity, deployedPlugin, freshnessWarning, pluginStaleness, recordedPluginSpecs } from "../../bridge/bridge-parity.js";
+import { checkBridgeParity, deployedPlugin, freshnessWarning, pluginStaleness, recordedPluginSpecs } from "./bridge-parity.js";
 import * as fs from "node:fs";
 import { attach, attachSummary } from "../../editor/deployer.js";
 import { collapsingEnvWarnings } from "../../config/session-env.js";
@@ -10,10 +10,10 @@ import { CLIENT_PROTOCOL_VERSION, describeProtocolMismatch } from "../../bridge/
 import { readLogState, readEngineSnapshot } from "../../editor/engine-observer.js";
 import { switchProject, isTargetDiverged } from "../../sessions/project-switch.js";
 import { ueMcpConfigRejections, describeConfigRejections } from "../../config/project.js";
-import type { ToolContext, ActionSpec } from "../../core/types.js";
+import type { ToolContext, ActionSpec } from "../../surface/tool-types.js";
 import type { EditorSession } from "../../sessions/session.js";
 import { toolGraphOf } from "../../surface/target-params.js";
-import { startProgress } from "../../cli/ui/progress.js";
+import { startProgress } from "../../terminal/progress.js";
 import { epicIntegrations } from "../../integrations/epic/project-status.js";
 
 /**

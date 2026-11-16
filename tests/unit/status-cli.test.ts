@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { apply, plan } from "../../src/cli/init-core.js";
-import { collectStatus } from "../../src/cli/status.js";
+import { collectStatus } from "../../src/integrations/install-status.js";
 import { packageVersion } from "../../src/core/package-root.js";
 import { ProjectFixture } from "../helpers/project-fixture.js";
 import { restoreEnv } from "../helpers/env.js";

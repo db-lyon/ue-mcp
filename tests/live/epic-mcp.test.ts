@@ -9,7 +9,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { callBridge, disconnectBridge, getBridge, type TestResult } from "../setup.js";
 import type { EditorBridge } from "../../src/bridge/bridge.js";
 import { ErrorCode } from "../../src/core/errors.js";
-import type { ProgressUpdate } from "../../src/core/types.js";
+import type { ProgressUpdate } from "../../src/core/progress.js";
 
 type Json = Record<string, unknown>;
 const body = (r: TestResult): Json => (r.result && typeof r.result === "object" ? (r.result as Json) : {});

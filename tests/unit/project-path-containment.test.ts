@@ -13,7 +13,7 @@ import { sourceActions } from "../../src/tools/project/source.js";
 import { configActions } from "../../src/tools/project/config.js";
 import { engineActions } from "../../src/tools/project/engine.js";
 import { resolveInside, requireModuleName, PathOutsideRootsError } from "../../src/core/path-guard.js";
-import type { ActionSpec } from "../../src/core/types.js";
+import type { ActionSpec } from "../../src/surface/tool-types.js";
 
 let sandbox: string;
 let projectDir: string;

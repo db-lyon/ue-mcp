@@ -12,7 +12,7 @@ import { subscribeFlowEvents } from "../flow/events.js";
 import { findUProject, isUProjectPath } from "../config/uproject-path.js";
 import { takeEditorTarget, EditorFlagError } from "./editor-flag.js";
 import { setDefaultLogLevel } from "../core/log.js";
-import { BOLD, DIM, GREEN, RED, RESET, YELLOW } from "./ui/ansi.js";
+import { BOLD, DIM, GREEN, RED, RESET, YELLOW } from "../terminal/ansi.js";
 import type { CliUsage } from "./cli-main.js";
 
 export const usage: CliUsage = {

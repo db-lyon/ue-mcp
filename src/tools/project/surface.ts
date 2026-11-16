@@ -1,8 +1,8 @@
 import { searchToolGraph, type ToolSearchHit } from "../../surface/context/tool-search.js";
 import { actionSchema, resolveActionRef, suggestActions } from "../../surface/action-schema.js";
-import { availabilityReport } from "../../dispatch/offline.js";
-import { getWorkarounds } from "../../dispatch/workaround-tracker.js";
-import type { ToolContext, ActionSpec } from "../../core/types.js";
+import { availabilityReport } from "../../flow/offline.js";
+import { getWorkarounds } from "../editor/workaround-tracker.js";
+import type { ToolContext, ActionSpec } from "../../surface/tool-types.js";
 import { visibleToolGraphOf } from "../../surface/registered-surface.js";
 
 /** Surface introspection: search, describe and list what this server can serve. */

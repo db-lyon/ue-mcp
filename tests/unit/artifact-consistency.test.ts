@@ -20,18 +20,16 @@
  *   - A shipped skill told agents there were 19 category tools. There are 24.
  *
  * Every one of those passed CI, because CI had nothing that looked. The
- * generator can restamp them all (`npm run generate:metadata`), but a
- * generator only helps if someone runs it, and the failure mode is precisely
- * that nobody did. So this fails the build instead.
- *
- * When this test fails the fix is almost always `npm run generate:metadata`,
- * then commit what it changed. The message says so.
+ * generators can restamp them all (`npm run generate`), but a generator only
+ * helps if someone runs it, and the failure mode is precisely that nobody did.
+ * So this fails the build instead.
  */
 import { describe, it, expect } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { ALL_TOOLS } from "../../src/tools.js";
+import { markerFiles } from "../../scripts/lib/tool-counts.js";
 
 const repo = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const read = (rel: string): string => fs.readFileSync(path.join(repo, rel), "utf8");
@@ -52,7 +50,7 @@ function readUplugin(): { path: string; json: any } {
   return { path: hit, json: JSON.parse(fs.readFileSync(path.join(dir, hit), "utf8")) };
 }
 
-const REGENERATE = "Run `npm run generate:metadata` and commit what it changes.";
+const REGENERATE = "Run `npm run generate` and commit what it changes.";
 
 const pkg = readJson("package.json");
 
@@ -97,20 +95,9 @@ describe("one product, one version", () => {
 });
 
 describe("one surface, one count", () => {
-  const stampedFiles = [
-    "CLAUDE.md",
-    "README.md",
-    "docs/index.md",
-    "docs/architecture.md",
-    "docs/configuration.md",
-    "docs/development.md",
-    "docs/flows.md",
-    "docs/tool-reference.md",
-  ];
-
   it("has no stale count marker in any file that carries one", () => {
     const stale: string[] = [];
-    for (const rel of stampedFiles) {
+    for (const rel of markerFiles()) {
       const text = read(rel);
       const pairs: Array<[RegExp, number]> = [
         [/<!--\s*count:tools\s*-->([^<]*)<!--\s*\/count\s*-->/g, counts.tools],

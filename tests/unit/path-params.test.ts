@@ -9,7 +9,7 @@
 import { describe, it, expect } from "vitest";
 import { isPathParam, normalizePathParams, attachPathRepairs } from "../../src/surface/path-params.js";
 import { categoryTool } from "../../src/surface/category-tool.js";
-import type { ToolContext } from "../../src/core/types.js";
+import type { ToolContext } from "../../src/surface/tool-types.js";
 
 describe("isPathParam", () => {
   it("recognises the path spellings the surface uses", () => {

@@ -66,10 +66,10 @@ export {
   type ContextMeasurementRun,
   type ContextMeasurementTask,
   type ContextScopeBucket,
-} from "./daemon/context-measurement.js";
+} from "./surface/context/context-measurement.js";
 export type { DaemonEvent } from "./daemon/events.js";
-export type { DialogBlock, DialogPromptFn, DialogPromptRequest, DialogPromptResult } from "./core/types.js";
+export type { DialogBlock, DialogPromptFn, DialogPromptRequest, DialogPromptResult } from "./editor/dialog-types.js";
 export type { DisconnectCause } from "./daemon/disconnect.js";
 export { signBundle, verifyBundle, type UiBundleInfo, type UiManifest } from "./daemon/ui-bundles.js";
-export type { StatusReport, ClientStatus } from "./cli/status.js";
+export type { StatusReport, ClientStatus } from "./integrations/install-status.js";
 export { MACHINE_REPORT_VERSION, type MachineReport, type MachineProject, type MachineDaemon } from "./machine/projects.js";
