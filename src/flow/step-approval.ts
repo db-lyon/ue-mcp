@@ -11,23 +11,7 @@
  * gets a run without it.
  */
 import type { TaskRegistry, TaskResult } from "@db-lyon/flowkit";
-
-export interface FlowStepApprovalRequest {
-  runId: string;
-  flowName: string;
-  /** The task the step runs, as the registry names it: `category.action` for an action. */
-  task: string;
-  /** flowkit's execution phase: "task" for a step, or on_success / on_failure work. */
-  phase: string;
-  /** The task's options after the run resolved them. */
-  options: Record<string, unknown>;
-  /** The caller's token from the run request, so the approver knows whose run it is. */
-  token: string;
-}
-
-export type FlowStepDecision = { allow: true } | { allow: false; reason?: string };
-
-export type FlowStepApprover = (request: FlowStepApprovalRequest) => Promise<FlowStepDecision>;
+import type { FlowStepApprover, FlowStepDecision } from "../contract/daemon.js";
 
 /** What a run asks for: the registered approver to ask, and the caller's token for it. */
 export interface FlowStepApprovalSpec {

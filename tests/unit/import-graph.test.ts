@@ -29,6 +29,7 @@ const srcDir = path.join(here, "..", "..", "src");
 
 /** Lowest first. A folder may import only folders on an earlier line. */
 const LAYERS: readonly (readonly string[])[] = [
+  ["contract"],
   ["core"],
   ["terminal"],
   ["bridge"],

@@ -15,7 +15,8 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { downloadVerified, extractZip, sha256Of } from "../core/archive.js";
 import { extensionGate, extensionsDir } from "./extensions.js";
-import { isExtensionName, type ExtensionManifest as PackageExtensionField } from "./extension-api.js";
+import type { ExtensionManifest as PackageExtensionField } from "../contract/daemon.js";
+import { isExtensionName } from "./extension-manifest.js";
 import { installedCopies, isLeftover, migrateLegacy, pruneVersions, recordVersion, versionDir } from "./extension-versions.js";
 import { clearExtensionRecords } from "../config/extension-state.js";
 

@@ -106,7 +106,7 @@ export const STEPS = [
     name: "golden",
     npm: "golden:record",
     cmd: [node, "scripts/record-golden.mjs"],
-    outputs: ["tests/golden/editor-down.json"],
+    outputs: ["tests/golden/editor-down.json", "tests/golden/daemon-api.d.ts.txt"],
   },
   {
     name: "golden:connected",

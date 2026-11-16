@@ -11,9 +11,9 @@
 import * as path from "node:path";
 import { findUProject } from "../config/uproject-path.js";
 import { readAnsweringDiscovery } from "../daemon/discovery.js";
+import { daemonRequest, daemonUiUrl, stopDaemon } from "../daemon/client.js";
 import { runDaemon } from "../daemon/daemon.js";
 import { ensureDaemon } from "../daemon/shim.js";
-import { waitForExit } from "../daemon/supersede-watch.js";
 
 /** How long `daemon stop` waits for the process to exit. */
 const STOP_WAIT_MS = 30_000;
@@ -76,7 +76,7 @@ export async function run(argv: string[]): Promise<number | void> {
 
   if (sub === "open") {
     const live = await ensureDaemon(projects[0]);
-    const url = `http://127.0.0.1:${live.port}/ui/?token=${live.token}`;
+    const url = daemonUiUrl(live);
     if (json) out({ ok: true, url });
     else console.log(url);
     if (browser) openUrl(url);
@@ -90,12 +90,8 @@ export async function run(argv: string[]): Promise<number | void> {
     else ok("no daemon running for this project");
     return 0;
   }
-  const auth = { authorization: `Bearer ${d.token}` };
-
   if (sub === "stop") {
-    await fetch(`http://127.0.0.1:${d.port}/v1/shutdown`, { method: "POST", headers: auth }).catch(() => undefined);
-    // Return once the process is gone, so a start right after never runs beside it.
-    if (!(await waitForExit(d.pid, STOP_WAIT_MS))) {
+    if (!(await stopDaemon(d, STOP_WAIT_MS))) {
       const error = `daemon pid ${d.pid} did not exit within ${STOP_WAIT_MS / 1000}s`;
       if (json) out({ ok: false, pid: d.pid, error });
       else fail(error);
@@ -107,8 +103,9 @@ export async function run(argv: string[]): Promise<number | void> {
   }
 
   try {
-    const res = await fetch(`http://127.0.0.1:${d.port}/v1/health`, { headers: auth });
-    const health = await res.json();
+    const res = await daemonRequest(d, "health");
+    if (res.json === undefined) throw new Error(`HTTP ${res.status}: ${res.text.slice(0, 200) || "no body"}`);
+    const health = res.json;
     if (json) out({ ok: true, running: true, discovery: { pid: d.pid, port: d.port, version: d.version, startedAt: d.startedAt }, health });
     else {
       const h = health as { editors: Array<{ name: string; connected: boolean; lastDisconnect: { cause: string } | null }>; clients: number };

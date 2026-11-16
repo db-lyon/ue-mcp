@@ -13,56 +13,10 @@ import { packageVersion } from "../core/package-root.js";
 import { findInstalledPackage } from "./resolver.js";
 import { CORE_OWNER, listSkills, packagedSkillsRoot, readSkillOwnership } from "./skills.js";
 import { PROJECT_SKILLS_DIR, parseSkillFile } from "./skill-file.js";
-
-/** Who a skill belongs to. */
-export type DaemonSkillOwner =
-  | { kind: "ue-mcp"; version: string }
-  | { kind: "plugin"; package: string; version: string | null }
-  | { kind: "project" };
+import type { DaemonSkill, DaemonSkillOwner, ProjectSkillFolder } from "../contract/daemon.js";
 
 /** The project folders skills are read from, in the order a same-named skill wins. */
-export const PROJECT_SKILL_FOLDERS = [PROJECT_SKILLS_DIR, ".agents/skills"] as const;
-export type ProjectSkillFolder = (typeof PROJECT_SKILL_FOLDERS)[number];
-
-/** A copy of a skill another entry with the same id hides. */
-export interface ShadowedSkill {
-  location: "packaged" | "project";
-  folder?: ProjectSkillFolder;
-  dir: string;
-}
-
-export interface DaemonSkill {
-  /**
-   * The skill's directory name, unique in one listing. A plugin's skills are
-   * installed as `<namespace>-<skill>` (installedSkillName), so that is their id.
-   */
-  id: string;
-  /** Frontmatter `name`, or the id when the frontmatter has none. */
-  name: string;
-  /** Frontmatter `description`, or "" (reported in `problems`). */
-  description: string;
-  /** Absolute path of the skill directory. */
-  dir: string;
-  /** Every other file in the directory, relative to it with `/` separators. */
-  files: string[];
-  /** SKILL.md without its frontmatter. */
-  body: string;
-  frontmatter: Record<string, unknown>;
-  /** SKILL.md length in characters / 4, rounded up. */
-  tokens: number;
-  owner: DaemonSkillOwner;
-  location: "packaged" | "project";
-  /** Which project folder, for a project skill. */
-  folder?: ProjectSkillFolder;
-  /**
-   * The copies with the same id this one hides: a project skill hides ue-mcp's
-   * packaged copy of itself, and `.claude/skills` hides `.agents/skills`.
-   * Absent when it hides nothing.
-   */
-  shadows?: ShadowedSkill[];
-  /** What is wrong with SKILL.md, such as frontmatter that does not parse. Empty when nothing is. */
-  problems: string[];
-}
+export const PROJECT_SKILL_FOLDERS: readonly ProjectSkillFolder[] = [PROJECT_SKILLS_DIR, ".agents/skills"];
 
 function filesBeside(dir: string): string[] {
   try {

@@ -14,8 +14,9 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { normalizeProjectRoot } from "../../src/bridge/wire-contract.js";
 import { isPidAlive } from "../../src/bridge/editor-target.js";
 import {
-  daemonDir, discoveryIsStale, discoveryPath, projectKey, readAnsweringDiscovery, readLiveDiscovery, writeDiscovery, type DaemonDiscovery,
+  daemonDir, discoveryIsStale, discoveryPath, projectKey, readAnsweringDiscovery, readLiveDiscovery, writeDiscovery,
 } from "../../src/daemon/discovery.js";
+import type { DaemonDiscovery } from "../../src/contract/daemon.js";
 import { compareVersions } from "../../src/core/semver.js";
 import { ensureDaemon } from "../../src/daemon/shim.js";
 import { packageVersion } from "../../src/core/package-root.js";

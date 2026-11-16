@@ -8,8 +8,8 @@ import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { selectBundle, selectOwnerBundle, signBundle, UiBundleStore, verifyBundle, type UiManifest } from "../../src/daemon/ui-bundles.js";
-import { DAEMON_API_VERSION } from "../../src/daemon/discovery.js";
+import { selectBundle, selectOwnerBundle, signBundle, UiBundleStore, verifyBundle } from "../../src/daemon/ui-bundles.js";
+import { DAEMON_API_VERSION, type UiManifest } from "../../src/contract/daemon.js";
 
 const b = (name: string, version: string) => ({ manifest: { name, version, api: { min: 1, max: 1 }, files: {} } as UiManifest });
 const versions = (xs: Array<{ manifest: UiManifest }> | null) => xs?.map((x) => `${x.manifest.name}@${x.manifest.version}`);

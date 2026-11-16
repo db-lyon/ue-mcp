@@ -9,38 +9,10 @@ import { ProjectContext } from "../config/project.js";
 import { packageVersion } from "../core/package-root.js";
 import { isPidAlive, readBridgeInstanceRecords } from "../bridge/editor-target.js";
 import { projectEngineVersion } from "../editor/engine-root.js";
-import { inspectInstall, type InstallReport } from "../editor/install-check.js";
-import { readInstallMarker, resolvePluginDir, type InstallMarker } from "../editor/install-marker.js";
+import { inspectInstall } from "../editor/install-check.js";
+import { readInstallMarker, resolvePluginDir } from "../editor/install-marker.js";
+import type { StatusReport } from "../contract/daemon.js";
 import { clientId, detectMcpClients, readUeMcpEntry } from "./mcp-clients/mcp-client-config.js";
-
-export interface ClientStatus {
-  id: string;
-  name: string;
-  configPath: string;
-  detected: boolean;
-  /** The config has a ue-mcp entry. */
-  configured: boolean;
-  /** The exact version the entry pins, or null for @latest or no entry. */
-  pinned: string | null;
-}
-
-export interface StatusReport {
-  version: string;
-  node: { version: string; execPath: string };
-  project: { path: string; name: string; engine: string | null; engineAssociation: string | null };
-  plugin: InstallReport["bridge"] & { dirSource: "instance-record" | "default" | "scan" | null; marker: InstallMarker | null };
-  editor: {
-    running: boolean;
-    instances: Array<{ pid: number; port: number; state: string | null; alive: boolean; startedAt: string | null }>;
-  };
-  toolchain: InstallReport["toolchain"];
-  engine: InstallReport["engine"];
-  config: { path: string; exists: boolean };
-  clients: ClientStatus[];
-  ok: boolean;
-  problems: InstallReport["problems"];
-  nextSteps: string[];
-}
 
 export function collectStatus(uprojectPath: string, isAlive: (pid: number) => boolean = isPidAlive): StatusReport {
   const project = new ProjectContext();

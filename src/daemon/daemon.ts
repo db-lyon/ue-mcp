@@ -4,24 +4,9 @@
  * editor bridge, survives editor restarts, and serves every MCP client (through
  * the stdio shim) and the UI over loopback HTTP.
  *
- * Endpoints, all on 127.0.0.1 and all requiring the bearer token from the
- * discovery file:
- *   GET  /v1/health     what the daemon is and what it is attached to
- *   GET  /v1/events     server-sent events, resumable by Last-Event-ID
- *   GET  /v1/install    the project's install state, as `ue-mcp status --json` reports it
- *   GET  /v1/update     the newest release for the install's channel, and whether it has binaries for this engine
- *   POST /v1/update/apply  install it, now or when the editor exits
- *   POST /v1/shutdown   exit now
- *   POST /v1/handoff    exit once no call is in flight (a newer daemon is taking over)
- *   /v1/checkpoints     checkpoints per editor session, see checkpoint-routes.ts
- *   /v1/journal         the mutation journal per editor session, see journal-routes.ts
- *   GET  /v1/skills     every skill a client of this project can load, see skills-list.ts
- *   GET  /v1/context/projection  what a strategy and category scope advertise, see context-projection.ts
- *   GET  /v1/actions    each action's effect and destructive flag, see action-effects.ts
- *   GET  /v1/sessions   open MCP sessions and their access mode; PUT /v1/sessions/<id>/access sets it
- *   GET  /v1/dialogs/native         native Win32 dialogs this project's editors show
- *   POST /v1/dialogs/native/press   press one by window handle and button label
- *   WS   /v1/mcp        one MCP session per socket
+ * Every route it serves is declared in DAEMON_ROUTES (contract/daemon.ts) and
+ * answered through router.ts; the handlers are the RouteHandlers built below
+ * and in the *-routes.ts modules.
  */
 import * as fs from "node:fs";
 import * as http from "node:http";
@@ -33,23 +18,45 @@ import { editorStepFailure } from "./editor-step.js";
 import { readEnv } from "../core/env.js";
 import { packageVersion } from "../core/package-root.js";
 import { compareVersions } from "../core/semver.js";
+import { hostIsAllowed } from "../core/loopback-host.js";
+import { StatusError } from "../core/status-error.js";
 import { normalizeProjectRoot } from "../bridge/wire-contract.js";
 import { bridgeInstancesDir, findLiveInstanceRecord, type BridgeInstanceRecord } from "../bridge/editor-target.js";
 import type { EditorSession } from "../sessions/session.js";
 import { createRuntime, type Runtime } from "../server/runtime.js";
+import type { InProcessCallOptions } from "../server/call-options.js";
 import { startVersionCheck } from "../core/version-check.js";
 import { createMcpServer } from "../server/mcp-server.js";
 import { startFlowHttpServer } from "../flow/http-server.js";
 import {
   DAEMON_API_VERSION,
+  DAEMON_FEATURES,
+  DAEMON_GAP_EVENT,
+  DAEMON_HEADERS,
+  EXTENSION_API_VERSION,
+  EXTENSION_FEATURES,
+  routePath,
+  type CallActionOptions,
+  type DaemonDiscovery,
+  type DaemonEvent,
+  type DaemonEventType,
+  type DaemonExtensionApi,
+  type DaemonHealth,
+  type EditorStatus,
+  type McpSessionInfo,
+  type NativeDialogPressResult,
+  type NativeDialogView,
+  type RefusedExtension,
+} from "../contract/daemon.js";
+import {
   discoveryIsStale,
   newToken,
   projectKey,
   readLiveDiscovery,
   removeDiscovery,
   writeDiscovery,
-  type DaemonDiscovery,
 } from "./discovery.js";
+import { daemonRequest } from "./client.js";
 import { EventLog } from "./events.js";
 import { ExpectedDisconnect, settleAndClassify } from "./disconnect.js";
 import { WebSocketServerTransport } from "./ws-transport.js";
@@ -57,23 +64,16 @@ import { watchDir, type DirWatch, type WatchFn } from "./dir-watch.js";
 import { drainInflight, watchSupersede } from "./supersede-watch.js";
 import { describeToolCall, resultError, type CallLabel } from "./activity.js";
 import { openUrl } from "../core/open-url.js";
-import { handleFlowRoute, hostIsAllowed } from "../flow/http-server.js";
+import { handleFlowRoute } from "../flow/http-server.js";
 import { userDir } from "../core/user-dir.js";
 import { readRegistryAuth } from "../extensions/registry-auth.js";
 import { DIALOG_MODE, FEEDBACK_MODE, PLAYTEST_MODE } from "../config/modes.js";
 import { resolvePlaytestMode } from "../editor/playtest-mode.js";
-import { EXTENSION_API_VERSION, type DaemonExtensionApi, type DaemonHealth, type EditorStatus, type McpSessionInfo, type RefusedExtension } from "./extension-api.js";
 import { randomUUID } from "node:crypto";
 import { SessionAccess, parseSessionAccessMode, SESSION_ACCESS_MODES } from "../flow/session-access.js";
 import { ensureGuard, existingGuard, nativeAsBlocking, onDialogEvent } from "../editor/dialog-guard.js";
 import { nativeDialogInfo, nativeDialogsForProject } from "../editor/native-dialogs.js";
-import type { NativeDialogPressResult, NativeDialogView } from "./extension-api.js";
-
-/** What this daemon's extension API offers beyond its version number. */
-export const EXTENSION_FEATURES: readonly string[] = ["callAction.dialogPrompt", "callAction.elicit", "callAction.access", "checkpoints", "checkpoints.assetDiff", "events.dialog", "events.script", "models.provider", "modes", "modes.playtest", "skills", "context.projection", "actions.effects", "extension.versions", "ui.scopedKeys", "ui.extensions", "extension.services", "flows.stepApproval", "dialogs.native"];
-
-/** What this daemon's HTTP API offers beyond DAEMON_API_VERSION, reported by /v1/health. */
-export const DAEMON_FEATURES: readonly string[] = ["checkpoints", "checkpoints.assetDiff", "skills", "context.projection", "actions.effects", "install.pendingBuild", "editor.rebuild", "ui.scopedKeys", "ui.extensions", "flows.stepApproval", "sessions.access", "journal", "tools.categories", "leases", "dialogs.native"];
+import { createRouter, HANDLED, ok, resolveEditorSession, type RouteHandlers, type RouteRequest } from "./router.js";
 import { extensionsDir, loadExtensions, matchRoute, normalizeResponse, type LoadedExtension } from "./extensions.js";
 import { installedCopies, recordedVersion, versionsOf } from "./extension-versions.js";
 import { UiBundleStore, contentType, type UiBundleOwner } from "./ui-bundles.js";
@@ -89,9 +89,9 @@ import { subscribeScriptEvents } from "../pie/script-events.js";
 import { stopAllScriptWatches } from "../pie/script-watch.js";
 import { pluginRoutes } from "./plugin-routes.js";
 import { releaseStartLock, waitForStartTurn } from "./start-lock.js";
-import { checkpointRoute } from "./checkpoint-routes.js";
-import { journalRoute } from "./journal-routes.js";
-import { toolsRoute } from "./tools-routes.js";
+import { checkpointRoutes } from "./checkpoint-routes.js";
+import { journalRoutes } from "./journal-routes.js";
+import { toolsRoutes } from "./tools-routes.js";
 import { checkpointsFor, subscribeCheckpointEvents } from "../checkpoints/service.js";
 import { listDaemonSkills } from "../extensions/skills-list.js";
 import { ContextProjectionError, ContextProjector, enabledGraph } from "../server/context-projection.js";
@@ -143,14 +143,33 @@ export interface DaemonOptions {
 const STALL_BEAT_MS = 1000;
 const STALL_REPORT_MS = 3000;
 
-/** Pipe a file to a response; a file gone mid-read ends the response instead of the daemon. */
-function streamFile(file: string, res: http.ServerResponse): void {
-  fs.createReadStream(file)
-    .on("error", (e) => {
-      warn("daemon", `could not read ${file}`, e);
-      res.destroy();
-    })
-    .pipe(res);
+/** An extension's call options, as the runtime takes them. */
+function callOptions(o: CallActionOptions | undefined): InProcessCallOptions {
+  return {
+    ...(o?.dialogPrompt ? { dialogPrompt: o.dialogPrompt } : {}),
+    ...(o?.dialogWaitMs !== undefined ? { dialogWaitMs: o.dialogWaitMs } : {}),
+    ...(o?.elicit ? { elicit: o.elicit } : {}),
+    ...(o?.access ? { access: o.access } : {}),
+  };
+}
+
+/** A comma list from the query, or undefined when the parameter is absent. */
+function listParam(query: URLSearchParams, name: string): string[] | undefined {
+  const raw = query.get(name);
+  return raw === null ? undefined : raw.split(",").map((c) => c.trim()).filter(Boolean);
+}
+
+/** The discovery record this process publishes. */
+function discoveryRecord(port: number, token: string, projectDir: string, startedAt: string): DaemonDiscovery {
+  return {
+    pid: process.pid,
+    port,
+    token,
+    version: packageVersion(),
+    apiVersion: DAEMON_API_VERSION,
+    projectRoot: normalizeProjectRoot(projectDir),
+    startedAt,
+  };
 }
 
 /** Whether anything accepts a connection on this loopback port; a closed port refuses at once. */
@@ -320,7 +339,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
   });
   // Checkpoints: checkpoint.created and checkpoint.restored for one checkpoint, checkpoints.* for the history.
   const unsubscribeCheckpoints = subscribeCheckpointEvents((e) => {
-    const type = e.type === "created" || e.type === "restored" ? `checkpoint.${e.type}` : `checkpoints.${e.type}`;
+    const type: DaemonEventType = e.type === "created" || e.type === "restored" ? `checkpoint.${e.type}` : `checkpoints.${e.type}`;
     events.publish(type, e.data as unknown as Record<string, unknown>);
   });
 
@@ -344,17 +363,17 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
   wss.on("headers", (headers, req) => {
     const id = randomUUID();
     sessionIds.set(req, id);
-    headers.push(`x-ue-mcp-session: ${id}`);
+    headers.push(`${DAEMON_HEADERS.session}: ${id}`);
   });
 
   wss.on("connection", (ws, req) => {
     clients += 1;
-    const header = String(req.headers["x-ue-mcp-client"] ?? "unknown");
+    const header = String(req.headers[DAEMON_HEADERS.client] ?? "unknown");
     const transport = new WebSocketServerTransport(ws);
     transports.add(transport);
     const sessionId = sessionIds.get(req) ?? randomUUID();
     // A client can open its session read-only, so no call slips through before it sets the mode.
-    const access = new SessionAccess(parseSessionAccessMode(req.headers["x-ue-mcp-access"]));
+    const access = new SessionAccess(parseSessionAccessMode(req.headers[DAEMON_HEADERS.access]));
     const { server, dispose } = createMcpServer(rt, { access, sessionId });
     // The MCP client's own name once it has introduced itself, else what the shim said.
     const client = (): string => server.server.getClientVersion()?.name ?? header;
@@ -438,7 +457,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
     if (cookieTokens(req).includes(token)) return true;
     // EventSource cannot set headers; the stream alone also takes the token as a query.
     const url = new URL(req.url ?? "/", "http://127.0.0.1");
-    return url.pathname === "/v1/events" && url.searchParams.get("token") === token;
+    return url.pathname === routePath("events") && url.searchParams.get("token") === token;
   };
 
   const health = (): DaemonHealth => ({
@@ -560,7 +579,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
         return dir;
       })(),
       events: {
-        publish: (type, data) => events.publish(`${name}.${type}`, data),
+        publish: (type, data) => events.publishFor(name, type, data),
         subscribe: (listener) => events.subscribe(listener),
         since: (lastId) => events.since(lastId),
       },
@@ -568,12 +587,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
         routes.push({ method, path: routePath, handler });
       },
       callAction: async (category, action, args, callOpts) => {
-        const r = await rt.callAction(category, action, args, {
-          ...(callOpts?.dialogPrompt ? { dialogPrompt: callOpts.dialogPrompt } : {}),
-          ...(callOpts?.dialogWaitMs !== undefined ? { dialogWaitMs: callOpts.dialogWaitMs } : {}),
-          ...(callOpts?.elicit ? { elicit: callOpts.elicit } : {}),
-          ...(callOpts?.access ? { access: callOpts.access } : {}),
-        });
+        const r = await rt.callAction(category, action, args, callOptions(callOpts));
         return { isError: !!r.isError, content: r.content };
       },
       features: EXTENSION_FEATURES,
@@ -606,12 +620,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
             { strategy: callOpts?.strategy ?? rt.contextStrategy, ...(callOpts?.categories ? { categories: callOpts.categories } : {}) },
             tool,
             input ?? {},
-            {
-              ...(callOpts?.dialogPrompt ? { dialogPrompt: callOpts.dialogPrompt } : {}),
-              ...(callOpts?.dialogWaitMs !== undefined ? { dialogWaitMs: callOpts.dialogWaitMs } : {}),
-              ...(callOpts?.elicit ? { elicit: callOpts.elicit } : {}),
-              ...(callOpts?.access ? { access: callOpts.access } : {}),
-            },
+            callOptions(callOpts),
           );
           return { isError: !!r.isError, content: r.content };
         },
@@ -641,11 +650,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
         setPlaytest: (mode) => PLAYTEST_MODE.set(mode, projectDir),
       },
       checkpoints: (() => {
-        const of = (editor?: string) => {
-          const session = editor ? rt.sessions.find(editor) : rt.sessions.active;
-          if (!session) throw new Error(`No editor session '${editor}'`);
-          return checkpointsFor(session);
-        };
+        const of = (editor?: string) => checkpointsFor(resolveEditorSession(rt.sessions, editor));
         return {
           state: (o) => of(o?.editor).state(o?.limit),
           setEnabled: (enabled, o) => of(o?.editor).setEnabled(enabled),
@@ -672,27 +677,195 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
   ui.setOwners(extensions.map(uiOwner));
   for (const o of uiOwners) if (!extensions.some((x) => x.name === o.name)) services.revokeOwner(o.name);
 
-  const readBody = (req: http.IncomingMessage): Promise<unknown> => new Promise((resolve, reject) => {
-    const chunks: Buffer[] = [];
-    req.on("data", (c: Buffer) => chunks.push(c));
-    req.on("end", () => {
-      const raw = Buffer.concat(chunks).toString("utf-8").trim();
-      if (!raw) return resolve(undefined);
-      try {
-        resolve(JSON.parse(raw));
-      } catch (e) {
-        reject(e);
-      }
-    });
-    req.on("error", reject);
+  // ── Routes ──────────────────────────────────────────────────────
+  const errorBody = (e: unknown) => ({ error: e instanceof Error ? e.message : String(e) });
+  /** The JSON body, where a body that is not JSON is the caller's mistake (400). */
+  const body400 = (r: RouteRequest): Promise<unknown> => r.body().catch((e: unknown) => {
+    throw new StatusError(400, errorBody(e).error);
   });
-
-  // The project's ue-mcp plugins: list, registry catalog, install, update, uninstall.
-  const plugins = pluginRoutes({ projectDir, onChanged: () => events.publish("plugins.changed", {}) });
-
-  const json = (res: http.ServerResponse, status: number, body: unknown): void => {
-    res.writeHead(status, { "content-type": "application/json" }).end(JSON.stringify(body));
+  const uiFile: RouteHandlers["ui"] = ({ url }) => {
+    const file = ui.resolve(url.pathname);
+    if (!file) {
+      const none = !url.pathname.startsWith("/ui/ext/") && ui.active() === null;
+      return {
+        status: none ? 503 : 404,
+        headers: { "content-type": "text/plain; charset=utf-8" },
+        raw: none ? "No client UI is installed for this daemon." : "Not found.",
+      };
+    }
+    return { status: 200, headers: { "content-type": contentType(file), "cache-control": "no-cache", "x-content-type-options": "nosniff" }, file };
   };
+  const editorRoute = (op: "start" | "stop" | "restart" | "rebuild"): RouteHandlers["editor.start"] => async () => {
+    try {
+      return ok(await editorOp(op));
+    } catch (e) {
+      return { status: 500, body: errorBody(e) };
+    }
+  };
+  const sessionAccess: RouteHandlers["sessions.access"] = async (r) => {
+    const id = r.params.id;
+    const session = mcpSessions.get(id);
+    if (!session) return { status: 404, body: { error: `no open MCP session '${id}'` } };
+    if (r.method === "GET") return ok({ id, access: session.access.mode });
+    if (r.method !== "PUT" && r.method !== "POST") return { status: 405, body: { error: "GET or PUT" } };
+    const mode = parseSessionAccessMode((await body400(r) as { mode?: unknown } | undefined)?.mode);
+    if (!mode) return { status: 400, body: { error: `mode is one of ${SESSION_ACCESS_MODES.join(", ")}` } };
+    if (session.access.set(mode)) {
+      info("daemon", `session ${id} (${session.client()}) is now ${mode}`);
+      events.publish("session.access", { session: id, client: session.client(), access: mode });
+    }
+    return ok({ id, access: session.access.mode });
+  };
+
+  const handlers: RouteHandlers = {
+    "health": () => ok(health()),
+    "events": ({ req, res, url }) => {
+      const asked = Number(req.headers["last-event-id"] ?? url.searchParams.get("since") ?? 0) || 0;
+      // An id past the newest came from an earlier daemon, which numbered its own events: start over, and say events were missed.
+      const restarted = asked > events.lastId;
+      const last = restarted ? 0 : asked;
+      res.writeHead(200, { "content-type": "text/event-stream", "cache-control": "no-cache", connection: "keep-alive" });
+      // Headers now, not with the first event: a quiet daemon would otherwise leave the client without a response.
+      res.flushHeaders();
+      const write = (e: DaemonEvent) =>
+        res.write(`id: ${e.id}\nevent: ${e.type}\ndata: ${JSON.stringify({ at: e.at, ...e.data })}\n\n`);
+      const backlog = events.since(last);
+      if (backlog.gap || restarted) res.write(`event: ${DAEMON_GAP_EVENT}\ndata: {}\n\n`);
+      for (const e of backlog.events) write(e);
+      const unsubscribe = events.subscribe(write);
+      sse.add(res);
+      req.on("close", () => {
+        unsubscribe();
+        sse.delete(res);
+        touch();
+      });
+      return HANDLED;
+    },
+    "install": () => {
+      // The same read-only report as `ue-mcp status --json`.
+      try {
+        return ok(collectStatus(rt.project.projectPath ?? opts.projects[0]));
+      } catch (e) {
+        return { status: 500, body: errorBody(e) };
+      }
+    },
+    "update.check": async ({ query }) => {
+      // ?channel=beta follows that npm dist-tag instead of the one the installed version implies.
+      const channel = query.get("channel");
+      if (channel !== null && !/^[A-Za-z][0-9A-Za-z._-]{0,31}$/.test(channel)) return { status: 400, body: { error: "channel is an npm dist-tag such as latest or beta" } };
+      return ok(await checkForUpdate(rt.project.projectPath ?? opts.projects[0], undefined, channel ?? undefined));
+    },
+    "update.apply": async (r) => {
+      try {
+        const b = ((await r.body()) ?? {}) as { version?: unknown; binaries?: unknown };
+        const uproject = rt.project.projectPath ?? opts.projects[0];
+        // A bridge that has not written its instance record yet (starting, or an older build) still
+        // maps its DLLs, so the process table is asked too. A probe that cannot run counts as running:
+        // the in-place swap is safe with the editor down, the whole-tree one is not with it up.
+        const editorRunning = editors().some((e) => e.connected) || findLiveInstanceRecord(projectDir) !== null
+          || (await editorProcessHolds(uproject));
+        const result = await applyUpdate(uproject, {
+          version: typeof b.version === "string" ? b.version : undefined,
+          binaries: typeof b.binaries === "string" ? b.binaries : null,
+          editorRunning,
+          onEvent: (type, data) => events.publish(type, data),
+        });
+        return { status: result.ok ? 200 : 500, body: result };
+      } catch (e) {
+        return { status: 400, body: errorBody(e) };
+      }
+    },
+    "skills": () => {
+      try {
+        return ok({ skills: listDaemonSkills(projectDir) });
+      } catch (e) {
+        return { status: 500, body: errorBody(e) };
+      }
+    },
+    "actions": ({ query }) => {
+      try {
+        return ok({ actions: actionEffects(listParam(query, "categories")) });
+      } catch (e) {
+        return { status: e instanceof RangeError ? 400 : 500, body: errorBody(e) };
+      }
+    },
+    "context.projection": ({ query }) => {
+      const strategy = (query.get("strategy") ?? rt.contextStrategy) as ContextStrategy;
+      const categories = listParam(query, "categories");
+      try {
+        return ok(projector.project({ strategy, ...(categories ? { categories } : {}) }));
+      } catch (e) {
+        return { status: e instanceof ContextProjectionError ? 400 : 500, body: errorBody(e) };
+      }
+    },
+    "sessions.list": () => ok({ sessions: listSessions() }),
+    "sessions.access": sessionAccess,
+    "sessions.unknown": () => ({ status: 404, body: { error: "not found" } }),
+    "dialogs.native": () => ok({ dialogs: nativeDialogList() }),
+    "dialogs.native.press": async (r) => {
+      const b = ((await body400(r)) ?? {}) as { hwnd?: unknown; button?: unknown; pid?: unknown };
+      if ((typeof b.hwnd !== "string" && typeof b.hwnd !== "number") || typeof b.button !== "string" || b.button === "") {
+        return { status: 400, body: { error: `hwnd (the window handle from ${routePath("dialogs.native")}) and button (one of its labels) are required` } };
+      }
+      try {
+        const result = await pressNativeDialogFor(String(b.hwnd), b.button, typeof b.pid === "number" ? b.pid : undefined);
+        return { status: result.pressed ? 200 : 409, body: result };
+      } catch (e) {
+        return { status: 400, body: errorBody(e) };
+      }
+    },
+    // Answered before the daemon starts closing its server.
+    "shutdown": ({ res }) => {
+      res.writeHead(202).end();
+      void shutdown("shutdown requested");
+      return HANDLED;
+    },
+    "handoff": ({ res }) => {
+      res.writeHead(202).end();
+      void handoff();
+      return HANDLED;
+    },
+    "editor.start": editorRoute("start"),
+    "editor.stop": editorRoute("stop"),
+    "editor.restart": editorRoute("restart"),
+    "editor.rebuild": editorRoute("rebuild"),
+    ...checkpointRoutes(rt.sessions),
+    ...journalRoutes(rt.sessions),
+    ...toolsRoutes(rt),
+    // The project's ue-mcp plugins: list, registry catalog, install, update, uninstall.
+    ...pluginRoutes({ projectDir, onChanged: () => events.publish("plugins.changed", {}) }),
+    "flows": async ({ req, res, url, path: routed }) => {
+      try {
+        const handled = await handleFlowRoute(rt.flowTool, rt.baseCtx, req, res, routed.slice("/v1".length), url);
+        return handled ? HANDLED : { status: 404 };
+      } catch (e) {
+        return { status: 500, body: errorBody(e) };
+      }
+    },
+    "ext": async (r) => {
+      const hit = matchRoute(extensions, r.method, r.url.pathname);
+      if (!hit) return { status: 404 };
+      // An extension's own errors are its 500, whatever they carry.
+      try {
+        const body = await r.body();
+        const out = await hit.route.handler({
+          method: r.method,
+          path: r.url.pathname.slice(`/v1/ext/${hit.ext.name}`.length) || "/",
+          params: hit.params,
+          query: Object.fromEntries(r.query),
+          headers: r.req.headers,
+          body,
+        });
+        const n = normalizeResponse(out ?? undefined);
+        return { status: n.status, headers: n.headers, raw: n.body };
+      } catch (e) {
+        return { status: 500, body: errorBody(e) };
+      }
+    },
+    "ui.extension": uiFile,
+    "ui": uiFile,
+  };
+  const route = createRouter(handlers);
 
   let closing: Promise<void> | null = null;
   // The header limit is raised so a browser already holding a jar past the
@@ -716,236 +889,12 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
       res.writeHead(401).end();
       return;
     }
-    const url = new URL(req.url ?? "/", "http://127.0.0.1");
-    if (req.method === "GET" && url.pathname === "/v1/health") {
-      res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify(health()));
-      return;
-    }
-    if (req.method === "GET" && url.pathname === "/v1/events") {
-      const asked = Number(req.headers["last-event-id"] ?? url.searchParams.get("since") ?? 0) || 0;
-      // An id past the newest came from an earlier daemon, which numbered its own events: start over, and say events were missed.
-      const restarted = asked > events.lastId;
-      const last = restarted ? 0 : asked;
-      res.writeHead(200, { "content-type": "text/event-stream", "cache-control": "no-cache", connection: "keep-alive" });
-      // Headers now, not with the first event: a quiet daemon would otherwise leave the client without a response.
-      res.flushHeaders();
-      const write = (e: { id: number; type: string; at: string; data: Record<string, unknown> }) =>
-        res.write(`id: ${e.id}\nevent: ${e.type}\ndata: ${JSON.stringify({ at: e.at, ...e.data })}\n\n`);
-      const backlog = events.since(last);
-      if (backlog.gap || restarted) res.write(`event: gap\ndata: {}\n\n`);
-      for (const e of backlog.events) write(e);
-      const unsubscribe = events.subscribe(write);
-      sse.add(res);
-      req.on("close", () => {
-        unsubscribe();
-        sse.delete(res);
-        touch();
-      });
-      return;
-    }
-    if (req.method === "GET" && url.pathname === "/v1/update") {
-      // ?channel=beta follows that npm dist-tag instead of the one the installed version implies.
-      const channel = url.searchParams.get("channel");
-      if (channel !== null && !/^[A-Za-z][0-9A-Za-z._-]{0,31}$/.test(channel)) return json(res, 400, { error: "channel is an npm dist-tag such as latest or beta" });
-      checkForUpdate(rt.project.projectPath ?? opts.projects[0], undefined, channel ?? undefined).then((check) => json(res, 200, check));
-      return;
-    }
-    if (req.method === "POST" && url.pathname === "/v1/update/apply") {
-      readBody(req)
-        .then(async (body) => {
-          const b = (body ?? {}) as { version?: unknown; binaries?: unknown };
-          const uproject = rt.project.projectPath ?? opts.projects[0];
-          // A bridge that has not written its instance record yet (starting, or an older build) still
-          // maps its DLLs, so the process table is asked too. A probe that cannot run counts as running:
-          // the in-place swap is safe with the editor down, the whole-tree one is not with it up.
-          const editorRunning = editors().some((e) => e.connected) || findLiveInstanceRecord(projectDir) !== null
-            || (await editorProcessHolds(uproject));
-          return applyUpdate(uproject, {
-            version: typeof b.version === "string" ? b.version : undefined,
-            binaries: typeof b.binaries === "string" ? b.binaries : null,
-            editorRunning,
-            onEvent: (type, data) => events.publish(type, data),
-          });
-        })
-        .then((result) => json(res, result.ok ? 200 : 500, result), (e) => json(res, 400, { error: e instanceof Error ? e.message : String(e) }));
-      return;
-    }
-    if (req.method === "GET" && url.pathname === "/v1/install") {
-      // The same read-only report as `ue-mcp status --json`.
-      try {
-        json(res, 200, collectStatus(rt.project.projectPath ?? opts.projects[0]));
-      } catch (e) {
-        json(res, 500, { error: e instanceof Error ? e.message : String(e) });
-      }
-      return;
-    }
-    if (req.method === "GET" && url.pathname === "/v1/skills") {
-      try {
-        json(res, 200, { skills: listDaemonSkills(projectDir) });
-      } catch (e) {
-        json(res, 500, { error: e instanceof Error ? e.message : String(e) });
-      }
-      return;
-    }
-    if (req.method === "GET" && url.pathname === "/v1/actions") {
-      const raw = url.searchParams.get("categories");
-      try {
-        json(res, 200, { actions: actionEffects(raw === null ? undefined : raw.split(",").map((c) => c.trim()).filter(Boolean)) });
-      } catch (e) {
-        json(res, e instanceof RangeError ? 400 : 500, { error: e instanceof Error ? e.message : String(e) });
-      }
-      return;
-    }
-    if (req.method === "GET" && url.pathname === "/v1/context/projection") {
-      const strategy = (url.searchParams.get("strategy") ?? rt.contextStrategy) as ContextStrategy;
-      const raw = url.searchParams.get("categories");
-      const categories = raw === null ? undefined : raw.split(",").map((c) => c.trim()).filter(Boolean);
-      try {
-        json(res, 200, projector.project({ strategy, ...(categories ? { categories } : {}) }));
-      } catch (e) {
-        json(res, e instanceof ContextProjectionError ? 400 : 500, { error: e instanceof Error ? e.message : String(e) });
-      }
-      return;
-    }
-    if (url.pathname === "/v1/sessions" || url.pathname.startsWith("/v1/sessions/")) {
-      const sub = url.pathname.slice("/v1/sessions".length).replace(/\/+$/, "");
-      if (req.method === "GET" && sub === "") return json(res, 200, { sessions: listSessions() });
-      const hit = /^\/([^/]+)\/access$/.exec(sub);
-      if (!hit) return json(res, 404, { error: "not found" });
-      const id = decodeURIComponent(hit[1]);
-      const session = mcpSessions.get(id);
-      if (!session) return json(res, 404, { error: `no open MCP session '${id}'` });
-      if (req.method === "GET") return json(res, 200, { id, access: session.access.mode });
-      if (req.method !== "PUT" && req.method !== "POST") return json(res, 405, { error: "GET or PUT" });
-      readBody(req).then((body) => {
-        const mode = parseSessionAccessMode((body as { mode?: unknown } | undefined)?.mode);
-        if (!mode) return json(res, 400, { error: `mode is one of ${SESSION_ACCESS_MODES.join(", ")}` });
-        if (session.access.set(mode)) {
-          info("daemon", `session ${id} (${session.client()}) is now ${mode}`);
-          events.publish("session.access", { session: id, client: session.client(), access: mode });
-        }
-        json(res, 200, { id, access: session.access.mode });
-      }, (e) => json(res, 400, { error: e instanceof Error ? e.message : String(e) }));
-      return;
-    }
-    if (req.method === "GET" && url.pathname === "/v1/dialogs/native") {
-      return json(res, 200, { dialogs: nativeDialogList() });
-    }
-    if (req.method === "POST" && url.pathname === "/v1/dialogs/native/press") {
-      readBody(req)
-        .then(async (body) => {
-          const b = (body ?? {}) as { hwnd?: unknown; button?: unknown; pid?: unknown };
-          if ((typeof b.hwnd !== "string" && typeof b.hwnd !== "number") || typeof b.button !== "string" || b.button === "") {
-            return json(res, 400, { error: "hwnd (the window handle from GET /v1/dialogs/native) and button (one of its labels) are required" });
-          }
-          const result = await pressNativeDialogFor(String(b.hwnd), b.button, typeof b.pid === "number" ? b.pid : undefined);
-          json(res, result.pressed ? 200 : 409, result);
-        })
-        .catch((e) => json(res, 400, { error: e instanceof Error ? e.message : String(e) }));
-      return;
-    }
-    if (req.method === "POST" && url.pathname === "/v1/shutdown") {
-      res.writeHead(202).end();
-      void shutdown("shutdown requested");
-      return;
-    }
-    if (req.method === "POST" && url.pathname === "/v1/handoff") {
-      res.writeHead(202).end();
-      void handoff();
-      return;
-    }
-    const op = /^\/v1\/editor\/(start|stop|restart|rebuild)$/.exec(url.pathname);
-    if (req.method === "POST" && op) {
-      editorOp(op[1]).then(
-        (result) => json(res, 200, result),
-        (e) => json(res, 500, { error: e instanceof Error ? e.message : String(e) }),
-      );
-      return;
-    }
-    if (req.method === "GET" && (url.pathname === "/ui" || url.pathname.startsWith("/ui/"))) {
-      const file = ui.resolve(url.pathname);
-      if (!file) {
-        const none = !url.pathname.startsWith("/ui/ext/") && ui.active() === null;
-        res.writeHead(none ? 503 : 404, { "content-type": "text/plain; charset=utf-8" })
-          .end(none ? "No client UI is installed for this daemon." : "Not found.");
-        return;
-      }
-      res.writeHead(200, {
-        "content-type": contentType(file),
-        "cache-control": "no-cache",
-        "x-content-type-options": "nosniff",
-      });
-      streamFile(file, res);
-      return;
-    }
-    if (url.pathname.startsWith("/v1/ext/")) {
-      const hit = matchRoute(extensions, req.method ?? "GET", url.pathname);
-      if (!hit) {
-        res.writeHead(404).end();
-        return;
-      }
-      readBody(req)
-        .then((body) => hit.route.handler({
-          method: req.method ?? "GET",
-          path: url.pathname.slice(`/v1/ext/${hit.ext.name}`.length) || "/",
-          params: hit.params,
-          query: Object.fromEntries(url.searchParams),
-          headers: req.headers,
-          body,
-        }))
-        .then((out) => {
-          const n = normalizeResponse(out ?? undefined);
-          res.writeHead(n.status, n.headers).end(n.body);
-        }, (e) => json(res, 500, { error: e instanceof Error ? e.message : String(e) }));
-      return;
-    }
-    if (url.pathname === "/v1/plugins" || url.pathname.startsWith("/v1/plugins/")) {
-      readBody(req)
-        .then((body) => plugins(req.method ?? "GET", url.pathname.slice("/v1/plugins".length).replace(/\/+$/, ""), body))
-        .then((r) => (r ? json(res, r.status, r.body) : void res.writeHead(404).end()), (e) => json(res, 500, { error: e instanceof Error ? e.message : String(e) }));
-      return;
-    }
-    if (url.pathname === "/v1/checkpoints" || url.pathname.startsWith("/v1/checkpoints/")) {
-      const sub = url.pathname.slice("/v1/checkpoints".length).replace(/\/+$/, "");
-      readBody(req)
-        .then((body) => checkpointRoute(rt.sessions, req.method ?? "GET", sub, url.searchParams, body))
-        .then((r) => {
-          if (!r) return void res.writeHead(404).end();
-          if (!r.file) return json(res, r.status, r.body);
-          // A picture is named by the blob id of the version it shows, so it never changes.
-          res.writeHead(200, { "content-type": r.file.type, "cache-control": "private, max-age=31536000, immutable", "x-content-type-options": "nosniff" });
-          streamFile(r.file.path, res);
-        }, (e) => json(res, 500, { error: e instanceof Error ? e.message : String(e) }));
-      return;
-    }
-    if (url.pathname === "/v1/journal" || url.pathname.startsWith("/v1/journal/")) {
-      const sub = url.pathname.slice("/v1/journal".length).replace(/\/+$/, "");
-      readBody(req)
-        .then((body) => journalRoute(rt.sessions, req.method ?? "GET", sub, url.searchParams, body))
-        .then((r) => (r ? json(res, r.status, r.body) : void res.writeHead(404).end()), (e) => json(res, 500, { error: e instanceof Error ? e.message : String(e) }));
-      return;
-    }
-    if (url.pathname === "/v1/tools" || url.pathname.startsWith("/v1/tools/") || url.pathname === "/v1/leases") {
-      const route = url.pathname.replace(/\/+$/, "");
-      readBody(req)
-        .then((body) => toolsRoute(rt, req.method ?? "GET", route, body))
-        .then((r) => (r ? json(res, r.status, r.body) : void res.writeHead(404).end()), (e) => json(res, 500, { error: e instanceof Error ? e.message : String(e) }));
-      return;
-    }
-    if (url.pathname === "/v1/flows" || url.pathname.startsWith("/v1/flows/")) {
-      const sub = url.pathname.slice("/v1".length).replace(/\/+$/, "");
-      handleFlowRoute(rt.flowTool, rt.baseCtx, req, res, sub, url).then(
-        (handled) => { if (!handled) res.writeHead(404).end(); },
-        (e) => json(res, 500, { error: e instanceof Error ? e.message : String(e) }),
-      );
-      return;
-    }
-    res.writeHead(404).end();
+    route(req, res);
   });
 
   httpServer.on("upgrade", (req, socket, head) => {
     const url = new URL(req.url ?? "/", "http://127.0.0.1");
-    if (url.pathname !== "/v1/mcp" || !authorized(req) || closing) {
+    if (url.pathname !== routePath("mcp") || !authorized(req) || closing) {
       socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");
       socket.destroy();
       return;
@@ -1019,15 +968,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
   rt.logSummary();
 
 
-  const discovery: DaemonDiscovery = {
-    pid: process.pid,
-    port,
-    token,
-    version: packageVersion(),
-    apiVersion: DAEMON_API_VERSION,
-    projectRoot: normalizeProjectRoot(projectDir),
-    startedAt,
-  };
+  const discovery = discoveryRecord(port, token, projectDir, startedAt);
   const superseded = opts.publish !== false ? rivalDaemon(projectDir, discovery.version) : null;
   if (opts.publish !== false && !superseded) writeDiscovery(projectDir, discovery);
   events.publish("daemon.started", { pid: process.pid, port, version: discovery.version });
@@ -1101,15 +1042,7 @@ export async function runDaemon(projects: string[]): Promise<number> {
       }
       daemon.superseded = rivalDaemon(projectDir, packageVersion(), existing.pid);
       if (!daemon.superseded) {
-        writeDiscovery(projectDir, {
-          pid: process.pid,
-          port: daemon.port,
-          token: daemon.token,
-          version: packageVersion(),
-          apiVersion: DAEMON_API_VERSION,
-          projectRoot: normalizeProjectRoot(projectDir),
-          startedAt: new Date().toISOString(),
-        });
+        writeDiscovery(projectDir, discoveryRecord(daemon.port, daemon.token, projectDir, new Date().toISOString()));
       }
     }
   } finally {
@@ -1155,7 +1088,7 @@ function rivalDaemon(projectDir: string, version: string, ignorePid?: number): D
 
 async function requestHandoff(d: DaemonDiscovery): Promise<void> {
   try {
-    await fetch(`http://127.0.0.1:${d.port}/v1/handoff`, { method: "POST", headers: { authorization: `Bearer ${d.token}` } });
+    await daemonRequest(d, "handoff", { method: "POST" });
   } catch (e) {
     warn("daemon", `handoff request to pid ${d.pid} failed`, e);
   }

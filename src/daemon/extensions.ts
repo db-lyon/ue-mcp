@@ -17,8 +17,8 @@ import { pathToFileURL } from "node:url";
 import { info, warn } from "../core/log.js";
 import { ENV_VARS, readEnv } from "../core/env.js";
 import { userDir } from "../core/user-dir.js";
-import type { DaemonExtension, DaemonExtensionApi, ExtensionHandler, ExtensionResponse } from "./extension-api.js";
-import { extensionRefusal, type ExtensionManifest, type RefusedExtension } from "./extension-api.js";
+import type { DaemonExtension, DaemonExtensionApi, ExtensionHandler, ExtensionManifest, ExtensionResponse, RefusedExtension } from "../contract/daemon.js";
+import { extensionRefusal } from "./extension-manifest.js";
 import { packageVersion } from "../core/package-root.js";
 import {
   chooseVersion,

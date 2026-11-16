@@ -2,9 +2,22 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { listInstalledPlugins, pluginRoutes, type PluginOps } from "../../src/daemon/plugin-routes.js";
+import { listInstalledPlugins, pluginRoutes, type PluginOps, type PluginRouteDeps } from "../../src/daemon/plugin-routes.js";
+import { findRoute, type RouteRequest, type RouteResult } from "../../src/daemon/router.js";
 import { PluginOpError } from "../../src/extensions/plugin-install.js";
 import { resetRegistryCatalogMemory } from "../../src/extensions/registry-catalog.js";
+
+/** `method /v1/plugins<sub>` as the daemon routes it, or null when no plugin route serves it. */
+function serve(deps: PluginRouteDeps) {
+  const handlers = pluginRoutes(deps);
+  return async (method: string, sub: string, body: unknown): Promise<RouteResult | null> => {
+    const hit = findRoute(method, `/v1/plugins${sub}`.replace(/\/+$/, ""));
+    if (!hit || !(hit.name in handlers)) return null;
+    return handlers[hit.name as keyof typeof handlers]({ method, body: async () => body } as unknown as RouteRequest);
+  };
+}
+
+const status = (r: RouteResult | null): number | undefined => (r && typeof r === "object" ? r.status : undefined);
 
 function project(yml: string): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ue-mcp-plugin-routes-"));
@@ -50,7 +63,7 @@ describe("the daemon's plugin routes", () => {
   it("runs install, update and uninstall through the plugin library and reports that a restart is needed", async () => {
     const calls: unknown[][] = [];
     const onChanged = vi.fn();
-    const routes = pluginRoutes({ projectDir: project(""), ops: fakeOps(calls), onChanged });
+    const routes = serve({ projectDir: project(""), ops: fakeOps(calls), onChanged });
     expect(await routes("POST", "/install", { name: "sample-recorder", version: "^1.0.0" })).toEqual({
       status: 200, body: { ok: true, exitCode: 0, output: "[ue-mcp plugin] done", restartRequired: true },
     });
@@ -62,7 +75,7 @@ describe("the daemon's plugin routes", () => {
 
   it("reports a refused change with what it printed and the refusal, and changes nothing", async () => {
     const onChanged = vi.fn();
-    const routes = pluginRoutes({
+    const routes = serve({
       projectDir: project(""),
       ops: fakeOps([], async () => { throw new PluginOpError("no such package"); }),
       onChanged,
@@ -76,19 +89,19 @@ describe("the daemon's plugin routes", () => {
 
   it("refuses names and versions that could be read as options, and one change while another runs", async () => {
     let release!: () => void;
-    const routes = pluginRoutes({ projectDir: project(""), ops: fakeOps([], () => new Promise<void>((r) => (release = r))) });
-    expect((await routes("POST", "/install", { name: "--registry=evil" }))?.status).toBe(400);
-    expect((await routes("POST", "/install", { name: "ok", version: "1.0.0 --force" }))?.status).toBe(400);
+    const routes = serve({ projectDir: project(""), ops: fakeOps([], () => new Promise<void>((r) => (release = r))) });
+    expect(status(await routes("POST", "/install", { name: "--registry=evil" }))).toBe(400);
+    expect(status(await routes("POST", "/install", { name: "ok", version: "1.0.0 --force" }))).toBe(400);
     const first = routes("POST", "/install", { name: "a" });
     await new Promise((r) => setTimeout(r, 0));
-    expect((await routes("POST", "/install", { name: "b" }))?.status).toBe(409);
+    expect(status(await routes("POST", "/install", { name: "b" }))).toBe(409);
     release();
-    expect((await first)?.status).toBe(200);
+    expect(status(await first)).toBe(200);
   });
 
   it("reads the registry catalog once and serves it again from memory", async () => {
     const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ plugins: [{ slug: "sample-recorder", name: "Sample Recorder" }] })));
-    const routes = pluginRoutes({ projectDir: project(""), fetchImpl: fetchImpl as unknown as typeof fetch });
+    const routes = serve({ projectDir: project(""), fetchImpl: fetchImpl as unknown as typeof fetch });
     expect(await routes("GET", "/catalog", undefined)).toEqual({ status: 200, body: { plugins: [{ slug: "sample-recorder", name: "Sample Recorder" }] } });
     await routes("GET", "/catalog", undefined);
     expect(fetchImpl).toHaveBeenCalledTimes(1);
@@ -97,23 +110,23 @@ describe("the daemon's plugin routes", () => {
   it("leaves a plugin that is now built into core out of the catalog", async () => {
     const listed = [{ slug: "pie-studio", name: "PIE Studio" }, { slug: "sample-recorder", name: "Sample Recorder" }];
     const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ plugins: listed })));
-    const routes = pluginRoutes({ projectDir: project(""), fetchImpl: fetchImpl as unknown as typeof fetch });
+    const routes = serve({ projectDir: project(""), fetchImpl: fetchImpl as unknown as typeof fetch });
     expect(await routes("GET", "/catalog", undefined)).toEqual({ status: 200, body: { plugins: [{ slug: "sample-recorder", name: "Sample Recorder" }] } });
   });
 
   it("serves the last catalog this machine saw when the registry is down", async () => {
     const up = vi.fn(async () => new Response(JSON.stringify({ plugins: [{ slug: "sample-recorder", name: "Sample Recorder" }] })));
-    await pluginRoutes({ projectDir: project(""), fetchImpl: up as unknown as typeof fetch })("GET", "/catalog", undefined);
+    await serve({ projectDir: project(""), fetchImpl: up as unknown as typeof fetch })("GET", "/catalog", undefined);
     resetRegistryCatalogMemory();
     const down = (async () => new Response("", { status: 503 })) as unknown as typeof fetch;
-    expect(await pluginRoutes({ projectDir: project(""), fetchImpl: down })("GET", "/catalog", undefined)).toEqual({
+    expect(await serve({ projectDir: project(""), fetchImpl: down })("GET", "/catalog", undefined)).toEqual({
       status: 200, body: { plugins: [{ slug: "sample-recorder", name: "Sample Recorder" }] },
     });
   });
 
-  it("answers 502 with a way forward when the registry cannot be reached and nothing is cached, and null for other paths", async () => {
-    const routes = pluginRoutes({ projectDir: project(""), fetchImpl: (async () => { throw new Error("offline"); }) as unknown as typeof fetch });
-    const r = await routes("GET", "/catalog", undefined);
+  it("answers 502 with a way forward when the registry cannot be reached and nothing is cached, and serves no other paths", async () => {
+    const routes = serve({ projectDir: project(""), fetchImpl: (async () => { throw new Error("offline"); }) as unknown as typeof fetch });
+    const r = await routes("GET", "/catalog", undefined) as { status: number; body: unknown } | null;
     expect(r?.status).toBe(502);
     expect((r?.body as { error: string }).error).toMatch(/offline.*npm package name still works.*UE_MCP_REGISTRY/);
     expect(await routes("GET", "/nope", undefined)).toBeNull();

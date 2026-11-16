@@ -11,8 +11,7 @@
  */
 import * as fs from "node:fs";
 import { isPidAlive, type BridgeInstanceRecord } from "../bridge/editor-target.js";
-
-export type DisconnectCause = "closed" | "crashed" | "restarting" | "rebuild" | "unknown";
+import type { DisconnectCause } from "../contract/daemon.js";
 
 export interface DisconnectEvidence {
   /** The editor's instance record as it was while connected, if one was found. */
