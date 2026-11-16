@@ -68,7 +68,7 @@ const TS_DIRS = ["src", "tests", "scripts"];
 const TS_EXT = /\.(?:ts|mts|mjs|js)$/;
 const CPP_EXT = /\.(?:h|hpp|inl|cpp)$/;
 /** Where every bridge call passes in the shipped server, before it reaches the plugin. */
-export const DISPATCH_ROOTS = ["src/server/mcp-server.ts", "src/dispatch/server-dispatch.ts", "src/bridge/bridge.ts"];
+export const DISPATCH_ROOTS = ["src/server/mcp-server.ts", "src/server/server-dispatch.ts", "src/bridge/bridge.ts"];
 /** Entry points of the live and automation runners; their import closures are the runners. */
 export const RUNNER_ROOTS = ["scripts/live-tests.mjs", "scripts/automation-tests.mjs", "vitest.config.ts"];
 /** The pseudo-specifier a file gets when it starts the server as a process. */

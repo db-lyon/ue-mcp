@@ -25,8 +25,8 @@
  * refusal and an on-demand probe both feed the same state, so a dialog is
  * caught by whichever notices first.
  */
-import type { EditorSession } from "../sessions/session.js";
 import type { BridgeCallOptions, IBridge } from "../bridge/bridge.js";
+import type { ProjectContext } from "../config/project.js";
 import { isDialogRefusal } from "../bridge/dialog-refusal.js";
 import type { DialogBlock, DialogPromptFn } from "./dialog-types.js";
 import type { ElicitFn, ElicitPrimitiveSchema, ElicitResult } from "../core/elicit.js";
@@ -1566,7 +1566,7 @@ export class DialogGuard {
  * This refuses those two methods and nothing else, from state already held, so
  * it adds no round-trip and cannot recurse.
  */
-export function withoutDialogActuation<T extends IBridge>(session: EditorSession, raw: T): T {
+export function withoutDialogActuation<T extends IBridge>(session: GuardedSession, raw: T): T {
   return new Proxy(raw, {
     get(target, prop, receiver) {
       if (prop !== "call") return Reflect.get(target, prop, receiver);
@@ -1645,8 +1645,22 @@ export function stampBlockedEditor(
   return out;
 }
 
+/**
+ * What the guard reads of an editor session. Structural, so the guard needs no
+ * import of the session registry, which itself builds on the guard.
+ */
+export interface GuardedSession {
+  readonly name: string;
+  readonly projectDir: string | null;
+  readonly project: ProjectContext;
+  /** The raw bridge. */
+  readonly bridge: IBridge;
+  /** The session's guard pipeline around `bridge`. */
+  readonly guarded: IBridge;
+}
+
 /** One guard per editor. */
-const guards = new WeakMap<EditorSession, DialogGuard>();
+const guards = new WeakMap<GuardedSession, DialogGuard>();
 
 /**
  * The guard for a session, created from the session itself if it has none.
@@ -1661,7 +1675,7 @@ const guards = new WeakMap<EditorSession, DialogGuard>();
  * capability, which is not knowable here; guardFor replaces the deps, so that
  * pass upgrades this guard rather than competing with it.
  */
-export async function ensureGuard(session: EditorSession): Promise<DialogGuard> {
+export async function ensureGuard(session: GuardedSession): Promise<DialogGuard> {
   const existing = guards.get(session);
   if (existing) return existing;
   const guard = guardFor(session, sessionGuardDeps(session, false));
@@ -1674,7 +1688,7 @@ export async function ensureGuard(session: EditorSession): Promise<DialogGuard> 
  * client can be shown a form; `elicit` is consulted only when it can.
  */
 export function sessionGuardDeps(
-  session: EditorSession,
+  session: GuardedSession,
   canElicit: boolean,
   elicit?: () => ElicitFn | undefined,
   extension?: { prompt: DialogPromptFn; askWaitMs?: number },
@@ -1715,7 +1729,7 @@ export function sessionGuardDeps(
   };
 }
 
-export function guardFor(session: EditorSession, deps: GuardDeps): DialogGuard {
+export function guardFor(session: GuardedSession, deps: GuardDeps): DialogGuard {
   const existing = guards.get(session);
   if (existing) {
     // The guard is kept, but its dependencies are REPLACED. They close over
@@ -1733,12 +1747,12 @@ export function guardFor(session: EditorSession, deps: GuardDeps): DialogGuard {
   return created;
 }
 
-export function existingGuard(session: EditorSession): DialogGuard | undefined {
+export function existingGuard(session: GuardedSession): DialogGuard | undefined {
   return guards.get(session);
 }
 
 /** Test seam. */
-export function forgetGuard(session: EditorSession): void {
+export function forgetGuard(session: GuardedSession): void {
   guards.get(session)?.stopWatching();
   guards.delete(session);
 }

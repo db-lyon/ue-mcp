@@ -23,7 +23,7 @@ import { usesArgsEnvelope } from "../surface/context/call-envelope.js";
 import { injectEditorTarget, injectMigrateTarget } from "../surface/target-params.js";
 import { unionSurface } from "../sessions/session-surface.js";
 import { buildLoadRegistry, strategySurface, type SessionLoad } from "../sessions/session-load.js";
-import { errorResult, type ToolResult } from "../dispatch/server-dispatch.js";
+import { errorResult, type ToolResult } from "./server-dispatch.js";
 import { advertisedPresentation, advertisesFlowTool } from "./mcp-server.js";
 import type { Runtime } from "./runtime.js";
 

@@ -23,7 +23,7 @@ import {
   type CallExtra,
   type DispatchDeps,
   type ToolResult,
-} from "../dispatch/server-dispatch.js";
+} from "./server-dispatch.js";
 import type { Runtime } from "./runtime.js";
 import type { SessionAccess } from "../flow/session-access.js";
 import { announceResourceChange, registerEditorResources } from "./editor-resources.js";
