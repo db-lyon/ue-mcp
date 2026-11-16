@@ -9,7 +9,7 @@ import { nativeHandlerSurface } from "../../src/extensions/loader.js";
 import { PluginManifestSchema } from "../../src/extensions/manifest.js";
 import { buildProvidedTool } from "../../src/extensions/provision.js";
 import { categoryTool } from "../../src/surface/category-tool.js";
-import { UeMcpTask } from "../../src/task.js";
+import { UeMcpTask } from "../../src/flow/task.js";
 import type { IBridge } from "../../src/bridge/bridge.js";
 
 // The same manifest -> registry-kind action -> native task registration path
