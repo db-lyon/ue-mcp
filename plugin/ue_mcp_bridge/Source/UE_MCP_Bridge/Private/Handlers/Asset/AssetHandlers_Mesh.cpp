@@ -292,8 +292,8 @@ TSharedPtr<FJsonValue> FAssetHandlers::SetMeshMaterialsBatch(const TSharedPtr<FJ
 		if (MCPIsProtectedAssetPath(AssetPath))
 		{
 			Reject(MeshMatStatusProtected, FString::Printf(
-				TEXT("Refusing to mutate protected mount: %s. Engine, /Script/, /Memory/, /Temp/ are read-only via the bridge."),
-				*AssetPath));
+				TEXT("Refusing to mutate protected mount: %s. Engine, /Script/, /Memory/, /Temp/ are read-only via the bridge. %s"),
+				*AssetPath, *MCPProtectedMountWayForward()));
 			Prepared.Add(MoveTemp(Item));
 			continue;
 		}

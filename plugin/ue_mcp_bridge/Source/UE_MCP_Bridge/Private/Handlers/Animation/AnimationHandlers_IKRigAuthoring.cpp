@@ -209,7 +209,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ConfigureIKRig(const TSharedPtr<FJson
 	}
 	if (MCPIsProtectedAssetPath(RigPath))
 	{
-		return Error(TEXT("protected_asset"), FString::Printf(TEXT("Protected asset cannot be modified: %s"), *RigPath));
+		return Error(TEXT("protected_asset"), FString::Printf(TEXT("Protected asset cannot be modified: %s. %s"), *RigPath, *MCPProtectedMountWayForward()));
 	}
 
 	FString AutoSetup;

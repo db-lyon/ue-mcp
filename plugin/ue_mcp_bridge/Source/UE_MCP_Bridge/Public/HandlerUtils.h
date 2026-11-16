@@ -44,6 +44,7 @@
 
 #include "HandlerEngineVersion.h"
 #include "HandlerResult.h"
+#include "HandlerWayForward.h"
 #include "HandlerParams.h"
 #include "HandlerJsonConvert.h"
 #include "HandlerWorld.h"

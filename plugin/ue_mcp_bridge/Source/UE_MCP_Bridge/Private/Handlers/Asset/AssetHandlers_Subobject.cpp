@@ -104,8 +104,8 @@ TSharedPtr<FJsonValue> FAssetHandlers::CreateSubobject(const TSharedPtr<FJsonObj
 	if (MCPIsProtectedAssetPath(AssetPath))
 	{
 		return MCPError(FString::Printf(
-			TEXT("'%s' is on a protected mount (/Engine/, /Script/, /Memory/, /Temp/), which the bridge never writes to."),
-			*AssetPath));
+			TEXT("'%s' is on a protected mount (/Engine/, /Script/, /Memory/, /Temp/), which the bridge never writes to. %s"),
+			*AssetPath, *MCPProtectedMountWayForward()));
 	}
 
 	TSharedPtr<FJsonValue> LoadError;

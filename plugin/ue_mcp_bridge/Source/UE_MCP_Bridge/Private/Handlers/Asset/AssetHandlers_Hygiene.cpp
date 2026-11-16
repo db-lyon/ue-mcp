@@ -1236,8 +1236,8 @@ TSharedPtr<FJsonValue> FAssetHandlers::FixAssetHygiene(const TSharedPtr<FJsonObj
 		{
 			Reject(Item, MCPHygStatusProtected, FString::Printf(
 				TEXT("Refusing to mutate protected mount: %s. Engine, /Script/, /Memory/ and /Temp/ are ")
-					TEXT("read-only through the bridge."),
-				*Item.PackageName));
+					TEXT("read-only through the bridge. %s"),
+				*Item.PackageName, *MCPProtectedMountWayForward()));
 			Plan.Add(MoveTemp(Item));
 			continue;
 		}
@@ -1357,7 +1357,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::FixAssetHygiene(const TSharedPtr<FJsonObj
 			if (MCPIsProtectedAssetPath(Item.NewPackagePath))
 			{
 				Reject(Item, MCPHygStatusProtected, FString::Printf(
-					TEXT("The destination '%s' is on a protected mount."), *Item.NewPackagePath));
+					TEXT("The destination '%s' is on a protected mount, which cannot be overridden. Pick a destination under /Game or a plugin content folder."), *Item.NewPackagePath));
 				Plan.Add(MoveTemp(Item));
 				continue;
 			}

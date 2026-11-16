@@ -1744,7 +1744,11 @@ namespace ImcEdit_Internal
 		if (HasParam(Params, TEXT("inputActionPath"))) return MCPError(TEXT("Choose inputActionPath or imcPath plus mappingIndex"));
 		UInputMappingContext* IMC = LoadAssetByPath<UInputMappingContext>(ImcPath);
 		if (!IMC) return MCPAssetLoadError(ImcPath, TEXT("InputMappingContext"));
-		if (MCPIsProtectedAssetPath(ImcPath)) return MCPError(TEXT("Cannot edit a protected mapping context"));
+		if (MCPIsProtectedAssetPath(ImcPath))
+		{
+			return MCPError(TEXT("Cannot edit a protected mapping context. ") + MCPProtectedMountWayForward()
+				+ TEXT(" To override its bindings without a copy, add a project mapping context at a higher priority."));
+		}
 		auto& Mappings = const_cast<TArray<FEnhancedActionKeyMapping>&>(IMC->GetMappings());
 		if (!FMath::IsFinite(RawIndex) || RawIndex < 0 || RawIndex >= Mappings.Num())
 			return MCPError(TEXT("mappingIndex must be an integer identifying an existing row"));

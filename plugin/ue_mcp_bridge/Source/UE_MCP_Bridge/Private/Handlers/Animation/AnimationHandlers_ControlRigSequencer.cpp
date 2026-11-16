@@ -292,7 +292,7 @@ namespace
 		}
 		if (MCPIsProtectedAssetPath(PackageName))
 		{
-			OutError = FString::Printf(TEXT("Refusing to create or edit protected asset path '%s'"), *PackageName);
+			OutError = FString::Printf(TEXT("Refusing to create or edit protected asset path '%s'. %s"), *PackageName, *MCPProtectedMountWayForward());
 			return false;
 		}
 		OutName = FPackageName::GetLongPackageAssetName(PackageName);
@@ -4558,7 +4558,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ApplyControlRigEdits(const TSharedPtr
 	if (auto Error = RequireString(Params, TEXT("sequencePath"), SequencePath)) return Error;
 	if (MCPIsProtectedAssetPath(SequencePath))
 	{
-		return MCPError(FString::Printf(TEXT("Protected asset cannot be modified: %s"), *SequencePath));
+		return MCPError(FString::Printf(TEXT("Protected asset cannot be modified: %s. %s"), *SequencePath, *MCPProtectedMountWayForward()));
 	}
 	ULevelSequence* Sequence = Cast<ULevelSequence>(MCPLoadAssetObject(SequencePath));
 	if (!Sequence) return MCPError(FString::Printf(TEXT("LevelSequence not found: %s"), *SequencePath));

@@ -167,7 +167,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::CreateRenderTarget2D(const TSharedPtr<FJs
 		LowerPackagePath == TEXT("/memory") || LowerPackagePath.StartsWith(TEXT("/memory/")) ||
 		LowerPackagePath == TEXT("/temp") || LowerPackagePath.StartsWith(TEXT("/temp/")))
 	{
-		return MCPError(FString::Printf(TEXT("Refusing to create an asset in protected mount: %s"), *PackagePath));
+		return MCPError(FString::Printf(TEXT("Refusing to create an asset in protected mount: %s. This cannot be overridden; create it under /Game or a plugin content folder."), *PackagePath));
 	}
 
 	if (Width < 1 || Width > MaxRenderTargetSize || Height < 1 || Height > MaxRenderTargetSize)

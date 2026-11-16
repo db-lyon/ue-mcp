@@ -687,7 +687,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ConfigureIKRetargeter(const TSharedPt
 	if (auto Error = RequireString(Params, TEXT("retargeterPath"), RetargeterPath)) return Error;
 	if (MCPIsProtectedAssetPath(RetargeterPath))
 	{
-		return MCPError(FString::Printf(TEXT("Protected asset cannot be modified: %s"), *RetargeterPath));
+		return MCPError(FString::Printf(TEXT("Protected asset cannot be modified: %s. %s"), *RetargeterPath, *MCPProtectedMountWayForward()));
 	}
 	UIKRetargeter* Retargeter = LoadAssetByPath<UIKRetargeter>(RetargeterPath);
 	if (!Retargeter) return MCPError(FString::Printf(TEXT("IKRetargeter not found: %s"), *RetargeterPath));

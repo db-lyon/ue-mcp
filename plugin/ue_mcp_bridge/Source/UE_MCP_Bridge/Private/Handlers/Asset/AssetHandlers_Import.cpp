@@ -516,7 +516,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::ImportSkeletalMesh(const TSharedPtr<FJson
 	if (!FPaths::FileExists(FileName)) return MCPError(TEXT("File not found: ") + FileName);
 	const FString Destination = DestinationPath / AssetName;
 	if (AssetName.IsEmpty() || AssetName.Contains(TEXT("/")) || AssetName.Contains(TEXT(".")) || !FPackageName::IsValidLongPackageName(Destination)) return MCPError(TEXT("Invalid mesh destination: ") + Destination);
-	if (MCPIsProtectedAssetPath(Destination)) return MCPError(TEXT("Cannot import to a protected mount"));
+	if (MCPIsProtectedAssetPath(Destination)) return MCPError(TEXT("Cannot import to a protected mount. This cannot be overridden; import into /Game or a plugin content folder."));
 	if (UObject* Existing = MCPLoadAssetObject(Destination))
 	{
 		if (!bReplaceExisting) return MCPError(TEXT("Destination exists and replaceExisting is false: ") + Destination);
@@ -1464,7 +1464,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::ImportTextureBatch(const TSharedPtr<FJson
 		const FString Name = OptionalString(*Item, TEXT("name"), FPaths::GetBaseFilename(FilePath));
 		const FString Destination = Folder / Name;
 		if (Name.IsEmpty() || Name.Contains(TEXT("/")) || Name.Contains(TEXT(".")) || !FPackageName::IsValidLongPackageName(Destination)) return MCPError(TEXT("Invalid texture destination: ") + Destination);
-		if (MCPIsProtectedAssetPath(Destination)) return MCPError(TEXT("Cannot import to a protected mount: ") + Destination);
+		if (MCPIsProtectedAssetPath(Destination)) return MCPError(TEXT("Cannot import to a protected mount: ") + Destination + TEXT(". This cannot be overridden; import into /Game or a plugin content folder."));
 		if (UObject* Existing = MCPLoadAssetObject(Destination))
 		{
 			if (auto Blocked = MCPAssetWriteBlockedError(Existing, Destination, TEXT("import texture"))) return Blocked;
@@ -4431,8 +4431,8 @@ TSharedPtr<FJsonValue> FAssetHandlers::ImportStringTableCsv(const TSharedPtr<FJs
 	if (MCPIsProtectedAssetPath(AssetPath))
 	{
 		return MCPError(FString::Printf(
-			TEXT("'%s' is on a protected mount (/Engine/, /Script/, /Memory/, /Temp/), which the bridge never writes to."),
-			*AssetPath));
+			TEXT("'%s' is on a protected mount (/Engine/, /Script/, /Memory/, /Temp/), which the bridge never writes to. %s"),
+			*AssetPath, *MCPProtectedMountWayForward()));
 	}
 
 	if (MissingCsvPath) return MissingCsvPath;

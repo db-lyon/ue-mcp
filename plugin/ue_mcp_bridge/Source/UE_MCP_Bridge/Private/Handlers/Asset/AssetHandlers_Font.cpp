@@ -128,7 +128,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::ImportFont(const TSharedPtr<FJsonObject>&
 	}
 	if (MCPIsProtectedAssetPath(PackagePath))
 	{
-		return MCPError(FString::Printf(TEXT("'%s' is a protected mount; import into /Game or a plugin content folder"), *PackagePath));
+		return MCPError(FString::Printf(TEXT("'%s' is a protected mount, which cannot be overridden; import into /Game or a plugin content folder"), *PackagePath));
 	}
 
 	const FString PackageName = PackagePath / Name;

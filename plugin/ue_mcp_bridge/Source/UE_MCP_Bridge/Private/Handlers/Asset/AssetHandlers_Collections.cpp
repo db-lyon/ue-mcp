@@ -88,7 +88,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::EditCollectionEntry(const TSharedPtr<FJso
 	if (MissingProperty) return MissingProperty;
 	if (!EntryKey.IsValid()) return MCPError(TEXT("entryKey is required"));
 	if (!NewKey.IsValid() && (!Overrides || (*Overrides)->Values.IsEmpty())) return MCPError(TEXT("Supply overrides to update, or newKey to clone"));
-	if (MCPIsProtectedAssetPath(AssetPath)) return MCPError(TEXT("Cannot edit a protected asset"));
+	if (MCPIsProtectedAssetPath(AssetPath)) return MCPError(TEXT("Cannot edit a protected asset. ") + MCPProtectedMountWayForward());
 	TSharedPtr<FJsonValue> LoadError;
 	UObject* Asset = MCPRequireAssetObject(AssetPath, LoadError);
 	if (!Asset) return LoadError;
@@ -251,7 +251,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::CloneDataTableRows(const TSharedPtr<FJson
 	const bool bDryRun = OptionalBool(Params, TEXT("dryRun"), false);
 	if (MissingAsset) return MissingAsset;
 	if (!Rows || Rows->IsEmpty() || Rows->Num() > 500) return MCPError(TEXT("clones must contain 1-500 clone requests"));
-	if (MCPIsProtectedAssetPath(AssetPath)) return MCPError(TEXT("Cannot edit a protected asset"));
+	if (MCPIsProtectedAssetPath(AssetPath)) return MCPError(TEXT("Cannot edit a protected asset. ") + MCPProtectedMountWayForward());
 	UDataTable* Table = LoadAssetByPath<UDataTable>(AssetPath);
 	if (!Table || !Table->GetRowStruct()) return MCPError(TEXT("DataTable with a row struct required"));
 	// UDataTable exposes its row type as const; the reflection helpers below only read it.
@@ -362,7 +362,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::RemoveDataTableRows(const TSharedPtr<FJso
 	}
 	else if (!FName(*RowName).IsNone()) Names.Add(FName(*RowName));
 	else return MCPError(TEXT("A row name is required"));
-	if (MCPIsProtectedAssetPath(AssetPath)) return MCPError(TEXT("Cannot edit a protected table"));
+	if (MCPIsProtectedAssetPath(AssetPath)) return MCPError(TEXT("Cannot edit a protected table. ") + MCPProtectedMountWayForward());
 	UDataTable* Table = LoadAssetByPath<UDataTable>(AssetPath);
 	if (!Table) return MCPAssetLoadError(AssetPath, TEXT("DataTable"));
 	if (bSave) if (auto Blocked = MCPAssetWriteBlockedError(Table, AssetPath, TEXT("remove table rows"))) return Blocked;

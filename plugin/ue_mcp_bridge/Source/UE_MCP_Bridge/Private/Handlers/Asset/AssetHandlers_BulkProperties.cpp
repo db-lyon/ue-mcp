@@ -195,8 +195,8 @@ TSharedPtr<FJsonValue> FAssetHandlers::BulkSetAssetProperties(const TSharedPtr<F
 		if (MCPIsProtectedAssetPath(AssetPath))
 		{
 			RejectItem(BulkStatusProtected, FString::Printf(
-				TEXT("Refusing to mutate protected mount: %s. Engine, /Script/, /Memory/, /Temp/ are read-only via the bridge."),
-				*AssetPath));
+				TEXT("Refusing to mutate protected mount: %s. Engine, /Script/, /Memory/, /Temp/ are read-only via the bridge. %s"),
+				*AssetPath, *MCPProtectedMountWayForward()));
 			PreparedAssets.Add(MoveTemp(PreparedAsset));
 			continue;
 		}

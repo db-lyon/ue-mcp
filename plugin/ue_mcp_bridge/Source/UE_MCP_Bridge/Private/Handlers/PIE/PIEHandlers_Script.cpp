@@ -606,7 +606,7 @@ TSharedPtr<FJsonValue> FPIEHandlers::PieScriptDelete(const TSharedPtr<FJsonObjec
 	const bool bConfirm = OptionalBool(Params, TEXT("confirm"), false);
 	if (PathErr) return PathErr;
 	if (!bConfirm) return MCPError(TEXT("confirm=true required to delete a test script"));
-	if (MCPIsProtectedAssetPath(Path)) return MCPError(FString::Printf(TEXT("Refusing to delete a protected path: %s"), *Path));
+	if (MCPIsProtectedAssetPath(Path)) return MCPError(FString::Printf(TEXT("Refusing to delete a protected path: %s. This cannot be overridden."), *Path));
 
 	if (!UEditorAssetLibrary::DoesAssetExist(Path))
 	{

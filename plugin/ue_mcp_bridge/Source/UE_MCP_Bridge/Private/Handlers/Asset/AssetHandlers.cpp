@@ -3141,7 +3141,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::DeleteAssetBatch(const TSharedPtr<FJsonOb
 		if (MCPIsProtectedAssetPath(Path))
 		{
 			Entry->SetStringField(TEXT("status"), TEXT("protected"));
-			Entry->SetStringField(TEXT("reason"), TEXT("Engine/Script/Memory/Temp mounts are read-only via the bridge"));
+			Entry->SetStringField(TEXT("reason"), TEXT("Engine/Script/Memory/Temp mounts are read-only via the bridge. ") + MCPProtectedMountWayForward());
 			Protected++;
 		}
 		else if (!UEditorAssetLibrary::DoesAssetExist(Path))
@@ -3413,7 +3413,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::BulkRename(const TSharedPtr<FJsonObject>&
 		if (MCPIsProtectedAssetPath(SourcePath) || MCPIsProtectedAssetPath(NewPackagePath))
 		{
 			Record->SetStringField(TEXT("status"), TEXT("protected"));
-			Record->SetStringField(TEXT("reason"), TEXT("Engine/Script/Memory/Temp mounts are read-only via the bridge"));
+			Record->SetStringField(TEXT("reason"), TEXT("Engine/Script/Memory/Temp mounts are read-only via the bridge. ") + MCPProtectedMountWayForward());
 			PerItem.Add(MakeShared<FJsonValueObject>(Record));
 			Skipped++;
 			continue;
