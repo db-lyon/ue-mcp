@@ -6,7 +6,7 @@
  * (`engineRange`, which the landing site and the other repos read from the npm
  * package), the `<!-- count:engineRange -->` markers in README and docs, the
  * README overview image, and the prose lint's range rule. Moving to a new
- * engine is a change to this file followed by `npm run generate:metadata`.
+ * engine is a change to this file followed by `npm run generate`.
  *
  * `tests/unit/engine-range.test.ts` holds the places that cannot read it (the
  * engine probe list, the release binaries table, the recorded Epic catalogs)

@@ -6,7 +6,7 @@
  * from at runtime, dumped as YAML: every category's tasks and the built-in
  * flows, in the form a project's ue-mcp.yml uses today.
  *
- * Run: tsx scripts/generate-default-config.ts
+ * Run: npm run generate:config (or npm run generate, which runs every generator)
  * Output: dist/ue-mcp.default.yml
  */
 import * as fs from "node:fs";
@@ -19,7 +19,7 @@ import { dumpYaml } from "../src/core/yaml-dump.js";
 
 const HEADER = [
   "# Auto-generated - do not edit by hand.",
-  "# Source: scripts/generate-default-config.ts",
+  "# Source: scripts/generate-default-config.ts, dumping buildDefaults() from src/flow/loader.ts",
   "",
 ].join("\n");
 
@@ -39,5 +39,5 @@ if (isMain) {
   const outPath = path.join(outDir, "ue-mcp.default.yml");
   fs.writeFileSync(outPath, text, "utf-8");
   const taskCount = (text.match(/^ {2}[\w-]+\.\w+:/gm) ?? []).length;
-  console.log(`[generate] ${outPath} - ${taskCount} tasks`);
+  console.log(`[config] ${outPath} - ${taskCount} tasks`);
 }

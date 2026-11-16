@@ -291,7 +291,7 @@ describe("the generated modules", () => {
     expect(fs.readdirSync(specsDir).map((f) => `src/tools/specs/${f}`).sort()).toEqual([...files.keys()].sort());
     for (const [rel, contents] of files) {
       const onDisk = fs.readFileSync(path.join(ROOT, rel), "utf8").replace(/\r\n/g, "\n");
-      expect(onDisk, `${rel} is stale: run npm run specs:generate`).toBe(contents);
+      expect(onDisk, `${rel} is stale: run npm run generate`).toBe(contents);
     }
   });
 

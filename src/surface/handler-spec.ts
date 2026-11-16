@@ -448,7 +448,7 @@ export function makeSpecBp(clauses: Readonly<Record<string, string>>, specs: Han
     if (clause === undefined) {
       throw new Error(
         `No recorded parameter spec for bridge method '${bridge}'. Register it with a spec in C++, `
-        + "then run npm run specs:record and npm run specs:generate.",
+        + "rebuild the plugin, then run npm run generate -- --editor with the editor open on tests/ue_mcp.",
       );
     }
     // The literal `bp` builds. Importing `bp` would load category-tool.ts,

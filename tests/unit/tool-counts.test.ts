@@ -12,7 +12,7 @@
  * tools wrapped in-process".
  */
 import { describe, expect, it } from "vitest";
-import { computeCounts } from "../../scripts/generate-tool-metadata.js";
+import { computeCounts } from "../../scripts/lib/tool-counts.js";
 import { SUPPORTED_ENGINE_RANGE } from "../../scripts/lib/engine-range.mjs";
 import { ALL_TOOLS } from "../../src/tools.js";
 import { SERVER_INSTRUCTIONS } from "../../src/surface/context/instructions.js";

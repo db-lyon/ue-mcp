@@ -4,7 +4,7 @@ Operating guide for Claude Code (and any AI agent) working in this repo. Shared 
 
 ## Repo at a glance
 
-- **TS server** (`src/`) - the MCP server. Wraps the UE bridge over WebSocket, exposes <!-- count:tools -->31<!-- /count --> category tools with <!-- count:actions -->3714+<!-- /count --> actions. The numbers between those markers are stamped by `scripts/generate-tool-metadata.ts` from `ALL_TOOLS`; do not hand-edit them, and do not remove the markers, because a hand-written count here is the first thing every agent reads and the last thing anyone remembers to update.
+- **TS server** (`src/`) - the MCP server. Wraps the UE bridge over WebSocket, exposes <!-- count:tools -->31<!-- /count --> category tools with <!-- count:actions -->3714+<!-- /count --> actions. The numbers between those markers are stamped by `npm run generate` (`scripts/generate-tool-metadata.ts`) from `ALL_TOOLS`; do not hand-edit them, and do not remove the markers, because a hand-written count here is the first thing every agent reads and the last thing anyone remembers to update.
 - **C++ plugin** (`plugin/ue_mcp_bridge/`) - the editor-side bridge. Lives in `Private/Handlers/<Category>/*.cpp`, registers actions with `FMCPHandlerRegistry`.
 - **Test project** (`tests/ue_mcp/`) - the dedicated UE project used for smoke testing. The plugin is deployed here from `plugin/` via the deployer. This is the **only** safe target for live tests.
 - **Docs** (`docs/`) - MkDocs site. Release bodies are drafted outside the repo (see Release process).
@@ -60,12 +60,22 @@ The merge style follows the commit count, and writing five commits only to squas
 - Smoke tests execute real mutations (create blueprints, delete assets, modify levels). A misrouted run against a real project can corrupt an active editor session.
 - <!-- count:bridgeActions -->3620<!-- /count --> bridge actions. Pass = every handler responds either with success or an expected parameter-validation error. Any timeout or `Unknown method` is a real failure.
 
+### Generated files - one command
+
+`npm run generate` (`scripts/generate.mjs`) regenerates every committed generated file in dependency order: the spec'd and Epic action modules, `docs/native-tools.md`, `docs/tool-reference.md` and every `<!-- count:* -->` marker, the package stamp (`.uplugin` VersionName and description, the npm description, the overview image), the golden baseline and both coverage inventories. Run it after any change to an action, a C++ spec, a recorded catalog or a test, and commit what it changes in the same commit as the source.
+
+- The steps that record from a live editor (`specs:record`, `epic:record`, the connected golden) run only with `npm run generate -- --editor`, against an editor on `tests/ue_mcp` built from your checkout. Without the flag they are skipped with a line saying how to run them.
+- `npm run generate -- --list` prints the steps and the npm script that runs each alone (`specs:generate`, `generate:metadata`, `stamp:package`, `golden:record`, `coverage:behavioural` and so on); those still work.
+- **Drift gate.** The `generated` release gate runs `npm run generate -- --check` in CI and fails when an editor-free step changed a committed file. CI cannot record C++ specs (no Unreal install), so `tests/unit/handler-spec-source.test.ts` compares a fingerprint of the spec source, stored beside the recording in `tests/golden/handler-specs.source.json`, and fails when a spec changed without a re-record.
+- Count markers are found by scanning tracked Markdown, so a page gains a stamped count by carrying the marker; there is no list to add it to.
+- Regenerating the golden baseline does not make its diff reviewed. Read it before committing.
+
 ### Golden baseline - the advertised surface
 
 `tests/golden/editor-down.json` is a recording of what a client is handed at startup with one project and no editor running: the `initialize` instructions and every tool in `tools/list` with its full input schema. `tests/unit/golden-editor-down.test.ts` starts the real server over stdio, records the same thing again, and fails if the two differ. It runs as part of `npm run test:unit`, so CI gates on it.
 
 - **A failure is not automatically a bug.** It says the startup contract moved. Read the diff.
-- **Re-record intentionally** with `npm run golden:record`, then review the diff before committing it. Never edit the JSON by hand.
+- **Re-record intentionally** with `npm run generate` (or `npm run golden:record` alone), then review the diff before committing it. Never edit the JSON by hand.
 - It records the `full` context strategy, pinned, because that is the surface every category tool, action enum and signature line is on. `micro` is the default a client gets; it and `lean` are projections of `full`, covered by the unit tests and the `context-tax` release gate.
 - The recording is hermetic: a throwaway project in a temp directory, `UE_MCP_PORT=1` so nothing can be listening, every inherited `UE_MCP_*` variable dropped, and the user-scoped config/state/auth files redirected. Absolute paths are rewritten before serialization and asserted absent, so the file verifies on any machine.
 - The `epic_*` actions enrichment injects are **sorted in the recording**, alongside the path, port and timestamp rewrites. Unreal's toolset registry promises the set of tools, not the sequence, and a restart that reshuffles it would otherwise report a surface change on a healthy editor. Only the snapshot is normalised; the server advertises exactly what it always did. A category's own actions keep their declared order, which is authored and does carry meaning.
@@ -103,7 +113,7 @@ The merge style follows the commit count, and writing five commits only to squas
 
 ### Behavioural coverage gate
 
-`tests/coverage/behavioural-coverage.json` maps every registered bridge action to the live and `UE.MCP.*` automation tests whose body dispatches it and asserts more than that the call answered (#1223). `npm run coverage:behavioural` regenerates it; `tests/unit/behavioural-coverage.test.ts` fails when it is stale or an action has no test.
+`tests/coverage/behavioural-coverage.json` maps every registered bridge action to the live and `UE.MCP.*` automation tests whose body dispatches it and asserts more than that the call answered (#1223). `npm run generate` regenerates it (`npm run coverage:behavioural` alone); `tests/unit/behavioural-coverage.test.ts` fails when it is stale or an action has no test.
 
 - A new action needs a behavioural test, or an exemption with a reason in `tests/coverage/behavioural-exemptions.json`. Never add it to `tests/coverage/behavioural-gaps.json`.
 - The gap list is the backlog grandfathered when the gate landed. It only shrinks: the unit test fails on an entry that has gained a test (`npm run coverage:behavioural -- --shrink-ratchet`), and the `behavioural-coverage` release gate fails on any entry the merge base did not have.
@@ -113,7 +123,7 @@ The merge style follows the commit count, and writing five commits only to squas
 
 Everything a user drives that is not a bridge action (CLI commands, server startup per strategy and mode, the gateway, flows, plugins, the daemon, feedback, auth, config) is listed by id in `tests/coverage/integration-surfaces.json`. `npm run test:integration` runs `tests/integration`: the real CLI, server and daemon spawned in hermetic sandboxes (`tests/integration/harness.ts`) with local fakes for the bridge, npm, the registry, the feedback service and GitHub. It runs in CI.
 
-- A test claims a surface with `covers("<id>")` from `tests/helpers/covers.ts`, and is credited when it asserts on what the process did. `npm run coverage:integration` regenerates `tests/coverage/integration-coverage.json`; `tests/unit/integration-coverage.test.ts` fails when it is stale, a surface is unexplained, or a test claims an id the manifest lacks.
+- A test claims a surface with `covers("<id>")` from `tests/helpers/covers.ts`, and is credited when it asserts on what the process did. `npm run generate` regenerates `tests/coverage/integration-coverage.json` (`npm run coverage:integration` alone); `tests/unit/integration-coverage.test.ts` fails when it is stale, a surface is unexplained, or a test claims an id the manifest lacks.
 - A new surface goes into the manifest with its test, or with a reasoned exemption in `tests/coverage/integration-exemptions.json`. `tests/coverage/integration-gaps.json` only shrinks, enforced by the `integration-coverage` release gate.
 - A surface that needs a live editor gets its test in `tests/live`, which the inventory also reads.
 - Never point a test at a real service or the developer's home: start from `Sandbox.env()`, which closes every service origin and redirects every per-user file.
@@ -179,7 +189,7 @@ Main and `release/*` take only pull requests that are up to date with them and w
 
 Release notes structure (below the frontmatter): **`## Features` / `## Fixes` / `## Mentions` / `## Contributions`**, in that order. Read `docs/release-notes-style.md` before writing any of it. The rules that get broken most:
 
-- **The engine range is <!-- count:engineRange -->5.4 to 5.9<!-- /count -->.** Say the range. It is declared once, in `scripts/lib/engine-range.mjs`, and stamped everywhere else by `npm run generate:metadata`. Never annotate it with which versions have been compiled, verified or gated. A user on 5.5 who hits a problem files an issue; that is the system working, not something to pre-empt in public copy.
+- **The engine range is <!-- count:engineRange -->5.4 to 5.9<!-- /count -->.** Say the range. It is declared once, in `scripts/lib/engine-range.mjs`, and stamped everywhere else by `npm run generate`. Never annotate it with which versions have been compiled, verified or gated. A user on 5.5 who hits a problem files an issue; that is the system working, not something to pre-empt in public copy.
 - **No thesis sentence, no three-part summary.** The opening is a compatibility line, an install block, and at most one plain sentence of scale. "N new actions across M categories, every X doing Y, and the Z now W" is a bulleted list flattened into prose.
 - **Cumulative, not archaeological.** A stable release never mentions its own betas or what an earlier release got wrong.
 - **Credit contributors** from `gh api repos/OWNER/REPO/compare/vPREV...vNEW --jq '.commits[].author.login'`, not from memory.
@@ -244,9 +254,9 @@ npx tsc --noEmit        # Type-check TS
 npm run test:smoke      # Live smoke tests (tests/ue_mcp only)
 npm run test:live       # Live tests against a running editor (tests/ue_mcp only)
 npm run test:automation # The plugin's C++ UE.MCP.* suite, through the bridge
-npm run golden:record   # Re-record tests/golden/editor-down.json (review the diff)
-npm run coverage:behavioural # Regenerate the behavioural-coverage inventory
-npm run coverage:integration # Regenerate the integration-coverage inventory
+npm run generate        # Regenerate every generated file in order (review the golden diff)
+npm run generate -- --editor # Also record specs, Epic catalog and connected golden from tests/ue_mcp
+npm run generate -- --list   # The steps, and the npm script that runs each alone
 npm run test:integration     # Spawned CLI, server and daemon in sandboxes (no editor)
 npm run release:notes   # Compose cumulative stable notes from a version's prereleases
 npm test                # Unit, multi-editor and integration suites (no editor needed)

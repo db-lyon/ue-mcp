@@ -17,16 +17,33 @@
  *
  * Talks to the bridge directly, and only to an editor that has tests/ue_mcp
  * open, the same guard every other script in this repo applies.
+ *
+ * It also writes tests/golden/handler-specs.source.json, a fingerprint of the
+ * C++ spec source (scripts/lib/spec-source.mjs), so CI, which has no Unreal
+ * install, can tell when the source changed and the recording did not.
+ * `--fingerprint-only` writes just that file, for when the recording is known
+ * current: tests/live/handler-specs.test.ts passed against an editor built from
+ * this source.
  */
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { connectTestBridge } from "./bridge-target.mjs";
+import { SPEC_SOURCE_FILE, serializeSpecSource, specSourceFingerprint } from "./lib/spec-source.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const OUT = path.join(ROOT, "tests", "golden", "handler-specs.json");
 
+function writeSourceFingerprint() {
+  fs.writeFileSync(SPEC_SOURCE_FILE, serializeSpecSource(specSourceFingerprint()));
+  console.log(`wrote ${path.relative(ROOT, SPEC_SOURCE_FILE)}`);
+}
+
 async function main() {
+  if (process.argv.includes("--fingerprint-only")) {
+    writeSourceFingerprint();
+    return;
+  }
   const bridge = await connectTestBridge({ log: console.log });
   console.log(`target confirmed: ${bridge.projectDir}`);
 
@@ -45,7 +62,8 @@ async function main() {
 
   fs.writeFileSync(OUT, `${JSON.stringify(snapshot, null, 2)}\n`);
   console.log(`recorded ${snapshot.handlerCount} spec'd handlers`);
-  console.log(`wrote ${path.relative(ROOT, OUT)}; now run npm run specs:generate`);
+  writeSourceFingerprint();
+  console.log(`wrote ${path.relative(ROOT, OUT)}; now run npm run generate`);
   bridge.close();
 }
 

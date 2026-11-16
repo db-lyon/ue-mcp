@@ -23,12 +23,12 @@
  * Availability per engine comes from each action's `epicTool.engines` and the
  * recorded snapshots in tests/golden/epic-catalog/.
  *
- * Usage: node scripts/gen-epic-docs.mjs   (run `npx tsc` first so dist/ exists)
+ * Usage: npm run gen:epic-docs   (node --import tsx, so it reads src/ directly)
  */
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
-import { ALL_TOOLS } from "../dist/tools.js";
+import { ALL_TOOLS } from "../src/tools.js";
 import { loadSnapshots, mergeSnapshots } from "./lib/epic-catalog.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");

@@ -17,7 +17,7 @@
  * would draw the subset larger than the set that contains it. Only the numbers
  * and the engine range are data.
  *
- * `npm run generate:metadata` calls this. It renders only when the figures,
+ * scripts/stamp-package.ts calls this. It renders only when the figures,
  * the template or this renderer changed, so an unchanged surface leaves the
  * PNG untouched.
  * `--force` renders regardless.
@@ -27,7 +27,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import type { Counts } from "./generate-tool-metadata.js";
+import type { Counts } from "./lib/tool-counts.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repo = path.resolve(here, "..");
@@ -206,7 +206,7 @@ export async function renderOverviewImage(
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const { computeCounts } = await import("./generate-tool-metadata.js");
+  const { computeCounts } = await import("./lib/tool-counts.js");
   const result = await renderOverviewImage(computeCounts(), { force: process.argv.includes("--force") });
   console.log(result.rendered ? `rendered ${result.png}` : `${result.png} already shows these counts`);
 }

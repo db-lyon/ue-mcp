@@ -4,12 +4,12 @@
  * It was drawn by hand once and its numbers and circles went stale. It is now
  * rendered by scripts/render-overview-image.ts, which writes the figures it drew
  * beside the PNG. This fails when those figures, or the template, no longer
- * match the current surface: run `npm run generate:metadata` and commit the result.
+ * match the current surface: run `npm run generate` and commit the result.
  */
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { describe, expect, it } from "vitest";
-import { computeCounts } from "../../scripts/generate-tool-metadata.js";
+import { computeCounts } from "../../scripts/lib/tool-counts.js";
 import { SUPPORTED_ENGINE_RANGE } from "../../scripts/lib/engine-range.mjs";
 import {
   FIGURES_PATH,

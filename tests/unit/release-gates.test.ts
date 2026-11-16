@@ -117,13 +117,13 @@ describe("every gate is reachable from the entry point", () => {
     const src = await import("node:fs").then((fs) =>
       fs.readFileSync(new URL("../../scripts/check-release-gates.mjs", import.meta.url), "utf8"),
     );
-    for (const gate of ["version-delta", "count-markers", "docs-freshness", "behavioural-coverage", "integration-coverage"]) {
+    for (const gate of ["version-delta", "generated", "docs-freshness", "behavioural-coverage", "integration-coverage"]) {
       expect(src, gate).toContain(`"${gate}"`);
     }
     // Each one has to be wired into the table `all` iterates, not merely
     // defined somewhere in the file.
     const table = src.slice(src.indexOf("const GATES = {"), src.indexOf("function main("));
-    for (const gate of ["version-delta", "count-markers", "docs-freshness", "behavioural-coverage", "integration-coverage"]) {
+    for (const gate of ["version-delta", "generated", "docs-freshness", "behavioural-coverage", "integration-coverage"]) {
       expect(table, `${gate} is not in the gate table`).toContain(gate);
     }
   });

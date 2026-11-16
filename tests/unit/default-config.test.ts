@@ -3,10 +3,15 @@ import yaml from "js-yaml";
 import { generateDefaultConfig } from "../../scripts/generate-default-config.js";
 import { ALL_TOOLS } from "../../src/tools.js";
 import { FlowConfigSchema } from "../../src/flow/schema.js";
+import { buildDefaults } from "../../src/flow/loader.js";
 
 describe("dist/ue-mcp.default.yml", () => {
   const text = generateDefaultConfig();
   const doc = yaml.load(text) as { tasks: Record<string, { class_path: string; group: string; options?: unknown }> };
+
+  it("is the runtime defaults the flow loader starts from, value for value", () => {
+    expect(doc).toEqual({ "ue-mcp": { version: 1 }, ...JSON.parse(JSON.stringify(buildDefaults(ALL_TOOLS))) });
+  });
 
   it("parses as a flow config", () => {
     expect(FlowConfigSchema.safeParse(doc).success).toBe(true);

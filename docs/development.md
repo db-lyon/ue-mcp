@@ -90,8 +90,8 @@ src/
 ├── flow/                 # Flow engine (registry, loader, task factory, HTTP)
 └── tools/                # <!-- count:tools -->31<!-- /count --> category tools, one file each
     ├── project/          # project category, split by action group
-    ├── epic/             # Generated epic_* actions (npm run epic:generate)
-    └── specs/            # Generated parameter specs (npm run specs:generate)
+    ├── epic/             # Generated epic_* actions (npm run generate)
+    └── specs/            # Generated parameter specs (npm run generate)
 
 plugin/ue_mcp_bridge/     # C++ bridge plugin
 └── Source/
@@ -123,8 +123,9 @@ docs/                      # Documentation
 | `npm run test:live` | `tests/live` through the shipped server, sharded across editors it launches | Launches its own |
 | `npm run test:smoke` | Every registered handler | Yes |
 | `npm run test:suites` | The Vitest suites in `tests/smoke` (`-- level` filters by file name) | Yes |
+| `npm run generate` | Every generated file (action modules, tool reference, stamped counts, golden, coverage) in order | No (`-- --editor` adds the recordings, Yes) |
 
-CI runs the unit and integration suites on every pull request.
+CI runs the unit and integration suites on every pull request, and fails when `npm run generate` would change a committed file.
 
 !!! warning "Editor tests target the test project only"
     Smoke, suite and automation runs execute real mutations (creating blueprints, deleting assets, modifying the level). They target `tests/ue_mcp/ue_mcp.uproject` only: after connecting, the runner asks the editor which project it has open and aborts before sending anything if it is not `tests/ue_mcp`. Non-loopback hosts are refused.
@@ -193,7 +194,7 @@ A category handler that calls another action in its own category routes that cal
 1. Add the handler in `plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Handlers/<Category>/`. It is static, takes `const TSharedPtr<FJsonObject>& Params` and returns `TSharedPtr<FJsonValue>`.
 2. Register it with a [parameter spec](architecture.md#parameter-specs) in the group's `RegisterHandlers`. A new group is added to `HandlerCatalog.cpp`.
 3. Follow [Handler Conventions](handler-conventions.md) for idempotency and rollback.
-4. Deploy, build, then `npm run specs:record` against `tests/ue_mcp` and `npm run specs:generate`.
+4. Deploy, build, open the editor on `tests/ue_mcp`, then `npm run generate -- --editor`. It records the specs and regenerates everything that depends on them; CI fails while a spec change is not re-recorded.
 
 Every new action needs a behavioural test (see the behavioural coverage gate in `CLAUDE.md`).
 
