@@ -5,7 +5,7 @@ import { z } from "zod";
  * Cursor pagination, TypeScript half (T3).
  *
  * The editor holds the data, so the paging itself happens in C++ - one shared
- * implementation in `plugin/ue_mcp_bridge/.../Public/HandlerPagination.h`,
+ * implementation in `plugin/ue_mcp_bridge/.../Private/HandlerPagination.h`,
  * which owns the cursor format and the rules for what happens when the
  * collection changes between pages. This module is the half that lives on this
  * side of the bridge: the shared `cursor` declaration, and `paged()`, which

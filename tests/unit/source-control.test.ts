@@ -171,7 +171,7 @@ describe("checkout on write", () => {
   });
 
   it("is asked before a read-only package is refused, and the refusal names source_control(checkout)", () => {
-    const save = read("Public/HandlerPackageSave.h");
+    const save = read("Private/HandlerPackageSave.h");
     const tryAt = save.indexOf("MCPSourceControl::TryAutoCheckout(PackageFileName, CheckoutNote)");
     expect(tryAt).toBeGreaterThan(-1);
     expect(tryAt).toBeLessThan(save.indexOf("is read-only on disk. Check it out with source_control(checkout)"));

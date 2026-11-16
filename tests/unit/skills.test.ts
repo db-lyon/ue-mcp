@@ -24,14 +24,13 @@ import {
   installedSkillName,
   listSkills,
   packagedSkillsRoot,
-  projectSkillsRoot,
   readSkillOwnership,
   removeCoreSkills,
   removeSkillSet,
-  setFrontmatterName,
   skillNamespace,
   syncPluginSkills,
 } from "../../src/extensions/skills.js";
+import { projectSkillsRoot, setFrontmatterName } from "../../src/extensions/skill-file.js";
 
 let tmp: string;
 let projectDir: string;

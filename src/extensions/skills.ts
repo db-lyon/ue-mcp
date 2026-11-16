@@ -14,24 +14,19 @@
  */
 import * as fs from "node:fs";
 import * as path from "node:path";
-import yaml from "js-yaml";
 import { nearestActions } from "../surface/action-schema.js";
 import { readPluginsList } from "./plugins-list.js";
 import { findInstalledPackage } from "./resolver.js";
 import { pluginSlug } from "./plugin-groups.js";
 import { packageRoot } from "../core/package-root.js";
+import { PROJECT_SKILLS_DIR, parseSkillFile, pluginSkillsRoot, projectSkillsRoot, setFrontmatterName } from "./skill-file.js";
 
 /** The owner name recorded for the skills that ship with ue-mcp itself. */
 export const CORE_OWNER = "ue-mcp";
 
 /** The `skills/` directory shipped in this package. */
 export function packagedSkillsRoot(): string {
-  return path.join(packageRoot(), "skills");
-}
-
-/** Where installed skills live for a project. */
-export function projectSkillsRoot(projectDir: string): string {
-  return path.join(projectDir, ".claude", "skills");
+  return pluginSkillsRoot(packageRoot());
 }
 
 /** Skill names under a root: every subdirectory that holds a SKILL.md. */
@@ -100,7 +95,7 @@ export interface SkillInstallResult {
  */
 export function skillNamespace(pkgName: string): string {
   const scoped = /^@([^/]+)\/(.+)$/.exec(pkgName);
-  const base = pluginSlug(scoped ? scoped[2] : pkgName);
+  const base = pluginSlug(pkgName);
   return (scoped ? `${scoped[1]}-${base}` : base)
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
@@ -187,7 +182,7 @@ export function installSkillSet(
 /** One line per refused skill, for a CLI to print as a warning. */
 export function conflictMessages(result: SkillInstallResult): string[] {
   return result.conflicts.map(
-    (c) => `skill '${c.skill}' not installed: .claude/skills/${c.skill} is held by ${c.heldBy}.`,
+    (c) => `skill '${c.skill}' not installed: ${PROJECT_SKILLS_DIR}/${c.skill} is held by ${c.heldBy}.`,
   );
 }
 
@@ -246,7 +241,7 @@ export function syncPluginSkills(projectDir: string, configPath: string): Plugin
     listed.add(name);
     const pkgDir = findInstalledPackage(name, projectDir);
     if (!pkgDir) continue;
-    const root = path.join(pkgDir, "skills");
+    const root = pluginSkillsRoot(pkgDir);
     const hadSkills = (readSkillOwnership(projectDir)[name] ?? []).length > 0;
     if (listSkills(root).length === 0 && !hadSkills) continue;
     result.plugins[name] = installSkillSet(projectDir, name, root);
@@ -286,16 +281,6 @@ function matches(files: Map<string, Buffer>, dest: string): boolean {
   const present = listFiles(dest);
   if (present.length !== files.size) return false;
   return present.every((rel) => files.get(rel)?.equals(fs.readFileSync(path.join(dest, rel))) ?? false);
-}
-
-/** Set the frontmatter `name:`, adding the field or the whole block if missing. */
-export function setFrontmatterName(text: string, name: string): string {
-  const m = /^---\r?\n([\s\S]*?)\r?\n---/.exec(text);
-  if (!m) return `---\nname: ${name}\n---\n\n${text}`;
-  const line = /^name:[^\r\n]*$/m;
-  const block = line.test(m[1]) ? m[1].replace(line, `name: ${name}`) : `name: ${name}\n${m[1]}`;
-  const start = m.index + (m[0].startsWith("---\r\n") ? 5 : 4);
-  return text.slice(0, start) + block + text.slice(start + m[1].length);
 }
 
 function removeIfEmpty(dir: string): void {
@@ -438,7 +423,7 @@ export function checkSkills(
   for (const skill of result.checked) {
     const file = path.join(root, skill, "SKILL.md");
     const text = fs.readFileSync(file, "utf-8");
-    const frontmatter = readFrontmatter(text);
+    const { frontmatter } = parseSkillFile(text);
     if (typeof frontmatter.description !== "string" || !frontmatter.description.trim()) {
       result.problems.push({
         skill,
@@ -483,15 +468,4 @@ export function checkSkills(
   }
   result.unverified = [...unverified].sort();
   return result;
-}
-
-function readFrontmatter(text: string): Record<string, unknown> {
-  const m = /^---\r?\n([\s\S]*?)\r?\n---/.exec(text);
-  if (!m) return {};
-  try {
-    const doc = yaml.load(m[1]);
-    return doc && typeof doc === "object" && !Array.isArray(doc) ? (doc as Record<string, unknown>) : {};
-  } catch {
-    return {};
-  }
 }

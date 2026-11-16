@@ -6,9 +6,8 @@
 // second .cpp becomes a redefinition the moment UBT groups the two files into
 // one blob (error C2084), and the grouping is not stable across machines.
 // Anything two handlers both need lives here, in a named namespace, as an
-// inline function. It is a Private header rather than Public/HandlerUtils.h
-// because it pulls in the editor file utilities, and HandlerUtils.h is also
-// included by UE_MCP_BridgeStatus, which does not link UnrealEd.
+// inline function. It is its own header rather than part of HandlerUtils.h so
+// that only the handlers needing the editor file utilities pay for including them.
 
 #include "CoreMinimal.h"
 #include "Dom/JsonObject.h"

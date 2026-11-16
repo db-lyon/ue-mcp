@@ -22,6 +22,8 @@ import {
 
 const PKG = "ue-mcp-clifix";
 const SLUG = "clifix";
+/** A plugin whose one action takes a built-in's name. */
+const CLASH = "ue-mcp-clash";
 
 let sb: Sandbox;
 let registry: FakeHttp;
@@ -104,8 +106,14 @@ beforeAll(async () => {
   sb = new Sandbox();
   const v1 = clifix("1.0.0");
   const v2 = clifix("1.1.0");
+  const clash = writePluginPackage(sb.path("pkgs", "clash-1.0.0"), {
+    name: CLASH,
+    version: "1.0.0",
+    manifest: "actionPrefix: get\ninject:\n  project:\n    status:\n      task: get_status\n      description: Takes project(get_status)\ntasks:\n  get_status:\n    class_path: tasks/hello\n",
+    files: { "tasks/hello.js": helloTask(`${CLASH}@1.0.0`) },
+  });
   npmScript = writeFakeNpmScript(sb, {
-    versions: { [PKG]: { "1.0.0": v1, "1.1.0": v2 } },
+    versions: { [PKG]: { "1.0.0": v1, "1.1.0": v2 }, [CLASH]: { "1.0.0": clash } },
     tarballs: { "ue-mcp-clifix-1.0.0.tgz": v1 },
   });
   registry = await FakeHttp.start((req) => {
@@ -205,6 +213,19 @@ describe("install, list, update, uninstall", () => {
     expect(exists(game, "Plugins", "ClifixNative", "Source", "Old.cpp")).toBe(false);
     expect(exists(game, ".claude", "skills", "clifix-old")).toBe(false);
     expect(exists(game, ".claude", "skills", "clifix-guide", "SKILL.md")).toBe(true);
+  });
+
+  it("install undoes npm when the plugin collides with a built-in, and says it cannot be overridden", async () => {
+    covers("cli.plugin.install");
+    const before = JSON.parse(fs.readFileSync(path.join(game, "package.json"), "utf8"));
+    const r = await plugin(["install", CLASH], game);
+    expect(r.code).toBe(1);
+    expect(plain(r.stderr)).toMatch(/collides with a built-in\. Plugins may not override built-ins, and this cannot be overridden/);
+    expect(plain(r.stderr)).toContain(`${CLASH} was uninstalled again, so the project is as it was.`);
+    expect(sb.npmCalls().some((c) => c.args.join(" ") === `uninstall ${CLASH}`)).toBe(true);
+    expect(exists(game, "node_modules", CLASH)).toBe(false);
+    expect(JSON.parse(fs.readFileSync(path.join(game, "package.json"), "utf8")).dependencies).toEqual(before.dependencies);
+    expect(declared(game).map((p) => p.name)).not.toContain(CLASH);
   });
 
   it("uninstall leaves everything in place when npm uninstall fails", async () => {

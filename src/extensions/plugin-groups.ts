@@ -25,13 +25,14 @@ export interface PluginRuntimeConfig {
 export type PluginConfigMap = Record<string, PluginRuntimeConfig>;
 
 /**
- * A plugin's short config key: the npm package name minus the conventional
- * `ue-mcp-` prefix. `ue-mcp-recipes` -> `recipes`. Matches the publish slug and
- * the registry resolver, so `ue-mcp plugin config recipes` and the config key
- * line up. A package without the prefix keeps its full name.
+ * A plugin's slug: the npm package name without its scope and the
+ * conventional `ue-mcp-` prefix. `ue-mcp-recipes` and `@team/ue-mcp-recipes`
+ * both give `recipes`; a package without the prefix keeps its name. The one
+ * rule for the registry slug `plugin publish` proposes, the config key,
+ * `plugin update <slug>`, feedback routing and the skill namespace.
  */
 export function pluginSlug(pkgName: string): string {
-  return pkgName.replace(/^ue-mcp-/, "");
+  return pkgName.replace(/^@[^/]+\//, "").replace(/^ue-mcp-/, "");
 }
 
 /**

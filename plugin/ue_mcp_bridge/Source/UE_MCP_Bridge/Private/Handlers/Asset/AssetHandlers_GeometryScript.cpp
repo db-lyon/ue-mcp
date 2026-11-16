@@ -47,7 +47,7 @@
 // AssetHandlers_MeshBoolean.cpp or AssetHandlers_UV.cpp is a redefinition
 // (C2084) on whichever machine happens to group them together. The reflected-
 // call helper is duplicated rather than shared for the same reason the UV pass
-// duplicated it: the shared home would be Public/HandlerUtils.h, and moving it
+// duplicated it: the shared home would be HandlerUtils.h, and moving it
 // there is a change to a file this work does not own.
 
 #include "AssetHandlers.h"

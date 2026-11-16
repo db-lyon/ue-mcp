@@ -25,7 +25,7 @@
 #include "Windows/WindowsHWrapper.h"
 #endif
 
-// Same definition as the canonical one in UE_MCP_Bridge/Public/HandlerUtils.h.
+// Same definition as the canonical one in UE_MCP_Bridge/Private/HandlerUtils.h.
 // It is repeated rather than shared because this module loads at
 // PostConfigInit and must not depend on the bridge module, and because the
 // bridge module lists this one as a private dependency, so its public headers

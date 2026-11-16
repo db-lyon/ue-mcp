@@ -235,7 +235,7 @@ AssetHandlers_BulkUpsert.cpp(53,6): error C2084: function
 
 The grouping shifts with file count, file order and the adaptive-unity working set, which UBT derives from `git status`, so a duplicate can build on one machine and fail on the next.
 
-Put a helper two files need in a shared header (one of the `Public/Handler*.h` headers that `HandlerUtils.h` gathers), never a copy. Copies also drift apart.
+Put a helper two files need in a shared header (one of the `Handler*.h` headers that `HandlerUtils.h` gathers, under `Private/`), never a copy. Copies also drift apart.
 
 ```bash
 npm run audit:unity      # duplicate file-local definitions, per module

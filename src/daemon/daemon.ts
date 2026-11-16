@@ -32,6 +32,7 @@ import { info, warn, error, stampLogs } from "../core/log.js";
 import { editorStepFailure } from "./editor-step.js";
 import { readEnv } from "../core/env.js";
 import { packageVersion } from "../core/package-root.js";
+import { compareVersions } from "../core/semver.js";
 import { normalizeProjectRoot } from "../bridge/wire-contract.js";
 import { bridgeInstancesDir, findLiveInstanceRecord, type BridgeInstanceRecord } from "../bridge/editor-target.js";
 import type { EditorSession } from "../sessions/session.js";
@@ -1082,7 +1083,7 @@ export async function runDaemon(projects: string[]): Promise<number> {
     return 2;
   }
   const projectDir = path.dirname(path.resolve(projects[0]));
-  const turn = await waitForStartTurn(projectDir, (d) => !isOlder(d.version, packageVersion()), { isStale: discoveryIsStale });
+  const turn = await waitForStartTurn(projectDir, (d) => compareVersions(d.version, packageVersion()) >= 0, { isStale: discoveryIsStale });
   if (turn.action === "defer") {
     info("daemon", `daemon ${turn.live.version} already running (pid ${turn.live.pid}); not starting another`);
     return 0;
@@ -1149,7 +1150,7 @@ const HANDOFF_DRAIN_MS = 90_000;
 /** A live same-or-newer daemon published by another process, other than `ignorePid`. */
 function rivalDaemon(projectDir: string, version: string, ignorePid?: number): DaemonDiscovery | null {
   const d = readLiveDiscovery(projectDir);
-  return d && d.pid !== process.pid && d.pid !== ignorePid && !isOlder(d.version, version) ? d : null;
+  return d && d.pid !== process.pid && d.pid !== ignorePid && compareVersions(d.version, version) >= 0 ? d : null;
 }
 
 async function requestHandoff(d: DaemonDiscovery): Promise<void> {
@@ -1158,21 +1159,4 @@ async function requestHandoff(d: DaemonDiscovery): Promise<void> {
   } catch (e) {
     warn("daemon", `handoff request to pid ${d.pid} failed`, e);
   }
-}
-
-/** True when a is an older release than b. Prerelease ordering follows semver loosely. */
-export function isOlder(a: string, b: string): boolean {
-  const parse = (v: string) => {
-    const [core, pre] = v.split("-", 2);
-    return { nums: core.split(".").map((n) => Number(n) || 0), pre: pre ?? null };
-  };
-  const x = parse(a);
-  const y = parse(b);
-  for (let i = 0; i < 3; i++) {
-    if ((x.nums[i] ?? 0) !== (y.nums[i] ?? 0)) return (x.nums[i] ?? 0) < (y.nums[i] ?? 0);
-  }
-  if (x.pre === y.pre) return false;
-  if (x.pre === null) return false;
-  if (y.pre === null) return true;
-  return x.pre.localeCompare(y.pre, undefined, { numeric: true }) < 0;
 }

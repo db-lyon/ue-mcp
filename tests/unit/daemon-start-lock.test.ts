@@ -16,7 +16,7 @@ import { isPidAlive } from "../../src/bridge/editor-target.js";
 import {
   daemonDir, discoveryIsStale, discoveryPath, projectKey, readAnsweringDiscovery, readLiveDiscovery, writeDiscovery, type DaemonDiscovery,
 } from "../../src/daemon/discovery.js";
-import { isOlder } from "../../src/daemon/daemon.js";
+import { compareVersions } from "../../src/core/semver.js";
 import { ensureDaemon } from "../../src/daemon/shim.js";
 import { packageVersion } from "../../src/core/package-root.js";
 import { userSandboxEnv } from "../helpers/user-sandbox.js";
@@ -45,7 +45,7 @@ const record = (pid: number, version: string): DaemonDiscovery => ({
   pid, port: 1000 + pid, token: "t", version, apiVersion: 1,
   projectRoot: normalizeProjectRoot(project), startedAt: "now",
 });
-const sameOrNewer = (version: string) => (d: DaemonDiscovery) => !isOlder(d.version, version);
+const sameOrNewer = (version: string) => (d: DaemonDiscovery) => compareVersions(d.version, version) >= 0;
 
 describe("the start lock", () => {
   const alive = new Set<number>();
