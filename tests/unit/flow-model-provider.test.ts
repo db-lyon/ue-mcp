@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { modelSource, NO_MODEL_MESSAGE, registerModelProvider, resolveModelProvider } from "../../src/flow/model-provider.js";
 import { EXTENSION_API_MIN_VERSION, EXTENSION_API_VERSION, extensionApiSupported } from "../../src/contract/daemon.js";
-import { PLAYTEST_DRAFT_OPTIONS, PLAYTEST_RETRIES, playtestFlow, playtestTasks, SCRIPT_DRAFT_SCHEMA } from "../../src/flow/playtest.js";
+import { PLAYTEST_BUILTIN_TASKS, PLAYTEST_DRAFT_OPTIONS, PLAYTEST_RETRIES, playtestFlow, SCRIPT_DRAFT_SCHEMA } from "../../src/flow/playtest/index.js";
 
 const provider = (text: string) => ({ complete: async () => ({ text }) });
 
@@ -64,8 +64,8 @@ describe("the playtest flow definition", () => {
   });
 
   it("drafts on an agent step with no tools, a budget and the step schema", () => {
-    const draft = playtestTasks()["playtest.draft"] as { class_path: string };
-    expect(draft.class_path).toBe("playtest.draft");
+    const draft = PLAYTEST_BUILTIN_TASKS.find((t) => t.name === "playtest.draft");
+    expect(draft?.definition?.group).toBe("playtest");
     expect(PLAYTEST_DRAFT_OPTIONS.tools).toEqual([]);
     expect(PLAYTEST_DRAFT_OPTIONS.tokenBudget).toBeGreaterThan(0);
     expect(PLAYTEST_DRAFT_OPTIONS.schema).toBe(SCRIPT_DRAFT_SCHEMA);

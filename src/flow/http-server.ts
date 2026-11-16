@@ -12,6 +12,7 @@ import { subscribeFlowEvents, type FlowEvent } from "./events.js";
 import { existingGuard } from "../editor/dialog-guard.js";
 import { readEnv } from "../core/env.js";
 import { hostIsAllowed } from "../core/loopback-host.js";
+import { FLOW_HTTP_PORT } from "../core/flow-http-port.js";
 import { DAEMON_HEADERS } from "../contract/daemon.js";
 
 type FlowTool = ReturnType<typeof createFlowTool>;
@@ -49,7 +50,7 @@ export function startFlowHttpServer(
   options: HttpServerOptions = {},
 ): { server: http.Server; port: number; host: string; token: string } {
   const host = options.host ?? "127.0.0.1";
-  const port = options.port ?? 7723;
+  const port = options.port ?? FLOW_HTTP_PORT;
   // Token precedence: explicit option > env override > freshly generated.
   // Env override lets CI scripts pin a known value without parsing stderr.
   const token =
