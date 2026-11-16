@@ -19,7 +19,6 @@ import {
   verifyTestProjectTarget,
   PROJECT_IDENTITY_TIMEOUT_MS,
 } from "../../scripts/bridge-target.mjs";
-import { deriveProjectPort as srcDeriveProjectPort } from "../../src/bridge/port.js";
 
 function withTempLockfile(contents: string | null): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ue-mcp-lock-"));
@@ -27,19 +26,6 @@ function withTempLockfile(contents: string | null): string {
   if (contents !== null) fs.writeFileSync(file, contents, "utf8");
   return file;
 }
-
-describe("port derivation parity", () => {
-  it("matches src/bridge/port.ts, which matches the C++ bridge", () => {
-    for (const p of [
-      TEST_PROJECT_DIR,
-      "C:/Users/dev/GameA",
-      "C:\\Users\\Dev\\GameA\\",
-      "/home/dev/projects/thing",
-    ]) {
-      expect(deriveProjectPort(p)).toBe(srcDeriveProjectPort(p));
-    }
-  });
-});
 
 describe("readPortLockfile", () => {
   it("reports a missing lockfile without throwing, keeping the path", () => {

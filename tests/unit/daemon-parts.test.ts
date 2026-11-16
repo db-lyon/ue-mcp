@@ -11,7 +11,7 @@ import { EventLog } from "../../src/daemon/events.js";
 import { compareVersions } from "../../src/core/semver.js";
 import { resolveServerMode } from "../../src/daemon/server-mode.js";
 import { discoveryPath, readDiscovery, readLiveDiscovery, removeDiscovery, writeDiscovery } from "../../src/daemon/discovery.js";
-import { normalizeProjectRoot } from "../../src/bridge/port.js";
+import { normalizeProjectRoot } from "../../src/bridge/wire-contract.js";
 import type { BridgeInstanceRecord } from "../../src/bridge/editor-target.js";
 
 const record: BridgeInstanceRecord = {

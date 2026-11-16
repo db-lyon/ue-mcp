@@ -17,7 +17,7 @@ import { WebSocketServer } from "ws";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { EditorBridge } from "../../src/bridge/bridge.js";
-import { resolveLiveBridgeAddress } from "../../src/bridge/editor-target.js";
+import { resolveBridgeTarget } from "../../src/bridge/editor-target.js";
 
 async function fakeEditor(name: string): Promise<{ port: number; close: () => Promise<void> }> {
   const server = new WebSocketServer({ host: "127.0.0.1", port: 0 });
@@ -64,15 +64,15 @@ function deadPid(): number {
   throw new Error("no dead pid available");
 }
 
-describe("resolveLiveBridgeAddress", () => {
+describe("resolveBridgeTarget's liveness rule", () => {
   it("takes port.json when the pid it names is alive", () => {
     const uproject = makeProject("alive");
     fs.writeFileSync(
       path.join(bridgeDir(uproject), "port.json"),
       JSON.stringify({ port: 51234, pid: process.pid }),
     );
-    const live = resolveLiveBridgeAddress(path.dirname(uproject));
-    expect(live).toEqual({ port: 51234, pid: process.pid, source: "port.json" });
+    const live = resolveBridgeTarget(path.dirname(uproject));
+    expect(live).toMatchObject({ ok: true, port: 51234, pid: process.pid, source: "port.json" });
   });
 
   // The auditor's case: an old plugin build publishes no pid at all, and
@@ -80,17 +80,21 @@ describe("resolveLiveBridgeAddress", () => {
   it("takes a port.json that names no pid, because older plugin builds publish none", () => {
     const uproject = makeProject("nopid");
     fs.writeFileSync(path.join(bridgeDir(uproject), "port.json"), JSON.stringify({ port: 51235 }));
-    const live = resolveLiveBridgeAddress(path.dirname(uproject));
-    expect(live).toEqual({ port: 51235, pid: null, source: "port.json" });
+    const live = resolveBridgeTarget(path.dirname(uproject));
+    expect(live).toMatchObject({ ok: true, port: 51235, pid: null, source: "port.json" });
   });
 
-  it("discards a port.json whose editor has exited", () => {
+  it("discards a port.json whose editor has exited, and says it was a crash", () => {
     const uproject = makeProject("dead");
-    fs.writeFileSync(
-      path.join(bridgeDir(uproject), "port.json"),
-      JSON.stringify({ port: 51236, pid: deadPid() }),
-    );
-    expect(resolveLiveBridgeAddress(path.dirname(uproject))).toBeNull();
+    const pid = deadPid();
+    fs.writeFileSync(path.join(bridgeDir(uproject), "port.json"), JSON.stringify({ port: 51236, pid }));
+    const live = resolveBridgeTarget(path.dirname(uproject));
+    expect(live.ok).toBe(false);
+    if (!live.ok) {
+      expect(live.deadLockfile).toMatchObject({ port: 51236, pid });
+      expect(live.reason).toContain("crashed");
+      expect(live.reason).toContain("start_editor");
+    }
   });
 
   // #934: two editors of one project share Saved/UE_MCP_Bridge/, and the one
@@ -103,9 +107,8 @@ describe("resolveLiveBridgeAddress", () => {
       path.join(dir, "instances", `${process.pid}.json`),
       JSON.stringify({ port: 51237, pid: process.pid, state: "listening" }),
     );
-    const live = resolveLiveBridgeAddress(path.dirname(uproject));
-    expect(live?.port).toBe(51237);
-    expect(live?.source).toBe("instance-record");
+    const live = resolveBridgeTarget(path.dirname(uproject));
+    expect(live).toMatchObject({ ok: true, port: 51237, source: "instance-record" });
   });
 
   it("never dials a bind-failed instance record", () => {
@@ -116,7 +119,7 @@ describe("resolveLiveBridgeAddress", () => {
       path.join(dir, "instances", `${process.pid}.json`),
       JSON.stringify({ port: 51238, pid: process.pid, state: "bind-failed" }),
     );
-    expect(resolveLiveBridgeAddress(path.dirname(uproject))).toBeNull();
+    expect(resolveBridgeTarget(path.dirname(uproject)).ok).toBe(false);
   });
 });
 

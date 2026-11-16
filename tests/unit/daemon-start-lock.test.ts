@@ -11,7 +11,7 @@ import type { AddressInfo } from "node:net";
 import { spawn, type ChildProcess } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { normalizeProjectRoot } from "../../src/bridge/port.js";
+import { normalizeProjectRoot } from "../../src/bridge/wire-contract.js";
 import { isPidAlive } from "../../src/bridge/editor-target.js";
 import {
   daemonDir, discoveryIsStale, discoveryPath, projectKey, readAnsweringDiscovery, readLiveDiscovery, writeDiscovery, type DaemonDiscovery,

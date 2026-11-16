@@ -7,7 +7,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { normalizeProjectRoot } from "../../src/bridge/port.js";
+import { normalizeProjectRoot } from "../../src/bridge/wire-contract.js";
 import { covers } from "../helpers/covers.js";
 import { FakeHttp, PACKAGE_VERSION, plain, runCli, Sandbox, stopSandboxDaemons, waitFor } from "./harness.js";
 import {

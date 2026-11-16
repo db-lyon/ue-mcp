@@ -8,7 +8,7 @@ import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import * as http from "node:http";
 import * as path from "node:path";
-import { normalizeProjectRoot } from "../bridge/port.js";
+import { normalizeProjectRoot } from "../bridge/wire-contract.js";
 import { isPidAlive } from "../bridge/editor-target.js";
 import { readEnv } from "../core/env.js";
 import { userDir } from "../core/user-dir.js";

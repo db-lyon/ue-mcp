@@ -1,0 +1,218 @@
+{
+  "$doc": "The wire contract between the TypeScript server and the C++ bridge plugin, declared once. scripts/generate-wire-contract.mjs writes src/bridge/wire-contract.ts, scripts/lib/wire-contract.mjs and the plugin's MCPWireContract.h from this file and runtime.ts.tmpl; npm run generate runs it and the generated drift gate fails CI on a stale output. Change values additively: an installed bridge or client built from an older copy of this file keeps reading the wire.",
+
+  "versions": {
+    "protocol": {
+      "value": 2,
+      "doc": "Wire protocol version, reported by get_bridge_capabilities. Version 1 is every bridge built before the handshake existed; those answer it with Unknown method. Version 2 reassembles messages across reads and frames, answers close and ping frames, validates the upgrade request and serves the handshake. Bump it when a change would make an older client misread the wire."
+    },
+    "handlerApi": {
+      "value": 2,
+      "doc": "Native handler ABI version for plugins that register their own handlers. Bump it when the handler signature or registration contract changes in a breaking way. 2: external handlers can register a parameter contract (MCPHandlerSpec.h)."
+    }
+  },
+
+  "features": {
+    "doc": "Capability names get_bridge_capabilities advertises. A client asks about the one thing it needs instead of comparing version numbers. Every name is always compiled in and always advertised.",
+    "values": [
+      "frame-reassembly",
+      "control-frames",
+      "capability-handshake",
+      "exclusive-port-claim",
+      "owned-port-record",
+      "instance-records",
+      "requested-port-file",
+      "param-echo",
+      "handler-specs",
+      "call-timeout",
+      "session-token",
+      "deferred-results",
+      "cancel-request",
+      "progress-frames"
+    ]
+  },
+
+  "jsonRpcErrors": {
+    "doc": "JSON-RPC 2.0 error codes the bridge answers with.",
+    "values": {
+      "parseError": -32700,
+      "invalidRequest": -32600,
+      "methodNotFound": -32601,
+      "internalError": -32603
+    }
+  },
+
+  "bridgeErrorCodes": {
+    "doc": "errorCode values a handler answers with that the client keys behaviour on.",
+    "values": {
+      "toolsetRegistryUnavailable": "toolset_registry_unavailable",
+      "unsupportedEngineVersion": "unsupported_engine_version"
+    }
+  },
+
+  "routingParams": {
+    "doc": "Parameter names the dispatcher consumes before a call reaches a handler. Never a handler argument, and never reported as an unread parameter.",
+    "values": ["action", "timeoutMs", "select", "omit", "editor", "toEditor"]
+  },
+
+  "batch": {
+    "maxCalls": {
+      "value": 256,
+      "doc": "The most steps one editor(batch) call carries. The whole list runs as one game-thread job, so this bounds how long one call holds the editor; a longer edit is two batches."
+    }
+  },
+
+  "bridgeState": {
+    "doc": "The state a bridge record reports. A bind-failed record names no reachable port: it exists to explain a failure, not to be dialled.",
+    "values": { "listening": "listening", "bindFailed": "bind-failed" }
+  },
+
+  "dialogRefusal": {
+    "doc": "The answer every method that is not modal-safe gets while a modal dialog is up. The client builds the call that presses a button from buttonLabel, so the bridge never spells tool syntax.",
+    "fields": {
+      "flag": "dialogBlocking",
+      "method": "refusedMethod",
+      "title": "dialogTitle",
+      "message": "dialogMessage",
+      "buttons": "buttons",
+      "choices": "choices",
+      "buttonLabel": "buttonLabel",
+      "respondWith": "respondWith"
+    }
+  },
+
+  "stateDir": {
+    "doc": "Where the bridge and the client exchange records, under the project directory (not ProjectSavedDir, which -UserDir moves).",
+    "segments": ["Saved", "UE_MCP_Bridge"],
+    "instancesDir": "instances",
+    "files": {
+      "portLockfile": "port.json",
+      "bridgeError": "bridge-error.json",
+      "requestedPort": "requested.json",
+      "sharedStatus": "status.json",
+      "instanceStatusPrefix": "status.",
+      "instanceRecordSuffix": ".json"
+    }
+  },
+
+  "records": {
+    "portLockfile": {
+      "doc": "port.json: the port the project's editor bound. Written temp-and-rename by the instance that bound it, removed only by that instance. Read for its port and pid; an older bridge writes no pid.",
+      "fields": {
+        "port": "port",
+        "pid": "pid",
+        "startedAt": "startedAt",
+        "instanceId": "instanceId",
+        "state": "state",
+        "legacyState": "status",
+        "protocolVersion": "protocolVersion",
+        "handlerApiVersion": "handlerApiVersion"
+      }
+    },
+    "instance": {
+      "doc": "instances/<pid>.json: one editor's own record of the bridge it runs or failed to run. One writer per file by construction.",
+      "fields": {
+        "port": "port",
+        "pid": "pid",
+        "instanceId": "instanceId",
+        "projectRoot": "projectRoot",
+        "startedAt": "startedAt",
+        "engineVersion": "engineVersion",
+        "protocolVersion": "protocolVersion",
+        "handlerApiVersion": "handlerApiVersion",
+        "state": "state",
+        "pluginDir": "pluginDir",
+        "installKind": "installKind",
+        "pluginVersion": "pluginVersion"
+      }
+    },
+    "bridgeError": {
+      "doc": "bridge-error.json: what a start that could not bind leaves behind, so editor alive and bridge dead is distinguishable from no editor.",
+      "fields": {
+        "state": "state",
+        "legacyState": "status",
+        "pid": "pid",
+        "startedAt": "startedAt",
+        "failedAt": "failedAt",
+        "instanceId": "instanceId",
+        "firstPortTried": "firstPortTried",
+        "lastPortTried": "lastPortTried",
+        "errorCode": "errorCode",
+        "detail": "detail"
+      }
+    },
+    "requestedPort": {
+      "doc": "requested.json: the port pin the client resolved, written by the client and read by the bridge. It exists only while a pin exists, and carries an integer, never a policy.",
+      "fields": {
+        "port": "port",
+        "projectRoot": "projectRoot",
+        "source": "source",
+        "writtenBy": "writtenBy",
+        "writtenAt": "writtenAt"
+      }
+    }
+  },
+
+  "installKind": {
+    "doc": "How the running plugin was installed, from its install marker.",
+    "markerFile": ".ue-mcp-install.json",
+    "values": { "source": "source", "binary": "binary" }
+  },
+
+  "pluginName": "UE_MCP_Bridge",
+
+  "token": {
+    "doc": "The bridge's per-session token: published by the plugin to <dir>/<port><suffix>, readable only by the editor's user, and required on every WebSocket upgrade as Authorization: Bearer <token>.",
+    "userDirName": ".ue-mcp",
+    "dirName": "bridge",
+    "fileSuffix": ".token",
+    "bytes": 32,
+    "authScheme": "Bearer",
+    "schemeHeader": "X-UE-MCP-Bridge-Auth",
+    "schemeHeaderValue": "token-file"
+  },
+
+  "canvasReservedPorts": {
+    "doc": "Ports the Unreal Canvas Bridge claims when a project enables it. A pin on one falls back to the derived port, and the collision walk steps over them.",
+    "plugin": "UnrealCanvasBridge",
+    "values": [
+      { "port": 9877, "use": "the Canvas webcam server (webcam_server.py)" },
+      { "port": 9880, "use": "the Canvas viewport stream" }
+    ]
+  },
+
+  "checkpointManifest": {
+    "doc": "One line of a checkpoint generation's manifest.jsonl: a file that was about to be written, whether it existed, and where its prior bytes were copied. A line without a version field is version 1; a reader skips lines newer than it knows.",
+    "file": "manifest.jsonl",
+    "version": 1,
+    "fields": { "version": "v", "path": "path", "existed": "existed", "copy": "copy" }
+  },
+
+  "env": {
+    "doc": "Environment variables the plugin reads. Each is also in src/core/env.ts, which documents every variable the server reads.",
+    "values": {
+      "port": "UE_MCP_PORT",
+      "env": "UE_MCP_ENV",
+      "globalConfig": "UE_MCP_GLOBAL_CONFIG",
+      "bridgeTokenDir": "UE_MCP_BRIDGE_TOKEN_DIR",
+      "dialogPolicy": "UE_MCP_DIALOG_POLICY",
+      "paramEcho": "UE_MCP_PARAM_ECHO",
+      "checkoutMode": "UE_MCP_CHECKOUT_MODE"
+    }
+  },
+
+  "port": {
+    "doc": "The bridge port. Each project derives its own from a hash of its root, so checkouts on one machine do not collide and neither side has to coordinate: SHA-1 (available to both Node and Unreal; spreading only, never security) of the normalized root, first four bytes big-endian, folded into [base, base + span). Normalized means forward slashes, no trailing slash, lowercase. The port.json the bridge publishes stays the authority on the port actually bound.",
+    "default": 9877,
+    "ephemeralBase": 49152,
+    "ephemeralSpan": 16384,
+    "vectors": [
+      { "root": "C:\\Users\\dev\\Projects\\MyGame", "normalized": "c:/users/dev/projects/mygame", "port": 53794 },
+      { "root": "c:/users/dev/projects/mygame/", "normalized": "c:/users/dev/projects/mygame", "port": 53794 },
+      { "root": "/home/dev/projects/MyGame", "normalized": "/home/dev/projects/mygame", "port": 64386 },
+      { "root": "/home/dev/projects/MyGame///", "normalized": "/home/dev/projects/mygame", "port": 64386 },
+      { "root": "D:\\UE\\ue-mcp\\tests\\ue_mcp\\", "normalized": "d:/ue/ue-mcp/tests/ue_mcp", "port": 58057 },
+      { "root": "/Users/Dev/Unreal Projects/Space Game", "normalized": "/users/dev/unreal projects/space game", "port": 49851 }
+    ]
+  }
+}

@@ -79,7 +79,7 @@ describe("resolveBridgeTarget", () => {
     const projectDir = makeProjectDir();
     writeLockfile(projectDir, { port: 52001, pid: 99 });
 
-    const target = resolveBridgeTarget(projectDir);
+    const target = resolveBridgeTarget(projectDir, (pid) => pid === 99);
     expect(target.ok).toBe(true);
     if (!target.ok) return;
     expect(target.port).toBe(52001);

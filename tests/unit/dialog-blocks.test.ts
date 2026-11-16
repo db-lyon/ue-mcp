@@ -43,9 +43,12 @@ const listed = (blocks: DialogBlock[] = BLOCKS) => ({
   dialogs: [{ title: "Save Content", message: FLAT, buttons: BUTTONS, choices: CHOICES, items: ITEMS, blocks }],
 });
 
+// Restored key by key: assigning a plain object to process.env detaches it
+// from the real environment for every later file in the same worker.
 const saved = { ...process.env };
 afterEach(() => {
-  process.env = { ...saved };
+  for (const k of Object.keys(process.env)) if (!(k in saved)) delete process.env[k];
+  Object.assign(process.env, saved);
 });
 
 function make(over: Partial<GuardDeps> = {}) {

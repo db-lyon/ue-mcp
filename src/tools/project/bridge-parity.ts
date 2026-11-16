@@ -22,7 +22,7 @@
  * inventing a cause. It reports WHICH advertised methods the running plugin
  * does not have, which is the fact, and leaves the diagnosis to the reader.
  */
-import type { BridgeCapabilities } from "../../bridge/bridge.js";
+import { PLUGIN_UPGRADE_POINTER, type BridgeCapabilities } from "../../bridge/bridge.js";
 import type { ToolDef } from "../../surface/tool-types.js";
 import { compareHandlerSpecs, type HandlerSpecs } from "../../surface/handler-spec.js";
 import { RECORDED_HANDLER_SPECS } from "../specs/index.js";
@@ -91,8 +91,7 @@ function describe(missing: string[], advertised: number, registered: number): st
     `${missing.length} of the ${advertised} bridge methods this server advertises are not `
     + `registered by the plugin it is connected to (${registered} registered): ${named}${rest}. `
     + "Calling one returns 'Unknown method'. The usual cause is a deployed plugin behind this "
-    + "package: npm update alone never reaches the editor. Run `ue-mcp update --build` in the "
-    + "project (or `ue-mcp deploy` then `ue-mcp build`), then restart the editor. "
+    + `package: npm update alone never reaches the editor. ${PLUGIN_UPGRADE_POINTER} `
     + "This is read from the running binary's own handler list, so it holds whatever the build "
     + "timestamps say."
   );
