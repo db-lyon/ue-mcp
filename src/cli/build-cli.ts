@@ -3,7 +3,7 @@ import * as path from "node:path";
 import { buildProject } from "../editor/editor-build.js";
 import { takeEditorTarget, EditorFlagError } from "./editor-flag.js";
 import { findUProject, isUProjectPath } from "../config/uproject-path.js";
-import { RESET, BOLD, GREEN, RED, CYAN } from "./ui/ansi.js";
+import { RESET, BOLD, GREEN, RED, CYAN } from "../terminal/ansi.js";
 import type { CliUsage } from "./cli-main.js";
 
 function targetUProject(argv: string[]): string | null {

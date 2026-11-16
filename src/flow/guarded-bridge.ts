@@ -13,7 +13,7 @@
 import { runGuarded } from "@db-lyon/flowkit/guard";
 import type { BridgeCallOptions, BridgeTarget, IBridge } from "../bridge/bridge.js";
 import type { EditorSession } from "../sessions/session.js";
-import { explainEditorDownWithEvidence } from "../dispatch/offline.js";
+import { explainEditorDownWithEvidence } from "./offline.js";
 import { GuardRegistry, makeCallContext, type ResolveExistingFile } from "./guard.js";
 import { callIsReadOnly, readOnlyGuard } from "./session-access.js";
 import { DialogGuard, ensureGuard, existingGuard } from "../editor/dialog-guard.js";
@@ -355,7 +355,7 @@ export class GuardedBridge extends ForwardingBridge {
       // flow step, the micro gateway), so this is the one place a missing
       // editor can be explained once rather than three times. Only a
       // connection failure is rewritten; everything else is rethrown as it
-      // was. See src/dispatch/offline.ts (T16).
+      // was. See src/flow/offline.ts (T16).
       throw await explainEditorDownWithEvidence(e, {
         method,
         projectPath: this.inner.getTarget().projectPath,

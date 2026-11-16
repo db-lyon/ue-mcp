@@ -28,7 +28,7 @@ import { ensurePluginsEnabled, ensureSetUp } from "./init-core.js";
 import { installedCopies, migrateLegacy, recordedVersion, versionsOf } from "../daemon/extension-versions.js";
 import { ensureDaemon } from "../daemon/shim.js";
 import { waitForExit } from "../daemon/supersede-watch.js";
-import { fail, ok, redirectConsoleToStderr, warn } from "./ui/ansi.js";
+import { fail, ok, redirectConsoleToStderr, warn } from "../terminal/ansi.js";
 import type { CliUsage } from "./cli-main.js";
 
 const USAGE = "usage: ue-mcp extension <install <name|zip|url> [--sha256 <hex>] | use <name> <version> | remove <name> | list> [project] [--json]";

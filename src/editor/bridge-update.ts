@@ -40,8 +40,9 @@ import {
   type BinaryManifest,
   type BinaryTarget,
 } from "./bridge-binaries.js";
-import { deploy, projectEngineVersion } from "./deployer.js";
-import { detectMcpClients, liftsAgeGate, readUeMcpEntry, writeMcpConfig } from "../integrations/claude-code/mcp-client-config.js";
+import { deploy } from "./deployer.js";
+import { projectEngineVersion } from "./engine-root.js";
+import { detectMcpClients, liftsAgeGate, readUeMcpEntry, writeMcpConfig } from "../integrations/mcp-clients/mcp-client-config.js";
 import { readEnv } from "../core/env.js";
 import { ASIDE_FILE, UPDATER_FILES, treeFiles, verifyBridgeTree } from "./bridge-tree.js";
 import { buildProject, type BuildResult } from "./editor-build.js";

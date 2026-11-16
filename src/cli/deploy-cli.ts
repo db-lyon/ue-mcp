@@ -4,7 +4,7 @@ import { deploy } from "../editor/deployer.js";
 import { coreSkillsInstalled, conflictMessages, installCoreSkills, syncPluginSkills } from "../extensions/skills.js";
 import { takeEditorTarget, EditorFlagError } from "./editor-flag.js";
 import { findUProject } from "../config/uproject-path.js";
-import { RESET, BOLD, RED, DIM, CYAN, ok, fail } from "./ui/ansi.js";
+import { RESET, BOLD, RED, DIM, CYAN, ok, fail } from "../terminal/ansi.js";
 import type { CliUsage } from "./cli-main.js";
 
 async function deployCmd(argv: string[]) {

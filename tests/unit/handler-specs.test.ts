@@ -39,7 +39,7 @@ import { ALL_TOOLS } from "../../src/tools.js";
 import type { ActionSpec, ToolDef } from "../../src/surface/tool-types.js";
 import { schema as specSchema, handlerSpecs } from "../../src/tools/specs/animation.generated.js";
 import { RECORDED_HANDLER_SPECS } from "../../src/tools/specs/index.js";
-import { deployedPlugin, checkBridgeParity } from "../../src/bridge/bridge-parity.js";
+import { deployedPlugin, checkBridgeParity } from "../../src/tools/project/bridge-parity.js";
 import type { BridgeCapabilities } from "../../src/bridge/bridge.js";
 import { paramMapperOf } from "../../src/surface/epic-input.js";
 

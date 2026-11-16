@@ -30,9 +30,9 @@ import { stripEditorTarget, sessionContext } from "../surface/target-params.js";
 import {
   DialogGuard,
   type GuardDecision,
-  isDialogRefusal,
   stampBlockedEditor,
 } from "../editor/dialog-guard.js";
+import { isDialogRefusal } from "../bridge/dialog-refusal.js";
 import { connectedEditorOf } from "../editor/editor-control.js";
 import { clientAdvertisesElicitation } from "../editor/dialog-mode.js";
 import { elicitationUnrenderedNote } from "./client-quirks.js";

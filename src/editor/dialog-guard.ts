@@ -26,6 +26,7 @@
  */
 import type { EditorSession } from "../sessions/session.js";
 import type { BridgeCallOptions, IBridge } from "../bridge/bridge.js";
+import { isDialogRefusal } from "../bridge/dialog-refusal.js";
 import type { DialogBlock, DialogPromptFn } from "./dialog-types.js";
 import type { ElicitFn, ElicitPrimitiveSchema, ElicitResult } from "../core/elicit.js";
 import type { DialogMode } from "../config/user-state.js";
@@ -289,11 +290,6 @@ function renderBlocks(blocks: DialogBlock[]): string {
   return out.join("\n");
 }
 
-/** True for the refusal the plugin's own gate emits. */
-export function isDialogRefusal(v: unknown): boolean {
-  return typeof v === "object" && v !== null
-    && (v as Record<string, unknown>).dialogBlocking === true;
-}
 
 /** Schema key for one tickable row. Kept in one place so both ends agree. */
 function itemKey(index: number): string {

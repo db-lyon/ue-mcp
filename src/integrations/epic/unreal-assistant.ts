@@ -31,8 +31,8 @@
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { ueMcpServerArgs, type ServerLaunch } from "../claude-code/mcp-client-config.js";
-import { REPLACED_BACKUP_SUFFIX, UNREAL_MCP_SERVER_NAME } from "../claude-code/unreal-mcp-entries.js";
+import { ueMcpServerArgs, type ServerLaunch } from "../mcp-clients/mcp-client-config.js";
+import { REPLACED_BACKUP_SUFFIX, UNREAL_MCP_SERVER_NAME } from "./unreal-mcp-entries.js";
 import { engineAtLeast, enginePluginPresent, uprojectPluginState } from "./unreal-mcp-server.js";
 
 export const UNREAL_ASSISTANT_PLUGIN = "AIAssistant";

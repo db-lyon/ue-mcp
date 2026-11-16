@@ -5,7 +5,7 @@ import * as path from "node:path";
 import type { ToolContext, PluginInfo } from "../../src/surface/tool-types.js";
 import type { ElicitFn, ElicitResult } from "../../src/core/elicit.js";
 import { isDirectiveResponse } from "../../src/core/directive.js";
-import { clearWorkarounds } from "../../src/dispatch/workaround-tracker.js";
+import { clearWorkarounds } from "../../src/tools/editor/workaround-tracker.js";
 import type { RegistryPlugin } from "../../src/extensions/registry-catalog.js";
 
 /**
@@ -41,7 +41,7 @@ vi.mock("../../src/feedback/github-app.js", () => ({
 }));
 
 const mockReadUserAuth = vi.fn();
-vi.mock("../../src/feedback/github-auth.js", () => ({
+vi.mock("../../src/github/auth.js", () => ({
   readUserAuth: () => mockReadUserAuth(),
 }));
 

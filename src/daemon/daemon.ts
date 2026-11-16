@@ -76,7 +76,7 @@ import { extensionsDir, loadExtensions, matchRoute, normalizeResponse, type Load
 import { installedCopies, recordedVersion, versionsOf } from "./extension-versions.js";
 import { UiBundleStore, contentType, type UiBundleOwner } from "./ui-bundles.js";
 import { ExtensionServices } from "./extension-services.js";
-import { collectStatus } from "../cli/status.js";
+import { collectStatus } from "../integrations/install-status.js";
 import { resolvePluginDir } from "../editor/install-marker.js";
 import { editorOwnsProject, probeEditorProcessList } from "../editor/engine-observer.js";
 import { applyUpdate, checkForUpdate, readPendingUpdate, repinClientConfigs, settlePendingUpdate } from "../editor/bridge-update.js";

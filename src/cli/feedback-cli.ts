@@ -27,7 +27,7 @@ import {
   parseRepoSlug,
   repoSlug,
   type GitHubRepo,
-} from "../extensions/registry-catalog.js";
+} from "../github/repos.js";
 import {
   getFeedbackMode,
   setFeedbackMode,
@@ -46,7 +46,7 @@ import {
   info,
   ok,
   warn,
-} from "./ui/ansi.js";
+} from "../terminal/ansi.js";
 import { isUProjectPath, projectDirOf } from "../config/uproject-path.js";
 import { readEnv } from "../core/env.js";
 

@@ -7,7 +7,7 @@
  */
 import * as path from "node:path";
 import { addProject, machineReport, removeProject, type MachineProject } from "../machine/projects.js";
-import { BOLD, DIM, RESET, fail, ok } from "./ui/ansi.js";
+import { BOLD, DIM, RESET, fail, ok } from "../terminal/ansi.js";
 import type { CliUsage } from "./cli-main.js";
 
 const USAGE = "usage: ue-mcp projects [list | add <uproject> | remove <uproject>] [--json]";

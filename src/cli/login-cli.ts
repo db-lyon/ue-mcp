@@ -8,12 +8,18 @@
  */
 import { createInterface, type Interface } from "node:readline";
 import {
+  EMAIL_CODE_TRIES,
+  EmailSignInError,
   clearRegistryAuth,
+  describeEmailError,
   displayAccount,
   fetchAuthMethods,
   loginToRegistry,
-  loginWithEmail,
+  looksLikeEmail,
   readRegistryAuth,
+  startEmailSignIn,
+  verifyEmailCode,
+  writeRegistryAuth,
   type AuthMethods,
   type RegistryAuth,
 } from "../extensions/registry-auth.js";
@@ -21,6 +27,84 @@ import { registryBase } from "../extensions/registry-catalog.js";
 
 function log(msg: string): void {
   console.log(msg ? `[ue-mcp] ${msg}` : "");
+}
+
+/**
+ * Email sign-in: send a code, read it with `ask`, verify, and cache the token.
+ *
+ * `ask` returns the next line the user typed, or null at end of input. A wrong
+ * or expired code may be retried up to the registry's limit, and typing "r"
+ * sends a new code.
+ */
+export async function loginWithEmail(
+  log: (msg: string) => void,
+  opts: { email: string; ask: (question: string) => Promise<string | null>; force?: boolean },
+): Promise<RegistryAuth> {
+  if (!opts.force) {
+    const existing = await readRegistryAuth();
+    if (existing) {
+      log(`Already logged in to ${existing.registry} as ${displayAccount(existing)}.`);
+      log(`Re-run with --force to mint a fresh token.`);
+      return existing;
+    }
+  }
+  const email = opts.email.trim();
+  if (!looksLikeEmail(email)) throw new Error(`not an email address: ${email}`);
+
+  const send = async (): Promise<void> => {
+    try {
+      const { expiresInSeconds } = await startEmailSignIn(email);
+      const minutes = Math.max(1, Math.round(expiresInSeconds / 60));
+      log(`Sent a sign-in code to ${email}. It is valid for ${minutes} minutes.`);
+    } catch (e) {
+      throw e instanceof EmailSignInError ? new Error(describeEmailError(e)) : e;
+    }
+  };
+
+  await send();
+  let wrong = 0;
+  for (;;) {
+    const exhausted = wrong >= EMAIL_CODE_TRIES;
+    const answer = await opts.ask(
+      exhausted
+        ? "That code can no longer be used. Type r to send a new one, or press Enter to stop: "
+        : "Enter the 6-digit code (or r to send a new one): ",
+    );
+    if (answer === null) throw new Error("no code entered");
+    const typed = answer.trim();
+    if (typed.toLowerCase() === "r") {
+      await send();
+      wrong = 0;
+      continue;
+    }
+    if (exhausted) throw new Error("sign-in stopped; run 'ue-mcp login' again");
+    if (typed === "") continue;
+    const code = typed.replace(/\s+/g, "");
+    if (!/^\d{6}$/.test(code)) {
+      log("The code is 6 digits.");
+      continue;
+    }
+    try {
+      const v = await verifyEmailCode(email, code);
+      const auth: RegistryAuth = {
+        token: v.token,
+        login: v.login,
+        email: v.email,
+        method: "email",
+        registry: registryBase(),
+        authorized_at: new Date().toISOString(),
+      };
+      await writeRegistryAuth(auth);
+      if (v.created) log(`Created a UE-MCP account for ${v.email}.`);
+      return auth;
+    } catch (e) {
+      if (!(e instanceof EmailSignInError) || e.status !== 400) {
+        throw e instanceof EmailSignInError ? new Error(describeEmailError(e)) : e;
+      }
+      wrong++;
+      log(e.message);
+    }
+  }
 }
 
 const HELP = `Usage: ue-mcp login [--email <address> | --github] [--force]

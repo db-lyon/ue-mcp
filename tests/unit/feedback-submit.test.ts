@@ -5,7 +5,7 @@ import * as path from "node:path";
 import type { ToolContext } from "../../src/surface/tool-types.js";
 import type { ElicitFn, ElicitResult } from "../../src/core/elicit.js";
 import { isDirectiveResponse } from "../../src/core/directive.js";
-import { clearWorkarounds, pushWorkaround } from "../../src/dispatch/workaround-tracker.js";
+import { clearWorkarounds, pushWorkaround } from "../../src/tools/editor/workaround-tracker.js";
 
 // Stub the GitHub submission so no network call happens.
 const mockSubmitFeedback = vi.fn();
@@ -16,7 +16,7 @@ vi.mock("../../src/feedback/github-app.js", () => ({
 // Stub the OAuth cache lookup so the test environment never depends on the
 // developer's actual ~/.ue-mcp/auth.json state.
 const mockReadUserAuth = vi.fn();
-vi.mock("../../src/feedback/github-auth.js", () => ({
+vi.mock("../../src/github/auth.js", () => ({
   readUserAuth: () => mockReadUserAuth(),
 }));
 

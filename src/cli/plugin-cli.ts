@@ -39,7 +39,7 @@ import {
   writeLayerGroups,
   type ConfigTarget,
 } from "../extensions/plugin-config-store.js";
-import { checkboxSelect, singleSelect } from "./ui/select.js";
+import { checkboxSelect, singleSelect } from "../terminal/select.js";
 import { readDeployedBridgeApiVersion } from "../extensions/bridge-api.js";
 import {
   deployNativeModule,

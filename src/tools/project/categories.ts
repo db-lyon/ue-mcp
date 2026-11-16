@@ -42,7 +42,7 @@ import {
 } from "../../surface/category-state.js";
 import { EPIC_TOOLSETS_BY_CATEGORY, routeEpicToolset } from "../epic/toolset-routes.js";
 import { readBlockedNames, setBlockedNames, toolsetSettingsFile } from "../../integrations/epic/toolset-settings.js";
-import { projectEngineVersion } from "../../editor/deployer.js";
+import { projectEngineVersion } from "../../editor/engine-root.js";
 import { findLiveInstanceRecord } from "../../bridge/editor-target.js";
 import { editorOwnsProject, probeEditorProcessList } from "../../editor/engine-observer.js";
 

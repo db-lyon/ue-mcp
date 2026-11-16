@@ -17,7 +17,7 @@ import { waitForExit } from "../daemon/supersede-watch.js";
 /** How long `daemon stop` waits for the process to exit. */
 const STOP_WAIT_MS = 30_000;
 import { takeEditorTarget, EditorFlagError } from "./editor-flag.js";
-import { fail, ok } from "./ui/ansi.js";
+import { fail, ok } from "../terminal/ansi.js";
 import type { CliUsage } from "./cli-main.js";
 import { openUrl } from "../core/open-url.js";
 

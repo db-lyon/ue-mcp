@@ -23,15 +23,15 @@ import {
   pinnedVersionOf,
   readUeMcpEntry,
   removeUeMcpEntry,
-} from "../integrations/claude-code/mcp-client-config.js";
+} from "../integrations/mcp-clients/mcp-client-config.js";
 import { packageVersion } from "../core/package-root.js";
 import { findUProject, isUProjectPath, projectDirOf } from "../config/uproject-path.js";
-import { RESET, BOLD, DIM, GREEN, RED, CYAN, YELLOW } from "./ui/ansi.js";
+import { RESET, BOLD, DIM, GREEN, RED, CYAN, YELLOW } from "../terminal/ansi.js";
 import { cliCommandNames } from "./cli-commands.js";
 import type { CliUsage } from "./cli-main.js";
 import { defaultPluginDir, installKindOf, resolvePluginDir, type InstallKind } from "../editor/install-marker.js";
 import { ProjectContext } from "../config/project.js";
-import { projectEpicIntegrations } from "./init-core.js";
+import { projectEpicIntegrations } from "../integrations/epic/project-status.js";
 import { describeUnrealMcpServer, type UnrealMcpServerStatus } from "../integrations/epic/unreal-mcp-server.js";
 import type { UnrealAssistantStatus } from "../integrations/epic/unreal-assistant.js";
 import { UNREAL_CANVAS_BRIDGE_PLUGIN, type UnrealCanvasStatus } from "../integrations/epic/unreal-canvas.js";

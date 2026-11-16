@@ -40,7 +40,7 @@ import {
   type EditorLossReport,
 } from "./editor-loss.js";
 import { taskEffect } from "../surface/action-effects.js";
-import { LOCAL_ACTIONS } from "../dispatch/offline.js";
+import { LOCAL_ACTIONS } from "./offline.js";
 import { EDITOR_OPERATION_TASKS } from "./editor-op-task.js";
 import { deriveFlowInputs } from "./flow-inputs.js";
 import { withStepApproval } from "./step-approval.js";
