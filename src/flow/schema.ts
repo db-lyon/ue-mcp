@@ -2,6 +2,7 @@
 import { z } from "zod";
 import { EngineConfigSchema, FlowDefinitionSchema } from "@db-lyon/flowkit";
 import { GuardsSchema } from "./guard-schema.js";
+import { EDITOR_LOSS_POLICIES } from "./editor-loss.js";
 
 /**
  * The `ue-mcp:` block at the top of ue-mcp.yml. Hosts project-level config
@@ -59,7 +60,7 @@ export const FlowStepKeySchema = z.coerce.string().regex(/^\d+$/, {
 
 /** flowkit's flow definition plus what ue-mcp adds to it. See flow/editor-loss.ts. */
 export const UeMcpFlowDefinitionSchema = FlowDefinitionSchema.extend({
-  on_editor_loss: z.enum(["resume", "rollback", "fail"]).optional(),
+  on_editor_loss: z.enum(EDITOR_LOSS_POLICIES).optional(),
   editor_loss_timeout_seconds: z.number().positive().optional(),
 });
 

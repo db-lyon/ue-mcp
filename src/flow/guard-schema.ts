@@ -40,9 +40,10 @@ import { z } from "zod";
  * "not a read" and cannot pick out the set whose effect is genuinely unknowable
  * from the name.
  */
-export const GuardScopeSchema = z
-  .enum(["all", "mutations", "writes", "reads", "unknown"])
-  .default("all");
+export const GUARD_SCOPES = ["all", "mutations", "writes", "reads", "unknown"] as const;
+export type GuardScope = (typeof GUARD_SCOPES)[number];
+
+export const GuardScopeSchema = z.enum(GUARD_SCOPES).default("all");
 
 /** One hook: the task to run, and the options it is built with. */
 export const GuardHookSchema = z.object({

@@ -13,6 +13,7 @@ import { readUnrealAssistant, type UnrealAssistantStatus } from "./unreal-assist
 import { canvasPortReplacement, readUnrealCanvas, type UnrealCanvasStatus } from "./unreal-canvas.js";
 import { deriveProjectPort } from "../../bridge/wire-contract.js";
 import { resolveSetting } from "../../core/env.js";
+import { FLOW_HTTP_PORT } from "../../core/flow-http-port.js";
 
 /** The engine tree this project builds and runs with, or null when none resolves. */
 export function projectEngineRoot(project: ProjectContext): string | null {
@@ -41,7 +42,7 @@ export function epicIntegrations(
 ): EpicIntegrations {
   const inputs = { uprojectPath: project.projectPath!, projectDir: project.projectDir!, engineVersion: projectEngineVersion(project), engineRoot };
   const http = project.config.http;
-  const flow = http?.enabled ? http.port ?? 7723 : undefined;
+  const flow = http?.enabled ? http.port ?? FLOW_HTTP_PORT : undefined;
   let liveBridge: number | undefined;
   try {
     const target = resolveBridgeTarget(project.projectDir);
