@@ -115,7 +115,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ReadControlRigGraph(const TSharedPtr<
 	// URigVMGraph. That is version-tolerant and needs no editor-only host API.
 	// Through the shared helper, not a local #if: GetObjectsWithOuter takes
 	// EGetObjectsFlags in 5.8 and a bool before it, and the version gate for
-	// that lives in exactly one place (Public/HandlerUtils.h).
+	// that lives in exactly one place (HandlerUtils.h).
 	TArray<UObject*> Subobjects;
 	MCPGetNestedSubobjects(Blueprint, Subobjects);
 

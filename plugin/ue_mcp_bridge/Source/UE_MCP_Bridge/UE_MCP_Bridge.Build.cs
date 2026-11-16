@@ -12,6 +12,11 @@ public class UE_MCP_Bridge : ModuleRules
 	{
 		PCHUsage = ModuleRules.PCHUsageMode.UseExplicitOrSharedPCHs;
 
+		// Public/ holds only what another module compiles against: the external
+		// handler API (MCPHandlerRegistration.h, MCPHandlerSpec.h, MCPContract.h)
+		// and the parameter, result and engine-version headers the MVVM module
+		// uses. Those include nothing beyond these, so nothing editor-only is
+		// forced onto a module that depends on this one.
 		PublicDependencyModuleNames.AddRange(
 			new string[]
 			{
@@ -19,19 +24,17 @@ public class UE_MCP_Bridge : ModuleRules
 				"CoreUObject",
 				"Engine",
 				"Json",
-				"JsonUtilities",
-				"GameplayTags",
-				// Public/HandlerUtils.h includes EditorAssetLibrary.h, the Asset
-				// Registry and Kismet2 headers, so a module including it needs these.
-				"AssetRegistry",
-				"EditorScriptingUtilities",
-				"UnrealEd",
 			}
 		);
 
 		PrivateDependencyModuleNames.AddRange(
 			new string[]
 			{
+				"JsonUtilities",
+				"GameplayTags",
+				"AssetRegistry",
+				"EditorScriptingUtilities",
+				"UnrealEd",
 				"AIModule",
 				"HTTP",
 				"BuildPatchServices",
