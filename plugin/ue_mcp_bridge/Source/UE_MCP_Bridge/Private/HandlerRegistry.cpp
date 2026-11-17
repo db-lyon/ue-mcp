@@ -720,10 +720,17 @@ TSharedPtr<FJsonObject> FMCPHandlerRegistry::ResolveParamAliases(const FMCPHandl
 
 void FMCPHandlerRegistry::RegisterHandlerWithTimeout(const FString& MethodName, FHandlerFunction Handler, float TimeoutSeconds)
 {
-	RegisterHandler(MethodName, MoveTemp(Handler));
-	FMCPActionFacts Facts;
+	// Adds a timeout to whatever the method already declared: a spec registered
+	// just before, by the same name, keeps its parameters and its other facts.
+	CppHandlers.Add(MethodName, MoveTemp(Handler));
+	TagCategory(MethodName);
+	FMCPActionFacts Facts = HandlerFacts.FindRef(MethodName);
 	Facts.TimeoutSeconds = FMath::Max(TimeoutSeconds, 0.0f);
 	SetFacts(MethodName, Facts);
+	if (FMCPHandlerSpec* Spec = HandlerSpecs.Find(MethodName))
+	{
+		Spec->Facts = Facts;
+	}
 }
 
 bool FMCPHandlerRegistry::RegisterHandlerWithTimeout(const FString& MethodName, FHandlerFunction Handler, float TimeoutSeconds, const TArray<FMCPParamSpec>& Params)

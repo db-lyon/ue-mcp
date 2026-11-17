@@ -113,9 +113,10 @@ export const handlerSpecs: HandlerSpecs = {
       },
       {
         "name": "pieInstance",
-        "type": "number",
+        "type": "integer",
         "required": false,
-        "description": "Which PIE world when several run (0 = server/primary). See editor(list_pie_instances)"
+        "description": "Which PIE world: 0 = server or primary, 1..N = clients. See editor(list_pie_instances)",
+        "minimum": 0
       },
       {
         "name": "designerSlot",
@@ -1052,7 +1053,7 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "onConflict",
         "type": "string",
         "required": false,
-        "description": "When the asset exists: skip (default, report it) | error"
+        "description": "When the asset already exists: skip (default) returns it untouched | error refuses; it never overwrites"
       }
     ],
     "contractExempt": "Creates and saves a material under the contract values; nothing it reads fails first"
@@ -1076,7 +1077,7 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "onConflict",
         "type": "string",
         "required": false,
-        "description": "When the asset exists: skip (default, report it) | error"
+        "description": "When the asset already exists: skip (default) returns it untouched | error refuses; it never overwrites"
       }
     ],
     "contractExempt": "Creates and saves a Material Designer material under the contract values; nothing it reads fails first"
@@ -1100,7 +1101,7 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "onConflict",
         "type": "string",
         "required": false,
-        "description": "When the asset exists: skip (default, report it) | error"
+        "description": "When the asset already exists: skip (default) returns it untouched | error refuses; it never overwrites"
       },
       {
         "name": "description",
@@ -1136,7 +1137,7 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "onConflict",
         "type": "string",
         "required": false,
-        "description": "When the asset exists: skip (default, report it) | error"
+        "description": "When the asset already exists: skip (default) returns it untouched | error refuses; it never overwrites"
       }
     ]
   },
@@ -1159,7 +1160,7 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "onConflict",
         "type": "string",
         "required": false,
-        "description": "When the asset exists: skip (default, report it) | error"
+        "description": "When the asset already exists: skip (default) returns it untouched | error refuses; it never overwrites"
       },
       {
         "name": "baseColor",
@@ -1226,7 +1227,7 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "onConflict",
         "type": "string",
         "required": false,
-        "description": "When the asset exists: skip (default, report it) | error"
+        "description": "When the asset already exists: skip (default) returns it untouched | error refuses; it never overwrites"
       }
     ]
   },
@@ -1289,7 +1290,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "dryRun",
         "type": "boolean",
         "required": false,
-        "description": "List the orphans without deleting them (default false)"
+        "description": "List the orphans without deleting them (default false)",
+        "default": false
       }
     ]
   },
@@ -1762,9 +1764,10 @@ export const handlerSpecs: HandlerSpecs = {
       },
       {
         "name": "pieInstance",
-        "type": "number",
+        "type": "integer",
         "required": false,
-        "description": "Which PIE world when several run (0 = server/primary). See editor(list_pie_instances)"
+        "description": "Which PIE world: 0 = server or primary, 1..N = clients. See editor(list_pie_instances)",
+        "minimum": 0
       },
       {
         "name": "designerSlot",
@@ -1902,9 +1905,10 @@ export const handlerSpecs: HandlerSpecs = {
       },
       {
         "name": "pieInstance",
-        "type": "number",
+        "type": "integer",
         "required": false,
-        "description": "Which PIE world when several run (0 = server/primary). See editor(list_pie_instances)"
+        "description": "Which PIE world: 0 = server or primary, 1..N = clients. See editor(list_pie_instances)",
+        "minimum": 0
       }
     ],
     "choices": [
@@ -1947,9 +1951,10 @@ export const handlerSpecs: HandlerSpecs = {
       },
       {
         "name": "pieInstance",
-        "type": "number",
+        "type": "integer",
         "required": false,
-        "description": "Which PIE world when several run (0 = server/primary). See editor(list_pie_instances)"
+        "description": "Which PIE world: 0 = server or primary, 1..N = clients. See editor(list_pie_instances)",
+        "minimum": 0
       }
     ]
   },
@@ -2098,9 +2103,10 @@ export const handlerSpecs: HandlerSpecs = {
       },
       {
         "name": "pieInstance",
-        "type": "number",
+        "type": "integer",
         "required": false,
-        "description": "Which PIE world when several run (0 = server/primary). See editor(list_pie_instances)"
+        "description": "Which PIE world: 0 = server or primary, 1..N = clients. See editor(list_pie_instances)",
+        "minimum": 0
       },
       {
         "name": "designerSlot",
@@ -2508,9 +2514,10 @@ export const handlerSpecs: HandlerSpecs = {
       },
       {
         "name": "pieInstance",
-        "type": "number",
+        "type": "integer",
         "required": false,
-        "description": "Which PIE world when several run (0 = server/primary). See editor(list_pie_instances)"
+        "description": "Which PIE world: 0 = server or primary, 1..N = clients. See editor(list_pie_instances)",
+        "minimum": 0
       },
       {
         "name": "designerSlot",
@@ -2962,7 +2969,7 @@ export const schema: Record<string, z.ZodType> = {
   newParentPath: z.string().optional().describe("New parent material or material instance path"),
   nodes: z.array(z.object({ name: z.string().describe("Your name for the node; connections refer to it, and it becomes the node description"), class: z.string().describe("Expression class: Multiply, LinearInterpolate, ScalarParameter, TextureSampleParameter2D, MaterialExpressionSine and so on"), posX: z.number().optional().describe("Graph X position"), posY: z.number().optional().describe("Graph Y position"), parameterName: z.string().optional().describe("Parameter name on a parameter node"), group: z.string().optional().describe("Parameter group"), sortPriority: z.number().optional().describe("Sort priority within the group"), defaultValue: z.unknown().optional().describe("ScalarParameter number, or VectorParameter colour {r,g,b,a} or [r,g,b,a]"), value: z.unknown().optional().describe("Constant number, Constant2Vector {x,y}, Constant3Vector/Constant4Vector colour"), channels: z.record(z.string(), z.unknown()).optional().describe("ComponentMask channels {r,g,b,a} as booleans"), texturePath: z.string().optional().describe("Texture on a TextureSample, TextureSampleParameter2D or TextureObject node"), properties: z.record(z.string(), z.unknown()).optional().describe("Any other UPROPERTY on the node by name, e.g. {SamplerType: 'Masks', ConstA: 1}") })).optional().describe("Nodes to create. Every node is created or none is"),
   objectPath: z.string().optional().describe("Full object path of the layer, as read_material_designer reports it (remove_material_designer_layer). Full object path of the component, as read_material_designer reports it (set_material_designer_value)"),
-  onConflict: z.string().optional().describe("When the asset exists: skip (default, report it) | error"),
+  onConflict: z.string().optional().describe("When the asset already exists: skip (default) returns it untouched | error refuses; it never overwrites"),
   outputName: z.string().optional().describe("FunctionOutput name (add_expression_in_function). Output of the expression, by name or index (default: its first output) (connect_to_material_property)"),
   outputPath: z.string().optional().describe("Absolute file path for the PNG output"),
   outputType: z.string().optional().describe("float1 | float2 | float3 | float4 | materialAttributes (#617)"),
@@ -2975,7 +2982,7 @@ export const schema: Record<string, z.ZodType> = {
   parameterType: z.string().optional().describe("scalar | vector (alias color) | texture; detected from the instance when omitted"),
   parentPath: z.string().optional().describe("Parent material or material instance (create_material_instance). Alias for newParentPath (set_material_instance_parent)"),
   path: z.string().optional().describe("Alias for materialPath (add_material_expression, connect_material_expressions, connect_texture_to_material, connect_to_material_property, delete_material_expression, list_material_expressions, read_material_graph, recompile_material, set_custom_expression, set_expression_value). Alias for assetPath (clear_material_instance_parameters, get_material_usage, list_material_parameters, list_material_static_switches, read_material, read_material_instance, read_material_parameter_collection, set_material_base_color, set_material_blend_mode, set_material_domain, set_material_instance_parent, set_material_parameter, set_material_shading_model, set_material_static_switch, set_material_usage)"),
-  pieInstance: z.number().optional().describe("Which PIE world when several run (0 = server/primary). See editor(list_pie_instances)"),
+  pieInstance: z.number().int().min(0).optional().describe("Which PIE world: 0 = server or primary, 1..N = clients. See editor(list_pie_instances)"),
   positionX: z.number().optional().describe("Graph editor X position for a new node"),
   positionY: z.number().optional().describe("Graph editor Y position for a new node"),
   previousSource: z.record(z.string(), z.unknown()).optional().describe("Original source and channel masks from the rollback record"),

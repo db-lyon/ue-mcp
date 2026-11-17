@@ -230,7 +230,7 @@ void FAnimationHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 			MCPParam::OptionalField(TEXT("swingSoft"), EType::Boolean, TEXT("Soft or hard cone limit")),
 			MCPParam::OptionalField(TEXT("twistSoft"), EType::Boolean, TEXT("Soft or hard twist limit")),
 		}),
-		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save the asset after the edit (default true)")),
+		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save the asset after the edit (default true)")).Default(true),
 	});
 	Registry.RegisterHandler(TEXT("set_physics_asset_body_material"), &SetPhysicsAssetBodyMaterial, {
 		AssetPath(TEXT("PhysicsAsset asset path, or a SkeletalMesh whose assigned PhysicsAsset to edit")),
@@ -240,7 +240,7 @@ void FAnimationHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 			MCPParam::RequiredField(TEXT("boneName"), EType::String, TEXT("Bone whose body to edit")),
 			MCPParam::RequiredField(TEXT("physicalMaterialPath"), EType::String, TEXT("PhysicalMaterial to assign; an empty string clears the override")),
 		}),
-		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save the asset after the edit (default true)")),
+		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save the asset after the edit (default true)")).Default(true),
 	}, MCPSpec::AtLeastOne({ { TEXT("physicalMaterialPath") }, { TEXT("bodies") } }));
 	Registry.RegisterHandler(TEXT("read_anim_blueprint"), &ReadAnimBlueprint, {
 		AssetPath(TEXT("AnimBlueprint asset path")),
@@ -409,7 +409,7 @@ void FAnimationHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 			MCPParam::RequiredField(TEXT("bone"), EType::String, TEXT("Bone whose track to replace")),
 			MCPParam::RequiredField(TEXT("keyframes"), EType::Array, TEXT("One key per frame as {location?, rotation? {x, y, z, w}, scale?}")).Items(EType::Object),
 		}),
-		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save the asset after baking (default true)")),
+		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save the asset after baking (default true)")).Default(true),
 	});
 	Registry.RegisterHandler(TEXT("reverse_sequence"), &ReverseSequence, {
 		MCPParam::Required(TEXT("sourcePath"), EType::String, TEXT("AnimSequence to reverse")),
@@ -986,7 +986,7 @@ void FAnimationHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 			MCPParam::OptionalField(TEXT("sourceBone"), EType::String, TEXT("reference_delta: bone whose rotation relative to its reference pose is applied")),
 			MCPParam::OptionalField(TEXT("targetBone"), EType::String, TEXT("reference_delta: bone set to its reference pose times that delta")),
 		}),
-		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save each sequence (default true)")),
+		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save each sequence (default true)")).Default(true),
 	});
 	Registry.RegisterHandler(TEXT("compose_pose_sequence"), &ComposePoseSequence, {
 		MCPParam::Required(TEXT("name"), EType::String, TEXT("New AnimSequence name")),

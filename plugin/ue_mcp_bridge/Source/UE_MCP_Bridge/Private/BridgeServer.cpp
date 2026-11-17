@@ -40,9 +40,6 @@ namespace
 	// half-closing their sockets before giving up and saying so.
 	constexpr double kConnectionCloseGraceSeconds = 2.0;
 	constexpr double kConnectionDrainTimeoutSeconds = 10.0;
-
-	// The most a frame-level timeoutMs can raise a request's budget to.
-	constexpr double kMaxRequestTimeoutSeconds = 3600.0;
 }
 
 FMCPConnectionUnlist::FMCPConnectionUnlist(FMCPBridgeServer& InServer, FMCPSocketHandle InHandle)
@@ -100,6 +97,67 @@ FMCPBridgeServer::FMCPBridgeServer(const FMCPBridgePortChoice& InPortChoice)
 	FMCPParamEcho::Get().SetEnabled(FMCPParamEcho::ResolveEnabledFromEnvironment());
 
 	MCPHandlerCatalog::RegisterAllHandlers(HandlerRegistry);
+	RegisterBuiltInMethods();
+}
+
+void FMCPBridgeServer::RegisterBuiltInMethods()
+{
+	// Answered on the socket thread, before the dialog gate and the game thread.
+	// Every other method waits on the game thread, so when it is inside a modal
+	// dialog, a slow task or a hang, these are the only questions the bridge can
+	// still answer. Registered like any handler, so they are in the action list,
+	// the specs and the facts a client reads.
+	const TCHAR* const BridgeClient = TEXT("the server's bridge client (src/bridge)");
+	const TArray<FMCPParamSpec> NoParams;
+	const FMCPSpecRules OffGameThread = MCPSpec::ServerInternal(BridgeClient).ServedOffGameThread();
+
+	HandlerRegistry.RegisterHandler(TEXT("get_engine_state"), [](const TSharedPtr<FJsonObject>&) -> TSharedPtr<FJsonValue>
+	{
+		TSharedPtr<FJsonObject> Snapshot = FMCPEngineStatus::Get().Snapshot();
+		Snapshot->SetBoolField(TEXT("success"), true);
+		Snapshot->SetBoolField(TEXT("servedWithoutGameThread"), true);
+		return MakeShared<FJsonValueObject>(Snapshot);
+	}, NoParams, OffGameThread);
+
+	// #821: asked on connect, which is exactly when the game thread is least
+	// likely to answer anything.
+	HandlerRegistry.RegisterHandler(TEXT("get_bridge_capabilities"), [this](const TSharedPtr<FJsonObject>&) -> TSharedPtr<FJsonValue>
+	{
+		return MakeShared<FJsonValueObject>(BuildCapabilitiesPayload());
+	}, NoParams, OffGameThread);
+
+	// #817: the parameter-name log and its reset. The assertion that reads it runs
+	// straight after the call it is about, so an unrelated slow handler must not
+	// decide whether a leak test passes. Reading the log does not append to it.
+	HandlerRegistry.RegisterHandler(TEXT("get_param_echo"), [](const TSharedPtr<FJsonObject>&) -> TSharedPtr<FJsonValue>
+	{
+		return MakeShared<FJsonValueObject>(FMCPParamEcho::Get().BuildPayload());
+	}, NoParams, OffGameThread.NotEchoed());
+	HandlerRegistry.RegisterHandler(TEXT("clear_param_echo"), [](const TSharedPtr<FJsonObject>&) -> TSharedPtr<FJsonValue>
+	{
+		FMCPParamEcho::Get().Clear();
+		TSharedPtr<FJsonObject> Cleared = MakeShared<FJsonObject>();
+		Cleared->SetBoolField(TEXT("success"), true);
+		Cleared->SetBoolField(TEXT("servedWithoutGameThread"), true);
+		Cleared->SetBoolField(TEXT("enabled"), FMCPParamEcho::Get().IsEnabled());
+		return MakeShared<FJsonValueObject>(Cleared);
+	}, NoParams, OffGameThread.NotEchoed());
+
+	// It has to reach a request whose handler is still running on the game
+	// thread, and it arrives on a connection of its own.
+	HandlerRegistry.RegisterHandler(TEXT("cancel_request"), [](const TSharedPtr<FJsonObject>& Params) -> TSharedPtr<FJsonValue>
+	{
+		FString Token;
+		if (Params.IsValid()) Params->TryGetStringField(TEXT("cancelToken"), Token);
+		TSharedPtr<FJsonObject> Cancelled = MakeShared<FJsonObject>();
+		Cancelled->SetBoolField(TEXT("success"), !Token.IsEmpty());
+		Cancelled->SetBoolField(TEXT("servedWithoutGameThread"), true);
+		Cancelled->SetStringField(TEXT("state"), Token.IsEmpty() ? FString(TEXT("unknown")) : MCPRequestContext::Cancel(Token));
+		if (Token.IsEmpty()) Cancelled->SetStringField(TEXT("error"), TEXT("cancelToken is required: the token the request to cancel was sent with"));
+		return MakeShared<FJsonValueObject>(Cancelled);
+	}, {
+		MCPParam::Required(TEXT("cancelToken"), EMCPParamType::String, TEXT("The frame-level cancelToken the request to cancel was sent with")),
+	}, OffGameThread);
 }
 
 FMCPBridgeServer::~FMCPBridgeServer()
@@ -668,6 +726,16 @@ TSharedPtr<FJsonObject> FMCPBridgeServer::BuildCapabilitiesPayload()
 	// #1282: plugin handler contracts, apart from the core ones so a core recording never captures them.
 	Payload->SetObjectField(TEXT("pluginHandlerSpecs"), FMCPHandlerRegistry::BuildExternalHandlerSpecsJson());
 
+	// How each action is run, for every action whose facts differ from the
+	// default: its timeout, modal safety, batch refusal, server-internal caller.
+	// The client reads these instead of keeping copies; plugin ones apart, as above.
+	Payload->SetObjectField(TEXT("actionFacts"), HandlerRegistry.BuildActionFactsJson());
+	Payload->SetObjectField(TEXT("pluginActionFacts"), HandlerRegistry.BuildExternalActionFactsJson());
+	TSharedPtr<FJsonObject> Timeouts = MakeShared<FJsonObject>();
+	Timeouts->SetNumberField(TEXT("defaultSeconds"), UEMCPWire::DefaultHandlerTimeoutSeconds);
+	Timeouts->SetNumberField(TEXT("maxRequestSeconds"), UEMCPWire::MaxRequestTimeoutSeconds);
+	Payload->SetObjectField(TEXT("timeouts"), Timeouts);
+
 	return Payload;
 }
 
@@ -712,71 +780,28 @@ FString FMCPBridgeServer::ProcessMessage(const FString& Message, const TFunction
 		Params = MakeShared<FJsonObject>();
 	}
 
+	// How the method is run, declared where it registered (FMCPActionFacts).
+	// All defaults for a method nothing registered.
+	const FMCPActionFacts Facts = HandlerRegistry.GetActionFacts(Method);
+
 	// #817: note what this dispatch was handed, before anything decides what to
 	// do with it. Recorded for unknown methods too: a leaked parameter on a
 	// method the bridge does not have is still a leaked parameter, and it is
 	// the case a stale-plugin test is most likely to hit.
-	//
-	// The two echo methods are excluded so reading the log does not append to
-	// it, which would make a second read return a different answer from the
-	// first for reasons that have nothing to do with the call under test.
-	if (Method != TEXT("get_param_echo") && Method != TEXT("clear_param_echo"))
+	if (!Facts.bNotEchoed)
 	{
 		FMCPParamEcho::Get().Record(Method, Params);
 	}
 
-	// Served here, on the socket thread, deliberately. Every other method waits
-	// on the game thread, so when the game thread is inside a modal dialog, a
-	// slow task, or a hang, this is the only question the bridge can still
-	// answer - and it is the question worth asking at that moment.
-	if (Method == TEXT("get_engine_state"))
+	// The handshake reads (RegisterBuiltInMethods), answered here on the socket
+	// thread, through the handler alone: none of them reads a parameter it did not
+	// declare, carries a rollback or touches source control.
+	if (Facts.bServedOffGameThread)
 	{
-		TSharedPtr<FJsonObject> Snapshot = FMCPEngineStatus::Get().Snapshot();
-		Snapshot->SetBoolField(TEXT("success"), true);
-		Snapshot->SetBoolField(TEXT("servedWithoutGameThread"), true);
-		return CreateJsonRpcResponse(Request, MakeShared<FJsonValueObject>(Snapshot));
-	}
-
-	// #821: also served here, for the same reason and one more. This is the
-	// question a client asks to find out whether the plugin it reached
-	// understands the protocol it speaks, and it asks it on connect, which is
-	// exactly when the game thread is least likely to answer anything.
-	if (Method == TEXT("get_bridge_capabilities"))
-	{
-		return CreateJsonRpcResponse(Request, MakeShared<FJsonValueObject>(BuildCapabilitiesPayload()));
-	}
-
-	// #817: the parameter-name log, and its reset. Served off the game thread
-	// for the same reason the handshake is: the assertion that reads it runs
-	// straight after the call it is about, and making it queue behind the game
-	// thread would let an unrelated slow handler decide whether a leak test
-	// passes.
-	if (Method == TEXT("get_param_echo"))
-	{
-		return CreateJsonRpcResponse(Request, MakeShared<FJsonValueObject>(FMCPParamEcho::Get().BuildPayload()));
-	}
-	if (Method == TEXT("clear_param_echo"))
-	{
-		FMCPParamEcho::Get().Clear();
-		TSharedPtr<FJsonObject> Cleared = MakeShared<FJsonObject>();
-		Cleared->SetBoolField(TEXT("success"), true);
-		Cleared->SetBoolField(TEXT("servedWithoutGameThread"), true);
-		Cleared->SetBoolField(TEXT("enabled"), FMCPParamEcho::Get().IsEnabled());
-		return CreateJsonRpcResponse(Request, MakeShared<FJsonValueObject>(Cleared));
-	}
-
-	// Off the game thread like the echo: it has to reach a request whose handler
-	// is still running there, and it arrives on a connection of its own.
-	if (Method == TEXT("cancel_request"))
-	{
-		FString Token;
-		Params->TryGetStringField(TEXT("cancelToken"), Token);
-		TSharedPtr<FJsonObject> Cancelled = MakeShared<FJsonObject>();
-		Cancelled->SetBoolField(TEXT("success"), !Token.IsEmpty());
-		Cancelled->SetBoolField(TEXT("servedWithoutGameThread"), true);
-		Cancelled->SetStringField(TEXT("state"), Token.IsEmpty() ? FString(TEXT("unknown")) : MCPRequestContext::Cancel(Token));
-		if (Token.IsEmpty()) Cancelled->SetStringField(TEXT("error"), TEXT("cancelToken is required"));
-		return CreateJsonRpcResponse(Request, MakeShared<FJsonValueObject>(Cancelled));
+		if (const FMCPHandlerRegistry::FHandlerFunction* Direct = HandlerRegistry.FindCppHandler(Method))
+		{
+			return CreateJsonRpcResponse(Request, (*Direct)(Params));
+		}
 	}
 
 	// A method nothing registered is answered as unknown before either gate, so
@@ -801,35 +826,24 @@ FString FMCPBridgeServer::ProcessMessage(const FString& Message, const TFunction
 		return HandlerRegistry.ExecuteHandler(Method, HandlerParams);
 	};
 
-	// Some handlers (create_cpp_class regenerates IDE project files;
-	// long-running compiles) legitimately need minutes. Honor per-handler
-	// timeouts registered via FMCPHandlerRegistry::RegisterHandlerWithTimeout.
-	float PerHandlerTimeout = HandlerRegistry.GetHandlerTimeout(Method);
-
-	// A caller's explicit budget (frame-level timeoutMs) raises the wait, never
-	// lowers it, so execute_python and the like can run past 30s (#1339).
+	// The action's declared timeout, or the default. A caller's explicit budget
+	// (frame-level timeoutMs) raises the wait, never lowers it, so execute_python
+	// and the like can run past it (#1339). It is capped at the ceiling rather
+	// than refused, and a capped budget is reported on the answer.
+	float PerHandlerTimeout = Facts.TimeoutSeconds > 0.0f ? Facts.TimeoutSeconds : FMCPGameThreadExecutor::DefaultTimeoutSeconds;
 	double RequestedTimeoutMs = 0.0;
+	bool bBudgetCapped = false;
 	if (Request->TryGetNumberField(TEXT("timeoutMs"), RequestedTimeoutMs) && RequestedTimeoutMs > 0.0)
 	{
-		const float RequestedSeconds = (float)FMath::Min(RequestedTimeoutMs / 1000.0, kMaxRequestTimeoutSeconds);
-		const float BaseSeconds = PerHandlerTimeout > 0.0f ? PerHandlerTimeout : FMCPGameThreadExecutor::DefaultTimeoutSeconds;
-		PerHandlerTimeout = FMath::Max(BaseSeconds, RequestedSeconds);
+		bBudgetCapped = RequestedTimeoutMs / 1000.0 > UEMCPWire::MaxRequestTimeoutSeconds;
+		const float RequestedSeconds = (float)FMath::Min(RequestedTimeoutMs / 1000.0, UEMCPWire::MaxRequestTimeoutSeconds);
+		PerHandlerTimeout = FMath::Max(PerHandlerTimeout, RequestedSeconds);
 	}
 
-	// These read or answer the dialog that is blocking the engine loop, so they
-	// are the handlers that must keep working while one is up. Everything else
-	// waits for the core ticker, which a modal loop suspends.
-	static const TSet<FString> ModalSafeMethods = {
-		TEXT("list_dialogs"),
-		TEXT("respond_to_dialog"),
-		TEXT("get_dialog_policy"),
-		TEXT("set_dialog_policy"),
-		TEXT("clear_dialog_policy"),
-		TEXT("list_windows"),
-		TEXT("press_window_button"),
-		TEXT("close_window"),
-	};
-	const bool bModalSafe = ModalSafeMethods.Contains(Method);
+	// The dialog handlers read or answer the dialog that is blocking the engine
+	// loop, so they must keep working while one is up. Everything else waits for
+	// the core ticker, which a modal loop suspends.
+	const bool bModalSafe = Facts.bModalSafe;
 
 	// THE DIALOG GATE.
 	//
@@ -871,7 +885,17 @@ FString FMCPBridgeServer::ProcessMessage(const FString& Message, const TFunction
 		}
 	}
 
-	const float WaitSeconds = PerHandlerTimeout > 0.0f ? PerHandlerTimeout : FMCPGameThreadExecutor::DefaultTimeoutSeconds;
+	const float WaitSeconds = PerHandlerTimeout;
+	RequestContext->BudgetSeconds = WaitSeconds;
+	// A timeoutMs past the ceiling ran with the ceiling; the answer says so, so
+	// the caller knows the budget it got and does not ask for more again.
+	const auto NoteCappedBudget = [bBudgetCapped](const TSharedPtr<FJsonValue>& Answer)
+	{
+		if (bBudgetCapped && Answer.IsValid() && Answer->Type == EJson::Object)
+		{
+			Answer->AsObject()->SetNumberField(TEXT("timeoutMsCappedTo"), UEMCPWire::MaxRequestTimeoutSeconds * 1000.0);
+		}
+	};
 	const double StartedSeconds = FPlatformTime::Seconds();
 	MCPRequestContext::Register(RequestContext);
 	FMCPEngineStatus::Get().NoteHandlerBegin(Method);
@@ -886,10 +910,11 @@ FString FMCPBridgeServer::ProcessMessage(const FString& Message, const TFunction
 		if (MCPIsDeferredMarker(Result))
 		{
 			const double Deadline = StartedSeconds + WaitSeconds;
-			TFunction<FString()> Finish = [this, Request, Method, Deferred, RequestContext, Deadline, bWantsProgress, SendInterim]() -> FString
+			TFunction<FString()> Finish = [this, Request, Method, Deferred, RequestContext, Deadline, bWantsProgress, SendInterim, NoteCappedBudget]() -> FString
 			{
 				const TSharedPtr<FJsonValue> Answer = AwaitDeferredAnswer(*Request, Method, *Deferred, *RequestContext, Deadline, bWantsProgress, SendInterim);
 				MCPRequestContext::Unregister(RequestContext);
+				NoteCappedBudget(Answer);
 				return FinishJsonRpcResponse(Request, Method, Answer);
 			};
 			if (!OutDeferred) return Finish();
@@ -900,6 +925,7 @@ FString FMCPBridgeServer::ProcessMessage(const FString& Message, const TFunction
 		Deferred->Cancel(TEXT("the handler answered without it"));
 	}
 	MCPRequestContext::Unregister(RequestContext);
+	NoteCappedBudget(Result);
 	return FinishJsonRpcResponse(Request, Method, Result);
 }
 
@@ -988,7 +1014,7 @@ TSharedPtr<FJsonValue> FMCPBridgeServer::AwaitDeferredAnswer(
 				TEXT("'%s' did not finish within its time budget; it was cancelled. Raise the budget with timeoutMs, up to %lld ")
 				TEXT("(a hard ceiling: a larger value is capped there). Work that needs longer must be split into several smaller calls, ")
 				TEXT("or run through the action's job form and polled where it has one."),
-				*Method, (int64)(kMaxRequestTimeoutSeconds * 1000.0)));
+				*Method, (int64)(UEMCPWire::MaxRequestTimeoutSeconds * 1000.0)));
 		}
 		if (!bWantsProgress) continue;
 

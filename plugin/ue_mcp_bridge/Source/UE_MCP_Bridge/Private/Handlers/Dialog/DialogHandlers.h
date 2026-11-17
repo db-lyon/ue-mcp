@@ -38,6 +38,11 @@ public:
 
 	static void RegisterHandlers(class FMCPHandlerRegistry& Registry);
 
+	/** Arm a policy the way set_dialog_policy does, for the startup policies the
+	 *  launch configures. Its answer is set_dialog_policy's: success, or an error
+	 *  naming the response keywords it accepts. */
+	static TSharedPtr<FJsonValue> ArmPolicy(const FString& Pattern, const FString& Response);
+
 	// Call once during module startup to hook FCoreDelegates::ModalMessageDialog
 	static void InstallDialogHook();
 

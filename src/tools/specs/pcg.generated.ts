@@ -129,7 +129,7 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "actorPath",
         "type": "string",
         "required": false,
-        "description": "Full actor object path; the unambiguous selector"
+        "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
       },
       {
         "name": "removeComponents",
@@ -260,7 +260,7 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "onConflict",
         "type": "string",
         "required": false,
-        "description": "When the asset exists: skip (default, report it) | error"
+        "description": "When the asset already exists: skip (default) returns it untouched | error refuses; it never overwrites"
       }
     ]
   },
@@ -327,7 +327,7 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "actorPath",
         "type": "string",
         "required": false,
-        "description": "Full actor object path; the unambiguous selector"
+        "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
       },
       {
         "name": "seed",
@@ -339,13 +339,16 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "wait",
         "type": "boolean",
         "required": false,
-        "description": "Return only once this run finishes (default false); the result gains wait {state, durationMs}"
+        "description": "Return only once this run finishes (default false); the result gains wait {state, durationMs}",
+        "default": false
       },
       {
         "name": "timeoutSeconds",
         "type": "number",
         "required": false,
-        "description": "Longest wait in seconds (default 600)"
+        "description": "Longest wait in seconds (default 600)",
+        "default": 600,
+        "minimum": 0
       }
     ],
     "choices": [
@@ -387,7 +390,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "save",
         "type": "boolean",
         "required": false,
-        "description": "Save the asset after export (default true)"
+        "description": "Save the asset after export (default true)",
+        "default": true
       }
     ]
   },
@@ -424,19 +428,22 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "actorPath",
         "type": "string",
         "required": false,
-        "description": "Full actor object path; the unambiguous selector"
+        "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
       },
       {
         "name": "wait",
         "type": "boolean",
         "required": false,
-        "description": "Return only once this run finishes (default false); the result gains wait {state, durationMs}"
+        "description": "Return only once this run finishes (default false); the result gains wait {state, durationMs}",
+        "default": false
       },
       {
         "name": "timeoutSeconds",
         "type": "number",
         "required": false,
-        "description": "Longest wait in seconds (default 600)"
+        "description": "Longest wait in seconds (default 600)",
+        "default": 600,
+        "minimum": 0
       }
     ],
     "choices": [
@@ -466,7 +473,7 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "actorPath",
         "type": "string",
         "required": false,
-        "description": "Full actor object path; the unambiguous selector"
+        "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
       }
     ],
     "choices": [
@@ -502,7 +509,7 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "actorPath",
         "type": "string",
         "required": false,
-        "description": "Full actor object path; the unambiguous selector"
+        "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
       },
       {
         "name": "componentName",
@@ -565,7 +572,7 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "actorPath",
         "type": "string",
         "required": false,
-        "description": "Full actor object path; the unambiguous selector"
+        "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
       },
       {
         "name": "componentName",
@@ -666,7 +673,7 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "actorPath",
         "type": "string",
         "required": false,
-        "description": "Full actor object path; the unambiguous selector"
+        "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
       },
       {
         "name": "componentName",
@@ -805,7 +812,7 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "actorPath",
         "type": "string",
         "required": false,
-        "description": "Full actor object path; the unambiguous selector"
+        "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
       },
       {
         "name": "componentName",
@@ -856,7 +863,7 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "actorPath",
         "type": "string",
         "required": false,
-        "description": "Full actor object path; the unambiguous selector"
+        "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
       },
       {
         "name": "componentName",
@@ -1249,7 +1256,7 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "actorPath",
         "type": "string",
         "required": false,
-        "description": "Full actor object path; the unambiguous selector"
+        "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
       },
       {
         "name": "graphPath",
@@ -1306,7 +1313,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "save",
         "type": "boolean",
         "required": false,
-        "description": "Save the assets after export (default true)"
+        "description": "Save the assets after export (default true)",
+        "default": true
       }
     ]
   },
@@ -1405,7 +1413,7 @@ export const paramsClauses: Readonly<Record<string, string>> = {
 /** Every key the spec'd pcg handlers declare, aliases included. */
 export const schema: Record<string, z.ZodType> = {
   actorLabel: z.string().optional().describe("Editor label of the actor holding the PCG component; a label naming several actors is refused"),
-  actorPath: z.string().optional().describe("Full actor object path; the unambiguous selector"),
+  actorPath: z.string().optional().describe("Full actor object path, the unambiguous selector; wins over actorLabel"),
   assetName: z.string().optional().describe("Asset name (default: <LevelName>_PCG)"),
   assetPath: z.string().optional().describe("PCGGraph asset path (add_pcg_node, connect_pcg_nodes, disconnect_pcg_nodes, export_pcg_graph, get_pcg_custom_hlsl, import_pcg_graph, read_pcg_graph, read_pcg_node_settings, remove_pcg_node, set_pcg_custom_hlsl, set_pcg_graph_parameters, set_pcg_graph_pins, set_pcg_node_settings, set_pcg_subgraph, set_pcg_subgraph_parameters, set_static_mesh_spawner_meshes, unwrap_pcg_instance_nodes, validate_pcg_edge). The PCG data asset's own path (an object path, or an existing asset's package path, updated in place), or else the folder for it (default: the level's folder) (export_level_to_pcg_asset). PCGGraphInstance asset path (set_pcg_graph_instance_overrides)"),
   assetPaths: z.array(z.string()).optional().describe("PCG data assets to re-export from their source levels"),
@@ -1431,7 +1439,7 @@ export const schema: Record<string, z.ZodType> = {
   nodes: z.array(z.record(z.string(), z.unknown())).optional().describe("[{name, class, posX?, posY?, settings?, subgraph?, parameter?}]"),
   nodeType: z.string().optional().describe("PCG settings class of the node to add"),
   offset: z.number().int().optional().describe("First entry to return (default 0)"),
-  onConflict: z.string().optional().describe("When the label exists: skip (default, report it) | error (add_pcg_volume). When the graph exists: skip (default, report it) | error (create_pcg_graph). When the asset exists: skip (default, report it) | error (create_pcg_graph_instance)"),
+  onConflict: z.string().optional().describe("When the label exists: skip (default, report it) | error (add_pcg_volume). When the graph exists: skip (default, report it) | error (create_pcg_graph). When the asset already exists: skip (default) returns it untouched | error refuses; it never overwrites (create_pcg_graph_instance)"),
   overrides: z.record(z.string(), z.unknown()).optional().describe("{parameterName: value} overrides to set on the new instance (create_pcg_graph_instance). {parameterName: value}; null clears that override (set_pcg_component_parameters, set_pcg_graph_instance_overrides)"),
   packagePath: z.string().optional().describe("Folder for the new graph (default /Game/PCG) (create_pcg_graph). Folder for the new instance (default /Game/PCG) (create_pcg_graph_instance)"),
   parameters: z.record(z.string(), z.unknown()).optional().describe("{parameterName: value}; null clears that override"),
@@ -1461,7 +1469,7 @@ export const schema: Record<string, z.ZodType> = {
   targetNodeName: z.string().optional().describe("Alias for targetNode"),
   targetPin: z.string().optional().describe("Input pin label. connect_nodes defaults to the first input pin, disconnect_nodes to any (connect_pcg_nodes, disconnect_pcg_nodes). Input pin label (default: the first input pin) (validate_pcg_edge)"),
   targetPinLabel: z.string().optional().describe("Alias for targetPin"),
-  timeoutSeconds: z.number().optional().describe("Longest wait in seconds (default 600)"),
+  timeoutSeconds: z.number().min(0).optional().describe("Longest wait in seconds (default 600)"),
   transform: z.object({ location: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("World location"), rotation: z.object({ pitch: z.number(), yaw: z.number(), roll: z.number() }).optional().describe("World rotation"), scale: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Actor scale (default 1)"), scale3D: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Same as scale") }).optional().describe("Actor transform; scale multiplies the extent"),
   wait: z.boolean().optional().describe("Return only once this run finishes (default false); the result gains wait {state, durationMs}"),
 };

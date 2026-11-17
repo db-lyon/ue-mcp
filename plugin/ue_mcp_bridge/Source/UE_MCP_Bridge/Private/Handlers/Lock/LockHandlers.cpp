@@ -53,8 +53,9 @@ void FLockHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 
 TSharedPtr<FJsonValue> FLockHandlers::AcquireLock(const TSharedPtr<FJsonObject>& Params)
 {
+	// The registry renames the assetPath alias to path before this runs.
 	FString Path;
-	if (TSharedPtr<FJsonValue> Err = RequireStringAlt(Params, TEXT("path"), TEXT("assetPath"), Path)) return Err;
+	if (TSharedPtr<FJsonValue> Err = RequireString(Params, TEXT("path"), Path)) return Err;
 	FString SessionId;
 	if (TSharedPtr<FJsonValue> Err = RequireString(Params, TEXT("sessionId"), SessionId)) return Err;
 
@@ -85,7 +86,7 @@ TSharedPtr<FJsonValue> FLockHandlers::AcquireLock(const TSharedPtr<FJsonObject>&
 TSharedPtr<FJsonValue> FLockHandlers::ReleaseLock(const TSharedPtr<FJsonObject>& Params)
 {
 	FString Path;
-	if (TSharedPtr<FJsonValue> Err = RequireStringAlt(Params, TEXT("path"), TEXT("assetPath"), Path)) return Err;
+	if (TSharedPtr<FJsonValue> Err = RequireString(Params, TEXT("path"), Path)) return Err;
 	FString SessionId;
 	if (TSharedPtr<FJsonValue> Err = RequireString(Params, TEXT("sessionId"), SessionId)) return Err;
 	const bool bForce = OptionalBool(Params, TEXT("force"), false);

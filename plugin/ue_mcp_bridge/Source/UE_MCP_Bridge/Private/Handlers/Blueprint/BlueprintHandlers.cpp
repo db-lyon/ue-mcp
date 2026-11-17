@@ -514,7 +514,7 @@ void FBlueprintHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	// v1.0.0-rc.15 - agent-friendly BP authoring
 	Registry.RegisterHandler(TEXT("compile_blueprints"), &CompileBlueprints, {
 		MCPParam::Required(TEXT("assetPaths"), EType::Array, TEXT("Blueprint asset paths to compile")).Items(EType::String),
-		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Persist on success (default true)")),
+		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Persist on success (default true)")).Default(true),
 	});
 	Registry.RegisterHandler(TEXT("cleanup_graph"), &CleanupGraph, {
 		SpecAssetPath,

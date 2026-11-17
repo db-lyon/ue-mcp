@@ -609,7 +609,7 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "onConflict",
         "type": "string",
         "required": false,
-        "description": "When the asset exists: skip (default, report it) | error"
+        "description": "When the asset already exists: skip (default) returns it untouched | error refuses; it never overwrites"
       }
     ],
     "choices": [
@@ -655,7 +655,7 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "onConflict",
         "type": "string",
         "required": false,
-        "description": "When the asset exists: skip (default, report it) | error"
+        "description": "When the asset already exists: skip (default) returns it untouched | error refuses; it never overwrites"
       }
     ],
     "choices": [
@@ -745,7 +745,7 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "onConflict",
         "type": "string",
         "required": false,
-        "description": "When the asset exists: skip (default, report it) | error"
+        "description": "When the asset already exists: skip (default) returns it untouched | error refuses; it never overwrites"
       }
     ],
     "choices": [
@@ -1064,7 +1064,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "pieInstance",
         "type": "integer",
         "required": false,
-        "description": "PIE instance id for multi-client sessions"
+        "description": "PIE instance id for multi-client sessions",
+        "minimum": 0
       },
       {
         "name": "maxInstances",
@@ -2087,13 +2088,13 @@ export const schema: Record<string, z.ZodType> = {
   namePrefix: z.string().optional().describe("Instance name prefix filter"),
   newName: z.string().optional().describe("New widget name; refused when another widget, variable or function already holds it"),
   newParentWidgetName: z.string().optional().describe("Panel widget to reparent into"),
-  onConflict: z.string().optional().describe("When the asset exists: skip (default, report it) | error"),
+  onConflict: z.string().optional().describe("When the asset already exists: skip (default) returns it untouched | error refuses; it never overwrites"),
   optional: z.boolean().optional().describe("Do not warn when the instance is not set or found"),
   packagePath: z.string().optional().describe("Folder for name (default /Game/EditorUtilities) (create_editor_utility_blueprint, create_editor_utility_widget). Folder for name (default /Game/UI/Widgets) (create_widget_blueprint)"),
   parentClass: z.string().optional().describe("UUserWidget subclass: a short name or a class path (default UserWidget)"),
   parentWidgetName: z.string().optional().describe("Name of the parent panel widget (#798) (add_widget). Panel to build under (default: the root panel, or the tree root when there is none) (build_tree). Alias for newParentWidgetName (move_widget)"),
   path: z.string().optional().describe("Alias for assetPath"),
-  pieInstance: z.number().int().optional().describe("PIE instance id for multi-client sessions"),
+  pieInstance: z.number().int().min(0).optional().describe("PIE instance id for multi-client sessions"),
   previous: z.array(z.record(z.string(), z.unknown())).optional().describe("The captured navigation snapshot set_navigation / clear_navigation return in their rollback payload"),
   properties: z.array(z.record(z.string(), z.unknown())).optional().describe("[{widgetName, propertyName, value}] (#563)"),
   propertyName: z.string().optional().describe("Reflected property name on the widget"),

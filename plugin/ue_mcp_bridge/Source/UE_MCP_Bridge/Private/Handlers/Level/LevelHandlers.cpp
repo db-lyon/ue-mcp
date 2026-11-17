@@ -286,7 +286,7 @@ void FLevelHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	}, MCPSpec::ContractExempt(TEXT("Ends any play session, collects garbage and swaps the open map before the contract path can fail")));
 	Registry.RegisterHandler(TEXT("clear_level_script"), &ClearLevelScript, {
 		MCPParam::Optional(TEXT("dryRun"), EType::Boolean, TEXT("Report what would be removed without removing it (default true)")),
-		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save only the current level after a successful clear and compile (default false)")),
+		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save only the current level after a successful clear and compile (default false)")).Default(false),
 	}, MCPSpec::ContractExempt(TEXT("The contract's dryRun=false clears the loaded Level Blueprint; nothing it reads fails first")));
 	Registry.RegisterHandler(TEXT("set_component_property"), &SetComponentProperty, {
 		SpecActorLabel, SpecActorPath, SpecComponentName, SpecPropertyName,
@@ -886,7 +886,7 @@ void FLevelHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("classFilter"), EType::String, TEXT("Restrict to actors of this class")).Alias(TEXT("actorClassFilter")),
 		SpecFolderPath, SpecFolderPathPrefix, SpecMatchSubclasses,
 		MCPParam::Optional(TEXT("dryRun"), EType::Boolean, TEXT("Report what would be removed without removing it (default TRUE)")),
-		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save the level after a committed removal (default false)")),
+		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save the level after a committed removal (default false)")).Default(false),
 		SpecTransactionLabel,
 	});
 	// The contract class resolves to nothing and is refused before anything spawns.
@@ -957,7 +957,7 @@ void FLevelHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Required(TEXT("meshPaths"), EType::Array, TEXT("StaticMesh asset paths whose loaded users to rebuild and save, matched by object path, case-insensitive (at most 256)")).Items(EType::String),
 		MCPParam::Optional(TEXT("componentClass"), EType::String, TEXT("any (default, every StaticMeshComponent and subclass) | StaticMeshComponent (all but spline meshes) | SplineMeshComponent")),
 		MCPParam::Optional(TEXT("recreateCollision"), EType::Boolean, TEXT("Recreate each match's physics state, and rebuild a SplineMeshComponent's collision copy from the current mesh even when the GUID did not change (default true)")),
-		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save the packages of the matched actors and no others (default true)")),
+		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save the packages of the matched actors and no others (default true)")).Default(true),
 		MCPParam::Optional(TEXT("dryRun"), EType::Boolean, TEXT("List the matched components and packages without rebuilding or saving (default TRUE)")),
 		MCPParam::Optional(TEXT("maxActors"), EType::Integer, TEXT("Refuse to act on more than this many actors (default 256)")),
 	});

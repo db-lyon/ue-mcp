@@ -597,7 +597,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "save",
         "type": "boolean",
         "required": false,
-        "description": "Persist on success (default true)"
+        "description": "Persist on success (default true)",
+        "default": true
       }
     ]
   },
@@ -2784,7 +2785,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "dryRun",
         "type": "boolean",
         "required": false,
-        "description": "Validate values on transient copies without editing, compiling or saving (default false)"
+        "description": "Validate values on transient copies without editing, compiling or saving (default false)",
+        "default": false
       }
     ]
   },

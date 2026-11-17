@@ -67,7 +67,7 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "onConflict",
         "type": "string",
         "required": false,
-        "description": "skip (default) returns an existing asset untouched, error refuses"
+        "description": "When the asset already exists: skip (default) returns it untouched | error refuses; it never overwrites"
       }
     ],
     "contractExempt": "creates a MetaHumanCharacter asset"
@@ -207,7 +207,7 @@ export const schema: Record<string, z.ZodType> = {
   items: z.record(z.string(), z.unknown()).optional().describe("{slotName: wardrobeItemPath}, e.g. {\"Top Garment\": \"/Game/Fab/MetaHuman/WI_Crewneck\"}"),
   name: z.string().optional().describe("Name of the new MetaHumanCharacter asset"),
   nameOverride: z.string().optional().describe("Name for the assembled assets instead of the character's"),
-  onConflict: z.string().optional().describe("skip (default) returns an existing asset untouched, error refuses"),
+  onConflict: z.string().optional().describe("When the asset already exists: skip (default) returns it untouched | error refuses; it never overwrites"),
   packagePath: z.string().optional().describe("Destination folder (default /Game/MetaHumans)"),
   pipelineType: z.string().optional().describe("Cinematic | Optimized (default) | UEFN"),
   quality: z.string().optional().describe("Pipeline quality level, e.g. Cinematic | High | Medium (default) | Low"),

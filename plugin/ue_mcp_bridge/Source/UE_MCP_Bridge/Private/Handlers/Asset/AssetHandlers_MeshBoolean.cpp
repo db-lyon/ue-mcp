@@ -118,7 +118,7 @@ void FAssetMeshBooleanHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("nanite"), EType::String, TEXT("inherit (default, match the target) | enable | disable")),
 		MCPSharedParam::OnConflict().Describe(TEXT("When outputPath exists: error (default) | replace")),
 		MCPSharedParam::DryRun().Describe(TEXT("Run the boolean and report the counts without writing (default false)")),
-		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save the written asset (default true)")),
+		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save the written asset (default true)")).Default(true),
 	});
 }
 

@@ -47,7 +47,13 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", ".
 const SNAPSHOT = JSON.parse(fs.readFileSync(path.join(ROOT, "tests", "golden", "handler-specs.json"), "utf8")) as {
   handlerCount: number;
   handlers: HandlerSpecs;
+  actionFacts: Record<string, { serverInternal?: string }>;
 };
+
+/** The spec'd handlers a tool surface declares: every one the server does not call by itself. */
+const SURFACE_HANDLERS: HandlerSpecs = Object.fromEntries(
+  Object.entries(SNAPSHOT.handlers).filter(([method]) => !SNAPSHOT.actionFacts[method]?.serverInternal),
+);
 
 /**
  * The one documented passthrough (#1057). Every generated `epic_*` action
@@ -300,7 +306,7 @@ describe("the generated modules", () => {
       Object.entries(SNAPSHOT.handlers).filter(([, spec]) => (spec as HandlerSpec).category === "animation"),
     );
     expect(handlerSpecs).toEqual(animation);
-    expect(RECORDED_HANDLER_SPECS).toEqual(SNAPSHOT.handlers);
+    expect(RECORDED_HANDLER_SPECS).toEqual(SURFACE_HANDLERS);
   });
 
   it("refuses to declare an action for a method with no recorded spec", () => {
@@ -414,7 +420,7 @@ function aliasOf(method: string): string | undefined {
 const HAND_WRITTEN_CROSS_TOOL: ReadonlyMap<string, string> = new Map([]);
 
 // Every other recorded category is held to the same surface rules as the pilot.
-const OTHER_CATEGORIES = [...new Set(Object.values(SNAPSHOT.handlers).map((s) => s.category as string))]
+const OTHER_CATEGORIES = [...new Set(Object.values(SURFACE_HANDLERS).map((s) => s.category as string))]
   .filter((c) => c !== "animation")
   .sort();
 
@@ -431,7 +437,7 @@ function toolForCategory(category: string, methods: string[]): ToolDef | undefin
 }
 
 describe.each(OTHER_CATEGORIES)("the %s category", (category) => {
-  const methods = Object.entries(SNAPSHOT.handlers).filter(([, s]) => s.category === category);
+  const methods = Object.entries(SURFACE_HANDLERS).filter(([, s]) => s.category === category);
   const tool = toolForCategory(category, methods.map(([method]) => method))!;
 
   it("is a tool, and every spec'd method is dispatched by an action or is a C++ alias of one that is", () => {

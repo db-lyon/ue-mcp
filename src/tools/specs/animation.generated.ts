@@ -1456,7 +1456,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "save",
         "type": "boolean",
         "required": false,
-        "description": "Save the asset after baking (default true)"
+        "description": "Save the asset after baking (default true)",
+        "default": true
       }
     ]
   },
@@ -3044,7 +3045,7 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "onConflict",
         "type": "string",
         "required": false,
-        "description": "skip (default) | error. It never overwrites"
+        "description": "When the asset already exists: skip (default) returns it untouched | error refuses; it never overwrites"
       }
     ]
   },
@@ -3206,7 +3207,7 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "actorLabel",
         "type": "string",
         "required": false,
-        "description": "Editor label of the actor; pass this or actorPath"
+        "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
       },
       {
         "name": "actorPath",
@@ -3275,7 +3276,7 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "actorLabel",
         "type": "string",
         "required": false,
-        "description": "Editor label of the actor; pass this or actorPath"
+        "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
       },
       {
         "name": "actorPath",
@@ -3454,7 +3455,7 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "actorLabel",
         "type": "string",
         "required": false,
-        "description": "Editor label of the actor; pass this or actorPath"
+        "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
       },
       {
         "name": "actorPath",
@@ -3777,7 +3778,7 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "actorLabel",
         "type": "string",
         "required": false,
-        "description": "Editor label of the actor; pass this or actorPath"
+        "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
       },
       {
         "name": "actorPath",
@@ -4167,7 +4168,7 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "actorLabel",
         "type": "string",
         "required": false,
-        "description": "Editor label of the actor; pass this or actorPath"
+        "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
       },
       {
         "name": "actorPath",
@@ -5064,7 +5065,7 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "actorLabel",
         "type": "string",
         "required": false,
-        "description": "Editor label of the actor; pass this or actorPath"
+        "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
       },
       {
         "name": "actorPath",
@@ -5279,7 +5280,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "save",
         "type": "boolean",
         "required": false,
-        "description": "Save the asset after the edit (default true)"
+        "description": "Save the asset after the edit (default true)",
+        "default": true
       }
     ],
     "choices": [
@@ -5430,7 +5432,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "save",
         "type": "boolean",
         "required": false,
-        "description": "Save the asset after the edit (default true)"
+        "description": "Save the asset after the edit (default true)",
+        "default": true
       }
     ]
   },
@@ -5913,7 +5916,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "save",
         "type": "boolean",
         "required": false,
-        "description": "Save each sequence (default true)"
+        "description": "Save each sequence (default true)",
+        "default": true
       }
     ]
   }
@@ -6055,7 +6059,7 @@ export const paramsClauses: Readonly<Record<string, string>> = {
 
 /** Every key the spec'd animation handlers declare, aliases included. */
 export const schema: Record<string, z.ZodType> = {
-  actorLabel: z.string().optional().describe("Editor label of the actor; pass this or actorPath"),
+  actorLabel: z.string().optional().describe("Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"),
   actorPath: z.string().optional().describe("Full actor object path, the unambiguous selector; wins over actorLabel"),
   add: z.array(z.string()).optional().describe("Curve names to add"),
   addDefaultChannels: z.boolean().optional().describe("Add Trajectory and Pose default channels so the schema is buildable (default true)"),
@@ -6216,7 +6220,7 @@ export const schema: Record<string, z.ZodType> = {
   notifyStateClass: z.string().optional().describe("UAnimNotifyState subclass: a class name, a bare suffix such as TimedParticleEffect, or a full path (add_anim_notify_state). Notify state class to match. Pass at least one of notifyName and notifyStateClass; both filters apply together (remove_anim_notify_state)"),
   numberOfPrincipalComponents: z.number().optional().describe("PCA components for PCAKDTree mode"),
   numFrames: z.number().optional().describe("Frame count, 1 to 10000 (default 1); the sequence has numFrames + 1 keys (compose_pose_sequence). Frame count (default 30) (create_sequence)"),
-  onConflict: z.string().optional().describe("skip (default) returns an existing section untouched, error refuses (add_montage_section). skip (default) returns an existing state untouched, error refuses (add_state). skip returns an existing output, error (default) refuses; it never overwrites (bake_control_rig_edit, bake_sequence_animation). skip returns the existing session, error (default) refuses; an existing session is never modified (begin_control_rig_edit). skip (default) returns an existing asset untouched, error refuses; it never overwrites (compose_pose_sequence). skip (default) returns an existing asset untouched, error refuses (create_anim_blueprint, create_anim_composite, create_anim_montage, create_blendspace, create_blendspace_1d, create_ik_retargeter, create_ik_rig, create_mirror_data_table, create_pose_search_database, create_pose_search_normalization_set, create_pose_search_schema, create_sequence). skip (default) returns the existing asset, error refuses; it never overwrites (create_control_rig). skip (default) | error. It never overwrites (create_skeleton). skip (default) returns an existing destination untouched, error refuses; it never overwrites (reverse_sequence)"),
+  onConflict: z.string().optional().describe("skip (default) returns an existing section untouched, error refuses (add_montage_section). skip (default) returns an existing state untouched, error refuses (add_state). skip returns an existing output, error (default) refuses; it never overwrites (bake_control_rig_edit, bake_sequence_animation). skip returns the existing session, error (default) refuses; an existing session is never modified (begin_control_rig_edit). skip (default) returns an existing asset untouched, error refuses; it never overwrites (compose_pose_sequence). skip (default) returns an existing asset untouched, error refuses (create_anim_blueprint, create_anim_composite, create_anim_montage, create_blendspace, create_blendspace_1d, create_ik_retargeter, create_ik_rig, create_mirror_data_table, create_pose_search_database, create_pose_search_normalization_set, create_pose_search_schema, create_sequence). skip (default) returns the existing asset, error refuses; it never overwrites (create_control_rig). When the asset already exists: skip (default) returns it untouched | error refuses; it never overwrites (create_skeleton). skip (default) returns an existing destination untouched, error refuses; it never overwrites (reverse_sequence)"),
   operation: z.string().optional().describe("upsert (default) | remove | rename"),
   operations: z.array(z.discriminatedUnion("op", [z.object({ op: z.literal("set"), control: z.string().describe("Control name on the session's rig"), frame: z.number().int().optional().describe("One frame to key; pass exactly one of frame and frames"), frames: z.array(z.number().int()).optional().describe("Frames to key; pass exactly one of frame and frames"), transform: z.record(z.string(), z.unknown()).describe("{translation {x,y,z}, rotationDegrees {pitch,yaw,roll}, scale {x,y,z}}"), space: z.string().optional().describe("local (default) | component | global, where global is an alias for component") }).strict().describe("Write one full absolute transform at frame or frames"), z.object({ op: z.literal("set_keys"), control: z.string().describe("Control name on the session's rig"), keys: z.array(z.record(z.string(), z.unknown())).describe("[{frame, transform {translation {x,y,z}, rotationQuaternion {x,y,z,w}, scale {x,y,z}}}], frames strictly increasing"), space: z.string().optional().describe("local (default) | component | global, where global is an alias for component") }).strict().describe("Write strictly ordered full per-frame transforms from normalized quaternions"), z.object({ op: z.literal("offset"), control: z.string().describe("Control name on the session's rig"), startFrame: z.number().int().describe("First frame of the range"), endFrame: z.number().int().describe("Last frame of the range, at or after startFrame"), translationCm: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Translation delta in centimetres"), rotationDegrees: z.object({ pitch: z.number(), yaw: z.number(), roll: z.number() }).optional().describe("Rotation delta in degrees"), scaleMultiplier: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Scale multiplier; one of translationCm, rotationDegrees and scaleMultiplier is required"), space: z.string().optional().describe("local (default) | component | global, where global is an alias for component"), blendInFrames: z.number().int().optional().describe("Frames to ease in over, from 0 (default 0)"), blendOutFrames: z.number().int().optional().describe("Frames to ease out over, from 0 (default 0)") }).strict().describe("Apply translation, rotation or scale deltas across an inclusive frame range"), z.object({ op: z.literal("contact_lock"), control: z.string().describe("Control name on the session's rig"), drivenReference: z.string().optional().describe("Bone or socket to constrain instead of the control; bake and analyze before accepting it"), startFrame: z.number().int().describe("First frame of the lock"), endFrame: z.number().int().describe("Last frame of the lock, at or after startFrame"), target: z.record(z.string(), z.unknown()).optional().describe("{translation {x,y,z}, rotationQuaternion? {x,y,z,w}}: a fixed component-space target, or a transform relative to targetReference when that is set; pass target or targetReference"), targetReference: z.string().optional().describe("Source-animation bone or socket to follow. Without target, the first frame's subject-to-reference offset is kept"), blendInFrames: z.number().int().optional().describe("Frames to ease in over, from 0 (default 0)"), blendOutFrames: z.number().int().optional().describe("Frames to ease out over, from 0 (default 0)"), stabilizeControls: z.array(z.string()).optional().describe("Up to 8 pole or stabilizer controls to hold steady; never the locked control itself"), positionToleranceCm: z.number().optional().describe("Readback position tolerance, above 0 and up to 100 (default 0.1)"), rotationToleranceDegrees: z.number().optional().describe("Readback rotation tolerance, above 0 and up to 180 (default 0.5)") }).strict().describe("Constrain a translatable driver control, or a driven bone or socket, to a fixed component-space target"), z.object({ op: z.literal("set_bool"), control: z.string().describe("Control name on the session's rig"), frame: z.number().int().optional().describe("One frame to key; pass exactly one of frame and frames"), frames: z.array(z.number().int()).optional().describe("Frames to key; pass exactly one of frame and frames"), value: z.boolean().describe("Value to key") }).strict().describe("Key a bool control at frame or frames"), z.object({ op: z.literal("set_float"), control: z.string().describe("Control name on the session's rig"), frame: z.number().int().optional().describe("One frame to key; pass exactly one of frame and frames"), frames: z.array(z.number().int()).optional().describe("Frames to key; pass exactly one of frame and frames"), value: z.number().describe("Finite value to key") }).strict().describe("Key a float control at frame or frames"), z.object({ op: z.literal("set_int"), control: z.string().describe("Control name on the session's rig"), frame: z.number().int().optional().describe("One frame to key; pass exactly one of frame and frames"), frames: z.array(z.number().int()).optional().describe("Frames to key; pass exactly one of frame and frames"), value: z.number().int().describe("Value to key") }).strict().describe("Key an integer or enum control at frame or frames; an enum takes one of its enumOptions values"), z.object({ op: z.literal("propagate_pose"), baseline: z.record(z.string(), z.unknown()).describe("Snapshot from capture_control_rig_pose before the edit"), accepted: z.record(z.string(), z.unknown()).describe("Snapshot from capture_control_rig_pose after the edit, same session, rig instance, frame and control set"), controls: z.array(z.record(z.string(), z.unknown())).describe("[{control, mode fixed | local_delta, donorFrames strictly increasing}], each control once; bool, enum and int controls take fixed only") }).strict().describe("Key the controls that changed between two live snapshots across each control's donor frames")])).optional().describe("Typed edits applied in one transaction, in order"),
   ops: z.array(z.object({ name: z.string().optional().describe("Op to write, by name"), index: z.number().int().optional().describe("Op to write, by stack index, when name is omitted"), enabled: z.boolean().optional().describe("Enable or disable the op"), settings: z.record(z.string(), z.unknown()).optional().describe("Properties on the op's settings struct, e.g. RootMotionSource"), chainSettings: z.array(z.record(z.string(), z.unknown())).optional().describe("Per-chain properties as [{chain, ...}], e.g. RotationMode") })).optional().describe("Per-op writes, at most 64. settings writes properties on the op's own settings struct, and chainSettings merges per-chain FK properties into the named chain rather than replacing the list"),

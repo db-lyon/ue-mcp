@@ -181,6 +181,10 @@ public:
 
 	TSharedPtr<FJsonObject> BuildCapabilitiesPayload();
 
+	/** The socket-thread methods (get_engine_state, get_bridge_capabilities, the
+	 *  parameter echo pair, cancel_request), registered like any handler. */
+	void RegisterBuiltInMethods();
+
 private:
 	// The bound port once Run() has bound one; until then the port to try first.
 	int32 ServerPort;

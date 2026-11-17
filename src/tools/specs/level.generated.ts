@@ -65,7 +65,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "pieInstance",
         "type": "integer",
         "required": false,
-        "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients"
+        "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients",
+        "minimum": 0
       }
     ]
   },
@@ -76,13 +77,13 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "actorLabel",
         "type": "string",
         "required": false,
-        "description": "Actor editor label; pass actorLabel or actorPath"
+        "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
       },
       {
         "name": "actorPath",
         "type": "string",
         "required": false,
-        "description": "Full actor object path; the unambiguous selector, and it wins over actorLabel"
+        "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
       },
       {
         "name": "tag",
@@ -99,13 +100,13 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "actorLabel",
         "type": "string",
         "required": false,
-        "description": "Actor editor label; pass actorLabel or actorPath"
+        "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
       },
       {
         "name": "actorPath",
         "type": "string",
         "required": false,
-        "description": "Full actor object path; the unambiguous selector, and it wins over actorLabel"
+        "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
       },
       {
         "name": "componentClass",
@@ -134,13 +135,13 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "actorLabel",
         "type": "string",
         "required": false,
-        "description": "Actor editor label; pass actorLabel or actorPath"
+        "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
       },
       {
         "name": "actorPath",
         "type": "string",
         "required": false,
-        "description": "Full actor object path; the unambiguous selector, and it wins over actorLabel"
+        "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
       },
       {
         "name": "componentName",
@@ -187,13 +188,13 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "actorLabel",
         "type": "string",
         "required": false,
-        "description": "Actor editor label; pass actorLabel or actorPath"
+        "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
       },
       {
         "name": "actorPath",
         "type": "string",
         "required": false,
-        "description": "Full actor object path; the unambiguous selector, and it wins over actorLabel"
+        "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
       },
       {
         "name": "componentName",
@@ -223,13 +224,13 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "actorLabel",
         "type": "string",
         "required": false,
-        "description": "Actor editor label; pass actorLabel or actorPath"
+        "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
       },
       {
         "name": "actorPath",
         "type": "string",
         "required": false,
-        "description": "Full actor object path; the unambiguous selector, and it wins over actorLabel"
+        "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
       },
       {
         "name": "materialPath",
@@ -341,13 +342,13 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "actorLabel",
         "type": "string",
         "required": false,
-        "description": "Actor editor label; pass actorLabel or actorPath"
+        "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
       },
       {
         "name": "actorPath",
         "type": "string",
         "required": false,
-        "description": "Full actor object path; the unambiguous selector, and it wins over actorLabel"
+        "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
       },
       {
         "name": "targetPoint",
@@ -383,7 +384,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "pieInstance",
         "type": "integer",
         "required": false,
-        "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients"
+        "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients",
+        "minimum": 0
       }
     ]
   },
@@ -512,7 +514,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "pieInstance",
         "type": "integer",
         "required": false,
-        "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients"
+        "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients",
+        "minimum": 0
       },
       {
         "name": "regionMin",
@@ -644,7 +647,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "dryRun",
         "type": "boolean",
         "required": false,
-        "description": "Report what would change without writing"
+        "description": "Report what would change without writing",
+        "default": false
       },
       {
         "name": "force",
@@ -923,7 +927,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "pieInstance",
         "type": "integer",
         "required": false,
-        "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients"
+        "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients",
+        "minimum": 0
       }
     ]
   },
@@ -1001,7 +1006,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "dryRun",
         "type": "boolean",
         "required": false,
-        "description": "Report what would change without writing"
+        "description": "Report what would change without writing",
+        "default": false
       },
       {
         "name": "transactionLabel",
@@ -1056,7 +1062,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "save",
         "type": "boolean",
         "required": false,
-        "description": "Save only the current level after a successful clear and compile (default false)"
+        "description": "Save only the current level after a successful clear and compile (default false)",
+        "default": false
       }
     ],
     "contractExempt": "The contract's dryRun=false clears the loaded Level Blueprint; nothing it reads fails first"
@@ -1183,7 +1190,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "pieInstance",
         "type": "integer",
         "required": false,
-        "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients"
+        "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients",
+        "minimum": 0
       },
       {
         "name": "topN",
@@ -1383,13 +1391,13 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "actorLabel",
         "type": "string",
         "required": false,
-        "description": "Actor editor label; pass actorLabel or actorPath"
+        "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
       },
       {
         "name": "actorPath",
         "type": "string",
         "required": false,
-        "description": "Full actor object path; the unambiguous selector, and it wins over actorLabel"
+        "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
       }
     ]
   },
@@ -1455,7 +1463,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "dryRun",
         "type": "boolean",
         "required": false,
-        "description": "Report the matches without deleting them (default false)"
+        "description": "Report the matches without deleting them (default false)",
+        "default": false
       }
     ],
     "choices": [
@@ -1564,7 +1573,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "dryRun",
         "type": "boolean",
         "required": false,
-        "description": "Report what would be deleted without deleting (default false)"
+        "description": "Report what would be deleted without deleting (default false)",
+        "default": false
       }
     ],
     "choices": [
@@ -1599,7 +1609,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "pieInstance",
         "type": "integer",
         "required": false,
-        "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients"
+        "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients",
+        "minimum": 0
       },
       {
         "name": "actorPath",
@@ -1668,13 +1679,13 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "actorLabel",
         "type": "string",
         "required": false,
-        "description": "Actor editor label; pass actorLabel or actorPath"
+        "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
       },
       {
         "name": "actorPath",
         "type": "string",
         "required": false,
-        "description": "Full actor object path; the unambiguous selector, and it wins over actorLabel"
+        "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
       },
       {
         "name": "outputPath",
@@ -1694,13 +1705,13 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "actorLabel",
         "type": "string",
         "required": false,
-        "description": "Actor editor label; pass actorLabel or actorPath"
+        "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
       },
       {
         "name": "actorPath",
         "type": "string",
         "required": false,
-        "description": "Full actor object path; the unambiguous selector, and it wins over actorLabel"
+        "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
       },
       {
         "name": "onlyColliding",
@@ -1718,7 +1729,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "pieInstance",
         "type": "integer",
         "required": false,
-        "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients"
+        "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients",
+        "minimum": 0
       }
     ]
   },
@@ -1729,13 +1741,13 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "actorLabel",
         "type": "string",
         "required": false,
-        "description": "Actor editor label; pass actorLabel or actorPath"
+        "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
       },
       {
         "name": "actorPath",
         "type": "string",
         "required": false,
-        "description": "Full actor object path; the unambiguous selector, and it wins over actorLabel"
+        "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
       },
       {
         "name": "includeProperties",
@@ -1759,7 +1771,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "pieInstance",
         "type": "integer",
         "required": false,
-        "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients"
+        "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients",
+        "minimum": 0
       }
     ]
   },
@@ -1788,7 +1801,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "pieInstance",
         "type": "integer",
         "required": false,
-        "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients"
+        "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients",
+        "minimum": 0
       },
       {
         "name": "matchSubclasses",
@@ -1826,7 +1840,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "pieInstance",
         "type": "integer",
         "required": false,
-        "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients"
+        "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients",
+        "minimum": 0
       }
     ]
   },
@@ -1837,13 +1852,13 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "actorLabel",
         "type": "string",
         "required": false,
-        "description": "Actor editor label; pass actorLabel or actorPath"
+        "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
       },
       {
         "name": "actorPath",
         "type": "string",
         "required": false,
-        "description": "Full actor object path; the unambiguous selector, and it wins over actorLabel"
+        "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
       },
       {
         "name": "componentName",
@@ -1874,7 +1889,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "pieInstance",
         "type": "integer",
         "required": false,
-        "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients"
+        "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients",
+        "minimum": 0
       }
     ]
   },
@@ -1885,13 +1901,13 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "actorLabel",
         "type": "string",
         "required": false,
-        "description": "Actor editor label; pass actorLabel or actorPath"
+        "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
       },
       {
         "name": "actorPath",
         "type": "string",
         "required": false,
-        "description": "Full actor object path; the unambiguous selector, and it wins over actorLabel"
+        "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
       },
       {
         "name": "includeProperties",
@@ -1934,7 +1950,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "pieInstance",
         "type": "integer",
         "required": false,
-        "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients"
+        "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients",
+        "minimum": 0
       }
     ]
   },
@@ -1957,13 +1974,13 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "actorLabel",
         "type": "string",
         "required": false,
-        "description": "Actor editor label; pass actorLabel or actorPath"
+        "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
       },
       {
         "name": "actorPath",
         "type": "string",
         "required": false,
-        "description": "Full actor object path; the unambiguous selector, and it wins over actorLabel"
+        "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
       },
       {
         "name": "componentName",
@@ -2000,13 +2017,13 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "actorLabel",
         "type": "string",
         "required": false,
-        "description": "Actor editor label; pass actorLabel or actorPath"
+        "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
       },
       {
         "name": "actorPath",
         "type": "string",
         "required": false,
-        "description": "Full actor object path; the unambiguous selector, and it wins over actorLabel"
+        "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
       },
       {
         "name": "componentName",
@@ -2084,7 +2101,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "pieInstance",
         "type": "integer",
         "required": false,
-        "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients"
+        "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients",
+        "minimum": 0
       }
     ]
   },
@@ -2118,7 +2136,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "pieInstance",
         "type": "integer",
         "required": false,
-        "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients"
+        "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients",
+        "minimum": 0
       }
     ]
   },
@@ -2139,7 +2158,7 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "actorPath",
         "type": "string",
         "required": false,
-        "description": "Actor object path; preferred when labels repeat"
+        "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
       },
       {
         "name": "componentName",
@@ -2157,7 +2176,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "pieInstance",
         "type": "integer",
         "required": false,
-        "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients"
+        "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients",
+        "minimum": 0
       },
       {
         "name": "lodIndex",
@@ -2279,13 +2299,13 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "actorLabel",
         "type": "string",
         "required": false,
-        "description": "Actor editor label; pass actorLabel or actorPath"
+        "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
       },
       {
         "name": "actorPath",
         "type": "string",
         "required": false,
-        "description": "Full actor object path; the unambiguous selector, and it wins over actorLabel"
+        "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
       },
       {
         "name": "componentName",
@@ -2309,7 +2329,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "pieInstance",
         "type": "integer",
         "required": false,
-        "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients"
+        "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients",
+        "minimum": 0
       }
     ],
     "choices": [
@@ -2333,13 +2354,13 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "actorLabel",
         "type": "string",
         "required": false,
-        "description": "Actor editor label; pass actorLabel or actorPath"
+        "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
       },
       {
         "name": "actorPath",
         "type": "string",
         "required": false,
-        "description": "Full actor object path; the unambiguous selector, and it wins over actorLabel"
+        "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
       }
     ]
   },
@@ -2398,7 +2419,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "pieInstance",
         "type": "integer",
         "required": false,
-        "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients"
+        "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients",
+        "minimum": 0
       },
       {
         "name": "cursor",
@@ -2488,7 +2510,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "pieInstance",
         "type": "integer",
         "required": false,
-        "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients"
+        "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients",
+        "minimum": 0
       }
     ]
   },
@@ -2560,13 +2583,13 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "actorLabel",
         "type": "string",
         "required": false,
-        "description": "Actor editor label; pass actorLabel or actorPath"
+        "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
       },
       {
         "name": "actorPath",
         "type": "string",
         "required": false,
-        "description": "Full actor object path; the unambiguous selector, and it wins over actorLabel"
+        "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
       },
       {
         "name": "cursor",
@@ -2677,7 +2700,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "pieInstance",
         "type": "integer",
         "required": false,
-        "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients"
+        "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients",
+        "minimum": 0
       },
       {
         "name": "cursor",
@@ -2779,7 +2803,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "dryRun",
         "type": "boolean",
         "required": false,
-        "description": "Report what would change without writing"
+        "description": "Report what would change without writing",
+        "default": false
       }
     ]
   },
@@ -2835,7 +2860,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "dryRun",
         "type": "boolean",
         "required": false,
-        "description": "Report what would change without writing"
+        "description": "Report what would change without writing",
+        "default": false
       }
     ],
     "contractExempt": "Creates a loader adapter and streams actors in; the bounds read is the only thing the contract values reach, and it is checked from source instead"
@@ -2916,13 +2942,13 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "actorLabel",
         "type": "string",
         "required": false,
-        "description": "Actor editor label; pass actorLabel or actorPath"
+        "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
       },
       {
         "name": "actorPath",
         "type": "string",
         "required": false,
-        "description": "Full actor object path; the unambiguous selector, and it wins over actorLabel"
+        "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
       },
       {
         "name": "location",
@@ -2952,7 +2978,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "pieInstance",
         "type": "integer",
         "required": false,
-        "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients"
+        "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients",
+        "minimum": 0
       }
     ]
   },
@@ -2981,7 +3008,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "pieInstance",
         "type": "integer",
         "required": false,
-        "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients"
+        "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients",
+        "minimum": 0
       }
     ]
   },
@@ -2992,13 +3020,13 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "actorLabel",
         "type": "string",
         "required": false,
-        "description": "Actor editor label; pass actorLabel or actorPath"
+        "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
       },
       {
         "name": "actorPath",
         "type": "string",
         "required": false,
-        "description": "Full actor object path; the unambiguous selector, and it wins over actorLabel"
+        "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
       },
       {
         "name": "componentName",
@@ -3094,7 +3122,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "dryRun",
         "type": "boolean",
         "required": false,
-        "description": "Inspect and preview the requested transform without writing (default false)"
+        "description": "Inspect and preview the requested transform without writing (default false)",
+        "default": false
       },
       {
         "name": "world",
@@ -3106,7 +3135,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "pieInstance",
         "type": "integer",
         "required": false,
-        "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients"
+        "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients",
+        "minimum": 0
       }
     ],
     "choices": [
@@ -3184,7 +3214,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "pieInstance",
         "type": "integer",
         "required": false,
-        "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients"
+        "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients",
+        "minimum": 0
       }
     ]
   },
@@ -3427,7 +3458,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "pieInstance",
         "type": "integer",
         "required": false,
-        "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients"
+        "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients",
+        "minimum": 0
       },
       {
         "name": "includeCollision",
@@ -3450,7 +3482,7 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "actorLabel",
         "type": "string",
         "required": false,
-        "description": "Actor editor label; pass actorLabel or actorPath"
+        "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
       },
       {
         "name": "actorLabels",
@@ -3463,7 +3495,7 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "actorPath",
         "type": "string",
         "required": false,
-        "description": "Full actor object path; the unambiguous selector, and it wins over actorLabel"
+        "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
       },
       {
         "name": "actorPaths",
@@ -3482,7 +3514,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "pieInstance",
         "type": "integer",
         "required": false,
-        "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients"
+        "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients",
+        "minimum": 0
       }
     ]
   },
@@ -3541,13 +3574,13 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "actorLabel",
         "type": "string",
         "required": false,
-        "description": "Actor editor label; pass actorLabel or actorPath"
+        "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
       },
       {
         "name": "actorPath",
         "type": "string",
         "required": false,
-        "description": "Full actor object path; the unambiguous selector, and it wins over actorLabel"
+        "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
       },
       {
         "name": "zoneExtent",
@@ -3631,7 +3664,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "pieInstance",
         "type": "integer",
         "required": false,
-        "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients"
+        "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients",
+        "minimum": 0
       }
     ],
     "choices": [
@@ -3667,13 +3701,13 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "actorLabel",
         "type": "string",
         "required": false,
-        "description": "Actor editor label; pass actorLabel or actorPath"
+        "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
       },
       {
         "name": "actorPath",
         "type": "string",
         "required": false,
-        "description": "Full actor object path; the unambiguous selector, and it wins over actorLabel"
+        "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
       },
       {
         "name": "tag",
@@ -3690,13 +3724,13 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "actorLabel",
         "type": "string",
         "required": false,
-        "description": "Actor editor label; pass actorLabel or actorPath"
+        "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
       },
       {
         "name": "actorPath",
         "type": "string",
         "required": false,
-        "description": "Full actor object path; the unambiguous selector, and it wins over actorLabel"
+        "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
       },
       {
         "name": "componentName",
@@ -3789,7 +3823,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "save",
         "type": "boolean",
         "required": false,
-        "description": "Save the level after a committed removal (default false)"
+        "description": "Save the level after a committed removal (default false)",
+        "default": false
       },
       {
         "name": "transactionLabel",
@@ -3823,13 +3858,13 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "actorLabel",
         "type": "string",
         "required": false,
-        "description": "Actor editor label; pass actorLabel or actorPath"
+        "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
       },
       {
         "name": "actorPath",
         "type": "string",
         "required": false,
-        "description": "Full actor object path; the unambiguous selector, and it wins over actorLabel"
+        "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
       },
       {
         "name": "componentName",
@@ -3877,13 +3912,13 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "actorLabel",
         "type": "string",
         "required": false,
-        "description": "Actor editor label; pass actorLabel or actorPath"
+        "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
       },
       {
         "name": "actorPath",
         "type": "string",
         "required": false,
-        "description": "Full actor object path; the unambiguous selector, and it wins over actorLabel"
+        "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
       },
       {
         "name": "newName",
@@ -3922,7 +3957,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "dryRun",
         "type": "boolean",
         "required": false,
-        "description": "Report what would change without writing"
+        "description": "Report what would change without writing",
+        "default": false
       }
     ],
     "choices": [
@@ -4129,7 +4165,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "pieInstance",
         "type": "integer",
         "required": false,
-        "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients"
+        "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients",
+        "minimum": 0
       }
     ],
     "choices": [
@@ -4172,7 +4209,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "save",
         "type": "boolean",
         "required": false,
-        "description": "Save the packages of the matched actors and no others (default true)"
+        "description": "Save the packages of the matched actors and no others (default true)",
+        "default": true
       },
       {
         "name": "dryRun",
@@ -4246,13 +4284,13 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "actorLabel",
         "type": "string",
         "required": false,
-        "description": "Actor editor label; pass actorLabel or actorPath"
+        "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
       },
       {
         "name": "actorPath",
         "type": "string",
         "required": false,
-        "description": "Full actor object path; the unambiguous selector, and it wins over actorLabel"
+        "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
       },
       {
         "name": "componentName",
@@ -4302,7 +4340,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "pieInstance",
         "type": "integer",
         "required": false,
-        "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients"
+        "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients",
+        "minimum": 0
       }
     ],
     "choices": [
@@ -4523,13 +4562,13 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "actorLabel",
         "type": "string",
         "required": false,
-        "description": "Actor editor label; pass actorLabel or actorPath"
+        "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
       },
       {
         "name": "actorPath",
         "type": "string",
         "required": false,
-        "description": "Full actor object path; the unambiguous selector, and it wins over actorLabel"
+        "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
       },
       {
         "name": "componentName",
@@ -4583,7 +4622,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "dryRun",
         "type": "boolean",
         "required": false,
-        "description": "Report the matches without moving them (default false)"
+        "description": "Report the matches without moving them (default false)",
+        "default": false
       },
       {
         "name": "transactionLabel",
@@ -4682,7 +4722,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "dryRun",
         "type": "boolean",
         "required": false,
-        "description": "Report what would change without writing"
+        "description": "Report what would change without writing",
+        "default": false
       },
       {
         "name": "transactionLabel",
@@ -4727,13 +4768,13 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "actorLabel",
         "type": "string",
         "required": false,
-        "description": "Actor editor label; pass actorLabel or actorPath"
+        "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
       },
       {
         "name": "actorPath",
         "type": "string",
         "required": false,
-        "description": "Full actor object path; the unambiguous selector, and it wins over actorLabel"
+        "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
       },
       {
         "name": "materialPath",
@@ -4756,13 +4797,13 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "actorLabel",
         "type": "string",
         "required": false,
-        "description": "Actor editor label; pass actorLabel or actorPath"
+        "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
       },
       {
         "name": "actorPath",
         "type": "string",
         "required": false,
-        "description": "Full actor object path; the unambiguous selector, and it wins over actorLabel"
+        "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
       },
       {
         "name": "mobility",
@@ -4779,13 +4820,13 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "actorLabel",
         "type": "string",
         "required": false,
-        "description": "Actor editor label; pass actorLabel or actorPath"
+        "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
       },
       {
         "name": "actorPath",
         "type": "string",
         "required": false,
-        "description": "Full actor object path; the unambiguous selector, and it wins over actorLabel"
+        "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
       },
       {
         "name": "propertyName",
@@ -4815,7 +4856,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "pieInstance",
         "type": "integer",
         "required": false,
-        "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients"
+        "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients",
+        "minimum": 0
       }
     ]
   },
@@ -4826,13 +4868,13 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "actorLabel",
         "type": "string",
         "required": false,
-        "description": "Actor editor label; pass actorLabel or actorPath"
+        "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
       },
       {
         "name": "actorPath",
         "type": "string",
         "required": false,
-        "description": "Full actor object path; the unambiguous selector, and it wins over actorLabel"
+        "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
       },
       {
         "name": "tags",
@@ -4923,7 +4965,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "dryRun",
         "type": "boolean",
         "required": false,
-        "description": "Report what would change without writing"
+        "description": "Report what would change without writing",
+        "default": false
       },
       {
         "name": "transactionLabel",
@@ -4982,13 +5025,13 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "actorLabel",
         "type": "string",
         "required": false,
-        "description": "Actor editor label; pass actorLabel or actorPath"
+        "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
       },
       {
         "name": "actorPath",
         "type": "string",
         "required": false,
-        "description": "Full actor object path; the unambiguous selector, and it wins over actorLabel"
+        "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
       },
       {
         "name": "componentName",
@@ -5018,7 +5061,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "pieInstance",
         "type": "integer",
         "required": false,
-        "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients"
+        "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients",
+        "minimum": 0
       }
     ]
   },
@@ -5029,13 +5073,13 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "actorLabel",
         "type": "string",
         "required": false,
-        "description": "Actor editor label; pass actorLabel or actorPath"
+        "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
       },
       {
         "name": "actorPath",
         "type": "string",
         "required": false,
-        "description": "Full actor object path; the unambiguous selector, and it wins over actorLabel"
+        "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
       },
       {
         "name": "skeletalMesh",
@@ -5060,7 +5104,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "pieInstance",
         "type": "integer",
         "required": false,
-        "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients"
+        "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients",
+        "minimum": 0
       }
     ],
     "choices": [
@@ -5122,13 +5167,13 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "actorLabel",
         "type": "string",
         "required": false,
-        "description": "Actor editor label; pass actorLabel or actorPath"
+        "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
       },
       {
         "name": "actorPath",
         "type": "string",
         "required": false,
-        "description": "Full actor object path; the unambiguous selector, and it wins over actorLabel"
+        "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
       },
       {
         "name": "componentName",
@@ -5166,13 +5211,13 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "actorLabel",
         "type": "string",
         "required": false,
-        "description": "Actor editor label; pass actorLabel or actorPath"
+        "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
       },
       {
         "name": "actorPath",
         "type": "string",
         "required": false,
-        "description": "Full actor object path; the unambiguous selector, and it wins over actorLabel"
+        "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
       },
       {
         "name": "world",
@@ -5184,7 +5229,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "pieInstance",
         "type": "integer",
         "required": false,
-        "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients"
+        "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients",
+        "minimum": 0
       },
       {
         "name": "fogDensity",
@@ -5276,13 +5322,13 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "actorLabel",
         "type": "string",
         "required": false,
-        "description": "Actor editor label; pass actorLabel or actorPath"
+        "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
       },
       {
         "name": "actorPath",
         "type": "string",
         "required": false,
-        "description": "Full actor object path; the unambiguous selector, and it wins over actorLabel"
+        "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
       },
       {
         "name": "intensity",
@@ -5373,13 +5419,13 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "actorLabel",
         "type": "string",
         "required": false,
-        "description": "Actor editor label; pass actorLabel or actorPath"
+        "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
       },
       {
         "name": "actorPath",
         "type": "string",
         "required": false,
-        "description": "Full actor object path; the unambiguous selector, and it wins over actorLabel"
+        "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
       },
       {
         "name": "componentName",
@@ -5448,13 +5494,13 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "actorLabel",
         "type": "string",
         "required": false,
-        "description": "Actor editor label; pass actorLabel or actorPath"
+        "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
       },
       {
         "name": "actorPath",
         "type": "string",
         "required": false,
-        "description": "Full actor object path; the unambiguous selector, and it wins over actorLabel"
+        "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
       },
       {
         "name": "points",
@@ -5627,13 +5673,13 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "actorLabel",
         "type": "string",
         "required": false,
-        "description": "Actor editor label; pass actorLabel or actorPath"
+        "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
       },
       {
         "name": "actorPath",
         "type": "string",
         "required": false,
-        "description": "Full actor object path; the unambiguous selector, and it wins over actorLabel"
+        "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
       },
       {
         "name": "properties",
@@ -5650,13 +5696,13 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "actorLabel",
         "type": "string",
         "required": false,
-        "description": "Actor editor label; pass actorLabel or actorPath"
+        "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
       },
       {
         "name": "actorPath",
         "type": "string",
         "required": false,
-        "description": "Full actor object path; the unambiguous selector, and it wins over actorLabel"
+        "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
       },
       {
         "name": "propertyName",
@@ -5844,7 +5890,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "pieInstance",
         "type": "integer",
         "required": false,
-        "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients"
+        "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients",
+        "minimum": 0
       },
       {
         "name": "multi",
@@ -5861,13 +5908,13 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "actorLabel",
         "type": "string",
         "required": false,
-        "description": "Actor editor label; pass actorLabel or actorPath"
+        "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
       },
       {
         "name": "actorPath",
         "type": "string",
         "required": false,
-        "description": "Full actor object path; the unambiguous selector, and it wins over actorLabel"
+        "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
       },
       {
         "name": "floorOffset",
@@ -5891,7 +5938,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "pieInstance",
         "type": "integer",
         "required": false,
-        "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients"
+        "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients",
+        "minimum": 0
       }
     ]
   },
@@ -5902,13 +5950,13 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "actorLabel",
         "type": "string",
         "required": false,
-        "description": "Actor editor label; pass actorLabel or actorPath"
+        "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
       },
       {
         "name": "actorPath",
         "type": "string",
         "required": false,
-        "description": "Full actor object path; the unambiguous selector, and it wins over actorLabel"
+        "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
       },
       {
         "name": "componentName",
@@ -5988,7 +6036,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "dryRun",
         "type": "boolean",
         "required": false,
-        "description": "Report what would change without writing"
+        "description": "Report what would change without writing",
+        "default": false
       }
     ]
   },
@@ -6205,7 +6254,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "dryRun",
         "type": "boolean",
         "required": false,
-        "description": "Return every computed transform without spawning"
+        "description": "Return every computed transform without spawning",
+        "default": false
       },
       {
         "name": "maxSpawn",
@@ -6467,7 +6517,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "pieInstance",
         "type": "integer",
         "required": false,
-        "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients"
+        "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients",
+        "minimum": 0
       },
       {
         "name": "actorClass",
@@ -6573,7 +6624,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "pieInstance",
         "type": "integer",
         "required": false,
-        "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients"
+        "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients",
+        "minimum": 0
       },
       {
         "name": "maxResults",
@@ -6650,7 +6702,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "pieInstance",
         "type": "integer",
         "required": false,
-        "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients"
+        "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients",
+        "minimum": 0
       }
     ]
   },
@@ -6686,7 +6739,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "dryRun",
         "type": "boolean",
         "required": false,
-        "description": "Report what would change without writing"
+        "description": "Report what would change without writing",
+        "default": false
       }
     ],
     "choices": [
@@ -6710,13 +6764,13 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "actorLabel",
         "type": "string",
         "required": false,
-        "description": "Actor editor label; pass actorLabel or actorPath"
+        "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
       },
       {
         "name": "actorPath",
         "type": "string",
         "required": false,
-        "description": "Full actor object path; the unambiguous selector, and it wins over actorLabel"
+        "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
       },
       {
         "name": "componentName",
@@ -6915,13 +6969,13 @@ export const paramsClauses: Readonly<Record<string, string>> = {
 export const schema: Record<string, z.ZodType> = {
   actorClass: z.string().optional().describe("Actor class: short name, /Script path or Blueprint class path (place_actor, spawn_actors_batch, spawn_transient_actor). Owning actor class, resolved as a class or matched as a substring (query_components)"),
   actorClassFilter: z.string().optional().describe("Alias for classFilter"),
-  actorLabel: z.string().optional().describe("Actor editor label; pass actorLabel or actorPath (add_actor_tag, add_component_to_actor, add_hismc_instances, add_instances, add_post_process_blendable, aim_actor_at, delete_actor, export_actor_fbx, get_actor_bounds, get_actor_details, get_component_details, get_component_tree, get_instance_transforms, get_post_process_settings, get_spline_info, get_water_state, list_actor_tags, move_actor, nudge_component, read_actor_motion, rebuild_water_zone, remove_actor_tag, remove_component_from_actor, remove_instance, rename_actor_object, restore_component_relative_transform, select_component, set_actor_material, set_actor_mobility, set_actor_property, set_actor_tags, set_component_property, set_component_skeletal_mesh, set_fixed_exposure, set_fog_properties, set_light_properties, set_post_process_settings, set_spline_points, set_volume_properties, set_water_body_property, snap_actor_to_floor, snap_instances_to_surface, update_instance_transform). Label of the actor that owns the spline; pass actorLabel or actorPath (build_spline_meshes, clear_spline_generated, scatter_along_spline). Transient actor label (destroy_transient_actor). Actor label, name or path; pass actorLabel or actorPath (get_skinned_vertices). Blockout actor label (match_asset_to_blockout, replace_blockout). Brush or volume to rebuild (rebuild_brush). Replacement actor label (restore_blockout)"),
+  actorLabel: z.string().optional().describe("Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then (add_actor_tag, add_component_to_actor, add_hismc_instances, add_instances, add_post_process_blendable, aim_actor_at, delete_actor, export_actor_fbx, get_actor_bounds, get_actor_details, get_component_details, get_component_tree, get_instance_transforms, get_post_process_settings, get_spline_info, get_water_state, list_actor_tags, move_actor, nudge_component, read_actor_motion, rebuild_water_zone, remove_actor_tag, remove_component_from_actor, remove_instance, rename_actor_object, restore_component_relative_transform, select_component, set_actor_material, set_actor_mobility, set_actor_property, set_actor_tags, set_component_property, set_component_skeletal_mesh, set_fixed_exposure, set_fog_properties, set_light_properties, set_post_process_settings, set_spline_points, set_volume_properties, set_water_body_property, snap_actor_to_floor, snap_instances_to_surface, update_instance_transform). Label of the actor that owns the spline; pass actorLabel or actorPath (build_spline_meshes, clear_spline_generated, scatter_along_spline). Transient actor label (destroy_transient_actor). Actor label, name or path; pass actorLabel or actorPath (get_skinned_vertices). Blockout actor label (match_asset_to_blockout, replace_blockout). Brush or volume to rebuild (rebuild_brush). Replacement actor label (restore_blockout)"),
   actorLabelA: z.string().optional().describe("First actor label; pass actorLabelA or actorPathA"),
   actorLabelB: z.string().optional().describe("Second actor label; pass actorLabelB or actorPathB"),
   actorLabelContains: z.string().optional().describe("Case-insensitive substring over the actor's editor label"),
   actorLabelPrefix: z.string().optional().describe("Case-sensitive prefix over the actor's editor label"),
   actorLabels: z.array(z.string()).optional().describe("Exact actor editor labels (batch_set_actor_properties, batch_translate, bulk_set_component_property, convert_brushes_to_static_mesh, read_actor_motion, recreate_physics_state, remove_components_by_class, rerun_construction_scripts, select_actors, set_actor_folder_path, set_actor_hlod_layer, set_component_materials, set_editor_visibility). HLOD actors to build (default: every loaded HLOD actor) (build_hlod_actors). Labels (or names or paths) of the actors to replace (replace_actors_with_asset, replace_actors_with_class)"),
-  actorPath: z.string().optional().describe("Full actor object path; the unambiguous selector, and it wins over actorLabel (add_actor_tag, add_component_to_actor, add_hismc_instances, add_instances, add_post_process_blendable, aim_actor_at, delete_actor, export_actor_fbx, get_actor_bounds, get_actor_details, get_component_details, get_component_tree, get_instance_transforms, get_post_process_settings, get_spline_info, get_water_state, list_actor_tags, move_actor, nudge_component, read_actor_motion, rebuild_water_zone, remove_actor_tag, remove_component_from_actor, remove_instance, rename_actor_object, restore_component_relative_transform, select_component, set_actor_material, set_actor_mobility, set_actor_property, set_actor_tags, set_component_property, set_component_skeletal_mesh, set_fixed_exposure, set_fog_properties, set_light_properties, set_post_process_settings, set_spline_points, set_volume_properties, set_water_body_property, snap_actor_to_floor, snap_instances_to_surface, update_instance_transform). Full path of the actor that owns the spline; wins over actorLabel (build_spline_meshes, clear_spline_generated, scatter_along_spline). Transient actor object path (destroy_transient_actor). Actor object path; preferred when labels repeat (get_skinned_vertices). Blockout actor path; the unambiguous selector (match_asset_to_blockout, replace_blockout). Object path of the brush; preferred over actorLabel when known (rebuild_brush). Replacement actor path (restore_blockout)"),
+  actorPath: z.string().optional().describe("Full actor object path, the unambiguous selector; wins over actorLabel (add_actor_tag, add_component_to_actor, add_hismc_instances, add_instances, add_post_process_blendable, aim_actor_at, delete_actor, export_actor_fbx, get_actor_bounds, get_actor_details, get_component_details, get_component_tree, get_instance_transforms, get_post_process_settings, get_skinned_vertices, get_spline_info, get_water_state, list_actor_tags, move_actor, nudge_component, read_actor_motion, rebuild_water_zone, remove_actor_tag, remove_component_from_actor, remove_instance, rename_actor_object, restore_component_relative_transform, select_component, set_actor_material, set_actor_mobility, set_actor_property, set_actor_tags, set_component_property, set_component_skeletal_mesh, set_fixed_exposure, set_fog_properties, set_light_properties, set_post_process_settings, set_spline_points, set_volume_properties, set_water_body_property, snap_actor_to_floor, snap_instances_to_surface, update_instance_transform). Full path of the actor that owns the spline; wins over actorLabel (build_spline_meshes, clear_spline_generated, scatter_along_spline). Transient actor object path (destroy_transient_actor). Blockout actor path; the unambiguous selector (match_asset_to_blockout, replace_blockout). Object path of the brush; preferred over actorLabel when known (rebuild_brush). Replacement actor path (restore_blockout)"),
   actorPathA: z.string().optional().describe("First actor object path"),
   actorPathB: z.string().optional().describe("Second actor object path"),
   actorPaths: z.array(z.string()).optional().describe("Full actor object paths (batch_translate, read_actor_motion, select_actors). Blockout actor paths (replace_blockout). Replacement actor paths, as replace_blockout returns them (restore_blockout)"),
@@ -7119,7 +7173,7 @@ export const schema: Record<string, z.ZodType> = {
   parentPath: z.string().optional().describe("Parent actor object path"),
   partitionClass: z.string().optional().describe("RuntimePartition class (default /Script/Engine.RuntimePartitionLHGrid)"),
   partitionName: z.string().optional().describe("Runtime partition name, as list_runtime_partitions reports it (add_hlod_setup, get_runtime_partition, list_hlod_setups, remove_hlod_setup, remove_runtime_partition, rename_runtime_partition, set_hlod_setup_layers, set_runtime_partition_properties). Name of the runtime partition to add (add_runtime_partition)"),
-  pieInstance: z.number().int().optional().describe("Which PIE world when world is pie: 0 = server or primary, 1..N = clients"),
+  pieInstance: z.number().int().min(0).optional().describe("Which PIE world when world is pie: 0 = server or primary, 1..N = clients"),
   point: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("World point to project onto the navmesh"),
   points: z.array(z.object({ x: z.number().optional().describe("World X, with y and z"), y: z.number().optional().describe("World Y"), z: z.number().optional().describe("World Z"), location: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("World position, instead of x, y, z"), position: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("World position, instead of x, y, z"), worldLocation: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("World position, instead of x, y, z"), pointType: z.string().optional().describe("Linear | Curve (default) | Constant | CurveClamped | CurveCustomTangent"), arriveTangent: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("World arrive tangent; pass both tangents or neither"), leaveTangent: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("World leave tangent; pass both tangents or neither"), rotation: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("World rotation as {x: pitch, y: yaw, z: roll} in degrees"), scale: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Point scale"), inputKey: z.number().optional().describe("Input key; keys must strictly increase (default the point's index)") })).optional().describe("Points in world space: a bare {x, y, z} or the typed form; validated as a batch before anything is cleared"),
   pointType: z.string().optional().describe("Curve (default) | Linear | CurveClamped | Constant, for every point"),

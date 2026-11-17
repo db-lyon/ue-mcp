@@ -134,7 +134,7 @@ void FGameplayHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	};
 	auto SaveFlag = []()
 	{
-		return MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Persist the asset (default true); false defers the write"));
+		return MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Persist the asset (default true); false defers the write")).Default(true);
 	};
 	auto PieInstance = [](const TCHAR* Description)
 	{

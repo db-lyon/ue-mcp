@@ -42,6 +42,13 @@ namespace MCPBatchHandlerTests
 				Order.Add(Tag);
 				return MCPError(TEXT("probe refused ") + Tag);
 			});
+			// Refused by its own declaration, as the undo-stack actions are.
+			Registry.RegisterHandler(TEXT("batch_probe_refused"), [this](const TSharedPtr<FJsonObject>& Params) -> TSharedPtr<FJsonValue>
+			{
+				Order.Add(OptionalString(Params, TEXT("tag")));
+				return MCPResult(MCPSuccess());
+			}, { MCPParam::Optional(TEXT("tag"), EMCPParamType::String, TEXT("probe")) },
+				MCPSpec::RefusedInBatch(TEXT("the probe walks the undo stack")));
 			FBatchHandlers::RegisterHandlers(Registry);
 		}
 
@@ -214,8 +221,9 @@ bool FMCPBatchRefusalsTest::RunTest(const FString& Parameters)
 	TestFalse(TEXT("a nested batch is refused"), Success(Body));
 	TestTrue(TEXT("with the reason"), ErrorText(Body).Contains(TEXT("cannot run inside a batch")));
 
-	Body = Probe.Run({ FProbeRegistry::Step(TEXT("undo"), TEXT("first")) });
-	TestFalse(TEXT("an undo-stack action is refused"), Success(Body));
+	Body = Probe.Run({ FProbeRegistry::Step(TEXT("batch_probe_refused"), TEXT("first")) });
+	TestFalse(TEXT("an action that declares RefusedInBatch is refused"), Success(Body));
+	TestTrue(TEXT("with the reason it declares"), ErrorText(Body).Contains(TEXT("the probe walks the undo stack")));
 
 	Body = Probe.Run({ FProbeRegistry::Step(TEXT("batch_probe_ok"), TEXT("first")) }, TEXT("retry"));
 	TestFalse(TEXT("an onError the batch does not know is refused"), Success(Body));

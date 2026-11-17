@@ -843,7 +843,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "pieInstance",
         "type": "integer",
         "required": false,
-        "description": "Which PIE instance, when several are running"
+        "description": "Which PIE world: 0 = server or primary, 1..N = clients. See editor(list_pie_instances)",
+        "minimum": 0
       },
       {
         "name": "includeDebugStrings",
@@ -1191,7 +1192,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "pieInstance",
         "type": "integer",
         "required": false,
-        "description": "Which PIE instance, when several are running"
+        "description": "Which PIE world: 0 = server or primary, 1..N = clients. See editor(list_pie_instances)",
+        "minimum": 0
       }
     ]
   },
@@ -1238,7 +1240,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "pieInstance",
         "type": "integer",
         "required": false,
-        "description": "Which PIE instance, when several are running"
+        "description": "Which PIE world: 0 = server or primary, 1..N = clients. See editor(list_pie_instances)",
+        "minimum": 0
       }
     ]
   },
@@ -1798,7 +1801,7 @@ export const schema: Record<string, z.ZodType> = {
   parameters: z.array(z.record(z.string(), z.unknown())).optional().describe("Root parameter definitions [{name, type}] where type is float, int32, bool, string, name or double"),
   paramName: z.string().optional().describe("Parameter name"),
   paramType: z.string().optional().describe("Bool, Int32, Int64, Float, Double, Name, String or Text"),
-  pieInstance: z.number().int().optional().describe("Which PIE instance, when several are running"),
+  pieInstance: z.number().int().min(0).optional().describe("Which PIE world: 0 = server or primary, 1..N = clients. See editor(list_pie_instances)"),
   priority: z.string().optional().describe("Low, Normal, Medium, High or Critical"),
   propertyName: z.string().optional().describe("Property to set (set_state_tree_evaluator_instance_property, set_state_tree_evaluator_property, set_state_tree_global_task_instance_property, set_state_tree_global_task_property, set_state_tree_task_instance_property, set_state_tree_task_property). Property to write. Omit to replace the whole struct with value (set_state_tree_node_data). Property to set: name, type, selectionBehavior, bEnabled, weight, linkedAsset, description, tag, customTickRate or color (set_state_tree_state_property)"),
   schema: z.string().optional().describe("Schema class path, e.g. /Script/GameplayStateTreeModule.StateTreeComponentSchema (default: the first concrete schema this editor has)"),

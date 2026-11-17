@@ -90,7 +90,7 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "onConflict",
         "type": "string",
         "required": false,
-        "description": "skip (default) returns the existing asset, error refuses; it never overwrites"
+        "description": "When the asset already exists: skip (default) returns it untouched | error refuses; it never overwrites"
       },
       {
         "name": "settings",
@@ -138,7 +138,7 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "onConflict",
         "type": "string",
         "required": false,
-        "description": "skip (default) returns the existing asset, error refuses; it never overwrites"
+        "description": "When the asset already exists: skip (default) returns it untouched | error refuses; it never overwrites"
       },
       {
         "name": "maxCount",
@@ -186,7 +186,7 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "onConflict",
         "type": "string",
         "required": false,
-        "description": "skip (default) returns the existing asset, error refuses; it never overwrites"
+        "description": "When the asset already exists: skip (default) returns it untouched | error refuses; it never overwrites"
       },
       {
         "name": "format",
@@ -222,7 +222,7 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "onConflict",
         "type": "string",
         "required": false,
-        "description": "skip (default) returns the existing asset, error refuses; it never overwrites"
+        "description": "When the asset already exists: skip (default) returns it untouched | error refuses; it never overwrites"
       },
       {
         "name": "properties",
@@ -258,7 +258,7 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "onConflict",
         "type": "string",
         "required": false,
-        "description": "skip (default) returns the existing asset, error refuses; it never overwrites"
+        "description": "When the asset already exists: skip (default) returns it untouched | error refuses; it never overwrites"
       }
     ],
     "contractExempt": "Creates and saves a SoundCue asset named by the contract values"
@@ -282,7 +282,7 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "onConflict",
         "type": "string",
         "required": false,
-        "description": "skip (default) returns the existing asset, error refuses; it never overwrites"
+        "description": "When the asset already exists: skip (default) returns it untouched | error refuses; it never overwrites"
       },
       {
         "name": "fadeInTime",
@@ -351,7 +351,7 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "onConflict",
         "type": "string",
         "required": false,
-        "description": "skip (default) returns the existing asset, error refuses; it never overwrites"
+        "description": "When the asset already exists: skip (default) returns it untouched | error refuses; it never overwrites"
       },
       {
         "name": "parentPath",
@@ -603,7 +603,7 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "onConflict",
         "type": "string",
         "required": false,
-        "description": "skip (default) returns the existing asset, error refuses; it never overwrites"
+        "description": "When the asset already exists: skip (default) returns it untouched | error refuses; it never overwrites"
       },
       {
         "name": "format",
@@ -1495,7 +1495,7 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "onConflict",
         "type": "string",
         "required": false,
-        "description": "skip (default) returns the existing asset, error refuses; it never overwrites"
+        "description": "When the asset already exists: skip (default) returns it untouched | error refuses; it never overwrites"
       },
       {
         "name": "nodes",
@@ -1776,7 +1776,7 @@ export const schema: Record<string, z.ZodType> = {
   nodeType: z.string().optional().describe("wave_player | mixer | random | modulator | attenuation | looping | concatenator | delay | switch"),
   nodeVariant: z.string().optional().describe("Node class variant, e.g. Audio"),
   offset: z.number().optional().describe("Refused. The row offset was replaced by cursor paging (#730); pass cursor and limit instead"),
-  onConflict: z.string().optional().describe("skip (default) returns the existing asset, error refuses; it never overwrites (create_attenuation, create_concurrency, create_metasound_source, create_sound_class, create_sound_cue, create_sound_mix, create_submix, metasound_author, soundcue_author). skip | error | rename when an actor with that label exists (default skip) (spawn_ambient_sound)"),
+  onConflict: z.string().optional().describe("When the asset already exists: skip (default) returns it untouched | error refuses; it never overwrites (create_attenuation, create_concurrency, create_metasound_source, create_sound_class, create_sound_cue, create_sound_mix, create_submix, metasound_author, soundcue_author). skip | error | rename when an actor with that label exists (default skip) (spawn_ambient_sound)"),
   oneShot: z.boolean().optional().describe("Declare the one-shot interface (default true)"),
   outputs: z.array(z.object({ name: z.string().describe("Graph output name"), dataType: z.string().describe("MetaSound data type") })).optional().describe("Graph outputs to add"),
   outputVolume: z.number().optional().describe("Output volume"),

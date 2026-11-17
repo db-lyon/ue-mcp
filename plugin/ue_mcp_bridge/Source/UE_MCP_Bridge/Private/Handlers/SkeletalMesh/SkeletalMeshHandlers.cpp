@@ -761,7 +761,7 @@ void FSkeletalMeshHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("moveBone"), EType::Boolean, TEXT("Move the bone's reference pose with its vertices (default true); false moves only the vertices")),
 		MCPParam::Optional(TEXT("lods"), EType::Array, TEXT("LOD indices whose source vertices move (default every LOD); generated LODs follow their base LOD")).Items(EType::Integer),
 		MCPSharedParam::DryRun().Describe(TEXT("Validate every LOD and report what would move without writing anything")),
-		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save the mesh after the rebuild (default true)")),
+		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save the mesh after the rebuild (default true)")).Default(true),
 	}, MCPSpec::AtLeastOne({ { TEXT("translation") }, { TEXT("rotation") } }));
 	Registry.RegisterHandlerWithTimeout(TEXT("generate_skeletal_mesh_lods"), &GenerateSkeletalMeshLods, 600.0f, {
 		MCPParam::Optional(TEXT("assetPath"), EType::String, TEXT("One SkeletalMesh")),
@@ -773,7 +773,7 @@ void FSkeletalMeshHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("regenerateImported"), EType::Boolean, TEXT("Also regenerate LODs that were imported rather than generated (default false)")),
 		MCPParam::Optional(TEXT("skipExisting"), EType::Boolean, TEXT("Skip a mesh already at lodCount (default true)")),
 		MCPSharedParam::DryRun().Describe(TEXT("Report each mesh's LODs and what would happen without changing anything")),
-		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save each changed mesh (default true)")),
+		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save each changed mesh (default true)")).Default(true),
 	}, MCPSpec::ExactlyOne({ { TEXT("assetPath") }, { TEXT("assetPaths") }, { TEXT("directory") } }));
 }
 

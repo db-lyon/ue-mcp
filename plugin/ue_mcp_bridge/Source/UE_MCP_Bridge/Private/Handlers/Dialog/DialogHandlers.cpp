@@ -430,6 +430,14 @@ void FDialogHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	}, MCPSpec::ContractExempt(TEXT("closes an open editor window")).ModalSafe());
 }
 
+TSharedPtr<FJsonValue> FDialogHandlers::ArmPolicy(const FString& Pattern, const FString& Response)
+{
+	TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+	Params->SetStringField(TEXT("pattern"), Pattern);
+	Params->SetStringField(TEXT("response"), Response);
+	return SetDialogPolicy(Params);
+}
+
 void FDialogHandlers::InstallDialogHook()
 {
 	if (bHookInstalled)

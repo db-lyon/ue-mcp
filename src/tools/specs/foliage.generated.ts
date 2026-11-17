@@ -157,7 +157,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "save",
         "type": "boolean",
         "required": false,
-        "description": "Save each changed FoliageType package (default true)"
+        "description": "Save each changed FoliageType package (default true)",
+        "default": true
       },
       {
         "name": "maxTypes",
@@ -365,7 +366,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "dryRun",
         "type": "boolean",
         "required": false,
-        "description": "Report what would be removed without removing it"
+        "description": "Report what would be removed without removing it",
+        "default": false
       }
     ]
   },
@@ -449,7 +451,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "save",
         "type": "boolean",
         "required": false,
-        "description": "Save the spawner package after a change (default true)"
+        "description": "Save the spawner package after a change (default true)",
+        "default": true
       }
     ]
   },

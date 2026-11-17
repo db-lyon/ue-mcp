@@ -368,7 +368,7 @@ void FEditorHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		ObjectPathParam(TEXT("Object, asset, class or Blueprint path. A class or Blueprint resolves to its default object")),
 		PropertyNameParam(),
 		MCPParam::Required(TEXT("value"), EType::Any, TEXT("New value as structured JSON, the form get_property returns under value")),
-		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save the package to disk after the write (default true; false leaves it dirty)")),
+		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save the package to disk after the write (default true; false leaves it dirty)")).Default(true),
 	});
 	Registry.RegisterHandler(TEXT("get_property"), &GetProperty, {
 		ObjectPathParam(TEXT("Object, asset, class or Blueprint path. A class or Blueprint resolves to its default object")),

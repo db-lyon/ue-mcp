@@ -77,7 +77,7 @@ void FFoliageHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("fromLevel"), EType::Boolean, TEXT("Take the foliage types placed in the open level")),
 		MCPParam::Optional(TEXT("propertyNames"), EType::Array, TEXT("Extra properties to report on each row without filtering on them")).Items(EType::String),
 		MCPParam::Optional(TEXT("dryRun"), EType::Boolean, TEXT("Preview without writing (default TRUE)")),
-		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save each changed FoliageType package (default true)")),
+		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save each changed FoliageType package (default true)")).Default(true),
 		MCPParam::Optional(TEXT("maxTypes"), EType::Integer, TEXT("Refuse to scan more than this many types (default 2000)")),
 	});
 
@@ -131,7 +131,7 @@ void FFoliageHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Required(TEXT("spawnerPath"), EType::String, TEXT("ProceduralFoliageSpawner asset path")),
 		MCPParam::Required(TEXT("foliageTypePaths"), EType::Array, TEXT("FoliageType assets, or Blueprints whose class derives from FoliageType")).Items(EType::String),
 		MCPParam::Optional(TEXT("mode"), EType::String, TEXT("replace (default) | add | remove")),
-		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save the spawner package after a change (default true)")),
+		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save the spawner package after a change (default true)")).Default(true),
 	});
 	// A tile simulation over a large volume plus a world trace per generated
 	// point outlives the default handler timeout on anything but a small volume.
