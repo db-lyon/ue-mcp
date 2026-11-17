@@ -1,29 +1,26 @@
 import { describe, expect, it } from "vitest";
-import { NO_MODEL_MESSAGE, NO_MODEL_WAY_FORWARD, registerModelProvider, resolveModelProvider } from "../../src/flow/model-provider.js";
+import { modelSource, NO_MODEL_MESSAGE, registerModelProvider, resolveModelProvider } from "../../src/flow/model-provider.js";
 import { EXTENSION_API_MIN_VERSION, EXTENSION_API_VERSION, extensionApiSupported } from "../../src/contract/daemon.js";
 import { PLAYTEST_BUILTIN_TASKS, PLAYTEST_DRAFT_OPTIONS, PLAYTEST_RETRIES, playtestFlow, SCRIPT_DRAFT_SCHEMA } from "../../src/flow/playtest/index.js";
 
 const provider = (text: string) => ({ complete: async () => ({ text }) });
 
 describe("the model behind flow agent steps", () => {
-  it("prefers the newest live registration, and has none of its own", async () => {
-    const savedKey = process.env.ANTHROPIC_API_KEY;
-    process.env.ANTHROPIC_API_KEY = "sk-ant-x";
-    try {
-      expect(resolveModelProvider()).toBeNull();
-    } finally {
-      if (savedKey === undefined) delete process.env.ANTHROPIC_API_KEY;
-      else process.env.ANTHROPIC_API_KEY = savedKey;
-    }
+  it("prefers the newest live registration, then the env key, then nothing", async () => {
+    expect(resolveModelProvider({})).toBeNull();
+    expect(modelSource({})).toBeNull();
+    expect(modelSource({ ANTHROPIC_API_KEY: "sk-ant-x" })).toBe("env");
+    expect(resolveModelProvider({ ANTHROPIC_API_KEY: "sk-ant-x" })).not.toBeNull();
 
     const offA = registerModelProvider(provider("a"));
     const offB = registerModelProvider(provider("b"));
-    expect((await resolveModelProvider()!.complete({})).text).toBe("b");
+    expect(modelSource({ ANTHROPIC_API_KEY: "sk-ant-x" })).toBe("extension");
+    expect((await resolveModelProvider({})!.complete({})).text).toBe("b");
     offB();
-    expect((await resolveModelProvider()!.complete({})).text).toBe("a");
+    expect((await resolveModelProvider({})!.complete({})).text).toBe("a");
     offA();
     offA();
-    expect(resolveModelProvider()).toBeNull();
+    expect(resolveModelProvider({})).toBeNull();
   });
 
   it("refuses something that is not a provider", () => {
@@ -32,11 +29,6 @@ describe("the model behind flow agent steps", () => {
 
   it("names the missing model in one sentence", () => {
     expect(NO_MODEL_MESSAGE).toBe("No model is configured for flow agent steps.");
-  });
-
-  it("says how to get one: the provider extension and the daemon it loads in", () => {
-    expect(NO_MODEL_WAY_FORWARD).toContain("ue-mcp install anthropic");
-    expect(NO_MODEL_WAY_FORWARD).toContain("daemon");
   });
 });
 

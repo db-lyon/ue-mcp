@@ -370,8 +370,8 @@ export function playtestFlow(): Record<string, unknown> {
         + "context? (what to test), profile?, name?, package_path?. Gathers the target Blueprint, its input mappings and the "
         + `values PIE can watch, drafts with an agent step, checks the draft with pie(script_validate) and returns refusals to the model up to ${PLAYTEST_RETRIES} times, `
         + "then saves it with pie(script_create). Fails before drafting when target is a path that resolves to nothing, and with the "
-        + "last errors when every draft is refused. Needs a model from a daemon "
-        + "extension's provider (`ue-mcp install anthropic` installs one).",
+        + "last errors when every draft is refused. Needs a model: a daemon "
+        + "extension's provider, or ANTHROPIC_API_KEY.",
       steps,
     },
   };

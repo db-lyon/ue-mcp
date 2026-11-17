@@ -1,6 +1,6 @@
 /**
  * The built-in playtest flow and the model behind flow agent steps: a daemon
- * extension's provider through /v1/flows, the first-party anthropic extension
+ * extension's provider through /v1/flows, the ANTHROPIC_API_KEY fallback
  * against a local stand-in for the Messages API, and the refusal when no
  * model is configured. The editor is a fake bridge whose pie_script_validate
  * refuses the first draft, so the flow has to hand the errors back.
@@ -10,7 +10,7 @@ import * as path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { covers } from "../helpers/covers.js";
 import { FakeBridge } from "../fake-bridge.js";
-import { FakeHttp, McpServer, REPO_ROOT, Sandbox, stopSandboxDaemons, waitFor } from "./harness.js";
+import { FakeHttp, json, McpServer, Sandbox, stopSandboxDaemons, waitFor } from "./harness.js";
 import { call, startDaemonCli, writeExtension, type Discovery } from "./daemon-fakes.js";
 
 type Json = Record<string, unknown>;
@@ -49,31 +49,6 @@ function editorLike(created: Json[]): Record<string, (p: Json) => unknown> {
 /** Which drafts the model produced, judged by what each prompt carried. */
 function draftFor(prompt: string): Json {
   return prompt.includes("was refused") ? GOOD : BAD;
-}
-
-/** extensions/anthropic installed alone into a fresh extensions directory, as a release zip would land; returns that directory. */
-function installAnthropic(label: string): string {
-  const root = sb.path(`extensions-${label}`);
-  const dir = path.join(root, "anthropic");
-  fs.cpSync(path.join(REPO_ROOT, "extensions", "anthropic"), dir, { recursive: true });
-  const pkg = JSON.parse(fs.readFileSync(path.join(dir, "package.json"), "utf8")) as Json;
-  fs.writeFileSync(path.join(dir, "package.json"), JSON.stringify({ ...pkg, version: "1.0.0" }));
-  return root;
-}
-
-/** A local stand-in for the Messages API that answers with `draft(prompt)`. */
-function messagesApi(draft: (prompt: string) => Json): Promise<FakeHttp> {
-  return FakeHttp.start((req) => {
-    const body = JSON.parse(req.body) as { model: string; messages: Array<{ content: unknown }> };
-    const prompt = body.messages.map((m) => (typeof m.content === "string" ? m.content : JSON.stringify(m.content))).join("\n");
-    return {
-      json: {
-        id: "msg_fake", type: "message", role: "assistant", model: body.model,
-        content: [{ type: "text", text: JSON.stringify(draft(prompt)) }],
-        stop_reason: "end_turn", stop_sequence: null, usage: { input_tokens: 12, output_tokens: 34 },
-      },
-    };
-  });
 }
 
 let sb: Sandbox;
@@ -140,26 +115,31 @@ describe("the playtest flow", () => {
     }
   }, 120_000);
 
-  it("runs on the anthropic extension with ANTHROPIC_API_KEY, and fails with the errors once every draft is refused", async () => {
-    covers("flow.agent.anthropic-extension", "flow.playtest");
+  it("falls back to ANTHROPIC_API_KEY, and fails with the errors once every draft is refused", async () => {
+    covers("flow.agent.env-model", "flow.playtest");
     const project = sb.makeProject("PlaytestEnv");
     const created: Json[] = [];
     const bridge = await FakeBridge.start({ projectDir: path.dirname(project), handlers: editorLike(created), answerAnything: false });
     let alwaysBad = false;
-    const api = await messagesApi((prompt) => (alwaysBad ? BAD : draftFor(prompt)));
+    const api = await FakeHttp.start((req) => {
+      const body = JSON.parse(req.body) as { model: string; messages: Array<{ content: unknown }> };
+      const prompt = body.messages.map((m) => (typeof m.content === "string" ? m.content : JSON.stringify(m.content))).join("\n");
+      const draft = alwaysBad ? BAD : draftFor(prompt);
+      return {
+        json: {
+          id: "msg_fake", type: "message", role: "assistant", model: body.model,
+          content: [{ type: "text", text: JSON.stringify(draft) }],
+          stop_reason: "end_turn", stop_sequence: null, usage: { input_tokens: 12, output_tokens: 34 },
+        },
+      };
+    });
+    const server = await McpServer.start(sb, {
+      projects: [project], port: null,
+      env: { ANTHROPIC_API_KEY: "sk-ant-fake-integration", ANTHROPIC_BASE_URL: api.origin },
+    });
     try {
-      const d = await startDaemonCli(sb, project, {
-        UE_MCP_PORT: undefined,
-        UE_MCP_EXTENSIONS_DIR: installAnthropic("env"),
-        ANTHROPIC_API_KEY: "sk-ant-fake-integration",
-        ANTHROPIC_BASE_URL: api.origin,
-      });
-      await waitFor(async () => (await call(d, "GET", "/v1/health")).body.editors[0]?.connected === true, 15_000, "the daemon to reach the fake editor");
-      expect((await call(d, "GET", "/v1/health")).body.extensions).toEqual([{ name: "anthropic", version: "1.0.0" }]);
-
-      const ok = await call(d, "POST", "/v1/flows/playtest/run", { params: { target: BP } });
-      expect(ok.status, ok.text).toBe(200);
-      expect(ok.text).toMatch(/"success":\s*true/);
+      const ok = json<{ success: boolean; steps: Json[] }>(await server.callFlow({ action: "run", flowName: "playtest", params: { target: BP } }));
+      expect(ok.success).toBe(true);
       expect(created).toHaveLength(1);
       const sent = api.requests.filter((r) => r.url.endsWith("/v1/messages"));
       expect(sent.length).toBe(2);
@@ -168,13 +148,13 @@ describe("the playtest flow", () => {
 
       alwaysBad = true;
       created.length = 0;
-      const failed = await call(d, "POST", "/v1/flows/playtest/run", { params: { target: BP } });
+      const failed = await server.callFlow({ action: "run", flowName: "playtest", params: { target: BP } });
       expect(failed.text).toMatch(/still refused after 3 attempts/);
       expect(failed.text).toContain("Helth");
       expect(created).toHaveLength(0);
       expect(bridge.calls.filter((c) => c.method === "pie_script_validate").length).toBe(2 + 3);
     } finally {
-      await stopSandboxDaemons(sb);
+      await server.close();
       await bridge.stop();
       await api.stop();
     }
@@ -185,27 +165,33 @@ describe("the playtest flow", () => {
     const project = sb.makeProject("PlaytestMissing");
     const created: Json[] = [];
     const bridge = await FakeBridge.start({ projectDir: path.dirname(project), handlers: editorLike(created), answerAnything: false });
-    const api = await messagesApi(() => GOOD);
+    const api = await FakeHttp.start((req) => {
+      const body = JSON.parse(req.body) as { model: string };
+      return {
+        json: {
+          id: "msg_fake", type: "message", role: "assistant", model: body.model,
+          content: [{ type: "text", text: JSON.stringify(GOOD) }],
+          stop_reason: "end_turn", stop_sequence: null, usage: { input_tokens: 1, output_tokens: 1 },
+        },
+      };
+    });
+    const server = await McpServer.start(sb, {
+      projects: [project], port: null,
+      env: { ANTHROPIC_API_KEY: "sk-ant-fake-integration", ANTHROPIC_BASE_URL: api.origin },
+    });
     try {
-      const d = await startDaemonCli(sb, project, {
-        UE_MCP_PORT: undefined,
-        UE_MCP_EXTENSIONS_DIR: installAnthropic("missing"),
-        ANTHROPIC_API_KEY: "sk-ant-fake-integration",
-        ANTHROPIC_BASE_URL: api.origin,
-      });
-      await waitFor(async () => (await call(d, "GET", "/v1/health")).body.editors[0]?.connected === true, 15_000, "the daemon to reach the fake editor");
-      const r = await call(d, "POST", "/v1/flows/playtest/run", { params: { target: MISSING } });
+      const r = await server.callFlow({ action: "run", flowName: "playtest", params: { target: MISSING } });
       expect(r.text).toContain(`playtest target ${MISSING} does not exist`);
       expect(r.text).not.toMatch(/"success":\s*true/);
       expect(api.requests.filter((q) => q.url.endsWith("/v1/messages"))).toHaveLength(0);
       expect(bridge.calls.some((c) => c.method === "pie_script_validate")).toBe(false);
       expect(created).toHaveLength(0);
 
-      const described = await call(d, "POST", "/v1/flows/playtest/run", { params: { target: "the hero" } });
-      expect(described.text).toMatch(/"success":\s*true/);
+      const described = json<{ success: boolean }>(await server.callFlow({ action: "run", flowName: "playtest", params: { target: "the hero" } }));
+      expect(described.success).toBe(true);
       expect(created).toHaveLength(1);
     } finally {
-      await stopSandboxDaemons(sb);
+      await server.close();
       await bridge.stop();
       await api.stop();
     }
@@ -216,12 +202,10 @@ describe("the playtest flow", () => {
     const project = sb.makeProject("PlaytestNoModel");
     const created: Json[] = [];
     const bridge = await FakeBridge.start({ projectDir: path.dirname(project), handlers: editorLike(created), answerAnything: false });
-    // A key alone is not a model any more: the provider that reads it is an extension.
-    const server = await McpServer.start(sb, { projects: [project], port: null, env: { ANTHROPIC_API_KEY: "sk-ant-fake-integration" } });
+    const server = await McpServer.start(sb, { projects: [project], port: null });
     try {
       const r = await server.callFlow({ action: "run", flowName: "playtest", params: { target: BP } });
       expect(r.text).toContain(NO_MODEL);
-      expect(r.text).toContain("ue-mcp install anthropic");
       expect(created).toHaveLength(0);
       expect(bridge.calls.some((c) => c.method === "pie_script_validate")).toBe(false);
     } finally {

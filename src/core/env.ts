@@ -83,6 +83,12 @@ export const ENV_VARS = {
   // ── Flow HTTP surface ──────────────────────────────────────────────
   /** Bearer token for the flow HTTP server, over a freshly generated one. */
   httpToken: "UE_MCP_HTTP_TOKEN",
+  /** Model a flow agent step uses when it names none and no extension provides one. */
+  flowModel: "UE_MCP_FLOW_MODEL",
+  /** API key a flow agent step falls back to when no extension registered a model provider. */
+  anthropicApiKey: "ANTHROPIC_API_KEY",
+  /** Base URL for that fallback provider. */
+  anthropicBaseUrl: "ANTHROPIC_BASE_URL",
 
   // ── Feedback ───────────────────────────────────────────────────────
   /** interactive, defer or auto-approve; wins over the stored feedback mode. */
