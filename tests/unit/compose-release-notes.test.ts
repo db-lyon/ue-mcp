@@ -570,6 +570,21 @@ describe("reading contributors off the range", () => {
     ]);
   });
 
+  it("reads every page of a range longer than one page", () => {
+    const paged = (args: string[]) => {
+      expect(args).toContain("--slurp");
+      return JSON.stringify([
+        { commits: [{ author: { login: "alexkenley" } }, { author: { login: "bing" } }] },
+        { commits: [{ author: { login: "dillytools" } }, { author: { login: "isJDongYa" } }] },
+      ]);
+    };
+    expect(contributorsBetween("o/r", "v1.3.0", "HEAD", { exclude: ["bing"], run: paged })).toEqual([
+      "alexkenley",
+      "dillytools",
+      "isJDongYa",
+    ]);
+  });
+
   it("yields nobody rather than failing the cut when the API will not answer", () => {
     const boom = () => {
       throw new Error("network");

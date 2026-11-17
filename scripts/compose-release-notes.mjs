@@ -700,6 +700,10 @@ function currentRepo(run = gh) {
  * handles and a commit only carries an email. A tag that does not exist yet,
  * or an API that will not answer, yields nobody rather than failing the cut.
  *
+ * `--paginate` alone prints each page as its own JSON document, back to back,
+ * which is not one parseable value once a range passes 100 commits. `--slurp`
+ * wraps the pages in an array, and every page's commits are read.
+ *
  * @param {string} repo
  * @param {string} base
  * @param {string} head
@@ -708,13 +712,16 @@ function currentRepo(run = gh) {
 export function contributorsBetween(repo, base, head, { exclude = [], run = gh } = {}) {
   let payload;
   try {
-    payload = JSON.parse(run(["api", `repos/${repo}/compare/${base}...${head}`, "--paginate"]));
+    payload = JSON.parse(
+      run(["api", `repos/${repo}/compare/${base}...${head}`, "--paginate", "--slurp"])
+    );
   } catch {
     return [];
   }
+  const pages = Array.isArray(payload) ? payload : [payload];
   const skip = new Set(exclude.map((s) => String(s).toLowerCase()));
   const seen = [];
-  for (const commit of payload.commits ?? []) {
+  for (const commit of pages.flatMap((p) => p?.commits ?? [])) {
     const login = commit?.author?.login;
     if (!login || skip.has(login.toLowerCase())) continue;
     if (!seen.some((l) => l.toLowerCase() === login.toLowerCase())) seen.push(login);
