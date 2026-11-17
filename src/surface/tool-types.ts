@@ -150,6 +150,13 @@ export interface ToolDef {
    * `rebuild` passes the same options back through this constructor.
    */
   options?: CategoryOptions;
+  /**
+   * The tool's one-paragraph summary, without its action list. For a tool
+   * built by `categoryTool`, `description` is rendered from it and `actions`,
+   * so anything that adds or removes actions re-renders rather than editing
+   * text (category-tool.ts `refreshDescription`).
+   */
+  summary?: string;
 }
 
 /**
@@ -337,6 +344,11 @@ interface ActionSpecBase {
    * it below every domain action, so it is found only when nothing else fits.
    */
   escapeHatch?: boolean;
+  /**
+   * The ue-mcp plugin that injected this action into a built-in category. The
+   * category's description lists it under "Plugin actions".
+   */
+  providedBy?: string;
 }
 
 /** The parameters of a TypeScript-declared action (see ActionSpecBase.params). */
@@ -426,7 +438,27 @@ export interface RegistryActionSpec extends ActionSpecBase {
  */
 export type ActionSpec = BridgeActionSpec | HandlerActionSpec | RegistryActionSpec;
 
+/** How a category is offered to a person choosing categories (`ue-mcp init`), and labelled on feedback. */
+export interface CategoryLabel {
+  /** Short display label; the category name when omitted. */
+  text?: string;
+  /** One line on what the category covers. */
+  description?: string;
+  /** Engine plugins the category needs, enabled by init when the category is kept. */
+  requiredPlugins?: readonly string[];
+  /** Always on: init does not offer to turn it off. */
+  alwaysOn?: boolean;
+  /**
+   * Words in a feedback report's title or summary that put it in this
+   * category, beside the name and label. A category without any is labelled
+   * only when the report's ideal tool names it.
+   */
+  keywords?: readonly string[];
+}
+
 export interface CategoryOptions {
+  /** The category's label for people (init, feedback). */
+  label?: CategoryLabel;
   /**
    * Fold a category's accepted parameter spellings into its canonical ones
    * before dispatch, in one place instead of once per action (#798).

@@ -14,7 +14,7 @@
 import type { ActionSpec, ToolContext, ToolDef } from "./tool-types.js";
 import type { IBridge } from "../bridge/bridge.js";
 import { PLUGIN_UPGRADE_POINTER } from "../bridge/bridge.js";
-import { actionEnum } from "./category-tool.js";
+import { actionEnum, descriptionFor } from "./category-tool.js";
 import { toolGraphOf } from "./target-params.js";
 import { searchToolGraph } from "./context/tool-search.js";
 
@@ -116,14 +116,10 @@ export function withholdFromTool(tool: ToolDef, have: ReadonlySet<string> | null
   if (kept.length === 0) return null;
   const actions: Record<string, ActionSpec> = {};
   for (const a of kept) actions[a] = tool.actions[a];
-  const gone = new Set(withheld);
   return {
     ...tool,
     actions,
-    description: tool.description
-      .split("\n")
-      .filter((line) => !gone.has(/^- ([^:\s]+)/.exec(line)?.[1] ?? ""))
-      .join("\n"),
+    description: descriptionFor(tool, actions),
     schema: tool.schema.action ? { ...tool.schema, action: actionEnum(kept as [string, ...string[]]) } : tool.schema,
   };
 }

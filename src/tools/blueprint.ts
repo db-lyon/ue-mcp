@@ -193,5 +193,5 @@ export const blueprintTool: ToolDef = categoryTool(
     maxSamples: z.number().int().nonnegative().optional().describe("audit_dead_code: samples listed per finding kind per Blueprint, default 20, max 500; counts stay complete (#1166)"),
     maxBlueprints: z.number().int().positive().optional().describe("search_call_sites / audit_dead_code: cap on Blueprints loaded, default 2000 (#945/#1166)"),
     offset: z.number().int().nonnegative().optional().describe("Row offset for read_graph, and the older non-resumable form of search_call_sites paging"),
-  },
+  }, { label: { text: "blueprints", description: "Blueprint classes: variables, functions, components, nodes", keywords: ["bp", "add_variable", "add_node", "set_class_default"] } },
 );

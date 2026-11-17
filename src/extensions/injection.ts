@@ -1,7 +1,7 @@
 // @session independent: Builds an injection plan from a manifest.
 import { z } from "zod";
 import type { ToolDef, ActionSpec } from "../surface/tool-types.js";
-import { actionEnum } from "../surface/category-tool.js";
+import { actionEnum, refreshDescription } from "../surface/category-tool.js";
 import { compileSchemaFields, type ManifestInjectAction } from "./manifest.js";
 import { inferActionEffect } from "../surface/action-class.js";
 import { contractActionFields, type NativeContractExtras } from "./native-contract.js";
@@ -25,8 +25,9 @@ export interface InjectionPlan {
 
 /**
  * Merge plugin-supplied injection plans into a built-in category tool. Returns
- * a NEW ToolDef with extended actions, rebuilt action enum, merged param
- * schema, and a "Plugin actions:" block appended to the description.
+ * a NEW ToolDef with extended actions (each marked `providedBy` its plugin,
+ * which the rendered description lists under "Plugin actions"), a rebuilt
+ * action enum and a merged param schema.
  *
  * Collisions with built-in actions are skipped with a warning and never
  * overwrite. Inter-plugin collisions are first-wins per the loader's left-to-
@@ -48,7 +49,6 @@ export function mergeInjectionsIntoTool(
   const added: string[] = [];
   const skipped: Array<{ action: string; reason: string }> = [];
   const extraSchema: Record<string, z.ZodType> = {};
-  const docLines: string[] = [];
 
   for (const plan of plans) {
     for (const [bareName, injectSpec] of Object.entries(plan.actions)) {
@@ -77,13 +77,9 @@ export function mergeInjectionsIntoTool(
           ? { description: injectSpec.description ?? `Plugin action from ${plan.pluginName}` }
           : manifestActionFields(injectSpec.description ?? `Plugin action from ${plan.pluginName}`, injectSpec.schema)),
         ...contractActionFields(injectSpec.contract),
+        providedBy: plan.pluginName,
       } as ActionSpec;
       added.push(prefixed);
-      docLines.push(
-        injectSpec.description
-          ? `- ${prefixed}: ${injectSpec.description}`
-          : `- ${prefixed} (${plan.pluginName})`,
-      );
 
       // Lift per-action schema fields to the top level as optional: one flat
       // schema backs every action, so requiredness lives on the action (#1270).
@@ -101,8 +97,6 @@ export function mergeInjectionsIntoTool(
   }
 
   const allNames = Object.keys(newActions) as [string, ...string[]];
-  const newDescription =
-    orig.description + "\n\nPlugin actions:\n" + docLines.join("\n");
 
   const newSchema: Record<string, z.ZodType> = {
     ...orig.schema,
@@ -115,7 +109,7 @@ export function mergeInjectionsIntoTool(
   const tool: ToolDef = orig.rebuild
     ? { ...orig.rebuild(newActions), injectedEditorParam: orig.injectedEditorParam, injectedMigrateParam: orig.injectedMigrateParam }
     : { ...orig, actions: newActions };
-  tool.description = newDescription;
+  refreshDescription(tool);
   tool.schema = newSchema;
   return { tool, added, skipped };
 }

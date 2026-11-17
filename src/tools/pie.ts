@@ -92,5 +92,5 @@ export const pieTool: ToolDef = categoryTool(
   {
     // #1057: every key the pie handlers declare, generated from their C++ registrations.
     ...specSchema,
-  },
+  }, { label: { text: "pie testing", description: "record, replay and diff PIE sessions, input injection, test scripts", keywords: ["play in editor"] } },
 );

@@ -21,7 +21,7 @@
  * `nativeTools.enabled: false` still means every category's Epic actions.
  */
 import type { ActionSpec, ToolDef } from "./tool-types.js";
-import { actionEnum } from "./category-tool.js";
+import { actionEnum, refreshDescription } from "./category-tool.js";
 
 export type CategoryScope = "all" | "native" | "epic";
 export const CATEGORY_SCOPES: readonly CategoryScope[] = ["all", "native", "epic"];
@@ -220,14 +220,7 @@ export function removeActions(tool: ToolDef, doomed: readonly string[]): void {
   for (const name of doomed) delete tool.actions[name];
   const names = Object.keys(tool.actions) as [string, ...string[]];
   if (names.length > 0) tool.schema.action = actionEnum(names);
-  if (removed.size === 0) return;
-  tool.description = tool.description
-    .split("\n")
-    .filter((line) => {
-      const match = /^-\s+([A-Za-z_][A-Za-z0-9_]*)\b/.exec(line);
-      return !match || !removed.has(match[1]);
-    })
-    .join("\n");
+  if (removed.size > 0) refreshDescription(tool);
 }
 
 /**

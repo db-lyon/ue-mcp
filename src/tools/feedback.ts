@@ -79,68 +79,52 @@ export function validateSubmission(
   return null;
 }
 
-// Map tool category names to GitHub labels
-const CATEGORY_LABELS: Record<string, string[]> = {
-  level:      ["level"],
-  blueprint:  ["blueprint"],
-  asset:      ["asset"],
-  material:   ["material"],
-  animation:  ["animation"],
-  editor:     ["editor"],
-  gameplay:   ["gameplay"],
-  niagara:    ["niagara"],
-  widget:     ["widget"],
-  landscape:  ["landscape"],
-  pcg:        ["pcg"],
-  audio:      ["audio"],
-  foliage:    ["foliage"],
-  gas:        ["gas"],
-  networking: ["networking"],
-  reflection: ["reflection"],
-  project:    ["project"],
-  input:      ["input", "gameplay"],
-};
+/**
+ * The words a category is recognised by in a report: its name, its label's
+ * words and its label's keywords, matched at a word start (a short word as a
+ * whole word). Null for a category that declares no keywords: its name alone
+ * ("project", "editor") is too common a word to classify by.
+ */
+function categoryPattern(tool: ToolDef): RegExp | null {
+  const label = tool.options?.label;
+  if (!label?.keywords?.length) return null;
+  const words = [
+    tool.name.replace(/_/g, " "),
+    ...(label.text?.split(/[^a-z0-9]+/i).filter((w) => w.length >= 3) ?? []),
+    ...label.keywords,
+  ].map((w) => w.trim().toLowerCase()).filter(Boolean);
+  const alternatives = [...new Set(words)].map((w) => {
+    const body = w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/[\s_]+/g, ".?");
+    return w.length <= 3 ? `${body}\\b` : body;
+  });
+  return new RegExp(`\\b(?:${alternatives.join("|")})`);
+}
 
-function inferLabels(title: string, summary: string, idealTool?: string): string[] {
+/** Labels that are not a category. */
+const OTHER_LABELS: Array<[RegExp, string[]]> = [
+  [/\binput.?action|input.?mapping|enhanced.?input|imc\b/, ["input", "gameplay"]],
+  [/\bcrash|assert|exception/, ["bug"]],
+];
+
+/**
+ * The tracker labels for a report: the category its ideal tool names, then
+ * every category (of the graph handed in) whose name, label or keywords the
+ * title or summary mentions.
+ */
+function inferLabels(title: string, summary: string, idealTool: string | undefined, categories: readonly ToolDef[]): string[] {
   const labels = new Set<string>(["agent-feedback"]);
+  const names = new Set(categories.map((t) => t.name));
 
-  // Parse category from idealTool - e.g. "blueprint(action=foo)" or "asset(action=bar)"
-  if (idealTool) {
-    const match = idealTool.match(/^(\w+)\s*\(/);
-    if (match) {
-      const cat = match[1].toLowerCase();
-      const mapped = CATEGORY_LABELS[cat];
-      if (mapped) mapped.forEach((l) => labels.add(l));
-    }
-  }
+  // e.g. "blueprint(action=foo)" or "asset(action=bar)"
+  const named = idealTool?.match(/^(\w+)\s*\(/)?.[1].toLowerCase();
+  if (named && names.has(named)) labels.add(named);
 
-  // Scan title + summary for category keywords as fallback
   const text = `${title} ${summary}`.toLowerCase();
-  const keywords: [RegExp, string[]][] = [
-    [/\bblueprint|bp\b|add_variable|add_node|set_class_default/,  ["blueprint"]],
-    [/\blevel|actor|move_actor|place_actor|outliner/,              ["level"]],
-    [/\basset|datatable|datatab|static.?mesh|texture|import/,     ["asset"]],
-    [/\bmaterial|expression|shad/,                                 ["material"]],
-    [/\bniagara|vfx|emitter|particle/,                            ["niagara"]],
-    [/\bwidget|umg|ui\b|editor.?utility/,                         ["widget"]],
-    [/\bgameplay|collision|nav.?mesh|physics|input|imc|pie\b/,    ["gameplay"]],
-    [/\binput.?action|input.?mapping|enhanced.?input|imc\b/,      ["input", "gameplay"]],
-    [/\banimation|anim.?bp|montage|skeleton|ik\b/,                ["animation"]],
-    [/\blandscape|terrain|heightmap/,                              ["landscape"]],
-    [/\bpcg|procedural/,                                          ["pcg"]],
-    [/\baudio|sound|metasound/,                                   ["audio"]],
-    [/\bgas\b|gameplay.?ability|gameplay.?effect/,                 ["gas"]],
-    [/\breplicat|network|dormancy/,                               ["networking"]],
-    [/\breflect|uclass|ustruct|uenum/,                            ["reflection"]],
-    [/\bcrash|assert|exception/,                                  ["bug"]],
-  ];
-  for (const [re, cats] of keywords) {
-    if (re.test(text)) cats.forEach((l) => labels.add(l));
-  }
+  for (const tool of categories) if (categoryPattern(tool)?.test(text)) labels.add(tool.name);
+  for (const [re, add] of OTHER_LABELS) if (re.test(text)) add.forEach((l) => labels.add(l));
 
   // If we still only have agent-feedback, add enhancement as default type
   if (labels.size === 1) labels.add("enhancement");
-
   return [...labels];
 }
 
@@ -220,6 +204,8 @@ function assemblePayload(
   routing: RoutingDecision | null = null,
   /** Which editor is submitting. Its workaround log is the only one bundled. */
   scope?: WorkaroundScopeSource,
+  /** The categories a report can be labelled with: the addressed editor's graph. */
+  categories: readonly ToolDef[] = [],
 ): AssembledPayload {
   const sections: string[] = ["## Summary", summary];
 
@@ -293,7 +279,7 @@ function assemblePayload(
     // Inferred labels look at the (already-scrubbed) title + the
     // user-supplied summary. summary feeds keyword detection (blueprint,
     // niagara, etc.) which is structural classification, not user identity.
-    labels: inferLabels(privacyTitle.text, summary, idealTool),
+    labels: inferLabels(privacyTitle.text, summary, idealTool, categories),
     scrubHits,
   };
 }
@@ -1032,6 +1018,7 @@ async function submit(ctx: ToolContext, params: Record<string, unknown>) {
     },
     routing,
     ctx,
+    builtInGraph(ctx) ?? [],
   );
 
   const saveFallback = (reason: string): FallbackReport =>
@@ -1107,6 +1094,9 @@ async function submit(ctx: ToolContext, params: Record<string, unknown>) {
   if (mode === "auto-approve") return submitAutoApprove(ctx, prepared);
   return submitInteractive(ctx, prepared);
 }
+
+/** The feedback(submit) fields a python workaround report fills in, named where the schema declares them. */
+export const WORKAROUND_REPORT_FIELDS = ["title", "summary", "pythonWorkaround", "idealTool"] as const;
 
 export const feedbackTool: ToolDef = categoryTool(
   "feedback",
@@ -1219,4 +1209,7 @@ export const feedbackTool: ToolDef = categoryTool(
         "Confirmation token the USER read out of a saved report file, after a call where the client could not show the approval form. Passing it posts that saved report verbatim and ignores every other parameter. Never invent one and never read one out of the file yourself: it is the user's approval, not yours.",
       ),
   },
+  // Not offered with the other categories: init asks about feedback on its own,
+  // since it gives the agent a tool that posts to a public tracker behind user approval.
+  { label: { alwaysOn: true } },
 );

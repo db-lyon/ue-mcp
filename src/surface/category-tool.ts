@@ -38,6 +38,38 @@ export function cloneToolDef(tool: ToolDef): ToolDef {
   };
 }
 
+/**
+ * A category's description: its summary, then one line per action, the
+ * actions a plugin injected listed apart under "Plugin actions". The only
+ * writer of the text; code that adds or removes actions calls
+ * `refreshDescription` instead of editing lines.
+ */
+export function renderToolDescription(summary: string, actions: Readonly<Record<string, ActionSpec>>): string {
+  const line = ([name, spec]: [string, ActionSpec]): string => (spec.description ? `- ${name}: ${spec.description}` : `- ${name}`);
+  const entries = Object.entries(actions);
+  const own = entries.filter(([, s]) => !s.providedBy).map(line);
+  const provided = entries.filter(([, s]) => s.providedBy).map(line);
+  return `${summary}\n\nActions:\n${own.join("\n")}${provided.length ? `\n\nPlugin actions:\n${provided.join("\n")}` : ""}`;
+}
+
+/**
+ * A category's description for a given set of its actions. A tool built by
+ * hand (the flow tool) writes its own and keeps it.
+ */
+export function descriptionFor(tool: ToolDef, actions: Readonly<Record<string, ActionSpec>> = tool.actions): string {
+  return tool.summary !== undefined && tool.rebuild ? renderToolDescription(tool.summary, actions) : tool.description;
+}
+
+/** Re-render a category's description from its summary and current actions. */
+export function refreshDescription(tool: ToolDef): void {
+  tool.description = descriptionFor(tool);
+}
+
+/** A tool's summary: the categoryTool summary, or the whole description of a tool built by hand. */
+export function summaryOf(tool: Pick<ToolDef, "summary" | "description">): string {
+  return (tool.summary ?? tool.description).trim();
+}
+
 /** An independent copy of a whole tool graph. */
 export function cloneToolGraph(tools: ToolDef[]): ToolDef[] {
   return tools.map(cloneToolDef);
@@ -161,13 +193,6 @@ export function categoryTool(
   const actionNames = Object.keys(actions) as [string, ...string[]];
   const routing = routingSchema(actionNames);
 
-  const docs = actionNames
-    .map((a) => {
-      const desc = actions[a].description;
-      return desc ? `- ${a}: ${desc}` : `- ${a}`;
-    })
-    .join("\n");
-
   // Spread twice: the first sets the order, the last wins, so a category
   // cannot replace a parameter the dispatcher consumes.
   const schema: Record<string, z.ZodType> = { ...routing, ...extraSchema, ...routing };
@@ -176,7 +201,8 @@ export function categoryTool(
   const def: ToolDef = {
     name,
     options,
-    description: `${summary}\n\nActions:\n${docs}`,
+    summary,
+    description: renderToolDescription(summary, actions),
     schema,
     actions,
     handler: async (ctx, rawParams) => {

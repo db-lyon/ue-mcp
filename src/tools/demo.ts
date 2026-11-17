@@ -16,5 +16,5 @@ export const demoTool: ToolDef = categoryTool(
     // #1057: every key a spec'd handler declares, generated from its C++
     // registration.
     ...specSchema,
-  },
+  }, { label: { description: "tutorial / demo project scaffolding" } },
 );
