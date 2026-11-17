@@ -34,7 +34,8 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { ueMcpServerArgs, type ServerLaunch } from "../mcp-clients/mcp-client-config.js";
 import { REPLACED_BACKUP_SUFFIX, UNREAL_MCP_SERVER_NAME } from "./unreal-mcp-entries.js";
-import { engineAtLeast, enginePluginPresent, uprojectPluginState } from "./unreal-mcp-server.js";
+import { enginePluginPresent, uprojectPluginState } from "./unreal-mcp-server.js";
+import { engineHas } from "./engine-features.js";
 
 export const UNREAL_ASSISTANT_PLUGIN = "AIAssistant";
 export const ASSISTANT_CONFIG_FILENAME = "AIAssistant.json";
@@ -141,7 +142,7 @@ export function readUnrealAssistant(inputs: UnrealAssistantInputs): UnrealAssist
     available: false, reason, configPath: null, shadowedBy: null, attached: false, attachedProject: null, invalid: false,
   });
   const present = enginePluginPresent(inputs.engineRoot, UNREAL_ASSISTANT_PLUGIN);
-  const recent = engineAtLeast(inputs.engineVersion, 5, 9);
+  const recent = engineHas("unrealAssistantMcp", inputs.engineVersion);
   if (recent === false) return none(`Unreal Assistant takes MCP servers from UE 5.9; this project is on ${inputs.engineVersion}`);
   if (present === false || (present === null && recent !== true)) return none("the project's engine has no Unreal Assistant plugin");
   if (uprojectPluginState(inputs.uprojectPath, UNREAL_ASSISTANT_PLUGIN) === false) return none("the .uproject disables the AIAssistant plugin");

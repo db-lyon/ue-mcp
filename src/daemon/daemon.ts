@@ -36,6 +36,7 @@ import {
   EXTENSION_API_VERSION,
   EXTENSION_FEATURES,
   routePath,
+  REGISTRY_ACCOUNT_PERMISSION_REQUIRED_FROM,
   type CallActionOptions,
   type DaemonDiscovery,
   type DaemonEvent,
@@ -310,7 +311,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
       if (pending) events.publish("update.failed", { version: pending.version, error: e instanceof Error ? e.message : String(e) });
     }
   };
-  // A daemon restarted under a running editor (Studio updating itself) must not swap a staged tree in beneath it.
+  // A daemon restarted under a running editor (a client restarting it to update) must not swap a staged tree in beneath it.
   settleUpdate(projectDir, findLiveInstanceRecord(projectDir) !== null);
 
   // Look for a newer release now and then, never in the first minute (tests and short runs finish first).
@@ -433,7 +434,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
   const cookieTokens = (req: http.IncomingMessage): string[] =>
     [...(req.headers.cookie ?? "").matchAll(/(?:^|;\s*)ue_mcp_token(?:_\d+)?=([0-9a-f]+)/g)].map((m) => m[1]);
   // Every daemon listens on a fresh port, so a browser that outlives daemon
-  // restarts (the Studio window, the editor dock) collects one login per
+  // restarts (a client window, an editor dock) collects one login per
   // restart. Nothing expires them, and once the jar passed Node's 16 KiB
   // header limit every request came back 431. Logging in clears the logins of
   // daemons no longer listening; one still running keeps its own.
@@ -564,6 +565,8 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
   // An extension's bundles are held to its version from activation, when it installs its own UI.
   const uiOwners: UiBundleOwner[] = [];
   const services = new ExtensionServices();
+  /** Extensions already told to declare "registry.account", so the log says it once. */
+  const warnedAccount = new Set<string>();
   const uiOwner = (x: { name: string; version: string; uiMin?: string; uiRoot?: false }): UiBundleOwner =>
     ({ name: x.name, version: x.version, ...(x.uiMin ? { uiMin: x.uiMin } : {}), ...(x.uiRoot === false ? { root: false } : {}) });
   const extensions: LoadedExtension[] = await loadExtensions((name, routes, setBusy, pkg): DaemonExtensionApi => {
@@ -664,6 +667,14 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
         };
       })(),
       registryAccount: async () => {
+        if (!pkg.permissions) {
+          if (!warnedAccount.has(name)) {
+            warnedAccount.add(name);
+            warn("extension", `${name} uses the ue-mcp account without declaring it. Add "ueMcpExtension": { "permissions": ["registry.account"] } to its package.json; from ue-mcp ${REGISTRY_ACCOUNT_PERMISSION_REQUIRED_FROM} registryAccount() answers null without it.`);
+          }
+        } else if (!pkg.permissions.includes("registry.account")) {
+          return null;
+        }
         const auth = await readRegistryAuth();
         return auth ? { login: auth.login, token: auth.token, registry: auth.registry } : null;
       },

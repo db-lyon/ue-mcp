@@ -58,7 +58,7 @@ beforeAll(async () => {
   fs.mkdirSync(extDir, { recursive: true });
   fs.writeFileSync(path.join(extDir, "package.json"), JSON.stringify({
     name: "sample-ext", version: "0.1.0", type: "module", main: "index.js",
-    ueMcpExtension: { name: "sample", api: { min: 1, max: 1 } },
+    ueMcpExtension: { name: "sample", api: { min: 1, max: 1 }, permissions: ["registry.account"] },
   }));
   fs.writeFileSync(path.join(extDir, "index.js"), `
     export function activate(api) {
@@ -140,8 +140,16 @@ beforeAll(async () => {
       broken: api.services.get("broken.svc") ?? null,
       seen,
     } }));
+    api.route("GET", "/account", async () => ({ body: { account: await api.registryAccount() } }));
   `);
-  plain("provider", `api.services.provide("greeter", { greet: (who) => "hello " + who });`);
+  // Declares permissions, without registry.account.
+  plain("strict", `api.route("GET", "/account", async () => ({ body: { account: await api.registryAccount() } }));`);
+  const strictPkg = path.join(sandbox, "extensions", "strict", "package.json");
+  fs.writeFileSync(strictPkg, JSON.stringify({
+    name: "strict-ext", version: "1.0.0", type: "module", main: "index.js",
+    ueMcpExtension: { name: "strict", api: { min: 1, max: 3 }, permissions: [] },
+  }));
+  plain("provider",`api.services.provide("greeter", { greet: (who) => "hello " + who });`);
   plain("broken", `api.services.provide("broken.svc", {}); throw new Error("activation fails after providing");`);
 
   daemon = await startDaemon({
@@ -164,7 +172,7 @@ describe("extensions", () => {
   it("loads the compatible extension and skips the other", async () => {
     const health = await (await fetch(`${base}/v1/health`, { headers: auth })).json();
     expect(health.extensions).toEqual(expect.arrayContaining([{ name: "sample", version: "0.1.0" }, { name: "consumer", version: "1.0.0" }, { name: "provider", version: "1.0.0" }]));
-    expect(health.extensions).toHaveLength(3);
+    expect(health.extensions).toHaveLength(4);
   });
 
   it("refuses an extension that needs a newer ue-mcp, and says which in health", async () => {
@@ -184,9 +192,19 @@ describe("extensions", () => {
     expect((await fetch(`${base}/v1/ext/sample/hello`)).status).toBe(401);
   });
 
-  it("reads the ue-mcp account this machine signed in with", async () => {
+  it("hands the account to an extension declaring registry.account", async () => {
     const res = await (await fetch(`${base}/v1/ext/sample/account`, { headers: auth })).json();
     expect(res).toEqual({ login: "someone", hasToken: true });
+  });
+
+  it("still hands the account to an extension with no permissions field, during the compatibility window", async () => {
+    const legacy = await (await fetch(`${base}/v1/ext/consumer/account`, { headers: auth })).json();
+    expect(legacy).toEqual({ account: { login: "someone", token: "uemcp_test", registry: "https://plugins.ue-mcp.com" } });
+  });
+
+  it("answers null to an extension that declares permissions without registry.account", async () => {
+    const strict = await (await fetch(`${base}/v1/ext/strict/account`, { headers: auth })).json();
+    expect(strict).toEqual({ account: null });
   });
 
   it("runs actions in process and publishes namespaced events", async () => {

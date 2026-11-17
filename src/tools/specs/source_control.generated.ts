@@ -240,23 +240,6 @@ export const handlerSpecs: HandlerSpecs = {
   }
 };
 
-/** The Params: clause of each spec'd bridge method. */
-export const paramsClauses: Readonly<Record<string, string>> = {
-  source_control_add: "Params: paths",
-  source_control_checkout: "Params: paths",
-  source_control_connect: "Params: password?",
-  source_control_diff: "Params: path, revision?, openEditor?, contextLines?, maxLines?",
-  source_control_get_provider: "Params: none",
-  source_control_get_status: "Params: paths, limit?",
-  source_control_history: "Params: path, limit?",
-  source_control_list_changes: "Params: paths?, limit?, includeUntracked?",
-  source_control_mark_for_delete: "Params: paths",
-  source_control_revert: "Params: paths, dryRun?, discardUnsaved?, restoreFrom?",
-  source_control_set_checkout_mode: "Params: mode",
-  source_control_submit: "Params: paths, description",
-  source_control_sync: "Params: paths?",
-};
-
 /** Every key the spec'd source_control handlers declare, aliases included. */
 export const schema: Record<string, z.ZodType> = {
   contextLines: z.number().int().optional().describe("Unchanged lines around each text change (default 3)"),
@@ -276,4 +259,4 @@ export const schema: Record<string, z.ZodType> = {
 };
 
 /** Declare an action for a spec'd bridge method: effect, summary, method. */
-export const specBp = makeSpecBp(paramsClauses, handlerSpecs);
+export const specBp = makeSpecBp(handlerSpecs);

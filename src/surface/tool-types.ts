@@ -242,6 +242,14 @@ interface ActionSpecBase {
    */
   paramSpec?: readonly ParamSpec[];
   /**
+   * The parameters of an action declared here in TypeScript rather than by a
+   * C++ spec: which names it takes, which of them are required, its required
+   * choices, and a per-action note for a name where the category's shared
+   * description is not enough. Types come from the category's zod shape. The
+   * accepted keys, describe_action and the signature are computed from it.
+   */
+  params?: ParamDecl;
+  /**
    * The spec's required choices (`actorLabel OR actorPath`). The flat category
    * shape cannot express them, so every dispatch route checks them before the
    * call is sent.
@@ -264,7 +272,90 @@ interface ActionSpecBase {
    * content.
    */
   imageOutputs?: readonly string[];
+
+  // Per-action facts. Each is declared here, on the action, and the gates
+  // that need it query the tool graph for it (surface/action-effects.ts
+  // `actionSpecOf`, `bridgeMethodSpecs`) instead of keeping a list of names.
+
+  /**
+   * A handler-backed action whose work happens in this process, so it runs
+   * with no editor attached: why, in one sentence a caller can act on. Read by
+   * flow/offline.ts. A bridge action never sets it; it needs the editor.
+   */
+  offline?: string;
+  /**
+   * A handler-backed action that still reaches the editor: which bridge work
+   * it does. A handler action declares `offline` or this, and
+   * tests/unit/offline.test.ts fails on one that declares neither.
+   */
+  editorBound?: string;
+  /**
+   * The action's subject is the session registry or a service outside every
+   * editor, so an untargeted call cannot land in the wrong editor and the
+   * routing gate (dispatch/editor-gate.ts) lets it through at many editors.
+   */
+  addressesServer?: boolean;
+  /**
+   * The action manages asset locks or leases itself, so it never takes a lock
+   * or needs a lease, and a batch refuses it as a step.
+   */
+  assetCoordination?: boolean;
+  /** The mutation journal never records this call: the journal's own actions and the checkpoints it rests on. */
+  unjournaled?: boolean;
+  /**
+   * A successful call may have removed the dialog the dialog guard is holding,
+   * so the guard refreshes after it. `press` also records the button pressed.
+   */
+  refreshesDialog?: "press" | "window";
+  /**
+   * The asset content paths a call writes, read off its parameters, for an
+   * action whose paths the generic rule (dispatch/written-paths.ts) cannot see:
+   * entries of a batch, or a written output beside read inputs. Replaces the
+   * rule for this action, for asset locks, leases and the source-control guard.
+   */
+  writes?: (params: Record<string, unknown>) => string[];
+  /**
+   * The calls this action runs as one job, read off its parameters. Locks,
+   * leases and the source-control guard take the union of the steps, and a
+   * batch refuses another batch as a step.
+   */
+  steps?: (params: Record<string, unknown>) => Array<{ task: string; params: Record<string, unknown> }>;
+  /**
+   * Bridge methods this action's handler calls directly, with what each does.
+   * No action forwards to them, so this is the only place their effect is
+   * stated; the guard pipeline reads it. tests/unit/action-effects.test.ts
+   * fails on a raw `bridge.call` site whose method no action declares.
+   */
+  rawBridgeMethods?: Readonly<Record<string, RawBridgeMethod>>;
+  /**
+   * For a bridge action whose method's effect one of its ARGUMENTS decides:
+   * how to read it, or undefined when the argument does not say.
+   */
+  bridgeEffect?: (params: Record<string, unknown>) => ActionEffect | undefined;
+  /**
+   * An escape hatch (arbitrary python or console commands). Tool search ranks
+   * it below every domain action, so it is found only when nothing else fits.
+   */
+  escapeHatch?: boolean;
 }
+
+/** The parameters of a TypeScript-declared action (see ActionSpecBase.params). */
+export interface ParamDecl {
+  required?: readonly string[];
+  /** Includes every member of a choice: the choice, not the member, is what is required. */
+  optional?: readonly string[];
+  choices?: readonly ParamChoice[];
+  notes?: Readonly<Record<string, string>>;
+}
+
+/** A bridge method a handler calls directly: its effect, or its effect and the bridge calls it runs. */
+export type RawBridgeMethod =
+  | ActionEffect
+  | {
+      effect: ActionEffect;
+      /** The bridge calls it runs as one job, read off its parameters. Its effect is then its strongest step's. */
+      steps: (params: Record<string, unknown>) => Array<{ method: string; params: Record<string, unknown> }>;
+    };
 
 /** Forwards to a C++ bridge method over the WebSocket. Built by `bp`. */
 export interface BridgeActionSpec extends ActionSpecBase {

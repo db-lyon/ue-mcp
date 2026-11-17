@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { animationTool } from "../../src/tools/animation.js";
+import { actionSchema } from "../../src/surface/action-schema.js";
 import type { ToolContext } from "../../src/surface/tool-types.js";
 import { readHandlerFile } from "../../scripts/lib/cpp-registrations.mjs";
 
@@ -25,7 +26,8 @@ describe("animation(analyze_animation) facingBones (#1163)", () => {
   it("declares and documents the parameter and its summary", () => {
     expect(animationTool.schema.facingBones.safeParse(["a", "b"]).success).toBe(true);
     const description = animationTool.actions.analyze_animation.description ?? "";
-    expect(description).toContain("facingBones?");
+    const facing = actionSchema(animationTool, "analyze_animation").params.find((p) => p.name === "facingBones");
+    expect(facing?.required).toBe(false);
     for (const field of ["facingYawDegrees", "averageYawDegrees", "minYawDegrees", "maxYawDegrees"]) {
       expect(description).toContain(field);
     }

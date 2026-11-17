@@ -468,7 +468,6 @@ static void SkeletonCollectSkinnedBones(
 	TMap<FString, int32>& OutBoneToSectionCount)
 {
 	OutBoneToSectionCount.Reset();
-#if WITH_EDITORONLY_DATA
 	if (!Mesh) return;
 	const FSkeletalMeshModel* Model = Mesh->GetImportedModel();
 	if (!Model) return;
@@ -485,7 +484,6 @@ static void SkeletonCollectSkinnedBones(
 			}
 		}
 	}
-#endif
 }
 
 // ── Retargeting modes ────────────────────────────────────────────────────────
@@ -2361,12 +2359,6 @@ TSharedPtr<FJsonValue> FAnimationHandlers::EditCurveMetadata(const TSharedPtr<FJ
 
 	// Everything but the skeleton is read after it loads (#1057).
 	MCPReadParamsAhead(Params, { TEXT("skeletonPath"), TEXT("add"), TEXT("remove"), TEXT("rename"), TEXT("flags") });
-#if !WITH_EDITOR
-	return SkeletonError(
-		TEXT("editor_only"),
-		TEXT("Curve metadata authoring uses editor-only USkeleton accessors and is unavailable in "
-			 "this build."));
-#else
 	if (!Params.IsValid()) return SkeletonError(TEXT("invalid_params"), TEXT("Parameters are required"));
 
 	FString SkeletonPath;
@@ -2667,7 +2659,6 @@ TSharedPtr<FJsonValue> FAnimationHandlers::EditCurveMetadata(const TSharedPtr<FJ
 	const bool bSaved = SaveAssetPackageChecked(Skeleton, SaveReason);
 	MCPNoteSaveOutcome(Result, SkeletonPath, bSaved, SaveReason);
 	return MCPResult(Result);
-#endif
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -2798,9 +2789,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::RegisterCompatibleSkeleton(const TSha
 
 			// The reason a caller asked, reported back: whether the engine's own
 			// editor compatibility check agrees, and how the bone counts compare.
-#if WITH_EDITORONLY_DATA
 			Row->SetBoolField(TEXT("engineReportsCompatible"), Skeleton->IsCompatibleForEditor(Source));
-#endif
 			Row->SetNumberField(TEXT("boneCount"), Source->GetReferenceSkeleton().GetNum());
 			Rows.Add(MakeShared<FJsonValueObject>(Row));
 		}

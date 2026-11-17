@@ -7,7 +7,7 @@
 // ChooserEditor module. These handlers do not call it: they edit the engine's
 // own chooser data structures (UChooserTable's ColumnsStructs, ResultsStructs,
 // DisabledRows, FallbackResult and nested objects, and the column virtuals)
-// the way that library does, so every engine from 5.4 to 5.9 takes one code
+// the way that library does, so every engine from <!-- count:engineRange -->5.4 to 5.9<!-- /count --> takes one code
 // path and the live tests on any engine cover all of them. Members that moved
 // between engine versions are reached through HandlerChooserShared.h.
 //
@@ -453,9 +453,7 @@ namespace
 	{
 		const UStruct* Current = ContextType;
 		OutDisplayName = ContextType ? ContextType->GetName() : FString();
-#if WITH_EDITOR
 		if (ContextType) OutDisplayName = ContextType->GetDisplayNameText().ToString();
-#endif
 		for (int32 i = 0; i < Chain.Num(); ++i)
 		{
 			if (!Current)
@@ -471,11 +469,7 @@ namespace
 					OutError = FString::Printf(TEXT("'%s' on %s is not blueprint visible, so a chooser cannot bind to it"), *Chain[i].ToString(), *Current->GetName());
 					return false;
 				}
-#if WITH_EDITOR
 				OutDisplayName = Prop->GetDisplayNameText().ToString();
-#else
-				OutDisplayName = Prop->GetName();
-#endif
 				if (FStructProperty* SP = CastField<FStructProperty>(Prop)) Current = SP->Struct;
 				else if (FObjectPropertyBase* OP = CastField<FObjectPropertyBase>(Prop)) Current = OP->PropertyClass;
 				else if (!bLast)
@@ -623,7 +617,8 @@ TSharedPtr<FJsonValue> FChooserHandlers::SetSignature(const TSharedPtr<FJsonObje
 	{
 		if (!SignatureProp)
 		{
-			return MCPError(TEXT("Inheriting a signature from a ChooserSignature asset needs UE 5.9; this engine's choosers carry their own result type, result class and parameters only"));
+			return MCPUnsupportedEngineError(TEXT("Inheriting a signature from a ChooserSignature asset"), TEXT("5.9"),
+				TEXT("This engine's choosers carry their own result type, result class and parameters only: set those with chooser(set_signature) instead of signaturePath"));
 		}
 		if (!SignaturePath.IsEmpty())
 		{
@@ -1810,7 +1805,8 @@ TSharedPtr<FJsonValue> FChooserHandlers::AutoPopulate(const TSharedPtr<FJsonObje
 	if (bHasColumn && bHasRows) return MCPError(TEXT("Pass column (one column, every row) or rows (those rows, every column), not both; neither fills everything"));
 	if (!MCPChooserAutoPopulateSupported())
 	{
-		return MCPError(TEXT("Auto populate needs FChooserColumnBase::AutoPopulate, which this bridge reaches on UE 5.7 and newer"));
+		return MCPUnsupportedEngineError(TEXT("Auto populate"), TEXT("5.7"),
+			TEXT("It needs FChooserColumnBase::AutoPopulate. On this engine, write the cell values with chooser(set_cell) or chooser(set_row) instead"));
 	}
 
 	TSharedPtr<FJsonValue> ResolveError;

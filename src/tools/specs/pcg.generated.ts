@@ -1362,46 +1362,6 @@ export const handlerSpecs: HandlerSpecs = {
   }
 };
 
-/** The Params: clause of each spec'd bridge method. */
-export const paramsClauses: Readonly<Record<string, string>> = {
-  add_pcg_node: "Params: assetPath (or path), nodeType, posX?, posY?, name?",
-  add_pcg_volume: "Params: graphPath?, location?, transform?, extent?, label?, onConflict?",
-  cleanup_pcg: "Params: actorLabel OR actorPath, removeComponents?",
-  connect_pcg_nodes: "Params: assetPath (or path), sourceNode (or sourceNodeName), sourcePin? (or sourcePinLabel), targetNode (or targetNodeName), targetPin? (or targetPinLabel)",
-  create_pcg_graph: "Params: name, packagePath? (or path), onConflict?",
-  create_pcg_graph_instance: "Params: name, graphPath, packagePath?, overrides?, onConflict?",
-  disconnect_pcg_nodes: "Params: assetPath (or path), sourceNode (or sourceNodeName), targetNode (or targetNodeName), sourcePin? (or sourcePinLabel), targetPin? (or targetPinLabel)",
-  execute_pcg_graph: "Params: actorLabel OR actorPath, seed?, wait?, timeoutSeconds?",
-  export_level_to_pcg_asset: "Params: levelPath, assetPath?, assetName?, save?",
-  export_pcg_graph: "Params: assetPath (or path), includeSettings?",
-  force_regenerate_pcg: "Params: actorLabel OR actorPath, wait?, timeoutSeconds?",
-  get_pcg_component_details: "Params: actorLabel OR actorPath",
-  get_pcg_component_parameters: "Params: blueprintPath OR actorLabel OR actorPath, componentName?",
-  get_pcg_components: "Params: none",
-  get_pcg_custom_hlsl: "Params: assetPath (or path), nodeName",
-  get_pcg_generation_state: "Params: actorLabel OR actorPath, componentName?",
-  import_pcg_graph: "Params: assetPath (or path), nodes, connections?, replace?, removeNodes?, removeConnections?",
-  list_pcg_graphs: "Params: cursor?, limit?",
-  read_pcg_generated_output: "Params: actorLabel OR actorPath, componentName?, pin?, attributes?, offset?, limit?, nodeName?, graphPath?, includeLocalComponents?",
-  read_pcg_graph: "Params: assetPath (or path)",
-  read_pcg_node_settings: "Params: assetPath (or path), nodeName",
-  remove_pcg_node: "Params: assetPath (or path), nodeName",
-  set_pcg_component_graph: "Params: blueprintPath OR actorLabel OR actorPath, componentName?, graphPath",
-  set_pcg_component_parameters: "Params: blueprintPath OR actorLabel OR actorPath, componentName?, overrides",
-  set_pcg_custom_hlsl: "Params: assetPath (or path), nodeName, at least one of sourceText/functionsText",
-  set_pcg_graph_instance_overrides: "Params: assetPath (or path), overrides",
-  set_pcg_graph_parameters: "Params: assetPath (or path), at least one of graphParameters/removeParameters",
-  set_pcg_graph_pins: "Params: assetPath (or path), side, pins, mode?",
-  set_pcg_node_settings: "Params: assetPath (or path), nodeName, settings OR propertyName + propertyValue",
-  set_pcg_subgraph: "Params: assetPath (or path), nodeName, subgraphPath",
-  set_pcg_subgraph_parameters: "Params: assetPath (or path), nodeName, parameters",
-  set_static_mesh_spawner_meshes: "Params: assetPath (or path), nodeName, entries, replace?",
-  toggle_pcg_graph: "Params: actorLabel OR actorPath, graphPath?",
-  unwrap_pcg_instance_nodes: "Params: assetPath (or path), nodeName?",
-  update_pcg_level_assets: "Params: assetPaths, save?",
-  validate_pcg_edge: "Params: assetPath (or path), sourceNode (or sourceNodeName), sourcePin? (or sourcePinLabel), targetNode (or targetNodeName), targetPin? (or targetPinLabel)",
-};
-
 /** Every key the spec'd pcg handlers declare, aliases included. */
 export const schema: Record<string, z.ZodType> = {
   actorLabel: z.string().optional().describe("Editor label of the actor holding the PCG component; a label naming several actors is refused"),
@@ -1467,4 +1427,4 @@ export const schema: Record<string, z.ZodType> = {
 };
 
 /** Declare an action for a spec'd bridge method: effect, summary, method. */
-export const specBp = makeSpecBp(paramsClauses, handlerSpecs);
+export const specBp = makeSpecBp(handlerSpecs);

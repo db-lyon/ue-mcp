@@ -81,7 +81,7 @@ The full table, with each route's method, path, query or body and the feature it
 
 ### Extensions and UI bundles
 
-An extension (`src/daemon/extensions.ts`) is a package with `activate(api)` and a `ueMcpExtension` field naming the extension API range it supports. The daemon loads extensions at startup from `~/.ue-mcp/extensions/` (`UE_MCP_EXTENSIONS_DIR`). An extension can register routes under `/v1/ext/<name>/`, publish and read events, run actions in process with `callAction`, register a model provider, use checkpoints, keep a data directory, trust a key for UI bundles, and provide or use objects shared with other extensions through `services` (one provider per id, revoked when the provider is disposed). `EXTENSION_API_VERSION` versions this contract; the daemon serves every version from `EXTENSION_API_MIN_VERSION` up.
+An extension (`src/daemon/extensions.ts`) is a package with `activate(api)` and a `ueMcpExtension` field naming the extension API range it supports. The daemon loads extensions at startup from `~/.ue-mcp/extensions/` (`UE_MCP_EXTENSIONS_DIR`). An extension can register routes under `/v1/ext/<name>/`, publish and read events, run actions in process with `callAction`, register a model provider, use checkpoints, keep a data directory, trust a key for UI bundles, and provide or use objects shared with other extensions through `services` (one provider per id, revoked when the provider is disposed). Anything beyond that is a permission the extension declares in `ueMcpExtension.permissions`: `registry.account` lets `registryAccount()` hand it the signed-in ue-mcp account and its token, and an extension that does not declare it gets null. `EXTENSION_API_VERSION` versions this contract; the daemon serves every version from `EXTENSION_API_MIN_VERSION` up.
 
 Versions install side by side as `<name>@<version>/`, and each project records the version it loads (`extension-versions.ts`), so updating an extension for one project does not change another. `ue-mcp extension install|use|list|remove` manages them. `ue-mcp install <name>` is the same install with the name resolved through `install-names.ts`, a list of names and release manifests. A manifest that declares an editor plugin channel also gets the project set up through init's `plan()` and `apply()`, and the channel's build for the project's engine installed under `Plugins/` (`editor/editor-plugin.ts`).
 
@@ -289,7 +289,7 @@ The plugin runs a raw WebSocket server on a dedicated thread, dispatches each re
 | `HandlerPackageSave.h` | `SaveAssetPackage`, `SaveAssetPackageChecked`, `MCPPackageWriteBlocked`, `MCPNoteSaveOutcome` |
 | `HandlerJsonConvert.h` | Vector, rotator, colour, quaternion, transform and string-list JSON builders |
 | `HandlerObjectUtils.h` | Property export, file dumps, `FGCRootScope`, subobject walks, component and collision lookup |
-| `HandlerEngineVersion.h` | The `UE_MCP_HAS_5_x_API` gates and engine API shims |
+| `HandlerEngineVersion.h` | Every engine-version gate (`UE_MCP_HAS_5_x_API`) and feature macro, and the engine API shims |
 | `HandlerAssetCreate.h` | `MCPCreateAssetIdempotent<T>` |
 
 ### Handler groups

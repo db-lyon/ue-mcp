@@ -1,4 +1,5 @@
 #include "FabLibrary.h"
+#include "HandlerEngineVersion.h"
 
 #include "HttpModule.h"
 #include "GenericPlatform/GenericPlatformHttp.h"
@@ -9,7 +10,7 @@
 #include "Serialization/JsonSerializer.h"
 #include "UObject/UnrealType.h"
 
-#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 8
+#if UE_MCP_HAS_5_8_API
 #include "DataStorage/Features.h"
 #include "Elements/Columns/TypedElementWebColumns.h"
 #include "Elements/Interfaces/TypedElementDataStorageInterface.h"
@@ -201,7 +202,7 @@ TSharedPtr<FJsonObject> FLibraryState::Describe() const
 
 bool PublishLibrary(const TArray<TSharedPtr<FJsonValue>>& Items, FString& Error)
 {
-#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 8
+#if UE_MCP_HAS_5_8_API
 	using namespace UE::Editor::DataStorage;
 	auto* Storage = GetMutableDataStorageFeature<ICoreProvider>(StorageFeatureName);
 	UScriptStruct* NameType = FindObject<UScriptStruct>(nullptr, TEXT("/Script/Fab.FabObjectNameColumn"));

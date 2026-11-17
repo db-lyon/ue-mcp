@@ -19,7 +19,10 @@ export const journalActions: Record<string, ActionSpec> = {
   journal_group: {
     kind: "handler",
     effect: "mutate",
-    description: "Name the group every later call that may change state is journaled into, until another group is named; omit journalGroup to stop journaling. Use one group per chat turn. Each journaled call records its rollback descriptor when its handler returned one, and with checkpoints on (checkpoints: on in ue-mcp.yml) a checkpoint before and after it, so the files it wrote can be put back. The journal is Saved/UE_MCP_Bridge/journal.jsonl in the project and survives restarts; the current group does not, so name it again after one. Returns the journal state. Params: journalGroup?",
+    offline: "Sets which group this server journals calls into. Nothing is sent anywhere.",
+    unjournaled: true,
+    params: { optional: ["journalGroup"] },
+    description: "Name the group every later call that may change state is journaled into, until another group is named; omit journalGroup to stop journaling. Use one group per chat turn. Each journaled call records its rollback descriptor when its handler returned one, and with checkpoints on (checkpoints: on in ue-mcp.yml) a checkpoint before and after it, so the files it wrote can be put back. The journal is Saved/UE_MCP_Bridge/journal.jsonl in the project and survives restarts; the current group does not, so name it again after one. Returns the journal state.",
     handler: async (ctx: ToolContext, p: Record<string, unknown>) => {
       const group = groupOf(p);
       return journalOf(ctx).setGroup(group === "" ? null : group);
@@ -28,7 +31,10 @@ export const journalActions: Record<string, ActionSpec> = {
   list_journal: {
     kind: "handler",
     effect: "read",
-    description: "The journal: the current group, whether checkpoints are on, and every group with its entry, revertible and reverted counts in the order they were first recorded. With journalGroup, also that group's entries: task, effect, the rollback descriptor or checkpoint snapshot that restores it, and for one that cannot be restored, the reason. Params: journalGroup?",
+    offline: "Reads the journal file on disk.",
+    unjournaled: true,
+    params: { optional: ["journalGroup"] },
+    description: "The journal: the current group, whether checkpoints are on, and every group with its entry, revertible and reverted counts in the order they were first recorded. With journalGroup, also that group's entries: task, effect, the rollback descriptor or checkpoint snapshot that restores it, and for one that cannot be restored, the reason.",
     handler: async (ctx: ToolContext, p: Record<string, unknown>) => {
       const group = groupOf(p);
       return journalOf(ctx).state(group ? { group } : {});
@@ -37,13 +43,19 @@ export const journalActions: Record<string, ActionSpec> = {
   revert_group: {
     kind: "handler",
     effect: "mutate",
-    description: "Revert every call journaled into journalGroup that is not reverted yet, newest first: a rollback descriptor is replayed through the bridge (falling back to the files when it fails and a snapshot exists), otherwise the call's files are restored to the checkpoint taken before it and reloaded in the editor. Returns one result per entry: reverted, failed with the error, or not-revertible with the reason, so nothing is skipped silently. Works after an editor or server restart. Params: journalGroup",
+    editorBound: "Replays each entry's rollback descriptor as a bridge call; entries restored from checkpoint snapshots are file writes the editor then reloads.",
+    unjournaled: true,
+    params: { required: ["journalGroup"] },
+    description: "Revert every call journaled into journalGroup that is not reverted yet, newest first: a rollback descriptor is replayed through the bridge (falling back to the files when it fails and a snapshot exists), otherwise the call's files are restored to the checkpoint taken before it and reloaded in the editor. Returns one result per entry: reverted, failed with the error, or not-revertible with the reason, so nothing is skipped silently. Works after an editor or server restart.",
     handler: async (ctx: ToolContext, p: Record<string, unknown>) => journalOf(ctx).revert(groupOf(p)),
   },
   revert_after_group: {
     kind: "handler",
     effect: "mutate",
-    description: "Revert every call of every group first journaled after journalGroup, newest first, the same way revert_group does; journalGroup itself is kept. Params: journalGroup",
+    editorBound: "Replays each entry's rollback descriptor as a bridge call; entries restored from checkpoint snapshots are file writes the editor then reloads.",
+    unjournaled: true,
+    params: { required: ["journalGroup"] },
+    description: "Revert every call of every group first journaled after journalGroup, newest first, the same way revert_group does; journalGroup itself is kept.",
     handler: async (ctx: ToolContext, p: Record<string, unknown>) => journalOf(ctx).revertAfter(groupOf(p)),
   },
 };

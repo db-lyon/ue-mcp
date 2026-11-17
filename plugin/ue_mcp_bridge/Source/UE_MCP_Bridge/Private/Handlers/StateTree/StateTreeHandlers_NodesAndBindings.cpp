@@ -913,7 +913,8 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::ListBindableProperties(const TSharedP
 	return MCPResult(Result);
 #else
 	(void)TargetPathStr; (void)bExactOnly; (void)MaxDepth;
-	return MCPError(TEXT("Binding introspection reads the general property-binding types StateTree adopted in UE 5.7; on this engine, list sources with statetree(list_bindable_sources) and bind with statetree(add_binding)."));
+	return MCPUnsupportedEngineError(TEXT("Binding introspection"), TEXT("5.7"),
+		TEXT("It reads the general property-binding types StateTree adopted there. On this engine, list sources with statetree(list_bindable_sources) and bind with statetree(add_binding)"));
 #endif
 }
 
@@ -1044,7 +1045,8 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::CheckBinding(const TSharedPtr<FJsonOb
 	return MCPResult(Result);
 #else
 	(void)TargetPathStr; (void)SourceIdStr; (void)SourcePathStr;
-	return MCPError(TEXT("Binding checks read the general property-binding types StateTree adopted in UE 5.7, which this engine predates."));
+	return MCPUnsupportedEngineError(TEXT("Binding checks"), TEXT("5.7"),
+		TEXT("They read the general property-binding types StateTree adopted there. On this engine, statetree(list_bindable_sources) lists what each node can bind to, and statetree(compile) reports bindings that do not resolve"));
 #endif
 }
 
@@ -1165,7 +1167,8 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::PromoteToParameter(const TSharedPtr<F
 	return MCPResult(Result);
 #else
 	(void)ParameterName;
-	return MCPError(TEXT("Promote to parameter uses the general property-binding types StateTree adopted in UE 5.7, which this engine predates. Add the parameter with statetree(add_state_parameter) and bind it with statetree(add_binding)."));
+	return MCPUnsupportedEngineError(TEXT("Promote to parameter"), TEXT("5.7"),
+		TEXT("It uses the general property-binding types StateTree adopted there. On this engine, add the parameter with statetree(add_state_parameter) and bind it with statetree(add_binding)"));
 #endif
 }
 

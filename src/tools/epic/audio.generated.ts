@@ -6,8 +6,8 @@
 // effects file and regenerate; to pick up a new engine's toolsets, re-record
 // the catalog and regenerate.
 //
-// These are ordinary actions. They carry a declared effect, real parameters and
-// a Params: clause, they are in ALL_TOOLS, and they dispatch through the same
+// These are ordinary actions. They carry a declared effect and real
+// parameters, they are in ALL_TOOLS, and they dispatch through the same
 // task factory, guards and locks as every hand-written action in this package.
 // Each also carries its input schema, which the compact signatures read (#1172).
 import { z } from "zod";
@@ -64,222 +64,222 @@ export const actions: Record<string, ActionSpec> = {
   epic_add_graph_inputs: {
     epicSchema: S_epic_add_graph_inputs,
     epicTool: { toolset: "MetaSoundToolset.MetaSoundAuthoringToolset", name: "MetaSoundToolset.MetaSoundAuthoringToolset.AddGraphInputs", engines: ["5.9"] },
-    ...bp("mutate", "[Epic MetaSoundToolset.MetaSoundAuthoringToolset] Declares graph inputs. Each becomes a node whose ref is the input's own name. Available on UE 5.9; absent from UE 5.8. Params: builderName, inputs, page?", "epic_call_tool"),
+    ...bp("mutate", "[Epic MetaSoundToolset.MetaSoundAuthoringToolset] Declares graph inputs. Each becomes a node whose ref is the input's own name. Available on UE 5.9; absent from UE 5.8.", "epic_call_tool"),
   },
   epic_add_graph_outputs: {
     epicSchema: S_epic_add_graph_outputs,
     epicTool: { toolset: "MetaSoundToolset.MetaSoundAuthoringToolset", name: "MetaSoundToolset.MetaSoundAuthoringToolset.AddGraphOutputs", engines: ["5.9"] },
-    ...bp("mutate", "[Epic MetaSoundToolset.MetaSoundAuthoringToolset] Declares graph outputs. Each becomes a node whose ref is the output's own name. A Source's audio output is already an interface member. Available on UE 5.9; absent from UE 5.8. Params: builderName, outputs, page?", "epic_call_tool"),
+    ...bp("mutate", "[Epic MetaSoundToolset.MetaSoundAuthoringToolset] Declares graph outputs. Each becomes a node whose ref is the output's own name. A Source's audio output is already an interface member. Available on UE 5.9; absent from UE 5.8.", "epic_call_tool"),
   },
   epic_add_graph_page: {
     epicSchema: S_epic_add_graph_page,
     epicTool: { toolset: "MetaSoundToolset.MetaSoundAuthoringToolset", name: "MetaSoundToolset.MetaSoundAuthoringToolset.AddGraphPage", engines: ["5.9"] },
-    ...bp("mutate", "[Epic MetaSoundToolset.MetaSoundAuthoringToolset] Adds a paged graph. Page must be declared (FindRegisteredPages) and not already carried (the record's Pages). Duplicating copies topology but not graph-input defaults. Available on UE 5.9; absent from UE 5.8. Params: builderName, page, bDuplicateLastGraph?, bSetAsBuildPage?", "epic_call_tool"),
+    ...bp("mutate", "[Epic MetaSoundToolset.MetaSoundAuthoringToolset] Adds a paged graph. Page must be declared (FindRegisteredPages) and not already carried (the record's Pages). Duplicating copies topology but not graph-input defaults. Available on UE 5.9; absent from UE 5.8.", "epic_call_tool"),
   },
   epic_add_graph_variables: {
     epicSchema: S_epic_add_graph_variables,
     epicTool: { toolset: "MetaSoundToolset.MetaSoundAuthoringToolset", name: "MetaSoundToolset.MetaSoundAuthoringToolset.AddGraphVariables", engines: ["5.9"] },
-    ...bp("mutate", "[Epic MetaSoundToolset.MetaSoundAuthoringToolset] Declares graph variables, which carry state across blocks. Referenced by name thereafter. Available on UE 5.9; absent from UE 5.8. Params: builderName, variables, page?", "epic_call_tool"),
+    ...bp("mutate", "[Epic MetaSoundToolset.MetaSoundAuthoringToolset] Declares graph variables, which carry state across blocks. Referenced by name thereafter. Available on UE 5.9; absent from UE 5.8.", "epic_call_tool"),
   },
   epic_add_nodes: {
     epicSchema: S_epic_add_nodes,
     epicTool: { toolset: "MetaSoundToolset.MetaSoundAuthoringToolset", name: "MetaSoundToolset.MetaSoundAuthoringToolset.AddNodes", engines: ["5.9"] },
-    ...bp("mutate", "[Epic MetaSoundToolset.MetaSoundAuthoringToolset] Adds nodes by registered class. Returns each new node's ref in the report's Nodes. Available on UE 5.9; absent from UE 5.8. Params: builderName, nodes, page?", "epic_call_tool"),
+    ...bp("mutate", "[Epic MetaSoundToolset.MetaSoundAuthoringToolset] Adds nodes by registered class. Returns each new node's ref in the report's Nodes. Available on UE 5.9; absent from UE 5.8.", "epic_call_tool"),
   },
   epic_add_variable_nodes: {
     epicSchema: S_epic_add_variable_nodes,
     epicTool: { toolset: "MetaSoundToolset.MetaSoundAuthoringToolset", name: "MetaSoundToolset.MetaSoundAuthoringToolset.AddVariableNodes", engines: ["5.9"] },
-    ...bp("mutate", "[Epic MetaSoundToolset.MetaSoundAuthoringToolset] Adds Set / Get / Delayed-Get nodes for already-declared graph variables. Available on UE 5.9; absent from UE 5.8. Params: builderName, nodes, page?", "epic_call_tool"),
+    ...bp("mutate", "[Epic MetaSoundToolset.MetaSoundAuthoringToolset] Adds Set / Get / Delayed-Get nodes for already-declared graph variables. Available on UE 5.9; absent from UE 5.8.", "epic_call_tool"),
   },
   epic_attach_builder_to_asset: {
     epicSchema: S_epic_attach_builder_to_asset,
     epicTool: { toolset: "MetaSoundToolset.MetaSoundAuthoringToolset", name: "MetaSoundToolset.MetaSoundAuthoringToolset.AttachBuilderToAsset", engines: ["5.9"] },
-    ...bp("mutate", "[Epic MetaSoundToolset.MetaSoundAuthoringToolset] Attaches an editable builder to an existing MetaSound under BuilderName, targeting Page. The builder is the engine's singleton for that asset, so anything else editing it in this editor shares the state. BuilderName is independent of the asset; any unused name works. Page is stated, not inherited: the page a builder arrives on differs by whether the asset is open, was opened earlier, or never has been, and those are indistinguishable from here. Pass \"Default\" unless the asset is paged. Fails without attaching on an unknown page, or one the asset does not carry -- AddGraphPage adopts it. Available on UE 5.9; absent from UE 5.8. Params: assetPath, builderName, page", "epic_call_tool"),
+    ...bp("mutate", "[Epic MetaSoundToolset.MetaSoundAuthoringToolset] Attaches an editable builder to an existing MetaSound under BuilderName, targeting Page. The builder is the engine's singleton for that asset, so anything else editing it in this editor shares the state. BuilderName is independent of the asset; any unused name works. Page is stated, not inherited: the page a builder arrives on differs by whether the asset is open, was opened earlier, or never has been, and those are indistinguishable from here. Pass \"Default\" unless the asset is paged. Fails without attaching on an unknown page, or one the asset does not carry -- AddGraphPage adopts it. Available on UE 5.9; absent from UE 5.8.", "epic_call_tool"),
   },
   epic_build_to_asset: {
     epicSchema: S_epic_build_to_asset,
     epicTool: { toolset: "MetaSoundToolset.MetaSoundAuthoringToolset", name: "MetaSoundToolset.MetaSoundAuthoringToolset.BuildToAsset", engines: ["5.9"] },
-    ...bp("mutate", "[Epic MetaSoundToolset.MetaSoundAuthoringToolset] Writes the builder to a NEW asset on disk. Returns the new asset's object path. On an attached builder this forks a duplicate rather than saving it. Available on UE 5.9; absent from UE 5.8. Params: builderName, assetName, packagePath, author", "epic_call_tool"),
+    ...bp("mutate", "[Epic MetaSoundToolset.MetaSoundAuthoringToolset] Writes the builder to a NEW asset on disk. Returns the new asset's object path. On an attached builder this forks a duplicate rather than saving it. Available on UE 5.9; absent from UE 5.8.", "epic_call_tool"),
   },
   epic_clear_pins: {
     epicSchema: S_epic_clear_pins,
     epicTool: { toolset: "MetaSoundToolset.MetaSoundAuthoringToolset", name: "MetaSoundToolset.MetaSoundAuthoringToolset.ClearPins", engines: ["5.9"] },
-    ...bp("mutate", "[Epic MetaSoundToolset.MetaSoundAuthoringToolset] Removes every edge touching the named pins, without knowing what is wired to them. An input takes at most one edge; clearing an output severs every consumer it fans out to. Available on UE 5.9; absent from UE 5.8. Params: builderName, pins, page?", "epic_call_tool"),
+    ...bp("mutate", "[Epic MetaSoundToolset.MetaSoundAuthoringToolset] Removes every edge touching the named pins, without knowing what is wired to them. An input takes at most one edge; clearing an output severs every consumer it fans out to. Available on UE 5.9; absent from UE 5.8.", "epic_call_tool"),
   },
   epic_commit_builder_to_asset: {
     epicSchema: S_epic_commit_builder_to_asset,
     epicTool: { toolset: "MetaSoundToolset.MetaSoundAuthoringToolset", name: "MetaSoundToolset.MetaSoundAuthoringToolset.CommitBuilderToAsset", engines: ["5.9"] },
-    ...bp("mutate", "[Epic MetaSoundToolset.MetaSoundAuthoringToolset] Saves an attached builder's edits back to its source asset and re-registers its graph, so the next play of the asset hears them. Returns the asset's path. Only valid for an attached builder. Available on UE 5.9; absent from UE 5.8. Params: builderName", "epic_call_tool"),
+    ...bp("mutate", "[Epic MetaSoundToolset.MetaSoundAuthoringToolset] Saves an attached builder's edits back to its source asset and re-registers its graph, so the next play of the asset hears them. Returns the asset's path. Only valid for an attached builder. Available on UE 5.9; absent from UE 5.8.", "epic_call_tool"),
   },
   epic_connect: {
     epicSchema: S_epic_connect,
     epicTool: { toolset: "MetaSoundToolset.MetaSoundAuthoringToolset", name: "MetaSoundToolset.MetaSoundAuthoringToolset.Connect", engines: ["5.9"] },
-    ...bp("mutate", "[Epic MetaSoundToolset.MetaSoundAuthoringToolset] Wires outputs to inputs. Every edge is resolved before any is made. Direction is not checked beyond type: same-typed pins wired backwards connect cleanly and produce wrong audio. Available on UE 5.9; absent from UE 5.8. Params: builderName, connections, page?", "epic_call_tool"),
+    ...bp("mutate", "[Epic MetaSoundToolset.MetaSoundAuthoringToolset] Wires outputs to inputs. Every edge is resolved before any is made. Direction is not checked beyond type: same-typed pins wired backwards connect cleanly and produce wrong audio. Available on UE 5.9; absent from UE 5.8.", "epic_call_tool"),
   },
   epic_create_patch_builder: {
     epicSchema: S_epic_create_patch_builder,
     epicTool: { toolset: "MetaSoundToolset.MetaSoundAuthoringToolset", name: "MetaSoundToolset.MetaSoundAuthoringToolset.CreatePatchBuilder", engines: ["5.9"] },
-    ...bp("mutate", "[Epic MetaSoundToolset.MetaSoundAuthoringToolset] Creates a Patch builder registered under BuilderName. Persists for the session. No built-in interface; its graph I/O must be declared explicitly. Available on UE 5.9; absent from UE 5.8. Params: builderName", "epic_call_tool"),
+    ...bp("mutate", "[Epic MetaSoundToolset.MetaSoundAuthoringToolset] Creates a Patch builder registered under BuilderName. Persists for the session. No built-in interface; its graph I/O must be declared explicitly. Available on UE 5.9; absent from UE 5.8.", "epic_call_tool"),
   },
   epic_create_patch_preset_builder: {
     epicSchema: S_epic_create_patch_preset_builder,
     epicTool: { toolset: "MetaSoundToolset.MetaSoundAuthoringToolset", name: "MetaSoundToolset.MetaSoundAuthoringToolset.CreatePatchPresetBuilder", engines: ["5.9"] },
-    ...bp("mutate", "[Epic MetaSoundToolset.MetaSoundAuthoringToolset] Same contract as CreateSourcePresetBuilder, for MetaSoundPatch parents. Available on UE 5.9; absent from UE 5.8. Params: presetName, referencedPatchPath", "epic_call_tool"),
+    ...bp("mutate", "[Epic MetaSoundToolset.MetaSoundAuthoringToolset] Same contract as CreateSourcePresetBuilder, for MetaSoundPatch parents. Available on UE 5.9; absent from UE 5.8.", "epic_call_tool"),
   },
   epic_create_source_builder: {
     epicSchema: S_epic_create_source_builder,
     epicTool: { toolset: "MetaSoundToolset.MetaSoundAuthoringToolset", name: "MetaSoundToolset.MetaSoundAuthoringToolset.CreateSourceBuilder", engines: ["5.9"] },
-    ...bp("mutate", "[Epic MetaSoundToolset.MetaSoundAuthoringToolset] Creates a Source builder registered under BuilderName. Persists for the session. The returned record already holds the interface members: an audio output per channel of OutputFormat, OnPlay, and -- when bIsOneShot -- OnFinished and the UE.Source.OneShot interface. Available on UE 5.9; absent from UE 5.8. Params: builderName, outputFormat?, bIsOneShot?", "epic_call_tool"),
+    ...bp("mutate", "[Epic MetaSoundToolset.MetaSoundAuthoringToolset] Creates a Source builder registered under BuilderName. Persists for the session. The returned record already holds the interface members: an audio output per channel of OutputFormat, OnPlay, and -- when bIsOneShot -- OnFinished and the UE.Source.OneShot interface. Available on UE 5.9; absent from UE 5.8.", "epic_call_tool"),
   },
   epic_create_source_preset_builder: {
     epicSchema: S_epic_create_source_preset_builder,
     epicTool: { toolset: "MetaSoundToolset.MetaSoundAuthoringToolset", name: "MetaSoundToolset.MetaSoundAuthoringToolset.CreateSourcePresetBuilder", engines: ["5.9"] },
-    ...bp("mutate", "[Epic MetaSoundToolset.MetaSoundAuthoringToolset] Creates a Source preset over an existing MetaSoundSource. The returned record's inputs are the whole overridable set; topology tools reject this builder. A restricted editor refuses a parent FindMetaSoundAssets would not list. Available on UE 5.9; absent from UE 5.8. Params: presetName, referencedSourcePath", "epic_call_tool"),
+    ...bp("mutate", "[Epic MetaSoundToolset.MetaSoundAuthoringToolset] Creates a Source preset over an existing MetaSoundSource. The returned record's inputs are the whole overridable set; topology tools reject this builder. A restricted editor refuses a parent FindMetaSoundAssets would not list. Available on UE 5.9; absent from UE 5.8.", "epic_call_tool"),
   },
   epic_describe_graph: {
     epicSchema: S_epic_describe_graph,
     epicTool: { toolset: "MetaSoundToolset.MetaSoundInspectionToolset", name: "MetaSoundToolset.MetaSoundInspectionToolset.DescribeGraph", engines: ["5.9"] },
-    ...bp("read", "[Epic MetaSoundToolset.MetaSoundInspectionToolset] The whole document in one call: interfaces, graph I/O with defaults, variables, nodes with their pins and authored values, positions, and edges. The detailed read -- creating or attaching a builder reports the same document with its nodes named but not detailed. Available on UE 5.9; absent from UE 5.8. Params: builderName, page?", "epic_call_tool"),
+    ...bp("read", "[Epic MetaSoundToolset.MetaSoundInspectionToolset] The whole document in one call: interfaces, graph I/O with defaults, variables, nodes with their pins and authored values, positions, and edges. The detailed read -- creating or attaching a builder reports the same document with its nodes named but not detailed. Available on UE 5.9; absent from UE 5.8.", "epic_call_tool"),
   },
   epic_describe_node: {
     epicSchema: S_epic_describe_node,
     epicTool: { toolset: "MetaSoundToolset.MetaSoundInspectionToolset", name: "MetaSoundToolset.MetaSoundInspectionToolset.DescribeNode", engines: ["5.9"] },
-    ...bp("read", "[Epic MetaSoundToolset.MetaSoundInspectionToolset] One node with its pins and the values authored onto them -- the record a document read reports. Errors when the ref names no node; a node that resolves but declares no pins reads back empty. A pin's ValueType is None when the node authored nothing, so the class default applies; DescribeNodeClass reports it. A connected pin uses neither -- the edge feeding it wins. Re-read refs per page: a duplicated page keeps the ids it was copied from. Available on UE 5.9; absent from UE 5.8. Params: builderName, node, page?", "epic_call_tool"),
+    ...bp("read", "[Epic MetaSoundToolset.MetaSoundInspectionToolset] One node with its pins and the values authored onto them -- the record a document read reports. Errors when the ref names no node; a node that resolves but declares no pins reads back empty. A pin's ValueType is None when the node authored nothing, so the class default applies; DescribeNodeClass reports it. A connected pin uses neither -- the edge feeding it wins. Re-read refs per page: a duplicated page keeps the ids it was copied from. Available on UE 5.9; absent from UE 5.8.", "epic_call_tool"),
   },
   epic_describe_node_class: {
     epicSchema: S_epic_describe_node_class,
     epicTool: { toolset: "MetaSoundToolset.MetaSoundDiscoveryToolset", name: "MetaSoundToolset.MetaSoundDiscoveryToolset.DescribeNodeClass", engines: ["5.9"] },
-    ...bp("read", "[Epic MetaSoundToolset.MetaSoundDiscoveryToolset] A registered class's default pins, without adding a node. Resolves the highest version. Errors when no class has that name. Available on UE 5.9; absent from UE 5.8. Params: namespace, name, variant", "epic_call_tool"),
+    ...bp("read", "[Epic MetaSoundToolset.MetaSoundDiscoveryToolset] A registered class's default pins, without adding a node. Resolves the highest version. Errors when no class has that name. Available on UE 5.9; absent from UE 5.8.", "epic_call_tool"),
   },
   epic_detach_builder_from_asset: {
     epicSchema: S_epic_detach_builder_from_asset,
     epicTool: { toolset: "MetaSoundToolset.MetaSoundAuthoringToolset", name: "MetaSoundToolset.MetaSoundAuthoringToolset.DetachBuilderFromAsset", engines: ["5.9"] },
-    ...bp("mutate", "[Epic MetaSoundToolset.MetaSoundAuthoringToolset] Unregisters an attached builder and drops its attachment record. Returns BuilderName. Uncommitted edits are lost. Safe to call when the builder was already unregistered externally. Available on UE 5.9; absent from UE 5.8. Params: builderName", "epic_call_tool"),
+    ...bp("mutate", "[Epic MetaSoundToolset.MetaSoundAuthoringToolset] Unregisters an attached builder and drops its attachment record. Returns BuilderName. Uncommitted edits are lost. Safe to call when the builder was already unregistered externally. Available on UE 5.9; absent from UE 5.8.", "epic_call_tool"),
   },
   epic_diff_pages: {
     epicSchema: S_epic_diff_pages,
     epicTool: { toolset: "MetaSoundToolset.MetaSoundInspectionToolset", name: "MetaSoundToolset.MetaSoundInspectionToolset.DiffPages", engines: ["5.9"] },
-    ...bp("read", "[Epic MetaSoundToolset.MetaSoundInspectionToolset] Compares two pages across topology and paged input defaults. Every array empty means they match. Matches by class, not id, so independently built pages compare usefully. Counts are significant: ten wave players against four reports six extras -- how many differ, not which. Available on UE 5.9; absent from UE 5.8. Params: builderName, pageA, pageB", "epic_call_tool"),
+    ...bp("read", "[Epic MetaSoundToolset.MetaSoundInspectionToolset] Compares two pages across topology and paged input defaults. Every array empty means they match. Matches by class, not id, so independently built pages compare usefully. Counts are significant: ten wave players against four reports six extras -- how many differ, not which. Available on UE 5.9; absent from UE 5.8.", "epic_call_tool"),
   },
   epic_disconnect: {
     epicSchema: S_epic_disconnect,
     epicTool: { toolset: "MetaSoundToolset.MetaSoundAuthoringToolset", name: "MetaSoundToolset.MetaSoundAuthoringToolset.Disconnect", engines: ["5.9"] },
-    ...bp("mutate", "[Epic MetaSoundToolset.MetaSoundAuthoringToolset] Removes specific edges. Takes the same records a read reports. Available on UE 5.9; absent from UE 5.8. Params: builderName, connections, page?", "epic_call_tool"),
+    ...bp("mutate", "[Epic MetaSoundToolset.MetaSoundAuthoringToolset] Removes specific edges. Takes the same records a read reports. Available on UE 5.9; absent from UE 5.8.", "epic_call_tool"),
   },
   epic_export_wav: {
     epicSchema: S_epic_export_wav,
     epicTool: { toolset: "EditorToolset.SoundWaveToolset", name: "EditorToolset.SoundWaveToolset.ExportWav", engines: ["5.9"] },
-    ...bp("mutate", "[Epic EditorToolset.SoundWaveToolset] Exports a SoundWave to a .wav file on disk. Available on UE 5.9; absent from UE 5.8. Params: soundWave, filePath", "epic_call_tool"),
+    ...bp("mutate", "[Epic EditorToolset.SoundWaveToolset] Exports a SoundWave to a .wav file on disk. Available on UE 5.9; absent from UE 5.8.", "epic_call_tool"),
   },
   epic_find_all_connections: {
     epicSchema: S_epic_find_all_connections,
     epicTool: { toolset: "MetaSoundToolset.MetaSoundInspectionToolset", name: "MetaSoundToolset.MetaSoundInspectionToolset.FindAllConnections", engines: ["5.9"] },
-    ...bp("read", "[Epic MetaSoundToolset.MetaSoundInspectionToolset] Every edge on Page, addressed by node ref. Edges whose pin names do not resolve against the document are dropped, not reported. Available on UE 5.9; absent from UE 5.8. Params: builderName, page?", "epic_call_tool"),
+    ...bp("read", "[Epic MetaSoundToolset.MetaSoundInspectionToolset] Every edge on Page, addressed by node ref. Edges whose pin names do not resolve against the document are dropped, not reported. Available on UE 5.9; absent from UE 5.8.", "epic_call_tool"),
   },
   epic_find_all_nodes: {
     epicSchema: S_epic_find_all_nodes,
     epicTool: { toolset: "MetaSoundToolset.MetaSoundInspectionToolset", name: "MetaSoundToolset.MetaSoundInspectionToolset.FindAllNodes", engines: ["5.9"] },
-    ...bp("read", "[Epic MetaSoundToolset.MetaSoundInspectionToolset] Every node on Page, interface and graph-I/O nodes included. Read DisplayName and AssetPath to tell what a node is: a nested patch or source registers its class name off the asset's GUID, so ClassName alone does not name it. Available on UE 5.9; absent from UE 5.8. Params: builderName, page?", "epic_call_tool"),
+    ...bp("read", "[Epic MetaSoundToolset.MetaSoundInspectionToolset] Every node on Page, interface and graph-I/O nodes included. Read DisplayName and AssetPath to tell what a node is: a nested patch or source registers its class name off the asset's GUID, so ClassName alone does not name it. Available on UE 5.9; absent from UE 5.8.", "epic_call_tool"),
   },
   epic_find_builder_interfaces: {
     epicSchema: S_epic_find_builder_interfaces,
     epicTool: { toolset: "MetaSoundToolset.MetaSoundInspectionToolset", name: "MetaSoundToolset.MetaSoundInspectionToolset.FindBuilderInterfaces", engines: ["5.9"] },
-    ...bp("read", "[Epic MetaSoundToolset.MetaSoundInspectionToolset] Interfaces declared on this builder. Available on UE 5.9; absent from UE 5.8. Params: builderName", "epic_call_tool"),
+    ...bp("read", "[Epic MetaSoundToolset.MetaSoundInspectionToolset] Interfaces declared on this builder. Available on UE 5.9; absent from UE 5.8.", "epic_call_tool"),
   },
   epic_find_data_types: {
     epicSchema: S_epic_find_data_types,
     epicTool: { toolset: "MetaSoundToolset.MetaSoundDiscoveryToolset", name: "MetaSoundToolset.MetaSoundDiscoveryToolset.FindDataTypes", engines: ["5.9"] },
-    ...bp("read", "[Epic MetaSoundToolset.MetaSoundDiscoveryToolset] Registered MetaSound data types matching Pattern, exact name first. TypeName is the spelling every data-type argument on this surface expects. Available on UE 5.9; absent from UE 5.8. Params: pattern", "epic_call_tool"),
+    ...bp("read", "[Epic MetaSoundToolset.MetaSoundDiscoveryToolset] Registered MetaSound data types matching Pattern, exact name first. TypeName is the spelling every data-type argument on this surface expects. Available on UE 5.9; absent from UE 5.8.", "epic_call_tool"),
   },
   epic_find_graph_input_defaults: {
     epicSchema: S_epic_find_graph_input_defaults,
     epicTool: { toolset: "MetaSoundToolset.MetaSoundInspectionToolset", name: "MetaSoundToolset.MetaSoundInspectionToolset.FindGraphInputDefaults", engines: ["5.9"] },
-    ...bp("read", "[Epic MetaSoundToolset.MetaSoundInspectionToolset] Graph-input defaults on Page. Inputs with no default there are omitted. Available on UE 5.9; absent from UE 5.8. Params: builderName, page?", "epic_call_tool"),
+    ...bp("read", "[Epic MetaSoundToolset.MetaSoundInspectionToolset] Graph-input defaults on Page. Inputs with no default there are omitted. Available on UE 5.9; absent from UE 5.8.", "epic_call_tool"),
   },
   epic_find_graph_inputs: {
     epicSchema: S_epic_find_graph_inputs,
     epicTool: { toolset: "MetaSoundToolset.MetaSoundInspectionToolset", name: "MetaSoundToolset.MetaSoundInspectionToolset.FindGraphInputs", engines: ["5.9"] },
-    ...bp("read", "[Epic MetaSoundToolset.MetaSoundInspectionToolset] Graph inputs as Name / DataType, with the default set on Page. Available on UE 5.9; absent from UE 5.8. Params: builderName, page?", "epic_call_tool"),
+    ...bp("read", "[Epic MetaSoundToolset.MetaSoundInspectionToolset] Graph inputs as Name / DataType, with the default set on Page. Available on UE 5.9; absent from UE 5.8.", "epic_call_tool"),
   },
   epic_find_graph_outputs: {
     epicSchema: S_epic_find_graph_outputs,
     epicTool: { toolset: "MetaSoundToolset.MetaSoundInspectionToolset", name: "MetaSoundToolset.MetaSoundInspectionToolset.FindGraphOutputs", engines: ["5.9"] },
-    ...bp("read", "[Epic MetaSoundToolset.MetaSoundInspectionToolset] Graph outputs as Name / DataType. Outputs carry no default, so Default is empty. Available on UE 5.9; absent from UE 5.8. Params: builderName", "epic_call_tool"),
+    ...bp("read", "[Epic MetaSoundToolset.MetaSoundInspectionToolset] Graph outputs as Name / DataType. Outputs carry no default, so Default is empty. Available on UE 5.9; absent from UE 5.8.", "epic_call_tool"),
   },
   epic_find_graph_pages: {
     epicSchema: S_epic_find_graph_pages,
     epicTool: { toolset: "MetaSoundToolset.MetaSoundInspectionToolset", name: "MetaSoundToolset.MetaSoundInspectionToolset.FindGraphPages", engines: ["5.9"] },
-    ...bp("read", "[Epic MetaSoundToolset.MetaSoundInspectionToolset] Pages this asset carries, naming which one mutations target. For the wider set a page can be added from, call FindRegisteredPages. Available on UE 5.9; absent from UE 5.8. Params: builderName", "epic_call_tool"),
+    ...bp("read", "[Epic MetaSoundToolset.MetaSoundInspectionToolset] Pages this asset carries, naming which one mutations target. For the wider set a page can be added from, call FindRegisteredPages. Available on UE 5.9; absent from UE 5.8.", "epic_call_tool"),
   },
   epic_find_graph_variables: {
     epicSchema: S_epic_find_graph_variables,
     epicTool: { toolset: "MetaSoundToolset.MetaSoundInspectionToolset", name: "MetaSoundToolset.MetaSoundInspectionToolset.FindGraphVariables", engines: ["5.9"] },
-    ...bp("read", "[Epic MetaSoundToolset.MetaSoundInspectionToolset] Graph variables on Page as Name / DataType / Default. Their Set and Get nodes are in the node listing, named \"Variable.Get.<Name>_<id>\". Declaring a variable also adds a \"Variable.<Name>_<id>\" node holding its value, which performs no access. Available on UE 5.9; absent from UE 5.8. Params: builderName, page?", "epic_call_tool"),
+    ...bp("read", "[Epic MetaSoundToolset.MetaSoundInspectionToolset] Graph variables on Page as Name / DataType / Default. Their Set and Get nodes are in the node listing, named \"Variable.Get.<Name>_<id>\". Declaring a variable also adds a \"Variable.<Name>_<id>\" node holding its value, which performs no access. Available on UE 5.9; absent from UE 5.8.", "epic_call_tool"),
   },
   epic_find_interface_input_nodes: {
     epicSchema: S_epic_find_interface_input_nodes,
     epicTool: { toolset: "MetaSoundToolset.MetaSoundInspectionToolset", name: "MetaSoundToolset.MetaSoundInspectionToolset.FindInterfaceInputNodes", engines: ["5.9"] },
-    ...bp("read", "[Epic MetaSoundToolset.MetaSoundInspectionToolset] Ids of the input nodes an interface contributes on the build page; empty when undeclared. Available on UE 5.9; absent from UE 5.8. Params: builderName, interfaceName", "epic_call_tool"),
+    ...bp("read", "[Epic MetaSoundToolset.MetaSoundInspectionToolset] Ids of the input nodes an interface contributes on the build page; empty when undeclared. Available on UE 5.9; absent from UE 5.8.", "epic_call_tool"),
   },
   epic_find_interface_output_nodes: {
     epicSchema: S_epic_find_interface_output_nodes,
     epicTool: { toolset: "MetaSoundToolset.MetaSoundInspectionToolset", name: "MetaSoundToolset.MetaSoundInspectionToolset.FindInterfaceOutputNodes", engines: ["5.9"] },
-    ...bp("read", "[Epic MetaSoundToolset.MetaSoundInspectionToolset] Ids of the output nodes an interface contributes on the build page; empty when undeclared. Available on UE 5.9; absent from UE 5.8. Params: builderName, interfaceName", "epic_call_tool"),
+    ...bp("read", "[Epic MetaSoundToolset.MetaSoundInspectionToolset] Ids of the output nodes an interface contributes on the build page; empty when undeclared. Available on UE 5.9; absent from UE 5.8.", "epic_call_tool"),
   },
   epic_find_interfaces: {
     epicSchema: S_epic_find_interfaces,
     epicTool: { toolset: "MetaSoundToolset.MetaSoundDiscoveryToolset", name: "MetaSoundToolset.MetaSoundDiscoveryToolset.FindInterfaces", engines: ["5.9"] },
-    ...bp("read", "[Epic MetaSoundToolset.MetaSoundDiscoveryToolset] Every registered MetaSound interface, at its highest registered version. Available on UE 5.9; absent from UE 5.8. Params: none", "epic_call_tool"),
+    ...bp("read", "[Epic MetaSoundToolset.MetaSoundDiscoveryToolset] Every registered MetaSound interface, at its highest registered version. Available on UE 5.9; absent from UE 5.8.", "epic_call_tool"),
   },
   epic_find_meta_sound_assets: {
     epicSchema: S_epic_find_meta_sound_assets,
     epicTool: { toolset: "MetaSoundToolset.MetaSoundAuthoringToolset", name: "MetaSoundToolset.MetaSoundAuthoringToolset.FindMetaSoundAssets", engines: ["5.9"] },
-    ...bp("read", "[Epic MetaSoundToolset.MetaSoundAuthoringToolset] MetaSound assets in content, ordered by path. Where preset authoring starts: each can parent a preset, and a preset that is not read-only can be attached and retuned. Lists only what this editor lets the user see. A restricted editor also drops any asset a preset would fail validation from: a preset's chain must end at a built-in MetaSound, not a project's own. The preset creators and AttachBuilderToAsset refuse the same assets there. Available on UE 5.9; absent from UE 5.8. Params: pattern, maxResults?, firstResult?", "epic_call_tool"),
+    ...bp("read", "[Epic MetaSoundToolset.MetaSoundAuthoringToolset] MetaSound assets in content, ordered by path. Where preset authoring starts: each can parent a preset, and a preset that is not read-only can be attached and retuned. Lists only what this editor lets the user see. A restricted editor also drops any asset a preset would fail validation from: a preset's chain must end at a built-in MetaSound, not a project's own. The preset creators and AttachBuilderToAsset refuse the same assets there. Available on UE 5.9; absent from UE 5.8.", "epic_call_tool"),
   },
   epic_find_node_classes: {
     epicSchema: S_epic_find_node_classes,
     epicTool: { toolset: "MetaSoundToolset.MetaSoundDiscoveryToolset", name: "MetaSoundToolset.MetaSoundDiscoveryToolset.FindNodeClasses", engines: ["5.9"] },
-    ...bp("read", "[Epic MetaSoundToolset.MetaSoundDiscoveryToolset] Registered node classes matching Pattern, best first, one group per node. Highest versions only; no deprecated classes. No pins: describe the chosen class before wiring it. The session's first call waits on the asset scan, so an empty result means nothing matched. Every term must match the class triple, display name, description, keywords or category. Ranked by match strength, an exact name first; ties rank UE before Experimental. Asset MetaSounds are listed loaded or not, and match by asset name. Available on UE 5.9; absent from UE 5.8. Params: pattern, inputs, outputs, bIncludeNonAddable?, maxResults?, firstResult?, maxPerGroup?", "epic_call_tool"),
+    ...bp("read", "[Epic MetaSoundToolset.MetaSoundDiscoveryToolset] Registered node classes matching Pattern, best first, one group per node. Highest versions only; no deprecated classes. No pins: describe the chosen class before wiring it. The session's first call waits on the asset scan, so an empty result means nothing matched. Every term must match the class triple, display name, description, keywords or category. Ranked by match strength, an exact name first; ties rank UE before Experimental. Asset MetaSounds are listed loaded or not, and match by asset name. Available on UE 5.9; absent from UE 5.8.", "epic_call_tool"),
   },
   epic_find_registered_pages: {
     epicSchema: S_epic_find_registered_pages,
     epicTool: { toolset: "MetaSoundToolset.MetaSoundDiscoveryToolset", name: "MetaSoundToolset.MetaSoundDiscoveryToolset.FindRegisteredPages", engines: ["5.9"] },
-    ...bp("read", "[Epic MetaSoundToolset.MetaSoundDiscoveryToolset] Page names the project declares, Default first -- the set AddGraphPage draws from. A name means the same page on every MetaSound. For the pages one asset carries, read Pages off a graph record. Available on UE 5.9; absent from UE 5.8. Params: none", "epic_call_tool"),
+    ...bp("read", "[Epic MetaSoundToolset.MetaSoundDiscoveryToolset] Page names the project declares, Default first -- the set AddGraphPage draws from. A name means the same page on every MetaSound. For the pages one asset carries, read Pages off a graph record. Available on UE 5.9; absent from UE 5.8.", "epic_call_tool"),
   },
   epic_import_file: {
     epicSchema: S_epic_import_file,
     epicTool: { toolset: "EditorToolset.SoundWaveToolset", name: "EditorToolset.SoundWaveToolset.ImportFile", engines: ["5.9"] },
-    ...bp("mutate", "[Epic EditorToolset.SoundWaveToolset] Imports an audio file from disk as a SoundWave asset. Accepts the extensions SoundFactory declares: wav, aif, aiff, ogg, flac, opus, mp3. Available on UE 5.9; absent from UE 5.8. Params: folderPath, assetName, sourceFile, bReplaceExisting?, bSave?", "epic_call_tool"),
+    ...bp("mutate", "[Epic EditorToolset.SoundWaveToolset] Imports an audio file from disk as a SoundWave asset. Accepts the extensions SoundFactory declares: wav, aif, aiff, ogg, flac, opus, mp3. Available on UE 5.9; absent from UE 5.8.", "epic_call_tool"),
   },
   epic_layout_graph: {
     epicSchema: S_epic_layout_graph,
     epicTool: { toolset: "MetaSoundToolset.MetaSoundAuthoringToolset", name: "MetaSoundToolset.MetaSoundAuthoringToolset.LayoutGraph", engines: ["5.9"] },
-    ...bp("mutate", "[Epic MetaSoundToolset.MetaSoundAuthoringToolset] Arranges the targeted page left to right by connection depth, discarding manual arrangement. Applied counts the nodes positioned, which is every node on the page, so zero with bOk set means the page held no nodes rather than that layout declined to run. Available on UE 5.9; absent from UE 5.8. Params: builderName, page?", "epic_call_tool"),
+    ...bp("mutate", "[Epic MetaSoundToolset.MetaSoundAuthoringToolset] Arranges the targeted page left to right by connection depth, discarding manual arrangement. Applied counts the nodes positioned, which is every node on the page, so zero with bOk set means the page held no nodes rather than that layout declined to run. Available on UE 5.9; absent from UE 5.8.", "epic_call_tool"),
   },
   epic_remove_graph_page: {
     epicSchema: S_epic_remove_graph_page,
     epicTool: { toolset: "MetaSoundToolset.MetaSoundAuthoringToolset", name: "MetaSoundToolset.MetaSoundAuthoringToolset.RemoveGraphPage", engines: ["5.9"] },
-    ...bp("mutate", "[Epic MetaSoundToolset.MetaSoundAuthoringToolset] Removes a paged graph. Removing the targeted page moves the builder to an adjacent one unreported -- read the next result's BuildPage. Default cannot be removed. Available on UE 5.9; absent from UE 5.8. Params: builderName, page", "epic_call_tool"),
+    ...bp("mutate", "[Epic MetaSoundToolset.MetaSoundAuthoringToolset] Removes a paged graph. Removing the targeted page moves the builder to an adjacent one unreported -- read the next result's BuildPage. Default cannot be removed. Available on UE 5.9; absent from UE 5.8.", "epic_call_tool"),
   },
   epic_remove_graph_variables: {
     epicSchema: S_epic_remove_graph_variables,
     epicTool: { toolset: "MetaSoundToolset.MetaSoundAuthoringToolset", name: "MetaSoundToolset.MetaSoundAuthoringToolset.RemoveGraphVariables", engines: ["5.9"] },
-    ...bp("mutate", "[Epic MetaSoundToolset.MetaSoundAuthoringToolset] Removes graph variables, every Set and Get node bound to them, and the edges those carried. Refs to those nodes are stale afterwards. Available on UE 5.9; absent from UE 5.8. Params: builderName, variables, page?", "epic_call_tool"),
+    ...bp("mutate", "[Epic MetaSoundToolset.MetaSoundAuthoringToolset] Removes graph variables, every Set and Get node bound to them, and the edges those carried. Refs to those nodes are stale afterwards. Available on UE 5.9; absent from UE 5.8.", "epic_call_tool"),
   },
   epic_remove_nodes: {
     epicSchema: S_epic_remove_nodes,
     epicTool: { toolset: "MetaSoundToolset.MetaSoundAuthoringToolset", name: "MetaSoundToolset.MetaSoundAuthoringToolset.RemoveNodes", engines: ["5.9"] },
-    ...bp("mutate", "[Epic MetaSoundToolset.MetaSoundAuthoringToolset] Removes nodes and every edge touching them. Refs are stale afterwards. Removing an interface-provided node leaves the interface inconsistent. Available on UE 5.9; absent from UE 5.8. Params: builderName, nodes, bRemoveUnusedDependencies?, page?", "epic_call_tool"),
+    ...bp("mutate", "[Epic MetaSoundToolset.MetaSoundAuthoringToolset] Removes nodes and every edge touching them. Refs are stale afterwards. Removing an interface-provided node leaves the interface inconsistent. Available on UE 5.9; absent from UE 5.8.", "epic_call_tool"),
   },
   epic_set_build_page: {
     epicSchema: S_epic_set_build_page,
     epicTool: { toolset: "MetaSoundToolset.MetaSoundAuthoringToolset", name: "MetaSoundToolset.MetaSoundAuthoringToolset.SetBuildPage", engines: ["5.9"] },
-    ...bp("mutate", "[Epic MetaSoundToolset.MetaSoundAuthoringToolset] Moves the builder to another page the asset carries. Every later edit lands there. Shared with the MetaSound editor, so an open editor follows. Transacted. Available on UE 5.9; absent from UE 5.8. Params: builderName, page", "epic_call_tool"),
+    ...bp("mutate", "[Epic MetaSoundToolset.MetaSoundAuthoringToolset] Moves the builder to another page the asset carries. Every later edit lands there. Shared with the MetaSound editor, so an open editor follows. Transacted. Available on UE 5.9; absent from UE 5.8.", "epic_call_tool"),
   },
   epic_set_defaults: {
     epicSchema: S_epic_set_defaults,
     epicTool: { toolset: "MetaSoundToolset.MetaSoundAuthoringToolset", name: "MetaSoundToolset.MetaSoundAuthoringToolset.SetDefaults", engines: ["5.9"] },
-    ...bp("mutate", "[Epic MetaSoundToolset.MetaSoundAuthoringToolset] Sets default values on node pins and graph inputs. A node pin on a preset aborts the whole call rather than failing that one item. A value carries no type; each is parsed against the data type of the pin it lands on. Scalars go bare -- \"true\", \"440\", \"0.5\", an object path -- and arrays as JSON. An empty value clears the default rather than setting one. Array values on a node pin do not render in the MetaSound editor. A graph-input default is page-scoped. Each entry's Page names where it lands, empty meaning the targeted page. Unlike the mutators a named page here writes there rather than failing -- the write is addressed, not applied in place. Node-pin defaults ignore Page; there is no paged form. Available on UE 5.9; absent from UE 5.8. Params: builderName, defaults", "epic_call_tool"),
+    ...bp("mutate", "[Epic MetaSoundToolset.MetaSoundAuthoringToolset] Sets default values on node pins and graph inputs. A node pin on a preset aborts the whole call rather than failing that one item. A value carries no type; each is parsed against the data type of the pin it lands on. Scalars go bare -- \"true\", \"440\", \"0.5\", an object path -- and arrays as JSON. An empty value clears the default rather than setting one. Array values on a node pin do not render in the MetaSound editor. A graph-input default is page-scoped. Each entry's Page names where it lands, empty meaning the targeted page. Unlike the mutators a named page here writes there rather than failing -- the write is addressed, not applied in place. Node-pin defaults ignore Page; there is no paged form. Available on UE 5.9; absent from UE 5.8.", "epic_call_tool"),
   },
 };
 

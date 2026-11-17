@@ -116,11 +116,7 @@ namespace
 			}
 
 			if (!Query.PathFilter.IsEmpty() && !Path.Contains(Query.PathFilter, ESearchCase::IgnoreCase)) continue;
-#if WITH_EDITORONLY_DATA
 			const FString Category = Property->GetMetaData(TEXT("Category"));
-#else
-			const FString Category;
-#endif
 			if (!Query.Category.IsEmpty() && !Category.Contains(Query.Category, ESearchCase::IgnoreCase)) continue;
 
 			++Out.Compared;

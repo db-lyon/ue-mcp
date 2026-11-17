@@ -117,11 +117,9 @@ TSharedPtr<FJsonValue> FLevelHandlers::SpawnTransientActor(const TSharedPtr<FJso
 	// The transiency contract, stated three ways so no single engine path can
 	// quietly persist this actor.
 	SpawnParameters.ObjectFlags |= RF_Transient;
-#if WITH_EDITOR
 	SpawnParameters.bTemporaryEditorActor = true;
 	SpawnParameters.bHideFromSceneOutliner = bHideFromOutliner;
 	SpawnParameters.bCreateActorPackage = false;
-#endif
 
 	AActor* Actor = World->SpawnActor<AActor>(
 		ActorClass, FTransform(Rotation, Location, Scale), SpawnParameters);
@@ -186,7 +184,6 @@ TSharedPtr<FJsonValue> FLevelHandlers::SpawnTransientActor(const TSharedPtr<FJso
 	}
 
 	FString InitializeNote;
-#if WITH_EDITOR
 	if (Initialize == TEXT("construction"))
 	{
 		Actor->RerunConstructionScripts();
@@ -210,9 +207,6 @@ TSharedPtr<FJsonValue> FLevelHandlers::SpawnTransientActor(const TSharedPtr<FJso
 	{
 		InitializeNote = TEXT("initialize='none': the actor exists with its default subobjects and nothing else has been run on it.");
 	}
-#else
-	InitializeNote = TEXT("Non-editor build: no construction or begin-play cycle was run.");
-#endif
 	MCPSpawnFinalize::FinishEditorSpawn(Actor);
 
 	// Read back after initialization, so the report shows what the actor holds

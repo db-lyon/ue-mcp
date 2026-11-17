@@ -13,7 +13,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { z } from "zod";
-import type { HandlerActionSpec, ToolContext } from "../surface/tool-types.js";
+import type { HandlerActionSpec, ParamDecl, ToolContext } from "../surface/tool-types.js";
 import type { DiagramModel } from "./model.js";
 import { toMermaid } from "./mermaid.js";
 import { svgToPng } from "./png.js";
@@ -146,8 +146,13 @@ export async function finishDiagram(ctx: Pick<ToolContext, "project" | "session"
   return { ...result, path: file, width: png.width, height: png.height, media: [inlinePng(png.png, file)] };
 }
 
+/** The parameters every diagram action takes beside its own: DIAGRAM_HELP's. */
+const DIAGRAM_PARAMS = ["format", "focus", "depth", "maxNodes", "outputPath"];
+
 export interface DiagramActionOptions {
   description: string;
+  /** The action's own parameters; the shared DIAGRAM_PARAMS are added to its optional ones. */
+  params: ParamDecl;
   /** Reads the graph over the bridge and adapts it. */
   build: (ctx: ToolContext, params: Record<string, unknown>) => Promise<DiagramModel>;
 }
@@ -156,6 +161,11 @@ export function diagramAction(options: DiagramActionOptions): HandlerActionSpec 
   return {
     kind: "handler",
     effect: "read",
+    editorBound: "Reads the graph through its reader over the bridge, then draws it in this process.",
+    params: {
+      ...options.params,
+      optional: [...new Set([...(options.params.optional ?? []), ...DIAGRAM_PARAMS])],
+    },
     description: options.description,
     handler: async (ctx, params) => finishDiagram(ctx, await options.build(ctx, params), params),
   };

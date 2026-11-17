@@ -29,13 +29,26 @@ import { McpError, ErrorCode } from "../core/errors.js";
 import { debug, info } from "../core/log.js";
 import { clientAdvertisesElicitation } from "../editor/dialog-mode.js";
 import { currentCallAsker } from "./call-elicit.js";
-import type { GuardDeclarations, GuardHook } from "./guard-schema.js";
+import type { GuardDeclarations, GuardHook, GuardScope } from "./guard-schema.js";
 import {
   GUARD_CALL_KEY,
   GUARD_CONFIG_KEY,
   type GuardHookPayload,
   type GuardPhase,
 } from "../guard-task.js";
+
+/**
+ * What each declared scope means as a test on a call. `all` has none: the guard
+ * sees every call. The Record is exhaustive over GUARD_SCOPES, so a scope added
+ * to the schema without a meaning here does not compile.
+ */
+const SCOPE_PREDICATES: Record<GuardScope, ((cc: CallContext) => boolean) | undefined> = {
+  all: undefined,
+  mutations: mutationScope,
+  writes: writeScope,
+  reads: readScope,
+  unknown: unknownScope,
+};
 
 /** Where a declaration came from, so an error can say which file to open. */
 export interface GuardSource {
@@ -278,10 +291,7 @@ export async function buildGuards(
       order: decl.order,
       // Both narrower scopes are lazy: a guard that does not ask pays nothing,
       // and a pipeline of guards that all ask pays once.
-      ...(decl.scope === "writes" ? { appliesTo: (cc: CallContext) => writeScope(cc) } : {}),
-      ...(decl.scope === "mutations" ? { appliesTo: (cc: CallContext) => mutationScope(cc) } : {}),
-      ...(decl.scope === "reads" ? { appliesTo: (cc: CallContext) => readScope(cc) } : {}),
-      ...(decl.scope === "unknown" ? { appliesTo: (cc: CallContext) => unknownScope(cc) } : {}),
+      ...(SCOPE_PREDICATES[decl.scope] ? { appliesTo: SCOPE_PREDICATES[decl.scope] } : {}),
 
       ...(decl.before
         ? {
@@ -366,6 +376,14 @@ export async function buildGuards(
 const LEGACY_GUARD_TASK = /^guard\.[^.]+\.(before|after)[A-Za-z0-9]*$/;
 
 /**
+ * The ue-mcp version that deletes assertNoLegacyGuardTasks, LEGACY_GUARD_TASK
+ * and their callers in sessions/session-load.ts. From that release a leftover
+ * `guard.<name>.<phase>` task loads as the ordinary task it is, so the error
+ * below names the release while there is still time to migrate.
+ */
+export const LEGACY_GUARD_TASKS_REMOVED_IN = "1.4.30";
+
+/**
  * Refuse to start when a task is still named like a guard.
  *
  * Before guards were declared, a task with this name WAS a guard. Under the
@@ -375,7 +393,7 @@ const LEGACY_GUARD_TASK = /^guard\.[^.]+\.(before|after)[A-Za-z0-9]*$/;
  *
  * That is the exact failure the declaration model exists to prevent, so the
  * migration must not reintroduce it. A leftover name is fatal and says what to
- * write instead.
+ * write instead. The check is temporary: it goes in LEGACY_GUARD_TASKS_REMOVED_IN.
  */
 export function assertNoLegacyGuardTasks(
   taskNames: string[],
@@ -404,6 +422,9 @@ export function assertNoLegacyGuardTasks(
     + "them one. A guard is declared in a `guards:` section now, so these are ordinary tasks that "
     + "nothing calls: whatever they were gating is ungated while the config still says it is "
     + `guarded.\n\n${examples.join("\n\n")}\n\n`
-    + "See the guards documentation for the full shape, including order and the after hook.",
+    + "Rename each task to a plain guard name under `guards:` and move its class_path into the "
+    + "before or after hook, as above; delete the old `guard.<name>.<phase>` task. See the guards "
+    + "documentation for the full shape, including order and the after hook. This check is removed "
+    + `in ue-mcp ${LEGACY_GUARD_TASKS_REMOVED_IN}; from then on such a task loads as an ordinary task and nothing warns.`,
   );
 }

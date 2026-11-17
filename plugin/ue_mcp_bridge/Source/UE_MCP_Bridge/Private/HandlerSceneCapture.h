@@ -65,11 +65,9 @@ namespace UEMCP::SceneCapture
 
 			FActorSpawnParameters SpawnParams;
 			SpawnParams.ObjectFlags |= RF_Transient;
-#if WITH_EDITOR
 			SpawnParams.bTemporaryEditorActor = true;
 			SpawnParams.bHideFromSceneOutliner = true;
 			SpawnParams.bCreateActorPackage = false;
-#endif
 			Actor = World->SpawnActor<ASceneCapture2D>(ASceneCapture2D::StaticClass(), Location, Rotation, SpawnParams);
 			if (!Actor.IsValid()) { OutError = TEXT("Failed to spawn SceneCapture2D actor"); return false; }
 			Actor->SetActorHiddenInGame(true);

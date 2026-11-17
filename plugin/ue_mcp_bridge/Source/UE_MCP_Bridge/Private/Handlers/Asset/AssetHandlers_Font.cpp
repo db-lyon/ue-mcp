@@ -172,9 +172,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::ImportFont(const TSharedPtr<FJsonObject>&
 	Result->SetStringField(TEXT("sourceFile"), FilePath);
 	Result->SetNumberField(TEXT("bytes"), Face->FontFaceData->GetData().Num());
 	TArray<TSharedPtr<FJsonValue>> SubFaces;
-#if WITH_EDITORONLY_DATA
 	for (const FString& SubFace : Face->SubFaces) SubFaces.Add(MakeShared<FJsonValueString>(SubFace));
-#endif
 	Result->SetArrayField(TEXT("subFaces"), SubFaces);
 	MCPNoteSaveOutcome(Result, Face->GetPathName(), bSaved, SaveError);
 

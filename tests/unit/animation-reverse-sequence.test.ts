@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { animationTool } from "../../src/tools/animation.js";
 import { handlerSpecs } from "../../src/tools/specs/animation.generated.js";
+import { actionSchema } from "../../src/surface/action-schema.js";
 import type { ToolContext } from "../../src/surface/tool-types.js";
 import { readHandlerFile } from "../../scripts/lib/cpp-registrations.mjs";
 
@@ -21,7 +22,11 @@ describe("animation.reverse_sequence (#1162)", () => {
     expect(action.bridge).toBe("reverse_sequence");
     expect(action.effect).toBe("mutate");
     expect(action.description).toContain("delete_asset rollback");
-    expect(action.description).toContain("Params: sourcePath, destinationPath?, name?, packagePath?, inPlace?");
+    const byName = new Map(actionSchema(animationTool, "reverse_sequence").params.map((p) => [p.name, p]));
+    expect(byName.get("sourcePath")?.required).toBe(true);
+    for (const name of ["destinationPath", "name", "packagePath", "inPlace"]) {
+      expect(byName.get(name)?.required, name).toBe(false);
+    }
   });
 
   it("takes the reversal parameters from its C++ spec (#1057)", async () => {

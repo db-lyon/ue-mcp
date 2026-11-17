@@ -65,11 +65,7 @@ void AddPerPlatformRow(UDataTable* Table, const TCHAR* RowName, int32 Default, c
 {
 	FPerPlatformInt Row;
 	Row.Default = Default;
-#if WITH_EDITORONLY_DATA
 	Row.PerPlatform = PerPlatform;
-#else
-	(void)PerPlatform;
-#endif
 	Table->AddRow(FName(RowName), *reinterpret_cast<FTableRowBase*>(&Row));
 }
 
@@ -150,10 +146,6 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 
 bool FDataTableSingleFieldWritePreservesRowTest::RunTest(const FString& Parameters)
 {
-#if !WITH_EDITORONLY_DATA
-	AddInfo(TEXT("FPerPlatformInt::PerPlatform is editor-only data; nothing to assert here."));
-	return true;
-#else
 
 	UDataTable* Table = MakeTransientPerPlatformTable();
 	if (!TestNotNull(TEXT("transient DataTable was created"), Table)) return false;
@@ -224,7 +216,6 @@ bool FDataTableSingleFieldWritePreservesRowTest::RunTest(const FString& Paramete
 
 	TestEqual(TEXT("no row was added or dropped"), Table->GetRowMap().Num(), 2);
 	return true;
-#endif
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -238,10 +229,6 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 
 bool FDataTableRejectedWriteLeavesRowIntactTest::RunTest(const FString& Parameters)
 {
-#if !WITH_EDITORONLY_DATA
-	AddInfo(TEXT("FPerPlatformInt::PerPlatform is editor-only data; nothing to assert here."));
-	return true;
-#else
 	UDataTable* Table = MakeTransientPerPlatformTable();
 	if (!TestNotNull(TEXT("transient DataTable was created"), Table)) return false;
 	FGCRootScope TableRoot(Table);
@@ -274,7 +261,6 @@ bool FDataTableRejectedWriteLeavesRowIntactTest::RunTest(const FString& Paramete
 	TestEqual(TEXT("the scalar is untouched"), RowA->Default, 1);
 	TestEqual(TEXT("the TMap is untouched"), RowA->PerPlatform.Num(), 1);
 	return true;
-#endif
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -603,10 +589,6 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 
 bool FReadbackVerificationTest::RunTest(const FString& Parameters)
 {
-#if !WITH_EDITORONLY_DATA
-	AddInfo(TEXT("FPerPlatformInt::PerPlatform is editor-only data; nothing to assert here."));
-	return true;
-#else
 	FProperty* MapProp = FPerPlatformInt::StaticStruct()->FindPropertyByName(DataTableRowWriteMapField);
 	if (!TestNotNull(TEXT("FPerPlatformInt::PerPlatform exists"), MapProp)) return false;
 
@@ -640,7 +622,6 @@ bool FReadbackVerificationTest::RunTest(const FString& Parameters)
 		MCPJsonProperty::VerifyJsonOnProperty(MapProp, MapAddr, Requested, Detail));
 	TestTrue(TEXT("the mismatch says what was asked for"), Detail.Contains(TEXT("Windows")));
 	return true;
-#endif
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1548,10 +1529,6 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 
 bool FDataTableBatchCellWriteTest::RunTest(const FString& Parameters)
 {
-#if !WITH_EDITORONLY_DATA
-	AddInfo(TEXT("FPerPlatformInt::PerPlatform is editor-only data; nothing to assert here."));
-	return true;
-#else
 	UDataTable* Table = MakeTransientPerPlatformTable();
 	if (!TestNotNull(TEXT("transient DataTable was created"), Table)) return false;
 	FGCRootScope TableRoot(Table);
@@ -1706,7 +1683,6 @@ bool FDataTableBatchCellWriteTest::RunTest(const FString& Parameters)
 		ScalarIs(TEXT("RowC"), 3, TEXT("after the dry run"));
 	}
 	return true;
-#endif
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(

@@ -1079,7 +1079,6 @@ TSharedPtr<FJsonValue> FGasHandlers::ValidateCueCoverage(const TSharedPtr<FJsonO
 			IndexedRuntime = RuntimeSet->GameplayCueData.Num();
 		}
 		Result->SetNumberField(TEXT("cueManagerRuntimeEntries"), IndexedRuntime);
-#if WITH_EDITOR
 		int32 IndexedEditor = 0;
 		if (const UGameplayCueSet* EditorSet = CueManager->GetEditorCueSet())
 		{
@@ -1094,7 +1093,6 @@ TSharedPtr<FJsonValue> FGasHandlers::ValidateCueCoverage(const TSharedPtr<FJsonO
 				"has not run yet rather than that the notifies are broken. The coverage above comes from "
 				"the asset registry and is unaffected."));
 		}
-#endif
 	}
 	else
 	{

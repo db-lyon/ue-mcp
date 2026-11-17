@@ -36,7 +36,7 @@ namespace
 	/** A pin with the label, type and flags given. */
 	FPCGPinProperties MCPGraphPinsMake(const FName& Label, EPCGDataType Type, bool bMultipleConnections, bool bMultipleData, const FText& Tooltip)
 	{
-#if ENGINE_MAJOR_VERSION > 5 || (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 7)
+#if UE_MCP_HAS_5_7_API
 		return FPCGPinProperties(Label, FPCGDataTypeIdentifier{Type}, bMultipleConnections, bMultipleData, Tooltip);
 #else
 		return FPCGPinProperties(Label, Type, bMultipleConnections, bMultipleData, Tooltip);

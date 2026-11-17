@@ -534,7 +534,6 @@ TSharedPtr<FJsonValue> FAudioHandlers::ExtractSoundWavePCM(const TSharedPtr<FJso
 		return MCPAssetLoadError(SoundPath, TEXT("SoundWave"));
 	}
 
-#if WITH_EDITOR
 	TArray<uint8> RawPCM;
 	uint32 SampleRate = 0;
 	uint16 NumChannels = 0;
@@ -591,9 +590,6 @@ TSharedPtr<FJsonValue> FAudioHandlers::ExtractSoundWavePCM(const TSharedPtr<FJso
 	Result->SetStringField(TEXT("format"), TEXT("pcm_s16le"));
 	Result->SetStringField(TEXT("pcmBase64"), Base64);
 	return MCPResult(Result);
-#else
-	return MCPError(TEXT("extract_sound_wave_pcm requires an editor build"));
-#endif
 }
 
 TSharedPtr<FJsonValue> FAudioHandlers::CreateSoundCue(const TSharedPtr<FJsonObject>& Params)

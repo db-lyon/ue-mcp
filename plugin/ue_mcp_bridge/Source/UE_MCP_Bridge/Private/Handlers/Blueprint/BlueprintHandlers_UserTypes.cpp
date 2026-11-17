@@ -524,11 +524,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::ReadUserDefinedEnum(const TSharedPtr<
 	// UPROPERTYs on the asset (EnumDescription).
 	Res->SetStringField(TEXT("objectPath"), Enum->GetPathName());
 	Res->SetBoolField(TEXT("isUserDefined"), UserEnum != nullptr);
-#if WITH_EDITORONLY_DATA
 	Res->SetStringField(TEXT("description"), UserEnum ? UserEnum->EnumDescription.ToString() : FString());
-#else
-	Res->SetStringField(TEXT("description"), FString());
-#endif
 	Res->SetBoolField(TEXT("bitflags"), UserEnum ? FEnumEditorUtils::IsEnumeratorBitflagsType(UserEnum) : false);
 
 	TArray<TSharedPtr<FJsonValue>> Values;
@@ -846,11 +842,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::ReadUserDefinedStruct(const TSharedPt
 	Res->SetStringField(TEXT("objectPath"), Struct->GetPathName());
 	Res->SetStringField(TEXT("guid"), Struct->Guid.ToString());
 	Res->SetStringField(TEXT("status"), StructStatusName(Struct->Status.GetValue()));
-#if WITH_EDITORONLY_DATA
 	Res->SetStringField(TEXT("errorMessage"), Struct->ErrorMessage);
-#else
-	Res->SetStringField(TEXT("errorMessage"), FString());
-#endif
 	Res->SetStringField(TEXT("tooltip"), FStructureEditorUtils::GetTooltip(Struct));
 
 	FString ValidityMessage;
@@ -1246,9 +1238,8 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::EditStructMetadata(const TSharedPtr<F
 				// the only honest answer, because writing the rest of the field
 				// and dropping the metadata would report a success that left
 				// the ClampMin or EditCondition the caller asked for unset.
-				return MCPError(FString::Printf(
-					TEXT("fields[%d] sets metadata, which requires Unreal Engine 5.5 or newer: 5.4's user-defined struct members do not store metadata. Remove the metadata object to author the rest of the field."),
-					Slot));
+				return MCPUnsupportedEngineError(FString::Printf(TEXT("fields[%d] sets metadata, which"), Slot), TEXT("5.5"),
+					TEXT("5.4's user-defined struct members do not store metadata. Remove the metadata object to author the rest of the field"));
 #endif
 				for (const auto& JsonEntry : (*MetaObj)->Values)
 				{

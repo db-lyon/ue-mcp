@@ -13,8 +13,9 @@
  * as `undefined` and the call returns an ordinary success for a mutation that
  * never happened.
  *
- * Every flow action must therefore carry a `Params:` clause and declare every
- * name in it, on the same terms as the 24 categories.
+ * Every flow action must therefore declare its parameters (`params`) and the
+ * tool's shape must declare every name in it, on the same terms as the
+ * categories.
  */
 import { describe, expect, it } from "vitest";
 import { actionSchema } from "../../src/surface/action-schema.js";
@@ -41,9 +42,9 @@ describe("flow action contract", () => {
     ).toEqual([]);
   });
 
-  it("documents parameters on every action", () => {
+  it("declares parameters on every action", () => {
     const undocumented = Object.entries(flowTool.actions)
-      .filter(([, spec]) => !/\bParams:/.test(spec.description ?? ""))
+      .filter(([, spec]) => !spec.params)
       .map(([name]) => `flow.${name}`);
     expect(undocumented).toEqual([]);
   });

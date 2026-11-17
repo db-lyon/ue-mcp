@@ -17,7 +17,16 @@ export interface ToolSearchHit {
 
 type SearchableTool = {
   name: string;
-  actions?: Record<string, { description?: string; bridge?: string; effect?: string; movedTo?: unknown }>;
+  actions?: Record<string, {
+    description?: string;
+    bridge?: string;
+    effect?: string;
+    movedTo?: unknown;
+    escapeHatch?: boolean;
+    paramSpec?: ReadonlyArray<{ name: string; aliases?: readonly string[] }>;
+    params?: { required?: readonly string[]; optional?: readonly string[] };
+    epicSchema?: { properties?: Record<string, unknown> };
+  }>;
 };
 
 // Task-verb / noun synonyms. When a query contains the KEY (or any value), the
@@ -116,10 +125,6 @@ function expandTerms(words: string[]): Set<string> {
   return out;
 }
 
-// Actions that must never win a discovery ranking (they ARE the fallback / are
-// advanced escape hatches), so they don't out-rank a real dedicated action.
-const DEPRIORITIZE = new Set(["execute_python", "run_python_file", "execute_command"]);
-
 // Wrapped Epic tools a single tool may place ahead of the other hits.
 const EPIC_HITS_PER_TOOL = 2;
 
@@ -145,7 +150,8 @@ export function searchToolGraph(tools: SearchableTool[], query: string, limit = 
 
   for (const tool of tools) {
     for (const [actionName, spec] of Object.entries(tool.actions ?? {})) {
-      if (DEPRIORITIZE.has(actionName)) continue;
+      // An escape hatch is the fallback, so it never out-ranks a dedicated action.
+      if (spec?.escapeHatch) continue;
       // A moved action's old address is the same action; search names the canonical one.
       if (spec?.movedTo) continue;
       const desc = spec?.description ?? "";
@@ -154,7 +160,10 @@ export function searchToolGraph(tools: SearchableTool[], query: string, limit = 
       // neither scores as the action's own words: "create data table" must not
       // rank epic_create__data_table_toolset above asset.create_datatable.
       const nameWords = wordsOf(actionName.replace(/__.*$/, ""));
-      const descWords = wordsOf(desc.replace(/^\[Epic [^\]]*\]\s*/, ""));
+      // The names of the parameters it takes count as its text too.
+      const paramNames = spec?.paramSpec?.flatMap((p) => [p.name, ...(p.aliases ?? [])])
+        ?? (spec?.params ? [...(spec.params.required ?? []), ...(spec.params.optional ?? [])] : Object.keys(spec?.epicSchema?.properties ?? {}));
+      const descWords = wordsOf(`${desc.replace(/^\[Epic [^\]]*\]\s*/, "")}${paramNames.length ? ` params ${paramNames.join(" ")}` : ""}`);
       const nameSet = new Set(joinedWords(nameWords));
       const toolSet = new Set(joinedWords(wordsOf(tool.name)));
       const textSet = new Set(joinedWords(descWords));

@@ -252,6 +252,27 @@ Build.bat ue_mcpEditor Win64 Development -Project="...\ue_mcp.uproject" -Disable
 
 `-DisableAdaptiveUnity` matters: adaptive unity moves locally modified files out of their blob, which hides a collision from the person who introduced it.
 
+### Engine-version gates
+
+`Public/HandlerEngineVersion.h` is the one owner of engine-version gating. A gate names a `UE_MCP_HAS_5_x_API` macro or a feature macro defined there:
+
+```cpp
+#if UE_MCP_HAS_5_8_API          // not ENGINE_MINOR_VERSION >= 8
+#if UE_MCP_HAS_PCG_NODE_INSPECTION
+```
+
+- Never read `ENGINE_MAJOR_VERSION`, `ENGINE_MINOR_VERSION` or `UE_VERSION_OLDER_THAN` outside the header.
+- Never `#define` a feature macro in a `.cpp`: it leaks into the files after it in the unity blob. Add it to the header.
+- The oldest supported engine needs no gate.
+- `UE_MCP_Bridge` and `UE_MCP_BridgeMVVM` only build for the editor, so they carry no `WITH_EDITOR` or `WITH_EDITORONLY_DATA` guards.
+- An action compiled out on an older engine stays registered and answers `MCPUnsupportedEngineError(subject, "5.x", fallback)`, naming what to do on that engine.
+
+```bash
+npm run audit:engine-gates   # gates written outside HandlerEngineVersion.h
+```
+
+The audit runs in `npm run audit`, in the pre-commit hook when plugin sources are staged, and as a unit test.
+
 ## Dependencies
 
 Runtime: `@modelcontextprotocol/sdk` (MCP), `ws` (WebSocket), `zod` (schemas), `@db-lyon/flowkit` (flow engine), `js-yaml` (config and flows), `isomorphic-git` (checkpoints), `@anthropic-ai/sdk` (flow agent steps when no extension provides a model).

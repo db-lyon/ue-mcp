@@ -11,7 +11,9 @@ export const pluginsTool: ToolDef = categoryTool(
     list: {
       kind: "handler",
       effect: "read",
-      description: "Every plugin loaded from ue-mcp.yml: name, version, prefix, status, and injected actions. Params: none",
+      offline: "Reads the plugin set this server loaded.",
+      params: {},
+      description: "Every plugin loaded from ue-mcp.yml: name, version, prefix, status, and injected actions.",
       handler: async (ctx) => {
         const all = ctx.getPlugins?.() ?? [];
         return {
@@ -24,7 +26,9 @@ export const pluginsTool: ToolDef = categoryTool(
     describe: {
       kind: "handler",
       effect: "read",
-      description: "Full detail for one plugin including knowledge files and flows. Params: name",
+      offline: "Reads one loaded plugin's manifest.",
+      params: { required: ["name"] },
+      description: "Full detail for one plugin including knowledge files and flows.",
       handler: async (ctx, p) => {
         const target = p.name as string;
         const all = ctx.getPlugins?.() ?? [];

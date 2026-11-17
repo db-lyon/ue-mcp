@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { parseParams } from "../../src/surface/action-schema.js";
 import { assetTool } from "../../src/tools/asset.js";
 import { handlerSpecs } from "../../src/tools/specs/asset.generated.js";
 
@@ -14,7 +13,7 @@ describe("asset cloth section binding (#1139)", () => {
   });
 
   it("documents and forwards the section address", () => {
-    const params = parseParams(assetTool.actions.bind_cloth_to_section.description ?? "").params.map((p) => p.name);
+    const params = (assetTool.actions.bind_cloth_to_section.paramSpec ?? []).map((p) => p.name);
     expect(params).toEqual(expect.arrayContaining(["skeletalMeshPath", "lodIndex", "sectionIndex", "clothingAsset", "assetLodIndex"]));
 
     // #1057: both handlers declare the section address themselves, and the

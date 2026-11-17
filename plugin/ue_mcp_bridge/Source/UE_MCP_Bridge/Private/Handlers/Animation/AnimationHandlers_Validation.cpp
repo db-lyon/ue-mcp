@@ -471,9 +471,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::AnalyzeAnimation(const TSharedPtr<FJs
 		UE::Anim::FStackAttributeContainer Attributes;
 		FAnimationPoseData PoseData(CompactPose, Curve, Attributes);
 		FAnimExtractContext ExtractContext(TimeSeconds, false);
-#if WITH_EDITOR
 		ExtractContext.bIgnoreRootLock = true;
-#endif
 		Sequence->GetAnimationPose(PoseData, ExtractContext);
 		for (const FCompactPoseBoneIndex BoneIndex : CompactPose.ForEachBoneIndex())
 		{
@@ -627,9 +625,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::AnalyzeAnimation(const TSharedPtr<FJs
 	const double RootDisplacement = FVector::Distance(FirstRoot, LastRoot);
 	const double LoopRootTranslationError = bHasRootMotion ? 0.0 : RootDisplacement;
 	FAnimExtractContext RootMotionContext;
-#if WITH_EDITOR
 	RootMotionContext.bIgnoreRootLock = true;
-#endif
 #if UE_MCP_HAS_5_6_API
 	const FTransform CycleRootMotion = Sequence->ExtractRootMotionFromRange(0.0, DurationSeconds, RootMotionContext);
 #else

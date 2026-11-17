@@ -131,9 +131,7 @@ static UWidgetAnimation* WAnim_FindAnimation(UWidgetBlueprint* BP, const FString
 	{
 		if (!Anim) continue;
 		if (Anim->GetName() == Name) return Anim;
-#if WITH_EDITOR
 		if (Anim->GetDisplayLabel() == Name) return Anim;
-#endif
 	}
 	return nullptr;
 }
@@ -287,12 +285,10 @@ template <typename ChannelType>
 static TArray<FString> WAnim_ChannelNames(UMovieSceneSection* Section)
 {
 	TArray<FString> Names;
-#if WITH_EDITOR
 	for (const FMovieSceneChannelMetaData& Meta : Section->GetChannelProxy().GetMetaData<ChannelType>())
 	{
 		Names.Add(Meta.Name.ToString());
 	}
-#endif
 	return Names;
 }
 
@@ -511,9 +507,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::CreateWidgetAnimation(const TSharedPtr<F
 		return MCPError(FString::Printf(
 			TEXT("NewObject<UWidgetAnimation> returned null for '%s' on %s."), *AnimationName, *AssetPath));
 	}
-#if WITH_EDITOR
 	NewAnim->SetDisplayLabel(DisplayLabel);
-#endif
 
 	UMovieScene* MovieScene = NewObject<UMovieScene>(NewAnim, UniqueName, RF_Transactional);
 	NewAnim->MovieScene = MovieScene;
@@ -654,9 +648,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::GetWidgetAnimation(const TSharedPtr<FJso
 	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetStringField(TEXT("animationName"), Anim->GetName());
-#if WITH_EDITOR
 	Result->SetStringField(TEXT("displayLabel"), Anim->GetDisplayLabel());
-#endif
 	Result->SetNumberField(TEXT("displayRate"), MovieScene->GetDisplayRate().AsDecimal());
 	Result->SetNumberField(TEXT("tickResolution"), MovieScene->GetTickResolution().AsDecimal());
 

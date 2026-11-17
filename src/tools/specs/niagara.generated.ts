@@ -1677,54 +1677,6 @@ export const handlerSpecs: HandlerSpecs = {
   }
 };
 
-/** The Params: clause of each spec'd bridge method. */
-export const paramsClauses: Readonly<Record<string, string>> = {
-  add_emitter_renderer: "Params: systemPath (or assetPath), rendererType, emitterName?, emitterIndex?",
-  add_emitter_to_system: "Params: systemPath (or assetPath), emitterPath",
-  add_niagara_event_handler: "Params: systemPath (or assetPath), eventName, emitterName?, emitterIndex?, sourceEmitterId?",
-  add_niagara_module: "Params: systemPath (or assetPath), moduleScript, stackContext, emitterName?, emitterIndex?, targetIndex?",
-  add_niagara_simulation_stage: "Params: systemPath (or assetPath), stageName, emitterName?, emitterIndex?, enabled?",
-  capture_niagara_sim_cache: "Params: actorLabel OR actorPath, componentName?, frames?, advanceSimulation?, tickDelta?, attributeCaptureMode?, explicitAttributes?, world?, pieInstance?",
-  compile_niagara_system: "Params: systemPath (or assetPath), force?, includeGpuShaders?",
-  create_niagara_emitter: "Params: name, packagePath?, onConflict?, templatePath?, inherit?",
-  create_niagara_module_from_hlsl: "Params: name, hlsl, packagePath?, onConflict?, inputs?, outputs?",
-  create_niagara_system: "Params: name, packagePath?, onConflict?",
-  create_niagara_system_from_spec: "Params: name, packagePath?, onConflict?, emitters?",
-  create_scratch_module: "Params: name, packagePath?, onConflict?, inputs?, outputs?",
-  get_emitter_info: "Params: assetPath OR systemPath, emitterName?, emitterIndex?",
-  get_niagara_compiled_hlsl: "Params: systemPath (or assetPath), emitterName?, emitterIndex?",
-  get_niagara_custom_hlsl: "Params: scriptPath OR systemPath, stackContext?, emitterName?, emitterIndex?, nodeIndex?",
-  get_niagara_info: "Params: assetPath (or path, or systemPath)",
-  inspect_data_interface: "Params: systemPath (or assetPath)",
-  list_emitter_renderers: "Params: systemPath (or assetPath), emitterName?, emitterIndex?",
-  list_emitters_in_system: "Params: systemPath (or assetPath)",
-  list_niagara_dynamic_inputs: "Params: systemPath (or assetPath), emitterName?, emitterIndex?, stackContext?, moduleName?",
-  list_niagara_module_inputs: "Params: systemPath (or assetPath), emitterName?, emitterIndex?, stackContext?, moduleName?",
-  list_niagara_modules: "Params: pathFilter?, cursor?, limit?",
-  list_niagara_static_switches: "Params: systemPath (or assetPath), moduleName?, emitterName?, emitterIndex?, stackContext?",
-  list_niagara_system_parameters: "Params: systemPath (or assetPath)",
-  list_niagara_systems: "Params: cursor?, limit?",
-  reactivate_niagara: "Params: actorLabel OR actorPath",
-  read_niagara_sim_cache: "Params: simCachePath, emitterName?, attributes?, frameIndex?, limit?, summarize?",
-  remove_emitter_from_system: "Params: systemPath (or assetPath), emitterName?, emitterIndex?",
-  remove_emitter_renderer: "Params: systemPath (or assetPath), rendererIndex, emitterName?, emitterIndex?",
-  remove_niagara_dynamic_input: "Params: systemPath (or assetPath), stackContext, moduleName, inputName, emitterName?, emitterIndex?",
-  remove_niagara_event_handler: "Params: systemPath (or assetPath), eventName, emitterName?, emitterIndex?",
-  remove_niagara_module: "Params: systemPath (or assetPath), stackContext, moduleName, emitterName?, emitterIndex?",
-  remove_niagara_simulation_stage: "Params: systemPath (or assetPath), stageName, emitterName?, emitterIndex?",
-  set_emitter_property: "Params: systemPath (or assetPath), emitterName?, propertyName, value",
-  set_niagara_custom_hlsl: "Params: hlsl, scriptPath OR systemPath, stackContext?, emitterName?, emitterIndex?, nodeIndex?",
-  set_niagara_dynamic_input: "Params: systemPath (or assetPath), stackContext, moduleName, inputName, dynamicInputScript, emitterName?, emitterIndex?",
-  set_niagara_module_enabled: "Params: systemPath (or assetPath), stackContext, moduleName, enabled, emitterName?, emitterIndex?",
-  set_niagara_module_input: "Params: systemPath (or assetPath), moduleName, inputName, value, emitterName?, emitterIndex?, stackContext?",
-  set_niagara_parameter: "Params: actorLabel OR actorPath, parameterName, parameterType?, value OR valueX + valueY + valueZ",
-  set_niagara_static_switch: "Params: systemPath (or assetPath), moduleName, switchName, value, emitterName?, emitterIndex?, stackContext?",
-  set_renderer_property: "Params: systemPath (or assetPath), rendererIndex?, propertyName, value, emitterName?, emitterIndex?",
-  spawn_niagara_actor: "Params: systemPath (or assetPath), location?, rotation?, label?, activate?",
-  spawn_niagara_at_location: "Params: systemPath (or assetPath), location?, rotation?, label?, scaleX?, scaleY?, scaleZ?, autoDestroy?",
-  validate_niagara_system: "Params: systemPath (or assetPath)",
-};
-
 /** Every key the spec'd niagara handlers declare, aliases included. */
 export const schema: Record<string, z.ZodType> = {
   activate: z.boolean().optional().describe("Activate the system on spawn (default true) (#537)"),
@@ -1794,4 +1746,4 @@ export const schema: Record<string, z.ZodType> = {
 };
 
 /** Declare an action for a spec'd bridge method: effect, summary, method. */
-export const specBp = makeSpecBp(paramsClauses, handlerSpecs);
+export const specBp = makeSpecBp(handlerSpecs);

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { animationTool } from "../../src/tools/animation.js";
 import { handlerSpecs } from "../../src/tools/specs/animation.generated.js";
+import { actionSchema } from "../../src/surface/action-schema.js";
 import type { ToolContext } from "../../src/surface/tool-types.js";
 import { readHandlerFile } from "../../scripts/lib/cpp-registrations.mjs";
 
@@ -9,7 +10,9 @@ describe("animation.create_control_rig (#1133)", () => {
     const action = animationTool.actions.create_control_rig;
     expect(action.bridge).toBe("create_control_rig");
     expect(action.effect).toBe("mutate");
-    expect(action.description).toContain("Params: skeletalMeshPath?, skeletonPath?");
+    const byName = new Map(actionSchema(animationTool, "create_control_rig").params.map((p) => [p.name, p]));
+    expect(byName.get("skeletalMeshPath")?.required).toBe(false);
+    expect(byName.get("skeletonPath")?.required).toBe(false);
     expect(action.description).toContain("Pass exactly one source");
     expect(action.description).toContain("delete_asset rollback");
   });

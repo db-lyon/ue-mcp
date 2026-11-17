@@ -63,12 +63,10 @@ TSharedPtr<FJsonValue> FSkeletalMeshHandlers::GetSkinnedVertices(const TSharedPt
 	{
 		return MCPError(FString::Printf(TEXT("Component '%s' has no skinned mesh assigned"), *Comp->GetName()));
 	}
-#if WITH_EDITOR
 	if (const USkeletalMesh* Mesh = Cast<USkeletalMesh>(Asset); Mesh && Mesh->IsCompiling())
 	{
 		return MCPError(FString::Printf(TEXT("'%s' is still compiling; read it again once it finishes"), *Asset->GetPathName()));
 	}
-#endif
 	const FSkeletalMeshRenderData* RenderData = Asset->GetResourceForRendering();
 	if (!RenderData || RenderData->LODRenderData.Num() == 0)
 	{

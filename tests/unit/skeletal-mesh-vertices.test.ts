@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { assetTool } from "../../src/tools/asset.js";
 import { levelTool } from "../../src/tools/level.js";
-import { classifyAction } from "../../src/dispatch/locking.js";
+import { classifyAction } from "../../src/dispatch/written-paths.js";
 import { registeredTimeoutMs } from "../../src/bridge/bridge-timeouts.js";
 import { readHandlerFile } from "../../scripts/lib/cpp-registrations.mjs";
 
@@ -65,9 +65,10 @@ describe("read_skeletal_mesh_vertices (#1567)", () => {
     expect(assetTool.schema.action.safeParse("read_skeletal_mesh_vertices").success).toBe(true);
     const read = assetTool.actions.read_skeletal_mesh_vertices;
     expect(read.mapParams).toBeUndefined();
-    expect(read.description).toContain(
-      "Params: assetPath, boneNames?, includeChildBones?, minWeight?, box?, include?, offset?, limit?, dumpToFile?, outputPath?, lodIndex?, profileName?",
-    );
+    expect(read.paramSpec?.map((p) => `${p.name}${p.required ? "" : "?"}`)).toEqual([
+      "assetPath", "boneNames?", "includeChildBones?", "minWeight?", "box?", "include?", "offset?", "limit?",
+      "dumpToFile?", "outputPath?", "lodIndex?", "profileName?",
+    ]);
     expect(assetTool.schema.box.safeParse({ min: { x: -1, y: -1, z: -1 }, max: { x: 1, y: 1, z: 1 } }).success).toBe(true);
     expect(assetTool.schema.include.safeParse(["positions", "weights", "triangles"]).success).toBe(true);
     expect(registeredTimeoutMs("read_skeletal_mesh_vertices")).toBe(300_000);
@@ -98,9 +99,12 @@ describe("get_skinned_vertices (#1452)", () => {
     expect(levelTool.schema.action.safeParse("get_skinned_vertices").success).toBe(true);
     const read = levelTool.actions.get_skinned_vertices;
     expect(read.mapParams).toBeUndefined();
-    expect(read.description).toContain(
-      "Params: at least one of actorLabel/actorPath, componentName?, world?, pieInstance?, lodIndex?, space?, boneNames?, includeChildBones?, minWeight?, box?, nearPoint?, radius?, include?, startIndex?, limit?, dumpToFile?, outputPath?",
-    );
+    expect(read.paramSpec?.map((p) => `${p.name}${p.required ? "" : "?"}`)).toEqual([
+      "actorLabel?", "actorPath?", "componentName?", "world?", "pieInstance?", "lodIndex?", "space?", "boneNames?",
+      "includeChildBones?", "minWeight?", "box?", "nearPoint?", "radius?", "include?", "startIndex?", "limit?",
+      "dumpToFile?", "outputPath?",
+    ]);
+    expect(read.paramChoices).toEqual([{ mode: "atLeastOne", branches: [["actorLabel"], ["actorPath"]] }]);
     expect(levelTool.schema.space.safeParse("world").success).toBe(true);
     expect(levelTool.schema.space.safeParse("bone").success).toBe(false);
     expect(levelTool.schema.nearPoint.safeParse({ x: 1, y: 2, z: 3 }).success).toBe(true);

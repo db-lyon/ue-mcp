@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseParams } from "../../src/surface/action-schema.js";
+import { actionAccepts } from "../../src/surface/action-schema.js";
 import { materialTool } from "../../src/tools/material.js";
 
 describe("material designer layer stacks (#1131)", () => {
@@ -19,7 +19,8 @@ describe("material designer layer stacks (#1131)", () => {
 
   it("declares every documented parameter so the MCP layer does not strip it", () => {
     for (const [action] of cases) {
-      const names = parseParams(materialTool.actions[action].description ?? "").params.map((p) => p.name);
+      const names = [...(actionAccepts(materialTool.actions[action])?.keys ?? [])];
+      expect(names.length, action).toBeGreaterThan(0);
       for (const name of names) expect(materialTool.schema[name], `${action}: ${name}`).toBeDefined();
     }
   });

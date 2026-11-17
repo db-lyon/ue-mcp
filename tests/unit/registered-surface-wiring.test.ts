@@ -106,7 +106,7 @@ describe("a method the plugin did not register", () => {
     const props = flow.inputSchema.properties as Record<string, unknown>;
     expect(props.flowName).toBeDefined();
     expect(props.args).toBeUndefined();
-    expect(flow.description).toContain("Actions:\n- run:");
+    expect(flow.description).toMatch(/Actions:\n- run\(flowName, [^)]*\): /);
   }, 60_000);
 
   it("is refused by name without a round trip", async () => {

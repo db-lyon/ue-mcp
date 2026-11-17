@@ -89,10 +89,8 @@ namespace
 		Row->SetStringField(TEXT("function"), Name);
 		Row->SetStringField(TEXT("observationType"), LAObservationTypeName(Name));
 		Row->SetBoolField(TEXT("supportsCrossAttention"), Func->FindPropertyByName(TEXT("QueryElement")) != nullptr);
-#if WITH_EDITOR
 		const FString Tooltip = Func->GetToolTipText().ToString();
 		if (!Tooltip.IsEmpty()) Row->SetStringField(TEXT("description"), Tooltip.Left(600));
-#endif
 		if (bIncludeParameters)
 		{
 			TArray<TSharedPtr<FJsonValue>> Parameters;
@@ -107,10 +105,8 @@ namespace
 				TSharedPtr<FJsonObject> Param = MakeShared<FJsonObject>();
 				Param->SetStringField(TEXT("name"), Prop->GetName());
 				Param->SetStringField(TEXT("type"), Prop->GetCPPType());
-#if WITH_EDITOR
 				const FString Default = Func->GetMetaData(*(TEXT("CPP_Default_") + Prop->GetName()));
 				if (!Default.IsEmpty()) Param->SetStringField(TEXT("default"), Default);
-#endif
 				if (Prop->GetName() == TEXT("Schema")) Param->SetBoolField(TEXT("wiredAutomatically"), true);
 				Parameters.Add(MakeShared<FJsonValueObject>(Param));
 			}

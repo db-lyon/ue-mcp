@@ -324,24 +324,6 @@ export const handlerSpecs: HandlerSpecs = {
   }
 };
 
-/** The Params: clause of each spec'd bridge method. */
-export const paramsClauses: Readonly<Record<string, string>> = {
-  create_enum: "Params: name, packagePath?, entries?, onConflict?",
-  create_gameplay_tag: "Params: tag, comment?",
-  inspect_save_game: "Params: slotName, userIndex?",
-  is_class_loaded: "Params: className (or class)",
-  is_module_loaded: "Params: moduleName (or module)",
-  list_classes: "Params: parentFilter?, cursor?, limit?",
-  list_gameplay_tags: "Params: filter?, cursor?, limit?",
-  list_loaded_modules: "Params: filter?, loadedOnly?, cursor?, limit?",
-  list_structs: "Params: package?, filter?, cursor?, limit?",
-  reflect_class: "Params: className, includeInherited?",
-  reflect_enum: "Params: enumName",
-  reflect_instance: "Params: objectPath, propertyPath?, filter?, includeInherited?, includeValues?, editableOnly?, maxDepth?, cursor?, limit?",
-  reflect_struct: "Params: structName",
-  set_enum_entries: "Params: assetPath, entries",
-};
-
 /** Every key the spec'd reflection handlers declare, aliases included. */
 export const schema: Record<string, z.ZodType> = {
   assetPath: z.string().optional().describe("Existing UserDefinedEnum asset path"),
@@ -374,4 +356,4 @@ export const schema: Record<string, z.ZodType> = {
 };
 
 /** Declare an action for a spec'd bridge method: effect, summary, method. */
-export const specBp = makeSpecBp(paramsClauses, handlerSpecs);
+export const specBp = makeSpecBp(handlerSpecs);

@@ -46,7 +46,9 @@ export async function openDiffWindow(deps: DiffWindowDeps, p: Record<string, unk
 export const openDiffWindowAction: ActionSpec = {
   kind: "handler",
   effect: "read",
-  description: "Open Unreal's Blueprint Diff window between the Blueprint as it was at `against` (left) and the asset as loaded now (right), and bring the editor to the front. against is read as blueprint(diff) reads it: checkpoint:<id> from editor(checkpoint), revision:<rev> from source_control(history) (the provider's id, a unique prefix, its number, or head), or a bare id, tried as a checkpoint first. A checkpoint's version is exported from the shadow history, a revision's is fetched from the provider; either is loaded into a /Temp package that is unloaded when the window closes (unloadsOnClose, tempPackages) (#1483). Params: assetPath, against",
+  editorBound: "Opens Unreal's diff window through checkpoint_open_native_diff or source_control_diff, both in the editor.",
+  params: { required: ["assetPath", "against"] },
+  description: "Open Unreal's Blueprint Diff window between the Blueprint as it was at `against` (left) and the asset as loaded now (right), and bring the editor to the front. against is read as blueprint(diff) reads it: checkpoint:<id> from editor(checkpoint), revision:<rev> from source_control(history) (the provider's id, a unique prefix, its number, or head), or a bare id, tried as a checkpoint first. A checkpoint's version is exported from the shadow history, a revision's is fetched from the provider; either is loaded into a /Temp package that is unloaded when the window closes (unloadsOnClose, tempPackages) (#1483).",
   handler: async (ctx: ToolContext, p: Record<string, unknown>) => {
     const svc = ctx.session ? checkpointsFor(ctx.session) : undefined;
     return openDiffWindow({

@@ -25,7 +25,9 @@ describe("lease paths", () => {
   });
 
   it("finds the asset paths a mutating call names, and none for a read", () => {
-    expect(leasePathsOf("blueprint.add_variable", { blueprintPath: "/Game/BP_Hero.BP_Hero", name: "Speed" })).toEqual(["/Game/BP_Hero"]);
+    expect(leasePathsOf("blueprint.add_variable", { assetPath: "/Game/BP_Hero.BP_Hero", name: "Speed" })).toEqual(["/Game/BP_Hero"]);
+    // The same written-path rule as asset locks: a read reference beside the primary asset is not leased.
+    expect(leasePathsOf("blueprint.add_component", { assetPath: "/Game/BP_Hero", meshPath: "/Game/SM_Rock" })).toEqual(["/Game/BP_Hero"]);
     expect(leasePathsOf("asset.delete_batch", { assetPaths: ["/Game/A", "/Game/B"] }).sort()).toEqual(["/Game/A", "/Game/B"]);
     expect(leasePathsOf("asset.list", { path: "/Game/A" })).toEqual([]);
     expect(leasePathsOf("project.acquire_lease", { paths: ["/Game/A"] })).toEqual([]);

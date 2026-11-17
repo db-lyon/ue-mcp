@@ -3,15 +3,12 @@
  *
  * `src/flow/offline.ts` answers "which of these 900-odd actions can run with no
  * editor". Most of that answer is mechanical, because an action carrying a
- * bridge method cannot run without one. The rest is a hand-written table, and a
- * hand-written table over a surface this size is exactly the thing that rots.
+ * bridge method cannot run without one. The rest is declared on each
+ * handler-backed action (`offline` or `editorBound`).
  *
- * So the first two cases here are the anti-drift guard: the table's key set and
- * the graph's handler-backed action set must be the same set, in both
- * directions. Add a local action without classifying it and the first case
- * names it. Rename or delete one and the second names the stale entry. Nothing
- * defaults quietly to "works offline", which is the answer that would cost an
- * agent a session to disprove.
+ * So the first case here is the guard: add a local action without declaring
+ * either and it names it. Nothing defaults quietly to "works offline", which is
+ * the answer that would cost an agent a session to disprove.
  */
 import * as fs from "node:fs";
 import * as os from "node:os";
@@ -22,8 +19,6 @@ import { projectTool } from "../../src/tools/project.js";
 import { ProjectContext } from "../../src/config/project.js";
 import { McpError, ErrorCode } from "../../src/core/errors.js";
 import {
-  LOCAL_ACTIONS,
-  EDITOR_BOUND_LOCAL_ACTIONS,
   availabilityReport,
   classifyAvailability,
   classifyGraph,
@@ -44,40 +39,35 @@ function handlerBackedActions(): string[] {
   return out;
 }
 
-function classified(): Set<string> {
-  return new Set([...Object.keys(LOCAL_ACTIONS), ...Object.keys(EDITOR_BOUND_LOCAL_ACTIONS)]);
+function specOf(task: string) {
+  const [tool, action] = task.split(".");
+  return ALL_TOOLS.find((t) => t.name === tool)!.actions[action];
 }
 
 describe("offline classification stays level with the dispatched graph", () => {
   it("classifies every action that runs in this process", () => {
-    const known = classified();
-    const missing = handlerBackedActions().filter((name) => !known.has(name));
+    const missing = handlerBackedActions().filter((name) => !specOf(name).offline && !specOf(name).editorBound);
     if (missing.length > 0) {
       throw new Error(
         `${missing.length} action(s) run in the server process and nothing says whether they ` +
           `then call the editor:\n` +
           missing.map((n) => `  ${n}`).join("\n") +
-          `\n\nAdd each to LOCAL_ACTIONS in src/flow/offline.ts (with the reason it needs no editor) ` +
-          `or to EDITOR_BOUND_LOCAL_ACTIONS (with the bridge work it does). ` +
-          `project(list_available_actions) reports this answer to callers, so an unclassified ` +
+          `\n\nDeclare offline: "<why it needs no editor>" or editorBound: "<the bridge work it does>" ` +
+          `on each. project(list_available_actions) reports this answer to callers, so an unclassified ` +
           `action is reported as unknown and treated as needing an editor.`,
       );
     }
     expect(missing).toEqual([]);
   });
 
-  it("carries no entry for an action that no longer exists", () => {
-    const live = new Set(handlerBackedActions());
-    const stale = [...classified()].filter((name) => !live.has(name));
-    if (stale.length > 0) {
-      throw new Error(
-        `${stale.length} classified action(s) are not in the graph any more:\n` +
-          stale.map((n) => `  ${n}`).join("\n") +
-          `\n\nThey were renamed, deleted, or turned into bridge actions. Remove them from ` +
-          `src/flow/offline.ts.`,
-      );
+  it("never declares an action both offline and editor-bound, nor offline with a bridge method", () => {
+    const contradictions: string[] = [];
+    for (const tool of ALL_TOOLS) {
+      for (const [action, spec] of Object.entries(tool.actions)) {
+        if (spec.offline && (spec.editorBound || spec.bridge)) contradictions.push(`${tool.name}.${action}`);
+      }
     }
-    expect(stale).toEqual([]);
+    expect(contradictions).toEqual([]);
   });
 
   it("never calls an action offline while it still carries a bridge method", () => {

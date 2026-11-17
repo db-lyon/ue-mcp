@@ -102,7 +102,8 @@ function leanTool(tool: ToolDef): ToolDef {
     actions.describe = {
       kind: "handler",
       effect: "read",
-      description: `Signatures of the ${tool.name} category's actions, a page at a time. Params: offset?`,
+      params: { optional: ["offset"] },
+      description: `Signatures of the ${tool.name} category's actions, a page at a time.`,
       handler: async (ctx, p) => describeCategory(withholdFromTool(tool, registeredMethodsOf(ctx?.bridge)) ?? tool, readOffset(p)),
     };
   }
@@ -146,7 +147,8 @@ export function buildCatalogTool(tools: ToolDef[]): ToolDef {
     search: {
       kind: "handler",
       effect: "read",
-      description: "Rank actions across every category by keyword; returns signatures. Params: query, limit? (default 20)",
+      params: { required: ["query"], optional: ["limit"], notes: { limit: "default 20" } },
+      description: "Rank actions across every category by keyword; returns signatures.",
       handler: async (ctx, p) => {
         const query = typeof p.query === "string" ? p.query : "";
         const limit = typeof p.limit === "number" && p.limit > 0 ? Math.min(p.limit, 100) : 20;
@@ -160,7 +162,8 @@ export function buildCatalogTool(tools: ToolDef[]): ToolDef {
     describe: {
       kind: "handler",
       effect: "read",
-      description: "A category's action signatures a page at a time, or one action's parameter schema. Params: category, method?, offset?",
+      params: { required: ["category"], optional: ["method", "offset"] },
+      description: "A category's action signatures a page at a time, or one action's parameter schema.",
       handler: async (ctx, p) => {
         const category = typeof p.category === "string" ? p.category : "";
         const declared = byName.get(category);
