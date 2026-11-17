@@ -1,5 +1,5 @@
 {
-  "handlerCount": 1419,
+  "handlerCount": 1421,
   "handlers": {
     "acquire_lock": {
       "category": "lock",
@@ -21718,6 +21718,27 @@
           "type": "string",
           "required": false,
           "description": "Only report this sense: Sight | Hearing | Damage | Touch | Team | Prediction"
+        }
+      ]
+    },
+    "get_physics_asset_bodies": {
+      "category": "animation",
+      "params": [
+        {
+          "name": "assetPath",
+          "type": "string",
+          "required": true,
+          "description": "PhysicsAsset asset path, or a SkeletalMesh whose assigned PhysicsAsset to read",
+          "aliases": [
+            "path"
+          ]
+        },
+        {
+          "name": "boneNames",
+          "type": "array",
+          "required": false,
+          "description": "Only these bodies, by bone name (default every body); an unknown bone is refused",
+          "items": "string"
         }
       ]
     },
@@ -46613,6 +46634,254 @@
               "bodies"
             ]
           ]
+        }
+      ]
+    },
+    "set_physics_asset_body_shapes": {
+      "category": "animation",
+      "params": [
+        {
+          "name": "assetPath",
+          "type": "string",
+          "required": true,
+          "description": "PhysicsAsset asset path, or a SkeletalMesh whose assigned PhysicsAsset to edit",
+          "aliases": [
+            "path"
+          ]
+        },
+        {
+          "name": "bodyShapes",
+          "type": "array",
+          "required": true,
+          "description": "Bodies to edit, at most 256, one entry per bone; this is how the rollback replays",
+          "items": "object",
+          "fields": [
+            {
+              "name": "boneName",
+              "type": "string",
+              "required": true,
+              "description": "Bone whose body to edit"
+            },
+            {
+              "name": "mode",
+              "type": "string",
+              "required": false,
+              "description": "replace (default): each shape list given replaces that kind on the body and kinds not given are kept; append: the shapes are added after the existing ones",
+              "enum": [
+                "replace",
+                "append"
+              ]
+            },
+            {
+              "name": "sphyls",
+              "type": "array",
+              "required": false,
+              "description": "Capsules, at most 64, in bone space; length is the cylinder between the two hemispheres",
+              "items": "object",
+              "fields": [
+                {
+                  "name": "center",
+                  "type": "vec3",
+                  "required": false,
+                  "description": "Centre in bone space, default zero"
+                },
+                {
+                  "name": "rotation",
+                  "type": "rotator",
+                  "required": false,
+                  "description": "Rotation in bone space, default zero (the capsule axis is Z)"
+                },
+                {
+                  "name": "radius",
+                  "type": "number",
+                  "required": true,
+                  "description": "Radius, greater than 0",
+                  "minimum": 0
+                },
+                {
+                  "name": "length",
+                  "type": "number",
+                  "required": true,
+                  "description": "Cylinder length, 0 or more",
+                  "minimum": 0
+                },
+                {
+                  "name": "name",
+                  "type": "string",
+                  "required": false,
+                  "description": "Shape name, default none"
+                },
+                {
+                  "name": "collisionEnabled",
+                  "type": "string",
+                  "required": false,
+                  "description": "Per-shape collision, default QueryAndPhysics",
+                  "enum": [
+                    "NoCollision",
+                    "QueryOnly",
+                    "PhysicsOnly",
+                    "QueryAndPhysics",
+                    "ProbeOnly",
+                    "QueryAndProbe"
+                  ]
+                },
+                {
+                  "name": "contributeToMass",
+                  "type": "boolean",
+                  "required": false,
+                  "description": "Whether the shape counts toward the body's mass, default true"
+                },
+                {
+                  "name": "restOffset",
+                  "type": "number",
+                  "required": false,
+                  "description": "Contact rest offset, default 0"
+                }
+              ]
+            },
+            {
+              "name": "spheres",
+              "type": "array",
+              "required": false,
+              "description": "Spheres, at most 64, in bone space",
+              "items": "object",
+              "fields": [
+                {
+                  "name": "center",
+                  "type": "vec3",
+                  "required": false,
+                  "description": "Centre in bone space, default zero"
+                },
+                {
+                  "name": "radius",
+                  "type": "number",
+                  "required": true,
+                  "description": "Radius, greater than 0",
+                  "minimum": 0
+                },
+                {
+                  "name": "name",
+                  "type": "string",
+                  "required": false,
+                  "description": "Shape name, default none"
+                },
+                {
+                  "name": "collisionEnabled",
+                  "type": "string",
+                  "required": false,
+                  "description": "Per-shape collision, default QueryAndPhysics",
+                  "enum": [
+                    "NoCollision",
+                    "QueryOnly",
+                    "PhysicsOnly",
+                    "QueryAndPhysics",
+                    "ProbeOnly",
+                    "QueryAndProbe"
+                  ]
+                },
+                {
+                  "name": "contributeToMass",
+                  "type": "boolean",
+                  "required": false,
+                  "description": "Whether the shape counts toward the body's mass, default true"
+                },
+                {
+                  "name": "restOffset",
+                  "type": "number",
+                  "required": false,
+                  "description": "Contact rest offset, default 0"
+                }
+              ]
+            },
+            {
+              "name": "boxes",
+              "type": "array",
+              "required": false,
+              "description": "Boxes, at most 64, in bone space; x, y and z are full extents",
+              "items": "object",
+              "fields": [
+                {
+                  "name": "center",
+                  "type": "vec3",
+                  "required": false,
+                  "description": "Centre in bone space, default zero"
+                },
+                {
+                  "name": "rotation",
+                  "type": "rotator",
+                  "required": false,
+                  "description": "Rotation in bone space, default zero"
+                },
+                {
+                  "name": "x",
+                  "type": "number",
+                  "required": true,
+                  "description": "Full extent along X, greater than 0",
+                  "minimum": 0
+                },
+                {
+                  "name": "y",
+                  "type": "number",
+                  "required": true,
+                  "description": "Full extent along Y, greater than 0",
+                  "minimum": 0
+                },
+                {
+                  "name": "z",
+                  "type": "number",
+                  "required": true,
+                  "description": "Full extent along Z, greater than 0",
+                  "minimum": 0
+                },
+                {
+                  "name": "name",
+                  "type": "string",
+                  "required": false,
+                  "description": "Shape name, default none"
+                },
+                {
+                  "name": "collisionEnabled",
+                  "type": "string",
+                  "required": false,
+                  "description": "Per-shape collision, default QueryAndPhysics",
+                  "enum": [
+                    "NoCollision",
+                    "QueryOnly",
+                    "PhysicsOnly",
+                    "QueryAndPhysics",
+                    "ProbeOnly",
+                    "QueryAndProbe"
+                  ]
+                },
+                {
+                  "name": "contributeToMass",
+                  "type": "boolean",
+                  "required": false,
+                  "description": "Whether the shape counts toward the body's mass, default true"
+                },
+                {
+                  "name": "restOffset",
+                  "type": "number",
+                  "required": false,
+                  "description": "Contact rest offset, default 0"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "dryRun",
+          "type": "boolean",
+          "required": false,
+          "description": "Validate and report the shapes each body would get without changing anything (default false)",
+          "default": false
+        },
+        {
+          "name": "save",
+          "type": "boolean",
+          "required": false,
+          "description": "Save the asset after the edit (default true)",
+          "default": true
         }
       ]
     },

@@ -30,6 +30,11 @@
 #include "PhysicsEngine/ConstraintInstance.h"
 // UPhysicalMaterial, which set_physics_asset_body_material assigns to each body.
 #include "PhysicalMaterials/PhysicalMaterial.h"
+// FScopedTransaction around set_physics_asset_body_shapes, so the edit is one undo step.
+#include "ScopedTransaction.h"
+// The condensed writer set_physics_asset_body_shapes compares shape lists with.
+#include "Serialization/JsonSerializer.h"
+#include "Policies/CondensedJsonPrintPolicy.h"
 #include "Engine/SkeletalMeshSocket.h"
 // PhysicsEngine/SkeletalBodySetup.h is unavailable as a public include on
 // UE 5.4. USkeletalBodySetup is still defined transitively via PhysicsAsset.h.
@@ -242,6 +247,48 @@ void FAnimationHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		}),
 		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save the asset after the edit (default true)")).Default(true),
 	}, MCPSpec::AtLeastOne({ { TEXT("physicalMaterialPath") }, { TEXT("bodies") } }));
+	Registry.RegisterHandler(TEXT("get_physics_asset_bodies"), &GetPhysicsAssetBodies, {
+		AssetPath(TEXT("PhysicsAsset asset path, or a SkeletalMesh whose assigned PhysicsAsset to read")),
+		MCPParam::Optional(TEXT("boneNames"), EType::Array, TEXT("Only these bodies, by bone name (default every body); an unknown bone is refused")).Items(EType::String),
+	});
+	Registry.RegisterHandler(TEXT("set_physics_asset_body_shapes"), &SetPhysicsAssetBodyShapes, {
+		AssetPath(TEXT("PhysicsAsset asset path, or a SkeletalMesh whose assigned PhysicsAsset to edit")),
+		MCPParam::Required(TEXT("bodyShapes"), EType::Array, TEXT("Bodies to edit, at most 256, one entry per bone; this is how the rollback replays")).Items(EType::Object).WithFields({
+			MCPParam::RequiredField(TEXT("boneName"), EType::String, TEXT("Bone whose body to edit")),
+			MCPParam::OptionalField(TEXT("mode"), EType::String, TEXT("replace (default): each shape list given replaces that kind on the body and kinds not given are kept; append: the shapes are added after the existing ones")).Enum({ TEXT("replace"), TEXT("append") }),
+			MCPParam::OptionalField(TEXT("sphyls"), EType::Array, TEXT("Capsules, at most 64, in bone space; length is the cylinder between the two hemispheres")).Items(EType::Object).WithFields({
+				MCPParam::OptionalField(TEXT("center"), EType::Vec3, TEXT("Centre in bone space, default zero")),
+				MCPParam::OptionalField(TEXT("rotation"), EType::Rotator, TEXT("Rotation in bone space, default zero (the capsule axis is Z)")),
+				MCPParam::RequiredField(TEXT("radius"), EType::Number, TEXT("Radius, greater than 0")).Min(0),
+				MCPParam::RequiredField(TEXT("length"), EType::Number, TEXT("Cylinder length, 0 or more")).Min(0),
+				MCPParam::OptionalField(TEXT("name"), EType::String, TEXT("Shape name, default none")),
+				MCPParam::OptionalField(TEXT("collisionEnabled"), EType::String, TEXT("Per-shape collision, default QueryAndPhysics")).Enum({ TEXT("NoCollision"), TEXT("QueryOnly"), TEXT("PhysicsOnly"), TEXT("QueryAndPhysics"), TEXT("ProbeOnly"), TEXT("QueryAndProbe") }),
+				MCPParam::OptionalField(TEXT("contributeToMass"), EType::Boolean, TEXT("Whether the shape counts toward the body's mass, default true")),
+				MCPParam::OptionalField(TEXT("restOffset"), EType::Number, TEXT("Contact rest offset, default 0")),
+			}),
+			MCPParam::OptionalField(TEXT("spheres"), EType::Array, TEXT("Spheres, at most 64, in bone space")).Items(EType::Object).WithFields({
+				MCPParam::OptionalField(TEXT("center"), EType::Vec3, TEXT("Centre in bone space, default zero")),
+				MCPParam::RequiredField(TEXT("radius"), EType::Number, TEXT("Radius, greater than 0")).Min(0),
+				MCPParam::OptionalField(TEXT("name"), EType::String, TEXT("Shape name, default none")),
+				MCPParam::OptionalField(TEXT("collisionEnabled"), EType::String, TEXT("Per-shape collision, default QueryAndPhysics")).Enum({ TEXT("NoCollision"), TEXT("QueryOnly"), TEXT("PhysicsOnly"), TEXT("QueryAndPhysics"), TEXT("ProbeOnly"), TEXT("QueryAndProbe") }),
+				MCPParam::OptionalField(TEXT("contributeToMass"), EType::Boolean, TEXT("Whether the shape counts toward the body's mass, default true")),
+				MCPParam::OptionalField(TEXT("restOffset"), EType::Number, TEXT("Contact rest offset, default 0")),
+			}),
+			MCPParam::OptionalField(TEXT("boxes"), EType::Array, TEXT("Boxes, at most 64, in bone space; x, y and z are full extents")).Items(EType::Object).WithFields({
+				MCPParam::OptionalField(TEXT("center"), EType::Vec3, TEXT("Centre in bone space, default zero")),
+				MCPParam::OptionalField(TEXT("rotation"), EType::Rotator, TEXT("Rotation in bone space, default zero")),
+				MCPParam::RequiredField(TEXT("x"), EType::Number, TEXT("Full extent along X, greater than 0")).Min(0),
+				MCPParam::RequiredField(TEXT("y"), EType::Number, TEXT("Full extent along Y, greater than 0")).Min(0),
+				MCPParam::RequiredField(TEXT("z"), EType::Number, TEXT("Full extent along Z, greater than 0")).Min(0),
+				MCPParam::OptionalField(TEXT("name"), EType::String, TEXT("Shape name, default none")),
+				MCPParam::OptionalField(TEXT("collisionEnabled"), EType::String, TEXT("Per-shape collision, default QueryAndPhysics")).Enum({ TEXT("NoCollision"), TEXT("QueryOnly"), TEXT("PhysicsOnly"), TEXT("QueryAndPhysics"), TEXT("ProbeOnly"), TEXT("QueryAndProbe") }),
+				MCPParam::OptionalField(TEXT("contributeToMass"), EType::Boolean, TEXT("Whether the shape counts toward the body's mass, default true")),
+				MCPParam::OptionalField(TEXT("restOffset"), EType::Number, TEXT("Contact rest offset, default 0")),
+			}),
+		}),
+		MCPParam::Optional(TEXT("dryRun"), EType::Boolean, TEXT("Validate and report the shapes each body would get without changing anything (default false)")).Default(false),
+		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save the asset after the edit (default true)")).Default(true),
+	});
 	Registry.RegisterHandler(TEXT("read_anim_blueprint"), &ReadAnimBlueprint, {
 		AssetPath(TEXT("AnimBlueprint asset path")),
 	});
@@ -2496,6 +2543,623 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetPhysicsAssetBodyMaterial(const TSh
 		MCPSetRollback(Result, TEXT("set_physics_asset_body_material"), Payload);
 	}
 	SaveIfChanged(PhysicsAsset, bSave, ChangedCount, TEXT("materials"), Result);
+	return MCPResult(Result);
+}
+
+// ---------------------------------------------------------------------------
+// Physics asset body collision shapes
+//
+// get_physics_asset_info lists body bone names only, and editor Python cannot
+// reach the shapes: SkeletalBodySetups is not exposed, and the KSphylElem fields
+// are not attribute-accessible. These read and write each body's AggGeom
+// (spheres, boxes and capsules) in bone space. A write ends with
+// InvalidatePhysicsData, CreatePhysicsMeshes and PostEditChangeProperty on
+// AggGeom, the same refresh the Physics Asset Editor runs, so components using
+// the asset rebuild their physics state.
+// ---------------------------------------------------------------------------
+namespace MCPPhysicsAssetShapes
+{
+	constexpr int32 MaxBodies = 256;
+	constexpr int32 MaxShapesPerKind = 64;
+
+	FString CollisionName(ECollisionEnabled::Type Value)
+	{
+		const UEnum* Enum = StaticEnum<ECollisionEnabled::Type>();
+		return Enum ? Enum->GetNameStringByValue(static_cast<int64>(Value)) : FString::FromInt(static_cast<int32>(Value));
+	}
+
+	bool ParseCollision(const FString& Text, ECollisionEnabled::Type& Out)
+	{
+		const UEnum* Enum = StaticEnum<ECollisionEnabled::Type>();
+		if (!Enum) return false;
+		const int64 Value = Enum->GetValueByNameString(Text);
+		if (Value == INDEX_NONE) return false;
+		Out = static_cast<ECollisionEnabled::Type>(Value);
+		return true;
+	}
+
+	const TCHAR* PhysicsTypeName(EPhysicsType Type)
+	{
+		switch (Type)
+		{
+		case PhysType_Kinematic: return TEXT("Kinematic");
+		case PhysType_Simulated: return TEXT("Simulated");
+		default: return TEXT("Default");
+		}
+	}
+
+	/** The fields every shape kind shares. */
+	void CommonFields(const TSharedPtr<FJsonObject>& Obj, const FKShapeElem& Elem)
+	{
+		Obj->SetStringField(TEXT("name"), Elem.GetName().IsNone() ? FString() : Elem.GetName().ToString());
+		Obj->SetStringField(TEXT("collisionEnabled"), CollisionName(Elem.GetCollisionEnabled()));
+		Obj->SetBoolField(TEXT("contributeToMass"), Elem.GetContributeToMass());
+		Obj->SetNumberField(TEXT("restOffset"), Elem.RestOffset);
+	}
+
+	TSharedPtr<FJsonObject> SphylJson(const FKSphylElem& Elem)
+	{
+		TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
+		Obj->SetObjectField(TEXT("center"), MCPVec3ToJsonObject(Elem.Center));
+		Obj->SetObjectField(TEXT("rotation"), MCPRotatorToJsonObject(Elem.Rotation));
+		Obj->SetNumberField(TEXT("radius"), Elem.Radius);
+		Obj->SetNumberField(TEXT("length"), Elem.Length);
+		CommonFields(Obj, Elem);
+		return Obj;
+	}
+
+	TSharedPtr<FJsonObject> SphereJson(const FKSphereElem& Elem)
+	{
+		TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
+		Obj->SetObjectField(TEXT("center"), MCPVec3ToJsonObject(Elem.Center));
+		Obj->SetNumberField(TEXT("radius"), Elem.Radius);
+		CommonFields(Obj, Elem);
+		return Obj;
+	}
+
+	TSharedPtr<FJsonObject> BoxJson(const FKBoxElem& Elem)
+	{
+		TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
+		Obj->SetObjectField(TEXT("center"), MCPVec3ToJsonObject(Elem.Center));
+		Obj->SetObjectField(TEXT("rotation"), MCPRotatorToJsonObject(Elem.Rotation));
+		Obj->SetNumberField(TEXT("x"), Elem.X);
+		Obj->SetNumberField(TEXT("y"), Elem.Y);
+		Obj->SetNumberField(TEXT("z"), Elem.Z);
+		CommonFields(Obj, Elem);
+		return Obj;
+	}
+
+	TSharedPtr<FJsonObject> TaperedCapsuleJson(const FKTaperedCapsuleElem& Elem)
+	{
+		TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
+		Obj->SetObjectField(TEXT("center"), MCPVec3ToJsonObject(Elem.Center));
+		Obj->SetObjectField(TEXT("rotation"), MCPRotatorToJsonObject(Elem.Rotation));
+		Obj->SetNumberField(TEXT("radius0"), Elem.Radius0);
+		Obj->SetNumberField(TEXT("radius1"), Elem.Radius1);
+		Obj->SetNumberField(TEXT("length"), Elem.Length);
+		CommonFields(Obj, Elem);
+		return Obj;
+	}
+
+	template <typename ElemType>
+	TArray<TSharedPtr<FJsonValue>> ListJson(const TArray<ElemType>& Elems, TFunctionRef<TSharedPtr<FJsonObject>(const ElemType&)> ToJson, bool bWithIndex)
+	{
+		TArray<TSharedPtr<FJsonValue>> Out;
+		for (int32 Index = 0; Index < Elems.Num(); ++Index)
+		{
+			TSharedPtr<FJsonObject> Obj = ToJson(Elems[Index]);
+			if (bWithIndex) Obj->SetNumberField(TEXT("index"), Index);
+			Out.Add(MakeShared<FJsonValueObject>(Obj));
+		}
+		return Out;
+	}
+
+	TArray<TSharedPtr<FJsonValue>> SphylsJson(const FKAggregateGeom& Geom, bool bWithIndex = false)
+	{
+		return ListJson<FKSphylElem>(Geom.SphylElems, [](const FKSphylElem& E) { return SphylJson(E); }, bWithIndex);
+	}
+
+	TArray<TSharedPtr<FJsonValue>> SpheresJson(const FKAggregateGeom& Geom, bool bWithIndex = false)
+	{
+		return ListJson<FKSphereElem>(Geom.SphereElems, [](const FKSphereElem& E) { return SphereJson(E); }, bWithIndex);
+	}
+
+	TArray<TSharedPtr<FJsonValue>> BoxesJson(const FKAggregateGeom& Geom, bool bWithIndex = false)
+	{
+		return ListJson<FKBoxElem>(Geom.BoxElems, [](const FKBoxElem& E) { return BoxJson(E); }, bWithIndex);
+	}
+
+	/** The three editable lists as one comparable string. */
+	FString EditableShapesKey(const FKAggregateGeom& Geom)
+	{
+		TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
+		Obj->SetArrayField(TEXT("sphyls"), SphylsJson(Geom));
+		Obj->SetArrayField(TEXT("spheres"), SpheresJson(Geom));
+		Obj->SetArrayField(TEXT("boxes"), BoxesJson(Geom));
+		FString Out;
+		const TSharedRef<TJsonWriter<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>> Writer = TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&Out);
+		FJsonSerializer::Serialize(Obj.ToSharedRef(), Writer);
+		return Out;
+	}
+
+	/** Bounds of every shape on the body, in bone space; null when it has none. */
+	TSharedPtr<FJsonValue> BoundsJson(const FKAggregateGeom& Geom)
+	{
+		if (Geom.GetElementCount() == 0) return MakeShared<FJsonValueNull>();
+		const FBox Box = Geom.CalcAABB(FTransform::Identity);
+		if (!Box.IsValid) return MakeShared<FJsonValueNull>();
+		TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
+		Obj->SetObjectField(TEXT("min"), MCPVec3ToJsonObject(Box.Min));
+		Obj->SetObjectField(TEXT("max"), MCPVec3ToJsonObject(Box.Max));
+		Obj->SetObjectField(TEXT("center"), MCPVec3ToJsonObject(Box.GetCenter()));
+		Obj->SetObjectField(TEXT("extent"), MCPVec3ToJsonObject(Box.GetExtent()));
+		return MakeShared<FJsonValueObject>(Obj);
+	}
+
+	bool IsFiniteVector(const FVector& V) { return FMath::IsFinite(V.X) && FMath::IsFinite(V.Y) && FMath::IsFinite(V.Z); }
+	bool IsFiniteRotator(const FRotator& R) { return FMath::IsFinite(R.Pitch) && FMath::IsFinite(R.Yaw) && FMath::IsFinite(R.Roll); }
+
+	/** Reads center, rotation and the shared fields. Returns an error message, empty on success. */
+	FString ParseCommon(const TSharedPtr<FJsonObject>& Obj, const FString& Where, FKShapeElem& Elem, FVector& Center, FRotator* Rotation)
+	{
+		Center = FVector::ZeroVector;
+		const TSharedPtr<FJsonObject>* Sub = nullptr;
+		if (Obj->HasField(TEXT("center")))
+		{
+			if (!Obj->TryGetObjectField(TEXT("center"), Sub) || !Sub || !ReadVec3FieldsStrict(*Sub, Center) || !IsFiniteVector(Center))
+			{
+				return FString::Printf(TEXT("%scenter must be {x, y, z} with finite numbers"), *Where);
+			}
+		}
+		if (Rotation)
+		{
+			*Rotation = FRotator::ZeroRotator;
+			if (Obj->HasField(TEXT("rotation")))
+			{
+				if (!Obj->TryGetObjectField(TEXT("rotation"), Sub) || !Sub || !ReadRotatorFieldsStrict(*Sub, *Rotation) || !IsFiniteRotator(*Rotation))
+				{
+					return FString::Printf(TEXT("%srotation must be {pitch, yaw, roll} with finite numbers"), *Where);
+				}
+			}
+		}
+		FString Name;
+		if (Obj->TryGetStringField(TEXT("name"), Name))
+		{
+			Elem.SetName(Name.IsEmpty() ? FName(NAME_None) : FName(*Name));
+		}
+		FString Collision;
+		if (Obj->TryGetStringField(TEXT("collisionEnabled"), Collision))
+		{
+			ECollisionEnabled::Type Parsed;
+			if (!ParseCollision(Collision, Parsed))
+			{
+				return FString::Printf(TEXT("%scollisionEnabled is '%s'; use NoCollision, QueryOnly, PhysicsOnly, QueryAndPhysics, ProbeOnly or QueryAndProbe"), *Where, *Collision);
+			}
+			Elem.SetCollisionEnabled(Parsed);
+		}
+		bool bMass = true;
+		if (Obj->TryGetBoolField(TEXT("contributeToMass"), bMass))
+		{
+			Elem.SetContributeToMass(bMass);
+		}
+		if (Obj->HasField(TEXT("restOffset")))
+		{
+			double RestOffset = 0.0;
+			if (!Obj->TryGetNumberField(TEXT("restOffset"), RestOffset) || !FMath::IsFinite(RestOffset))
+			{
+				return FString::Printf(TEXT("%srestOffset must be a finite number"), *Where);
+			}
+			Elem.RestOffset = static_cast<float>(RestOffset);
+		}
+		return FString();
+	}
+
+	/** A required dimension that must be finite and above (or, when bAllowZero, at least) zero. */
+	FString ParseDimension(const TSharedPtr<FJsonObject>& Obj, const FString& Where, const TCHAR* Key, bool bAllowZero, float& Out)
+	{
+		double Value = 0.0;
+		if (!Obj->TryGetNumberField(Key, Value))
+		{
+			return FString::Printf(TEXT("%s%s is required"), *Where, Key);
+		}
+		if (!FMath::IsFinite(Value) || Value < 0.0 || (!bAllowZero && Value <= 0.0))
+		{
+			return FString::Printf(TEXT("%s%s must be a finite number %s 0, got %g"), *Where, Key, bAllowZero ? TEXT("of at least") : TEXT("greater than"), Value);
+		}
+		Out = static_cast<float>(Value);
+		return FString();
+	}
+
+	/** One parsed body entry: the shape lists it gives, and how they apply. */
+	struct FBodyShapesEdit
+	{
+		FString BoneName;
+		bool bAppend = false;
+		TOptional<TArray<FKSphylElem>> Sphyls;
+		TOptional<TArray<FKSphereElem>> Spheres;
+		TOptional<TArray<FKBoxElem>> Boxes;
+	};
+
+	/** Reads one shape list off Obj into Out; bPresent says whether the key was given. */
+	template <typename ElemType>
+	FString ReadShapeList(const TSharedPtr<FJsonObject>& Obj, const FString& Where, const TCHAR* Key,
+		TFunctionRef<FString(const TSharedPtr<FJsonObject>&, const FString&, ElemType&)> ReadOne, TOptional<TArray<ElemType>>& Out)
+	{
+		if (!Obj->HasField(Key)) return FString();
+		const TArray<TSharedPtr<FJsonValue>>* Arr = nullptr;
+		if (!Obj->TryGetArrayField(Key, Arr) || !Arr)
+		{
+			return FString::Printf(TEXT("%s%s must be an array"), *Where, Key);
+		}
+		if (Arr->Num() > MaxShapesPerKind)
+		{
+			return FString::Printf(TEXT("%s%s has %d shapes; at most %d per body"), *Where, Key, Arr->Num(), MaxShapesPerKind);
+		}
+		TArray<ElemType> Elems;
+		for (int32 Index = 0; Index < Arr->Num(); ++Index)
+		{
+			const TSharedPtr<FJsonObject>* ShapeObj = nullptr;
+			if (!(*Arr)[Index].IsValid() || !(*Arr)[Index]->TryGetObject(ShapeObj) || !ShapeObj || !(*ShapeObj).IsValid())
+			{
+				return FString::Printf(TEXT("%s%s[%d] must be an object"), *Where, Key, Index);
+			}
+			ElemType Elem;
+			const FString Error = ReadOne(*ShapeObj, FString::Printf(TEXT("%s%s[%d]."), *Where, Key, Index), Elem);
+			if (!Error.IsEmpty()) return Error;
+			Elems.Add(Elem);
+		}
+		Out = MoveTemp(Elems);
+		return FString();
+	}
+
+	/** Reads one bodyShapes[] entry. Returns an error message, empty on success. */
+	FString ParseBodyEdit(const TSharedPtr<FJsonObject>& Obj, int32 BodyIndex, FBodyShapesEdit& Out)
+	{
+		const FString Where = FString::Printf(TEXT("bodyShapes[%d]."), BodyIndex);
+		if (!Obj->TryGetStringField(TEXT("boneName"), Out.BoneName) || Out.BoneName.IsEmpty())
+		{
+			return FString::Printf(TEXT("%sboneName is required"), *Where);
+		}
+		FString Mode = TEXT("replace");
+		if (Obj->HasField(TEXT("mode")) && !Obj->TryGetStringField(TEXT("mode"), Mode))
+		{
+			return FString::Printf(TEXT("%smode must be replace or append"), *Where);
+		}
+		if (Mode.Equals(TEXT("append"), ESearchCase::IgnoreCase))
+		{
+			Out.bAppend = true;
+		}
+		else if (!Mode.Equals(TEXT("replace"), ESearchCase::IgnoreCase))
+		{
+			return FString::Printf(TEXT("%smode is '%s'; use replace or append"), *Where, *Mode);
+		}
+
+		// Every list is read in full before anything is applied, so a bad shape refuses the call.
+		FString Error = ReadShapeList<FKSphylElem>(Obj, Where, TEXT("sphyls"),
+			[](const TSharedPtr<FJsonObject>& S, const FString& W, FKSphylElem& Elem) -> FString
+			{
+				FString Err = ParseCommon(S, W, Elem, Elem.Center, &Elem.Rotation);
+				if (Err.IsEmpty()) Err = ParseDimension(S, W, TEXT("radius"), false, Elem.Radius);
+				if (Err.IsEmpty()) Err = ParseDimension(S, W, TEXT("length"), true, Elem.Length);
+				return Err;
+			}, Out.Sphyls);
+		if (Error.IsEmpty())
+		{
+			Error = ReadShapeList<FKSphereElem>(Obj, Where, TEXT("spheres"),
+				[](const TSharedPtr<FJsonObject>& S, const FString& W, FKSphereElem& Elem) -> FString
+				{
+					FString Err = ParseCommon(S, W, Elem, Elem.Center, nullptr);
+					if (Err.IsEmpty()) Err = ParseDimension(S, W, TEXT("radius"), false, Elem.Radius);
+					return Err;
+				}, Out.Spheres);
+		}
+		if (Error.IsEmpty())
+		{
+			Error = ReadShapeList<FKBoxElem>(Obj, Where, TEXT("boxes"),
+				[](const TSharedPtr<FJsonObject>& S, const FString& W, FKBoxElem& Elem) -> FString
+				{
+					FString Err = ParseCommon(S, W, Elem, Elem.Center, &Elem.Rotation);
+					if (Err.IsEmpty()) Err = ParseDimension(S, W, TEXT("x"), false, Elem.X);
+					if (Err.IsEmpty()) Err = ParseDimension(S, W, TEXT("y"), false, Elem.Y);
+					if (Err.IsEmpty()) Err = ParseDimension(S, W, TEXT("z"), false, Elem.Z);
+					return Err;
+				}, Out.Boxes);
+		}
+		if (!Error.IsEmpty()) return Error;
+
+		if (!Out.Sphyls.IsSet() && !Out.Spheres.IsSet() && !Out.Boxes.IsSet())
+		{
+			return FString::Printf(TEXT("bodyShapes[%d] gives no sphyls, spheres or boxes; pass at least one list (an empty list with mode replace clears that kind)"), BodyIndex);
+		}
+		return FString();
+	}
+
+	/** Applies one edit to a copy of Geom and returns the copy. */
+	FKAggregateGeom Apply(const FKAggregateGeom& Geom, const FBodyShapesEdit& Edit)
+	{
+		FKAggregateGeom Out = Geom;
+		if (Edit.Sphyls.IsSet())
+		{
+			if (!Edit.bAppend) Out.SphylElems.Reset();
+			Out.SphylElems.Append(Edit.Sphyls.GetValue());
+		}
+		if (Edit.Spheres.IsSet())
+		{
+			if (!Edit.bAppend) Out.SphereElems.Reset();
+			Out.SphereElems.Append(Edit.Spheres.GetValue());
+		}
+		if (Edit.Boxes.IsSet())
+		{
+			if (!Edit.bAppend) Out.BoxElems.Reset();
+			Out.BoxElems.Append(Edit.Boxes.GetValue());
+		}
+		return Out;
+	}
+
+	/** The editable lists of Geom, each with its index. */
+	void SetShapeLists(const TSharedPtr<FJsonObject>& Obj, const FKAggregateGeom& Geom, bool bWithIndex)
+	{
+		Obj->SetArrayField(TEXT("sphyls"), SphylsJson(Geom, bWithIndex));
+		Obj->SetArrayField(TEXT("spheres"), SpheresJson(Geom, bWithIndex));
+		Obj->SetArrayField(TEXT("boxes"), BoxesJson(Geom, bWithIndex));
+	}
+}
+
+// ---------------------------------------------------------------------------
+// get_physics_asset_bodies
+// ---------------------------------------------------------------------------
+TSharedPtr<FJsonValue> FAnimationHandlers::GetPhysicsAssetBodies(const TSharedPtr<FJsonObject>& Params)
+{
+	using namespace MCPPhysicsAssetEdit;
+	using namespace MCPPhysicsAssetShapes;
+
+	// Every parameter is read before anything can fail (#1057).
+	const TArray<TSharedPtr<FJsonValue>>* NamesArr = nullptr;
+	const bool bHasNames = TryGetArrayParam(Params, TEXT("boneNames"), NamesArr) && NamesArr;
+	FString AssetPath;
+	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
+
+	UPhysicsAsset* PhysicsAsset = nullptr;
+	if (auto Err = Resolve(AssetPath, PhysicsAsset)) return Err;
+
+	TArray<USkeletalBodySetup*> Bodies;
+	if (bHasNames)
+	{
+		TArray<FString> Unknown;
+		for (const FString& Name : JsonArrayToStringList(NamesArr))
+		{
+			if (USkeletalBodySetup* Body = FindBody(PhysicsAsset, FName(*Name))) Bodies.AddUnique(Body);
+			else Unknown.Add(Name);
+		}
+		if (Unknown.Num() > 0)
+		{
+			TArray<FString> Known;
+			for (const USkeletalBodySetup* Body : PhysicsAsset->SkeletalBodySetups)
+			{
+				if (Body) Known.Add(Body->BoneName.ToString());
+			}
+			return MCPError(FString::Printf(TEXT("No body for bone %s on %s. Bodies: %s"),
+				*FString::Join(Unknown, TEXT(", ")), *PhysicsAsset->GetName(), *FString::Join(Known, TEXT(", "))));
+		}
+	}
+	else
+	{
+		for (USkeletalBodySetup* Body : PhysicsAsset->SkeletalBodySetups)
+		{
+			if (Body) Bodies.Add(Body);
+		}
+	}
+
+	TArray<TSharedPtr<FJsonValue>> Rows;
+	for (USkeletalBodySetup* Body : Bodies)
+	{
+		const FKAggregateGeom& Geom = Body->AggGeom;
+		TSharedPtr<FJsonObject> Row = MakeShared<FJsonObject>();
+		Row->SetStringField(TEXT("boneName"), Body->BoneName.ToString());
+		Row->SetNumberField(TEXT("bodyIndex"), PhysicsAsset->SkeletalBodySetups.IndexOfByKey(Body));
+		Row->SetStringField(TEXT("physicsType"), PhysicsTypeName(Body->PhysicsType));
+		Row->SetStringField(TEXT("collisionEnabled"), CollisionName(Body->DefaultInstance.GetCollisionEnabled(false)));
+		Row->SetBoolField(TEXT("collisionResponseEnabled"), Body->CollisionReponse != EBodyCollisionResponse::BodyCollision_Disabled);
+		Row->SetBoolField(TEXT("considerForBounds"), Body->bConsiderForBounds);
+		const UPhysicalMaterial* Material = Body->PhysMaterial.Get();
+		Row->SetStringField(TEXT("physicalMaterialPath"), Material ? Material->GetPathName() : FString());
+		Row->SetNumberField(TEXT("shapeCount"), Geom.GetElementCount());
+		SetShapeLists(Row, Geom, true);
+		Row->SetArrayField(TEXT("taperedCapsules"), ListJson<FKTaperedCapsuleElem>(Geom.TaperedCapsuleElems,
+			[](const FKTaperedCapsuleElem& E) { return TaperedCapsuleJson(E); }, true));
+		Row->SetNumberField(TEXT("convexCount"), Geom.ConvexElems.Num());
+		int32 ConvexVertices = 0;
+		for (const FKConvexElem& Convex : Geom.ConvexElems) ConvexVertices += Convex.VertexData.Num();
+		Row->SetNumberField(TEXT("convexVertexCount"), ConvexVertices);
+		Row->SetField(TEXT("bounds"), BoundsJson(Geom));
+		Rows.Add(MakeShared<FJsonValueObject>(Row));
+	}
+
+	auto Result = MCPSuccess();
+	Result->SetStringField(TEXT("physicsAssetName"), PhysicsAsset->GetName());
+	Result->SetStringField(TEXT("physicsAssetPath"), PhysicsAsset->GetPathName());
+	Result->SetStringField(TEXT("space"), TEXT("bone"));
+	Result->SetNumberField(TEXT("bodyCount"), PhysicsAsset->SkeletalBodySetups.Num());
+	Result->SetArrayField(TEXT("bodies"), Rows);
+	Result->SetNumberField(TEXT("count"), Rows.Num());
+	return MCPResult(Result);
+}
+
+// ---------------------------------------------------------------------------
+// set_physics_asset_body_shapes
+// ---------------------------------------------------------------------------
+TSharedPtr<FJsonValue> FAnimationHandlers::SetPhysicsAssetBodyShapes(const TSharedPtr<FJsonObject>& Params)
+{
+	using namespace MCPPhysicsAssetEdit;
+	using namespace MCPPhysicsAssetShapes;
+
+	// Every parameter is read before anything can fail (#1057).
+	const TArray<TSharedPtr<FJsonValue>>* BodiesArr = nullptr;
+	const bool bHasBodies = TryGetArrayParam(Params, TEXT("bodyShapes"), BodiesArr) && BodiesArr;
+	const bool bDryRun = OptionalBool(Params, TEXT("dryRun"), false);
+	const bool bSave = OptionalBool(Params, TEXT("save"), true);
+	FString AssetPath;
+	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
+	if (!bHasBodies || BodiesArr->Num() == 0)
+	{
+		return MCPError(TEXT("Nothing to write: pass a non-empty bodyShapes array"));
+	}
+	if (BodiesArr->Num() > MaxBodies)
+	{
+		return MCPError(FString::Printf(TEXT("bodyShapes has %d entries; at most %d per call"), BodiesArr->Num(), MaxBodies));
+	}
+
+	// Parse and validate every shape before resolving anything, so a bad value changes nothing.
+	TArray<FBodyShapesEdit> Edits;
+	TSet<FString> SeenBones;
+	for (int32 Index = 0; Index < BodiesArr->Num(); ++Index)
+	{
+		const TSharedPtr<FJsonObject>* EntryObj = nullptr;
+		if (!(*BodiesArr)[Index].IsValid() || !(*BodiesArr)[Index]->TryGetObject(EntryObj) || !EntryObj || !(*EntryObj).IsValid())
+		{
+			return MCPError(FString::Printf(TEXT("bodyShapes[%d] must be an object"), Index));
+		}
+		FBodyShapesEdit Edit;
+		const FString Error = ParseBodyEdit(*EntryObj, Index, Edit);
+		if (!Error.IsEmpty()) return MCPError(Error);
+		bool bDuplicate = false;
+		SeenBones.Add(Edit.BoneName.ToLower(), &bDuplicate);
+		if (bDuplicate)
+		{
+			return MCPError(FString::Printf(TEXT("bodyShapes[%d] repeats bone %s; give each body one entry"), Index, *Edit.BoneName));
+		}
+		Edits.Add(MoveTemp(Edit));
+	}
+
+	UPhysicsAsset* PhysicsAsset = nullptr;
+	if (auto Err = Resolve(AssetPath, PhysicsAsset)) return Err;
+
+	// Resolve every bone before the first write, so a typo changes nothing.
+	TArray<USkeletalBodySetup*> Targets;
+	TArray<FString> Unknown;
+	for (const FBodyShapesEdit& Edit : Edits)
+	{
+		USkeletalBodySetup* Body = FindBody(PhysicsAsset, FName(*Edit.BoneName));
+		if (!Body) Unknown.Add(Edit.BoneName);
+		Targets.Add(Body);
+	}
+	if (Unknown.Num() > 0)
+	{
+		TArray<FString> Known;
+		for (const USkeletalBodySetup* Body : PhysicsAsset->SkeletalBodySetups)
+		{
+			if (Body) Known.Add(Body->BoneName.ToString());
+		}
+		return MCPError(FString::Printf(TEXT("No body for bone %s on %s. Nothing was changed. Bodies: %s"),
+			*FString::Join(Unknown, TEXT(", ")), *PhysicsAsset->GetName(), *FString::Join(Known, TEXT(", "))));
+	}
+	if (bSave && !bDryRun)
+	{
+		if (auto Blocked = MCPAssetWriteBlockedError(PhysicsAsset, PhysicsAsset->GetPathName(), TEXT("edit this physics asset's body shapes"))) return Blocked;
+	}
+
+	// The geometry each body would end with, computed on copies, and the state before.
+	TArray<FKAggregateGeom> Planned;
+	TArray<FKAggregateGeom> Before;
+	TArray<bool> Changes;
+	int32 ChangedCount = 0;
+	for (int32 Index = 0; Index < Edits.Num(); ++Index)
+	{
+		Before.Add(Targets[Index]->AggGeom);
+		Planned.Add(Apply(Before[Index], Edits[Index]));
+		const bool bChanged = EditableShapesKey(Planned[Index]) != EditableShapesKey(Before[Index]);
+		Changes.Add(bChanged);
+		if (bChanged) ++ChangedCount;
+	}
+
+	if (!bDryRun && ChangedCount > 0)
+	{
+		const FScopedTransaction Transaction(NSLOCTEXT("UE_MCP", "SetPhysicsAssetBodyShapes", "Set Physics Asset Body Shapes"));
+		PhysicsAsset->Modify();
+		FProperty* AggGeomProperty = FindFProperty<FProperty>(UBodySetup::StaticClass(), GET_MEMBER_NAME_CHECKED(UBodySetup, AggGeom));
+		for (int32 Index = 0; Index < Edits.Num(); ++Index)
+		{
+			if (!Changes[Index]) continue;
+			USkeletalBodySetup* Body = Targets[Index];
+			Body->Modify();
+			// Only the editable kinds are assigned; tapered capsules, convex hulls and level sets stay as they were.
+			Body->AggGeom.SphylElems = Planned[Index].SphylElems;
+			Body->AggGeom.SphereElems = Planned[Index].SphereElems;
+			Body->AggGeom.BoxElems = Planned[Index].BoxElems;
+			Body->InvalidatePhysicsData();
+			Body->CreatePhysicsMeshes();
+			FPropertyChangedEvent Event(AggGeomProperty, EPropertyChangeType::ValueSet);
+			Body->PostEditChangeProperty(Event);
+		}
+		PhysicsAsset->UpdateBoundsBodiesArray();
+		PhysicsAsset->RefreshPhysicsAssetChange();
+		PhysicsAsset->MarkPackageDirty();
+	}
+
+	// Read back what each body holds now (on a dry run, what it would hold).
+	TArray<TSharedPtr<FJsonValue>> Rows;
+	TArray<TSharedPtr<FJsonValue>> RollbackEntries;
+	TArray<FString> Mismatched;
+	for (int32 Index = 0; Index < Edits.Num(); ++Index)
+	{
+		const FBodyShapesEdit& Edit = Edits[Index];
+		const FKAggregateGeom& Now = bDryRun ? Planned[Index] : Targets[Index]->AggGeom;
+		const bool bVerified = bDryRun || EditableShapesKey(Now) == EditableShapesKey(Planned[Index]);
+		if (!bVerified) Mismatched.Add(Edit.BoneName);
+
+		TSharedPtr<FJsonObject> Row = MakeShared<FJsonObject>();
+		Row->SetStringField(TEXT("boneName"), Targets[Index]->BoneName.ToString());
+		Row->SetStringField(TEXT("mode"), Edit.bAppend ? TEXT("append") : TEXT("replace"));
+		Row->SetBoolField(bDryRun ? TEXT("wouldChange") : TEXT("changed"), Changes[Index]);
+		if (!bDryRun) Row->SetBoolField(TEXT("verified"), bVerified);
+		SetShapeLists(Row, Now, true);
+		Row->SetField(TEXT("bounds"), BoundsJson(Now));
+		TSharedPtr<FJsonObject> Previous = MakeShared<FJsonObject>();
+		SetShapeLists(Previous, Before[Index], true);
+		Row->SetObjectField(TEXT("previous"), Previous);
+		Rows.Add(MakeShared<FJsonValueObject>(Row));
+
+		// The rollback restores only the kinds this call touched, as they were before it.
+		if (Changes[Index])
+		{
+			TSharedPtr<FJsonObject> Restore = MakeShared<FJsonObject>();
+			Restore->SetStringField(TEXT("boneName"), Targets[Index]->BoneName.ToString());
+			Restore->SetStringField(TEXT("mode"), TEXT("replace"));
+			if (Edit.Sphyls.IsSet()) Restore->SetArrayField(TEXT("sphyls"), SphylsJson(Before[Index]));
+			if (Edit.Spheres.IsSet()) Restore->SetArrayField(TEXT("spheres"), SpheresJson(Before[Index]));
+			if (Edit.Boxes.IsSet()) Restore->SetArrayField(TEXT("boxes"), BoxesJson(Before[Index]));
+			RollbackEntries.Add(MakeShared<FJsonValueObject>(Restore));
+		}
+	}
+
+	auto Result = MCPSuccess();
+	Result->SetStringField(TEXT("physicsAssetPath"), PhysicsAsset->GetPathName());
+	Result->SetStringField(TEXT("space"), TEXT("bone"));
+	Result->SetArrayField(TEXT("bodies"), Rows);
+	Result->SetNumberField(TEXT("count"), Rows.Num());
+	Result->SetNumberField(TEXT("changedCount"), ChangedCount);
+	Result->SetBoolField(TEXT("unchanged"), ChangedCount == 0);
+	if (bDryRun)
+	{
+		Result->SetBoolField(TEXT("dryRun"), true);
+		Result->SetBoolField(TEXT("saved"), false);
+		return MCPResult(Result);
+	}
+	if (Mismatched.Num() > 0)
+	{
+		Result->SetBoolField(TEXT("success"), false);
+		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("The shapes read back differently from what was written on %s"), *FString::Join(Mismatched, TEXT(", "))));
+	}
+	if (ChangedCount > 0)
+	{
+		MCPSetUpdated(Result);
+		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+		Payload->SetStringField(TEXT("assetPath"), PhysicsAsset->GetPathName());
+		Payload->SetArrayField(TEXT("bodyShapes"), RollbackEntries);
+		Payload->SetBoolField(TEXT("save"), bSave);
+		MCPSetRollback(Result, TEXT("set_physics_asset_body_shapes"), Payload);
+	}
+	SaveIfChanged(PhysicsAsset, bSave, ChangedCount, TEXT("shapes"), Result);
 	return MCPResult(Result);
 }
 
