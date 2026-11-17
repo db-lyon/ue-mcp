@@ -5,13 +5,14 @@ import { categoryTool } from "../surface/category-tool.js";
 import { toolGraphOf } from "../surface/target-params.js";
 import { directive, type DirectiveResponse } from "../core/directive.js";
 import { CORE_ISSUES_URL } from "../github/repos.js";
+import { WORKAROUND_REPORT_FIELDS } from "./feedback.js";
 import { startEditor, stopEditor, restartEditor, resolveOwnedEditor, connectedEditorOf } from "../editor/editor-control.js";
 import { buildProjectAction } from "./project/install.js";
 import { startProgress } from "../terminal/progress.js";
 import { clientAdvertisesElicitation } from "../editor/dialog-mode.js";
 import { readEngineState, withBridgeSnapshot, type EngineSnapshot } from "../editor/engine-observer.js";
 import { windowModeOf } from "../editor/launch-args.js";
-import { progressRenderingNote } from "../core/client-quirks.js";
+import { progressRenderingNote } from "../dispatch/client-quirks.js";
 import { pushWorkaround, workaroundCount } from "./editor/workaround-tracker.js";
 import { searchToolGraph } from "../surface/context/tool-search.js";
 import { evaluateGate, gateRefusalMessage, relevantCandidates, type GateCandidate } from "./editor/python-gate.js";
@@ -74,7 +75,7 @@ export function workaroundDirective(n: number, result: unknown, canSubmit: boole
           workaroundCount: n,
           feedbackDisabled: true,
           issueTracker: CORE_ISSUES_URL,
-          expectedFields: ["title", "summary", "pythonWorkaround", "idealTool"],
+          expectedFields: [...WORKAROUND_REPORT_FIELDS],
         },
       },
     );
@@ -103,7 +104,7 @@ export function workaroundDirective(n: number, result: unknown, canSubmit: boole
         workaroundCount: n,
         feedbackTool: "feedback",
         feedbackAction: "submit",
-        expectedFields: ["title", "summary", "pythonWorkaround", "idealTool"],
+        expectedFields: [...WORKAROUND_REPORT_FIELDS],
       },
     },
   );
@@ -144,7 +145,17 @@ export const editorTool: ToolDef = categoryTool(
       kind: "handler",
       effect: "mutate",
       offline: "Launches the editor process, then waits for its bridge. It exists for the case where nothing is running.",
-      description: "Launch Unreal Editor and BLOCK until it is fully ready (not merely until the socket answers), rendering a startup progress bar in the terminal. Returns the phase timeline it waited through. Do NOT poll get_engine_state or get_status afterwards: this call already waited, and a ready editor is the only way it returns success. An editor already running for this project is reported as a failure, because this call launched nothing, with alreadyRunning=true, bridgeReady, and the port it published, so a caller can tell \"there was nothing to do\" from \"the launch broke\" without parsing the sentence. A flow step that expects that outcome sets ignore_failure: true on itself rather than asking this action to call a non-launch a launch. dialogPolicy answers startup prompts before they can wedge the game thread, which is how the post-crash \"Restore Packages\" modal used to stall a launch (#968). Params: timeout? (seconds, default 300), dialogPolicy? (\"pattern=response;pattern=response\", responses as set_dialog_policy takes them), window? (normal (default) or offscreen, which passes -RenderOffScreen so no editor window appears), ide? (allow or none; none passes the NullSourceCodeAccessor ini override so the editor opens no IDE; defaults to editor.ide from ue-mcp.yml, then none for an offscreen editor and allow otherwise), extraArgs? (extra editor command-line arguments, appended after editor.launchArgs from ue-mcp.yml)",
+      params: {
+        optional: ["timeout", "dialogPolicy", "window", "ide", "extraArgs"],
+        notes: {
+          timeout: "seconds, default 300",
+          dialogPolicy: "\"pattern=response;pattern=response\", responses as set_dialog_policy takes them",
+          window: "normal (default) or offscreen, which passes -RenderOffScreen so no editor window appears",
+          ide: "allow or none; none passes the NullSourceCodeAccessor ini override so the editor opens no IDE; defaults to editor.ide from ue-mcp.yml, then none for an offscreen editor and allow otherwise",
+          extraArgs: "extra editor command-line arguments, appended after editor.launchArgs from ue-mcp.yml",
+        },
+      },
+      description: "Launch Unreal Editor and BLOCK until it is fully ready (not merely until the socket answers), rendering a startup progress bar in the terminal. Returns the phase timeline it waited through. Do NOT poll get_engine_state or get_status afterwards: this call already waited, and a ready editor is the only way it returns success. An editor already running for this project is reported as a failure, because this call launched nothing, with alreadyRunning=true, bridgeReady, and the port it published, so a caller can tell \"there was nothing to do\" from \"the launch broke\" without parsing the sentence. A flow step that expects that outcome sets ignore_failure: true on itself rather than asking this action to call a non-launch a launch. dialogPolicy answers startup prompts before they can wedge the game thread, which is how the post-crash \"Restore Packages\" modal used to stall a launch (#968).",
       handler: async (ctx: ToolContext, p: Record<string, unknown>) => {
         const timeout = typeof p?.timeout === "number" && p.timeout > 0 ? p.timeout : 300;
         const dialogPolicy = typeof p?.dialogPolicy === "string" && p.dialogPolicy.trim() !== "" ? p.dialogPolicy.trim() : undefined;
@@ -189,7 +200,13 @@ export const editorTool: ToolDef = categoryTool(
       effect: "read",
       offline: "Probes the process table, the editor's log and the plugin's status file from outside. The bridge is consulted only when it is already connected.",
       rawBridgeMethods: { get_engine_state: "read" },
-      description: "What the engine is REALLY doing, read from outside the game thread: startup phase from the editor's own log, every process holding this project's .uproject open (PID, command line, responding), the plugin's status snapshot (slow-task name and percent, active modal dialog, game-thread stall), and native dialog windows. `running` follows the strongest evidence: an editor that answered over the bridge is running whatever the process table saw, and a probe that could not run is reported as processProbeFailed rather than as an absent editor (#965). Call this ONCE when something is already wrong (handlers timing out, an editor that will not come up). Never call it in a wait loop: start_editor blocks until ready on its own, and polling this during startup burns tokens re-reading state that is already tracked. Params: probeWindows? (default true; scans native windows, costs ~2s)",
+      params: {
+        optional: ["probeWindows"],
+        notes: {
+          probeWindows: "default true; scans native windows, costs ~2s",
+        },
+      },
+      description: "What the engine is REALLY doing, read from outside the game thread: startup phase from the editor's own log, every process holding this project's .uproject open (PID, command line, responding), the plugin's status snapshot (slow-task name and percent, active modal dialog, game-thread stall), and native dialog windows. `running` follows the strongest evidence: an editor that answered over the bridge is running whatever the process table saw, and a probe that could not run is reported as processProbeFailed rather than as an absent editor (#965). Call this ONCE when something is already wrong (handlers timing out, an editor that will not come up). Never call it in a wait loop: start_editor blocks until ready on its own, and polling this during startup burns tokens re-reading state that is already tracked.",
       handler: async (ctx: ToolContext, p: Record<string, unknown>) => {
         const probeWindows = p?.probeWindows !== false;
         const state = await readEngineState(ctx.project.projectPath ?? null, { probeWindows });
@@ -220,7 +237,8 @@ export const editorTool: ToolDef = categoryTool(
       kind: "handler",
       effect: "mutate",
       offline: "Asks the editor that published this project's port lockfile to quit. With no lockfile it refuses and names the file it checked. With no editor of this project left running, it ends a crash reporter a crashed one left holding the project's binaries.",
-      description: "Close Unreal Editor gracefully (asks the editor to quit itself via the bridge; never an OS kill of an editor). Acts only on the editor for the loaded project, resolved from the port lockfile that editor published at <project>/Saved/UE_MCP_Bridge/port.json. With no lockfile there is no port to aim at and the call refuses, naming the file it checked, rather than probing a default port that another project's editor could answer on (#819). With no editor of this project running there is nothing to quit, and the call fails saying so, with alreadyStopped=true marking that reason apart from a running editor that cannot be reached or refuses on unsaved work. A flow that stops the editor before building sets ignore_failure: true on the stop step. With more than one editor of this project open it closes the one the lockfile names and reports the rest under remainingInstances, so plain success never has to be read as 'no editor of this project is running' (#1072). Unsaved work: the quit is sent and the EDITOR decides. It refuses inside the engine and names every dirty package without scheduling a close, so nothing is lost and no quit is left pending; save them with editor(save_dirty), or close the editor yourself and answer its save prompt by hand. There is deliberately no flag that discards real content. discardTransient=true clears, before the quit, only packages nobody can save (the transient package and /Engine maps such as the /Engine/Maps/Entry startup map, as editor(discard_dirty) judges them), so a prompt that would ask only about those never comes up; anything else still reaches the editor's save prompt, and what was cleared is reported under discarded. This action has no dialog behaviour of its own: a modal blocks it exactly as it blocks every other action, refused by the same gate with the same fields. Read the dialog with editor(list_dialogs) and answer it with editor(respond_to_dialog). On Windows, once no editor of this project is left running (after the stop, or when there was nothing to stop), it ends any CrashReportClient process a crashed editor of this project left behind, because it keeps the project's module DLLs open and the next build_project fails with LNK1104; each one is reported under crashReporters with its pid and the reason it was judged this project's (a path under the project on its command line, or a project binary it holds open). A reporter still watching a live editor, or one of another project, is never touched. A success names the editor it quit under stopped {project, pid}, and an editor name that matches no registered session refuses rather than stopping the active editor (#1278). Params: discardTransient?",
+      params: { optional: ["discardTransient"] },
+      description: "Close Unreal Editor gracefully (asks the editor to quit itself via the bridge; never an OS kill of an editor). Acts only on the editor for the loaded project, resolved from the port lockfile that editor published at <project>/Saved/UE_MCP_Bridge/port.json. With no lockfile there is no port to aim at and the call refuses, naming the file it checked, rather than probing a default port that another project's editor could answer on (#819). With no editor of this project running there is nothing to quit, and the call fails saying so, with alreadyStopped=true marking that reason apart from a running editor that cannot be reached or refuses on unsaved work. A flow that stops the editor before building sets ignore_failure: true on the stop step. With more than one editor of this project open it closes the one the lockfile names and reports the rest under remainingInstances, so plain success never has to be read as 'no editor of this project is running' (#1072). Unsaved work: the quit is sent and the EDITOR decides. It refuses inside the engine and names every dirty package without scheduling a close, so nothing is lost and no quit is left pending; save them with editor(save_dirty), or close the editor yourself and answer its save prompt by hand. There is deliberately no flag that discards real content. discardTransient=true clears, before the quit, only packages nobody can save (the transient package and /Engine maps such as the /Engine/Maps/Entry startup map, as editor(discard_dirty) judges them), so a prompt that would ask only about those never comes up; anything else still reaches the editor's save prompt, and what was cleared is reported under discarded. This action has no dialog behaviour of its own: a modal blocks it exactly as it blocks every other action, refused by the same gate with the same fields. Read the dialog with editor(list_dialogs) and answer it with editor(respond_to_dialog). On Windows, once no editor of this project is left running (after the stop, or when there was nothing to stop), it ends any CrashReportClient process a crashed editor of this project left behind, because it keeps the project's module DLLs open and the next build_project fails with LNK1104; each one is reported under crashReporters with its pid and the reason it was judged this project's (a path under the project on its command line, or a project binary it holds open). A reporter still watching a live editor, or one of another project, is never touched. A success names the editor it quit under stopped {project, pid}, and an editor name that matches no registered session refuses rather than stopping the active editor (#1278).",
       handler: async (ctx: ToolContext, p: Record<string, unknown>) => {
         return stopEditor(ctx.project.projectDir ?? undefined, {
           connected: connectedEditorOf(ctx.bridge),
@@ -232,7 +250,15 @@ export const editorTool: ToolDef = categoryTool(
       kind: "handler",
       effect: "mutate",
       offline: "Stops whatever holds this project open and starts it again.",
-      description: "Stop then start the editor for the loaded project. Editors for other projects are left alone: the stop is aimed by this project's port lockfile, and the decision to start is made from the process holding this project's .uproject open, never from whether some editor is running (#819). The stop half is editor(stop_editor) exactly as it behaves on its own, so a restart refuses on unsaved packages and reports them rather than acting on them, and an editor that was already down is not a reason to refuse the start. Like the stop half it has no dialog behaviour of its own: a modal blocks it through the same gate as every other action. Params: window? (normal or offscreen; defaults to editor.window from ue-mcp.yml, then normal, not to the mode of the editor being stopped), ide? (allow or none; none passes the NullSourceCodeAccessor ini override so the editor opens no IDE; defaults to editor.ide from ue-mcp.yml, then none for an offscreen editor and allow otherwise), extraArgs? (extra editor command-line arguments, appended after editor.launchArgs from ue-mcp.yml)",
+      params: {
+        optional: ["window", "ide", "extraArgs"],
+        notes: {
+          window: "normal or offscreen; defaults to editor.window from ue-mcp.yml, then normal, not to the mode of the editor being stopped",
+          ide: "allow or none; none passes the NullSourceCodeAccessor ini override so the editor opens no IDE; defaults to editor.ide from ue-mcp.yml, then none for an offscreen editor and allow otherwise",
+          extraArgs: "extra editor command-line arguments, appended after editor.launchArgs from ue-mcp.yml",
+        },
+      },
+      description: "Stop then start the editor for the loaded project. Editors for other projects are left alone: the stop is aimed by this project's port lockfile, and the decision to start is made from the process holding this project's .uproject open, never from whether some editor is running (#819). The stop half is editor(stop_editor) exactly as it behaves on its own, so a restart refuses on unsaved packages and reports them rather than acting on them, and an editor that was already down is not a reason to refuse the start. Like the stop half it has no dialog behaviour of its own: a modal blocks it through the same gate as every other action.",
       handler: async (ctx: ToolContext, p: Record<string, unknown>) => {
         const window = p?.window === "normal" || p?.window === "offscreen" ? p.window : undefined;
         const ide = p?.ide === "allow" || p?.ide === "none" ? p.ide : undefined;
@@ -248,7 +274,15 @@ export const editorTool: ToolDef = categoryTool(
       editorBound: "Runs Python inside the editor process.",
       rawBridgeMethods: { execute_python: "unknown" },
       escapeHatch: true,
-      description: "GATED LAST RESORT. execute_python is unreachable until a semantic tool search over your taskSummary has been run AND every candidate it returns is EXPLICITLY ruled out with a stated reason. Flow: (1) call with taskSummary (+code) - it returns the candidate actions AND the exact ruledOut array to send back; (2) re-call with the same taskSummary/code PLUS that ruledOut=[{action, reason}], each reason at least 12 characters saying why that candidate does not fit. The action field accepts the bare name, tool(action) or tool.action, and rulings are remembered for the session so rewording the taskSummary never asks you to justify the same action twice. A candidate the running plugin does not register cannot do the task, so it needs no ruling: it is listed under notInRunningPlugin with the upgrade command instead. Python runs only once every candidate is ruled out. Candidates are the search hits that bear on the summary: when it names a subsystem (PCG, Niagara, MetaSound), another subsystem's actions that only share a word are not candidates, nor is a hit scoring under half the best one. Params: code, taskSummary (required), ruledOut?, resultVariable? (name of a top-level variable to return as `result`, separate from print()/log; #732) (#704, #938, #960, #1167)",
+      params: {
+        required: ["code", "taskSummary"],
+        optional: ["ruledOut", "resultVariable", "captureLog", "maxLogChars"],
+        notes: {
+          taskSummary: "required",
+          resultVariable: "name of a top-level variable to return as `result`, separate from print()/log; #732",
+        },
+      },
+      description: "GATED LAST RESORT. execute_python is unreachable until a semantic tool search over your taskSummary has been run AND every candidate it returns is EXPLICITLY ruled out with a stated reason. Flow: (1) call with taskSummary (+code) - it returns the candidate actions AND the exact ruledOut array to send back; (2) re-call with the same taskSummary/code PLUS that ruledOut=[{action, reason}], each reason at least 12 characters saying why that candidate does not fit. The action field accepts the bare name, tool(action) or tool.action, and rulings are remembered for the session so rewording the taskSummary never asks you to justify the same action twice. A candidate the running plugin does not register cannot do the task, so it needs no ruling: it is listed under notInRunningPlugin with the upgrade command instead. Python runs only once every candidate is ruled out. Candidates are the search hits that bear on the summary: when it names a subsystem (PCG, Niagara, MetaSound), another subsystem's actions that only share a word are not candidates, nor is a hit scoring under half the best one. (#704, #938, #960, #1167)",
       handler: async (ctx: ToolContext, params: Record<string, unknown>) => {
         const code = (params.code as string) ?? "";
         const taskSummary = ((params.taskSummary as string) ?? "").trim();
@@ -356,7 +390,11 @@ export const editorTool: ToolDef = categoryTool(
       effect: "mutate",
       editorBound: "Starts Play In Editor through the pie_start_ignoring_blueprint_errors bridge method.",
       rawBridgeMethods: { pie_start_ignoring_blueprint_errors: "mutate" },
-      description: `Start PIE for one launch with the editor's unresolved-Blueprint-error prompt suppressed. PIE then runs whatever bytecode those Blueprints last compiled to, so the launch is authorized per call: set ${IGNORE_BLUEPRINT_ERRORS_CONFIG_KEY} to true in your ue-mcp config to pre-authorize it, otherwise the user answers an MCP approval prompt. The bridge refuses the launch when a Blueprint would have to be recompiled first (dirty non-data Blueprints, errored Level Blueprints) and lists every errored Blueprint it suppressed in loadedErroredBlueprints. Params: waitForAssetRegistry? (default true), assetRegistryTimeoutSeconds? (default 180).`,
+      description: `Start PIE for one launch with the editor's unresolved-Blueprint-error prompt suppressed. PIE then runs whatever bytecode those Blueprints last compiled to, so the launch is authorized per call: set ${IGNORE_BLUEPRINT_ERRORS_CONFIG_KEY} to true in your ue-mcp config to pre-authorize it, otherwise the user answers an MCP approval prompt. The bridge refuses the launch when a Blueprint would have to be recompiled first (dirty non-data Blueprints, errored Level Blueprints) and lists every errored Blueprint it suppressed in loadedErroredBlueprints.`,
+      params: {
+        optional: ["waitForAssetRegistry", "assetRegistryTimeoutSeconds"],
+        notes: { waitForAssetRegistry: "default true", assetRegistryTimeoutSeconds: "default 180" },
+      },
       handler: async (ctx: ToolContext, p: Record<string, unknown>) => {
         const preauthorized = ctx.project.config.pie?.allowIgnoreBlueprintErrors === true;
         let authorizationSource = "config";
@@ -453,7 +491,16 @@ export const editorTool: ToolDef = categoryTool(
       kind: "handler",
       effect: "mutate",
       editorBound: "Calls the capture_screenshot bridge method once per frame on a fixed interval.",
-      description: "Capture a numbered frame sequence on a fixed interval, through capture_screenshot (default target=pie, the running game viewport). Frame k is scheduled at k * intervalMs from the first; one that starts after its slot is reported with lateMs rather than shifting the rest, so the sequence keeps its cadence. Frames are written as <filename>_0000.png, <filename>_0001.png and so on, under Saved/Screenshots for a relative path. Stops at the first failed frame and returns the frames already written. Returns frames [{index, filename, scheduledAtMs, capturedAtMs, durationMs, lateMs, width, height}] and maxLateMs (#1645). inline=true, or a longest-edge size in pixels, also returns the first 8 written images as image content, scaled down when larger. Params: filename, frameCount? (default 10, at most 600), intervalMs? (default 500), target? (pie|editor|window|auto, default pie), pieInstance?, worldPath?",
+      params: {
+        required: ["filename"],
+        optional: ["frameCount", "intervalMs", "target", "pieInstance", "worldPath"],
+        notes: {
+          frameCount: "default 10, at most 600",
+          intervalMs: "default 500",
+          target: "pie|editor|window|auto, default pie",
+        },
+      },
+      description: "Capture a numbered frame sequence on a fixed interval, through capture_screenshot (default target=pie, the running game viewport). Frame k is scheduled at k * intervalMs from the first; one that starts after its slot is reported with lateMs rather than shifting the rest, so the sequence keeps its cadence. Frames are written as <filename>_0000.png, <filename>_0001.png and so on, under Saved/Screenshots for a relative path. Stops at the first failed frame and returns the frames already written. Returns frames [{index, filename, scheduledAtMs, capturedAtMs, durationMs, lateMs, width, height}] and maxLateMs (#1645). inline=true, or a longest-edge size in pixels, also returns the first 8 written images as image content, scaled down when larger.",
       handler: async (ctx: ToolContext, p: Record<string, unknown>) => captureScreenshotSequence(ctx, p),
     }, ["frames.filename"]),
     capture_scene_png: withInlineImage(specBp("mutate", "Headless PNG via a transient SceneCapture2D (RGBA8 LDR). Returns captureMetadata with the actual camera transform/basis, FOV, resolution, world/PIE identity and resolved focus actor/bounds. Pair this data with this image; get_viewport_state and hit_test_viewport_pixel refer to a different, live editor camera. Without warmupFrames the capture is synchronous and its actor is destroyed before return; old stray capture actors are swept and reported. warmupFrames=1-240 starts one bounded asynchronous capture using normal streaming from the capture camera, then returns captureId and status=warming. Query this same action with captureId only until complete=true, or add cancel=true. Only the latest warm job is retained; another start while it is active is refused. warmupTimeoutSeconds defaults to 60 (1-120), checked between frames and before export. A completed job reports fileWritten, actual warmupFramesRendered, camera metadata, streaming enablement and textureResidencyVerified=false: warmup does not guarantee highest mip residency. Warm captures require fullyLoadTextures omitted or false, retain temporal rendering state, and leave viewport/config/streaming settings alone. Cancel, timeout, world cleanup and module shutdown release the transient rig. focusActorLabel or focusActorPath auto-frames the camera on that actor's bounds (#599/#662). Pending render updates are flushed before the capture so components created at runtime (BeginPlay attachments, retargeted meshes) are drawn, and for immediate PIE captures captureMetadata.runtimeComponents counts the visible runtime primitives and names any the capture still cannot draw (no render state, or bOnlyOwnerSee, which a capture owned by its own actor never shows) (#1203). A synchronous capture keeps a view state and renders settling passes before the exported frame, so Lumen lighting and auto exposure are converged; exposure is metered from the capture camera itself, not copied from the live view, and captureMetadata.exposure reports it (#1549). inline=true, or a longest-edge size in pixels, also returns the written image as image content, scaled down when larger.", "capture_scene_png"), ["path"]),
@@ -500,7 +547,8 @@ export const editorTool: ToolDef = categoryTool(
       kind: "handler",
       effect: "read",
       offline: "Reads a CSV profiler capture from disk; the editor is never called.",
-      description: "Summarise a CSV profiler capture on the server, without the editor: frameCount, per-stat avg/min/max/p50/p95/p99 and the frame each peak happened on, frameTime with hitches over hitchThresholdMs (default 50) and avgFps, the events the capture recorded with their frames, and the metadata block. csvPath defaults to the newest capture in <Project>/Saved/Profiling/CSV (a relative path is tried there first); .csv.gz is read too. stats filters columns by case-insensitive substring; sortBy is avg (default), max, p95 or name; maxStats (default 50) and maxEvents (default 50) bound the lists, with totals reported. complete=false (with a warning) means the file had no closing metadata row: the capture was still running. Params: csvPath?, stats?, sortBy?, maxStats?, maxEvents?, hitchThresholdMs?",
+      params: { optional: ["csvPath", "stats", "sortBy", "maxStats", "maxEvents", "hitchThresholdMs"] },
+      description: "Summarise a CSV profiler capture on the server, without the editor: frameCount, per-stat avg/min/max/p50/p95/p99 and the frame each peak happened on, frameTime with hitches over hitchThresholdMs (default 50) and avgFps, the events the capture recorded with their frames, and the metadata block. csvPath defaults to the newest capture in <Project>/Saved/Profiling/CSV (a relative path is tried there first); .csv.gz is read too. stats filters columns by case-insensitive substring; sortBy is avg (default), max, p95 or name; maxStats (default 50) and maxEvents (default 50) bound the lists, with totals reported. complete=false (with a warning) means the file had no closing metadata row: the capture was still running.",
       handler: async (ctx: ToolContext, p: Record<string, unknown>) => summarizeCsvProfileAction(ctx, p),
     },
     launch_standalone: specBp("mutate", "Launch the project as a separate -game process, optionally tracing, so frame times come from a real game process rather than from the editor. Passing channels (or traceFile) adds -trace and -tracefile, and the response carries the .utrace path plus the UnrealInsights command that opens it. Idempotent: a bridge-launched run that is still alive is reported as alreadyRunning rather than joined by a second. When the editor runs offscreen, the game is launched offscreen too. The process is detached and its output is not read; poll get_standalone_status. Rollback: stop_standalone.", "launch_standalone_game"),
@@ -583,7 +631,16 @@ export const editorTool: ToolDef = categoryTool(
       effect: "mutate",
       editorBound: "Asks the running editor to shut itself down over the bridge.",
       rawBridgeMethods: { request_editor_shutdown: "mutate" },
-      description: "Ask the editor to close itself from inside the engine, after it has checked that closing is safe. Refuses by default when any content or map package is dirty (including an unsaved /Temp world) and reports which ones, so nothing is lost to a silent discard. Ends an active PIE/SIE session first and closes only once play has actually stopped. The response is returned before the process exits. Aimed at the same editor stop_editor aims at, through the same ownership check, so the two can never disagree about which editor belongs to the loaded project (#967), including what happens when none is running: both fail with alreadyStopped=true rather than one succeeding and the other refusing. This IS what stop_editor sends: stop_editor calls it with requireClean=false, so the editor schedules its own close and raises its own save prompt for anything dirty rather than the server refusing in its place. Called directly it defaults to requireClean=true, which refuses and names the dirty packages without scheduling anything. To close without the save prompt, say up front what happens to the dirty packages: dirtyPackages=save writes each one (every package is checked for writability first; any failure refuses the close and names it in failedPackages), dirtyPackages=discard clears transient or engine map dirty flags; project or plugin content additionally requires allowContent=true, and code or PIE packages are refused. DISCARD IS IRREVERSIBLE: the changes were never written and nothing keeps a copy. Both act in this call on the dirty list read in this call and report savedPackages or discardedPackages, with skippedPackages for missing or already-clean packages and deletedPackages for committed empty external packages; pass packages to name exactly which ones you expect, and any other dirty package refuses the call (unexpectedDirtyPackages) with nothing saved or discarded. Both refuse while PIE is running. If something is dirty again when the close runs, the close is called off rather than prompting. Use editor(stop_editor) for the full stop-and-confirm flow; this action is the in-engine half of it. Params: requireClean? (default true), dirtyPackages? (default refuse), packages?, allowContent? (default false), endPIE? (default true)",
+      params: {
+        optional: ["requireClean", "dirtyPackages", "packages", "allowContent", "endPIE"],
+        notes: {
+          requireClean: "default true",
+          dirtyPackages: "default refuse",
+          allowContent: "default false",
+          endPIE: "default true",
+        },
+      },
+      description: "Ask the editor to close itself from inside the engine, after it has checked that closing is safe. Refuses by default when any content or map package is dirty (including an unsaved /Temp world) and reports which ones, so nothing is lost to a silent discard. Ends an active PIE/SIE session first and closes only once play has actually stopped. The response is returned before the process exits. Aimed at the same editor stop_editor aims at, through the same ownership check, so the two can never disagree about which editor belongs to the loaded project (#967), including what happens when none is running: both fail with alreadyStopped=true rather than one succeeding and the other refusing. This IS what stop_editor sends: stop_editor calls it with requireClean=false, so the editor schedules its own close and raises its own save prompt for anything dirty rather than the server refusing in its place. Called directly it defaults to requireClean=true, which refuses and names the dirty packages without scheduling anything. To close without the save prompt, say up front what happens to the dirty packages: dirtyPackages=save writes each one (every package is checked for writability first; any failure refuses the close and names it in failedPackages), dirtyPackages=discard clears transient or engine map dirty flags; project or plugin content additionally requires allowContent=true, and code or PIE packages are refused. DISCARD IS IRREVERSIBLE: the changes were never written and nothing keeps a copy. Both act in this call on the dirty list read in this call and report savedPackages or discardedPackages, with skippedPackages for missing or already-clean packages and deletedPackages for committed empty external packages; pass packages to name exactly which ones you expect, and any other dirty package refuses the call (unexpectedDirtyPackages) with nothing saved or discarded. Both refuse while PIE is running. If something is dirty again when the close runs, the close is called off rather than prompting. Use editor(stop_editor) for the full stop-and-confirm flow; this action is the in-engine half of it.",
       handler: async (ctx: ToolContext, p: Record<string, unknown>) => {
         // #967/#970: stop_editor refused on an ownership check this action did
         // not perform at all, so the two actions gave opposite answers about
@@ -664,5 +721,5 @@ export const editorTool: ToolDef = categoryTool(
     ...checkpointSchema,
     ...journalSchema,
     ...inlineSchema,
-  },
+  }, { label: { alwaysOn: true } },
 );

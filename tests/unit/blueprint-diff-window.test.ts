@@ -55,7 +55,8 @@ describe("blueprint(open_diff_window)", () => {
     const action = blueprintTool.actions.open_diff_window;
     expect(action.kind).toBe("handler");
     expect(declaredActionEffect("blueprint", "open_diff_window")).toBe("read");
-    expect(action.description).toMatch(/Params: assetPath, against/);
+    expect(action.params?.required).toEqual(expect.arrayContaining(["assetPath"]));
+    expect(action.params?.required).toEqual(expect.arrayContaining(["against"]));
   });
 
   it("opens a checkpoint's version from the shadow history against the asset now", async () => {

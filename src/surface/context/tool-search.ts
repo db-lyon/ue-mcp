@@ -17,7 +17,16 @@ export interface ToolSearchHit {
 
 type SearchableTool = {
   name: string;
-  actions?: Record<string, { description?: string; bridge?: string; effect?: string; movedTo?: unknown; escapeHatch?: boolean }>;
+  actions?: Record<string, {
+    description?: string;
+    bridge?: string;
+    effect?: string;
+    movedTo?: unknown;
+    escapeHatch?: boolean;
+    paramSpec?: ReadonlyArray<{ name: string; aliases?: readonly string[] }>;
+    params?: { required?: readonly string[]; optional?: readonly string[] };
+    epicSchema?: { properties?: Record<string, unknown> };
+  }>;
 };
 
 // Task-verb / noun synonyms. When a query contains the KEY (or any value), the
@@ -151,7 +160,10 @@ export function searchToolGraph(tools: SearchableTool[], query: string, limit = 
       // neither scores as the action's own words: "create data table" must not
       // rank epic_create__data_table_toolset above asset.create_datatable.
       const nameWords = wordsOf(actionName.replace(/__.*$/, ""));
-      const descWords = wordsOf(desc.replace(/^\[Epic [^\]]*\]\s*/, ""));
+      // The names of the parameters it takes count as its text too.
+      const paramNames = spec?.paramSpec?.flatMap((p) => [p.name, ...(p.aliases ?? [])])
+        ?? (spec?.params ? [...(spec.params.required ?? []), ...(spec.params.optional ?? [])] : Object.keys(spec?.epicSchema?.properties ?? {}));
+      const descWords = wordsOf(`${desc.replace(/^\[Epic [^\]]*\]\s*/, "")}${paramNames.length ? ` params ${paramNames.join(" ")}` : ""}`);
       const nameSet = new Set(joinedWords(nameWords));
       const toolSet = new Set(joinedWords(wordsOf(tool.name)));
       const textSet = new Set(joinedWords(descWords));

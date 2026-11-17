@@ -234,27 +234,6 @@ export const handlerSpecs: HandlerSpecs = {
   }
 };
 
-/** The Params: clause of each spec'd bridge method. */
-export const paramsClauses: Readonly<Record<string, string>> = {
-  fab_cache_info: "Params: none",
-  fab_cancel_download: "Params: jobId",
-  fab_clear_cache: "Params: none",
-  fab_download: "Params: listingId, engineVersion?, platform?, outputDirectory?, verifyOnly?",
-  fab_download_status: "Params: jobId?",
-  fab_import_file: "Params: source (or sourceFile), destination (or destPath)",
-  fab_install_pack: "Params: jobId",
-  fab_list_cached: "Params: none",
-  fab_list_owned: "Params: query?, offset?, limit?",
-  fab_login: "Params: none",
-  fab_logout: "Params: none",
-  fab_open_search: "Params: query, listingType?, assetFormat?, free?, open?",
-  fab_pause_download: "Params: jobId",
-  fab_remove_installation: "Params: jobId",
-  fab_resume_download: "Params: jobId",
-  fab_status: "Params: none",
-  fab_sync_library: "Params: batchSize?",
-};
-
 /** Every key the spec'd fab handlers declare, aliases included. */
 export const schema: Record<string, z.ZodType> = {
   assetFormat: z.string().optional().describe("Asset format filter (default unreal-engine; empty string drops the filter)"),
@@ -278,4 +257,4 @@ export const schema: Record<string, z.ZodType> = {
 };
 
 /** Declare an action for a spec'd bridge method: effect, summary, method. */
-export const specBp = makeSpecBp(paramsClauses, handlerSpecs);
+export const specBp = makeSpecBp(handlerSpecs);

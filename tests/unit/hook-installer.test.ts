@@ -2,9 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { UE_MCP_LAUNCH } from "../../src/integrations/mcp-clients/mcp-client-config.js";
 import {
-  HOOK_COMMAND,
   installClaudeHooks,
   uninstallClaudeHooks,
   uninstallAllRegisteredHooks,
@@ -52,34 +50,6 @@ describe("hook installer", () => {
     const settings = readJson<ClaudeSettings>(settingsPath);
     expect(settings.hooks?.PostToolUse).toHaveLength(1);
     expect(settings.hooks?.PostToolUse?.[0].matcher).toBe("mcp__ue-mcp__editor");
-  });
-
-  it("launches the hook the way the server entry launches the server", () => {
-    installClaudeHooks(settingsPath, projectDir);
-    const settings = readJson<ClaudeSettings>(settingsPath);
-    expect(settings.hooks?.PostToolUse?.[0].hooks).toEqual([{ type: "command", command: `${UE_MCP_LAUNCH} hook post-tool-use` }]);
-    expect(HOOK_COMMAND).toBe(`${UE_MCP_LAUNCH} hook post-tool-use`);
-  });
-
-  it("brings a hook written in the old launch form up to date on install, keeping the user's own hooks", () => {
-    fs.mkdirSync(path.dirname(settingsPath), { recursive: true });
-    const old = { type: "command", command: "npx ue-mcp hook post-tool-use" };
-    const mine = { type: "command", command: "echo mine" };
-    fs.writeFileSync(settingsPath, JSON.stringify({ hooks: { PostToolUse: [{ matcher: "mcp__ue-mcp__editor", hooks: [old, mine] }] } }));
-    installClaudeHooks(settingsPath, projectDir);
-    const settings = readJson<ClaudeSettings>(settingsPath);
-    expect(settings.hooks?.PostToolUse).toHaveLength(1);
-    expect(settings.hooks?.PostToolUse?.[0].hooks).toEqual([{ type: "command", command: HOOK_COMMAND }, mine]);
-  });
-
-  it("removes a hook written in the old launch form", () => {
-    fs.mkdirSync(path.dirname(settingsPath), { recursive: true });
-    fs.writeFileSync(
-      settingsPath,
-      JSON.stringify({ hooks: { PostToolUse: [{ matcher: "mcp__ue-mcp__editor", hooks: [{ type: "command", command: "npx ue-mcp hook post-tool-use" }] }] } }),
-    );
-    expect(uninstallClaudeHooks(settingsPath, projectDir)).toBe(true);
-    expect(readJson<ClaudeSettings>(settingsPath).hooks).toBeUndefined();
   });
 
   it("registers the install path in ~/.ue-mcp/state.json under this project's key", () => {

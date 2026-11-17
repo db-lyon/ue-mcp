@@ -70,5 +70,5 @@ export const chooserTool: ToolDef = categoryTool(
     // #1057: every key a spec'd handler declares, generated from its C++
     // registration.
     ...specSchema,
-  },
+  }, { label: { description: "ChooserTable rows and columns (Motion Matching selection)", keywords: ["chooser table"] } },
 );

@@ -12,7 +12,15 @@ export const surfaceActions: Record<string, ActionSpec> = {
     kind: "handler",
     effect: "read",
     offline: "Searches the tool graph this server holds in memory.",
-    description: "Search every ue-mcp tool + action by keyword or task INTENT (a synonym layer maps 'screenshot'->capture_scene_png, 'tile a texture'->the texture-bomb flow, etc.) and return ranked matches (tool, action, description, score). The first step before editor(execute_python); most tasks already have a dedicated action. Params: query (space-separated keywords/intent), limit? (default 20) (#704)",
+    params: {
+      required: ["query"],
+      optional: ["limit"],
+      notes: {
+        query: "space-separated keywords/intent",
+        limit: "default 20",
+      },
+    },
+    description: "Search every ue-mcp tool + action by keyword or task INTENT (a synonym layer maps 'screenshot'->capture_scene_png, 'tile a texture'->the texture-bomb flow, etc.) and return ranked matches (tool, action, description, score). The first step before editor(execute_python); most tasks already have a dedicated action. (#704)",
     handler: async (_ctx, p) => {
       const query = (p.query as string) ?? "";
       if (!query.trim()) throw new Error("Missing 'query'");
@@ -30,6 +38,14 @@ export const surfaceActions: Record<string, ActionSpec> = {
     kind: "handler",
     effect: "read",
     offline: "Reads the parameter schema out of the tool graph this server holds in memory.",
+    params: {
+      required: ["name"],
+      optional: ["category"],
+      notes: {
+        name: "required",
+        category: "return every action of one category instead of one action",
+      },
+    },
     description:
       "Return the live parameter schema for one action: every parameter it accepts, "
       + "with type, required/optional, description, allowed values and default, plus the "
@@ -42,8 +58,7 @@ export const surfaceActions: Record<string, ActionSpec> = {
       + "reports class: read (observes), mutate (changes the editor, its project on disk, or "
       + "its process) or unknown (decided by a parameter, so gated like mutate) - MCP's own "
       + "readOnlyHint is per tool, and every tool here is a category holding both, so a "
-      + "harness that gates writes reads it from here. "
-      + "Params: name (required), category? (return every action of one category instead of one action)",
+      + "harness that gates writes reads it from here.",
     handler: async (ctx: ToolContext, p: Record<string, unknown>) => {
       const graph = visibleToolGraphOf(ctx);
 
@@ -91,6 +106,13 @@ export const surfaceActions: Record<string, ActionSpec> = {
     kind: "handler",
     effect: "read",
     offline: "Classifies the tool graph this server holds in memory.",
+    params: {
+      optional: ["category", "includeNames", "state"],
+      notes: {
+        includeNames: "default false",
+        state: "available|blocked|all, default available",
+      },
+    },
     description:
       "Report which actions this server can serve RIGHT NOW and why the rest cannot. With no editor "
       + "attached the surface is advertised in full but most of it cannot run, and this is the line "
@@ -103,8 +125,7 @@ export const surfaceActions: Record<string, ActionSpec> = {
       + "Counts come back by default, per category as well as overall; includeNames=true adds the actions "
       + "themselves, and category narrows the whole report to one. With an editor attached everything "
       + "is available and the classification still answers the question worth asking then, which is "
-      + "what keeps working once the editor is stopped for a rebuild. "
-      + "Params: category?, includeNames? (default false), state? (available|blocked|all, default available)",
+      + "what keeps working once the editor is stopped for a rebuild.",
     handler: async (ctx: ToolContext, p: Record<string, unknown>) => {
       const graph = visibleToolGraphOf(ctx);
 
@@ -140,7 +161,8 @@ export const surfaceActions: Record<string, ActionSpec> = {
     kind: "handler",
     effect: "read",
     offline: "Reads this session's own recorded calls.",
-    description: "Measurement for #704: reads this session's execute_python calls and, for each, runs its taskSummary back through search_tools to flag calls that OVERLAPPED an existing dedicated action ('you used Python for X, but tool Y does X'). Returns totalCalls, overlapping[] and an overlapRate. Params: none (#704)",
+    params: {},
+    description: "Measurement for #704: reads this session's execute_python calls and, for each, runs its taskSummary back through search_tools to flag calls that OVERLAPPED an existing dedicated action ('you used Python for X, but tool Y does X'). Returns totalCalls, overlapping[] and an overlapRate. (#704)",
     handler: async (ctx) => {
       const entries = getWorkarounds(ctx);
       const graph = visibleToolGraphOf(ctx);

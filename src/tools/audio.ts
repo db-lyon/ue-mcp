@@ -94,5 +94,5 @@ export const audioTool: ToolDef = categoryTool(
     // #1057: every key the audio handlers declare, generated from their C++
     // registrations.
     ...specSchema,
-  },
+  }, { label: { description: "MetaSounds, sound cues, sound classes", keywords: ["sound", "metasound"] } },
 );

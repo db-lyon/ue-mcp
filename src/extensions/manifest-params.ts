@@ -3,7 +3,7 @@ import type { TaskConstructor } from "@db-lyon/flowkit";
 import type { z } from "zod";
 import { McpError, ErrorCode } from "../core/errors.js";
 import type { ActionSpec } from "../surface/tool-types.js";
-import { paramsClause, type ParamSpec } from "../surface/handler-spec.js";
+import type { ParamSpec } from "../surface/handler-spec.js";
 import type { ManifestSchemaField } from "./manifest.js";
 
 type Fields = Record<string, ManifestSchemaField> | undefined;
@@ -24,15 +24,13 @@ export function requiredFieldNames(fields: Fields): string[] {
 }
 
 /**
- * The action fields a manifest `schema:` declares: its spec, and a Params
- * clause on the description so the requiredness is per action. One flat zod
- * shape backs every action in a category, so it cannot carry it.
+ * The action fields a manifest `schema:` declares: its description and its
+ * spec, which carries the requiredness per action. One flat zod shape backs
+ * every action in a category, so it cannot carry it.
  */
 export function manifestActionFields(description: string, fields: Fields): Partial<ActionSpec> {
   if (!fields || Object.keys(fields).length === 0) return { description };
-  const paramSpec = manifestParamSpecs(fields);
-  const clause = /\bParams:/.test(description) ? "" : paramsClause({ params: paramSpec });
-  return { description: [description, clause].filter(Boolean).join(" "), paramSpec };
+  return { description, paramSpec: manifestParamSpecs(fields) };
 }
 
 /** A lifted category key: always optional, since other actions share it. */

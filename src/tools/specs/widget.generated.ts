@@ -1967,70 +1967,6 @@ export const handlerSpecs: HandlerSpecs = {
   }
 };
 
-/** The Params: clause of each spec'd bridge method. */
-export const paramsClauses: Readonly<Record<string, string>> = {
-  add_to_viewport: "Params: assetPath (or path, or widgetBlueprintPath), zOrder?",
-  add_widget: "Params: assetPath (or path), widgetClass (or typeName), widgetName? (or name), parentWidgetName?, childIndex?",
-  add_widget_animation_event_key: "Params: assetPath (or path), animationName, functionName, time?, trackName?",
-  add_widget_animation_key: "Params: assetPath (or path), animationName, widgetName, propertyName, time, value, channel?, channelIndex?, interpolation?",
-  add_widget_animation_track: "Params: assetPath (or path), animationName, widgetName, propertyName",
-  add_widget_viewmodel: "Params: assetPath (or path), viewModelClass, viewModelName?, creationType?, globalViewModelIdentifier?, viewModelPropertyPath?, optional?, createSetter?, createGetter?, viewModelId?",
-  add_widget_viewmodel_binding: "Params: assetPath (or path), sourcePath?, destinationPath?, bindingMode?, executionMode?, conversionFunction?, conversionArguments?, conversionDirection?, enabled?, includeInCompile?",
-  audit_commonui: "Params: assetPath? (or path)",
-  audit_widget_accessibility: "Params: assetPath (or path), minFontSize?, minHitSize?",
-  audit_widget_focus_chain: "Params: assetPath (or path)",
-  bind_widget_animation_event: "Params: assetPath (or path), animationName, event?, userTag?",
-  build_tree: "Params: assetPath (or path), tree, parentWidgetName?",
-  bulk_set_widget_properties: "Params: assetPath (or path), properties",
-  check_widget_structure: "Params: assetPath (or path)",
-  clear_widget_binding: "Params: assetPath (or path), widgetName, propertyName?",
-  clear_widget_navigation: "Params: assetPath (or path), widgetName, direction?",
-  compile_widget_viewmodels: "Params: assetPath (or path)",
-  create_editor_utility_blueprint: "Params: at least one of assetPath (or path)/name, packagePath?, onConflict?",
-  create_editor_utility_widget: "Params: at least one of assetPath (or path)/name, packagePath?, onConflict?",
-  create_widget_animation: "Params: assetPath (or path), animationName, durationSeconds?, displayRate?, displayLabel?",
-  create_widget_blueprint: "Params: at least one of assetPath (or path)/name, packagePath?, parentClass?, onConflict?",
-  delete_widget_animation: "Params: assetPath (or path), animationName",
-  extract_widget_subtree: "Params: sourceAssetPath (or sourcePath), sourceWidgetName (or widgetName), destinationAssetPath (or destinationPath), destinationParentClass?, destinationRootName?, dryRun?",
-  get_bind_widget_contract: "Params: at least one of className/assetPath (or path)",
-  get_runtime_delegates: "Params: widgetName?, className?",
-  get_runtime_focus_path: "Params: userIndex?",
-  get_runtime_widget: "Params: at least one of widgetName/className, childName?, maxDepth?, includeLayout?",
-  get_widget_animation: "Params: assetPath (or path), animationName",
-  get_widget_details: "Params: assetPath (or path), widgetName",
-  get_widget_properties: "Params: assetPath (or path), widgetName, includeSubtree?",
-  inspect_runtime_instances: "Params: widgetName?, classFilter?, propertyNames?, includeSubtree?, childName?, childClassFilter?, viewportOnly?, world?, pieInstance?, maxInstances?, maxNodesPerInstance?",
-  invoke_runtime_function: "Params: at least one of widgetName/className, functionName?, childName?, value?, commitMethod?",
-  list_runtime_widgets: "Params: classFilter?, namePrefix?, viewportOnly?, cursor?, limit?",
-  list_widget_bindings: "Params: assetPath (or path), filterWidgetName?, filterProperty?",
-  list_widget_blueprints: "Params: recursive?, cursor?, limit?",
-  list_widget_classes: "Params: filter?, module?, includeAbstract?, includeBlueprint?, cursor?, limit?",
-  list_widget_viewmodel_bindings: "Params: assetPath (or path)",
-  list_widget_viewmodels: "Params: assetPath (or path)",
-  move_widget: "Params: assetPath (or path), widgetName, newParentWidgetName (or parentWidgetName)",
-  read_widget_animations: "Params: assetPath (or path)",
-  read_widget_tree: "Params: assetPath (or path)",
-  remove_widget: "Params: assetPath (or path), widgetName",
-  remove_widget_animation_event_key: "Params: assetPath (or path), animationName, time?, trackName?",
-  remove_widget_animation_key: "Params: assetPath (or path), animationName, widgetName, propertyName, time, channel?, channelIndex?",
-  remove_widget_animation_track: "Params: assetPath (or path), animationName, widgetName, propertyName",
-  remove_widget_viewmodel: "Params: assetPath (or path), viewModelName",
-  remove_widget_viewmodel_binding: "Params: assetPath (or path), bindingId",
-  rename_widget: "Params: assetPath (or path), widgetName, newName",
-  reorder_child: "Params: assetPath (or path), widgetName, index",
-  restore_widget_navigation: "Params: assetPath (or path), previous",
-  run_editor_utility_blueprint: "Params: assetPath (or path)",
-  run_editor_utility_widget: "Params: assetPath (or path)",
-  set_root_widget: "Params: assetPath (or path), widgetName",
-  set_runtime_focus: "Params: widgetName, userIndex?, className?",
-  set_widget_navigation: "Params: assetPath (or path), rules OR widgetName, direction?, rule?, widgetToFocus?",
-  set_widget_property: "Params: assetPath (or path), widgetName, propertyName, value (or propertyValue)",
-  set_widget_style: "Params: assetPath (or path), widgetName, propertyName, value",
-  unbind_widget_animation_event: "Params: assetPath (or path), animationName, event?, userTag?",
-  update_widget_viewmodel_binding: "Params: assetPath (or path), bindingId, sourcePath?, destinationPath?, bindingMode?, executionMode?, conversionFunction?, conversionArguments?, conversionDirection?, enabled?, includeInCompile?",
-  wrap_root_widget: "Params: assetPath (or path), wrapperClass (or widgetClass), wrapperName?",
-};
-
 /** Every key the spec'd widget handlers declare, aliases included. */
 export const schema: Record<string, z.ZodType> = {
   animationName: z.string().optional().describe("The UWidgetAnimation's object name or display label"),
@@ -2128,4 +2064,4 @@ export const schema: Record<string, z.ZodType> = {
 };
 
 /** Declare an action for a spec'd bridge method: effect, summary, method. */
-export const specBp = makeSpecBp(paramsClauses, handlerSpecs);
+export const specBp = makeSpecBp(handlerSpecs);

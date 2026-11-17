@@ -54,7 +54,13 @@ export const configActions: Record<string, ActionSpec> = {
     kind: "handler",
     effect: "read",
     offline: "Reads INI files from the project's Config directory.",
-    description: "Read INI config. Params: configName (e.g. 'Engine', 'Game')",
+    params: {
+      required: ["configName"],
+      notes: {
+        configName: "e.g. 'Engine', 'Game'",
+      },
+    },
+    description: "Read INI config.",
     handler: async (ctx, p) => {
       ctx.project.ensureLoaded();
       const filePath = resolveConfigPath(ctx.project.configDir!, p.configName as string);
@@ -67,7 +73,15 @@ export const configActions: Record<string, ActionSpec> = {
     kind: "handler",
     effect: "read",
     offline: "Reads the engine's and the project's INI files on disk.",
-    description: "Final value of one ini key as the editor reads it, through Unreal's whole config hierarchy (engine Base.ini, Base<Category>.ini, the engine platform file, the project's Default<Category>.ini and platform file, then Saved/Config/<Platform>Editor), with +, -, ., ! array operations applied. Returns value (a string, a list for an array key, null when unset), setBy (layer, file, line, text) and the layers read. No editor needed. Params: configName (category, e.g. 'Engine', 'Game', 'Input'), section, key, platform? (default this machine's: Windows, Mac or Linux)",
+    params: {
+      required: ["configName", "section", "key"],
+      optional: ["platform"],
+      notes: {
+        configName: "category, e.g. 'Engine', 'Game', 'Input'",
+        platform: "default this machine's: Windows, Mac or Linux",
+      },
+    },
+    description: "Final value of one ini key as the editor reads it, through Unreal's whole config hierarchy (engine Base.ini, Base<Category>.ini, the engine platform file, the project's Default<Category>.ini and platform file, then Saved/Config/<Platform>Editor), with +, -, ., ! array operations applied. Returns value (a string, a list for an array key, null when unset), setBy (layer, file, line, text) and the layers read. No editor needed.",
     handler: async (ctx, p) => {
       const h = hierarchyFor(ctx, p);
       const { steps, values } = explainKey(h.loaded, requireText(p.section, "section"), requireText(p.key, "key"));
@@ -89,7 +103,14 @@ export const configActions: Record<string, ActionSpec> = {
     kind: "handler",
     effect: "read",
     offline: "Reads the engine's and the project's INI files on disk.",
-    description: "Every config layer that touches one ini key, lowest first, with the lines it applies (+, -, ., ! array operations included) and the value after each, then the final value. The layers are resolve_setting's. No editor needed. Params: configName (category, e.g. 'Engine'), section, key, platform?",
+    params: {
+      required: ["configName", "section", "key"],
+      optional: ["platform"],
+      notes: {
+        configName: "category, e.g. 'Engine'",
+      },
+    },
+    description: "Every config layer that touches one ini key, lowest first, with the lines it applies (+, -, ., ! array operations included) and the value after each, then the final value. The layers are resolve_setting's. No editor needed.",
     handler: async (ctx, p) => {
       const h = hierarchyFor(ctx, p);
       const { steps, values } = explainKey(h.loaded, requireText(p.section, "section"), requireText(p.key, "key"));
@@ -108,7 +129,15 @@ export const configActions: Record<string, ActionSpec> = {
     kind: "handler",
     effect: "read",
     offline: "Reads the engine's and the project's INI files on disk.",
-    description: "The ini keys the project changes from the engine's defaults for one category: every key whose final value through the project (and, by default, the per-user Saved) layers differs from the value the engine layers alone give. Each change has section, key, engineValue, value and setBy. No editor needed. Params: configName (category, e.g. 'Engine'), platform?, includeUser? (default true: include Saved/Config/<Platform>Editor)",
+    params: {
+      required: ["configName"],
+      optional: ["platform", "includeUser"],
+      notes: {
+        configName: "category, e.g. 'Engine'",
+        includeUser: "default true: include Saved/Config/<Platform>Editor",
+      },
+    },
+    description: "The ini keys the project changes from the engine's defaults for one category: every key whose final value through the project (and, by default, the per-user Saved) layers differs from the value the engine layers alone give. Each change has section, key, engineValue, value and setBy. No editor needed.",
     handler: async (ctx, p) => {
       const h = hierarchyFor(ctx, p);
       const engineOnly = resolveAll(h.loaded.filter((l) => l.scope === "engine"));
@@ -134,7 +163,8 @@ export const configActions: Record<string, ActionSpec> = {
     kind: "handler",
     effect: "read",
     offline: "Searches the project's INI files on disk.",
-    description: "Search INI files. Params: query",
+    params: { required: ["query"] },
+    description: "Search INI files.",
     handler: async (ctx, p) => {
       ctx.project.ensureLoaded();
       const configDir = ctx.project.configDir!;
@@ -156,7 +186,8 @@ export const configActions: Record<string, ActionSpec> = {
     kind: "handler",
     effect: "read",
     offline: "Builds the gameplay tag tree from the project's INI files.",
-    description: "Extract gameplay tags from config. Params: none",
+    params: {},
+    description: "Extract gameplay tags from config.",
     handler: async (ctx) => {
       ctx.project.ensureLoaded();
       const configDir = ctx.project.configDir!;

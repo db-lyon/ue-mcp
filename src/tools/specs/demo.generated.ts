@@ -47,14 +47,6 @@ export const handlerSpecs: HandlerSpecs = {
   }
 };
 
-/** The Params: clause of each spec'd bridge method. */
-export const paramsClauses: Readonly<Record<string, string>> = {
-  demo_cleanup: "Params: none",
-  demo_get_steps: "Params: none",
-  demo_go_home: "Params: discardUnsaved?",
-  demo_step: "Params: step? (or stepIndex)",
-};
-
 /** Every key the spec'd demo handlers declare, aliases included. */
 export const schema: Record<string, z.ZodType> = {
   discardUnsaved: z.boolean().optional().describe("Switch even though the open map has unsaved changes, discarding them (default false)"),
@@ -63,4 +55,4 @@ export const schema: Record<string, z.ZodType> = {
 };
 
 /** Declare an action for a spec'd bridge method: effect, summary, method. */
-export const specBp = makeSpecBp(paramsClauses, handlerSpecs);
+export const specBp = makeSpecBp(handlerSpecs);

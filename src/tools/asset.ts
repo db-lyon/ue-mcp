@@ -2,7 +2,6 @@
 import { z } from "zod";
 import type { ToolDef } from "../surface/tool-types.js";
 import { categoryTool } from "../surface/category-tool.js";
-import { paged } from "../surface/pagination.js";
 import { SESSION_ID } from "../dispatch/lock-owner.js";
 import { McpError, ErrorCode } from "../core/errors.js";
 import type { EditorSession } from "../sessions/session.js";
@@ -200,7 +199,8 @@ export const assetTool: ToolDef = categoryTool(
       effect: "read",
       editorBound: "Wraps the search_assets bridge method, resolving content roots first.",
       rawBridgeMethods: { search_assets: "read" },
-      description: paged("Search by name/class/path. maxResults is a deprecated spelling of limit and sizes the page when limit is omitted. With extra content roots configured and no directory, this searches each root and pages ONE ROOT AT A TIME, so a cursor has to be passed back together with the directory it came from. classFilter (alias typeFilter) keeps only assets whose class name contains it, case-insensitive, as list_assets does. Params: query, directory?, classFilter?, maxResults?, searchAll?"),
+      params: { required: ["query"], optional: ["directory", "classFilter", "maxResults", "searchAll", "cursor", "limit"] },
+      description: "Search by name/class/path. maxResults is a deprecated spelling of limit and sizes the page when limit is omitted. With extra content roots configured and no directory, this searches each root and pages ONE ROOT AT A TIME, so a cursor has to be passed back together with the directory it came from. classFilter (alias typeFilter) keeps only assets whose class name contains it, case-insensitive, as list_assets does.",
       handler: async (ctx, p) => {
         const { action: _, maxResults, ...rest } = p;
         // One page size, whichever spelling the caller used. The bridge reads
@@ -415,14 +415,22 @@ export const assetTool: ToolDef = categoryTool(
       effect: "mutate",
       editorBound: "Calls the migrate bridge method from a module-level helper, then rescans the destination editor.",
       rawBridgeMethods: { migrate: "mutate" },
+      params: {
+        optional: ["assetPaths", "assetPath", "toEditor", "destinationContentDir", "includeDependencies", "onConflict", "allowDirty", "dryRun"],
+        choices: [{ mode: "exactlyOne", branches: [["assetPaths"], ["assetPath"]] }, { mode: "exactlyOne", branches: [["toEditor"], ["destinationContentDir"]] }],
+        notes: {
+          assetPaths: "string[]",
+          includeDependencies: "default true",
+          onConflict: "skip|overwrite, default skip",
+        },
+      },
       description:
         "Copy assets and their dependencies into ANOTHER project's Content directory - the scripted form of the content browser's Migrate (#760). " +
         "destinationContentDir is the TARGET project's Content folder. " +
         "While this server drives more than one editor, a 'toEditor' parameter is offered as well: name the destination editor and its Content folder is resolved for you and its asset registry rescanned afterwards, so the assets are visible there without a manual rescan (#817). " +
         "The call runs in the editor holding the SOURCE assets, so it pushes assets out of the project it is attached to. " +
         "Unsaved or never-saved assets are refused, because migrate copies files and would otherwise silently omit your edits. " +
-        "Every asset is resolved before anything is copied, and the destination is checked for the packages afterwards rather than reporting success on the call returning. " +
-        "Params: assetPaths (string[]) or assetPath, toEditor OR destinationContentDir, includeDependencies? (default true), onConflict? (skip|overwrite, default skip), allowDirty?, dryRun?",
+        "Every asset is resolved before anything is copied, and the destination is checked for the packages afterwards rather than reporting success on the call returning.",
       destinationEditor: true,
       handler: async (ctx, p) => migrateAssets(ctx, p),
     },
@@ -447,7 +455,14 @@ export const assetTool: ToolDef = categoryTool(
       editorBound: "Calls the acquire_lock bridge method. The lock registry lives in the editor.",
       assetCoordination: true,
       rawBridgeMethods: { acquire_lock: "mutate" },
-      description: "Acquire an exclusive lock on an asset for this editor. Returns acquired=true, or acquired=false with holder{sessionId,ttlSecondsRemaining} when another session holds it. Params: assetPath, ttlSeconds? (default 300), sessionId?",
+      params: {
+        required: ["assetPath"],
+        optional: ["ttlSeconds", "sessionId", "path"],
+        notes: {
+          ttlSeconds: "default 300",
+        },
+      },
+      description: "Acquire an exclusive lock on an asset for this editor. Returns acquired=true, or acquired=false with holder{sessionId,ttlSecondsRemaining} when another session holds it.",
       handler: async (ctx, p) => ctx.bridge.call("acquire_lock", {
         path: p.assetPath ?? p.path,
         sessionId: lockOwner(ctx, p),
@@ -460,7 +475,8 @@ export const assetTool: ToolDef = categoryTool(
       editorBound: "Calls the release_lock bridge method. The lock registry lives in the editor.",
       assetCoordination: true,
       rawBridgeMethods: { release_lock: "mutate" },
-      description: "Release an asset lock held by this editor (or force=true to break any holder's lock). Params: assetPath, force?, sessionId?",
+      params: { required: ["assetPath"], optional: ["force", "sessionId", "path"] },
+      description: "Release an asset lock held by this editor (or force=true to break any holder's lock).",
       handler: async (ctx, p) => ctx.bridge.call("release_lock", {
         path: p.assetPath ?? p.path,
         sessionId: lockOwner(ctx, p),
@@ -474,7 +490,8 @@ export const assetTool: ToolDef = categoryTool(
       editorBound: "Calls the release_session_locks bridge method. The lock registry lives in the editor.",
       assetCoordination: true,
       rawBridgeMethods: { release_session_locks: "mutate" },
-      description: "Release every lock held by one session in a single call, returning the number released. Defaults to the addressed editor's own session; pass sessionId to clear a different one (for example after a crashed session left assets wedged). Params: sessionId?",
+      params: { optional: ["sessionId"] },
+      description: "Release every lock held by one session in a single call, returning the number released. Defaults to the addressed editor's own session; pass sessionId to clear a different one (for example after a crashed session left assets wedged).",
       handler: async (ctx, p) => ctx.bridge.call("release_session_locks", {
         sessionId: lockOwner(ctx, p),
       }),
@@ -540,5 +557,5 @@ export const assetTool: ToolDef = categoryTool(
     // session id; it is only passed explicitly to coordinate across processes.
     sessionId: z.string().optional().describe("lock / unlock / unlock_all: owning session id (defaults to this server process)"),
     ttlSeconds: z.number().optional().describe("lock: seconds before the lock auto-expires (default 300)"),
-  },
+  }, { label: { text: "assets", description: "import/move/rename/delete content browser assets", keywords: ["datatable", "static mesh", "texture", "import"] } },
 );

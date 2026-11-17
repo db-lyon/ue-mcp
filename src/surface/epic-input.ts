@@ -149,6 +149,14 @@ function exampleFor(name: string, prop: SchemaProp | undefined): string {
  * argument cannot be assembled, rather than dispatching a call the engine will
  * reject with "input params Json is empty".
  */
+/**
+ * The keys a wrapped engine tool's action accepts beside its own properties:
+ * the `input` object and the raw `inputJson`, and the category's canonical
+ * asset path, which fills the tool's one unresolved asset reference.
+ */
+export const EPIC_ENVELOPE_KEYS = ["input", "inputJson"] as const;
+export const EPIC_ASSET_KEYS = ["assetPath", "path"] as const;
+
 export function resolveEpicToolInput(
   toolName: string,
   schema: EpicInputSchema | undefined,
@@ -186,7 +194,7 @@ export function resolveEpicToolInput(
   const unresolvedRefs = propNames.filter(
     (n) => input[n] === undefined && isAssetRefProp(asProp(props[n])),
   );
-  const canonicalAsset = coerceAssetPathValue(params.assetPath) ?? coerceAssetPathValue(params.path);
+  const canonicalAsset = EPIC_ASSET_KEYS.map((k) => coerceAssetPathValue(params[k])).find((v) => v !== undefined);
   if (unresolvedRefs.length === 1 && canonicalAsset) {
     input[unresolvedRefs[0]] = canonicalAsset;
   }
@@ -212,7 +220,7 @@ export function resolveEpicToolInput(
   }
   const missing = required.filter((n) => input[n] === undefined);
   if (missing.length > 0) {
-    const known = new Set([...propNames, "action", "input", "inputJson"]);
+    const known = new Set<string>([...propNames, "action", ...EPIC_ENVELOPE_KEYS]);
     const ignored = Object.keys(params).filter(
       (k) => !known.has(k) && params[k] !== undefined && params[k] !== null,
     );

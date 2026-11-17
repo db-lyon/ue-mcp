@@ -17,7 +17,6 @@ import {
 import { bridgeTaskClass } from "../flow/task-factory.js";
 import {
   flatContractShape,
-  paramsClause,
   recordedSpecsProblems,
   type HandlerSpecs,
   type RecordedHandlerSpecs,
@@ -656,7 +655,7 @@ export function nativeHandlerSurface(
     // Injection and provisioning lift every key optional; the action keeps its required flags.
     if (!spec) return { description: hSpec.description, schema: hSpec.schema };
     return {
-      description: [hSpec.description, paramsClause(spec)].filter(Boolean).join(" "),
+      description: hSpec.description,
       contract: { method: hName, spec },
       zodSchema,
     };

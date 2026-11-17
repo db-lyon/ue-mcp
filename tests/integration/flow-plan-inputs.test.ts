@@ -68,8 +68,8 @@ describe("flow plan inputs over the daemon", () => {
     expect(plan.status, plan.text).toBe(200);
     const inputs = plan.body.inputs as Input[];
     expect(inputs.map((i) => [i.name, i.type, i.required, i.steps.map((s) => `${s.path} ${s.task} ${s.flow}`)])).toEqual([
+      // From its options_schema; the Params text in its description is prose and names nothing.
       ["who", "string", true, ["1 greet integ_inputs"]],
-      ["cwd", "any", false, ["1 greet integ_inputs"]],
       ["cursor", "string", false, ["2/1 asset.list_textures textures"]],
       ["limit", "integer", false, ["2/1 asset.list_textures textures"]],
     ]);

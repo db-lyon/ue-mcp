@@ -65,7 +65,7 @@ export async function hookProjectDir(
   }
 
   // A call that addressed an editor named a session, which resolves through the
-  // same MCP client config the server was started from.
+  // same MCP client config the server was started from (see editor-flag.ts).
   const editor = str(input.editor);
   if (editor) {
     try {
@@ -89,7 +89,7 @@ export async function hookProjectDir(
  * tool-call path, so the import is deferred to the calls that name an editor.
  */
 async function defaultResolveEditor(name: string): Promise<string> {
-  const { resolveEditorFlag } = await import("../mcp-clients/configured-editors.js");
+  const { resolveEditorFlag } = await import("../../cli/editor-flag.js");
   return resolveEditorFlag(name);
 }
 

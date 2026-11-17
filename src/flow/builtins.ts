@@ -7,7 +7,7 @@
  * what is built in.
  */
 import { createRequire } from "node:module";
-import { ShellTask, type TaskConstructor, type TaskRegistry } from "@db-lyon/flowkit";
+import { ShellTask, type OptionSpecs, type TaskConstructor, type TaskRegistry } from "@db-lyon/flowkit";
 import { BridgeTask } from "./bridge-task.js";
 import { editorOperationTask } from "./editor-op-task.js";
 import { AGENT_BUILTIN_TASKS } from "./agent-step.js";
@@ -23,7 +23,7 @@ export interface BuiltinTask {
    * The task the default config lists for it. Without one the class is
    * reachable by name and `class_path` but not listed.
    */
-  readonly definition?: { readonly group: string; readonly description: string };
+  readonly definition?: { readonly group: string; readonly description: string; readonly options_schema?: OptionSpecs };
 }
 
 export const BUILTIN_TASKS: readonly BuiltinTask[] = [
@@ -31,7 +31,11 @@ export const BUILTIN_TASKS: readonly BuiltinTask[] = [
   {
     name: "shell",
     task: ShellTask as unknown as TaskConstructor,
-    definition: { group: "util", description: "Run a shell command. Params: command, cwd?, timeout?" },
+    definition: {
+      group: "util",
+      description: "Run a shell command.",
+      options_schema: { command: { type: "string", required: true }, cwd: { type: "string" }, timeout: { type: "number" } },
+    },
   },
   { name: "editor.restart", task: editorOperationTask("restart") },
   { name: "editor.rebuild", task: editorOperationTask("rebuild") },

@@ -48,23 +48,21 @@ describe("a spec'd core action", () => {
 });
 
 describe("an in-process handler", () => {
-  it("refuses a key its Params clause and its reads do not name", async () => {
+  it("refuses a key its params declaration does not name", async () => {
     await expect(projectTool.handler(ctxWith(), { action: "search_tools", query: "save asset", limitt: 3 }))
       .rejects.toThrow(/search_tools does not take limitt; it takes query, limit/);
   });
 
-  it("is not checked when its bag escapes to code a scan cannot follow", () => {
-    const spread: ActionSpec = { kind: "handler", effect: "read", description: "Params: a", handler: async (_ctx, p) => ({ ...p }) };
-    const passed: ActionSpec = { kind: "handler", effect: "read", description: "Params: a", handler: async (_ctx, p) => JSON.stringify(p) };
-    const reads: ActionSpec = { kind: "handler", effect: "read", description: "Params: a", handler: async (_ctx, p) => p.a ?? p["b"] };
-    expect(actionAccepts(spread)).toBeUndefined();
-    expect(actionAccepts(passed)).toBeUndefined();
-    expect([...actionAccepts(reads)!.keys].sort()).toEqual(["a", "b"]);
+  it("accepts the names it declares, and is not checked when it declares none", () => {
+    const declared: ActionSpec = { kind: "handler", effect: "read", params: { required: ["a"], optional: ["b"] }, handler: async (_ctx, p) => ({ ...p }) };
+    const undeclared: ActionSpec = { kind: "handler", effect: "read", handler: async (_ctx, p) => JSON.stringify(p) };
+    expect([...actionAccepts(declared)!.keys].sort()).toEqual(["a", "b"]);
+    expect(actionAccepts(undeclared)).toBeUndefined();
   });
 
   it("lets routing names through", async () => {
     const tool = categoryTool("demo", "Demo", {
-      go: { kind: "handler", effect: "read", description: "Params: a", handler: async (_ctx, p) => ({ a: p.a }) },
+      go: { kind: "handler", effect: "read", params: { required: ["a"] }, handler: async (_ctx, p) => ({ a: p.a }) },
     });
     await expect(tool.handler(ctxWith(), { action: "go", a: 1, timeoutMs: 5_000, select: "a" })).resolves.toBeDefined();
   });

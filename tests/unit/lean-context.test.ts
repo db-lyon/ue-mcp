@@ -1,9 +1,9 @@
 import { describe, it, expect, afterEach } from "vitest";
 import { z } from "zod";
 import type { ToolDef, ToolContext } from "../../src/surface/tool-types.js";
-import { actionEnumValues, categoryTool, bp } from "../../src/surface/category-tool.js";
+import { actionEnumValues, categoryTool, bp, refreshDescription, renderToolDescription, summaryOf } from "../../src/surface/category-tool.js";
 import { resolveContextStrategy } from "../../src/config/context-strategy.js";
-import { splitDescription, buildCatalogTool, applyLeanContext } from "../../src/surface/context/lean-context.js";
+import { buildCatalogTool, applyLeanContext } from "../../src/surface/context/lean-context.js";
 import { buildMicroGateway } from "../../src/surface/context/micro-context.js";
 import { searchToolGraph } from "../../src/surface/context/tool-search.js";
 import { actionSignature } from "../../src/surface/action-signature.js";
@@ -63,17 +63,26 @@ describe("resolveContextStrategy", () => {
   });
 });
 
-describe("splitDescription", () => {
-  it("splits a categoryTool description into summary and catalog", () => {
+describe("a category's description", () => {
+  it("is rendered from its summary and its actions", () => {
     const tool = fixtureTools()[0];
-    const { summary, catalog } = splitDescription(tool.description);
-    expect(summary).toBe("Blueprint authoring.");
-    expect(catalog).toContain("- create: Create a new Blueprint asset");
-    expect(catalog).toContain("- add_node:");
+    expect(summaryOf(tool)).toBe("Blueprint authoring.");
+    expect(tool.description).toBe(renderToolDescription("Blueprint authoring.", tool.actions));
+    expect(tool.description).toContain("- create: Create a new Blueprint asset");
+    expect(tool.description).toContain("- add_node:");
   });
 
-  it("handles a description with no catalog", () => {
-    expect(splitDescription("Just a summary")).toEqual({ summary: "Just a summary", catalog: "" });
+  it("re-renders when an action is removed, and lists injected actions apart", () => {
+    const tool = fixtureTools()[0];
+    tool.actions.injected = { kind: "registry", effect: "read", description: "From a plugin.", providedBy: "someplugin" };
+    delete tool.actions.add_node;
+    refreshDescription(tool);
+    expect(tool.description).not.toContain("- add_node:");
+    expect(tool.description).toMatch(/\n\nPlugin actions:\n- injected: From a plugin\.$/);
+  });
+
+  it("is a hand-built tool's whole description when it has no summary", () => {
+    expect(summaryOf({ description: "Just a summary" })).toBe("Just a summary");
   });
 });
 
@@ -280,7 +289,10 @@ describe("buildMicroGateway", () => {
 
 describe("compact discovery for spatial requests", () => {
   const tools = [categoryTool("level", "Spatial tools", {
-    nudge_component: bp("read", "Adjust a component. Params: componentName, axisRotation?", "nudge_component"),
+    nudge_component: {
+      ...bp("read", "Adjust a component.", "nudge_component"),
+      params: { required: ["componentName"], optional: ["axisRotation"] },
+    },
     irrelevant: bp("read", "Something else. Params: none", "irrelevant"),
   }, {
     componentName: z.string().optional(),

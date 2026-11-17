@@ -1,13 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildResolvePrompt } from "../../src/cli/resolve.js";
-import { CLAUDE_CODE, RESOLVE_ALLOWED_TOOLS } from "../../src/integrations/claude-code/claude-code-client.js";
-import { AGENT_CLIENT } from "../../src/integrations/mcp-clients/agent-client.js";
-
-const resolveClaudeArgs = (): string[] => CLAUDE_CODE.resolveArgs();
-
-it("resolve launches Claude Code", () => {
-  expect(AGENT_CLIENT.command).toBe("claude");
-});
+import { RESOLVE_ALLOWED_TOOLS, buildResolvePrompt, resolveClaudeArgs } from "../../src/cli/resolve.js";
 
 /**
  * `ue-mcp resolve` hands a public issue to claude. The issue text is anyone's,

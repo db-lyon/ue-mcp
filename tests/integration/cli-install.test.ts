@@ -362,8 +362,9 @@ describe("init --dry-run", () => {
     expect(plan.blockers).toEqual([]);
     // What a setup page needs to offer every choice the interactive wizard does.
     expect(plan.categories.map((c: { name: string }) => c.name)).toEqual(
-      ["level", "blueprint", "material", "asset", "animation", "niagara", "landscape", "pcg", "foliage", "audio", "widget", "gameplay", "gas", "networking", "demo",
-       "pie", "statetree", "chooser", "dataflow", "conversation", "epic", "fab", "datasmith", "metahuman", "source_control", "canvas"],
+      // The server's category order: init reads the list off the categories themselves.
+      ["asset", "blueprint", "level", "material", "animation", "landscape", "pcg", "foliage", "niagara", "audio", "widget", "pie", "gameplay", "gas",
+       "networking", "demo", "statetree", "chooser", "epic", "fab", "datasmith", "metahuman", "dataflow", "conversation", "source_control", "canvas"],
     );
     expect(plan.categories.find((c: { name: string }) => c.name === "niagara")).toEqual(
       { name: "niagara", label: "vfx (niagara)", description: "VFX systems, emitters, modules", requiredPlugins: ["Niagara"] },

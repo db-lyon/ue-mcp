@@ -1698,65 +1698,6 @@ export const handlerSpecs: HandlerSpecs = {
   }
 };
 
-/** The Params: clause of each spec'd bridge method. */
-export const paramsClauses: Readonly<Record<string, string>> = {
-  add_state_tree_binding: "Params: assetPath, sourceStructId, sourcePath, targetStructId, targetPath",
-  add_state_tree_color: "Params: assetPath, displayName, color?",
-  add_state_tree_consideration: "Params: assetPath, stateId?, statePath?, structType, instanceProperties?, operand?",
-  add_state_tree_enter_condition: "Params: assetPath, stateId?, statePath?, structType, instanceProperties?, operand?",
-  add_state_tree_evaluator: "Params: assetPath, structType, instanceProperties?",
-  add_state_tree_global_task: "Params: assetPath, structType, instanceProperties?",
-  add_state_tree_state: "Params: assetPath, stateId?, statePath?, name, stateType?, selectionBehavior?, insertIndex?, linkedSubtree?",
-  add_state_tree_state_parameter: "Params: assetPath, stateId?, statePath?, paramName, paramType",
-  add_state_tree_task: "Params: assetPath, stateId?, statePath?, structType, instanceProperties?",
-  add_state_tree_transition: "Params: assetPath, stateId?, statePath?, trigger, transitionType, eventTag?, targetStateId?, targetStatePath?, priority?, delayDuration?, bDelayTransition?",
-  add_state_tree_transition_condition: "Params: assetPath, stateId?, statePath?, transitionIndex, structType, instanceProperties?, operand?",
-  check_state_tree_binding: "Params: assetPath, targetStructId, targetPath?, sourceStructId?, sourcePath?",
-  clear_state_tree_state_nodes: "Params: assetPath, stateId?, statePath?",
-  compile_state_tree: "Params: assetPath",
-  list_state_tree_bindable_properties: "Params: assetPath, structId, targetPath?, exactOnly?, maxDepth?",
-  list_state_tree_bindable_sources: "Params: assetPath, cursor?, limit?",
-  list_state_tree_bindings: "Params: assetPath, structId?",
-  list_state_tree_colors: "Params: assetPath",
-  list_state_tree_node_types: "Params: assetPath, nodeType?, filter?, includeInstanceProperties?, schemaAllowedOnly?",
-  list_state_tree_state_parameters: "Params: assetPath, stateId?, statePath?",
-  list_state_tree_states: "Params: assetPath, cursor?, limit?",
-  move_state_tree_node: "Params: assetPath, nodeId, newIndex",
-  move_state_tree_state: "Params: assetPath, stateId?, statePath?, newParentStateId?, newParentStatePath?, toRoot?, insertIndex?",
-  promote_state_tree_property_to_parameter: "Params: assetPath, targetStructId, targetPath, parameterName?, stateId?, statePath?",
-  read_state_tree: "Params: assetPath",
-  read_state_tree_node: "Params: assetPath, nodeId",
-  read_state_tree_runtime: "Params: actorLabel?, actorPath?, componentName?, world?, pieInstance?, includeDebugStrings?",
-  read_state_tree_state: "Params: assetPath, stateId?, statePath?",
-  remove_state_tree_binding: "Params: assetPath, targetStructId, targetPath",
-  remove_state_tree_consideration: "Params: assetPath, stateId?, statePath?, considerationIndex",
-  remove_state_tree_enter_condition: "Params: assetPath, stateId?, statePath?, conditionIndex",
-  remove_state_tree_evaluator: "Params: assetPath, nodeId",
-  remove_state_tree_global_task: "Params: assetPath, nodeId",
-  remove_state_tree_state: "Params: assetPath, stateId?, statePath?",
-  remove_state_tree_state_parameter: "Params: assetPath, stateId?, statePath?, paramName",
-  remove_state_tree_task: "Params: assetPath, stateId?, statePath?, taskIndex",
-  remove_state_tree_transition: "Params: assetPath, stateId?, statePath?, transitionIndex",
-  remove_state_tree_transition_condition: "Params: assetPath, stateId?, statePath?, transitionIndex, conditionIndex",
-  request_state_tree_transition: "Params: actorLabel?, actorPath?, targetStateId?, targetStateTag?, priority?, fallback?, componentName?, world?, pieInstance?",
-  send_state_tree_event: "Params: actorLabel?, actorPath?, eventTag, componentName?, origin?, world?, pieInstance?",
-  set_state_tree_evaluator_instance_property: "Params: assetPath, nodeId, propertyName, value",
-  set_state_tree_evaluator_property: "Params: assetPath, nodeId, propertyName, value",
-  set_state_tree_global_task_instance_property: "Params: assetPath, nodeId, propertyName, value",
-  set_state_tree_global_task_property: "Params: assetPath, nodeId, propertyName, value",
-  set_state_tree_node_class: "Params: assetPath, nodeId, nodeClass",
-  set_state_tree_node_data: "Params: assetPath, nodeId, target?, propertyName?, value",
-  set_state_tree_node_flags: "Params: assetPath, nodeId, taskEnabled?, consideredForCompletion?, evaluationMode?",
-  set_state_tree_root_parameters: "Params: assetPath, parameters",
-  set_state_tree_schema: "Params: assetPath, schema?",
-  set_state_tree_state_link: "Params: assetPath, stateId?, statePath?, linkType, targetStateId?, targetStatePath?, linkedAsset?",
-  set_state_tree_state_parameter: "Params: assetPath, stateId?, statePath?, paramName, value",
-  set_state_tree_state_property: "Params: assetPath, stateId?, statePath?, propertyName, value",
-  set_state_tree_task_instance_property: "Params: assetPath, stateId?, statePath?, taskIndex, propertyName, value",
-  set_state_tree_task_property: "Params: assetPath, stateId?, statePath?, taskIndex, propertyName, value",
-  validate_state_tree: "Params: assetPath",
-};
-
 /** Every key the spec'd statetree handlers declare, aliases included. */
 export const schema: Record<string, z.ZodType> = {
   actorLabel: z.string().optional().describe("Label of the actor carrying the running StateTree component (or pass actorPath)"),
@@ -1828,4 +1769,4 @@ export const schema: Record<string, z.ZodType> = {
 };
 
 /** Declare an action for a spec'd bridge method: effect, summary, method. */
-export const specBp = makeSpecBp(paramsClauses, handlerSpecs);
+export const specBp = makeSpecBp(handlerSpecs);

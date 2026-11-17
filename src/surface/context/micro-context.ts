@@ -14,7 +14,7 @@
 import { z } from "zod";
 import { registeredMethodsOf, withholdFromTool, withholdUnregistered } from "../registered-surface.js";
 import type { ActionSpec, ToolDef } from "../tool-types.js";
-import { categoryTool } from "../category-tool.js";
+import { categoryTool, summaryOf } from "../category-tool.js";
 import { EDITOR_TARGET_PARAM, stripAction } from "../routing-params.js";
 import { createFlowTool } from "../../flow/flow-tool.js";
 import { microGuide } from "./instructions.js";
@@ -23,7 +23,7 @@ import { McpError, ErrorCode } from "../../core/errors.js";
 import { actionSchema } from "../action-schema.js";
 import { takeFieldSelection } from "./field-select.js";
 import { coerceJsonStringArgs, flatValidationMessage, unknownRecord } from "./call-envelope.js";
-import { describeCategory, discoveryResults, readOffset, splitDescription } from "./lean-context.js";
+import { describeCategory, discoveryResults, readOffset } from "./lean-context.js";
 
 /**
  * The one tool micro mode advertises. Named here rather than inline because
@@ -164,7 +164,7 @@ export function buildMicroGateway(tools: ToolDef[]): ToolDef {
   // Flow is listed, searched and described like a category; dispatch runs it.
   const discoverable = [...tools, flow];
   const byName = new Map(discoverable.map((t) => [t.name, t] as const));
-  const summaries = discoverable.map((t) => ({ category: t.name, summary: splitDescription(t.description).summary }));
+  const summaries = discoverable.map((t) => ({ category: t.name, summary: summaryOf(t) }));
 
   const actions: Record<string, ActionSpec> = {
     guide: {
@@ -176,7 +176,8 @@ export function buildMicroGateway(tools: ToolDef[]): ToolDef {
     search: {
       kind: "handler",
       effect: "read",
-      description: "Find actions by keyword or intent; returns category.signature lines. Params: query, limit? (default 20)",
+      params: { required: ["query"], optional: ["limit"], notes: { limit: "default 20" } },
+      description: "Find actions by keyword or intent; returns category.signature lines.",
       handler: async (ctx, p) => {
         const query = typeof p.query === "string" ? p.query : "";
         if (!query.trim()) throw new Error("Provide a query to search for actions.");
@@ -202,7 +203,8 @@ export function buildMicroGateway(tools: ToolDef[]): ToolDef {
     describe: {
       kind: "handler",
       effect: "read",
-      description: "A category's action signatures a page at a time, or one action's parameter schema. Params: category, method?, offset?",
+      params: { required: ["category"], optional: ["method", "offset"] },
+      description: "A category's action signatures a page at a time, or one action's parameter schema.",
       handler: async (ctx, p) => {
         const category = typeof p.category === "string" ? p.category : "";
         const declared = byName.get(category);
@@ -220,7 +222,11 @@ export function buildMicroGateway(tools: ToolDef[]): ToolDef {
     call: {
       kind: "handler",
       effect: "unknown",
-      description: "Invoke any action. Params: category, method (the action name), args (object of the action's params).",
+      params: {
+        required: ["category", "method", "args"],
+        notes: { method: "the action name", args: "object of the action's params" },
+      },
+      description: "Invoke any action.",
       handler: async (ctx, p) => {
         const category = typeof p.category === "string" ? p.category : "";
         const method = typeof p.method === "string" ? p.method : "";

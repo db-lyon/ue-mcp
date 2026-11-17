@@ -30,5 +30,5 @@ export const sourceControlTool: ToolDef = categoryTool(
     ...epicSchema,
     // Every key the source_control handlers declare, generated from their C++ registrations.
     ...specSchema,
-  },
+  }, { label: { text: "source control", description: "provider status, checkout, history, diff, submit", keywords: ["perforce", "checkout", "changelist"] } },
 );

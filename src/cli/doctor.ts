@@ -17,16 +17,13 @@ import { distTagForVersion, isNewer, npmResolvedLatest } from "../core/version-c
 import {
   NPX_AGE_GATE_OVERRIDE,
   UE_MCP_LAUNCH,
-  clientLocation,
   detectMcpClients,
   isNpxCommand,
   liftAgeGateInEntry,
   liftsAgeGate,
-  projectClientAt,
+  pinnedVersionOf,
   readUeMcpEntry,
   removeUeMcpEntry,
-  serversKeyOf,
-  type McpClient,
 } from "../integrations/mcp-clients/mcp-client-config.js";
 import { packageVersion } from "../core/package-root.js";
 import { findUProject, isUProjectPath, projectDirOf } from "../config/uproject-path.js";
@@ -388,9 +385,6 @@ function bridgePluginVersion(projectArg: string | undefined, cwd: string): NonNu
   }
 }
 
-/** The project's .mcp.json in `dir`, the config the walks from cwd up look for. */
-const projectMcpJsonAt = (dir: string): McpClient => projectClientAt(clientLocation("claude-code"), dir);
-
 /**
  * Scan cwd + parents for a .mcp.json that launches the server via bare
  * `npx ue-mcp` (an npx server whose args include "ue-mcp" with no @version pin
@@ -400,13 +394,11 @@ export function findBareNpxConfigs(cwd: string): string[] {
   const hits: string[] = [];
   let dir = path.resolve(cwd);
   for (let i = 0; i < 4; i++) {
-    const client = projectMcpJsonAt(dir);
-    const cfg = client.configPath;
-    if (client.detected) {
+    const cfg = path.join(dir, ".mcp.json");
+    if (fs.existsSync(cfg)) {
       try {
-        // Every server, not only the ue-mcp entry: one registered under another name shadows just the same.
         const parsed = JSON.parse(fs.readFileSync(cfg, "utf-8"));
-        const servers = (parsed && typeof parsed === "object" && parsed[serversKeyOf(client)]) || {};
+        const servers = (parsed && typeof parsed === "object" && parsed.mcpServers) || {};
         for (const key of Object.keys(servers)) {
           const s = servers[key] || {};
           const command = String(s.command ?? "");
@@ -431,9 +423,14 @@ export function findPinnedConfigs(cwd: string): Array<{ config: string; version:
   const hits: Array<{ config: string; version: string }> = [];
   let dir = path.resolve(cwd);
   for (let i = 0; i < 4; i++) {
-    const client = projectMcpJsonAt(dir);
-    const version = readUeMcpEntry(client).pinned;
-    if (version) hits.push({ config: client.configPath, version });
+    const cfg = path.join(dir, ".mcp.json");
+    try {
+      const parsed = JSON.parse(fs.readFileSync(cfg, "utf-8"));
+      const entry = parsed?.mcpServers?.["ue-mcp"];
+      const args: string[] = Array.isArray(entry?.args) ? entry.args.map((a: unknown) => String(a)) : [];
+      const version = pinnedVersionOf(args);
+      if (version) hits.push({ config: cfg, version });
+    } catch { /* absent or malformed */ }
     const parent = path.dirname(dir);
     if (parent === dir) break;
     dir = parent;

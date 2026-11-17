@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { levelTool } from "../../src/tools/level.js";
+import { actionSchema } from "../../src/surface/action-schema.js";
 
 function fakeCtx(seen: Array<Record<string, unknown>>) {
   return {
@@ -25,7 +26,11 @@ describe("level.set_component_skeletal_mesh (#1099)", () => {
     expect(action.kind === "bridge" && action.paramChoices).toEqual([
       { mode: "exactlyOne", branches: [["actorLabel"], ["actorPath"]] },
     ]);
-    expect(action.description).toContain("Params: actorLabel OR actorPath, skeletalMesh, componentName?, world?, pieInstance?");
+    const schema = actionSchema(levelTool, "set_component_skeletal_mesh");
+    expect(schema.alternatives).toEqual([{ branches: [["actorLabel"], ["actorPath"]], required: true }]);
+    const byName = new Map(schema.params.map((p) => [p.name, p]));
+    expect(byName.get("skeletalMesh")?.required).toBe(true);
+    for (const name of ["componentName", "world", "pieInstance"]) expect(byName.get(name)?.required, name).toBe(false);
   });
 
   it("accepts null to clear the mesh, and sends it", async () => {

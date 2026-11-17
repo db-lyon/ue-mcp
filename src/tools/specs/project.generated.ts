@@ -411,28 +411,6 @@ export const handlerSpecs: HandlerSpecs = {
   }
 };
 
-/** The Params: clause of each spec'd bridge method. */
-export const paramsClauses: Readonly<Record<string, string>> = {
-  compile_localization_target: "Params: target, culture?",
-  create_cpp_class: "Params: className, parentClass?, moduleName?, classDomain?, subPath?",
-  disable_plugin: "Params: pluginName, removeReference?",
-  enable_plugin: "Params: pluginName",
-  gather_localization_target: "Params: target",
-  generate_project_files: "Params: none",
-  get_maps_settings: "Params: none",
-  list_available_plugins: "Params: filter?, pluginCategory?, enabledOnly?, cursor?, limit?",
-  list_localization_cultures: "Params: none",
-  list_localization_targets: "Params: includeEngineTargets?",
-  list_project_modules: "Params: cursor?, limit?",
-  live_coding_compile: "Params: wait?",
-  live_coding_status: "Params: none",
-  remove_localization_target: "Params: target, deleteFiles?",
-  set_config: "Params: configName? (or configFile), section, key, value",
-  set_developer_setting: "Params: settingsClass, propertyName, settingValue, persist?",
-  set_localization_target: "Params: target, cultures?, nativeCulture?, gatherFromPackages?, includePaths?, excludePaths?, gatherFromTextFiles?, searchDirectories?",
-  set_maps_settings: "Params: at least one of globalDefaultGameMode/globalDefaultServerGameMode/gameInstanceClass/gameDefaultMap/serverDefaultMap/editorStartupMap/transitionMap",
-};
-
 /** Every key the spec'd project handlers declare, aliases included. */
 export const schema: Record<string, z.ZodType> = {
   classDomain: z.string().optional().describe("public | private | classes (default public)"),
@@ -478,4 +456,4 @@ export const schema: Record<string, z.ZodType> = {
 };
 
 /** Declare an action for a spec'd bridge method: effect, summary, method. */
-export const specBp = makeSpecBp(paramsClauses, handlerSpecs);
+export const specBp = makeSpecBp(handlerSpecs);

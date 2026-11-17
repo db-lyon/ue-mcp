@@ -91,7 +91,15 @@ export const blueprintTool: ToolDef = categoryTool(
       kind: "handler",
       effect: "mutate",
       editorBound: "Runs a sequence of bridge calls to create and populate a Blueprint.",
-      description: "Author a whole Blueprint in one call: optionally create it (parentClass), then add components, variables and function stubs, then compile - one agent-facing action instead of a dozen add_* round-trips. Params: assetPath, parentClass? (create/ensure the BP if given), components? [{componentClass, componentName?, parentComponent?, parentSocket?, childActorClass?, asRoot?}] (asRoot=true makes that scene component the root in place of DefaultSceneRoot), variables? [{name, varType}], functions? [{functionName}], compile? (default true). Returns per-step results + created flag. (#607)",
+      params: {
+        required: ["assetPath"],
+        optional: ["parentClass", "components", "variables", "functions", "compile"],
+        notes: {
+          parentClass: "create/ensure the BP if given",
+          compile: "default true",
+        },
+      },
+      description: "Author a whole Blueprint in one call: optionally create it (parentClass), then add components, variables and function stubs, then compile - one agent-facing action instead of a dozen add_* round-trips. Returns per-step results + created flag. (#607)",
       handler: async (ctx, p) => {
         const assetPath = p.assetPath as string;
         if (!assetPath) throw new Error("Missing 'assetPath'");
@@ -185,5 +193,5 @@ export const blueprintTool: ToolDef = categoryTool(
     maxSamples: z.number().int().nonnegative().optional().describe("audit_dead_code: samples listed per finding kind per Blueprint, default 20, max 500; counts stay complete (#1166)"),
     maxBlueprints: z.number().int().positive().optional().describe("search_call_sites / audit_dead_code: cap on Blueprints loaded, default 2000 (#945/#1166)"),
     offset: z.number().int().nonnegative().optional().describe("Row offset for read_graph, and the older non-resumable form of search_call_sites paging"),
-  },
+  }, { label: { text: "blueprints", description: "Blueprint classes: variables, functions, components, nodes", keywords: ["bp", "add_variable", "add_node", "set_class_default"] } },
 );

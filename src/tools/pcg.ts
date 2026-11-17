@@ -41,7 +41,8 @@ export const pcgTool: ToolDef = categoryTool(
       kind: "handler",
       effect: "read",
       editorBound: "Polls the get_pcg_generation_state bridge method until a generation ends.",
-      description: "Block until a PCG component's generation finishes, for a run started by anything (execute, the editor, a project function that defers to the next tick), polling get_generation_state with backoff. With runId, waits for that run; without, for the generation in flight, or one that starts within graceSeconds (default 2), else returns state idle. Partitioned components finish when their local components do. Returns state generated|cancelled|cleaned|not_started|idle|timed_out, durationMs, polls and lastRun; timed_out fails the call (#1365). With runId, a not_started run is final only after graceSeconds, since Generate can defer its start; not_started adds alreadyGenerated and lastFinishUtc. Params: actorLabel?, actorPath?, componentName?, runId?, timeoutSeconds?, graceSeconds?",
+      params: { optional: ["actorLabel", "actorPath", "componentName", "runId", "timeoutSeconds", "graceSeconds"] },
+      description: "Block until a PCG component's generation finishes, for a run started by anything (execute, the editor, a project function that defers to the next tick), polling get_generation_state with backoff. With runId, waits for that run; without, for the generation in flight, or one that starts within graceSeconds (default 2), else returns state idle. Partitioned components finish when their local components do. Returns state generated|cancelled|cleaned|not_started|idle|timed_out, durationMs, polls and lastRun; timed_out fails the call (#1365). With runId, a not_started run is final only after graceSeconds, since Generate can defer its start; not_started adds alreadyGenerated and lastFinishUtc.",
       handler: async (ctx, p) => waitForGeneration(ctx, {
         actorLabel: p.actorLabel as string | undefined,
         actorPath: p.actorPath as string | undefined,
@@ -80,5 +81,5 @@ export const pcgTool: ToolDef = categoryTool(
     ...diagramSchema({ ...epicSchema, ...specSchema }),
     runId: z.number().optional().describe("wait_for_generation: the runId execute or force_regenerate returned"),
     graceSeconds: z.number().optional().describe("wait_for_generation: with no runId and nothing generating, how long to wait for a deferred start (default 2)"),
-  },
+  }, { label: { description: "procedural content graphs", requiredPlugins: ["PCG"], keywords: ["procedural"] } },
 );

@@ -94,7 +94,7 @@ describe("signatures from a recorded C++ spec", () => {
 describe("signatures from an Epic input schema", () => {
   it("reads the generated schema, with object references as ref", () => {
     const action: ActionSpec = {
-      ...bp("mutate", "[Epic X] Adds an event. Params: blueprint, event_name, position?", "epic_call_tool"),
+      ...bp("mutate", "[Epic X] Adds an event.","epic_call_tool"),
       epicSchema: {
         properties: {
           blueprint: { type: "object", properties: { refPath: {} } },
@@ -116,7 +116,7 @@ describe("signatures from an Epic input schema", () => {
 describe("signatures from an Epic input schema, continued", () => {
   it("sends an argument named like a dispatcher key through input, never at the top level", () => {
     const action: ActionSpec = {
-      ...bp("read", "[Epic X] Windows. Params: index?, input?", "epic_call_tool"),
+      ...bp("read", "[Epic X] Windows.","epic_call_tool"),
       epicSchema: { properties: { action: { type: "string" }, index: { type: "integer" } } },
     };
     const tool = categoryTool("widget", "W.", { epic_windows: action });
@@ -127,7 +127,7 @@ describe("signatures from an Epic input schema, continued", () => {
 describe("signatures from the declared shape", () => {
   it("covers an in-process action with no spec from describe_action's reading", () => {
     const tool = categoryTool("demo", "Demo.", {
-      run: { kind: "handler", effect: "read", description: "Run. Params: name, limit?", handler: async () => ({}) },
+      run: { kind: "handler", effect: "read", description: "Run.", params: { required: ["name"], optional: ["limit"] }, handler: async () => ({}) },
     }, { name: z.string().optional(), limit: z.number().optional() });
     expect(actionSignature(tool, "run")).toBe("run(name, limit?:n)");
   });

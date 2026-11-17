@@ -5,14 +5,6 @@ import { warn as logWarn } from "../../core/log.js";
 
 export type McpClientConfigFormat = "json" | "toml";
 
-/** The name the server's entry goes by in every client config, and the server name clients show. */
-export const MCP_SERVER_ENTRY = "ue-mcp";
-
-const TOML_TABLE = `mcp_servers.${MCP_SERVER_ENTRY}`;
-/** The header lines a TOML config can open the entry's table with; the quoted key is the same table. */
-const TOML_HEADERS = [`[${TOML_TABLE}]`, `[mcp_servers."${MCP_SERVER_ENTRY}"]`];
-const isEntryHeader = (line: string): boolean => TOML_HEADERS.includes(line.trim());
-
 /**
  * Lifts npm's release-age gate for this one launch. npx ignores
  * `min-release-age-exclude` (npm/cli#9765), so without it a release younger
@@ -82,155 +74,138 @@ export type ClientShape = Pick<McpClient, "configPath" | "format" | "serversKey"
 
 export const serversKeyOf = (client: Pick<McpClient, "serversKey">): string => client.serversKey ?? "mcpServers";
 
-/**
- * Where a client config sits: under the project directory, the user's home, or
- * the roaming app-data folder.
- */
-export type ClientConfigBase = "project" | "home" | "appData";
-
-interface ClientPath {
-  base: ClientConfigBase;
-  parts: readonly string[];
-}
-
-/** One MCP client config ue-mcp knows how to read and write. */
-export interface ClientLocation extends ClientPath {
-  /** The stable id `--clients` takes. */
-  id: string;
-  /** The name init, doctor and status show. */
-  name: string;
-  format: McpClientConfigFormat;
-  serversKey?: string;
-  stdioType?: boolean;
-  /**
-   * Paths whose existence means the client is on this machine. Absent, it is
-   * the config's own folder.
-   */
-  detectWhen?: readonly ClientPath[];
-}
-
-/**
- * "Detected" for both Claude Code scopes means Claude Code has been opened on
- * this machine at all. Gating the project scope on the project's .mcp.json
- * already existing would hide its checkbox from a first-time user in a fresh
- * project and funnel them into the global scope by elimination.
- */
-const CLAUDE_CODE_DETECT: readonly ClientPath[] = [
-  { base: "project", parts: [".mcp.json"] },
-  { base: "home", parts: [".claude"] },
-];
-
-/**
- * Every client config, in the order init offers them. A project-based entry is
- * project scoped: enabling it affects only this project, so init may check it
- * by default. A home or app-data entry touches every project the user opens.
- */
-export const CLIENT_LOCATIONS: readonly ClientLocation[] = [
-  { id: "claude-code", name: "Claude Code (project)", base: "project", parts: [".mcp.json"], format: "json", detectWhen: CLAUDE_CODE_DETECT },
-  { id: "claude-code-global", name: "Claude Code (global)", base: "home", parts: [".claude", ".mcp.json"], format: "json", detectWhen: CLAUDE_CODE_DETECT },
-  { id: "claude-desktop", name: "Claude Desktop", base: "appData", parts: ["Claude", "claude_desktop_config.json"], format: "json" },
-  { id: "cursor", name: "Cursor", base: "project", parts: [".cursor", "mcp.json"], format: "json" },
-  { id: "codex", name: "Codex", base: "home", parts: [".codex", "config.toml"], format: "toml" },
-  { id: "vscode", name: "VS Code", base: "project", parts: [".vscode", "mcp.json"], format: "json", serversKey: "servers", stdioType: true },
-  {
-    id: "gemini",
-    name: "Gemini CLI",
-    base: "project",
-    parts: [".gemini", "settings.json"],
-    format: "json",
-    detectWhen: [{ base: "project", parts: [".gemini"] }, { base: "home", parts: [".gemini"] }],
-  },
-  {
-    // Codex reads a project's .codex/config.toml once the project is trusted.
-    id: "codex-project",
-    name: "Codex (project)",
-    base: "project",
-    parts: [".codex", "config.toml"],
-    format: "toml",
-    detectWhen: [{ base: "project", parts: [".codex"] }, { base: "home", parts: [".codex"] }],
-  },
-];
-
-/** The location with this id. Throws on an id CLIENT_LOCATIONS does not declare. */
-export function clientLocation(id: string): ClientLocation {
-  const location = CLIENT_LOCATIONS.find((l) => l.id === id);
-  if (!location) throw new Error(`No MCP client location '${id}'.`);
-  return location;
-}
-
 /** Stable ids for `--clients`, mapped to the names detectMcpClients uses. */
-export const CLIENT_IDS: Record<string, string> = Object.fromEntries(CLIENT_LOCATIONS.map((l) => [l.id, l.name]));
+export const CLIENT_IDS: Record<string, string> = {
+  "claude-code": "Claude Code (project)",
+  "claude-code-global": "Claude Code (global)",
+  "claude-desktop": "Claude Desktop",
+  cursor: "Cursor",
+  vscode: "VS Code",
+  gemini: "Gemini CLI",
+  codex: "Codex",
+  "codex-project": "Codex (project)",
+};
 
 export function clientId(name: string): string {
-  return CLIENT_LOCATIONS.find((l) => l.name === name)?.id ?? name;
+  return Object.entries(CLIENT_IDS).find(([, n]) => n === name)?.[0] ?? name;
 }
 
-/** Whether the named client writes its config beside the project rather than for every project. */
+const PROJECT_SCOPED = new Set(["Cursor", "VS Code", "Gemini CLI"]);
+
+/**
+ * Project-scoped clients write their MCP config alongside the .uproject,
+ * so enabling them only affects this project. Global/Desktop configs touch
+ * every project the user opens - they should not be opted in by default.
+ */
 export function isProjectScopedClient(clientName: string): boolean {
-  return CLIENT_LOCATIONS.find((l) => l.name === clientName)?.base === "project";
-}
-
-type ClientDirs = Record<ClientConfigBase, string>;
-
-function clientDirs(projectDir: string): ClientDirs {
-  const home = process.env.HOME || process.env.USERPROFILE || "";
-  return { project: projectDir, home, appData: process.env.APPDATA || path.join(home, "AppData", "Roaming") };
-}
-
-const resolveAt = (dirs: ClientDirs, p: ClientPath): string => path.join(dirs[p.base], ...p.parts);
-
-function clientAt(location: ClientLocation, configPath: string, detected: boolean): McpClient {
-  return {
-    name: location.name,
-    configPath,
-    detected,
-    format: location.format,
-    ...(location.serversKey ? { serversKey: location.serversKey } : {}),
-    ...(location.stdioType ? { stdioType: true } : {}),
-  };
+  return clientName.includes("(project)") || PROJECT_SCOPED.has(clientName);
 }
 
 export function detectMcpClients(projectDir: string): McpClient[] {
-  const dirs = clientDirs(projectDir);
-  return CLIENT_LOCATIONS.map((location) => {
-    const configPath = resolveAt(dirs, location);
-    const probes = location.detectWhen?.map((p) => resolveAt(dirs, p)) ?? [path.dirname(configPath)];
-    return clientAt(location, configPath, probes.some((p) => fs.existsSync(p)));
+  const home = process.env.HOME || process.env.USERPROFILE || "";
+  const clients: McpClient[] = [];
+
+  const claudeProjectMcp = path.join(projectDir, ".mcp.json");
+  const claudeGlobalMcp = path.join(home, ".claude", ".mcp.json");
+  // "Detected" for both Claude Code scopes means "Claude Code is installed
+  // anywhere on this machine." If we gated project-scope detection on the
+  // project's .mcp.json already existing, first-time users in a fresh
+  // project would never see the project-scope checkbox and would be
+  // funneled into global scope by elimination. Show both scopes whenever
+  // Claude Code has been opened at least once; let the user pick.
+  const claudeInstalled =
+    fs.existsSync(claudeProjectMcp) ||
+    fs.existsSync(path.dirname(claudeGlobalMcp));
+  clients.push({
+    name: "Claude Code (project)",
+    configPath: claudeProjectMcp,
+    detected: claudeInstalled,
+    format: "json",
   });
+  clients.push({
+    name: "Claude Code (global)",
+    configPath: claudeGlobalMcp,
+    detected: claudeInstalled,
+    format: "json",
+  });
+
+  const appData =
+    process.env.APPDATA || path.join(home, "AppData", "Roaming");
+  const claudeDesktop = path.join(
+    appData,
+    "Claude",
+    "claude_desktop_config.json",
+  );
+  clients.push({
+    name: "Claude Desktop",
+    configPath: claudeDesktop,
+    detected: fs.existsSync(path.dirname(claudeDesktop)),
+    format: "json",
+  });
+
+  const cursorMcp = path.join(projectDir, ".cursor", "mcp.json");
+  clients.push({
+    name: "Cursor",
+    configPath: cursorMcp,
+    detected: fs.existsSync(path.join(projectDir, ".cursor")),
+    format: "json",
+  });
+
+  const codexConfig = path.join(home, ".codex", "config.toml");
+  clients.push({
+    name: "Codex",
+    configPath: codexConfig,
+    detected: fs.existsSync(path.dirname(codexConfig)),
+    format: "toml",
+  });
+
+  const vscodeMcp = path.join(projectDir, ".vscode", "mcp.json");
+  clients.push({
+    name: "VS Code",
+    configPath: vscodeMcp,
+    detected: fs.existsSync(path.join(projectDir, ".vscode")),
+    format: "json",
+    serversKey: "servers",
+    stdioType: true,
+  });
+
+  const geminiSettings = path.join(projectDir, ".gemini", "settings.json");
+  clients.push({
+    name: "Gemini CLI",
+    configPath: geminiSettings,
+    detected: fs.existsSync(path.join(projectDir, ".gemini")) || fs.existsSync(path.join(home, ".gemini")),
+    format: "json",
+  });
+
+  // Codex reads a project's .codex/config.toml once the project is trusted.
+  const codexProject = path.join(projectDir, ".codex", "config.toml");
+  clients.push({
+    name: "Codex (project)",
+    configPath: codexProject,
+    detected: fs.existsSync(path.join(projectDir, ".codex")) || fs.existsSync(path.dirname(codexConfig)),
+    format: "toml",
+  });
+
+  return clients;
 }
 
 /**
  * The project-scoped client configs as they would sit under `dir`: the five
- * files UE 5.9's client config writer writes. `detected` is whether the file
- * exists.
+ * files UE 5.9's client config writer writes, named as detectMcpClients names
+ * them. `detected` is whether the file exists.
  */
 export function projectScopedClientsAt(dir: string): McpClient[] {
-  return CLIENT_LOCATIONS.filter((l) => l.base === "project").map((location) => projectClientAt(location, dir));
-}
-
-/** A project-based client's config as it would sit under `dir`; `detected` is whether the file exists. */
-export function projectClientAt(location: ClientLocation, dir: string): McpClient {
-  const configPath = path.join(dir, ...location.parts);
-  return clientAt(location, configPath, fs.existsSync(configPath));
-}
-
-/**
- * Every client config that can hold a ue-mcp entry for `projectDir`, nearest
- * first: the project's own, then the user's home, then app data. A base this
- * machine has no folder for is left out. `detected` is whether the file exists.
- */
-export function clientsNearestFirst(projectDir: string): McpClient[] {
-  const dirs = clientDirs(projectDir);
-  if (!process.env.APPDATA && !dirs.home) dirs.appData = "";
-  const order: readonly ClientConfigBase[] = ["project", "home", "appData"];
-  return order.flatMap((base) =>
-    dirs[base]
-      ? CLIENT_LOCATIONS.filter((l) => l.base === base).map((l) => {
-          const configPath = resolveAt(dirs, l);
-          return clientAt(l, configPath, fs.existsSync(configPath));
-        })
-      : [],
-  );
+  const at = (name: string, rel: string[], extra: Partial<McpClient> = {}): McpClient => {
+    const configPath = path.join(dir, ...rel);
+    return { name, configPath, detected: fs.existsSync(configPath), format: "json", ...extra };
+  };
+  return [
+    at("Claude Code (project)", [".mcp.json"]),
+    at("Cursor", [".cursor", "mcp.json"]),
+    at("VS Code", [".vscode", "mcp.json"], { serversKey: "servers", stdioType: true }),
+    at("Gemini CLI", [".gemini", "settings.json"]),
+    at("Codex (project)", [".codex", "config.toml"], { format: "toml" }),
+  ];
 }
 
 /** Whether a client's config has a ue-mcp entry, and the version it pins. */
@@ -258,13 +233,13 @@ export function readUeMcpEntry(client: ClientShape): UeMcpEntry {
   try {
     const raw = fs.readFileSync(client.configPath, "utf-8");
     if (client.format === "json") {
-      const entry = JSON.parse(raw)?.[serversKeyOf(client)]?.[MCP_SERVER_ENTRY];
+      const entry = JSON.parse(raw)?.[serversKeyOf(client)]?.["ue-mcp"];
       if (!entry) return NO_ENTRY;
       const args: string[] = Array.isArray(entry.args) ? entry.args.map(String) : [];
       return entryFromArgs(typeof entry.command === "string" ? entry.command : null, args);
     }
     const lines = raw.split(/\r?\n/);
-    const start = lines.findIndex(isEntryHeader);
+    const start = lines.findIndex((l) => l.trim() === "[mcp_servers.ue-mcp]");
     if (start < 0) return NO_ENTRY;
     const end = lines.findIndex((l, i) => i > start && /^\s*\[/.test(l));
     const table = lines.slice(start, end < 0 ? undefined : end).join("\n");
@@ -282,15 +257,15 @@ export function removeUeMcpEntry(client: ClientShape): boolean {
   if (!fs.existsSync(client.configPath)) return false;
   const raw = fs.readFileSync(client.configPath, "utf-8");
   if (client.format === "toml") {
-    const next = removeTomlTable(raw, TOML_TABLE).trimEnd();
+    const next = removeTomlTable(raw, "mcp_servers.ue-mcp").trimEnd();
     if (next === raw.trimEnd()) return false;
     fs.writeFileSync(client.configPath, next ? `${next}\n` : "");
     return true;
   }
   const parsed = JSON.parse(raw) as Record<string, Record<string, unknown> | undefined>;
   const servers = parsed[serversKeyOf(client)];
-  if (!servers || !(MCP_SERVER_ENTRY in servers)) return false;
-  delete servers[MCP_SERVER_ENTRY];
+  if (!servers || !("ue-mcp" in servers)) return false;
+  delete servers["ue-mcp"];
   fs.writeFileSync(client.configPath, JSON.stringify(parsed, null, 2));
   return true;
 }
@@ -306,7 +281,7 @@ export function liftAgeGateInEntry(client: ClientShape): boolean {
   const isSpec = (a: string) => a === "ue-mcp" || a.startsWith("ue-mcp@");
   if (client.format === "json") {
     const parsed = JSON.parse(raw) as Record<string, Record<string, { args?: unknown[] }> | undefined>;
-    const args = parsed[serversKeyOf(client)]?.[MCP_SERVER_ENTRY]?.args;
+    const args = parsed[serversKeyOf(client)]?.["ue-mcp"]?.args;
     if (!Array.isArray(args) || liftsAgeGate(args.map(String))) return false;
     const at = args.findIndex((a) => typeof a === "string" && isSpec(a));
     if (at < 0) return false;
@@ -315,7 +290,7 @@ export function liftAgeGateInEntry(client: ClientShape): boolean {
     return true;
   }
   const lines = raw.split(/\r?\n/);
-  const start = lines.findIndex(isEntryHeader);
+  const start = lines.findIndex((l) => l.trim() === "[mcp_servers.ue-mcp]");
   if (start < 0) return false;
   for (let i = start + 1; i < lines.length && !/^\s*\[/.test(lines[i]); i++) {
     if (!/^\s*args\s*=/.test(lines[i])) continue;
@@ -354,7 +329,7 @@ export function writeJsonMcpConfig(
 
   const key = serversKeyOf(shape);
   const servers = (existing[key] ?? {}) as Record<string, unknown>;
-  servers[MCP_SERVER_ENTRY] = {
+  servers["ue-mcp"] = {
     ...(shape.stdioType ? { type: "stdio" } : {}),
     command: launch.command ?? "npx",
     args: ueMcpServerArgs(uprojectPath, launch),
@@ -378,9 +353,9 @@ export function writeCodexMcpConfig(configPath: string, uprojectPath: string, la
 }
 
 export function upsertCodexMcpServer(existingToml: string, uprojectPath: string, launch: ServerLaunch = {}): string {
-  const withoutExisting = removeTomlTable(existingToml, TOML_TABLE).trimEnd();
+  const withoutExisting = removeTomlTable(existingToml, "mcp_servers.ue-mcp").trimEnd();
   const block = [
-    `[${TOML_TABLE}]`,
+    "[mcp_servers.ue-mcp]",
     `command = ${tomlString(launch.command ?? "npx")}`,
     `args = [${ueMcpServerArgs(uprojectPath, launch).map(tomlString).join(", ")}]`,
     `cwd = ${tomlString(toMcpPath(getProjectDir(uprojectPath)))}`,
@@ -397,8 +372,7 @@ function removeTomlTable(toml: string, tableName: string): string {
 
   for (const line of lines) {
     const trimmed = line.trim();
-    // A quoted key names the same table, so `[mcp_servers."ue-mcp"]` goes too.
-    const currentTable = getTomlTableName(trimmed)?.replace(/"/g, "");
+    const currentTable = getTomlTableName(trimmed);
     if (currentTable) {
       removing = currentTable === tableName || currentTable.startsWith(`${tableName}.`);
       if (removing) continue;

@@ -184,7 +184,7 @@ describe("the generated union", () => {
   });
 
   it("states availability only where it is not every engine", () => {
-    expect(epicToolLine("blueprint.generated.ts", "epic_list_graphs")).toContain("Available on UE 5.8; absent from UE 5.9. Params: blueprint");
+    expect(epicToolLine("blueprint.generated.ts", "epic_list_graphs")).toContain("Available on UE 5.8; absent from UE 5.9.");
     expect(epicToolLine("blueprint.generated.ts", "epic_add_variable")).not.toContain("Available on");
   });
 
@@ -193,7 +193,10 @@ describe("the generated union", () => {
     expect(src).toContain(
       'const S_epic_add_variable = {"properties":{"blueprint":{"type":"object","properties":{"refPath":{}}},"name":{"type":"integer"},"category":{"type":"string"}},"required":["blueprint"]} as const;',
     );
-    expect(epicToolLine("blueprint.generated.ts", "epic_add_variable")).toContain("Params: blueprint, name?, category?");
+    // The parameters ride on the structured schema, not in the description.
+    const line = epicToolLine("blueprint.generated.ts", "epic_add_variable");
+    expect(line).toContain("epicSchema: S_epic_add_variable,");
+    expect(line).not.toContain("Params:");
     expect(src).toMatch(/^ {2}category: z\.string\(\)\.optional\(\)/m);
     // string on 5.8, integer on 5.9: either is accepted.
     expect(src).toMatch(/^ {2}name: z\.unknown\(\)\.optional\(\)/m);

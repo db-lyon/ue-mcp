@@ -16,7 +16,7 @@
  * dispatch to a session that lacks one can say which sessions have it.
  */
 import type { ToolDef, ActionSpec } from "../surface/tool-types.js";
-import { actionEnum, cloneToolDef, cloneToolGraph } from "../surface/category-tool.js";
+import { actionEnum, cloneToolDef, cloneToolGraph, refreshDescription } from "../surface/category-tool.js";
 import type { EditorSession } from "./session.js";
 import type { PluginRecord } from "../extensions/loader.js";
 
@@ -121,27 +121,8 @@ function mergeActions(target: ToolDef, added: Record<string, ActionSpec>, donor:
     if (key === "action") continue;
     if (!(key in target.schema)) target.schema[key] = schema;
   }
-  if (target.description.includes(ACTIONS_MARKER) && donor.description.includes(ACTIONS_MARKER)) {
-    target.description = insertActionLines(target.description, added);
-  }
+  refreshDescription(target);
   rebuildActionEnum(target);
-}
-
-const ACTIONS_MARKER = "\n\nActions:\n";
-const PLUGIN_ACTIONS_MARKER = "\n\nPlugin actions:\n";
-
-/**
- * Add catalog lines for merged actions to the end of the `Actions:` list, above
- * any `Plugin actions:` section, so they are not presented as plugin actions.
- */
-function insertActionLines(description: string, added: Record<string, ActionSpec>): string {
-  const lines = Object.entries(added)
-    .map(([name, spec]) => `\n- ${name}${spec.description ? `: ${spec.description}` : ""}`)
-    .join("");
-  const start = description.indexOf(ACTIONS_MARKER);
-  const plugin = description.indexOf(PLUGIN_ACTIONS_MARKER, start + ACTIONS_MARKER.length);
-  if (plugin === -1) return description + lines;
-  return description.slice(0, plugin) + lines + description.slice(plugin);
 }
 
 /** Re-derive a category's `action` enum from its live action keys. */

@@ -290,10 +290,10 @@ describe("required plugin params (#1270)", () => {
     expect(z.object(tool.schema).safeParse({ action: "list_graphs" }).success).toBe(true);
   });
 
-  it("keeps the field required on its own action's spec and Params clause", () => {
+  it("keeps the field required on its own action's spec, with no clause in the description", () => {
     const { tool } = mergeInjectionsIntoTool(fakePcg(), [plan]);
     const spec = tool.actions.vpp_scatter;
-    expect(spec.description).toBe("Scatter meshes Params: meshPath, density?");
+    expect(spec.description).toBe("Scatter meshes");
     expect(spec.paramSpec?.map((p) => [p.name, p.required])).toEqual([["meshPath", true], ["density", false]]);
   });
 
