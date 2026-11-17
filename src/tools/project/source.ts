@@ -64,7 +64,8 @@ export const sourceActions: Record<string, ActionSpec> = {
     kind: "handler",
     effect: "read",
     offline: "Reads a header from the project's Source tree.",
-    description: "Parse a .h file. Params: headerPath",
+    params: { required: ["headerPath"] },
+    description: "Parse a .h file.",
     handler: async (ctx, p) => {
       ctx.project.ensureLoaded();
       const headerPath = p.headerPath as string;
@@ -77,7 +78,8 @@ export const sourceActions: Record<string, ActionSpec> = {
     kind: "handler",
     effect: "read",
     offline: "Reads a module's headers from the project's Source tree.",
-    description: "Read module source. Params: moduleName",
+    params: { required: ["moduleName"] },
+    description: "Read module source.",
     handler: async (ctx, p) => {
       ctx.project.ensureLoaded();
       const moduleName = p.moduleName as string;
@@ -96,7 +98,8 @@ export const sourceActions: Record<string, ActionSpec> = {
     kind: "handler",
     effect: "read",
     offline: "Enumerates the modules declared under the project's Source roots.",
-    description: "List C++ modules. Params: none",
+    params: {},
+    description: "List C++ modules.",
     handler: async (ctx) => {
       ctx.project.ensureLoaded();
       const roots = findSourceRoots(ctx.project.projectDir!, ctx.project.projectName);
@@ -116,7 +119,8 @@ export const sourceActions: Record<string, ActionSpec> = {
     kind: "handler",
     effect: "read",
     offline: "Searches the project's own C++ on disk.",
-    description: "Search .h/.cpp files. Params: query, directory?",
+    params: { required: ["query"], optional: ["directory"] },
+    description: "Search .h/.cpp files.",
     handler: async (ctx, p) => {
       ctx.project.ensureLoaded();
       const roots = findSourceRoots(ctx.project.projectDir!, ctx.project.projectName);
@@ -176,9 +180,16 @@ export const sourceActions: Record<string, ActionSpec> = {
       + "modified time, and it deliberately does not answer class, registry tags or dependencies: "
       + "those live in the editor's asset registry and are not in the file, so asset(list) and "
       + "asset(search) remain the answer once an editor is up. maxResults stops the walk rather "
-      + "than trimming the result, and truncated says when it did. "
-      + "Params: contentPath? (default /Game), recursive? (default true), namePattern? "
-      + "(case-insensitive substring of the asset name), maxResults? (default 1000)",
+      + "than trimming the result, and truncated says when it did.",
+    params: {
+      optional: ["contentPath", "recursive", "namePattern", "maxResults"],
+      notes: {
+        contentPath: "default /Game",
+        recursive: "default true",
+        namePattern: "case-insensitive substring of the asset name",
+        maxResults: "default 1000",
+      },
+    },
     handler: async (ctx: ToolContext, p: Record<string, unknown>) => listContent(ctx.project, {
       contentPath: p.contentPath as string | undefined,
       recursive: p.recursive as boolean | undefined,
@@ -190,7 +201,18 @@ export const sourceActions: Record<string, ActionSpec> = {
     kind: "handler",
     effect: "read",
     offline: "Lists files on disk under a directory.",
-    description: "List files on disk under a directory, optionally filtered by extension(s) and by name. Runs in the MCP server process (no editor round-trip). Params: directory (inside the project: absolute, or relative to the project dir), extensions? (e.g. ['png','exr'] or 'png'), namePattern? (case-insensitive substring of the file name; maxResults counts matches, so a name search over a large tree is not cut short by files that do not match), recursive? (default false), maxResults? (default 1000) (#608)",
+    params: {
+      required: ["directory"],
+      optional: ["extensions", "namePattern", "recursive", "maxResults"],
+      notes: {
+        directory: "inside the project: absolute, or relative to the project dir",
+        extensions: "e.g. ['png','exr'] or 'png'",
+        namePattern: "case-insensitive substring of the file name; maxResults counts matches, so a name search over a large tree is not cut short by files that do not match",
+        recursive: "default false",
+        maxResults: "default 1000",
+      },
+    },
+    description: "List files on disk under a directory, optionally filtered by extension(s) and by name. Runs in the MCP server process (no editor round-trip). (#608)",
     handler: async (ctx, p) => {
       ctx.project.ensureLoaded();
       const dirArg = p.directory as string;
@@ -236,8 +258,15 @@ export const sourceActions: Record<string, ActionSpec> = {
     kind: "handler",
     effect: "mutate",
     offline: "Writes a file under the project's Source tree.",
+    params: {
+      required: ["path", "content"],
+      notes: {
+        path: "relative to Source/ or absolute within Source/",
+        content: "full file contents",
+      },
+    },
     description:
-      "Write a .h / .cpp / .inl file under the project's Source/ tree. Used to append UPROPERTYs/UFUNCTIONs or method bodies after create_cpp_class. Writes are scoped to Source/ for safety. Params: path (relative to Source/ or absolute within Source/), content (full file contents). After editing, call live_coding_compile (for existing classes) or build_project (for new classes).",
+      "Write a .h / .cpp / .inl file under the project's Source/ tree. Used to append UPROPERTYs/UFUNCTIONs or method bodies after create_cpp_class. Writes are scoped to Source/ for safety. After editing, call live_coding_compile (for existing classes) or build_project (for new classes).",
     handler: async (ctx, p) => {
       ctx.project.ensureLoaded();
       const sourceDir = path.join(ctx.project.projectDir!, "Source");
@@ -269,7 +298,13 @@ export const sourceActions: Record<string, ActionSpec> = {
     kind: "handler",
     effect: "read",
     offline: "Reads a .cpp from the project's Source tree.",
-    description: "Read a .cpp file from the project Source/ tree. Companion to read_cpp_header for round-trip edits. Params: sourcePath (relative to Source/ or absolute).",
+    params: {
+      required: ["sourcePath"],
+      notes: {
+        sourcePath: "relative to Source/ or absolute",
+      },
+    },
+    description: "Read a .cpp file from the project Source/ tree. Companion to read_cpp_header for round-trip edits.",
     handler: async (ctx, p) => {
       ctx.project.ensureLoaded();
       const sp = p.sourcePath as string;
@@ -284,8 +319,15 @@ export const sourceActions: Record<string, ActionSpec> = {
     kind: "handler",
     effect: "mutate",
     offline: "Writes into a named module's Public or Private folder.",
+    params: {
+      required: ["module", "visibility", "fileName", "content"],
+      notes: {
+        module: "module name, default the project's primary module",
+        visibility: "Public|Private, default Private",
+      },
+    },
     description:
-      "Write a .h/.cpp/.inl into a named module's Public/Private folder (resolves the module dir for you, including plugin modules under Plugins/*/Source/ that write_cpp_file refuses). After a new file, build_project + restart; after a body edit, live_coding_compile. Params: module (module name, default the project's primary module), visibility (Public|Private, default Private), fileName, content.",
+      "Write a .h/.cpp/.inl into a named module's Public/Private folder (resolves the module dir for you, including plugin modules under Plugins/*/Source/ that write_cpp_file refuses). After a new file, build_project + restart; after a body edit, live_coding_compile.",
     handler: async (ctx, p) => {
       ctx.project.ensureLoaded();
       const moduleName = (p.module as string) ?? "";
@@ -321,8 +363,9 @@ export const sourceActions: Record<string, ActionSpec> = {
     kind: "handler",
     effect: "read",
     offline: "Reads from a named module's folder.",
+    params: { required: ["module", "fileName"], optional: ["visibility"] },
     description:
-      "Read a .h/.cpp/.inl from a named module's folder (companion to write_source_file; resolves plugin modules too). With no visibility it tries Public then Private then the module root. Params: module, visibility?, fileName.",
+      "Read a .h/.cpp/.inl from a named module's folder (companion to write_source_file; resolves plugin modules too). With no visibility it tries Public then Private then the module root.",
     handler: async (ctx, p) => {
       ctx.project.ensureLoaded();
       const moduleName = (p.module as string) ?? "";
@@ -347,8 +390,17 @@ export const sourceActions: Record<string, ActionSpec> = {
     kind: "handler",
     effect: "mutate",
     offline: "Edits a Build.cs dependency array on disk.",
+    params: {
+      required: ["moduleName", "dependency"],
+      optional: ["access"],
+      notes: {
+        moduleName: "the Build.cs to edit - must exist in the project",
+        dependency: "module name to add, e.g. 'UMG'",
+        access: "'public'|'private', default 'private'",
+      },
+    },
     description:
-      "Add a module to a target module's Build.cs dependency array. Params: moduleName (the Build.cs to edit - must exist in the project), dependency (module name to add, e.g. 'UMG'), access? ('public'|'private', default 'private'). Creates the corresponding AddRange block if missing. Rebuild required afterward.",
+      "Add a module to a target module's Build.cs dependency array. Creates the corresponding AddRange block if missing. Rebuild required afterward.",
     handler: async (ctx, p) => {
       ctx.project.ensureLoaded();
       const moduleName = p.moduleName as string;
@@ -418,8 +470,18 @@ export const sourceActions: Record<string, ActionSpec> = {
     // handler inserts the requested access specifier before the declaration
     // and restores the previous one after, so the caller doesn't need to
     // know what section was active at the end of the class body.
+    params: {
+      required: ["headerPath", "declaration", "memberName"],
+      optional: ["access"],
+      notes: {
+        headerPath: "relative to Source/ or absolute",
+        declaration: "full multi-line UPROPERTY(...) / UFUNCTION(...) block plus its single-line member or function signature",
+        memberName: "the identifier the declaration introduces - used for idempotency",
+        access: "'public'|'protected'|'private', default 'public'",
+      },
+    },
     description:
-      "Append a UPROPERTY/UFUNCTION declaration to an existing UCLASS header inside the access specifier you choose. Idempotent: if a declaration containing the same memberName is already present, returns existed:true. Params: headerPath (relative to Source/ or absolute), declaration (full multi-line UPROPERTY(...) / UFUNCTION(...) block plus its single-line member or function signature), memberName (the identifier the declaration introduces - used for idempotency), access? ('public'|'protected'|'private', default 'public').",
+      "Append a UPROPERTY/UFUNCTION declaration to an existing UCLASS header inside the access specifier you choose. Idempotent: if a declaration containing the same memberName is already present, returns existed:true.",
     handler: async (ctx, p) => {
       ctx.project.ensureLoaded();
       const headerPath = p.headerPath as string;

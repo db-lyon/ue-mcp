@@ -21,5 +21,5 @@ export const metahumanTool: ToolDef = categoryTool(
   },
   {
     ...specSchema,
-  },
+  }, { label: { description: "MetaHumanCharacter assets" } },
 );

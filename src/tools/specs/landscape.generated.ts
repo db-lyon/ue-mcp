@@ -2425,54 +2425,6 @@ export const handlerSpecs: HandlerSpecs = {
   }
 };
 
-/** The Params: clause of each spec'd bridge method. */
-export const paramsClauses: Readonly<Record<string, string>> = {
-  add_landscape_layer_info: "Params: layerName, landscapeName?, packagePath?",
-  analyze_landscape_terrain: "Params: actorLabel?, actorPath?, region?, space?, center?, radius?, maxVertices?, histogramBins?, slopeThresholdDegrees?",
-  apply_landscape_erosion: "Params: actorLabel?, actorPath?, erosionType?, region?, space?, center?, radius?, maxVertices?, iterations?, maxWork?, talusAngle?, strength?, rainAmount?, evaporation?, sedimentCapacity?, erosionRate?, depositionRate?, editLayer?, editLayerIndex?, rollbackMaxVertices?",
-  apply_landscape_splines: "Params: actorLabel?, actorPath?, editLayer?, editLayerIndex?, updateNow?",
-  connect_landscape_spline_points: "Params: startPoint, endPoint, startTangentLength?, endTangentLength?, layerName?, raiseTerrain?, lowerTerrain?, meshes?, collisionProfile?, castShadow?, autoRotate?, name?",
-  create_landscape: "Params: location?, scale?, componentCountX?, componentCountY?, subsectionSizeQuads?, numSubsections?, heightOffset?, label?",
-  create_landscape_layer_info: "Params: layerName, name?, packagePath?, onConflict?, physMaterial?, hardness?",
-  create_landscape_spline_point: "Params: location, rotation?, halfWidth?, sideFalloff?, endFalloff?, layerName?, raiseTerrain?, lowerTerrain?, name?, ownerPath?, newSplineActor?, onConflict?, actorLabel?, actorPath?",
-  delete_landscape_spline_point: "Params: controlPoint",
-  delete_landscape_spline_segment: "Params: segment",
-  export_landscape_heightmap: "Params: filePath (or outputPath), actorLabel?, actorPath?, format?, region?, space?, center?, radius?, maxVertices?, editLayer?, editLayerIndex?, overwrite?",
-  find_landscape_proxy_at: "Params: worldX, worldY",
-  get_landscape_component: "Params: componentIndex?",
-  get_landscape_height_at_point: "Params: x?, y?, point?, worldX?, worldY?, actorLabel?, actorPath?, editLayer?, editLayerIndex?",
-  get_landscape_height_region: "Params: actorLabel?, actorPath?, region?, space?, center?, radius?, maxVertices?, editLayer?, editLayerIndex?, includeHeights?, encoding?, arrayEncodingLimit?",
-  get_landscape_holes: "Params: actorLabel?, actorPath?, region?, space?, center?, radius?, x?, y?, point?, worldX?, worldY?, maxVertices?, includeMask?, arrayEncodingLimit?, editLayer?, editLayerIndex?",
-  get_landscape_info: "Params: none",
-  get_landscape_layer_weight_region: "Params: layerName, actorLabel?, actorPath?, region?, space?, center?, radius?, maxVertices?, editLayer?, editLayerIndex?, includeWeights?, encoding?, arrayEncodingLimit?",
-  get_landscape_material_usage_summary: "Params: none",
-  get_landscape_normal_at_point: "Params: x?, y?, point?, worldX?, worldY?, actorLabel?, actorPath?",
-  get_landscape_slope_at_point: "Params: x?, y?, point?, worldX?, worldY?, actorLabel?, actorPath?",
-  get_landscape_slope_map: "Params: actorLabel?, actorPath?, region?, space?, center?, radius?, maxVertices?, includeSlopes?, arrayEncodingLimit?",
-  import_landscape_heightmap: "Params: filePath (or sourcePath), actorLabel?, actorPath?, format?, region?, space?, center?, radius?, maxVertices?, width?, height?, resample?, minHeight?, maxHeight?, editLayer?, editLayerIndex?, rollbackMaxVertices?",
-  landscape_layer_exists: "Params: layerName, actorLabel?, actorPath?",
-  list_landscape_edit_layers: "Params: actorLabel?, actorPath?",
-  list_landscape_layers: "Params: none",
-  list_landscape_proxies: "Params: cursor?, limit?",
-  list_landscape_splines: "Params: none",
-  merge_landscape_edit_layers: "Params: actorLabel?, actorPath?, updateNow?",
-  paint_landscape_layer: "Params: layerName, center, radius?, strength?, falloff?, actorLabel?, actorPath?, editLayer?, editLayerIndex?, maxVertices?, rollbackMaxVertices?",
-  plan_real_world_landscape: "Params: minElevationMeters, maxElevationMeters, realWorldSizeMeters?, boundsLatLon?, sourcePath? (or filePath), format?, width?, height?, metersPerQuad?, elevationEncoding?, verticalExaggeration?, maxComponents?, location?",
-  project_geo_coordinates: "Params: boundsLatLon, points, actorLabel?, actorPath?, northAt?, sampleHeight?",
-  refresh_landscape_physical_material_collision: "Params: actorLabels?, guids?, bounds?, maxActors?, save?",
-  remove_landscape_layer: "Params: layerName, actorLabel?, actorPath?",
-  sample_landscape: "Params: x?, y?, point?, worldX?, worldY?, actorLabel?, actorPath?, layerName?, includeLayers?",
-  sculpt_landscape: "Params: center, radius?, mode?, amount?, falloff?, actorLabel?, actorPath?, editLayer?, editLayerIndex?, maxVertices?, rollbackMaxVertices?",
-  sculpt_landscape_region: "Params: operator, actorLabel?, actorPath?, region?, space?, center?, radius?, maxVertices?, amount?, strength?, falloff?, sharpness?, shape?, targetHeight?, flattenTo?, iterations?, steps?, ridgeAngle?, rimPosition?, rimRatio?, editLayer?, editLayerIndex?, rollbackMaxVertices?",
-  set_landscape_height_region: "Params: actorLabel?, actorPath?, region?, space?, center?, radius?, maxVertices?, heightsBase64?, heights?, height?, rawHeight?, heightSpace?, editLayer?, editLayerIndex?, rollbackMaxVertices?",
-  set_landscape_holes: "Params: actorLabel?, actorPath?, region?, space?, center?, radius?, x?, y?, point?, worldX?, worldY?, maxVertices?, hole?, holes?, weightsBase64?, editLayer?, editLayerIndex?, rollbackMaxVertices?",
-  set_landscape_layer_weight_region: "Params: layerName, actorLabel?, actorPath?, region?, space?, center?, radius?, maxVertices?, weightsBase64?, weights?, weight?, strength?, editLayer?, editLayerIndex?, rollbackMaxVertices?",
-  set_landscape_material: "Params: materialPath (or path, or assetPath), landscapeName?",
-  set_landscape_spline_segment_meshes: "Params: segment, meshes?, collisionProfile?, castShadow?",
-  update_landscape_spline_point: "Params: controlPoint, location?, rotation?, halfWidth?, sideFalloff?, endFalloff?, layerName?, raiseTerrain?, lowerTerrain?, autoRotate?",
-  update_landscape_spline_segment: "Params: segment, startTangentLength?, endTangentLength?, layerName?, raiseTerrain?, lowerTerrain?",
-};
-
 /** Every key the spec'd landscape handlers declare, aliases included. */
 export const schema: Record<string, z.ZodType> = {
   actorLabel: z.string().optional().describe("Landscape actor label, when the level has more than one"),
@@ -2599,4 +2551,4 @@ export const schema: Record<string, z.ZodType> = {
 };
 
 /** Declare an action for a spec'd bridge method: effect, summary, method. */
-export const specBp = makeSpecBp(paramsClauses, handlerSpecs);
+export const specBp = makeSpecBp(handlerSpecs);

@@ -171,5 +171,5 @@ export const levelTool: ToolDef = categoryTool(
     // the keys only they read come from the editor spec.
     ...specSchema,
     ...borrowSchema(editorSpecSchema, ["templateLevel", "worldPartition", "quality"]),
-  },
+  }, { label: { text: "levels", description: "spawn/move/select actors, sublevels, world settings", keywords: ["actor", "move_actor", "place_actor", "outliner"] } },
 );

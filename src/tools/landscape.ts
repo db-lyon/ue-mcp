@@ -65,5 +65,5 @@ export const landscapeTool: ToolDef = categoryTool(
     // #1057: every landscape action is spec'd, so every key comes from the C++
     // registrations through the generated module.
     ...specSchema,
-  },
+  }, { label: { description: "terrain edit, layers, paint, sculpt", keywords: ["terrain", "heightmap"] } },
 );

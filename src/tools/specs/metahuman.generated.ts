@@ -184,18 +184,6 @@ export const handlerSpecs: HandlerSpecs = {
   }
 };
 
-/** The Params: clause of each spec'd bridge method. */
-export const paramsClauses: Readonly<Record<string, string>> = {
-  metahuman_assemble: "Params: assetPath (or characterPath), pipelineType?, quality?, nameOverride?, commonFolderPath?",
-  metahuman_create_character: "Params: name, packagePath?, onConflict?",
-  metahuman_read_character: "Params: assetPath (or characterPath), includeBody?",
-  metahuman_request_rig: "Params: assetPath (or characterPath), rigType?, blocking?",
-  metahuman_request_textures: "Params: assetPath (or characterPath), blocking?",
-  metahuman_set_body: "Params: assetPath (or characterPath), constraints",
-  metahuman_set_wardrobe: "Params: assetPath (or characterPath), items",
-  metahuman_status: "Params: none",
-};
-
 /** Every key the spec'd metahuman handlers declare, aliases included. */
 export const schema: Record<string, z.ZodType> = {
   assetPath: z.string().optional().describe("MetaHumanCharacter asset path"),
@@ -215,4 +203,4 @@ export const schema: Record<string, z.ZodType> = {
 };
 
 /** Declare an action for a spec'd bridge method: effect, summary, method. */
-export const specBp = makeSpecBp(paramsClauses, handlerSpecs);
+export const specBp = makeSpecBp(handlerSpecs);

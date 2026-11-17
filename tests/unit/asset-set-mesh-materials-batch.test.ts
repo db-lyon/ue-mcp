@@ -30,7 +30,12 @@ describe("asset.set_mesh_materials_batch", () => {
     const action = assetTool.actions.set_mesh_materials_batch;
     expect(action.bridge).toBe("set_mesh_materials_batch");
     expect(action.mapParams).toBeUndefined();
-    expect(action.description).toContain("Params: assignments, save?, dryRun?, continueOnError?");
+    expect(action.paramSpec?.map((p) => [p.name, p.required])).toEqual([
+      ["assignments", true],
+      ["save", false],
+      ["dryRun", false],
+      ["continueOnError", false],
+    ]);
   });
 
   it("exposes continueOnError so a partial batch is reachable", () => {

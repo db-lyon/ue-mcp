@@ -75,5 +75,5 @@ export const statetreeTool: ToolDef = categoryTool(
     // declared again by hand.
     ...specSchema,
     ...diagramSchema({ ...epicSchema, ...specSchema }),
-  },
+  }, { label: { description: "StateTree states, tasks, conditions, transitions, bindings", keywords: ["state tree"] } },
 );

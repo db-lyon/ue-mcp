@@ -1,7 +1,7 @@
 // @session independent: Pure transforms over a graph. The strategy is one answer per transport, since there is one transport.
 import { z } from "zod";
 import type { ActionSpec, ToolDef } from "../tool-types.js";
-import { actionEnum, categoryTool } from "../category-tool.js";
+import { actionEnum, categoryTool, summaryOf } from "../category-tool.js";
 import { actionSchema } from "../action-schema.js";
 import { registeredMethodsOf, withholdFromTool, withholdUnregistered } from "../registered-surface.js";
 import { searchToolGraph } from "./tool-search.js";
@@ -32,18 +32,6 @@ import { McpError, ErrorCode } from "../../core/errors.js";
  * failure mode this repo works hardest to avoid.
  */
 
-const ACTIONS_MARKER = "\n\nActions:\n";
-
-/** Split a categoryTool() description into its summary and the generated catalog. */
-export function splitDescription(description: string): { summary: string; catalog: string } {
-  const i = description.indexOf(ACTIONS_MARKER);
-  if (i === -1) return { summary: description.trim(), catalog: "" };
-  return {
-    summary: description.slice(0, i).trim(),
-    catalog: description.slice(i + ACTIONS_MARKER.length).trim(),
-  };
-}
-
 /**
  * The full-mode description of a category tool (#1172): its summary, how to
  * call it, and one signature line per action. No per-action prose: a first
@@ -51,7 +39,7 @@ export function splitDescription(description: string): { summary: string; catalo
  * 60k budget, and describe_action carries every description on demand.
  */
 export function fullSurfaceDescription(tool: ToolDef): string {
-  const { summary } = splitDescription(tool.description);
+  const summary = summaryOf(tool);
   const lines = Object.keys(tool.actions).map((name) => actionSignature(tool, name));
   return `${summary}\n\nCall ${tool.name}(action, args={...}). Actions:\n${lines.join("\n")}`;
 }
@@ -94,7 +82,7 @@ export function readOffset(p: Record<string, unknown>): number {
 
 /** Produce the lean variant of a single category tool (non-mutating). */
 function leanTool(tool: ToolDef): ToolDef {
-  const { summary } = splitDescription(tool.description);
+  const summary = summaryOf(tool);
 
   // Preserve any pre-existing describe action rather than clobber it.
   const actions: Record<string, ActionSpec> = { ...tool.actions };
@@ -102,7 +90,8 @@ function leanTool(tool: ToolDef): ToolDef {
     actions.describe = {
       kind: "handler",
       effect: "read",
-      description: `Signatures of the ${tool.name} category's actions, a page at a time. Params: offset?`,
+      params: { optional: ["offset"] },
+      description: `Signatures of the ${tool.name} category's actions, a page at a time.`,
       handler: async (ctx, p) => describeCategory(withholdFromTool(tool, registeredMethodsOf(ctx?.bridge)) ?? tool, readOffset(p)),
     };
   }
@@ -139,14 +128,15 @@ export function discoveryResults(tools: ToolDef[], query: string, limit: number)
  * leaned tools hide them.
  */
 export function buildCatalogTool(tools: ToolDef[]): ToolDef {
-  const summaries = tools.map((t) => ({ category: t.name, summary: splitDescription(t.description).summary }));
+  const summaries = tools.map((t) => ({ category: t.name, summary: summaryOf(t) }));
   const byName = new Map(tools.map((t) => [t.name, t] as const));
 
   const actions: Record<string, ActionSpec> = {
     search: {
       kind: "handler",
       effect: "read",
-      description: "Rank actions across every category by keyword; returns signatures. Params: query, limit? (default 20)",
+      params: { required: ["query"], optional: ["limit"], notes: { limit: "default 20" } },
+      description: "Rank actions across every category by keyword; returns signatures.",
       handler: async (ctx, p) => {
         const query = typeof p.query === "string" ? p.query : "";
         const limit = typeof p.limit === "number" && p.limit > 0 ? Math.min(p.limit, 100) : 20;
@@ -160,7 +150,8 @@ export function buildCatalogTool(tools: ToolDef[]): ToolDef {
     describe: {
       kind: "handler",
       effect: "read",
-      description: "A category's action signatures a page at a time, or one action's parameter schema. Params: category, method?, offset?",
+      params: { required: ["category"], optional: ["method", "offset"] },
+      description: "A category's action signatures a page at a time, or one action's parameter schema.",
       handler: async (ctx, p) => {
         const category = typeof p.category === "string" ? p.category : "";
         const declared = byName.get(category);

@@ -52,5 +52,5 @@ export const epicTool: ToolDef = categoryTool(
     // dispatch to call_tool too; each builds its bag from its wrapped tool's
     // recorded input schema.
     ...specSchema,
-  },
+  }, { label: { text: "epic toolsets", description: "Unreal AI Toolset Registry discovery and direct dispatch (UE 5.8+)" } },
 );

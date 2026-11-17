@@ -33,10 +33,14 @@ describe("skeletal mesh skin-weight actions", () => {
   it("takes the read and edit contracts from their C++ specs (#1057)", () => {
     const read = assetTool.actions.read_skeletal_mesh_skin_weights;
     expect(read.mapParams).toBeUndefined();
-    expect(read.description).toContain("Params: assetPath, vertexIndices, lodIndex?, profileName?");
+    expect(read.paramSpec?.map((p) => `${p.name}${p.required ? "" : "?"}`)).toEqual(
+      ["assetPath", "vertexIndices", "lodIndex?", "profileName?"],
+    );
     const set = assetTool.actions.set_skeletal_mesh_skin_weights;
     expect(set.mapParams).toBeUndefined();
-    expect(set.description).toContain("Params: assetPath, edits, lodIndex?, profileName?, restoreRawWeights?");
+    expect(set.paramSpec?.map((p) => `${p.name}${p.required ? "" : "?"}`)).toEqual(
+      ["assetPath", "edits", "lodIndex?", "profileName?", "restoreRawWeights?"],
+    );
   });
 
   it("preflights the whole edit batch before the first write and only sets listed vertices", () => {

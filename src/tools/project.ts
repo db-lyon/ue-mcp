@@ -1,5 +1,5 @@
 // @session per-session: Every category tool is cloned per session and dispatches against the addressed editor.
-import type { ActionSpec, ToolDef } from "../surface/tool-types.js";
+import type { ToolDef } from "../surface/tool-types.js";
 import { categoryTool } from "../surface/category-tool.js";
 import { z } from "zod";
 import { CURSOR_PARAM } from "../surface/pagination.js";
@@ -19,103 +19,20 @@ import { leaseActions, leaseSchema } from "./project/leases.js";
 
 export { envWarningsFor } from "./project/sessions.js";
 
-/**
- * The order project advertises its actions in, which the golden baseline pins.
- * Each group module owns its actions; this only positions them, and a name
- * missing from either side fails at load.
- */
-const ACTION_ORDER = [
-  "get_status",
-  "set_project",
-  "list_editors",
-  "use_editor",
-  "add_editor",
-  "drop_editor",
-  "get_info",
-  "read_config",
-  "search_config",
-  "list_config_tags",
-  "resolve_setting",
-  "explain_setting",
-  "diff_config_from_default",
-  "read_cpp_header",
-  "read_module",
-  "list_modules",
-  "search_cpp",
-  "read_engine_header",
-  "find_engine_symbol",
-  "list_engine_modules",
-  "search_engine_cpp",
-  "search_tools",
-  "describe_action",
-  "list_available_actions",
-  "list_categories",
-  "set_category_enabled",
-  "set_toolset_enabled",
-  "acquire_lease",
-  "release_lease",
-  "list_leases",
-  "list_content_assets",
-  "check_install",
-  "execute_python_report",
-  "list_files",
-  "set_config",
-  "set_developer_setting",
-  "get_maps_settings",
-  "set_maps_settings",
-  "build",
-  "generate_project_files",
-  "create_cpp_class",
-  "list_project_modules",
-  "list_loaded_modules",
-  "is_module_loaded",
-  "list_available_plugins",
-  "enable_plugin",
-  "disable_plugin",
-  "live_coding_compile",
-  "live_coding_status",
-  "resolve_collision_profile",
-  "write_cpp_file",
-  "read_cpp_source",
-  "write_source_file",
-  "read_source_file",
-  "build_engine_index",
-  "verify_symbols",
-  "suggest_build_deps",
-  "find_example_usage",
-  "class_hierarchy",
-  "find_references",
-  "find_callers",
-  "find_callees",
-  "symbol_context",
-  "lint_cpp_header",
-  "add_module_dependency",
-  "add_cpp_member",
-  "list_localization_cultures",
-  "list_localization_targets",
-  "set_localization_target",
-  "remove_localization_target",
-  "gather_localization_target",
-  "compile_localization_target",
-] as const;
-
-function inAdvertisedOrder(...groups: Record<string, ActionSpec>[]): Record<string, ActionSpec> {
-  const all: Record<string, ActionSpec> = Object.assign({}, ...groups);
-  const ordered: Record<string, ActionSpec> = {};
-  for (const name of ACTION_ORDER) {
-    if (!all[name]) throw new Error(`project: '${name}' is ordered but no group declares it`);
-    ordered[name] = all[name];
-  }
-  const unordered = Object.keys(all).filter((n) => !(n in ordered));
-  if (unordered.length > 0) throw new Error(`project: ${unordered.join(", ")} missing from ACTION_ORDER`);
-  return ordered;
-}
-
 export const projectTool: ToolDef = categoryTool(
   "project",
   "Project status and editor connection: get_status (is the editor connected?), set_project (switch/redirect the bridge to another .uproject), get_info. Also config INI files, module load state, and C++ source inspection. Call project(get_status) first in any session.",
   {
-    ...inAdvertisedOrder(sessionActions, configActions, sourceActions, engineActions, surfaceActions, installActions, localizationActions, categoryActions, leaseActions),
+    // Each group module owns its actions and their order; the groups are advertised in this order.
+    ...sessionActions,
+    ...configActions,
+    ...sourceActions,
+    ...engineActions,
+    ...surfaceActions,
+    ...installActions,
+    ...localizationActions,
+    ...categoryActions,
+    ...leaseActions,
     ...epicActions,
   },
   {
@@ -195,5 +112,5 @@ export const projectTool: ToolDef = categoryTool(
     access: z.string().optional().describe("For add_module_dependency: 'public' (PublicDependencyModuleNames) or 'private' (default)."),
     // resolve_collision_profile dispatches to a blueprint-category handler, so its keys come from that spec.
     ...borrowSchema(blueprintSpecSchema, ["profileName", "channel", "includeAllChannels"]),
-  },
+  }, { label: { alwaysOn: true } },
 );

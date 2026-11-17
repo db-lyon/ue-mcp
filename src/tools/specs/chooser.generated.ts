@@ -1210,45 +1210,6 @@ export const handlerSpecs: HandlerSpecs = {
   }
 };
 
-/** The Params: clause of each spec'd bridge method. */
-export const paramsClauses: Readonly<Record<string, string>> = {
-  chooser_add_column: "Params: table (or assetPath), columnType, inputStruct?, boundProperty?, enumPath?, nested?, insertIndex?",
-  chooser_add_parameter: "Params: table (or assetPath), nested?, parameterType, properties?",
-  chooser_add_row: "Params: table (or assetPath), output?, outputType?, cells?, inputs?, nested?, resultType?, insertIndex?",
-  chooser_auto_populate: "Params: table (or assetPath), nested?, column?, rows?, includeFallback?",
-  chooser_copy_column: "Params: table (or assetPath), nested?, column, targetTable?, targetNested?, insertIndex?",
-  chooser_copy_rows: "Params: table (or assetPath), nested?, rows, targetTable?, targetNested?, insertIndex?, includeFallback?",
-  chooser_create: "Params: name, packagePath?, onConflict?",
-  chooser_create_nested: "Params: table (or assetPath), nested?, row?, name?",
-  chooser_delete_column: "Params: table (or assetPath), nested?, column",
-  chooser_delete_nested: "Params: table (or assetPath), name",
-  chooser_delete_row: "Params: table (or assetPath), index, nested?",
-  chooser_delete_rows: "Params: table (or assetPath), nested?, rows",
-  chooser_describe: "Params: table (or assetPath), nested?",
-  chooser_duplicate_column: "Params: table (or assetPath), nested?, column",
-  chooser_duplicate_rows: "Params: table (or assetPath), nested?, rows",
-  chooser_get_cell: "Params: table (or assetPath), nested?, column, row?, fallback?",
-  chooser_get_property: "Params: table (or assetPath), nested?, target, index?, propertyPath?",
-  chooser_get_signature: "Params: table (or assetPath), nested?",
-  chooser_list_nested: "Params: table (or assetPath)",
-  chooser_list_object_references: "Params: assetPath (or path), classFilter?, pathFilter?",
-  chooser_list_rows: "Params: table (or assetPath), nested?",
-  chooser_list_types: "Params: kind, table?, nested?, column?",
-  chooser_move_column: "Params: table (or assetPath), nested?, column, newIndex",
-  chooser_move_rows: "Params: table (or assetPath), nested?, rows, targetIndex",
-  chooser_remap_object_references: "Params: assetPath (or path), from?, to?, fromPrefix?, toPrefix?, dryRun?, allowMissing?",
-  chooser_remove_disabled: "Params: table (or assetPath), nested?",
-  chooser_remove_parameter: "Params: table (or assetPath), nested?, index",
-  chooser_rename_nested: "Params: table (or assetPath), name, newName",
-  chooser_restore_snapshot: "Params: table (or assetPath), snapshot",
-  chooser_set_cell: "Params: table (or assetPath), nested?, column, row?, fallback?, value",
-  chooser_set_column: "Params: table (or assetPath), nested?, column, disabled?, inputType?, parameterIndex?, propertyChain?",
-  chooser_set_fallback: "Params: table (or assetPath), nested?, resultType?, output?, outputType?, remove?",
-  chooser_set_property: "Params: table (or assetPath), nested?, target, index?, propertyPath?, value",
-  chooser_set_row: "Params: table (or assetPath), index, output?, outputType?, disabled?, cells?, inputs?, nested?, resultType?",
-  chooser_set_signature: "Params: table (or assetPath), nested?, resultType?, resultClass?, signatureAsset?",
-};
-
 /** Every key the spec'd chooser handlers declare, aliases included. */
 export const schema: Record<string, z.ZodType> = {
   allowMissing: z.boolean().optional().describe("Write a soft reference even when the target does not exist yet (default false)"),
@@ -1304,4 +1265,4 @@ export const schema: Record<string, z.ZodType> = {
 };
 
 /** Declare an action for a spec'd bridge method: effect, summary, method. */
-export const specBp = makeSpecBp(paramsClauses, handlerSpecs);
+export const specBp = makeSpecBp(handlerSpecs);

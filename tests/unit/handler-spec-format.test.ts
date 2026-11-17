@@ -2,15 +2,15 @@
  * What a parameter spec can say beyond a flat list of names (#1057): required
  * choices, value shapes (a colour, a union, null, a literal flag, an object or
  * array element with declared fields), and a contract exemption. Each is held
- * here from the recording's format, through the generated zod and Params
- * clause, to describe_action and the check every dispatch route runs.
+ * here from the recording's format, through the generated zod, to
+ * describe_action and the check every dispatch route runs.
  */
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
-import { paramsClause, renderAll, zodExpression } from "../../scripts/lib/handler-spec-gen.mjs";
+import { renderAll, zodExpression } from "../../scripts/lib/handler-spec-gen.mjs";
 import {
   choiceViolation,
   compareHandlerSpecs,
@@ -23,7 +23,7 @@ import {
   type HandlerSpecs,
   type ParamSpec,
 } from "../../src/surface/handler-spec.js";
-import { actionSchema, parseParams } from "../../src/surface/action-schema.js";
+import { actionSchema, ROUTING_PARAMS } from "../../src/surface/action-schema.js";
 import { categoryTool } from "../../src/surface/category-tool.js";
 import { prepareCall } from "../../src/dispatch/call-pipeline.js";
 import { bridgeTaskClass } from "../../src/flow/task-factory.js";
@@ -153,7 +153,7 @@ describe("value shapes", () => {
 
   it("describe as their types, with a union's alternatives and null", () => {
     const tool = categoryTool("probe", "Probe.", {
-      set: makeSpecBp({ probe_set: paramsClause({ params: shapes }) }, { probe_set: { category: "probe", params: shapes } })(
+      set: makeSpecBp({ probe_set: { category: "probe", params: shapes } })(
         "mutate", "Set it.", "probe_set",
       ),
     }, Object.fromEntries(shapes.map((s) => [s.name, paramZod(s).optional()])));
@@ -183,35 +183,21 @@ describe("choices", () => {
     expect(refused([{ mode: "oneOrTwo" as never, branches: [["settings"], ["propertyName"]] }])).toContain("unknown mode");
   });
 
-  it("refuse a required parameter right behind an at-least-one group, which the clause would absorb", () => {
-    const behind: HandlerSpec = {
-      params: [p("labelPrefix", "string"), p("tag", "string"), p("hlodLayer", "string", { required: true })],
-      choices: [{ mode: "atLeastOne", branches: [["labelPrefix"], ["tag"]] }],
-    };
-    expect(specProblems({ probe: behind }).join("\n")).toContain("follows an at-least-one choice");
-  });
-
-  it("render in the clause where their first member is declared, as the hand-written clauses read", () => {
-    expect(paramsClause(SETTINGS)).toBe("Params: assetPath (or path), nodeName, settings OR propertyName + propertyValue");
-    expect(paramsClause(SELECTOR)).toBe("Params: actorLabel OR actorPath, skeletalMesh?");
-    expect(paramsClause(ANY_OF)).toBe("Params: hlodLayer, at least one of actorLabels/labelPrefix/tag, dryRun?");
+  it("render as a readable sentence fragment", () => {
     expect(renderChoice({ mode: "atLeastOne", branches: [["a"], ["b", "c"]] }, [p("a", "string"), p("b", "string"), p("c", "string")]))
       .toBe("at least one of a OR b + c");
   });
 
-  it("parse back out of the clause as the same choice groups", () => {
+  it("publish through describe_action as the same choice groups", () => {
     for (const spec of [SETTINGS, SELECTOR, ANY_OF]) {
-      const known = new Set(spec.params.flatMap((x) => [x.name, ...(x.aliases ?? [])]));
-      const parsed = parseParams(`Do it. ${paramsClause(spec)}`, known);
-      // `assetPath (or path)` parses as a choice between spellings; the spec
-      // calls that an alias, and describe_action reports it as one.
-      const spellings = new Map(spec.params.map((x) => [x.name, new Set([x.name, ...(x.aliases ?? [])])]));
-      const isAlias = (branches: string[][]) =>
-        [...spellings.values()].some((names) => branches.flat().every((n) => names.has(n)));
-      expect(parsed.alternatives.filter((a) => !isAlias(a.branches))).toEqual(spec.choices!.map((c) => ({ branches: c.branches, required: true })));
-      expect(parsed.params.map((x) => x.name).sort()).toEqual(
-        spec.params.flatMap((x) => [x.name, ...(x.aliases ?? [])]).sort(),
-      );
+      const action = makeSpecBp({ probe: spec })("mutate", "Do it.", "probe");
+      const names = spec.params.flatMap((x) => [x.name, ...(x.aliases ?? [])]);
+      const tool = categoryTool("probe", "Probe.", { go: action }, Object.fromEntries(names.map((n) => [n, z.unknown().optional()])));
+      const schema = actionSchema(tool, "go");
+      // An alias rides on the parameter it names rather than as a parameter of its own.
+      expect(schema.alternatives).toEqual(spec.choices!.map((c) => ({ branches: c.branches, required: true })));
+      expect(schema.params.map((x) => x.name).filter((n) => !ROUTING_PARAMS.has(n)).sort())
+        .toEqual(spec.params.map((x) => x.name).sort());
     }
   });
 
@@ -234,7 +220,7 @@ describe("choices", () => {
   });
 
   it("travel on the action specBp declares, and describe_action reports them as choice groups", () => {
-    const specBp = makeSpecBp({ probe_settings: paramsClause(SETTINGS) }, { probe_settings: SETTINGS });
+    const specBp = makeSpecBp({ probe_settings: SETTINGS });
     const action = specBp("mutate", "Set node settings.", "probe_settings");
     expect(action.kind === "bridge" && action.paramChoices).toEqual(SETTINGS.choices);
     const tool = categoryTool("probe", "Probe.", { set_node_settings: action },
@@ -251,7 +237,7 @@ describe("choices", () => {
 });
 
 describe("the choice check at the TS boundary", () => {
-  const specBp = makeSpecBp({ probe_settings: paramsClause(SETTINGS) }, { probe_settings: SETTINGS });
+  const specBp = makeSpecBp({ probe_settings: SETTINGS });
   function fakeCtx(seen: Array<Record<string, unknown>>) {
     return {
       bridge: {
@@ -322,7 +308,7 @@ describe("the recording format", () => {
     const files = renderAll({ handlers: { probe_exempt: ANY_OF } });
     const module = files.get("src/tools/specs/level.generated.ts")!;
     expect(module).toContain('"contractExempt": "Selector-driven batch write"');
-    expect(module).toContain('probe_exempt: "Params: hlodLayer, at least one of actorLabels/labelPrefix/tag, dryRun?"');
+    expect(module).not.toContain("Params:");
     expect(module).toContain("hlodLayer: z.string().nullable().optional()");
   });
 

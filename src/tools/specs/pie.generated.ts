@@ -2402,77 +2402,6 @@ export const handlerSpecs: HandlerSpecs = {
   }
 };
 
-/** The Params: clause of each spec'd bridge method. */
-export const paramsClauses: Readonly<Record<string, string>> = {
-  pie_anim_properties: "Params: actorLabel, propertyNames?",
-  pie_anim_state: "Params: actorLabel",
-  pie_assert_eval: "Params: run_id?, output_dir?, recording_dir?, recording_id?, csv_path?, assertions?, test_path?",
-  pie_clients: "Params: none",
-  pie_console: "Params: command, client",
-  pie_drive_pawn: "Params: direction OR targetLocation, mode?, durationSeconds?, scale?, sampleEvery?, acceptanceRadius?, planar?, stopOnMapChange?, playerIndex?, pieInstance?, driveId?, wait?, timeoutSeconds?",
-  pie_drive_status: "Params: driveId?, includeSamples?",
-  pie_drive_stop: "Params: driveId?",
-  pie_inject_input: "Params: action_path, value_x?, value_y?, value_z?, client_id?, pie_instance?, client?",
-  pie_inject_input_start: "Params: action_path, value_x?, value_y?, value_z?, injection_id?, duration_seconds?, control_rotation?, client_id?, pie_instance?, client?",
-  pie_inject_input_stop: "Params: injection_id",
-  pie_inject_input_tape: "Params: action_path, values, hz?, injection_id?, client_id?, pie_instance?, client?",
-  pie_inject_input_update: "Params: injection_id, value_x?, value_y?, value_z?, control_rotation?",
-  pie_mark: "Params: label",
-  pie_observe_arm: "Params: profile, output_dir?, sample_hz?, client_id?, pie_instance?, pin_fps?",
-  pie_observe_disarm: "Params: none",
-  pie_observe_list: "Params: output_dir?, limit?",
-  pie_observe_read: "Params: run_id, output_dir?, file?, limit?, offset?, channels?, threshold?, include_values?, max_points?",
-  pie_observe_status: "Params: none",
-  pie_observe_stop: "Params: none",
-  pie_perf_summary: "Params: recording_id?, recording_dir?",
-  pie_profile_create: "Params: name, package_path?, onConflict?, tracked_values?, tracked_actors?, tracked_widgets?, capture_pawn_state?, capture_montage?, position_threshold_cm?, rotation_threshold_deg?, velocity_threshold_cms?, tracked_value_default_threshold?",
-  pie_profile_delete: "Params: path, confirm?",
-  pie_profile_list: "Params: directory?",
-  pie_profile_read: "Params: path",
-  pie_profile_update: "Params: path, tracked_values?, tracked_actors?, tracked_widgets?, capture_pawn_state?, capture_montage?, position_threshold_cm?, rotation_threshold_deg?, velocity_threshold_cms?, tracked_value_default_threshold?",
-  pie_record_arm: "Params: actions?, track_values?, track_actors?, axis_threshold?, sample_hz?, pin_fps?, capture_pawn_state?, capture_montage?, take_record?, client_id?, pie_instance?, rng_seed?, run_gap_frames?, capture_ui_pointer?, recording_dir?, id?",
-  pie_record_delete: "Params: id, confirm?, recording_dir?",
-  pie_record_diff: "Params: a_id, b_id, recording_dir?, position_cm?, rotation_deg?, velocity_cms?, tracked_default?, tracked_thresholds?",
-  pie_record_disarm: "Params: none",
-  pie_record_list: "Params: recording_dir?, limit?, offset?",
-  pie_record_read: "Params: id, file?, recording_dir?, limit?, offset?",
-  pie_record_status: "Params: none",
-  pie_record_stop: "Params: none",
-  pie_remote_result: "Params: request_id (or injection_id)",
-  pie_replay_analyze: "Params: recording_id?, recording_dir?, limit?, offset?",
-  pie_replay_arm: "Params: recording_id?, sequence_path?, recording_dir?, steps?, settle_ms?, sample_hz?, rng_seed?, pin_fps?, apply_rng_seed?, record_drift?, auto_stop_pie?, eject?, lock_input?, time_scale?, mode?, capture_frame_every?, encode_gif?, fixed_timestep?, client_id?, pie_instance?, drift_thresholds?, start_when?",
-  pie_replay_disarm: "Params: none",
-  pie_replay_run: "Params: recording_id?, sequence_path?, recording_dir?, steps?, settle_ms?, sample_hz?, rng_seed?, pin_fps?, apply_rng_seed?, record_drift?, auto_stop_pie?, eject?, lock_input?, time_scale?, mode?, capture_frame_every?, encode_gif?, fixed_timestep?, client_id?, pie_instance?, drift_thresholds?, start_when?",
-  pie_replay_state: "Params: recording_id?, recording_dir?, at_time?, at_frame?, apply?",
-  pie_replay_status: "Params: none",
-  pie_replay_stop: "Params: none",
-  pie_scenario_scaffold: "Params: recording_id?, recording_dir?, name?, max_errors?",
-  pie_scenario_validate: "Params: scenario_path OR scenario",
-  pie_script_create: "Params: name, package_path?, steps, description?, profile?, map?, default_within_ms?, manual_only?, onConflict?",
-  pie_script_delete: "Params: path, confirm?",
-  pie_script_list: "Params: directory?",
-  pie_script_read: "Params: path",
-  pie_script_replay: "Params: run_id?, results_path?, time_scale?, auto_stop_pie?, pie_instance?, client_id?, wait?, timeout_seconds?",
-  pie_script_results: "Params: run_id?, results_path?",
-  pie_script_run: "Params: script OR steps, name?, profile?, map?, record?, start_pie?, block_on_manual?, mode?, default_within_ms?, pie_instance?, client_id?, wait?, timeout_seconds?",
-  pie_script_runs: "Params: script?, limit?, include_steps?",
-  pie_script_status: "Params: run_id?, since_seq?, wait?, timeout_seconds?",
-  pie_script_stop: "Params: run_id?, reason?",
-  pie_script_update: "Params: path, steps?, description?, profile?, map?, default_within_ms?, manual_only?",
-  pie_script_validate: "Params: steps, profile?, map?, manual_only?",
-  pie_script_values: "Params: target?, profile?, limit?",
-  pie_script_verdict: "Params: step, verdict, note?, run_id?, source?, evidence?",
-  pie_session_errors: "Params: session?, session_dir?, min_verbosity?",
-  pie_session_log: "Params: session?, session_dir?, min_verbosity?, category?, contains?, limit?, offset?, max_message_chars?",
-  pie_test_list: "Params: recording_id?, recording_dir?",
-  pie_test_run: "Params: test_path?, recording_id?, recording_dir?, name?, auto_run?",
-  pie_test_scaffold: "Params: recording_id?, recording_dir?, name?, max_position_drift_cm?, max_velocity_drift_cms?, max_rotation_drift_deg?, max_errors?, start_when?",
-  pie_uat_abort: "Params: reason?",
-  pie_uat_run: "Params: scenario OR path",
-  pie_uat_status: "Params: none",
-  pie_view_trace: "Params: playerIndex?, pieInstance?, distance?, channel?, sweepRadius?, traceComplex?, ignoreActors?, ignorePawn?",
-};
-
 /** Every key the spec'd pie handlers declare, aliases included. */
 export const schema: Record<string, z.ZodType> = {
   a_id: z.string().optional().describe("First recording id"),
@@ -2613,4 +2542,4 @@ export const schema: Record<string, z.ZodType> = {
 };
 
 /** Declare an action for a spec'd bridge method: effect, summary, method. */
-export const specBp = makeSpecBp(paramsClauses, handlerSpecs);
+export const specBp = makeSpecBp(handlerSpecs);

@@ -12,7 +12,8 @@ export const pluginsTool: ToolDef = categoryTool(
       kind: "handler",
       effect: "read",
       offline: "Reads the plugin set this server loaded.",
-      description: "Every plugin loaded from ue-mcp.yml: name, version, prefix, status, and injected actions. Params: none",
+      params: {},
+      description: "Every plugin loaded from ue-mcp.yml: name, version, prefix, status, and injected actions.",
       handler: async (ctx) => {
         const all = ctx.getPlugins?.() ?? [];
         return {
@@ -26,7 +27,8 @@ export const pluginsTool: ToolDef = categoryTool(
       kind: "handler",
       effect: "read",
       offline: "Reads one loaded plugin's manifest.",
-      description: "Full detail for one plugin including knowledge files and flows. Params: name",
+      params: { required: ["name"] },
+      description: "Full detail for one plugin including knowledge files and flows.",
       handler: async (ctx, p) => {
         const target = p.name as string;
         const all = ctx.getPlugins?.() ?? [];
@@ -45,7 +47,7 @@ export const pluginsTool: ToolDef = categoryTool(
   {
     ...epicSchema,
     name: z.string().optional().describe("Plugin npm package name (describe action)"),
-  },
+  }, { label: { alwaysOn: true } },
 );
 
 function summarise(p: PluginInfo): Record<string, unknown> {

@@ -18,5 +18,5 @@ export const datasmithTool: ToolDef = categoryTool(
   },
   {
     ...specSchema,
-  },
+  }, { label: { description: "Datasmith scene import and metadata queries" } },
 );

@@ -44,7 +44,6 @@ describe("asset.set_mesh_simple_collision", () => {
   it("takes its parameters from its C++ spec and forwards the bag as sent", () => {
     expect(action.bridge).toBe("set_mesh_simple_collision");
     expect(action.mapParams).toBeUndefined();
-    expect(action.description).toContain("Params: assetPath, shapes, replace?, collisionTraceFlag?, save?, dryRun?");
     const spec = action.kind === "bridge" ? action.paramSpec : undefined;
     expect(spec?.map((p) => [p.name, p.required])).toEqual([
       ["assetPath", true], ["shapes", true], ["replace", false],
@@ -131,7 +130,6 @@ describe("level.resave_mesh_users", () => {
   it("takes its parameters from its C++ spec and forwards the bag as sent", () => {
     expect(action.bridge).toBe("resave_mesh_users");
     expect(action.mapParams).toBeUndefined();
-    expect(action.description).toContain("Params: meshPaths, componentClass?, recreateCollision?, save?, dryRun?, maxActors?");
     const spec = action.kind === "bridge" ? action.paramSpec : undefined;
     expect(spec?.map((p) => [p.name, p.required])).toEqual([
       ["meshPaths", true], ["componentClass", false], ["recreateCollision", false],

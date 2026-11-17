@@ -7,36 +7,12 @@ import { McpError, ErrorCode } from "../core/errors.js";
 import type { FlowContext } from "./context.js";
 import { liftRollback } from "./rollback.js";
 import { applyHandlerOutcome } from "./handler-outcome.js";
-import { ensureGuard } from "../editor/dialog-guard.js";
+import { refuseIfBlocked } from "../editor/dialog-guard.js";
 import { epicSuccessorFor, paramMapperOf } from "../surface/epic-input.js";
 import { epicEngineRefusal } from "../surface/epic-engines.js";
 import { actionAccepts } from "../surface/action-schema.js";
 import type { BridgeCallOptions, IBridge } from "../bridge/bridge.js";
 import { attachInlineImages } from "../dispatch/inline-image.js";
-
-/**
- * Refuse a handler-backed call while a modal is up, through the one guard.
- *
- * The bridge-backed calls are covered at the bridge boundary. An in-process
- * handler never goes near it, so without this the gate simply was not on that
- * route: a modal raised mid-run was missed by every remaining step.
- *
- * Returns the refusal to report, or null to run the call.
- */
-async function refuseIfBlocked(
-  ctx: FlowContext,
-  taskName: string,
-): Promise<Record<string, unknown> | null> {
-  const session = ctx.session;
-  if (!session) return null;
-  // No early return for an allow-listed subject. `check` already exempts them,
-  // and it additionally applies the mode to the one allow-listed subject that
-  // PRESSES a button, so short-circuiting here let a step answer a modal under
-  // interactive by walking around the gate rather than through it.
-  const guard = await ensureGuard(session);
-  const decision = await guard.check(taskName, "action");
-  return decision.allow ? null : (decision.refusal ?? null);
-}
 
 /** The error a refused call reports, worded by the refusal itself. */
 function refusalError(taskName: string, refusal: Record<string, unknown>): Error {
@@ -69,10 +45,12 @@ export function actionPreparation(
 }
 
 /**
- * Run one action: THE per-call path. The flow registry's task classes and a
- * category tool's own handler both come here, so a live MCP call, a flow step,
- * a batch op and a gateway call get the same preparation, the same verdict
- * read off the body, the same lifted rollback and the same modal check.
+ * Run one action's body: the last step of every route. The call pipeline's
+ * gates (server/call-gates.ts) decide whether a call runs; the flow registry's
+ * task classes and a category tool's own handler then come here, so a live
+ * call, a flow step, a batch op and a gateway call get the same preparation,
+ * the same verdict read off the body, the same lifted rollback and, for a
+ * call no gate admitted (a flow step, a batch op), the same modal check.
  *
  * `options` carries neither `action` nor a routing `editor`; the task name
  * selects the action, and `prep.action` hands it to the category's folding.
@@ -106,8 +84,9 @@ export async function runBridge(
   // mapper, since a mapper that forwards its input verbatim would carry it.
   const options = stripAction(rawOptions);
   // A wrapped engine tool the attached engine's recorded registry lacks is refused unsent.
+  // The call pipeline's engine gate already checked the action it admitted.
   const engineVersion = ctx.bridge?.capabilities?.engineVersion;
-  const refused = epicEngineRefusal(name, prep?.epicTool, engineVersion);
+  const refused = ctx.gatedTask === name ? null : epicEngineRefusal(name, prep?.epicTool, engineVersion);
   if (refused) return applyHandlerOutcome(ctx, refused, { success: true, data: { ...refused } });
   // A wrapped tool the attached engine replaced goes to its successor, whichever
   // route built the mapper.
@@ -209,9 +188,12 @@ export async function runHandler(
   const callCtx = pipeline.timeoutMs === undefined
     ? ctx
     : { ...ctx, callTimeoutMs: pipeline.timeoutMs, bridge: withCallTimeout(ctx.bridge, pipeline.timeoutMs) };
-  // A flow is a minutes-long run and a modal can appear at any point in it, so
-  // the gate is checked per call, not once before the run.
-  const refusal = await refuseIfBlocked(ctx, name);
+  // An in-process handler never reaches the bridge boundary, and a flow is a
+  // minutes-long run a modal can interrupt at any step, so every handler call
+  // is checked here, unless the call pipeline's dialog gate just admitted it.
+  // No early return for an allow-listed subject: `check` exempts them, and
+  // applies the mode to the one that PRESSES a button.
+  const refusal = ctx.gatedTask === name ? null : await refuseIfBlocked(ctx.session, name, "action");
   if (refusal) {
     return { success: false, data: refusal, error: refusalError(name, refusal) };
   }

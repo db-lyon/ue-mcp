@@ -17,6 +17,7 @@ import { actionEnum, SELECT_PARAM, OMIT_PARAM } from "../surface/category-tool.j
 import { takeFieldSelection, projectResult, attachFieldReport } from "../surface/context/field-select.js";
 import { McpError, ErrorCode } from "../core/errors.js";
 import { nearestActions } from "../surface/action-schema.js";
+import { actionSignature } from "../surface/action-signature.js";
 import { unknownRecord } from "../surface/context/call-envelope.js";
 import {
   takeSnapshot,
@@ -78,11 +79,17 @@ export function createFlowTool(
     run: {
       kind: "handler",
       effect: "mutate",
+      params: {
+        required: ["flowName"],
+        optional: ["skip", "params", "rollback_on_failure"],
+        notes: {
+          skip: "step names or numbers",
+          params: "runtime options merged into every step's options, highest priority",
+          rollback_on_failure: "invoke inverse tasks in reverse order when a later step fails",
+        },
+      },
       description:
-        "Execute a named flow from ue-mcp.yml. Params: flowName, "
-        + "skip? (step names or numbers), params? (runtime options merged into every step's options, "
-        + "highest priority), rollback_on_failure? (invoke inverse tasks in reverse order when a "
-        + "later step fails). A step whose handler reports success:false FAILS the step and stops the "
+        "Execute a named flow from ue-mcp.yml. A step whose handler reports success:false FAILS the step and stops the "
         + "run, and the inverses collected up to and including it are what rollback_on_failure "
         + "unwinds. A step whose failure is EXPECTED says so itself, in the YAML, with "
         + "ignore_failure: true - the run walks on, and the step is still recorded as failed with its "
@@ -99,8 +106,9 @@ export function createFlowTool(
     plan: {
       kind: "handler",
       effect: "read",
+      params: { required: ["flowName"] },
       description:
-        "Show a flow's execution plan without running a step of it. Params: flowName. Returns the ordered plan, "
+        "Show a flow's execution plan without running a step of it. Returns the ordered plan, "
         + "and the flow as declared under definition: its description and each step's task or nested flow, "
         + "options and conditions, with ${steps.N...} references left unresolved. inputs lists the params a run may pass: "
         + "each parameter the step tasks read and the steps leave unset, with its type, required flag and the steps that read it.",
@@ -109,31 +117,24 @@ export function createFlowTool(
     list: {
       kind: "handler",
       effect: "read",
+      params: {},
       description:
         "List the flows available to this project, merged from ue-mcp.yml, the user-global config "
-        + "and any loaded plugin. Params: none",
+        + "and any loaded plugin.",
       handler: async (ctx) => listFlows(configFor(ctx)),
     },
   };
 
+  const summary =
+    `Run pre-built named sequences for this project. ` +
+    `ALWAYS check project(action="get_status") first - its 'flows' field lists what's available. ` +
+    `If a flow matches the user's request, run it via ` +
+    `flow(action="run", flowName="...") instead of composing the sequence by hand. ` +
+    `Config reloads on every call - no restart needed.`;
   const def: ToolDef = {
     name: "flow",
-    description:
-      `Run pre-built named sequences for this project. ` +
-      `ALWAYS check project(action="get_status") first - its 'flows' field lists what's available. ` +
-      `If a flow matches the user's request, run it via ` +
-      `flow(action="run", flowName="...") instead of composing the sequence by hand. ` +
-      `Config reloads on every call - no restart needed.\n\n` +
-      `Actions:\n` +
-      Object.entries(actions)
-        .map(([name, spec]) => `- ${name}: ${spec.description ?? ""}`)
-        .join("\n") +
-      `\n\nStep types supported in YAML flows: any MCP action (category.action), nested flows (flow:),\n` +
-      `and 'shell' for running shell/exec commands. Per-step options: options, when, retries,\n` +
-      `retryDelay, retryOn, and ignore_failure (record this step's failure and carry on).\n` +
-      `Example shell step:\n` +
-      `  steps:\n` +
-      `    1: { task: shell, options: { command: "npm run up:build" } }`,
+    summary,
+    description: "",
     schema: {
       action: actionEnum(Object.keys(actions) as [string, ...string[]]),
       flowName: z.string().optional().describe("Flow name from ue-mcp.yml"),
@@ -165,6 +166,17 @@ export function createFlowTool(
       return attachFieldReport(projection.result, projection);
     },
   };
+  // Each action's line leads with its signature, built from its declaration.
+  def.description =
+    `${summary}\n\n` +
+    `Actions:\n` +
+    Object.entries(actions).map(([name, spec]) => `- ${actionSignature(def, name)}: ${spec.description ?? ""}`).join("\n") +
+    `\n\nStep types supported in YAML flows: any MCP action (category.action), nested flows (flow:),\n` +
+    `and 'shell' for running shell/exec commands. Per-step options: options, when, retries,\n` +
+    `retryDelay, retryOn, and ignore_failure (record this step's failure and carry on).\n` +
+    `Example shell step:\n` +
+    `  steps:\n` +
+    `    1: { task: shell, options: { command: "npm run up:build" } }`;
   return def;
 }
 

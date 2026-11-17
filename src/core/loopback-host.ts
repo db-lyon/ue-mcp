@@ -1,5 +1,14 @@
-// @session independent: Reads one request's Host header. Pure logic.
+// @session independent: Reads one request's Host header and compares tokens. Pure logic.
 import type * as http from "node:http";
+import { timingSafeEqual } from "node:crypto";
+
+/** Whether a presented token is the expected one, compared in constant time. */
+export function tokensMatch(presented: string | null | undefined, expected: string): boolean {
+  if (typeof presented !== "string") return false;
+  const a = Buffer.from(presented, "utf8");
+  const b = Buffer.from(expected, "utf8");
+  return a.length === b.length && timingSafeEqual(a, b);
+}
 
 const ALLOWED_HOSTS = new Set([
   "localhost",

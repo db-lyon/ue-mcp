@@ -19,7 +19,7 @@ import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { z as zodRuntime, type z } from "zod";
-import { renderAll, paramsClause, zodExpression } from "../../scripts/lib/handler-spec-gen.mjs";
+import { renderAll, zodExpression } from "../../scripts/lib/handler-spec-gen.mjs";
 import { readCategory } from "../../scripts/lib/tool-source.mjs";
 import { readRegistrations } from "../../scripts/audit-handler-conventions.mjs";
 import {
@@ -33,7 +33,7 @@ import {
   type ParamSpec,
 } from "../../src/surface/handler-spec.js";
 import { ROUTING_PARAM_NAMES } from "../../src/surface/routing-params.js";
-import { parseParams, actionSchema } from "../../src/surface/action-schema.js";
+import { actionAccepts, actionSchema, type ActionAccepts } from "../../src/surface/action-schema.js";
 import { animationTool } from "../../src/tools/animation.js";
 import { ALL_TOOLS } from "../../src/tools.js";
 import type { ActionSpec, ToolDef } from "../../src/surface/tool-types.js";
@@ -80,12 +80,20 @@ function isMcpToolPassthrough(spec: ActionSpec): boolean {
   return spec.kind === "bridge" && spec.bridge === "epic_call_mcp_tool" && spec.mcpTool !== undefined && spec.mapParams !== undefined;
 }
 
+interface SpecdAction {
+  bridge: string;
+  description: string;
+  mapParams?: unknown;
+  paramSpec?: readonly ParamSpec[];
+  accepts?: ActionAccepts;
+}
+
 /** Actions of a tool that dispatch to a spec'd bridge method, the Epic passthroughs aside. */
-function specdActions(tool: ToolDef = animationTool): Array<[string, { bridge: string; description: string; mapParams?: unknown }]> {
-  const out: Array<[string, { bridge: string; description: string; mapParams?: unknown }]> = [];
+function specdActions(tool: ToolDef = animationTool): Array<[string, SpecdAction]> {
+  const out: Array<[string, SpecdAction]> = [];
   for (const [name, spec] of Object.entries(tool.actions)) {
     if (spec.kind === "bridge" && SNAPSHOT.handlers[spec.bridge] && !isEpicPassthrough(name, spec) && !isMcpToolPassthrough(spec)) {
-      out.push([name, { bridge: spec.bridge, description: spec.description ?? "", mapParams: spec.mapParams }]);
+      out.push([name, { bridge: spec.bridge, description: spec.description ?? "", mapParams: spec.mapParams, paramSpec: spec.paramSpec, accepts: actionAccepts(spec) }]);
     }
   }
   return out;
@@ -311,8 +319,8 @@ describe("the generated modules", () => {
   });
 
   it("refuses to declare an action for a method with no recorded spec", () => {
-    const specBp = makeSpecBp({ known_method: "Params: none" });
-    expect(specBp("read", "Read it.", "known_method").description).toBe("Read it. Params: none");
+    const specBp = makeSpecBp({ known_method: { category: "probe", params: [] } });
+    expect(specBp("read", "Read it.", "known_method").description).toBe("Read it.");
     expect(() => specBp("read", "Read it.", "unrecorded_method")).toThrow(/No recorded parameter spec/);
   });
 });
@@ -322,20 +330,18 @@ describe("the animation surface", () => {
     expect(specdActions().length).toBeGreaterThanOrEqual(15);
   });
 
-  it("takes each spec'd action's Params clause from its spec, and renames nothing in TS", () => {
+  it("takes each spec'd action's parameters from its spec, and renames nothing in TS", () => {
     for (const [action, spec] of specdActions()) {
-      const clause = paramsClause(SNAPSHOT.handlers[spec.bridge]);
-      expect(spec.description.endsWith(` ${clause}`), `${action}: description does not end with its generated clause`).toBe(true);
+      expect(spec.paramSpec, `${action}: paramSpec is not the recorded spec`).toEqual(SNAPSHOT.handlers[spec.bridge].params);
+      expect(spec.description, `${action}: the description carries no parameter clause`).not.toMatch(/\bParams:/);
       expect(spec.mapParams, `${action}: a spec'd action forwards its bag as sent; renames are aliases in the spec`).toBeUndefined();
     }
   });
 
-  it("documents every declared name and alias, and nothing else", () => {
-    const known = new Set(Object.keys(animationTool.schema));
+  it("accepts every declared name and alias, and nothing else", () => {
     for (const [action, spec] of specdActions()) {
       const declared = SNAPSHOT.handlers[spec.bridge].params.flatMap((p) => [p.name, ...(p.aliases ?? [])]).sort();
-      const documented = parseParams(spec.description, known).params.map((p) => p.name).sort();
-      expect(documented, action).toEqual(declared);
+      expect([...(spec.accepts?.keys ?? [])].sort(), action).toEqual(declared);
     }
   });
 
@@ -472,20 +478,18 @@ describe.each(SPEC_TOOLS)("the %s tool", (toolName) => {
   const tool = ALL_TOOLS.find((t) => t.name === toolName)!;
   const actions = specdActions(tool).filter(([action]) => !HAND_WRITTEN_CROSS_TOOL.has(`${toolName}.${action}`));
 
-  it("takes each spec'd action's Params clause from its spec, and renames nothing in TS", () => {
+  it("takes each spec'd action's parameters from its spec, and renames nothing in TS", () => {
     for (const [action, spec] of actions) {
-      const clause = paramsClause(SNAPSHOT.handlers[spec.bridge]);
-      expect(spec.description.endsWith(` ${clause}`), `${action}: description does not end with its generated clause`).toBe(true);
+      expect(spec.paramSpec, `${action}: paramSpec is not the recorded spec`).toEqual(SNAPSHOT.handlers[spec.bridge].params);
+      expect(spec.description, `${action}: the description carries no parameter clause`).not.toMatch(/\bParams:/);
       expect(spec.mapParams, `${action}: a spec'd action forwards its bag as sent; renames are aliases in the spec`).toBeUndefined();
     }
   });
 
-  it("documents every declared name and alias, and nothing else", () => {
-    const known = new Set(Object.keys(tool.schema));
+  it("accepts every declared name and alias, and nothing else", () => {
     for (const [action, spec] of actions) {
       const declared = SNAPSHOT.handlers[spec.bridge].params.flatMap((p) => [p.name, ...(p.aliases ?? [])]).sort();
-      const documented = parseParams(spec.description, known).params.map((p) => p.name).sort();
-      expect(documented, action).toEqual(declared);
+      expect([...(spec.accepts?.keys ?? [])].sort(), action).toEqual(declared);
     }
   });
 

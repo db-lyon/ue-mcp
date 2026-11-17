@@ -324,6 +324,13 @@ export const batchAction: HandlerActionSpec = {
   editorBound: "Sends its steps to the editor as one execute_batch bridge call, which runs them in one game-thread job.",
   steps: (params) => batchCallsOf(params).map((c) => ({ task: `${c.category}.${c.method}`, params: c.args ?? {} })),
   rawBridgeMethods: { execute_batch: { effect: "unknown", steps: executeBatchSteps } },
+  params: {
+    required: ["ops"],
+    optional: ["onError", "transactionDescription"],
+    notes: {
+      onError: "stop|continue",
+    },
+  },
   description:
     "Run several actions as ONE game-thread job in the editor, so no call from any other session can land between them. "
     + "This is the fix for multi-step edits that other agents interleave with: add a variable, add a node and connect its pins "
@@ -339,8 +346,7 @@ export const batchAction: HandlerActionSpec = {
     + "every action, so a step that fails leaves the steps before it applied, and the result says exactly which ran "
     + "(completedCalls, failedIndex, per-step success). Each step's answer comes back under results[i].result, including any "
     + "rollback descriptor that action reports on its own. The wait is the sum of what each step would get alone, or the "
-    + "batch's timeoutMs; a batch that outlives the wait reports how many steps had finished, and keeps running. "
-    + "Params: ops:[{category, method, args?}] (1-256), onError? (stop|continue), transactionDescription?",
+    + "batch's timeoutMs; a batch that outlives the wait reports how many steps had finished, and keeps running.",
   handler: async (ctx: ToolContext, params: Record<string, unknown>) => {
     const { steps, onError } = prepareBatch(ctx, params);
     const payload: Record<string, unknown> = {

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { animationTool } from "../../src/tools/animation.js";
+import { actionSchema } from "../../src/surface/action-schema.js";
 import type { ToolContext } from "../../src/surface/tool-types.js";
 import { readHandlerFile } from "../../scripts/lib/cpp-registrations.mjs";
 
@@ -46,9 +47,11 @@ describe("animation(read_sequence) batch form (#1163)", () => {
 
   it("documents the batch form, its paging and its per-row failures", () => {
     const description = animationTool.actions.read_sequence.description ?? "";
-    for (const name of ["assetPaths", "directory", "nameFilter", "fields", "cursor", "limit", "failedCount"]) {
-      expect(description).toContain(name);
+    const names = actionSchema(animationTool, "read_sequence").params.map((p) => p.name);
+    for (const name of ["assetPaths", "directory", "nameFilter", "fields", "cursor", "limit"]) {
+      expect(names).toContain(name);
     }
+    expect(description).toContain("failedCount");
   });
 
   it("reads every parameter the tool forwards, through the recorded helpers", () => {

@@ -6,8 +6,8 @@
 // effects file and regenerate; to pick up a new engine's toolsets, re-record
 // the catalog and regenerate.
 //
-// These are ordinary actions. They carry a declared effect, real parameters and
-// a Params: clause, they are in ALL_TOOLS, and they dispatch through the same
+// These are ordinary actions. They carry a declared effect and real
+// parameters, they are in ALL_TOOLS, and they dispatch through the same
 // task factory, guards and locks as every hand-written action in this package.
 // Each also carries its input schema, which the compact signatures read (#1172).
 import { z } from "zod";
@@ -34,72 +34,72 @@ export const actions: Record<string, ActionSpec> = {
   epic_create_markdown_knowledge_base: {
     epicSchema: S_epic_create_markdown_knowledge_base,
     epicTool: { toolset: "KnowledgeBaseToolset.KnowledgeBaseTools", name: "KnowledgeBaseToolset.KnowledgeBaseTools.CreateMarkdownKnowledgeBase", engines: ["5.9"] },
-    ...bp("mutate", "[Epic KnowledgeBaseToolset.KnowledgeBaseTools] Creates an empty markdown base under the project's Content/KnowledgeBases folder, writes the marker file that lets it be rediscovered on restart, and registers it. An empty base is valid; the first WriteKnowledge creates its first file. Raises an error if the alias is already registered or not a valid identifier, if RelativePath is not one or two plain segments, if the directory already belongs to another base, or if it cannot be written. Available on UE 5.9; absent from UE 5.8. Params: alias, description, relativePath", "epic_call_tool"),
+    ...bp("mutate", "[Epic KnowledgeBaseToolset.KnowledgeBaseTools] Creates an empty markdown base under the project's Content/KnowledgeBases folder, writes the marker file that lets it be rediscovered on restart, and registers it. An empty base is valid; the first WriteKnowledge creates its first file. Raises an error if the alias is already registered or not a valid identifier, if RelativePath is not one or two plain segments, if the directory already belongs to another base, or if it cannot be written. Available on UE 5.9; absent from UE 5.8.", "epic_call_tool"),
   },
   epic_create_skill: {
     epicSchema: S_epic_create_skill,
     epicTool: { toolset: "ToolsetRegistry.AgentSkillToolset", name: "ToolsetRegistry.AgentSkillToolset.CreateSkill", engines: ["5.8","5.9"] },
-    ...bp("mutate", "[Epic ToolsetRegistry.AgentSkillToolset] Creates a new AgentSkill. This should ONLY be called after getting explicit direction or permission from the user. Params: folderPath, assetName, description, details", "epic_call_tool"),
+    ...bp("mutate", "[Epic ToolsetRegistry.AgentSkillToolset] Creates a new AgentSkill. This should ONLY be called after getting explicit direction or permission from the user.", "epic_call_tool"),
   },
   epic_execute_tool_script: {
     epicSchema: S_epic_execute_tool_script,
     epicTool: { toolset: "editor_toolset.toolsets.programmatic.ProgrammaticToolset", name: "editor_toolset.toolsets.programmatic.ProgrammaticToolset.execute_tool_script", engines: ["5.8"] },
-    ...bp("mutate", "[Epic editor_toolset.toolsets.programmatic.ProgrammaticToolset] Execute a Python script against the toolset APIs. Use this to batch multiple tool calls into a single script execution, reducing round-trips and context usage. IMPORTANT: Available modules and usage instructions are described by the value returned by `get_execution_environment`. You MUST call `get_execution_environment` once in the conversation before using this tool. Read the value in the `instructions` field in the returned environment info prior to calling this function, so that you understand what APIs are available and how to use them. Before writing a script that calls multiple tools, look up the output schemas (if available) for any tools you plan to use. This returns the JSON schema describing each tool's return value, so you know how to parse results and pass data between calls. Available on UE 5.8; absent from UE 5.9. Params: script", "epic_call_tool"),
+    ...bp("mutate", "[Epic editor_toolset.toolsets.programmatic.ProgrammaticToolset] Execute a Python script against the toolset APIs. Use this to batch multiple tool calls into a single script execution, reducing round-trips and context usage. IMPORTANT: Available modules and usage instructions are described by the value returned by `get_execution_environment`. You MUST call `get_execution_environment` once in the conversation before using this tool. Read the value in the `instructions` field in the returned environment info prior to calling this function, so that you understand what APIs are available and how to use them. Before writing a script that calls multiple tools, look up the output schemas (if available) for any tools you plan to use. This returns the JSON schema describing each tool's return value, so you know how to parse results and pass data between calls. Available on UE 5.8; absent from UE 5.9.", "epic_call_tool"),
   },
   epic_get_docked_context: {
     epicSchema: S_epic_get_docked_context,
     epicTool: { toolset: "AIAssistantEditor.AIAssistantToolset", name: "AIAssistantEditor.AIAssistantToolset.GetDockedContext", engines: ["5.9"] },
-    ...bp("read", "[Epic AIAssistantEditor.AIAssistantToolset] Returns the UE tab layout and editor context in the window hosting the assistant. Tab information is available for tool windows with no asset editor. The result is empty when the assistant is closed or detached from a window. Available on UE 5.9; absent from UE 5.8. Params: none", "epic_call_tool"),
+    ...bp("read", "[Epic AIAssistantEditor.AIAssistantToolset] Returns the UE tab layout and editor context in the window hosting the assistant. Tab information is available for tool windows with no asset editor. The result is empty when the assistant is closed or detached from a window. Available on UE 5.9; absent from UE 5.8.", "epic_call_tool"),
   },
   epic_get_execution_environment: {
     epicSchema: S_epic_get_execution_environment,
     epicTool: { toolset: "editor_toolset.toolsets.programmatic.ProgrammaticToolset", name: "editor_toolset.toolsets.programmatic.ProgrammaticToolset.get_execution_environment", engines: ["5.8"] },
-    ...bp("read", "[Epic editor_toolset.toolsets.programmatic.ProgrammaticToolset] Get details about execution environment. This includes instructions on how to write scripts, and constraints, such as what modules may be imported and the script entrypoint and function signature. Available on UE 5.8; absent from UE 5.9. Params: none", "epic_call_tool"),
+    ...bp("read", "[Epic editor_toolset.toolsets.programmatic.ProgrammaticToolset] Get details about execution environment. This includes instructions on how to write scripts, and constraints, such as what modules may be imported and the script entrypoint and function signature. Available on UE 5.8; absent from UE 5.9.", "epic_call_tool"),
   },
   epic_get_knowledge_entry: {
     epicSchema: S_epic_get_knowledge_entry,
     epicTool: { toolset: "KnowledgeBaseToolset.KnowledgeBaseTools", name: "KnowledgeBaseToolset.KnowledgeBaseTools.GetKnowledgeEntry", engines: ["5.9"] },
-    ...bp("read", "[Epic KnowledgeBaseToolset.KnowledgeBaseTools] Returns one entry by id with its full body. Ids are exact, so take them from QueryKnowledgeBase hits rather than composing them; a miss names the nearest ids the base holds. Raises an error if the alias is not registered or no entry has that id. Available on UE 5.9; absent from UE 5.8. Params: alias, entryId", "epic_call_tool"),
+    ...bp("read", "[Epic KnowledgeBaseToolset.KnowledgeBaseTools] Returns one entry by id with its full body. Ids are exact, so take them from QueryKnowledgeBase hits rather than composing them; a miss names the nearest ids the base holds. Raises an error if the alias is not registered or no entry has that id. Available on UE 5.9; absent from UE 5.8.", "epic_call_tool"),
   },
   epic_get_project_context: {
     epicSchema: S_epic_get_project_context,
     epicTool: { toolset: "AIAssistantEditor.AIAssistantToolset", name: "AIAssistantEditor.AIAssistantToolset.GetProjectContext", engines: ["5.9"] },
-    ...bp("read", "[Epic AIAssistantEditor.AIAssistantToolset] Returns important information about the current project and/or current user. Available on UE 5.9; absent from UE 5.8. Params: none", "epic_call_tool"),
+    ...bp("read", "[Epic AIAssistantEditor.AIAssistantToolset] Returns important information about the current project and/or current user. Available on UE 5.9; absent from UE 5.8.", "epic_call_tool"),
   },
   epic_get_skills: {
     epicSchema: S_epic_get_skills,
     epicTool: { toolset: "ToolsetRegistry.AgentSkillToolset", name: "ToolsetRegistry.AgentSkillToolset.GetSkills", engines: ["5.8","5.9"] },
-    ...bp("read", "[Epic ToolsetRegistry.AgentSkillToolset] Returns detailed information about a specific set of AgentSkills. Params: skillPaths", "epic_call_tool"),
+    ...bp("read", "[Epic ToolsetRegistry.AgentSkillToolset] Returns detailed information about a specific set of AgentSkills.", "epic_call_tool"),
   },
   epic_list_knowledge_base_tags: {
     epicSchema: S_epic_list_knowledge_base_tags,
     epicTool: { toolset: "KnowledgeBaseToolset.KnowledgeBaseTools", name: "KnowledgeBaseToolset.KnowledgeBaseTools.ListKnowledgeBaseTags", engines: ["5.9"] },
-    ...bp("read", "[Epic KnowledgeBaseToolset.KnowledgeBaseTools] Lists the tags a base's entries carry, most common first, so a Tags filter is spelled from what exists rather than guessed. Tags are exact strings: \"simulation\" does not match \"Simulation\". Raises an error if the alias is not registered or the base fails to build. Available on UE 5.9; absent from UE 5.8. Params: alias, prefix, limit?", "epic_call_tool"),
+    ...bp("read", "[Epic KnowledgeBaseToolset.KnowledgeBaseTools] Lists the tags a base's entries carry, most common first, so a Tags filter is spelled from what exists rather than guessed. Tags are exact strings: \"simulation\" does not match \"Simulation\". Raises an error if the alias is not registered or the base fails to build. Available on UE 5.9; absent from UE 5.8.", "epic_call_tool"),
   },
   epic_list_knowledge_bases: {
     epicSchema: S_epic_list_knowledge_bases,
     epicTool: { toolset: "KnowledgeBaseToolset.KnowledgeBaseTools", name: "KnowledgeBaseToolset.KnowledgeBaseTools.ListKnowledgeBases", engines: ["5.9"] },
-    ...bp("read", "[Epic KnowledgeBaseToolset.KnowledgeBaseTools] Lists every registered knowledge base. Call this first: aliases are the handle every other tool takes and they vary by project. Choose a base by its Description. A base with a \"vocabulary\" consumer is the catalogue that tool's input is spelled from, so query it before calling that tool. Builds nothing. Available on UE 5.9; absent from UE 5.8. Params: none", "epic_call_tool"),
+    ...bp("read", "[Epic KnowledgeBaseToolset.KnowledgeBaseTools] Lists every registered knowledge base. Call this first: aliases are the handle every other tool takes and they vary by project. Choose a base by its Description. A base with a \"vocabulary\" consumer is the catalogue that tool's input is spelled from, so query it before calling that tool. Builds nothing. Available on UE 5.9; absent from UE 5.8.", "epic_call_tool"),
   },
   epic_list_skills: {
     epicSchema: S_epic_list_skills,
     epicTool: { toolset: "ToolsetRegistry.AgentSkillToolset", name: "ToolsetRegistry.AgentSkillToolset.ListSkills", engines: ["5.8","5.9"] },
-    ...bp("read", "[Epic ToolsetRegistry.AgentSkillToolset] Gets a summary of all AgentSkills in the project. Params: none", "epic_call_tool"),
+    ...bp("read", "[Epic ToolsetRegistry.AgentSkillToolset] Gets a summary of all AgentSkills in the project.", "epic_call_tool"),
   },
   epic_query_knowledge_base: {
     epicSchema: S_epic_query_knowledge_base,
     epicTool: { toolset: "KnowledgeBaseToolset.KnowledgeBaseTools", name: "KnowledgeBaseToolset.KnowledgeBaseTools.QueryKnowledgeBase", engines: ["5.9"] },
-    ...bp("read", "[Epic KnowledgeBaseToolset.KnowledgeBaseTools] Searches one base. Text is matched as plain words and ranked; Tags keep only entries carrying all of them; both empty lists the whole base. Bodies are truncated; GetKnowledgeEntry returns a hit's full payload. Raises an error if the alias is not registered or the base fails to build. Available on UE 5.9; absent from UE 5.8. Params: alias, text, tags, limit?", "epic_call_tool"),
+    ...bp("read", "[Epic KnowledgeBaseToolset.KnowledgeBaseTools] Searches one base. Text is matched as plain words and ranked; Tags keep only entries carrying all of them; both empty lists the whole base. Bodies are truncated; GetKnowledgeEntry returns a hit's full payload. Raises an error if the alias is not registered or the base fails to build. Available on UE 5.9; absent from UE 5.8.", "epic_call_tool"),
   },
   epic_update_skill: {
     epicSchema: S_epic_update_skill,
     epicTool: { toolset: "ToolsetRegistry.AgentSkillToolset", name: "ToolsetRegistry.AgentSkillToolset.UpdateSkill", engines: ["5.8","5.9"] },
-    ...bp("mutate", "[Epic ToolsetRegistry.AgentSkillToolset] Updates an existing AgentSkill. This should ONLY be called after getting explicit direction or permission from the user. Params: skillPath, description, details", "epic_call_tool"),
+    ...bp("mutate", "[Epic ToolsetRegistry.AgentSkillToolset] Updates an existing AgentSkill. This should ONLY be called after getting explicit direction or permission from the user.", "epic_call_tool"),
   },
   epic_write_knowledge: {
     epicSchema: S_epic_write_knowledge,
     epicTool: { toolset: "KnowledgeBaseToolset.KnowledgeBaseTools", name: "KnowledgeBaseToolset.KnowledgeBaseTools.WriteKnowledge", engines: ["5.9"] },
-    ...bp("mutate", "[Epic KnowledgeBaseToolset.KnowledgeBaseTools] Writes a structured entry into a markdown base as a JSON block, preserving the prose and other blocks in the file. An existing EntryId is replaced in the file that holds it, wherever that is; an empty EntryId appends a new entry to the file FileId names, creating the file if absent. Reuse the stem of a hit's Source as FileId so a topic accumulates rather than sprawls. Only markdown bases are writable; check bWritable in ListKnowledgeBases first. Raises an error if the alias is not registered, the base is read-only, BodyJson is not a JSON object, or the file cannot be written. Available on UE 5.9; absent from UE 5.8. Params: alias, fileId, summary, tags, bodyJson, entryId", "epic_call_tool"),
+    ...bp("mutate", "[Epic KnowledgeBaseToolset.KnowledgeBaseTools] Writes a structured entry into a markdown base as a JSON block, preserving the prose and other blocks in the file. An existing EntryId is replaced in the file that holds it, wherever that is; an empty EntryId appends a new entry to the file FileId names, creating the file if absent. Reuse the stem of a hit's Source as FileId so a topic accumulates rather than sprawls. Only markdown bases are writable; check bWritable in ListKnowledgeBases first. Raises an error if the alias is not registered, the base is read-only, BodyJson is not a JSON object, or the file cannot be written. Available on UE 5.9; absent from UE 5.8.", "epic_call_tool"),
   },
 };
 

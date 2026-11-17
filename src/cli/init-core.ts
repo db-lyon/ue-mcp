@@ -8,6 +8,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { EPIC_CATEGORIES } from "../tools/epic/index.js";
+import { ALL_TOOLS } from "../tools.js";
 import { projectConfigPath, readConfigDoc, writeConfigDoc } from "../config/ue-mcp-config.js";
 import { ProjectContext } from "../config/project.js";
 import type { ContextStrategy } from "../config/context-strategy.js";
@@ -89,43 +90,17 @@ export interface ToolCategory {
   alwaysOn?: boolean;
 }
 
-export const CATEGORIES: ToolCategory[] = [
-  { name: "project",    label: "project",       alwaysOn: true },
-  { name: "editor",     label: "editor",        alwaysOn: true },
-  { name: "reflection", label: "reflection",    alwaysOn: true },
-  { name: "level",      label: "levels",        description: "spawn/move/select actors, sublevels, world settings" },
-  { name: "blueprint",  label: "blueprints",    description: "Blueprint classes: variables, functions, components, nodes" },
-  { name: "material",   label: "materials",     description: "Materials, Material Functions, parameters" },
-  { name: "asset",      label: "assets",        description: "import/move/rename/delete content browser assets" },
-  { name: "animation",  label: "animation",     description: "anim sequences, montages, AnimBPs, skeletons" },
-  { name: "niagara",    label: "vfx (niagara)", description: "VFX systems, emitters, modules", requiredPlugins: ["Niagara"] },
-  { name: "landscape",  label: "landscape",     description: "terrain edit, layers, paint, sculpt" },
-  { name: "pcg",        label: "pcg",           description: "procedural content graphs", requiredPlugins: ["PCG"] },
-  { name: "foliage",    label: "foliage",       description: "instanced foliage placement and types" },
-  { name: "audio",      label: "audio",         description: "MetaSounds, sound cues, sound classes" },
-  { name: "widget",     label: "ui (widgets)",  description: "UMG widgets, editor utility widgets" },
-  { name: "gameplay",   label: "gameplay / ai", description: "input mappings, collision, navmesh, PIE", requiredPlugins: ["EnhancedInput"] },
-  { name: "gas",        label: "gas",           description: "Gameplay Ability System abilities, effects, attributes", requiredPlugins: ["GameplayAbilities"] },
-  { name: "networking", label: "networking",    description: "replication, dormancy, RPCs" },
-  { name: "demo",       label: "demo",          description: "tutorial / demo project scaffolding" },
-  // Plugins these reach are optional: the handlers report "not available" when
-  // one is off, so they are not forced on through requiredPlugins.
-  { name: "pie",            label: "pie testing",    description: "record, replay and diff PIE sessions, input injection, test scripts" },
-  { name: "statetree",      label: "statetree",      description: "StateTree states, tasks, conditions, transitions, bindings" },
-  { name: "chooser",        label: "chooser",        description: "ChooserTable rows and columns (Motion Matching selection)" },
-  { name: "dataflow",       label: "dataflow",       description: "Dataflow graphs, Chaos geometry and simulation assets (UE 5.8+)" },
-  { name: "conversation",   label: "conversation",   description: "Conversation dialogue graphs, speakers, entry points (UE 5.8+)" },
-  { name: "epic",           label: "epic toolsets",  description: "Unreal AI Toolset Registry discovery and direct dispatch (UE 5.8+)" },
-  { name: "fab",            label: "fab",            description: "Fab library sync, download cache, content import" },
-  { name: "datasmith",      label: "datasmith",      description: "Datasmith scene import and metadata queries" },
-  { name: "metahuman",      label: "metahuman",      description: "MetaHumanCharacter assets" },
-  { name: "source_control", label: "source control", description: "provider status, checkout, history, diff, submit" },
-  { name: "canvas",         label: "unreal canvas",  description: "Unreal Canvas renders, viewport stream, stencils, splats, cutouts (UE 5.9)" },
-  { name: "plugins",    label: "plugins",       alwaysOn: true },
-  // feedback has its own toggle: enabling it gives the agent a tool that can
-  // post to a public issue tracker, behind user approval.
-  { name: "feedback",   label: "feedback",      alwaysOn: true },
-];
+/** Every category, as its `label` option describes it to a person choosing categories. */
+export const CATEGORIES: ToolCategory[] = ALL_TOOLS.map((tool) => {
+  const label = tool.options?.label;
+  return {
+    name: tool.name,
+    label: label?.text ?? tool.name,
+    ...(label?.description ? { description: label.description } : {}),
+    ...(label?.requiredPlugins ? { requiredPlugins: [...label.requiredPlugins] } : {}),
+    ...(label?.alwaysOn ? { alwaysOn: true } : {}),
+  };
+});
 
 /** Categories that carry wrapped engine tools, read from the generated modules. */
 export const ENRICHABLE_CATEGORIES = Object.keys(EPIC_CATEGORIES).sort();

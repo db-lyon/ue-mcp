@@ -83,14 +83,19 @@ export const listEpicFabTools: HandlerActionSpec = {
   kind: "handler",
   effect: "read",
   editorBound: "Calls epic_list_toolsets and epic_list_mcp_tools, which read the editor's Toolset Registry and Unreal MCP plugin, and keeps the Fab tools.",
+  params: {
+    optional: ["includeSchemas"],
+    notes: {
+      includeSchemas: "bool",
+    },
+  },
   description:
     "List Epic's built-in Fab tools the connected editor has, which search the Fab catalog and import listings "
     + "(the Fab plugin's FabToolset.FabToolset in Unreal's Toolset Registry, UE 5.9, and any Fab tool registered with Epic's Unreal MCP plugin). "
     + "Each tool names the call that runs it: epic(call_tool) with its toolset and qualified name, or epic(call_mcp_tool), "
     + "plus the fab epic_* action that wraps it when this session has one. "
     + "ue-mcp does not replace these tools; use them for catalog search and free-asset import, and fab's own actions for the owned library. "
-    + "includeSchemas returns each tool's input schema. available=false with a note when the editor has none. "
-    + "Params: includeSchemas? (bool)",
+    + "includeSchemas returns each tool's input schema. available=false with a note when the editor has none.",
   handler: async (ctx, p) => {
     const includeSchemas = p.includeSchemas === true;
     const [registry, mcp] = await Promise.all([

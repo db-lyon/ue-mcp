@@ -25,7 +25,12 @@ describe("asset.bulk_set_properties", () => {
     const action = assetTool.actions.bulk_set_properties;
     expect(action.bridge).toBe("bulk_set_asset_properties");
     expect(action.mapParams).toBeUndefined();
-    expect(action.description).toContain("Params: items, save?, dryRun?, continueOnError?");
+    expect(action.paramSpec?.map((p) => [p.name, p.required])).toEqual([
+      ["items", true],
+      ["save", false],
+      ["dryRun", false],
+      ["continueOnError", false],
+    ]);
   });
 
   it("exposes continueOnError so a partial batch is reachable", () => {

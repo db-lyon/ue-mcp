@@ -72,7 +72,7 @@
     "golden:record": "node scripts/record-golden.mjs",
     "release": "node scripts/release-run.mjs",
     "release:notes": "node scripts/compose-release-notes.mjs",
-    "audit:docs": "node scripts/audit-docs.mjs && node scripts/audit-params.mjs",
+    "audit:docs": "node scripts/audit-docs.mjs",
     "audit:handlers": "node scripts/audit-handlers.mjs",
     "lint:prose": "node scripts/lint-prose.mjs",
     "check:config": "node scripts/check-tracked-config.mjs",

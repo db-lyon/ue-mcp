@@ -138,9 +138,10 @@ describe("the generated actions", () => {
     }
   });
 
-  it("documents its parameters, like every other action on this surface", () => {
+  it("declares its parameters structurally, with no prose clause in the description", () => {
     for (const { tool, action, spec } of epicActions()) {
-      expect(spec.description ?? "", `${tool}.${action}`).toMatch(/\bParams:/);
+      expect(spec.kind === "bridge" && spec.epicSchema, `${tool}.${action}`).toBeTruthy();
+      expect(spec.description ?? "", `${tool}.${action}`).not.toMatch(/\bParams:/);
     }
   });
 
@@ -154,11 +155,8 @@ describe("the generated actions", () => {
       const declared = new Set(Object.keys(tool.schema));
       for (const [action, spec] of Object.entries(tool.actions)) {
         if (!action.startsWith("epic_")) continue;
-        const clause = (spec.description ?? "").split(/\bParams:\s*/)[1] ?? "";
-        if (clause.trim() === "none") continue;
-        for (const raw of clause.split(",")) {
-          const name = raw.trim().replace(/\?$/, "");
-          if (!name || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) continue;
+        if (spec.kind !== "bridge") continue;
+        for (const name of Object.keys(spec.epicSchema?.properties ?? {})) {
           if (!declared.has(name)) offenders.push(`${tool.name}.${action}: ${name}`);
         }
       }
