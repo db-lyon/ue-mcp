@@ -4,6 +4,7 @@
 #include "Dom/JsonValue.h"
 #include "Dom/JsonObject.h"
 #include "MCPHandlerSpec.h"
+#include "MCPWireContract.h"
 
 /**
  * Public API for plugins that extend the UE-MCP bridge with their own
@@ -28,30 +29,9 @@
  * is responsible for its own gating.
  */
 
-/** Current bridge handler ABI version. Bump when the FHandlerFunction
- *  signature or registration contract changes in a breaking way.
- *  2: external handlers can register a parameter contract (MCPHandlerSpec.h). */
-#define UEMCP_BRIDGE_API_VERSION 2
-
-/**
- * Current bridge wire protocol version, reported by get_bridge_capabilities.
- *
- * Distinct from the handler ABI above: this describes what a client can expect
- * of the socket (framing, control frames, the handshake itself), not what a
- * native plugin can expect of the registration API.
- *
- * Version 1 is every bridge built before the handshake existed. Those answer
- * get_bridge_capabilities with "Unknown method", which is how a client
- * recognises them.
- *
- * Version 2 reassembles messages across reads and frames, answers close and
- * ping frames, validates the upgrade request, and serves this handshake.
- *
- * Bump this when a change would make an older client misread the wire. The
- * client compares its own expectation against what it is told and names both
- * numbers when they differ, so the value is only useful if it moves.
- */
-#define UEMCP_BRIDGE_PROTOCOL_VERSION 2
+// UEMCP_BRIDGE_API_VERSION (the handler ABI) and UEMCP_BRIDGE_PROTOCOL_VERSION
+// (the socket) come from MCPWireContract.h, generated from the contract the
+// client is generated from too.
 
 namespace UEMCP
 {

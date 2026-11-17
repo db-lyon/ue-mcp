@@ -142,15 +142,17 @@ void MCPCheckpointRecordBeforeWrite(const FString& Filename)
 	R.Seen.Add(Key);
 	++R.Count;
 
+	namespace M = UEMCPWire::CheckpointManifest;
 	TSharedPtr<FJsonObject> Line = MakeShared<FJsonObject>();
-	Line->SetStringField(TEXT("path"), Full);
-	Line->SetBoolField(TEXT("existed"), bExisted);
-	if (bExisted) Line->SetStringField(TEXT("copy"), Copy);
+	Line->SetNumberField(M::VersionField, M::Version);
+	Line->SetStringField(M::PathField, Full);
+	Line->SetBoolField(M::ExistedField, bExisted);
+	if (bExisted) Line->SetStringField(M::CopyField, Copy);
 	FString Text;
 	TSharedRef<TJsonWriter<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>> Writer = TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&Text);
 	FJsonSerializer::Serialize(Line.ToSharedRef(), Writer);
 	Text += TEXT("\n");
-	FFileHelper::SaveStringToFile(Text, *FPaths::Combine(R.PendingDir, TEXT("manifest.jsonl")),
+	FFileHelper::SaveStringToFile(Text, *FPaths::Combine(R.PendingDir, M::File),
 		FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM, &FileManager, FILEWRITE_Append);
 }
 

@@ -192,18 +192,17 @@ describe("readUnrealCanvas and doctor", () => {
   });
 });
 
-describe("C++ parity", () => {
-  it("BridgePortConfig.cpp reserves the same ports and the walk steps over them", () => {
+describe("the plugin's port policy", () => {
+  // The ports themselves are the wire contract's, so they cannot drift. What a
+  // contract cannot say is that every resolution path applies them.
+  it("sends every resolved port through the Canvas check, and the walk steps over the reserved ones", () => {
     const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
     const priv = path.join(repo, "plugin", "ue_mcp_bridge", "Source", "UE_MCP_Bridge", "Private");
     const config = fs.readFileSync(path.join(priv, "BridgePortConfig.cpp"), "utf8");
-    const list = /kCanvasReservedPorts\[\]\s*=\s*\{([^}]*)\}/.exec(config)?.[1];
-    expect(list?.split(",").map((s) => Number(s.trim()))).toEqual(CANVAS_RESERVED_PORTS.map((r) => r.port));
-    expect(config).toContain('FindPlugin(TEXT("UnrealCanvasBridge"))');
-    // Every pinned return goes through the check; only the derived one does not.
-    const resolve = config.slice(config.indexOf("FMCPBridgePortChoice FMCPBridgeServer::ResolveConfiguredPort()"));
-    expect((resolve.match(/return KeepOffCanvasPorts\(Choice\);/g) ?? []).length).toBe(4);
+    expect(config).toContain("UEMCPWire::CanvasReservedPorts");
+    const resolve = config.slice(config.indexOf("FMCPBridgePortChoice MCPBridgePortPolicy::Resolve()"));
+    expect((resolve.match(/return Finish\(Choice\);/g) ?? []).length).toBe(5);
     const server = fs.readFileSync(path.join(priv, "BridgeServer.cpp"), "utf8");
-    expect(server).toMatch(/if \(IsCanvasReservedPort\(RequestedPort \+ Offset\)\)\s*\{\s*continue;/);
+    expect(server).toMatch(/if \(PortChoice\.AvoidPorts\.Contains\(RequestedPort \+ Offset\)\)\s*\{\s*continue;/);
   });
 });

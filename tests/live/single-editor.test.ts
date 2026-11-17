@@ -176,10 +176,13 @@ describe("the editor's own records", () => {
         JSON.stringify({ port: 49155, pid: 0x7ffffffe, startedAt: new Date().toISOString() }),
         "utf-8",
       );
+      expect(isPidAlive(0x7ffffffe)).toBe(false);
       const resolved = resolveBridgeTarget(fake.dir);
-      if (!resolved.ok) throw new Error(resolved.reason);
-      expect(resolved.port).toBe(49155);
-      expect(isPidAlive(resolved.pid!)).toBe(false);
+      expect(resolved.ok).toBe(false);
+      if (resolved.ok) return;
+      // Not an address, but still reported, so stop can say a crash left it.
+      expect(resolved.deadLockfile?.port).toBe(49155);
+      expect(resolved.reason).toContain("crashed");
     } finally {
       fake.cleanup();
     }

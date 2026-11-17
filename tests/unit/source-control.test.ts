@@ -162,7 +162,7 @@ describe("source_control", () => {
 
 describe("checkout on write", () => {
   it("is off unless the session or UE_MCP_CHECKOUT_MODE turns it on", () => {
-    expect(HANDLERS).toMatch(/GetEnvironmentVariable\(TEXT\("UE_MCP_CHECKOUT_MODE"\)\)\.Equals\(TEXT\("auto"\)/);
+    expect(HANDLERS).toMatch(/GetEnvironmentVariable\(UEMCPWire::EnvVar::CheckoutMode\)\.Equals\(TEXT\("auto"\)/);
     expect(sourceControlTool.actions.set_checkout_mode.description).toMatch(/manual \(the default\)/);
   });
 

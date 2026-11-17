@@ -12,6 +12,7 @@
 #include "Math/Transform.h"
 #include <initializer_list>
 #include "HandlerResult.h"
+#include "MCPWireContract.h"
 
 // ── Parameter read tracking (#1057) ──────────────────────────────────────────
 //
@@ -20,12 +21,18 @@
 // arrived and was never read comes back as `paramsNotRead`. Reads of nested
 // objects are not noted, and with no scope open nothing is.
 
-/** Names the dispatcher consumes. Mirrors ROUTING_PARAM_NAMES in src/routing-params.ts. */
+/** Names the dispatcher consumes, from the wire contract the client shares. */
 inline const TArray<FString>& MCPRoutingParamNames()
 {
-	static const TArray<FString> Names = {
-		TEXT("action"), TEXT("timeoutMs"), TEXT("select"), TEXT("omit"), TEXT("editor"), TEXT("toEditor"),
-	};
+	static const TArray<FString> Names = []()
+	{
+		TArray<FString> Out;
+		for (const TCHAR* Name : UEMCPWire::RoutingParams)
+		{
+			Out.Add(Name);
+		}
+		return Out;
+	}();
 	return Names;
 }
 

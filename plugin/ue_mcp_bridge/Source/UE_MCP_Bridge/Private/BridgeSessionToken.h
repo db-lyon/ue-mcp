@@ -6,10 +6,11 @@
 //
 // The decision and file logic are free functions so the automation tests in
 // Private/Tests/BridgeSessionTokenTests.cpp can exercise them without a socket.
-// The client half lives in src/bridge/bridge-token.ts; keep the directory, file
-// name and header in step with it.
+// The directory, file name, scheme and header are the wire contract's
+// (MCPWireContract.h), which the client reads from the same source.
 
 #include "CoreMinimal.h"
+#include "MCPWireContract.h"
 
 /** Outcome of checking an upgrade request's Authorization header. */
 enum class EMCPBridgeAuthDecision : uint8
@@ -28,14 +29,21 @@ enum class EMCPBridgeAuthDecision : uint8
 namespace UEMCPBridgeSessionToken
 {
 	/** Random bytes in a token. The wire and file form is twice this many lowercase hex digits. */
-	constexpr int32 TokenBytes = 32;
+	constexpr int32 TokenBytes = UEMCPWire::Token::Bytes;
 
 	/** Response header naming the scheme, sent on the 101 and on a 401. */
-	inline const TCHAR* AuthSchemeHeaderName() { return TEXT("X-UE-MCP-Bridge-Auth"); }
-	inline const TCHAR* AuthSchemeHeaderValue() { return TEXT("token-file"); }
+	inline const TCHAR* AuthSchemeHeaderName() { return UEMCPWire::Token::SchemeHeader; }
+	inline const TCHAR* AuthSchemeHeaderValue() { return UEMCPWire::Token::SchemeHeaderValue; }
 
 	/** Overrides the token directory on both sides; hermetic tests set it. */
-	inline const TCHAR* DirectoryEnvVar() { return TEXT("UE_MCP_BRIDGE_TOKEN_DIR"); }
+	inline const TCHAR* DirectoryEnvVar() { return UEMCPWire::EnvVar::BridgeTokenDir; }
+
+	/**
+	 * <home>/.ue-mcp, with home resolved the way Node's os.homedir() resolves it
+	 * (USERPROFILE on Windows, HOME elsewhere, then the platform's own answer),
+	 * so the client and the plugin agree. Empty when no home can be found.
+	 */
+	FString UserMcpDir();
 
 	/**
 	 * Fill Out with Num bytes from the operating system's cryptographic random
@@ -66,12 +74,7 @@ namespace UEMCPBridgeSessionToken
 	/** The plain-text body of the 401 for a refusal. Never contains a token. */
 	FString DescribeRefusal(EMCPBridgeAuthDecision Decision, int32 Port);
 
-	/**
-	 * Where token files live: UE_MCP_BRIDGE_TOKEN_DIR, else <home>/.ue-mcp/bridge.
-	 * Home is resolved the way Node's os.homedir() resolves it (USERPROFILE on
-	 * Windows, HOME elsewhere, then the platform's own answer), so the client
-	 * and the plugin agree. Empty when no home can be found.
-	 */
+	/** Where token files live: UE_MCP_BRIDGE_TOKEN_DIR, else UserMcpDir()/bridge. Empty when no home can be found. */
 	FString TokenDirectory();
 
 	/** <Dir>/<Port>.token */

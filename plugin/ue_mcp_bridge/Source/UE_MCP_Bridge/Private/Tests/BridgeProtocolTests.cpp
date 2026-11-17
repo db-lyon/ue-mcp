@@ -4,6 +4,8 @@
 #include "BridgeServer.h"
 #include "BridgeStateFiles.h"
 #include "MCPHandlerRegistration.h"
+#include "MCPWireContract.h"
+#include "BridgePortConfig.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 #include "HAL/FileManager.h"
@@ -157,11 +159,11 @@ bool FMCPBridgeFrameReassemblyTest::RunTest(const FString& Parameters)
 		Buffer.Append(MakeClientFrame(0x1, TextPayload(TEXT("{\"id\":\"two\"}"))));
 
 		TestEqual(TEXT("first frame decodes"),
-			(int32)FMCPBridgeServer::DecodeWebSocketFrame(Buffer, Frame, Error, CloseCode), (int32)EMCPFrameDecode::Decoded);
+			(int32)MCPFrameCodec::Decode(Buffer, Frame, Error, CloseCode), (int32)EMCPFrameDecode::Decoded);
 		TestEqual(TEXT("first payload"), PayloadAsText(Frame.Payload), FString(TEXT("{\"id\":\"one\"}")));
 
 		TestEqual(TEXT("second frame decodes from the same segment"),
-			(int32)FMCPBridgeServer::DecodeWebSocketFrame(Buffer, Frame, Error, CloseCode), (int32)EMCPFrameDecode::Decoded);
+			(int32)MCPFrameCodec::Decode(Buffer, Frame, Error, CloseCode), (int32)EMCPFrameDecode::Decoded);
 		TestEqual(TEXT("second payload"), PayloadAsText(Frame.Payload), FString(TEXT("{\"id\":\"two\"}")));
 
 		TestEqual(TEXT("both frames were consumed"), Buffer.Num(), 0);
@@ -176,12 +178,12 @@ bool FMCPBridgeFrameReassemblyTest::RunTest(const FString& Parameters)
 		const int32 PartialSize = Partial.Num();
 
 		TestEqual(TEXT("a partial frame asks for more data"),
-			(int32)FMCPBridgeServer::DecodeWebSocketFrame(Partial, Frame, Error, CloseCode), (int32)EMCPFrameDecode::NeedMoreData);
+			(int32)MCPFrameCodec::Decode(Partial, Frame, Error, CloseCode), (int32)EMCPFrameDecode::NeedMoreData);
 		TestEqual(TEXT("a partial frame consumes nothing"), Partial.Num(), PartialSize);
 
 		Partial.Append(Whole.GetData() + Whole.Num() - 3, 3);
 		TestEqual(TEXT("the completed frame decodes"),
-			(int32)FMCPBridgeServer::DecodeWebSocketFrame(Partial, Frame, Error, CloseCode), (int32)EMCPFrameDecode::Decoded);
+			(int32)MCPFrameCodec::Decode(Partial, Frame, Error, CloseCode), (int32)EMCPFrameDecode::Decoded);
 		TestEqual(TEXT("split payload"), PayloadAsText(Frame.Payload), FString(TEXT("{\"id\":\"split\"}")));
 	}
 
@@ -197,7 +199,7 @@ bool FMCPBridgeFrameReassemblyTest::RunTest(const FString& Parameters)
 
 		TArray<uint8> Buffer = MakeClientFrame(0x1, Large);
 		TestEqual(TEXT("a 100 KB frame decodes"),
-			(int32)FMCPBridgeServer::DecodeWebSocketFrame(Buffer, Frame, Error, CloseCode), (int32)EMCPFrameDecode::Decoded);
+			(int32)MCPFrameCodec::Decode(Buffer, Frame, Error, CloseCode), (int32)EMCPFrameDecode::Decoded);
 		TestEqual(TEXT("100 KB payload length survives"), Frame.Payload.Num(), Large.Num());
 		TestTrue(TEXT("100 KB payload content survives"), Frame.Payload == Large);
 	}
@@ -211,12 +213,12 @@ bool FMCPBridgeFrameReassemblyTest::RunTest(const FString& Parameters)
 		Buffer.Append(MakeClientFrame(0x0, TextPayload(TEXT("\"frag\"}")), /*bFinal*/ true));
 
 		TestEqual(TEXT("first fragment decodes"),
-			(int32)FMCPBridgeServer::DecodeWebSocketFrame(Buffer, Frame, Error, CloseCode), (int32)EMCPFrameDecode::Decoded);
+			(int32)MCPFrameCodec::Decode(Buffer, Frame, Error, CloseCode), (int32)EMCPFrameDecode::Decoded);
 		TestFalse(TEXT("first fragment is not final"), Frame.bFinal);
 		TestEqual(TEXT("first fragment is a text frame"), (int32)Frame.Opcode, (int32)EMCPWebSocketOpcode::Text);
 
 		TestEqual(TEXT("continuation decodes"),
-			(int32)FMCPBridgeServer::DecodeWebSocketFrame(Buffer, Frame, Error, CloseCode), (int32)EMCPFrameDecode::Decoded);
+			(int32)MCPFrameCodec::Decode(Buffer, Frame, Error, CloseCode), (int32)EMCPFrameDecode::Decoded);
 		TestTrue(TEXT("continuation is final"), Frame.bFinal);
 		TestEqual(TEXT("continuation carries the continuation opcode"), (int32)Frame.Opcode, (int32)EMCPWebSocketOpcode::Continuation);
 	}
@@ -231,7 +233,7 @@ bool FMCPBridgeFrameReassemblyTest::RunTest(const FString& Parameters)
 		TArray<uint8> Buffer = MakeClientFrame(0x8, ClosePayload);
 
 		TestEqual(TEXT("a close frame decodes"),
-			(int32)FMCPBridgeServer::DecodeWebSocketFrame(Buffer, Frame, Error, CloseCode), (int32)EMCPFrameDecode::Decoded);
+			(int32)MCPFrameCodec::Decode(Buffer, Frame, Error, CloseCode), (int32)EMCPFrameDecode::Decoded);
 		TestEqual(TEXT("a close frame is recognised as one"), (int32)Frame.Opcode, (int32)EMCPWebSocketOpcode::Close);
 		TestEqual(TEXT("the peer's status code survives"), (int32)Frame.Payload.Num(), 2);
 	}
@@ -240,7 +242,7 @@ bool FMCPBridgeFrameReassemblyTest::RunTest(const FString& Parameters)
 	{
 		TArray<uint8> Buffer = MakeClientFrame(0x9, TextPayload(TEXT("hb")));
 		TestEqual(TEXT("a ping decodes"),
-			(int32)FMCPBridgeServer::DecodeWebSocketFrame(Buffer, Frame, Error, CloseCode), (int32)EMCPFrameDecode::Decoded);
+			(int32)MCPFrameCodec::Decode(Buffer, Frame, Error, CloseCode), (int32)EMCPFrameDecode::Decoded);
 		TestEqual(TEXT("a ping is recognised as one"), (int32)Frame.Opcode, (int32)EMCPWebSocketOpcode::Ping);
 	}
 
@@ -268,7 +270,7 @@ bool FMCPBridgeFrameRefusalTest::RunTest(const FString& Parameters)
 		Buffer.Add('h');
 		Buffer.Add('i');
 		TestEqual(TEXT("an unmasked client frame is refused"),
-			(int32)FMCPBridgeServer::DecodeWebSocketFrame(Buffer, Frame, Error, CloseCode), (int32)EMCPFrameDecode::ProtocolError);
+			(int32)MCPFrameCodec::Decode(Buffer, Frame, Error, CloseCode), (int32)EMCPFrameDecode::ProtocolError);
 		TestEqual(TEXT("refused as a framing violation"), (int32)CloseCode, 1002);
 	}
 
@@ -278,7 +280,7 @@ bool FMCPBridgeFrameRefusalTest::RunTest(const FString& Parameters)
 		TArray<uint8> Buffer = MakeClientFrame(0x1, TextPayload(TEXT("x")));
 		Buffer[0] |= 0x40; // RSV1
 		TestEqual(TEXT("a reserved bit is refused"),
-			(int32)FMCPBridgeServer::DecodeWebSocketFrame(Buffer, Frame, Error, CloseCode), (int32)EMCPFrameDecode::ProtocolError);
+			(int32)MCPFrameCodec::Decode(Buffer, Frame, Error, CloseCode), (int32)EMCPFrameDecode::ProtocolError);
 	}
 
 	// A 64-bit length must accumulate in 64 bits. Folding it into an int32 is
@@ -297,13 +299,13 @@ bool FMCPBridgeFrameRefusalTest::RunTest(const FString& Parameters)
 			Buffer.Add(0x00); // mask key
 		}
 		TestEqual(TEXT("a 64-bit length with the high bit set is refused"),
-			(int32)FMCPBridgeServer::DecodeWebSocketFrame(Buffer, Frame, Error, CloseCode), (int32)EMCPFrameDecode::ProtocolError);
+			(int32)MCPFrameCodec::Decode(Buffer, Frame, Error, CloseCode), (int32)EMCPFrameDecode::ProtocolError);
 	}
 
 	// Too large is reported as too large (1009), never as broken framing, so a
 	// caller can tell "you sent more than I hold" from "your stream is corrupt".
 	{
-		const uint64 TooLarge = (uint64)FMCPBridgeServer::MaxMessageBytes() + 1;
+		const uint64 TooLarge = (uint64)MCPFrameCodec::MaxMessageBytes() + 1;
 		TArray<uint8> Buffer;
 		Buffer.Add(0x81);
 		Buffer.Add((uint8)(0x80 | 127));
@@ -316,7 +318,7 @@ bool FMCPBridgeFrameRefusalTest::RunTest(const FString& Parameters)
 			Buffer.Add(0x00); // mask key
 		}
 		TestEqual(TEXT("an oversized frame is refused"),
-			(int32)FMCPBridgeServer::DecodeWebSocketFrame(Buffer, Frame, Error, CloseCode), (int32)EMCPFrameDecode::ProtocolError);
+			(int32)MCPFrameCodec::Decode(Buffer, Frame, Error, CloseCode), (int32)EMCPFrameDecode::ProtocolError);
 		TestEqual(TEXT("refused as too big, not as bad framing"), (int32)CloseCode, 1009);
 	}
 
@@ -326,19 +328,19 @@ bool FMCPBridgeFrameRefusalTest::RunTest(const FString& Parameters)
 		Payload.SetNumZeroed(126);
 		TArray<uint8> Buffer = MakeClientFrame(0x9, Payload);
 		TestEqual(TEXT("an oversized control frame is refused"),
-			(int32)FMCPBridgeServer::DecodeWebSocketFrame(Buffer, Frame, Error, CloseCode), (int32)EMCPFrameDecode::ProtocolError);
+			(int32)MCPFrameCodec::Decode(Buffer, Frame, Error, CloseCode), (int32)EMCPFrameDecode::ProtocolError);
 	}
 	{
 		TArray<uint8> Buffer = MakeClientFrame(0x9, TextPayload(TEXT("x")), /*bFinal*/ false);
 		TestEqual(TEXT("a fragmented control frame is refused"),
-			(int32)FMCPBridgeServer::DecodeWebSocketFrame(Buffer, Frame, Error, CloseCode), (int32)EMCPFrameDecode::ProtocolError);
+			(int32)MCPFrameCodec::Decode(Buffer, Frame, Error, CloseCode), (int32)EMCPFrameDecode::ProtocolError);
 	}
 
 	// An opcode the bridge does not implement is a stream it cannot follow.
 	{
 		TArray<uint8> Buffer = MakeClientFrame(0x3, TextPayload(TEXT("x")));
 		TestEqual(TEXT("an unsupported opcode is refused"),
-			(int32)FMCPBridgeServer::DecodeWebSocketFrame(Buffer, Frame, Error, CloseCode), (int32)EMCPFrameDecode::ProtocolError);
+			(int32)MCPFrameCodec::Decode(Buffer, Frame, Error, CloseCode), (int32)EMCPFrameDecode::ProtocolError);
 	}
 
 	return true;
@@ -353,7 +355,7 @@ bool FMCPBridgeOutboundFramingTest::RunTest(const FString& Parameters)
 {
 	// Short: a one-byte length, no mask bit (a server never masks).
 	{
-		const TArray<uint8> Frame = FMCPBridgeServer::CreateWebSocketFrame(TEXT("hello"));
+		const TArray<uint8> Frame = MCPFrameCodec::CreateTextFrame(TEXT("hello"));
 		TestEqual(TEXT("FIN plus text opcode"), (int32)Frame[0], 0x81);
 		TestEqual(TEXT("length in the second byte, unmasked"), (int32)Frame[1], 5);
 		TestEqual(TEXT("header plus payload"), Frame.Num(), 7);
@@ -362,7 +364,7 @@ bool FMCPBridgeOutboundFramingTest::RunTest(const FString& Parameters)
 	// 16-bit extended length.
 	{
 		const FString Message = FString::ChrN(1000, TEXT('a'));
-		const TArray<uint8> Frame = FMCPBridgeServer::CreateWebSocketFrame(Message);
+		const TArray<uint8> Frame = MCPFrameCodec::CreateTextFrame(Message);
 		TestEqual(TEXT("126 selects the 16-bit length"), (int32)Frame[1], 126);
 		const int32 Declared = ((int32)Frame[2] << 8) | (int32)Frame[3];
 		TestEqual(TEXT("declared length matches the payload"), Declared, 1000);
@@ -375,7 +377,7 @@ bool FMCPBridgeOutboundFramingTest::RunTest(const FString& Parameters)
 	{
 		const int32 Length = 70000;
 		const FString Message = FString::ChrN(Length, TEXT('b'));
-		const TArray<uint8> Frame = FMCPBridgeServer::CreateWebSocketFrame(Message);
+		const TArray<uint8> Frame = MCPFrameCodec::CreateTextFrame(Message);
 		TestEqual(TEXT("127 selects the 64-bit length"), (int32)Frame[1], 127);
 
 		uint64 Declared = 0;
@@ -392,7 +394,7 @@ bool FMCPBridgeOutboundFramingTest::RunTest(const FString& Parameters)
 		TArray<uint8> Payload;
 		Payload.Add(0x03);
 		Payload.Add(0xF1); // 1009
-		const TArray<uint8> Frame = FMCPBridgeServer::CreateControlFrame(EMCPWebSocketOpcode::Close, Payload);
+		const TArray<uint8> Frame = MCPFrameCodec::CreateControlFrame(EMCPWebSocketOpcode::Close, Payload);
 		TestEqual(TEXT("FIN plus close opcode"), (int32)Frame[0], 0x88);
 		TestEqual(TEXT("payload length"), (int32)Frame[1], 2);
 		const int32 Code = ((int32)Frame[2] << 8) | (int32)Frame[3];
@@ -413,32 +415,23 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 
 bool FMCPBridgeDerivedPortTest::RunTest(const FString& Parameters)
 {
-	// The client derives the same number from the same path (src/port.ts). If
-	// these two drift, a project with no lockfile has its halves on different
-	// ports and the failure looks like "no editor is running".
-	const FString Path = TEXT("C:/Users/example/Projects/Demo/");
-	const int32 First = FMCPBridgeServer::DeriveProjectPort(Path);
-
-	TestTrue(TEXT("derived port is inside the ephemeral range"), First >= 49152 && First <= 65535);
-	TestEqual(TEXT("derivation is deterministic"), FMCPBridgeServer::DeriveProjectPort(Path), First);
-
-	// Normalization is what makes the two sides agree despite separators,
-	// trailing slashes and drive-letter casing.
-	TestEqual(TEXT("backslashes normalize"),
-		FMCPBridgeServer::DeriveProjectPort(TEXT("C:\\Users\\example\\Projects\\Demo\\")), First);
-	TestEqual(TEXT("a missing trailing slash normalizes"),
-		FMCPBridgeServer::DeriveProjectPort(TEXT("C:/Users/example/Projects/Demo")), First);
-	TestEqual(TEXT("case normalizes"),
-		FMCPBridgeServer::DeriveProjectPort(TEXT("c:/users/example/projects/demo")), First);
+	// The client derives the same number from the same path. If the two drift, a
+	// project with no lockfile has its halves on different ports and the failure
+	// looks like "no editor is running". The vectors are the wire contract's,
+	// and tests/unit/wire-contract.test.ts holds the client to the same ones.
+	for (const UEMCPWire::Port::FHashVector& Vector : UEMCPWire::Port::HashVectors)
+	{
+		TestEqual(FString::Printf(TEXT("%s normalizes"), Vector.Root),
+			FMCPBridgeStateFiles::NormalizeProjectRoot(Vector.Root), FString(Vector.Normalized));
+		TestEqual(FString::Printf(TEXT("%s derives the contract's port"), Vector.Root),
+			MCPBridgePortPolicy::DeriveProjectPort(Vector.Root), Vector.Port);
+	}
 
 	// Different worktrees have to land on different ports, which is the whole
 	// reason the port is derived rather than fixed.
 	TestTrue(TEXT("a different project derives a different port"),
-		FMCPBridgeServer::DeriveProjectPort(TEXT("C:/Users/example/Projects/Other")) != First);
-
-	TestEqual(TEXT("the shared normalizer agrees"),
-		FMCPBridgeStateFiles::NormalizeProjectRoot(TEXT("C:\\Users\\Example\\Demo\\")),
-		FString(TEXT("c:/users/example/demo")));
+		MCPBridgePortPolicy::DeriveProjectPort(TEXT("C:/work/game-main"))
+			!= MCPBridgePortPolicy::DeriveProjectPort(TEXT("C:/work/game-feature")));
 
 	return true;
 }
@@ -601,7 +594,10 @@ bool FMCPBridgeCapabilitiesTest::RunTest(const FString& Parameters)
 	// Constructed, never started: registering handlers touches no socket and
 	// writes no file, and the payload is built from values snapshotted at
 	// construction, which is exactly why it can be answered off the game thread.
-	FMCPBridgeServer Server(49700, TEXT("automation test"), /*bPinned*/ false);
+	FMCPBridgePortChoice Choice;
+	Choice.Port = 49700;
+	Choice.Source = TEXT("automation test");
+	FMCPBridgeServer Server(Choice);
 
 	const TSharedPtr<FJsonObject> Payload = Server.BuildCapabilitiesPayload();
 	TestTrue(TEXT("a payload is produced"), Payload.IsValid());

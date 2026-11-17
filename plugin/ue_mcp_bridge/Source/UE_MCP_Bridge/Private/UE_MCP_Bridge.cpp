@@ -3,6 +3,7 @@
 #include "Handlers/Fab/FabDownloads.h"
 #include "Modules/ModuleManager.h"
 #include "BridgeServer.h"
+#include "MCPWireContract.h"
 #include "EngineStatusHooks.h"
 #include "DeletedActorPackages.h"
 #include "HandlerSceneCaptureJob.h"
@@ -55,7 +56,7 @@ namespace
 		{
 			return FromCommandLine;
 		}
-		return FPlatformMisc::GetEnvironmentVariable(TEXT("UE_MCP_DIALOG_POLICY"));
+		return FPlatformMisc::GetEnvironmentVariable(UEMCPWire::EnvVar::DialogPolicy);
 	}
 
 	void ApplyConfiguredDialogPolicies(FMCPHandlerRegistry& Registry)
@@ -138,8 +139,8 @@ void FUE_MCP_BridgeModule::StartupModule()
 	// order the client uses (#819). Deriving lets multiple checkouts run
 	// side-by-side without colliding; the probe loop in Run() resolves the rare
 	// clash and publishes the actual bound port to the per-project lockfile.
-	const FMCPBridgePortChoice PortChoice = FMCPBridgeServer::ResolveConfiguredPort();
-	G_BridgeServer = MakeShared<FMCPBridgeServer>(PortChoice.Port, PortChoice.Source, PortChoice.bPinned);
+	const FMCPBridgePortChoice PortChoice = MCPBridgePortPolicy::Resolve();
+	G_BridgeServer = MakeShared<FMCPBridgeServer>(PortChoice);
 
 	// The snapshot has been publishing since PostConfigInit, from the
 	// UE_MCP_BridgeStatus module. Now that Slate, the shader compiler and the

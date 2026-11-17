@@ -60,7 +60,7 @@ namespace MCPSourceControlState
 {
 	bool& AutoCheckoutFlag()
 	{
-		static bool bEnabled = FPlatformMisc::GetEnvironmentVariable(TEXT("UE_MCP_CHECKOUT_MODE")).Equals(TEXT("auto"), ESearchCase::IgnoreCase);
+		static bool bEnabled = FPlatformMisc::GetEnvironmentVariable(UEMCPWire::EnvVar::CheckoutMode).Equals(TEXT("auto"), ESearchCase::IgnoreCase);
 		return bEnabled;
 	}
 
