@@ -1,6 +1,6 @@
 {
   "name": "ue-mcp",
-  "version": "1.4.14-beta.6",
+  "version": "1.4.14-beta.7",
   "description": "Unreal Engine MCP server - 31 tools, 3714+ actions for AI-driven editor control",
   "type": "module",
   "main": "dist/index.js",
@@ -91,7 +91,7 @@
     "context-tax": "node scripts/context-tax.mjs",
     "generate": "node scripts/generate.mjs",
     "generate:wire": "node scripts/generate-wire-contract.mjs",
-    "generate:config":"tsx scripts/generate-default-config.ts",
+    "generate:config": "tsx scripts/generate-default-config.ts",
     "generate:metadata": "tsx scripts/generate-tool-metadata.ts && tsx scripts/stamp-package.ts",
     "stamp:package": "tsx scripts/stamp-package.ts",
     "prepublishOnly": "node -e \"fs.rmSync('dist',{recursive:true,force:true})\" && npx tsc && tsx scripts/generate-default-config.ts && tsx scripts/generate-tool-metadata.ts && tsx scripts/stamp-package.ts",
