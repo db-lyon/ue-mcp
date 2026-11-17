@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { widgetTool } from "../../src/tools/widget.js";
 import type { IBridge } from "../../src/bridge/bridge.js";
 import type { ToolContext } from "../../src/surface/tool-types.js";
+import { REGISTERED_HANDLER_TIMEOUT_SECONDS, resolveBridgeTimeout } from "../../src/bridge/bridge-timeouts.js";
 
 /**
  * #799: add_widget and remove_widget compile and save the Widget Blueprint
@@ -27,10 +28,12 @@ describe("widget tree mutations", () => {
   for (const action of ["add_widget", "remove_widget"] as const) {
     it(`${action} allows longer than the 30s default`, async () => {
       const spec = widgetTool.actions[action];
-      expect(spec.timeoutMs).toBe(120_000);
+      expect(spec.timeoutMs).toBeUndefined();
+      expect(REGISTERED_HANDLER_TIMEOUT_SECONDS[action]).toBe(120);
+      expect(resolveBridgeTimeout(action)).toBeGreaterThan(30_000);
     });
 
-    it(`${action} forwards its timeout to the bridge`, async () => {
+    it(`${action} sends no explicit timeout, leaving the client to wait the declared one`, async () => {
       const bridge = recordingBridge();
       await widgetTool.handler({ bridge } as unknown as ToolContext, {
         action,
@@ -40,7 +43,7 @@ describe("widget tree mutations", () => {
         ...(action === "add_widget" ? { widgetClass: "Button" } : {}),
       });
 
-      expect(bridge.calls).toEqual([{ method: action, timeoutMs: 120_000 }]);
+      expect(bridge.calls).toEqual([{ method: action, timeoutMs: undefined }]);
     });
   }
 

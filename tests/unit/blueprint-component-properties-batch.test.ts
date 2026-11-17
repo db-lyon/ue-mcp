@@ -5,7 +5,7 @@ import { actionSchema } from "../../src/surface/action-schema.js";
 import { ROUTING_PARAM_NAMES } from "../../src/surface/routing-params.js";
 import { declaredActionEffect } from "../../src/surface/action-effects.js";
 import { liftRollback } from "../../src/flow/rollback.js";
-import { resolveBridgeTimeout } from "../../src/bridge/bridge-timeouts.js";
+import { REGISTERED_HANDLER_TIMEOUT_SECONDS, resolveBridgeTimeout } from "../../src/bridge/bridge-timeouts.js";
 
 const METHOD = "set_blueprint_component_properties_batch";
 const ACTION = "set_component_properties_batch";
@@ -34,7 +34,7 @@ describe("blueprint.set_component_properties_batch", () => {
     };
     await blueprintTool.handler(ctx, { action: ACTION, ...params });
     expect(call).toHaveBeenCalledTimes(1);
-    expect(call).toHaveBeenCalledWith(METHOD, params, 600_000);
+    expect(call).toHaveBeenCalledWith(METHOD, params, undefined);
   });
 
   it("forwards directory selection and leaves defaults to the native handler", async () => {
@@ -47,7 +47,7 @@ describe("blueprint.set_component_properties_batch", () => {
       recursive: false,
     };
     await blueprintTool.handler(ctx, { action: ACTION, ...params });
-    expect(call).toHaveBeenCalledWith(METHOD, params, 600_000);
+    expect(call).toHaveBeenCalledWith(METHOD, params, undefined);
     expect(call.mock.calls[0][1]).not.toHaveProperty("items");
     expect(call.mock.calls[0][1]).not.toHaveProperty("dryRun");
   });
@@ -86,7 +86,7 @@ describe("blueprint.set_component_properties_batch", () => {
   });
 
   it("allows enough time for the native batch to finish", () => {
-    expect(blueprintTool.actions[ACTION].timeoutMs).toBe(600_000);
+    expect(REGISTERED_HANDLER_TIMEOUT_SECONDS[METHOD]).toBe(600);
     expect(resolveBridgeTimeout(METHOD, undefined, {})).toBeGreaterThanOrEqual(600_000);
   });
 });

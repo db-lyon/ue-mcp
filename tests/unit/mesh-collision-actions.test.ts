@@ -164,7 +164,7 @@ describe("level.resave_mesh_users", () => {
 
   it("is given the timeout the C++ registration waits", () => {
     expect(registeredTimeoutMs("resave_mesh_users")).toBe(300_000);
-    expect(action.kind === "bridge" && action.timeoutMs).toBe(300_000);
+    expect(action.kind === "bridge" && action.timeoutMs).toBeFalsy();
   });
 
   it("refuses PIE, rebuilds spline copies and saves through the targeted save only", () => {

@@ -37,6 +37,7 @@ import { McpError as SdkMcpError } from "@modelcontextprotocol/sdk/types.js";
 import type { ActionSpec, BridgeActionSpec, HandlerActionSpec, ToolContext } from "../../surface/tool-types.js";
 import { McpError, ErrorCode } from "../../core/errors.js";
 import { MAX_BRIDGE_TIMEOUT_MS, resolveBridgeTimeout } from "../../bridge/bridge-timeouts.js";
+import { ACTION_FACTS } from "../../bridge/action-facts.generated.js";
 import { PLUGIN_UPGRADE_POINTER } from "../../bridge/bridge.js";
 import { prepareCall, finishCall, forwardToBridge, withLiveContract, type CallPipeline } from "../../dispatch/call-pipeline.js";
 import { MAX_BATCH_CALLS, batchCallsOf, executeBatchSteps, type BatchCall } from "../../dispatch/batch-steps.js";
@@ -52,21 +53,6 @@ import { stripEditorTarget, toolGraphOf } from "../../surface/target-params.js";
 export type { BatchCall };
 
 export type BatchOnError = "stop" | "continue";
-
-/**
- * Actions that act on the undo stack the batch itself is recording into. A
- * batch is one transaction; a step that opened, closed or cancelled another
- * inside it would split or abort that transaction, and an undo in the middle
- * of a batch would undo the batch's own earlier steps.
- */
-const UNDO_STACK_ACTIONS = new Set([
-  "editor.undo",
-  "editor.redo",
-  "editor.undo_redo_steps",
-  "editor.begin_transaction",
-  "editor.end_transaction",
-  "editor.cancel_transaction",
-]);
 
 /** Whether a step's `editor` names the session the batch itself runs on. */
 function targetsSession(ctx: ToolContext, target: unknown): boolean {
@@ -109,11 +95,13 @@ export function admitBatchStep(task: string, spec: ActionSpec): StepAdmission {
   if (spec.assetCoordination) {
     return refused("manages the asset locks the batch is run under; take or release locks with their own calls");
   }
-  if (UNDO_STACK_ACTIONS.has(task)) {
-    return refused("acts on the undo stack, and a batch is itself one undo transaction; call it on its own");
-  }
   if (spec.kind !== "bridge") {
     return refused("runs in the server process rather than in the editor, so the editor cannot run it inside one game-thread job; call it on its own");
+  }
+  // Declared at the action's C++ registration (RefusedInBatch), with its reason.
+  const refusedInBatch = ACTION_FACTS[spec.bridge]?.refusedInBatch;
+  if (refusedInBatch) {
+    return refused(`cannot run inside a batch: ${refusedInBatch}`);
   }
   if (DialogGuard.actionAllowed(task) || isModalSafeMethod(spec.bridge)) {
     return refused("reads or answers a dialog and is served while the editor is blocked, so it runs alone");

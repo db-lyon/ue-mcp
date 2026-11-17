@@ -5,7 +5,7 @@
  */
 import { z } from "zod";
 import { McpError, ErrorCode } from "../core/errors.js";
-import { MAX_BRIDGE_TIMEOUT_MS } from "../bridge/bridge-timeouts.js";
+import { DEFAULT_BRIDGE_TIMEOUT_MS, MAX_BRIDGE_TIMEOUT_MS } from "../bridge/bridge-timeouts.js";
 import { unknownActionMessage } from "./action-schema.js";
 import { stripAction } from "./routing-params.js";
 import { stripEditorTarget } from "./target-params.js";
@@ -110,16 +110,19 @@ export const OMIT_PARAM = z
  * It is a routing instruction, never a handler parameter: the dispatcher reads
  * it and strips it, so it cannot reach a bridge method as an argument.
  */
+// Not bounded in the schema: a larger value is capped at the ceiling where the
+// call is made (call-pipeline, the bridge and the plugin all clamp, and the
+// plugin's answer reports timeoutMsCappedTo), rather than refused here (#1952).
 export const TIMEOUT_PARAM = z
   .number()
   .int()
   .positive()
-  .max(MAX_BRIDGE_TIMEOUT_MS)
   .optional()
   .describe(
-    "How long to wait for this call, in milliseconds. Omitted, the wait is 30s, "
+    `How long to wait for this call, in milliseconds. Omitted, the wait is ${DEFAULT_BRIDGE_TIMEOUT_MS / 1000}s, `
     + "or longer for the actions the editor itself allows longer. Raise it for a "
-    + "large batch or an editor busy compiling shaders. A timeout never means the "
+    + "large batch or an editor busy compiling shaders; it is capped at "
+    + `${MAX_BRIDGE_TIMEOUT_MS} (one hour), and longer work is split into several calls. A timeout never means the `
     + "call did not happen: read the state back before retrying.",
   );
 

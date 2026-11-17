@@ -4,6 +4,8 @@ import { categoryTool } from "../surface/category-tool.js";
 import { z } from "zod";
 import { CURSOR_PARAM } from "../surface/pagination.js";
 import { schema as specSchema } from "./specs/project.generated.js";
+import { schema as blueprintSpecSchema } from "./specs/blueprint.generated.js";
+import { borrowSchema } from "../surface/handler-spec.js";
 import { actions as epicActions, schema as epicSchema } from "./epic/project.generated.js";
 import { sessionActions } from "./project/sessions.js";
 import { configActions } from "./project/config.js";
@@ -191,8 +193,7 @@ export const projectTool: ToolDef = categoryTool(
     // values, never reaches the caller. add_module_dependency rejects an unknown
     // access by name.
     access: z.string().optional().describe("For add_module_dependency: 'public' (PublicDependencyModuleNames) or 'private' (default)."),
-    profileName: z.string().optional().describe("For resolve_collision_profile: the profile to resolve, e.g. 'Pawn', 'BlockAll', or one the project defined."),
-    channel: z.string().optional().describe("For resolve_collision_profile: narrow the answer to one channel. Accepts the configured name ('Camera', 'Weapon'), the C++ enumerator ('ECC_Camera'), or the container index."),
-    includeAllChannels: z.boolean().optional().describe("For resolve_collision_profile: include the unused GameTraceChannel slots as well as the engine channels and the project's own. Default false."),
+    // resolve_collision_profile dispatches to a blueprint-category handler, so its keys come from that spec.
+    ...borrowSchema(blueprintSpecSchema, ["profileName", "channel", "includeAllChannels"]),
   },
 );

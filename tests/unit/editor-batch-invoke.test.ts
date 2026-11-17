@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { editorTool } from "../../src/tools/editor.js";
+import { REGISTERED_HANDLER_TIMEOUT_SECONDS } from "../../src/bridge/bridge-timeouts.js";
 import { readHandlerFile } from "../../scripts/lib/cpp-registrations.mjs";
 
 describe("editor.invoke_object_functions", () => {
@@ -24,7 +25,8 @@ describe("editor.invoke_object_functions", () => {
   it("is spec'd: it forwards its bag as sent, with its long timeout", () => {
     const action = editorTool.actions.invoke_object_functions;
     expect(action.bridge).toBe("invoke_object_functions");
-    expect(action.timeoutMs).toBe(300_000);
+    expect(action.timeoutMs).toBeUndefined();
+    expect(REGISTERED_HANDLER_TIMEOUT_SECONDS.invoke_object_functions).toBe(300);
     expect(action.mapParams).toBeUndefined();
   });
 });

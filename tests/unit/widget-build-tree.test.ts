@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { widgetTool } from "../../src/tools/widget.js";
 import type { ToolContext } from "../../src/surface/tool-types.js";
+import { REGISTERED_HANDLER_TIMEOUT_SECONDS } from "../../src/bridge/bridge-timeouts.js";
 
 // build_tree hands the nested spec to the bridge untouched; the bridge
 // validates it whole, builds it, and undoes it on any failure (#1300).
@@ -24,7 +25,8 @@ describe("widget build_tree (#1300)", () => {
     expect(method).toBe("build_tree");
     expect(params).toMatchObject({ assetPath: "/Game/UI/WBP_Form", parentWidgetName: "FormRoot" });
     expect(params.tree).toEqual(TREE);
-    expect(timeoutMs).toBe(120_000);
+    expect(timeoutMs).toBeUndefined();
+    expect(REGISTERED_HANDLER_TIMEOUT_SECONDS.build_tree).toBe(120);
   });
 });
 

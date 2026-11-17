@@ -294,7 +294,8 @@ describe("the generated modules", () => {
   it("are exactly what the recording renders to", () => {
     const files = renderAll(SNAPSHOT);
     const specsDir = path.join(ROOT, "src", "tools", "specs");
-    expect(fs.readdirSync(specsDir).map((f) => `src/tools/specs/${f}`).sort()).toEqual([...files.keys()].sort());
+    expect(fs.readdirSync(specsDir).map((f) => `src/tools/specs/${f}`).sort())
+      .toEqual([...files.keys()].filter((rel) => rel.startsWith("src/tools/specs/")).sort());
     for (const [rel, contents] of files) {
       const onDisk = fs.readFileSync(path.join(ROOT, rel), "utf8").replace(/\r\n/g, "\n");
       expect(onDisk, `${rel} is stale: run npm run generate`).toBe(contents);

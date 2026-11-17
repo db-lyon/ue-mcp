@@ -57,4 +57,5 @@ for (const rel of stale) {
 
 const handlers = Object.keys(snapshot.handlers).length;
 if (check && differs > 0) process.exit(1);
-console.log(`[specs] ${handlers} spec'd handlers, ${files.size - 1} categories${differs === 0 ? ", up to date" : ""}`);
+const categories = [...files.keys()].filter((rel) => rel.endsWith(".generated.ts") && rel.startsWith("src/tools/specs/")).length;
+console.log(`[specs] ${handlers} spec'd handlers, ${categories} categories${differs === 0 ? ", up to date" : ""}`);

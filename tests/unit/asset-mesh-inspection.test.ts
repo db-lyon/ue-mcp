@@ -4,6 +4,7 @@ import { contractViolation } from "../../src/surface/handler-spec.js";
 import { handlerSpecs } from "../../src/tools/specs/asset.generated.js";
 import { classifyAction } from "../../src/dispatch/written-paths.js";
 import type { ToolContext } from "../../src/surface/tool-types.js";
+import { REGISTERED_HANDLER_TIMEOUT_SECONDS } from "../../src/bridge/bridge-timeouts.js";
 
 describe("static mesh inspection surface", () => {
   const accepts = (args: Record<string, unknown>) => contractViolation({ ...handlerSpecs.get_static_mesh_geometry, strict: true }, args) === undefined;
@@ -38,7 +39,8 @@ describe("static mesh inspection surface", () => {
     const call = vi.fn().mockResolvedValue(result);
     const ctx = { bridge: { call } } as unknown as ToolContext;
     expect(await assetTool.handler(ctx, { action: "get_static_mesh_geometry", ...params })).toEqual(result);
-    expect(call).toHaveBeenCalledWith("get_static_mesh_geometry", params, 300_000);
+    expect(call).toHaveBeenCalledWith("get_static_mesh_geometry", params, undefined);
+    expect(REGISTERED_HANDLER_TIMEOUT_SECONDS.get_static_mesh_geometry).toBe(300);
     expect(classifyAction("asset.get_static_mesh_geometry", params).mutates).toBe(false);
   });
 
@@ -52,7 +54,7 @@ describe("static mesh inspection surface", () => {
     const call = vi.fn().mockResolvedValue(receipt);
     const ctx = { bridge: { call } } as unknown as ToolContext;
     expect(await assetTool.handler(ctx, { action: "get_static_mesh_geometry", ...params })).toEqual(receipt);
-    expect(call).toHaveBeenCalledExactlyOnceWith("get_static_mesh_geometry", params, 300_000);
+    expect(call).toHaveBeenCalledExactlyOnceWith("get_static_mesh_geometry", params, undefined);
     expect(assetTool.actions.get_static_mesh_geometry.description).toContain("existing destinations are refused");
   });
 

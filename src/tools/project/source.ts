@@ -227,12 +227,7 @@ export const sourceActions: Record<string, ActionSpec> = {
   // v0.7.13 - native C++ authoring. Bridge handlers wrap
   // GameProjectUtils / ILiveCodingModule (same APIs used by the editor's
   // File → New C++ Class and Live Coding menus).
-  create_cpp_class: {
-    ...specBp("mutate", "Create a new native UCLASS in a project module. Uses the same engine template path as File → New C++ Class. Writes .h + .cpp; returns both paths plus needsEditorRestart (true unless Live Coding successfully hot-reloaded).", "create_cpp_class"),
-    // AddCodeToProject regenerates IDE project files synchronously - can
-    // easily exceed the default 30-second cap on first use.
-    timeoutMs: 300_000,
-  },
+  create_cpp_class: specBp("mutate", "Create a new native UCLASS in a project module. Uses the same engine template path as File → New C++ Class. Writes .h + .cpp; returns both paths plus needsEditorRestart (true unless Live Coding successfully hot-reloaded).", "create_cpp_class"),
   list_project_modules: specBp("read", 
     "List native modules in the current project (name, host type, source path), in the .uproject's own declaration order. Feed moduleName from here into create_cpp_class.",
     "list_project_modules",

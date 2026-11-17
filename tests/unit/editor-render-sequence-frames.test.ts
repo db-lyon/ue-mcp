@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { editorTool } from "../../src/tools/editor.js";
 import { declaredActionEffect } from "../../src/surface/action-effects.js";
 import type { ToolContext } from "../../src/surface/tool-types.js";
+import { REGISTERED_HANDLER_TIMEOUT_SECONDS } from "../../src/bridge/bridge-timeouts.js";
 
 /**
  * #1098: a frame range renders in one bridge call, so the call needs the long
@@ -39,7 +40,8 @@ describe("editor.render_sequence_frames", () => {
       outputDir: "Saved/Renders/Cycle",
       format: "png",
       cameraActorLabel: "Cam",
-    }, 600_000);
+    }, undefined);
+    expect(REGISTERED_HANDLER_TIMEOUT_SECONDS.render_sequence_frames).toBe(600);
   });
 
   it("classifies as a mutation", () => {

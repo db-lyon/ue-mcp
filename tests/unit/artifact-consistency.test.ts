@@ -57,14 +57,16 @@ const pkg = readJson("package.json");
 /** The live surface, which is what every count is supposed to describe. */
 const counts = (() => {
   let actions = 0;
-  let bridgeActions = 0;
+  // Distinct bridge methods: every wrapped Epic tool dispatches to one handler.
+  const bridgeMethods = new Set<string>();
   for (const tool of ALL_TOOLS) {
     for (const spec of Object.values(tool.actions)) {
       actions += 1;
-      if ((spec as { bridge?: string }).bridge) bridgeActions += 1;
+      const bridge = (spec as { bridge?: string }).bridge;
+      if (bridge) bridgeMethods.add(bridge);
     }
   }
-  return { tools: ALL_TOOLS.length, actions, bridgeActions };
+  return { tools: ALL_TOOLS.length, actions, bridgeActions: bridgeMethods.size };
 })();
 
 describe("one product, one version", () => {

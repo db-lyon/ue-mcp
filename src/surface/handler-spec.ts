@@ -96,24 +96,7 @@ export interface ParamSpec {
   default?: boolean | string | number;
 }
 
-/**
- * How the bridge runs an action, as get_bridge_capabilities.actionFacts
- * publishes it (FMCPActionFacts). Only what differs from the common case is present.
- */
-export interface ActionFacts {
-  /** Game-thread budget in seconds; absent is the bridge default. */
-  timeoutSeconds?: number;
-  /** Runs while a modal dialog holds the game thread. */
-  modalSafe?: boolean;
-  /** Answered on the socket thread, before the dialog gate. */
-  servedOffGameThread?: boolean;
-  /** Left out of the parameter echo. */
-  notEchoed?: boolean;
-  /** Why execute_batch refuses to carry it. */
-  refusedInBatch?: string;
-  /** Who calls it instead of a tool. */
-  serverInternal?: string;
-}
+export type { ActionFacts } from "../bridge/action-facts.generated.js";
 
 /** How many branches of a choice a call supplies. Mirrors EMCPChoiceMode. */
 export const CHOICE_MODES = ["exactlyOne", "atLeastOne"] as const;
@@ -488,6 +471,23 @@ export function makeSpecBp(clauses: Readonly<Record<string, string>>, specs: Han
       ? { ...action, paramSpec: spec.params, paramChoices: spec.choices }
       : { ...action, paramSpec: spec.params };
   };
+}
+
+/**
+ * The default a handler declares for one of its parameters, so the server
+ * never restates it. Throws when the spec declares none, which a re-record that
+ * dropped the default would otherwise turn into a silent `undefined`.
+ */
+export function declaredDefault<T extends boolean | string | number>(
+  specs: Readonly<HandlerSpecs>,
+  method: string,
+  param: string,
+): T {
+  const value = specs[method]?.params.find((p) => p.name === param)?.default;
+  if (value === undefined) {
+    throw new Error(`${method} declares no default for '${param}'; declare it with .Default() at its C++ registration`);
+  }
+  return value as T;
 }
 
 /**

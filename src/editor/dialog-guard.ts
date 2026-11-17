@@ -28,6 +28,7 @@
 import type { BridgeCallOptions, IBridge } from "../bridge/bridge.js";
 import type { ProjectContext } from "../config/project.js";
 import { isDialogRefusal } from "../bridge/dialog-refusal.js";
+import { ACTION_FACTS } from "../bridge/action-facts.generated.js";
 import type { DialogBlock, DialogPromptFn } from "../contract/daemon.js";
 import type { ElicitFn, ElicitPrimitiveSchema, ElicitResult } from "../core/elicit.js";
 import type { DialogMode } from "../config/modes.js";
@@ -126,28 +127,17 @@ export function nativeAsBlocking(d: NativeDialog): BlockingDialog {
 }
 
 /**
- * Bridge methods the plugin answers while a modal is up.
- *
- * Mirrors ModalSafeMethods in BridgeServer.cpp plus the handshake reads served
- * before the gate. Pinned by tests/unit/dialog-modal-safe-parity.test.ts,
- * because a method the plugin serves but this list omits would be read as proof
- * the editor is running.
+ * Bridge methods the plugin answers while a modal is up: the ones that declare
+ * themselves modal-safe at their C++ registration, and the handshake reads it
+ * serves off the game thread, before the gate. Read from the recorded action
+ * facts, because a method the plugin serves but this set omitted would be read
+ * as proof the editor is running.
  */
-const MODAL_SAFE_METHODS = new Set([
-  "list_dialogs",
-  "respond_to_dialog",
-  "list_windows",
-  "press_window_button",
-  "close_window",
-  "get_dialog_policy",
-  "set_dialog_policy",
-  "clear_dialog_policy",
-  "get_engine_state",
-  "get_bridge_capabilities",
-  "get_param_echo",
-  "clear_param_echo",
-  "cancel_request",
-]);
+const MODAL_SAFE_METHODS = new Set(
+  Object.entries(ACTION_FACTS)
+    .filter(([, facts]) => facts.modalSafe || facts.servedOffGameThread)
+    .map(([method]) => method),
+);
 
 export function isModalSafeMethod(method: string): boolean {
   return MODAL_SAFE_METHODS.has(method);

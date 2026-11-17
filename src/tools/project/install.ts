@@ -67,10 +67,7 @@ export const installActions: Record<string, ActionSpec> = {
     "Disable a plugin in the .uproject. removeReference deletes the entry outright instead of writing an explicit disable, which is the difference between handing a default-on plugin back to its default and overriding it, and the two are not the same file. Idempotent against whichever of the two was asked for. Refuses to disable the bridge itself, since that would leave no way to undo it. Patches only that entry of the on-disk .uproject (#1248). Takes effect on the next editor start.",
     "disable_plugin",
   ),
-  live_coding_compile: {
-    ...specBp("mutate", "Trigger a Live Coding compile (Windows only). Hot-patches method bodies of existing UCLASSes without editor restart - the fast inner loop for UFUNCTION implementations. Does NOT reliably register brand-new UCLASSes; use build_project + editor restart for those.", "live_coding_compile"),
-    timeoutMs: 300_000,
-  },
+  live_coding_compile: specBp("mutate", "Trigger a Live Coding compile (Windows only). Hot-patches method bodies of existing UCLASSes without editor restart - the fast inner loop for UFUNCTION implementations. Does NOT reliably register brand-new UCLASSes; use build_project + editor restart for those.", "live_coding_compile"),
   live_coding_status: specBp("read", 
     "Report Live Coding availability/state (available, started, enabledForSession, compiling). Helps choose between live_coding_compile and build_project.",
     "live_coding_status",
