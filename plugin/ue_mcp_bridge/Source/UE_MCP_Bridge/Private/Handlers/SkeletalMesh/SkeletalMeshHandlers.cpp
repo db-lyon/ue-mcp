@@ -720,11 +720,11 @@ void FSkeletalMeshHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		// A placed component, so the level tool exposes it (#1452).
 		FMCPHandlerRegistry::FCategoryScope LevelScope(Registry, TEXT("level"));
 		Registry.RegisterHandlerWithTimeout(TEXT("get_skinned_vertices"), &GetSkinnedVertices, 300.0f, {
-			MCPParam::Optional(TEXT("actorLabel"), EType::String, TEXT("Actor label, name or path; pass actorLabel or actorPath")),
-			MCPParam::Optional(TEXT("actorPath"), EType::String, TEXT("Actor object path; preferred when labels repeat")),
+			MCPSharedParam::ActorLabel().Describe(TEXT("Actor label, name or path; pass actorLabel or actorPath")),
+			MCPSharedParam::ActorPath(),
 			MCPParam::Optional(TEXT("componentName"), EType::String, TEXT("Skinned mesh component (default: the first on the actor); a leader-pose follower reads as drawn")),
-			MCPParam::Optional(TEXT("world"), EType::String, TEXT("World scope: editor (default) | pie")),
-			MCPParam::Optional(TEXT("pieInstance"), EType::Integer, TEXT("Which PIE world when world is pie: 0 = server or primary, 1..N = clients")),
+			MCPSharedParam::World().Describe(TEXT("World scope: editor (default) | pie")),
+			MCPSharedParam::PieInstance().Describe(TEXT("Which PIE world when world is pie: 0 = server or primary, 1..N = clients")),
 			MCPParam::Optional(TEXT("lodIndex"), EType::Integer, TEXT("Render LOD to skin (default: the LOD the component draws)")),
 			MCPParam::Optional(TEXT("space"), EType::String, TEXT("Space of positions, box and nearPoint (default component)")).Enum({ TEXT("component"), TEXT("world") }),
 			MCPParam::Optional(TEXT("boneNames"), EType::Array, TEXT("Keep vertices weighted to any of these bones; omit to keep every vertex")).Items(EType::String),
@@ -760,8 +760,8 @@ void FSkeletalMeshHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("space"), EType::String, TEXT("Axes of translation and rotation: the bone's bind-pose frame (default) or the mesh's component space")).Enum({ TEXT("bone"), TEXT("component") }),
 		MCPParam::Optional(TEXT("moveBone"), EType::Boolean, TEXT("Move the bone's reference pose with its vertices (default true); false moves only the vertices")),
 		MCPParam::Optional(TEXT("lods"), EType::Array, TEXT("LOD indices whose source vertices move (default every LOD); generated LODs follow their base LOD")).Items(EType::Integer),
-		MCPParam::Optional(TEXT("dryRun"), EType::Boolean, TEXT("Validate every LOD and report what would move without writing anything")),
-		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save the mesh after the rebuild (default true)")),
+		MCPSharedParam::DryRun().Describe(TEXT("Validate every LOD and report what would move without writing anything")),
+		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save the mesh after the rebuild (default true)")).Default(true),
 	}, MCPSpec::AtLeastOne({ { TEXT("translation") }, { TEXT("rotation") } }));
 	Registry.RegisterHandlerWithTimeout(TEXT("generate_skeletal_mesh_lods"), &GenerateSkeletalMeshLods, 600.0f, {
 		MCPParam::Optional(TEXT("assetPath"), EType::String, TEXT("One SkeletalMesh")),
@@ -772,8 +772,8 @@ void FSkeletalMeshHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("trianglePercentages"), EType::Array, TEXT("Triangle percentage of LOD 0 for each LOD after it, lodCount - 1 values above 0 and at most 100 (default the engine's reduction settings)")).Items(EType::Number),
 		MCPParam::Optional(TEXT("regenerateImported"), EType::Boolean, TEXT("Also regenerate LODs that were imported rather than generated (default false)")),
 		MCPParam::Optional(TEXT("skipExisting"), EType::Boolean, TEXT("Skip a mesh already at lodCount (default true)")),
-		MCPParam::Optional(TEXT("dryRun"), EType::Boolean, TEXT("Report each mesh's LODs and what would happen without changing anything")),
-		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save each changed mesh (default true)")),
+		MCPSharedParam::DryRun().Describe(TEXT("Report each mesh's LODs and what would happen without changing anything")),
+		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save each changed mesh (default true)")).Default(true),
 	}, MCPSpec::ExactlyOne({ { TEXT("assetPath") }, { TEXT("assetPaths") }, { TEXT("directory") } }));
 }
 

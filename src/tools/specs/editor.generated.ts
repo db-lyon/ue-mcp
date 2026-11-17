@@ -56,13 +56,13 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "actorLabel",
         "type": "string",
         "required": false,
-        "description": "Actor label. Editor labels are not unique, so a label naming several actors is refused"
+        "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
       },
       {
         "name": "actorPath",
         "type": "string",
         "required": false,
-        "description": "Full actor object path, the unambiguous selector. Wins over actorLabel"
+        "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
       },
       {
         "name": "startSeconds",
@@ -142,13 +142,13 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "actorLabel",
         "type": "string",
         "required": false,
-        "description": "Actor label. Editor labels are not unique, so a label naming several actors is refused"
+        "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
       },
       {
         "name": "actorPath",
         "type": "string",
         "required": false,
-        "description": "Full actor object path, the unambiguous selector. Wins over actorLabel"
+        "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
       },
       {
         "name": "materialParameterCollection",
@@ -460,9 +460,10 @@ export const handlerSpecs: HandlerSpecs = {
       },
       {
         "name": "pieInstance",
-        "type": "number",
+        "type": "integer",
         "required": false,
-        "description": "PIE world to target: 0 = server/primary, 1..N = clients. See list_pie_instances"
+        "description": "PIE world to target: 0 = server/primary, 1..N = clients. See list_pie_instances",
+        "minimum": 0
       },
       {
         "name": "width",
@@ -511,9 +512,10 @@ export const handlerSpecs: HandlerSpecs = {
       },
       {
         "name": "pieInstance",
-        "type": "number",
+        "type": "integer",
         "required": false,
-        "description": "PIE world to target: 0 = server/primary, 1..N = clients. See list_pie_instances"
+        "description": "PIE world to target: 0 = server/primary, 1..N = clients. See list_pie_instances",
+        "minimum": 0
       },
       {
         "name": "worldPath",
@@ -673,7 +675,7 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "onConflict",
         "type": "string",
         "required": false,
-        "description": "skip (default) returns an existing asset untouched, error refuses"
+        "description": "When the asset already exists: skip (default) returns it untouched | error refuses; it never overwrites"
       },
       {
         "name": "displayRate",
@@ -762,7 +764,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "dryRun",
         "type": "boolean",
         "required": false,
-        "description": "Report what would happen to each package and clear nothing (default false)"
+        "description": "Report what would happen to each package and clear nothing (default false)",
+        "default": false
       },
       {
         "name": "allowContent",
@@ -805,9 +808,10 @@ export const handlerSpecs: HandlerSpecs = {
       },
       {
         "name": "pieInstance",
-        "type": "number",
+        "type": "integer",
         "required": false,
-        "description": "PIE world to target: 0 = server/primary, 1..N = clients. See list_pie_instances"
+        "description": "PIE world to target: 0 = server/primary, 1..N = clients. See list_pie_instances",
+        "minimum": 0
       },
       {
         "name": "playerIndex",
@@ -865,9 +869,10 @@ export const handlerSpecs: HandlerSpecs = {
       },
       {
         "name": "pieInstance",
-        "type": "number",
+        "type": "integer",
         "required": false,
-        "description": "PIE world to target: 0 = server/primary, 1..N = clients. See list_pie_instances"
+        "description": "PIE world to target: 0 = server/primary, 1..N = clients. See list_pie_instances",
+        "minimum": 0
       },
       {
         "name": "cursor",
@@ -906,13 +911,13 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "actorLabel",
         "type": "string",
         "required": false,
-        "description": "Actor label. Editor labels are not unique, so a label naming several actors is refused"
+        "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
       },
       {
         "name": "actorPath",
         "type": "string",
         "required": false,
-        "description": "Full actor object path, the unambiguous selector. Wins over actorLabel"
+        "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
       }
     ]
   },
@@ -1066,9 +1071,10 @@ export const handlerSpecs: HandlerSpecs = {
       },
       {
         "name": "pieInstance",
-        "type": "number",
+        "type": "integer",
         "required": false,
-        "description": "PIE world to target: 0 = server/primary, 1..N = clients. See list_pie_instances"
+        "description": "PIE world to target: 0 = server/primary, 1..N = clients. See list_pie_instances",
+        "minimum": 0
       },
       {
         "name": "limit",
@@ -1141,9 +1147,10 @@ export const handlerSpecs: HandlerSpecs = {
       },
       {
         "name": "pieInstance",
-        "type": "number",
+        "type": "integer",
         "required": false,
-        "description": "PIE world to read (default: the primary world, or the first client world when the primary is a dedicated server). See list_pie_instances"
+        "description": "PIE world to read (default: the primary world, or the first client world when the primary is a dedicated server). See list_pie_instances",
+        "minimum": 0
       }
     ]
   },
@@ -1175,13 +1182,13 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "actorLabel",
         "type": "string",
         "required": false,
-        "description": "Actor label. Editor labels are not unique, so a label naming several actors is refused"
+        "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
       },
       {
         "name": "actorPath",
         "type": "string",
         "required": false,
-        "description": "Full actor object path, the unambiguous selector. Wins over actorLabel"
+        "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
       },
       {
         "name": "propertyName",
@@ -1197,9 +1204,10 @@ export const handlerSpecs: HandlerSpecs = {
       },
       {
         "name": "pieInstance",
-        "type": "number",
+        "type": "integer",
         "required": false,
-        "description": "PIE world to target: 0 = server/primary, 1..N = clients. See list_pie_instances"
+        "description": "PIE world to target: 0 = server/primary, 1..N = clients. See list_pie_instances",
+        "minimum": 0
       }
     ]
   },
@@ -1233,9 +1241,10 @@ export const handlerSpecs: HandlerSpecs = {
       },
       {
         "name": "pieInstance",
-        "type": "number",
+        "type": "integer",
         "required": false,
-        "description": "PIE world to target: 0 = server/primary, 1..N = clients. See list_pie_instances"
+        "description": "PIE world to target: 0 = server/primary, 1..N = clients. See list_pie_instances",
+        "minimum": 0
       }
     ]
   },
@@ -1326,13 +1335,13 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "actorLabel",
         "type": "string",
         "required": false,
-        "description": "Actor label. Editor labels are not unique, so a label naming several actors is refused"
+        "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
       },
       {
         "name": "actorPath",
         "type": "string",
         "required": false,
-        "description": "Full actor object path, the unambiguous selector. Wins over actorLabel"
+        "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
       },
       {
         "name": "sectionIndex",
@@ -1397,9 +1406,10 @@ export const handlerSpecs: HandlerSpecs = {
       },
       {
         "name": "pieInstance",
-        "type": "number",
+        "type": "integer",
         "required": false,
-        "description": "PIE instance index when several clients run"
+        "description": "Which PIE world: 0 = server or primary, 1..N = clients. See editor(list_pie_instances)",
+        "minimum": 0
       },
       {
         "name": "sequencePath",
@@ -1524,13 +1534,13 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "actorLabel",
         "type": "string",
         "required": false,
-        "description": "Actor label. Editor labels are not unique, so a label naming several actors is refused"
+        "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
       },
       {
         "name": "actorPath",
         "type": "string",
         "required": false,
-        "description": "Full actor object path, the unambiguous selector. Wins over actorLabel"
+        "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
       },
       {
         "name": "component",
@@ -1564,9 +1574,10 @@ export const handlerSpecs: HandlerSpecs = {
       },
       {
         "name": "pieInstance",
-        "type": "number",
+        "type": "integer",
         "required": false,
-        "description": "PIE world to target: 0 = server/primary, 1..N = clients. See list_pie_instances"
+        "description": "PIE world to target: 0 = server/primary, 1..N = clients. See list_pie_instances",
+        "minimum": 0
       },
       {
         "name": "deferToNextTick",
@@ -1675,9 +1686,10 @@ export const handlerSpecs: HandlerSpecs = {
       },
       {
         "name": "pieInstance",
-        "type": "number",
+        "type": "integer",
         "required": false,
-        "description": "PIE world to target: 0 = server/primary, 1..N = clients. See list_pie_instances"
+        "description": "PIE world to target: 0 = server/primary, 1..N = clients. See list_pie_instances",
+        "minimum": 0
       },
       {
         "name": "deferToNextTick",
@@ -1756,9 +1768,10 @@ export const handlerSpecs: HandlerSpecs = {
       },
       {
         "name": "pieInstance",
-        "type": "number",
+        "type": "integer",
         "required": false,
-        "description": "PIE world to target: 0 = server/primary, 1..N = clients. See list_pie_instances"
+        "description": "PIE world to target: 0 = server/primary, 1..N = clients. See list_pie_instances",
+        "minimum": 0
       }
     ],
     "contractExempt": "calls UFUNCTIONs"
@@ -1810,9 +1823,10 @@ export const handlerSpecs: HandlerSpecs = {
       },
       {
         "name": "pieInstance",
-        "type": "number",
+        "type": "integer",
         "required": false,
-        "description": "PIE world to target: 0 = server/primary, 1..N = clients. See list_pie_instances"
+        "description": "PIE world to target: 0 = server/primary, 1..N = clients. See list_pie_instances",
+        "minimum": 0
       }
     ],
     "contractExempt": "calls a static UFUNCTION"
@@ -2236,13 +2250,15 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "waitForAssetRegistry",
         "type": "boolean",
         "required": false,
-        "description": "start only: block until the AssetRegistry initial scan completes, since PIE silently no-ops during it on a cold editor (default true)"
+        "description": "start only: block until the AssetRegistry initial scan completes, since PIE silently no-ops during it on a cold editor (default true)",
+        "default": true
       },
       {
         "name": "assetRegistryTimeoutSeconds",
         "type": "number",
         "required": false,
-        "description": "start only: how long to wait for that scan (default 180)"
+        "description": "start only: how long to wait for that scan (default 180)",
+        "default": 180
       }
     ],
     "contractExempt": "starts and stops Play In Editor"
@@ -2340,9 +2356,10 @@ export const handlerSpecs: HandlerSpecs = {
       },
       {
         "name": "pieInstance",
-        "type": "number",
+        "type": "integer",
         "required": false,
-        "description": "PIE world to target: 0 = server/primary, 1..N = clients. See list_pie_instances"
+        "description": "PIE world to target: 0 = server/primary, 1..N = clients. See list_pie_instances",
+        "minimum": 0
       }
     ]
   },
@@ -2402,13 +2419,13 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "actorLabel",
         "type": "string",
         "required": false,
-        "description": "Actor label. Editor labels are not unique, so a label naming several actors is refused"
+        "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
       },
       {
         "name": "actorPath",
         "type": "string",
         "required": false,
-        "description": "Full actor object path, the unambiguous selector. Wins over actorLabel"
+        "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
       },
       {
         "name": "componentName",
@@ -2449,9 +2466,10 @@ export const handlerSpecs: HandlerSpecs = {
       },
       {
         "name": "pieInstance",
-        "type": "number",
+        "type": "integer",
         "required": false,
-        "description": "PIE world to target: 0 = server/primary, 1..N = clients. See list_pie_instances"
+        "description": "PIE world to target: 0 = server/primary, 1..N = clients. See list_pie_instances",
+        "minimum": 0
       }
     ]
   },
@@ -2484,13 +2502,13 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "actorLabel",
         "type": "string",
         "required": false,
-        "description": "Actor label. Editor labels are not unique, so a label naming several actors is refused"
+        "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
       },
       {
         "name": "actorPath",
         "type": "string",
         "required": false,
-        "description": "Full actor object path, the unambiguous selector. Wins over actorLabel"
+        "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
       },
       {
         "name": "includeChildren",
@@ -2622,13 +2640,13 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "actorLabel",
         "type": "string",
         "required": false,
-        "description": "Actor label. Editor labels are not unique, so a label naming several actors is refused"
+        "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
       },
       {
         "name": "actorPath",
         "type": "string",
         "required": false,
-        "description": "Full actor object path, the unambiguous selector. Wins over actorLabel"
+        "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
       },
       {
         "name": "sectionIndex",
@@ -3053,9 +3071,10 @@ export const handlerSpecs: HandlerSpecs = {
       },
       {
         "name": "pieInstance",
-        "type": "number",
+        "type": "integer",
         "required": false,
-        "description": "PIE world to target: 0 = server/primary, 1..N = clients. See list_pie_instances"
+        "description": "PIE world to target: 0 = server/primary, 1..N = clients. See list_pie_instances",
+        "minimum": 0
       }
     ]
   },
@@ -3306,9 +3325,10 @@ export const handlerSpecs: HandlerSpecs = {
       },
       {
         "name": "pieInstance",
-        "type": "number",
+        "type": "integer",
         "required": false,
-        "description": "PIE world to target: 0 = server/primary, 1..N = clients. See list_pie_instances"
+        "description": "PIE world to target: 0 = server/primary, 1..N = clients. See list_pie_instances",
+        "minimum": 0
       }
     ]
   },
@@ -3404,13 +3424,13 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "actorLabel",
         "type": "string",
         "required": false,
-        "description": "Actor label. Editor labels are not unique, so a label naming several actors is refused"
+        "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
       },
       {
         "name": "actorPath",
         "type": "string",
         "required": false,
-        "description": "Full actor object path, the unambiguous selector. Wins over actorLabel"
+        "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
       },
       {
         "name": "mode",
@@ -3438,9 +3458,10 @@ export const handlerSpecs: HandlerSpecs = {
       },
       {
         "name": "pieInstance",
-        "type": "number",
+        "type": "integer",
         "required": false,
-        "description": "PIE world to target: 0 = server/primary, 1..N = clients. See list_pie_instances"
+        "description": "PIE world to target: 0 = server/primary, 1..N = clients. See list_pie_instances",
+        "minimum": 0
       }
     ]
   },
@@ -3503,9 +3524,10 @@ export const handlerSpecs: HandlerSpecs = {
       },
       {
         "name": "pieInstance",
-        "type": "number",
+        "type": "integer",
         "required": false,
-        "description": "PIE world to target: 0 = server/primary, 1..N = clients. See list_pie_instances"
+        "description": "PIE world to target: 0 = server/primary, 1..N = clients. See list_pie_instances",
+        "minimum": 0
       }
     ]
   },
@@ -3538,9 +3560,10 @@ export const handlerSpecs: HandlerSpecs = {
       },
       {
         "name": "pieInstance",
-        "type": "number",
+        "type": "integer",
         "required": false,
-        "description": "PIE world to target: 0 = server/primary, 1..N = clients. See list_pie_instances"
+        "description": "PIE world to target: 0 = server/primary, 1..N = clients. See list_pie_instances",
+        "minimum": 0
       }
     ]
   },
@@ -3562,13 +3585,13 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "actorLabel",
         "type": "string",
         "required": false,
-        "description": "Actor label. Editor labels are not unique, so a label naming several actors is refused"
+        "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
       },
       {
         "name": "actorPath",
         "type": "string",
         "required": false,
-        "description": "Full actor object path, the unambiguous selector. Wins over actorLabel"
+        "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
       },
       {
         "name": "playerIndex",
@@ -3590,9 +3613,10 @@ export const handlerSpecs: HandlerSpecs = {
       },
       {
         "name": "pieInstance",
-        "type": "number",
+        "type": "integer",
         "required": false,
-        "description": "PIE world to target: 0 = server/primary, 1..N = clients. See list_pie_instances"
+        "description": "PIE world to target: 0 = server/primary, 1..N = clients. See list_pie_instances",
+        "minimum": 0
       }
     ],
     "choices": [
@@ -3638,7 +3662,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "save",
         "type": "boolean",
         "required": false,
-        "description": "Save the package to disk after the write (default true; false leaves it dirty)"
+        "description": "Save the package to disk after the write (default true; false leaves it dirty)",
+        "default": true
       }
     ]
   },
@@ -3741,9 +3766,10 @@ export const handlerSpecs: HandlerSpecs = {
       },
       {
         "name": "pieInstance",
-        "type": "number",
+        "type": "integer",
         "required": false,
-        "description": "PIE world to target: 0 = server/primary, 1..N = clients. See list_pie_instances"
+        "description": "PIE world to target: 0 = server/primary, 1..N = clients. See list_pie_instances",
+        "minimum": 0
       }
     ],
     "choices": [
@@ -3822,13 +3848,13 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "actorLabel",
         "type": "string",
         "required": false,
-        "description": "Actor label. Editor labels are not unique, so a label naming several actors is refused"
+        "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
       },
       {
         "name": "actorPath",
         "type": "string",
         "required": false,
-        "description": "Full actor object path, the unambiguous selector. Wins over actorLabel"
+        "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
       },
       {
         "name": "sectionIndex",
@@ -3925,13 +3951,13 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "actorLabel",
         "type": "string",
         "required": false,
-        "description": "Actor label. Editor labels are not unique, so a label naming several actors is refused"
+        "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
       },
       {
         "name": "actorPath",
         "type": "string",
         "required": false,
-        "description": "Full actor object path, the unambiguous selector. Wins over actorLabel"
+        "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
       },
       {
         "name": "sectionIndex",
@@ -4295,13 +4321,13 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "actorLabel",
         "type": "string",
         "required": false,
-        "description": "Actor label. Editor labels are not unique, so a label naming several actors is refused"
+        "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
       },
       {
         "name": "actorPath",
         "type": "string",
         "required": false,
-        "description": "Full actor object path, the unambiguous selector. Wins over actorLabel"
+        "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
       },
       {
         "name": "location",
@@ -4335,9 +4361,10 @@ export const handlerSpecs: HandlerSpecs = {
       },
       {
         "name": "pieInstance",
-        "type": "number",
+        "type": "integer",
         "required": false,
-        "description": "PIE world to target: 0 = server/primary, 1..N = clients. See list_pie_instances"
+        "description": "PIE world to target: 0 = server/primary, 1..N = clients. See list_pie_instances",
+        "minimum": 0
       }
     ]
   },
@@ -4411,9 +4438,9 @@ export const handlerSpecs: HandlerSpecs = {
 export const schema: Record<string, z.ZodType> = {
   actorArgs: z.record(z.string(), z.unknown()).optional().describe("UObject* parameter name -> actor label, resolved against live actors in the selected world"),
   actorClass: z.string().optional().describe("Every actor of this class in the PIE world, bounded by maxTargets"),
-  actorLabel: z.string().optional().describe("Actor label. Editor labels are not unique, so a label naming several actors is refused (add_sequence_section, add_sequence_track, focus_viewport_on_actor, get_runtime_value, get_sequence_channel_keys, invoke_function, read_bone_transforms, rebind_possessable, remove_sequence_section, set_movement_mode, set_pie_view_target, set_sequence_channel_keys, set_sequence_keyframes, teleport_runtime_actor). Report only the LevelSequenceActor with this label or name (get_sequence_runtime_bindings). Actor the message is about; the Message Log links to it (log_map_check_message)"),
+  actorLabel: z.string().optional().describe("Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then (add_sequence_section, add_sequence_track, focus_viewport_on_actor, get_runtime_value, get_sequence_channel_keys, invoke_function, read_bone_transforms, rebind_possessable, remove_sequence_section, set_movement_mode, set_pie_view_target, set_sequence_channel_keys, set_sequence_keyframes, teleport_runtime_actor). Report only the LevelSequenceActor with this label or name (get_sequence_runtime_bindings). Actor the message is about; the Message Log links to it (log_map_check_message)"),
   actorLabels: z.array(z.string()).optional().describe("Explicit actor labels; a label matching several actors is refused"),
-  actorPath: z.string().optional().describe("Full actor object path, the unambiguous selector. Wins over actorLabel (add_sequence_section, add_sequence_track, focus_viewport_on_actor, get_runtime_value, get_sequence_channel_keys, invoke_function, read_bone_transforms, rebind_possessable, remove_sequence_section, set_movement_mode, set_pie_view_target, set_sequence_channel_keys, set_sequence_keyframes, teleport_runtime_actor). Object path of that actor; preferred over actorLabel when known (log_map_check_message)"),
+  actorPath: z.string().optional().describe("Full actor object path, the unambiguous selector; wins over actorLabel (add_sequence_section, add_sequence_track, focus_viewport_on_actor, get_runtime_value, get_sequence_channel_keys, invoke_function, read_bone_transforms, rebind_possessable, remove_sequence_section, set_movement_mode, set_pie_view_target, set_sequence_channel_keys, set_sequence_keyframes, teleport_runtime_actor). Object path of that actor; preferred over actorLabel when known (log_map_check_message)"),
   actorPaths: z.array(z.string()).optional().describe("Explicit actor object paths, the unambiguous selector"),
   affectActor: z.boolean().optional().describe("Hide or show the actor itself (default true only without a component filter)"),
   affectComponents: z.boolean().optional().describe("Hide or show matched components (default true with a component filter)"),
@@ -4588,7 +4615,7 @@ export const schema: Record<string, z.ZodType> = {
   newWindowWidth: z.number().optional().describe("Play-in-New-Window width"),
   numClients: z.number().optional().describe("Number of PIE clients"),
   objectPath: z.string().optional().describe("Object, asset, class or Blueprint path. A class or Blueprint resolves to its default object (describe_object, get_property, set_property). Check one path: reports found and isValid rather than failing when it is gone. Wins over the search filters (find_object). Object path of the live instance. Wins over target (get_object_properties, invoke_object_function, set_object_property)"),
-  onConflict: z.string().optional().describe("skip (default) returns an existing asset untouched, error refuses (create_level_sequence). When the level exists: skip (default) returns it untouched, error refuses (create_new_level)"),
+  onConflict: z.string().optional().describe("When the asset already exists: skip (default) returns it untouched | error refuses; it never overwrites (create_level_sequence). When the level exists: skip (default) returns it untouched, error refuses (create_new_level)"),
   orthoZoom: z.number().optional().describe("Orthographic zoom, within the engine's own limits"),
   outerPath: z.string().optional().describe("Only objects somewhere under this outer, such as one level or world"),
   outputDir: z.string().optional().describe("Absolute or project-relative directory for <id>.png and a job-specific JSON manifest (render_mesh_studio). Absolute or project-relative directory for the frames (default Saved/SequenceFrames/<sequence>) (render_sequence_frames)"),
@@ -4603,7 +4630,7 @@ export const schema: Record<string, z.ZodType> = {
   pattern: z.string().optional().describe("Exact pattern of the policy to clear; omit to clear every policy (clear_dialog_policy). Substring matched against every registered console variable. Pass at least one of name, names and pattern (get_cvars). Case-insensitive substring of the library class name or its Python name (list_function_libraries). Substring matched case-insensitively against the dialog title and message (set_dialog_policy)"),
   paused: z.boolean().optional().describe("true pauses the running trace, false resumes it (default true) (pause_insights_trace). true pauses, false resumes (set_pie_paused)"),
   pieAction: z.string().optional().describe("start | stop | status (default status)"),
-  pieInstance: z.number().optional().describe("PIE world to target: 0 = server/primary, 1..N = clients. See list_pie_instances (capture_scene_png, capture_screenshot, execute_command, find_object, get_object_properties, get_runtime_value, get_runtime_values, invoke_function, invoke_object_function, invoke_object_functions, invoke_static_function, pose_debug_camera, read_bone_transforms, restore_runtime_visibility, set_buffer_visualization, set_movement_mode, set_object_property, set_pie_paused, set_pie_view_target, set_runtime_visibility, teleport_runtime_actor). PIE world to read (default: the primary world, or the first client world when the primary is a dedicated server). See list_pie_instances (get_pie_pawn). PIE instance index when several clients run (get_sequence_runtime_bindings)"),
+  pieInstance: z.number().int().min(0).optional().describe("PIE world to target: 0 = server/primary, 1..N = clients. See list_pie_instances (capture_scene_png, capture_screenshot, execute_command, find_object, get_object_properties, get_runtime_value, get_runtime_values, invoke_function, invoke_object_function, invoke_object_functions, invoke_static_function, pose_debug_camera, read_bone_transforms, restore_runtime_visibility, set_buffer_visualization, set_movement_mode, set_object_property, set_pie_paused, set_pie_view_target, set_runtime_visibility, teleport_runtime_actor). PIE world to read (default: the primary world, or the first client world when the primary is a dedicated server). See list_pie_instances (get_pie_pawn). Which PIE world: 0 = server or primary, 1..N = clients. See editor(list_pie_instances) (get_sequence_runtime_bindings)"),
   pitch: z.number().optional().describe("Control-rotation pitch"),
   platform: z.string().optional().describe("Target platform (default Windows)"),
   playerIndex: z.number().optional().describe("Local player whose console runs a PIE command (default 0) (execute_command). Player index for target=playercontroller, playerpawn, or a LocalPlayer subsystem (default 0) (get_object_properties, invoke_object_function, set_object_property). 0-based player index (default 0) (get_pie_pawn). Local player whose debug camera is used (default 0) (pose_debug_camera). Player whose view target is set (default 0) (set_pie_view_target)"),

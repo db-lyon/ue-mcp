@@ -23,13 +23,15 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "wait",
         "type": "boolean",
         "required": false,
-        "description": "Return only once the result is complete (default true); false returns the requestId to poll with get_request"
+        "description": "Return only once the result is complete (default true); false returns the requestId to poll with get_request",
+        "default": true
       },
       {
         "name": "timeoutSeconds",
         "type": "number",
         "required": false,
-        "description": "Longest wait in seconds (send_message default 300, get_conversation default 60)"
+        "description": "Longest wait in seconds (send_message default 300, get_conversation default 60)",
+        "default": 60
       }
     ],
     "contractExempt": "opens the AI Assistant panel"
@@ -93,13 +95,15 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "wait",
         "type": "boolean",
         "required": false,
-        "description": "Return only once the result is complete (default true); false returns the requestId to poll with get_request"
+        "description": "Return only once the result is complete (default true); false returns the requestId to poll with get_request",
+        "default": true
       },
       {
         "name": "timeoutSeconds",
         "type": "number",
         "required": false,
-        "description": "Longest wait in seconds (send_message default 300, get_conversation default 60)"
+        "description": "Longest wait in seconds (send_message default 300, get_conversation default 60)",
+        "default": 300
       }
     ],
     "contractExempt": "opens the AI Assistant panel and sends a message to its backend"

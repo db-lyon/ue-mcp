@@ -8,161 +8,55 @@
  * mutation a second time.
  *
  *  1. Some calls are simply long. A 190-item batch on a machine that is also
- *     compiling shaders does not finish inside 30 seconds. Callers can now pass
- *     a `timeoutMs` and be believed.
+ *     compiling shaders does not finish inside 30 seconds. Callers can pass a
+ *     `timeoutMs` and be believed.
  *
- *  2. The two ends disagreed. The C++ side registers a per-handler timeout via
- *     FMCPHandlerRegistry::RegisterHandlerWithTimeout, and the game-thread
- *     executor waits that long before giving up. delete_exact_labeled_actors_in_levels
- *     is allowed 300 seconds there and was cut off by the client at 30, so the
- *     server's own limit could never be reached and its error could never be
- *     read. The client now waits at least as long as the server said it would.
+ *  2. The two ends disagreed. The editor waits as long as an action declares
+ *     at its C++ registration, and the client cut it off at 30. The client now
+ *     waits at least as long as the editor will.
  *
- * The registered timeouts are NOT advertised. get_bridge_capabilities publishes
- * the protocol version, the feature list and the registered action names, but
- * not their timeouts, so there is no way to read this off the wire from a
- * plugin that is already built. Inventing a field would mean a protocol change
- * on the C++ side. The table below therefore mirrors the registrations by hand,
- * and tests/unit/bridge-timeout-parity.test.ts parses the plugin sources and
- * fails when the two drift apart. A mirror nobody checks is worse than none.
+ * Each action's timeout is declared once, at its C++ registration
+ * (FMCPActionFacts), published in get_bridge_capabilities.actionFacts and
+ * recorded into ACTION_FACTS, so this file keeps no copy of any of them. The
+ * default and the ceiling come from the wire contract both sides read.
  */
 import { ENV_VARS, readEnv } from "../core/env.js";
+import { ACTION_FACTS } from "./action-facts.generated.js";
+import { DEFAULT_HANDLER_TIMEOUT_SECONDS, MAX_REQUEST_TIMEOUT_SECONDS } from "./wire-contract.js";
 
-/** What a method with no registered timeout gets. Unchanged from before. */
-export const DEFAULT_BRIDGE_TIMEOUT_MS = 30_000;
+/** What a method with no declared timeout gets: the bridge's own default. */
+export const DEFAULT_BRIDGE_TIMEOUT_MS = DEFAULT_HANDLER_TIMEOUT_SECONDS * 1000;
 
 /**
- * Slack added on top of a server-registered timeout, so the client outlives the
+ * Slack added on top of a server-declared timeout, so the client outlives the
  * server's own deadline and can report the server's error instead of its own
  * guess. Without it the two expire together and the race decides which message
  * the user sees.
  */
 export const SERVER_TIMEOUT_MARGIN_MS = 5_000;
 
-/** Upper bound on any single call, caller-supplied included. */
-export const MAX_BRIDGE_TIMEOUT_MS = 3_600_000;
+/**
+ * Upper bound on any single call, caller-supplied included. A larger request is
+ * capped here, never refused; work that needs longer is split into several calls,
+ * or run through the action's job form and polled where it has one.
+ */
+export const MAX_BRIDGE_TIMEOUT_MS = MAX_REQUEST_TIMEOUT_SECONDS * 1000;
 
 /** Environment override for the floor under every call, in milliseconds. */
 export const TIMEOUT_ENV_VAR = ENV_VARS.bridgeTimeoutMs;
 
 /**
- * Mirror of every FMCPHandlerRegistry::RegisterHandlerWithTimeout call in
- * plugin/, in seconds, keyed by bridge method name.
+ * Every declared game-thread timeout, in seconds, keyed by bridge method.
  *
- * Keep it in the order the parity test reads it: alphabetical by method.
  * External handlers registered at runtime through
- * RegisterExternalHandlerWithTimeout are not here and cannot be, since they
- * come from plugins this repo does not build.
+ * RegisterExternalHandlerWithTimeout are not here and cannot be, since they come
+ * from plugins this repo does not build.
  */
-export const REGISTERED_HANDLER_TIMEOUT_SECONDS: Readonly<Record<string, number>> = {
-  analyze_insights_trace: 600,
-  analyze_landscape_terrain: 120,
-  apply_landscape_erosion: 600,
-  apply_landscape_splines: 300,
-  apply_mesh_fracture: 600,
-  apply_mesh_hole_fill: 300,
-  apply_mesh_mirror: 300,
-  apply_mesh_remesh: 300,
-  apply_mesh_simplify: 300,
-  audit_asset_hygiene: 300,
-  audit_blueprint_dead_code: 600,
-  audit_level_performance: 300,
-  audit_replication: 300,
-  batch_retarget_animations: 300,
-  batch_set_actor_properties: 300,
-  batch_set_foliage_settings_where: 300,
-  build_hlod_actors: 1800,
-  build_world_partition_hlods: 3600,
-  build_world_partition_minimap: 3600,
-  bulk_read_asset_properties: 300,
-  bulk_restore_data_assets: 120,
-  bulk_set_component_property: 300,
-  bulk_upsert_data_assets: 120,
-  checkpoint_diff_asset: 300,
-  checkpoint_finish_restore: 300,
-  checkpoint_open_native_diff: 120,
-  compile_customizable_object: 600,
-  compile_localization_target: 1800,
-  convert_brushes_to_static_mesh: 600,
-  create_cpp_class: 300,
-  datasmith_import: 600,
-  datasmith_inspect: 300,
-  datasmith_reimport: 600,
-  delete_exact_labeled_actors_in_levels: 300,
-  delete_world_partition_hlods: 3600,
-  epic_call_mcp_tool: 300,
-  epic_call_tool: 300,
-  export_blueprint_batch: 600,
-  export_landscape_heightmap: 300,
-  fix_asset_hygiene: 300,
-  fixup_redirectors: 300,
-  gather_localization_target: 1800,
-  generate_mesh_collision: 300,
-  generate_skeletal_mesh_lods: 600,
-  get_blueprint_connections: 600,
-  get_landscape_height_region: 120,
-  get_landscape_holes: 120,
-  get_landscape_layer_weight_region: 120,
-  get_landscape_slope_map: 120,
-  get_skinned_vertices: 300,
-  get_static_mesh_geometry: 300,
-  import_landscape_heightmap: 600,
-  invoke_object_functions: 300,
-  live_coding_compile: 300,
-  load_actor_descs: 300,
-  load_region: 300,
-  merge_landscape_edit_layers: 300,
-  mesh_boolean: 300,
-  metahuman_assemble: 900,
-  metahuman_read_character: 300,
-  metahuman_request_rig: 900,
-  metahuman_request_textures: 900,
-  metahuman_set_body: 300,
-  metahuman_set_wardrobe: 300,
-  mrq_render: 1800,
-  paint_landscape_layer: 120,
-  plan_real_world_landscape: 120,
-  query_components: 300,
-  read_blueprint_graph: 180,
-  read_skeletal_mesh_vertices: 300,
-  rebuild_water_zone: 120,
-  recreate_physics_state: 300,
-  refresh_landscape_physical_material_collision: 600,
-  remove_components_by_class: 300,
-  render_sequence_frames: 600,
-  rerun_construction_scripts: 300,
-  resave_mesh_users: 300,
-  run_automation_tests: 300,
-  scale_mesh_geometry: 300,
-  sculpt_landscape: 120,
-  sculpt_landscape_region: 300,
-  search_blueprint_call_sites: 600,
-  search_blueprint_nodes: 600,
-  semantic_search: 120,
-  set_actor_hlod_layer: 300,
-  set_blueprint_component_properties_batch: 600,
-  set_component_materials: 300,
-  set_landscape_height_region: 300,
-  set_landscape_holes: 300,
-  set_landscape_layer_weight_region: 300,
-  set_mesh_simple_collision: 300,
-  simulate_procedural_foliage: 600,
-  snap_instances_to_surface: 300,
-  source_control_connect: 120,
-  source_control_diff: 120,
-  source_control_get_status: 120,
-  source_control_history: 120,
-  source_control_list_changes: 120,
-  source_control_submit: 120,
-  source_control_sync: 300,
-  spawn_actors_batch: 300,
-  start_csv_profile: 30,
-  stop_csv_profile: 90,
-  summarize_static_mesh_usage: 300,
-  transform_skinned_part: 600,
-  trigger_hitch: 30,
-  unload_loaded_regions: 300,
-};
+export const REGISTERED_HANDLER_TIMEOUT_SECONDS: Readonly<Record<string, number>> = Object.fromEntries(
+  Object.entries(ACTION_FACTS)
+    .filter(([, facts]) => facts.timeoutSeconds !== undefined)
+    .map(([method, facts]) => [method, facts.timeoutSeconds as number]),
+);
 
 /** What the editor will wait for this method, in ms, or undefined for the default. */
 export function registeredTimeoutMs(method: string): number | undefined {
@@ -185,7 +79,7 @@ export function environmentTimeoutMs(env: NodeJS.ProcessEnv = process.env): numb
  * An explicit per-call value wins outright, including a shorter one: a caller
  * that asks for less has said so on purpose. Otherwise the answer is the
  * longest of the default, the environment floor, and the server's own
- * registered limit plus its margin, so the client never gives up on a call the
+ * declared limit plus its margin, so the client never gives up on a call the
  * editor is still allowed to be working on.
  */
 export function resolveBridgeTimeout(

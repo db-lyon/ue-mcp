@@ -93,4 +93,5 @@ void MCPHandlerCatalog::RegisterAllHandlers(FMCPHandlerRegistry& Registry)
 	FPIEHandlers::RegisterHandlers(Registry);
 	FBatchHandlers::RegisterHandlers(Registry);
 	FLocalizationHandlers::RegisterHandlers(Registry);
+	Registry.MarkCatalogComplete();
 }

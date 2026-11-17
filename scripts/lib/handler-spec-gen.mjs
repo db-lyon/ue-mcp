@@ -163,7 +163,10 @@ export function handlersByCategory(snapshot) {
   const problems = specProblems(snapshot.handlers ?? {});
   if (problems.length > 0) throw new Error(`handler-specs.json cannot generate a surface:\n  ${problems.join("\n  ")}`);
   const out = new Map();
+  const facts = snapshot.actionFacts ?? {};
   for (const method of Object.keys(snapshot.handlers).sort()) {
+    // Called by the server itself, never through a tool, so no surface declares it.
+    if (facts[method]?.serverInternal) continue;
     const spec = snapshot.handlers[method];
     const category = spec.category;
     if (!category) throw new Error(`${method}: no category, so no module to generate it into`);
@@ -219,6 +222,46 @@ ${categories.map((c) => `  ...${c},`).join("\n")}
 `;
 }
 
+/** Where the recorded action facts are rendered: the bridge layer, which reads them. */
+export const ACTION_FACTS_MODULE = "src/bridge/action-facts.generated.ts";
+
+/**
+ * The action facts every registered action declares in C++ (FMCPActionFacts),
+ * as get_bridge_capabilities.actionFacts published them: the client's timeout
+ * table, modal-safe set, batch refusals and server-internal list all read this.
+ */
+export function renderActionFactsModule(snapshot) {
+  const facts = snapshot.actionFacts ?? {};
+  const sorted = Object.fromEntries(Object.keys(facts).sort().map((m) => [m, facts[m]]));
+  return `// @session independent: Generated action facts from the recorded C++ registrations; data only, with no editor state.
+// GENERATED FILE - do not edit.
+//
+// Written by scripts/generate-handler-specs.mjs from tests/golden/handler-specs.json
+// (actionFacts), recorded from get_bridge_capabilities. To change one, change the
+// action's C++ registration (FMCPSpecRules: Timeout, ModalSafe, RefusedInBatch,
+// ServerInternal), re-record and regenerate.
+
+/** How the bridge runs an action. Only what differs from the common case is present. */
+export interface ActionFacts {
+  /** Game-thread budget in seconds; absent is the bridge default. */
+  timeoutSeconds?: number;
+  /** Runs while a modal dialog holds the game thread. */
+  modalSafe?: boolean;
+  /** Answered on the socket thread, before the dialog gate. */
+  servedOffGameThread?: boolean;
+  /** Left out of the parameter echo. */
+  notEchoed?: boolean;
+  /** Why execute_batch refuses to carry it. */
+  refusedInBatch?: string;
+  /** Who calls it instead of a tool. */
+  serverInternal?: string;
+}
+
+/** Every bridge method whose facts differ from the default, keyed by method. */
+export const ACTION_FACTS: Readonly<Record<string, ActionFacts>> = ${JSON.stringify(sorted, null, 2)};
+`;
+}
+
 /** Every generated file, as relative path to contents. */
 export function renderAll(snapshot) {
   const byCategory = handlersByCategory(snapshot);
@@ -228,5 +271,6 @@ export function renderAll(snapshot) {
     files.set(`src/tools/specs/${category}.generated.ts`, renderCategoryModule(category, byCategory.get(category)));
   }
   files.set("src/tools/specs/index.ts", renderIndexModule(categories));
+  files.set(ACTION_FACTS_MODULE, renderActionFactsModule(snapshot));
   return files;
 }

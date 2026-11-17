@@ -18,17 +18,19 @@ export const PROTOCOL_VERSION = 2;
 /**
  * Native handler ABI version for plugins that register their own handlers. Bump it when the
  * handler signature or registration contract changes in a breaking way. 2: external handlers can
- * register a parameter contract (MCPHandlerSpec.h).
+ * register a parameter contract (MCPHandlerSpec.h). 3: the spec structs gain parameter defaults
+ * and action facts (FMCPActionFacts: timeout, modal safety, batch refusal, server-internal
+ * caller), which changes their layout, so a plugin built against 2 is rebuilt.
  */
 
-export const HANDLER_API_VERSION = 2;
+export const HANDLER_API_VERSION = 3;
 
 /**
  * Capability names get_bridge_capabilities advertises. A client asks about the one thing it needs
  * instead of comparing version numbers. Every name is always compiled in and always advertised.
  */
 
-export const BRIDGE_FEATURES = ["frame-reassembly","control-frames","capability-handshake","exclusive-port-claim","owned-port-record","instance-records","requested-port-file","param-echo","handler-specs","call-timeout","session-token","deferred-results","cancel-request","progress-frames"] as const;
+export const BRIDGE_FEATURES = ["frame-reassembly","control-frames","capability-handshake","exclusive-port-claim","owned-port-record","instance-records","requested-port-file","param-echo","handler-specs","call-timeout","session-token","deferred-results","cancel-request","progress-frames","action-facts"] as const;
 export type BridgeFeature = (typeof BRIDGE_FEATURES)[number];
 
 /** JSON-RPC 2.0 error codes the bridge answers with. */
@@ -60,6 +62,22 @@ export const ROUTING_PARAM_NAMES: readonly string[] = ["action","timeoutMs","sel
  */
 
 export const MAX_BATCH_CALLS = 256;
+
+/**
+ * How long the bridge waits on the game thread for an action that declares no timeout of its own
+ * (FMCPActionFacts::TimeoutSeconds). get_bridge_capabilities.actionFacts lists every action that
+ * declares one.
+ */
+
+export const DEFAULT_HANDLER_TIMEOUT_SECONDS = 30;
+
+/**
+ * The most a call's timeoutMs can raise its budget to. A larger value is capped here, never
+ * refused; work that needs longer is split into several calls, or run through the action's job
+ * form and polled where it has one.
+ */
+
+export const MAX_REQUEST_TIMEOUT_SECONDS = 3600;
 
 /**
  * The state a bridge record reports. A bind-failed record names no reachable port: it exists to

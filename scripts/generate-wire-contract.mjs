@@ -87,6 +87,10 @@ export function renderTs(c) {
 
   out.push(jsDoc(c.batch.maxCalls.doc));
   out.push(`export const MAX_BATCH_CALLS = ${c.batch.maxCalls.value};\n`);
+  out.push(jsDoc(c.timeouts.defaultSeconds.doc));
+  out.push(`export const DEFAULT_HANDLER_TIMEOUT_SECONDS = ${c.timeouts.defaultSeconds.value};\n`);
+  out.push(jsDoc(c.timeouts.maxRequestSeconds.doc));
+  out.push(`export const MAX_REQUEST_TIMEOUT_SECONDS = ${c.timeouts.maxRequestSeconds.value};\n`);
 
   out.push(jsDoc(c.bridgeState.doc));
   out.push(`export const BRIDGE_STATE = ${constObject(c.bridgeState.values)} as const;\nexport type BridgeState = (typeof BRIDGE_STATE)[keyof typeof BRIDGE_STATE];\n`);
@@ -169,6 +173,11 @@ export function renderCpp(c) {
 
   o.push(cppDoc(c.batch.maxCalls.doc, "\t"));
   o.push(`\tinline constexpr int32 MaxBatchCalls = ${c.batch.maxCalls.value};\n\n`);
+
+  o.push(cppDoc(c.timeouts.defaultSeconds.doc, "\t"));
+  o.push(`\tinline constexpr double DefaultHandlerTimeoutSeconds = ${c.timeouts.defaultSeconds.value}.0;\n\n`);
+  o.push(cppDoc(c.timeouts.maxRequestSeconds.doc, "\t"));
+  o.push(`\tinline constexpr double MaxRequestTimeoutSeconds = ${c.timeouts.maxRequestSeconds.value}.0;\n\n`);
 
   o.push(cppStrings("BridgeState", c.bridgeState.values, c.bridgeState.doc), "\n");
   o.push(cppStrings("DialogRefusalField", c.dialogRefusal.fields, c.dialogRefusal.doc), "\n");

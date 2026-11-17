@@ -838,7 +838,7 @@ void FMetaHumanHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("metahuman_create_character"), &CreateCharacter, {
 		MCPParam::Required(TEXT("name"), EType::String, TEXT("Name of the new MetaHumanCharacter asset")),
 		MCPParam::Optional(TEXT("packagePath"), EType::String, TEXT("Destination folder (default /Game/MetaHumans)")),
-		MCPParam::Optional(TEXT("onConflict"), EType::String, TEXT("skip (default) returns an existing asset untouched, error refuses")),
+		MCPSharedParam::OnConflict(),
 	}, MCPSpec::ContractExempt(TEXT("creates a MetaHumanCharacter asset")));
 	Registry.RegisterHandlerWithTimeout(TEXT("metahuman_read_character"), &ReadCharacter, 300.0f, {
 		AssetPathParam(),

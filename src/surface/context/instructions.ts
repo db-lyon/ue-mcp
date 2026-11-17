@@ -1,6 +1,7 @@
 // @session independent: The initialize payload is sent once per process and cannot be renegotiated.
 import { ALL_TOOLS } from "../../tools.js";
 import { SIGNATURE_LEGEND } from "../action-signature.js";
+import { DEFAULT_BRIDGE_TIMEOUT_MS } from "../../bridge/bridge-timeouts.js";
 import { unionKnowledge, type SessionSurface } from "../../sessions/session-surface.js";
 import type { ContextStrategy } from "../../config/context-strategy.js";
 import type { ToolDef } from "../tool-types.js";
@@ -267,7 +268,7 @@ function microGuideText(f: SurfaceFacts): string {
 - tools(action="call", category="blueprint", method="create", args={ ... }) - invoke any action
 
 \`method\` is the action name; \`args\` is the object of that action's parameters.
-Every call also takes, in args or beside it: timeoutMs (how long to wait in ms, default 30s; a timeout never means the call did not happen, so read the state back before retrying), select and omit (result fields to keep or drop, as dotted paths).
+Every call also takes, in args or beside it: timeoutMs (how long to wait in ms, default ${DEFAULT_BRIDGE_TIMEOUT_MS / 1000}s; a timeout never means the call did not happen, so read the state back before retrying), select and omit (result fields to keep or drop, as dotted paths).
 ${SIGNATURE_LEGEND}
 Start with: tools(action="call", category="project", method="get_status").
 

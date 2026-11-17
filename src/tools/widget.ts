@@ -58,27 +58,10 @@ export const widgetTool: ToolDef = categoryTool(
     run_utility_widget:       specBp("mutate", "Open editor utility widget.", "run_editor_utility_widget"),
     create_utility_blueprint: specBp("mutate", "Create editor utility blueprint. assetPath is the full destination; name + packagePath is the older spelling. Idempotent by path.", "create_editor_utility_blueprint"),
     run_utility_blueprint:    specBp("mutate", "Run editor utility blueprint.", "run_editor_utility_blueprint"),
-    // #799: both compile and save the Widget Blueprint before they answer, and
-    // that can run well past the 30s default when the asset is open in the
-    // designer. The mutation is on disk by the time the default cap expires, so
-    // giving up early only turns a completed call into an ambiguous one. Both
-    // are idempotent by assetPath + widgetName, so a retry is safe.
-    add_widget: {
-      ...specBp("mutate", "Add widget to widget tree. Idempotent by assetPath + widgetName: passing widgetName makes a retry safe, and the result carries requestedWidgetName/persistedWidgetName/renamed plus compileStatus.", "add_widget"),
-      timeoutMs: 120_000,
-    },
-    build_tree: {
-      ...specBp("mutate", "Build a nested widget subtree in one call (#1300). tree is one node {widgetClass, widgetName?, properties?, children?}, children nesting the same shape; properties take set_widget_property names, slot.* included, with JSON values (a string, number or bool goes through set_widget_property's routes, an object or array through the JSON setter). The whole spec is validated (classes, panels, unique and unused names) before anything is built, any failure undoes every widget it built, and the blueprint is compiled and saved once. Lands under parentWidgetName, else the root panel, else becomes the root. The one rollback is remove_widget on the subtree root, which removes everything under it. Wrap several siblings in a panel node.", "build_tree"),
-      timeoutMs: 120_000,
-    },
-    remove_widget: {
-      ...specBp("mutate", "Remove widget from tree. Idempotent, and clears the widget's Widget Blueprint GUID metadata so later compiles stop reporting a deleted variable (#799).", "remove_widget"),
-      timeoutMs: 120_000,
-    },
-    rename_widget: {
-      ...specBp("mutate", "Rename a widget in place (#1679). It keeps its object, slot, sibling position and properties; the variable GUID, designer bindings, animation bindings, navigation rules, desired focus and graph get/set nodes move to the new name. Refuses a name another widget, variable or function holds, unless it is a BindWidget name on the native parent for a widget of the bound class, which is how a copied widget is fitted to a BindWidget contract. Reports referencesUpdated; idempotent by the new name; the rollback renames it back.", "rename_widget"),
-      timeoutMs: 120_000,
-    },
+    add_widget: specBp("mutate", "Add widget to widget tree. Idempotent by assetPath + widgetName: passing widgetName makes a retry safe, and the result carries requestedWidgetName/persistedWidgetName/renamed plus compileStatus.", "add_widget"),
+    build_tree: specBp("mutate", "Build a nested widget subtree in one call (#1300). tree is one node {widgetClass, widgetName?, properties?, children?}, children nesting the same shape; properties take set_widget_property names, slot.* included, with JSON values (a string, number or bool goes through set_widget_property's routes, an object or array through the JSON setter). The whole spec is validated (classes, panels, unique and unused names) before anything is built, any failure undoes every widget it built, and the blueprint is compiled and saved once. Lands under parentWidgetName, else the root panel, else becomes the root. The one rollback is remove_widget on the subtree root, which removes everything under it. Wrap several siblings in a panel node.", "build_tree"),
+    remove_widget: specBp("mutate", "Remove widget from tree. Idempotent, and clears the widget's Widget Blueprint GUID metadata so later compiles stop reporting a deleted variable (#799).", "remove_widget"),
+    rename_widget: specBp("mutate", "Rename a widget in place (#1679). It keeps its object, slot, sibling position and properties; the variable GUID, designer bindings, animation bindings, navigation rules, desired focus and graph get/set nodes move to the new name. Refuses a name another widget, variable or function holds, unless it is a BindWidget name on the native parent for a widget of the bound class, which is how a copied widget is fitted to a BindWidget contract. Reports referencesUpdated; idempotent by the new name; the rollback renames it back.", "rename_widget"),
     move_widget:              specBp("mutate", "Reparent widget.", "move_widget"),
     set_root:                 specBp("mutate", "Replace WBP root with an existing widget by name (#365).", "set_root_widget"),
     wrap_root:                specBp("mutate", "Wrap the current root in a new panel widget (UMG 'Wrap With'). wrapperClass must be a UPanelWidget subclass (#365).", "wrap_root_widget"),

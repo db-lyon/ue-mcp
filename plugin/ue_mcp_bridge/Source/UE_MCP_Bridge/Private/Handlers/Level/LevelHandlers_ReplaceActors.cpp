@@ -380,8 +380,8 @@ void FLevelHandlers::RegisterActorReplaceHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("copySourceProperties"), EType::Boolean, TEXT("When the asset is a Blueprint sharing a native parent with a replaced actor, copy that actor's property values (default true)")),
 	});
 	Registry.RegisterHandler(TEXT("rebuild_brush"), &RebuildBrush, {
-		MCPParam::Optional(TEXT("actorLabel"), EType::String, TEXT("Brush or volume to rebuild")),
-		MCPParam::Optional(TEXT("actorPath"), EType::String, TEXT("Object path of the brush; preferred over actorLabel when known")),
+		MCPSharedParam::ActorLabel().Describe(TEXT("Brush or volume to rebuild")),
+		MCPSharedParam::ActorPath().Describe(TEXT("Object path of the brush; preferred over actorLabel when known")),
 		MCPParam::Optional(TEXT("builderClass"), EType::String, TEXT("Brush builder class to rebuild with (default: the brush's current builder)")),
 		MCPParam::Optional(TEXT("builderProperties"), EType::Object, TEXT("Builder property name -> value, such as {X: 400, Y: 200, Z: 100} for a CubeBuilder")),
 		MCPParam::Optional(TEXT("deferBsp"), EType::Boolean, TEXT("Defer the BSP rebuild for batching; a later call without it processes the pending BSP (default false)")),

@@ -106,7 +106,7 @@ void FBlueprintHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	const FMCPParamSpec SpecComponentName = MCPParam::Required(TEXT("componentName"), EType::String, TEXT("SCS or inherited component name"));
 	const FMCPParamSpec SpecPropertyName = MCPParam::Required(TEXT("propertyName"), EType::String, TEXT("Property name"));
 	const FMCPParamSpec SpecValue = MCPParam::Required(TEXT("value"), EType::Any, TEXT("Value to write: a JSON value, or Unreal export text. null clears an object, class or interface reference"));
-	const FMCPParamSpec SpecOnConflict = MCPParam::Optional(TEXT("onConflict"), EType::String, TEXT("skip (default) reports the existing entry; error refuses"));
+	const FMCPParamSpec SpecOnConflict = MCPSharedParam::OnConflict().Describe(TEXT("skip (default) reports the existing entry; error refuses"));
 	const FMCPParamSpec SpecVarType = MCPParam::Optional(TEXT("varType"), EType::String, TEXT("Variable type: bool, int, float, string, name, text, byte, vector, rotator, transform, object:/Script/Module.Class, struct:/Game/Path, enum:/Game/Path.Enum, or a container over any of those (Type[], set<Type>, map<Key,Value>)")).Alias(TEXT("type"));
 	const FMCPParamSpec SpecTitleFilter = MCPParam::Optional(TEXT("titleFilter"), EType::String, TEXT("Case-insensitive substring match on node title"));
 	const FMCPParamSpec SpecClassFilter = MCPParam::Optional(TEXT("classFilter"), EType::String, TEXT("Case-insensitive substring match on node class name"));
@@ -332,7 +332,7 @@ void FBlueprintHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("properties"), EType::Object, TEXT("Directory mode: property map applied to each matching Blueprint")),
 		MCPParam::Optional(TEXT("recursive"), EType::Boolean, TEXT("Directory mode: include subdirectories (default true)")),
 		MCPParam::Optional(TEXT("maxBlueprints"), EType::Integer, TEXT("Maximum candidate Blueprints, default 200, maximum 2000; overflow refuses the batch")).Range(1, 2000),
-		MCPParam::Optional(TEXT("dryRun"), EType::Boolean, TEXT("Validate values on transient copies without editing, compiling or saving (default false)")),
+		MCPSharedParam::DryRun().Describe(TEXT("Validate values on transient copies without editing, compiling or saving (default false)")),
 	});
 	// #442: dedicated OverrideMaterials writer that takes a materialPaths array
 	// directly, avoiding any value coercion concerns on the generic path.
@@ -453,7 +453,8 @@ void FBlueprintHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("flush_inheritable_component_handler"), &FlushInheritableComponentHandler, {
 		SpecAssetPath,
 	});
-	Registry.RegisterHandler(TEXT("flush_blueprint_component_templates"), &FlushComponentTemplates, {
+	// Recompiles and resaves the Blueprint and its children.
+	Registry.RegisterHandlerWithTimeout(TEXT("flush_blueprint_component_templates"), &FlushComponentTemplates, 120.0f, {
 		SpecAssetPath,
 	});
 	Registry.RegisterHandler(TEXT("set_actor_tick_settings"), &SetActorTickSettings, {
@@ -513,7 +514,7 @@ void FBlueprintHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	// v1.0.0-rc.15 - agent-friendly BP authoring
 	Registry.RegisterHandler(TEXT("compile_blueprints"), &CompileBlueprints, {
 		MCPParam::Required(TEXT("assetPaths"), EType::Array, TEXT("Blueprint asset paths to compile")).Items(EType::String),
-		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Persist on success (default true)")),
+		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Persist on success (default true)")).Default(true),
 	});
 	Registry.RegisterHandler(TEXT("cleanup_graph"), &CleanupGraph, {
 		SpecAssetPath,

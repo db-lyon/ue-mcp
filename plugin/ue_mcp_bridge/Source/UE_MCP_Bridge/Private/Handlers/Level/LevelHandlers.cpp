@@ -116,10 +116,10 @@ void FLevelHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	// contract values would reach a write before anything fails says why in its
 	// ContractExempt reason.
 	using EType = EMCPParamType;
-	const FMCPParamSpec SpecActorLabel = MCPParam::Optional(TEXT("actorLabel"), EType::String, TEXT("Actor editor label; pass actorLabel or actorPath"));
-	const FMCPParamSpec SpecActorPath = MCPParam::Optional(TEXT("actorPath"), EType::String, TEXT("Full actor object path; the unambiguous selector, and it wins over actorLabel"));
-	const FMCPParamSpec SpecWorld = MCPParam::Optional(TEXT("world"), EType::String, TEXT("World scope: editor (default) | pie"));
-	const FMCPParamSpec SpecPieInstance = MCPParam::Optional(TEXT("pieInstance"), EType::Integer, TEXT("Which PIE world when world is pie: 0 = server or primary, 1..N = clients"));
+	const FMCPParamSpec SpecActorLabel = MCPSharedParam::ActorLabel();
+	const FMCPParamSpec SpecActorPath = MCPSharedParam::ActorPath();
+	const FMCPParamSpec SpecWorld = MCPSharedParam::World().Describe(TEXT("World scope: editor (default) | pie"));
+	const FMCPParamSpec SpecPieInstance = MCPSharedParam::PieInstance().Describe(TEXT("Which PIE world when world is pie: 0 = server or primary, 1..N = clients"));
 	const FMCPParamSpec SpecCursor = MCPParam::Optional(TEXT("cursor"), EType::String, TEXT("Resume a paged read: pass back the nextCursor from the previous page, unmodified"));
 	const FMCPParamSpec SpecLimit = MCPParam::Optional(TEXT("limit"), EType::Integer, TEXT("Rows on this page"));
 	const FMCPParamSpec SpecLocation = MCPParam::Optional(TEXT("location"), EType::Vec3, TEXT("World location"));
@@ -127,7 +127,7 @@ void FLevelHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	const FMCPParamSpec SpecScale = MCPParam::Optional(TEXT("scale"), EType::Vec3, TEXT("Actor scale"));
 	const FMCPParamSpec SpecComponentName = MCPParam::Optional(TEXT("componentName"), EType::String, TEXT("Component instance name"));
 	const FMCPParamSpec SpecLabel = MCPParam::Optional(TEXT("label"), EType::String, TEXT("Actor label; an existing actor with this label is reported rather than duplicated"));
-	const FMCPParamSpec SpecOnConflict = MCPParam::Optional(TEXT("onConflict"), EType::String, TEXT("When the label or name is taken: skip (default) | error"));
+	const FMCPParamSpec SpecOnConflict = MCPSharedParam::OnConflict().Describe(TEXT("When the label or name is taken: skip (default) | error"));
 	const FMCPParamSpec SpecPropertyName = MCPParam::Required(TEXT("propertyName"), EType::String, TEXT("Property name, dotted paths supported"));
 	const FMCPParamSpec SpecWorldSpace = MCPParam::Optional(TEXT("worldSpace"), EType::Boolean, TEXT("Treat transforms as world space (default true)"));
 	const FMCPParamSpec SpecIndex = MCPParam::Required(TEXT("index"), EType::Integer, TEXT("Instance index"));
@@ -144,7 +144,7 @@ void FLevelHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	const FMCPParamSpec SpecColor = MCPParam::Optional(TEXT("color"), EType::Object, TEXT("Colour {r, g, b} in 0-255"));
 	const FMCPParamSpec SpecPostProcessComponent = MCPParam::Optional(TEXT("componentName"), EType::String, TEXT("Component holding the post-process settings, when the actor is not a PostProcessVolume"));
 	const FMCPParamSpec SpecPostProcessProperty = MCPParam::Optional(TEXT("propertyName"), EType::String, TEXT("FPostProcessSettings property on that component"));
-	const FMCPParamSpec SpecDryRun = MCPParam::Optional(TEXT("dryRun"), EType::Boolean, TEXT("Report what would change without writing"));
+	const FMCPParamSpec SpecDryRun = MCPSharedParam::DryRun().Describe(TEXT("Report what would change without writing"));
 	const FMCPParamSpec SpecTransactionLabel = MCPParam::Optional(TEXT("transactionLabel"), EType::String, TEXT("Undo-stack entry name"));
 	const FMCPParamSpec SpecActorLabels = MCPParam::Optional(TEXT("actorLabels"), EType::Array, TEXT("Exact actor editor labels")).Items(EType::String);
 	const FMCPParamSpec SpecLabelPrefix = MCPParam::Optional(TEXT("labelPrefix"), EType::String, TEXT("Case-sensitive prefix over the actor's editor label"));
@@ -192,7 +192,7 @@ void FLevelHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("componentName"), EType::String, TEXT("Only this component, by instance name")),
 		MCPParam::Optional(TEXT("relativeTo"), EType::String, TEXT("Scene component on the same actor (instance name); every scene component and socket row also reports its transform in that component's space")),
 		MCPParam::Optional(TEXT("socketNames"), EType::Array, TEXT("Bone or socket names; each component that has sockets reports their component-space transforms")).Items(EType::String),
-		MCPParam::Optional(TEXT("world"), EType::String, TEXT("editor (default) | pie | a world object path such as a Blueprint editor preview world (/Engine/Transient.World_N); with world omitted, an actorPath in another world reads that world")),
+		MCPSharedParam::World().Describe(TEXT("editor (default) | pie | a world object path such as a Blueprint editor preview world (/Engine/Transient.World_N); with world omitted, an actorPath in another world reads that world")),
 		SpecPieInstance,
 	});
 	Registry.RegisterHandler(TEXT("get_relative_transform"), &GetRelativeTransform, {
@@ -286,7 +286,7 @@ void FLevelHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	}, MCPSpec::ContractExempt(TEXT("Ends any play session, collects garbage and swaps the open map before the contract path can fail")));
 	Registry.RegisterHandler(TEXT("clear_level_script"), &ClearLevelScript, {
 		MCPParam::Optional(TEXT("dryRun"), EType::Boolean, TEXT("Report what would be removed without removing it (default true)")),
-		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save only the current level after a successful clear and compile (default false)")),
+		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save only the current level after a successful clear and compile (default false)")).Default(false),
 	}, MCPSpec::ContractExempt(TEXT("The contract's dryRun=false clears the loaded Level Blueprint; nothing it reads fails first")));
 	Registry.RegisterHandler(TEXT("set_component_property"), &SetComponentProperty, {
 		SpecActorLabel, SpecActorPath, SpecComponentName, SpecPropertyName,
@@ -312,7 +312,7 @@ void FLevelHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 			MCPParam::RequiredField(TEXT("degrees"), EType::Number, TEXT("Rotation in degrees, greater than zero")),
 		}),
 		MCPParam::Optional(TEXT("scaleMultiplier"), EType::Number, TEXT("Uniform relative-scale multiplier, greater than zero")),
-		MCPParam::Optional(TEXT("dryRun"), EType::Boolean, TEXT("Inspect and preview the requested transform without writing (default false)")),
+		MCPSharedParam::DryRun().Describe(TEXT("Inspect and preview the requested transform without writing (default false)")),
 		SpecWorld, SpecPieInstance,
 	}, MCPSpec::ExactlyOne({ { TEXT("actorLabel") }, { TEXT("actorPath") } }));
 	// nudge_component's rollback names this, so its own surface carries no restore key.
@@ -442,8 +442,8 @@ void FLevelHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("traceComplex"), EType::Boolean, TEXT("Trace per-triangle collision (default false)")),
 		MCPParam::Optional(TEXT("channel"), EType::String, TEXT("Collision channel (default Visibility)")),
 		MCPParam::Optional(TEXT("ignoreActors"), EType::Array, TEXT("Actor labels to skip")).Items(EType::String),
-		MCPParam::Optional(TEXT("world"), EType::String, TEXT("World scope: editor (default) | pie")),
-		MCPParam::Optional(TEXT("pieInstance"), EType::Integer, TEXT("Which PIE world when world is pie: 0 = server or primary, 1..N = clients")),
+		MCPSharedParam::World().Describe(TEXT("World scope: editor (default) | pie")),
+		MCPSharedParam::PieInstance().Describe(TEXT("Which PIE world when world is pie: 0 = server or primary, 1..N = clients")),
 		MCPParam::Optional(TEXT("multi"), EType::Boolean, TEXT("Return overlaps and the first blocking hit, capped at 64 (default false)")),
 	});
 	Registry.RegisterHandler(TEXT("line_trace"), &LineTrace, {
@@ -487,7 +487,7 @@ void FLevelHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("read_actor_motion"), &ReadActorMotion, {
 		SpecActorLabel, SpecActorLabels, SpecActorPath,
 		MCPParam::Optional(TEXT("actorPaths"), EType::Array, TEXT("Full actor object paths")).Items(EType::String),
-		MCPParam::Optional(TEXT("world"), EType::String, TEXT("World scope: auto (default, PIE when running) | editor | pie")),
+		MCPSharedParam::World().Describe(TEXT("World scope: auto (default, PIE when running) | editor | pie")),
 		SpecPieInstance,
 	});
 	// #434: bulk-add transforms to a HISMC / ISMC component (Python crashes).
@@ -606,7 +606,7 @@ void FLevelHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("classPathContains"), EType::String, TEXT("Case-insensitive substring of the generated class path")),
 		MCPParam::Optional(TEXT("classPathContainsAny"), EType::Array, TEXT("Match when the class path contains any of these case-insensitive substrings")).Items(EType::String),
 		SpecFolderPath, SpecFolderPathPrefix,
-		MCPParam::Optional(TEXT("dryRun"), EType::Boolean, TEXT("Report the matches without deleting them (default false)")),
+		MCPSharedParam::DryRun().Describe(TEXT("Report the matches without deleting them (default false)")),
 	}, MCPSpec::AtLeastOne({
 		{ TEXT("labelPrefix") }, { TEXT("labelContains") }, { TEXT("nameContains") }, { TEXT("className") },
 		{ TEXT("tag") }, { TEXT("classPathContains") }, { TEXT("classPathContainsAny") },
@@ -628,7 +628,7 @@ void FLevelHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		SpecActorLabels, SpecLabelPrefix,
 		MCPParam::Optional(TEXT("className"), EType::String, TEXT("Case-sensitive substring over the class name")),
 		SpecSelectorTag,
-		MCPParam::Optional(TEXT("dryRun"), EType::Boolean, TEXT("Report the matches without moving them (default false)")),
+		MCPSharedParam::DryRun().Describe(TEXT("Report the matches without moving them (default false)")),
 		SpecTransactionLabel,
 	}, MCPSpec::AtLeastOne({ { TEXT("actorLabels") }, { TEXT("labelPrefix") }, { TEXT("className") }, { TEXT("tag") } })
 		.ContractExempt(TEXT("Opens an undo transaction and runs its write loop under the contract values, which match no actor; nothing it reads fails first")));
@@ -642,7 +642,7 @@ void FLevelHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("delete_outliner_folder"), &DeleteOutlinerFolder, {
 		MCPParam::Optional(TEXT("folderPath"), EType::String, TEXT("World Outliner folder to delete, with the empty folders under it")),
 		SpecOutlinerFolderPaths,
-		MCPParam::Optional(TEXT("dryRun"), EType::Boolean, TEXT("Report what would be deleted without deleting (default false)")),
+		MCPSharedParam::DryRun().Describe(TEXT("Report what would be deleted without deleting (default false)")),
 	}, MCPSpec::AtLeastOne({ { TEXT("folderPath") }, { TEXT("folderPaths") } }));
 	const FMCPParamSpec SpecDescFilter = MCPParam::Optional(TEXT("filter"), EType::String, TEXT("Case-insensitive substring over label, name, class and path"));
 	const FMCPParamSpec SpecDescClassName = MCPParam::Optional(TEXT("className"), EType::String, TEXT("Actor class filter"));
@@ -886,7 +886,7 @@ void FLevelHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("classFilter"), EType::String, TEXT("Restrict to actors of this class")).Alias(TEXT("actorClassFilter")),
 		SpecFolderPath, SpecFolderPathPrefix, SpecMatchSubclasses,
 		MCPParam::Optional(TEXT("dryRun"), EType::Boolean, TEXT("Report what would be removed without removing it (default TRUE)")),
-		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save the level after a committed removal (default false)")),
+		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save the level after a committed removal (default false)")).Default(false),
 		SpecTransactionLabel,
 	});
 	// The contract class resolves to nothing and is refused before anything spawns.
@@ -927,7 +927,7 @@ void FLevelHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		}),
 		MCPParam::Optional(TEXT("properties"), EType::Object, TEXT("Property name to value applied to every spawn")),
 		MCPParam::Optional(TEXT("labelPrefix"), EType::String, TEXT("Label prefix for the spawned actors")),
-		MCPParam::Optional(TEXT("dryRun"), EType::Boolean, TEXT("Return every computed transform without spawning")),
+		MCPSharedParam::DryRun().Describe(TEXT("Return every computed transform without spawning")),
 		MCPParam::Optional(TEXT("maxSpawn"), EType::Integer, TEXT("Refuse a plan larger than this (default 500, max 5000)")),
 		SpecTransactionLabel,
 	}, MCPSpec::ExactlyOne({ { TEXT("instances") }, { TEXT("fromComponents") }, { TEXT("alongSpline") } }));
@@ -957,7 +957,7 @@ void FLevelHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Required(TEXT("meshPaths"), EType::Array, TEXT("StaticMesh asset paths whose loaded users to rebuild and save, matched by object path, case-insensitive (at most 256)")).Items(EType::String),
 		MCPParam::Optional(TEXT("componentClass"), EType::String, TEXT("any (default, every StaticMeshComponent and subclass) | StaticMeshComponent (all but spline meshes) | SplineMeshComponent")),
 		MCPParam::Optional(TEXT("recreateCollision"), EType::Boolean, TEXT("Recreate each match's physics state, and rebuild a SplineMeshComponent's collision copy from the current mesh even when the GUID did not change (default true)")),
-		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save the packages of the matched actors and no others (default true)")),
+		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save the packages of the matched actors and no others (default true)")).Default(true),
 		MCPParam::Optional(TEXT("dryRun"), EType::Boolean, TEXT("List the matched components and packages without rebuilding or saving (default TRUE)")),
 		MCPParam::Optional(TEXT("maxActors"), EType::Integer, TEXT("Refuse to act on more than this many actors (default 256)")),
 	});
@@ -1010,8 +1010,8 @@ void FLevelHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	});
 	Registry.RegisterHandler(TEXT("destroy_transient_actor"), &DestroyTransientActor, {
 		SpecWorld, SpecPieInstance,
-		MCPParam::Optional(TEXT("actorPath"), EType::String, TEXT("Transient actor object path")),
-		MCPParam::Optional(TEXT("actorLabel"), EType::String, TEXT("Transient actor label")),
+		MCPSharedParam::ActorPath().Describe(TEXT("Transient actor object path")),
+		MCPSharedParam::ActorLabel().Describe(TEXT("Transient actor label")),
 		MCPParam::Optional(TEXT("all"), EType::Boolean, TEXT("Destroy every transient verification actor in the world")),
 	});
 	Registry.RegisterHandler(TEXT("list_transient_actors"), &ListTransientActors, {

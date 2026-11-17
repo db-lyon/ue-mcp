@@ -15,7 +15,7 @@ void FMachineLearningHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("NNEModelData asset to create, e.g. /Game/ML/NNE_Model")),
 		MCPParam::Optional(TEXT("fileType"), EType::String, TEXT("Model file type the runtimes read (default the file's extension)")),
 		MCPParam::Optional(TEXT("targetRuntimes"), EType::Array, TEXT("Runtimes to cook the model for, e.g. NNERuntimeORTCpu or NNERuntimeLiteRT (default every runtime)")).Items(EType::String),
-		MCPParam::Optional(TEXT("onConflict"), EType::String, TEXT("skip (default) reports an existing asset, error refuses it")),
+		MCPSharedParam::OnConflict(),
 	});
 	Registry.RegisterHandler(TEXT("nne_run_inference"), &NNERunInference, {
 		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("NNEModelData asset")),

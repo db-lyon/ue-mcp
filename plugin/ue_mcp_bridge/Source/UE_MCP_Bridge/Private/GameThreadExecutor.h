@@ -5,6 +5,7 @@
 #include "Dom/JsonObject.h"
 #include "HAL/PlatformProcess.h"
 #include "HAL/ThreadSafeBool.h"
+#include "MCPWireContract.h"
 
 class FMCPGameThreadExecutor
 {
@@ -13,7 +14,7 @@ public:
 	using FHandlerFunction = TFunction<TSharedPtr<FJsonValue>(const TSharedPtr<FJsonObject>& Params)>;
 
 	// Game-thread timeout for a handler that registered none of its own.
-	static constexpr float DefaultTimeoutSeconds = 30.0f;
+	static constexpr float DefaultTimeoutSeconds = (float)UEMCPWire::DefaultHandlerTimeoutSeconds;
 
 	/** The answer for a request the executor did not run: success false, the
 	 *  message, and a reason of timeout, not_ready or shutting_down. */

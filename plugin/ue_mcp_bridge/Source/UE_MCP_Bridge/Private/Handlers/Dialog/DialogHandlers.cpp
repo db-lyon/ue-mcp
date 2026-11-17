@@ -373,6 +373,9 @@ void FDialogHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	// to their specs instead.
 	using EType = EMCPParamType;
 	const TArray<FMCPParamSpec> NoParams;
+	// Every handler here reads or answers the dialog that is blocking the engine
+	// loop, so each is modal-safe: it runs from inside the modal loop while
+	// everything else is refused by the dialog gate.
 	// buttonLabel and response combine: the label answers a Slate modal, the
 	// response keyword a message dialog.
 	Registry.RegisterHandler(TEXT("set_dialog_policy"), &SetDialogPolicy, {
@@ -380,12 +383,12 @@ void FDialogHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("response"), EType::String, TEXT("yes | no | ok | cancel | retry | continue | yesall | noall. On a Slate modal it presses whichever button carries that meaning; an unknown keyword is refused")),
 		MCPParam::Optional(TEXT("buttonLabel"), EType::String, TEXT("Button a matched dialog gets pressed for it, matched exactly first, then as a substring. Reaches buttons no response names, such as Don't Save")),
 	}, MCPSpec::AtLeastOne({ { TEXT("response") }, { TEXT("buttonLabel") } })
-		.ContractExempt(TEXT("arms a policy that answers dialogs unattended")));
+		.ContractExempt(TEXT("arms a policy that answers dialogs unattended")).ModalSafe());
 	Registry.RegisterHandler(TEXT("clear_dialog_policy"), &ClearDialogPolicy, {
 		MCPParam::Optional(TEXT("pattern"), EMCPParamType::String, TEXT("Exact pattern of the policy to clear; omit to clear every policy")),
-	});
-	Registry.RegisterHandler(TEXT("get_dialog_policy"), &GetDialogPolicy, NoParams);
-	Registry.RegisterHandler(TEXT("list_dialogs"), &ListDialogs, NoParams);
+	}, MCPSpec::ModalSafe());
+	Registry.RegisterHandler(TEXT("get_dialog_policy"), &GetDialogPolicy, NoParams, MCPSpec::ModalSafe());
+	Registry.RegisterHandler(TEXT("list_dialogs"), &ListDialogs, NoParams, MCPSpec::ModalSafe());
 	// buttonLabel wins over buttonIndex, and dialogAction applies only when no
 	// button was named.
 	Registry.RegisterHandler(TEXT("respond_to_dialog"), &RespondToDialog, {
@@ -406,7 +409,7 @@ void FDialogHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 			MCPParam::RequiredField(TEXT("text"), EType::String, TEXT("The text the field ends up holding")),
 		}),
 	}, MCPSpec::AtLeastOne({ { TEXT("buttonLabel") }, { TEXT("buttonIndex") }, { TEXT("dialogAction") }, { TEXT("combos") }, { TEXT("textFields") } })
-		.ContractExempt(TEXT("presses a button on the active modal dialog")));
+		.ContractExempt(TEXT("presses a button on the active modal dialog")).ModalSafe());
 
 	// #1231: every open modal and floating window, not only the one the gate
 	// describes, addressed by the windowId list_windows reports.
@@ -415,16 +418,24 @@ void FDialogHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("maxTexts"), EType::Integer, TEXT("Texts reported per window (default 200)")),
 		MCPParam::Optional(TEXT("maxTextChars"), EType::Integer, TEXT("Characters kept per text (default 2000)")),
 		MCPParam::Optional(TEXT("maxButtons"), EType::Integer, TEXT("Buttons reported per window (default 200)")),
-	});
+	}, MCPSpec::ModalSafe());
 	Registry.RegisterHandler(TEXT("press_window_button"), &PressWindowButton, {
 		MCPParam::Required(TEXT("windowId"), EType::Integer, TEXT("Window to press a button on, by the id list_windows reported")),
 		MCPParam::Optional(TEXT("buttonLabel"), EType::String, TEXT("Label of the button to press, matched exactly first, then as a substring; refused when ambiguous")),
 		MCPParam::Optional(TEXT("buttonIndex"), EType::Number, TEXT("Index of the button to press, in the order list_windows reports")),
 	}, MCPSpec::ExactlyOne({ { TEXT("buttonLabel") }, { TEXT("buttonIndex") } })
-		.ContractExempt(TEXT("presses a button on an open editor window")));
+		.ContractExempt(TEXT("presses a button on an open editor window")).ModalSafe());
 	Registry.RegisterHandler(TEXT("close_window"), &CloseWindowById, {
 		MCPParam::Required(TEXT("windowId"), EType::Integer, TEXT("Window to close, by the id list_windows reported")),
-	}, MCPSpec::ContractExempt(TEXT("closes an open editor window")));
+	}, MCPSpec::ContractExempt(TEXT("closes an open editor window")).ModalSafe());
+}
+
+TSharedPtr<FJsonValue> FDialogHandlers::ArmPolicy(const FString& Pattern, const FString& Response)
+{
+	TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+	Params->SetStringField(TEXT("pattern"), Pattern);
+	Params->SetStringField(TEXT("response"), Response);
+	return SetDialogPolicy(Params);
 }
 
 void FDialogHandlers::InstallDialogHook()

@@ -42,7 +42,7 @@ describe("datasmith category (#1383)", () => {
   it("gives the long calls the plugin's timeouts", () => {
     expect(BRIDGE_TIMEOUTS.datasmith_import).toBe(600);
     expect(BRIDGE_TIMEOUTS.datasmith_reimport).toBe(600);
-    expect(datasmithTool.actions.import.timeoutMs).toBe(600_000);
+    expect(datasmithTool.actions.import.timeoutMs).toBeUndefined();
   });
 
   it("reaches Datasmith by reflection only, and says when the plugin is off", () => {
@@ -67,7 +67,7 @@ describe("metahuman category (#1354)", () => {
     const assetPath = setBody.find((p) => p.name === "assetPath");
     expect(assetPath).toMatchObject({ required: true, aliases: ["characterPath"] });
     expect(setBody.find((p) => p.name === "constraints")?.required).toBe(true);
-    expect(metahumanTool.actions.assemble.timeoutMs).toBe(900_000);
+    expect(metahumanTool.actions.assemble.timeoutMs).toBeUndefined();
     expect(BRIDGE_TIMEOUTS.metahuman_assemble).toBe(900);
   });
 

@@ -191,7 +191,7 @@ void FEditorHandlers::RegisterMapCheckHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("log_map_check_message"), &LogMapCheckMessage, {
 		MCPParam::Required(TEXT("severity"), EType::String, TEXT("error | warning | info")),
 		MCPParam::Required(TEXT("message"), EType::String, TEXT("Message text")),
-		MCPParam::Optional(TEXT("actorLabel"), EType::String, TEXT("Actor the message is about; the Message Log links to it")),
-		MCPParam::Optional(TEXT("actorPath"), EType::String, TEXT("Object path of that actor; preferred over actorLabel when known")),
+		MCPSharedParam::ActorLabel().Describe(TEXT("Actor the message is about; the Message Log links to it")),
+		MCPSharedParam::ActorPath().Describe(TEXT("Object path of that actor; preferred over actorLabel when known")),
 	});
 }

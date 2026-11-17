@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { blueprintTool } from "../../src/tools/blueprint.js";
 import type { ToolContext } from "../../src/surface/tool-types.js";
+import { REGISTERED_HANDLER_TIMEOUT_SECONDS } from "../../src/bridge/bridge-timeouts.js";
 
 describe("blueprint.flush_component_templates", () => {
   it("routes one Blueprint path to the native maintenance handler", async () => {
@@ -15,7 +16,8 @@ describe("blueprint.flush_component_templates", () => {
     expect(call).toHaveBeenCalledWith(
       "flush_blueprint_component_templates",
       { assetPath: "/Game/Blueprints/BP_Actor" },
-      120_000,
+      undefined,
     );
+    expect(REGISTERED_HANDLER_TIMEOUT_SECONDS.flush_blueprint_component_templates).toBe(120);
   });
 });

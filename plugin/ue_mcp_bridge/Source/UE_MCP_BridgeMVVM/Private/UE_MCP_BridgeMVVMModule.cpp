@@ -832,7 +832,7 @@ namespace UEMCPMVVM
 	class FBackend final : public IMCPMVVMBackend
 	{
 	public:
-		virtual FMCPMVVMOutcome Run(const FString& Operation, UWidgetBlueprint* WidgetBlueprint, const TSharedPtr<FJsonObject>& Params) override
+		virtual FMCPMVVMOutcome Run(EMCPMVVMOperation Operation, UWidgetBlueprint* WidgetBlueprint, const TSharedPtr<FJsonObject>& Params) override
 		{
 			UMVVMEditorSubsystem* Editor = Subsystem();
 			if (!Editor || !WidgetBlueprint)
@@ -840,14 +840,17 @@ namespace UEMCPMVVM
 				return FMCPMVVMOutcome::Failure(TEXT("The viewmodel editor subsystem is not available in this editor session. ")
 					+ MCPEnablePluginStep(TEXT("ModelViewViewModel")));
 			}
-			if (Operation == TEXT("list_widget_viewmodels")) return ListViewModels(Editor, WidgetBlueprint);
-			if (Operation == TEXT("add_widget_viewmodel")) return AddViewModel(Editor, WidgetBlueprint, Params);
-			if (Operation == TEXT("remove_widget_viewmodel")) return RemoveViewModel(Editor, WidgetBlueprint, Params);
-			if (Operation == TEXT("list_widget_viewmodel_bindings")) return ListBindings(Editor, WidgetBlueprint);
-			if (Operation == TEXT("add_widget_viewmodel_binding")) return AddBinding(Editor, WidgetBlueprint, Params);
-			if (Operation == TEXT("update_widget_viewmodel_binding")) return UpdateBinding(Editor, WidgetBlueprint, Params);
-			if (Operation == TEXT("remove_widget_viewmodel_binding")) return RemoveBinding(Editor, WidgetBlueprint, Params);
-			return FMCPMVVMOutcome::Failure(FString::Printf(TEXT("The viewmodel backend has no operation '%s'."), *Operation));
+			switch (Operation)
+			{
+			case EMCPMVVMOperation::ListViewModels:  return ListViewModels(Editor, WidgetBlueprint);
+			case EMCPMVVMOperation::AddViewModel:    return AddViewModel(Editor, WidgetBlueprint, Params);
+			case EMCPMVVMOperation::RemoveViewModel: return RemoveViewModel(Editor, WidgetBlueprint, Params);
+			case EMCPMVVMOperation::ListBindings:    return ListBindings(Editor, WidgetBlueprint);
+			case EMCPMVVMOperation::AddBinding:      return AddBinding(Editor, WidgetBlueprint, Params);
+			case EMCPMVVMOperation::UpdateBinding:   return UpdateBinding(Editor, WidgetBlueprint, Params);
+			case EMCPMVVMOperation::RemoveBinding:   return RemoveBinding(Editor, WidgetBlueprint, Params);
+			}
+			return FMCPMVVMOutcome::Failure(FString::Printf(TEXT("The viewmodel backend has no operation %d."), (int32)Operation));
 		}
 
 	private:
@@ -997,7 +1000,7 @@ namespace UEMCPMVVM
 			Out.bModified = true;
 			const FMVVMBlueprintViewModelContext* Added = View->FindViewModel(Context.GetViewModelId());
 			Out.Data = DescribeViewModel(View, Added ? *Added : Context);
-			Out.RollbackMethod = TEXT("remove_widget_viewmodel");
+			Out.RollbackOperation = EMCPMVVMOperation::RemoveViewModel;
 			Out.RollbackPayload = MakeShared<FJsonObject>();
 			Out.RollbackPayload->SetStringField(TEXT("viewModelName"), Name);
 			return Out;
@@ -1052,7 +1055,7 @@ namespace UEMCPMVVM
 			Out.Data = MakeShared<FJsonObject>();
 			Out.Data->SetStringField(TEXT("viewModelName"), Name);
 			Out.Data->SetArrayField(TEXT("bindingsLeftDangling"), Dependent);
-			Out.RollbackMethod = TEXT("add_widget_viewmodel");
+			Out.RollbackOperation = EMCPMVVMOperation::AddViewModel;
 			Out.RollbackPayload = Restore;
 			return Out;
 		}
@@ -1153,7 +1156,7 @@ namespace UEMCPMVVM
 			Out.Change = FMCPMVVMOutcome::EChange::Created;
 			Out.bModified = true;
 			Out.Data = DescribeBinding(WidgetBlueprint, View, *View->GetBinding(BindingId));
-			Out.RollbackMethod = TEXT("remove_widget_viewmodel_binding");
+			Out.RollbackOperation = EMCPMVVMOperation::RemoveBinding;
 			Out.RollbackPayload = MakeShared<FJsonObject>();
 			Out.RollbackPayload->SetStringField(TEXT("bindingId"), BindingId.ToString(EGuidFormats::DigitsWithHyphens));
 			return Out;
@@ -1182,7 +1185,7 @@ namespace UEMCPMVVM
 			{
 				// What landed before the failure is described, and the rollback puts the binding back.
 				FMCPMVVMOutcome Out = FMCPMVVMOutcome::Failure(Error);
-				Out.RollbackMethod = TEXT("update_widget_viewmodel_binding");
+				Out.RollbackOperation = EMCPMVVMOperation::UpdateBinding;
 				Out.RollbackPayload = RestorePayload(BindingId, Before);
 				Out.bModified = true;
 				return Out;
@@ -1200,7 +1203,7 @@ namespace UEMCPMVVM
 			Out.Change = FMCPMVVMOutcome::EChange::Updated;
 			Out.bModified = true;
 			Out.Data->SetObjectField(TEXT("previous"), Before);
-			Out.RollbackMethod = TEXT("update_widget_viewmodel_binding");
+			Out.RollbackOperation = EMCPMVVMOperation::UpdateBinding;
 			Out.RollbackPayload = RestorePayload(BindingId, Before);
 			return Out;
 		}
@@ -1242,7 +1245,7 @@ namespace UEMCPMVVM
 			Out.Change = FMCPMVVMOutcome::EChange::Deleted;
 			Out.bModified = true;
 			Out.Data = Described;
-			Out.RollbackMethod = TEXT("add_widget_viewmodel_binding");
+			Out.RollbackOperation = EMCPMVVMOperation::AddBinding;
 			Out.RollbackPayload = Restore;
 			return Out;
 		}

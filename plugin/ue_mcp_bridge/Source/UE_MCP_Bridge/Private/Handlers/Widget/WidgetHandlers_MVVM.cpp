@@ -100,7 +100,24 @@ enum class EMCPMVVMReads : uint8
 	ConversionFunction,
 };
 
-static TSharedPtr<FJsonValue> MCPMVVMRun(const TCHAR* Operation, const TSharedPtr<FJsonObject>& Params, EMCPMVVMReads Reads = EMCPMVVMReads::Plain)
+// The bridge method each backend operation is registered as, so a rollback the
+// backend names reaches the handler that performs it.
+static const TCHAR* MCPMVVMMethodName(EMCPMVVMOperation Operation)
+{
+	switch (Operation)
+	{
+	case EMCPMVVMOperation::ListViewModels:  return TEXT("list_widget_viewmodels");
+	case EMCPMVVMOperation::AddViewModel:    return TEXT("add_widget_viewmodel");
+	case EMCPMVVMOperation::RemoveViewModel: return TEXT("remove_widget_viewmodel");
+	case EMCPMVVMOperation::ListBindings:    return TEXT("list_widget_viewmodel_bindings");
+	case EMCPMVVMOperation::AddBinding:      return TEXT("add_widget_viewmodel_binding");
+	case EMCPMVVMOperation::UpdateBinding:   return TEXT("update_widget_viewmodel_binding");
+	case EMCPMVVMOperation::RemoveBinding:   return TEXT("remove_widget_viewmodel_binding");
+	}
+	return TEXT("");
+}
+
+static TSharedPtr<FJsonValue> MCPMVVMRun(EMCPMVVMOperation Operation, const TSharedPtr<FJsonObject>& Params, EMCPMVVMReads Reads = EMCPMVVMReads::Plain)
 {
 	FString AssetPath;
 	if (TSharedPtr<FJsonValue> Missing = RequireString(Params, TEXT("assetPath"), AssetPath))
@@ -180,12 +197,12 @@ static TSharedPtr<FJsonValue> MCPMVVMRun(const TCHAR* Operation, const TSharedPt
 		break;
 	}
 
-	if (!Outcome.RollbackMethod.IsEmpty())
+	if (Outcome.RollbackOperation.IsSet())
 	{
 		TSharedPtr<FJsonObject> Payload = Outcome.RollbackPayload;
 		if (!Payload.IsValid()) Payload = MakeShared<FJsonObject>();
 		Payload->SetStringField(TEXT("assetPath"), AssetPath);
-		MCPSetRollback(Result, Outcome.RollbackMethod, Payload);
+		MCPSetRollback(Result, MCPMVVMMethodName(Outcome.RollbackOperation.GetValue()), Payload);
 	}
 	else if (!Outcome.NoRollbackReason.IsEmpty())
 	{
@@ -283,7 +300,7 @@ void FWidgetMVVMHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 
 TSharedPtr<FJsonValue> FWidgetMVVMHandlers::ListViewModels(const TSharedPtr<FJsonObject>& Params)
 {
-	return MCPMVVMRun(TEXT("list_widget_viewmodels"), Params);
+	return MCPMVVMRun(EMCPMVVMOperation::ListViewModels, Params);
 }
 
 TSharedPtr<FJsonValue> FWidgetMVVMHandlers::AddViewModel(const TSharedPtr<FJsonObject>& Params)
@@ -293,18 +310,18 @@ TSharedPtr<FJsonValue> FWidgetMVVMHandlers::AddViewModel(const TSharedPtr<FJsonO
 		TEXT("globalViewModelIdentifier"), TEXT("viewModelPropertyPath"), TEXT("optional"),
 		TEXT("createSetter"), TEXT("createGetter"), TEXT("viewModelId"),
 	});
-	return MCPMVVMRun(TEXT("add_widget_viewmodel"), Params, EMCPMVVMReads::ViewModelClass);
+	return MCPMVVMRun(EMCPMVVMOperation::AddViewModel, Params, EMCPMVVMReads::ViewModelClass);
 }
 
 TSharedPtr<FJsonValue> FWidgetMVVMHandlers::RemoveViewModel(const TSharedPtr<FJsonObject>& Params)
 {
 	MCPReadParamsAhead(Params, { TEXT("assetPath"), TEXT("viewModelName") });
-	return MCPMVVMRun(TEXT("remove_widget_viewmodel"), Params);
+	return MCPMVVMRun(EMCPMVVMOperation::RemoveViewModel, Params);
 }
 
 TSharedPtr<FJsonValue> FWidgetMVVMHandlers::ListViewModelBindings(const TSharedPtr<FJsonObject>& Params)
 {
-	return MCPMVVMRun(TEXT("list_widget_viewmodel_bindings"), Params);
+	return MCPMVVMRun(EMCPMVVMOperation::ListBindings, Params);
 }
 
 TSharedPtr<FJsonValue> FWidgetMVVMHandlers::AddViewModelBinding(const TSharedPtr<FJsonObject>& Params)
@@ -314,7 +331,7 @@ TSharedPtr<FJsonValue> FWidgetMVVMHandlers::AddViewModelBinding(const TSharedPtr
 		TEXT("conversionFunction"), TEXT("conversionArguments"), TEXT("conversionDirection"),
 		TEXT("enabled"), TEXT("includeInCompile"),
 	});
-	return MCPMVVMRun(TEXT("add_widget_viewmodel_binding"), Params, EMCPMVVMReads::ConversionFunction);
+	return MCPMVVMRun(EMCPMVVMOperation::AddBinding, Params, EMCPMVVMReads::ConversionFunction);
 }
 
 TSharedPtr<FJsonValue> FWidgetMVVMHandlers::UpdateViewModelBinding(const TSharedPtr<FJsonObject>& Params)
@@ -324,13 +341,13 @@ TSharedPtr<FJsonValue> FWidgetMVVMHandlers::UpdateViewModelBinding(const TShared
 		TEXT("executionMode"), TEXT("conversionFunction"), TEXT("conversionArguments"), TEXT("conversionDirection"),
 		TEXT("enabled"), TEXT("includeInCompile"),
 	});
-	return MCPMVVMRun(TEXT("update_widget_viewmodel_binding"), Params, EMCPMVVMReads::ConversionFunction);
+	return MCPMVVMRun(EMCPMVVMOperation::UpdateBinding, Params, EMCPMVVMReads::ConversionFunction);
 }
 
 TSharedPtr<FJsonValue> FWidgetMVVMHandlers::RemoveViewModelBinding(const TSharedPtr<FJsonObject>& Params)
 {
 	MCPReadParamsAhead(Params, { TEXT("assetPath"), TEXT("bindingId") });
-	return MCPMVVMRun(TEXT("remove_widget_viewmodel_binding"), Params);
+	return MCPMVVMRun(EMCPMVVMOperation::RemoveBinding, Params);
 }
 
 TSharedPtr<FJsonValue> FWidgetMVVMHandlers::CompileViewModels(const TSharedPtr<FJsonObject>& Params)
@@ -368,7 +385,7 @@ TSharedPtr<FJsonValue> FWidgetMVVMHandlers::CompileViewModels(const TSharedPtr<F
 
 	// The viewmodel compiler records each binding's problems on the view, which
 	// is what the editor's binding panel shows; read them back after the compile.
-	const FMCPMVVMOutcome Bindings = Backend->Run(TEXT("list_widget_viewmodel_bindings"), WidgetBP, Params);
+	const FMCPMVVMOutcome Bindings = Backend->Run(EMCPMVVMOperation::ListBindings, WidgetBP, Params);
 	int32 BindingErrors = 0;
 	if (Bindings.bOk && Bindings.Data.IsValid())
 	{

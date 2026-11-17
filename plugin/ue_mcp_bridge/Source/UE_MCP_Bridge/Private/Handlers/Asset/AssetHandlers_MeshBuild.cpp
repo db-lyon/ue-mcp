@@ -187,7 +187,7 @@ void FAssetMeshBuildHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StaticMesh asset path")).Alias(TEXT("path")),
 		MCPParam::Required(TEXT("settings"), EType::Object, TEXT("FMeshBuildSettings fields to write by name, e.g. {bRecomputeNormals: true}; get_static_mesh_build_settings lists them")),
 		MCPParam::Optional(TEXT("lodIndex"), EType::Integer, TEXT("Source model (LOD) to write (default 0)")),
-		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save the mesh after the rebuild (default true)")),
+		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save the mesh after the rebuild (default true)")).Default(true),
 	});
 	// A rebuild of a dense mesh takes longer than the default handler timeout.
 	Registry.RegisterHandlerWithTimeout(TEXT("scale_mesh_geometry"), &ScaleMeshGeometry, 300.0f, {
@@ -197,7 +197,7 @@ void FAssetMeshBuildHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("outputPath"), EType::String, TEXT("Scale a copy written here and leave assetPath untouched (default: scale assetPath in place)")),
 		MCPParam::Optional(TEXT("scaleSockets"), EType::Boolean, TEXT("Move socket locations with the geometry (default true)")),
 		MCPParam::Optional(TEXT("scaleCollision"), EType::Boolean, TEXT("Scale the simple collision with the geometry (default true)")),
-		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save the mesh after the rebuild (default true)")),
+		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save the mesh after the rebuild (default true)")).Default(true),
 	});
 }
 

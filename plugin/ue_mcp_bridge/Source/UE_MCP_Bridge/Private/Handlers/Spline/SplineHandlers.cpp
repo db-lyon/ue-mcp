@@ -65,8 +65,8 @@ void FSplineHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	FMCPHandlerRegistry::FCategoryScope CategoryScope(Registry, TEXT("level"));
 
 	using EType = EMCPParamType;
-	const FMCPParamSpec SpecActorLabel = MCPParam::Optional(TEXT("actorLabel"), EType::String, TEXT("Actor editor label; pass actorLabel or actorPath"));
-	const FMCPParamSpec SpecActorPath = MCPParam::Optional(TEXT("actorPath"), EType::String, TEXT("Full actor object path; the unambiguous selector, and it wins over actorLabel"));
+	const FMCPParamSpec SpecActorLabel = MCPSharedParam::ActorLabel();
+	const FMCPParamSpec SpecActorPath = MCPSharedParam::ActorPath();
 	const FMCPSpecRules OneActor = MCPSpec::ExactlyOne({ { TEXT("actorLabel") }, { TEXT("actorPath") } });
 
 	// The contract world scope is refused before any actor is looked up.
@@ -74,8 +74,8 @@ void FSplineHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		SpecActorLabel, SpecActorPath,
 		MCPParam::Optional(TEXT("componentName"), EType::String, TEXT("Spline component, when the actor has several")),
 		MCPParam::Optional(TEXT("projectPoint"), EType::Vec3, TEXT("World point to project onto the spline")),
-		MCPParam::Optional(TEXT("world"), EType::String, TEXT("World scope: editor (default) | pie")),
-		MCPParam::Optional(TEXT("pieInstance"), EType::Integer, TEXT("Which PIE world when world is pie: 0 = server or primary, 1..N = clients")),
+		MCPSharedParam::World().Describe(TEXT("World scope: editor (default) | pie")),
+		MCPSharedParam::PieInstance().Describe(TEXT("Which PIE world when world is pie: 0 = server or primary, 1..N = clients")),
 	}, OneActor);
 	// The contract actor path names no actor, which is refused before any point is written.
 	Registry.RegisterHandler(TEXT("set_spline_points"), &SetSplinePoints, {

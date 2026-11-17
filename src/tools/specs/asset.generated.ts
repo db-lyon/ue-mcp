@@ -171,7 +171,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "save",
         "type": "boolean",
         "required": false,
-        "description": "Save the asset after the edit (default true)"
+        "description": "Save the asset after the edit (default true)",
+        "default": true
       }
     ]
   },
@@ -256,7 +257,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "save",
         "type": "boolean",
         "required": false,
-        "description": "Save the package after the write (default true)"
+        "description": "Save the package after the write (default true)",
+        "default": true
       }
     ]
   },
@@ -396,13 +398,15 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "save",
         "type": "boolean",
         "required": false,
-        "description": "Save the written asset (default true)"
+        "description": "Save the written asset (default true)",
+        "default": true
       },
       {
         "name": "dryRun",
         "type": "boolean",
         "required": false,
-        "description": "Run the operation and report the result without writing (default false)"
+        "description": "Run the operation and report the result without writing (default false)",
+        "default": false
       }
     ]
   },
@@ -524,13 +528,15 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "save",
         "type": "boolean",
         "required": false,
-        "description": "Save the written asset (default true)"
+        "description": "Save the written asset (default true)",
+        "default": true
       },
       {
         "name": "dryRun",
         "type": "boolean",
         "required": false,
-        "description": "Run the operation and report the result without writing (default false)"
+        "description": "Run the operation and report the result without writing (default false)",
+        "default": false
       }
     ]
   },
@@ -658,13 +664,15 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "save",
         "type": "boolean",
         "required": false,
-        "description": "Save the written asset (default true)"
+        "description": "Save the written asset (default true)",
+        "default": true
       },
       {
         "name": "dryRun",
         "type": "boolean",
         "required": false,
-        "description": "Run the operation and report the result without writing (default false)"
+        "description": "Run the operation and report the result without writing (default false)",
+        "default": false
       }
     ]
   },
@@ -822,13 +830,15 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "save",
         "type": "boolean",
         "required": false,
-        "description": "Save the written asset (default true)"
+        "description": "Save the written asset (default true)",
+        "default": true
       },
       {
         "name": "dryRun",
         "type": "boolean",
         "required": false,
-        "description": "Run the operation and report the result without writing (default false)"
+        "description": "Run the operation and report the result without writing (default false)",
+        "default": false
       }
     ]
   },
@@ -980,13 +990,15 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "save",
         "type": "boolean",
         "required": false,
-        "description": "Save the written asset (default true)"
+        "description": "Save the written asset (default true)",
+        "default": true
       },
       {
         "name": "dryRun",
         "type": "boolean",
         "required": false,
-        "description": "Run the operation and report the result without writing (default false)"
+        "description": "Run the operation and report the result without writing (default false)",
+        "default": false
       }
     ]
   },
@@ -1360,13 +1372,15 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "save",
         "type": "boolean",
         "required": false,
-        "description": "Save the changed packages (default true)"
+        "description": "Save the changed packages (default true)",
+        "default": true
       },
       {
         "name": "dryRun",
         "type": "boolean",
         "required": false,
-        "description": "Preflight and report without writing (default false)"
+        "description": "Preflight and report without writing (default false)",
+        "default": false
       },
       {
         "name": "continueOnError",
@@ -1396,13 +1410,15 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "dryRun",
         "type": "boolean",
         "required": false,
-        "description": "Run the full preflight and report the planned statuses without writing (default false)"
+        "description": "Run the full preflight and report the planned statuses without writing (default false)",
+        "default": false
       },
       {
         "name": "save",
         "type": "boolean",
         "required": false,
-        "description": "Save the changed packages (default true)"
+        "description": "Save the changed packages (default true)",
+        "default": true
       }
     ]
   },
@@ -1487,13 +1503,15 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "save",
         "type": "boolean",
         "required": false,
-        "description": "Save the table after editing (default true)"
+        "description": "Save the table after editing (default true)",
+        "default": true
       },
       {
         "name": "dryRun",
         "type": "boolean",
         "required": false,
-        "description": "Validate the entire batch and return proposedRows without changes (default false)"
+        "description": "Validate the entire batch and return proposedRows without changes (default false)",
+        "default": false
       }
     ]
   },
@@ -1616,7 +1634,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "save",
         "type": "boolean",
         "required": false,
-        "description": "Save the asset after the edit (default true)"
+        "description": "Save the asset after the edit (default true)",
+        "default": true
       }
     ]
   },
@@ -1654,7 +1673,7 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "onConflict",
         "type": "string",
         "required": false,
-        "description": "skip (default) returns an existing asset; error refuses"
+        "description": "When the asset already exists: skip (default) returns it untouched | error refuses; it never overwrites"
       }
     ]
   },
@@ -1707,7 +1726,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "save",
         "type": "boolean",
         "required": false,
-        "description": "Save the new asset (default true)"
+        "description": "Save the new asset (default true)",
+        "default": true
       }
     ]
   },
@@ -1745,7 +1765,7 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "onConflict",
         "type": "string",
         "required": false,
-        "description": "skip (default) returns an existing asset; error refuses"
+        "description": "When the asset already exists: skip (default) returns it untouched | error refuses; it never overwrites"
       }
     ]
   },
@@ -1774,7 +1794,7 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "onConflict",
         "type": "string",
         "required": false,
-        "description": "skip (default) returns an existing asset; error refuses"
+        "description": "When the asset already exists: skip (default) returns it untouched | error refuses; it never overwrites"
       },
       {
         "name": "csvString",
@@ -1990,7 +2010,7 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "onConflict",
         "type": "string",
         "required": false,
-        "description": "skip (default) returns an existing asset; error refuses"
+        "description": "When the asset already exists: skip (default) returns it untouched | error refuses; it never overwrites"
       }
     ]
   },
@@ -2070,7 +2090,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "save",
         "type": "boolean",
         "required": false,
-        "description": "Save the owning package (default true)"
+        "description": "Save the owning package (default true)",
+        "default": true
       }
     ]
   },
@@ -2328,7 +2349,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "save",
         "type": "boolean",
         "required": false,
-        "description": "Save the asset after the edit (default true)"
+        "description": "Save the asset after the edit (default true)",
+        "default": true
       }
     ]
   },
@@ -2401,13 +2423,15 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "save",
         "type": "boolean",
         "required": false,
-        "description": "Save the package after editing (default true)"
+        "description": "Save the package after editing (default true)",
+        "default": true
       },
       {
         "name": "dryRun",
         "type": "boolean",
         "required": false,
-        "description": "Validate and return proposedValue without changing the asset (default false)"
+        "description": "Validate and return proposedValue without changing the asset (default false)",
+        "default": false
       }
     ]
   },
@@ -2521,7 +2545,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "dryRun",
         "type": "boolean",
         "required": false,
-        "description": "Validate and report without importing, writing or saving (default false)"
+        "description": "Validate and report without importing, writing or saving (default false)",
+        "default": false
       },
       {
         "name": "replaceExisting",
@@ -2765,7 +2790,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "save",
         "type": "boolean",
         "required": false,
-        "description": "Save what changed (default true)"
+        "description": "Save what changed (default true)",
+        "default": true
       },
       {
         "name": "dryRun",
@@ -2789,13 +2815,15 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "dryRun",
         "type": "boolean",
         "required": false,
-        "description": "Report the redirectors, referencers and packages it would load and save, and stop (default false)"
+        "description": "Report the redirectors, referencers and packages it would load and save, and stop (default false)",
+        "default": false
       },
       {
         "name": "save",
         "type": "boolean",
         "required": false,
-        "description": "Save the repointed referencers (default true); false leaves them dirty in memory and keeps every redirector they reference"
+        "description": "Save the repointed referencers (default true); false leaves them dirty in memory and keeps every redirector they reference",
+        "default": true
       },
       {
         "name": "allowProjectWide",
@@ -2915,13 +2943,15 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "save",
         "type": "boolean",
         "required": false,
-        "description": "Save the mesh (default true)"
+        "description": "Save the mesh (default true)",
+        "default": true
       },
       {
         "name": "dryRun",
         "type": "boolean",
         "required": false,
-        "description": "Report without writing"
+        "description": "Report without writing",
+        "default": false
       },
       {
         "name": "rasterSize",
@@ -3061,13 +3091,15 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "save",
         "type": "boolean",
         "required": false,
-        "description": "Save the written asset (default true)"
+        "description": "Save the written asset (default true)",
+        "default": true
       },
       {
         "name": "dryRun",
         "type": "boolean",
         "required": false,
-        "description": "Run the operation and report the result without writing (default false)"
+        "description": "Run the operation and report the result without writing (default false)",
+        "default": false
       }
     ]
   },
@@ -3128,13 +3160,15 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "dryRun",
         "type": "boolean",
         "required": false,
-        "description": "Report each mesh's LODs and what would happen without changing anything"
+        "description": "Report each mesh's LODs and what would happen without changing anything",
+        "default": false
       },
       {
         "name": "save",
         "type": "boolean",
         "required": false,
-        "description": "Save each changed mesh (default true)"
+        "description": "Save each changed mesh (default true)",
+        "default": true
       }
     ],
     "choices": [
@@ -3776,7 +3810,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "save",
         "type": "boolean",
         "required": false,
-        "description": "Save each imported asset and report saved per asset (default true; false leaves them dirty)"
+        "description": "Save each imported asset and report saved per asset (default true; false leaves them dirty)",
+        "default": true
       },
       {
         "name": "automated",
@@ -3953,13 +3988,15 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "save",
         "type": "boolean",
         "required": false,
-        "description": "Save all imported assets (default false)"
+        "description": "Save all imported assets (default false)",
+        "default": false
       },
       {
         "name": "dryRun",
         "type": "boolean",
         "required": false,
-        "description": "Validate and report without importing, writing or saving (default false)"
+        "description": "Validate and report without importing, writing or saving (default false)",
+        "default": false
       }
     ]
   },
@@ -4093,7 +4130,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "save",
         "type": "boolean",
         "required": false,
-        "description": "Save the table (default true)"
+        "description": "Save the table (default true)",
+        "default": true
       }
     ]
   },
@@ -4185,7 +4223,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "save",
         "type": "boolean",
         "required": false,
-        "description": "Save changed assets (default true)"
+        "description": "Save changed assets (default true)",
+        "default": true
       },
       {
         "name": "automated",
@@ -4197,7 +4236,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "dryRun",
         "type": "boolean",
         "required": false,
-        "description": "Validate and report without importing, writing or saving (default false)"
+        "description": "Validate and report without importing, writing or saving (default false)",
+        "default": false
       }
     ]
   },
@@ -4636,13 +4676,15 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "dryRun",
         "type": "boolean",
         "required": false,
-        "description": "Run the boolean and report the counts without writing (default false)"
+        "description": "Run the boolean and report the counts without writing (default false)",
+        "default": false
       },
       {
         "name": "save",
         "type": "boolean",
         "required": false,
-        "description": "Save the written asset (default true)"
+        "description": "Save the written asset (default true)",
+        "default": true
       }
     ]
   },
@@ -5240,7 +5282,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "save",
         "type": "boolean",
         "required": false,
-        "description": "Save the reimported asset's package (default false: it is left dirty)"
+        "description": "Save the reimported asset's package (default false: it is left dirty)",
+        "default": false
       }
     ]
   },
@@ -5382,7 +5425,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "save",
         "type": "boolean",
         "required": false,
-        "description": "Save the package after the write (default true)"
+        "description": "Save the package after the write (default true)",
+        "default": true
       }
     ],
     "choices": [
@@ -5448,7 +5492,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "save",
         "type": "boolean",
         "required": false,
-        "description": "Save after removing rows (default true)"
+        "description": "Save after removing rows (default true)",
+        "default": true
       }
     ],
     "choices": [
@@ -5493,7 +5538,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "save",
         "type": "boolean",
         "required": false,
-        "description": "Save the asset after the edit (default true)"
+        "description": "Save the asset after the edit (default true)",
+        "default": true
       }
     ]
   },
@@ -5791,7 +5837,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "save",
         "type": "boolean",
         "required": false,
-        "description": "Save the mesh after the rebuild (default true)"
+        "description": "Save the mesh after the rebuild (default true)",
+        "default": true
       }
     ]
   },
@@ -5906,7 +5953,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "save",
         "type": "boolean",
         "required": false,
-        "description": "Save the package after the write (default true)"
+        "description": "Save the package after the write (default true)",
+        "default": true
       }
     ]
   },
@@ -5977,7 +6025,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "save",
         "type": "boolean",
         "required": false,
-        "description": "Save the package (default true); false leaves it dirty"
+        "description": "Save the package (default true); false leaves it dirty",
+        "default": true
       }
     ]
   },
@@ -6083,13 +6132,15 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "dryRun",
         "type": "boolean",
         "required": false,
-        "description": "Validate every cell and report what would change without writing (default false)"
+        "description": "Validate every cell and report what would change without writing (default false)",
+        "default": false
       },
       {
         "name": "save",
         "type": "boolean",
         "required": false,
-        "description": "Save the package after the write (default false)"
+        "description": "Save the package after the write (default false)",
+        "default": false
       }
     ]
   },
@@ -6189,13 +6240,15 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "save",
         "type": "boolean",
         "required": false,
-        "description": "Save each changed mesh (default true)"
+        "description": "Save each changed mesh (default true)",
+        "default": true
       },
       {
         "name": "dryRun",
         "type": "boolean",
         "required": false,
-        "description": "Preflight and report without writing (default false)"
+        "description": "Preflight and report without writing (default false)",
+        "default": false
       },
       {
         "name": "continueOnError",
@@ -6303,13 +6356,15 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "save",
         "type": "boolean",
         "required": false,
-        "description": "Save the mesh (default true)"
+        "description": "Save the mesh (default true)",
+        "default": true
       },
       {
         "name": "dryRun",
         "type": "boolean",
         "required": false,
-        "description": "Preflight and report without writing (default false)"
+        "description": "Preflight and report without writing (default false)",
+        "default": false
       }
     ]
   },
@@ -6477,7 +6532,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "save",
         "type": "boolean",
         "required": false,
-        "description": "Save the mesh after the rebuild (default true)"
+        "description": "Save the mesh after the rebuild (default true)",
+        "default": true
       }
     ]
   },
@@ -6679,13 +6735,15 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "save",
         "type": "boolean",
         "required": false,
-        "description": "Save changed textures (default false; otherwise leave the packages dirty)"
+        "description": "Save changed textures (default false; otherwise leave the packages dirty)",
+        "default": false
       },
       {
         "name": "dryRun",
         "type": "boolean",
         "required": false,
-        "description": "Validate and report without importing, writing or saving (default false)"
+        "description": "Validate and report without importing, writing or saving (default false)",
+        "default": false
       }
     ],
     "choices": [
@@ -6771,13 +6829,15 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "save",
         "type": "boolean",
         "required": false,
-        "description": "Save the mesh (default true)"
+        "description": "Save the mesh (default true)",
+        "default": true
       },
       {
         "name": "dryRun",
         "type": "boolean",
         "required": false,
-        "description": "Report without writing"
+        "description": "Report without writing",
+        "default": false
       }
     ]
   },
@@ -6835,13 +6895,15 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "dryRun",
         "type": "boolean",
         "required": false,
-        "description": "Validate every LOD and report what would move without writing anything"
+        "description": "Validate every LOD and report what would move without writing anything",
+        "default": false
       },
       {
         "name": "save",
         "type": "boolean",
         "required": false,
-        "description": "Save the mesh after the rebuild (default true)"
+        "description": "Save the mesh after the rebuild (default true)",
+        "default": true
       }
     ],
     "choices": [
@@ -6934,13 +6996,15 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "save",
         "type": "boolean",
         "required": false,
-        "description": "Save the mesh (default true)"
+        "description": "Save the mesh (default true)",
+        "default": true
       },
       {
         "name": "dryRun",
         "type": "boolean",
         "required": false,
-        "description": "Report without writing"
+        "description": "Report without writing",
+        "default": false
       }
     ]
   },
@@ -7058,13 +7122,15 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "save",
         "type": "boolean",
         "required": false,
-        "description": "Save the mesh (default true)"
+        "description": "Save the mesh (default true)",
+        "default": true
       },
       {
         "name": "dryRun",
         "type": "boolean",
         "required": false,
-        "description": "Report without writing"
+        "description": "Report without writing",
+        "default": false
       },
       {
         "name": "rasterSize",
@@ -7323,7 +7389,7 @@ export const schema: Record<string, z.ZodType> = {
   nodeClass: z.string().optional().describe("Class the node action spawns"),
   offset: z.number().optional().describe("Refused: the row offset was replaced by cursor paging, because a row number cannot report that the folder changed. Use cursor and limit (list_assets). First bone index of the page (default 0) (list_skeleton_bones). First selected vertex to return (default 0); ignored with dumpToFile (read_skeletal_mesh_vertices)"),
   oldName: z.string().optional().describe("Row to rename"),
-  onConflict: z.string().optional().describe("skip (default) | update | error (add_socket). When a piece asset exists: error (default) | replace (apply_mesh_fracture). When the output asset exists: error (default) | replace (apply_mesh_hole_fill, apply_mesh_mirror, apply_mesh_remesh, apply_mesh_simplify). update (default) | skip | error (bulk_upsert_data_assets). skip (default) returns an existing asset; error refuses (create_asset_by_class, create_data_asset, create_datatable, create_render_target_2d). skip (default) returns an existing table; error refuses (create_curvetable, create_stringtable). skip (default) | error (create_customizable_object). When the font exists: skip (default, report it) | error | update (rewrite its default typeface) (create_font). skip (default) returns an existing pipeline; error refuses (create_interchange_pipeline). reuse (default) | error (create_subobject). skip (default) returns an existing enum; error refuses (create_user_defined_enum). skip (default) returns an existing struct; error refuses (create_user_defined_struct). skip (default) returns an existing destination; error refuses (duplicate_asset). When the face exists: skip (default, report it) | error | replace (reimport its bytes) (import_font). When outputPath exists: error (default) | replace (mesh_boolean)"),
+  onConflict: z.string().optional().describe("skip (default) | update | error (add_socket). When a piece asset exists: error (default) | replace (apply_mesh_fracture). When the output asset exists: error (default) | replace (apply_mesh_hole_fill, apply_mesh_mirror, apply_mesh_remesh, apply_mesh_simplify). update (default) | skip | error (bulk_upsert_data_assets). When the asset already exists: skip (default) returns it untouched | error refuses; it never overwrites (create_asset_by_class, create_data_asset, create_datatable, create_render_target_2d). skip (default) returns an existing table; error refuses (create_curvetable, create_stringtable). skip (default) | error (create_customizable_object). When the font exists: skip (default, report it) | error | update (rewrite its default typeface) (create_font). skip (default) returns an existing pipeline; error refuses (create_interchange_pipeline). reuse (default) | error (create_subobject). skip (default) returns an existing enum; error refuses (create_user_defined_enum). skip (default) returns an existing struct; error refuses (create_user_defined_struct). skip (default) returns an existing destination; error refuses (duplicate_asset). When the face exists: skip (default, report it) | error | replace (reimport its bytes) (import_font). When outputPath exists: error (default) | replace (mesh_boolean)"),
   op: z.string().optional().describe("add_value | rename_value | remove_value (edit_user_defined_enum). add_field | rename_field | set_field_type | remove_field (edit_user_defined_struct). generate (default) | clear (generate_mesh_collision). set (default) | add | remove | copy (set_uv_channel_count)"),
   operation: z.string().optional().describe("union | subtract | intersect | trimInside | trimOutside | newPolyGroupInside | newPolyGroupOutside"),
   optimizationLevel: z.string().optional().describe("Optimization level enum name, e.g. None or Maximum (default: the compile function's own)"),

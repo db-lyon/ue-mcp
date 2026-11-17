@@ -34,6 +34,7 @@ import type { ToolDef, ToolContext } from "../../src/surface/tool-types.js";
 import { categoryTool, bp } from "../../src/surface/category-tool.js";
 import { buildMicroGateway } from "../../src/surface/context/micro-context.js";
 import { widgetTool } from "../../src/tools/widget.js";
+import { REGISTERED_HANDLER_TIMEOUT_SECONDS, resolveBridgeTimeout } from "../../src/bridge/bridge-timeouts.js";
 import { ProjectContext } from "../../src/config/project.js";
 import type { IBridge } from "../../src/bridge/bridge.js";
 import type { FlowContext } from "../../src/flow/context.js";
@@ -214,14 +215,17 @@ describe("timeoutMs on the live dispatch route", () => {
     expect(bridge.calls[0].timeoutMs).toBe(900_000);
   });
 
-  it("gives the same 120s floor to the real widget actions that author one", async () => {
+  it("leaves the real widget actions' 120s to the client, which reads it from the C++ registration", async () => {
     const bridge = recordingBridge();
     await callLive([widgetTool], "widget.add_widget", bridge, {
       action: "add_widget",
       assetPath: "/Game/UI/WBP_Menu",
       widgetClass: "Button",
     });
-    expect(bridge.calls[0].timeoutMs).toBe(120_000);
+    expect(bridge.calls[0].method).toBe("add_widget");
+    expect(bridge.calls[0].timeoutMs).toBeUndefined();
+    expect(REGISTERED_HANDLER_TIMEOUT_SECONDS.add_widget).toBe(120);
+    expect(resolveBridgeTimeout("add_widget")).toBeGreaterThan(30_000);
   });
 
   it("hands a direct handler the budget on the context, never in its parameters", async () => {

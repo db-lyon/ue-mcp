@@ -755,8 +755,8 @@ void FPCGHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		return MCPParam::Required(TEXT("targetNode"), EType::String, TEXT("Node the edge enters")).Alias(TEXT("targetNodeName"));
 	};
 	// The component actions name their actor one way or the other, never both.
-	const FMCPParamSpec SpecActorLabel = MCPParam::Optional(TEXT("actorLabel"), EType::String, TEXT("Editor label of the actor holding the PCG component; a label naming several actors is refused"));
-	const FMCPParamSpec SpecActorPath = MCPParam::Optional(TEXT("actorPath"), EType::String, TEXT("Full actor object path; the unambiguous selector"));
+	const FMCPParamSpec SpecActorLabel = MCPSharedParam::ActorLabel().Describe(TEXT("Editor label of the actor holding the PCG component; a label naming several actors is refused"));
+	const FMCPParamSpec SpecActorPath = MCPSharedParam::ActorPath();
 	const FMCPSpecRules ActorChoice = MCPSpec::ExactlyOne({ { TEXT("actorLabel") }, { TEXT("actorPath") } });
 
 	Registry.RegisterHandler(TEXT("list_pcg_graphs"), &ListPCGGraphs, {
@@ -767,7 +767,7 @@ void FPCGHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("create_pcg_graph"), &CreatePCGGraph, {
 		MCPParam::Required(TEXT("name"), EType::String, TEXT("Graph asset name")),
 		MCPParam::Optional(TEXT("packagePath"), EType::String, TEXT("Folder for the new graph (default /Game/PCG)")).Alias(TEXT("path")),
-		MCPParam::Optional(TEXT("onConflict"), EType::String, TEXT("When the graph exists: skip (default, report it) | error")),
+		MCPSharedParam::OnConflict().Describe(TEXT("When the graph exists: skip (default, report it) | error")),
 	}, MCPSpec::ContractExempt(TEXT("Creates and saves a graph under the contract values; nothing it reads fails first")));
 	Registry.RegisterHandler(TEXT("read_pcg_graph"), &ReadPCGGraph, {
 		GraphPath(),
@@ -809,8 +809,8 @@ void FPCGHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("propertyValue"), EType::String, TEXT("The value for propertyName, as UE export text")),
 	}, MCPSpec::ExactlyOne({ { TEXT("settings") }, { TEXT("propertyName"), TEXT("propertyValue") } }));
 	// #1365: wait and timeoutSeconds are honoured by the MCP server, which polls get_pcg_generation_state.
-	const FMCPParamSpec SpecWait = MCPParam::Optional(TEXT("wait"), EType::Boolean, TEXT("Return only once this run finishes (default false); the result gains wait {state, durationMs}"));
-	const FMCPParamSpec SpecWaitTimeout = MCPParam::Optional(TEXT("timeoutSeconds"), EType::Number, TEXT("Longest wait in seconds (default 600)"));
+	const FMCPParamSpec SpecWait = MCPParam::Optional(TEXT("wait"), EType::Boolean, TEXT("Return only once this run finishes (default false); the result gains wait {state, durationMs}")).Default(false);
+	const FMCPParamSpec SpecWaitTimeout = MCPParam::Optional(TEXT("timeoutSeconds"), EType::Number, TEXT("Longest wait in seconds (default 600)")).Min(0).Default(600.0);
 	Registry.RegisterHandler(TEXT("execute_pcg_graph"), &ExecutePCGGraph, {
 		SpecActorLabel, SpecActorPath,
 		MCPParam::Optional(TEXT("seed"), EType::Integer, TEXT("Write the component's Seed before generating; the old one is reported as previousSeed")),
@@ -827,7 +827,7 @@ void FPCGHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		}),
 		MCPParam::Optional(TEXT("extent"), EType::Vec3, TEXT("Half-size of the volume box {x,y,z} before scale (default 500 on each axis)")),
 		MCPParam::Optional(TEXT("label"), EType::String, TEXT("Editor label. Also the idempotency key: an existing actor with this label is reported rather than duplicated")),
-		MCPParam::Optional(TEXT("onConflict"), EType::String, TEXT("When the label exists: skip (default, report it) | error")),
+		MCPSharedParam::OnConflict().Describe(TEXT("When the label exists: skip (default, report it) | error")),
 	}, MCPSpec::ContractExempt(TEXT("Spawns a volume under the contract values; nothing it reads fails first")));
 	Registry.RegisterHandler(TEXT("read_pcg_node_settings"), &ReadPCGNodeSettings, {
 		GraphPath(),
@@ -887,11 +887,11 @@ void FPCGHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Required(TEXT("levelPath"), EType::String, TEXT("Saved level (.umap) to export, package or object path")),
 		MCPParam::Optional(TEXT("assetPath"), EType::String, TEXT("The PCG data asset's own path (an object path, or an existing asset's package path, updated in place), or else the folder for it (default: the level's folder)")),
 		MCPParam::Optional(TEXT("assetName"), EType::String, TEXT("Asset name (default: <LevelName>_PCG)")),
-		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save the asset after export (default true)")),
+		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save the asset after export (default true)")).Default(true),
 	});
 	Registry.RegisterHandler(TEXT("update_pcg_level_assets"), &UpdateLevelAssets, {
 		MCPParam::Required(TEXT("assetPaths"), EType::Array, TEXT("PCG data assets to re-export from their source levels")).Items(EType::String),
-		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save the assets after export (default true)")),
+		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save the assets after export (default true)")).Default(true),
 	});
 	// #1253: subgraph assignment and parameter overrides.
 	Registry.RegisterHandler(TEXT("set_pcg_subgraph"), &SetSubgraph, {
@@ -920,7 +920,7 @@ void FPCGHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Required(TEXT("graphPath"), EType::String, TEXT("PCGGraph or PCGGraphInstance the instance runs")),
 		MCPParam::Optional(TEXT("packagePath"), EType::String, TEXT("Folder for the new instance (default /Game/PCG)")),
 		MCPParam::Optional(TEXT("overrides"), EType::Object, TEXT("{parameterName: value} overrides to set on the new instance")),
-		MCPParam::Optional(TEXT("onConflict"), EType::String, TEXT("When the asset exists: skip (default, report it) | error")),
+		MCPSharedParam::OnConflict(),
 	});
 	Registry.RegisterHandler(TEXT("set_pcg_graph_instance_overrides"), &SetGraphInstanceOverrides, {
 		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("PCGGraphInstance asset path")).Alias(TEXT("path")),

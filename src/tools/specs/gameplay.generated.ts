@@ -179,7 +179,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "save",
         "type": "boolean",
         "required": false,
-        "description": "Persist the asset (default true); false defers the write"
+        "description": "Persist the asset (default true); false defers the write",
+        "default": true
       }
     ]
   },
@@ -339,9 +340,10 @@ export const handlerSpecs: HandlerSpecs = {
       },
       {
         "name": "pieInstance",
-        "type": "number",
+        "type": "integer",
         "required": false,
-        "description": "PIE world instance (0 = server/primary); omit for the first running one"
+        "description": "PIE world instance (0 = server/primary); omit for the first running one",
+        "minimum": 0
       },
       {
         "name": "playerIndex",
@@ -386,9 +388,10 @@ export const handlerSpecs: HandlerSpecs = {
       },
       {
         "name": "pieInstance",
-        "type": "number",
+        "type": "integer",
         "required": false,
-        "description": "PIE world instance (0 = server/primary); omit for the primary world"
+        "description": "PIE world instance (0 = server/primary); omit for the primary world",
+        "minimum": 0
       }
     ]
   },
@@ -440,7 +443,7 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "onConflict",
         "type": "string",
         "required": false,
-        "description": "skip (default, returns the existing asset) or error when the asset already exists"
+        "description": "When the asset already exists: skip (default) returns it untouched | error refuses; it never overwrites"
       },
       {
         "name": "blackboardPath",
@@ -469,7 +472,7 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "onConflict",
         "type": "string",
         "required": false,
-        "description": "skip (default, returns the existing asset) or error when the asset already exists"
+        "description": "When the asset already exists: skip (default) returns it untouched | error refuses; it never overwrites"
       }
     ],
     "contractExempt": "Creates and saves an asset under the contract values; nothing it reads fails first"
@@ -493,7 +496,7 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "onConflict",
         "type": "string",
         "required": false,
-        "description": "skip (default, returns the existing asset) or error when the asset already exists"
+        "description": "When the asset already exists: skip (default) returns it untouched | error refuses; it never overwrites"
       }
     ],
     "contractExempt": "Creates and saves an asset under the contract values; nothing it reads fails first"
@@ -586,7 +589,7 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "onConflict",
         "type": "string",
         "required": false,
-        "description": "skip (default, returns the existing asset) or error when the asset already exists"
+        "description": "When the asset already exists: skip (default) returns it untouched | error refuses; it never overwrites"
       },
       {
         "name": "valueType",
@@ -616,7 +619,7 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "onConflict",
         "type": "string",
         "required": false,
-        "description": "skip (default, returns the existing asset) or error when the asset already exists"
+        "description": "When the asset already exists: skip (default) returns it untouched | error refuses; it never overwrites"
       }
     ],
     "contractExempt": "Creates and saves an asset under the contract values; nothing it reads fails first"
@@ -686,7 +689,7 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "onConflict",
         "type": "string",
         "required": false,
-        "description": "skip (default, returns the existing asset) or error when the asset already exists"
+        "description": "When the asset already exists: skip (default) returns it untouched | error refuses; it never overwrites"
       },
       {
         "name": "defaultBehaviorClass",
@@ -722,7 +725,7 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "onConflict",
         "type": "string",
         "required": false,
-        "description": "skip (default, returns the existing asset) or error when the asset already exists"
+        "description": "When the asset already exists: skip (default) returns it untouched | error refuses; it never overwrites"
       },
       {
         "name": "schema",
@@ -768,9 +771,10 @@ export const handlerSpecs: HandlerSpecs = {
       },
       {
         "name": "pieInstance",
-        "type": "number",
+        "type": "integer",
         "required": false,
-        "description": "PIE instance id; omitted selects the active PIE world"
+        "description": "PIE instance id; omitted selects the active PIE world",
+        "minimum": 0
       }
     ]
   },
@@ -785,9 +789,10 @@ export const handlerSpecs: HandlerSpecs = {
       },
       {
         "name": "pieInstance",
-        "type": "number",
+        "type": "integer",
         "required": false,
-        "description": "PIE world instance (0 = server/primary); omit for the first running one"
+        "description": "PIE world instance (0 = server/primary); omit for the first running one",
+        "minimum": 0
       },
       {
         "name": "playerIndex",
@@ -824,7 +829,7 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "actorPath",
         "type": "string",
         "required": false,
-        "description": "Full actor object path; wins over actorLabel"
+        "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
       },
       {
         "name": "world",
@@ -834,9 +839,10 @@ export const handlerSpecs: HandlerSpecs = {
       },
       {
         "name": "pieInstance",
-        "type": "number",
+        "type": "integer",
         "required": false,
-        "description": "PIE world instance (0 = server/primary); omit for the primary world"
+        "description": "PIE world instance (0 = server/primary); omit for the primary world",
+        "minimum": 0
       },
       {
         "name": "includeAuxNodes",
@@ -861,9 +867,10 @@ export const handlerSpecs: HandlerSpecs = {
     "params": [
       {
         "name": "pieInstance",
-        "type": "number",
+        "type": "integer",
         "required": false,
-        "description": "PIE world instance (0 = server/primary); omit for every running PIE world"
+        "description": "PIE world instance (0 = server/primary); omit for every running PIE world",
+        "minimum": 0
       },
       {
         "name": "playerIndex",
@@ -898,7 +905,7 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "actorPath",
         "type": "string",
         "required": false,
-        "description": "Full actor object path; wins over actorLabel"
+        "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
       },
       {
         "name": "world",
@@ -908,9 +915,10 @@ export const handlerSpecs: HandlerSpecs = {
       },
       {
         "name": "pieInstance",
-        "type": "number",
+        "type": "integer",
         "required": false,
-        "description": "PIE world instance (0 = server/primary); omit for the primary world"
+        "description": "PIE world instance (0 = server/primary); omit for the primary world",
+        "minimum": 0
       },
       {
         "name": "key",
@@ -947,7 +955,7 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "actorPath",
         "type": "string",
         "required": false,
-        "description": "Full actor object path; wins over actorLabel"
+        "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
       },
       {
         "name": "world",
@@ -957,9 +965,10 @@ export const handlerSpecs: HandlerSpecs = {
       },
       {
         "name": "pieInstance",
-        "type": "number",
+        "type": "integer",
         "required": false,
-        "description": "PIE world instance (0 = server/primary); omit for the primary world"
+        "description": "PIE world instance (0 = server/primary); omit for the primary world",
+        "minimum": 0
       },
       {
         "name": "senseType",
@@ -982,7 +991,7 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "actorPath",
         "type": "string",
         "required": false,
-        "description": "Full actor object path; the unambiguous selector"
+        "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
       },
       {
         "name": "world",
@@ -992,9 +1001,10 @@ export const handlerSpecs: HandlerSpecs = {
       },
       {
         "name": "pieInstance",
-        "type": "number",
+        "type": "integer",
         "required": false,
-        "description": "PIE world instance (0 = server/primary)"
+        "description": "PIE world instance (0 = server/primary)",
+        "minimum": 0
       },
       {
         "name": "componentName",
@@ -1090,9 +1100,10 @@ export const handlerSpecs: HandlerSpecs = {
       },
       {
         "name": "pieInstance",
-        "type": "number",
+        "type": "integer",
         "required": false,
-        "description": "PIE world instance (0 = server/primary); omit for the primary world"
+        "description": "PIE world instance (0 = server/primary); omit for the primary world",
+        "minimum": 0
       },
       {
         "name": "runningOnly",
@@ -1416,7 +1427,7 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "onConflict",
         "type": "string",
         "required": false,
-        "description": "skip (default) reports an existing asset, error refuses it"
+        "description": "When the asset already exists: skip (default) returns it untouched | error refuses; it never overwrites"
       }
     ]
   },
@@ -1518,9 +1529,10 @@ export const handlerSpecs: HandlerSpecs = {
       },
       {
         "name": "pieInstance",
-        "type": "number",
+        "type": "integer",
         "required": false,
-        "description": "PIE world instance when world is pie or auto"
+        "description": "PIE world instance when world is pie or auto",
+        "minimum": 0
       },
       {
         "name": "actorLabel",
@@ -1690,7 +1702,7 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "actorPath",
         "type": "string",
         "required": false,
-        "description": "Full actor object path; wins over actorLabel"
+        "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
       },
       {
         "name": "world",
@@ -1700,9 +1712,10 @@ export const handlerSpecs: HandlerSpecs = {
       },
       {
         "name": "pieInstance",
-        "type": "number",
+        "type": "integer",
         "required": false,
-        "description": "PIE world instance (0 = server/primary); omit for the primary world"
+        "description": "PIE world instance (0 = server/primary); omit for the primary world",
+        "minimum": 0
       },
       {
         "name": "componentName",
@@ -1835,7 +1848,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "save",
         "type": "boolean",
         "required": false,
-        "description": "Persist the asset (default true); false defers the write"
+        "description": "Persist the asset (default true); false defers the write",
+        "default": true
       }
     ]
   },
@@ -1850,9 +1864,10 @@ export const handlerSpecs: HandlerSpecs = {
       },
       {
         "name": "pieInstance",
-        "type": "number",
+        "type": "integer",
         "required": false,
-        "description": "PIE world instance (0 = server/primary); omit for the first running one"
+        "description": "PIE world instance (0 = server/primary); omit for the first running one",
+        "minimum": 0
       },
       {
         "name": "playerIndex",
@@ -2050,9 +2065,10 @@ export const handlerSpecs: HandlerSpecs = {
       },
       {
         "name": "pieInstance",
-        "type": "number",
+        "type": "integer",
         "required": false,
-        "description": "PIE world instance (0 = server/primary); omit for the primary world"
+        "description": "PIE world instance (0 = server/primary); omit for the primary world",
+        "minimum": 0
       }
     ]
   },
@@ -2078,7 +2094,7 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "actorPath",
         "type": "string",
         "required": false,
-        "description": "Full actor object path; wins over actorLabel"
+        "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
       },
       {
         "name": "world",
@@ -2088,9 +2104,10 @@ export const handlerSpecs: HandlerSpecs = {
       },
       {
         "name": "pieInstance",
-        "type": "number",
+        "type": "integer",
         "required": false,
-        "description": "PIE world instance (0 = server/primary); omit for the primary world"
+        "description": "PIE world instance (0 = server/primary); omit for the primary world",
+        "minimum": 0
       },
       {
         "name": "executionMode",
@@ -2141,9 +2158,10 @@ export const handlerSpecs: HandlerSpecs = {
       },
       {
         "name": "pieInstance",
-        "type": "number",
+        "type": "integer",
         "required": false,
-        "description": "PIE world instance when world is pie or auto"
+        "description": "PIE world instance when world is pie or auto",
+        "minimum": 0
       },
       {
         "name": "limit",
@@ -2373,7 +2391,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "save",
         "type": "boolean",
         "required": false,
-        "description": "Persist the asset (default true); false defers the write"
+        "description": "Persist the asset (default true); false defers the write",
+        "default": true
       }
     ]
   },
@@ -2414,7 +2433,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "save",
         "type": "boolean",
         "required": false,
-        "description": "Persist the asset (default true); false defers the write"
+        "description": "Persist the asset (default true); false defers the write",
+        "default": true
       }
     ]
   },
@@ -2431,7 +2451,7 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "actorPath",
         "type": "string",
         "required": false,
-        "description": "Full actor object path; wins over actorLabel"
+        "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
       },
       {
         "name": "world",
@@ -2441,9 +2461,10 @@ export const handlerSpecs: HandlerSpecs = {
       },
       {
         "name": "pieInstance",
-        "type": "number",
+        "type": "integer",
         "required": false,
-        "description": "PIE world instance (0 = server/primary); omit for the primary world"
+        "description": "PIE world instance (0 = server/primary); omit for the primary world",
+        "minimum": 0
       },
       {
         "name": "key",
@@ -2498,7 +2519,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "save",
         "type": "boolean",
         "required": false,
-        "description": "Persist the asset (default true); false defers the write"
+        "description": "Persist the asset (default true); false defers the write",
+        "default": true
       }
     ]
   },
@@ -2563,13 +2585,15 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "dryRun",
         "type": "boolean",
         "required": false,
-        "description": "Validate and report proposed settings without changing the asset (default false)"
+        "description": "Validate and report proposed settings without changing the asset (default false)",
+        "default": false
       },
       {
         "name": "save",
         "type": "boolean",
         "required": false,
-        "description": "Persist the asset (default true); false defers the write"
+        "description": "Persist the asset (default true); false defers the write",
+        "default": true
       }
     ],
     "choices": [
@@ -2697,7 +2721,7 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "actorPath",
         "type": "string",
         "required": false,
-        "description": "Full actor object path; wins over actorLabel"
+        "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
       },
       {
         "name": "world",
@@ -2707,9 +2731,10 @@ export const handlerSpecs: HandlerSpecs = {
       },
       {
         "name": "pieInstance",
-        "type": "number",
+        "type": "integer",
         "required": false,
-        "description": "PIE world instance (0 = server/primary); omit for the primary world"
+        "description": "PIE world instance (0 = server/primary); omit for the primary world",
+        "minimum": 0
       },
       {
         "name": "mode",
@@ -2776,7 +2801,7 @@ export const handlerSpecs: HandlerSpecs = {
 /** Every key the spec'd gameplay handlers declare, aliases included. */
 export const schema: Record<string, z.ZodType> = {
   actorLabel: z.string().optional().describe("Live actor label or name (the pawn or its AIController) (get_bt_runtime, get_live_blackboard, get_perceived_actors, read_perception, run_behavior_tree, set_live_blackboard, stop_behavior_tree). Actor label, name or path. Pass actorLabel or actorPath (get_state_tree_runtime). Only this ZoneGraphData actor, by label or name (query_zone_graph)"),
-  actorPath: z.string().optional().describe("Full actor object path; wins over actorLabel (get_bt_runtime, get_live_blackboard, get_perceived_actors, read_perception, run_behavior_tree, set_live_blackboard, stop_behavior_tree). Full actor object path; the unambiguous selector (get_state_tree_runtime). Only this ZoneGraphData actor, by full object path (query_zone_graph)"),
+  actorPath: z.string().optional().describe("Full actor object path, the unambiguous selector; wins over actorLabel (get_bt_runtime, get_live_blackboard, get_perceived_actors, get_state_tree_runtime, read_perception, run_behavior_tree, set_live_blackboard, stop_behavior_tree). Only this ZoneGraphData actor, by full object path (query_zone_graph)"),
   amount: z.number().optional().describe("Damage amount (damage only, required there)"),
   areaClass: z.string().optional().describe("UNavArea subclass: NavArea_Null (default, cuts a hole), NavArea_Obstacle, or a /Script path"),
   assetPath: z.string().optional().describe("BehaviorTree asset path (add_bt_node, get_behavior_tree_info, list_bt_graph_nodes, move_bt_node, read_behavior_tree_graph, read_bt_node_properties, remove_bt_node, set_bt_node_property, set_bt_task_property). Alias for imcPath (add_imc_mapping, read_imc, remove_imc_mapping). SmartObjectDefinition asset path (add_smart_object_default_behavior, add_smart_object_slot, add_smart_object_slot_behavior, list_smart_object_slots, remove_smart_object_slot, set_smart_object_slot). BehaviorTree asset path; omit to sweep directory (list_bt_tasks). NNEModelData asset to create, e.g. /Game/ML/NNE_Model (nne_import_model). NNEModelData asset (nne_run_inference). Alias for blackboardPath (read_blackboard). MassEntityConfigAsset path (remove_mass_trait, reorder_mass_traits, validate_mass_entity_config). BehaviorTree asset to run (run_behavior_tree)"),
@@ -2853,7 +2878,7 @@ export const schema: Record<string, z.ZodType> = {
   nodePath: z.string().optional().describe("BT node address from read_behavior_tree_graph, e.g. 'Root.Children[0].Decorators[1]' (list_bt_tasks, read_bt_node_properties, set_bt_node_property, set_bt_task_property). Alias for node (move_bt_node, remove_bt_node)"),
   observationType: z.string().optional().describe("Observation type: Float, Location, Set, ... or the Specify function name"),
   offset: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Slot offset {x,y,z}"),
-  onConflict: z.string().optional().describe("skip (default, returns the existing asset) or error when the asset already exists (create_behavior_tree, create_blackboard, create_eqs_query, create_input_action, create_input_mapping_context, create_smart_object_definition, create_state_tree). skip (default) reports an existing asset, error refuses it (nne_import_model). skip (default, returns the actor already carrying label) or error when one does (spawn_nav_modifier_volume)"),
+  onConflict: z.string().optional().describe("When the asset already exists: skip (default) returns it untouched | error refuses; it never overwrites (create_behavior_tree, create_blackboard, create_eqs_query, create_input_action, create_input_mapping_context, create_smart_object_definition, create_state_tree, nne_import_model). skip (default, returns the actor already carrying label) or error when one does (spawn_nav_modifier_volume)"),
   optionIndex: z.number().optional().describe("Option to add the test to (default 0) (add_eqs_test). Option to remove, as read_eqs_query reports it (remove_eqs_option). Option the test belongs to (default 0) (remove_eqs_test). Option whose tests to reorder (default 0) (reorder_eqs_tests)"),
   order: z.array(z.number()).optional().describe("Current test indices in the order wanted; must be a full permutation (reorder_eqs_tests). Current trait indices in the order wanted; must be a full permutation (reorder_mass_traits)"),
   packagePath: z.string().optional().describe("Content folder (default /Game/AI) (create_behavior_tree, create_blackboard, create_state_tree). Content folder (default /Game/AI/EQS) (create_eqs_query). Content folder (default /Game/Blueprints/GameFramework) (create_game_mode, create_game_state, create_hud, create_player_controller, create_player_state). Content folder (default /Game/Input) (create_input_action, create_input_mapping_context). Content folder (default /Game/AI/SmartObjects) (create_smart_object_definition)"),
@@ -2865,7 +2890,7 @@ export const schema: Record<string, z.ZodType> = {
   pathfindingContextPath: z.string().optional().describe("Full object path of the pathfinding context actor; alternative to pathfindingContext"),
   perceiverLabel: z.string().optional().describe("The actor doing the perceiving"),
   perceiverPath: z.string().optional().describe("Full object path of the perceiver"),
-  pieInstance: z.number().optional().describe("PIE world instance (0 = server/primary); omit for the first running one (apply_mapping_context, get_action_value, remove_mapping_context). PIE world instance (0 = server/primary); omit for the primary world (check_perception, get_bt_runtime, get_live_blackboard, get_perceived_actors, list_ai_agents, read_perception, report_noise_event, run_behavior_tree, set_live_blackboard, stop_behavior_tree). PIE instance id; omitted selects the active PIE world (find_nav_path). PIE world instance (0 = server/primary); omit for every running PIE world (get_input_mapping_contexts). PIE world instance (0 = server/primary) (get_state_tree_runtime). PIE world instance when world is pie or auto (query_zone_graph, run_eqs_query)"),
+  pieInstance: z.number().int().min(0).optional().describe("PIE world instance (0 = server/primary); omit for the first running one (apply_mapping_context, get_action_value, remove_mapping_context). PIE world instance (0 = server/primary); omit for the primary world (check_perception, get_bt_runtime, get_live_blackboard, get_perceived_actors, list_ai_agents, read_perception, report_noise_event, run_behavior_tree, set_live_blackboard, stop_behavior_tree). PIE instance id; omitted selects the active PIE world (find_nav_path). PIE world instance (0 = server/primary); omit for every running PIE world (get_input_mapping_contexts). PIE world instance (0 = server/primary) (get_state_tree_runtime). PIE world instance when world is pie or auto (query_zone_graph, run_eqs_query)"),
   playerIndex: z.number().optional().describe("Local player to act on (default 0) (apply_mapping_context, remove_mapping_context). Local player to read (default 0) (get_action_value). Player index; omit for every player (get_input_mapping_contexts)"),
   playerMappableKeySettings: z.record(z.string(), z.unknown()).nullable().optional().describe("Per-mapping reflected settings fields; null clears the override subobject"),
   posX: z.number().int().optional().describe("Node X position (default 0)"),

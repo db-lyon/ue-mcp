@@ -44,8 +44,8 @@ namespace
 	 *     UE_MCP_DIALOG_POLICY="Restore=no;Would you like to rebuild=yes"
 	 *
 	 * The response words are exactly the ones set_dialog_policy accepts,
-	 * because each entry is applied by dispatching set_dialog_policy itself
-	 * rather than by a second copy of its parsing. An entry that is not a
+	 * because each entry is armed by set_dialog_policy's own code
+	 * (FDialogHandlers::ArmPolicy) rather than by a second copy of its parsing. An entry that is not a
 	 * pattern=response pair is skipped and said out loud: a policy that
 	 * silently does nothing is worse than no policy at all.
 	 */
@@ -59,7 +59,7 @@ namespace
 		return FPlatformMisc::GetEnvironmentVariable(UEMCPWire::EnvVar::DialogPolicy);
 	}
 
-	void ApplyConfiguredDialogPolicies(FMCPHandlerRegistry& Registry)
+	void ApplyConfiguredDialogPolicies()
 	{
 		const FString Spec = ReadConfiguredDialogPolicy();
 		if (Spec.IsEmpty())
@@ -88,10 +88,7 @@ namespace
 				continue;
 			}
 
-			TSharedPtr<FJsonObject> PolicyParams = MakeShared<FJsonObject>();
-			PolicyParams->SetStringField(TEXT("pattern"), Pattern);
-			PolicyParams->SetStringField(TEXT("response"), Response);
-			const TSharedPtr<FJsonValue> PolicyResult = Registry.ExecuteHandler(TEXT("set_dialog_policy"), PolicyParams);
+			const TSharedPtr<FJsonValue> PolicyResult = FDialogHandlers::ArmPolicy(Pattern, Response);
 
 			// The handler refuses a response keyword it does not recognise, and
 			// its error names the valid ones. Reporting "applied" regardless
@@ -173,10 +170,10 @@ void FUE_MCP_BridgeModule::StartupModule()
 	// caller asked for by name.
 	//
 	// #968: policies the LAUNCHER asked for are the one thing applied here, and
-	// they are applied by dispatching set_dialog_policy, so they are recorded as
+	// they are armed through set_dialog_policy's own code, so they are recorded as
 	// what they are: a caller arming an answer in advance, before the socket is
 	// listening, for a prompt they already know is coming.
-	ApplyConfiguredDialogPolicies(G_BridgeServer->GetHandlerRegistry());
+	ApplyConfiguredDialogPolicies();
 
 	if (G_BridgeServer->Start())
 	{

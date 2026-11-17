@@ -116,9 +116,9 @@ void FAssetMeshBooleanHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("copyCollisionFromTarget"), EType::Boolean, TEXT("Copy the target's simple collision onto the result (default true)")),
 		MCPParam::Optional(TEXT("copyMaterialsFromTarget"), EType::Boolean, TEXT("Copy the target's material slots onto the result (default true)")),
 		MCPParam::Optional(TEXT("nanite"), EType::String, TEXT("inherit (default, match the target) | enable | disable")),
-		MCPParam::Optional(TEXT("onConflict"), EType::String, TEXT("When outputPath exists: error (default) | replace")),
-		MCPParam::Optional(TEXT("dryRun"), EType::Boolean, TEXT("Run the boolean and report the counts without writing (default false)")),
-		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save the written asset (default true)")),
+		MCPSharedParam::OnConflict().Describe(TEXT("When outputPath exists: error (default) | replace")),
+		MCPSharedParam::DryRun().Describe(TEXT("Run the boolean and report the counts without writing (default false)")),
+		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save the written asset (default true)")).Default(true),
 	});
 }
 

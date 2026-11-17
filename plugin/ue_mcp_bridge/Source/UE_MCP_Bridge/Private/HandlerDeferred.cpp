@@ -175,6 +175,11 @@ MCPRequestContext::FScope::~FScope()
 	GMCPCurrentRequest = Previous;
 }
 
+double MCPRequestContext::BudgetSeconds(double Fallback)
+{
+	return GMCPCurrentRequest.IsValid() && GMCPCurrentRequest->BudgetSeconds > 0.0 ? GMCPCurrentRequest->BudgetSeconds : Fallback;
+}
+
 void MCPRequestContext::Register(const FMCPRequestContextRef& Context)
 {
 	if (Context->CancelToken.IsEmpty()) return;

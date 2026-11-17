@@ -188,7 +188,7 @@ void FMassHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 				MCPParam::OptionalField(TEXT("traitClass"), EType::String, TEXT("Same as class")),
 				MCPParam::OptionalField(TEXT("properties"), EType::Object, TEXT("Fields written onto the trait instance; dotted paths allowed")),
 			}),
-		MCPParam::Optional(TEXT("onConflict"), EType::String, TEXT("skip | error | update (default): what an existing asset gets")),
+		MCPSharedParam::OnConflict().Describe(TEXT("skip | error | update (default): what an existing asset gets")),
 	}, MCPSpec::ExactlyOne({ { TEXT("assetPath") }, { TEXT("name") } }));
 	Registry.RegisterHandler(TEXT("read_mass_entity_config"), &ReadEntityConfig, {
 		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("MassEntityConfigAsset path")),

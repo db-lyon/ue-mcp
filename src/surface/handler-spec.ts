@@ -92,7 +92,11 @@ export interface ParamSpec {
   minimum?: number;
   /** Inclusive upper bound, as minimum. */
   maximum?: number;
+  /** What the handler uses when the parameter is omitted. */
+  default?: boolean | string | number;
 }
+
+export type { ActionFacts } from "../bridge/action-facts.generated.js";
 
 /** How many branches of a choice a call supplies. Mirrors EMCPChoiceMode. */
 export const CHOICE_MODES = ["exactlyOne", "atLeastOne"] as const;
@@ -436,6 +440,23 @@ export function makeSpecBp(specs: HandlerSpecs) {
       ? { ...action, paramSpec: spec.params, paramChoices: spec.choices }
       : { ...action, paramSpec: spec.params };
   };
+}
+
+/**
+ * The default a handler declares for one of its parameters, so the server
+ * never restates it. Throws when the spec declares none, which a re-record that
+ * dropped the default would otherwise turn into a silent `undefined`.
+ */
+export function declaredDefault<T extends boolean | string | number>(
+  specs: Readonly<HandlerSpecs>,
+  method: string,
+  param: string,
+): T {
+  const value = specs[method]?.params.find((p) => p.name === param)?.default;
+  if (value === undefined) {
+    throw new Error(`${method} declares no default for '${param}'; declare it with .Default() at its C++ registration`);
+  }
+  return value as T;
 }
 
 /**

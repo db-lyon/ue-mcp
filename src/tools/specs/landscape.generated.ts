@@ -453,7 +453,7 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "onConflict",
         "type": "string",
         "required": false,
-        "description": "When the asset already exists: skip (default) | error"
+        "description": "When the asset already exists: skip (default) returns it untouched | error refuses; it never overwrites"
       },
       {
         "name": "physMaterial",
@@ -2498,7 +2498,7 @@ export const schema: Record<string, z.ZodType> = {
   newSplineActor: z.boolean().optional().describe("World Partition: put the point in a new LandscapeSplineActor (the default when ownerPath is not given)"),
   northAt: z.string().optional().describe("Which end of the Y axis is north: minY (default) | maxY"),
   numSubsections: z.number().int().optional().describe("1 | 2 (default 2)"),
-  onConflict: z.string().optional().describe("When the asset already exists: skip (default) | error (create_landscape_layer_info). When name is taken: skip (default) | error (create_landscape_spline_point)"),
+  onConflict: z.string().optional().describe("When the asset already exists: skip (default) returns it untouched | error refuses; it never overwrites (create_landscape_layer_info). When name is taken: skip (default) | error (create_landscape_spline_point)"),
   operator: z.string().optional().describe("raise | lower | flatten | smooth | mountain | valley | ridge | plateau | crater | terrace"),
   outputPath: z.string().optional().describe("Alias for filePath"),
   overwrite: z.boolean().optional().describe("Allow replacing an existing file (default true)"),

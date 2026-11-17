@@ -186,8 +186,8 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("channel"), EType::Number, TEXT("Channel to remove (op=remove)")),
 		MCPParam::Optional(TEXT("fromChannel"), EType::Number, TEXT("Source channel (op=copy)")),
 		MCPParam::Optional(TEXT("toChannel"), EType::Number, TEXT("Destination channel (op=copy)")),
-		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save the mesh (default true)")),
-		MCPParam::Optional(TEXT("dryRun"), EType::Boolean, TEXT("Report without writing")),
+		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save the mesh (default true)")).Default(true),
+		MCPSharedParam::DryRun().Describe(TEXT("Report without writing")),
 	});
 	Registry.RegisterHandler(TEXT("unwrap_uvs"), &UnwrapUvs, {
 		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StaticMesh or SkeletalMesh asset path")).Alias(TEXT("path")),
@@ -202,8 +202,8 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("projectionTransform"), EType::Object, TEXT("Transform for the planar, box and cylinder projections")),
 		MCPParam::Optional(TEXT("preserveVertexOrder"), EType::Boolean, TEXT("Keep the existing vertex order (default true)")),
 		MCPParam::Optional(TEXT("backupToChannel"), EType::Number, TEXT("Copy the existing UVs here first")),
-		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save the mesh (default true)")),
-		MCPParam::Optional(TEXT("dryRun"), EType::Boolean, TEXT("Report without writing")),
+		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save the mesh (default true)")).Default(true),
+		MCPSharedParam::DryRun().Describe(TEXT("Report without writing")),
 		MCPParam::Optional(TEXT("rasterSize"), EType::Number, TEXT("Raster resolution for the result's overlap estimate (default 512)")),
 	});
 	Registry.RegisterHandler(TEXT("transform_uvs"), &TransformUvs, {
@@ -218,8 +218,8 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("flipV"), EType::Boolean, TEXT("Mirror across V")),
 		MCPParam::Optional(TEXT("order"), EType::String, TEXT("flipScaleRotateTranslate (default) | translateRotateScaleFlip")),
 		MCPParam::Optional(TEXT("selection"), EType::Object, TEXT("What to transform: {mode: all|island|normal|polygonGroup, islandIndices?, normalDirection?, normalAngleTolerance?, polygonGroups?, materialSlotNames?}")),
-		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save the mesh (default true)")),
-		MCPParam::Optional(TEXT("dryRun"), EType::Boolean, TEXT("Report without writing")),
+		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save the mesh (default true)")).Default(true),
+		MCPSharedParam::DryRun().Describe(TEXT("Report without writing")),
 	});
 	Registry.RegisterHandler(TEXT("generate_lightmap_uvs"), &GenerateLightmapUvs, {
 		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StaticMesh asset path")).Alias(TEXT("path")),
@@ -231,8 +231,8 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("lightmapResolution"), EType::Number, TEXT("The mesh's lightmap resolution")),
 		MCPParam::Optional(TEXT("setLightmapCoordinateIndex"), EType::Boolean, TEXT("Point LightMapCoordinateIndex at the destination channel (default true)")),
 		MCPParam::Optional(TEXT("force"), EType::Boolean, TEXT("Rebuild even when the settings already match")),
-		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save the mesh (default true)")),
-		MCPParam::Optional(TEXT("dryRun"), EType::Boolean, TEXT("Report without writing")),
+		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save the mesh (default true)")).Default(true),
+		MCPSharedParam::DryRun().Describe(TEXT("Report without writing")),
 		MCPParam::Optional(TEXT("rasterSize"), EType::Number, TEXT("Raster resolution for the result's overlap estimate (default 512)")),
 	});
 	Registry.RegisterHandler(TEXT("export_uv_layout"), &ExportUvLayout, {
@@ -263,15 +263,15 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	const FMCPParamSpec SpecGeoBackupPath = MCPParam::Optional(TEXT("backupPath"), EType::String, TEXT("Copy the source here before an inPlace edit, the only way back to the original geometry"));
 	const FMCPParamSpec SpecGeoLodType = MCPParam::Optional(TEXT("lodType"), EType::String, TEXT("MaxAvailable (default, ignores lodIndex) | HiResSourceModel | SourceModel | RenderData"));
 	const FMCPParamSpec SpecGeoLodIndex = MCPParam::Optional(TEXT("lodIndex"), EType::Integer, TEXT("LOD to read when lodType names one (default 0)"));
-	const FMCPParamSpec SpecGeoOnConflict = MCPParam::Optional(TEXT("onConflict"), EType::String, TEXT("When the output asset exists: error (default) | replace"));
+	const FMCPParamSpec SpecGeoOnConflict = MCPSharedParam::OnConflict().Describe(TEXT("When the output asset exists: error (default) | replace"));
 	const FMCPParamSpec SpecGeoCopyMaterials = MCPParam::Optional(TEXT("copyMaterialsFromSource"), EType::Boolean, TEXT("Copy the source's material slots onto the written asset (default true)"));
 	const FMCPParamSpec SpecGeoCopyCollision = MCPParam::Optional(TEXT("copyCollisionFromSource"), EType::Boolean, TEXT("Copy the source's simple collision and trace flag onto the written asset (default true)"));
 	const FMCPParamSpec SpecGeoNanite = MCPParam::Optional(TEXT("nanite"), EType::String, TEXT("inherit (default, match the source) | enable | disable"));
 	const FMCPParamSpec SpecGeoRecomputeNormals = MCPParam::Optional(TEXT("recomputeNormals"), EType::Boolean, TEXT("Recompute normals on the written mesh (default false)"));
 	const FMCPParamSpec SpecGeoRecomputeTangents = MCPParam::Optional(TEXT("recomputeTangents"), EType::Boolean, TEXT("Recompute tangents on the written mesh (default false)"));
 	const FMCPParamSpec SpecGeoRemoveDegenerates = MCPParam::Optional(TEXT("removeDegenerates"), EType::Boolean, TEXT("Drop degenerate triangles when writing back into an existing mesh (default false)"));
-	const FMCPParamSpec SpecGeoSave = MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save the written asset (default true)"));
-	const FMCPParamSpec SpecGeoDryRun = MCPParam::Optional(TEXT("dryRun"), EType::Boolean, TEXT("Run the operation and report the result without writing (default false)"));
+	const FMCPParamSpec SpecGeoSave = MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save the written asset (default true)")).Default(true);
+	const FMCPParamSpec SpecGeoDryRun = MCPSharedParam::DryRun().Describe(TEXT("Run the operation and report the result without writing (default false)"));
 	Registry.RegisterHandlerWithTimeout(TEXT("apply_mesh_simplify"), &SimplifyMesh, 300.0f, {
 		SpecGeoAssetPath,
 		MCPParam::Optional(TEXT("simplifyMode"), EType::String, TEXT("triangleCount (default) | vertexCount | tolerance | edgeLength | clusterEdgeLength | planar | polygroup | editorTriangleCount | editorVertexCount")),
@@ -368,7 +368,7 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("fillHoles"), EType::Boolean, TEXT("Cap each piece where the plane cut it (default true)")),
 		MCPParam::Optional(TEXT("minPieceTriangles"), EType::Integer, TEXT("Discard pieces with fewer triangles than this (default 4)")),
 		MCPParam::Optional(TEXT("outputBasePath"), EType::String, TEXT("Pieces are written as outputBasePath_00, _01 and on (default '<assetPath>_Piece')")),
-		MCPParam::Optional(TEXT("onConflict"), EType::String, TEXT("When a piece asset exists: error (default) | replace")),
+		MCPSharedParam::OnConflict().Describe(TEXT("When a piece asset exists: error (default) | replace")),
 		SpecGeoCopyMaterials, SpecGeoNanite, SpecGeoRecomputeNormals, SpecGeoRecomputeTangents,
 		SpecGeoLodType, SpecGeoLodIndex, SpecGeoSave, SpecGeoDryRun,
 	});
@@ -411,7 +411,7 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		SpecHygIgnoreRedirectorReferencers,
 		MCPParam::Optional(TEXT("maxFixes"), EType::Integer, TEXT("Refuse the call past this many assets (default 100)")),
 		MCPParam::Optional(TEXT("continueOnError"), EType::Boolean, TEXT("Apply the candidates that passed preflight instead of aborting (default false)")),
-		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save what changed (default true)")),
+		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save what changed (default true)")).Default(true),
 		MCPParam::Optional(TEXT("dryRun"), EType::Boolean, TEXT("Name every asset and destination without changing anything (default TRUE)")),
 	});
 
@@ -441,7 +441,7 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("duplicate_asset"), &DuplicateAsset, {
 		MCPParam::Required(TEXT("sourcePath"), EType::String, TEXT("Asset to duplicate")),
 		MCPParam::Required(TEXT("destinationPath"), EType::String, TEXT("Object path of the copy")),
-		MCPParam::Optional(TEXT("onConflict"), EType::String, TEXT("skip (default) returns an existing destination; error refuses")),
+		MCPSharedParam::OnConflict().Describe(TEXT("skip (default) returns an existing destination; error refuses")),
 	});
 	Registry.RegisterHandler(TEXT("rename_asset"), &RenameAsset, {
 		MCPParam::Optional(TEXT("sourcePath"), EType::String, TEXT("Asset to rename, together with destinationPath")),
@@ -478,8 +478,8 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	// fix-up loads and resaves every referencing package.
 	Registry.RegisterHandlerWithTimeout(TEXT("fixup_redirectors"), &FixupRedirectors, 300.0f, {
 		MCPParam::Required(TEXT("paths"), EType::Array, TEXT("Redirector packages, or the folders holding them")).Items(EType::String),
-		MCPParam::Optional(TEXT("dryRun"), EType::Boolean, TEXT("Report the redirectors, referencers and packages it would load and save, and stop (default false)")),
-		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save the repointed referencers (default true); false leaves them dirty in memory and keeps every redirector they reference")),
+		MCPSharedParam::DryRun().Describe(TEXT("Report the redirectors, referencers and packages it would load and save, and stop (default false)")),
+		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save the repointed referencers (default true); false leaves them dirty in memory and keeps every redirector they reference")).Default(true),
 		MCPParam::Optional(TEXT("allowProjectWide"), EType::Boolean, TEXT("Permit a path naming a whole content root (default false)")),
 		MCPParam::Optional(TEXT("deleteRedirectors"), EType::Boolean, TEXT("Delete each redirector once nothing references it (default true); false keeps the stubs")),
 	});
@@ -488,7 +488,7 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Required(TEXT("className"), EType::String, TEXT("UDataAsset subclass: class name with or without the C++ prefix, or a /Script/Module.Class path")).Alias(TEXT("class")),
 		MCPParam::Optional(TEXT("packagePath"), EType::String, TEXT("Destination folder (default /Game)")),
 		MCPParam::Optional(TEXT("properties"), EType::Object, TEXT("Property values keyed by property name")),
-		MCPParam::Optional(TEXT("onConflict"), EType::String, TEXT("skip (default) returns an existing asset; error refuses")),
+		MCPSharedParam::OnConflict(),
 	});
 	// Bounded batch upsert plus its rollback inverse. A 500-item batch that
 	// preflights every item on a transient copy before touching a package can
@@ -496,9 +496,9 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	// explicit timeout.
 	Registry.RegisterHandlerWithTimeout(TEXT("bulk_upsert_data_assets"), &BulkUpsertDataAssets, 120.0f, {
 		MCPParam::Required(TEXT("items"), EType::Array, TEXT("DataAsset descriptors: [{name, packagePath, className, properties?}], max 500")).Items(EType::Object),
-		MCPParam::Optional(TEXT("onConflict"), EType::String, TEXT("update (default) | skip | error")),
-		MCPParam::Optional(TEXT("dryRun"), EType::Boolean, TEXT("Run the full preflight and report the planned statuses without writing (default false)")),
-		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save the changed packages (default true)")),
+		MCPSharedParam::OnConflict().Describe(TEXT("update (default) | skip | error")),
+		MCPSharedParam::DryRun().Describe(TEXT("Run the full preflight and report the planned statuses without writing (default false)")),
+		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save the changed packages (default true)")).Default(true),
 	});
 	Registry.RegisterHandlerWithTimeout(TEXT("bulk_restore_data_assets"), &BulkRestoreDataAssets, 120.0f);
 	// #726: generic create-any-concrete-UObject-class asset (physical materials,
@@ -508,7 +508,7 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Required(TEXT("className"), EType::String, TEXT("Concrete UObject class: class name with or without the C++ prefix, or a /Script/Module.Class path")).Alias(TEXT("class")),
 		MCPParam::Optional(TEXT("packagePath"), EType::String, TEXT("Destination folder (default /Game)")),
 		MCPParam::Optional(TEXT("properties"), EType::Object, TEXT("Property values keyed by property name")),
-		MCPParam::Optional(TEXT("onConflict"), EType::String, TEXT("skip (default) returns an existing asset; error refuses")),
+		MCPSharedParam::OnConflict(),
 	});
 	// #975: a named subobject inside an existing asset package, which
 	// create_asset_by_class cannot make because it always creates a package.
@@ -518,8 +518,8 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Required(TEXT("name"), EType::String, TEXT("Subobject name")),
 		MCPParam::Optional(TEXT("properties"), EType::Object, TEXT("Property values, validated on a throwaway instance first")),
 		MCPParam::Optional(TEXT("outer"), EType::String, TEXT("asset (default) | package")),
-		MCPParam::Optional(TEXT("onConflict"), EType::String, TEXT("reuse (default) | error")),
-		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save the owning package (default true)")),
+		MCPSharedParam::OnConflict().Describe(TEXT("reuse (default) | error")),
+		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save the owning package (default true)")).Default(true),
 	});
 	Registry.RegisterHandler(TEXT("read_asset_graph"), &ReadAssetGraph, {
 		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("EdGraph-backed asset path")).Alias(TEXT("path")),
@@ -538,7 +538,7 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("targetPinId"), EType::String, TEXT("pinId of the target pin")),
 		MCPParam::Optional(TEXT("targetPin"), EType::String, TEXT("Target pin name, when no pinId is given")),
 		MCPParam::Optional(TEXT("targetPinDirection"), EType::String, TEXT("input | output, to disambiguate targetPin")),
-		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save the asset after the edit (default true)")),
+		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save the asset after the edit (default true)")).Default(true),
 	});
 	Registry.RegisterHandler(TEXT("disconnect_graph_pins"), &DisconnectGraphPins, {
 		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("EdGraph-backed asset path")).Alias(TEXT("path")),
@@ -551,7 +551,7 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("targetPinId"), EType::String, TEXT("pinId of the target pin")),
 		MCPParam::Optional(TEXT("targetPin"), EType::String, TEXT("Target pin name, when no pinId is given")),
 		MCPParam::Optional(TEXT("targetPinDirection"), EType::String, TEXT("input | output, to disambiguate targetPin")),
-		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save the asset after the edit (default true)")),
+		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save the asset after the edit (default true)")).Default(true),
 	});
 	Registry.RegisterHandler(TEXT("add_graph_node"), &AddGraphNode, {
 		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("EdGraph-backed asset path")).Alias(TEXT("path")),
@@ -561,13 +561,13 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("spawnMode"), EType::String, TEXT("auto (default) | action | direct")),
 		MCPParam::Optional(TEXT("posX"), EType::Number, TEXT("Node X position")),
 		MCPParam::Optional(TEXT("posY"), EType::Number, TEXT("Node Y position")),
-		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save the asset after the edit (default true)")),
+		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save the asset after the edit (default true)")).Default(true),
 	});
 	Registry.RegisterHandler(TEXT("remove_graph_node"), &RemoveGraphNode, {
 		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("EdGraph-backed asset path")).Alias(TEXT("path")),
 		MCPParam::Optional(TEXT("graphName"), EType::String, TEXT("Graph to author in, by name or unique substring (required when the asset has several graphs)")),
 		MCPParam::Required(TEXT("node"), EType::String, TEXT("Node to remove: nodeGuid, path, name or unique title")),
-		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save the asset after the edit (default true)")),
+		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save the asset after the edit (default true)")).Default(true),
 	});
 	Registry.RegisterHandlerWithTimeout(TEXT("compile_customizable_object"), &CompileCustomizableObject, 600.0f, {
 		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("CustomizableObject asset path")).Alias(TEXT("path")),
@@ -577,8 +577,8 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("create_customizable_object"), &CreateCustomizableObject, {
 		MCPParam::Required(TEXT("name"), EType::String, TEXT("Asset name")),
 		MCPParam::Optional(TEXT("packagePath"), EType::String, TEXT("Destination folder (default /Game)")),
-		MCPParam::Optional(TEXT("onConflict"), EType::String, TEXT("skip (default) | error")),
-		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save the new asset (default true)")),
+		MCPSharedParam::OnConflict().Describe(TEXT("skip (default) | error")),
+		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save the new asset (default true)")).Default(true),
 	});
 	Registry.RegisterHandler(TEXT("save_asset"), &SaveAsset, {
 		MCPParam::Optional(TEXT("assetPath"), EType::String, TEXT("Asset to save; omit it and assetPaths to save every dirty asset under /Game")).Alias(TEXT("path")),
@@ -618,8 +618,8 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("createPhysicsAsset"), EType::Boolean, TEXT("Create a PhysicsAsset (default false)")),
 		MCPParam::Optional(TEXT("replaceExisting"), EType::Boolean, TEXT("Replace an asset already at the destination (default true)")),
 		MCPParam::Optional(TEXT("importer"), EType::String, TEXT("auto uses Interchange on 5.8 and later, legacy on older versions; interchange passes an explicit pipeline stack")).Enum({ TEXT("auto"), TEXT("interchange"), TEXT("legacy") }),
-		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save all imported assets (default false)")),
-		MCPParam::Optional(TEXT("dryRun"), EType::Boolean, TEXT("Validate and report without importing, writing or saving (default false)")),
+		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save all imported assets (default false)")).Default(false),
+		MCPSharedParam::DryRun().Describe(TEXT("Validate and report without importing, writing or saving (default false)")),
 	});
 	Registry.RegisterHandler(TEXT("import_animation"), &ImportAnimation, {
 		MCPParam::Optional(TEXT("filePath"), EType::String, TEXT("Source FBX on disk; exclusive with filePaths")).Alias(TEXT("filename")),
@@ -638,7 +638,7 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("factoryClass"), EType::String, TEXT("UFactory subclass by name or /Script path (default: picked by extension)")),
 		MCPParam::Optional(TEXT("factoryProperties"), EType::Object, TEXT("Factory properties by UPROPERTY name or dotted path, set before the import")),
 		MCPParam::Optional(TEXT("replaceExisting"), EType::Boolean, TEXT("Replace an asset already at the destination (default true)")),
-		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save each imported asset and report saved per asset (default true; false leaves them dirty)")),
+		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save each imported asset and report saved per asset (default true; false leaves them dirty)")).Default(true),
 		MCPParam::Optional(TEXT("automated"), EType::Boolean, TEXT("Suppress interactive dialogs (default true)")),
 		MCPParam::Optional(TEXT("rowStruct"), EType::String, TEXT("For a .csv: the DataTable row struct the DataTable Options dialog would ask for (default: the row struct of a DataTable already at the destination). An unattended .csv import with neither is refused")),
 		MCPParam::Optional(TEXT("ignoreExtraFields"), EType::Boolean, TEXT("For a .csv with rowStruct: ignore CSV columns the row struct lacks, as the dialog's Ignore Extra Fields")),
@@ -651,7 +651,7 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Required(TEXT("filePath"), EType::String, TEXT("Font file on disk: .ttf, .otf, .ttc or .otc")).Alias(TEXT("filename")),
 		MCPParam::Optional(TEXT("name"), EType::String, TEXT("FontFace asset name (default: the file name)")).Alias(TEXT("assetName")),
 		MCPParam::Optional(TEXT("packagePath"), EType::String, TEXT("Destination folder (default /Game/Fonts)")).Alias(TEXT("destinationPath")),
-		MCPParam::Optional(TEXT("onConflict"), EType::String, TEXT("When the face exists: skip (default, report it) | error | replace (reimport its bytes)")),
+		MCPSharedParam::OnConflict().Describe(TEXT("When the face exists: skip (default, report it) | error | replace (reimport its bytes)")),
 		MCPParam::Optional(TEXT("hinting"), EType::String, TEXT("Default (default) | Auto | AutoLight | Monochrome | None")),
 		MCPParam::Optional(TEXT("loadingPolicy"), EType::String, TEXT("LazyLoad (default) | Stream | Inline")),
 		MCPParam::Optional(TEXT("createFont"), EType::Boolean, TEXT("Also create <name>_Font, a runtime Font whose Default typeface is this face (default false)")),
@@ -661,7 +661,7 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("packagePath"), EType::String, TEXT("Folder for the font (default /Game/Fonts)")),
 		MCPParam::Required(TEXT("fontFaces"), EType::Array, TEXT("FontFace asset paths, one typeface entry each")).Items(EType::String),
 		MCPParam::Optional(TEXT("typefaceNames"), EType::Array, TEXT("Typeface entry names in fontFaces order, e.g. Regular, Bold, Italic (default: Default, then each face's asset name)")).Items(EType::String),
-		MCPParam::Optional(TEXT("onConflict"), EType::String, TEXT("When the font exists: skip (default, report it) | error | update (rewrite its default typeface)")),
+		MCPSharedParam::OnConflict().Describe(TEXT("When the font exists: skip (default, report it) | error | update (rewrite its default typeface)")),
 	});
 	Registry.RegisterHandler(TEXT("import_texture"), &ImportTexture, {
 		MCPParam::Required(TEXT("filePath"), EType::String, TEXT("Source file on disk")).Alias(TEXT("filename")),
@@ -677,9 +677,9 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("import_texture_batch"), &ImportTextureBatch, {
 		MCPParam::Required(TEXT("items"), EType::Array, TEXT("Textures to import, 1-500: {filePath, packagePath?, name?, replaceExisting?, preset?: normal|masks|color, settings?: {compressionSettings?, lodGroup?, sRGB?, neverStream?, flipGreenChannel?, maxTextureSize?}}. Settings may also be given directly on each item; direct fields win. All entries are validated before import")).Items(EType::Object),
 		MCPParam::Optional(TEXT("packagePath"), EType::String, TEXT("Folder for entries that name none (default /Game/Textures)")),
-		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save changed assets (default true)")),
+		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save changed assets (default true)")).Default(true),
 		MCPParam::Optional(TEXT("automated"), EType::Boolean, TEXT("Suppress interactive dialogs (default true)")),
-		MCPParam::Optional(TEXT("dryRun"), EType::Boolean, TEXT("Validate and report without importing, writing or saving (default false)")),
+		MCPSharedParam::DryRun().Describe(TEXT("Validate and report without importing, writing or saving (default false)")),
 	});
 	Registry.RegisterHandler(TEXT("create_render_target_2d"), &CreateRenderTarget2D, {
 		MCPParam::Required(TEXT("name"), EType::String, TEXT("Asset name, without '/' or '.'")),
@@ -690,7 +690,7 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("clearColor"), EType::Object, TEXT("Linear clear color {r, g, b, a} (default transparent)")),
 		MCPParam::Optional(TEXT("generateMips"), EType::Boolean, TEXT("Generate mipmaps automatically (default false)")),
 		MCPParam::Optional(TEXT("targetGamma"), EType::Number, TEXT("Target gamma (default 0, the engine behavior)")),
-		MCPParam::Optional(TEXT("onConflict"), EType::String, TEXT("skip (default) returns an existing asset; error refuses")),
+		MCPSharedParam::OnConflict(),
 	});
 	// #697: texture export + compare.
 	Registry.RegisterHandler(TEXT("export_texture"), &ExportTexture, {
@@ -716,8 +716,8 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("neverStream"), EType::Boolean, TEXT("Keep every mip resident")),
 		MCPParam::Optional(TEXT("flipGreenChannel"), EType::Boolean, TEXT("Flip the normal green channel; normal preset defaults to false")),
 		MCPParam::Optional(TEXT("maxTextureSize"), EType::Integer, TEXT("Maximum texture size; 0 uses the source size")).Range(0, 32768),
-		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save changed textures (default false; otherwise leave the packages dirty)")),
-		MCPParam::Optional(TEXT("dryRun"), EType::Boolean, TEXT("Validate and report without importing, writing or saving (default false)")),
+		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save changed textures (default false; otherwise leave the packages dirty)")).Default(false),
+		MCPSharedParam::DryRun().Describe(TEXT("Validate and report without importing, writing or saving (default false)")),
 	}, MCPSpec::ExactlyOne({ { TEXT("assetPath") }, { TEXT("assetPaths") } }));
 
 	// Mesh handlers
@@ -733,8 +733,8 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 			MCPParam::OptionalField(TEXT("slotName"), EType::String, TEXT("Slot by name, which survives a reimport reordering slot indices")),
 			MCPParam::OptionalField(TEXT("slotIndex"), EType::Integer, TEXT("Slot by index (default 0); refused when it disagrees with slotName")),
 		}),
-		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save each changed mesh (default true)")),
-		MCPParam::Optional(TEXT("dryRun"), EType::Boolean, TEXT("Preflight and report without writing (default false)")),
+		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save each changed mesh (default true)")).Default(true),
+		MCPSharedParam::DryRun().Describe(TEXT("Preflight and report without writing (default false)")),
 		MCPParam::Optional(TEXT("continueOnError"), EType::Boolean, TEXT("Apply the assignments that passed preflight instead of aborting the batch (default false)")),
 	});
 	Registry.RegisterHandler(TEXT("recenter_pivot"), &RecenterPivot, {
@@ -750,7 +750,7 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("relativeLocation"), EType::Vec3, TEXT("Socket location relative to its parent")),
 		MCPParam::Optional(TEXT("relativeRotation"), EType::Rotator, TEXT("Socket rotation relative to its parent")),
 		MCPParam::Optional(TEXT("relativeScale"), EType::Vec3, TEXT("Socket scale")),
-		MCPParam::Optional(TEXT("onConflict"), EType::String, TEXT("skip (default) | update | error")),
+		MCPSharedParam::OnConflict().Describe(TEXT("skip (default) | update | error")),
 	});
 	Registry.RegisterHandler(TEXT("set_socket_transform"), &SetSocketTransform, {
 		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StaticMesh or SkeletalMesh asset path")),
@@ -763,7 +763,7 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("Asset path; a Blueprint path writes its generated-class CDO")).Alias(TEXT("path")),
 		MCPParam::Required(TEXT("propertyName"), EType::String, TEXT("Property path; dotted and indexed paths walk structs, arrays and instanced subobjects")),
 		MCPParam::Required(TEXT("value"), EType::Any, TEXT("Value to write: scalar, object, array or asset path")),
-		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save the package after the write (default true)")),
+		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save the package after the write (default true)")).Default(true),
 	});
 	Registry.RegisterHandler(TEXT("edit_collection_entry"), &EditCollectionEntry, {
 		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("Data asset path")).Alias(TEXT("path")),
@@ -772,8 +772,8 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("keyField"), EType::String, TEXT("Array element field to match, required for arrays (for example WeaponId)")),
 		MCPParam::Optional(TEXT("newKey"), EType::Any, TEXT("Clone the selected entry to this unused key; omit to update in place")),
 		MCPParam::Optional(TEXT("overrides"), EType::Object, TEXT("Struct fields to patch; nested objects or dotted struct paths, preserving omitted fields")),
-		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save the package after editing (default true)")),
-		MCPParam::Optional(TEXT("dryRun"), EType::Boolean, TEXT("Validate and return proposedValue without changing the asset (default false)")),
+		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save the package after editing (default true)")).Default(true),
+		MCPSharedParam::DryRun().Describe(TEXT("Validate and return proposedValue without changing the asset (default false)")),
 	});
 	Registry.RegisterHandler(TEXT("clone_datatable_rows"), &CloneDataTableRows, {
 		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("DataTable asset path")).Alias(TEXT("path")),
@@ -782,27 +782,27 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 			MCPParam::RequiredField(TEXT("rowName"), EType::String, TEXT("Unused destination row name")),
 			MCPParam::OptionalField(TEXT("overrides"), EType::Object, TEXT("Nested or dotted struct field patches; omitted fields are preserved")),
 		}),
-		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save the table after editing (default true)")),
-		MCPParam::Optional(TEXT("dryRun"), EType::Boolean, TEXT("Validate the entire batch and return proposedRows without changes (default false)")),
+		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save the table after editing (default true)")).Default(true),
+		MCPSharedParam::DryRun().Describe(TEXT("Validate the entire batch and return proposedRows without changes (default false)")),
 	});
 	Registry.RegisterHandler(TEXT("append_asset_array_elements"), &AppendAssetArrayElements, {
 		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("Asset path; a Blueprint path writes its generated-class CDO")).Alias(TEXT("path")),
 		MCPParam::Required(TEXT("propertyName"), EType::String, TEXT("Path of the TArray property")),
 		MCPParam::Required(TEXT("elements"), EType::Array, TEXT("Values to append, validated before any is written")),
 		MCPParam::Optional(TEXT("unique"), EType::Boolean, TEXT("Skip values already in the array or earlier in elements (default false)")),
-		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save the package after the write (default true)")),
+		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save the package after the write (default true)")).Default(true),
 	});
 	Registry.RegisterHandler(TEXT("remove_asset_array_elements"), &RemoveAssetArrayElements, {
 		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("Asset path; a Blueprint path writes its generated-class CDO")).Alias(TEXT("path")),
 		MCPParam::Required(TEXT("propertyName"), EType::String, TEXT("Path of the TArray property")),
 		MCPParam::Optional(TEXT("indices"), EType::Array, TEXT("Element indices to remove; each must exist")).Items(EType::Integer),
 		MCPParam::Optional(TEXT("elements"), EType::Array, TEXT("Values to remove; every element equal to one of them goes")),
-		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save the package after the write (default true)")),
+		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save the package after the write (default true)")).Default(true),
 	}, MCPSpec::ExactlyOne({ { TEXT("indices") }, { TEXT("elements") } }));
 	Registry.RegisterHandler(TEXT("bulk_set_asset_properties"), &BulkSetAssetProperties, {
 		MCPParam::Required(TEXT("items"), EType::Array, TEXT("Asset updates: [{assetPath, properties}], max 500")).Items(EType::Object),
-		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save the changed packages (default true)")),
-		MCPParam::Optional(TEXT("dryRun"), EType::Boolean, TEXT("Preflight and report without writing (default false)")),
+		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save the changed packages (default true)")).Default(true),
+		MCPSharedParam::DryRun().Describe(TEXT("Preflight and report without writing (default false)")),
 		MCPParam::Optional(TEXT("continueOnError"), EType::Boolean, TEXT("Apply the items that passed preflight instead of aborting the batch (default false)")),
 	});
 	Registry.RegisterHandler(TEXT("set_texture_settings_by_type"), &SetTextureSettingsByType, {
@@ -814,7 +814,7 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("packagePath"), EType::String, TEXT("Folder for name (default /Game/Import)")),
 		MCPParam::Optional(TEXT("meshType"), EType::String, TEXT("skeletal (default) | static")),
 		MCPParam::Optional(TEXT("options"), EType::Object, TEXT("Dotted-path overrides on the new pipeline, e.g. {'MeshPipeline.bBuildNanite': true}")),
-		MCPParam::Optional(TEXT("onConflict"), EType::String, TEXT("skip (default) returns an existing pipeline; error refuses")),
+		MCPSharedParam::OnConflict().Describe(TEXT("skip (default) returns an existing pipeline; error refuses")),
 	}, MCPSpec::ExactlyOne({ { TEXT("assetPath") }, { TEXT("name") } }).ContractExempt(TEXT("Creates and saves a pipeline asset from the contract path before anything fails")));
 	Registry.RegisterHandler(TEXT("remove_socket"), &RemoveSocket, {
 		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StaticMesh, SkeletalMesh or Skeleton asset path")),
@@ -844,7 +844,7 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Required(TEXT("name"), EType::String, TEXT("Asset name")),
 		MCPParam::Required(TEXT("rowStruct"), EType::String, TEXT("Row struct, e.g. /Script/Module.MyRow or a UserDefinedStruct path")),
 		MCPParam::Optional(TEXT("packagePath"), EType::String, TEXT("Destination folder (default /Game/DataTables)")),
-		MCPParam::Optional(TEXT("onConflict"), EType::String, TEXT("skip (default) returns an existing asset; error refuses")),
+		MCPSharedParam::OnConflict(),
 		MCPParam::Optional(TEXT("csvString"), EType::String, TEXT("CSV text to fill the new table from, read by the engine's CSV importer")),
 		MCPParam::Optional(TEXT("filePath"), EType::String, TEXT(".csv file to fill the new table from")).Alias(TEXT("csvPath")),
 		MCPParam::Optional(TEXT("ignoreExtraFields"), EType::Boolean, TEXT("With csvString or filePath: ignore CSV columns the row struct lacks, as the DataTable Options dialog's Ignore Extra Fields")),
@@ -889,7 +889,7 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("DataTable asset path")).Alias(TEXT("path")),
 		MCPParam::Optional(TEXT("rowName"), EType::String, TEXT("Single row to remove")),
 		MCPParam::Optional(TEXT("rowNames"), EType::Array, TEXT("Rows to remove in one transaction, including clone rollback")).Items(EType::String),
-		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save after removing rows (default true)")),
+		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save after removing rows (default true)")).Default(true),
 	}, MCPSpec::ExactlyOne({ { TEXT("rowName") }, { TEXT("rowNames") } }));
 	// #535: single-row read, single-cell write, row rename, and bulk JSON fill.
 	Registry.RegisterHandler(TEXT("get_datatable_row"), &GetDataTableRow, {
@@ -911,8 +911,8 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 			MCPParam::RequiredField(TEXT("column"), EType::String, TEXT("Row-struct field to write")),
 			MCPParam::RequiredField(TEXT("value"), EType::Any, TEXT("Value to write, parsed as set_datatable_cell parses value")),
 		}),
-		MCPParam::Optional(TEXT("dryRun"), EType::Boolean, TEXT("Validate every cell and report what would change without writing (default false)")),
-		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save the package after the write (default false)")),
+		MCPSharedParam::DryRun().Describe(TEXT("Validate every cell and report what would change without writing (default false)")),
+		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save the package after the write (default false)")).Default(false),
 	});
 	Registry.RegisterHandler(TEXT("rename_datatable_row"), &RenameDataTableRow, {
 		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("DataTable asset path")).Alias(TEXT("path")),
@@ -929,7 +929,7 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("create_curvetable"), &CreateCurveTable, {
 		MCPParam::Required(TEXT("name"), EType::String, TEXT("Asset name")),
 		MCPParam::Optional(TEXT("packagePath"), EType::String, TEXT("Destination folder (default /Game/CurveTables)")),
-		MCPParam::Optional(TEXT("onConflict"), EType::String, TEXT("skip (default) returns an existing table; error refuses")),
+		MCPSharedParam::OnConflict().Describe(TEXT("skip (default) returns an existing table; error refuses")),
 	}, MCPSpec::ContractExempt(TEXT("Creates and saves a CurveTable from the contract name before anything fails")));
 	Registry.RegisterHandler(TEXT("read_curvetable"), &ReadCurveTable, {
 		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("CurveTable asset path")).Alias(TEXT("path")),
@@ -984,7 +984,7 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("channel"), EType::Number, TEXT("Channel index to replace: 0 on a CurveFloat, 0-2 on a CurveVector, 0-3 on a CurveLinearColor (default 0)")),
 		MCPParam::Optional(TEXT("channelName"), EType::String, TEXT("Channel to replace by name, instead of channel: Value, X/Y/Z or R/G/B/A")),
 		MCPParam::Required(TEXT("keys"), EType::Array, TEXT("Replacement keys, [] to clear: [{time, value, interpMode? (cubic default, linear, constant, none), tangentMode? (auto|smartAuto|user|break|none), tangentWeightMode? (none|arrive|leave|both), arriveTangent?, leaveTangent?, arriveTangentWeight?, leaveTangentWeight?}]. A tangent given without tangentMode is kept as a user tangent")).Items(EType::Object),
-		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save the package (default true); false leaves it dirty")),
+		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save the package (default true); false leaves it dirty")).Default(true),
 	});
 
 	// Generic reimport / export
@@ -992,13 +992,13 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("Imported asset to rebuild from its source file")).Alias(TEXT("path")),
 		MCPParam::Optional(TEXT("filePath"), EType::String, TEXT("New source file to record and reimport from")).Alias(TEXT("filename")),
 		MCPParam::Optional(TEXT("preserveSettings"), EType::Boolean, TEXT("Texture: put back any compression, LOD group, sRGB, streaming, size, mip, filter or address setting the reimport changed (default true)")),
-		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save the reimported asset's package (default false: it is left dirty)")),
+		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save the reimported asset's package (default false: it is left dirty)")).Default(false),
 	});
 	Registry.RegisterHandler(TEXT("export_asset"), &ExportAsset, {
 		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("Asset to export")).Alias(TEXT("path")),
 		MCPParam::Required(TEXT("outputPath"), EType::String, TEXT("File to write; a relative path resolves against the project directory")),
 		MCPParam::Optional(TEXT("format"), EType::String, TEXT("DataTable: json | csv; MaterialInstance: json (resolved parameters and overrides). Meshes use the FBX exporter; textures use PNG, selected by outputPath extension")),
-		MCPParam::Optional(TEXT("dryRun"), EType::Boolean, TEXT("Validate and report without importing, writing or saving (default false)")),
+		MCPSharedParam::DryRun().Describe(TEXT("Validate and report without importing, writing or saving (default false)")),
 		MCPParam::Optional(TEXT("replaceExisting"), EType::Boolean, TEXT("Overwrite the output file (default true)")),
 	});
 
@@ -1007,7 +1007,7 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Required(TEXT("name"), EType::String, TEXT("Asset name")),
 		MCPParam::Optional(TEXT("packagePath"), EType::String, TEXT("Destination folder (default /Game/StringTables)")),
 		MCPParam::Optional(TEXT("namespace"), EType::String, TEXT("StringTable namespace")),
-		MCPParam::Optional(TEXT("onConflict"), EType::String, TEXT("skip (default) returns an existing table; error refuses")),
+		MCPSharedParam::OnConflict().Describe(TEXT("skip (default) returns an existing table; error refuses")),
 	}, MCPSpec::ContractExempt(TEXT("Creates and saves a StringTable from the contract name before anything fails")));
 	Registry.RegisterHandler(TEXT("read_stringtable"), &ReadStringTable, {
 		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StringTable asset path")).Alias(TEXT("path")),
@@ -1052,7 +1052,7 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("expectedKeys"), EType::Array, TEXT("Keys the CSV must carry, checked before the asset is touched")).Items(EType::String),
 		MCPParam::Optional(TEXT("requireExactKeys"), EType::Boolean, TEXT("Also fail when the CSV carries keys expectedKeys does not list (default false)")),
 		MCPParam::Optional(TEXT("replaceExisting"), EType::Boolean, TEXT("Remove entries the CSV does not carry (default false)")),
-		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save the table (default true)")),
+		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save the table (default true)")).Default(true),
 	});
 
 	// Ranked asset search over the Asset Registry.
@@ -1165,8 +1165,8 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		}),
 		MCPParam::Optional(TEXT("replace"), EType::Boolean, TEXT("Remove every existing simple shape, convex hulls included, before writing (default true); false appends")),
 		MCPParam::Optional(TEXT("collisionTraceFlag"), EType::String, TEXT("UseDefault | UseSimpleAndComplex | UseSimpleAsComplex | UseComplexAsSimple, with or without the CTF_ prefix (default unchanged)")),
-		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save the mesh (default true)")),
-		MCPParam::Optional(TEXT("dryRun"), EType::Boolean, TEXT("Preflight and report without writing (default false)")),
+		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save the mesh (default true)")).Default(true),
+		MCPSharedParam::DryRun().Describe(TEXT("Preflight and report without writing (default false)")),
 	});
 	Registry.RegisterHandler(TEXT("set_mesh_nav"), &SetMeshNav, {
 		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StaticMesh asset path")),
@@ -1193,7 +1193,7 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Required(TEXT("name"), EType::String, TEXT("Asset name")),
 		MCPParam::Optional(TEXT("packagePath"), EType::String, TEXT("Destination folder (default /Game)")),
 		MCPParam::Optional(TEXT("values"), EType::Array, TEXT("Initial enumerator display names")).Items(EType::String),
-		MCPParam::Optional(TEXT("onConflict"), EType::String, TEXT("skip (default) returns an existing enum; error refuses")),
+		MCPSharedParam::OnConflict().Describe(TEXT("skip (default) returns an existing enum; error refuses")),
 	}, MCPSpec::ContractExempt(TEXT("Creates and saves an enum package from the contract name before anything fails")));
 	Registry.RegisterHandler(TEXT("list_enum_values"), &ListEnumValues, {
 		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("UEnum or UserDefinedEnum asset path")).Alias(TEXT("path")),
@@ -1214,7 +1214,7 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 			MCPParam::RequiredField(TEXT("name"), EType::String, TEXT("Member display name")),
 			MCPParam::OptionalField(TEXT("type"), EType::String, TEXT("Type: bool (default), int, int64, float, string, name, text, byte, a struct (Vector, struct:/Game/S.S), an enum, an object class such as Actor, or a container: struct:/Game/S.S[], TArray<int>, Set<Name>, Map<Name,int>")),
 		}),
-		MCPParam::Optional(TEXT("onConflict"), EType::String, TEXT("skip (default) returns an existing struct; error refuses")),
+		MCPSharedParam::OnConflict().Describe(TEXT("skip (default) returns an existing struct; error refuses")),
 	}, MCPSpec::ContractExempt(TEXT("Creates and saves a struct package from the contract name before anything fails")));
 	Registry.RegisterHandler(TEXT("list_struct_fields"), &ListStructFields, {
 		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("UserDefinedStruct asset path")).Alias(TEXT("path")),

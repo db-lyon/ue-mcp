@@ -195,7 +195,7 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "actorPath",
         "type": "string",
         "required": false,
-        "description": "Full actor object path; the unambiguous selector"
+        "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
       },
       {
         "name": "componentName",
@@ -244,7 +244,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "pieInstance",
         "type": "integer",
         "required": false,
-        "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients"
+        "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients",
+        "minimum": 0
       }
     ],
     "choices": [
@@ -306,7 +307,7 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "onConflict",
         "type": "string",
         "required": false,
-        "description": "When the asset exists: skip (default, report it) | error"
+        "description": "When the asset already exists: skip (default) returns it untouched | error refuses; it never overwrites"
       },
       {
         "name": "templatePath",
@@ -347,7 +348,7 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "onConflict",
         "type": "string",
         "required": false,
-        "description": "When the asset exists: skip (default, report it) | error"
+        "description": "When the asset already exists: skip (default) returns it untouched | error refuses; it never overwrites"
       },
       {
         "name": "inputs",
@@ -413,7 +414,7 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "onConflict",
         "type": "string",
         "required": false,
-        "description": "When the asset exists: skip (default, report it) | error"
+        "description": "When the asset already exists: skip (default) returns it untouched | error refuses; it never overwrites"
       }
     ],
     "contractExempt": "Creates and saves a system under the contract values; nothing it reads fails first"
@@ -437,7 +438,7 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "onConflict",
         "type": "string",
         "required": false,
-        "description": "When the asset exists: skip (default, report it) | error"
+        "description": "When the asset already exists: skip (default) returns it untouched | error refuses; it never overwrites"
       },
       {
         "name": "emitters",
@@ -476,7 +477,7 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "onConflict",
         "type": "string",
         "required": false,
-        "description": "When the asset exists: skip (default, report it) | error"
+        "description": "When the asset already exists: skip (default) returns it untouched | error refuses; it never overwrites"
       },
       {
         "name": "inputs",
@@ -895,7 +896,7 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "actorPath",
         "type": "string",
         "required": false,
-        "description": "Full actor object path; the unambiguous selector"
+        "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
       }
     ],
     "choices": [
@@ -1407,7 +1408,7 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "actorPath",
         "type": "string",
         "required": false,
-        "description": "Full actor object path; the unambiguous selector"
+        "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
       },
       {
         "name": "parameterName",
@@ -1681,7 +1682,7 @@ export const handlerSpecs: HandlerSpecs = {
 export const schema: Record<string, z.ZodType> = {
   activate: z.boolean().optional().describe("Activate the system on spawn (default true) (#537)"),
   actorLabel: z.string().optional().describe("Editor label of the actor holding the NiagaraComponent; a label naming several actors is refused"),
-  actorPath: z.string().optional().describe("Full actor object path; the unambiguous selector"),
+  actorPath: z.string().optional().describe("Full actor object path, the unambiguous selector; wins over actorLabel"),
   advanceSimulation: z.boolean().optional().describe("Advance one tick before the first frame too (default false)"),
   assetPath: z.string().optional().describe("Alias for systemPath (add_emitter_renderer, add_emitter_to_system, add_niagara_event_handler, add_niagara_module, add_niagara_simulation_stage, compile_niagara_system, get_niagara_compiled_hlsl, inspect_data_interface, list_emitter_renderers, list_emitters_in_system, list_niagara_dynamic_inputs, list_niagara_module_inputs, list_niagara_static_switches, list_niagara_system_parameters, remove_emitter_from_system, remove_emitter_renderer, remove_niagara_dynamic_input, remove_niagara_event_handler, remove_niagara_module, remove_niagara_simulation_stage, set_emitter_property, set_niagara_dynamic_input, set_niagara_module_enabled, set_niagara_module_input, set_niagara_static_switch, set_renderer_property, spawn_niagara_actor, spawn_niagara_at_location, validate_niagara_system). NiagaraEmitter asset path, or a NiagaraSystem asset path to read one of its emitters (get_emitter_info). NiagaraSystem asset path (get_niagara_info)"),
   attributeCaptureMode: z.string().optional().describe("All (default) | RenderingOnly | ExplicitAttributes"),
@@ -1712,14 +1713,14 @@ export const schema: Record<string, z.ZodType> = {
   moduleScript: z.string().optional().describe("Stock module script path, e.g. /Niagara/Modules/Emitter/SpawnRate"),
   name: z.string().optional().describe("Emitter asset name (create_niagara_emitter). Module script asset name (create_niagara_module_from_hlsl, create_scratch_module). System asset name (create_niagara_system, create_niagara_system_from_spec)"),
   nodeIndex: z.number().int().optional().describe("Only this CustomHLSL node (default: every one in the graph) (get_niagara_custom_hlsl). Which CustomHLSL node when the graph has several (default 0) (set_niagara_custom_hlsl)"),
-  onConflict: z.string().optional().describe("When the asset exists: skip (default, report it) | error"),
+  onConflict: z.string().optional().describe("When the asset already exists: skip (default) returns it untouched | error refuses; it never overwrites"),
   outputs: z.array(z.object({ name: z.string().describe("Pin name"), type: z.string().optional().describe("HLSL type (default float)") })).optional().describe("Requested outputs, counted back as requestedOutputs; the pins come from the HLSL body (create_niagara_module_from_hlsl). Outputs declared on a pass-through CustomHLSL node (create_scratch_module)"),
   packagePath: z.string().optional().describe("Folder for the new emitter (default /Game/VFX) (create_niagara_emitter). Folder for the new module (default /Game/VFX/Modules) (create_niagara_module_from_hlsl). Folder for the new system (default /Game/VFX) (create_niagara_system, create_niagara_system_from_spec). Folder for the new module (default /Game/VFX) (create_scratch_module)"),
   parameterName: z.string().optional().describe("User parameter name"),
   parameterType: z.string().optional().describe("float (default) | vector | bool | int"),
   path: z.string().optional().describe("Alias for assetPath"),
   pathFilter: z.string().optional().describe("Case-sensitive substring of the module script object path, applied to the whole set before paging"),
-  pieInstance: z.number().int().optional().describe("Which PIE world when world is pie: 0 = server or primary, 1..N = clients"),
+  pieInstance: z.number().int().min(0).optional().describe("Which PIE world when world is pie: 0 = server or primary, 1..N = clients"),
   propertyName: z.string().optional().describe("Emitter property to set (set_emitter_property). Renderer property to set (set_renderer_property)"),
   rendererIndex: z.number().int().optional().describe("Index of the renderer on the emitter (remove_emitter_renderer). Index of the renderer on the emitter (default 0) (set_renderer_property)"),
   rendererType: z.string().optional().describe("sprite|mesh|ribbon or full class name"),

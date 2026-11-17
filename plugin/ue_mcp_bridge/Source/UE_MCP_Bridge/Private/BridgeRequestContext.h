@@ -18,6 +18,10 @@ public:
 
 	const FString CancelToken;
 
+	/** How long the bridge waits for this request, in seconds: the action's declared
+	 *  timeout, raised by the caller's timeoutMs. Set before the handler runs. */
+	double BudgetSeconds = 0.0;
+
 	FMCPDeferredCallPtr GetDeferred() const;
 	FMCPDeferredCallRef MakeDeferred();
 
@@ -51,4 +55,9 @@ namespace MCPRequestContext
 
 	/** "deferred", "running", or "unknown" when no request carries the token. */
 	FString Cancel(const FString& CancelToken);
+
+	/** Game thread: the budget of the request being served, or Fallback outside one
+	 *  (an automation test calling a handler directly). A handler that stops itself
+	 *  early to report a failure in time takes its deadline from this. */
+	double BudgetSeconds(double Fallback);
 }

@@ -153,11 +153,47 @@ struct FMCPParamSpec
 	/** Inclusive bounds of a Number or Integer parameter (or of each element of an Array of them). */
 	TOptional<double> Minimum;
 	TOptional<double> Maximum;
+	/** What the handler uses when the parameter is omitted. Published so the client never restates it. */
+	TSharedPtr<FJsonValue> DefaultValue;
 
 	FMCPParamSpec Enum(const TArray<FString>& InValues) const
 	{
 		FMCPParamSpec Copy = *this;
 		Copy.EnumValues = InValues;
+		return Copy;
+	}
+
+	FMCPParamSpec Default(bool bValue) const
+	{
+		FMCPParamSpec Copy = *this;
+		Copy.DefaultValue = MakeShared<FJsonValueBoolean>(bValue);
+		return Copy;
+	}
+
+	FMCPParamSpec Default(double Value) const
+	{
+		FMCPParamSpec Copy = *this;
+		Copy.DefaultValue = MakeShared<FJsonValueNumber>(Value);
+		return Copy;
+	}
+
+	FMCPParamSpec Default(int32 Value) const
+	{
+		return Default((double)Value);
+	}
+
+	FMCPParamSpec Default(const TCHAR* Value) const
+	{
+		FMCPParamSpec Copy = *this;
+		Copy.DefaultValue = MakeShared<FJsonValueString>(FString(Value));
+		return Copy;
+	}
+
+	/** The same parameter with a description that fits the handler declaring it. */
+	FMCPParamSpec Describe(const FString& InDescription) const
+	{
+		FMCPParamSpec Copy = *this;
+		Copy.Description = InDescription;
 		return Copy;
 	}
 
@@ -316,14 +352,86 @@ struct FMCPParamChoice
 };
 
 /**
- * What a spec says beyond its parameter list: its choices, and whether the
- * contract test may call it. Passed as the last argument of RegisterHandler.
+ * How the bridge runs an action, declared where it registers and published in
+ * get_bridge_capabilities.actionFacts, so the client reads it instead of keeping
+ * a copy. Every field's zero value is the common case.
+ */
+struct FMCPActionFacts
+{
+	/** Game-thread budget in seconds. 0 is the bridge default. */
+	float TimeoutSeconds = 0.0f;
+	/** Runs while a modal dialog holds the game thread: it reads or answers that dialog. */
+	bool bModalSafe = false;
+	/** Answered on the socket thread, before the dialog gate and the game thread. */
+	bool bServedOffGameThread = false;
+	/** Left out of the parameter echo, so reading the echo does not change it. */
+	bool bNotEchoed = false;
+	/** Why execute_batch refuses to carry this action. Empty when it may. */
+	FString RefusedInBatchReason;
+	/** Who calls this action instead of a tool. Empty for an action a tool exposes. */
+	FString ServerInternalCaller;
+
+	bool IsDefault() const
+	{
+		return TimeoutSeconds <= 0.0f && !bModalSafe && !bServedOffGameThread && !bNotEchoed
+			&& RefusedInBatchReason.IsEmpty() && ServerInternalCaller.IsEmpty();
+	}
+};
+
+/**
+ * What a spec says beyond its parameter list: its choices, whether the
+ * contract test may call it, and its action facts. Passed as the last argument
+ * of RegisterHandler.
  */
 struct FMCPSpecRules
 {
 	TArray<FMCPParamChoice> Choices;
 	/** Why the contract test must not call this handler. Empty when it may. */
 	FString ContractExemptReason;
+	FMCPActionFacts Facts;
+
+	FMCPSpecRules Timeout(float Seconds) const
+	{
+		FMCPSpecRules Copy = *this;
+		Copy.Facts.TimeoutSeconds = Seconds;
+		return Copy;
+	}
+
+	FMCPSpecRules ModalSafe() const
+	{
+		FMCPSpecRules Copy = *this;
+		Copy.Facts.bModalSafe = true;
+		return Copy;
+	}
+
+	FMCPSpecRules ServedOffGameThread() const
+	{
+		FMCPSpecRules Copy = *this;
+		Copy.Facts.bServedOffGameThread = true;
+		return Copy;
+	}
+
+	FMCPSpecRules NotEchoed() const
+	{
+		FMCPSpecRules Copy = *this;
+		Copy.Facts.bNotEchoed = true;
+		return Copy;
+	}
+
+	FMCPSpecRules RefusedInBatch(const TCHAR* Reason) const
+	{
+		FMCPSpecRules Copy = *this;
+		Copy.Facts.RefusedInBatchReason = Reason;
+		return Copy;
+	}
+
+	/** `ServerInternal(TEXT("the server's checkpoint service"))`: no tool exposes it. */
+	FMCPSpecRules ServerInternal(const TCHAR* Caller) const
+	{
+		FMCPSpecRules Copy = *this;
+		Copy.Facts.ServerInternalCaller = Caller;
+		return Copy;
+	}
 
 	FMCPSpecRules ExactlyOne(const TArray<TArray<FString>>& Branches) const
 	{
@@ -373,6 +481,26 @@ namespace MCPSpec
 	{
 		return FMCPSpecRules().ContractExempt(Reason);
 	}
+
+	inline FMCPSpecRules Timeout(float Seconds)
+	{
+		return FMCPSpecRules().Timeout(Seconds);
+	}
+
+	inline FMCPSpecRules ModalSafe()
+	{
+		return FMCPSpecRules().ModalSafe();
+	}
+
+	inline FMCPSpecRules RefusedInBatch(const TCHAR* Reason)
+	{
+		return FMCPSpecRules().RefusedInBatch(Reason);
+	}
+
+	inline FMCPSpecRules ServerInternal(const TCHAR* Caller)
+	{
+		return FMCPSpecRules().ServerInternal(Caller);
+	}
 }
 
 /** A handler's declared parameters. Present, even when empty, only for a handler registered with one. */
@@ -382,4 +510,5 @@ struct FMCPHandlerSpec
 	TArray<FMCPParamChoice> Choices;
 	/** Non-empty when the contract test must not call the handler, saying why. */
 	FString ContractExemptReason;
+	FMCPActionFacts Facts;
 };

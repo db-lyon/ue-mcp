@@ -2,6 +2,7 @@
 #include "AssetHandlers_Geometry.h"
 #include "HandlerUtils.h"
 #include "HandlerEngineVersion.h"
+#include "BridgeRequestContext.h"
 #include "Engine/StaticMesh.h"
 #include "StaticMeshAttributes.h"
 #include "StaticMeshResources.h"
@@ -571,6 +572,10 @@ TSharedPtr<FJsonValue> ExportSnapshot(const FSnapshot& S, const FString& Output,
 	};
 	FExportStream Stream(*Handle, ByteLimit);
 	const double Started = FPlatformTime::Seconds();
+	// Stops with a fifth of the request's budget left, so the failure reaches the
+	// caller before the bridge gives up on it. 300 s is the declared timeout of
+	// get_static_mesh_geometry, for a call made outside a bridge request.
+	const double ExportSeconds = MCPRequestContext::BudgetSeconds(300.0) * 0.8;
 	auto Header = InspectionSummary(S, bFresh);
 	const FString ExportedUtc = FDateTime::UtcNow().ToIso8601();
 	Header->SetStringField(TEXT("exportedUtc"), ExportedUtc);
@@ -586,7 +591,7 @@ TSharedPtr<FJsonValue> ExportSnapshot(const FSnapshot& S, const FString& Output,
 		const int32 Count = Table == TEXT("vertices") ? S.Vertices.Num() : Table == TEXT("corners") ? S.Corners.Num() : S.Triangles.Num();
 		for (int32 Index = 0; Index < Count; ++Index)
 		{
-			if ((Index % 512) == 0 && FPlatformTime::Seconds() - Started > 240.0) return Fail(TEXT("export_timeout"));
+			if ((Index % 512) == 0 && FPlatformTime::Seconds() - Started > ExportSeconds) return Fail(TEXT("export_timeout"));
 			Text.Reset();
 			if (!FJsonSerializer::Serialize(InspectionRow(S, Table, Index).ToSharedRef(), TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&Text))
 				|| Text.Len() > MaxExportRecordChars) return Fail(TEXT("export_serialization_failed"));

@@ -79,17 +79,17 @@ void FSequencerHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	};
 	auto ActorLabelParam = []()
 	{
-		return MCPParam::Optional(TEXT("actorLabel"), EType::String, TEXT("Actor label. Editor labels are not unique, so a label naming several actors is refused"));
+		return MCPSharedParam::ActorLabel();
 	};
 	auto ActorPathParam = []()
 	{
-		return MCPParam::Optional(TEXT("actorPath"), EType::String, TEXT("Full actor object path, the unambiguous selector. Wins over actorLabel"));
+		return MCPSharedParam::ActorPath();
 	};
 
 	Registry.RegisterHandler(TEXT("create_level_sequence"), &CreateLevelSequence, {
 		MCPParam::Required(TEXT("name"), EType::String, TEXT("Name of the new Level Sequence asset")),
 		MCPParam::Optional(TEXT("packagePath"), EType::String, TEXT("Destination folder (default /Game/Cinematics)")),
-		MCPParam::Optional(TEXT("onConflict"), EType::String, TEXT("skip (default) returns an existing asset untouched, error refuses")),
+		MCPSharedParam::OnConflict(),
 		DisplayRateParam(false),
 	}, MCPSpec::ContractExempt(TEXT("creates a Level Sequence asset")));
 	Registry.RegisterHandler(TEXT("get_sequence_info"), &ReadSequenceInfo, {
@@ -235,10 +235,10 @@ void FSequencerHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	});
 	// #1232: runtime players and what each of their bindings resolved to.
 	Registry.RegisterHandler(TEXT("get_sequence_runtime_bindings"), &GetRuntimeBindings, {
-		MCPParam::Optional(TEXT("world"), EType::String, TEXT("auto (default: PIE when running, else editor) | pie | editor")),
-		MCPParam::Optional(TEXT("pieInstance"), EType::Number, TEXT("PIE instance index when several clients run")),
+		MCPSharedParam::World().Describe(TEXT("auto (default: PIE when running, else editor) | pie | editor")),
+		MCPSharedParam::PieInstance(),
 		MCPParam::Optional(TEXT("sequencePath"), EType::String, TEXT("Report only actors playing this sequence")),
-		MCPParam::Optional(TEXT("actorLabel"), EType::String, TEXT("Report only the LevelSequenceActor with this label or name")),
+		MCPSharedParam::ActorLabel().Describe(TEXT("Report only the LevelSequenceActor with this label or name")),
 	});
 	// #1640: what a binding's components hold, read off the template or the possessed actor.
 	Registry.RegisterHandler(TEXT("get_sequence_binding_components"), &GetBindingComponents, {

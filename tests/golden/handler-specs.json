@@ -1,6 +1,34 @@
 {
-  "handlerCount": 1397,
+  "handlerCount": 1410,
   "handlers": {
+    "acquire_lock": {
+      "category": "lock",
+      "params": [
+        {
+          "name": "path",
+          "type": "string",
+          "required": true,
+          "description": "Asset path the lock is keyed by",
+          "aliases": [
+            "assetPath"
+          ]
+        },
+        {
+          "name": "sessionId",
+          "type": "string",
+          "required": true,
+          "description": "Session that holds, or asks for, the lock"
+        },
+        {
+          "name": "ttlSeconds",
+          "type": "number",
+          "required": false,
+          "description": "Seconds the lock lasts without renewal",
+          "default": 300
+        }
+      ],
+      "contractExempt": "takes a lock in the editor-wide lock registry"
+    },
     "actors_in_box": {
       "category": "level",
       "params": [
@@ -56,7 +84,8 @@
           "name": "pieInstance",
           "type": "integer",
           "required": false,
-          "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients"
+          "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients",
+          "minimum": 0
         }
       ]
     },
@@ -84,13 +113,13 @@
           "name": "actorLabel",
           "type": "string",
           "required": false,
-          "description": "Actor editor label; pass actorLabel or actorPath"
+          "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
         },
         {
           "name": "actorPath",
           "type": "string",
           "required": false,
-          "description": "Full actor object path; the unambiguous selector, and it wins over actorLabel"
+          "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
         },
         {
           "name": "tag",
@@ -434,13 +463,13 @@
           "name": "actorLabel",
           "type": "string",
           "required": false,
-          "description": "Actor editor label; pass actorLabel or actorPath"
+          "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
         },
         {
           "name": "actorPath",
           "type": "string",
           "required": false,
-          "description": "Full actor object path; the unambiguous selector, and it wins over actorLabel"
+          "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
         },
         {
           "name": "componentClass",
@@ -1078,7 +1107,8 @@
           "name": "save",
           "type": "boolean",
           "required": false,
-          "description": "Save the asset after the edit (default true)"
+          "description": "Save the asset after the edit (default true)",
+          "default": true
         }
       ]
     },
@@ -1089,13 +1119,13 @@
           "name": "actorLabel",
           "type": "string",
           "required": false,
-          "description": "Actor editor label; pass actorLabel or actorPath"
+          "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
         },
         {
           "name": "actorPath",
           "type": "string",
           "required": false,
-          "description": "Full actor object path; the unambiguous selector, and it wins over actorLabel"
+          "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
         },
         {
           "name": "componentName",
@@ -1167,7 +1197,8 @@
           "name": "save",
           "type": "boolean",
           "required": false,
-          "description": "Persist the asset (default true); false defers the write"
+          "description": "Persist the asset (default true); false defers the write",
+          "default": true
         }
       ]
     },
@@ -1178,13 +1209,13 @@
           "name": "actorLabel",
           "type": "string",
           "required": false,
-          "description": "Actor editor label; pass actorLabel or actorPath"
+          "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
         },
         {
           "name": "actorPath",
           "type": "string",
           "required": false,
-          "description": "Full actor object path; the unambiguous selector"
+          "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
         },
         {
           "name": "impulse",
@@ -1240,9 +1271,10 @@
         },
         {
           "name": "pieInstance",
-          "type": "number",
+          "type": "integer",
           "required": false,
-          "description": "PIE world instance (0 = server/primary); omit for the primary world"
+          "description": "PIE world instance (0 = server/primary); omit for the primary world",
+          "minimum": 0
         }
       ],
       "choices": [
@@ -1266,13 +1298,13 @@
           "name": "actorLabel",
           "type": "string",
           "required": false,
-          "description": "Actor editor label; pass actorLabel or actorPath"
+          "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
         },
         {
           "name": "actorPath",
           "type": "string",
           "required": false,
-          "description": "Full actor object path; the unambiguous selector, and it wins over actorLabel"
+          "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
         },
         {
           "name": "componentName",
@@ -1366,7 +1398,7 @@
           "name": "actorPath",
           "type": "string",
           "required": false,
-          "description": "Full actor object path. The unambiguous selector, and it wins over actorLabel when both are given"
+          "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
         },
         {
           "name": "tag",
@@ -1435,9 +1467,10 @@
         },
         {
           "name": "pieInstance",
-          "type": "number",
+          "type": "integer",
           "required": false,
-          "description": "Which PIE world when several run (0 = server/primary). See editor(list_pie_instances)"
+          "description": "Which PIE world: 0 = server or primary, 1..N = clients. See editor(list_pie_instances)",
+          "minimum": 0
         },
         {
           "name": "designerSlot",
@@ -2169,13 +2202,13 @@
           "name": "actorLabel",
           "type": "string",
           "required": false,
-          "description": "Actor editor label; pass actorLabel or actorPath"
+          "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
         },
         {
           "name": "actorPath",
           "type": "string",
           "required": false,
-          "description": "Full actor object path; the unambiguous selector, and it wins over actorLabel"
+          "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
         },
         {
           "name": "materialPath",
@@ -2466,13 +2499,13 @@
           "name": "actorLabel",
           "type": "string",
           "required": false,
-          "description": "Actor label. Editor labels are not unique, so a label naming several actors is refused"
+          "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
         },
         {
           "name": "actorPath",
           "type": "string",
           "required": false,
-          "description": "Full actor object path, the unambiguous selector. Wins over actorLabel"
+          "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
         },
         {
           "name": "startSeconds",
@@ -2552,13 +2585,13 @@
           "name": "actorLabel",
           "type": "string",
           "required": false,
-          "description": "Actor label. Editor labels are not unique, so a label naming several actors is refused"
+          "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
         },
         {
           "name": "actorPath",
           "type": "string",
           "required": false,
-          "description": "Full actor object path, the unambiguous selector. Wins over actorLabel"
+          "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
         },
         {
           "name": "materialParameterCollection",
@@ -3840,13 +3873,13 @@
           "name": "actorLabel",
           "type": "string",
           "required": false,
-          "description": "Actor editor label; pass actorLabel or actorPath"
+          "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
         },
         {
           "name": "actorPath",
           "type": "string",
           "required": false,
-          "description": "Full actor object path; the unambiguous selector, and it wins over actorLabel"
+          "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
         },
         {
           "name": "targetPoint",
@@ -3882,7 +3915,8 @@
           "name": "pieInstance",
           "type": "integer",
           "required": false,
-          "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients"
+          "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients",
+          "minimum": 0
         }
       ]
     },
@@ -4139,7 +4173,8 @@
           "name": "save",
           "type": "boolean",
           "required": false,
-          "description": "Save the package after the write (default true)"
+          "description": "Save the package after the write (default true)",
+          "default": true
         }
       ]
     },
@@ -4527,7 +4562,7 @@
           "name": "actorPath",
           "type": "string",
           "required": false,
-          "description": "Full actor object path. The unambiguous selector, and it wins over actorLabel when both are given"
+          "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
         },
         {
           "name": "effectClass",
@@ -4735,9 +4770,10 @@
         },
         {
           "name": "pieInstance",
-          "type": "number",
+          "type": "integer",
           "required": false,
-          "description": "PIE world instance (0 = server/primary); omit for the first running one"
+          "description": "PIE world instance (0 = server/primary); omit for the first running one",
+          "minimum": 0
         },
         {
           "name": "playerIndex",
@@ -4883,13 +4919,15 @@
           "name": "save",
           "type": "boolean",
           "required": false,
-          "description": "Save the written asset (default true)"
+          "description": "Save the written asset (default true)",
+          "default": true
         },
         {
           "name": "dryRun",
           "type": "boolean",
           "required": false,
-          "description": "Run the operation and report the result without writing (default false)"
+          "description": "Run the operation and report the result without writing (default false)",
+          "default": false
         }
       ]
     },
@@ -5011,13 +5049,15 @@
           "name": "save",
           "type": "boolean",
           "required": false,
-          "description": "Save the written asset (default true)"
+          "description": "Save the written asset (default true)",
+          "default": true
         },
         {
           "name": "dryRun",
           "type": "boolean",
           "required": false,
-          "description": "Run the operation and report the result without writing (default false)"
+          "description": "Run the operation and report the result without writing (default false)",
+          "default": false
         }
       ]
     },
@@ -5145,13 +5185,15 @@
           "name": "save",
           "type": "boolean",
           "required": false,
-          "description": "Save the written asset (default true)"
+          "description": "Save the written asset (default true)",
+          "default": true
         },
         {
           "name": "dryRun",
           "type": "boolean",
           "required": false,
-          "description": "Run the operation and report the result without writing (default false)"
+          "description": "Run the operation and report the result without writing (default false)",
+          "default": false
         }
       ]
     },
@@ -5309,13 +5351,15 @@
           "name": "save",
           "type": "boolean",
           "required": false,
-          "description": "Save the written asset (default true)"
+          "description": "Save the written asset (default true)",
+          "default": true
         },
         {
           "name": "dryRun",
           "type": "boolean",
           "required": false,
-          "description": "Run the operation and report the result without writing (default false)"
+          "description": "Run the operation and report the result without writing (default false)",
+          "default": false
         }
       ]
     },
@@ -5467,13 +5511,15 @@
           "name": "save",
           "type": "boolean",
           "required": false,
-          "description": "Save the written asset (default true)"
+          "description": "Save the written asset (default true)",
+          "default": true
         },
         {
           "name": "dryRun",
           "type": "boolean",
           "required": false,
-          "description": "Run the operation and report the result without writing (default false)"
+          "description": "Run the operation and report the result without writing (default false)",
+          "default": false
         }
       ]
     },
@@ -5786,7 +5832,7 @@
           "name": "actorPath",
           "type": "string",
           "required": false,
-          "description": "Full actor object path. The unambiguous selector, and it wins over actorLabel when both are given"
+          "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
         },
         {
           "name": "probeClamping",
@@ -5895,7 +5941,8 @@
           "name": "pieInstance",
           "type": "integer",
           "required": false,
-          "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients"
+          "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients",
+          "minimum": 0
         },
         {
           "name": "regionMin",
@@ -6500,7 +6547,8 @@
           "name": "save",
           "type": "boolean",
           "required": false,
-          "description": "Save the asset after baking (default true)"
+          "description": "Save the asset after baking (default true)",
+          "default": true
         }
       ]
     },
@@ -6866,7 +6914,8 @@
           "name": "dryRun",
           "type": "boolean",
           "required": false,
-          "description": "Report what would change without writing"
+          "description": "Report what would change without writing",
+          "default": false
         },
         {
           "name": "force",
@@ -6946,7 +6995,8 @@
           "name": "save",
           "type": "boolean",
           "required": false,
-          "description": "Save each changed FoliageType package (default true)"
+          "description": "Save each changed FoliageType package (default true)",
+          "default": true
         },
         {
           "name": "maxTypes",
@@ -7162,7 +7212,7 @@
           "name": "actorPath",
           "type": "string",
           "required": false,
-          "description": "Full actor object path. The unambiguous selector, and it wins over actorLabel when both are given"
+          "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
         },
         {
           "name": "abilityClass",
@@ -8023,7 +8073,8 @@
           "name": "pieInstance",
           "type": "integer",
           "required": false,
-          "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients"
+          "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients",
+          "minimum": 0
         }
       ]
     },
@@ -8230,13 +8281,15 @@
           "name": "save",
           "type": "boolean",
           "required": false,
-          "description": "Save the changed packages (default true)"
+          "description": "Save the changed packages (default true)",
+          "default": true
         },
         {
           "name": "dryRun",
           "type": "boolean",
           "required": false,
-          "description": "Preflight and report without writing (default false)"
+          "description": "Preflight and report without writing (default false)",
+          "default": false
         },
         {
           "name": "continueOnError",
@@ -8320,7 +8373,8 @@
           "name": "dryRun",
           "type": "boolean",
           "required": false,
-          "description": "Report what would change without writing"
+          "description": "Report what would change without writing",
+          "default": false
         },
         {
           "name": "transactionLabel",
@@ -8399,13 +8453,15 @@
           "name": "dryRun",
           "type": "boolean",
           "required": false,
-          "description": "Run the full preflight and report the planned statuses without writing (default false)"
+          "description": "Run the full preflight and report the planned statuses without writing (default false)",
+          "default": false
         },
         {
           "name": "save",
           "type": "boolean",
           "required": false,
-          "description": "Save the changed packages (default true)"
+          "description": "Save the changed packages (default true)",
+          "default": true
         }
       ]
     },
@@ -8429,6 +8485,16 @@
           "type": "string",
           "required": true,
           "description": "Job id returned by render_mesh_studio; already-finished jobs are returned unchanged"
+        }
+      ]
+    },
+    "cancel_request": {
+      "params": [
+        {
+          "name": "cancelToken",
+          "type": "string",
+          "required": true,
+          "description": "The frame-level cancelToken the request to cancel was sent with"
         }
       ]
     },
@@ -8486,7 +8552,7 @@
           "name": "actorPath",
           "type": "string",
           "required": false,
-          "description": "Full actor object path. The unambiguous selector, and it wins over actorLabel when both are given"
+          "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
         },
         {
           "name": "snapshotId",
@@ -8527,7 +8593,7 @@
           "name": "actorPath",
           "type": "string",
           "required": false,
-          "description": "Full actor object path; the unambiguous selector"
+          "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
         },
         {
           "name": "componentName",
@@ -8576,7 +8642,8 @@
           "name": "pieInstance",
           "type": "integer",
           "required": false,
-          "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients"
+          "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients",
+          "minimum": 0
         }
       ],
       "choices": [
@@ -8699,9 +8766,10 @@
         },
         {
           "name": "pieInstance",
-          "type": "number",
+          "type": "integer",
           "required": false,
-          "description": "PIE world to target: 0 = server/primary, 1..N = clients. See list_pie_instances"
+          "description": "PIE world to target: 0 = server/primary, 1..N = clients. See list_pie_instances",
+          "minimum": 0
         },
         {
           "name": "width",
@@ -8750,9 +8818,10 @@
         },
         {
           "name": "pieInstance",
-          "type": "number",
+          "type": "integer",
           "required": false,
-          "description": "PIE world to target: 0 = server/primary, 1..N = clients. See list_pie_instances"
+          "description": "PIE world to target: 0 = server/primary, 1..N = clients. See list_pie_instances",
+          "minimum": 0
         },
         {
           "name": "worldPath",
@@ -8802,9 +8871,10 @@
         },
         {
           "name": "pieInstance",
-          "type": "number",
+          "type": "integer",
           "required": false,
-          "description": "PIE world instance (0 = server/primary); omit for the primary world"
+          "description": "PIE world instance (0 = server/primary); omit for the primary world",
+          "minimum": 0
         }
       ]
     },
@@ -8898,6 +8968,213 @@
     "check_world_partition_errors": {
       "category": "level",
       "params": []
+    },
+    "checkpoint_diff_asset": {
+      "category": "diff",
+      "params": [
+        {
+          "name": "originalFile",
+          "type": "string",
+          "required": false,
+          "description": "The package's file on disk, under a mounted content folder"
+        },
+        {
+          "name": "fromFile",
+          "type": "string",
+          "required": false,
+          "description": "Stored copy of the earlier version"
+        },
+        {
+          "name": "toFile",
+          "type": "string",
+          "required": false,
+          "description": "Stored copy of the later version; omitted means the file as it is now"
+        },
+        {
+          "name": "fromThumbnail",
+          "type": "string",
+          "required": false,
+          "description": "Where to write the earlier version's thumbnail"
+        },
+        {
+          "name": "toThumbnail",
+          "type": "string",
+          "required": false,
+          "description": "Where to write the later version's thumbnail"
+        },
+        {
+          "name": "fromGraphPicture",
+          "type": "string",
+          "required": false,
+          "description": "Where to write the earlier version's graph picture"
+        },
+        {
+          "name": "toGraphPicture",
+          "type": "string",
+          "required": false,
+          "description": "Where to write the later version's graph picture"
+        },
+        {
+          "name": "maxRecords",
+          "type": "integer",
+          "required": false,
+          "description": "Records kept; more are counted in recordsDropped",
+          "default": 2000,
+          "minimum": 1,
+          "maximum": 20000
+        },
+        {
+          "name": "items",
+          "type": "array",
+          "required": false,
+          "description": "Several diffs in one call, each with the fields above",
+          "items": "object",
+          "fields": [
+            {
+              "name": "originalFile",
+              "type": "string",
+              "required": true,
+              "description": "The package's file on disk"
+            },
+            {
+              "name": "fromFile",
+              "type": "string",
+              "required": false,
+              "description": "Stored copy of the earlier version"
+            },
+            {
+              "name": "toFile",
+              "type": "string",
+              "required": false,
+              "description": "Stored copy of the later version"
+            },
+            {
+              "name": "fromThumbnail",
+              "type": "string",
+              "required": false,
+              "description": "Where to write the earlier version's thumbnail"
+            },
+            {
+              "name": "toThumbnail",
+              "type": "string",
+              "required": false,
+              "description": "Where to write the later version's thumbnail"
+            },
+            {
+              "name": "fromGraphPicture",
+              "type": "string",
+              "required": false,
+              "description": "Where to write the earlier version's graph picture"
+            },
+            {
+              "name": "toGraphPicture",
+              "type": "string",
+              "required": false,
+              "description": "Where to write the later version's graph picture"
+            },
+            {
+              "name": "maxRecords",
+              "type": "integer",
+              "required": false,
+              "description": "Records kept (default 2000)",
+              "minimum": 1,
+              "maximum": 20000
+            }
+          ]
+        }
+      ],
+      "choices": [
+        {
+          "mode": "exactlyOne",
+          "branches": [
+            [
+              "originalFile"
+            ],
+            [
+              "items"
+            ]
+          ]
+        }
+      ],
+      "contractExempt": "with items it reads each item's fields, never the top-level ones the contract run also sends"
+    },
+    "checkpoint_diff_blueprint": {
+      "category": "diff",
+      "params": [
+        {
+          "name": "originalFile",
+          "type": "string",
+          "required": true,
+          "description": "The package's file on disk, under a mounted content folder"
+        },
+        {
+          "name": "fromFile",
+          "type": "string",
+          "required": true,
+          "description": "Stored copy of the earlier version"
+        },
+        {
+          "name": "toFile",
+          "type": "string",
+          "required": false,
+          "description": "Stored copy of the later version; omitted means the file as it is now"
+        }
+      ]
+    },
+    "checkpoint_open_native_diff": {
+      "category": "diff",
+      "params": [
+        {
+          "name": "originalFile",
+          "type": "string",
+          "required": true,
+          "description": "The package's file on disk, under a mounted content folder"
+        },
+        {
+          "name": "fromFile",
+          "type": "string",
+          "required": false,
+          "description": "Stored copy of the earlier version"
+        },
+        {
+          "name": "toFile",
+          "type": "string",
+          "required": false,
+          "description": "Stored copy of the later version; omitted means the file as it is now"
+        },
+        {
+          "name": "current",
+          "type": "boolean",
+          "required": false,
+          "description": "The later side is the package as it is now",
+          "default": false
+        },
+        {
+          "name": "fromLabel",
+          "type": "string",
+          "required": false,
+          "description": "Label of the earlier side",
+          "default": "Before"
+        },
+        {
+          "name": "toLabel",
+          "type": "string",
+          "required": false,
+          "description": "Label of the later side (default After, or Current with current)"
+        },
+        {
+          "name": "fromTime",
+          "type": "string",
+          "required": false,
+          "description": "Time shown for the earlier side"
+        },
+        {
+          "name": "toTime",
+          "type": "string",
+          "required": false,
+          "description": "Time shown for the later side"
+        }
+      ]
     },
     "chooser_add_column": {
       "category": "chooser",
@@ -10130,7 +10407,7 @@
           "name": "actorPath",
           "type": "string",
           "required": false,
-          "description": "Full actor object path; the unambiguous selector"
+          "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
         },
         {
           "name": "removeComponents",
@@ -10166,7 +10443,7 @@
           "name": "actorPath",
           "type": "string",
           "required": false,
-          "description": "Full actor object path. The unambiguous selector, and it wins over actorLabel when both are given"
+          "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
         },
         {
           "name": "abilityClass",
@@ -10206,7 +10483,8 @@
           "name": "save",
           "type": "boolean",
           "required": false,
-          "description": "Save only the current level after a successful clear and compile (default false)"
+          "description": "Save only the current level after a successful clear and compile (default false)",
+          "default": false
         }
       ],
       "contractExempt": "The contract's dryRun=false clears the loaded Level Blueprint; nothing it reads fails first"
@@ -10225,6 +10503,9 @@
           ]
         }
       ]
+    },
+    "clear_param_echo": {
+      "params": []
     },
     "clear_procedural_foliage": {
       "category": "foliage",
@@ -10403,13 +10684,15 @@
           "name": "save",
           "type": "boolean",
           "required": false,
-          "description": "Save the table after editing (default true)"
+          "description": "Save the table after editing (default true)",
+          "default": true
         },
         {
           "name": "dryRun",
           "type": "boolean",
           "required": false,
-          "description": "Validate the entire batch and return proposedRows without changes (default false)"
+          "description": "Validate the entire batch and return proposedRows without changes (default false)",
+          "default": false
         }
       ]
     },
@@ -10598,7 +10881,8 @@
           "name": "save",
           "type": "boolean",
           "required": false,
-          "description": "Persist on success (default true)"
+          "description": "Persist on success (default true)",
+          "default": true
         }
       ]
     },
@@ -11406,7 +11690,8 @@
           "name": "save",
           "type": "boolean",
           "required": false,
-          "description": "Save the asset after the edit (default true)"
+          "description": "Save the asset after the edit (default true)",
+          "default": true
         }
       ]
     },
@@ -11890,7 +12175,8 @@
           "name": "pieInstance",
           "type": "integer",
           "required": false,
-          "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients"
+          "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients",
+          "minimum": 0
         },
         {
           "name": "topN",
@@ -12027,7 +12313,7 @@
           "name": "onConflict",
           "type": "string",
           "required": false,
-          "description": "skip (default) returns an existing asset; error refuses"
+          "description": "When the asset already exists: skip (default) returns it untouched | error refuses; it never overwrites"
         }
       ]
     },
@@ -12050,7 +12336,7 @@
           "name": "onConflict",
           "type": "string",
           "required": false,
-          "description": "skip (default) returns the existing asset, error refuses; it never overwrites"
+          "description": "When the asset already exists: skip (default) returns it untouched | error refuses; it never overwrites"
         },
         {
           "name": "settings",
@@ -12098,7 +12384,7 @@
           "name": "onConflict",
           "type": "string",
           "required": false,
-          "description": "skip (default, returns the existing asset) or error when the asset already exists"
+          "description": "When the asset already exists: skip (default) returns it untouched | error refuses; it never overwrites"
         }
       ],
       "contractExempt": "Creates, compiles and saves a Blueprint under the contract values; nothing it reads fails first"
@@ -12122,7 +12408,7 @@
           "name": "onConflict",
           "type": "string",
           "required": false,
-          "description": "skip (default, returns the existing asset) or error when the asset already exists"
+          "description": "When the asset already exists: skip (default) returns it untouched | error refuses; it never overwrites"
         },
         {
           "name": "blackboardPath",
@@ -12151,7 +12437,7 @@
           "name": "onConflict",
           "type": "string",
           "required": false,
-          "description": "skip (default, returns the existing asset) or error when the asset already exists"
+          "description": "When the asset already exists: skip (default) returns it untouched | error refuses; it never overwrites"
         }
       ],
       "contractExempt": "Creates and saves an asset under the contract values; nothing it reads fails first"
@@ -12437,7 +12723,7 @@
           "name": "onConflict",
           "type": "string",
           "required": false,
-          "description": "skip (default) returns the existing asset, error refuses; it never overwrites"
+          "description": "When the asset already exists: skip (default) returns it untouched | error refuses; it never overwrites"
         },
         {
           "name": "maxCount",
@@ -12585,7 +12871,8 @@
           "name": "save",
           "type": "boolean",
           "required": false,
-          "description": "Save the new asset (default true)"
+          "description": "Save the new asset (default true)",
+          "default": true
         }
       ]
     },
@@ -12623,7 +12910,7 @@
           "name": "onConflict",
           "type": "string",
           "required": false,
-          "description": "skip (default) returns an existing asset; error refuses"
+          "description": "When the asset already exists: skip (default) returns it untouched | error refuses; it never overwrites"
         }
       ]
     },
@@ -12652,7 +12939,7 @@
           "name": "onConflict",
           "type": "string",
           "required": false,
-          "description": "skip (default) returns an existing asset; error refuses"
+          "description": "When the asset already exists: skip (default) returns it untouched | error refuses; it never overwrites"
         },
         {
           "name": "csvString",
@@ -12717,7 +13004,7 @@
           "name": "onConflict",
           "type": "string",
           "required": false,
-          "description": "When the asset exists: skip (default, report it) | error"
+          "description": "When the asset already exists: skip (default) returns it untouched | error refuses; it never overwrites"
         }
       ],
       "choices": [
@@ -12763,7 +13050,7 @@
           "name": "onConflict",
           "type": "string",
           "required": false,
-          "description": "When the asset exists: skip (default, report it) | error"
+          "description": "When the asset already exists: skip (default) returns it untouched | error refuses; it never overwrites"
         }
       ],
       "choices": [
@@ -12830,7 +13117,7 @@
           "name": "onConflict",
           "type": "string",
           "required": false,
-          "description": "skip (default, returns the existing asset) or error when the asset already exists"
+          "description": "When the asset already exists: skip (default) returns it untouched | error refuses; it never overwrites"
         }
       ],
       "contractExempt": "Creates and saves an asset under the contract values; nothing it reads fails first"
@@ -13030,7 +13317,7 @@
           "name": "onConflict",
           "type": "string",
           "required": false,
-          "description": "skip (default, returns the existing asset) or error when the asset already exists"
+          "description": "When the asset already exists: skip (default) returns it untouched | error refuses; it never overwrites"
         }
       ],
       "contractExempt": "Creates, compiles and saves a Blueprint under the contract values; nothing it reads fails first"
@@ -13054,7 +13341,7 @@
           "name": "onConflict",
           "type": "string",
           "required": false,
-          "description": "skip (default, returns the existing asset) or error when the asset already exists"
+          "description": "When the asset already exists: skip (default) returns it untouched | error refuses; it never overwrites"
         },
         {
           "name": "cueType",
@@ -13084,7 +13371,7 @@
           "name": "onConflict",
           "type": "string",
           "required": false,
-          "description": "skip (default, returns the existing asset) or error when the asset already exists"
+          "description": "When the asset already exists: skip (default) returns it untouched | error refuses; it never overwrites"
         },
         {
           "name": "durationPolicy",
@@ -13271,7 +13558,7 @@
           "name": "onConflict",
           "type": "string",
           "required": false,
-          "description": "skip (default, returns the existing asset) or error when the asset already exists"
+          "description": "When the asset already exists: skip (default) returns it untouched | error refuses; it never overwrites"
         },
         {
           "name": "valueType",
@@ -13301,7 +13588,7 @@
           "name": "onConflict",
           "type": "string",
           "required": false,
-          "description": "skip (default, returns the existing asset) or error when the asset already exists"
+          "description": "When the asset already exists: skip (default) returns it untouched | error refuses; it never overwrites"
         }
       ],
       "contractExempt": "Creates and saves an asset under the contract values; nothing it reads fails first"
@@ -13439,7 +13726,7 @@
           "name": "onConflict",
           "type": "string",
           "required": false,
-          "description": "When the asset already exists: skip (default) | error"
+          "description": "When the asset already exists: skip (default) returns it untouched | error refuses; it never overwrites"
         },
         {
           "name": "physMaterial",
@@ -13564,7 +13851,7 @@
           "name": "onConflict",
           "type": "string",
           "required": false,
-          "description": "skip (default) returns an existing asset untouched, error refuses"
+          "description": "When the asset already exists: skip (default) returns it untouched | error refuses; it never overwrites"
         },
         {
           "name": "displayRate",
@@ -13634,7 +13921,7 @@
           "name": "onConflict",
           "type": "string",
           "required": false,
-          "description": "When the asset exists: skip (default, report it) | error"
+          "description": "When the asset already exists: skip (default) returns it untouched | error refuses; it never overwrites"
         }
       ],
       "contractExempt": "Creates and saves a material under the contract values; nothing it reads fails first"
@@ -13658,7 +13945,7 @@
           "name": "onConflict",
           "type": "string",
           "required": false,
-          "description": "When the asset exists: skip (default, report it) | error"
+          "description": "When the asset already exists: skip (default) returns it untouched | error refuses; it never overwrites"
         }
       ],
       "contractExempt": "Creates and saves a Material Designer material under the contract values; nothing it reads fails first"
@@ -13682,7 +13969,7 @@
           "name": "onConflict",
           "type": "string",
           "required": false,
-          "description": "When the asset exists: skip (default, report it) | error"
+          "description": "When the asset already exists: skip (default) returns it untouched | error refuses; it never overwrites"
         },
         {
           "name": "description",
@@ -13718,7 +14005,7 @@
           "name": "onConflict",
           "type": "string",
           "required": false,
-          "description": "When the asset exists: skip (default, report it) | error"
+          "description": "When the asset already exists: skip (default) returns it untouched | error refuses; it never overwrites"
         }
       ]
     },
@@ -13741,7 +14028,7 @@
           "name": "onConflict",
           "type": "string",
           "required": false,
-          "description": "When the asset exists: skip (default, report it) | error"
+          "description": "When the asset already exists: skip (default) returns it untouched | error refuses; it never overwrites"
         },
         {
           "name": "baseColor",
@@ -13802,7 +14089,7 @@
           "name": "onConflict",
           "type": "string",
           "required": false,
-          "description": "skip (default) returns the existing asset, error refuses; it never overwrites"
+          "description": "When the asset already exists: skip (default) returns it untouched | error refuses; it never overwrites"
         },
         {
           "name": "format",
@@ -13936,7 +14223,7 @@
           "name": "onConflict",
           "type": "string",
           "required": false,
-          "description": "When the asset exists: skip (default, report it) | error"
+          "description": "When the asset already exists: skip (default) returns it untouched | error refuses; it never overwrites"
         },
         {
           "name": "templatePath",
@@ -13977,7 +14264,7 @@
           "name": "onConflict",
           "type": "string",
           "required": false,
-          "description": "When the asset exists: skip (default, report it) | error"
+          "description": "When the asset already exists: skip (default) returns it untouched | error refuses; it never overwrites"
         },
         {
           "name": "inputs",
@@ -14043,7 +14330,7 @@
           "name": "onConflict",
           "type": "string",
           "required": false,
-          "description": "When the asset exists: skip (default, report it) | error"
+          "description": "When the asset already exists: skip (default) returns it untouched | error refuses; it never overwrites"
         }
       ],
       "contractExempt": "Creates and saves a system under the contract values; nothing it reads fails first"
@@ -14067,7 +14354,7 @@
           "name": "onConflict",
           "type": "string",
           "required": false,
-          "description": "When the asset exists: skip (default, report it) | error"
+          "description": "When the asset already exists: skip (default) returns it untouched | error refuses; it never overwrites"
         },
         {
           "name": "emitters",
@@ -14177,7 +14464,7 @@
           "name": "onConflict",
           "type": "string",
           "required": false,
-          "description": "When the asset exists: skip (default, report it) | error"
+          "description": "When the asset already exists: skip (default) returns it untouched | error refuses; it never overwrites"
         }
       ]
     },
@@ -14395,7 +14682,7 @@
           "name": "onConflict",
           "type": "string",
           "required": false,
-          "description": "skip (default) returns an existing asset; error refuses"
+          "description": "When the asset already exists: skip (default) returns it untouched | error refuses; it never overwrites"
         }
       ]
     },
@@ -14424,7 +14711,7 @@
           "name": "onConflict",
           "type": "string",
           "required": false,
-          "description": "When the asset exists: skip (default, report it) | error"
+          "description": "When the asset already exists: skip (default) returns it untouched | error refuses; it never overwrites"
         }
       ]
     },
@@ -14447,7 +14734,7 @@
           "name": "onConflict",
           "type": "string",
           "required": false,
-          "description": "When the asset exists: skip (default, report it) | error"
+          "description": "When the asset already exists: skip (default) returns it untouched | error refuses; it never overwrites"
         },
         {
           "name": "inputs",
@@ -14560,7 +14847,7 @@
           "name": "onConflict",
           "type": "string",
           "required": false,
-          "description": "skip (default) | error. It never overwrites"
+          "description": "When the asset already exists: skip (default) returns it untouched | error refuses; it never overwrites"
         }
       ]
     },
@@ -14583,7 +14870,7 @@
           "name": "onConflict",
           "type": "string",
           "required": false,
-          "description": "skip (default, returns the existing asset) or error when the asset already exists"
+          "description": "When the asset already exists: skip (default) returns it untouched | error refuses; it never overwrites"
         },
         {
           "name": "defaultBehaviorClass",
@@ -14619,7 +14906,7 @@
           "name": "onConflict",
           "type": "string",
           "required": false,
-          "description": "skip (default) returns the existing asset, error refuses; it never overwrites"
+          "description": "When the asset already exists: skip (default) returns it untouched | error refuses; it never overwrites"
         },
         {
           "name": "properties",
@@ -14655,7 +14942,7 @@
           "name": "onConflict",
           "type": "string",
           "required": false,
-          "description": "skip (default) returns the existing asset, error refuses; it never overwrites"
+          "description": "When the asset already exists: skip (default) returns it untouched | error refuses; it never overwrites"
         }
       ],
       "contractExempt": "Creates and saves a SoundCue asset named by the contract values"
@@ -14679,7 +14966,7 @@
           "name": "onConflict",
           "type": "string",
           "required": false,
-          "description": "skip (default) returns the existing asset, error refuses; it never overwrites"
+          "description": "When the asset already exists: skip (default) returns it untouched | error refuses; it never overwrites"
         },
         {
           "name": "fadeInTime",
@@ -14849,7 +15136,7 @@
           "name": "onConflict",
           "type": "string",
           "required": false,
-          "description": "skip (default, returns the existing asset) or error when the asset already exists"
+          "description": "When the asset already exists: skip (default) returns it untouched | error refuses; it never overwrites"
         },
         {
           "name": "schema",
@@ -14909,7 +15196,7 @@
           "name": "onConflict",
           "type": "string",
           "required": false,
-          "description": "skip (default) returns the existing asset, error refuses; it never overwrites"
+          "description": "When the asset already exists: skip (default) returns it untouched | error refuses; it never overwrites"
         },
         {
           "name": "parentPath",
@@ -14984,7 +15271,8 @@
           "name": "save",
           "type": "boolean",
           "required": false,
-          "description": "Save the owning package (default true)"
+          "description": "Save the owning package (default true)",
+          "default": true
         }
       ]
     },
@@ -15136,7 +15424,7 @@
           "name": "onConflict",
           "type": "string",
           "required": false,
-          "description": "When the asset exists: skip (default, report it) | error"
+          "description": "When the asset already exists: skip (default) returns it untouched | error refuses; it never overwrites"
         }
       ],
       "choices": [
@@ -15287,13 +15575,13 @@
           "name": "actorLabel",
           "type": "string",
           "required": false,
-          "description": "Actor editor label; pass actorLabel or actorPath"
+          "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
         },
         {
           "name": "actorPath",
           "type": "string",
           "required": false,
-          "description": "Full actor object path; the unambiguous selector, and it wins over actorLabel"
+          "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
         }
       ]
     },
@@ -15359,7 +15647,8 @@
           "name": "dryRun",
           "type": "boolean",
           "required": false,
-          "description": "Report the matches without deleting them (default false)"
+          "description": "Report the matches without deleting them (default false)",
+          "default": false
         }
       ],
       "choices": [
@@ -15718,7 +16007,8 @@
           "name": "dryRun",
           "type": "boolean",
           "required": false,
-          "description": "List the orphans without deleting them (default false)"
+          "description": "List the orphans without deleting them (default false)",
+          "default": false
         }
       ]
     },
@@ -15742,7 +16032,8 @@
           "name": "dryRun",
           "type": "boolean",
           "required": false,
-          "description": "Report what would be deleted without deleting (default false)"
+          "description": "Report what would be deleted without deleting (default false)",
+          "default": false
         }
       ],
       "choices": [
@@ -15886,7 +16177,8 @@
           "name": "pieInstance",
           "type": "integer",
           "required": false,
-          "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients"
+          "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients",
+          "minimum": 0
         },
         {
           "name": "actorPath",
@@ -16061,7 +16353,8 @@
           "name": "dryRun",
           "type": "boolean",
           "required": false,
-          "description": "Report what would happen to each package and clear nothing (default false)"
+          "description": "Report what would happen to each package and clear nothing (default false)",
+          "default": false
         },
         {
           "name": "allowContent",
@@ -16141,7 +16434,8 @@
           "name": "save",
           "type": "boolean",
           "required": false,
-          "description": "Save the asset after the edit (default true)"
+          "description": "Save the asset after the edit (default true)",
+          "default": true
         }
       ]
     },
@@ -16372,13 +16666,15 @@
           "name": "save",
           "type": "boolean",
           "required": false,
-          "description": "Save the package after editing (default true)"
+          "description": "Save the package after editing (default true)",
+          "default": true
         },
         {
           "name": "dryRun",
           "type": "boolean",
           "required": false,
-          "description": "Validate and return proposedValue without changing the asset (default false)"
+          "description": "Validate and return proposedValue without changing the asset (default false)",
+          "default": false
         }
       ]
     },
@@ -16857,13 +17153,15 @@
           "name": "wait",
           "type": "boolean",
           "required": false,
-          "description": "Return only once the result is complete (default true); false returns the requestId to poll with get_request"
+          "description": "Return only once the result is complete (default true); false returns the requestId to poll with get_request",
+          "default": true
         },
         {
           "name": "timeoutSeconds",
           "type": "number",
           "required": false,
-          "description": "Longest wait in seconds (send_message default 300, get_conversation default 60)"
+          "description": "Longest wait in seconds (send_message default 300, get_conversation default 60)",
+          "default": 60
         }
       ],
       "contractExempt": "opens the AI Assistant panel"
@@ -16927,13 +17225,15 @@
           "name": "wait",
           "type": "boolean",
           "required": false,
-          "description": "Return only once the result is complete (default true); false returns the requestId to poll with get_request"
+          "description": "Return only once the result is complete (default true); false returns the requestId to poll with get_request",
+          "default": true
         },
         {
           "name": "timeoutSeconds",
           "type": "number",
           "required": false,
-          "description": "Longest wait in seconds (send_message default 300, get_conversation default 60)"
+          "description": "Longest wait in seconds (send_message default 300, get_conversation default 60)",
+          "default": 300
         }
       ],
       "contractExempt": "opens the AI Assistant panel and sends a message to its backend"
@@ -17095,6 +17395,50 @@
       "category": "epic",
       "params": []
     },
+    "execute_batch": {
+      "category": "editor",
+      "params": [
+        {
+          "name": "ops",
+          "type": "array",
+          "required": true,
+          "description": "The steps, run in order as one undo transaction and one game-thread job",
+          "items": "object",
+          "fields": [
+            {
+              "name": "method",
+              "type": "string",
+              "required": true,
+              "description": "Bridge method of the step"
+            },
+            {
+              "name": "params",
+              "type": "object",
+              "required": false,
+              "description": "The step's parameters"
+            }
+          ]
+        },
+        {
+          "name": "onError",
+          "type": "string",
+          "required": false,
+          "description": "stop: the first failed step ends the batch | continue: run the rest",
+          "default": "stop",
+          "enum": [
+            "stop",
+            "continue"
+          ]
+        },
+        {
+          "name": "transactionDescription",
+          "type": "string",
+          "required": false,
+          "description": "Undo-stack label (default: MCP batch (N calls))"
+        }
+      ],
+      "contractExempt": "dispatches its steps through the registry that runs it, which a direct call does not have"
+    },
     "execute_command": {
       "category": "editor",
       "params": [
@@ -17112,9 +17456,10 @@
         },
         {
           "name": "pieInstance",
-          "type": "number",
+          "type": "integer",
           "required": false,
-          "description": "PIE world to target: 0 = server/primary, 1..N = clients. See list_pie_instances"
+          "description": "PIE world to target: 0 = server/primary, 1..N = clients. See list_pie_instances",
+          "minimum": 0
         },
         {
           "name": "playerIndex",
@@ -17138,7 +17483,7 @@
           "name": "actorPath",
           "type": "string",
           "required": false,
-          "description": "Full actor object path; the unambiguous selector"
+          "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
         },
         {
           "name": "seed",
@@ -17150,13 +17495,16 @@
           "name": "wait",
           "type": "boolean",
           "required": false,
-          "description": "Return only once this run finishes (default false); the result gains wait {state, durationMs}"
+          "description": "Return only once this run finishes (default false); the result gains wait {state, durationMs}",
+          "default": false
         },
         {
           "name": "timeoutSeconds",
           "type": "number",
           "required": false,
-          "description": "Longest wait in seconds (default 600)"
+          "description": "Longest wait in seconds (default 600)",
+          "default": 600,
+          "minimum": 0
         }
       ],
       "choices": [
@@ -17180,13 +17528,13 @@
           "name": "actorLabel",
           "type": "string",
           "required": false,
-          "description": "Actor editor label; pass actorLabel or actorPath"
+          "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
         },
         {
           "name": "actorPath",
           "type": "string",
           "required": false,
-          "description": "Full actor object path; the unambiguous selector, and it wins over actorLabel"
+          "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
         },
         {
           "name": "outputPath",
@@ -17227,7 +17575,8 @@
           "name": "dryRun",
           "type": "boolean",
           "required": false,
-          "description": "Validate and report without importing, writing or saving (default false)"
+          "description": "Validate and report without importing, writing or saving (default false)",
+          "default": false
         },
         {
           "name": "replaceExisting",
@@ -17396,7 +17745,8 @@
           "name": "save",
           "type": "boolean",
           "required": false,
-          "description": "Save the asset after export (default true)"
+          "description": "Save the asset after export (default true)",
+          "default": true
         }
       ]
     },
@@ -17916,9 +18266,10 @@
         },
         {
           "name": "pieInstance",
-          "type": "number",
+          "type": "integer",
           "required": false,
-          "description": "PIE instance id; omitted selects the active PIE world"
+          "description": "PIE instance id; omitted selects the active PIE world",
+          "minimum": 0
         }
       ]
     },
@@ -17969,9 +18320,10 @@
         },
         {
           "name": "pieInstance",
-          "type": "number",
+          "type": "integer",
           "required": false,
-          "description": "PIE world to target: 0 = server/primary, 1..N = clients. See list_pie_instances"
+          "description": "PIE world to target: 0 = server/primary, 1..N = clients. See list_pie_instances",
+          "minimum": 0
         },
         {
           "name": "cursor",
@@ -18132,7 +18484,8 @@
           "name": "save",
           "type": "boolean",
           "required": false,
-          "description": "Save what changed (default true)"
+          "description": "Save what changed (default true)",
+          "default": true
         },
         {
           "name": "dryRun",
@@ -18156,13 +18509,15 @@
           "name": "dryRun",
           "type": "boolean",
           "required": false,
-          "description": "Report the redirectors, referencers and packages it would load and save, and stop (default false)"
+          "description": "Report the redirectors, referencers and packages it would load and save, and stop (default false)",
+          "default": false
         },
         {
           "name": "save",
           "type": "boolean",
           "required": false,
-          "description": "Save the repointed referencers (default true); false leaves them dirty in memory and keeps every redirector they reference"
+          "description": "Save the repointed referencers (default true); false leaves them dirty in memory and keeps every redirector they reference",
+          "default": true
         },
         {
           "name": "allowProjectWide",
@@ -18249,13 +18604,13 @@
           "name": "actorLabel",
           "type": "string",
           "required": false,
-          "description": "Actor label. Editor labels are not unique, so a label naming several actors is refused"
+          "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
         },
         {
           "name": "actorPath",
           "type": "string",
           "required": false,
-          "description": "Full actor object path, the unambiguous selector. Wins over actorLabel"
+          "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
         }
       ]
     },
@@ -18272,19 +18627,22 @@
           "name": "actorPath",
           "type": "string",
           "required": false,
-          "description": "Full actor object path; the unambiguous selector"
+          "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
         },
         {
           "name": "wait",
           "type": "boolean",
           "required": false,
-          "description": "Return only once this run finishes (default false); the result gains wait {state, durationMs}"
+          "description": "Return only once this run finishes (default false); the result gains wait {state, durationMs}",
+          "default": false
         },
         {
           "name": "timeoutSeconds",
           "type": "number",
           "required": false,
-          "description": "Longest wait in seconds (default 600)"
+          "description": "Longest wait in seconds (default 600)",
+          "default": 600,
+          "minimum": 0
         }
       ],
       "choices": [
@@ -18416,13 +18774,15 @@
           "name": "save",
           "type": "boolean",
           "required": false,
-          "description": "Save the mesh (default true)"
+          "description": "Save the mesh (default true)",
+          "default": true
         },
         {
           "name": "dryRun",
           "type": "boolean",
           "required": false,
-          "description": "Report without writing"
+          "description": "Report without writing",
+          "default": false
         },
         {
           "name": "rasterSize",
@@ -18562,13 +18922,15 @@
           "name": "save",
           "type": "boolean",
           "required": false,
-          "description": "Save the written asset (default true)"
+          "description": "Save the written asset (default true)",
+          "default": true
         },
         {
           "name": "dryRun",
           "type": "boolean",
           "required": false,
-          "description": "Run the operation and report the result without writing (default false)"
+          "description": "Run the operation and report the result without writing (default false)",
+          "default": false
         }
       ]
     },
@@ -18634,13 +18996,15 @@
           "name": "dryRun",
           "type": "boolean",
           "required": false,
-          "description": "Report each mesh's LODs and what would happen without changing anything"
+          "description": "Report each mesh's LODs and what would happen without changing anything",
+          "default": false
         },
         {
           "name": "save",
           "type": "boolean",
           "required": false,
-          "description": "Save each changed mesh (default true)"
+          "description": "Save each changed mesh (default true)",
+          "default": true
         }
       ],
       "choices": [
@@ -18671,9 +19035,10 @@
         },
         {
           "name": "pieInstance",
-          "type": "number",
+          "type": "integer",
           "required": false,
-          "description": "PIE world instance (0 = server/primary); omit for the first running one"
+          "description": "PIE world instance (0 = server/primary); omit for the first running one",
+          "minimum": 0
         },
         {
           "name": "playerIndex",
@@ -18696,7 +19061,7 @@
           "name": "actorPath",
           "type": "string",
           "required": false,
-          "description": "Full actor object path. The unambiguous selector, and it wins over actorLabel when both are given"
+          "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
         },
         {
           "name": "world",
@@ -18713,13 +19078,13 @@
           "name": "actorLabel",
           "type": "string",
           "required": false,
-          "description": "Actor editor label; pass actorLabel or actorPath"
+          "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
         },
         {
           "name": "actorPath",
           "type": "string",
           "required": false,
-          "description": "Full actor object path; the unambiguous selector, and it wins over actorLabel"
+          "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
         },
         {
           "name": "onlyColliding",
@@ -18737,7 +19102,8 @@
           "name": "pieInstance",
           "type": "integer",
           "required": false,
-          "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients"
+          "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients",
+          "minimum": 0
         }
       ]
     },
@@ -18748,13 +19114,13 @@
           "name": "actorLabel",
           "type": "string",
           "required": false,
-          "description": "Actor editor label; pass actorLabel or actorPath"
+          "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
         },
         {
           "name": "actorPath",
           "type": "string",
           "required": false,
-          "description": "Full actor object path; the unambiguous selector, and it wins over actorLabel"
+          "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
         },
         {
           "name": "includeProperties",
@@ -18778,7 +19144,8 @@
           "name": "pieInstance",
           "type": "integer",
           "required": false,
-          "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients"
+          "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients",
+          "minimum": 0
         }
       ]
     },
@@ -18807,7 +19174,8 @@
           "name": "pieInstance",
           "type": "integer",
           "required": false,
-          "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients"
+          "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients",
+          "minimum": 0
         },
         {
           "name": "matchSubclasses",
@@ -18845,7 +19213,8 @@
           "name": "pieInstance",
           "type": "integer",
           "required": false,
-          "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients"
+          "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients",
+          "minimum": 0
         }
       ]
     },
@@ -18862,7 +19231,7 @@
           "name": "actorPath",
           "type": "string",
           "required": false,
-          "description": "Full actor object path. The unambiguous selector, and it wins over actorLabel when both are given"
+          "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
         },
         {
           "name": "world",
@@ -19015,7 +19384,7 @@
           "name": "actorPath",
           "type": "string",
           "required": false,
-          "description": "Full actor object path. The unambiguous selector, and it wins over actorLabel when both are given"
+          "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
         },
         {
           "name": "attribute",
@@ -19265,7 +19634,7 @@
           "name": "actorLabel",
           "type": "string",
           "required": false,
-          "description": "Editor label of the actor; pass this or actorPath"
+          "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
         },
         {
           "name": "actorPath",
@@ -19327,6 +19696,9 @@
         }
       ]
     },
+    "get_bridge_capabilities": {
+      "params": []
+    },
     "get_bt_runtime": {
       "category": "gameplay",
       "params": [
@@ -19340,7 +19712,7 @@
           "name": "actorPath",
           "type": "string",
           "required": false,
-          "description": "Full actor object path; wins over actorLabel"
+          "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
         },
         {
           "name": "world",
@@ -19350,9 +19722,10 @@
         },
         {
           "name": "pieInstance",
-          "type": "number",
+          "type": "integer",
           "required": false,
-          "description": "PIE world instance (0 = server/primary); omit for the primary world"
+          "description": "PIE world instance (0 = server/primary); omit for the primary world",
+          "minimum": 0
         },
         {
           "name": "includeAuxNodes",
@@ -19432,13 +19805,13 @@
           "name": "actorLabel",
           "type": "string",
           "required": false,
-          "description": "Actor editor label; pass actorLabel or actorPath"
+          "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
         },
         {
           "name": "actorPath",
           "type": "string",
           "required": false,
-          "description": "Full actor object path; the unambiguous selector, and it wins over actorLabel"
+          "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
         },
         {
           "name": "componentName",
@@ -19469,7 +19842,8 @@
           "name": "pieInstance",
           "type": "integer",
           "required": false,
-          "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients"
+          "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients",
+          "minimum": 0
         }
       ]
     },
@@ -19480,13 +19854,13 @@
           "name": "actorLabel",
           "type": "string",
           "required": false,
-          "description": "Actor editor label; pass actorLabel or actorPath"
+          "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
         },
         {
           "name": "actorPath",
           "type": "string",
           "required": false,
-          "description": "Full actor object path; the unambiguous selector, and it wins over actorLabel"
+          "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
         },
         {
           "name": "includeProperties",
@@ -19529,7 +19903,8 @@
           "name": "pieInstance",
           "type": "integer",
           "required": false,
-          "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients"
+          "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients",
+          "minimum": 0
         }
       ]
     },
@@ -19672,6 +20047,9 @@
         }
       ]
     },
+    "get_engine_state": {
+      "params": []
+    },
     "get_foliage_instances": {
       "category": "foliage",
       "params": [
@@ -19762,9 +20140,10 @@
       "params": [
         {
           "name": "pieInstance",
-          "type": "number",
+          "type": "integer",
           "required": false,
-          "description": "PIE world instance (0 = server/primary); omit for every running PIE world"
+          "description": "PIE world instance (0 = server/primary); omit for every running PIE world",
+          "minimum": 0
         },
         {
           "name": "playerIndex",
@@ -19797,13 +20176,13 @@
           "name": "actorLabel",
           "type": "string",
           "required": false,
-          "description": "Actor editor label; pass actorLabel or actorPath"
+          "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
         },
         {
           "name": "actorPath",
           "type": "string",
           "required": false,
-          "description": "Full actor object path; the unambiguous selector, and it wins over actorLabel"
+          "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
         },
         {
           "name": "componentName",
@@ -20324,7 +20703,7 @@
           "name": "actorPath",
           "type": "string",
           "required": false,
-          "description": "Full actor object path. The unambiguous selector, and it wins over actorLabel when both are given"
+          "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
         },
         {
           "name": "attributeSet",
@@ -20365,7 +20744,7 @@
           "name": "actorPath",
           "type": "string",
           "required": false,
-          "description": "Full actor object path; wins over actorLabel"
+          "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
         },
         {
           "name": "world",
@@ -20375,9 +20754,10 @@
         },
         {
           "name": "pieInstance",
-          "type": "number",
+          "type": "integer",
           "required": false,
-          "description": "PIE world instance (0 = server/primary); omit for the primary world"
+          "description": "PIE world instance (0 = server/primary); omit for the primary world",
+          "minimum": 0
         },
         {
           "name": "key",
@@ -20400,7 +20780,7 @@
           "name": "actorLabel",
           "type": "string",
           "required": false,
-          "description": "Editor label of the actor; pass this or actorPath"
+          "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
         },
         {
           "name": "actorPath",
@@ -20761,9 +21141,10 @@
         },
         {
           "name": "pieInstance",
-          "type": "number",
+          "type": "integer",
           "required": false,
-          "description": "PIE world to target: 0 = server/primary, 1..N = clients. See list_pie_instances"
+          "description": "PIE world to target: 0 = server/primary, 1..N = clients. See list_pie_instances",
+          "minimum": 0
         },
         {
           "name": "limit",
@@ -20821,6 +21202,9 @@
         }
       ]
     },
+    "get_param_echo": {
+      "params": []
+    },
     "get_pcg_component_details": {
       "category": "pcg",
       "params": [
@@ -20834,7 +21218,7 @@
           "name": "actorPath",
           "type": "string",
           "required": false,
-          "description": "Full actor object path; the unambiguous selector"
+          "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
         }
       ],
       "choices": [
@@ -20870,7 +21254,7 @@
           "name": "actorPath",
           "type": "string",
           "required": false,
-          "description": "Full actor object path; the unambiguous selector"
+          "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
         },
         {
           "name": "componentName",
@@ -20933,7 +21317,7 @@
           "name": "actorPath",
           "type": "string",
           "required": false,
-          "description": "Full actor object path; the unambiguous selector"
+          "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
         },
         {
           "name": "componentName",
@@ -20969,7 +21353,7 @@
           "name": "actorPath",
           "type": "string",
           "required": false,
-          "description": "Full actor object path; wins over actorLabel"
+          "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
         },
         {
           "name": "world",
@@ -20979,9 +21363,10 @@
         },
         {
           "name": "pieInstance",
-          "type": "number",
+          "type": "integer",
           "required": false,
-          "description": "PIE world instance (0 = server/primary); omit for the primary world"
+          "description": "PIE world instance (0 = server/primary); omit for the primary world",
+          "minimum": 0
         },
         {
           "name": "senseType",
@@ -21046,9 +21431,10 @@
         },
         {
           "name": "pieInstance",
-          "type": "number",
+          "type": "integer",
           "required": false,
-          "description": "PIE world to read (default: the primary world, or the first client world when the primary is a dedicated server). See list_pie_instances"
+          "description": "PIE world to read (default: the primary world, or the first client world when the primary is a dedicated server). See list_pie_instances",
+          "minimum": 0
         }
       ]
     },
@@ -21059,13 +21445,13 @@
           "name": "actorLabel",
           "type": "string",
           "required": false,
-          "description": "Actor editor label; pass actorLabel or actorPath"
+          "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
         },
         {
           "name": "actorPath",
           "type": "string",
           "required": false,
-          "description": "Full actor object path; the unambiguous selector, and it wins over actorLabel"
+          "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
         },
         {
           "name": "componentName",
@@ -21181,7 +21567,8 @@
           "name": "pieInstance",
           "type": "integer",
           "required": false,
-          "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients"
+          "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients",
+          "minimum": 0
         }
       ]
     },
@@ -21237,13 +21624,13 @@
           "name": "actorLabel",
           "type": "string",
           "required": false,
-          "description": "Actor label. Editor labels are not unique, so a label naming several actors is refused"
+          "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
         },
         {
           "name": "actorPath",
           "type": "string",
           "required": false,
-          "description": "Full actor object path, the unambiguous selector. Wins over actorLabel"
+          "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
         },
         {
           "name": "propertyName",
@@ -21259,9 +21646,10 @@
         },
         {
           "name": "pieInstance",
-          "type": "number",
+          "type": "integer",
           "required": false,
-          "description": "PIE world to target: 0 = server/primary, 1..N = clients. See list_pie_instances"
+          "description": "PIE world to target: 0 = server/primary, 1..N = clients. See list_pie_instances",
+          "minimum": 0
         }
       ]
     },
@@ -21295,9 +21683,10 @@
         },
         {
           "name": "pieInstance",
-          "type": "number",
+          "type": "integer",
           "required": false,
-          "description": "PIE world to target: 0 = server/primary, 1..N = clients. See list_pie_instances"
+          "description": "PIE world to target: 0 = server/primary, 1..N = clients. See list_pie_instances",
+          "minimum": 0
         }
       ]
     },
@@ -21314,7 +21703,8 @@
           "name": "pieInstance",
           "type": "integer",
           "required": false,
-          "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients"
+          "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients",
+          "minimum": 0
         }
       ]
     },
@@ -21457,13 +21847,13 @@
           "name": "actorLabel",
           "type": "string",
           "required": false,
-          "description": "Actor label. Editor labels are not unique, so a label naming several actors is refused"
+          "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
         },
         {
           "name": "actorPath",
           "type": "string",
           "required": false,
-          "description": "Full actor object path, the unambiguous selector. Wins over actorLabel"
+          "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
         },
         {
           "name": "sectionIndex",
@@ -21528,9 +21918,10 @@
         },
         {
           "name": "pieInstance",
-          "type": "number",
+          "type": "integer",
           "required": false,
-          "description": "PIE instance index when several clients run"
+          "description": "Which PIE world: 0 = server or primary, 1..N = clients. See editor(list_pie_instances)",
+          "minimum": 0
         },
         {
           "name": "sequencePath",
@@ -21584,7 +21975,7 @@
           "name": "actorPath",
           "type": "string",
           "required": false,
-          "description": "Actor object path; preferred when labels repeat"
+          "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
         },
         {
           "name": "componentName",
@@ -21602,7 +21993,8 @@
           "name": "pieInstance",
           "type": "integer",
           "required": false,
-          "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients"
+          "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients",
+          "minimum": 0
         },
         {
           "name": "lodIndex",
@@ -21724,13 +22116,13 @@
           "name": "actorLabel",
           "type": "string",
           "required": false,
-          "description": "Actor editor label; pass actorLabel or actorPath"
+          "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
         },
         {
           "name": "actorPath",
           "type": "string",
           "required": false,
-          "description": "Full actor object path; the unambiguous selector, and it wins over actorLabel"
+          "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
         },
         {
           "name": "componentName",
@@ -21754,7 +22146,8 @@
           "name": "pieInstance",
           "type": "integer",
           "required": false,
-          "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients"
+          "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients",
+          "minimum": 0
         }
       ],
       "choices": [
@@ -21788,7 +22181,7 @@
           "name": "actorPath",
           "type": "string",
           "required": false,
-          "description": "Full actor object path; the unambiguous selector"
+          "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
         },
         {
           "name": "world",
@@ -21798,9 +22191,10 @@
         },
         {
           "name": "pieInstance",
-          "type": "number",
+          "type": "integer",
           "required": false,
-          "description": "PIE world instance (0 = server/primary)"
+          "description": "PIE world instance (0 = server/primary)",
+          "minimum": 0
         },
         {
           "name": "componentName",
@@ -22022,13 +22416,13 @@
           "name": "actorLabel",
           "type": "string",
           "required": false,
-          "description": "Actor editor label; pass actorLabel or actorPath"
+          "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
         },
         {
           "name": "actorPath",
           "type": "string",
           "required": false,
-          "description": "Full actor object path; the unambiguous selector, and it wins over actorLabel"
+          "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
         }
       ]
     },
@@ -22153,7 +22547,8 @@
           "name": "pieInstance",
           "type": "integer",
           "required": false,
-          "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients"
+          "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients",
+          "minimum": 0
         },
         {
           "name": "cursor",
@@ -22198,7 +22593,7 @@
           "name": "actorPath",
           "type": "string",
           "required": false,
-          "description": "Full actor object path. The unambiguous selector, and it wins over actorLabel when both are given"
+          "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
         },
         {
           "name": "abilityClass",
@@ -22493,7 +22888,8 @@
           "name": "save",
           "type": "boolean",
           "required": false,
-          "description": "Save each imported asset and report saved per asset (default true; false leaves them dirty)"
+          "description": "Save each imported asset and report saved per asset (default true; false leaves them dirty)",
+          "default": true
         },
         {
           "name": "automated",
@@ -23037,13 +23433,15 @@
           "name": "save",
           "type": "boolean",
           "required": false,
-          "description": "Save all imported assets (default false)"
+          "description": "Save all imported assets (default false)",
+          "default": false
         },
         {
           "name": "dryRun",
           "type": "boolean",
           "required": false,
-          "description": "Validate and report without importing, writing or saving (default false)"
+          "description": "Validate and report without importing, writing or saving (default false)",
+          "default": false
         }
       ]
     },
@@ -23177,7 +23575,8 @@
           "name": "save",
           "type": "boolean",
           "required": false,
-          "description": "Save the table (default true)"
+          "description": "Save the table (default true)",
+          "default": true
         }
       ]
     },
@@ -23269,7 +23668,8 @@
           "name": "save",
           "type": "boolean",
           "required": false,
-          "description": "Save changed assets (default true)"
+          "description": "Save changed assets (default true)",
+          "default": true
         },
         {
           "name": "automated",
@@ -23281,7 +23681,8 @@
           "name": "dryRun",
           "type": "boolean",
           "required": false,
-          "description": "Validate and report without importing, writing or saving (default false)"
+          "description": "Validate and report without importing, writing or saving (default false)",
+          "default": false
         }
       ]
     },
@@ -23298,7 +23699,7 @@
           "name": "actorPath",
           "type": "string",
           "required": false,
-          "description": "Full actor object path. The unambiguous selector, and it wins over actorLabel when both are given"
+          "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
         },
         {
           "name": "attributeSet",
@@ -23470,7 +23871,8 @@
           "name": "pieInstance",
           "type": "integer",
           "required": false,
-          "description": "PIE instance id for multi-client sessions"
+          "description": "PIE instance id for multi-client sessions",
+          "minimum": 0
         },
         {
           "name": "maxInstances",
@@ -23516,13 +23918,13 @@
           "name": "actorLabel",
           "type": "string",
           "required": false,
-          "description": "Actor label. Editor labels are not unique, so a label naming several actors is refused"
+          "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
         },
         {
           "name": "actorPath",
           "type": "string",
           "required": false,
-          "description": "Full actor object path, the unambiguous selector. Wins over actorLabel"
+          "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
         },
         {
           "name": "component",
@@ -23556,9 +23958,10 @@
         },
         {
           "name": "pieInstance",
-          "type": "number",
+          "type": "integer",
           "required": false,
-          "description": "PIE world to target: 0 = server/primary, 1..N = clients. See list_pie_instances"
+          "description": "PIE world to target: 0 = server/primary, 1..N = clients. See list_pie_instances",
+          "minimum": 0
         },
         {
           "name": "deferToNextTick",
@@ -23667,9 +24070,10 @@
         },
         {
           "name": "pieInstance",
-          "type": "number",
+          "type": "integer",
           "required": false,
-          "description": "PIE world to target: 0 = server/primary, 1..N = clients. See list_pie_instances"
+          "description": "PIE world to target: 0 = server/primary, 1..N = clients. See list_pie_instances",
+          "minimum": 0
         },
         {
           "name": "deferToNextTick",
@@ -23748,9 +24152,10 @@
         },
         {
           "name": "pieInstance",
-          "type": "number",
+          "type": "integer",
           "required": false,
-          "description": "PIE world to target: 0 = server/primary, 1..N = clients. See list_pie_instances"
+          "description": "PIE world to target: 0 = server/primary, 1..N = clients. See list_pie_instances",
+          "minimum": 0
         }
       ],
       "contractExempt": "calls UFUNCTIONs"
@@ -23856,9 +24261,10 @@
         },
         {
           "name": "pieInstance",
-          "type": "number",
+          "type": "integer",
           "required": false,
-          "description": "PIE world to target: 0 = server/primary, 1..N = clients. See list_pie_instances"
+          "description": "PIE world to target: 0 = server/primary, 1..N = clients. See list_pie_instances",
+          "minimum": 0
         }
       ],
       "contractExempt": "calls a static UFUNCTION"
@@ -24103,7 +24509,8 @@
           "name": "pieInstance",
           "type": "integer",
           "required": false,
-          "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients"
+          "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients",
+          "minimum": 0
         }
       ]
     },
@@ -24175,13 +24582,13 @@
           "name": "actorLabel",
           "type": "string",
           "required": false,
-          "description": "Actor editor label; pass actorLabel or actorPath"
+          "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
         },
         {
           "name": "actorPath",
           "type": "string",
           "required": false,
-          "description": "Full actor object path; the unambiguous selector, and it wins over actorLabel"
+          "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
         },
         {
           "name": "cursor",
@@ -24208,9 +24615,10 @@
         },
         {
           "name": "pieInstance",
-          "type": "number",
+          "type": "integer",
           "required": false,
-          "description": "PIE world instance (0 = server/primary); omit for the primary world"
+          "description": "PIE world instance (0 = server/primary); omit for the primary world",
+          "minimum": 0
         },
         {
           "name": "runningOnly",
@@ -24558,7 +24966,7 @@
           "name": "actorLabel",
           "type": "string",
           "required": false,
-          "description": "Editor label of the actor; pass this or actorPath"
+          "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
         },
         {
           "name": "actorPath",
@@ -26069,7 +26477,8 @@
           "name": "pieInstance",
           "type": "integer",
           "required": false,
-          "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients"
+          "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients",
+          "minimum": 0
         },
         {
           "name": "cursor",
@@ -26334,7 +26743,8 @@
           "name": "dryRun",
           "type": "boolean",
           "required": false,
-          "description": "Report what would change without writing"
+          "description": "Report what would change without writing",
+          "default": false
         }
       ]
     },
@@ -26390,7 +26800,8 @@
           "name": "dryRun",
           "type": "boolean",
           "required": false,
-          "description": "Report what would change without writing"
+          "description": "Report what would change without writing",
+          "default": false
         }
       ],
       "contractExempt": "Creates a loader adapter and streams actors in; the bounds read is the only thing the contract values reach, and it is checked from source instead"
@@ -26782,13 +27193,15 @@
           "name": "dryRun",
           "type": "boolean",
           "required": false,
-          "description": "Run the boolean and report the counts without writing (default false)"
+          "description": "Run the boolean and report the counts without writing (default false)",
+          "default": false
         },
         {
           "name": "save",
           "type": "boolean",
           "required": false,
-          "description": "Save the written asset (default true)"
+          "description": "Save the written asset (default true)",
+          "default": true
         }
       ]
     },
@@ -26849,7 +27262,7 @@
           "name": "onConflict",
           "type": "string",
           "required": false,
-          "description": "skip (default) returns an existing asset untouched, error refuses"
+          "description": "When the asset already exists: skip (default) returns it untouched | error refuses; it never overwrites"
         }
       ],
       "contractExempt": "creates a MetaHumanCharacter asset"
@@ -27079,7 +27492,7 @@
           "name": "onConflict",
           "type": "string",
           "required": false,
-          "description": "skip (default) returns the existing asset, error refuses; it never overwrites"
+          "description": "When the asset already exists: skip (default) returns it untouched | error refuses; it never overwrites"
         },
         {
           "name": "format",
@@ -27734,13 +28147,13 @@
           "name": "actorLabel",
           "type": "string",
           "required": false,
-          "description": "Actor editor label; pass actorLabel or actorPath"
+          "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
         },
         {
           "name": "actorPath",
           "type": "string",
           "required": false,
-          "description": "Full actor object path; the unambiguous selector, and it wins over actorLabel"
+          "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
         },
         {
           "name": "location",
@@ -27770,7 +28183,8 @@
           "name": "pieInstance",
           "type": "integer",
           "required": false,
-          "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients"
+          "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients",
+          "minimum": 0
         }
       ]
     },
@@ -28133,7 +28547,8 @@
           "name": "pieInstance",
           "type": "integer",
           "required": false,
-          "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients"
+          "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients",
+          "minimum": 0
         }
       ]
     },
@@ -28169,7 +28584,7 @@
           "name": "onConflict",
           "type": "string",
           "required": false,
-          "description": "skip (default) reports an existing asset, error refuses it"
+          "description": "When the asset already exists: skip (default) returns it untouched | error refuses; it never overwrites"
         }
       ]
     },
@@ -28220,13 +28635,13 @@
           "name": "actorLabel",
           "type": "string",
           "required": false,
-          "description": "Actor editor label; pass actorLabel or actorPath"
+          "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
         },
         {
           "name": "actorPath",
           "type": "string",
           "required": false,
-          "description": "Full actor object path; the unambiguous selector, and it wins over actorLabel"
+          "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
         },
         {
           "name": "componentName",
@@ -28322,7 +28737,8 @@
           "name": "dryRun",
           "type": "boolean",
           "required": false,
-          "description": "Inspect and preview the requested transform without writing (default false)"
+          "description": "Inspect and preview the requested transform without writing (default false)",
+          "default": false
         },
         {
           "name": "world",
@@ -28334,7 +28750,8 @@
           "name": "pieInstance",
           "type": "integer",
           "required": false,
-          "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients"
+          "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients",
+          "minimum": 0
         }
       ],
       "choices": [
@@ -28648,13 +29065,15 @@
           "name": "waitForAssetRegistry",
           "type": "boolean",
           "required": false,
-          "description": "start only: block until the AssetRegistry initial scan completes, since PIE silently no-ops during it on a cold editor (default true)"
+          "description": "start only: block until the AssetRegistry initial scan completes, since PIE silently no-ops during it on a cold editor (default true)",
+          "default": true
         },
         {
           "name": "assetRegistryTimeoutSeconds",
           "type": "number",
           "required": false,
-          "description": "start only: how long to wait for that scan (default 180)"
+          "description": "start only: how long to wait for that scan (default 180)",
+          "default": 180
         }
       ],
       "contractExempt": "starts and stops Play In Editor"
@@ -28736,7 +29155,8 @@
           "name": "pieInstance",
           "type": "integer",
           "required": false,
-          "description": "FWorldContext::PIEInstance, a non-negative integer. Omitted picks the active PlayWorld, then the first PIE world with the player; an explicit value never falls back"
+          "description": "FWorldContext::PIEInstance, a non-negative integer. Omitted picks the active PlayWorld, then the first PIE world with the player; an explicit value never falls back",
+          "minimum": 0
         },
         {
           "name": "driveId",
@@ -30761,6 +31181,36 @@
       ],
       "contractExempt": "rotates the running PIE player's view"
     },
+    "pie_start_ignoring_blueprint_errors": {
+      "category": "editor",
+      "params": [
+        {
+          "name": "authorizationSource",
+          "type": "string",
+          "required": true,
+          "description": "Who authorized the bypass: user_approval (an approval prompt the user accepted) or config (the standing pie.allowIgnoreBlueprintErrors opt-in)",
+          "enum": [
+            "user_approval",
+            "config"
+          ]
+        },
+        {
+          "name": "waitForAssetRegistry",
+          "type": "boolean",
+          "required": false,
+          "description": "start only: block until the AssetRegistry initial scan completes, since PIE silently no-ops during it on a cold editor (default true)",
+          "default": true
+        },
+        {
+          "name": "assetRegistryTimeoutSeconds",
+          "type": "number",
+          "required": false,
+          "description": "start only: how long to wait for that scan (default 180)",
+          "default": 180
+        }
+      ],
+      "contractExempt": "starts Play In Editor"
+    },
     "pie_test_list": {
       "category": "pie",
       "params": [
@@ -30929,7 +31379,8 @@
           "name": "pieInstance",
           "type": "integer",
           "required": false,
-          "description": "PIE instance id; omitted selects the active PIE world"
+          "description": "PIE instance id; omitted selects the active PIE world",
+          "minimum": 0
         },
         {
           "name": "distance",
@@ -31031,7 +31482,8 @@
           "name": "pieInstance",
           "type": "integer",
           "required": false,
-          "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients"
+          "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients",
+          "minimum": 0
         }
       ]
     },
@@ -31432,9 +31884,10 @@
         },
         {
           "name": "pieInstance",
-          "type": "number",
+          "type": "integer",
           "required": false,
-          "description": "PIE world to target: 0 = server/primary, 1..N = clients. See list_pie_instances"
+          "description": "PIE world to target: 0 = server/primary, 1..N = clients. See list_pie_instances",
+          "minimum": 0
         }
       ]
     },
@@ -31482,7 +31935,7 @@
           "name": "actorLabel",
           "type": "string",
           "required": false,
-          "description": "Editor label of the actor; pass this or actorPath"
+          "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
         },
         {
           "name": "actorPath",
@@ -31786,7 +32239,8 @@
           "name": "pieInstance",
           "type": "integer",
           "required": false,
-          "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients"
+          "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients",
+          "minimum": 0
         },
         {
           "name": "includeCollision",
@@ -31849,9 +32303,10 @@
         },
         {
           "name": "pieInstance",
-          "type": "number",
+          "type": "integer",
           "required": false,
-          "description": "PIE world instance when world is pie or auto"
+          "description": "PIE world instance when world is pie or auto",
+          "minimum": 0
         },
         {
           "name": "actorLabel",
@@ -31909,7 +32364,7 @@
           "name": "actorPath",
           "type": "string",
           "required": false,
-          "description": "Full actor object path; the unambiguous selector"
+          "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
         }
       ],
       "choices": [
@@ -31933,7 +32388,7 @@
           "name": "actorLabel",
           "type": "string",
           "required": false,
-          "description": "Actor editor label; pass actorLabel or actorPath"
+          "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
         },
         {
           "name": "actorLabels",
@@ -31946,7 +32401,7 @@
           "name": "actorPath",
           "type": "string",
           "required": false,
-          "description": "Full actor object path; the unambiguous selector, and it wins over actorLabel"
+          "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
         },
         {
           "name": "actorPaths",
@@ -31965,7 +32420,8 @@
           "name": "pieInstance",
           "type": "integer",
           "required": false,
-          "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients"
+          "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients",
+          "minimum": 0
         }
       ]
     },
@@ -32451,13 +32907,13 @@
           "name": "actorLabel",
           "type": "string",
           "required": false,
-          "description": "Actor label. Editor labels are not unique, so a label naming several actors is refused"
+          "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
         },
         {
           "name": "actorPath",
           "type": "string",
           "required": false,
-          "description": "Full actor object path, the unambiguous selector. Wins over actorLabel"
+          "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
         },
         {
           "name": "componentName",
@@ -32498,9 +32954,10 @@
         },
         {
           "name": "pieInstance",
-          "type": "number",
+          "type": "integer",
           "required": false,
-          "description": "PIE world to target: 0 = server/primary, 1..N = clients. See list_pie_instances"
+          "description": "PIE world to target: 0 = server/primary, 1..N = clients. See list_pie_instances",
+          "minimum": 0
         }
       ]
     },
@@ -32902,9 +33359,10 @@
         },
         {
           "name": "pieInstance",
-          "type": "number",
+          "type": "integer",
           "required": false,
-          "description": "Which PIE world when several run (0 = server/primary). See editor(list_pie_instances)"
+          "description": "Which PIE world: 0 = server or primary, 1..N = clients. See editor(list_pie_instances)",
+          "minimum": 0
         },
         {
           "name": "designerSlot",
@@ -33042,9 +33500,10 @@
         },
         {
           "name": "pieInstance",
-          "type": "number",
+          "type": "integer",
           "required": false,
-          "description": "Which PIE world when several run (0 = server/primary). See editor(list_pie_instances)"
+          "description": "Which PIE world: 0 = server or primary, 1..N = clients. See editor(list_pie_instances)",
+          "minimum": 0
         }
       ],
       "choices": [
@@ -33087,9 +33546,10 @@
         },
         {
           "name": "pieInstance",
-          "type": "number",
+          "type": "integer",
           "required": false,
-          "description": "Which PIE world when several run (0 = server/primary). See editor(list_pie_instances)"
+          "description": "Which PIE world: 0 = server or primary, 1..N = clients. See editor(list_pie_instances)",
+          "minimum": 0
         }
       ]
     },
@@ -33274,7 +33734,7 @@
           "name": "actorPath",
           "type": "string",
           "required": false,
-          "description": "Full actor object path; the unambiguous selector"
+          "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
         },
         {
           "name": "componentName",
@@ -33393,7 +33853,7 @@
           "name": "actorPath",
           "type": "string",
           "required": false,
-          "description": "Full actor object path; wins over actorLabel"
+          "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
         },
         {
           "name": "world",
@@ -33403,9 +33863,10 @@
         },
         {
           "name": "pieInstance",
-          "type": "number",
+          "type": "integer",
           "required": false,
-          "description": "PIE world instance (0 = server/primary); omit for the primary world"
+          "description": "PIE world instance (0 = server/primary); omit for the primary world",
+          "minimum": 0
         },
         {
           "name": "componentName",
@@ -33743,7 +34204,8 @@
           "name": "pieInstance",
           "type": "integer",
           "required": false,
-          "description": "Which PIE instance, when several are running"
+          "description": "Which PIE world: 0 = server or primary, 1..N = clients. See editor(list_pie_instances)",
+          "minimum": 0
         },
         {
           "name": "includeDebugStrings",
@@ -33904,7 +34366,7 @@
           "name": "actorLabel",
           "type": "string",
           "required": false,
-          "description": "Editor label of the actor; pass this or actorPath"
+          "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
         },
         {
           "name": "actorPath",
@@ -33949,13 +34411,13 @@
           "name": "actorLabel",
           "type": "string",
           "required": false,
-          "description": "Actor label. Editor labels are not unique, so a label naming several actors is refused"
+          "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
         },
         {
           "name": "actorPath",
           "type": "string",
           "required": false,
-          "description": "Full actor object path, the unambiguous selector. Wins over actorLabel"
+          "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
         },
         {
           "name": "includeChildren",
@@ -34037,13 +34499,13 @@
           "name": "actorLabel",
           "type": "string",
           "required": false,
-          "description": "Actor editor label; pass actorLabel or actorPath"
+          "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
         },
         {
           "name": "actorPath",
           "type": "string",
           "required": false,
-          "description": "Full actor object path; the unambiguous selector, and it wins over actorLabel"
+          "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
         },
         {
           "name": "zoneExtent",
@@ -34182,7 +34644,8 @@
           "name": "pieInstance",
           "type": "integer",
           "required": false,
-          "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients"
+          "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients",
+          "minimum": 0
         }
       ],
       "choices": [
@@ -34508,7 +34971,8 @@
           "name": "save",
           "type": "boolean",
           "required": false,
-          "description": "Save the reimported asset's package (default false: it is left dirty)"
+          "description": "Save the reimported asset's package (default false: it is left dirty)",
+          "default": false
         }
       ]
     },
@@ -34601,6 +35065,44 @@
         }
       ]
     },
+    "release_lock": {
+      "category": "lock",
+      "params": [
+        {
+          "name": "path",
+          "type": "string",
+          "required": true,
+          "description": "Asset path the lock is keyed by",
+          "aliases": [
+            "assetPath"
+          ]
+        },
+        {
+          "name": "sessionId",
+          "type": "string",
+          "required": true,
+          "description": "Session that holds, or asks for, the lock"
+        },
+        {
+          "name": "force",
+          "type": "boolean",
+          "required": false,
+          "description": "Break the lock whoever holds it",
+          "default": false
+        }
+      ]
+    },
+    "release_session_locks": {
+      "category": "lock",
+      "params": [
+        {
+          "name": "sessionId",
+          "type": "string",
+          "required": true,
+          "description": "Session that holds, or asks for, the lock"
+        }
+      ]
+    },
     "reload_handlers": {
       "category": "editor",
       "params": [],
@@ -34627,13 +35129,13 @@
           "name": "actorLabel",
           "type": "string",
           "required": false,
-          "description": "Actor editor label; pass actorLabel or actorPath"
+          "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
         },
         {
           "name": "actorPath",
           "type": "string",
           "required": false,
-          "description": "Full actor object path; the unambiguous selector, and it wins over actorLabel"
+          "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
         },
         {
           "name": "tag",
@@ -34750,7 +35252,8 @@
           "name": "save",
           "type": "boolean",
           "required": false,
-          "description": "Save the package after the write (default true)"
+          "description": "Save the package after the write (default true)",
+          "default": true
         }
       ],
       "choices": [
@@ -34860,13 +35363,13 @@
           "name": "actorLabel",
           "type": "string",
           "required": false,
-          "description": "Actor editor label; pass actorLabel or actorPath"
+          "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
         },
         {
           "name": "actorPath",
           "type": "string",
           "required": false,
-          "description": "Full actor object path; the unambiguous selector, and it wins over actorLabel"
+          "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
         },
         {
           "name": "componentName",
@@ -34959,7 +35462,8 @@
           "name": "save",
           "type": "boolean",
           "required": false,
-          "description": "Save the level after a committed removal (default false)"
+          "description": "Save the level after a committed removal (default false)",
+          "default": false
         },
         {
           "name": "transactionLabel",
@@ -35018,7 +35522,8 @@
           "name": "save",
           "type": "boolean",
           "required": false,
-          "description": "Save after removing rows (default true)"
+          "description": "Save after removing rows (default true)",
+          "default": true
         }
       ],
       "choices": [
@@ -35048,7 +35553,7 @@
           "name": "actorPath",
           "type": "string",
           "required": false,
-          "description": "Full actor object path. The unambiguous selector, and it wins over actorLabel when both are given"
+          "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
         },
         {
           "name": "effectHandle",
@@ -35291,7 +35796,8 @@
           "name": "dryRun",
           "type": "boolean",
           "required": false,
-          "description": "Report what would be removed without removing it"
+          "description": "Report what would be removed without removing it",
+          "default": false
         }
       ]
     },
@@ -35340,7 +35846,8 @@
           "name": "save",
           "type": "boolean",
           "required": false,
-          "description": "Save the asset after the edit (default true)"
+          "description": "Save the asset after the edit (default true)",
+          "default": true
         }
       ]
     },
@@ -35399,7 +35906,8 @@
           "name": "save",
           "type": "boolean",
           "required": false,
-          "description": "Persist the asset (default true); false defers the write"
+          "description": "Persist the asset (default true); false defers the write",
+          "default": true
         }
       ]
     },
@@ -35410,13 +35918,13 @@
           "name": "actorLabel",
           "type": "string",
           "required": false,
-          "description": "Actor editor label; pass actorLabel or actorPath"
+          "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
         },
         {
           "name": "actorPath",
           "type": "string",
           "required": false,
-          "description": "Full actor object path; the unambiguous selector, and it wins over actorLabel"
+          "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
         },
         {
           "name": "componentName",
@@ -35485,7 +35993,7 @@
           "name": "actorPath",
           "type": "string",
           "required": false,
-          "description": "Full actor object path. The unambiguous selector, and it wins over actorLabel when both are given"
+          "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
         },
         {
           "name": "tag",
@@ -35518,9 +36026,10 @@
         },
         {
           "name": "pieInstance",
-          "type": "number",
+          "type": "integer",
           "required": false,
-          "description": "PIE world instance (0 = server/primary); omit for the first running one"
+          "description": "PIE world instance (0 = server/primary); omit for the first running one",
+          "minimum": 0
         },
         {
           "name": "playerIndex",
@@ -35606,9 +36115,10 @@
         },
         {
           "name": "pieInstance",
-          "type": "number",
+          "type": "integer",
           "required": false,
-          "description": "Which PIE world when several run (0 = server/primary). See editor(list_pie_instances)"
+          "description": "Which PIE world: 0 = server or primary, 1..N = clients. See editor(list_pie_instances)",
+          "minimum": 0
         },
         {
           "name": "designerSlot",
@@ -36013,13 +36523,13 @@
           "name": "actorLabel",
           "type": "string",
           "required": false,
-          "description": "Actor label. Editor labels are not unique, so a label naming several actors is refused"
+          "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
         },
         {
           "name": "actorPath",
           "type": "string",
           "required": false,
-          "description": "Full actor object path, the unambiguous selector. Wins over actorLabel"
+          "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
         },
         {
           "name": "sectionIndex",
@@ -36685,13 +37195,13 @@
           "name": "actorLabel",
           "type": "string",
           "required": false,
-          "description": "Actor editor label; pass actorLabel or actorPath"
+          "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
         },
         {
           "name": "actorPath",
           "type": "string",
           "required": false,
-          "description": "Full actor object path; the unambiguous selector, and it wins over actorLabel"
+          "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
         },
         {
           "name": "newName",
@@ -36730,7 +37240,8 @@
           "name": "dryRun",
           "type": "boolean",
           "required": false,
-          "description": "Report what would change without writing"
+          "description": "Report what would change without writing",
+          "default": false
         }
       ],
       "choices": [
@@ -37672,9 +38183,10 @@
         },
         {
           "name": "pieInstance",
-          "type": "number",
+          "type": "integer",
           "required": false,
-          "description": "PIE world instance (0 = server/primary); omit for the primary world"
+          "description": "PIE world instance (0 = server/primary); omit for the primary world",
+          "minimum": 0
         }
       ]
     },
@@ -37733,7 +38245,8 @@
           "name": "pieInstance",
           "type": "integer",
           "required": false,
-          "description": "Which PIE instance, when several are running"
+          "description": "Which PIE world: 0 = server or primary, 1..N = clients. See editor(list_pie_instances)",
+          "minimum": 0
         }
       ]
     },
@@ -37769,7 +38282,8 @@
           "name": "pieInstance",
           "type": "integer",
           "required": false,
-          "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients"
+          "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients",
+          "minimum": 0
         }
       ],
       "choices": [
@@ -37812,7 +38326,8 @@
           "name": "save",
           "type": "boolean",
           "required": false,
-          "description": "Save the packages of the matched actors and no others (default true)"
+          "description": "Save the packages of the matched actors and no others (default true)",
+          "default": true
         },
         {
           "name": "dryRun",
@@ -38091,13 +38606,13 @@
           "name": "actorLabel",
           "type": "string",
           "required": false,
-          "description": "Actor editor label; pass actorLabel or actorPath"
+          "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
         },
         {
           "name": "actorPath",
           "type": "string",
           "required": false,
-          "description": "Full actor object path; the unambiguous selector, and it wins over actorLabel"
+          "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
         },
         {
           "name": "componentName",
@@ -38147,7 +38662,8 @@
           "name": "pieInstance",
           "type": "integer",
           "required": false,
-          "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients"
+          "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients",
+          "minimum": 0
         }
       ],
       "choices": [
@@ -38210,9 +38726,10 @@
         },
         {
           "name": "pieInstance",
-          "type": "number",
+          "type": "integer",
           "required": false,
-          "description": "PIE world to target: 0 = server/primary, 1..N = clients. See list_pie_instances"
+          "description": "PIE world to target: 0 = server/primary, 1..N = clients. See list_pie_instances",
+          "minimum": 0
         }
       ]
     },
@@ -38303,7 +38820,7 @@
           "name": "actorPath",
           "type": "string",
           "required": false,
-          "description": "Full actor object path. The unambiguous selector, and it wins over actorLabel when both are given"
+          "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
         },
         {
           "name": "abilityClass",
@@ -38365,7 +38882,7 @@
           "name": "actorPath",
           "type": "string",
           "required": false,
-          "description": "Full actor object path; wins over actorLabel"
+          "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
         },
         {
           "name": "world",
@@ -38375,9 +38892,10 @@
         },
         {
           "name": "pieInstance",
-          "type": "number",
+          "type": "integer",
           "required": false,
-          "description": "PIE world instance (0 = server/primary); omit for the primary world"
+          "description": "PIE world instance (0 = server/primary); omit for the primary world",
+          "minimum": 0
         },
         {
           "name": "executionMode",
@@ -38476,9 +38994,10 @@
         },
         {
           "name": "pieInstance",
-          "type": "number",
+          "type": "integer",
           "required": false,
-          "description": "PIE world instance when world is pie or auto"
+          "description": "PIE world instance when world is pie or auto",
+          "minimum": 0
         },
         {
           "name": "limit",
@@ -38894,7 +39413,8 @@
           "name": "save",
           "type": "boolean",
           "required": false,
-          "description": "Save the mesh after the rebuild (default true)"
+          "description": "Save the mesh after the rebuild (default true)",
+          "default": true
         }
       ]
     },
@@ -39614,13 +40134,13 @@
           "name": "actorLabel",
           "type": "string",
           "required": false,
-          "description": "Actor editor label; pass actorLabel or actorPath"
+          "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
         },
         {
           "name": "actorPath",
           "type": "string",
           "required": false,
-          "description": "Full actor object path; the unambiguous selector, and it wins over actorLabel"
+          "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
         },
         {
           "name": "componentName",
@@ -39700,7 +40220,7 @@
           "name": "actorPath",
           "type": "string",
           "required": false,
-          "description": "Full actor object path. The unambiguous selector, and it wins over actorLabel when both are given"
+          "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
         },
         {
           "name": "inputEvent",
@@ -39771,7 +40291,8 @@
           "name": "pieInstance",
           "type": "integer",
           "required": false,
-          "description": "Which PIE instance, when several are running"
+          "description": "Which PIE world: 0 = server or primary, 1..N = clients. See editor(list_pie_instances)",
+          "minimum": 0
         }
       ]
     },
@@ -39890,7 +40411,8 @@
           "name": "dryRun",
           "type": "boolean",
           "required": false,
-          "description": "Report the matches without moving them (default false)"
+          "description": "Report the matches without moving them (default false)",
+          "default": false
         },
         {
           "name": "transactionLabel",
@@ -39989,7 +40511,8 @@
           "name": "dryRun",
           "type": "boolean",
           "required": false,
-          "description": "Report what would change without writing"
+          "description": "Report what would change without writing",
+          "default": false
         },
         {
           "name": "transactionLabel",
@@ -40034,13 +40557,13 @@
           "name": "actorLabel",
           "type": "string",
           "required": false,
-          "description": "Actor editor label; pass actorLabel or actorPath"
+          "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
         },
         {
           "name": "actorPath",
           "type": "string",
           "required": false,
-          "description": "Full actor object path; the unambiguous selector, and it wins over actorLabel"
+          "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
         },
         {
           "name": "materialPath",
@@ -40063,13 +40586,13 @@
           "name": "actorLabel",
           "type": "string",
           "required": false,
-          "description": "Actor editor label; pass actorLabel or actorPath"
+          "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
         },
         {
           "name": "actorPath",
           "type": "string",
           "required": false,
-          "description": "Full actor object path; the unambiguous selector, and it wins over actorLabel"
+          "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
         },
         {
           "name": "mobility",
@@ -40086,13 +40609,13 @@
           "name": "actorLabel",
           "type": "string",
           "required": false,
-          "description": "Actor editor label; pass actorLabel or actorPath"
+          "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
         },
         {
           "name": "actorPath",
           "type": "string",
           "required": false,
-          "description": "Full actor object path; the unambiguous selector, and it wins over actorLabel"
+          "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
         },
         {
           "name": "propertyName",
@@ -40122,7 +40645,8 @@
           "name": "pieInstance",
           "type": "integer",
           "required": false,
-          "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients"
+          "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients",
+          "minimum": 0
         }
       ]
     },
@@ -40133,13 +40657,13 @@
           "name": "actorLabel",
           "type": "string",
           "required": false,
-          "description": "Actor editor label; pass actorLabel or actorPath"
+          "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
         },
         {
           "name": "actorPath",
           "type": "string",
           "required": false,
-          "description": "Full actor object path; the unambiguous selector, and it wins over actorLabel"
+          "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
         },
         {
           "name": "tags",
@@ -40329,7 +40853,8 @@
           "name": "save",
           "type": "boolean",
           "required": false,
-          "description": "Save the package after the write (default true)"
+          "description": "Save the package after the write (default true)",
+          "default": true
         }
       ]
     },
@@ -40346,7 +40871,7 @@
           "name": "actorPath",
           "type": "string",
           "required": false,
-          "description": "Full actor object path. The unambiguous selector, and it wins over actorLabel when both are given"
+          "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
         },
         {
           "name": "attribute",
@@ -40589,7 +41114,8 @@
           "name": "dryRun",
           "type": "boolean",
           "required": false,
-          "description": "Validate values on transient copies without editing, compiling or saving (default false)"
+          "description": "Validate values on transient copies without editing, compiling or saving (default false)",
+          "default": false
         }
       ]
     },
@@ -40918,9 +41444,10 @@
         },
         {
           "name": "pieInstance",
-          "type": "number",
+          "type": "integer",
           "required": false,
-          "description": "PIE world to target: 0 = server/primary, 1..N = clients. See list_pie_instances"
+          "description": "PIE world to target: 0 = server/primary, 1..N = clients. See list_pie_instances",
+          "minimum": 0
         }
       ]
     },
@@ -41044,13 +41571,13 @@
           "name": "actorLabel",
           "type": "string",
           "required": false,
-          "description": "Actor editor label; pass actorLabel or actorPath"
+          "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
         },
         {
           "name": "actorPath",
           "type": "string",
           "required": false,
-          "description": "Full actor object path; the unambiguous selector"
+          "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
         },
         {
           "name": "assetPath",
@@ -41119,13 +41646,13 @@
           "name": "actorLabel",
           "type": "string",
           "required": false,
-          "description": "Actor editor label; pass actorLabel or actorPath"
+          "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
         },
         {
           "name": "actorPath",
           "type": "string",
           "required": false,
-          "description": "Full actor object path; the unambiguous selector"
+          "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
         },
         {
           "name": "collisionEnabled",
@@ -41158,13 +41685,13 @@
           "name": "actorLabel",
           "type": "string",
           "required": false,
-          "description": "Actor editor label; pass actorLabel or actorPath"
+          "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
         },
         {
           "name": "actorPath",
           "type": "string",
           "required": false,
-          "description": "Full actor object path; the unambiguous selector"
+          "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
         },
         {
           "name": "profileName",
@@ -41267,7 +41794,8 @@
           "name": "dryRun",
           "type": "boolean",
           "required": false,
-          "description": "Report what would change without writing"
+          "description": "Report what would change without writing",
+          "default": false
         },
         {
           "name": "transactionLabel",
@@ -41353,13 +41881,13 @@
           "name": "actorLabel",
           "type": "string",
           "required": false,
-          "description": "Actor editor label; pass actorLabel or actorPath"
+          "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
         },
         {
           "name": "actorPath",
           "type": "string",
           "required": false,
-          "description": "Full actor object path; the unambiguous selector, and it wins over actorLabel"
+          "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
         },
         {
           "name": "componentName",
@@ -41389,7 +41917,8 @@
           "name": "pieInstance",
           "type": "integer",
           "required": false,
-          "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients"
+          "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients",
+          "minimum": 0
         }
       ]
     },
@@ -41400,13 +41929,13 @@
           "name": "actorLabel",
           "type": "string",
           "required": false,
-          "description": "Actor editor label; pass actorLabel or actorPath"
+          "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
         },
         {
           "name": "actorPath",
           "type": "string",
           "required": false,
-          "description": "Full actor object path; the unambiguous selector, and it wins over actorLabel"
+          "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
         },
         {
           "name": "skeletalMesh",
@@ -41431,7 +41960,8 @@
           "name": "pieInstance",
           "type": "integer",
           "required": false,
-          "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients"
+          "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients",
+          "minimum": 0
         }
       ],
       "choices": [
@@ -41550,7 +42080,8 @@
           "name": "save",
           "type": "boolean",
           "required": false,
-          "description": "Save the package (default true); false leaves it dirty"
+          "description": "Save the package (default true); false leaves it dirty",
+          "default": true
         }
       ]
     },
@@ -41754,13 +42285,15 @@
           "name": "dryRun",
           "type": "boolean",
           "required": false,
-          "description": "Validate every cell and report what would change without writing (default false)"
+          "description": "Validate every cell and report what would change without writing (default false)",
+          "default": false
         },
         {
           "name": "save",
           "type": "boolean",
           "required": false,
-          "description": "Save the package after the write (default false)"
+          "description": "Save the package after the write (default false)",
+          "default": false
         }
       ]
     },
@@ -42131,13 +42664,13 @@
           "name": "actorLabel",
           "type": "string",
           "required": false,
-          "description": "Actor editor label; pass actorLabel or actorPath"
+          "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
         },
         {
           "name": "actorPath",
           "type": "string",
           "required": false,
-          "description": "Full actor object path; the unambiguous selector, and it wins over actorLabel"
+          "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
         },
         {
           "name": "componentName",
@@ -42175,13 +42708,13 @@
           "name": "actorLabel",
           "type": "string",
           "required": false,
-          "description": "Actor editor label; pass actorLabel or actorPath"
+          "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
         },
         {
           "name": "actorPath",
           "type": "string",
           "required": false,
-          "description": "Full actor object path; the unambiguous selector, and it wins over actorLabel"
+          "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
         },
         {
           "name": "world",
@@ -42193,7 +42726,8 @@
           "name": "pieInstance",
           "type": "integer",
           "required": false,
-          "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients"
+          "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients",
+          "minimum": 0
         },
         {
           "name": "fogDensity",
@@ -42491,7 +43025,8 @@
           "name": "save",
           "type": "boolean",
           "required": false,
-          "description": "Persist the asset (default true); false defers the write"
+          "description": "Persist the asset (default true); false defers the write",
+          "default": true
         }
       ]
     },
@@ -42532,7 +43067,8 @@
           "name": "save",
           "type": "boolean",
           "required": false,
-          "description": "Persist the asset (default true); false defers the write"
+          "description": "Persist the asset (default true); false defers the write",
+          "default": true
         }
       ]
     },
@@ -42945,13 +43481,13 @@
           "name": "actorLabel",
           "type": "string",
           "required": false,
-          "description": "Actor editor label; pass actorLabel or actorPath"
+          "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
         },
         {
           "name": "actorPath",
           "type": "string",
           "required": false,
-          "description": "Full actor object path; the unambiguous selector, and it wins over actorLabel"
+          "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
         },
         {
           "name": "intensity",
@@ -43022,7 +43558,7 @@
           "name": "actorPath",
           "type": "string",
           "required": false,
-          "description": "Full actor object path. The unambiguous selector, and it wins over actorLabel when both are given"
+          "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
         },
         {
           "name": "attributeSet",
@@ -43075,7 +43611,7 @@
           "name": "actorPath",
           "type": "string",
           "required": false,
-          "description": "Full actor object path; wins over actorLabel"
+          "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
         },
         {
           "name": "world",
@@ -43085,9 +43621,10 @@
         },
         {
           "name": "pieInstance",
-          "type": "number",
+          "type": "integer",
           "required": false,
-          "description": "PIE world instance (0 = server/primary); omit for the primary world"
+          "description": "PIE world instance (0 = server/primary); omit for the primary world",
+          "minimum": 0
         },
         {
           "name": "key",
@@ -43116,7 +43653,7 @@
           "name": "actorLabel",
           "type": "string",
           "required": false,
-          "description": "Editor label of the actor; pass this or actorPath"
+          "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
         },
         {
           "name": "actorPath",
@@ -43240,7 +43777,8 @@
           "name": "save",
           "type": "boolean",
           "required": false,
-          "description": "Persist the asset (default true); false defers the write"
+          "description": "Persist the asset (default true); false defers the write",
+          "default": true
         }
       ]
     },
@@ -43449,9 +43987,10 @@
         },
         {
           "name": "pieInstance",
-          "type": "number",
+          "type": "integer",
           "required": false,
-          "description": "Which PIE world when several run (0 = server/primary). See editor(list_pie_instances)"
+          "description": "Which PIE world: 0 = server or primary, 1..N = clients. See editor(list_pie_instances)",
+          "minimum": 0
         },
         {
           "name": "designerSlot",
@@ -43771,13 +44310,15 @@
           "name": "save",
           "type": "boolean",
           "required": false,
-          "description": "Save each changed mesh (default true)"
+          "description": "Save each changed mesh (default true)",
+          "default": true
         },
         {
           "name": "dryRun",
           "type": "boolean",
           "required": false,
-          "description": "Preflight and report without writing (default false)"
+          "description": "Preflight and report without writing (default false)",
+          "default": false
         },
         {
           "name": "continueOnError",
@@ -43885,13 +44426,15 @@
           "name": "save",
           "type": "boolean",
           "required": false,
-          "description": "Save the mesh (default true)"
+          "description": "Save the mesh (default true)",
+          "default": true
         },
         {
           "name": "dryRun",
           "type": "boolean",
           "required": false,
-          "description": "Preflight and report without writing (default false)"
+          "description": "Preflight and report without writing (default false)",
+          "default": false
         }
       ]
     },
@@ -44033,13 +44576,13 @@
           "name": "actorLabel",
           "type": "string",
           "required": false,
-          "description": "Actor label. Editor labels are not unique, so a label naming several actors is refused"
+          "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
         },
         {
           "name": "actorPath",
           "type": "string",
           "required": false,
-          "description": "Full actor object path, the unambiguous selector. Wins over actorLabel"
+          "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
         },
         {
           "name": "mode",
@@ -44067,9 +44610,10 @@
         },
         {
           "name": "pieInstance",
-          "type": "number",
+          "type": "integer",
           "required": false,
-          "description": "PIE world to target: 0 = server/primary, 1..N = clients. See list_pie_instances"
+          "description": "PIE world to target: 0 = server/primary, 1..N = clients. See list_pie_instances",
+          "minimum": 0
         }
       ]
     },
@@ -44367,7 +44911,7 @@
           "name": "actorPath",
           "type": "string",
           "required": false,
-          "description": "Full actor object path; the unambiguous selector"
+          "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
         },
         {
           "name": "parameterName",
@@ -44636,9 +45180,10 @@
         },
         {
           "name": "pieInstance",
-          "type": "number",
+          "type": "integer",
           "required": false,
-          "description": "PIE world to target: 0 = server/primary, 1..N = clients. See list_pie_instances"
+          "description": "PIE world to target: 0 = server/primary, 1..N = clients. See list_pie_instances",
+          "minimum": 0
         }
       ]
     },
@@ -44678,7 +45223,7 @@
           "name": "actorPath",
           "type": "string",
           "required": false,
-          "description": "Full actor object path; the unambiguous selector"
+          "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
         },
         {
           "name": "componentName",
@@ -44729,7 +45274,7 @@
           "name": "actorPath",
           "type": "string",
           "required": false,
-          "description": "Full actor object path; the unambiguous selector"
+          "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
         },
         {
           "name": "componentName",
@@ -45112,7 +45657,8 @@
           "name": "save",
           "type": "boolean",
           "required": false,
-          "description": "Save the asset after the edit (default true)"
+          "description": "Save the asset after the edit (default true)",
+          "default": true
         }
       ],
       "choices": [
@@ -45263,7 +45809,8 @@
           "name": "save",
           "type": "boolean",
           "required": false,
-          "description": "Save the asset after the edit (default true)"
+          "description": "Save the asset after the edit (default true)",
+          "default": true
         }
       ]
     },
@@ -45274,13 +45821,13 @@
           "name": "actorLabel",
           "type": "string",
           "required": false,
-          "description": "Actor editor label; pass actorLabel or actorPath"
+          "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
         },
         {
           "name": "actorPath",
           "type": "string",
           "required": false,
-          "description": "Full actor object path; the unambiguous selector"
+          "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
         },
         {
           "name": "mass",
@@ -45350,9 +45897,10 @@
         },
         {
           "name": "pieInstance",
-          "type": "number",
+          "type": "integer",
           "required": false,
-          "description": "PIE world to target: 0 = server/primary, 1..N = clients. See list_pie_instances"
+          "description": "PIE world to target: 0 = server/primary, 1..N = clients. See list_pie_instances",
+          "minimum": 0
         }
       ]
     },
@@ -45374,13 +45922,13 @@
           "name": "actorLabel",
           "type": "string",
           "required": false,
-          "description": "Actor label. Editor labels are not unique, so a label naming several actors is refused"
+          "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
         },
         {
           "name": "actorPath",
           "type": "string",
           "required": false,
-          "description": "Full actor object path, the unambiguous selector. Wins over actorLabel"
+          "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
         },
         {
           "name": "playerIndex",
@@ -45402,9 +45950,10 @@
         },
         {
           "name": "pieInstance",
-          "type": "number",
+          "type": "integer",
           "required": false,
-          "description": "PIE world to target: 0 = server/primary, 1..N = clients. See list_pie_instances"
+          "description": "PIE world to target: 0 = server/primary, 1..N = clients. See list_pie_instances",
+          "minimum": 0
         }
       ],
       "choices": [
@@ -45482,13 +46031,15 @@
           "name": "dryRun",
           "type": "boolean",
           "required": false,
-          "description": "Validate and report proposed settings without changing the asset (default false)"
+          "description": "Validate and report proposed settings without changing the asset (default false)",
+          "default": false
         },
         {
           "name": "save",
           "type": "boolean",
           "required": false,
-          "description": "Persist the asset (default true); false defers the write"
+          "description": "Persist the asset (default true); false defers the write",
+          "default": true
         }
       ],
       "choices": [
@@ -45615,13 +46166,13 @@
           "name": "actorLabel",
           "type": "string",
           "required": false,
-          "description": "Actor editor label; pass actorLabel or actorPath"
+          "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
         },
         {
           "name": "actorPath",
           "type": "string",
           "required": false,
-          "description": "Full actor object path; the unambiguous selector, and it wins over actorLabel"
+          "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
         },
         {
           "name": "componentName",
@@ -45675,7 +46226,8 @@
           "name": "save",
           "type": "boolean",
           "required": false,
-          "description": "Save the spawner package after a change (default true)"
+          "description": "Save the spawner package after a change (default true)",
+          "default": true
         }
       ]
     },
@@ -45708,7 +46260,8 @@
           "name": "save",
           "type": "boolean",
           "required": false,
-          "description": "Save the package to disk after the write (default true; false leaves it dirty)"
+          "description": "Save the package to disk after the write (default true; false leaves it dirty)",
+          "default": true
         }
       ]
     },
@@ -46042,9 +46595,10 @@
         },
         {
           "name": "pieInstance",
-          "type": "number",
+          "type": "integer",
           "required": false,
-          "description": "PIE world to target: 0 = server/primary, 1..N = clients. See list_pie_instances"
+          "description": "PIE world to target: 0 = server/primary, 1..N = clients. See list_pie_instances",
+          "minimum": 0
         }
       ],
       "choices": [
@@ -46177,13 +46731,13 @@
           "name": "actorLabel",
           "type": "string",
           "required": false,
-          "description": "Actor label. Editor labels are not unique, so a label naming several actors is refused"
+          "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
         },
         {
           "name": "actorPath",
           "type": "string",
           "required": false,
-          "description": "Full actor object path, the unambiguous selector. Wins over actorLabel"
+          "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
         },
         {
           "name": "sectionIndex",
@@ -46280,13 +46834,13 @@
           "name": "actorLabel",
           "type": "string",
           "required": false,
-          "description": "Actor label. Editor labels are not unique, so a label naming several actors is refused"
+          "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
         },
         {
           "name": "actorPath",
           "type": "string",
           "required": false,
-          "description": "Full actor object path, the unambiguous selector. Wins over actorLabel"
+          "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
         },
         {
           "name": "sectionIndex",
@@ -46373,13 +46927,13 @@
           "name": "actorLabel",
           "type": "string",
           "required": false,
-          "description": "Actor editor label; pass actorLabel or actorPath"
+          "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
         },
         {
           "name": "actorPath",
           "type": "string",
           "required": false,
-          "description": "Full actor object path; the unambiguous selector"
+          "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
         },
         {
           "name": "simulate",
@@ -46689,13 +47243,13 @@
           "name": "actorLabel",
           "type": "string",
           "required": false,
-          "description": "Actor editor label; pass actorLabel or actorPath"
+          "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
         },
         {
           "name": "actorPath",
           "type": "string",
           "required": false,
-          "description": "Full actor object path; the unambiguous selector, and it wins over actorLabel"
+          "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
         },
         {
           "name": "points",
@@ -47352,7 +47906,8 @@
           "name": "save",
           "type": "boolean",
           "required": false,
-          "description": "Save the mesh after the rebuild (default true)"
+          "description": "Save the mesh after the rebuild (default true)",
+          "default": true
         }
       ]
     },
@@ -47749,13 +48304,15 @@
           "name": "save",
           "type": "boolean",
           "required": false,
-          "description": "Save changed textures (default false; otherwise leave the packages dirty)"
+          "description": "Save changed textures (default false; otherwise leave the packages dirty)",
+          "default": false
         },
         {
           "name": "dryRun",
           "type": "boolean",
           "required": false,
-          "description": "Validate and report without importing, writing or saving (default false)"
+          "description": "Validate and report without importing, writing or saving (default false)",
+          "default": false
         }
       ],
       "choices": [
@@ -47961,13 +48518,15 @@
           "name": "save",
           "type": "boolean",
           "required": false,
-          "description": "Save the mesh (default true)"
+          "description": "Save the mesh (default true)",
+          "default": true
         },
         {
           "name": "dryRun",
           "type": "boolean",
           "required": false,
-          "description": "Report without writing"
+          "description": "Report without writing",
+          "default": false
         }
       ]
     },
@@ -48188,13 +48747,13 @@
           "name": "actorLabel",
           "type": "string",
           "required": false,
-          "description": "Actor editor label; pass actorLabel or actorPath"
+          "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
         },
         {
           "name": "actorPath",
           "type": "string",
           "required": false,
-          "description": "Full actor object path; the unambiguous selector, and it wins over actorLabel"
+          "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
         },
         {
           "name": "properties",
@@ -48211,13 +48770,13 @@
           "name": "actorLabel",
           "type": "string",
           "required": false,
-          "description": "Actor editor label; pass actorLabel or actorPath"
+          "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
         },
         {
           "name": "actorPath",
           "type": "string",
           "required": false,
-          "description": "Full actor object path; the unambiguous selector, and it wins over actorLabel"
+          "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
         },
         {
           "name": "propertyName",
@@ -48570,7 +49129,8 @@
           "name": "pieInstance",
           "type": "integer",
           "required": false,
-          "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients"
+          "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients",
+          "minimum": 0
         },
         {
           "name": "multi",
@@ -48672,13 +49232,13 @@
           "name": "actorLabel",
           "type": "string",
           "required": false,
-          "description": "Actor editor label; pass actorLabel or actorPath"
+          "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
         },
         {
           "name": "actorPath",
           "type": "string",
           "required": false,
-          "description": "Full actor object path; the unambiguous selector, and it wins over actorLabel"
+          "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
         },
         {
           "name": "floorOffset",
@@ -48702,7 +49262,8 @@
           "name": "pieInstance",
           "type": "integer",
           "required": false,
-          "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients"
+          "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients",
+          "minimum": 0
         }
       ]
     },
@@ -48713,13 +49274,13 @@
           "name": "actorLabel",
           "type": "string",
           "required": false,
-          "description": "Actor editor label; pass actorLabel or actorPath"
+          "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
         },
         {
           "name": "actorPath",
           "type": "string",
           "required": false,
-          "description": "Full actor object path; the unambiguous selector, and it wins over actorLabel"
+          "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
         },
         {
           "name": "componentName",
@@ -48799,7 +49360,8 @@
           "name": "dryRun",
           "type": "boolean",
           "required": false,
-          "description": "Report what would change without writing"
+          "description": "Report what would change without writing",
+          "default": false
         }
       ]
     },
@@ -48854,7 +49416,7 @@
           "name": "onConflict",
           "type": "string",
           "required": false,
-          "description": "skip (default) returns the existing asset, error refuses; it never overwrites"
+          "description": "When the asset already exists: skip (default) returns it untouched | error refuses; it never overwrites"
         },
         {
           "name": "nodes",
@@ -49418,7 +49980,8 @@
           "name": "dryRun",
           "type": "boolean",
           "required": false,
-          "description": "Return every computed transform without spawning"
+          "description": "Return every computed transform without spawning",
+          "default": false
         },
         {
           "name": "maxSpawn",
@@ -49858,7 +50421,8 @@
           "name": "pieInstance",
           "type": "integer",
           "required": false,
-          "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients"
+          "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients",
+          "minimum": 0
         },
         {
           "name": "actorClass",
@@ -50052,7 +50616,7 @@
           "name": "actorPath",
           "type": "string",
           "required": false,
-          "description": "Full actor object path; wins over actorLabel"
+          "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
         },
         {
           "name": "world",
@@ -50062,9 +50626,10 @@
         },
         {
           "name": "pieInstance",
-          "type": "number",
+          "type": "integer",
           "required": false,
-          "description": "PIE world instance (0 = server/primary); omit for the primary world"
+          "description": "PIE world instance (0 = server/primary); omit for the primary world",
+          "minimum": 0
         },
         {
           "name": "mode",
@@ -50114,7 +50679,8 @@
           "name": "pieInstance",
           "type": "integer",
           "required": false,
-          "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients"
+          "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients",
+          "minimum": 0
         },
         {
           "name": "maxResults",
@@ -50143,13 +50709,13 @@
           "name": "actorLabel",
           "type": "string",
           "required": false,
-          "description": "Actor label. Editor labels are not unique, so a label naming several actors is refused"
+          "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
         },
         {
           "name": "actorPath",
           "type": "string",
           "required": false,
-          "description": "Full actor object path, the unambiguous selector. Wins over actorLabel"
+          "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
         },
         {
           "name": "location",
@@ -50183,9 +50749,10 @@
         },
         {
           "name": "pieInstance",
-          "type": "number",
+          "type": "integer",
           "required": false,
-          "description": "PIE world to target: 0 = server/primary, 1..N = clients. See list_pie_instances"
+          "description": "PIE world to target: 0 = server/primary, 1..N = clients. See list_pie_instances",
+          "minimum": 0
         }
       ]
     },
@@ -50244,7 +50811,8 @@
           "name": "pieInstance",
           "type": "integer",
           "required": false,
-          "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients"
+          "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients",
+          "minimum": 0
         }
       ]
     },
@@ -50261,7 +50829,7 @@
           "name": "actorPath",
           "type": "string",
           "required": false,
-          "description": "Full actor object path; the unambiguous selector"
+          "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
         },
         {
           "name": "graphPath",
@@ -50297,7 +50865,7 @@
           "name": "actorPath",
           "type": "string",
           "required": false,
-          "description": "Full actor object path. The unambiguous selector, and it wins over actorLabel when both are given"
+          "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
         },
         {
           "name": "abilityClass",
@@ -50421,7 +50989,8 @@
           "name": "save",
           "type": "boolean",
           "required": false,
-          "description": "Save each sequence (default true)"
+          "description": "Save each sequence (default true)",
+          "default": true
         }
       ]
     },
@@ -50479,13 +51048,15 @@
           "name": "dryRun",
           "type": "boolean",
           "required": false,
-          "description": "Validate every LOD and report what would move without writing anything"
+          "description": "Validate every LOD and report what would move without writing anything",
+          "default": false
         },
         {
           "name": "save",
           "type": "boolean",
           "required": false,
-          "description": "Save the mesh after the rebuild (default true)"
+          "description": "Save the mesh after the rebuild (default true)",
+          "default": true
         }
       ],
       "choices": [
@@ -50578,13 +51149,15 @@
           "name": "save",
           "type": "boolean",
           "required": false,
-          "description": "Save the mesh (default true)"
+          "description": "Save the mesh (default true)",
+          "default": true
         },
         {
           "name": "dryRun",
           "type": "boolean",
           "required": false,
-          "description": "Report without writing"
+          "description": "Report without writing",
+          "default": false
         }
       ]
     },
@@ -50724,7 +51297,8 @@
           "name": "dryRun",
           "type": "boolean",
           "required": false,
-          "description": "Report what would change without writing"
+          "description": "Report what would change without writing",
+          "default": false
         }
       ],
       "choices": [
@@ -50843,13 +51417,15 @@
           "name": "save",
           "type": "boolean",
           "required": false,
-          "description": "Save the mesh (default true)"
+          "description": "Save the mesh (default true)",
+          "default": true
         },
         {
           "name": "dryRun",
           "type": "boolean",
           "required": false,
-          "description": "Report without writing"
+          "description": "Report without writing",
+          "default": false
         },
         {
           "name": "rasterSize",
@@ -50896,13 +51472,13 @@
           "name": "actorLabel",
           "type": "string",
           "required": false,
-          "description": "Actor editor label; pass actorLabel or actorPath"
+          "description": "Actor editor label. Labels are not unique, so a label naming several actors is refused; pass actorPath then"
         },
         {
           "name": "actorPath",
           "type": "string",
           "required": false,
-          "description": "Full actor object path; the unambiguous selector, and it wins over actorLabel"
+          "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
         },
         {
           "name": "componentName",
@@ -51062,7 +51638,8 @@
           "name": "save",
           "type": "boolean",
           "required": false,
-          "description": "Save the assets after export (default true)"
+          "description": "Save the assets after export (default true)",
+          "default": true
         }
       ]
     },
@@ -51379,5 +51956,435 @@
         }
       ]
     }
+  },
+  "actionFacts": {
+    "acquire_lock": {
+      "serverInternal": "the server's asset locks (src/dispatch/locking.ts) and asset(lock, unlock, unlock_all)"
+    },
+    "add_widget": {
+      "timeoutSeconds": 120
+    },
+    "analyze_insights_trace": {
+      "timeoutSeconds": 600
+    },
+    "analyze_landscape_terrain": {
+      "timeoutSeconds": 120
+    },
+    "apply_landscape_erosion": {
+      "timeoutSeconds": 600
+    },
+    "apply_landscape_splines": {
+      "timeoutSeconds": 300
+    },
+    "apply_mesh_fracture": {
+      "timeoutSeconds": 600
+    },
+    "apply_mesh_hole_fill": {
+      "timeoutSeconds": 300
+    },
+    "apply_mesh_mirror": {
+      "timeoutSeconds": 300
+    },
+    "apply_mesh_remesh": {
+      "timeoutSeconds": 300
+    },
+    "apply_mesh_simplify": {
+      "timeoutSeconds": 300
+    },
+    "audit_asset_hygiene": {
+      "timeoutSeconds": 300
+    },
+    "audit_blueprint_dead_code": {
+      "timeoutSeconds": 600
+    },
+    "audit_level_performance": {
+      "timeoutSeconds": 300
+    },
+    "audit_replication": {
+      "timeoutSeconds": 300
+    },
+    "batch_retarget_animations": {
+      "timeoutSeconds": 300
+    },
+    "batch_set_actor_properties": {
+      "timeoutSeconds": 300
+    },
+    "batch_set_foliage_settings_where": {
+      "timeoutSeconds": 300
+    },
+    "begin_editor_transaction": {
+      "refusedInBatch": "a batch is already one transaction, and this would split or abort it; leave the batch to record the transaction"
+    },
+    "build_hlod_actors": {
+      "timeoutSeconds": 1800
+    },
+    "build_tree": {
+      "timeoutSeconds": 120
+    },
+    "build_world_partition_hlods": {
+      "timeoutSeconds": 3600
+    },
+    "build_world_partition_minimap": {
+      "timeoutSeconds": 3600
+    },
+    "bulk_read_asset_properties": {
+      "timeoutSeconds": 300
+    },
+    "bulk_restore_data_assets": {
+      "timeoutSeconds": 120
+    },
+    "bulk_set_component_property": {
+      "timeoutSeconds": 300
+    },
+    "bulk_upsert_data_assets": {
+      "timeoutSeconds": 120
+    },
+    "cancel_editor_transaction": {
+      "refusedInBatch": "a batch is already one transaction, and this would split or abort it; leave the batch to record the transaction"
+    },
+    "cancel_request": {
+      "servedOffGameThread": true,
+      "serverInternal": "the server's bridge client (src/bridge)"
+    },
+    "checkpoint_diff_asset": {
+      "timeoutSeconds": 300,
+      "serverInternal": "the server's checkpoint service (src/checkpoints/service.ts)"
+    },
+    "checkpoint_diff_blueprint": {
+      "serverInternal": "the server's checkpoint service (src/checkpoints/service.ts)"
+    },
+    "checkpoint_finish_restore": {
+      "timeoutSeconds": 300
+    },
+    "checkpoint_open_native_diff": {
+      "timeoutSeconds": 120,
+      "serverInternal": "the server's checkpoint service (src/checkpoints/service.ts)"
+    },
+    "clear_dialog_policy": {
+      "modalSafe": true
+    },
+    "clear_param_echo": {
+      "servedOffGameThread": true,
+      "notEchoed": true,
+      "serverInternal": "the server's bridge client (src/bridge)"
+    },
+    "close_window": {
+      "modalSafe": true
+    },
+    "compile_customizable_object": {
+      "timeoutSeconds": 600
+    },
+    "compile_localization_target": {
+      "timeoutSeconds": 1800
+    },
+    "convert_brushes_to_static_mesh": {
+      "timeoutSeconds": 600
+    },
+    "create_cpp_class": {
+      "timeoutSeconds": 300
+    },
+    "datasmith_import": {
+      "timeoutSeconds": 600
+    },
+    "datasmith_inspect": {
+      "timeoutSeconds": 300
+    },
+    "datasmith_reimport": {
+      "timeoutSeconds": 600
+    },
+    "delete_exact_labeled_actors_in_levels": {
+      "timeoutSeconds": 300
+    },
+    "delete_world_partition_hlods": {
+      "timeoutSeconds": 3600
+    },
+    "end_editor_transaction": {
+      "refusedInBatch": "a batch is already one transaction, and this would split or abort it; leave the batch to record the transaction"
+    },
+    "epic_call_mcp_tool": {
+      "timeoutSeconds": 300
+    },
+    "epic_call_tool": {
+      "timeoutSeconds": 300
+    },
+    "execute_batch": {
+      "refusedInBatch": "a nested batch is the same game-thread job twice; put its steps in this batch instead",
+      "serverInternal": "editor(batch), which builds the steps from category actions"
+    },
+    "export_blueprint_batch": {
+      "timeoutSeconds": 600
+    },
+    "export_landscape_heightmap": {
+      "timeoutSeconds": 300
+    },
+    "fix_asset_hygiene": {
+      "timeoutSeconds": 300
+    },
+    "fixup_redirectors": {
+      "timeoutSeconds": 300
+    },
+    "flush_blueprint_component_templates": {
+      "timeoutSeconds": 120
+    },
+    "gather_localization_target": {
+      "timeoutSeconds": 1800
+    },
+    "generate_mesh_collision": {
+      "timeoutSeconds": 300
+    },
+    "generate_skeletal_mesh_lods": {
+      "timeoutSeconds": 600
+    },
+    "get_blueprint_connections": {
+      "timeoutSeconds": 600
+    },
+    "get_bridge_capabilities": {
+      "servedOffGameThread": true,
+      "serverInternal": "the server's bridge client (src/bridge)"
+    },
+    "get_dialog_policy": {
+      "modalSafe": true
+    },
+    "get_engine_state": {
+      "servedOffGameThread": true,
+      "serverInternal": "the server's bridge client (src/bridge)"
+    },
+    "get_landscape_height_region": {
+      "timeoutSeconds": 120
+    },
+    "get_landscape_holes": {
+      "timeoutSeconds": 120
+    },
+    "get_landscape_layer_weight_region": {
+      "timeoutSeconds": 120
+    },
+    "get_landscape_slope_map": {
+      "timeoutSeconds": 120
+    },
+    "get_param_echo": {
+      "servedOffGameThread": true,
+      "notEchoed": true,
+      "serverInternal": "the server's bridge client (src/bridge)"
+    },
+    "get_skinned_vertices": {
+      "timeoutSeconds": 300
+    },
+    "get_static_mesh_geometry": {
+      "timeoutSeconds": 300
+    },
+    "import_landscape_heightmap": {
+      "timeoutSeconds": 600
+    },
+    "invoke_object_functions": {
+      "timeoutSeconds": 300
+    },
+    "list_dialogs": {
+      "modalSafe": true
+    },
+    "list_windows": {
+      "modalSafe": true
+    },
+    "live_coding_compile": {
+      "timeoutSeconds": 300
+    },
+    "load_actor_descs": {
+      "timeoutSeconds": 300
+    },
+    "load_region": {
+      "timeoutSeconds": 300
+    },
+    "merge_landscape_edit_layers": {
+      "timeoutSeconds": 300
+    },
+    "mesh_boolean": {
+      "timeoutSeconds": 300
+    },
+    "metahuman_assemble": {
+      "timeoutSeconds": 900
+    },
+    "metahuman_read_character": {
+      "timeoutSeconds": 300
+    },
+    "metahuman_request_rig": {
+      "timeoutSeconds": 900
+    },
+    "metahuman_request_textures": {
+      "timeoutSeconds": 900
+    },
+    "metahuman_set_body": {
+      "timeoutSeconds": 300
+    },
+    "metahuman_set_wardrobe": {
+      "timeoutSeconds": 300
+    },
+    "mrq_render": {
+      "timeoutSeconds": 1800
+    },
+    "paint_landscape_layer": {
+      "timeoutSeconds": 120
+    },
+    "pie_start_ignoring_blueprint_errors": {
+      "serverInternal": "editor(play_in_editor_ignore_blueprint_errors), after the server authorizes the launch"
+    },
+    "plan_real_world_landscape": {
+      "timeoutSeconds": 120
+    },
+    "press_window_button": {
+      "modalSafe": true
+    },
+    "query_components": {
+      "timeoutSeconds": 300
+    },
+    "read_blueprint_graph": {
+      "timeoutSeconds": 180
+    },
+    "read_skeletal_mesh_vertices": {
+      "timeoutSeconds": 300
+    },
+    "rebuild_water_zone": {
+      "timeoutSeconds": 120
+    },
+    "recreate_physics_state": {
+      "timeoutSeconds": 300
+    },
+    "redo": {
+      "refusedInBatch": "inside a batch it would undo or redo the batch's own earlier steps; call it after the batch"
+    },
+    "refresh_landscape_physical_material_collision": {
+      "timeoutSeconds": 600
+    },
+    "release_lock": {
+      "serverInternal": "the server's asset locks (src/dispatch/locking.ts) and asset(lock, unlock, unlock_all)"
+    },
+    "release_session_locks": {
+      "serverInternal": "the server's asset locks (src/dispatch/locking.ts) and asset(lock, unlock, unlock_all)"
+    },
+    "remove_components_by_class": {
+      "timeoutSeconds": 300
+    },
+    "remove_widget": {
+      "timeoutSeconds": 120
+    },
+    "rename_widget": {
+      "timeoutSeconds": 120
+    },
+    "render_mesh_studio": {
+      "timeoutSeconds": 600
+    },
+    "render_sequence_frames": {
+      "timeoutSeconds": 600
+    },
+    "rerun_construction_scripts": {
+      "timeoutSeconds": 300
+    },
+    "resave_mesh_users": {
+      "timeoutSeconds": 300
+    },
+    "respond_to_dialog": {
+      "modalSafe": true
+    },
+    "run_automation_tests": {
+      "timeoutSeconds": 300
+    },
+    "scale_mesh_geometry": {
+      "timeoutSeconds": 300
+    },
+    "sculpt_landscape": {
+      "timeoutSeconds": 120
+    },
+    "sculpt_landscape_region": {
+      "timeoutSeconds": 300
+    },
+    "search_blueprint_call_sites": {
+      "timeoutSeconds": 600
+    },
+    "search_blueprint_nodes": {
+      "timeoutSeconds": 600
+    },
+    "semantic_search": {
+      "timeoutSeconds": 120
+    },
+    "set_actor_hlod_layer": {
+      "timeoutSeconds": 300
+    },
+    "set_blueprint_component_properties_batch": {
+      "timeoutSeconds": 600
+    },
+    "set_component_materials": {
+      "timeoutSeconds": 300
+    },
+    "set_dialog_policy": {
+      "modalSafe": true
+    },
+    "set_landscape_height_region": {
+      "timeoutSeconds": 300
+    },
+    "set_landscape_holes": {
+      "timeoutSeconds": 300
+    },
+    "set_landscape_layer_weight_region": {
+      "timeoutSeconds": 300
+    },
+    "set_mesh_simple_collision": {
+      "timeoutSeconds": 300
+    },
+    "simulate_procedural_foliage": {
+      "timeoutSeconds": 600
+    },
+    "snap_instances_to_surface": {
+      "timeoutSeconds": 300
+    },
+    "source_control_connect": {
+      "timeoutSeconds": 120
+    },
+    "source_control_diff": {
+      "timeoutSeconds": 120
+    },
+    "source_control_get_status": {
+      "timeoutSeconds": 120
+    },
+    "source_control_history": {
+      "timeoutSeconds": 120
+    },
+    "source_control_list_changes": {
+      "timeoutSeconds": 120
+    },
+    "source_control_submit": {
+      "timeoutSeconds": 120
+    },
+    "source_control_sync": {
+      "timeoutSeconds": 300
+    },
+    "spawn_actors_batch": {
+      "timeoutSeconds": 300
+    },
+    "start_csv_profile": {
+      "timeoutSeconds": 30
+    },
+    "stop_csv_profile": {
+      "timeoutSeconds": 90
+    },
+    "summarize_static_mesh_usage": {
+      "timeoutSeconds": 300
+    },
+    "transform_skinned_part": {
+      "timeoutSeconds": 600
+    },
+    "trigger_hitch": {
+      "timeoutSeconds": 30
+    },
+    "undo": {
+      "refusedInBatch": "inside a batch it would undo or redo the batch's own earlier steps; call it after the batch"
+    },
+    "undo_redo_steps": {
+      "refusedInBatch": "inside a batch it would undo or redo the batch's own earlier steps; call it after the batch"
+    },
+    "unload_loaded_regions": {
+      "timeoutSeconds": 300
+    }
+  },
+  "timeouts": {
+    "defaultSeconds": 30,
+    "maxRequestSeconds": 3600
   }
 }

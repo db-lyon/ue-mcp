@@ -163,7 +163,7 @@ void FNiagaraHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	};
 	auto OnConflictParam = []()
 	{
-		return MCPParam::Optional(TEXT("onConflict"), EType::String, TEXT("When the asset exists: skip (default, report it) | error"));
+		return MCPSharedParam::OnConflict();
 	};
 	auto PinListParam = [](const TCHAR* Name, const TCHAR* Description)
 	{
@@ -172,8 +172,8 @@ void FNiagaraHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 			MCPParam::OptionalField(TEXT("type"), EType::String, TEXT("HLSL type (default float)")),
 		});
 	};
-	const FMCPParamSpec ActorLabelParam = MCPParam::Optional(TEXT("actorLabel"), EType::String, TEXT("Editor label of the actor holding the NiagaraComponent; a label naming several actors is refused"));
-	const FMCPParamSpec ActorPathParam = MCPParam::Optional(TEXT("actorPath"), EType::String, TEXT("Full actor object path; the unambiguous selector"));
+	const FMCPParamSpec ActorLabelParam = MCPSharedParam::ActorLabel().Describe(TEXT("Editor label of the actor holding the NiagaraComponent; a label naming several actors is refused"));
+	const FMCPParamSpec ActorPathParam = MCPSharedParam::ActorPath();
 	const FMCPSpecRules ActorChoice = MCPSpec::ExactlyOne({ { TEXT("actorLabel") }, { TEXT("actorPath") } });
 	// The custom HLSL pair address a graph by script asset, or by system + stack.
 	const FMCPParamSpec HlslScriptPathParam = MCPParam::Optional(TEXT("scriptPath"), EType::String, TEXT("NiagaraScript asset holding the CustomHLSL node"));
@@ -460,8 +460,8 @@ void FNiagaraHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("tickDelta"), EType::Number, TEXT("Seconds per advanced tick (default 1/60)")),
 		MCPParam::Optional(TEXT("attributeCaptureMode"), EType::String, TEXT("All (default) | RenderingOnly | ExplicitAttributes")),
 		MCPParam::Optional(TEXT("explicitAttributes"), EType::Array, TEXT("With ExplicitAttributes: names written Emitter.Particles.Attribute")).Items(EType::String),
-		MCPParam::Optional(TEXT("world"), EType::String, TEXT("World scope: editor (default) | pie")),
-		MCPParam::Optional(TEXT("pieInstance"), EType::Integer, TEXT("Which PIE world when world is pie: 0 = server or primary, 1..N = clients")),
+		MCPSharedParam::World().Describe(TEXT("World scope: editor (default) | pie")),
+		MCPSharedParam::PieInstance().Describe(TEXT("Which PIE world when world is pie: 0 = server or primary, 1..N = clients")),
 	}, ActorChoice);
 	Registry.RegisterHandler(TEXT("read_niagara_sim_cache"), &ReadNiagaraSimCache, {
 		MCPParam::Required(TEXT("simCachePath"), EType::String, TEXT("simCachePath from capture_niagara_sim_cache, or a NiagaraSimCache asset path")),

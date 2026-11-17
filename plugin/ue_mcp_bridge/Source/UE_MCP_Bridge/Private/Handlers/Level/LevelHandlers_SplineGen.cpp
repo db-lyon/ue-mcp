@@ -288,8 +288,8 @@ void FLevelSplineGenHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	FMCPHandlerRegistry::FCategoryScope CategoryScope(Registry, TEXT("level"));
 	using EType = EMCPParamType;
 
-	const FMCPParamSpec SpecActorLabel = MCPParam::Optional(TEXT("actorLabel"), EType::String, TEXT("Label of the actor that owns the spline; pass actorLabel or actorPath"));
-	const FMCPParamSpec SpecActorPath = MCPParam::Optional(TEXT("actorPath"), EType::String, TEXT("Full path of the actor that owns the spline; wins over actorLabel"));
+	const FMCPParamSpec SpecActorLabel = MCPSharedParam::ActorLabel().Describe(TEXT("Label of the actor that owns the spline; pass actorLabel or actorPath"));
+	const FMCPParamSpec SpecActorPath = MCPSharedParam::ActorPath().Describe(TEXT("Full path of the actor that owns the spline; wins over actorLabel"));
 	const FMCPSpecRules OneActor = MCPSpec::ExactlyOne({ { TEXT("actorLabel") }, { TEXT("actorPath") } });
 	const FMCPParamSpec SpecComponent = MCPParam::Optional(TEXT("componentName"), EType::String, TEXT("Spline component, when the actor has several (default the first)"));
 	const FMCPParamSpec SpecRebuild = MCPParam::Optional(TEXT("rebuild"), EType::Boolean, TEXT("Reuse the parameters stored by the last run of this generator; passed parameters override them"));
@@ -308,7 +308,7 @@ void FLevelSplineGenHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("pointType"), EType::String, TEXT("Curve (default) | Linear | CurveClamped | Constant, for every point")),
 		MCPParam::Optional(TEXT("coordinateSpace"), EType::String, TEXT("world (default) | local: whether points are relative to the actor location")),
 		MCPParam::Optional(TEXT("tags"), EType::Array, TEXT("Actor tags to add")).Items(EType::String),
-		MCPParam::Optional(TEXT("onConflict"), EType::String, TEXT("When the label is taken: skip (default) | update (rewrite its spline points) | error")),
+		MCPSharedParam::OnConflict().Describe(TEXT("When the label is taken: skip (default) | update (rewrite its spline points) | error")),
 	});
 	Registry.RegisterHandler(TEXT("build_spline_meshes"), &BuildSplineMeshes, {
 		SpecActorLabel, SpecActorPath, SpecComponent,

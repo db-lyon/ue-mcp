@@ -11,23 +11,6 @@ namespace
 {
 	constexpr int32 MaxBatchCalls = UEMCPWire::MaxBatchCalls;
 
-	// Methods a batch cannot carry. The undo-stack ones would split, abort or
-	// unwind the transaction the batch itself is recording into, and a nested
-	// batch is the same job twice.
-	bool IsRefusedInBatch(const FString& Method)
-	{
-		static const TSet<FString> Refused = {
-			TEXT("execute_batch"),
-			TEXT("undo"),
-			TEXT("redo"),
-			TEXT("undo_redo_steps"),
-			TEXT("begin_editor_transaction"),
-			TEXT("end_editor_transaction"),
-			TEXT("cancel_editor_transaction"),
-		};
-		return Refused.Contains(Method);
-	}
-
 	struct FBatchStep
 	{
 		FString Method;
@@ -69,7 +52,19 @@ void FBatchHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 {
 	// Reports parameters its handler never read (#1057).
 	FMCPHandlerRegistry::FCategoryScope CategoryScope(Registry, TEXT("editor"));
-	Registry.RegisterHandler(TEXT("execute_batch"), &FBatchHandlers::ExecuteBatch);
+	using EType = EMCPParamType;
+	// An action refuses to ride in a batch by declaring RefusedInBatch at its own
+	// registration; the undo-stack ones in EditorHandlers.cpp do.
+	Registry.RegisterHandler(TEXT("execute_batch"), &FBatchHandlers::ExecuteBatch, {
+		MCPParam::Required(TEXT("ops"), EType::Array, TEXT("The steps, run in order as one undo transaction and one game-thread job")).Items(EType::Object).WithFields({
+			MCPParam::RequiredField(TEXT("method"), EType::String, TEXT("Bridge method of the step")),
+			MCPParam::OptionalField(TEXT("params"), EType::Object, TEXT("The step's parameters")),
+		}),
+		MCPParam::Optional(TEXT("onError"), EType::String, TEXT("stop: the first failed step ends the batch | continue: run the rest")).Enum({ TEXT("stop"), TEXT("continue") }).Default(TEXT("stop")),
+		MCPParam::Optional(TEXT("transactionDescription"), EType::String, TEXT("Undo-stack label (default: MCP batch (N calls))")),
+	}, MCPSpec::ServerInternal(TEXT("editor(batch), which builds the steps from category actions"))
+		.ContractExempt(TEXT("dispatches its steps through the registry that runs it, which a direct call does not have"))
+		.RefusedInBatch(TEXT("a nested batch is the same game-thread job twice; put its steps in this batch instead")));
 }
 
 TSharedPtr<FJsonValue> FBatchHandlers::ExecuteBatch(const TSharedPtr<FJsonObject>& Params)
@@ -122,11 +117,12 @@ TSharedPtr<FJsonValue> FBatchHandlers::ExecuteBatch(const TSharedPtr<FJsonObject
 		{
 			return MCPError(FString::Printf(TEXT("ops[%d] requires a non-empty 'method'"), Index));
 		}
-		if (IsRefusedInBatch(Step.Method))
+		const FString RefusedBecause = Registry.GetActionFacts(Step.Method).RefusedInBatchReason;
+		if (!RefusedBecause.IsEmpty())
 		{
 			return MCPError(FString::Printf(
-				TEXT("ops[%d]: '%s' cannot run inside a batch. A batch is one undo transaction and one job; call it on its own"),
-				Index, *Step.Method));
+				TEXT("ops[%d]: '%s' cannot run inside a batch: %s. Call it on its own, before or after the batch"),
+				Index, *Step.Method, *RefusedBecause));
 		}
 		if (!Registry.HasHandler(Step.Method))
 		{

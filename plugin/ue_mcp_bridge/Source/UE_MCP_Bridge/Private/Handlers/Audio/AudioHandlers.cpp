@@ -57,12 +57,12 @@ void FAudioHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("create_sound_cue"), &CreateSoundCue, {
 		MCPParam::Required(TEXT("name"), EType::String, TEXT("SoundCue asset name")),
 		MCPParam::Optional(TEXT("packagePath"), EType::String, TEXT("Destination folder (default /Game/Audio/SoundCues)")),
-		MCPParam::Optional(TEXT("onConflict"), EType::String, TEXT("skip (default) returns the existing asset, error refuses; it never overwrites")),
+		MCPSharedParam::OnConflict(),
 	}, MCPSpec::ContractExempt(TEXT("Creates and saves a SoundCue asset named by the contract values")));
 	Registry.RegisterHandler(TEXT("create_metasound_source"), &CreateMetaSoundSource, {
 		MCPParam::Required(TEXT("name"), EType::String, TEXT("MetaSoundSource asset name")),
 		MCPParam::Optional(TEXT("packagePath"), EType::String, TEXT("Destination folder (default /Game/Audio/MetaSounds)")),
-		MCPParam::Optional(TEXT("onConflict"), EType::String, TEXT("skip (default) returns the existing asset, error refuses; it never overwrites")),
+		MCPSharedParam::OnConflict(),
 		MCPParam::Optional(TEXT("format"), EType::String, TEXT("Output format: mono | stereo (default mono)")),
 		MCPParam::Optional(TEXT("oneShot"), EType::Boolean, TEXT("Declare the one-shot interface (default true)")),
 	}, MCPSpec::ContractExempt(TEXT("Creates and saves a MetaSoundSource asset named by the contract values")));
@@ -76,7 +76,7 @@ void FAudioHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Required(TEXT("soundPath"), EType::String, TEXT("Sound asset the AmbientSound plays")).Alias(TEXT("assetPath")).Alias(TEXT("path")),
 		MCPParam::Optional(TEXT("location"), EType::Vec3, TEXT("World location of the actor (default origin)")),
 		MCPParam::Optional(TEXT("label"), EType::String, TEXT("Actor label")),
-		MCPParam::Optional(TEXT("onConflict"), EType::String, TEXT("skip | error | rename when an actor with that label exists (default skip)")),
+		MCPSharedParam::OnConflict().Describe(TEXT("skip | error | rename when an actor with that label exists (default skip)")),
 		MCPParam::Optional(TEXT("volumeMultiplier"), EType::Number, TEXT("Volume multiplier on the audio component (default 1)")).Alias(TEXT("volume")),
 	});
 
@@ -84,7 +84,7 @@ void FAudioHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("metasound_author"), &MetaSoundAuthor, {
 		MCPParam::Required(TEXT("name"), EType::String, TEXT("MetaSoundSource asset name")),
 		MCPParam::Optional(TEXT("packagePath"), EType::String, TEXT("Destination folder (default /Game/Audio/MetaSounds)")),
-		MCPParam::Optional(TEXT("onConflict"), EType::String, TEXT("skip (default) returns the existing asset, error refuses; it never overwrites")),
+		MCPSharedParam::OnConflict(),
 		MCPParam::Optional(TEXT("format"), EType::String, TEXT("Output format: mono | stereo (default mono)")),
 		MCPParam::Optional(TEXT("oneShot"), EType::Boolean, TEXT("Declare the one-shot interface (default true)")),
 		MCPParam::Optional(TEXT("inputs"), EType::Array, TEXT("Graph inputs to add")).Items(EType::Object).WithFields({
@@ -206,7 +206,7 @@ void FAudioHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("soundcue_author"), &SoundCueAuthor, {
 		MCPParam::Required(TEXT("name"), EType::String, TEXT("SoundCue asset name")),
 		MCPParam::Optional(TEXT("packagePath"), EType::String, TEXT("Destination folder (default /Game/Audio/SoundCues)")),
-		MCPParam::Optional(TEXT("onConflict"), EType::String, TEXT("skip (default) returns the existing asset, error refuses; it never overwrites")),
+		MCPSharedParam::OnConflict(),
 		MCPParam::Optional(TEXT("nodes"), EType::Array, TEXT("Nodes to add, each {id, type, soundWavePath?, properties?: {field: value}}; id is the local name connections use, type is a soundcue_add_node nodeType")).Items(EType::Object),
 		MCPParam::Optional(TEXT("connections"), EType::Array, TEXT("Links, each {child, parent?, index?}; an omitted or 'root' parent makes the child the cue root, and index defaults to append")).Items(EType::Object),
 		MCPParam::Optional(TEXT("root"), EType::String, TEXT("Local id of the node to make the cue root, overriding the connections")),
@@ -231,7 +231,7 @@ void FAudioHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("create_submix"), &CreateSubmix, {
 		MCPParam::Required(TEXT("name"), EType::String, TEXT("SoundSubmix asset name")),
 		MCPParam::Optional(TEXT("packagePath"), EType::String, TEXT("Destination folder (default /Game/Audio/Submixes)")),
-		MCPParam::Optional(TEXT("onConflict"), EType::String, TEXT("skip (default) returns the existing asset, error refuses; it never overwrites")),
+		MCPSharedParam::OnConflict(),
 		MCPParam::Optional(TEXT("parentPath"), EType::String, TEXT("Parent submix (default none)")),
 		MCPParam::Optional(TEXT("outputVolume"), EType::Number, TEXT("Output volume")),
 		MCPParam::Optional(TEXT("wetLevel"), EType::Number, TEXT("Wet level")),
@@ -251,14 +251,14 @@ void FAudioHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("create_sound_class"), &CreateSoundClass, {
 		MCPParam::Required(TEXT("name"), EType::String, TEXT("SoundClass asset name")),
 		MCPParam::Optional(TEXT("packagePath"), EType::String, TEXT("Destination folder (default /Game/Audio/SoundClasses)")),
-		MCPParam::Optional(TEXT("onConflict"), EType::String, TEXT("skip (default) returns the existing asset, error refuses; it never overwrites")),
+		MCPSharedParam::OnConflict(),
 		MCPParam::Optional(TEXT("properties"), EType::Object, TEXT("FSoundClassProperties as JSON: Volume, Pitch, bIsUISound, ...")),
 		MCPParam::Optional(TEXT("parentPath"), EType::String, TEXT("Parent SoundClass (default none)")),
 	}, MCPSpec::ContractExempt(TEXT("Creates and saves a SoundClass asset named by the contract values")));
 	Registry.RegisterHandler(TEXT("create_sound_mix"), &CreateSoundMix, {
 		MCPParam::Required(TEXT("name"), EType::String, TEXT("SoundMix asset name")),
 		MCPParam::Optional(TEXT("packagePath"), EType::String, TEXT("Destination folder (default /Game/Audio/SoundMixes)")),
-		MCPParam::Optional(TEXT("onConflict"), EType::String, TEXT("skip (default) returns the existing asset, error refuses; it never overwrites")),
+		MCPSharedParam::OnConflict(),
 		MCPParam::Optional(TEXT("fadeInTime"), EType::Number, TEXT("Fade-in time in seconds")),
 		MCPParam::Optional(TEXT("fadeOutTime"), EType::Number, TEXT("Fade-out time in seconds")),
 		MCPParam::Optional(TEXT("adjusters"), EType::Array, TEXT("Per-SoundClass adjustments; an entry whose class does not load is skipped")).Items(EType::Object).WithFields({
@@ -271,7 +271,7 @@ void FAudioHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("create_concurrency"), &CreateConcurrency, {
 		MCPParam::Required(TEXT("name"), EType::String, TEXT("SoundConcurrency asset name")),
 		MCPParam::Optional(TEXT("packagePath"), EType::String, TEXT("Destination folder (default /Game/Audio/Concurrency)")),
-		MCPParam::Optional(TEXT("onConflict"), EType::String, TEXT("skip (default) returns the existing asset, error refuses; it never overwrites")),
+		MCPSharedParam::OnConflict(),
 		MCPParam::Optional(TEXT("maxCount"), EType::Integer, TEXT("Most concurrent voices")),
 		MCPParam::Optional(TEXT("limitToOwner"), EType::Boolean, TEXT("Count voices per owning actor")),
 		MCPParam::Optional(TEXT("volumeScale"), EType::Number, TEXT("Volume scale applied to each new voice")),
@@ -280,7 +280,7 @@ void FAudioHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("create_attenuation"), &CreateAttenuation, {
 		MCPParam::Required(TEXT("name"), EType::String, TEXT("SoundAttenuation asset name")),
 		MCPParam::Optional(TEXT("packagePath"), EType::String, TEXT("Destination folder (default /Game/Audio/Attenuation)")),
-		MCPParam::Optional(TEXT("onConflict"), EType::String, TEXT("skip (default) returns the existing asset, error refuses; it never overwrites")),
+		MCPSharedParam::OnConflict(),
 		MCPParam::Optional(TEXT("settings"), EType::Object, TEXT("FSoundAttenuationSettings as JSON, applied before the shortcuts")),
 		MCPParam::Optional(TEXT("falloffDistance"), EType::Number, TEXT("Falloff distance; also turns volume attenuation on")),
 		MCPParam::Optional(TEXT("spatialize"), EType::Boolean, TEXT("bSpatialize")),

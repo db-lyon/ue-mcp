@@ -161,7 +161,7 @@ void FPIEHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 
 	Registry.RegisterHandler(TEXT("pie_view_trace"), &ViewTrace, {
 		MCPParam::Optional(TEXT("playerIndex"), EType::Integer, TEXT("Local player index in the selected PIE world (default 0)")),
-		MCPParam::Optional(TEXT("pieInstance"), EType::Integer, TEXT("PIE instance id; omitted selects the active PIE world")),
+		MCPSharedParam::PieInstance().Describe(TEXT("PIE instance id; omitted selects the active PIE world")),
 		MCPParam::Optional(TEXT("distance"), EType::Number, TEXT("Positive trace distance in cm (default 1000)")),
 		MCPParam::Optional(TEXT("channel"), EType::String, TEXT("Collision channel, including project-renamed channels (default Visibility)")),
 		MCPParam::Optional(TEXT("sweepRadius"), EType::Number, TEXT("Also sweep a sphere of this radius in cm when positive")),
@@ -225,7 +225,7 @@ void FPIEHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("planar"), EType::Boolean, TEXT("Steer and measure arrival on the XY plane (default true); false for flying or swimming pawns")),
 		MCPParam::Optional(TEXT("stopOnMapChange"), EType::Boolean, TEXT("End the drive as map_changed when the player arrives in another level (default false: keep driving there)")),
 		MCPParam::Optional(TEXT("playerIndex"), EType::Integer, TEXT("Local player index in the PIE world (default 0)")),
-		MCPParam::Optional(TEXT("pieInstance"), EType::Integer, PieInstanceDoc),
+		MCPSharedParam::PieInstance().Describe(PieInstanceDoc),
 		MCPParam::Optional(TEXT("driveId"), EType::String, TEXT("Caller-chosen drive id (minted when absent)")),
 		MCPParam::Optional(TEXT("wait"), EType::Boolean, TEXT("Return only when the drive ends, with its whole track (default true)")),
 		MCPParam::Optional(TEXT("timeoutSeconds"), EType::Number, TEXT("Longest wait=true waits (default durationSeconds + 30)")).Min(0),
@@ -413,7 +413,7 @@ void FPIEHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("pie_profile_create"), &PieProfileCreate, {
 		MCPParam::Required(TEXT("name"), EType::String, TEXT("Asset name")),
 		MCPParam::Optional(TEXT("package_path"), EType::String, TEXT("Content folder (default /Game/Observation)")),
-		MCPParam::Optional(TEXT("onConflict"), EType::String, TEXT("What to do when the asset exists (default skip)")).Enum({ TEXT("skip"), TEXT("replace") }),
+		MCPSharedParam::OnConflict().Describe(TEXT("What to do when the asset exists (default skip)")).Enum({ TEXT("skip"), TEXT("replace") }),
 		MCPParam::Optional(TEXT("tracked_values"), EType::Array, TrackedValuesDoc),
 		MCPParam::Optional(TEXT("tracked_actors"), EType::Array, TEXT("Actor ids to track")).Items(EType::String),
 		MCPParam::Optional(TEXT("tracked_widgets"), EType::Array, TEXT("Widget class names or paths, or widget names, sampled as visible true or false")).Items(EType::String),

@@ -30,7 +30,9 @@ export interface Counts {
   /** ue-mcp's own actions: `actions` minus the wrapped Epic tools. This is the
    *  number to quote when the copy names Epic's tools separately. */
   ownActions: number;
+  /** Distinct bridge methods the actions dispatch to: the handlers a smoke run calls. */
   bridgeActions: number;
+  /** Actions the server answers itself, without the bridge. */
   localActions: number;
   perTool: Record<string, number>;
   /** Official Unreal ToolsetRegistry toolsets ue-mcp wraps, across every recorded engine. */
@@ -122,7 +124,12 @@ export function computeCounts(): Counts {
     perTool[t.name] = n;
     total += n;
   }
-  const bridge = enumerateBridgeActions().length;
+  // Actions that reach the bridge, each counted once: every wrapped Epic tool
+  // dispatches to the same epic_call_tool handler, so counting TS actions would
+  // count that one handler two thousand times.
+  const bridgeActionNames = enumerateBridgeActions();
+  const bridge = new Set(bridgeActionNames.map((a) => a.bridge)).size;
+  const bridgeBacked = bridgeActionNames.length;
   const pkg = JSON.parse(fs.readFileSync(path.join(repo, "package.json"), "utf8"));
   const native = computeNativeCounts();
   const newest = newestEpicCatalog();
@@ -140,7 +147,7 @@ export function computeCounts(): Counts {
     actions: total,
     ownActions: total - native.nativeToolActions,
     bridgeActions: bridge,
-    localActions: total - bridge,
+    localActions: total - bridgeBacked,
     perTool,
     nativeToolsets: native.nativeToolsets,
     nativeToolActions: native.nativeToolActions,

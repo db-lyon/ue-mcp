@@ -1,12 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { landscapeTool } from "../../src/tools/landscape.js";
+import { REGISTERED_HANDLER_TIMEOUT_SECONDS } from "../../src/bridge/bridge-timeouts.js";
 
 describe("landscape.refresh_physical_material_collision", () => {
   it("is exposed and takes its target parameters from its spec", () => {
     const action = landscapeTool.actions.refresh_physical_material_collision;
     expect(landscapeTool.schema.action.safeParse("refresh_physical_material_collision").success).toBe(true);
     expect(action.bridge).toBe("refresh_landscape_physical_material_collision");
-    expect(action.timeoutMs).toBe(600_000);
+    expect(action.timeoutMs).toBeUndefined();
+    expect(REGISTERED_HANDLER_TIMEOUT_SECONDS.refresh_landscape_physical_material_collision).toBe(600);
     expect(action.description).toContain("no pending landscape edit-layer work");
     expect(action.description).toContain("every raw, complex-live, and simple-live height sample");
     expect(action.description).toContain("Persistence is deliberately unsupported");

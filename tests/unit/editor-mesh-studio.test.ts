@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { ToolContext } from "../../src/surface/tool-types.js";
 import { editorTool } from "../../src/tools/editor.js";
+import { REGISTERED_HANDLER_TIMEOUT_SECONDS } from "../../src/bridge/bridge-timeouts.js";
 import { declaredActionEffect } from "../../src/surface/action-effects.js";
 import { waitForMeshStudioRender, type MeshStudioClock } from "../../src/tools/mesh-studio-wait.js";
 
@@ -27,7 +28,8 @@ describe("editor.render_mesh_studio", () => {
       cubemapPath: "/Engine/MapTemplates/Sky/DaylightAmbientCubemap.DaylightAmbientCubemap",
     };
     const result = await editorTool.handler({ bridge: { call } } as unknown as ToolContext, { action: "render_mesh_studio", ...params });
-    expect(call.mock.calls[0]).toEqual(["render_mesh_studio", params, 600_000]);
+    expect(call.mock.calls[0]).toEqual(["render_mesh_studio", params, undefined]);
+    expect(REGISTERED_HANDLER_TIMEOUT_SECONDS.render_mesh_studio).toBe(600);
     expect(call.mock.calls[1]).toEqual(["get_mesh_studio_render", { jobId: running.jobId }, 15_000]);
     expect(result).toEqual(completed);
     expect(declaredActionEffect("editor", "render_mesh_studio")).toBe("mutate");

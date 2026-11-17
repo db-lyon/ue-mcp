@@ -118,7 +118,7 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "actorPath",
         "type": "string",
         "required": false,
-        "description": "Full actor object path. The unambiguous selector, and it wins over actorLabel when both are given"
+        "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
       },
       {
         "name": "tag",
@@ -153,7 +153,7 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "actorPath",
         "type": "string",
         "required": false,
-        "description": "Full actor object path. The unambiguous selector, and it wins over actorLabel when both are given"
+        "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
       },
       {
         "name": "effectClass",
@@ -203,7 +203,7 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "actorPath",
         "type": "string",
         "required": false,
-        "description": "Full actor object path. The unambiguous selector, and it wins over actorLabel when both are given"
+        "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
       },
       {
         "name": "probeClamping",
@@ -232,7 +232,7 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "actorPath",
         "type": "string",
         "required": false,
-        "description": "Full actor object path. The unambiguous selector, and it wins over actorLabel when both are given"
+        "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
       },
       {
         "name": "abilityClass",
@@ -267,7 +267,7 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "actorPath",
         "type": "string",
         "required": false,
-        "description": "Full actor object path. The unambiguous selector, and it wins over actorLabel when both are given"
+        "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
       },
       {
         "name": "snapshotId",
@@ -308,7 +308,7 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "actorPath",
         "type": "string",
         "required": false,
-        "description": "Full actor object path. The unambiguous selector, and it wins over actorLabel when both are given"
+        "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
       },
       {
         "name": "abilityClass",
@@ -372,7 +372,7 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "onConflict",
         "type": "string",
         "required": false,
-        "description": "skip (default, returns the existing asset) or error when the asset already exists"
+        "description": "When the asset already exists: skip (default) returns it untouched | error refuses; it never overwrites"
       }
     ],
     "contractExempt": "Creates, compiles and saves a Blueprint under the contract values; nothing it reads fails first"
@@ -396,7 +396,7 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "onConflict",
         "type": "string",
         "required": false,
-        "description": "skip (default, returns the existing asset) or error when the asset already exists"
+        "description": "When the asset already exists: skip (default) returns it untouched | error refuses; it never overwrites"
       }
     ],
     "contractExempt": "Creates, compiles and saves a Blueprint under the contract values; nothing it reads fails first"
@@ -420,7 +420,7 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "onConflict",
         "type": "string",
         "required": false,
-        "description": "skip (default, returns the existing asset) or error when the asset already exists"
+        "description": "When the asset already exists: skip (default) returns it untouched | error refuses; it never overwrites"
       },
       {
         "name": "cueType",
@@ -450,7 +450,7 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "onConflict",
         "type": "string",
         "required": false,
-        "description": "skip (default, returns the existing asset) or error when the asset already exists"
+        "description": "When the asset already exists: skip (default) returns it untouched | error refuses; it never overwrites"
       },
       {
         "name": "durationPolicy",
@@ -491,7 +491,7 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "actorPath",
         "type": "string",
         "required": false,
-        "description": "Full actor object path. The unambiguous selector, and it wins over actorLabel when both are given"
+        "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
       },
       {
         "name": "world",
@@ -514,7 +514,7 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "actorPath",
         "type": "string",
         "required": false,
-        "description": "Full actor object path. The unambiguous selector, and it wins over actorLabel when both are given"
+        "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
       },
       {
         "name": "world",
@@ -537,7 +537,7 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "actorPath",
         "type": "string",
         "required": false,
-        "description": "Full actor object path. The unambiguous selector, and it wins over actorLabel when both are given"
+        "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
       },
       {
         "name": "attribute",
@@ -577,7 +577,7 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "actorPath",
         "type": "string",
         "required": false,
-        "description": "Full actor object path. The unambiguous selector, and it wins over actorLabel when both are given"
+        "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
       },
       {
         "name": "attributeSet",
@@ -618,7 +618,7 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "actorPath",
         "type": "string",
         "required": false,
-        "description": "Full actor object path. The unambiguous selector, and it wins over actorLabel when both are given"
+        "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
       },
       {
         "name": "abilityClass",
@@ -659,7 +659,7 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "actorPath",
         "type": "string",
         "required": false,
-        "description": "Full actor object path. The unambiguous selector, and it wins over actorLabel when both are given"
+        "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
       },
       {
         "name": "attributeSet",
@@ -705,7 +705,7 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "actorPath",
         "type": "string",
         "required": false,
-        "description": "Full actor object path. The unambiguous selector, and it wins over actorLabel when both are given"
+        "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
       },
       {
         "name": "effectHandle",
@@ -786,7 +786,7 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "actorPath",
         "type": "string",
         "required": false,
-        "description": "Full actor object path. The unambiguous selector, and it wins over actorLabel when both are given"
+        "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
       },
       {
         "name": "tag",
@@ -821,7 +821,7 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "actorPath",
         "type": "string",
         "required": false,
-        "description": "Full actor object path. The unambiguous selector, and it wins over actorLabel when both are given"
+        "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
       },
       {
         "name": "abilityClass",
@@ -850,7 +850,7 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "actorPath",
         "type": "string",
         "required": false,
-        "description": "Full actor object path. The unambiguous selector, and it wins over actorLabel when both are given"
+        "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
       },
       {
         "name": "inputEvent",
@@ -969,7 +969,7 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "actorPath",
         "type": "string",
         "required": false,
-        "description": "Full actor object path. The unambiguous selector, and it wins over actorLabel when both are given"
+        "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
       },
       {
         "name": "attribute",
@@ -1058,7 +1058,7 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "actorPath",
         "type": "string",
         "required": false,
-        "description": "Full actor object path. The unambiguous selector, and it wins over actorLabel when both are given"
+        "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
       },
       {
         "name": "attributeSet",
@@ -1111,7 +1111,7 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "actorPath",
         "type": "string",
         "required": false,
-        "description": "Full actor object path. The unambiguous selector, and it wins over actorLabel when both are given"
+        "description": "Full actor object path, the unambiguous selector; wins over actorLabel"
       },
       {
         "name": "abilityClass",
@@ -1170,7 +1170,7 @@ export const schema: Record<string, z.ZodType> = {
   activation_blocked_tags: z.array(z.string()).optional().describe("ActivationBlockedTags container, written whole"),
   activation_required_tags: z.array(z.string()).optional().describe("ActivationRequiredTags container, written whole"),
   actorLabel: z.string().optional().describe("Live actor label, internal name or object path. Pass this or actorPath"),
-  actorPath: z.string().optional().describe("Full actor object path. The unambiguous selector, and it wins over actorLabel when both are given (add_loose_gameplay_tag, apply_effect, audit_attributes, bind_ability_input, capture_gas_state, clear_ability_input, get_active_effects, get_asc_state, get_attribute, get_live_attribute_value, grant_ability, init_asc, remove_effect, remove_loose_gameplay_tag, revoke_ability, send_ability_input, set_attribute, set_live_attribute_value, trace_ability_activation). Only snapshots of this actor object path (list_gas_snapshots)"),
+  actorPath: z.string().optional().describe("Full actor object path, the unambiguous selector; wins over actorLabel (add_loose_gameplay_tag, apply_effect, audit_attributes, bind_ability_input, capture_gas_state, clear_ability_input, get_active_effects, get_asc_state, get_attribute, get_live_attribute_value, grant_ability, init_asc, remove_effect, remove_loose_gameplay_tag, revoke_ability, send_ability_input, set_attribute, set_live_attribute_value, trace_ability_activation). Only snapshots of this actor object path (list_gas_snapshots)"),
   afterId: z.string().optional().describe("Snapshot id of the later reading. Pass this or afterSnapshot"),
   afterSnapshot: z.record(z.string(), z.unknown()).optional().describe("The later snapshot object itself"),
   attribute: z.string().optional().describe("Attribute to read. Omit to list every attribute (get_attribute). Attribute property name, or Set.Property (get_live_attribute_value, set_live_attribute_value). Attribute name: Health or SetName.Health (set_attribute). Attribute to modify: SetName.Attribute, or a unique attribute name (set_effect_modifier)"),
@@ -1205,7 +1205,7 @@ export const schema: Record<string, z.ZodType> = {
   maxLevel: z.number().optional().describe("Highest effect level this cue covers"),
   minLevel: z.number().optional().describe("Lowest effect level this cue covers, used to normalise the magnitude"),
   name: z.string().optional().describe("Blueprint name"),
-  onConflict: z.string().optional().describe("skip (default, returns the existing asset) or error when the asset already exists"),
+  onConflict: z.string().optional().describe("When the asset already exists: skip (default) returns it untouched | error refuses; it never overwrites"),
   operation: z.string().optional().describe("Additive (default) | Multiplicative | Division | Override"),
   packagePath: z.string().optional().describe("Content folder (default /Game/GAS/Attributes) (create_attribute_set). Content folder (default /Game/GAS/Abilities) (create_gameplay_ability). Content folder (default /Game/GAS/Cues) (create_gameplay_cue). Content folder (default /Game/GAS/Effects) (create_gameplay_effect)"),
   probeClamping: z.boolean().optional().describe("Measure an existing clamp by driving the set's own PreAttributeChange. Needs a live registered set (default false)"),

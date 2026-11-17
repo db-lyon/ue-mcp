@@ -164,9 +164,9 @@ describe("editor(batch) refuses the whole batch before sending anything", () => 
     expect(await refused({ ops: [{ category: "asset", method: "lock", args: { assetPath: "/Game/A" } }] }))
       .toContain("manages the asset locks");
     expect(await refused({ ops: [probe, { category: "editor", method: "undo" }] }))
-      .toContain("ops[1] (editor.undo) acts on the undo stack");
+      .toContain("ops[1] (editor.undo) cannot run inside a batch: inside a batch it would undo or redo");
     expect(await refused({ ops: [{ category: "editor", method: "begin_transaction", args: { label: "x" } }] }))
-      .toContain("one undo transaction");
+      .toContain("a batch is already one transaction");
   });
 
   it("an action served by this process, and one that answers a dialog", async () => {

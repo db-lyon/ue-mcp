@@ -15,9 +15,11 @@
 /**
  * Native handler ABI version for plugins that register their own handlers. Bump it when the
  * handler signature or registration contract changes in a breaking way. 2: external handlers can
- * register a parameter contract (MCPHandlerSpec.h).
+ * register a parameter contract (MCPHandlerSpec.h). 3: the spec structs gain parameter defaults
+ * and action facts (FMCPActionFacts: timeout, modal safety, batch refusal, server-internal
+ * caller), which changes their layout, so a plugin built against 2 is rebuilt.
  */
-#define UEMCP_BRIDGE_API_VERSION 2
+#define UEMCP_BRIDGE_API_VERSION 3
 
 namespace UEMCPWire
 {
@@ -40,6 +42,7 @@ namespace UEMCPWire
 		TEXT("deferred-results"),
 		TEXT("cancel-request"),
 		TEXT("progress-frames"),
+		TEXT("action-facts"),
 	};
 
 	/** JSON-RPC 2.0 error codes the bridge answers with. */
@@ -76,6 +79,20 @@ namespace UEMCPWire
 	 * this bounds how long one call holds the editor; a longer edit is two batches.
 	 */
 	inline constexpr int32 MaxBatchCalls = 256;
+
+	/**
+	 * How long the bridge waits on the game thread for an action that declares no timeout of its own
+	 * (FMCPActionFacts::TimeoutSeconds). get_bridge_capabilities.actionFacts lists every action that
+	 * declares one.
+	 */
+	inline constexpr double DefaultHandlerTimeoutSeconds = 30.0;
+
+	/**
+	 * The most a call's timeoutMs can raise its budget to. A larger value is capped here, never
+	 * refused; work that needs longer is split into several calls, or run through the action's job
+	 * form and polled where it has one.
+	 */
+	inline constexpr double MaxRequestTimeoutSeconds = 3600.0;
 
 	/**
 	 * The state a bridge record reports. A bind-failed record names no reachable port: it exists to
