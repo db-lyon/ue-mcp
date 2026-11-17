@@ -130,6 +130,11 @@ function socketThreadFastPaths() {
   for (const m of src.matchAll(/\bMethod\s*==\s*TEXT\("([a-z_][a-z0-9_]*)"\)/g)) {
     if (!out.has(m[1])) out.set(m[1], [{ file: "BridgeServer.cpp (socket-thread fast path)" }]);
   }
+  // The built-in methods register through the registry with lambdas, which the
+  // `&Fn` registration scan does not read.
+  for (const m of src.matchAll(/\bRegisterHandler(?:WithTimeout)?\(\s*TEXT\("([a-z_][a-z0-9_]*)"\)/g)) {
+    if (!out.has(m[1])) out.set(m[1], [{ file: "BridgeServer.cpp (built-in)" }]);
+  }
   return out;
 }
 
