@@ -102,7 +102,18 @@ async function categoryMatrix(call: Caller): Promise<Record<string, unknown>> {
   out.media = record(await call("level", "get_selected"));
   out.taskFailed = record(await call("asset", "delete", { assetPath: "/Game/Refused" }));
   out.bridgeError = record(await call("level", "get_current"));
-  out.handler = record(await call("project", "describe_action", { name: "level.get_selected" }));
+  // A handler action served in this process. Only its identity is kept: the
+  // description it reports moves with every edit to the action's prose.
+  const described = await call("project", "describe_action", { name: "level.get_selected" });
+  out.handler = {
+    isError: described.isError,
+    blocks: described.blocks.map((b, i) => {
+      if (i > 0) return normalise(b);
+      const { tool, action, bridge } = JSON.parse(b) as Record<string, unknown>;
+      return JSON.stringify({ tool, action, bridge });
+    }),
+    media: described.media.length,
+  };
   out.unknownAction = record(await call("level", "get_outliners"));
   out.invalidParams = record(await call("level", "get_outliner", { limit: "many" }));
   out.undeclaredKey = record(await call("level", "get_outliner", { notAParam: 1 }));
