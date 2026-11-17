@@ -1,33 +1,24 @@
 // @session per-session: Resolves an editor per request and refuses an untargeted run.
 import * as http from "node:http";
 import { parseStepApproval, type FlowStepApprovalSpec } from "./step-approval.js";
-import { randomBytes, timingSafeEqual } from "node:crypto";
-import type { createFlowTool } from "./flow-tool.js";
-import type { ToolContext } from "../surface/tool-types.js";
-import { sessionContext } from "../surface/target-params.js";
+import { randomBytes } from "node:crypto";
 import { EDITOR_TARGET_PARAM } from "../surface/routing-params.js";
-import { refuseUntargetedCall } from "../dispatch/editor-gate.js";
+import { ErrorCode } from "../core/errors.js";
+import type { CallOutcome } from "../dispatch/call.js";
 import { info, warn, error as logError } from "../core/log.js";
 import { subscribeFlowEvents, type FlowEvent } from "./events.js";
-import { existingGuard } from "../editor/dialog-guard.js";
 import { readEnv } from "../core/env.js";
-import { hostIsAllowed } from "../core/loopback-host.js";
+import { hostIsAllowed, tokensMatch } from "../core/loopback-host.js";
 import { FLOW_HTTP_PORT } from "../core/flow-http-port.js";
 import { DAEMON_HEADERS } from "../contract/daemon.js";
 
-type FlowTool = ReturnType<typeof createFlowTool>;
+/** One flow call through the server's call pipeline, as the routes hand it over. */
+export type FlowRequest = (input: Record<string, unknown>, approval?: FlowStepApprovalSpec) => Promise<{ outcome: CallOutcome }>;
 
 export interface HttpServerOptions {
   host?: string;
   port?: number;
   token?: string;
-}
-
-function constantTimeEq(a: string, b: string): boolean {
-  const ab = Buffer.from(a, "utf8");
-  const bb = Buffer.from(b, "utf8");
-  if (ab.length !== bb.length) return false;
-  return timingSafeEqual(ab, bb);
 }
 
 function extractToken(req: http.IncomingMessage): string | null {
@@ -45,8 +36,7 @@ function extractToken(req: http.IncomingMessage): string | null {
 // MCP. Intentionally tiny: routes mirror the three flow actions, responses
 // mirror the existing flow result shape.
 export function startFlowHttpServer(
-  flowTool: FlowTool,
-  ctx: ToolContext,
+  run: FlowRequest,
   options: HttpServerOptions = {},
 ): { server: http.Server; port: number; host: string; token: string } {
   const host = options.host ?? "127.0.0.1";
@@ -81,11 +71,11 @@ export function startFlowHttpServer(
       // Bearer token: every route requires it, including /health (otherwise
       // any local process can probe whether the server is up).
       const presented = extractToken(req);
-      if (presented === null || !constantTimeEq(presented, token)) {
+      if (!tokensMatch(presented, token)) {
         return send(401, { error: "Missing or invalid token" });
       }
 
-      const handled = await handleFlowRoute(flowTool, ctx, req, res, pathname, url);
+      const handled = await handleFlowRoute(run, req, res, pathname, url);
       if (handled) return;
 
       if (method === "GET" && pathname === "/health") {
@@ -125,8 +115,7 @@ export function startFlowHttpServer(
  * Resolves true when the request matched a route and was answered.
  */
 export async function handleFlowRoute(
-  flowTool: FlowTool,
-  ctx: ToolContext,
+  run: FlowRequest,
   req: http.IncomingMessage,
   res: http.ServerResponse,
   pathname: string,
@@ -141,119 +130,52 @@ export async function handleFlowRoute(
     return true;
   };
 
-  const activeContext = (): ToolContext =>
-    ctx.sessions ? sessionContext(ctx, ctx.sessions.active) : ctx;
-
   /**
-   * The HTTP routes are a third way into the editor and use the same
-   * guard object as the MCP surface. Steps are refused at the guarded
-   * bridge; this covers a run STARTED while a modal is up, and list/plan,
-   * which never touch the bridge.
-   *
-   * There is no person on an HTTP request, so interactive cannot elicit
-   * and degrades to reporting the dialog, which is what defer does.
+   * A flow call through the same pipeline as an MCP call: routing, the
+   * untargeted refusal beyond one editor (#817), the dialog guard, read-only,
+   * the journal. Untargeted calls follow the active session. Steps are refused
+   * at the guarded bridge; the dialog gate covers a run STARTED while a modal
+   * is up, and list/plan, which never touch the bridge. Nobody is on an HTTP
+   * request, so interactive degrades to reporting the dialog, as defer does.
    */
-  const gatedFlow = async (
-    toolCtx: ToolContext,
-    params: Record<string, unknown>,
-    taskName: string,
-  ): Promise<{ refused: Record<string, unknown> } | { value: unknown }> => {
-    const session = toolCtx.session ?? ctx.session;
-    const guard = session ? existingGuard(session) : undefined;
-    if (!guard) {
-      // No guard means no way to know whether a modal is up, and running
-      // anyway is the exception this design does not have. Refuse instead
-      // of falling through: a route that cannot be checked is closed.
-      return {
-        refused: {
-          success: false,
-          dialogBlocking: true,
-          refusedMethod: taskName,
-          error:
-            `'${taskName}' was refused because no editor session is attached to this request, `
-            + "so whether a modal is blocking the editor cannot be established.",
-        },
-      };
-    }
-    // No person on an HTTP request, so this route never elicits. Without
-    // saying so it used the shared guard's deps, which were last set by an
-    // MCP client, and a curl raised a form in that client's UI.
-    const decision = await guard.check(taskName, "action", { canElicit: false });
-    if (!decision.allow) return { refused: decision.refusal };
-    return { value: await flowTool.handler(toolCtx, params) };
+  const answer = async (input: Record<string, unknown>, approval?: FlowStepApprovalSpec): Promise<true> => {
+    const { outcome } = await run(input, approval);
+    if (outcome.code === undefined) return send(200, outcome.data);
+    if (outcome.code === ErrorCode.REFUSED) return send(409, outcome.data);
+    const status = outcome.code === ErrorCode.INVALID_PARAMS ? 400 : outcome.code === ErrorCode.NOT_FOUND ? 404 : 500;
+    return send(status, { error: outcome.message });
   };
 
   if (method === "GET" && (pathname === "/" || pathname === "/flows")) {
-    const listed = await gatedFlow(activeContext(), { action: "list" }, "flow.list");
-    if ("refused" in listed) return send(409, listed.refused);
-    return send(200, listed.value);
+    return answer({ action: "list" });
   }
 
   const planMatch = pathname.match(/^\/flows\/([^/]+)\/plan$/);
   if (method === "GET" && planMatch) {
-    const flowName = decodeURIComponent(planMatch[1]);
-    const planned = await gatedFlow(activeContext(), { action: "plan", flowName }, "flow.plan");
-    if ("refused" in planned) return send(409, planned.refused);
-    const result = planned.value;
-    return send(200, result);
+    return answer({ action: "plan", flowName: decodeURIComponent(planMatch[1]) });
   }
 
   const runMatch = pathname.match(/^\/flows\/([^/]+)\/run$/);
   if (method === "POST" && runMatch) {
-    const flowName = decodeURIComponent(runMatch[1]);
+    const input: Record<string, unknown> = { action: "run", flowName: decodeURIComponent(runMatch[1]) };
     const body = await readJsonBody(req);
-    const params: Record<string, unknown> = {
-      action: "run",
-      flowName,
-    };
-    // Untargeted runs follow the active session, the same as the MCP
-    // surface, rather than staying pinned to whichever session was
-    // active when this server started.
-    let runCtx = activeContext();
-    let targeted = false;
     let approval: FlowStepApprovalSpec | null = null;
     if (body && typeof body === "object") {
       const b = body as Record<string, unknown>;
-      if (b.params !== undefined) params.params = b.params;
-      if (b.skip !== undefined) params.skip = b.skip;
-      if (b.rollback_on_failure !== undefined) params.rollback_on_failure = b.rollback_on_failure;
+      if (b.params !== undefined) input.params = b.params;
+      if (b.skip !== undefined) input.skip = b.skip;
+      if (b.rollback_on_failure !== undefined) input.rollback_on_failure = b.rollback_on_failure;
       // Each step asks a registered extension before it runs (flow/step-approval.ts).
-      let stepApproval: FlowStepApprovalSpec | null;
       try {
-        stepApproval = parseStepApproval(b.stepApproval);
+        approval = parseStepApproval(b.stepApproval);
       } catch (e) {
         return send(400, { error: e instanceof Error ? e.message : String(e) });
       }
-      if (stepApproval) approval = stepApproval;
-      // #817: the HTTP surface addresses an editor the same way the MCP
-      // surface does. Resolving here (rather than forwarding `editor` into
-      // the flow) keeps the routing instruction off every step's options.
-      if (typeof b.editor === "string" && b.editor && ctx.sessions) {
-        try {
-          runCtx = sessionContext(ctx, ctx.sessions.resolve(b.editor));
-        } catch (e) {
-          return send(404, { error: e instanceof Error ? e.message : String(e) });
-        }
-        targeted = true;
-      }
+      // The editor is addressed the same way the MCP surface addresses one;
+      // the pipeline takes it off before the flow sees its options.
+      if (typeof b.editor === "string" && b.editor) input[EDITOR_TARGET_PARAM] = b.editor;
     }
-    // Same gate as the MCP surface (#817): beyond one editor a run has to
-    // say which one it means, because a flow is whatever its steps are and
-    // the fall-through would edit a project nobody named. Inert at one
-    // editor, where this returns null without classifying anything.
-    if (!targeted && ctx.sessions && ctx.sessions.size > 1) {
-      const refusal = refuseUntargetedCall({
-        taskName: "flow.run",
-        editors: ctx.sessions.list().map((s) => s.name),
-        activeEditor: ctx.sessions.active.name,
-        targetParam: EDITOR_TARGET_PARAM,
-      });
-      if (refusal) return send(400, { error: refusal });
-    }
-    const ran = await gatedFlow(approval ? { ...runCtx, flowStepApproval: approval } : runCtx, params, "flow.run");
-    if ("refused" in ran) return send(409, ran.refused);
-    const result = ran.value;
-    return send(200, result);
+    return answer(input, approval ?? undefined);
   }
 
 

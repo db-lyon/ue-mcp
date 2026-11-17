@@ -187,6 +187,7 @@ export async function run(argv: string[]): Promise<number> {
   // The runtime logs its startup the way a server does; a terminal command wants warnings only.
   setDefaultLogLevel("warn");
   const { createRuntime } = await import("../server/runtime.js");
+  const { toToolResult } = await import("../server/server-dispatch.js");
   const rt = await createRuntime([project]);
 
   const input: Record<string, unknown> = { action: sub };
@@ -205,28 +206,26 @@ export async function run(argv: string[]): Promise<number> {
         if (line) console.log(line);
       })
     : () => undefined;
-  let result;
+  let served;
   try {
-    result = await rt.callTool(rt.flowTool, input);
+    served = await rt.callFlowOutcome(input);
   } finally {
     unsubscribe();
   }
 
-  // A flow answers with one text block; a media block (an image a step returned) carries no JSON.
-  const first = result.content[0];
-  const text = first?.type === "text" ? first.text : "";
-  if (result.isError) {
+  const { outcome } = served;
+  if (outcome.code !== undefined) {
+    // What an MCP client reads for the same failure.
+    const text = toToolResult(outcome, rt.sessions, served.session).content.map((c) => (c.type === "text" ? c.text : "")).join("\n");
     if (json) console.log(text);
     else console.error(`  ${RED}${text}${RESET}`);
     return 1;
   }
-  let parsed: Record<string, unknown>;
-  try {
-    parsed = JSON.parse(text) as Record<string, unknown>;
-  } catch {
-    console.log(text);
+  if (!outcome.data || typeof outcome.data !== "object") {
+    console.log(typeof outcome.data === "string" ? outcome.data : JSON.stringify(outcome.data));
     return 0;
   }
+  const parsed = outcome.data as Record<string, unknown>;
   if (json) {
     console.log(JSON.stringify(parsed, null, 2));
   } else if (sub === "list") {

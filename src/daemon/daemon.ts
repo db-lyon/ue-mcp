@@ -18,12 +18,13 @@ import { editorStepFailure } from "./editor-step.js";
 import { readEnv } from "../core/env.js";
 import { packageVersion } from "../core/package-root.js";
 import { compareVersions } from "../core/semver.js";
-import { hostIsAllowed } from "../core/loopback-host.js";
+import { hostIsAllowed, tokensMatch } from "../core/loopback-host.js";
 import { StatusError } from "../core/status-error.js";
 import { normalizeProjectRoot } from "../bridge/wire-contract.js";
 import { bridgeInstancesDir, findLiveInstanceRecord, type BridgeInstanceRecord } from "../bridge/editor-target.js";
 import type { EditorSession } from "../sessions/session.js";
 import { createRuntime, type Runtime } from "../server/runtime.js";
+import { toToolResult } from "../server/server-dispatch.js";
 import type { InProcessCallOptions } from "../server/call-options.js";
 import { startVersionCheck } from "../core/version-check.js";
 import { createMcpServer } from "../server/mcp-server.js";
@@ -453,12 +454,12 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
   const authorized = (req: http.IncomingMessage): boolean => {
     if (!hostIsAllowed(req) || !originAllowed(req)) return false;
     const header = req.headers.authorization;
-    if (header === `Bearer ${token}`) return true;
+    if (typeof header === "string" && header.startsWith("Bearer ") && tokensMatch(header.slice("Bearer ".length), token)) return true;
     // The served page authenticates by cookie, set once from ?token= on /ui.
-    if (cookieTokens(req).includes(token)) return true;
+    if (cookieTokens(req).some((t) => tokensMatch(t, token))) return true;
     // EventSource cannot set headers; the stream alone also takes the token as a query.
     const url = new URL(req.url ?? "/", "http://127.0.0.1");
-    return url.pathname === routePath("events") && url.searchParams.get("token") === token;
+    return url.pathname === routePath("events") && tokensMatch(url.searchParams.get("token"), token);
   };
 
   const health = (): DaemonHealth => ({
@@ -487,16 +488,16 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
   // The daemon owns these, so it can say beforehand why the editor is about to
   // go away and the disconnect is classified as that rather than guessed.
   const editorOp = async (op: string): Promise<Record<string, unknown>> => {
-    const text = (r: { content?: Array<{ type?: string; text?: string }> }) => r.content?.map((c) => c.text ?? "").join("\n") ?? "";
     const step = async (category: string, action: string) => {
       const name = `${category}.${action}`;
       events.publish("editor.operation", { op, step: name, phase: "started" });
-      const result = await rt.callAction(category, action);
-      const body = text(result);
-      // A handler reports failure by RETURNING success: false, which the dispatch
-      // passes on as a result, not an error. Reading isError alone took a failed
-      // build for a good one and launched the editor on it (#1384).
-      const failure = editorStepFailure(result.isError === true, body);
+      const served = await rt.callActionOutcome(category, action);
+      // `result` is the step's answer as an MCP client reads it.
+      const body = toToolResult(served.outcome, rt.sessions, served.session).content.map((c) => (c.type === "text" ? c.text : "")).join("\n");
+      // A handler reports failure by RETURNING success: false, which the
+      // pipeline passes on as a result, not an error. Reading the error alone
+      // took a failed build for a good one and launched the editor on it (#1384).
+      const failure = editorStepFailure(served.outcome);
       if (failure === null) {
         events.publish("editor.operation", { op, step: name, phase: "done" });
       } else {
@@ -847,7 +848,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
     ...pluginRoutes({ projectDir, onChanged: () => events.publish("plugins.changed", {}) }),
     "flows": async ({ req, res, url, path: routed }) => {
       try {
-        const handled = await handleFlowRoute(rt.flowTool, rt.baseCtx, req, res, routed.slice("/v1".length), url);
+        const handled = await handleFlowRoute(rt.flowRequest, req, res, routed.slice("/v1".length), url);
         return handled ? HANDLED : { status: 404 };
       } catch (e) {
         return { status: 500, body: errorBody(e) };
@@ -883,7 +884,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
   // default 16 KiB still reaches the login below, which clears it.
   const httpServer = http.createServer({ maxHeaderSize: 64 * 1024 }, (req, res) => {
     const first = new URL(req.url ?? "/", "http://127.0.0.1");
-    if (req.method === "GET" && (first.pathname === "/ui" || first.pathname === "/ui/") && first.searchParams.get("token") === token
+    if (req.method === "GET" && (first.pathname === "/ui" || first.pathname === "/ui/") && tokensMatch(first.searchParams.get("token"), token)
       && hostIsAllowed(req)) {
       void staleCookies(req).then((stale) => {
         res.writeHead(302, {
@@ -1011,7 +1012,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
       const http = rt.project.config.http;
       if (!http?.enabled || flowHttp) return;
       try {
-        flowHttp = startFlowHttpServer(rt.flowTool, rt.baseCtx, { port: http.port, host: http.host }).server;
+        flowHttp = startFlowHttpServer(rt.flowRequest, { port: http.port, host: http.host }).server;
       } catch (e) {
         error("http", "Failed to start the flow HTTP server", e);
       }

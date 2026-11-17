@@ -7,7 +7,14 @@
  */
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { SessionRegistry } from "../../src/sessions/session.js";
-import { routeEditorCall } from "../../src/dispatch/editor-gate.js";
+import { resolveEditorTarget, takeEditorTarget } from "../../src/dispatch/editor-gate.js";
+import type { ToolDef } from "../../src/surface/tool-types.js";
+
+/** What the call boundary does with `editor`: take it off, then resolve it. */
+function routeEditorCall(tool: ToolDef, params: Record<string, unknown>, registry: SessionRegistry) {
+  const taken = takeEditorTarget(tool, params);
+  return { ...resolveEditorTarget(registry, taken.target), params: taken.params };
+}
 import { editorTool } from "../../src/tools/editor.js";
 import { buildMicroGateway } from "../../src/surface/context/micro-context.js";
 import { ProjectFixture } from "../helpers/project-fixture.js";

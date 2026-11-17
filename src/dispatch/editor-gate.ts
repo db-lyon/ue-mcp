@@ -74,51 +74,45 @@ function describeWhy(taskName: string, cls: ActionClass): string {
     : `'${taskName}' changes the editor it runs in.`;
 }
 
-export interface RoutedCall {
-  /** The editor this call runs in. */
-  session: EditorSession;
-  /** Params with every routing instruction removed, at both nesting levels. */
+/** The editor a call named, taken off its parameters. */
+export interface TakenTarget {
+  /** The name, project or path the caller gave; undefined when it gave none. */
+  target: unknown;
+  /** Params with the routing instruction removed, at both nesting levels. */
   params: Record<string, unknown>;
-  /** True when the caller named the editor rather than taking the default. */
-  targeted: boolean;
 }
 
 /**
- * Route one call to the editor it addressed.
+ * Take the editor a call names off its parameters, before anything validates
+ * them, so validation never sees or strips a routing instruction (#1278).
  *
  * `editor` is a routing instruction only on a tool that had the parameter
- * injected; on any other tool it is that tool's own parameter and is left
- * alone. It is stripped here, at both nesting levels, so no dispatch path can
- * forward it into a bridge call.
+ * injected, or on one that does not declare it (one editor: not advertised,
+ * but a name a caller still holds resolves strictly). On a tool that declares
+ * its own `editor` it is that tool's parameter and is left alone. The micro
+ * gateway carries every real parameter inside `args`, so both levels are read
+ * and both stripped.
  */
-export function routeEditorCall(
-  tool: ToolDef,
-  params: Record<string, unknown>,
-  sessions: SessionRegistry,
-): RoutedCall {
-  // The micro gateway carries every real parameter inside `args`, so a target
-  // arrives there rather than at the top level. Read both, and strip both.
+export function takeEditorTarget(tool: ToolDef, params: Record<string, unknown>): TakenTarget {
+  if (!tool.injectedEditorParam && EDITOR_TARGET_PARAM in tool.schema) return { target: undefined, params };
   const nested = params.args && typeof params.args === "object"
     ? (params.args as Record<string, unknown>)
     : undefined;
-  if (!tool.injectedEditorParam) {
-    // One editor: the parameter is not advertised, but a name a caller still
-    // holds resolves strictly, so a stale one refuses instead of falling
-    // through to the active editor (#1278). A tool's own `editor` is left alone.
-    if (EDITOR_TARGET_PARAM in tool.schema) return { session: sessions.active, params, targeted: false };
-    const held = params[EDITOR_TARGET_PARAM] ?? nested?.[EDITOR_TARGET_PARAM];
-    if (held === undefined || held === null || held === "") return { session: sessions.active, params, targeted: false };
-    const session = sessions.resolve(held);
-    const stripped = { ...stripEditorTarget(params) };
-    if (nested) stripped.args = stripEditorTarget(nested);
-    return { session, params: stripped, targeted: true };
-  }
   const target = params[EDITOR_TARGET_PARAM] ?? nested?.[EDITOR_TARGET_PARAM];
+  if (!tool.injectedEditorParam && (target === undefined || target === null || target === "")) return { target: undefined, params };
   const stripped = stripEditorTarget(params);
   if (nested) stripped.args = stripEditorTarget(nested);
+  return { target, params: stripped };
+}
+
+/**
+ * The editor a taken target names, and whether the caller named one. No name
+ * is the active editor; a name that matches nothing throws rather than falling
+ * through to it.
+ */
+export function resolveEditorTarget(sessions: SessionRegistry, target: unknown): { session: EditorSession; targeted: boolean } {
   return {
     session: sessions.resolve(target),
-    params: stripped,
     targeted: typeof target === "string" && target.trim() !== "",
   };
 }
