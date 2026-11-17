@@ -6,7 +6,10 @@
  * not have, so the editor's own pie(script_validate) has to refuse it and the
  * flow has to hand that refusal back before pie(script_create) saves the fix.
  */
+import * as fs from "node:fs";
 import * as http from "node:http";
+import * as os from "node:os";
+import * as path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { callBridge, disconnectBridge, getBridge, type TestResult } from "../setup.js";
 import type { EditorBridge } from "../../src/bridge/bridge.js";
@@ -58,8 +61,20 @@ beforeAll(async () => {
     env.ANTHROPIC_API_KEY = "sk-ant-live-fake";
     env.ANTHROPIC_BASE_URL = `http://127.0.0.1:${(fake.address() as { port: number }).port}`;
   }
+  // Core ships no model: the first-party anthropic extension provides it, and
+  // extensions load only in the daemon, so this server runs through one.
+  const extensions = fs.mkdtempSync(path.join(os.tmpdir(), "ue-mcp-live-ext-"));
+  fs.cpSync(path.resolve("extensions", "anthropic"), path.join(extensions, "anthropic"), { recursive: true });
+  env.UE_MCP_EXTENSIONS_DIR = extensions;
   const target = await liveTarget();
-  server = await LiveServer.start({ projects: [target.uproject], env });
+  const viaDaemon = process.env.UE_MCP_LIVE_VIA_DAEMON;
+  process.env.UE_MCP_LIVE_VIA_DAEMON = "1";
+  try {
+    server = await LiveServer.start({ projects: [target.uproject], env });
+  } finally {
+    if (viaDaemon === undefined) delete process.env.UE_MCP_LIVE_VIA_DAEMON;
+    else process.env.UE_MCP_LIVE_VIA_DAEMON = viaDaemon;
+  }
 }, 240_000);
 
 afterAll(async () => {
