@@ -47,7 +47,7 @@ export const pluginsTool: ToolDef = categoryTool(
   {
     ...epicSchema,
     name: z.string().optional().describe("Plugin npm package name (describe action)"),
-  },
+  }, { label: { alwaysOn: true } },
 );
 
 function summarise(p: PluginInfo): Record<string, unknown> {

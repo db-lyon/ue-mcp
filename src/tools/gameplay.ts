@@ -129,5 +129,5 @@ export const gameplayTool: ToolDef = categoryTool(
     ...massSpecSchema,
     ...specSchema,
     ...diagramSchema({ ...epicSchema, ...physicsSpecSchema, ...massSpecSchema, ...specSchema }),
-  },
+  }, { label: { text: "gameplay / ai", description: "input mappings, collision, navmesh, PIE", requiredPlugins: ["EnhancedInput"], keywords: ["collision", "nav mesh", "physics", "input", "imc", "pie"] } },
 );

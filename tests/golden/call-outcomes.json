@@ -1,0 +1,569 @@
+{
+  "full": {
+    "category": {
+      "read": {
+        "isError": false,
+        "blocks": [
+          "{\n  \"success\": true,\n  \"actors\": [\n    {\n      \"label\": \"Floor\",\n      \"class\": \"StaticMeshActor\"\n    }\n  ],\n  \"count\": 1\n}"
+        ],
+        "media": 0
+      },
+      "mutate": {
+        "isError": false,
+        "blocks": [
+          "{\n  \"success\": true,\n  \"actorLabel\": \"Cube\",\n  \"actorPath\": \"/Game/Map.Map:PersistentLevel.Cube\"\n}"
+        ],
+        "media": 0
+      },
+      "undeclaredInTask": {
+        "isError": true,
+        "blocks": [
+          "Error [TASK_FAILED]: place_actor does not take actorLabel; it takes actorClass, label, onConflict, location, rotation, scale, staticMesh, material, world, pieInstance, so the call was not sent. project(action=\"describe_action\") lists what it takes."
+        ],
+        "media": 0
+      },
+      "media": {
+        "isError": false,
+        "blocks": [
+          "{\n  \"success\": true,\n  \"media\": [\n    {\n      \"type\": \"image\",\n      \"mimeType\": \"image/png\",\n      \"width\": 1,\n      \"height\": 1,\n      \"contentBlock\": 1\n    }\n  ]\n}"
+        ],
+        "media": 1
+      },
+      "taskFailed": {
+        "isError": false,
+        "blocks": [
+          "{\n  \"success\": false,\n  \"error\": \"The editor refused to delete /Game/Refused.\"\n}"
+        ],
+        "media": 0
+      },
+      "bridgeError": {
+        "isError": true,
+        "blocks": [
+          "Error [TASK_FAILED]: Bridge error: Unknown method: get_current_level. 'get_current_level' is advertised by this ue-mcp package but not registered by the running plugin. Run `ue-mcp update` in the project directory (it deploys the plugin from this package and rebuilds it), then restart the editor."
+        ],
+        "media": 0
+      },
+      "handler": {
+        "isError": false,
+        "blocks": [
+          "{\"tool\":\"level\",\"action\":\"get_selected\",\"bridge\":\"get_selected_actors\"}"
+        ],
+        "media": 0
+      },
+      "unknownAction": {
+        "isError": true,
+        "blocks": [
+          "Error [NOT_FOUND]: Unknown action 'get_outliners' on 'level'. Did you mean: get_outliner? 249 actions available - project(action=\"describe_action\", category=\"level\") lists them with their parameters, and project(action=\"search_tools\") searches by intent."
+        ],
+        "media": 0
+      },
+      "invalidParams": {
+        "isError": true,
+        "blocks": [
+          "MCP error -32602: Input validation error: Invalid arguments for tool level: Invalid input: expected number, received string at limit"
+        ],
+        "media": 0
+      },
+      "undeclaredKey": {
+        "isError": true,
+        "blocks": [
+          "MCP error -32602: get_outliner does not take notAParam; it takes classFilter, exactClass, nameFilter, folderPath, folderPathPrefix, editorHidden, includeStreaming, world, pieInstance, cursor, limit, so the call was not sent. project(action=\"describe_action\") lists what it takes."
+        ],
+        "media": 0
+      },
+      "disabled": {
+        "isError": true,
+        "blocks": [
+          "MCP error -32602: Tool foliage not found"
+        ],
+        "media": 0
+      },
+      "playtest": {
+        "isError": true,
+        "blocks": [
+          "{\n  \"success\": false,\n  \"refusedMethod\": \"pie.script_run\",\n  \"playtestMode\": \"manual\",\n  \"reason\": \"Playtest runs are set to manual for this project (playtest mode in <SANDBOX>/home/.ue-mcp/state.json), so pie.script_run was not run: a person starts playtests here. To let an agent run them, a person can run `ue-mcp playtest mode automatic --editor <this project's .uproject>`.\"\n}"
+        ],
+        "media": 0
+      },
+      "staleEditor": {
+        "isError": true,
+        "blocks": [
+          "Error [NOT_FOUND]: No editor session named 'Nowhere'. Registered: Game. Use project(action='list_editors') to see them, or project(action='add_editor', projectPath=...) to register one."
+        ],
+        "media": 0
+      },
+      "dialogRead": {
+        "isError": true,
+        "blocks": [
+          "{\n  \"success\": false,\n  \"dialogBlocking\": true,\n  \"refusedMethod\": \"level.get_outliner\",\n  \"dialogMode\": \"defer\",\n  \"dialogPhase\": \"asking\",\n  \"dialogTitle\": \"Save Content\",\n  \"dialogMessage\": \"Save changes to 1 package?\",\n  \"buttons\": [\n    \"Save\",\n    \"Don't Save\"\n  ],\n  \"error\": \"A modal dialog is blocking the editor, so 'level.get_outliner' was refused without running. Unreal cannot execute anything else until the dialog is answered. Dialog mode is defer, so this names the dialog but not the calls that press its buttons, and a press sent from here is refused: a person answers it in the Unreal Editor window. Every other action returns this same refusal until then.\"\n}"
+        ],
+        "media": 0
+      },
+      "dialogMutate": {
+        "isError": true,
+        "blocks": [
+          "{\n  \"success\": false,\n  \"dialogBlocking\": true,\n  \"refusedMethod\": \"level.place_actor\",\n  \"dialogMode\": \"defer\",\n  \"dialogPhase\": \"asking\",\n  \"dialogTitle\": \"Save Content\",\n  \"dialogMessage\": \"Save changes to 1 package?\",\n  \"buttons\": [\n    \"Save\",\n    \"Don't Save\"\n  ],\n  \"error\": \"A modal dialog is blocking the editor, so 'level.place_actor' was refused without running. Unreal cannot execute anything else until the dialog is answered. Dialog mode is defer, so this names the dialog but not the calls that press its buttons, and a press sent from here is refused: a person answers it in the Unreal Editor window. Every other action returns this same refusal until then.\"\n}"
+        ],
+        "media": 0
+      },
+      "dialogList": {
+        "isError": false,
+        "blocks": [
+          "{\n  \"success\": true,\n  \"dialogs\": [\n    {\n      \"title\": \"Save Content\",\n      \"message\": \"Save changes to 1 package?\",\n      \"buttons\": [\n        \"Save\",\n        \"Don't Save\"\n      ]\n    }\n  ],\n  \"editorBlockedByDialog\": true,\n  \"dialogTitle\": \"Save Content\",\n  \"dialogMessage\": \"Save changes to 1 package?\",\n  \"dialogNote\": \"A modal dialog is blocking this editor. Every other action is refused until it is answered, and in defer mode it is answered by a person, not from here: read it with editor(list_dialogs) if you need to see it, but a press sent from here is refused.\"\n}"
+        ],
+        "media": 0
+      }
+    },
+    "flat": {
+      "isError": false,
+      "blocks": [
+        "{\n  \"success\": true,\n  \"actors\": [\n    {\n      \"label\": \"Floor\",\n      \"class\": \"StaticMeshActor\"\n    }\n  ],\n  \"count\": 1\n}"
+      ],
+      "media": 0
+    },
+    "flow": {
+      "plan": {
+        "isError": false,
+        "blocks": [
+          "{\n  \"success\": true,\n  \"steps\": [\n    {\n      \"stepNumber\": 1,\n      \"type\": \"task\",\n      \"name\": \"level.get_outliner\",\n      \"skipped\": false,\n      \"duration\": \"<VAR>\"\n    },\n    {\n      \"stepNumber\": 2,\n      \"type\": \"task\",\n      \"name\": \"asset.delete\",\n      \"skipped\": false,\n      \"duration\": \"<VAR>\"\n    }\n  ],\n  \"duration\": \"<VAR>\",\n  \"inputs\": [\n    {\n      \"name\": \"classFilter\",\n      \"type\": \"string\",\n      \"required\": false,\n      \"steps\": [\n        {\n          \"path\": \"1\",\n          \"task\": \"level.get_outliner\",\n          \"flow\": \"outline\"\n        }\n      ],\n      \"description\": \"Case-sensitive substring over the class name\"\n    },\n    {\n      \"name\": \"cursor\",\n      \"type\": \"string\",\n      \"required\": false,\n      \"steps\": [\n        {\n          \"path\": \"1\",\n          \"task\": \"level.get_outliner\",\n          \"flow\": \"outline\"\n        }\n      ],\n      \"description\": \"Resume a paged read: pass back the nextCursor from the previous page, unmodified\"\n    },\n    {\n      \"name\": \"editorHidden\",\n      \"type\": \"boolean\",\n      \"required\": false,\n      \"steps\": [\n        {\n          \"path\": \"1\",\n          \"task\": \"level.get_outliner\",\n          \"flow\": \"outline\"\n        }\n      ],\n      \"description\": \"Only editor-hidden (true) or only visible (false) actors\"\n    },\n    {\n      \"name\": \"exactClass\",\n      \"type\": \"boolean\",\n      \"required\": false,\n      \"steps\": [\n        {\n          \"path\": \"1\",\n          \"task\": \"level.get_outliner\",\n          \"flow\": \"outline\"\n        }\n      ],\n      \"description\": \"Require classFilter to be the exact class name\"\n    },\n    {\n      \"name\": \"folderPath\",\n      \"type\": \"string\",\n      \"required\": false,\n      \"steps\": [\n        {\n          \"path\": \"1\",\n          \"task\": \"level.get_outliner\",\n          \"flow\": \"outline\"\n        }\n      ],\n      \"description\": \"World Outliner folder, matched exactly\"\n    },\n    {\n      \"name\": \"folderPathPrefix\",\n      \"type\": \"string\",\n      \"required\": false,\n      \"steps\": [\n        {\n          \"path\": \"1\",\n          \"task\": \"level.get_outliner\",\n          \"flow\": \"outline\"\n        }\n      ],\n      \"description\": \"World Outliner folder, matched with every folder nested under it\"\n    },\n    {\n      \"name\": \"includeStreaming\",\n      \"type\": \"boolean\",\n      \"required\": false,\n      \"steps\": [\n        {\n          \"path\": \"1\",\n          \"task\": \"level.get_outliner\",\n          \"flow\": \"outline\"\n        }\n      ],\n      \"description\": \"Include World Partition streaming-proxy and HLOD actors (default false)\"\n    },\n    {\n      \"name\": \"limit\",\n      \"type\": \"integer\",\n      \"required\": false,\n      \"steps\": [\n        {\n          \"path\": \"1\",\n          \"task\": \"level.get_outliner\",\n          \"flow\": \"outline\"\n        }\n      ],\n      \"description\": \"Rows on this page\"\n    },\n    {\n      \"name\": \"nameFilter\",\n      \"type\": \"string\",\n      \"required\": false,\n      \"steps\": [\n        {\n          \"path\": \"1\",\n          \"task\": \"level.get_outliner\",\n          \"flow\": \"outline\"\n        }\n      ],\n      \"description\": \"Case-sensitive substring over the internal name or the label\"\n    },\n    {\n      \"name\": \"pieInstance\",\n      \"type\": \"integer\",\n      \"required\": false,\n      \"steps\": [\n        {\n          \"path\": \"1\",\n          \"task\": \"level.get_outliner\",\n          \"flow\": \"outline\"\n        }\n      ],\n      \"description\": \"Which PIE world when world is pie: 0 = server or primary, 1..N = clients\"\n    },\n    {\n      \"name\": \"world\",\n      \"type\": \"string\",\n      \"required\": false,\n      \"steps\": [\n        {\n          \"path\": \"1\",\n          \"task\": \"level.get_outliner\",\n          \"flow\": \"outline\"\n        }\n      ],\n      \"description\": \"World scope: editor (default) | pie\"\n    },\n    {\n      \"name\": \"force\",\n      \"type\": \"boolean\",\n      \"required\": false,\n      \"steps\": [\n        {\n          \"path\": \"2\",\n          \"task\": \"asset.delete\",\n          \"flow\": \"outline\"\n        }\n      ],\n      \"description\": \"Delete even when other packages reference it, closing open editors (default false)\"\n    }\n  ],\n  \"definition\": {\n    \"description\": \"Read the outliner, then fail in the editor.\",\n    \"steps\": {\n      \"1\": {\n        \"task\": \"level.get_outliner\"\n      },\n      \"2\": {\n        \"task\": \"asset.delete\",\n        \"options\": {\n          \"assetPath\": \"/Game/Refused\"\n        }\n      }\n    }\n  }\n}"
+        ],
+        "media": 0
+      },
+      "planUnknown": {
+        "isError": true,
+        "blocks": [
+          "Error [UNKNOWN]: Flow \"nope\" not found in configuration"
+        ],
+        "media": 0
+      },
+      "run": {
+        "isError": false,
+        "blocks": [
+          "{\n  \"summary\": \"✗ Flow failed in <N>ms\\n\\n  ✓ 1. level.get_outliner (task) - <N>ms\\n  ✗ 2. asset.delete (task) - FAILED\\n      The editor refused to delete /Game/Refused.\",\n  \"success\": false,\n  \"duration\": \"<VAR>\",\n  \"stepCount\": 2,\n  \"failedStep\": \"asset.delete\",\n  \"steps\": [\n    {\n      \"stepNumber\": 1,\n      \"name\": \"level.get_outliner\",\n      \"type\": \"task\",\n      \"skipped\": false,\n      \"success\": true,\n      \"duration\": \"<VAR>\",\n      \"attempts\": 1,\n      \"data\": {\n        \"success\": true,\n        \"actors\": [\n          {\n            \"label\": \"Floor\",\n            \"class\": \"StaticMeshActor\"\n          }\n        ],\n        \"count\": 1\n      }\n    },\n    {\n      \"stepNumber\": 2,\n      \"name\": \"asset.delete\",\n      \"type\": \"task\",\n      \"skipped\": false,\n      \"success\": false,\n      \"duration\": \"<VAR>\",\n      \"attempts\": 1,\n      \"error\": {\n        \"message\": \"The editor refused to delete /Game/Refused.\",\n        \"name\": \"Error\"\n      },\n      \"data\": {\n        \"success\": false,\n        \"error\": \"The editor refused to delete /Game/Refused.\"\n      }\n    }\n  ],\n  \"runId\": \"<VAR>\"\n}"
+        ],
+        "media": 0
+      },
+      "runUnderDialog": {
+        "isError": true,
+        "blocks": [
+          "{\n  \"success\": false,\n  \"dialogBlocking\": true,\n  \"refusedMethod\": \"flow.run\",\n  \"dialogMode\": \"defer\",\n  \"dialogPhase\": \"asking\",\n  \"dialogTitle\": \"Save Content\",\n  \"dialogMessage\": \"Save changes to 1 package?\",\n  \"buttons\": [\n    \"Save\",\n    \"Don't Save\"\n  ],\n  \"error\": \"A modal dialog is blocking the editor, so 'flow.run' was refused without running. Unreal cannot execute anything else until the dialog is answered. Dialog mode is defer, so this names the dialog but not the calls that press its buttons, and a press sent from here is refused: a person answers it in the Unreal Editor window. Every other action returns this same refusal until then.\"\n}"
+        ],
+        "media": 0
+      }
+    }
+  },
+  "lean": {
+    "category": {
+      "read": {
+        "isError": false,
+        "blocks": [
+          "{\n  \"success\": true,\n  \"actors\": [\n    {\n      \"label\": \"Floor\",\n      \"class\": \"StaticMeshActor\"\n    }\n  ],\n  \"count\": 1\n}"
+        ],
+        "media": 0
+      },
+      "mutate": {
+        "isError": false,
+        "blocks": [
+          "{\n  \"success\": true,\n  \"actorLabel\": \"Cube\",\n  \"actorPath\": \"/Game/Map.Map:PersistentLevel.Cube\"\n}"
+        ],
+        "media": 0
+      },
+      "undeclaredInTask": {
+        "isError": true,
+        "blocks": [
+          "Error [TASK_FAILED]: place_actor does not take actorLabel; it takes actorClass, label, onConflict, location, rotation, scale, staticMesh, material, world, pieInstance, so the call was not sent. project(action=\"describe_action\") lists what it takes."
+        ],
+        "media": 0
+      },
+      "media": {
+        "isError": false,
+        "blocks": [
+          "{\n  \"success\": true,\n  \"media\": [\n    {\n      \"type\": \"image\",\n      \"mimeType\": \"image/png\",\n      \"width\": 1,\n      \"height\": 1,\n      \"contentBlock\": 1\n    }\n  ]\n}"
+        ],
+        "media": 1
+      },
+      "taskFailed": {
+        "isError": false,
+        "blocks": [
+          "{\n  \"success\": false,\n  \"error\": \"The editor refused to delete /Game/Refused.\"\n}"
+        ],
+        "media": 0
+      },
+      "bridgeError": {
+        "isError": true,
+        "blocks": [
+          "Error [TASK_FAILED]: Bridge error: Unknown method: get_current_level. 'get_current_level' is advertised by this ue-mcp package but not registered by the running plugin. Run `ue-mcp update` in the project directory (it deploys the plugin from this package and rebuilds it), then restart the editor."
+        ],
+        "media": 0
+      },
+      "handler": {
+        "isError": false,
+        "blocks": [
+          "{\"tool\":\"level\",\"action\":\"get_selected\",\"bridge\":\"get_selected_actors\"}"
+        ],
+        "media": 0
+      },
+      "unknownAction": {
+        "isError": true,
+        "blocks": [
+          "Error [NOT_FOUND]: Unknown action 'get_outliners' on 'level'. Did you mean: get_outliner? 250 actions available - project(action=\"describe_action\", category=\"level\") lists them with their parameters, and project(action=\"search_tools\") searches by intent."
+        ],
+        "media": 0
+      },
+      "invalidParams": {
+        "isError": true,
+        "blocks": [
+          "MCP error -32602: Input validation error: Invalid arguments for tool level: Invalid input: expected number, received string at limit"
+        ],
+        "media": 0
+      },
+      "undeclaredKey": {
+        "isError": true,
+        "blocks": [
+          "MCP error -32602: get_outliner does not take notAParam; it takes classFilter, exactClass, nameFilter, folderPath, folderPathPrefix, editorHidden, includeStreaming, world, pieInstance, cursor, limit, so the call was not sent. project(action=\"describe_action\") lists what it takes."
+        ],
+        "media": 0
+      },
+      "disabled": {
+        "isError": true,
+        "blocks": [
+          "MCP error -32602: Tool foliage not found"
+        ],
+        "media": 0
+      },
+      "playtest": {
+        "isError": true,
+        "blocks": [
+          "{\n  \"success\": false,\n  \"refusedMethod\": \"pie.script_run\",\n  \"playtestMode\": \"manual\",\n  \"reason\": \"Playtest runs are set to manual for this project (playtest mode in <SANDBOX>/home/.ue-mcp/state.json), so pie.script_run was not run: a person starts playtests here. To let an agent run them, a person can run `ue-mcp playtest mode automatic --editor <this project's .uproject>`.\"\n}"
+        ],
+        "media": 0
+      },
+      "staleEditor": {
+        "isError": true,
+        "blocks": [
+          "Error [NOT_FOUND]: No editor session named 'Nowhere'. Registered: Game. Use project(action='list_editors') to see them, or project(action='add_editor', projectPath=...) to register one."
+        ],
+        "media": 0
+      },
+      "dialogRead": {
+        "isError": true,
+        "blocks": [
+          "{\n  \"success\": false,\n  \"dialogBlocking\": true,\n  \"refusedMethod\": \"level.get_outliner\",\n  \"dialogMode\": \"defer\",\n  \"dialogPhase\": \"asking\",\n  \"dialogTitle\": \"Save Content\",\n  \"dialogMessage\": \"Save changes to 1 package?\",\n  \"buttons\": [\n    \"Save\",\n    \"Don't Save\"\n  ],\n  \"error\": \"A modal dialog is blocking the editor, so 'level.get_outliner' was refused without running. Unreal cannot execute anything else until the dialog is answered. Dialog mode is defer, so this names the dialog but not the calls that press its buttons, and a press sent from here is refused: a person answers it in the Unreal Editor window. Every other action returns this same refusal until then.\"\n}"
+        ],
+        "media": 0
+      },
+      "dialogMutate": {
+        "isError": true,
+        "blocks": [
+          "{\n  \"success\": false,\n  \"dialogBlocking\": true,\n  \"refusedMethod\": \"level.place_actor\",\n  \"dialogMode\": \"defer\",\n  \"dialogPhase\": \"asking\",\n  \"dialogTitle\": \"Save Content\",\n  \"dialogMessage\": \"Save changes to 1 package?\",\n  \"buttons\": [\n    \"Save\",\n    \"Don't Save\"\n  ],\n  \"error\": \"A modal dialog is blocking the editor, so 'level.place_actor' was refused without running. Unreal cannot execute anything else until the dialog is answered. Dialog mode is defer, so this names the dialog but not the calls that press its buttons, and a press sent from here is refused: a person answers it in the Unreal Editor window. Every other action returns this same refusal until then.\"\n}"
+        ],
+        "media": 0
+      },
+      "dialogList": {
+        "isError": false,
+        "blocks": [
+          "{\n  \"success\": true,\n  \"dialogs\": [\n    {\n      \"title\": \"Save Content\",\n      \"message\": \"Save changes to 1 package?\",\n      \"buttons\": [\n        \"Save\",\n        \"Don't Save\"\n      ]\n    }\n  ],\n  \"editorBlockedByDialog\": true,\n  \"dialogTitle\": \"Save Content\",\n  \"dialogMessage\": \"Save changes to 1 package?\",\n  \"dialogNote\": \"A modal dialog is blocking this editor. Every other action is refused until it is answered, and in defer mode it is answered by a person, not from here: read it with editor(list_dialogs) if you need to see it, but a press sent from here is refused.\"\n}"
+        ],
+        "media": 0
+      }
+    },
+    "describe": {
+      "isError": false,
+      "blocks": [
+        "{\n  \"category\": \"level\",\n  \"count\": 249,\n  \"signatures\": [\n    \"get_outliner(classFilter?, exactClass?:b, nameFilter?, folderPath?, folderPathPrefix?, editorHidden?:b, includeStreaming?:b, world?, pieInstance?:i, cursor?, limit?:i)\",\n    \"set_editor_visibility(hidden:b, actorLabels?:[s], all?:b)\",\n    \"place_actor(actorClass, label?, onConflict?, location?:v, rotation?:r, scale?:v, staticMesh?, material?, world?, pieInstance?:i)\",\n    \"delete_actor(actorLabel?, actorPath?)\",\n    \"get_actor_details(actorLabel?, actorPath?, includeProperties?:b, propertyName?, world?, pieInstance?:i)\",\n    \"move_actor(actorLabel?, actorPath?, location?:v, rotation?:r, scale?:v, world?, pieInstance?:i)\",\n    \"aim_actor_at(actorLabel?, actorPath?, targetPoint?:v, targetActor?, targetActorPath?, roll?:n, world?, pieInstance?:i)\",\n    \"nav_project_point(point:v, extent?:v, world?, pieInstance?:i)\",\n    \"select(any(actorLabels:[s]; actorPaths:[s]))\",\n    \"select_component(actorLabel?, actorPath?, componentName, addToSelection?:b)\",\n    \"get_selected()\",\n    \"add_component(actorLabel?, actorPath?, componentClass, componentName, onConflict?)\",\n    \"remove_component(actorLabel?, actorPath?, componentName)\",\n    \"set_component_property(actorLabel?, actorPath?, componentName?, propertyName, value:*, world?, pieInstance?:i)\",\n    \"nudge_component(one(actorLabel; actorPath), componentName, frame?, translationDelta?:o, axisRotation?:o, viewRotation?:o, scaleMultiplier?:n, dryRun?:b, world?, pieInstance?:i)\",\n    \"restore_component_transform(one(actorLabel; actorPath), componentName, relativeTransform:o, world?, pieInstance?:i)\",\n    \"get_component_details(actorLabel?, actorPath?, componentName?, includeValues?:b, propertyNames?:[s], world?, pieInstance?:i)\",\n    \"get_current()\",\n    \"load(levelPath, saveFirst|saveCurrent?:b, discardUnsaved?:b)\",\n    \"clear_level_script(dryRun?:b, save?:b)\",\n    \"save(force?:b, includeExternalActors?:b, commitDeletes?:b)\",\n    \"list(cursor?, limit?:i)\",\n    \"create(levelPath, templateLevel?, onConflict?, worldPartition?:b)\",\n    \"spawn_volume(volumeType, onConflict?, label?, location?:v, extent?:v, graphPath?)\",\n    \"list_volumes(volumeType?, cursor?, limit?:i)\",\n    \"set_volume_properties(actorLabel?, actorPath?, properties:o)\",\n    \"spawn_light(lightType, onConflict?, label?, location?:v, rotation?:r, intensity?:n, color?:o, mobility?, attenuationRadius?:n)\",\n    \"set_light_properties(actorLabel?, actorPath?, intensity?:n, color?:o, rotation?:r, mobility?, recaptureSky?:b, volumetricScatteringIntensity?:n, sourceRadius?:n, innerConeAngle?:n, outerConeAngle?:n)\",\n    \"set_fog_properties(actorLabel?, actorPath?, world?, pieInstance?:i, fogDensity?:n, fogHeightFalloff?:n, startDistance?:n, fogInscatteringColor|color?:o, enableVolumetricFog?:b, volumetricFogScatteringDistribution?:n, volumetricFogExtinctionScale?:n, volumetricFogDistance?:n, volumetricFogAlbedo?:o)\",\n    \"get_actors_by_class(className?, labelPrefix?, world?, pieInstance?:i, matchSubclasses?:b, includeTransforms?:b)\",\n    \"get_actors_by_component_class(componentClass|className, world?, pieInstance?:i)\",\n    \"query_components(componentClass?, actorClass?, matchSubclasses?:b, componentNameContains?, actorLabelPrefix?, actorLabelContains?, actorTag?, folderPath?, folderPathPrefix?, includeChildActors?:b, fields?:[s], propertyNames?:[s], actorPropertyNames?:[s], where?:[o], whereMode?, suspectOnly?:b, groupBy?, countBy?:[s], sampleLimit?:i, countOnly?:b, limit?:i, startIndex?:i, duplicateTransformTolerance?:n, levelPath?, world?, pieInstance?:i, includeCollision?:b, collisionChannel?)\",\n    \"count_actors_by_class(world?, pieInstance?:i, topN?:i)\",\n    \"get_runtime_virtual_texture_summary(world?, pieInstance?:i)\",\n    \"set_water_body_property(actorLabel?, actorPath?, propertyName, value:*)\",\n    \"build_lighting(quality?)\",\n    \"rebuild_water_zone(actorLabel?, actorPath?, zoneExtent?:*, tileSize?:n, maxPasses?:i)\",\n    \"get_water_state(actorLabel?, actorPath?)\",\n    \"get_spline_info(one(actorLabel; actorPath), componentName?, projectPoint?:v, world?, pieInstance?:i)\",\n    \"set_spline_points(one(actorLabel; actorPath), points:[o], componentName?, closedLoop?:b, loopPosition?:n, loopPositionOverride?:b, markEdited?:b)\",\n    \"create_spline_actor(splinePoints:[o], label?, location?:v, closedLoop?:b, pointType?, coordinateSpace?, tags?:[s], onConflict?)\",\n    \"build_spline_meshes(one(actorLabel; actorPath), componentName?, generatorName?, staticMesh?, spacing?:n, forwardAxis?, scale?:v, roll?:n, startOffset?:n, endOffset?:n, stretchToFit?:b, collisionProfile?, rebuild?:b)\",\n    \"scatter_along_spline(one(actorLabel; actorPath), componentName?, generatorName?, meshes?:[s], weights?:[n], mode?, interval?:n, count?:i, startOffset?:n, endOffset?:n, offset?:v, positionJitter?:v, yawJitter?:n, scaleMin?:n, scaleMax?:n, alignToSpline?:b, seed?:i, maxCount?:i, rebuild?:b)\",\n    \"clear_spline_generated(one(actorLabel; actorPath), generatorName)\",\n    \"create_blockout(shape, location?:v, rotation?:r, size?:v, steps?:i, sides?:i, label?, tag?, material?, meshFolder?, onConflict?)\",\n    \"list_blockout(tag?, includeReplaced?:b)\",\n    \"match_asset_to_blockout(one(actorLabel; actorPath; tag), candidateFolder, recursive?:b, allowRotation?:b, maxCandidates?:i, limit?:i)\",\n    \"replace_blockout(one(actorLabel; actorPath; tag; actorPaths:[s]), assetPath?, candidateFolder?, recursive?:b, allowRotation?:b, maxCandidates?:i, fit?, yawOffset?:n)\",\n    \"restore_blockout(one(actorLabel; actorPath; actorPaths:[s]))\",\n    \"set_actor_material(actorLabel?, actorPath?, materialPath, slotIndex?:i)\",\n    \"get_world_settings()\",\n    \"set_world_settings(defaultGameMode?, killZ?:n, globalGravityZ?:n, enableWorldBoundsChecks?:b)\",\n    \"get_actor_bounds(actorLabel?, actorPath?, onlyColliding?:b, world?, pieInstance?:i)\",\n    \"get_component_tree(actorLabel?, actorPath?, includeProperties?:b, componentClass?, componentName?, relativeTo?, socketNames?:[s], world?, pieInstance?:i)\"\n  ],\n  \"nextOffset\": 54\n}"
+      ],
+      "media": 0
+    },
+    "catalogUnknown": {
+      "isError": true,
+      "blocks": [
+        "Error [TASK_FAILED]: Unknown category \"nope\". Categories: project, asset, blueprint, level, material, animation, landscape, pcg, niagara, audio, widget, editor, pie, reflection, gameplay, gas, networking, demo, feedback, statetree, chooser, plugins, epic, fab, datasmith, metahuman, dataflow, conversation, source_control, canvas."
+      ],
+      "media": 0
+    },
+    "catalogEmpty": {
+      "isError": false,
+      "blocks": [
+        "{\n  \"error\": \"Provide a \\\"query\\\" string, e.g. catalog(action=\\\"search\\\", query=\\\"spawn actor\\\").\"\n}"
+      ],
+      "media": 0
+    }
+  },
+  "micro": {
+    "category": {
+      "read": {
+        "isError": false,
+        "blocks": [
+          "{\n  \"success\": true,\n  \"actors\": [\n    {\n      \"label\": \"Floor\",\n      \"class\": \"StaticMeshActor\"\n    }\n  ],\n  \"count\": 1\n}"
+        ],
+        "media": 0
+      },
+      "mutate": {
+        "isError": false,
+        "blocks": [
+          "{\n  \"success\": true,\n  \"actorLabel\": \"Cube\",\n  \"actorPath\": \"/Game/Map.Map:PersistentLevel.Cube\"\n}"
+        ],
+        "media": 0
+      },
+      "undeclaredInTask": {
+        "isError": true,
+        "blocks": [
+          "Error [TASK_FAILED]: place_actor does not take actorLabel; it takes actorClass, label, onConflict, location, rotation, scale, staticMesh, material, world, pieInstance, so the call was not sent. project(action=\"describe_action\") lists what it takes."
+        ],
+        "media": 0
+      },
+      "media": {
+        "isError": false,
+        "blocks": [
+          "{\n  \"success\": true,\n  \"media\": [\n    {\n      \"type\": \"image\",\n      \"mimeType\": \"image/png\",\n      \"width\": 1,\n      \"height\": 1,\n      \"contentBlock\": 1\n    }\n  ]\n}"
+        ],
+        "media": 1
+      },
+      "taskFailed": {
+        "isError": false,
+        "blocks": [
+          "{\n  \"success\": false,\n  \"error\": \"The editor refused to delete /Game/Refused.\"\n}"
+        ],
+        "media": 0
+      },
+      "bridgeError": {
+        "isError": true,
+        "blocks": [
+          "Error [TASK_FAILED]: Bridge error: Unknown method: get_current_level. 'get_current_level' is advertised by this ue-mcp package but not registered by the running plugin. Run `ue-mcp update` in the project directory (it deploys the plugin from this package and rebuilds it), then restart the editor."
+        ],
+        "media": 0
+      },
+      "handler": {
+        "isError": false,
+        "blocks": [
+          "{\"tool\":\"level\",\"action\":\"get_selected\",\"bridge\":\"get_selected_actors\"}"
+        ],
+        "media": 0
+      },
+      "unknownAction": {
+        "isError": true,
+        "blocks": [
+          "Error [UNKNOWN_ACTION]: Unknown action \"get_outliners\" on level. Use tools(action=\"describe\", category=\"level\")."
+        ],
+        "media": 0
+      },
+      "invalidParams": {
+        "isError": true,
+        "blocks": [
+          "Error [INVALID_PARAMS]: Input validation error: Invalid arguments for tool level: Invalid input: expected number, received string at limit"
+        ],
+        "media": 0
+      },
+      "undeclaredKey": {
+        "isError": true,
+        "blocks": [
+          "Error [INVALID_PARAMS]: get_outliner does not take notAParam; it takes classFilter, exactClass, nameFilter, folderPath, folderPathPrefix, editorHidden, includeStreaming, world, pieInstance, cursor, limit, so the call was not sent. project(action=\"describe_action\") lists what it takes."
+        ],
+        "media": 0
+      },
+      "disabled": {
+        "isError": true,
+        "blocks": [
+          "Error [CATEGORY_DISABLED]: 'foliage.list_types' is turned off: this project's ue-mcp.yml lists 'foliage' under 'disable'. Turn it back on with project(action='set_category_enabled', category='foliage', enabled=true) or `ue-mcp tools enable foliage`."
+        ],
+        "media": 0
+      },
+      "playtest": {
+        "isError": true,
+        "blocks": [
+          "{\n  \"success\": false,\n  \"refusedMethod\": \"pie.script_run\",\n  \"playtestMode\": \"manual\",\n  \"reason\": \"Playtest runs are set to manual for this project (playtest mode in <SANDBOX>/home/.ue-mcp/state.json), so pie.script_run was not run: a person starts playtests here. To let an agent run them, a person can run `ue-mcp playtest mode automatic --editor <this project's .uproject>`.\"\n}"
+        ],
+        "media": 0
+      },
+      "staleEditor": {
+        "isError": true,
+        "blocks": [
+          "Error [NOT_FOUND]: No editor session named 'Nowhere'. Registered: Game. Use project(action='list_editors') to see them, or project(action='add_editor', projectPath=...) to register one."
+        ],
+        "media": 0
+      },
+      "dialogRead": {
+        "isError": true,
+        "blocks": [
+          "{\n  \"success\": false,\n  \"dialogBlocking\": true,\n  \"refusedMethod\": \"level.get_outliner\",\n  \"dialogMode\": \"defer\",\n  \"dialogPhase\": \"asking\",\n  \"dialogTitle\": \"Save Content\",\n  \"dialogMessage\": \"Save changes to 1 package?\",\n  \"buttons\": [\n    \"Save\",\n    \"Don't Save\"\n  ],\n  \"error\": \"A modal dialog is blocking the editor, so 'level.get_outliner' was refused without running. Unreal cannot execute anything else until the dialog is answered. Dialog mode is defer, so this names the dialog but not the calls that press its buttons, and a press sent from here is refused: a person answers it in the Unreal Editor window. Every other action returns this same refusal until then.\"\n}"
+        ],
+        "media": 0
+      },
+      "dialogMutate": {
+        "isError": true,
+        "blocks": [
+          "{\n  \"success\": false,\n  \"dialogBlocking\": true,\n  \"refusedMethod\": \"level.place_actor\",\n  \"dialogMode\": \"defer\",\n  \"dialogPhase\": \"asking\",\n  \"dialogTitle\": \"Save Content\",\n  \"dialogMessage\": \"Save changes to 1 package?\",\n  \"buttons\": [\n    \"Save\",\n    \"Don't Save\"\n  ],\n  \"error\": \"A modal dialog is blocking the editor, so 'level.place_actor' was refused without running. Unreal cannot execute anything else until the dialog is answered. Dialog mode is defer, so this names the dialog but not the calls that press its buttons, and a press sent from here is refused: a person answers it in the Unreal Editor window. Every other action returns this same refusal until then.\"\n}"
+        ],
+        "media": 0
+      },
+      "dialogList": {
+        "isError": false,
+        "blocks": [
+          "{\n  \"success\": true,\n  \"dialogs\": [\n    {\n      \"title\": \"Save Content\",\n      \"message\": \"Save changes to 1 package?\",\n      \"buttons\": [\n        \"Save\",\n        \"Don't Save\"\n      ]\n    }\n  ],\n  \"editorBlockedByDialog\": true,\n  \"dialogTitle\": \"Save Content\",\n  \"dialogMessage\": \"Save changes to 1 package?\",\n  \"dialogNote\": \"A modal dialog is blocking this editor. Every other action is refused until it is answered, and in defer mode it is answered by a person, not from here: read it with editor(list_dialogs) if you need to see it, but a press sent from here is refused.\"\n}"
+        ],
+        "media": 0
+      }
+    },
+    "unknownCategory": {
+      "isError": true,
+      "blocks": [
+        "Error [UNKNOWN_ACTION]: Unknown category \"nope\". Use tools(action=\"list_categories\")."
+      ],
+      "media": 0
+    },
+    "unknownMethod": {
+      "isError": true,
+      "blocks": [
+        "Error [UNKNOWN_ACTION]: Unknown action \"nope\" on level. Use tools(action=\"describe\", category=\"level\")."
+      ],
+      "media": 0
+    },
+    "nestedAction": {
+      "isError": true,
+      "blocks": [
+        "Error [INVALID_PARAMS]: args.action was not sent to level.get_outliner: 'action' is the dispatcher's own key on every category and never reaches a handler. If this action takes an action asset or name, pass it under its other parameter name; tools(action=\"describe\", category=\"level\", method=\"get_outliner\") lists them."
+      ],
+      "media": 0
+    },
+    "routingBeside": {
+      "isError": false,
+      "blocks": [
+        "{\n  \"actors\": [\n    {\n      \"label\": \"Floor\",\n      \"class\": \"StaticMeshActor\"\n    }\n  ]\n}"
+      ],
+      "media": 0
+    },
+    "describeUnknown": {
+      "isError": true,
+      "blocks": [
+        "Error [TASK_FAILED]: Unknown category \"nope\". Categories: project, asset, blueprint, level, material, animation, landscape, pcg, niagara, audio, widget, editor, pie, reflection, gameplay, gas, networking, demo, feedback, statetree, chooser, plugins, epic, fab, datasmith, metahuman, dataflow, conversation, source_control, canvas, flow."
+      ],
+      "media": 0
+    },
+    "searchEmpty": {
+      "isError": true,
+      "blocks": [
+        "Error [TASK_FAILED]: Provide a query to search for actions."
+      ],
+      "media": 0
+    },
+    "flow": {
+      "plan": {
+        "isError": false,
+        "blocks": [
+          "{\n  \"success\": true,\n  \"steps\": [\n    {\n      \"stepNumber\": 1,\n      \"type\": \"task\",\n      \"name\": \"level.get_outliner\",\n      \"skipped\": false,\n      \"duration\": \"<VAR>\"\n    },\n    {\n      \"stepNumber\": 2,\n      \"type\": \"task\",\n      \"name\": \"asset.delete\",\n      \"skipped\": false,\n      \"duration\": \"<VAR>\"\n    }\n  ],\n  \"duration\": \"<VAR>\",\n  \"inputs\": [\n    {\n      \"name\": \"classFilter\",\n      \"type\": \"string\",\n      \"required\": false,\n      \"steps\": [\n        {\n          \"path\": \"1\",\n          \"task\": \"level.get_outliner\",\n          \"flow\": \"outline\"\n        }\n      ],\n      \"description\": \"Case-sensitive substring over the class name\"\n    },\n    {\n      \"name\": \"cursor\",\n      \"type\": \"string\",\n      \"required\": false,\n      \"steps\": [\n        {\n          \"path\": \"1\",\n          \"task\": \"level.get_outliner\",\n          \"flow\": \"outline\"\n        }\n      ],\n      \"description\": \"Resume a paged read: pass back the nextCursor from the previous page, unmodified\"\n    },\n    {\n      \"name\": \"editorHidden\",\n      \"type\": \"boolean\",\n      \"required\": false,\n      \"steps\": [\n        {\n          \"path\": \"1\",\n          \"task\": \"level.get_outliner\",\n          \"flow\": \"outline\"\n        }\n      ],\n      \"description\": \"Only editor-hidden (true) or only visible (false) actors\"\n    },\n    {\n      \"name\": \"exactClass\",\n      \"type\": \"boolean\",\n      \"required\": false,\n      \"steps\": [\n        {\n          \"path\": \"1\",\n          \"task\": \"level.get_outliner\",\n          \"flow\": \"outline\"\n        }\n      ],\n      \"description\": \"Require classFilter to be the exact class name\"\n    },\n    {\n      \"name\": \"folderPath\",\n      \"type\": \"string\",\n      \"required\": false,\n      \"steps\": [\n        {\n          \"path\": \"1\",\n          \"task\": \"level.get_outliner\",\n          \"flow\": \"outline\"\n        }\n      ],\n      \"description\": \"World Outliner folder, matched exactly\"\n    },\n    {\n      \"name\": \"folderPathPrefix\",\n      \"type\": \"string\",\n      \"required\": false,\n      \"steps\": [\n        {\n          \"path\": \"1\",\n          \"task\": \"level.get_outliner\",\n          \"flow\": \"outline\"\n        }\n      ],\n      \"description\": \"World Outliner folder, matched with every folder nested under it\"\n    },\n    {\n      \"name\": \"includeStreaming\",\n      \"type\": \"boolean\",\n      \"required\": false,\n      \"steps\": [\n        {\n          \"path\": \"1\",\n          \"task\": \"level.get_outliner\",\n          \"flow\": \"outline\"\n        }\n      ],\n      \"description\": \"Include World Partition streaming-proxy and HLOD actors (default false)\"\n    },\n    {\n      \"name\": \"limit\",\n      \"type\": \"integer\",\n      \"required\": false,\n      \"steps\": [\n        {\n          \"path\": \"1\",\n          \"task\": \"level.get_outliner\",\n          \"flow\": \"outline\"\n        }\n      ],\n      \"description\": \"Rows on this page\"\n    },\n    {\n      \"name\": \"nameFilter\",\n      \"type\": \"string\",\n      \"required\": false,\n      \"steps\": [\n        {\n          \"path\": \"1\",\n          \"task\": \"level.get_outliner\",\n          \"flow\": \"outline\"\n        }\n      ],\n      \"description\": \"Case-sensitive substring over the internal name or the label\"\n    },\n    {\n      \"name\": \"pieInstance\",\n      \"type\": \"integer\",\n      \"required\": false,\n      \"steps\": [\n        {\n          \"path\": \"1\",\n          \"task\": \"level.get_outliner\",\n          \"flow\": \"outline\"\n        }\n      ],\n      \"description\": \"Which PIE world when world is pie: 0 = server or primary, 1..N = clients\"\n    },\n    {\n      \"name\": \"world\",\n      \"type\": \"string\",\n      \"required\": false,\n      \"steps\": [\n        {\n          \"path\": \"1\",\n          \"task\": \"level.get_outliner\",\n          \"flow\": \"outline\"\n        }\n      ],\n      \"description\": \"World scope: editor (default) | pie\"\n    },\n    {\n      \"name\": \"force\",\n      \"type\": \"boolean\",\n      \"required\": false,\n      \"steps\": [\n        {\n          \"path\": \"2\",\n          \"task\": \"asset.delete\",\n          \"flow\": \"outline\"\n        }\n      ],\n      \"description\": \"Delete even when other packages reference it, closing open editors (default false)\"\n    }\n  ],\n  \"definition\": {\n    \"description\": \"Read the outliner, then fail in the editor.\",\n    \"steps\": {\n      \"1\": {\n        \"task\": \"level.get_outliner\"\n      },\n      \"2\": {\n        \"task\": \"asset.delete\",\n        \"options\": {\n          \"assetPath\": \"/Game/Refused\"\n        }\n      }\n    }\n  }\n}"
+        ],
+        "media": 0
+      },
+      "planUnknown": {
+        "isError": true,
+        "blocks": [
+          "Error [UNKNOWN]: Flow \"nope\" not found in configuration"
+        ],
+        "media": 0
+      },
+      "run": {
+        "isError": false,
+        "blocks": [
+          "{\n  \"summary\": \"✗ Flow failed in <N>ms\\n\\n  ✓ 1. level.get_outliner (task) - <N>ms\\n  ✗ 2. asset.delete (task) - FAILED\\n      The editor refused to delete /Game/Refused.\",\n  \"success\": false,\n  \"duration\": \"<VAR>\",\n  \"stepCount\": 2,\n  \"failedStep\": \"asset.delete\",\n  \"steps\": [\n    {\n      \"stepNumber\": 1,\n      \"name\": \"level.get_outliner\",\n      \"type\": \"task\",\n      \"skipped\": false,\n      \"success\": true,\n      \"duration\": \"<VAR>\",\n      \"attempts\": 1,\n      \"data\": {\n        \"success\": true,\n        \"actors\": [\n          {\n            \"label\": \"Floor\",\n            \"class\": \"StaticMeshActor\"\n          }\n        ],\n        \"count\": 1\n      }\n    },\n    {\n      \"stepNumber\": 2,\n      \"name\": \"asset.delete\",\n      \"type\": \"task\",\n      \"skipped\": false,\n      \"success\": false,\n      \"duration\": \"<VAR>\",\n      \"attempts\": 1,\n      \"error\": {\n        \"message\": \"The editor refused to delete /Game/Refused.\",\n        \"name\": \"Error\"\n      },\n      \"data\": {\n        \"success\": false,\n        \"error\": \"The editor refused to delete /Game/Refused.\"\n      }\n    }\n  ],\n  \"runId\": \"<VAR>\"\n}"
+        ],
+        "media": 0
+      },
+      "runUnderDialog": {
+        "isError": true,
+        "blocks": [
+          "{\n  \"success\": false,\n  \"dialogBlocking\": true,\n  \"refusedMethod\": \"flow.run\",\n  \"dialogMode\": \"defer\",\n  \"dialogPhase\": \"asking\",\n  \"dialogTitle\": \"Save Content\",\n  \"dialogMessage\": \"Save changes to 1 package?\",\n  \"buttons\": [\n    \"Save\",\n    \"Don't Save\"\n  ],\n  \"error\": \"A modal dialog is blocking the editor, so 'flow.run' was refused without running. Unreal cannot execute anything else until the dialog is answered. Dialog mode is defer, so this names the dialog but not the calls that press its buttons, and a press sent from here is refused: a person answers it in the Unreal Editor window. Every other action returns this same refusal until then.\"\n}"
+        ],
+        "media": 0
+      }
+    }
+  },
+  "twoEditors": {
+    "untargetedRead": {
+      "isError": false,
+      "blocks": [
+        "{\n  \"success\": true,\n  \"actors\": [\n    {\n      \"label\": \"Floor\",\n      \"class\": \"StaticMeshActor\"\n    }\n  ],\n  \"count\": 1\n}",
+        "MACHINE_EDITOR={\"editor\":\"Game\",\"project\":\"<SANDBOX>/Game/Game.uproject\",\"pid\": \"<PID>\"}"
+      ],
+      "media": 0
+    },
+    "untargetedMutate": {
+      "isError": true,
+      "blocks": [
+        "Error [INVALID_PARAMS]: 'level.place_actor' changes the editor it runs in. This server drives 2 editors (Game, Other), so it will not pick one for you: an untargeted run would go to 'Game', leaving Other untouched. Re-send it with editor=\"<name>\". project(action='list_editors') reports what each one is. Reads do not need this."
+      ],
+      "media": 0
+    },
+    "targetedMutate": {
+      "isError": false,
+      "blocks": [
+        "{\n  \"success\": true,\n  \"actorLabel\": \"Cube\",\n  \"actorPath\": \"/Game/Map.Map:PersistentLevel.Cube\"\n}",
+        "MACHINE_EDITOR={\"editor\":\"Other\",\"project\":\"<SANDBOX>/Other/Other.uproject\",\"pid\": \"<PID>\"}"
+      ],
+      "media": 0
+    },
+    "staleEditor": {
+      "isError": true,
+      "blocks": [
+        "Error [NOT_FOUND]: No editor session named 'Nowhere'. Registered: Game, Other. Use project(action='list_editors') to see them, or project(action='add_editor', projectPath=...) to register one."
+      ],
+      "media": 0
+    },
+    "flowUntargeted": {
+      "isError": true,
+      "blocks": [
+        "Error [INVALID_PARAMS]: 'flow.run' changes the editor it runs in. This server drives 2 editors (Game, Other), so it will not pick one for you: an untargeted run would go to 'Game', leaving Other untouched. Re-send it with editor=\"<name>\". project(action='list_editors') reports what each one is. Reads do not need this."
+      ],
+      "media": 0
+    },
+    "flowList": {
+      "isError": false,
+      "blocks": [
+        "{\n  \"flowCount\": 8,\n  \"flows\": [\n    {\n      \"name\": \"blockout_to_assets\",\n      \"description\": \"Replace every blockout actor carrying tag (default Blockout) with the best-fitting StaticMesh under candidateFolder: lists the set, ranks the candidates by bounds, swaps each actor for its best match fitted to its bounds (fit, default uniform), then lists the replacements. Each replacement keeps a record, so level(restore_blockout) or the run's rollback puts the blockout back.\",\n      \"stepCount\": 4\n    },\n    {\n      \"name\": \"niagara_fire\",\n      \"description\": \"Build a fire Niagara system from scratch (spawn rate, upward velocity, HDR orange colour) and verify it emits. A 0-to-1 best-practice starting point, not a demo. Lands at /Game/VFX/Fire/NS_Fire; override name/packagePath via params.\",\n      \"stepCount\": 7\n    },\n    {\n      \"name\": \"beacon\",\n      \"description\": \"Demo - build a shrine scene from scratch: floor, pedestal, orb, five pillars, four materials (dark stone, brushed metal, warm stone, parameterized emissive), colored lights, and atmosphere\",\n      \"stepCount\": 56\n    },\n    {\n      \"name\": \"texture_bomb\",\n      \"description\": \"Build a reusable MF_TextureBomb MaterialFunction (#491). Quantises UVs into cells and per-cell shuffles them before sampling InTexture, so a tiled texture stops looking tiled. Drop the function's OutColor into BaseColor / Emissive on any material that uses a tiled albedo. CellDensity input controls the cell frequency. Lives at /Game/Materials/Functions/MF_TextureBomb.\",\n      \"stepCount\": 14\n    },\n    {\n      \"name\": \"neon_shrine\",\n      \"description\": \"Build the full Neon Shrine demo scene end-to-end (19 steps). Driven by the demo.step handler shipped with the bridge plugin. Leaves the editor on /Game/Demo/DemoLevel; run neon_shrine_cleanup to wipe it.\",\n      \"stepCount\": 19\n    },\n    {\n      \"name\": \"neon_shrine_cleanup\",\n      \"description\": \"Wipe the Neon Shrine demo content. Switches the editor to /Game/MCP_Home first so you don't get stranded on Untitled.\",\n      \"stepCount\": 1\n    },\n    {\n      \"name\": \"playtest\",\n      \"description\": \"Draft a PIE test script for a target with the flow model and save it. params: target (asset path or description), context? (what to test), profile?, name?, package_path?. Gathers the target Blueprint, its input mappings and the values PIE can watch, drafts with an agent step, checks the draft with pie(script_validate) and returns refusals to the model up to 2 times, then saves it with pie(script_create). Fails before drafting when target is a path that resolves to nothing, and with the last errors when every draft is refused. Needs a model from a daemon extension's provider (`ue-mcp install anthropic` installs one).\",\n      \"stepCount\": 8\n    },\n    {\n      \"name\": \"outline\",\n      \"description\": \"Read the outliner, then fail in the editor.\",\n      \"stepCount\": 2\n    }\n  ]\n}",
+        "MACHINE_EDITOR={\"editor\":\"Game\",\"project\":\"<SANDBOX>/Game/Game.uproject\",\"pid\": \"<PID>\"}"
+      ],
+      "media": 0
+    }
+  },
+  "daemon": {
+    "tools": {
+      "status": 200,
+      "text": "{\"categoryCount\":31,\"categories\":[{\"name\":\"animation\",\"enabled\":true,\"native\":{\"enabled\":true,\"actions\":131},\"epic\":{\"enabled\":true,\"actions\":1004,\"toolsets\":[{\"name\":\"AnimationAssistantToolset.SequencerDirectorToolset\"},{\"name\":\"ControlRigEditor.ControlRigSequencerEditorLibrary\"},{\"name\":\"EditorToolset.SkeletalMeshToolset\"},{\"name\":\"LevelSequenceEditor.LevelSequenceEditorBlueprintLibrary\"},{\"name\":\"LevelSequenceEditor.LevelSequenceEditorSubsystem\"},{\"name\":\"OptimusScripting.DeformerGraphScriptingSubsystem\"},{\"name\":\"SequenceValidator.SequenceValidatorSubsystem\"},{\"name\":\"SequencerAnimTools.SequencerAnimToolsEditorLibrary\"},{\"name\":\"SequencerScripting.MovieSceneBindingExtensions\"},{\"name\":\"SequencerScripting.MovieSceneBindingTagExtensions\"},{\"name\":\"SequencerScripting.MovieSceneConditionExtensions\"},{\"name\":\"SequencerScripting.MovieSceneDoubleVectorTrackExtensions\"},{\"name\":\"SequencerScripting.MovieSceneEventTrackExtensions\"},{\"name\":\"SequencerScripting.MovieSceneFloatVectorTrackExtensions\"},{\"name\":\"SequencerScripting.MovieSceneFolderExtensions\"},{\"name\":\"SequencerScripting.MovieScenePropertyTrackExtensions\"},{\"name\":\"SequencerScripting.MovieSceneSectionEasingExtensions\"},{\"name\":\"SequencerScripting.MovieSceneSectionExtensions\"},{\"name\":\"SequencerScripting.MovieSceneSequenceExtensions\"},{\"name\":\"SequencerScripting.MovieSceneTimeWarpExtensions\"},{\"name\":\"SequencerScripting.MovieSceneTrackExtensions\"},{\"name\":\"SequencerScriptingEditor.SequencerToolsFunctionLibrary\"},{\"name\":\"TemplateSequenceEditor.TemplateSequenceEditorSubsystem\"},{\"name\":\"animation_toolset.toolsets.conditions.SequencerConditionTools\"},{\"name\":\"animation_toolset.toolsets.controlrig.ControlRigTools\"},{\"name\":\"animation_toolset.toolsets.controlrig_sequencer.SequencerControlRigTools\"},{\"name\":\"animation_toolset.toolsets.custom_bindings.SequencerCustomBindingTools\"},{\"name\":\"animation_toolset.toolsets.import_export.SequencerImportExportTools\"},{\"name\":\"animation_toolset.toolsets.keyframing.SequencerKeyframingTools\"},{\"name\":\"animation_toolset.toolsets.outliner.SequencerOutlinerTools\"},{\"name\":\"animation_toolset.toolsets.sequencer.SequencerTools\"},{\"name\":\"editor_toolset.toolsets.skeletal_mesh.SkeletalMeshTools\"}]}},{\"name\":\"asset\",\"enabled\":true,\"native\":{\"enabled\":true,\"actions\":169},\"epic\":{\"enabled\":true,\"actions\":165,\"toolsets\":[{\"name\":\"ChaosClothAssetToolset.ChaosClothAssetToolset\"},{\"name\":\"DataRegistryToolset.DataRegistryTools\"},{\"name\":\"EditorToolset.AssetToolset\"},{\"name\":\"EditorToolset.CurveAtlasToolset\"},{\"name\":\"EditorToolset.CurveTableToolset\"},{\"name\":\"EditorToolset.DataAssetToolset\"},{\"name\":\"EditorToolset.DataTableToolset\"},{\"name\":\"EditorToolset.StaticMeshToolset\"},{\"name\":\"EditorToolset.StringTableToolset\"},{\"name\":\"EditorToolset.TextureToolset\"},{\"name\":\"EditorToolset.UserDefinedEnumToolset\"},{\"name\":\"EditorToolset.UserDefinedStructToolset\"},{\"name\":\"SemanticSearchToolset.SemanticSearchToolset\"},{\"name\":\"TextureGraphToolset.TextureGraphTools\"},{\"name\":\"editor_toolset.toolsets.asset.AssetTools\"},{\"name\":\"editor_toolset.toolsets.curve_table.CurveTableTools\"},{\"name\":\"editor_toolset.toolsets.data_asset.DataAssetTools\"},{\"name\":\"editor_toolset.toolsets.data_table.DataTableTools\"},{\"name\":\"editor_toolset.toolsets.static_mesh.StaticMeshTools\"},{\"name\":\"editor_toolset.toolsets.string_table.StringTableTools\"},{\"name\":\"editor_toolset.toolsets.texture.TextureTools\"},{\"name\":\"geometry_toolset.geometry_ops.GeometryTools\"}]}},{\"name\":\"audio\",\"enabled\":true,\"native\":{\"enabled\":true,\"actions\":51},\"epic\":{\"enabled\":true,\"actions\":44,\"toolsets\":[{\"name\":\"EditorToolset.SoundWaveToolset\"},{\"name\":\"MetaSoundToolset.MetaSoundAuthoringToolset\"},{\"name\":\"MetaSoundToolset.MetaSoundDiscoveryToolset\"},{\"name\":\"MetaSoundToolset.MetaSoundInspectionToolset\"}]}},{\"name\":\"blueprint\",\"enabled\":true,\"native\":{\"enabled\":true,\"actions\":99},\"epic\":{\"enabled\":true,\"actions\":92,\"toolsets\":[{\"name\":\"BlueprintToolsets.BlueprintDslToolset\"},{\"name\":\"BlueprintToolsets.BlueprintToolset\"},{\"name\":\"editor_toolset.toolsets.blueprint.BlueprintDslTools\"},{\"name\":\"editor_toolset.toolsets.blueprint.BlueprintTools\"},{\"name\":\"editor_toolset.toolsets.blueprint_diff.BlueprintDiffTools\"}]}},{\"name\":\"canvas\",\"enabled\":true,\"native\":{\"enabled\":true,\"actions\":28},\"epic\":{\"enabled\":true,\"actions\":0,\"toolsets\":[]}},{\"name\":\"chooser\",\"enabled\":true,\"native\":{\"enabled\":true,\"actions\":35},\"epic\":{\"enabled\":true,\"actions\":0,\"toolsets\":[]}},{\"name\":\"conversation\",\"enabled\":true,\"native\":{\"enabled\":true,\"actions\":0},\"epic\":{\"enabled\":true,\"actions\":7,\"toolsets\":[{\"name\":\"conversation_toolset.toolsets.conversation.ConversationTools\"}]}},{\"name\":\"dataflow\",\"enabled\":true,\"native\":{\"enabled\":true,\"actions\":0},\"epic\":{\"enabled\":true,\"actions\":70,\"toolsets\":[{\"name\":\"DataflowAgent.DataflowAgentToolset\"},{\"name\":\"DataflowEditor.DataflowScriptingSubsystem\"}]}},{\"name\":\"datasmith\",\"enabled\":true,\"native\":{\"enabled\":true,\"actions\":5},\"epic\":{\"enabled\":true,\"actions\":0,\"toolsets\":[]}},{\"name\":\"demo\",\"enabled\":true,\"native\":{\"enabled\":true,\"actions\":4},\"epic\":{\"enabled\":true,\"actions\":0,\"toolsets\":[]}},{\"name\":\"editor\",\"enabled\":true,\"native\":{\"enabled\":true,\"actions\":164},\"epic\":{\"enabled\":true,\"actions\":101,\"toolsets\":[{\"name\":\"CheatsToolset.CheatsToolset\"},{\"name\":\"ConsoleToolset.ConsoleToolset\"},{\"name\":\"ConsoleToolset.LogsToolset\"},{\"name\":\"EditorToolset.EditorAppToolset\"},{\"name\":\"EditorToolset.LogsToolset\"},{\"name\":\"EditorToolset.UndoHistoryToolset\"},{\"name\":\"MediaToolset.MediaToolset\"},{\"name\":\"PerfToolset.CsvProfilerToolset\"},{\"name\":\"PerfToolset.GpuProfilerToolset\"},{\"name\":\"PerfToolset.StatsToolset\"},{\"name\":\"RewindDebuggerToolset.RewindDebuggerToolset\"},{\"name\":\"SceneCaptureToolset.SceneCaptureToolset\"},{\"name\":\"editor_toolset.toolsets.python_scripting.PythonScriptingTools\"}]}},{\"name\":\"epic\",\"enabled\":true,\"native\":{\"enabled\":true,\"actions\":15},\"epic\":{\"enabled\":true,\"actions\":14,\"toolsets\":[{\"name\":\"AIAssistantEditor.AIAssistantToolset\"},{\"name\":\"KnowledgeBaseToolset.KnowledgeBaseTools\"},{\"name\":\"ToolsetRegistry.AgentSkillToolset\"},{\"name\":\"editor_toolset.toolsets.programmatic.ProgrammaticToolset\"}]},\"protected\":\"native actions cannot be turned off\"},{\"name\":\"fab\",\"enabled\":true,\"native\":{\"enabled\":true,\"actions\":18},\"epic\":{\"enabled\":true,\"actions\":5,\"toolsets\":[{\"name\":\"FabToolset.FabToolset\"}]}},{\"name\":\"feedback\",\"enabled\":true,\"native\":{\"enabled\":true,\"actions\":2},\"epic\":{\"enabled\":true,\"actions\":0,\"toolsets\":[]}},{\"name\":\"foliage\",\"enabled\":false,\"native\":{\"enabled\":false,\"actions\":15},\"epic\":{\"enabled\":false,\"actions\":0,\"toolsets\":[]}},{\"name\":\"gameplay\",\"enabled\":true,\"native\":{\"enabled\":true,\"actions\":106},\"epic\":{\"enabled\":true,\"actions\":99,\"toolsets\":[{\"name\":\"AIModuleToolset.BehaviorTreeToolset\"},{\"name\":\"AIModuleToolset.EnvironmentQueryToolset\"},{\"name\":\"GameplayTagsToolset.GameplayTagsToolset\"},{\"name\":\"InputToolset.InputToolset\"},{\"name\":\"NavMeshToolset.NavMeshToolset\"},{\"name\":\"PhysicsToolsets.PhysicsAssetToolset\"},{\"name\":\"WorldConditionsToolset.WorldConditionTools\"},{\"name\":\"aimodule_toolset.toolsets.behavior_tree.BehaviorTreeTools\"}]}},{\"name\":\"gas\",\"enabled\":true,\"native\":{\"enabled\":true,\"actions\":38},\"epic\":{\"enabled\":true,\"actions\":15,\"toolsets\":[{\"name\":\"GASToolsets.AbilitySystemInspectorToolset\"},{\"name\":\"GASToolsets.AttributeSetToolset\"},{\"name\":\"GASToolsets.GameplayAbilityToolset\"},{\"name\":\"GASToolsets.GameplayCueToolset\"}]}},{\"name\":\"landscape\",\"enabled\":true,\"native\":{\"enabled\":true,\"actions\":45},\"epic\":{\"enabled\":true,\"actions\":0,\"toolsets\":[]}},{\"name\":\"level\",\"enabled\":true,\"native\":{\"enabled\":true,\"actions\":150},\"epic\":{\"enabled\":true,\"actions\":99,\"toolsets\":[{\"name\":\"EditorToolset.ActorToolset\"},{\"name\":\"EditorToolset.LevelToolset\"},{\"name\":\"EditorToolset.PrimitiveToolset\"},{\"name\":\"UnrealCanvasAnnotationsEditor.UnrealCanvasSpatialAnnotationEditorSubsystem\"},{\"name\":\"UnrealCanvasAnnotationsEditor.UnrealCanvasSpatialAnnotationToolset\"},{\"name\":\"editor_toolset.toolsets.actor.ActorTools\"},{\"name\":\"editor_toolset.toolsets.primitive.PrimitiveTools\"},{\"name\":\"editor_toolset.toolsets.scene.SceneTools\"}]}},{\"name\":\"material\",\"enabled\":true,\"native\":{\"enabled\":true,\"actions\":62},\"epic\":{\"enabled\":true,\"actions\":39,\"toolsets\":[{\"name\":\"EditorToolset.MaterialInstanceToolset\"},{\"name\":\"EditorToolset.MaterialToolset\"},{\"name\":\"editor_toolset.toolsets.material.MaterialTools\"},{\"name\":\"editor_toolset.toolsets.material_instance.MaterialInstanceTools\"}]}},{\"name\":\"metahuman\",\"enabled\":true,\"native\":{\"enabled\":true,\"actions\":8},\"epic\":{\"enabled\":true,\"actions\":0,\"toolsets\":[]}},{\"name\":\"networking\",\"enabled\":true,\"native\":{\"enabled\":true,\"actions\":12},\"epic\":{\"enabled\":true,\"actions\":0,\"toolsets\":[]}},{\"name\":\"niagara\",\"enabled\":true,\"native\":{\"enabled\":true,\"actions\":45},\"epic\":{\"enabled\":true,\"actions\":57,\"toolsets\":[{\"name\":\"NiagaraToolsets.NiagaraToolset_Assets\"},{\"name\":\"NiagaraToolsets.NiagaraToolset_Blueprint\"},{\"name\":\"NiagaraToolsets.NiagaraToolset_Component\"},{\"name\":\"NiagaraToolsets.NiagaraToolset_Info\"},{\"name\":\"NiagaraToolsets.NiagaraToolset_System\"}]}},{\"name\":\"pcg\",\"enabled\":true,\"native\":{\"enabled\":true,\"actions\":38},\"epic\":{\"enabled\":true,\"actions\":75,\"toolsets\":[{\"name\":\"PCGEditor.PCGEditorSubsystem\"},{\"name\":\"PCGToolset.PCGSpatialToolset\"},{\"name\":\"PCGToolset.PCGToolset\"}]}},{\"name\":\"pie\",\"enabled\":true,\"native\":{\"enabled\":true,\"actions\":67},\"epic\":{\"enabled\":true,\"actions\":0,\"toolsets\":[]}},{\"name\":\"plugins\",\"enabled\":true,\"native\":{\"enabled\":true,\"actions\":2},\"epic\":{\"enabled\":true,\"actions\":40,\"toolsets\":[{\"name\":\"AgentPluginToolset.AgentPluginToolset\"},{\"name\":\"GameFeaturesToolset.GameFeaturesToolset\"},{\"name\":\"PluginToolset.PluginToolset\"}]}},{\"name\":\"project\",\"enabled\":true,\"native\":{\"enabled\":true,\"actions\":72},\"epic\":{\"enabled\":true,\"actions\":31,\"toolsets\":[{\"name\":\"AutomationTestToolset.AutomationTestToolset\"},{\"name\":\"ConfigSettingsToolset.ConfigSettingsToolset\"},{\"name\":\"FileSystemToolset.FileSystemToolset\"},{\"name\":\"LiveCodingToolset.LiveCodingToolset\"}]},\"protected\":\"native actions cannot be turned off\"},{\"name\":\"reflection\",\"enabled\":true,\"native\":{\"enabled\":true,\"actions\":14},\"epic\":{\"enabled\":true,\"actions\":7,\"toolsets\":[{\"name\":\"EditorToolset.ObjectToolset\"},{\"name\":\"editor_toolset.toolsets.object.ObjectTools\"}]}},{\"name\":\"source_control\",\"enabled\":true,\"native\":{\"enabled\":true,\"actions\":13},\"epic\":{\"enabled\":true,\"actions\":38,\"toolsets\":[{\"name\":\"SourceControl.SourceControlHelpers\"}]}},{\"name\":\"statetree\",\"enabled\":true,\"native\":{\"enabled\":true,\"actions\":56},\"epic\":{\"enabled\":true,\"actions\":49,\"toolsets\":[{\"name\":\"state_tree_toolset.state_tree.StateTreeToolset\"},{\"name\":\"state_tree_toolset.toolsets.state_tree.StateTreeTools\"}]}},{\"name\":\"widget\",\"enabled\":true,\"native\":{\"enabled\":true,\"actions\":60},\"epic\":{\"enabled\":true,\"actions\":139,\"toolsets\":[{\"name\":\"CommonUIToolset.CommonUIToolset\"},{\"name\":\"MVVMToolset.MVVMToolset\"},{\"name\":\"SlateDebugger.SlateDebuggerSubsystem\"},{\"name\":\"SlateInspectorToolset.SlateInspectorToolset\"},{\"name\":\"UMGEditor.UMGDebuggerSubsystem\"},{\"name\":\"UMGEditor.WidgetBlueprintEditorSubsystem\"},{\"name\":\"UMGToolSet.UMGToolSet\"},{\"name\":\"WidgetAnimationToolset.WidgetAnimationToolset\"},{\"name\":\"WidgetFinder.WidgetFinderSubsystem\"},{\"name\":\"WidgetStaticAnalysisToolset.WidgetStaticAnalysisToolset\"}]}}],\"disable\":[\"foliage\"],\"engine\":{\"connected\":true,\"toolsetStatesError\":\"Bridge error: Unknown method: epic_get_toolset_states. 'epic_get_toolset_states' is advertised by this ue-mcp package but not registered by the running plugin. Run `ue-mcp update` in the project directory (it deploys the plugin from this package and rebuilds it), then restart the editor.\"},\"hint\":\"project(action='set_category_enabled', category, enabled, scope?) turns one on or off; project(action='set_toolset_enabled', toolsets, enabled) switches Unreal toolsets by name.\"}"
+    },
+    "categoryRefused": {
+      "status": 422,
+      "text": "{\"error\":\"'project' cannot be turned off: it holds set_category_enabled, the action that turns categories back on. Its Epic actions can go with scope='epic'.\",\"code\":\"TASK_FAILED\"}"
+    },
+    "categoryUnknown": {
+      "status": 422,
+      "text": "{\"error\":\"Unknown category 'nope'. Categories: animation, asset, audio, blueprint, canvas, chooser, conversation, dataflow, datasmith, demo, editor, epic, fab, feedback, foliage, gameplay, gas, landscape, level, material, metahuman, networking, niagara, pcg, pie, plugins, project, reflection, source_control, statetree, widget.\",\"code\":\"TASK_FAILED\"}"
+    },
+    "categoryInvalid": {
+      "status": 422,
+      "text": "{\"error\":\"'enabled' is required: true turns it on, false turns it off.\",\"code\":\"TASK_FAILED\"}"
+    },
+    "leases": {
+      "status": 200,
+      "text": "{\"mode\":\"auto\",\"ttlSeconds\":600,\"implicit\":false,\"sessions\":0,\"you\":{\"id\":\"<UUID>\",\"label\":\"this server\"},\"count\":0,\"leases\":[]}"
+    },
+    "flows": {
+      "status": 200,
+      "text": "{\n  \"flowCount\": 8,\n  \"flows\": [\n    {\n      \"name\": \"blockout_to_assets\",\n      \"description\": \"Replace every blockout actor carrying tag (default Blockout) with the best-fitting StaticMesh under candidateFolder: lists the set, ranks the candidates by bounds, swaps each actor for its best match fitted to its bounds (fit, default uniform), then lists the replacements. Each replacement keeps a record, so level(restore_blockout) or the run's rollback puts the blockout back.\",\n      \"stepCount\": 4\n    },\n    {\n      \"name\": \"niagara_fire\",\n      \"description\": \"Build a fire Niagara system from scratch (spawn rate, upward velocity, HDR orange colour) and verify it emits. A 0-to-1 best-practice starting point, not a demo. Lands at /Game/VFX/Fire/NS_Fire; override name/packagePath via params.\",\n      \"stepCount\": 7\n    },\n    {\n      \"name\": \"beacon\",\n      \"description\": \"Demo - build a shrine scene from scratch: floor, pedestal, orb, five pillars, four materials (dark stone, brushed metal, warm stone, parameterized emissive), colored lights, and atmosphere\",\n      \"stepCount\": 56\n    },\n    {\n      \"name\": \"texture_bomb\",\n      \"description\": \"Build a reusable MF_TextureBomb MaterialFunction (#491). Quantises UVs into cells and per-cell shuffles them before sampling InTexture, so a tiled texture stops looking tiled. Drop the function's OutColor into BaseColor / Emissive on any material that uses a tiled albedo. CellDensity input controls the cell frequency. Lives at /Game/Materials/Functions/MF_TextureBomb.\",\n      \"stepCount\": 14\n    },\n    {\n      \"name\": \"neon_shrine\",\n      \"description\": \"Build the full Neon Shrine demo scene end-to-end (19 steps). Driven by the demo.step handler shipped with the bridge plugin. Leaves the editor on /Game/Demo/DemoLevel; run neon_shrine_cleanup to wipe it.\",\n      \"stepCount\": 19\n    },\n    {\n      \"name\": \"neon_shrine_cleanup\",\n      \"description\": \"Wipe the Neon Shrine demo content. Switches the editor to /Game/MCP_Home first so you don't get stranded on Untitled.\",\n      \"stepCount\": 1\n    },\n    {\n      \"name\": \"playtest\",\n      \"description\": \"Draft a PIE test script for a target with the flow model and save it. params: target (asset path or description), context? (what to test), profile?, name?, package_path?. Gathers the target Blueprint, its input mappings and the values PIE can watch, drafts with an agent step, checks the draft with pie(script_validate) and returns refusals to the model up to 2 times, then saves it with pie(script_create). Fails before drafting when target is a path that resolves to nothing, and with the last errors when every draft is refused. Needs a model from a daemon extension's provider (`ue-mcp install anthropic` installs one).\",\n      \"stepCount\": 8\n    },\n    {\n      \"name\": \"outline\",\n      \"description\": \"Read the outliner, then fail in the editor.\",\n      \"stepCount\": 2\n    }\n  ]\n}"
+    },
+    "plan": {
+      "status": 200,
+      "text": "{\n  \"success\": true,\n  \"steps\": [\n    {\n      \"stepNumber\": 1,\n      \"type\": \"task\",\n      \"name\": \"level.get_outliner\",\n      \"skipped\": false,\n      \"duration\": \"<VAR>\"\n    },\n    {\n      \"stepNumber\": 2,\n      \"type\": \"task\",\n      \"name\": \"asset.delete\",\n      \"skipped\": false,\n      \"duration\": \"<VAR>\"\n    }\n  ],\n  \"duration\": \"<VAR>\",\n  \"inputs\": [\n    {\n      \"name\": \"classFilter\",\n      \"type\": \"string\",\n      \"required\": false,\n      \"steps\": [\n        {\n          \"path\": \"1\",\n          \"task\": \"level.get_outliner\",\n          \"flow\": \"outline\"\n        }\n      ],\n      \"description\": \"Case-sensitive substring over the class name\"\n    },\n    {\n      \"name\": \"cursor\",\n      \"type\": \"string\",\n      \"required\": false,\n      \"steps\": [\n        {\n          \"path\": \"1\",\n          \"task\": \"level.get_outliner\",\n          \"flow\": \"outline\"\n        }\n      ],\n      \"description\": \"Resume a paged read: pass back the nextCursor from the previous page, unmodified\"\n    },\n    {\n      \"name\": \"editorHidden\",\n      \"type\": \"boolean\",\n      \"required\": false,\n      \"steps\": [\n        {\n          \"path\": \"1\",\n          \"task\": \"level.get_outliner\",\n          \"flow\": \"outline\"\n        }\n      ],\n      \"description\": \"Only editor-hidden (true) or only visible (false) actors\"\n    },\n    {\n      \"name\": \"exactClass\",\n      \"type\": \"boolean\",\n      \"required\": false,\n      \"steps\": [\n        {\n          \"path\": \"1\",\n          \"task\": \"level.get_outliner\",\n          \"flow\": \"outline\"\n        }\n      ],\n      \"description\": \"Require classFilter to be the exact class name\"\n    },\n    {\n      \"name\": \"folderPath\",\n      \"type\": \"string\",\n      \"required\": false,\n      \"steps\": [\n        {\n          \"path\": \"1\",\n          \"task\": \"level.get_outliner\",\n          \"flow\": \"outline\"\n        }\n      ],\n      \"description\": \"World Outliner folder, matched exactly\"\n    },\n    {\n      \"name\": \"folderPathPrefix\",\n      \"type\": \"string\",\n      \"required\": false,\n      \"steps\": [\n        {\n          \"path\": \"1\",\n          \"task\": \"level.get_outliner\",\n          \"flow\": \"outline\"\n        }\n      ],\n      \"description\": \"World Outliner folder, matched with every folder nested under it\"\n    },\n    {\n      \"name\": \"includeStreaming\",\n      \"type\": \"boolean\",\n      \"required\": false,\n      \"steps\": [\n        {\n          \"path\": \"1\",\n          \"task\": \"level.get_outliner\",\n          \"flow\": \"outline\"\n        }\n      ],\n      \"description\": \"Include World Partition streaming-proxy and HLOD actors (default false)\"\n    },\n    {\n      \"name\": \"limit\",\n      \"type\": \"integer\",\n      \"required\": false,\n      \"steps\": [\n        {\n          \"path\": \"1\",\n          \"task\": \"level.get_outliner\",\n          \"flow\": \"outline\"\n        }\n      ],\n      \"description\": \"Rows on this page\"\n    },\n    {\n      \"name\": \"nameFilter\",\n      \"type\": \"string\",\n      \"required\": false,\n      \"steps\": [\n        {\n          \"path\": \"1\",\n          \"task\": \"level.get_outliner\",\n          \"flow\": \"outline\"\n        }\n      ],\n      \"description\": \"Case-sensitive substring over the internal name or the label\"\n    },\n    {\n      \"name\": \"pieInstance\",\n      \"type\": \"integer\",\n      \"required\": false,\n      \"steps\": [\n        {\n          \"path\": \"1\",\n          \"task\": \"level.get_outliner\",\n          \"flow\": \"outline\"\n        }\n      ],\n      \"description\": \"Which PIE world when world is pie: 0 = server or primary, 1..N = clients\"\n    },\n    {\n      \"name\": \"world\",\n      \"type\": \"string\",\n      \"required\": false,\n      \"steps\": [\n        {\n          \"path\": \"1\",\n          \"task\": \"level.get_outliner\",\n          \"flow\": \"outline\"\n        }\n      ],\n      \"description\": \"World scope: editor (default) | pie\"\n    },\n    {\n      \"name\": \"force\",\n      \"type\": \"boolean\",\n      \"required\": false,\n      \"steps\": [\n        {\n          \"path\": \"2\",\n          \"task\": \"asset.delete\",\n          \"flow\": \"outline\"\n        }\n      ],\n      \"description\": \"Delete even when other packages reference it, closing open editors (default false)\"\n    }\n  ],\n  \"definition\": {\n    \"description\": \"Read the outliner, then fail in the editor.\",\n    \"steps\": {\n      \"1\": {\n        \"task\": \"level.get_outliner\"\n      },\n      \"2\": {\n        \"task\": \"asset.delete\",\n        \"options\": {\n          \"assetPath\": \"/Game/Refused\"\n        }\n      }\n    }\n  }\n}"
+    },
+    "run": {
+      "status": 200,
+      "text": "{\n  \"summary\": \"✗ Flow failed in <N>ms\\n\\n  ✓ 1. level.get_outliner (task) - <N>ms\\n  ✗ 2. asset.delete (task) - FAILED\\n      The editor refused to delete /Game/Refused.\",\n  \"success\": false,\n  \"duration\": \"<VAR>\",\n  \"stepCount\": 2,\n  \"failedStep\": \"asset.delete\",\n  \"steps\": [\n    {\n      \"stepNumber\": 1,\n      \"name\": \"level.get_outliner\",\n      \"type\": \"task\",\n      \"skipped\": false,\n      \"success\": true,\n      \"duration\": \"<VAR>\",\n      \"attempts\": 1,\n      \"data\": {\n        \"success\": true,\n        \"actors\": [\n          {\n            \"label\": \"Floor\",\n            \"class\": \"StaticMeshActor\"\n          }\n        ],\n        \"count\": 1\n      }\n    },\n    {\n      \"stepNumber\": 2,\n      \"name\": \"asset.delete\",\n      \"type\": \"task\",\n      \"skipped\": false,\n      \"success\": false,\n      \"duration\": \"<VAR>\",\n      \"attempts\": 1,\n      \"error\": {\n        \"message\": \"The editor refused to delete /Game/Refused.\",\n        \"name\": \"Error\"\n      },\n      \"data\": {\n        \"success\": false,\n        \"error\": \"The editor refused to delete /Game/Refused.\"\n      }\n    }\n  ],\n  \"runId\": \"<VAR>\"\n}"
+    },
+    "runStaleEditor": {
+      "status": 404,
+      "text": "{\n  \"error\": \"No editor session named 'Nowhere'. Registered: Game. Use project(action='list_editors') to see them, or project(action='add_editor', projectPath=...) to register one.\"\n}"
+    },
+    "runUnderDialog": {
+      "status": 409,
+      "text": "{\n  \"success\": false,\n  \"dialogBlocking\": true,\n  \"refusedMethod\": \"flow.run\",\n  \"dialogMode\": \"defer\",\n  \"dialogPhase\": \"asking\",\n  \"dialogTitle\": \"Save Content\",\n  \"dialogMessage\": \"Save changes to 1 package?\",\n  \"buttons\": [\n    \"Save\",\n    \"Don't Save\"\n  ],\n  \"error\": \"A modal dialog is blocking the editor, so 'flow.run' was refused without running. Unreal cannot execute anything else until the dialog is answered. Dialog mode is defer, so this names the dialog but not the calls that press its buttons, and a press sent from here is refused: a person answers it in the Unreal Editor window. Every other action returns this same refusal until then.\"\n}"
+    }
+  }
+}

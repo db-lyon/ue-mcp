@@ -17,36 +17,10 @@ import type { EditorSession } from "../sessions/session.js";
 import { explainEditorDownWithEvidence } from "./offline.js";
 import { GuardRegistry, makeCallContext, type ResolveExistingFile } from "./guard.js";
 import { callIsReadOnly, readOnlyGuard } from "./session-access.js";
-import { DialogGuard, ensureGuard, existingGuard } from "../editor/dialog-guard.js";
+import { ensureGuard, existingGuard, refuseIfBlocked } from "../editor/dialog-guard.js";
 import { listsDialogs, nativeDialogReply, repliesToNativeDialog } from "../editor/native-dialog-reply.js";
 
 export type { ResolveExistingFile } from "./guard.js";
-
-/**
- * The dialog gate, at the boundary every route to the editor shares.
- *
- * A tool action, a flow step, a nested flow, a guard task making its own
- * calls: they all arrive here, so refusing here is what makes the guarantee
- * hold without a second copy of the rule anywhere else. The plugin refuses too,
- * and agrees, but it cannot see a call that never reaches it and it does not
- * know this machine's dialog mode.
- *
- * Returns the refusal to send back, or null to let the call through.
- */
-export async function refuseIfBlocked(
-  session: EditorSession | undefined,
-  method: string,
-): Promise<Record<string, unknown> | null> {
-  if (!session) return null;
-  if (DialogGuard.bridgeAllowed(method)) return null;
-  // Built from the session when it has none, rather than refused for not
-  // having one. Failing closed is right, but only because no session can reach
-  // this without a guard: they were created in one startup pass, so a session
-  // registered any other way was refused every call it ever made.
-  const guard = await ensureGuard(session);
-  const decision = await guard.check(method, "bridge");
-  return decision.allow ? null : decision.refusal;
-}
 
 /**
  * Arm or clear the dialog latch from what the editor just said.

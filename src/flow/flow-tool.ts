@@ -125,8 +125,15 @@ export function createFlowTool(
     },
   };
 
+  const summary =
+    `Run pre-built named sequences for this project. ` +
+    `ALWAYS check project(action="get_status") first - its 'flows' field lists what's available. ` +
+    `If a flow matches the user's request, run it via ` +
+    `flow(action="run", flowName="...") instead of composing the sequence by hand. ` +
+    `Config reloads on every call - no restart needed.`;
   const def: ToolDef = {
     name: "flow",
+    summary,
     description: "",
     schema: {
       action: actionEnum(Object.keys(actions) as [string, ...string[]]),
@@ -161,11 +168,7 @@ export function createFlowTool(
   };
   // Each action's line leads with its signature, built from its declaration.
   def.description =
-    `Run pre-built named sequences for this project. ` +
-    `ALWAYS check project(action="get_status") first - its 'flows' field lists what's available. ` +
-    `If a flow matches the user's request, run it via ` +
-    `flow(action="run", flowName="...") instead of composing the sequence by hand. ` +
-    `Config reloads on every call - no restart needed.\n\n` +
+    `${summary}\n\n` +
     `Actions:\n` +
     Object.entries(actions).map(([name, spec]) => `- ${actionSignature(def, name)}: ${spec.description ?? ""}`).join("\n") +
     `\n\nStep types supported in YAML flows: any MCP action (category.action), nested flows (flow:),\n` +

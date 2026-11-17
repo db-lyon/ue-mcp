@@ -34,5 +34,5 @@ export const reflectionTool: ToolDef = categoryTool(
     // The spec's type is the same, which the handler-specs unit test holds.
     slotName: z.string().min(1).max(128).optional().describe("inspect_save_game: logical save slot name without a path"),
     userIndex: z.number().int().nonnegative().optional().describe("inspect_save_game: platform user index (default 0)"),
-  },
+  }, { label: { alwaysOn: true, keywords: ["uclass", "ustruct", "uenum"] } },
 );

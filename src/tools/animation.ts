@@ -163,5 +163,5 @@ export const animationTool: ToolDef = categoryTool(
     insertIndex: z.number().int().min(0).optional().describe("add_montage_segment: position within the slot's segment list (default: append)"),
     bindingTag: z.string().min(1).optional().describe("Stable Control Rig edit-session natural key used by begin/read/apply/bake."),
     tolerance: z.number().nonnegative().optional().describe("bake_control_rig_edit: key-reduction tolerance."),
-  },
+  }, { label: { description: "anim sequences, montages, AnimBPs, skeletons", keywords: ["anim bp", "montage", "skeleton", "ik"] } },
 );

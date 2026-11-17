@@ -262,5 +262,5 @@ export const canvasTool: ToolDef = categoryTool(
     provenancePath: z.string().optional().describe("spawn_cutout_from_png: a detached C2PA manifest (.c2pa) signed for the image, attached to the assets made from it"),
     cutoutId: z.string().optional().describe("The cutout_id a spawn returned"),
     variantIndex: z.number().int().min(0).optional().describe("set_cutout_variant: 0-based variant index"),
-  },
+  }, { label: { text: "unreal canvas", description: "Unreal Canvas renders, viewport stream, stencils, splats, cutouts (UE 5.9)", keywords: ["unreal canvas", "movie render graph"] } },
 );

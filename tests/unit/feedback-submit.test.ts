@@ -21,6 +21,7 @@ vi.mock("../../src/github/auth.js", () => ({
 }));
 
 const { feedbackTool } = await import("../../src/tools/feedback.js");
+const { ALL_TOOLS } = await import("../../src/tools.js");
 
 const realTitle = "blueprint.set_class_default does not save asset";
 const realSummary =
@@ -41,7 +42,8 @@ function makeCtx(
     projectDir: projectDir ?? null,
     config: {},
   } as never;
-  return { bridge: {} as never, project, elicit };
+  // The categories a report is labelled with come from the session's graph.
+  return { bridge: {} as never, project, elicit, getToolGraph: () => ALL_TOOLS };
 }
 
 async function call(ctx: ToolContext, params: Record<string, unknown>): Promise<unknown> {

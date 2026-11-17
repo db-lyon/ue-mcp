@@ -557,5 +557,5 @@ export const assetTool: ToolDef = categoryTool(
     // session id; it is only passed explicitly to coordinate across processes.
     sessionId: z.string().optional().describe("lock / unlock / unlock_all: owning session id (defaults to this server process)"),
     ttlSeconds: z.number().optional().describe("lock: seconds before the lock auto-expires (default 300)"),
-  },
+  }, { label: { text: "assets", description: "import/move/rename/delete content browser assets", keywords: ["datatable", "static mesh", "texture", "import"] } },
 );

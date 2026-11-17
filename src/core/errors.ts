@@ -27,6 +27,12 @@ export enum ErrorCode {
   /** Another MCP session holds a lease on an asset this call would change.
    *  The message names the holder and when the lease runs out. */
   ASSET_LEASED = "ASSET_LEASED",
+  /** The action ran and failed for its own reasons; the message is the reason it gave. */
+  TASK_FAILED = "TASK_FAILED",
+  /** A failure that carried no code of its own. */
+  UNKNOWN = "UNKNOWN",
+  /** A gate refused the call before it ran (a blocking dialog, playtest mode, a missing engine tool); the refusal payload says why and what to do. */
+  REFUSED = "REFUSED",
 }
 
 /**

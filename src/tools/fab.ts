@@ -42,5 +42,5 @@ export const fabTool: ToolDef = categoryTool(
     // registrations.
     ...specSchema,
     includeSchemas: z.boolean().optional().describe("list_epic_tools: return each Fab tool's input schema (default false)"),
-  },
+  }, { label: { description: "Fab library sync, download cache, content import", keywords: ["fab library"] } },
 );

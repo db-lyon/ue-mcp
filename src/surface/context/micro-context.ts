@@ -14,7 +14,7 @@
 import { z } from "zod";
 import { registeredMethodsOf, withholdFromTool, withholdUnregistered } from "../registered-surface.js";
 import type { ActionSpec, ToolDef } from "../tool-types.js";
-import { categoryTool } from "../category-tool.js";
+import { categoryTool, summaryOf } from "../category-tool.js";
 import { EDITOR_TARGET_PARAM, stripAction } from "../routing-params.js";
 import { createFlowTool } from "../../flow/flow-tool.js";
 import { microGuide } from "./instructions.js";
@@ -23,7 +23,7 @@ import { McpError, ErrorCode } from "../../core/errors.js";
 import { actionSchema } from "../action-schema.js";
 import { takeFieldSelection } from "./field-select.js";
 import { coerceJsonStringArgs, flatValidationMessage, unknownRecord } from "./call-envelope.js";
-import { describeCategory, discoveryResults, readOffset, splitDescription } from "./lean-context.js";
+import { describeCategory, discoveryResults, readOffset } from "./lean-context.js";
 
 /**
  * The one tool micro mode advertises. Named here rather than inline because
@@ -164,7 +164,7 @@ export function buildMicroGateway(tools: ToolDef[]): ToolDef {
   // Flow is listed, searched and described like a category; dispatch runs it.
   const discoverable = [...tools, flow];
   const byName = new Map(discoverable.map((t) => [t.name, t] as const));
-  const summaries = discoverable.map((t) => ({ category: t.name, summary: splitDescription(t.description).summary }));
+  const summaries = discoverable.map((t) => ({ category: t.name, summary: summaryOf(t) }));
 
   const actions: Record<string, ActionSpec> = {
     guide: {

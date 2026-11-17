@@ -1,7 +1,7 @@
 // @session independent: Pure transforms over a graph. The strategy is one answer per transport, since there is one transport.
 import { z } from "zod";
 import type { ActionSpec, ToolDef } from "../tool-types.js";
-import { actionEnum, categoryTool } from "../category-tool.js";
+import { actionEnum, categoryTool, summaryOf } from "../category-tool.js";
 import { actionSchema } from "../action-schema.js";
 import { registeredMethodsOf, withholdFromTool, withholdUnregistered } from "../registered-surface.js";
 import { searchToolGraph } from "./tool-search.js";
@@ -32,18 +32,6 @@ import { McpError, ErrorCode } from "../../core/errors.js";
  * failure mode this repo works hardest to avoid.
  */
 
-const ACTIONS_MARKER = "\n\nActions:\n";
-
-/** Split a categoryTool() description into its summary and the generated catalog. */
-export function splitDescription(description: string): { summary: string; catalog: string } {
-  const i = description.indexOf(ACTIONS_MARKER);
-  if (i === -1) return { summary: description.trim(), catalog: "" };
-  return {
-    summary: description.slice(0, i).trim(),
-    catalog: description.slice(i + ACTIONS_MARKER.length).trim(),
-  };
-}
-
 /**
  * The full-mode description of a category tool (#1172): its summary, how to
  * call it, and one signature line per action. No per-action prose: a first
@@ -51,7 +39,7 @@ export function splitDescription(description: string): { summary: string; catalo
  * 60k budget, and describe_action carries every description on demand.
  */
 export function fullSurfaceDescription(tool: ToolDef): string {
-  const { summary } = splitDescription(tool.description);
+  const summary = summaryOf(tool);
   const lines = Object.keys(tool.actions).map((name) => actionSignature(tool, name));
   return `${summary}\n\nCall ${tool.name}(action, args={...}). Actions:\n${lines.join("\n")}`;
 }
@@ -94,7 +82,7 @@ export function readOffset(p: Record<string, unknown>): number {
 
 /** Produce the lean variant of a single category tool (non-mutating). */
 function leanTool(tool: ToolDef): ToolDef {
-  const { summary } = splitDescription(tool.description);
+  const summary = summaryOf(tool);
 
   // Preserve any pre-existing describe action rather than clobber it.
   const actions: Record<string, ActionSpec> = { ...tool.actions };
@@ -140,7 +128,7 @@ export function discoveryResults(tools: ToolDef[], query: string, limit: number)
  * leaned tools hide them.
  */
 export function buildCatalogTool(tools: ToolDef[]): ToolDef {
-  const summaries = tools.map((t) => ({ category: t.name, summary: splitDescription(t.description).summary }));
+  const summaries = tools.map((t) => ({ category: t.name, summary: summaryOf(t) }));
   const byName = new Map(tools.map((t) => [t.name, t] as const));
 
   const actions: Record<string, ActionSpec> = {

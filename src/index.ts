@@ -27,7 +27,7 @@ async function main() {
   // Opt-in via `ue-mcp.http`; binds to 127.0.0.1 only.
   if (rt.project.config.http?.enabled) {
     try {
-      startFlowHttpServer(rt.flowTool, rt.baseCtx, {
+      startFlowHttpServer(rt.flowRequest, {
         port: rt.project.config.http.port,
         host: rt.project.config.http.host,
       });

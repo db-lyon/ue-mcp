@@ -108,7 +108,7 @@ export function createMcpServer(rt: Runtime, opts: McpServerOptions = {}): Runti
     elicit: () => elicit,
     client: () => server.server.getClientVersion(),
     // An MCP session's playtest runs follow `ue-mcp playtest mode`.
-    gatePlaytest: true,
+    origin: "mcp",
     flow: { tool: rt.flowTool, ctx: rt.baseCtx },
     ...(opts.access ? { access: () => opts.access!.mode } : {}),
     ...(opts.sessionId
@@ -180,7 +180,7 @@ export function createMcpServer(rt: Runtime, opts: McpServerOptions = {}): Runti
     const flowShape: Record<string, z.ZodType> = { ...flowTool.schema };
     const flowRegistration = server.registerTool(flowTool.name, { description: flowTool.description, inputSchema: strippingInputSchema(flowShape) }, ((rawParams: Record<string, unknown>) => {
       claimElicit();
-      return withNotice(dispatchFlowCall(deps, flowTool, rt.baseCtx, rawParams)) as never;
+      return withNotice(dispatchFlowCall(deps, rawParams)) as never;
     }) as never);
     registeredTools.set(flowTool.name, flowRegistration);
   }

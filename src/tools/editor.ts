@@ -5,6 +5,7 @@ import { categoryTool } from "../surface/category-tool.js";
 import { toolGraphOf } from "../surface/target-params.js";
 import { directive, type DirectiveResponse } from "../core/directive.js";
 import { CORE_ISSUES_URL } from "../github/repos.js";
+import { WORKAROUND_REPORT_FIELDS } from "./feedback.js";
 import { startEditor, stopEditor, restartEditor, resolveOwnedEditor, connectedEditorOf } from "../editor/editor-control.js";
 import { buildProjectAction } from "./project/install.js";
 import { startProgress } from "../terminal/progress.js";
@@ -74,7 +75,7 @@ export function workaroundDirective(n: number, result: unknown, canSubmit: boole
           workaroundCount: n,
           feedbackDisabled: true,
           issueTracker: CORE_ISSUES_URL,
-          expectedFields: ["title", "summary", "pythonWorkaround", "idealTool"],
+          expectedFields: [...WORKAROUND_REPORT_FIELDS],
         },
       },
     );
@@ -103,7 +104,7 @@ export function workaroundDirective(n: number, result: unknown, canSubmit: boole
         workaroundCount: n,
         feedbackTool: "feedback",
         feedbackAction: "submit",
-        expectedFields: ["title", "summary", "pythonWorkaround", "idealTool"],
+        expectedFields: [...WORKAROUND_REPORT_FIELDS],
       },
     },
   );
@@ -720,5 +721,5 @@ export const editorTool: ToolDef = categoryTool(
     ...checkpointSchema,
     ...journalSchema,
     ...inlineSchema,
-  },
+  }, { label: { alwaysOn: true } },
 );

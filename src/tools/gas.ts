@@ -77,5 +77,5 @@ export const gasTool: ToolDef = categoryTool(
     // #1057: every key a spec'd handler declares, generated from its C++
     // registration.
     ...specSchema,
-  },
+  }, { label: { description: "Gameplay Ability System abilities, effects, attributes", requiredPlugins: ["GameplayAbilities"], keywords: ["gameplay ability", "gameplay effect"] } },
 );

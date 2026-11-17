@@ -94,5 +94,5 @@ export const materialTool: ToolDef = categoryTool(
     slotIndex: z.number().int().min(0).optional().describe("read_instance / *_designer*: material slot index on the mesh component (default 0) (#1114/#1131)"),
     layerIndex: z.number().int().min(0).optional().describe("Material Designer layer index within the slot (#1131)"),
     maxDepth: z.number().int().min(1).optional().describe("read_designer: how deep to describe nested stages and values (default 10) (#1131)"),
-  },
+  }, { label: { text: "materials", description: "Materials, Material Functions, parameters", keywords: ["expression", "shad"] } },
 );
