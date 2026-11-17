@@ -12,7 +12,8 @@ import * as path from "node:path";
 import { FakeBridge } from "../fake-bridge.js";
 import { SessionRegistry, type EditorSession } from "../../src/sessions/session.js";
 import {
-  routeEditorCall,
+  resolveEditorTarget,
+  takeEditorTarget,
   effectiveTaskName,
   refuseUntargetedInRegistry,
   editorAttribution,
@@ -45,7 +46,8 @@ function targetable(tool: ToolDef): ToolDef {
 async function dispatch(tool: ToolDef, params: Record<string, unknown>): Promise<
   { refused: string } | { ran: true; editor: string; attribution: string | null }
 > {
-  const routed = routeEditorCall(tool, params, sessions);
+  const taken = takeEditorTarget(tool, params);
+  const routed = { ...resolveEditorTarget(sessions, taken.target), params: taken.params };
   const refusal = refuseUntargetedInRegistry(
     sessions,
     effectiveTaskName(tool, routed.params),

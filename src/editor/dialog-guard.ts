@@ -1494,11 +1494,16 @@ export class DialogGuard {
    */
   observe(method: string, result: unknown): void {
     if (isDialogRefusal(result)) {
-      const dialog = asDialog(result);
-      if (dialog) this.note(dialog);
+      this.noteRefusal(result);
       return;
     }
     if (!isModalSafeMethod(method)) this.clear();
+  }
+
+  /** Learn the dialog a refusal names, whichever call it came back on. */
+  noteRefusal(refusal: unknown): void {
+    const dialog = asDialog(refusal);
+    if (dialog) this.note(dialog);
   }
 
   /**
@@ -1703,6 +1708,34 @@ export async function ensureGuard(session: GuardedSession): Promise<DialogGuard>
   const guard = guardFor(session, sessionGuardDeps(session, false));
   guard.startWatching();
   return guard;
+}
+
+/**
+ * The dialog gate for one call into an editor: the refusal to send back, or
+ * null to let the call through.
+ *
+ * `kind` says what is checked. A bridge method is checked at the guarded
+ * bridge, the boundary every route to the editor shares (a tool action, a
+ * flow step, a nested flow, a guard task's own calls), so refusing there holds
+ * without a second copy of the rule. An action is an in-process handler that
+ * never reaches that boundary (flow/run-action.ts). The plugin refuses too,
+ * and agrees, but it cannot see a call that never reaches it and does not
+ * know this machine's dialog mode.
+ *
+ * A session without a guard gets one built rather than being refused: failing
+ * closed is right only because no session reaches this without a guard, and a
+ * session registered outside the startup pass was refused every call it made.
+ */
+export async function refuseIfBlocked(
+  session: GuardedSession | undefined,
+  subject: string,
+  kind: "bridge" | "action" = "bridge",
+): Promise<Record<string, unknown> | null> {
+  if (!session) return null;
+  if (kind === "bridge" && DialogGuard.bridgeAllowed(subject)) return null;
+  const guard = await ensureGuard(session);
+  const decision = await guard.check(subject, kind);
+  return decision.allow ? null : (decision.refusal ?? null);
 }
 
 /**

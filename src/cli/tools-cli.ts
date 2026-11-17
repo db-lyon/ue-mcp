@@ -116,14 +116,14 @@ async function inProcessBackend(uproject: string): Promise<Backend> {
     }
   }
   const run = async (action: string, args: Record<string, unknown> = {}): Promise<Outcome> => {
-    const result = await rt.callAction("project", action, args);
-    const text = result.content.map((c) => (c.type === "text" ? c.text : "")).join("\n");
-    if (result.isError) return { ok: false, error: text.replace(/^Error \[[A-Z_]+\]: /, "") };
-    try {
-      return { ok: true, data: JSON.parse(text) as Record<string, unknown> };
-    } catch {
-      return { ok: true, data: { result: text } };
+    const { outcome } = await rt.callActionOutcome("project", action, args);
+    if (outcome.code !== undefined) {
+      const refusal = (outcome.data ?? {}) as Record<string, unknown>;
+      const said = outcome.message ?? (typeof refusal.error === "string" ? refusal.error : typeof refusal.reason === "string" ? refusal.reason : JSON.stringify(refusal));
+      return { ok: false, error: said };
     }
+    const data = outcome.data;
+    return { ok: true, data: data && typeof data === "object" ? (data as Record<string, unknown>) : { result: data } };
   };
   return {
     list: () => run("list_categories"),

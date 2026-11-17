@@ -83,6 +83,12 @@ export interface ToolContext {
    * Absent where no session is behind the call.
    */
   leaseHolder?: { id: string; label: string };
+  /**
+   * The `category.action` the call pipeline's gates already admitted. Its own
+   * run does not check the dialog and the engine again; any other action run
+   * under this context (a batch op, a flow step) still does.
+   */
+  gatedTask?: string;
 }
 
 /** One loaded ue-mcp plugin (an entry of a project's `plugins:` list), active or skipped. */

@@ -30,11 +30,12 @@ import { buildMicroGateway } from "../../src/surface/context/micro-context.js";
 import { buildFlowRegistry } from "../../src/flow/registry.js";
 import { loadFlowConfig } from "../../src/flow/loader.js";
 import { createFlowTool } from "../../src/flow/flow-tool.js";
-import { startFlowHttpServer } from "../../src/flow/http-server.js";
-import { routeEditorCall } from "../../src/dispatch/editor-gate.js";
+import { startFlowHttpServer, type FlowRequest } from "../../src/flow/http-server.js";
+import { resolveEditorTarget, takeEditorTarget } from "../../src/dispatch/editor-gate.js";
+import { succeeded } from "../../src/dispatch/call.js";
 import type { ToolContext, ToolDef } from "../../src/surface/tool-types.js";
 import { cloneToolDef } from "../../src/surface/category-tool.js";
-import { injectEditorTarget, sessionContext } from "../../src/surface/target-params.js";
+import { injectEditorTarget, sessionContext, stripEditorTarget } from "../../src/surface/target-params.js";
 import type { EditorBridge } from "../../src/bridge/bridge.js";
 import { LiveServer } from "./server.js";
 import { covers } from "../helpers/covers.js";
@@ -106,8 +107,8 @@ function targetable(tool: ToolDef): ToolDef {
 
 /** One dispatch through the routing layer, into the routed session's context. */
 async function dispatch(tool: ToolDef, params: Record<string, unknown>): Promise<unknown> {
-  const routed = routeEditorCall(tool, params, sessions);
-  return tool.handler(sessionContext(ctx, routed.session), routed.params);
+  const taken = takeEditorTarget(tool, params);
+  return tool.handler(sessionContext(ctx, resolveEditorTarget(sessions, taken.target).session), taken.params);
 }
 
 describe.skipIf(echoUnavailable !== null)("the client consumes the routing key, on every path", () => {
@@ -210,7 +211,16 @@ describe.skipIf(echoUnavailable !== null)("the client consumes the routing key, 
     const load = loadFlowConfig(ALL_TOOLS, live.project.projectDir ?? undefined);
     const registry = buildFlowRegistry(ALL_TOOLS);
     const flowTool = createFlowTool(registry, () => load.config);
-    const started = startFlowHttpServer(flowTool, ctx, { port: 0, token: "live-tests-token" });
+    // The routing half of the server's flow pipeline: the target is resolved
+    // and taken off the call and its nested params before the flow sees them.
+    const run: FlowRequest = async (input) => {
+      const nested = input.params && typeof input.params === "object" ? (input.params as Record<string, unknown>) : undefined;
+      const session = sessions.resolve(input.editor ?? nested?.editor);
+      const flowInput = stripEditorTarget(input);
+      if (nested) flowInput.params = stripEditorTarget(nested);
+      return { outcome: succeeded(await flowTool.handler(sessionContext(ctx, session), flowInput), [], true) };
+    };
+    const started = startFlowHttpServer(run, { port: 0, token: "live-tests-token" });
     await new Promise<void>((resolve) => started.server.once("listening", () => resolve()));
     const address = started.server.address();
     const port = typeof address === "object" && address !== null ? address.port : 0;

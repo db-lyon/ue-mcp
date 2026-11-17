@@ -1,59 +1,35 @@
-// @session per-session: Routes each call to the editor it addressed and runs it through that editor's registry and guard.
+// @session per-session: Turns each route's call into the pipeline's one call value, and its outcome into what that route answers.
 /**
- * The per-call pipeline behind every advertised tool: route the call to an
- * editor, gate it, check the dialog guard, run the addressed session's task
- * under asset locks, and shape the result or refusal the client sees.
+ * The boundaries of the call pipeline. A category tool call (or a micro
+ * gateway call) and a flow call are each read off their wire shape into one
+ * `ActionCall`, run through the gates in call-gates.ts, and the outcome is
+ * turned into MCP content here, and only here.
  */
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { McpError as SdkMcpError } from "@modelcontextprotocol/sdk/types.js";
 import type { EditorSession, SessionRegistry } from "../sessions/session.js";
 import type { ElicitFn } from "../core/elicit.js";
 import type { ProgressFn, ProgressUpdate } from "../core/progress.js";
-import type { ToolContext, ToolDef } from "../surface/tool-types.js";
+import type { ToolDef } from "../surface/tool-types.js";
 import { McpError, ErrorCode } from "../core/errors.js";
 import { debug } from "../core/log.js";
-import { withCallAsker } from "../flow/call-elicit.js";
-import { readOnlyRefusal, type SessionAccessMode } from "../flow/session-access.js";
-import { actionSpecOf, taskEffect } from "../surface/action-effects.js";
-import { journalFor } from "../journal/journal.js";
+import type { SessionAccessMode } from "../flow/session-access.js";
 import { unwrapArgsEnvelope, validateCategoryParams } from "../surface/context/call-envelope.js";
 import { microFlowCall } from "../surface/context/micro-context.js";
-import {
-  routeEditorCall,
-  callSubject,
-  refuseUntargetedInRegistry,
-  editorAttribution,
-  type RoutedCall,
-} from "../dispatch/editor-gate.js";
+import { callSubject, editorAttribution, resolveEditorTarget, takeEditorTarget } from "../dispatch/editor-gate.js";
 import { isDirectiveResponse } from "../core/directive.js";
 import { EDITOR_TARGET_PARAM, stripAction } from "../surface/routing-params.js";
-import { stripEditorTarget, sessionContext } from "../surface/target-params.js";
-import {
-  DialogGuard,
-  type GuardDecision,
-  stampBlockedEditor,
-} from "../editor/dialog-guard.js";
-import { isDialogRefusal } from "../bridge/dialog-refusal.js";
+import { stripEditorTarget } from "../surface/target-params.js";
 import { connectedEditorOf } from "../editor/editor-control.js";
-import { clientAdvertisesElicitation } from "../editor/dialog-mode.js";
 import { elicitationUnrenderedNote } from "../dispatch/client-quirks.js";
-import { playtestRefusal } from "../editor/playtest-mode.js";
 import { contestedProject } from "../editor/project-holders.js";
-import { withAssetLocks, type LockingConfig } from "../dispatch/locking.js";
-import { unknownActionMessage } from "../surface/action-schema.js";
-import { runsEpicMcpTool, withheldTarget, wrapsEpicTool } from "../surface/registered-surface.js";
-import { epicEngineRefusalFor } from "../surface/epic-engines.js";
-import { explainMissingAction } from "../sessions/session-surface.js";
-import { disabledActionRefusal } from "../surface/category-state.js";
-import { leaseConflictMessage } from "../dispatch/leases.js";
-import { leasePathsOf } from "../dispatch/lease-paths.js";
 import { SESSION_ID } from "../dispatch/lock-owner.js";
-import type { FlowContext } from "../flow/context.js";
-import type { SessionLoad, SessionLoads } from "../sessions/session-load.js";
+import { failed, type ActionCall, type Asker, type CallOutcome, type CallTarget, type MediaBlock } from "../dispatch/call.js";
+import { machineDetails, runCall, type GateDeps } from "./call-gates.js";
+
+export { splitMedia, type MediaBlock } from "../dispatch/call.js";
 
 type TextBlock = { type: "text"; text: string };
-/** Image or audio a result carries, as MCP content rather than base64 inside its JSON text. */
-export type MediaBlock = { type: "image" | "audio"; data: string; mimeType: string };
 export type ContentBlock = TextBlock | MediaBlock;
 
 /** What a tool callback hands back to the MCP SDK. */
@@ -70,53 +46,10 @@ export interface CallExtra {
   signal?: AbortSignal;
 }
 
-/**
- * A result's `media` entries ({type, mimeType, data}) become MCP image and
- * audio content. Each entry stays in the JSON without its data and says which
- * content block holds it, so the text still describes the result whole.
- */
-export function splitMedia(data: unknown): { data: unknown; blocks: MediaBlock[] } {
-  if (!data || typeof data !== "object" || Array.isArray(data)) return { data, blocks: [] };
-  const media = (data as Record<string, unknown>).media;
-  if (!Array.isArray(media)) return { data, blocks: [] };
-  const blocks: MediaBlock[] = [];
-  const kept = media.map((entry) => {
-    if (!entry || typeof entry !== "object") return entry;
-    const { data: payload, ...rest } = entry as Record<string, unknown>;
-    const type = rest.type;
-    if ((type !== "image" && type !== "audio") || typeof payload !== "string" || typeof rest.mimeType !== "string") return entry;
-    blocks.push({ type, data: payload, mimeType: rest.mimeType });
-    return { ...rest, contentBlock: blocks.length };
-  });
-  return blocks.length ? { data: { ...(data as Record<string, unknown>), media: kept }, blocks } : { data, blocks };
-}
-
-/**
- * Structured tail for an error a caller has to make a decision about (#799).
- * A bridge timeout is not a failed call: the editor may have finished it. The
- * prose says so, and this block says so in a form a client can branch on
- * without matching strings.
- */
-function machineErrorBlock(e: unknown): TextBlock[] {
-  if (!(e instanceof McpError) || !e.details) return [];
-  return [{
-    type: "text" as const,
-    text: "MACHINE_ERROR=" + JSON.stringify({ code: e.code, ...e.details }),
-  }];
-}
-
 /** The one error shape every tool answers with: `Error [CODE]: message`, then any tail. */
 export function errorResult(code: string, message: string, tail: TextBlock[] = []): ToolResult {
   return {
     content: [{ type: "text" as const, text: `Error [${code}]: ${message}` }, ...tail],
-    isError: true,
-  };
-}
-
-/** A refusal payload, returned as the error result it is. */
-function refusalResult(refusal: unknown, tail: TextBlock[] = []): ToolResult {
-  return {
-    content: [{ type: "text" as const, text: JSON.stringify(refusal, null, 2) }, ...tail],
     isError: true,
   };
 }
@@ -195,33 +128,17 @@ export function buildElicit(mcp: McpServer): ElicitFn {
   return elicit;
 }
 
-/** What the pipeline needs from the server that owns it. */
-export interface DispatchDeps {
-  sessions: SessionRegistry;
-  loads: SessionLoads;
-  lockingCfg: LockingConfig;
-  /** The one dialog guard per editor, created on first use. */
-  dialogGuardFor: (session: EditorSession, canElicit?: boolean) => DialogGuard;
+/** What one route hands the pipeline beside the gates' own dependencies: who is calling. */
+export interface DispatchDeps extends GateDeps {
+  /** Where this route's calls come from; see Asker.origin. */
+  origin: Asker["origin"];
   elicit: () => ElicitFn | undefined;
   client: () => { name: string; version?: string } | undefined;
   /**
-   * The load a call runs against in place of the session's own: a context
-   * projection's, whose registry holds the tasks of the tools it advertises.
-   */
-  loadView?: (load: SessionLoad) => SessionLoad;
-  /**
-   * Refuse pie(script_run) and pie(script_replay) while the addressed
-   * project's playtest mode is manual. Set by the MCP server; an in-process
-   * caller enforces its own rules.
-   */
-  gatePlaytest?: boolean;
-  /** The flow route a micro gateway call to the flow category takes. */
-  flow?: { tool: ToolDef; ctx: ToolContext };
-  /**
    * The calling session's access mode, read on every call. Absent is
    * read-write. In read-only mode an action whose declared effect is `mutate`
-   * or `unknown` is refused here, and every bridge call it would make is
-   * refused by the read-only guard (#1484).
+   * or `unknown` is refused, and every bridge call it would make is refused
+   * by the read-only guard (#1484).
    */
   access?: () => SessionAccessMode;
   /**
@@ -231,13 +148,19 @@ export interface DispatchDeps {
   leaseHolder?: () => { id: string; label: string };
 }
 
-/** The button a respond_to_dialog call names: its label, its index into the dialog's buttons, or the dismissal. */
-function pressedLabel(params: Record<string, unknown>, dialog: { buttons: string[] } | null): string {
-  if (typeof params.buttonLabel === "string" && params.buttonLabel !== "") return params.buttonLabel;
-  if (typeof params.buttonIndex === "number" && dialog?.buttons[params.buttonIndex] !== undefined) {
-    return dialog.buttons[params.buttonIndex];
-  }
-  return typeof params.dialogAction === "string" ? params.dialogAction : "";
+/** The caller of one call, read off the route's deps and the request. */
+function askerOf(deps: DispatchDeps, extra: CallExtra = {}): Asker {
+  const client = deps.client();
+  return {
+    origin: deps.origin,
+    ...(deps.origin === "http" ? { canElicit: false } : {}),
+    elicit: deps.elicit(),
+    client,
+    ...(deps.access ? { access: deps.access } : {}),
+    leaseHolder: deps.leaseHolder?.() ?? { id: SESSION_ID, label: client?.name ?? "this server" },
+    onProgress: makeProgressReporter(extra),
+    signal: extra?.signal,
+  };
 }
 
 /** The serving editor, appended to a response only beyond one editor (5.3). */
@@ -254,11 +177,134 @@ export function attribution(sessions: SessionRegistry, session: EditorSession): 
   return line ? [{ type: "text" as const, text: line }] : [];
 }
 
+/** A result as one text block: a string as itself, anything else as indented JSON. */
+function stringify(v: unknown): string {
+  return typeof v === "string" ? v : JSON.stringify(v, null, 2);
+}
+
+/** The MACHINE_ERROR block a client branches on without matching prose (#799). */
+function machineErrorBlocks(details: Record<string, unknown> | undefined): TextBlock[] {
+  return details ? [{ type: "text" as const, text: "MACHINE_ERROR=" + JSON.stringify(details) }] : [];
+}
+
+/** An outcome as MCP content: the one place a call's answer becomes text. */
+export function toToolResult(outcome: CallOutcome, sessions: SessionRegistry, session: EditorSession | undefined): ToolResult {
+  const served = outcome.attributed && session ? attribution(sessions, session) : [];
+  if (outcome.code === ErrorCode.REFUSED) {
+    return { content: [{ type: "text" as const, text: JSON.stringify(outcome.data, null, 2) }, ...served], isError: true };
+  }
+  if (outcome.code !== undefined) {
+    return errorResult(outcome.code, outcome.message ?? "", [...machineErrorBlocks(outcome.details), ...served]);
+  }
+  const notes: TextBlock[] = outcome.notes.map((text) => ({ type: "text" as const, text }));
+  // Directive responses (execute_python workaround tracking) emit the prose
+  // directive, a MACHINE_DIRECTIVE block for clients that strip prose, and
+  // the actual tool result.
+  if (isDirectiveResponse(outcome.data)) {
+    const blocks: TextBlock[] = [...notes, { type: "text" as const, text: outcome.data.directive }];
+    if (outcome.data.machine) {
+      blocks.push({ type: "text" as const, text: "MACHINE_DIRECTIVE=" + JSON.stringify(outcome.data.machine) });
+    }
+    blocks.push({ type: "text" as const, text: stringify(outcome.data.result) });
+    return { content: [...blocks, ...served] };
+  }
+  return { content: [...notes, { type: "text" as const, text: stringify(outcome.data) }, ...outcome.media, ...served] };
+}
+
+/** An outcome, and the editor that served it, when the call got as far as one. */
+export interface Served {
+  outcome: CallOutcome;
+  session?: EditorSession;
+}
+
 /**
- * One call to a category tool (or the micro gateway). `envelope` says the
- * tool is advertised as `action` + `args`, so the flat shape is validated here
- * rather than by the SDK.
+ * Read one call to a category tool (or the micro gateway) into the pipeline's
+ * call value and run it. `envelope` says the tool is advertised as `action` +
+ * `args`, so the flat shape is validated here rather than by the SDK; a
+ * validation failure is thrown to the SDK, which words it as its own.
  */
+export async function categoryCallOutcome(
+  deps: DispatchDeps,
+  tool: ToolDef,
+  envelope: boolean,
+  callArgs: Record<string, unknown>,
+  extra: CallExtra = {},
+): Promise<Served> {
+  let taken: { target: unknown; params: Record<string, unknown> };
+  let flowInput: Record<string, unknown> | null;
+  try {
+    taken = takeEditorTarget(tool, envelope ? unwrapArgsEnvelope(tool, callArgs) : callArgs);
+    if (envelope) taken = { ...taken, params: validateCategoryParams(tool, taken.params) };
+    flowInput = microFlowCall(tool, taken.params);
+  } catch (e) {
+    if (e instanceof SdkMcpError) throw e;
+    const code = e instanceof McpError ? e.code : ErrorCode.INVALID_PARAMS;
+    return { outcome: failed(code, e instanceof Error ? e.message : String(e), false) };
+  }
+  // The micro gateway reaches flows as a category; the flow route runs them.
+  if (flowInput) return flowCallOutcome(deps, { ...flowInput, ...(taken.target === undefined ? {} : { [EDITOR_TARGET_PARAM]: taken.target }) }, extra);
+
+  let routed: { session: EditorSession; targeted: boolean };
+  try {
+    routed = resolveEditorTarget(deps.sessions, taken.target);
+  } catch (e) {
+    return { outcome: failed(ErrorCode.NOT_FOUND, e instanceof Error ? e.message : String(e), false) };
+  }
+  const params = taken.params;
+  // The action that actually runs: the gateway's target in micro mode.
+  const subject = callSubject(tool, params);
+  const call: ActionCall<EditorSession> = {
+    task: subject.taskName,
+    params: subject.params,
+    routing: { targeted: routed.targeted },
+    session: routed.session,
+    asker: askerOf(deps, extra),
+    target: { kind: "task", registryTask: `${tool.name}.${String(params.action)}`, registryParams: stripAction(params) },
+  };
+  return { outcome: await runCall(deps, call), session: routed.session };
+}
+
+/**
+ * Read one call to the flow tool into the pipeline's call value and run it. A
+ * flow addresses one editor for the whole run, so the target is read off the
+ * call and stripped from both the call and the nested `params` forwarded into
+ * every step.
+ */
+export async function flowCallOutcome(
+  deps: DispatchDeps,
+  rawParams: Record<string, unknown>,
+  extra: CallExtra = {},
+  approval?: Extract<CallTarget, { kind: "flow" }>["approval"],
+): Promise<Served> {
+  const flowTool = deps.flow.tool;
+  const nested = rawParams.params && typeof rawParams.params === "object"
+    ? (rawParams.params as Record<string, unknown>)
+    : undefined;
+  // A name is resolved strictly at one editor too, so a stale one refuses
+  // rather than running the flow against the active editor (#1278).
+  const routable = flowTool.injectedEditorParam || !(EDITOR_TARGET_PARAM in flowTool.schema);
+  const target = routable ? rawParams[EDITOR_TARGET_PARAM] ?? nested?.[EDITOR_TARGET_PARAM] : undefined;
+  let session: EditorSession;
+  try {
+    session = routable ? deps.sessions.resolve(target) : deps.sessions.active;
+  } catch (e) {
+    const code = e instanceof McpError ? e.code : ErrorCode.UNKNOWN;
+    return { outcome: failed(code, e instanceof Error ? e.message : String(e), false, machineDetails(e)) };
+  }
+  const input = stripEditorTarget(rawParams);
+  if (nested) input.params = stripEditorTarget(nested);
+  const call: ActionCall<EditorSession> = {
+    task: `${flowTool.name}.${String(input.action ?? "")}`,
+    params: stripAction(input),
+    routing: { targeted: typeof target === "string" && target.trim() !== "" },
+    session,
+    asker: askerOf(deps, extra),
+    target: { kind: "flow", input, ...(approval ? { approval } : {}) },
+  };
+  return { outcome: await runCall(deps, call), session };
+}
+
+/** One call to a category tool (or the micro gateway), answered as MCP content. */
 export async function dispatchCategoryCall(
   deps: DispatchDeps,
   tool: ToolDef,
@@ -266,359 +312,12 @@ export async function dispatchCategoryCall(
   callArgs: Record<string, unknown>,
   extra: CallExtra,
 ): Promise<ToolResult> {
-  const { sessions, loads } = deps;
-  let rawParams: Record<string, unknown>;
-  let flowParams: Record<string, unknown> | null = null;
-  try {
-    if (envelope) {
-      const flat = unwrapArgsEnvelope(tool, callArgs);
-      rawParams = validateCategoryParams(tool, flat);
-      // At one editor `editor` is not in the shape, so validation would strip a
-      // stale name before routing could refuse it (#1278).
-      const held = flat[EDITOR_TARGET_PARAM];
-      if (held !== undefined && !(EDITOR_TARGET_PARAM in rawParams)) rawParams = { ...rawParams, [EDITOR_TARGET_PARAM]: held };
-    } else {
-      rawParams = callArgs;
-    }
-    flowParams = deps.flow ? microFlowCall(tool, rawParams) : null;
-  } catch (e) {
-    // Thrown to the SDK, which words it exactly as its own validation did.
-    if (e instanceof SdkMcpError) throw e;
-    const msg = e instanceof Error ? e.message : String(e);
-    const code = e instanceof McpError ? e.code : ErrorCode.INVALID_PARAMS;
-    return errorResult(code, msg);
-  }
-  if (flowParams && deps.flow) return dispatchFlowCall(deps, deps.flow.tool, deps.flow.ctx, flowParams);
-  let routed: RoutedCall;
-  try {
-    routed = routeEditorCall(tool, rawParams, sessions);
-  } catch (e) {
-    return errorResult("NOT_FOUND", e instanceof Error ? e.message : String(e));
-  }
-  const session = routed.session;
-  const params = routed.params;
-  const action = params.action as string;
-  const taskName = `${tool.name}.${action}`;
-  // The action actually run: the gateway's target in micro mode.
-  const subject = callSubject(tool, params);
-  const effectiveTask = subject.taskName;
-
-  // Refuse an untargeted change while more than one editor is registered
-  // (#817, plan 5.2). Returns null at one editor without classifying anything.
-  const untargeted = refuseUntargetedInRegistry(sessions, effectiveTask, routed.targeted, loads.dispatchUnion.tools);
-  if (untargeted) return errorResult("INVALID_PARAMS", untargeted);
-
-  // Before the dialog guard and the task: an action served in this process
-  // never reaches the bridge, so the bridge guard alone cannot refuse it.
-  if (deps.access?.() === "read-only") {
-    const refused = readOnlyRefusal(effectiveTask, loads.dispatchUnion.tools);
-    if (refused) return errorResult(ErrorCode.WRITE_BLOCKED, refused, attribution(sessions, session));
-  }
-
-  if (deps.gatePlaytest) {
-    const refused = playtestRefusal(effectiveTask, session.project.projectDir);
-    if (refused) return refusalResult(refused, attribution(sessions, session));
-  }
-
-  // One guard per editor, shared by every route. The mode is read per call,
-  // so changing it takes effect without restarting anything.
-  const guard = deps.dialogGuardFor(session, clientAdvertisesElicitation(deps.elicit()));
-
-  // Actions served in this process never reach the bridge, so the bridge
-  // boundary cannot refuse them. Same guard, same decision.
-  const preflight = await guard.check(effectiveTask, "action");
-  if (!preflight.allow) return refusalResult(preflight.refusal);
-  // The dialog a press is aimed at, for the answered event.
-  const facing = guard.current;
-
-  const taskParams = stripAction(params);
-  const leaseHolder = deps.leaseHolder?.() ?? { id: SESSION_ID, label: deps.client()?.name ?? "this server" };
-  const flowCtx: FlowContext = {
-    ...loads.contextFor(session),
-    leaseHolder,
-    elicit: deps.elicit(),
-    onProgress: makeProgressReporter(extra),
-    signal: extra?.signal,
-    client: deps.client(),
-  };
-
-  // The addressed session's own registry, built on demand rather than falling
-  // back to the first project's (D1). A call for an action this session does
-  // not provide is refused here, naming the editors that do.
-  let sessionLoad: SessionLoad;
-  try {
-    sessionLoad = await loads.ensure(session);
-    if (deps.loadView) sessionLoad = deps.loadView(sessionLoad);
-  } catch (e) {
-    return errorResult(
-      "NOT_CONNECTED",
-      `Editor '${session.name}' has no tool surface of its own, so this call cannot ` +
-        `be dispatched to it. Running it through another project's registry would execute that project's ` +
-        `tasks in this editor, which is exactly what must not happen. Cause: ` +
-        `${e instanceof Error ? e.message : String(e)}`,
-    );
-  }
-  // Turned off by this project's `disable:`, named with the command that turns it back on.
-  const turnedOff = disabledActionRefusal(sessionLoad.pristine, sessionLoad.categories, effectiveTask);
-  if (turnedOff) return errorResult(ErrorCode.CATEGORY_DISABLED, turnedOff, attribution(sessions, session));
-
-  const sessionRegistry = sessionLoad.registry ?? loads.loadFor(undefined).registry!;
-  const refusal = sessions.size > 1
-    ? explainMissingAction(
-        loads.dispatchUnion,
-        effectiveTask,
-        session.name,
-        sessionRegistry.listRegistered().includes(effectiveTask),
-      )
-    : null;
-  if (refusal) return errorResult("NOT_FOUND", refusal);
-
-  // `action` is advertised as an enum but parsed as a string, so a typo is
-  // refused here with the closest spellings rather than by the MCP layer
-  // with every action named twice.
-  if (!sessionRegistry.listRegistered().includes(taskName)) {
-    return errorResult("NOT_FOUND", unknownActionMessage(action, tool.name, Object.keys(tool.actions)));
-  }
-
-  // A wrapped engine tool this engine's recorded registry lacks: named before the
-  // toolset check, which would only say the toolset is absent.
-  const engineRefusal = epicEngineRefusalFor(sessionLoad.registryTools, effectiveTask, session.bridge.capabilities?.engineVersion);
-  if (engineRefusal) return refusalResult(engineRefusal);
-
-  // Withheld from the surface because the running plugin lacks its method (6.4).
-  // A wrapped engine tool re-reads the editor's toolsets when they are unknown
-  // or say it is absent, since a toolset can register after the handshake.
-  let withheld = withheldTarget(sessionLoad.registryTools, effectiveTask, session.bridge);
-  if (wrapsEpicTool(sessionLoad.registryTools, effectiveTask)
-    && (withheld || session.bridge.epicToolsets == null) && session.bridge.refreshEpicToolsets) {
-    await session.bridge.refreshEpicToolsets();
-    withheld = withheldTarget(sessionLoad.registryTools, effectiveTask, session.bridge);
-  }
-  // The same for an MCP tool an engine plugin registers (#1824).
-  if (runsEpicMcpTool(sessionLoad.registryTools, effectiveTask)
-    && (withheld || session.bridge.epicMcpTools == null) && session.bridge.refreshEpicMcpTools) {
-    await session.bridge.refreshEpicMcpTools();
-    withheld = withheldTarget(sessionLoad.registryTools, effectiveTask, session.bridge);
-  }
-  if (withheld) return errorResult("NOT_FOUND", withheld);
-
-  const served = attribution(sessions, session);
-
-  // Asset leases (leases.ts): a change to a path another MCP session holds is
-  // refused, naming the holder. While leases are implicit, the change takes a
-  // lease on what it names for this session.
-  const leases = sessions.leases;
-  if (leases?.enforcing) {
-    const leasePaths = leasePathsOf(effectiveTask, subject.params, loads.dispatchUnion.tools);
-    if (leasePaths.length > 0) {
-      const hit = leases.conflict(session.name, leasePaths, leaseHolder.id);
-      if (hit) return errorResult(ErrorCode.ASSET_LEASED, leaseConflictMessage(hit.lease, hit.path, leases.now()), served);
-      if (leases.implicit) leases.acquire(session.name, leasePaths, leaseHolder, undefined, true);
-    }
-  }
-  try {
-    const task = await sessionRegistry.create(taskName, flowCtx, taskParams);
-    // Locks are taken in the editor the call runs in, through the GUARDED
-    // bridge, so a lock request made while a modal is up is refused as a dialog.
-    // Every bridge call the task makes answers to this caller, so a guard that
-    // allows overrides asks the person who sent this call and nobody else.
-    // Journaled when the client named a group and the action may change state (#1481).
-    const effect = taskEffect(effectiveTask, loads.dispatchUnion.tools).effect;
-    const result = await journalFor(session).record(effectiveTask, effect, () =>
-      withCallAsker({ elicit: flowCtx.elicit, subject: effectiveTask, access: deps.access }, () => withAssetLocks(
-        session.guarded,
-        deps.lockingCfg,
-        effectiveTask,
-        subject.params,
-        () => task.run(),
-        session.lockOwnerId,
-        loads.dispatchUnion.tools,
-      )), actionSpecOf(effectiveTask, loads.dispatchUnion.tools));
-
-    // A task that failed for its own reasons reports that, not a dialog. A
-    // failure DURING a modal is usually caused by it, and the runner returns
-    // no data on a throw, so ask the guard. The decision is kept so the
-    // refusal below reports what the guard actually did.
-    let postRunDecision: GuardDecision | null = null;
-    const failedUnderDialog = !result.success
-      && !isDialogRefusal(result.data)
-      && !DialogGuard.actionAllowed(effectiveTask)
-      && (postRunDecision = await guard.check(effectiveTask, "action")).allow === false;
-    if (!result.success && !isDialogRefusal(result.data) && !failedUnderDialog) {
-      const msg = result.error?.message ?? `Task ${taskName} failed`;
-      return errorResult("TASK_FAILED", msg, [...machineErrorBlock(result.error), ...served]);
-    }
-
-    // An allow-listed read still SAYS a dialog is up: get_status must never
-    // report a healthy editor while the game thread is parked.
-    if (DialogGuard.actionAllowed(effectiveTask)) {
-      // respond_to_dialog may have just cleared it. refresh, not check: check
-      // applies the mode and could press a button on the next prompt unasked.
-      const refreshes = result.success ? actionSpecOf(effectiveTask, loads.dispatchUnion.tools)?.refreshesDialog : undefined;
-      if (refreshes === "press") guard.notePress(pressedLabel(subject.params, facing), facing);
-      if (refreshes) await guard.refresh();
-      const seen = guard.current;
-      if (result.success) stampBlockedEditor(result.data, seen, guard.modeFor(seen));
-    }
-
-    // Whatever the route, the caller gets ONE refusal shape, built here.
-    // Actions allowed through a modal are exempt.
-    let answeredWhileWaiting: string | null = null;
-    if (!DialogGuard.actionAllowed(effectiveTask)) {
-      const fromPlugin = isDialogRefusal(result.data)
-        ? (result.data as Record<string, unknown>)
-        : null;
-      if (fromPlugin) guard.observe("__refused__", fromPlugin);
-      const blocking = guard.current;
-      const decision = blocking ? postRunDecision ?? (await guard.check(effectiveTask, "action")) : null;
-      // The check can answer the dialog itself: the person was asked and pressed a
-      // button while this call waited. Then nothing is blocking any more, and the
-      // call's own result is the answer, not a refusal naming a dialog that is gone.
-      if (blocking && decision?.allow === true && !fromPlugin) {
-        const pressed = guard.lastPressed;
-        answeredWhileWaiting = `The dialog "${blocking.title}" that appeared during this call was answered`
-          + (pressed ? ` (${pressed.button} was pressed)` : "") + ". The call's own result follows.";
-      }
-      if (blocking && decision && !(decision.allow === true && !fromPlugin)) {
-        const refusalForReturn = decision.allow === false
-          ? decision.refusal
-          : guard.refusal(effectiveTask, blocking);
-        // A refusal means nothing ran. Anything else had already started when
-        // the dialog appeared, so it may have applied part of its work.
-        // A call that was already in flight when a native dialog appeared was
-        // answered by the server, not refused by the plugin: it had started too.
-        const started = fromPlugin === null || fromPlugin.inFlight === true;
-        return refusalResult(
-          started
-            ? {
-                ...refusalForReturn,
-                partiallyApplied: true,
-                note:
-                  `'${taskName}' had already started when the dialog appeared, so it may `
-                  + "have applied some of its changes. Answer the dialog, then read the "
-                  + "state back before deciding whether to run it again.",
-                // A mutation that completed still has the path it created in here.
-                partialResult: result.data ?? null,
-              }
-            : refusalForReturn,
-          served,
-        );
-      }
-    }
-
-    const stringify = (v: unknown) =>
-      typeof v === "string" ? v : JSON.stringify(v, null, 2);
-    const answeredNote: TextBlock[] = answeredWhileWaiting ? [{ type: "text" as const, text: answeredWhileWaiting }] : [];
-
-    // Directive responses (execute_python workaround tracking) emit the prose
-    // directive, a MACHINE_DIRECTIVE block for clients that strip prose, and
-    // the actual tool result.
-    if (isDirectiveResponse(result.data)) {
-      const blocks: TextBlock[] = [
-        ...answeredNote,
-        { type: "text" as const, text: result.data.directive },
-      ];
-      if (result.data.machine) {
-        blocks.push({
-          type: "text" as const,
-          text: "MACHINE_DIRECTIVE=" + JSON.stringify(result.data.machine),
-        });
-      }
-      blocks.push({ type: "text" as const, text: stringify(result.data.result) });
-      return { content: [...blocks, ...served] };
-    }
-
-    const { data: shown, blocks: media } = splitMedia(result.data);
-    return {
-      content: [
-        ...answeredNote,
-        { type: "text" as const, text: stringify(shown) },
-        ...media,
-        ...served,
-      ],
-    };
-  } catch (e) {
-    // A refusal can arrive as a throw (taking an asset lock is a bridge call),
-    // and is shaped through the guard so the payload matches the result route.
-    const thrownRefusal = e instanceof McpError && isDialogRefusal(e.details)
-      ? (e.details as unknown as Record<string, unknown>)
-      : null;
-    if (thrownRefusal) {
-      guard.observe("__refused__", thrownRefusal);
-      const blocking = guard.current;
-      if (blocking) return refusalResult(guard.refusal(effectiveTask, blocking), served);
-    }
-    const msg = e instanceof Error ? e.message : String(e);
-    const code = e instanceof McpError ? e.code : "UNKNOWN";
-    return errorResult(code, msg, [...machineErrorBlock(e), ...served]);
-  }
+  const { outcome, session } = await categoryCallOutcome(deps, tool, envelope, callArgs, extra);
+  return toToolResult(outcome, deps.sessions, session);
 }
 
-/**
- * One call to the flow tool. A flow addresses one editor for the whole run,
- * so the target is read off the call and stripped from both the call and the
- * nested `params` forwarded into every step.
- */
-export async function dispatchFlowCall(
-  deps: DispatchDeps,
-  flowTool: ToolDef,
-  baseCtx: ToolContext,
-  rawParams: Record<string, unknown>,
-): Promise<ToolResult> {
-  const { sessions } = deps;
-  try {
-    const nested = rawParams.params && typeof rawParams.params === "object"
-      ? (rawParams.params as Record<string, unknown>)
-      : undefined;
-    // A name is resolved strictly at one editor too, so a stale one refuses
-    // rather than running the flow against the active editor (#1278).
-    const routable = flowTool.injectedEditorParam || !(EDITOR_TARGET_PARAM in flowTool.schema);
-    const target = routable
-      ? rawParams[EDITOR_TARGET_PARAM] ?? nested?.[EDITOR_TARGET_PARAM]
-      : undefined;
-    const session = routable ? sessions.resolve(target) : sessions.active;
-    const params = stripEditorTarget(rawParams);
-    if (nested) params.params = stripEditorTarget(nested);
-
-    // A flow is whatever its steps are, so an untargeted run is gated like
-    // any other change. `plan` and `list` read and are not.
-    const untargeted = refuseUntargetedInRegistry(
-      sessions,
-      `${flowTool.name}.${String(params.action ?? "")}`,
-      typeof target === "string" && target.trim() !== "",
-      deps.loads.dispatchUnion.tools,
-    );
-    if (untargeted) return errorResult("INVALID_PARAMS", untargeted);
-
-    if (deps.access?.() === "read-only") {
-      const refused = readOnlyRefusal(`${flowTool.name}.${String(params.action ?? "")}`, deps.loads.dispatchUnion.tools);
-      if (refused) return errorResult(ErrorCode.WRITE_BLOCKED, refused, attribution(sessions, session));
-    }
-
-    // Steps are refused individually at the guarded bridge. This covers a run
-    // STARTED while a modal is up, and flow(list)/flow(plan), which never
-    // touch the bridge at all.
-    const flowGuard = deps.dialogGuardFor(session, clientAdvertisesElicitation(deps.elicit()));
-    const flowCheck = await flowGuard.check(
-      `${flowTool.name}.${String(params.action ?? "")}`,
-      "action",
-    );
-    if (!flowCheck.allow) return refusalResult(flowCheck.refusal, attribution(sessions, session));
-    const flowTask = `${flowTool.name}.${String(params.action ?? "")}`;
-    // A flow's steps are not journaled one by one, so a run is one entry whose files the checkpoints restore (#1481).
-    const journaled = await journalFor(session).record(flowTask, taskEffect(flowTask, deps.loads.dispatchUnion.tools).effect, async () => ({
-      success: true,
-      data: await withCallAsker(
-        { elicit: deps.elicit(), access: deps.access },
-        () => flowTool.handler(sessionContext(baseCtx, session), params),
-      ),
-    }));
-    const result = journaled.data;
-    const text = typeof result === "string" ? result : JSON.stringify(result, null, 2);
-    return { content: [{ type: "text" as const, text }, ...attribution(sessions, session)] };
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    const code = e instanceof McpError ? e.code : "UNKNOWN";
-    return errorResult(code, msg, machineErrorBlock(e));
-  }
+/** One call to the flow tool, answered as MCP content. */
+export async function dispatchFlowCall(deps: DispatchDeps, rawParams: Record<string, unknown>, extra: CallExtra = {}): Promise<ToolResult> {
+  const { outcome, session } = await flowCallOutcome(deps, rawParams, extra);
+  return toToolResult(outcome, deps.sessions, session);
 }
