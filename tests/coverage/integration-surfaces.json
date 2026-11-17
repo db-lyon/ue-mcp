@@ -592,9 +592,9 @@
       "summary": "flow(run, playtest) drafts a test script with the flow model, checks it with pie(script_validate), returns refusals to the model and saves it with pie(script_create)"
     },
     {
-      "id": "flow.agent.anthropic-extension",
+      "id": "flow.agent.env-model",
       "group": "flow",
-      "summary": "the first-party anthropic daemon extension (extensions/anthropic) registers a provider from ANTHROPIC_API_KEY and flow agent steps run on it"
+      "summary": "a flow agent step with no registered provider runs on ANTHROPIC_API_KEY"
     },
     {
       "id": "flow.agent.no-model",
