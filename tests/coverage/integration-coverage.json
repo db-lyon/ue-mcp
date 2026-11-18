@@ -705,6 +705,11 @@
         {
           "suite": "integration",
           "file": "tests/integration/cli-install-named.test.ts",
+          "test": "leaves a bare project on an engine with no build untouched, and says what to do instead"
+        },
+        {
+          "suite": "integration",
+          "file": "tests/integration/cli-install-named.test.ts",
           "test": "lists the names it knows when given one it does not, and reaches nothing"
         },
         {
