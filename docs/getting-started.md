@@ -13,9 +13,9 @@ UE-MCP lets an AI assistant work in the Unreal Editor: place actors, write Bluep
 ## 1. Installation
 
 !!! tip "Windows: use the Launcher"
-    [Download the UE-MCP Launcher](https://ue-mcp.com/downloads), pick a project and click **Add Studio** to set up ue-mcp and Studio for it.
+    On Windows, the easiest route is the [UE-MCP Launcher](https://ue-mcp.com/downloads): once you choose your project and click **Add Studio**, it sets up both ue-mcp and Studio for you.
 
-Or from the command line:
+To install from the command line instead:
 
 1. If your Unreal Editor is open, close it.
 2. `cd` into your project folder (the one with the `.uproject`).
