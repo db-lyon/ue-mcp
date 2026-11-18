@@ -71,17 +71,29 @@ async function readChannel(url: string): Promise<PluginChannel> {
   return c as PluginChannel;
 }
 
+/** The build a channel offers for one project's engine, read before anything is written. */
+export interface EditorPluginPick {
+  project: ProjectContext;
+  engine: string;
+  channel: PluginChannel;
+  build: { url: string; sha256: string };
+}
+
 /**
- * Install the build `channelUrl` offers for the project's engine into the
- * project's Plugins/ folder. `min` refuses a channel older than the
- * extension needs.
+ * The build `channelUrl` offers for the project's engine, without touching
+ * the project. `min` refuses a channel older than the extension needs. An
+ * install calls this first, so a project whose engine has no build is left
+ * exactly as it was.
  */
-export async function installEditorPlugin(channelUrl: string, uproject: string, min?: string): Promise<InstalledEditorPlugin> {
+export async function pickEditorPluginBuild(channelUrl: string, uproject: string, min?: string): Promise<EditorPluginPick> {
   const project = new ProjectContext();
   project.setProject(uproject);
   const engine = projectEngineVersion(project);
   if (!engine || !/^\d+\.\d+$/.test(engine)) {
-    throw new Error(`cannot pick an editor plugin build: the engine version of ${project.projectName} is unknown (${engine ?? "unset"})`);
+    throw new Error(
+      `cannot pick an editor plugin build: the engine version of ${project.projectName} is unknown (${engine ?? "unset"}). ` +
+        `Open the project once in Unreal, or pick its engine with Switch Unreal Engine Version on the .uproject, then install again.`,
+    );
   }
 
   const channel = await readChannel(channelUrl);
@@ -91,8 +103,22 @@ export async function installEditorPlugin(channelUrl: string, uproject: string, 
   const build = channel.files[engine];
   if (!build?.url || !build.sha256) {
     const have = Object.keys(channel.files).sort().join(", ") || "none";
-    throw new Error(`no editor plugin build for UE ${engine} (builds exist for ${have})`);
+    throw new Error(
+      `no editor plugin build for UE ${engine} (builds exist for ${have}). Nothing in ${project.projectName} was changed. ` +
+        `Move the project to one of those engines with Switch Unreal Engine Version on the .uproject and install again, ` +
+        `or set up ue-mcp on its own with \`ue-mcp init "${uproject}"\`.`,
+    );
   }
+  return { project, engine, channel, build };
+}
+
+/**
+ * Install the build `channelUrl` offers for the project's engine into the
+ * project's Plugins/ folder. `min` refuses a channel older than the
+ * extension needs. `picked` is a pickEditorPluginBuild result already read.
+ */
+export async function installEditorPlugin(channelUrl: string, uproject: string, min?: string, picked?: EditorPluginPick): Promise<InstalledEditorPlugin> {
+  const { project, channel, build } = picked ?? (await pickEditorPluginBuild(channelUrl, uproject, min));
 
   const work = fs.mkdtempSync(path.join(os.tmpdir(), "ue-mcp-plugin-"));
   try {

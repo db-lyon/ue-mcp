@@ -139,6 +139,22 @@ describe("ue-mcp install <name>", () => {
     expect(JSON.parse(r.stdout).error).toMatch(/no editor plugin build for UE 5\.6 \(builds exist for 5\.7\)/);
   });
 
+  it("leaves a bare project on an engine with no build untouched, and says what to do instead", async () => {
+    covers("cli.install");
+    const bare = sb.makeProject("BareOld", { engine: "5.6" });
+    const bareDir = path.dirname(bare);
+    const before = fs.readFileSync(bare, "utf8");
+    const listing = fs.readdirSync(bareDir).sort();
+    const r = await runCli(sb, ["install", "studio", bare, "--json"], { env: env() });
+    expect(r.code).toBe(1);
+    const error = JSON.parse(r.stdout).error as string;
+    expect(error).toMatch(/no editor plugin build for UE 5\.6 \(builds exist for 5\.7\)\. Nothing in BareOld was changed\./);
+    expect(error).toContain("Switch Unreal Engine Version");
+    expect(error).toContain("ue-mcp init");
+    expect(fs.readFileSync(bare, "utf8")).toBe(before);
+    expect(fs.readdirSync(bareDir).sort()).toEqual(listing);
+  });
+
   it("lists the names it knows when given one it does not, and reaches nothing", async () => {
     covers("cli.install");
     const before = fake.requests.length;

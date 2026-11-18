@@ -24,7 +24,7 @@ import { readAnsweringDiscovery } from "../daemon/discovery.js";
 import { extensionsDir } from "../daemon/extensions.js";
 import { installExtension, isManifestUrl, readExtensionManifest, removeExtension, useExtensionVersion } from "../daemon/extension-install.js";
 import { isInstallName, resolveInstallName } from "../daemon/install-names.js";
-import { installEditorPlugin } from "../editor/editor-plugin.js";
+import { installEditorPlugin, pickEditorPluginBuild } from "../editor/editor-plugin.js";
 import { ensurePluginsEnabled, ensureSetUp } from "./init-core.js";
 import { installedCopies, migrateLegacy, recordedVersion, versionsOf } from "../daemon/extension-versions.js";
 import { ensureDaemon } from "../daemon/shim.js";
@@ -59,6 +59,10 @@ async function install(target: string, sha256: string | undefined, uproject: str
   const projectDir = uproject ? path.dirname(path.resolve(uproject)) : undefined;
   const result: Record<string, unknown> = {};
 
+  // The editor plugin's build for this engine is found before anything is written, so a project
+  // whose engine has none is left as it was instead of half set up.
+  const picked = plugin && uproject ? await pickEditorPluginBuild(plugin, uproject, manifest.pluginMin) : undefined;
+
   // An editor plugin needs the bridge beside it, so the project is set up first.
   if (plugin && uproject) {
     const setup = await ensureSetUp(uproject);
@@ -76,7 +80,7 @@ async function install(target: string, sha256: string | undefined, uproject: str
   say(`installed ${named?.title ?? installed.name} ${installed.version}`);
 
   if (plugin && uproject) {
-    const p = await installEditorPlugin(plugin, uproject, manifest.pluginMin);
+    const p = await installEditorPlugin(plugin, uproject, manifest.pluginMin, picked);
     ensurePluginsEnabled(uproject, [p.name]);
     result.editorPlugin = p;
     say(p.changed ? `installed the ${p.title} editor plugin ${p.version}` : `the ${p.title} editor plugin ${p.version} is already installed`);
