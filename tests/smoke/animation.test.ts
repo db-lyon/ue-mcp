@@ -70,6 +70,26 @@ describe("animation - read specific (dynamic)", () => {
     expect(Array.isArray(res.constraints)).toBe(true);
     expect((res.constraints as unknown[]).length).toBeLessThanOrEqual(5);
   });
+
+  it("get_physics_asset_bodies", async ({ skip }) => {
+    if (!skelMeshPath) skip();
+    const r = await callBridge(bridge, "get_physics_asset_bodies", { assetPath: skelMeshPath });
+    expect(r.ok, r.error).toBe(true);
+    const res = r.result as Record<string, unknown>;
+    if (res.success === false) {
+      expect(String(res.error)).toContain("no PhysicsAsset");
+      return;
+    }
+    expect(res.space).toBe("bone");
+    expect(Array.isArray(res.bodies)).toBe(true);
+    for (const body of res.bodies as Array<Record<string, unknown>>) {
+      expect(typeof body.boneName).toBe("string");
+      expect(Array.isArray(body.sphyls)).toBe(true);
+      expect(Array.isArray(body.spheres)).toBe(true);
+      expect(Array.isArray(body.boxes)).toBe(true);
+      expect(typeof body.convexCount).toBe("number");
+    }
+  });
 });
 
 describe("animation - v0.7.15: PoseSearch (motion matching)", () => {
