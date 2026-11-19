@@ -15,8 +15,8 @@ Studio's window has three tabs: **Chat**, **Plugins** and **Settings**. **Feedba
 ## Requirements
 
 - Windows 10 or 11.
-- Unreal Engine 5.7, 5.8 or 5.9.
-- [Node.js](https://nodejs.org/) 20 or newer. The UE-MCP app's setup offers to install the LTS release with winget. Otherwise install it from the Node.js website with its Windows installer, using the default options. When it is missing, Studio's setup page opens the Node.js download page.
+- Unreal Engine 5.7, 5.8 or 5.9. On macOS, Linux or an older engine, use ue-mcp from your own MCP client instead: see [Getting Started](getting-started.md).
+- [Node.js](https://nodejs.org/) 22.19 or newer. The UE-MCP Launcher's setup offers to install the LTS release with winget. Otherwise install it from the Node.js website with its Windows installer, using the default options. When it is missing, Studio's setup page opens the Node.js download page.
 - ue-mcp 1.4.11 or later. Studio installs it.
 - The Microsoft Edge WebView2 Runtime, which Windows 11 includes. On Windows 10, if it is not already installed, get the Evergreen Runtime from [Microsoft's WebView2 page](https://developer.microsoft.com/en-us/microsoft-edge/webview2/). Without it, Studio opens in your web browser instead of its own window.
 - An internet connection, and an account or API key for at least one model provider (see [Models and accounts](#models-and-accounts)).
@@ -25,16 +25,15 @@ Studio's own setup does not compile anything: the Studio plugin release is alrea
 
 ## Install
 
-Close the project in Unreal first. Then either:
+The recommended install is the UE-MCP Launcher:
 
-- Install the UE-MCP app with [UE-MCP-Setup.exe](https://github.com/db-lyon/ue-mcp-studio/releases/latest/download/UE-MCP-Setup.exe). It installs for your Windows user without admin rights and checks for Node.js. The app lists your Unreal projects (`npx ue-mcp projects`): pick one and choose **Add Studio**, which runs the command below. The app also launches the editor, opens each project's Studio, shows what has an update, and lists the daemons running with their logs.
-- Or run this in your project folder, the one holding the `.uproject`:
+1. Download `UE-MCP-Setup.exe` from [ue-mcp.com/downloads](https://ue-mcp.com/downloads) and run it. It installs for your Windows user without admin rights and checks for Node.js.
+2. Close the project in Unreal.
+3. In the Launcher, pick the project from the list of your Unreal projects and choose **Add Studio**.
 
-    ```bash
-    npx ue-mcp install studio
-    ```
+The Launcher also launches the editor, opens each project's Studio, shows what has an update, and lists the daemons running with their logs.
 
-    Name the `.uproject` after `studio` to run it from anywhere else.
+**Add Studio** runs `npx ue-mcp install studio`, which you can also run yourself in the project folder, the one holding the `.uproject`, with the project closed. Name the `.uproject` after `studio` to run it from anywhere else.
 
 Either way, the project gets the Studio editor plugin for its engine in `Plugins/UE_MCP_Studio`, Studio itself in `%USERPROFILE%\.ue-mcp\extensions`, and, if the project is not set up for ue-mcp yet, the bridge plugin as prebuilt binaries and `ue-mcp.yml` with the same defaults as `npx ue-mcp init --yes`. Every download is checked against its SHA-256.
 
