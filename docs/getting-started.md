@@ -10,7 +10,7 @@ UE-MCP lets an AI assistant work in the Unreal Editor: place actors, write Bluep
 |---|---|---|
 | What you get | The in-editor agent, with ue-mcp set up for the project | ue-mcp for the MCP client you already use |
 | Platform | Windows 10 or 11 | Windows, macOS or Linux |
-| Unreal Engine | 5.7 to 5.9 | <!-- count:engineRange -->5.4 to 5.9<!-- /count --> |
+| Unreal Engine | 5.7, 5.8 or 5.9 | <!-- count:engineRange -->5.4 to 5.9<!-- /count --> |
 | Node.js | 22.19 or newer | 20 or newer |
 | Install with | [UE-MCP Launcher](https://ue-mcp.com/downloads) | `npx ue-mcp init` |
 

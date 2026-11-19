@@ -17,7 +17,7 @@ Some actions read project files directly (config INI files, C++ source, the Cont
 
 ## New here?
 
-Start with **[Getting Started](getting-started.md)**. It assumes no Node.js, MCP or command line experience and ends with your AI placing actors in your level. On Windows with UE 5.7 to 5.9, the recommended install is the [UE-MCP Launcher](https://ue-mcp.com/downloads), which sets up ue-mcp and [Studio](studio.md) together. On macOS and Linux, or to use your own MCP client on any platform, run `npx ue-mcp init`, which supports UE <!-- count:engineRange -->5.4 to 5.9<!-- /count -->.
+Start with **[Getting Started](getting-started.md)**. It assumes no Node.js, MCP or command line experience and ends with your AI placing actors in your level. On Windows with UE 5.7, 5.8 or 5.9, the recommended install is the [UE-MCP Launcher](https://ue-mcp.com/downloads), which sets up ue-mcp and [Studio](studio.md) together. On macOS and Linux, or to use your own MCP client on any platform, run `npx ue-mcp init`, which supports UE <!-- count:engineRange -->5.4 to 5.9<!-- /count -->.
 
 ## What can it do?
 
