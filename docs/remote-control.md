@@ -1,6 +1,6 @@
 # Remote control
 
-Remote control lets you use [Studio](studio.md) from a phone or another computer. The project, the editor and the agent stay on the computer running Studio. The paired device sends requests and shows the answers. Traffic between them is encrypted end to end through the relay at `remote.ue-mcp.com`, so the relay cannot read it.
+Remote control lets you use [Studio](studio.md) from a phone or another computer. The project, the editor and the agent stay on the computer running Studio. The paired device sends requests and shows the answers. Traffic between them is encrypted end to end through the relay at `remote.ue-mcp.com`, so the relay cannot read it. See [Security](security.md).
 
 Remote control needs the Remote plan: $5 a month or $50 a year, plus tax. Studio and ue-mcp are free and open source under the MIT license. See [ue-mcp.com/pricing](https://ue-mcp.com/pricing).
 
