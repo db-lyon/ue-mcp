@@ -149,6 +149,8 @@ A call that asks waits in the chat, showing the command, the diff or the action,
 
 Stopping the turn while a call waits answers it as stopped, and it does not run.
 
+[Security](security.md) covers what runs on your computer and what leaves it.
+
 ### Editor dialogs
 
 An editor call waits while a dialog it opened is unanswered. **Settings > Approvals & review > Editor dialogs** sets who answers it:
