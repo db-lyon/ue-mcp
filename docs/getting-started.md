@@ -4,6 +4,20 @@
 
 UE-MCP lets an AI assistant work in the Unreal Editor: place actors, write Blueprints, author materials, configure Niagara, build lighting, generate PCG systems and more.
 
+## Choose an install path
+
+| | Studio | ue-mcp server |
+|---|---|---|
+| What you get | The in-editor agent, with ue-mcp set up for the project | ue-mcp for the MCP client you already use |
+| Platform | Windows 10 or 11 | Windows, macOS or Linux |
+| Unreal Engine | 5.7, 5.8 or 5.9 | <!-- count:engineRange -->5.4 to 5.9<!-- /count --> |
+| Node.js | 22.19 or newer | 20 or newer |
+| Install with | [UE-MCP Launcher](https://ue-mcp.com/downloads) | `npx ue-mcp init` |
+
+On Windows, install with the [UE-MCP Launcher](https://ue-mcp.com/downloads). Pick your project and choose **Add Studio**: the Launcher installs Studio and sets up ue-mcp for the project, and Studio's setup page can connect your other MCP clients to the same server. [Studio: Install](studio.md#install) covers that path, and the [connection check](#3-verify-the-connection) below works from Studio's chat too.
+
+On macOS and Linux, or on Windows when you want ue-mcp only in your own MCP client, follow the steps on this page.
+
 ## Prerequisites
 
 1. Install [**Unreal Engine <!-- count:engineRange -->5.4 to 5.9<!-- /count -->**](https://www.unrealengine.com/en-US/download "Free download via the Epic Games Launcher.")
@@ -11,11 +25,6 @@ UE-MCP lets an AI assistant work in the Unreal Editor: place actors, write Bluep
 3. Install an MCP-capable AI client (e.g. [**Claude Code**](https://docs.anthropic.com/en/docs/claude-code "Anthropic's official CLI agent."))
 
 ## 1. Installation
-
-!!! tip "Windows: use the Launcher"
-    On Windows, the easiest route is the [UE-MCP Launcher](https://ue-mcp.com/downloads): once you choose your project and click **Add Studio**, it sets up both ue-mcp and Studio for you.
-
-To install from the command line instead:
 
 1. If your Unreal Editor is open, close it.
 2. `cd` into your project folder (the one with the `.uproject`).
