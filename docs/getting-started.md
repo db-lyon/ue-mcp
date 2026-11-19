@@ -14,7 +14,7 @@ UE-MCP lets an AI assistant work in the Unreal Editor: place actors, write Bluep
 | Node.js | 22.19 or newer | 20 or newer |
 | Install with | [UE-MCP Launcher](https://ue-mcp.com/downloads) | `npx ue-mcp init` |
 
-On Windows, install with the [UE-MCP Launcher](https://ue-mcp.com/downloads). Pick your project and choose **Add Studio**: the Launcher installs Studio and sets up ue-mcp for the project, and Studio's setup page can connect your other MCP clients to the same server. [Studio: Install](studio.md#install) covers that path, and the [connection check](#3-verify-the-connection) below works from Studio's chat too.
+On Windows, install with the [UE-MCP Launcher](https://ue-mcp.com/downloads). Pick your project and choose **Add Studio**: the Launcher installs Studio and sets up ue-mcp for the project, and Studio's setup page can connect your other MCP clients to the same server. [Studio: Install](studio.md#install) covers that path, and the [first task](#3-first-task-check-the-connection) below works from Studio's chat too.
 
 On macOS and Linux, or on Windows when you want ue-mcp only in your own MCP client, follow the steps on this page.
 
@@ -158,16 +158,23 @@ The bridge starts once the editor finishes loading. It listens on a port derived
 
 If it is not there, see [Troubleshooting](troubleshooting.md).
 
-## 3. Verify the connection
+## 3. First task: check the connection
 
-1. Open your AI client.
-2. Paste:
+The first task is to ask for the project's status. It changes nothing in your project, and a good answer proves the whole chain works: your client started ue-mcp, ue-mcp found your project, and the bridge inside the editor answered.
+
+1. Leave the editor open on your project.
+2. In your AI client, or in Studio's chat, send:
 
    ```text
    Run project(action="get_status").
    ```
 
-3. Look for `"editorConnected": true` in the response.
+3. Read the result. A good one contains:
+    - `"editorConnected": true` and `"mode": "live"`: the bridge in the editor answered.
+    - `project`, with the `name` and `path` of the project you opened.
+    - no `pluginStale: true` and no `bridgeProtocol.mismatch`. Either one means the editor is still running an older build of the bridge plugin; see [stale compiled plugin](troubleshooting.md#a-fix-shipped-but-the-editor-behaves-the-same-stale-compiled-plugin).
+
+If `editorConnected` is `false`, the call fails, or your client does not list ue-mcp's tools at all, see [Troubleshooting](troubleshooting.md), starting with [Editor not connected](troubleshooting.md#editor-not-connected--bridge-not-running).
 
 ## 4. Try things
 
