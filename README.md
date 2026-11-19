@@ -27,11 +27,11 @@ https://github.com/user-attachments/assets/24d4fc16-e6b4-4dc7-98ea-eaf4798923b1
 
 [**Studio**](https://ue-mcp.com/docs/studio) is a free desktop client with the agent built in. Dock it in the editor or run it in its own window. Sign in with your Claude or ChatGPT account, or use an API key. Every turn is checkpointed so you can review and revert changes, and shell commands and file edits wait for your approval.
 
-Install it with the [UE-MCP app](https://github.com/db-lyon/ue-mcp-studio/releases/latest), or run `npx ue-mcp install studio` in your project folder, then open Studio from the toolbar. See [Install](https://ue-mcp.com/docs/studio#install). Windows, UE 5.7, 5.8 and 5.9.
+Studio runs on Windows with UE 5.7, 5.8 and 5.9. Install it with the [UE-MCP Launcher](https://ue-mcp.com/downloads), then open Studio from the editor toolbar. See [Install](https://ue-mcp.com/docs/studio#install).
 
 ### 2. Bring your own AI client
 
-Already using Claude Code, Claude Desktop, Cursor or Codex? From your project folder:
+Already using Claude Code, Claude Desktop, Cursor or Codex? The server runs on Windows, macOS and Linux with UE <!-- count:engineRange -->5.4 to 5.9<!-- /count --> and needs Node.js 20 or newer. From your project folder:
 
 ```bash
 npx ue-mcp init
