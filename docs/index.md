@@ -54,14 +54,27 @@ Start with **[Getting Started](getting-started.md)**. It assumes no Node.js, MCP
 | `demo` | The 19-step Neon Shrine procedural scene |
 | `feedback` | File a report when an action falls short |
 
-A **flow engine** chains actions into YAML workflows with rollback, retries and step references. See [Flows](flows.md).
+The **[Tool Reference](tool-reference.md)** lists every tool and action with its parameters.
 
-A **plugin system** lets npm packages add actions to the existing categories, so the agent finds them in the tools it already uses. See [Plugins](plugins.md) and [Configuration: Plugins](configuration.md#plugins).
+## Beyond tool calls
+
+| Feature | What it does |
+|---|---|
+| [Dialog handling](configuration.md#dialog-handling-mode) | A call that opens an editor dialog waits for an answer, given by you as a form in your client or handed to the agent. |
+| [Flows](flows.md) | Chain actions into YAML workflows with retries and step references. |
+| [Rollback](flows.md#rollback-on-failure) | A failed flow undoes the steps it finished. [Checkpoints](checkpoints.md) and the [mutation journal](journal.md) revert changes after the fact. |
+| [Plugins](plugins.md) | npm packages add actions to the existing categories, so the agent finds them in the tools it already uses. Browse them at [plugins.ue-mcp.com](https://plugins.ue-mcp.com). |
+| [Guards](guards.md) | Hooks declared in `ue-mcp.yml` that can deny, act on or audit every bridge call. |
+| [Multi-editor control](configuration.md#several-editors-from-one-server) | One server addresses several projects' editors, each as its own session. |
+| [Spatial instructions](spatial-instructions.md) | Requests such as "turn it a bit clockwise" are resolved into an axis, an angle and a frame, then verified. |
+| [Feedback](feedback.md) | When an action falls short, the agent drafts a GitHub issue, scrubbed of personal details, and files it once you approve. |
 
 ## Navigation
 
 - **[Getting Started](getting-started.md)**: zero-to-running walkthrough
 - **[Studio](studio.md)**: the in-editor agent, from install to uninstall
+- **[Remote control](remote-control.md)**: Studio from a phone or another computer
+- **[Security](security.md)**: what runs on your computer, what leaves it, and when the agent asks first
 - **[Architecture](architecture.md)**: the daemon, the server, the bridge plugin and how they connect
 - **[Tool Reference](tool-reference.md)**: all <!-- count:tools -->31<!-- /count --> tools with every action and its parameters
 - **[Control Rig Animation](control-rig-animation.md)**: rig discovery, solving, keys, baking and verification
@@ -79,6 +92,7 @@ A **plugin system** lets npm packages add actions to the existing categories, so
 - **[Plugins](plugins.md)**: npm packages that add actions to existing categories
 - **[Configuration](configuration.md)**: MCP client setup, the daemon and settings
 - **[ue-mcp.yml Reference](config-file.md)**: every key in the project config file
+- **[Guards](guards.md)**: hooks that deny, act on or audit bridge calls
 - **[Neon Shrine Demo](neon-shrine-demo.md)**: the 19-step procedural scene
 - **[Feedback](feedback.md)**: how agent feedback is filed
 - **[Troubleshooting](troubleshooting.md)**: connection, build and asset path issues
