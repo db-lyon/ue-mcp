@@ -19,6 +19,8 @@ export interface CallAsker {
   readonly subject?: string;
   /** The sending session's access mode, read when a guard asks. Absent is read-write. */
   readonly access?: () => SessionAccessMode;
+  /** Aborted when the caller cancels the call; no bridge call is sent after that. */
+  readonly signal?: AbortSignal;
 }
 
 const store = new AsyncLocalStorage<CallAsker>();

@@ -4,6 +4,7 @@ import * as path from "node:path";
 import { describe, it, expect, vi } from "vitest";
 import { DialogGatedBridge, GuardedBridge } from "../../src/flow/guarded-bridge.js";
 import { GuardRegistry, type BridgeGuard, type CallContext } from "../../src/flow/guard.js";
+import { withCallAsker } from "../../src/flow/call-elicit.js";
 import { CLIENT_PROTOCOL_VERSION, type BridgeCapabilities, type IBridge } from "../../src/bridge/bridge.js";
 import { ProjectContext } from "../../src/config/project.js";
 import { projectTool } from "../../src/tools/project.js";
@@ -39,6 +40,25 @@ function bridgeWith(...guards: BridgeGuard[]) {
 function writeGuard(name: string, before: (ctx: CallContext) => Promise<void>): BridgeGuard {
   return { name, appliesTo: (ctx) => ctx.writeFiles().length > 0, before };
 }
+
+describe("GuardedBridge after its call was cancelled (#1902)", () => {
+  it("sends the bridge calls an action makes until its caller cancels, and none after", async () => {
+    const { inner, gb } = bridgeWith();
+    const turn = new AbortController();
+    await withCallAsker({ signal: turn.signal }, async () => {
+      await gb.call("get_world_outliner", {});
+      turn.abort();
+      await expect(gb.call("delete_actor", { actorLabel: "Floor" })).rejects.toMatchObject({
+        code: "CANCELLED",
+        message: expect.stringMatching(/'delete_actor' was not sent/),
+      });
+    });
+    expect(inner.calls.map((c) => c.method)).toEqual(["get_world_outliner"]);
+    // Another caller's call on the same editor is untouched.
+    await gb.call("delete_actor", { actorLabel: "Floor" });
+    expect(inner.calls.map((c) => c.method)).toEqual(["get_world_outliner", "delete_actor"]);
+  });
+});
 
 describe("GuardedBridge pipeline", () => {
   it("is a pass-through when the registry is empty", async () => {
