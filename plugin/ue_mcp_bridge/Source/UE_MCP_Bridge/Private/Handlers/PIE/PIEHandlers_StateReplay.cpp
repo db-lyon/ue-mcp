@@ -6,7 +6,9 @@
 
 #include "Handlers/PIE/PIEHandlers.h"
 #include "HandlerUtils.h"
+#include "Handlers/PIE/PIERemotePlayers.h"
 #include "Handlers/PIE/PIESequenceFormat.h"
+#include "Handlers/PIE/PIEWorldResolver.h"
 #include "Editor.h"
 #include "Editor/EditorEngine.h"
 #include "Engine/World.h"
@@ -50,6 +52,11 @@ TSharedPtr<FJsonValue> FPIEHandlers::PieReplayState(const TSharedPtr<FJsonObject
 	MCP_CHECK_GAME_THREAD();
 	const FString Id = OptionalString(Params, TEXT("recording_id"));
 	const FString RecDir = OptionalString(Params, TEXT("recording_dir"));
+	const bool bApply = OptionalBool(Params, TEXT("apply"), false);
+	const int32 ClientId = OptionalInt(Params, TEXT("client_id"), 0);
+	int32 PIEInstance = INDEX_NONE;
+	FString PIEInstanceError;
+	if (!FPIEHandlers::ParsePIEInstance(Params, PIEInstance, PIEInstanceError)) return MCPError(PIEInstanceError);
 
 	FString Folder;
 	if (!RecDir.IsEmpty() && Id.IsEmpty()) Folder = RecDir;
@@ -134,26 +141,40 @@ TSharedPtr<FJsonValue> FPIEHandlers::PieReplayState(const TSharedPtr<FJsonObject
 	Result->SetBoolField(TEXT("deterministic"), true);
 
 	// Optionally apply the recorded pose to the live PIE pawn (state replay).
-	if (OptionalBool(Params, TEXT("apply"), false))
+	if (bApply)
 	{
-		UWorld* PIEWorld = GEditor ? GEditor->PlayWorld : nullptr;
-		if (!PIEWorld)
+		MCPPIE::PIEWorldResolver::FPlayerTarget Target;
+		FString ResolveError;
+		if (!MCPPIE::PIEWorldResolver::ResolvePlayer(PIEInstance, ClientId, Target, ResolveError))
 		{
 			Result->SetBoolField(TEXT("applied"), false);
-			Result->SetStringField(TEXT("apply_note"), TEXT("no live PIE session; state not applied"));
+			Result->SetStringField(TEXT("apply_note"), FString::Printf(TEXT("state not applied: %s"), *ResolveError));
 		}
 		else
 		{
-			APlayerController* PC = PIEWorld->GetFirstPlayerController();
+			APlayerController* PC = Target.PlayerController;
 			APawn* Pawn = PC ? PC->GetPawn() : nullptr;
+			Result->SetStringField(TEXT("apply_target"), MCPPIE::PIERemotePlayers::DescribeLocalPlayer(Target.LocalPlayer));
 			if (Pawn)
 			{
+				// On a net client the server's pawn is the one that counts: moving only the client's copy is undone
+				// by the server within a couple of frames (#2010).
 				const FVector PreviousLoc = Pawn->GetActorLocation();
 				const FRotator PreviousRot = Pawn->GetActorRotation();
-				Pawn->TeleportTo(Out.Loc, Out.Rot, /*bIsATest*/false, /*bNoCheck*/true);
-				Result->SetBoolField(TEXT("applied"), true);
+				FString TeleportError;
+				APawn* Authority = MCPPIE::PIERemotePlayers::TeleportOnAuthority(PC, Pawn, Out.Loc, Out.Rot, TeleportError);
+				Result->SetBoolField(TEXT("applied"), Authority != nullptr);
 				Result->SetBoolField(TEXT("changed"), !PreviousLoc.Equals(Pawn->GetActorLocation()) || !PreviousRot.Equals(Pawn->GetActorRotation()));
 				Result->SetObjectField(TEXT("previous_pawn_state"), TransformJson(PreviousLoc, PreviousRot, FVector::ZeroVector));
+				if (!Authority)
+				{
+					Result->SetStringField(TEXT("apply_note"), FString::Printf(TEXT("state not applied: %s"), *TeleportError));
+				}
+				else
+				{
+					Result->SetStringField(TEXT("applied_on"), Authority == Pawn ? TEXT("authority") : TEXT("server_and_client"));
+					if (Authority != Pawn) Result->SetStringField(TEXT("server_pawn"), Authority->GetName());
+				}
 			}
 			else
 			{

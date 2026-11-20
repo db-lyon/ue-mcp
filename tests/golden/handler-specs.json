@@ -1,5 +1,5 @@
 {
-  "handlerCount": 1413,
+  "handlerCount": 1414,
   "handlers": {
     "acquire_lock": {
       "category": "lock",
@@ -30380,6 +30380,23 @@
           "type": "object",
           "required": false,
           "description": "Per-path tracked-value thresholds {path: threshold}"
+        },
+        {
+          "name": "align",
+          "type": "string",
+          "required": false,
+          "description": "auto (default) pairs a's rows with b's shifted by the row offset that best matches the two trajectories, so input landing a few frames later is not read as drift; index pairs rows by index. The result's alignment reports the offset",
+          "enum": [
+            "auto",
+            "index"
+          ]
+        },
+        {
+          "name": "max_offset_rows",
+          "type": "integer",
+          "required": false,
+          "description": "align=auto: largest shift tried, in rows either way (default 30)",
+          "minimum": 0
         }
       ]
     },
@@ -30844,7 +30861,21 @@
           "name": "apply",
           "type": "boolean",
           "required": false,
-          "description": "Teleport the live PIE pawn to the recorded pose (default false)"
+          "description": "Teleport the live PIE pawn to the recorded pose (default false). On a net client the server's pawn for that player moves too, so the server does not correct it back"
+        },
+        {
+          "name": "pie_instance",
+          "type": "integer",
+          "required": false,
+          "description": "With apply: FWorldContext PIEInstance whose player to move (default the active PIE world)",
+          "minimum": 0
+        },
+        {
+          "name": "client_id",
+          "type": "integer",
+          "required": false,
+          "description": "With apply: local-player index inside that PIE world (default 0)",
+          "minimum": 0
         }
       ],
       "contractExempt": "With apply it moves the live PIE pawn"
@@ -31174,14 +31205,14 @@
           "name": "pie_instance",
           "type": "integer",
           "required": false,
-          "description": "FWorldContext PIEInstance to observe (default the active PIE world)",
+          "description": "FWorldContext PIEInstance the run observes, and whose player act entries with no client drive and triggered steps on client 0 watch. Without it the observer takes the active PIE world and those entries take the editor's own player: the listen-server host, else the lowest PIE instance",
           "minimum": 0
         },
         {
           "name": "client_id",
           "type": "integer",
           "required": false,
-          "description": "Local-player index inside the selected PIE world (default 0)",
+          "description": "Local-player index inside that PIE world, for observing, client 0 act entries and client 0 triggered steps alike (default 0)",
           "minimum": 0
         },
         {
@@ -36013,6 +36044,41 @@
               "rowNames"
             ]
           ]
+        }
+      ]
+    },
+    "remove_datatable_rows": {
+      "category": "asset",
+      "params": [
+        {
+          "name": "assetPath",
+          "type": "string",
+          "required": true,
+          "description": "DataTable asset path",
+          "aliases": [
+            "path"
+          ]
+        },
+        {
+          "name": "rowNames",
+          "type": "array",
+          "required": true,
+          "description": "1-500 rows to remove; names the table lacks are listed in missingRowNames",
+          "items": "string"
+        },
+        {
+          "name": "save",
+          "type": "boolean",
+          "required": false,
+          "description": "Save after removing rows (default true)",
+          "default": true
+        },
+        {
+          "name": "dryRun",
+          "type": "boolean",
+          "required": false,
+          "description": "Return wouldRemove, missingRowNames and rowCountAfter without changing the table (default false)",
+          "default": false
         }
       ]
     },

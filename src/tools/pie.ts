@@ -22,7 +22,7 @@ export const pieTool: ToolDef = categoryTool(
     },
     drive_status:         specBp("read", "A pawn drive's state and sampled track; includeSamples=false for the summary only.", "pie_drive_status"),
     drive_stop:           specBp("mutate", "End a pawn drive now and return its track; alreadyStopped when it had ended.", "pie_drive_stop"),
-    clients:              specBp("read", "List a networked PIE session's players: client 0 is the editor's own player, 1..N remote players in join order with ready and log_file.", "pie_clients"),
+    clients:              specBp("read", "List a networked PIE session's players: client 0 is the editor's own player, 1..N remote players in join order with ready and log_file. pie_worlds lists each PIE world's pie_instance, net_mode and local players, the numbers script_run and inject_input take as pie_instance and client_id.", "pie_clients"),
     console:              specBp("mutate", "Run a console command in a remote player's own process (client 1..N). The editor's own PIE player is editor(execute_command, world=\"pie\").", "pie_console"),
     remote_result:        boundedRequestIds(specBp("read", "Whether a request relayed to a remote player ran: reported, ok, finished, error.", "pie_remote_result")),
     uat_run:              specBp("mutate", "Run a multiplayer acceptance scenario unattended: opens its map, starts PIE with its players, drives each step, judges it from the host and client logs, stops PIE and writes report.md and report.json. Poll uat_status.", "pie_uat_run"),
