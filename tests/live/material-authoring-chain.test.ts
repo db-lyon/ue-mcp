@@ -11,6 +11,9 @@
  * - set_custom_expression carries each wire to the input of the same name (#1907).
  * - A Custom node's whole spec goes on its build_material_graph node, applied
  *   before that call's connections (#1948).
+ * - An export imported with replace into an empty material exports the same
+ *   (#1951). material-graph-replace.test.ts covers a replace that does not
+ *   compile, which needs an editor that compiles shaders.
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { closeLiveBridges, liveBridge, liveTarget } from "./harness.js";
@@ -22,7 +25,9 @@ const MPC = `${DIR}/MPC_Chain`;
 const M_MPC = `${DIR}/M_ChainMpc`;
 const M_CUSTOM = `${DIR}/M_ChainCustom`;
 const M_CUSTOM_BUILD = `${DIR}/M_ChainCustomBuild`;
-const ALL_ASSETS = [M_CUSTOM_BUILD, M_CUSTOM, M_MPC, MPC];
+const M_RT_SRC = `${DIR}/M_ChainRoundTripSource`;
+const M_RT_DST = `${DIR}/M_ChainRoundTripTarget`;
+const ALL_ASSETS = [M_RT_DST, M_RT_SRC, M_CUSTOM_BUILD, M_CUSTOM, M_MPC, MPC];
 
 type Json = Record<string, unknown>;
 type MpcParam = { name: string; id: string; defaultValue: unknown };
@@ -61,6 +66,8 @@ beforeAll(async () => {
   await call("create_material", { name: "M_ChainMpc", packagePath: DIR });
   await call("create_material", { name: "M_ChainCustom", packagePath: DIR });
   await call("create_material", { name: "M_ChainCustomBuild", packagePath: DIR });
+  await call("create_material", { name: "M_ChainRoundTripSource", packagePath: DIR });
+  await call("create_material", { name: "M_ChainRoundTripTarget", packagePath: DIR });
 }, 180_000);
 
 afterAll(async () => {
@@ -239,4 +246,67 @@ describe("a Custom node is built whole in one call (#1948)", () => {
     expect(refused.success).toBe(false);
     expect(String(refused.error)).toContain("code applies to a Custom node");
   }, 120_000);
+});
+
+describe("export_material_graph and import_material_graph round-trip (#1951)", () => {
+  const withoutPath = (exported: Json): Json => {
+    const { assetPath: _path, success: _ok, ...rest } = exported;
+    return rest;
+  };
+  let firstExport: Json = {};
+
+  it("an export imported with replace into an empty material exports identically", async () => {
+    await call("build_material_graph", {
+      assetPath: M_RT_SRC,
+      materialSettings: { TwoSided: true, bUsedWithSkeletalMesh: true, BlendMode: "BLEND_Masked" },
+      nodes: [
+        { name: "Bravo", class: "CollectionParameter", posX: -900, properties: { Collection: `${MPC}.MPC_Chain`, ParameterName: "Bravo" } },
+        { name: "Tint", class: "VectorParameter", parameterName: "Tint", group: "Look", sortPriority: 3, defaultValue: { r: 0.1, g: 0.2, b: 0.3, a: 1 }, posX: -900, posY: 200 },
+        { name: "UseTint", class: "StaticSwitchParameter", parameterName: "UseTint", properties: { DefaultValue: true }, posX: -600 },
+        { name: "Red", class: "ComponentMask", channels: { r: true, g: false, b: false, a: false }, posX: -600, posY: 300 },
+        {
+          name: "Grade", class: "Custom", posX: -300,
+          code: "Extra = InColor.g;\nreturn InColor * Amount;", outputType: "float3",
+          inputs: ["InColor", "Amount"], additionalOutputs: [{ name: "Extra", type: "float1" }],
+          additionalDefines: [{ name: "GRADE_MODE", value: "1" }],
+        },
+      ],
+      connections: [
+        { from: "Tint", to: "UseTint", toInput: "True" },
+        { from: "Tint", to: "UseTint", toInput: "False" },
+        { from: "UseTint", to: "Grade", toInput: "InColor" },
+        { from: "Bravo", to: "Grade", toInput: "Amount" },
+        { from: "Tint", to: "Red", toInput: "Input" },
+      ],
+      propertyConnections: [
+        { property: "BaseColor", from: "Grade" },
+        { property: "OpacityMask", from: "Grade", output: "Extra" },
+        { property: "AmbientOcclusion", from: "Red" },
+      ],
+    });
+
+    firstExport = await call("export_material_graph", { assetPath: M_RT_SRC });
+    const nodes = firstExport.nodes as Json[];
+    const custom = nodes.find((n) => n.class === "MaterialExpressionCustom")!;
+    expect(custom.inputs).toEqual(["InColor", "Amount"]);
+    expect(custom.additionalOutputs).toEqual([{ name: "Extra", type: "float1" }]);
+    const collection = nodes.find((n) => n.class === "MaterialExpressionCollectionParameter")!;
+    expect(String((collection.properties as Json).Collection)).toContain("MPC_Chain");
+    expect((collection.properties as Json).ParameterName).toBe("Bravo");
+    expect((nodes.find((n) => n.name === "UseTint")!.properties as Json).DefaultValue).toBe(true);
+    expect((nodes.find((n) => n.name === "Tint")!.properties as Json).Group).toBe("Look");
+    expect((firstExport.propertyConnections as Json[]).map((p) => p.property).sort()).toEqual(["AmbientOcclusion", "BaseColor", "OpacityMask"]);
+    const settings = firstExport.materialSettings as Json;
+    expect(settings.TwoSided).toBe(true);
+    expect(settings.bUsedWithSkeletalMesh).toBe(true);
+    expect(String(settings.BlendMode)).toContain("Masked");
+
+    const imported = await call("import_material_graph", { assetPath: M_RT_DST, replace: true, ...withoutPath(firstExport) });
+    expect(imported.replaced).toBe(true);
+    expect(imported.compileErrors).toEqual([]);
+    expect((imported.rollback as Json).method).toBe("import_material_graph");
+
+    const secondExport = await call("export_material_graph", { assetPath: M_RT_DST });
+    expect(withoutPath(secondExport)).toEqual(withoutPath(firstExport));
+  }, 300_000);
 });

@@ -454,12 +454,18 @@ void FMaterialHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("export_material_graph"), &ExportMaterialGraph, {
 		SpecGraphAssetPath(),
 	});
+	auto SpecMaterialSettings = []()
+	{
+		return MCPParam::Optional(TEXT("materialSettings"), EType::Object, TEXT("Material-level properties by name, as export_material_graph writes them: MaterialDomain, BlendMode, ShadingModel, TwoSided, BlendableLocation, bUsedWith* and the rest (#1951)"));
+	};
 	Registry.RegisterHandler(TEXT("import_material_graph"), &ImportMaterialGraph, {
 		SpecGraphAssetPath(),
 		SpecGraphNodes(),
 		SpecGraphConnections(),
 		SpecPropertyConnections(),
 		SpecRemoveExpressions(),
+		SpecMaterialSettings(),
+		MCPParam::Optional(TEXT("replace"), EType::Boolean, TEXT("Replace every expression with the spec instead of adding to the graph, saving only when the result compiles; otherwise nothing changes and compileErrors lists why (#1951)")),
 	});
 	Registry.RegisterHandler(TEXT("build_material_graph"), &BuildMaterialGraph, {
 		SpecGraphAssetPath(),
@@ -467,6 +473,7 @@ void FMaterialHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		SpecGraphConnections(),
 		SpecPropertyConnections(),
 		SpecRemoveExpressions(),
+		SpecMaterialSettings(),
 	});
 	Registry.RegisterHandler(TEXT("delete_orphan_expressions"), &DeleteOrphanExpressions, {
 		SpecGraphAssetPath(),
@@ -1508,6 +1515,12 @@ bool FMaterialHandlers::ParseMaterialProperty(const FString& PropertyName, EMate
 		{ TEXT("refraction"),          MP_Refraction          },
 		{ TEXT("pixeldepthoffset"),    MP_PixelDepthOffset    },
 		{ TEXT("shadingmodel"),        MP_ShadingModel        },
+		{ TEXT("customdata0"),         MP_CustomData0         },
+		{ TEXT("clearcoat"),           MP_CustomData0         },
+		{ TEXT("customdata1"),         MP_CustomData1         },
+		{ TEXT("clearcoatroughness"),  MP_CustomData1         },
+		{ TEXT("frontmaterial"),       MP_FrontMaterial       },
+		{ TEXT("materialattributes"),  MP_MaterialAttributes  },
 	};
 	if (const EMaterialProperty* Found = Table.Find(PropertyName.ToLower()))
 	{

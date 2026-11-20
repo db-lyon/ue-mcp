@@ -960,6 +960,12 @@ export const handlerSpecs: HandlerSpecs = {
         "required": false,
         "description": "Existing expressions to delete once the new nodes are wired, named as delete_expression takes them (description, class, parameter name, index or engine name). Resolved before anything changes; a connection may not use one (#1461)",
         "items": "string"
+      },
+      {
+        "name": "materialSettings",
+        "type": "object",
+        "required": false,
+        "description": "Material-level properties by name, as export_material_graph writes them: MaterialDomain, BlendMode, ShadingModel, TwoSided, BlendableLocation, bUsedWith* and the rest (#1951)"
       }
     ]
   },
@@ -1671,6 +1677,18 @@ export const handlerSpecs: HandlerSpecs = {
         "required": false,
         "description": "Existing expressions to delete once the new nodes are wired, named as delete_expression takes them (description, class, parameter name, index or engine name). Resolved before anything changes; a connection may not use one (#1461)",
         "items": "string"
+      },
+      {
+        "name": "materialSettings",
+        "type": "object",
+        "required": false,
+        "description": "Material-level properties by name, as export_material_graph writes them: MaterialDomain, BlendMode, ShadingModel, TwoSided, BlendableLocation, bUsedWith* and the rest (#1951)"
+      },
+      {
+        "name": "replace",
+        "type": "boolean",
+        "required": false,
+        "description": "Replace every expression with the spec instead of adding to the graph, saving only when the result compiles; otherwise nothing changes and compileErrors lists why (#1951)"
       }
     ]
   },
@@ -3116,6 +3134,7 @@ export const schema: Record<string, z.ZodType> = {
   materialFunctionPath: z.string().optional().describe("Alias for functionPath"),
   materialPath: z.string().optional().describe("Material asset path (add_material_expression, add_rvt_output, add_rvt_sampler, connect_material_expressions, connect_texture_to_material, connect_to_material_property, delete_material_expression, disconnect_material_property, insert_expression_between, list_material_expressions, read_material_graph, read_material_summary, recompile_material, restore_expression_insertion, set_custom_expression, set_expression_value). Existing material to build into (build_material). Alias for assetPath (build_material_graph, clear_material_instance_parameters, delete_orphan_expressions, export_material_graph, get_material_shader_stats, import_material_graph, list_material_parameters, list_material_static_switches, read_material, read_material_instance, render_material_preview, set_material_instance_parent, set_material_static_switch, set_material_usage, validate_material)"),
   materialProperty: z.string().optional().describe("EDMMaterialPropertyType of the new layer, and the slot when designerSlot is omitted (default BaseColor) (add_material_designer_layer). Alias for property (connect_texture_to_material)"),
+  materialSettings: z.record(z.string(), z.unknown()).optional().describe("Material-level properties by name, as export_material_graph writes them: MaterialDomain, BlendMode, ShadingModel, TwoSided, BlendableLocation, bUsedWith* and the rest (#1951)"),
   materialType: z.string().optional().describe("RVT content layout: BaseColor | BaseColor_Normal_Roughness | BaseColor_Normal_Specular | BaseColor_Normal_Specular_YCoCg | BaseColor_Normal_Specular_Mask_YCoCg | Mask4 | WorldHeight | Displacement; one this project disables is refused"),
   maxDepth: z.number().int().optional().describe("How deep to describe nested stages and values (default 10)"),
   meshPath: z.string().optional().describe("Alias for assignToMesh"),
@@ -3154,6 +3173,7 @@ export const schema: Record<string, z.ZodType> = {
   recompile: z.boolean().optional().describe("Recompile the material after the graph edit (default true)"),
   recompileChildren: z.boolean().optional().describe("Cascade to every MaterialInstanceConstant whose parent chain reaches this material (#421)"),
   removeExpressions: z.array(z.string()).optional().describe("Existing expressions to delete once the new nodes are wired, named as delete_expression takes them (description, class, parameter name, index or engine name). Resolved before anything changes; a connection may not use one (#1461)"),
+  replace: z.boolean().optional().describe("Replace every expression with the spec instead of adding to the graph, saving only when the result compiles; otherwise nothing changes and compileErrors lists why (#1951)"),
   roughness: z.number().optional().describe("Roughness constant"),
   rvtPath: z.string().optional().describe("RuntimeVirtualTexture asset path (add_rvt_sampler, add_rvt_volume, read_runtime_virtual_texture). One RuntimeVirtualTexture asset path, instead of rvtPaths (assign_rvt_to_landscape). RuntimeVirtualTexture whose one bound volume to refit (set_rvt_volume_bounds)"),
   rvtPaths: z.array(z.string()).optional().describe("RuntimeVirtualTexture asset paths"),

@@ -7911,6 +7911,12 @@
           "required": false,
           "description": "Existing expressions to delete once the new nodes are wired, named as delete_expression takes them (description, class, parameter name, index or engine name). Resolved before anything changes; a connection may not use one (#1461)",
           "items": "string"
+        },
+        {
+          "name": "materialSettings",
+          "type": "object",
+          "required": false,
+          "description": "Material-level properties by name, as export_material_graph writes them: MaterialDomain, BlendMode, ShadingModel, TwoSided, BlendableLocation, bUsedWith* and the rest (#1951)"
         }
       ]
     },
@@ -23380,6 +23386,18 @@
           "required": false,
           "description": "Existing expressions to delete once the new nodes are wired, named as delete_expression takes them (description, class, parameter name, index or engine name). Resolved before anything changes; a connection may not use one (#1461)",
           "items": "string"
+        },
+        {
+          "name": "materialSettings",
+          "type": "object",
+          "required": false,
+          "description": "Material-level properties by name, as export_material_graph writes them: MaterialDomain, BlendMode, ShadingModel, TwoSided, BlendableLocation, bUsedWith* and the rest (#1951)"
+        },
+        {
+          "name": "replace",
+          "type": "boolean",
+          "required": false,
+          "description": "Replace every expression with the spec instead of adding to the graph, saving only when the result compiles; otherwise nothing changes and compileErrors lists why (#1951)"
         }
       ]
     },

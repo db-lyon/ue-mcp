@@ -154,7 +154,7 @@
     "build_hlod_actors": "d593bb963a75",
     "build_lighting": "17d5f6a44fce",
     "build_material": "7c849519c1e3",
-    "build_material_graph": "6a3678dd11f7",
+    "build_material_graph": "8d5f60f27d3c",
     "build_pose_search_index": "76aa54cdd73e",
     "build_spline_meshes": "bafab108b45a",
     "build_tree": "479d836806f3",
@@ -606,7 +606,7 @@
     "import_file": "a64c20aaaa75",
     "import_font": "7567c4beb433",
     "import_landscape_heightmap": "171acf076b7d",
-    "import_material_graph": "6a3678dd11f7",
+    "import_material_graph": "865c6fe8589b",
     "import_nodes_t3d": "d7a7977cc031",
     "import_pcg_graph": "ee6d678944c0",
     "import_skeletal_mesh": "f08b2e102091",
@@ -1409,5 +1409,5 @@
     "validate_state_tree": "53ffb0027b09",
     "wrap_root_widget": "e1db178ee3d3"
   },
-  "shared": "69bdd7f4034c"
+  "shared": "be5111f92edc"
 }

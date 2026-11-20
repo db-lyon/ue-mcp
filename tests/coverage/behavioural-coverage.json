@@ -2777,6 +2777,11 @@
         {
           "suite": "live",
           "file": "tests/live/material-authoring-chain.test.ts",
+          "test": "an export imported with replace into an empty material exports identically"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/material-authoring-chain.test.ts",
           "test": "an input that keeps its name keeps its wire, and a dropped one is reported"
         },
         {
@@ -2788,6 +2793,11 @@
           "suite": "live",
           "file": "tests/live/material-authoring-chain.test.ts",
           "test": "refuses Custom fields on a node of another class before anything is built"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/material-graph-replace.test.ts",
+          "test": "replaces the graph when the spec compiles, and its rollback restores the previous one"
         }
       ]
     },
@@ -8333,6 +8343,21 @@
           "suite": "live",
           "file": "tests/live/bcov-material-graph.test.ts",
           "test": "import_material_graph adds nodes that export_material_graph reads back"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/material-authoring-chain.test.ts",
+          "test": "an export imported with replace into an empty material exports identically"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/material-graph-replace.test.ts",
+          "test": "a spec that does not compile leaves the material as it was and returns the errors"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/material-graph-replace.test.ts",
+          "test": "replaces the graph when the spec compiles, and its rollback restores the previous one"
         }
       ]
     },
@@ -12504,6 +12529,21 @@
           "suite": "live",
           "file": "tests/live/bcov-material-graph.test.ts",
           "test": "import_material_graph adds nodes that export_material_graph reads back"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/material-authoring-chain.test.ts",
+          "test": "an export imported with replace into an empty material exports identically"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/material-graph-replace.test.ts",
+          "test": "a spec that does not compile leaves the material as it was and returns the errors"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/material-graph-replace.test.ts",
+          "test": "replaces the graph when the spec compiles, and its rollback restores the previous one"
         }
       ]
     },

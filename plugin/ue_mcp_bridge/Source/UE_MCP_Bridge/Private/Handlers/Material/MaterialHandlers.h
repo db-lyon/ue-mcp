@@ -199,6 +199,17 @@ private:
 	// float1..float4 | materialAttributes, as an ECustomMaterialOutputType value.
 	static bool ParseCustomOutputType(const FString& Text, int32& OutType);
 	static FString CustomOutputTypeName(int32 Type);
+	// #1951: what export_material_graph writes and a graph spec takes back.
+	static TArray<TPair<EMaterialProperty, FString>> WireableMaterialProperties();
+	static const TArray<FProperty*>& ExportedMaterialSettings();
+	static bool MaterialPropertyHoldsExpressionInput(const FProperty* Prop);
+	// build_material_graph into Target (the material at assetPath when null),
+	// saving only when bSave. import_material_graph's replace builds a trial
+	// copy first and saves nothing until it compiles.
+	static TSharedPtr<FJsonValue> BuildMaterialGraphInto(const TSharedPtr<FJsonObject>& Params, UMaterial* Target, bool bSave);
+	// Recompiles and returns the compile errors; false when this engine cannot report them.
+	static bool CompileMaterialForErrors(UMaterial* Material, TArray<FString>& OutErrors);
+	static TSharedPtr<FJsonValue> ReplaceMaterialGraph(const TSharedPtr<FJsonObject>& Params);
 	static bool ResolveExpressionInputIndex(UMaterialExpression* Expression, const FString& Pin, int32& OutIndex, FString& OutError);
 	static bool ResolveExpressionOutputIndex(UMaterialExpression* Expression, const FString& Pin, int32& OutIndex, FString& OutError);
 

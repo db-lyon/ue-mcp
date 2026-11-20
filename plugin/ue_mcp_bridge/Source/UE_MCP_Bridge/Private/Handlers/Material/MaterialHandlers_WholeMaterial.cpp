@@ -24,6 +24,9 @@
 #include "Materials/MaterialExpressionCustomOutput.h"
 #include "Materials/MaterialExpressionNamedReroute.h"
 #include "Materials/MaterialExpressionCustom.h"
+#include "MaterialShared.h"
+#include "Misc/App.h"
+#include "JsonSerializer.h"
 #include "MaterialEditingLibrary.h"
 #include "Factories/MaterialFactoryNew.h"
 #include "AssetToolsModule.h"
@@ -326,15 +329,92 @@ TSharedPtr<FJsonValue> FMaterialHandlers::ExportMaterialGraph(const TSharedPtr<F
 
 	auto AllExpressions = Material->GetExpressions();
 
+	// #1951: a node is named by its description when that is unique, which is
+	// the name build_material_graph gave it, so an export of an imported graph
+	// names its nodes the way the first export did. Otherwise by engine name.
+	TMap<const UMaterialExpression*, FString> NodeNames;
+	{
+		TMap<FString, int32> DescCount;
+		TSet<FString> EngineNames;
+		for (UMaterialExpression* Expr : AllExpressions)
+		{
+			if (!Expr) continue;
+			EngineNames.Add(Expr->GetName());
+			if (!Expr->Desc.IsEmpty()) DescCount.FindOrAdd(Expr->Desc)++;
+		}
+		for (UMaterialExpression* Expr : AllExpressions)
+		{
+			if (!Expr) continue;
+			const bool bUseDesc = !Expr->Desc.IsEmpty() && DescCount.FindRef(Expr->Desc) == 1
+				&& (!EngineNames.Contains(Expr->Desc) || Expr->Desc == Expr->GetName());
+			NodeNames.Add(Expr, bUseDesc ? Expr->Desc : Expr->GetName());
+		}
+	}
+	auto NameOf = [&NodeNames](const UMaterialExpression* Expr) { return NodeNames.Contains(Expr) ? NodeNames[Expr] : Expr->GetName(); };
+
+	// Written as first-class fields, or derived from them, so not repeated in properties.
+	static const TSet<FName> SkippedProperties = {
+		TEXT("Desc"), TEXT("MaterialExpressionEditorX"), TEXT("MaterialExpressionEditorY"),
+	};
+	static const TSet<FName> CustomFieldProperties = {
+		TEXT("Code"), TEXT("Description"), TEXT("OutputType"), TEXT("Inputs"), TEXT("AdditionalOutputs"),
+		TEXT("AdditionalDefines"), TEXT("IncludeFilePaths"),
+	};
+
 	TArray<TSharedPtr<FJsonValue>> NodesArr;
 	for (UMaterialExpression* Expr : AllExpressions)
 	{
 		if (!Expr) continue;
 		TSharedPtr<FJsonObject> Node = MakeShared<FJsonObject>();
-		Node->SetStringField(TEXT("name"), Expr->GetName());
+		Node->SetStringField(TEXT("name"), NameOf(Expr));
 		Node->SetStringField(TEXT("class"), Expr->GetClass()->GetName());
 		Node->SetNumberField(TEXT("posX"), Expr->MaterialExpressionEditorX);
 		Node->SetNumberField(TEXT("posY"), Expr->MaterialExpressionEditorY);
+
+		// Every edited property that differs from the class default, in the
+		// shape the properties map of a node spec takes back.
+		const UObject* ClassDefault = Expr->GetClass()->GetDefaultObject();
+		TSharedPtr<FJsonObject> EditedProps = MakeShared<FJsonObject>();
+		for (TFieldIterator<FProperty> It(Expr->GetClass()); It; ++It)
+		{
+			FProperty* Prop = *It;
+			if (!Prop->HasAnyPropertyFlags(CPF_Edit) || Prop->HasAnyPropertyFlags(CPF_EditConst | CPF_Transient | CPF_Deprecated)) continue;
+			if (SkippedProperties.Contains(Prop->GetFName()) || MaterialPropertyHoldsExpressionInput(Prop)) continue;
+			if (Expr->IsA<UMaterialExpressionCustom>() && CustomFieldProperties.Contains(Prop->GetFName())) continue;
+			if (Prop->Identical_InContainer(Expr, ClassDefault)) continue;
+			if (Cast<UMaterialExpressionTextureSample>(Expr) && Prop->GetFName() == TEXT("Texture")) continue;
+			const TSharedPtr<FJsonValue> Value = FMCPJsonSerializer::SerializeValue(Prop->ContainerPtrToValuePtr<void>(Expr), Prop);
+			if (Value.IsValid()) EditedProps->SetField(Prop->GetName(), Value);
+		}
+		if (EditedProps->Values.Num() > 0) Node->SetObjectField(TEXT("properties"), EditedProps);
+
+		if (const UMaterialExpressionCustom* Custom = Cast<UMaterialExpressionCustom>(Expr))
+		{
+			Node->SetStringField(TEXT("code"), Custom->Code);
+			if (!Custom->Description.IsEmpty()) Node->SetStringField(TEXT("description"), Custom->Description);
+			Node->SetStringField(TEXT("outputType"), CustomOutputTypeName((int32)Custom->OutputType));
+			TArray<TSharedPtr<FJsonValue>> Inputs, Outputs, Defines, Includes;
+			for (const FCustomInput& In : Custom->Inputs) Inputs.Add(MakeShared<FJsonValueString>(In.InputName.ToString()));
+			for (const FCustomOutput& Out : Custom->AdditionalOutputs)
+			{
+				TSharedPtr<FJsonObject> Row = MakeShared<FJsonObject>();
+				Row->SetStringField(TEXT("name"), Out.OutputName.ToString());
+				Row->SetStringField(TEXT("type"), CustomOutputTypeName((int32)Out.OutputType));
+				Outputs.Add(MakeShared<FJsonValueObject>(Row));
+			}
+			for (const FCustomDefine& Define : Custom->AdditionalDefines)
+			{
+				TSharedPtr<FJsonObject> Row = MakeShared<FJsonObject>();
+				Row->SetStringField(TEXT("name"), Define.DefineName);
+				Row->SetStringField(TEXT("value"), Define.DefineValue);
+				Defines.Add(MakeShared<FJsonValueObject>(Row));
+			}
+			for (const FString& Path : Custom->IncludeFilePaths) Includes.Add(MakeShared<FJsonValueString>(Path));
+			Node->SetArrayField(TEXT("inputs"), Inputs);
+			if (Outputs.Num() > 0) Node->SetArrayField(TEXT("additionalOutputs"), Outputs);
+			if (Defines.Num() > 0) Node->SetArrayField(TEXT("additionalDefines"), Defines);
+			if (Includes.Num() > 0) Node->SetArrayField(TEXT("includeFilePaths"), Includes);
+		}
 
 		// Scalar / vector constants - capture literal
 		if (UMaterialExpressionConstant* C = Cast<UMaterialExpressionConstant>(Expr))
@@ -361,25 +441,29 @@ TSharedPtr<FJsonValue> FMaterialHandlers::ExportMaterialGraph(const TSharedPtr<F
 		NodesArr.Add(MakeShared<FJsonValueObject>(Node));
 	}
 
-	// Property connections (reachable roots).
+	// Property connections: every material output build_material_graph can wire.
 	TArray<TSharedPtr<FJsonValue>> PropArr;
-	static const TMap<EMaterialProperty, FString> PropMap = {
-		{ MP_BaseColor, TEXT("BaseColor") }, { MP_Metallic, TEXT("Metallic") },
-		{ MP_Specular, TEXT("Specular") }, { MP_Roughness, TEXT("Roughness") },
-		{ MP_EmissiveColor, TEXT("EmissiveColor") }, { MP_Opacity, TEXT("Opacity") },
-		{ MP_OpacityMask, TEXT("OpacityMask") }, { MP_Normal, TEXT("Normal") },
-	};
-	for (const auto& Pair : PropMap)
+	for (const TPair<EMaterialProperty, FString>& Pair : WireableMaterialProperties())
 	{
 		FExpressionInput* In = Material->GetExpressionInputForProperty(Pair.Key);
 		if (In && In->Expression)
 		{
 			TSharedPtr<FJsonObject> P = MakeShared<FJsonObject>();
 			P->SetStringField(TEXT("property"), Pair.Value);
-			P->SetStringField(TEXT("from"), In->Expression->GetName());
+			P->SetStringField(TEXT("from"), NameOf(In->Expression));
 			P->SetNumberField(TEXT("outputIndex"), In->OutputIndex);
 			PropArr.Add(MakeShared<FJsonValueObject>(P));
 		}
+	}
+
+	// Material-level settings that differ from a new material's.
+	TSharedPtr<FJsonObject> Settings = MakeShared<FJsonObject>();
+	const UMaterial* MaterialDefault = GetDefault<UMaterial>();
+	for (FProperty* Prop : ExportedMaterialSettings())
+	{
+		if (Prop->Identical_InContainer(Material, MaterialDefault)) continue;
+		const TSharedPtr<FJsonValue> Value = FMCPJsonSerializer::SerializeValue(Prop->ContainerPtrToValuePtr<void>(Material), Prop);
+		if (Value.IsValid()) Settings->SetField(Prop->GetName(), Value);
 	}
 
 	// Node-to-node wires in build_material_graph's connections shape, so an export imports back.
@@ -392,9 +476,9 @@ TSharedPtr<FJsonValue> FMaterialHandlers::ExportMaterialGraph(const TSharedPtr<F
 			const FExpressionInput* In = Expr->GetInput(InputIdx);
 			if (!In->Expression) continue;
 			TSharedPtr<FJsonObject> W = MakeShared<FJsonObject>();
-			W->SetStringField(TEXT("from"), In->Expression->GetName());
+			W->SetStringField(TEXT("from"), NameOf(In->Expression));
 			W->SetNumberField(TEXT("fromOutput"), In->OutputIndex);
-			W->SetStringField(TEXT("to"), Expr->GetName());
+			W->SetStringField(TEXT("to"), NameOf(Expr));
 			W->SetNumberField(TEXT("toInput"), InputIdx);
 			WireArr.Add(MakeShared<FJsonValueObject>(W));
 		}
@@ -405,12 +489,207 @@ TSharedPtr<FJsonValue> FMaterialHandlers::ExportMaterialGraph(const TSharedPtr<F
 	Result->SetArrayField(TEXT("nodes"), NodesArr);
 	Result->SetArrayField(TEXT("connections"), WireArr);
 	Result->SetArrayField(TEXT("propertyConnections"), PropArr);
+	Result->SetObjectField(TEXT("materialSettings"), Settings);
 	return MCPResult(Result);
+}
+
+
+TArray<TPair<EMaterialProperty, FString>> FMaterialHandlers::WireableMaterialProperties()
+{
+	static const TCHAR* Names[] = {
+		TEXT("BaseColor"), TEXT("Metallic"), TEXT("Specular"), TEXT("Roughness"), TEXT("Anisotropy"),
+		TEXT("EmissiveColor"), TEXT("Opacity"), TEXT("OpacityMask"), TEXT("Normal"), TEXT("Tangent"),
+		TEXT("WorldPositionOffset"), TEXT("SubsurfaceColor"), TEXT("CustomData0"), TEXT("CustomData1"),
+		TEXT("AmbientOcclusion"), TEXT("Refraction"), TEXT("PixelDepthOffset"), TEXT("ShadingModel"),
+		TEXT("FrontMaterial"), TEXT("MaterialAttributes"),
+	};
+	TArray<TPair<EMaterialProperty, FString>> Out;
+	for (const TCHAR* Name : Names)
+	{
+		EMaterialProperty Prop;
+		if (ParseMaterialProperty(Name, Prop)) Out.Add({ Prop, Name });
+	}
+	return Out;
+}
+
+const TArray<FProperty*>& FMaterialHandlers::ExportedMaterialSettings()
+{
+	static TArray<FProperty*> Props;
+	if (Props.Num() == 0)
+	{
+		static const TCHAR* Names[] = {
+			TEXT("MaterialDomain"), TEXT("BlendMode"), TEXT("ShadingModel"), TEXT("TwoSided"), TEXT("bIsThinSurface"),
+			TEXT("BlendableLocation"), TEXT("BlendablePriority"), TEXT("bIsBlendable"), TEXT("OpacityMaskClipValue"),
+			TEXT("bTangentSpaceNormal"), TEXT("bUseMaterialAttributes"), TEXT("bCastDynamicShadowAsMasked"),
+			TEXT("DitheredLODTransition"), TEXT("bAllowNegativeEmissiveColor"), TEXT("TranslucencyLightingMode"),
+			TEXT("bEnableResponsiveAA"), TEXT("bScreenSpaceReflections"), TEXT("bUseEmissiveForDynamicArea"),
+		};
+		for (const TCHAR* Name : Names)
+		{
+			if (FProperty* Prop = UMaterial::StaticClass()->FindPropertyByName(Name)) Props.Add(Prop);
+		}
+		// Usage flags: whichever bUsedWith* this engine defines.
+		for (TFieldIterator<FProperty> It(UMaterial::StaticClass()); It; ++It)
+		{
+			if (It->GetName().StartsWith(TEXT("bUsedWith")) && CastField<FBoolProperty>(*It)) Props.AddUnique(*It);
+		}
+	}
+	return Props;
+}
+
+bool FMaterialHandlers::MaterialPropertyHoldsExpressionInput(const FProperty* Prop)
+{
+	if (const FArrayProperty* Arr = CastField<FArrayProperty>(Prop)) return MaterialPropertyHoldsExpressionInput(Arr->Inner);
+	const FStructProperty* StructProp = CastField<FStructProperty>(Prop);
+	if (!StructProp || !StructProp->Struct) return false;
+	for (const UStruct* S = StructProp->Struct; S; S = S->GetSuperStruct())
+	{
+		const FString Name = S->GetName();
+		if (Name.EndsWith(TEXT("ExpressionInput")) || Name.EndsWith(TEXT("MaterialInput"))) return true;
+	}
+	for (TFieldIterator<FProperty> It(StructProp->Struct); It; ++It)
+	{
+		if (MaterialPropertyHoldsExpressionInput(*It)) return true;
+	}
+	return false;
+}
+
+
+bool FMaterialHandlers::CompileMaterialForErrors(UMaterial* Material, TArray<FString>& OutErrors)
+{
+	OutErrors.Reset();
+	// A -nullrhi editor compiles no shaders, so an empty list there says nothing.
+	if (!FApp::CanEverRender())
+	{
+		UMaterialEditingLibrary::RecompileMaterial(Material);
+		return false;
+	}
+#if UE_MCP_HAS_5_8_API
+	OutErrors = UMaterialEditingLibrary::RecompileMaterial(Material);
+	return true;
+#else
+	// RecompileMaterial returns void before 5.8; the resource holds the errors
+	// once its compile has finished.
+	UMaterialEditingLibrary::RecompileMaterial(Material);
+	if (FMaterialResource* Resource = Material->GetMaterialResource(GMaxRHIShaderPlatform))
+	{
+		Resource->FinishCompilation();
+		OutErrors = Resource->GetCompileErrors();
+		return true;
+	}
+	return false;
+#endif
+}
+
+
+// #1951: replace the whole graph from a spec, saving only on a clean compile.
+// The spec is built into a transient copy first, so a spec that fails to
+// build or compile leaves the material exactly as it was.
+static TSharedPtr<FJsonValue> MaterialGraphReplaceFailure(const FString& Message, const TArray<FString>& Errors)
+{
+	TSharedPtr<FJsonObject> Error = MakeShared<FJsonObject>();
+	Error->SetBoolField(TEXT("success"), false);
+	Error->SetStringField(TEXT("error"), Message);
+	TArray<TSharedPtr<FJsonValue>> ErrorValues;
+	for (const FString& E : Errors) ErrorValues.Add(MakeShared<FJsonValueString>(E));
+	Error->SetArrayField(TEXT("compileErrors"), ErrorValues);
+	return MakeShared<FJsonValueObject>(Error);
+}
+
+TSharedPtr<FJsonValue> FMaterialHandlers::ReplaceMaterialGraph(const TSharedPtr<FJsonObject>& Params)
+{
+	FString AssetPath;
+	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
+	UMaterial* Material = LoadMaterialFromPath(AssetPath);
+	if (!Material) return MCPError(FString::Printf(TEXT("Material not found: %s"), *AssetPath));
+
+	// The graph as it stands, which is what the rollback replaces it with.
+	TSharedPtr<FJsonObject> ExportParams = MakeShared<FJsonObject>();
+	ExportParams->SetStringField(TEXT("assetPath"), AssetPath);
+	const TSharedPtr<FJsonValue> PreviousValue = ExportMaterialGraph(ExportParams);
+	const TSharedPtr<FJsonObject> Previous = PreviousValue.IsValid() ? PreviousValue->AsObject() : nullptr;
+
+	auto BuildOk = [](const TSharedPtr<FJsonValue>& Value, FString& OutError) -> bool
+	{
+		const TSharedPtr<FJsonObject> Obj = Value.IsValid() ? Value->AsObject() : nullptr;
+		bool bOk = false;
+		if (Obj.IsValid() && Obj->TryGetBoolField(TEXT("success"), bOk) && bOk) return true;
+		if (Obj.IsValid()) Obj->TryGetStringField(TEXT("error"), OutError);
+		return false;
+	};
+
+	UMaterial* Trial = DuplicateObject<UMaterial>(Material, GetTransientPackage(), MakeUniqueObjectName(GetTransientPackage(), UMaterial::StaticClass(), TEXT("MCPReplaceTrial")));
+	if (!Trial) return MCPError(TEXT("Could not make a trial copy of the material. Nothing was changed."));
+	UMaterialEditingLibrary::DeleteAllMaterialExpressions(Trial);
+	FString BuildError;
+	TArray<FString> TrialErrors;
+	const bool bTrialBuilt = BuildOk(BuildMaterialGraphInto(Params, Trial, false), BuildError);
+	const bool bErrorsKnown = bTrialBuilt && CompileMaterialForErrors(Trial, TrialErrors);
+	Trial->ClearFlags(RF_Public | RF_Standalone);
+	Trial->MarkAsGarbage();
+	if (!bTrialBuilt)
+	{
+		return MCPError(FString::Printf(TEXT("%s The material was not changed."), *BuildError));
+	}
+	if (TrialErrors.Num() > 0)
+	{
+		return MaterialGraphReplaceFailure(FString::Printf(TEXT("The replacement graph does not compile (%d error(s), in compileErrors). The material was not changed."), TrialErrors.Num()), TrialErrors);
+	}
+
+	UMaterialEditingLibrary::DeleteAllMaterialExpressions(Material);
+	const TSharedPtr<FJsonValue> Built = BuildMaterialGraphInto(Params, Material, false);
+	if (!BuildOk(Built, BuildError))
+	{
+		return MCPError(FString::Printf(TEXT("The replacement built on a trial copy but not on the material: %s The material's expressions were deleted and it was not saved; reload it from disk to discard the change."), *BuildError));
+	}
+	TArray<FString> Errors;
+	CompileMaterialForErrors(Material, Errors);
+	if (Errors.Num() > 0)
+	{
+		return MaterialGraphReplaceFailure(TEXT("The replacement compiled on a trial copy but not on the material, so it was not saved; reload the material from disk to discard the change."), Errors);
+	}
+	FString SaveError;
+	const bool bSaved = SaveAssetPackageChecked(Material, SaveError);
+
+	TSharedPtr<FJsonObject> Result = Built->AsObject();
+	Result->SetBoolField(TEXT("replaced"), true);
+	Result->SetBoolField(TEXT("compileChecked"), bErrorsKnown);
+	Result->SetArrayField(TEXT("compileErrors"), TArray<TSharedPtr<FJsonValue>>());
+	if (!bErrorsKnown) Result->SetStringField(TEXT("compileErrorsNote"), TEXT("This editor compiled no shaders (a -nullrhi session, or an engine that does not report the errors), so the replacement was saved without the compile check. recompile_material in a rendering editor reports them."));
+	MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveError);
+	Result->SetStringField(TEXT("aliasOf"), TEXT("build_material_graph"));
+	Result->RemoveField(TEXT("rollbackPossible"));
+	Result->RemoveField(TEXT("rollbackNote"));
+	if (Previous.IsValid())
+	{
+		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+		Payload->SetStringField(TEXT("assetPath"), AssetPath);
+		Payload->SetBoolField(TEXT("replace"), true);
+		for (const TCHAR* Key : { TEXT("nodes"), TEXT("connections"), TEXT("propertyConnections") })
+		{
+			const TArray<TSharedPtr<FJsonValue>>* Arr = nullptr;
+			if (Previous->TryGetArrayField(Key, Arr)) Payload->SetArrayField(Key, *Arr);
+		}
+		const TSharedPtr<FJsonObject>* PrevSettings = nullptr;
+		if (Previous->TryGetObjectField(TEXT("materialSettings"), PrevSettings)) Payload->SetObjectField(TEXT("materialSettings"), *PrevSettings);
+		MCPSetRollback(Result, TEXT("import_material_graph"), Payload);
+		Result->SetBoolField(TEXT("rollbackLossy"), true);
+		Result->SetStringField(TEXT("rollbackNote"), TEXT("The rollback replaces the graph with export_material_graph's reading of it before this call: every node, edited property, wire, property connection and listed material setting. Material settings this call changed that export does not list are not restored."));
+	}
+	else
+	{
+		MCPSetNoRollback(Result, TEXT("The previous graph could not be exported before the replace, so there is nothing to restore it from."));
+	}
+	return MakeShared<FJsonValueObject>(Result);
 }
 
 
 TSharedPtr<FJsonValue> FMaterialHandlers::ImportMaterialGraph(const TSharedPtr<FJsonObject>& Params)
 {
+	if (OptionalBool(Params, TEXT("replace"), false))
+	{
+		return ReplaceMaterialGraph(Params);
+	}
 	// Delegates to BuildMaterialGraph - same JSON spec format, same effect.
 	TSharedPtr<FJsonValue> Delegated = BuildMaterialGraph(Params);
 
@@ -649,6 +928,12 @@ bool FMaterialHandlers::ApplyCustomNodeSpec(UMaterialExpressionCustom* Custom, c
 
 TSharedPtr<FJsonValue> FMaterialHandlers::BuildMaterialGraph(const TSharedPtr<FJsonObject>& Params)
 {
+	return BuildMaterialGraphInto(Params, nullptr, true);
+}
+
+
+TSharedPtr<FJsonValue> FMaterialHandlers::BuildMaterialGraphInto(const TSharedPtr<FJsonObject>& Params, UMaterial* Target, bool bSave)
+{
 	FString AssetPath;
 	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
 
@@ -664,9 +949,26 @@ TSharedPtr<FJsonValue> FMaterialHandlers::BuildMaterialGraph(const TSharedPtr<FJ
 	const bool bHasConnections = TryGetArrayParam(Params, TEXT("connections"), ConnArr) && ConnArr;
 	const TArray<TSharedPtr<FJsonValue>>* RemoveArr = nullptr;
 	const bool bHasRemovals = TryGetArrayParam(Params, TEXT("removeExpressions"), RemoveArr) && RemoveArr;
+	const TSharedPtr<FJsonObject>* SettingsObj = nullptr;
+	const bool bHasSettings = TryGetObjectParam(Params, TEXT("materialSettings"), SettingsObj) && SettingsObj && (*SettingsObj).IsValid();
 
-	UMaterial* Material = LoadMaterialFromPath(AssetPath);
+	UMaterial* Material = Target ? Target : LoadMaterialFromPath(AssetPath);
 	if (!Material) return MCPError(FString::Printf(TEXT("Material not found: %s"), *AssetPath));
+
+	// #1951: material-level settings by property name, checked before anything changes.
+	TArray<TPair<FProperty*, TSharedPtr<FJsonValue>>> Settings;
+	if (bHasSettings)
+	{
+		for (const auto& Pair : (*SettingsObj)->Values)
+		{
+			FProperty* Prop = UMaterial::StaticClass()->FindPropertyByName(FName(*Pair.Key));
+			if (!Prop || !Prop->HasAnyPropertyFlags(CPF_Edit))
+			{
+				return MCPError(FString::Printf(TEXT("materialSettings: UMaterial has no editable property '%s' (export_material_graph lists the ones it writes). Nothing was changed."), *Pair.Key));
+			}
+			Settings.Add({ Prop, Pair.Value });
+		}
+	}
 
 	// #1461: resolved before any node exists, so a new node's description cannot
 	// shadow the expression being replaced. Deleted last, once every wire is in.
@@ -747,15 +1049,33 @@ TSharedPtr<FJsonValue> FMaterialHandlers::BuildMaterialGraph(const TSharedPtr<FJ
 	Material->PreEditChange(nullptr);
 	TMap<FString, UMaterialExpression*> ByName;
 	TArray<UMaterialExpression*> CreatedNodes;
+	TArray<TPair<FProperty*, FString>> PreviousSettings;
 	auto Abort = [&](const FString& Message) -> TSharedPtr<FJsonValue>
 	{
 		for (UMaterialExpression* Expr : CreatedNodes)
 		{
 			UMaterialEditingLibrary::DeleteMaterialExpression(Material, Expr);
 		}
+		for (const TPair<FProperty*, FString>& Previous : PreviousSettings)
+		{
+			Previous.Key->ImportText_InContainer(*Previous.Value, Material, Material, PPF_None);
+		}
 		Material->PostEditChange();
 		return MCPError(Message + TEXT(" Nothing was kept: the nodes this call created were removed again."));
 	};
+
+	// Settings first, so a MaterialAttributes wire below finds bUseMaterialAttributes on.
+	for (const TPair<FProperty*, TSharedPtr<FJsonValue>>& Setting : Settings)
+	{
+		FString PreviousText;
+		Setting.Key->ExportTextItem_InContainer(PreviousText, Material, nullptr, Material, PPF_None);
+		PreviousSettings.Add({ Setting.Key, PreviousText });
+		FString SetError;
+		if (!MCPJsonProperty::SetJsonOnProperty(Setting.Key, Setting.Key->ContainerPtrToValuePtr<void>(Material), Setting.Value, SetError))
+		{
+			return Abort(FString::Printf(TEXT("materialSettings.%s: %s."), *Setting.Key->GetName(), *SetError));
+		}
+	}
 
 	for (const FNodeSpec& Spec : Specs)
 	{
@@ -898,7 +1218,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::BuildMaterialGraph(const TSharedPtr<FJ
 	Material->PostEditChange();
 	Material->MarkPackageDirty();
 	FString SaveError;
-	const bool bSaved = SaveAssetPackageChecked(Material, SaveError);
+	const bool bSaved = bSave && SaveAssetPackageChecked(Material, SaveError);
 
 	TArray<TSharedPtr<FJsonValue>> CreatedExpressionNames;
 	TArray<TSharedPtr<FJsonValue>> NodeMap;
@@ -915,9 +1235,10 @@ TSharedPtr<FJsonValue> FMaterialHandlers::BuildMaterialGraph(const TSharedPtr<FJ
 	}
 
 	TSharedPtr<FJsonObject> Result = MCPSuccess();
-	MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveError);
+	if (bSave) MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveError);
 	MCPSetUpdated(Result);
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
+	if (Settings.Num() > 0) Result->SetNumberField(TEXT("settingsApplied"), Settings.Num());
 	Result->SetNumberField(TEXT("expressionsCreated"), Specs.Num());
 	Result->SetNumberField(TEXT("wiresMade"), Wires);
 	Result->SetNumberField(TEXT("connectionsMade"), Connections);
