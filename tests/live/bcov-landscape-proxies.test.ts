@@ -48,7 +48,7 @@ beforeAll(async () => {
   originalMap = level.mapPackagePath as string | undefined;
   await callBridge(bridge, "delete_asset", { assetPath: MAP, force: true });
   // Copying the template saves every external actor package, which outlives the default budget.
-  const created = await bridge.call("create_new_level", { levelPath: MAP, templateLevel: TEMPLATE }, 600_000) as Json;
+  const created = await bridge.call("create_new_level", { levelPath: MAP, templateLevel: TEMPLATE, discardUnsaved: true }, 600_000) as Json;
   expect(created.success, JSON.stringify(created)).not.toBe(false);
 
   proxies = await readProxies();

@@ -94,7 +94,7 @@ describe("demo", () => {
   }, 300_000);
 
   it("demo_go_home leaves another map for the home level", async () => {
-    await call("create_new_level", { levelPath: SCRATCH_MAP });
+    await call("create_new_level", { levelPath: SCRATCH_MAP, discardUnsaved: true });
     if ((await currentMap()) !== SCRATCH_MAP) await call("load_level", { levelPath: SCRATCH_MAP });
     expect(await currentMap()).toBe(SCRATCH_MAP);
 

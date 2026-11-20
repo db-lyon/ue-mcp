@@ -7,6 +7,7 @@
 #include "HandlerFunctionCall.h"
 #include "HandlerCommitSave.h"
 #include "HandlerPagination.h"
+#include "HandlerLevelSwitch.h"
 #include "HandlerSkinnedAsset.h"
 #include "HandlerSceneCapture.h"
 #include "Handlers/Editor/HandlerWindowPick.h"
@@ -783,11 +784,15 @@ void FEditorHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("templateLevel"), EType::String, TEXT("Level to copy; omit, Empty or None for a blank level")),
 		MCPSharedParam::OnConflict().Describe(TEXT("When the level exists: skip (default) returns it untouched, error refuses")),
 		MCPParam::Optional(TEXT("worldPartition"), EType::Boolean, TEXT("Create a blank World Partition level with one file per actor (default false); a templateLevel decides this itself")),
+		MCPParam::Optional(TEXT("saveFirst"), EType::Boolean, TEXT("Save the open map and its dirty external actor packages before replacing it (default false)")),
+		MCPParam::Optional(TEXT("discardUnsaved"), EType::Boolean, TEXT("Replace the open map even though it has unsaved changes, discarding them (default false)")),
+		MCPParam::Optional(TEXT("endPIE"), EType::Boolean, TEXT("End a running play session (Play, Simulate, ejected or queued) and create the level; without it the call is refused while one is up (default false)")),
 	}, MCPSpec::ContractExempt(TEXT("creates and opens a level")));
 	Registry.RegisterHandler(TEXT("open_asset"), &OpenAsset, {
 		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("Asset to open in its editor")).Alias(TEXT("path")),
 		MCPParam::Optional(TEXT("saveFirst"), EType::Boolean, TEXT("For a map: save the open map's unsaved packages before switching (default false)")),
 		MCPParam::Optional(TEXT("discardUnsaved"), EType::Boolean, TEXT("For a map: switch even though the open map has unsaved changes, discarding them (default false)")),
+		MCPParam::Optional(TEXT("endPIE"), EType::Boolean, TEXT("For a map: end a running play session and switch; without it the switch is refused while one is up (default false)")),
 	});
 	// #1112: the inverse of open_asset - what is already open, and what has focus.
 	Registry.RegisterHandler(TEXT("get_open_asset_editors"), &GetOpenAssetEditors, NoParams);
@@ -3778,6 +3783,12 @@ TSharedPtr<FJsonValue> FEditorHandlers::GetWorldState(const TSharedPtr<FJsonObje
 	Result->SetBoolField(TEXT("playInEditor"), bPlayWorld && !bSimulating);
 	Result->SetBoolField(TEXT("simulateInEditor"), bSimulating);
 	Result->SetStringField(TEXT("mode"), bSimulating ? TEXT("simulate") : (bPlayWorld ? TEXT("play") : TEXT("editor")));
+	// playInEditor is false for a Play session ejected with F8, which reads as
+	// simulating, and for a start queued for the next tick. playSessionActive
+	// is the one field that means "a session is up", the test every
+	// world-replacing action refuses on without endPIE (#1912).
+	Result->SetBoolField(TEXT("playSessionActive"), MCPLevelSwitch::IsPlaySessionActive());
+	Result->SetBoolField(TEXT("playSessionQueued"), GEditor->IsPlaySessionRequestQueued());
 
 	const FDirtyEditorPackages Dirty = CollectDirtyEditorPackages();
 	TArray<FString> All;
@@ -4373,7 +4384,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::FocusViewportOnActor(const TSharedPtr<FJ
 }
 TSharedPtr<FJsonValue> FEditorHandlers::CreateNewLevel(const TSharedPtr<FJsonObject>& Params)
 {
-	MCPReadParamsAhead(Params, { TEXT("onConflict"), TEXT("worldPartition") });
+	MCPReadParamsAhead(Params, { TEXT("onConflict"), TEXT("worldPartition"), TEXT("saveFirst"), TEXT("discardUnsaved"), TEXT("endPIE") });
 	FString LevelPath = OptionalString(Params, TEXT("levelPath"));
 	FString TemplateLevel = OptionalString(Params, TEXT("templateLevel"));
 	const bool bWorldPartition = OptionalBool(Params, TEXT("worldPartition"), false);
@@ -4438,6 +4449,16 @@ TSharedPtr<FJsonValue> FEditorHandlers::CreateNewLevel(const TSharedPtr<FJsonObj
 	if (bHasTemplate && bWorldPartition)
 	{
 		return MCPError(TEXT("worldPartition applies to a blank level; a templateLevel decides partitioning itself. Pass one or the other. Nothing was created."));
+	}
+
+	// The new level replaces the editor world. NewLevel drops the open map's
+	// unsaved changes without asking (it runs as an unattended script) and
+	// fails outright during play, so both are answered for here, the same way
+	// level(load) answers for them (#1912).
+	MCPLevelSwitch::FSwitchPreparation Prepared;
+	if (TSharedPtr<FJsonObject> Refusal = MCPLevelSwitch::Prepare(Params, FString::Printf(TEXT("creating '%s'"), *LevelPath), Prepared))
+	{
+		return MCPResult(Refusal);
 	}
 
 	bool bSuccess = false;
@@ -4507,6 +4528,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::CreateNewLevel(const TSharedPtr<FJsonObj
 
 	auto Result = MCPSuccess();
 	MCPSetCreated(Result);
+	MCPLevelSwitch::ReportPreparation(Result, Prepared);
 	if (bReopened) Result->SetBoolField(TEXT("savedAndReopened"), true);
 	Result->SetStringField(TEXT("worldName"), World->GetName());
 	Result->SetStringField(TEXT("worldPath"), World->GetPathName());
@@ -4529,7 +4551,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::CreateNewLevel(const TSharedPtr<FJsonObj
 
 TSharedPtr<FJsonValue> FEditorHandlers::OpenAsset(const TSharedPtr<FJsonObject>& Params)
 {
-	MCPReadParamsAhead(Params, { TEXT("assetPath"), TEXT("saveFirst"), TEXT("discardUnsaved") });
+	MCPReadParamsAhead(Params, { TEXT("assetPath"), TEXT("saveFirst"), TEXT("discardUnsaved"), TEXT("endPIE") });
 	// `path` arrives as `assetPath`, renamed by the registry (#1057).
 	FString AssetPath;
 	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
@@ -4544,6 +4566,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::OpenAsset(const TSharedPtr<FJsonObject>&
 		LevelParams->SetStringField(TEXT("levelPath"), AssetPath);
 		LevelParams->SetBoolField(TEXT("saveFirst"), OptionalBool(Params, TEXT("saveFirst"), false));
 		LevelParams->SetBoolField(TEXT("discardUnsaved"), OptionalBool(Params, TEXT("discardUnsaved"), false));
+		LevelParams->SetBoolField(TEXT("endPIE"), OptionalBool(Params, TEXT("endPIE"), false));
 		TSharedPtr<FJsonValue> LevelResult = FLevelHandlers::LoadLevel(LevelParams);
 		const TSharedPtr<FJsonObject>* LevelObject = nullptr;
 		if (LevelResult.IsValid() && LevelResult->TryGetObject(LevelObject) && LevelObject && LevelObject->IsValid())

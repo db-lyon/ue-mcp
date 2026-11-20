@@ -712,6 +712,24 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "boolean",
         "required": false,
         "description": "Create a blank World Partition level with one file per actor (default false); a templateLevel decides this itself"
+      },
+      {
+        "name": "saveFirst",
+        "type": "boolean",
+        "required": false,
+        "description": "Save the open map and its dirty external actor packages before replacing it (default false)"
+      },
+      {
+        "name": "discardUnsaved",
+        "type": "boolean",
+        "required": false,
+        "description": "Replace the open map even though it has unsaved changes, discarding them (default false)"
+      },
+      {
+        "name": "endPIE",
+        "type": "boolean",
+        "required": false,
+        "description": "End a running play session (Play, Simulate, ejected or queued) and create the level; without it the call is refused while one is up (default false)"
       }
     ],
     "contractExempt": "creates and opens a level"
@@ -2186,6 +2204,12 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "boolean",
         "required": false,
         "description": "For a map: switch even though the open map has unsaved changes, discarding them (default false)"
+      },
+      {
+        "name": "endPIE",
+        "type": "boolean",
+        "required": false,
+        "description": "For a map: end a running play session and switch; without it the switch is refused while one is up (default false)"
       }
     ]
   },
@@ -4512,7 +4536,7 @@ export const schema: Record<string, z.ZodType> = {
   direction: z.string().optional().describe("undo (default) | redo"),
   directory: z.string().optional().describe("Package path validated recursively (default /Game/). Not with assetPath or assetPaths"),
   disable: z.union([z.array(z.string()), z.string()]).optional().describe("Channels to turn off, as an array or a comma-separated string"),
-  discardUnsaved: z.boolean().optional().describe("For a map: switch even though the open map has unsaved changes, discarding them (default false)"),
+  discardUnsaved: z.boolean().optional().describe("Replace the open map even though it has unsaved changes, discarding them (default false) (create_new_level). For a map: switch even though the open map has unsaved changes, discarding them (default false) (open_asset)"),
   displayRate: z.unknown().optional().describe("Display rate: frames per second (24, 30, 60; 23.976, 29.97 and 59.94 map to the NTSC rates) or {numerator, denominator}. Bakes and display frames sample at this rate"),
   dryRun: z.boolean().optional().describe("Report what would happen to each package and clear nothing (default false) (discard_dirty). Report the targets without touching them (default TRUE; pass false to apply) (set_runtime_visibility)"),
   dumpToFile: z.boolean().optional().describe("Write the full analysis to a JSON file and return the headline numbers with its path (default false)"),
@@ -4522,6 +4546,7 @@ export const schema: Record<string, z.ZodType> = {
   enabledOnly: z.boolean().optional().describe("Only channels that are currently on (default false)"),
   endFrame: z.number().optional().describe("End display frame of a custom range, exclusive (with startFrame) (mrq_create_job). Last display frame to render, inclusive. Not with endSeconds (render_sequence_frames)"),
   endFrameOffset: z.number().int().optional().describe("SkeletalAnimation only: ticks trimmed from the clip's end"),
+  endPIE: z.boolean().optional().describe("End a running play session (Play, Simulate, ejected or queued) and create the level; without it the call is refused while one is up (default false) (create_new_level). For a map: end a running play session and switch; without it the switch is refused while one is up (default false) (open_asset)"),
   endSeconds: z.number().optional().describe("Section end in seconds (default one second after the start) (add_sequence_section). Window end, seconds from the start of the trace (default the end) (analyze_insights_trace). Range end in seconds, exclusive (render_sequence_frames). Range end in seconds (set_sequence_playback_range)"),
   entryPoint: z.string().optional().describe("Function in the file to call after loading it under runName (default ue_mcp_entry, so its main guard does not fire); its return value comes back as result"),
   ev100: z.number().optional().describe("Fixed EV100 to pin the viewport to; implies fixed exposure"),
@@ -4671,7 +4696,7 @@ export const schema: Record<string, z.ZodType> = {
   sampleStartFrame: z.number().optional().describe("Also evaluate the channel from this display frame"),
   sampleStep: z.number().optional().describe("Display frames between samples (default 1)"),
   save: z.boolean().optional().describe("Save the package to disk after the write (default true; false leaves it dirty)"),
-  saveFirst: z.boolean().optional().describe("For a map: save the open map's unsaved packages before switching (default false)"),
+  saveFirst: z.boolean().optional().describe("Save the open map and its dirty external actor packages before replacing it (default false) (create_new_level). For a map: save the open map's unsaved packages before switching (default false) (open_asset)"),
   seconds: z.number().optional().describe("Playhead position in seconds. Pass exactly one of seconds and frame"),
   section: z.string().optional().describe("Settings section, e.g. Physics, or a combined Engine.Physics"),
   sectionIndex: z.number().int().optional().describe("Section index on the track (default 0) (get_sequence_channel_keys, set_sequence_channel_keys). Index of the section to remove, as get_sequence_info lists them (remove_sequence_section). Target section index (default 0) (set_sequence_keyframes)"),

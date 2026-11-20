@@ -665,6 +665,33 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetClassDefault(const TSharedPtr<FJso
 	FString PrevValue;
 	FinalProp->ExportText_Direct(PrevValue, ValuePtr, ValuePtr, nullptr, PPF_None);
 
+	// Placed instances that still hold the old default follow the new one, as
+	// the details panel propagates a default; the rest keep their override.
+	// Read before the write, because afterwards the CDO no longer says what the
+	// old default was (#1938). Child class defaults are handled below.
+	TArray<TWeakObjectPtr<UObject>> FollowingInstances;
+	int32 InstancesKeptOverride = 0;
+	{
+		TArray<UObject*> Instances;
+		CDO->GetArchetypeInstances(Instances);
+		for (UObject* Instance : Instances)
+		{
+			if (!IsValid(Instance) || Instance == CDO || Instance->HasAnyFlags(RF_ClassDefaultObject | RF_ArchetypeObject)) continue;
+			if (Instance->GetClass()->HasAnyClassFlags(CLASS_NewerVersionExists)) continue;
+			UPackage* InstancePackage = Instance->GetOutermost();
+			if (InstancePackage == GetTransientPackage() || InstancePackage->HasAnyPackageFlags(PKG_PlayInEditor)) continue;
+			FProperty* InstProp = nullptr;
+			void* InstAddr = nullptr;
+			UObject* InstOwner = nullptr;
+			FString InstErr;
+			if (!MCPResolveCDOPath(Instance, PropertyName, /*bOwnedOnly=*/true, InstProp, InstAddr, InstOwner, InstErr)) continue;
+			FString InstValue;
+			InstProp->ExportText_Direct(InstValue, InstAddr, InstAddr, nullptr, PPF_None);
+			if (InstValue == PrevValue) FollowingInstances.Add(Instance);
+			else ++InstancesKeptOverride;
+		}
+	}
+
 	CDO->Modify();
 	if (LeafOwner != CDO) LeafOwner->Modify();
 	FString SetErr;
@@ -732,6 +759,28 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetClassDefault(const TSharedPtr<FJso
 		ChildrenUpdated.Add(MakeShared<FJsonValueString>(Child->GetPathName()));
 	}
 
+	int32 InstancesUpdated = 0;
+	for (const TWeakObjectPtr<UObject>& Weak : FollowingInstances)
+	{
+		UObject* Instance = Weak.Get();
+		if (!Instance) continue;
+		FProperty* InstProp = nullptr;
+		void* InstAddr = nullptr;
+		UObject* InstOwner = nullptr;
+		FString InstErr;
+		if (!MCPResolveCDOPath(Instance, PropertyName, /*bOwnedOnly=*/true, InstProp, InstAddr, InstOwner, InstErr)) continue;
+		if (!InstOwner) InstOwner = Instance;
+		InstOwner->Modify();
+		if (!MCPPropertyText::ImportTextIntoProperty(InstProp, InstAddr, NewValue, InstOwner, InstErr)) continue;
+		FPropertyChangedEvent InstChanged(InstProp);
+		InstOwner->PostEditChangeProperty(InstChanged);
+		++InstancesUpdated;
+	}
+
+	// New spawns read inherited native properties through the class's
+	// post-construction list, which predates this write (#1938).
+	const int32 ClassesRefreshed = MCPRefreshPostConstructionDefaults(GenClass);
+
 	// Save
 	FString SaveError;
 	const bool bSaved = SaveAssetPackageChecked(Blueprint, SaveError);
@@ -746,6 +795,9 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetClassDefault(const TSharedPtr<FJso
 	if (LeafOwner != CDO) Result->SetStringField(TEXT("subobject"), LeafOwner->GetName());
 	Result->SetArrayField(TEXT("childrenUpdated"), ChildrenUpdated);
 	Result->SetArrayField(TEXT("childrenOverriding"), ChildrenOverriding);
+	Result->SetNumberField(TEXT("instancesUpdated"), InstancesUpdated);
+	Result->SetNumberField(TEXT("instancesKeptOverride"), InstancesKeptOverride);
+	Result->SetNumberField(TEXT("spawnDefaultsRefreshed"), ClassesRefreshed);
 	if (ChildrenNotSaved.Num() > 0) Result->SetArrayField(TEXT("childrenNotSaved"), ChildrenNotSaved);
 
 	// Rollback: self-inverse with previous value
@@ -1420,6 +1472,9 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetActorTickSettings(const TSharedPtr
 			++InstancesUpdated;
 		}
 
+		// PrimaryActorTick is an inherited native property, so a new spawn
+		// reads it through the post-construction list (#1938).
+		MCPRefreshPostConstructionDefaults(Blueprint->GeneratedClass);
 		Blueprint->MarkPackageDirty();
 		bSaved = SaveAssetPackageChecked(Blueprint, SaveError);
 	}
@@ -1639,6 +1694,9 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetCdoProperty(const TSharedPtr<FJson
 	}
 
 	CDO->PostEditChange();
+	// A Blueprint class's spawns read inherited native properties through its
+	// post-construction list, which predates this write (#1938).
+	MCPRefreshPostConstructionDefaults(Class);
 
 	auto Result = MCPSuccess();
 	MCPSetUpdated(Result);
@@ -2164,8 +2222,8 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddTimelineTrack(const TSharedPtr<FJs
 // FBlueprintEditorUtils::RemoveNode, whose DestroyNode calls RemoveTimeline;
 // a template with no node left is removed with RemoveTimeline directly. The
 // compile then drops the generated TimelineComponent variable.
-// delete_node keeps the template on purpose so its rollback can paste the
-// curves back; this is the action that drops it.
+// delete_node on one Timeline node removes its template the same way (#1911);
+// this is the action that drops a timeline by name, with or without a node.
 // ---------------------------------------------------------------------------
 TSharedPtr<FJsonValue> FBlueprintHandlers::RemoveTimeline(const TSharedPtr<FJsonObject>& Params)
 {
