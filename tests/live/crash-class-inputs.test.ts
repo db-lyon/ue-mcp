@@ -132,7 +132,7 @@ describe("the currently loaded map", () => {
 
   it("deletes a map while it is the loaded one, and the editor carries on", async () => {
     await callBridge(bridge, "delete_asset", { assetPath: SCRATCH_MAP, force: true });
-    const created = await survive("create_new_level", { levelPath: SCRATCH_MAP });
+    const created = await survive("create_new_level", { levelPath: SCRATCH_MAP, discardUnsaved: true });
     expect(refused(created), created.error ?? JSON.stringify(created.result)).toBe(false);
     if ((await currentMap()) !== SCRATCH_MAP) await survive("load_level", { levelPath: SCRATCH_MAP });
     expect(await currentMap()).toBe(SCRATCH_MAP);

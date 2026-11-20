@@ -1,5 +1,5 @@
 {
-  "handlerCount": 1414,
+  "handlerCount": 1415,
   "handlers": {
     "acquire_lock": {
       "category": "lock",
@@ -14416,6 +14416,24 @@
           "type": "boolean",
           "required": false,
           "description": "Create a blank World Partition level with one file per actor (default false); a templateLevel decides this itself"
+        },
+        {
+          "name": "saveFirst",
+          "type": "boolean",
+          "required": false,
+          "description": "Save the open map and its dirty external actor packages before replacing it (default false)"
+        },
+        {
+          "name": "discardUnsaved",
+          "type": "boolean",
+          "required": false,
+          "description": "Replace the open map even though it has unsaved changes, discarding them (default false)"
+        },
+        {
+          "name": "endPIE",
+          "type": "boolean",
+          "required": false,
+          "description": "End a running play session (Play, Simulate, ejected or queued) and create the level; without it the call is refused while one is up (default false)"
         }
       ],
       "contractExempt": "creates and opens a level"
@@ -16363,6 +16381,12 @@
           "type": "boolean",
           "required": false,
           "description": "Switch even though the open map has unsaved changes, discarding them (default false)"
+        },
+        {
+          "name": "endPIE",
+          "type": "boolean",
+          "required": false,
+          "description": "End a running play session and switch; without it the switch is refused while one is up (default false)"
         }
       ],
       "contractExempt": "Creates the home level if missing and opens it before the contract path can fail"
@@ -27146,9 +27170,15 @@
           "type": "boolean",
           "required": false,
           "description": "Switch even though the open map has unsaved changes, discarding them (default false)"
+        },
+        {
+          "name": "endPIE",
+          "type": "boolean",
+          "required": false,
+          "description": "End a running play session (Play, Simulate, ejected or queued) and switch; without it the switch is refused while one is up (default false)"
         }
       ],
-      "contractExempt": "Ends any play session, collects garbage and swaps the open map before the contract path can fail"
+      "contractExempt": "Ends a play session when asked, collects garbage and swaps the open map before the contract path can fail"
     },
     "load_region": {
       "category": "level",
@@ -29166,6 +29196,12 @@
           "type": "boolean",
           "required": false,
           "description": "For a map: switch even though the open map has unsaved changes, discarding them (default false)"
+        },
+        {
+          "name": "endPIE",
+          "type": "boolean",
+          "required": false,
+          "description": "For a map: end a running play session and switch; without it the switch is refused while one is up (default false)"
         }
       ]
     },
@@ -39954,6 +39990,18 @@
         }
       ],
       "contractExempt": "Saves the current level under the contract values; nothing it reads fails first"
+    },
+    "save_level_as": {
+      "category": "level",
+      "params": [
+        {
+          "name": "levelPath",
+          "type": "string",
+          "required": true,
+          "description": "Long package path to save the open map under, e.g. /Game/Maps/MyLevel. Must not exist yet"
+        }
+      ],
+      "contractExempt": "Saves the open map under the contract levelPath and moves the editor onto it before anything fails"
     },
     "scale_mesh_geometry": {
       "category": "asset",

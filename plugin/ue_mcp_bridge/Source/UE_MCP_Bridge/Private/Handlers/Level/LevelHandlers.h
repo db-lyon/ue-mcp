@@ -38,6 +38,9 @@ private:
 	// path editor(save_dirty) uses, and report what happened to each package
 	// rather than one bare boolean. LevelHandlers_Save.cpp.
 	static TSharedPtr<FJsonValue> SaveLevel(const TSharedPtr<FJsonObject>& Params);
+	// #2007: save the open map, a never-saved Untitled one included, under a
+	// new package path, the editor's Save Current Level As. LevelHandlers_Save.cpp.
+	static TSharedPtr<FJsonValue> SaveLevelAs(const TSharedPtr<FJsonObject>& Params);
 	// #985: World Partition streaming settings (CellSize / LoadingRange) and the
 	// runtime cell transformer stack, whose instanced transformer object had no
 	// writable path at all. LevelHandlers_WorldPartitionSettings.cpp.
