@@ -443,6 +443,15 @@ TSharedPtr<FJsonValue> FMaterialHandlers::ImportMaterialGraph(const TSharedPtr<F
 bool FMaterialHandlers::ApplyExpressionProperties(UMaterialExpression* Expression, const TSharedPtr<FJsonObject>& Properties, FString& OutError)
 {
 	if (!Expression || !Properties.IsValid()) return true;
+	// #1946: each write is a details-panel edit (Modify, PreEditChange, write,
+	// PostEditChangeProperty), so a node that derives state from a property
+	// rebuilds it: a CollectionParameter looks its ParameterId up in the
+	// collection, a Custom node rebuilds its outputs. The notifications run
+	// after every property of the node is written, because a derivation can
+	// read a sibling: the id lookup needs Collection and ParameterName both.
+	TArray<FProperty*> Written;
+	OutError.Reset();
+	Expression->Modify();
 	for (const auto& Pair : Properties->Values)
 	{
 		const FString Key(Pair.Key);
@@ -457,16 +466,24 @@ bool FMaterialHandlers::ApplyExpressionProperties(UMaterialExpression* Expressio
 		if (!Prop)
 		{
 			OutError = FString::Printf(TEXT("%s has no property '%s'"), *Expression->GetClass()->GetName(), *Key);
-			return false;
+			break;
 		}
 		FString SetError;
+		Expression->PreEditChange(Prop);
+		Written.Add(Prop);
 		if (!MCPJsonProperty::SetJsonOnProperty(Prop, Prop->ContainerPtrToValuePtr<void>(Expression), Pair.Value, SetError))
 		{
 			OutError = FString::Printf(TEXT("property '%s': %s"), *Key, *SetError);
-			return false;
+			break;
 		}
 	}
-	return true;
+	// Every PreEditChange is balanced, on failure too.
+	for (FProperty* Prop : Written)
+	{
+		FPropertyChangedEvent Changed(Prop, EPropertyChangeType::ValueSet);
+		Expression->PostEditChangeProperty(Changed);
+	}
+	return OutError.IsEmpty();
 }
 
 
