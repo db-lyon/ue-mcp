@@ -4,6 +4,7 @@
 #include "HandlerStaticInvoke.h"
 #include "UE_MCP_BridgeModule.h"
 #include "HandlerDeferred.h"
+#include "HandlerDslPreflight.h"
 
 #include "Containers/Ticker.h"
 #include "Misc/Guid.h"
@@ -448,11 +449,7 @@ TSharedPtr<FJsonValue> FEpicHandlers::CallTool(const TSharedPtr<FJsonObject>& Pa
 	if (TSharedPtr<FJsonValue> Err = RequireString(Params, TEXT("toolset"), Toolset)) return Err;
 	FString Tool;
 	if (TSharedPtr<FJsonValue> Err = RequireString(Params, TEXT("tool"), Tool)) return Err;
-
-	if (!UEMCPEpic::RegistryClass())
-	{
-		return MCPErrorWithCode(UEMCPWire::BridgeErrorCode::ToolsetRegistryUnavailable, UEMCPEpic::UnavailableMsg);
-	}
+	const bool bAllowDestructive = OptionalBool(Params, TEXT("allowDestructive"), false);
 
 	// Build the JSON input: prefer an `input` object, fall back to `inputJson`.
 	FString Input = OptionalString(Params, TEXT("inputJson"), TEXT(""));
@@ -463,6 +460,19 @@ TSharedPtr<FJsonValue> FEpicHandlers::CallTool(const TSharedPtr<FJsonObject>& Pa
 		FJsonSerializer::Serialize((*InObj).ToSharedRef(), Writer);
 	}
 	if (Input.IsEmpty()) Input = TEXT("{}");
+
+	// #1908: a Graph DSL Write or Edit deletes what its text does not carry
+	// (loose nodes, comment boxes, collapsed graphs). Refuse that unless the
+	// caller opted in, and refuse a construction script tombstone outright.
+	if (TSharedPtr<FJsonValue> Refusal = MCPDslPreflight::GuardCall(Toolset, Tool, Input, bAllowDestructive))
+	{
+		return Refusal;
+	}
+
+	if (!UEMCPEpic::RegistryClass())
+	{
+		return MCPErrorWithCode(UEMCPWire::BridgeErrorCode::ToolsetRegistryUnavailable, UEMCPEpic::UnavailableMsg);
+	}
 
 	// ExecuteTool expects the bare tool name, but list/describe report the
 	// fully-qualified "Toolset.Tool" form. Accept either: strip the toolset
@@ -633,6 +643,7 @@ void FEpicHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Required(TEXT("tool"), EType::String, TEXT("Tool name from describe_toolset, bare or qualified with its toolset")),
 		MCPParam::Optional(TEXT("input"), EType::Object, TEXT("Tool arguments as a JSON object")),
 		MCPParam::Optional(TEXT("inputJson"), EType::String, TEXT("Tool arguments as a raw JSON string; wins over input")),
+		MCPParam::Optional(TEXT("allowDestructive"), EType::Boolean, TEXT("BlueprintDslToolset Write/Edit: apply a rewrite that deletes loose nodes, comment boxes or collapsed graphs the text does not carry (default false refuses it and lists them)")).Default(false),
 	}, MCPSpec::ContractExempt(TEXT("runs a registered engine tool")));
 
 	// Epic's Unreal MCP plugin: its own tool list and resource providers.
@@ -645,6 +656,7 @@ void FEpicHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Required(TEXT("tool"), EType::String, TEXT("Tool name from epic_list_mcp_tools")),
 		MCPParam::Optional(TEXT("input"), EType::Object, TEXT("Tool arguments as a JSON object")),
 		MCPParam::Optional(TEXT("inputJson"), EType::String, TEXT("Tool arguments as a raw JSON string; wins over input")),
+		MCPParam::Optional(TEXT("allowDestructive"), EType::Boolean, TEXT("BlueprintDslToolset Write/Edit: apply a rewrite that deletes loose nodes, comment boxes or collapsed graphs the text does not carry (default false refuses it and lists them)")).Default(false),
 	}, MCPSpec::ContractExempt(TEXT("runs a registered engine tool")));
 	Registry.RegisterHandler(TEXT("epic_list_mcp_resources"), &ListMCPResources, {});
 	Registry.RegisterHandler(TEXT("epic_read_mcp_resource"), &ReadMCPResource, {

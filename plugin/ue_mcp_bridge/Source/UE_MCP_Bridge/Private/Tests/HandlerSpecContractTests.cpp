@@ -288,6 +288,12 @@ bool FMCPHandlerSpecContractTest::RunTest(const FString& Parameters)
 				(*Handler)(Params);
 				Read = Scope.ReadKeys();
 			}
+			// #1910: for a handler under the save policy, ExecuteHandler reads save
+			// before the handler runs, and this calls the handler directly.
+			if (Registry.FollowsSavePolicy(Method))
+			{
+				Read.Add(TEXT("save"));
+			}
 
 			const FString Sent = FString::Join(Run, TEXT(", "));
 			for (const FString& Name : Run)

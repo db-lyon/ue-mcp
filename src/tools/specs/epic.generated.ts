@@ -132,6 +132,13 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "string",
         "required": false,
         "description": "Tool arguments as a raw JSON string; wins over input"
+      },
+      {
+        "name": "allowDestructive",
+        "type": "boolean",
+        "required": false,
+        "description": "BlueprintDslToolset Write/Edit: apply a rewrite that deletes loose nodes, comment boxes or collapsed graphs the text does not carry (default false refuses it and lists them)",
+        "default": false
       }
     ],
     "contractExempt": "runs a registered engine tool"
@@ -162,6 +169,13 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "string",
         "required": false,
         "description": "Tool arguments as a raw JSON string; wins over input"
+      },
+      {
+        "name": "allowDestructive",
+        "type": "boolean",
+        "required": false,
+        "description": "BlueprintDslToolset Write/Edit: apply a rewrite that deletes loose nodes, comment boxes or collapsed graphs the text does not carry (default false refuses it and lists them)",
+        "default": false
       }
     ],
     "contractExempt": "runs a registered engine tool"
@@ -269,6 +283,7 @@ export const handlerSpecs: HandlerSpecs = {
 
 /** Every key the spec'd epic handlers declare, aliases included. */
 export const schema: Record<string, z.ZodType> = {
+  allowDestructive: z.boolean().optional().describe("BlueprintDslToolset Write/Edit: apply a rewrite that deletes loose nodes, comment boxes or collapsed graphs the text does not carry (default false refuses it and lists them)"),
   conversationId: z.string().optional().describe("Conversation to use; empty or omitted starts a new one (send_message) or reads the active one (get_conversation) (epic_ai_assistant_get_conversation, epic_ai_assistant_send_message). Return only this conversation's updates (epic_ai_assistant_get_events)"),
   enabled: z.boolean().optional().describe("true turns the toolsets on, false turns them off"),
   hiddenContext: z.string().optional().describe("Context appended to the message but not shown in the panel"),

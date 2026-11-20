@@ -155,6 +155,21 @@ function exampleFor(name: string, prop: SchemaProp | undefined): string {
  * asset path, which fills the tool's one unresolved asset reference.
  */
 export const EPIC_ENVELOPE_KEYS = ["input", "inputJson"] as const;
+
+/**
+ * The Graph DSL tools that rewrite a Blueprint's graphs. epic_call_tool checks
+ * what such a rewrite would delete before it runs and refuses unless the caller
+ * passes allowDestructive (#1908).
+ */
+const DSL_REWRITE_TOOLS: ReadonlySet<string> = new Set([
+  "BlueprintToolsets.BlueprintDslToolset.Write",
+  "BlueprintToolsets.BlueprintDslToolset.Edit",
+]);
+
+/** The bridge's own switches a wrapped tool takes beside its arguments. */
+export function epicBridgeKeys(tool: { readonly name: string } | undefined): string[] {
+  return tool && DSL_REWRITE_TOOLS.has(tool.name) ? ["allowDestructive"] : [];
+}
 export const EPIC_ASSET_KEYS = ["assetPath", "path"] as const;
 
 export function resolveEpicToolInput(
@@ -220,7 +235,7 @@ export function resolveEpicToolInput(
   }
   const missing = required.filter((n) => input[n] === undefined);
   if (missing.length > 0) {
-    const known = new Set<string>([...propNames, "action", ...EPIC_ENVELOPE_KEYS]);
+    const known = new Set<string>([...propNames, "action", "allowDestructive", ...EPIC_ENVELOPE_KEYS]);
     const ignored = Object.keys(params).filter(
       (k) => !known.has(k) && params[k] !== undefined && params[k] !== null,
     );
@@ -248,7 +263,12 @@ export function epicToolCall(
   schema: EpicInputSchema | undefined,
   params: Record<string, unknown>,
 ): Record<string, unknown> {
-  return { toolset, tool, ...resolveEpicToolInput(tool, schema, params) };
+  // allowDestructive is the bridge's own switch, read by epic_call_tool's guard
+  // on Graph DSL rewrites (#1908), so it rides beside `input` rather than in it.
+  const optIn = params.allowDestructive === true && epicBridgeKeys({ name: tool }).length > 0
+    ? { allowDestructive: true }
+    : {};
+  return { toolset, tool, ...resolveEpicToolInput(tool, schema, params), ...optIn };
 }
 
 /**

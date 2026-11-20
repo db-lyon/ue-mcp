@@ -39,6 +39,13 @@ namespace MCPSharedParam
 			TEXT("When the asset already exists: skip (default) returns it untouched | error refuses; it never overwrites"));
 	}
 
+	/** The save policy's switch (#1910); FMCPHandlerRegistry::AdoptSavePolicy adds it. */
+	inline FMCPParamSpec Save()
+	{
+		return MCPParam::Optional(TEXT("save"), EMCPParamType::Boolean,
+			TEXT("Write the edited package to disk (default true). false leaves it dirty in memory and writes nothing; editor(save_dirty) saves it later")).Default(true);
+	}
+
 	inline FMCPParamSpec DryRun()
 	{
 		return MCPParam::Optional(TEXT("dryRun"), EMCPParamType::Boolean,
