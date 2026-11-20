@@ -1024,6 +1024,23 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "object",
         "required": false,
         "description": "Per-path tracked-value thresholds {path: threshold}"
+      },
+      {
+        "name": "align",
+        "type": "string",
+        "required": false,
+        "description": "auto (default) pairs a's rows with b's shifted by the row offset that best matches the two trajectories, so input landing a few frames later is not read as drift; index pairs rows by index. The result's alignment reports the offset",
+        "enum": [
+          "auto",
+          "index"
+        ]
+      },
+      {
+        "name": "max_offset_rows",
+        "type": "integer",
+        "required": false,
+        "description": "align=auto: largest shift tried, in rows either way (default 30)",
+        "minimum": 0
       }
     ]
   },
@@ -1488,7 +1505,21 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "apply",
         "type": "boolean",
         "required": false,
-        "description": "Teleport the live PIE pawn to the recorded pose (default false)"
+        "description": "Teleport the live PIE pawn to the recorded pose (default false). On a net client the server's pawn for that player moves too, so the server does not correct it back"
+      },
+      {
+        "name": "pie_instance",
+        "type": "integer",
+        "required": false,
+        "description": "With apply: FWorldContext PIEInstance whose player to move (default the active PIE world)",
+        "minimum": 0
+      },
+      {
+        "name": "client_id",
+        "type": "integer",
+        "required": false,
+        "description": "With apply: local-player index inside that PIE world (default 0)",
+        "minimum": 0
       }
     ],
     "contractExempt": "With apply it moves the live PIE pawn"
@@ -1818,14 +1849,14 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "pie_instance",
         "type": "integer",
         "required": false,
-        "description": "FWorldContext PIEInstance to observe (default the active PIE world)",
+        "description": "FWorldContext PIEInstance the run observes, and whose player act entries with no client drive and triggered steps on client 0 watch. Without it the observer takes the active PIE world and those entries take the editor's own player: the listen-server host, else the lowest PIE instance",
         "minimum": 0
       },
       {
         "name": "client_id",
         "type": "integer",
         "required": false,
-        "description": "Local-player index inside the selected PIE world (default 0)",
+        "description": "Local-player index inside that PIE world, for observing, client 0 act entries and client 0 triggered steps alike (default 0)",
         "minimum": 0
       },
       {
@@ -2409,7 +2440,8 @@ export const schema: Record<string, z.ZodType> = {
   action_path: z.string().optional().describe("InputAction asset path"),
   actions: z.array(z.string()).optional().describe("InputAction paths to record (default: every action bound on the pawn)"),
   actorLabel: z.string().optional().describe("Actor label or name in PIE"),
-  apply: z.boolean().optional().describe("Teleport the live PIE pawn to the recorded pose (default false)"),
+  align: z.enum(["auto","index"]).optional().describe("auto (default) pairs a's rows with b's shifted by the row offset that best matches the two trajectories, so input landing a few frames later is not read as drift; index pairs rows by index. The result's alignment reports the offset"),
+  apply: z.boolean().optional().describe("Teleport the live PIE pawn to the recorded pose (default false). On a net client the server's pawn for that player moves too, so the server does not correct it back"),
   apply_rng_seed: z.boolean().optional().describe("Re-apply the recorded seed (default true)"),
   assertions: z.array(z.record(z.string(), z.unknown())).optional().describe("Predicates {name, channel|event, op, value|min+max|tol, hold, from_s, to_s, within_s, after_event, severity}; omitted reads test_path's predicates"),
   at_frame: z.number().int().min(0).optional().describe("Frame index to sample, instead of at_time"),
@@ -2427,7 +2459,7 @@ export const schema: Record<string, z.ZodType> = {
   channel: z.string().optional().describe("Collision channel, including project-renamed channels (default Visibility)"),
   channels: z.string().optional().describe("series: comma-separated columns (default: every t:* plus speed2d, gpu_ms, game_ms)"),
   client: z.number().int().optional().describe("Remote player 1..N (join order) (pie_console). 1..N relays to that remote player (join order) over the game connection, including separate-process clients; 0 or absent uses the local player (pie_inject_input, pie_inject_input_start, pie_inject_input_tape)"),
-  client_id: z.number().int().min(0).optional().describe("Local-player index inside the selected PIE world (default 0)"),
+  client_id: z.number().int().min(0).optional().describe("Local-player index inside the selected PIE world (default 0) (pie_inject_input, pie_inject_input_start, pie_inject_input_tape, pie_observe_arm, pie_record_arm, pie_replay_arm, pie_replay_run, pie_script_replay). With apply: local-player index inside that PIE world (default 0) (pie_replay_state). Local-player index inside that PIE world, for observing, client 0 act entries and client 0 triggered steps alike (default 0) (pie_script_run)"),
   command: z.string().optional().describe("Console command"),
   confirm: z.boolean().optional().describe("Must be true to delete"),
   contains: z.string().optional().describe("Substring the message must contain"),
@@ -2462,6 +2494,7 @@ export const schema: Record<string, z.ZodType> = {
   map: z.string().optional().describe("Level the script plays in, as a package or object path such as /Game/Maps/L_Arena. A run opens it before PIE and refuses when the open level has unsaved changes; empty plays whatever level is open (pie_script_create). Level to open before PIE; overrides the script's. Mode manual leaves the open level as it is (pie_script_run). Level the script plays in; empty clears it (pie_script_update). Level the script would play in (pie_script_validate)"),
   max_errors: z.number().int().min(0).optional().describe("no-errors predicate threshold (default 0) (pie_scenario_scaffold). Most errors logged during the run (default 0) (pie_test_scaffold)"),
   max_message_chars: z.number().int().min(0).optional().describe("Longest message returned; longer ones are cut and marked truncated (default 500, 0 for no limit)"),
+  max_offset_rows: z.number().int().min(0).optional().describe("align=auto: largest shift tried, in rows either way (default 30)"),
   max_points: z.number().int().min(1).optional().describe("series: most values per channel (default 500)"),
   max_position_drift_cm: z.number().optional().describe("Most position drift allowed (default 10)"),
   max_rotation_drift_deg: z.number().optional().describe("Most rotation drift allowed (default 5)"),
@@ -2475,7 +2508,7 @@ export const schema: Record<string, z.ZodType> = {
   output_dir: z.string().optional().describe("Observation root (default Saved/MCPObservations)"),
   package_path: z.string().optional().describe("Content folder (default /Game/Observation) (pie_profile_create). Package folder (default /Game/PIEStudio/Scripts) (pie_script_create)"),
   path: z.string().optional().describe("Profile asset path (pie_profile_delete, pie_profile_read, pie_profile_update). Test script asset path (pie_script_delete, pie_script_read, pie_script_update). Scenario JSON file, relative to the project directory (pie_uat_run)"),
-  pie_instance: z.number().int().min(0).optional().describe("FWorldContext::PIEInstance, a non-negative integer. Omitted picks the active PlayWorld, then the first PIE world with the player; an explicit value never falls back (pie_inject_input, pie_inject_input_start, pie_inject_input_tape, pie_observe_arm, pie_record_arm, pie_replay_arm, pie_replay_run). FWorldContext PIEInstance to observe (default the active PIE world) (pie_script_replay, pie_script_run)"),
+  pie_instance: z.number().int().min(0).optional().describe("FWorldContext::PIEInstance, a non-negative integer. Omitted picks the active PlayWorld, then the first PIE world with the player; an explicit value never falls back (pie_inject_input, pie_inject_input_start, pie_inject_input_tape, pie_observe_arm, pie_record_arm, pie_replay_arm, pie_replay_run). With apply: FWorldContext PIEInstance whose player to move (default the active PIE world) (pie_replay_state). FWorldContext PIEInstance to observe (default the active PIE world) (pie_script_replay). FWorldContext PIEInstance the run observes, and whose player act entries with no client drive and triggered steps on client 0 watch. Without it the observer takes the active PIE world and those entries take the editor's own player: the listen-server host, else the lowest PIE instance (pie_script_run)"),
   pieInstance: z.number().int().min(0).optional().describe("FWorldContext::PIEInstance, a non-negative integer. Omitted picks the active PlayWorld, then the first PIE world with the player; an explicit value never falls back (pie_drive_pawn). PIE instance id; omitted selects the active PIE world (pie_view_trace)"),
   pin_fps: z.number().int().optional().describe("Pin PIE fps while observing (pie_observe_arm). Pin PIE fps for reproducibility (default sample_hz) (pie_record_arm). Pin PIE fps during replay (pie_replay_arm, pie_replay_run)"),
   planar: z.boolean().optional().describe("Steer and measure arrival on the XY plane (default true); false for flying or swimming pawns"),

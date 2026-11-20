@@ -4,6 +4,7 @@
 #include "Handlers/PIE/PIEHandlers.h"
 #include "HandlerUtils.h"
 #include "Handlers/PIE/PIERemotePlayers.h"
+#include "Handlers/PIE/PIEWorldResolver.h"
 #include "MCPPIERemoteControl.h"
 #include "Editor.h"
 #include "Engine/Engine.h"
@@ -33,8 +34,10 @@ TSharedPtr<FJsonValue> FPIEHandlers::PieClients(const TSharedPtr<FJsonObject>& P
 		: Server->GetNetMode() == NM_ListenServer ? TEXT("listen_server") : TEXT("dedicated_server"));
 	Result->SetBoolField(TEXT("host_player"), Server && Server->GetNetMode() == NM_ListenServer);
 	Result->SetArrayField(TEXT("clients"), Players);
+	// The pie_instance and client_id numbers inject_input and script_run take, per world.
+	Result->SetArrayField(TEXT("pie_worlds"), MCPPIE::PIEWorldResolver::DescribePlayWorlds());
 	Result->SetStringField(TEXT("addressing"),
-		TEXT("client 0 = the editor's own player (listen server); clients 1..N = remote players in join order"));
+		TEXT("client 0 = the editor's own player (the listen-server host, else the lowest PIE instance's player); clients 1..N = remote players in join order"));
 	return MCPResult(Result);
 }
 

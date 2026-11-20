@@ -138,6 +138,8 @@ namespace MCPPIE
 		// While waiting: what the replay is waiting on (no player target, no
 		// pawn, or the start_when gate).
 		FString WaitingFor;
+		// Where the frame-0 teleport landed: authority, server and client, or not moved with the reason.
+		FString StartAlignment;
 	};
 
 	struct FLiveReplaySnapshot
@@ -199,6 +201,12 @@ namespace MCPPIE
 		void ExecutePendingUISteps(double UIElapsedMs);
 		void ApplyFPSPin(UWorld* PIEWorld, int32 Hz);
 		bool UpdateStartGate(UWorld* PIEWorld, double Now, FString& OutBlocker);
+		// The target local player's controller as it is now, else the one resolved at attach.
+		APlayerController* CurrentTargetController();
+		// The pawn the target player controls in PIEWorld, or null.
+		APawn* CurrentTargetPawn(UWorld* PIEWorld);
+		// "pie_instance N local player L in <world> (<net mode>)": which player a wait searched.
+		FString DescribeTarget() const;
 
 		// Source recording's per-frame pawn state for drift comparison.
 		// Sparse rows: only fields needed for drift; populated by ReadSourceCSV.
@@ -237,6 +245,7 @@ namespace MCPPIE
 		TWeakObjectPtr<UWorld> TargetWorld;
 		TWeakObjectPtr<APlayerController> TargetPlayerController;
 		TWeakObjectPtr<ULocalPlayer> TargetLocalPlayer;
+		FString StartAlignment;
 		int32 ResolvedPIEInstance = INDEX_NONE;
 		bool bTargetResolved = false;
 		double TargetResolveStartSeconds = 0.0;

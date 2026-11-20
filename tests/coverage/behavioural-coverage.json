@@ -4701,6 +4701,16 @@
           "suite": "live",
           "file": "tests/live/bcov-editor-diagnostics.test.ts",
           "test": "configure_pie writes the client count get_pie_config reads, and its rollback restores it"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/pie-multiplayer-scripts.test.ts",
+          "test": "starts with the host and a joined client"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/pie-multiplayer-scripts.test.ts",
+          "test": "starts with two joined clients and no host player"
         }
       ]
     },
@@ -16681,6 +16691,16 @@
           "suite": "live",
           "file": "tests/live/bcov-pie-assets.test.ts",
           "test": "clients reports a session that is not networked"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/pie-multiplayer-scripts.test.ts",
+          "test": "starts with the host and a joined client"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/pie-multiplayer-scripts.test.ts",
+          "test": "starts with two joined clients and no host player"
         }
       ]
     },
@@ -16937,6 +16957,26 @@
           "suite": "live",
           "file": "tests/live/pie-drive-pawn.test.ts",
           "test": "driving the PIE player"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/pie-multiplayer-scripts.test.ts",
+          "test": "a replay's start_when opens on a client of the dedicated server, which starts from the recorded spot (#2011, #2010)"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/pie-multiplayer-scripts.test.ts",
+          "test": "starts with the host and a joined client"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/pie-multiplayer-scripts.test.ts",
+          "test": "starts with two joined clients and no host player"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/pie-multiplayer-scripts.test.ts",
+          "test": "stops"
         },
         {
           "suite": "live",
@@ -17359,6 +17399,11 @@
           "suite": "live",
           "file": "tests/live/bcov-pie-session.test.ts",
           "test": "record_diff of a recording against itself finds no drift"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/pie-multiplayer-scripts.test.ts",
+          "test": "auto shifts b by the rows its input landed late and reports the offset; index pairs rows as before"
         }
       ]
     },
@@ -17549,6 +17594,11 @@
           "suite": "live",
           "file": "tests/live/bcov-pie-session.test.ts",
           "test": "replay_stop ends a replay in flight"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/pie-multiplayer-scripts.test.ts",
+          "test": "a replay's start_when opens on a client of the dedicated server, which starts from the recorded spot (#2011, #2010)"
         }
       ]
     },
@@ -17572,6 +17622,11 @@
           "suite": "live",
           "file": "tests/live/bcov-pie-session.test.ts",
           "test": "replay_state without apply reads the recorded pose at a frame"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/pie-multiplayer-scripts.test.ts",
+          "test": "replay_state apply moves the server's pawn for that client too (#2010)"
         }
       ]
     },
@@ -17595,6 +17650,11 @@
           "suite": "live",
           "file": "tests/live/bcov-pie-session.test.ts",
           "test": "replay_stop ends a replay in flight"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/pie-multiplayer-scripts.test.ts",
+          "test": "a replay's start_when opens on a client of the dedicated server, which starts from the recorded spot (#2011, #2010)"
         }
       ]
     },
@@ -17968,6 +18028,26 @@
         },
         {
           "suite": "live",
+          "file": "tests/live/pie-multiplayer-scripts.test.ts",
+          "test": "an act with no client drives the first client window, and script_run's pie_instance another client (#1814, #2012)"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/pie-multiplayer-scripts.test.ts",
+          "test": "an act with no client drives the host's own player, and client 1 the remote player (#1814)"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/pie-multiplayer-scripts.test.ts",
+          "test": "place on client 0 moves the server's pawn, so the client stays where it was put (#2010)"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/pie-multiplayer-scripts.test.ts",
+          "test": "replay_state apply moves the server's pawn for that client too (#2010)"
+        },
+        {
+          "suite": "live",
           "file": "tests/live/pie-script-place-delete.test.ts",
           "test": "a place act puts the pawn at a location written as {x, y, z} or as [x, y, z]"
         },
@@ -18056,6 +18136,26 @@
           "suite": "live",
           "file": "tests/live/bcov-pie-scripts.test.ts",
           "test": "verdict with source agent needs evidence, honours agent_judgeable, and is counted apart from human verdicts"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/pie-multiplayer-scripts.test.ts",
+          "test": "an act with no client drives the first client window, and script_run's pie_instance another client (#1814, #2012)"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/pie-multiplayer-scripts.test.ts",
+          "test": "an act with no client drives the host's own player, and client 1 the remote player (#1814)"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/pie-multiplayer-scripts.test.ts",
+          "test": "place on client 0 moves the server's pawn, so the client stays where it was put (#2010)"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/pie-multiplayer-scripts.test.ts",
+          "test": "replay_state apply moves the server's pawn for that client too (#2010)"
         },
         {
           "suite": "live",
