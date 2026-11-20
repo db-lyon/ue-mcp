@@ -55,6 +55,8 @@ The matte uses the renderer's scene-colour inverse-opacity channel. Material tra
 
 The call waits while a native job advances on real editor frames. It yields after loading, before skeletal component registration, and waits for shaders and, by default, requested texture mips before capturing. `fullyLoadTextures=false` skips the mip-residency wait. Each item has a 60-second readiness budget and the batch has a 540-second budget. A cold project with substantial shader compilation can report blocked items; retry after compilation settles.
 
+The editor compiles a material's shaders when something first draws with them, so a material instance that overrides a static switch can sit with an incomplete shader map while nothing is compiling. Once the compiler is idle, the job compiles what such a material lacks and waits for it. A material still incomplete after that is drawn if its shader map compiled without errors, and the item's outcome lists it under `incompleteShaderMaps`. A blocked item's `reason` names the material or texture it was waiting on.
+
 The batch accepts 1-128 items, each with at most 64 parts. An id is a unique filename stem of 1-100 ASCII letters, digits, underscores or hyphens. Case-insensitive duplicates and Windows device names are refused before starting. Outputs are `<outputDir>/<id>.png`; a repeated id in a later batch overwrites that PNG. Relative output directories resolve against the project directory.
 
 The result contains `jobId`, `state`, `outcomes`, `rendered`, `blocked`, `errors`, `manifest`, `cleanupComplete`, `dirtyPackagesBefore`, `dirtyPackagesAfter` and `dirtyPackagesUnchanged`. The job-specific `mesh-studio-<jobId>.json` manifest is written at startup, after each item and after cleanup. Each outcome contains:

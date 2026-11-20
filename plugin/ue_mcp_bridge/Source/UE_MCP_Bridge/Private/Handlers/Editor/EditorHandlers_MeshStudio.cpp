@@ -16,6 +16,7 @@
 #include "Engine/Texture.h"
 #include "Engine/TextureCube.h"
 #include "Materials/MaterialInterface.h"
+#include "MaterialShared.h"
 #include "Misc/App.h"
 #include "Misc/CoreDelegates.h"
 #include "RHI.h"
@@ -284,7 +285,9 @@ namespace MeshStudioRender
 			if (Index == Items.Num()) { Finish(TEXT("completed")); return; }
 			if (Stage != EStage::Load && FPlatformTime::Seconds() - ItemStartedAt > ItemBudgetSeconds)
 			{
-				EndItem(TEXT("blocked"), TEXT("Mesh, shader or requested texture mips did not become ready within 60s")); return;
+				EndItem(TEXT("blocked"), WaitingOn.IsEmpty()
+					? FString(TEXT("Mesh, shader or requested texture mips did not become ready within 60s"))
+					: FString::Printf(TEXT("Not ready within 60s: still waiting on %s"), *WaitingOn)); return;
 			}
 			FString Error;
 			switch (Stage)
@@ -312,9 +315,7 @@ namespace MeshStudioRender
 				USkyLightComponent::UpdateSkyCaptureContents(World);
 				World->SendAllEndOfFrameUpdates();
 				if (WarmupFrames++ < 3) return;
-				for (UMeshComponent* Mesh : Meshes)
-					for (UMaterialInterface* Material : Mesh->GetMaterials())
-						if (Material && !Material->IsComplete()) return;
+				if (!MaterialsReady()) return;
 				if (bFullyLoadTextures)
 				{
 					// Re-query after material compilation so the final texture set,
@@ -323,7 +324,11 @@ namespace MeshStudioRender
 					for (UTexture* Texture : Textures)
 					{
 						Texture->SetForceMipLevelsToBeResident(60.0f);
-						if (Texture->IsCompiling() || !Texture->IsFullyStreamedIn()) return;
+						if (Texture->IsCompiling() || !Texture->IsFullyStreamedIn())
+						{
+							WaitingOn = FString::Printf(TEXT("texture %s streaming in its mips"), *Texture->GetPathName());
+							return;
+						}
 					}
 				}
 				if (!FitCamera(Error)) { EndItem(TEXT("error"), Error); return; }
@@ -357,6 +362,10 @@ namespace MeshStudioRender
 		EStage Stage = EStage::Load;
 		int32 Index = 0;
 		int32 WarmupFrames = 0;
+		/** What the current item is waiting for, named in its outcome if the wait runs out. */
+		FString WaitingOn;
+		/** The missing shaders of this item's materials have been compiled once on request. */
+		bool bShadersRequested = false;
 		uint64 LastFrame = MAX_uint64;
 		double StartedAt = FPlatformTime::Seconds();
 		double ItemStartedAt = 0;
@@ -388,6 +397,8 @@ namespace MeshStudioRender
 		void BeginItem()
 		{
 			ItemStartedAt = FPlatformTime::Seconds();
+			WaitingOn.Reset();
+			bShadersRequested = false;
 			const FItem& Item = Items[Index];
 			Outcome = MakeShared<FJsonObject>();
 			Outcome->SetStringField(TEXT("id"), Item.Id);
@@ -432,6 +443,56 @@ namespace MeshStudioRender
 			Textures.Reset();
 			Assets.Reset();
 			FirstPixels.Reset();
+		}
+
+		/** True once every material on the item can draw. IsComplete() alone never opens for an instance
+		 *  that overrides a static switch: the editor compiles a shader map's shaders on demand, when
+		 *  something draws with them, so the permutation's map stays incomplete while nothing is compiling
+		 *  (#1992). Once nothing is compiling, EnsureIsComplete submits the missing shaders and waits for
+		 *  them, as the engine does for tools that cannot draw a fallback. A material still incomplete after
+		 *  that is drawn if its shader map is valid, and named in the outcome; one with no valid shader map
+		 *  would draw as the default material, and keeps the item waiting. */
+		bool MaterialsReady()
+		{
+			TArray<UMaterialInterface*> Incomplete;
+			for (UMeshComponent* Mesh : Meshes)
+			{
+				for (UMaterialInterface* Material : Mesh->GetMaterials())
+				{
+					if (!Material || Material->IsComplete()) continue;
+					if (Material->IsCompiling())
+					{
+						WaitingOn = FString::Printf(TEXT("material %s compiling its shaders"), *Material->GetPathName());
+						return false;
+					}
+					Incomplete.AddUnique(Material);
+				}
+			}
+			if (Incomplete.IsEmpty()) return true;
+			WaitingOn = FString::Printf(TEXT("material %s, whose shader map is incomplete"), *Incomplete[0]->GetPathName());
+			if (!bShadersRequested)
+			{
+				for (UMaterialInterface* Material : Incomplete) Material->EnsureIsComplete();
+				bShadersRequested = true;
+				return false;
+			}
+
+			TArray<TSharedPtr<FJsonValue>> Accepted;
+			for (UMaterialInterface* Material : Incomplete)
+			{
+				// A shader map that compiled without errors is what draws; one never completed is never
+				// finalized, so HasValidGameThreadShaderMap reads false for it.
+				const FMaterialResource* Resource = Material->GetMaterialResource(GMaxRHIShaderPlatform);
+				if (!Resource || !Resource->GetGameThreadShaderMap() || Resource->GetCompileErrors().Num() > 0)
+				{
+					WaitingOn = FString::Printf(TEXT("material %s, which has no valid shader map and would draw as the default material"), *Material->GetPathName());
+					return false;
+				}
+				Accepted.Add(MakeShared<FJsonValueString>(Material->GetPathName()));
+			}
+			// Said in the outcome, so a picture that looks wrong can be traced to the material.
+			Outcome->SetArrayField(TEXT("incompleteShaderMaps"), Accepted);
+			return true;
 		}
 
 		void EndItem(const FString& Status, const FString& Reason = FString())
