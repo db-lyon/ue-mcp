@@ -117,7 +117,7 @@ beforeAll(async () => {
   await call("save_asset", { assetPath: DT });
   await call("create_material", { name: "M_CkDoomed", packagePath: DIR });
   await call("save_asset", { assetPath: DOOMED });
-  await call("create_new_level", { levelPath: LEVEL });
+  await call("create_new_level", { levelPath: LEVEL, discardUnsaved: true });
   expect((await call("get_current_level")).mapPackagePath).toBe(LEVEL);
   await call("place_actor", { actorClass: "PointLight", label: "CkMover", location: { x: 0, y: 0, z: 100 } });
   await call("place_actor", { actorClass: "PointLight", label: "CkDoomed", location: { x: 300, y: 0, z: 100 } });

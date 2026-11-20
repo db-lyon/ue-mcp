@@ -7,6 +7,7 @@
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
 #include "HandlerJsonProperty.h"
+#include "HandlerMaterialCompile.h"
 #include "JsonSerializer.h"
 #include "Materials/Material.h"
 #include "Materials/MaterialInstanceConstant.h"
@@ -174,6 +175,9 @@ TSharedPtr<FJsonValue> FMaterialHandlers::ConnectTextureToMaterial(const TShared
 	// source/target expressions if idempotency is required.
 	UMaterialExpressionTextureSample* TextureSampleExpr = NewObject<UMaterialExpressionTextureSample>(Material);
 	TextureSampleExpr->Texture = Texture;
+	// The sampler type the texture needs; the node's default (Color) does not
+	// compile against a linear, normal or mask texture.
+	TextureSampleExpr->AutoSetSampleType();
 	TextureSampleExpr->MaterialExpressionEditorX = -400;
 	TextureSampleExpr->MaterialExpressionEditorY = 0;
 
@@ -222,6 +226,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::ConnectTextureToMaterial(const TShared
 			*PreviousPropertyExpression->GetName(), PreviousPropertyOutputIndex));
 	}
 
+	MCPMaterialCompile::Report(Result, Material, MCPMaterialCompile::Finish(Material), MCPMaterialCompile::EOnError::Warn);
 	return MCPResult(Result);
 }
 
@@ -332,6 +337,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::ConnectMaterialExpressions(const TShar
 			TargetInputIndex, *TargetExpressionName));
 	}
 
+	MCPMaterialCompile::Report(Result, Material, MCPMaterialCompile::Finish(Material), MCPMaterialCompile::EOnError::Warn);
 	return MCPResult(Result);
 }
 
@@ -415,6 +421,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::ConnectToMaterialProperty(const TShare
 	Payload->SetStringField(TEXT("property"), PropertyName);
 	MCPSetRollback(Result, TEXT("disconnect_material_property"), Payload);
 
+	MCPMaterialCompile::Report(Result, Material, MCPMaterialCompile::Finish(Material), MCPMaterialCompile::EOnError::Warn);
 	return MCPResult(Result);
 }
 
@@ -550,6 +557,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::DeleteMaterialExpression(const TShared
 		TEXT("The rollback adds a fresh %s at the same position, with default values and no wiring. It does NOT restore this node's authored property values, and it does NOT restore the %d expression input(s) and %d material property input(s) listed in severedExpressionInputs / severedProperties - rewire those with connect_material_expressions and connect_to_material_property. The replacement also gets a new engine name, so anything that addressed this node by name has to be re-pointed."),
 		*DeletedClass, SeveredWires.Num(), SeveredProperties.Num()));
 
+	MCPMaterialCompile::Report(Result, Material, MCPMaterialCompile::Finish(Material), MCPMaterialCompile::EOnError::Warn);
 	return MCPResult(Result);
 }
 
@@ -658,6 +666,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::DisconnectMaterialProperty(const TShar
 			TEXT("'%s' was already unconnected, so this call changed nothing and there is no inverse to run."), *PropertyName));
 	}
 
+	MCPMaterialCompile::Report(Result, Material, MCPMaterialCompile::Finish(Material), MCPMaterialCompile::EOnError::Warn);
 	return MCPResult(Result);
 }
 

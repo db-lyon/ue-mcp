@@ -129,6 +129,7 @@ void FDemoHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPSpec::ContractExempt(TEXT("Takes no parameters and acts unconditionally: switches levels and deletes the demo scene")));
 	Registry.RegisterHandler(TEXT("demo_go_home"), &DemoGoHome, {
 		MCPParam::Optional(TEXT("discardUnsaved"), EType::Boolean, TEXT("Switch even though the open map has unsaved changes, discarding them (default false)")),
+		MCPParam::Optional(TEXT("endPIE"), EType::Boolean, TEXT("End a running play session and switch; without it the switch is refused while one is up (default false)")),
 	}, MCPSpec::ContractExempt(TEXT("Creates the home level if missing and opens it before the contract path can fail")));
 }
 
@@ -160,8 +161,20 @@ bool FDemoHandlers::EnsureHomeLevelLoaded(FString& OutError, EMCPHomeDiscard Dis
 		return true;
 	}
 
+	// The switch would end a running play session; demo_go_home ends it first
+	// when asked to, so reaching here with one up means nobody asked (#1912).
+	// Checked after the unsaved-changes refusal and before anything is discarded.
+	const auto RefusePlaySession = [&OutError]()
+	{
+		if (!MCPLevelSwitch::IsPlaySessionActive()) return false;
+		OutError = FString::Printf(TEXT("A play session (%s) is running, and switching to %s would end it, so the editor was left where it is. %s"),
+			*MCPLevelSwitch::PlaySessionMode(), *DemoConstants::HOME_LEVEL, *MCPStopPlayInEditorStep());
+		return true;
+	};
+
 	const TArray<UPackage*> Dirty = MCPLevelSwitch::CollectDirtyPackages(GetEditorWorld());
 	const TArray<FString> DirtyNames = MCPLevelSwitch::PackageNames(Dirty);
+	if (DirtyNames.Num() == 0 && RefusePlaySession()) return false;
 	if (DirtyNames.Num() > 0)
 	{
 		TArray<FString> NotDiscardable;
@@ -186,6 +199,7 @@ bool FDemoHandlers::EnsureHomeLevelLoaded(FString& OutError, EMCPHomeDiscard Dis
 					: TEXT(" with level(save) or editor(save_dirty)"));
 			return false;
 		}
+		if (RefusePlaySession()) return false;
 		const TArray<FString> StillDirty = MCPLevelSwitch::DiscardChanges(Dirty);
 		if (StillDirty.Num() > 0)
 		{
@@ -253,6 +267,22 @@ TSharedPtr<FJsonValue> FDemoHandlers::DemoGoHome(const TSharedPtr<FJsonObject>& 
 	}
 
 	const bool bDiscardUnsaved = OptionalBool(Params, TEXT("discardUnsaved"), false);
+	// Switching home replaces the editor world, which ends a play session, so
+	// it is refused unless the caller asked for that (#1912). Already standing
+	// in the home level switches nothing and needs no session ended.
+	bool bEndedPlaySession = false;
+	if (MCPLevelSwitch::IsPlaySessionActive() && MCPLevelSwitch::OpenMapPackageName() != DemoConstants::HOME_LEVEL)
+	{
+		if (!OptionalBool(Params, TEXT("endPIE"), false))
+		{
+			TSharedPtr<FJsonObject> Refusal = MCPLevelSwitch::PlaySessionRefusal(FString::Printf(TEXT("switching to %s"), *DemoConstants::HOME_LEVEL));
+			Refusal->SetStringField(TEXT("openMap"), MCPLevelSwitch::OpenMapPackageName());
+			return MCPResult(Refusal);
+		}
+		// A refusal over unsaved changes, which comes next, must leave the session running.
+		const bool bDirtyRefusalComing = !bDiscardUnsaved && MCPLevelSwitch::CollectDirtyPackages(GetEditorWorld()).Num() > 0;
+		if (!bDirtyRefusalComing) bEndedPlaySession = MCPLevelSwitch::EndPlaySession();
+	}
 	FString Err;
 	TArray<FString> Dirty;
 	TArray<FString> Discarded;
@@ -262,10 +292,13 @@ TSharedPtr<FJsonValue> FDemoHandlers::DemoGoHome(const TSharedPtr<FJsonObject>& 
 		if (Dirty.Num() > 0) Refusal->SetArrayField(TEXT("dirtyPackages"), MCPStringListToJson(Dirty));
 		Refusal->SetStringField(TEXT("openMap"), MCPLevelSwitch::OpenMapPackageName());
 		if (Discarded.Num() > 0) Refusal->SetArrayField(TEXT("discardedPackages"), MCPStringListToJson(Discarded));
+		Refusal->SetBoolField(TEXT("playSessionActive"), MCPLevelSwitch::IsPlaySessionActive());
+		Refusal->SetBoolField(TEXT("endedPlaySession"), bEndedPlaySession);
 		return MCPResult(Refusal);
 	}
 	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("levelPath"), DemoConstants::HOME_LEVEL);
+	Result->SetBoolField(TEXT("endedPlaySession"), bEndedPlaySession);
 	// Said whichever way it went, so a caller never has to infer that unsaved work was dropped.
 	Result->SetArrayField(TEXT("discardedPackages"), MCPStringListToJson(Discarded));
 	Result->SetStringField(TEXT("previousLevelPath"), PreviousLevelPath);
@@ -758,6 +791,28 @@ TSharedPtr<FJsonObject> FDemoHandlers::StepCreateLevel()
 	if (!LevelSub)
 	{
 		return DemoStepFailed(Result, TEXT("LevelEditorSubsystem not available"));
+	}
+
+	// Opening the demo level replaces the editor world. A play session or
+	// unsaved work outside the demo would be lost without being asked, so the
+	// step stops and names the call that clears the way (#1912).
+	if (MCPLevelSwitch::OpenMapPackageName() != DemoConstants::DEMO_LEVEL)
+	{
+		if (MCPLevelSwitch::IsPlaySessionActive())
+		{
+			return DemoStepFailed(Result, FString::Printf(
+				TEXT("A play session (%s) is running, and opening %s would end it. Run demo_go_home with endPIE=true, or %s"),
+				*MCPLevelSwitch::PlaySessionMode(), *DemoConstants::DEMO_LEVEL, *MCPStopPlayInEditorStep()));
+		}
+		TArray<FString> Unsaved = MCPLevelSwitch::PackageNames(MCPLevelSwitch::CollectDirtyPackages(GetEditorWorld()));
+		Unsaved.RemoveAll([](const FString& Name) { return DemoHome::IsDemoPackage(Name); });
+		if (Unsaved.Num() > 0)
+		{
+			Result->SetArrayField(TEXT("dirtyPackages"), MCPStringListToJson(Unsaved));
+			return DemoStepFailed(Result, FString::Printf(
+				TEXT("The open map has %d unsaved package(s) that opening %s would discard. Save them with level(save), or drop them with demo_go_home(discardUnsaved=true), then run the step again."),
+				Unsaved.Num(), *DemoConstants::DEMO_LEVEL));
+		}
 	}
 
 	UEditorAssetLibrary::MakeDirectory(DemoConstants::MAT_DIR);

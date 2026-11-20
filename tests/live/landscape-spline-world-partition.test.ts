@@ -34,7 +34,7 @@ beforeAll(async () => {
   originalMap = body(await callBridge(bridge, "get_current_level", {})).mapPackagePath as string | undefined;
   await call("demo_go_home");
   await callBridge(bridge, "delete_asset", { assetPath: MAP, force: true });
-  const created = await call("create_new_level", { levelPath: MAP, worldPartition: true });
+  const created = await call("create_new_level", { levelPath: MAP, worldPartition: true, discardUnsaved: true });
   expect(created.worldPartition).toBe(true);
   const landscape = await call("create_landscape", {
     label: "LspWP_Landscape", location: { x: 0, y: 0, z: 0 },
