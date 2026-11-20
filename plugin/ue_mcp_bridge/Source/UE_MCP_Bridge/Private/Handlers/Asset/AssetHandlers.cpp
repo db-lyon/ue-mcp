@@ -9,6 +9,7 @@
 #include "HandlerJsonProperty.h"
 #include "HandlerPropertyText.h"
 #include "HandlerAssetCreate.h"
+#include "HandlerTextureSamplers.h"
 #include "Handlers/Dialog/DialogHandlers.h"
 #include "JsonSerializer.h"
 #include "AssetRegistry/AssetRegistryModule.h"
@@ -719,8 +720,9 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("neverStream"), EType::Boolean, TEXT("Keep every mip resident")),
 		MCPParam::Optional(TEXT("flipGreenChannel"), EType::Boolean, TEXT("Flip the normal green channel; normal preset defaults to false")),
 		MCPParam::Optional(TEXT("maxTextureSize"), EType::Integer, TEXT("Maximum texture size; 0 uses the source size")).Range(0, 32768),
-		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save changed textures (default false; otherwise leave the packages dirty)")).Default(false),
-		MCPSharedParam::DryRun().Describe(TEXT("Validate and report without importing, writing or saving (default false)")),
+		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save changed textures, and materials whose sampler type was fixed (default false; otherwise leave the packages dirty)")).Default(false),
+		MCPParam::Optional(TEXT("fixSamplers"), EType::Boolean, TEXT("Set each material node sampling a changed texture to the sampler type it now needs (default true); the affected materials recompile once either way")).Default(true),
+		MCPSharedParam::DryRun().Describe(TEXT("Validate and report without importing, writing or saving; samplerFixes lists what fixSamplers would change (default false)")),
 	}, MCPSpec::ExactlyOne({ { TEXT("assetPath") }, { TEXT("assetPaths") } }));
 
 	// Mesh handlers
@@ -810,6 +812,7 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	});
 	Registry.RegisterHandler(TEXT("set_texture_settings_by_type"), &SetTextureSettingsByType, {
 		MCPParam::Required(TEXT("groups"), EType::Object, TEXT("Texture paths per profile: {normal?, grayscale?, baseColor?, hdr?}")),
+		MCPParam::Optional(TEXT("fixSamplers"), EType::Boolean, TEXT("Set each material node sampling a changed texture to the sampler type it now needs (default true); the affected materials recompile once either way")).Default(true),
 	});
 	Registry.RegisterHandler(TEXT("create_interchange_pipeline"), &CreateInterchangePipeline, {
 		MCPParam::Optional(TEXT("assetPath"), EType::String, TEXT("Object path of the new pipeline")),
@@ -5843,6 +5846,8 @@ TSharedPtr<FJsonValue> FAssetHandlers::SetTextureSettingsByType(const TSharedPtr
 	// bulk_set_asset_properties rejects a duplicate assetPath.
 	TArray<TSharedPtr<FJsonValue>> RollbackItems;
 	TSet<FString> RollbackSeen;
+	const bool bFixSamplers = OptionalBool(Params, TEXT("fixSamplers"), true);
+	TArray<UTexture*> ChangedTextures;
 
 	for (const auto& Pair : (*GroupsObj)->Values)
 	{
@@ -5897,6 +5902,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::SetTextureSettingsByType(const TSharedPtr
 			Tex->LODGroup = Profile->LodGroup;
 			Tex->PostEditChange();
 			Tex->MarkPackageDirty();
+			ChangedTextures.AddUnique(Tex);
 			TSharedPtr<FJsonObject> U = MakeShared<FJsonObject>();
 			U->SetStringField(TEXT("path"), Tex->GetPathName());
 			U->SetStringField(TEXT("group"), Group);
@@ -5947,6 +5953,12 @@ TSharedPtr<FJsonValue> FAssetHandlers::SetTextureSettingsByType(const TSharedPtr
 	{
 		Result->SetBoolField(TEXT("rollbackPossible"), false);
 		Result->SetStringField(TEXT("rollbackNote"), TEXT("No texture was written, so there is nothing to undo."));
+	}
+	// The materials sampling these textures, once for the whole batch (#1994).
+	// Like the textures, a material whose sampler type changed is left dirty.
+	if (ChangedTextures.Num() > 0)
+	{
+		MCPTextureSamplers::UpdateMaterialsForTextures(Result, ChangedTextures, bFixSamplers, /*bDryRun*/ false, /*bSave*/ false);
 	}
 	return MCPResult(Result);
 }
