@@ -835,6 +835,11 @@
         },
         {
           "suite": "automation",
+          "file": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Tests/BlueprintParameterRenameTests.cpp",
+          "test": "UE.MCP.Blueprint.EditGraphParameters.RenamePersists"
+        },
+        {
+          "suite": "automation",
           "file": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Tests/BlueprintTransactionalNodeTests.cpp",
           "test": "UE.MCP.Blueprint.TransactionalNodes.BlueprintHandlers"
         },
@@ -1701,6 +1706,11 @@
           "suite": "automation",
           "file": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Tests/BlueprintObjectArrayPinTests.cpp",
           "test": "UE.MCP.Blueprint.ObjectArray.PinTypesAndCompile"
+        },
+        {
+          "suite": "automation",
+          "file": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Tests/BlueprintParameterRenameTests.cpp",
+          "test": "UE.MCP.Blueprint.EditGraphParameters.RenamePersists"
         },
         {
           "suite": "live",
@@ -4305,6 +4315,11 @@
         },
         {
           "suite": "automation",
+          "file": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Tests/BlueprintParameterRenameTests.cpp",
+          "test": "UE.MCP.Blueprint.EditGraphParameters.RenamePersists"
+        },
+        {
+          "suite": "automation",
           "file": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Tests/BlueprintTransactionalNodeTests.cpp",
           "test": "UE.MCP.Blueprint.TransactionalNodes.AnimationHandlers"
         },
@@ -4766,6 +4781,11 @@
           "test": "UE.MCP.Blueprint.ObjectArray.PinTypesAndCompile"
         },
         {
+          "suite": "automation",
+          "file": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Tests/BlueprintParameterRenameTests.cpp",
+          "test": "UE.MCP.Blueprint.EditGraphParameters.RenamePersists"
+        },
+        {
           "suite": "live",
           "file": "tests/live/blueprint-guid-addressing.test.ts",
           "test": "wires the second getter, which no title could name"
@@ -5078,6 +5098,11 @@
           "suite": "automation",
           "file": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Tests/BlueprintObjectArrayPinTests.cpp",
           "test": "UE.MCP.Blueprint.ObjectArray.PinTypesAndCompile"
+        },
+        {
+          "suite": "automation",
+          "file": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Tests/BlueprintParameterRenameTests.cpp",
+          "test": "UE.MCP.Blueprint.EditGraphParameters.RenamePersists"
         },
         {
           "suite": "automation",
@@ -5472,6 +5497,11 @@
       "registeredIn": "BlueprintHandlers.cpp",
       "status": "covered",
       "tests": [
+        {
+          "suite": "automation",
+          "file": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Tests/BlueprintParameterRenameTests.cpp",
+          "test": "UE.MCP.Blueprint.EditGraphParameters.RenamePersists"
+        },
         {
           "suite": "automation",
           "file": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Tests/BlueprintTransactionalNodeTests.cpp",
@@ -7519,6 +7549,11 @@
       "registeredIn": "BlueprintHandlers.cpp",
       "status": "covered",
       "tests": [
+        {
+          "suite": "automation",
+          "file": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Tests/BlueprintParameterRenameTests.cpp",
+          "test": "UE.MCP.Blueprint.EditGraphParameters.RenamePersists"
+        },
         {
           "suite": "automation",
           "file": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Tests/BlueprintTransactionalNodeTests.cpp",
