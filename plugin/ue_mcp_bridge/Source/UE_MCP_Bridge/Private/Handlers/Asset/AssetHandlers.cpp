@@ -681,6 +681,8 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("automated"), EType::Boolean, TEXT("Suppress interactive dialogs (default true)")),
 		MCPSharedParam::DryRun().Describe(TEXT("Validate and report without importing, writing or saving (default false)")),
 	});
+	// Inverse of import_texture_batch, reached only through the rollback record a replace emits (#1860).
+	Registry.RegisterHandlerWithTimeout(TEXT("restore_texture_import"), &RestoreTextureImport, 120.0f);
 	Registry.RegisterHandler(TEXT("create_render_target_2d"), &CreateRenderTarget2D, {
 		MCPParam::Required(TEXT("name"), EType::String, TEXT("Asset name, without '/' or '.'")),
 		MCPParam::Optional(TEXT("packagePath"), EType::String, TEXT("Destination folder (default /Game)")),

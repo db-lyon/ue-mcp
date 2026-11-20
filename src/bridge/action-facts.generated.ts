@@ -349,6 +349,9 @@ export const ACTION_FACTS: Readonly<Record<string, ActionFacts>> = {
   "respond_to_dialog": {
     "modalSafe": true
   },
+  "restore_texture_import": {
+    "timeoutSeconds": 120
+  },
   "run_automation_tests": {
     "timeoutSeconds": 300
   },
