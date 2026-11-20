@@ -4,6 +4,7 @@
 #include "JsonSerializer.h"
 #include "Engine/Blueprint.h"
 #include "Engine/DataTable.h"
+#include "DataTableEditorUtils.h"
 #include "ScopedTransaction.h"
 #include "UObject/StructOnScope.h"
 #include "UObject/Package.h"
@@ -339,6 +340,21 @@ TSharedPtr<FJsonValue> FAssetHandlers::CloneDataTableRows(const TSharedPtr<FJson
 	return MCPResult(Result);
 }
 
+bool FAssetHandlers::RemoveDataTableRowSafely(UDataTable* Table, FName RowName)
+{
+	if (!Table || !Table->GetRowMap().Contains(RowName)) return false;
+	// The editor's own Delete Row goes through FDataTableEditorUtils. It takes
+	// the row out of the map, frees it and broadcasts the row-list change
+	// without naming the row, so nothing looks the removed row up afterwards.
+	// UDataTable::RemoveRow names it to HandleDataTableChanged, and on UE 5.6
+	// that lookup asserts for a native row struct.
+	if (Table->GetRowStruct()) return FDataTableEditorUtils::RemoveRow(Table, RowName);
+	// With no row struct, HandleDataTableChanged skips the per-row hook, so the
+	// engine call cannot reach the lookup.
+	Table->RemoveRow(RowName);
+	return !Table->GetRowMap().Contains(RowName);
+}
+
 TSharedPtr<FJsonValue> FAssetHandlers::RemoveDataTableRows(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath;
@@ -376,7 +392,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::RemoveDataTableRows(const TSharedPtr<FJso
 		for (const FName Name : Names)
 		{
 			if (!Table->GetRowMap().Contains(Name)) continue;
-			Table->RemoveRow(Name);
+			RemoveDataTableRowSafely(Table, Name);
 			Removed.Add(MakeShared<FJsonValueString>(Name.ToString()));
 		}
 		Table->MarkPackageDirty();
