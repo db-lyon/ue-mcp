@@ -390,7 +390,7 @@ ue-mcp:
     host: 127.0.0.1   # default
 ```
 
-The server logs its bearer token to stderr at startup, or uses `UE_MCP_HTTP_TOKEN`. Every route requires it, as `Authorization: Bearer <token>` or `X-UE-MCP-Token: <token>`. In daemon mode the project's daemon serves it; in process, the server does.
+The token is `UE_MCP_HTTP_TOKEN` when that is set. Otherwise the server generates one at startup and writes it to `~/.ue-mcp/flow-http/<port>.token`, readable only by your user; the log names the file but never contains the token. Every route requires it, as `Authorization: Bearer <token>` or `X-UE-MCP-Token: <token>`. In daemon mode the project's daemon serves it; in process, the server does.
 
 | Route | What it does |
 |-------|--------------|

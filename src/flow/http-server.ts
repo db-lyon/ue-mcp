@@ -11,6 +11,9 @@ import { readEnv } from "../core/env.js";
 import { hostIsAllowed, tokensMatch } from "../core/loopback-host.js";
 import { FLOW_HTTP_PORT } from "../core/flow-http-port.js";
 import { DAEMON_HEADERS } from "../contract/daemon.js";
+import { userDir } from "../core/user-dir.js";
+import { writePrivateFile } from "../core/private-file.js";
+import * as path from "node:path";
 
 /** One flow call through the server's call pipeline, as the routes hand it over. */
 export type FlowRequest = (input: Record<string, unknown>, approval?: FlowStepApprovalSpec) => Promise<{ outcome: CallOutcome }>;
@@ -19,6 +22,11 @@ export interface HttpServerOptions {
   host?: string;
   port?: number;
   token?: string;
+}
+
+/** Where a generated flow HTTP token is written: `~/.ue-mcp/flow-http/<port>.token`, readable by this user only. */
+export function flowHttpTokenFile(port: number): string {
+  return path.join(userDir(), "flow-http", `${port}.token`);
 }
 
 function extractToken(req: http.IncomingMessage): string | null {
@@ -43,10 +51,9 @@ export function startFlowHttpServer(
   const port = options.port ?? FLOW_HTTP_PORT;
   // Token precedence: explicit option > env override > freshly generated.
   // Env override lets CI scripts pin a known value without parsing stderr.
-  const token =
-    options.token ??
-    readEnv("httpToken") ??
-    randomBytes(32).toString("hex");
+  const supplied = options.token ?? readEnv("httpToken");
+  const generated = supplied === undefined;
+  const token = supplied ?? randomBytes(32).toString("hex");
 
   const server = http.createServer(async (req, res) => {
     try {
@@ -100,10 +107,21 @@ export function startFlowHttpServer(
 
   server.listen(port, host, () => {
     info("http", `flow HTTP server listening on http://${host}:${port}`);
-    // Print the token to stderr (where MCP servers' diagnostic output lives)
-    // so the operator can copy it without parsing tool output. Env-supplied
-    // tokens are still echoed; the value is already known to whoever set it.
-    info("http", `flow HTTP token: ${token} (send as 'Authorization: Bearer ...' or 'X-UE-MCP-Token: ...')`);
+    // The token never goes into the log: MCP clients and the daemon keep it
+    // on disk, and logs get pasted into issues (#1866). A supplied token is
+    // already known to whoever supplied it; a generated one goes to a file
+    // only this user can read.
+    const how = "send it as 'Authorization: Bearer <token>' or 'X-UE-MCP-Token: <token>'";
+    if (!generated) {
+      info("http", `flow HTTP token: the one set in ${options.token ? "the server options" : "UE_MCP_HTTP_TOKEN"}; ${how}`);
+      return;
+    }
+    const address = server.address();
+    const file = flowHttpTokenFile(typeof address === "object" && address !== null ? address.port : port);
+    writePrivateFile(file, `${token}\n`).then(
+      () => info("http", `flow HTTP token written to ${file}; ${how}`),
+      (e) => warn("http", `could not write the flow HTTP token to ${file}; set UE_MCP_HTTP_TOKEN to choose one`, e),
+    );
   });
 
   return { server, port, host, token };
