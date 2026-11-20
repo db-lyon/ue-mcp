@@ -1659,7 +1659,11 @@ namespace MCPPIE
 		class FEditorScriptStepDriver : public IScriptStepDriver
 		{
 		public:
-			explicit FEditorScriptStepDriver(const FString& InCaptureRoot) : CaptureRoot(InCaptureRoot) {}
+			FEditorScriptStepDriver(const FString& InCaptureRoot, int32 PIEInstance, int32 LocalPlayer) : CaptureRoot(InCaptureRoot)
+			{
+				Runner.OwnPIEInstance = PIEInstance;
+				Runner.OwnLocalPlayer = LocalPlayer;
+			}
 
 			virtual bool BeginAct(int32 Index, const FScriptStepDef& Def, double NowMs, FScriptActReport& Report) override
 			{
@@ -1798,6 +1802,9 @@ namespace MCPPIE
 	class FEditorScriptTriggerSource : public IScriptTriggerSource
 	{
 	public:
+		FEditorScriptTriggerSource(int32 InOwnPIEInstance, int32 InOwnLocalPlayer)
+			: OwnPIEInstance(InOwnPIEInstance), OwnLocalPlayer(InOwnLocalPlayer) {}
+
 		virtual EScriptTriggerRead ReadTrigger(int32 Index, const FScriptExpect& Expect, double FromMs,
 			FScriptTrigger& OutTrigger, FString& OutWhy) override
 		{
@@ -1878,7 +1885,7 @@ namespace MCPPIE
 			const UInputAction* Action = LoadWatchedAction(W);
 			FString Err;
 			// The same player an act with no client drives.
-			ULocalPlayer* LocalPlayer = Action ? PIERemotePlayers::FindOwnLocalPlayer(INDEX_NONE, 0, Err) : nullptr;
+			ULocalPlayer* LocalPlayer = Action ? PIERemotePlayers::FindOwnLocalPlayer(OwnPIEInstance, OwnLocalPlayer, Err) : nullptr;
 			bool bTriggered = false;
 			FVector Value = FVector::ZeroVector;
 			if (!Action) { W.bWatching = false; return; }
@@ -1946,6 +1953,8 @@ namespace MCPPIE
 		}
 
 		TMap<int32, FWatch> Watches;
+		int32 OwnPIEInstance = INDEX_NONE;
+		int32 OwnLocalPlayer = 0;
 	};
 
 	// ── Runner ──────────────────────────────────────────────────────────
@@ -2141,8 +2150,9 @@ namespace MCPPIE
 		}
 
 		NewRun.State = EScriptRunState::Armed;
-		StepDriver = MakeShared<FEditorScriptStepDriver>(NewRun.OutputDir);
-		TriggerSource = MakeShared<FEditorScriptTriggerSource>();
+		// An act entry with no client, and a triggered step on client 0, use the player the run observes.
+		StepDriver = MakeShared<FEditorScriptStepDriver>(NewRun.OutputDir, Cfg.PIEInstance, Cfg.ClientId);
+		TriggerSource = MakeShared<FEditorScriptTriggerSource>(Cfg.PIEInstance, Cfg.ClientId);
 		Run = MoveTemp(NewRun);
 		bHasRun = true;
 
@@ -2279,7 +2289,7 @@ namespace MCPPIE
 		NewRun.bOwnsReplayer = true;
 		NewRun.bEndPIEWhenSettled = Cfg.bAutoStopPIE;
 		NewRun.State = EScriptRunState::Armed;
-		TriggerSource = MakeShared<FEditorScriptTriggerSource>();
+		TriggerSource = MakeShared<FEditorScriptTriggerSource>(Cfg.PIEInstance, Cfg.ClientId);
 		Run = MoveTemp(NewRun);
 		bHasRun = true;
 

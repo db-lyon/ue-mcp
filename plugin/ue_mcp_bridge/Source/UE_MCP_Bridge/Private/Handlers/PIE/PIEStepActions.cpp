@@ -310,10 +310,12 @@ namespace MCPPIE
 
 		// The editor's own player, resolved to one exact local player: left to the injector, the input went to
 		// whichever PIE world was active, which in a one-process session with a second client was the client (#1814).
-		ULocalPlayer* Own = PIERemotePlayers::FindOwnLocalPlayer(INDEX_NONE, 0, Err);
+		ULocalPlayer* Own = PIERemotePlayers::FindOwnLocalPlayer(OwnPIEInstance, OwnLocalPlayer, Err);
 		if (!Own)
 		{
-			Err = FString::Printf(TEXT("%s: client 0 has no local player (%s)"), *A.Verb, *Err);
+			Err = OwnPIEInstance >= 0
+				? FString::Printf(TEXT("%s: the run's pie_instance %d client_id %d has no local player (%s)"), *A.Verb, OwnPIEInstance, OwnLocalPlayer, *Err)
+				: FString::Printf(TEXT("%s: client 0 has no local player (%s)"), *A.Verb, *Err);
 			return false;
 		}
 		LastTarget = PIERemotePlayers::DescribeLocalPlayer(Own);

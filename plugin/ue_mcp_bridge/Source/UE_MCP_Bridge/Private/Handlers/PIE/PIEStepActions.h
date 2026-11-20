@@ -62,6 +62,12 @@ namespace MCPPIE
 		/** Captures go to <CaptureRoot>/captures/step<NN>_client<C>_<label>.jpg; File is relative to CaptureRoot. */
 		FString CaptureRoot;
 		int32 StepNumber = 1;
+		/**
+		 * The player an entry with no client (client 0) drives: local player OwnLocalPlayer of PIE instance
+		 * OwnPIEInstance, as pie(inject_input) takes pie_instance and client_id. INDEX_NONE means the editor's own player.
+		 */
+		int32 OwnPIEInstance = INDEX_NONE;
+		int32 OwnLocalPlayer = 0;
 
 		/** Runs one action now. A wait does nothing here; FStepActionSequence times it. */
 		bool Run(const FStepAction& A, FString& OutError);
