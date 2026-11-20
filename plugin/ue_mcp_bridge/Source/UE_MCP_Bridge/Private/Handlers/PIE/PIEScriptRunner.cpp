@@ -1659,7 +1659,11 @@ namespace MCPPIE
 		class FEditorScriptStepDriver : public IScriptStepDriver
 		{
 		public:
-			explicit FEditorScriptStepDriver(const FString& InCaptureRoot) : CaptureRoot(InCaptureRoot) {}
+			FEditorScriptStepDriver(const FString& InCaptureRoot, int32 PIEInstance, int32 LocalPlayer) : CaptureRoot(InCaptureRoot)
+			{
+				Runner.OwnPIEInstance = PIEInstance;
+				Runner.OwnLocalPlayer = LocalPlayer;
+			}
 
 			virtual bool BeginAct(int32 Index, const FScriptStepDef& Def, double NowMs, FScriptActReport& Report) override
 			{
@@ -1766,6 +1770,7 @@ namespace MCPPIE
 					A->SetStringField(TEXT("action"), R.Verb);
 					A->SetBoolField(TEXT("ok"), R.bOk);
 					if (!R.Error.IsEmpty()) A->SetStringField(TEXT("error"), R.Error);
+					if (!R.Target.IsEmpty()) A->SetStringField(TEXT("target"), R.Target);
 					A->SetNumberField(TEXT("at_ms"), NowMs);
 					Report.Actions.Add(MakeShared<FJsonValueObject>(A));
 				}
@@ -1797,6 +1802,9 @@ namespace MCPPIE
 	class FEditorScriptTriggerSource : public IScriptTriggerSource
 	{
 	public:
+		FEditorScriptTriggerSource(int32 InOwnPIEInstance, int32 InOwnLocalPlayer)
+			: OwnPIEInstance(InOwnPIEInstance), OwnLocalPlayer(InOwnLocalPlayer) {}
+
 		virtual EScriptTriggerRead ReadTrigger(int32 Index, const FScriptExpect& Expect, double FromMs,
 			FScriptTrigger& OutTrigger, FString& OutWhy) override
 		{
@@ -1872,22 +1880,12 @@ namespace MCPPIE
 			return Action;
 		}
 
-		// The editor's own player: the first local player of the server world (a listen server's host), else of the play world.
-		static ULocalPlayer* ResolveOwnPlayer(FString& OutError)
-		{
-			PIEWorldResolver::FPlayerTarget Target;
-			if (UWorld* World = PIERemotePlayers::FindLocalPlayerWorld())
-			{
-				if (PIEWorldResolver::ResolvePlayerInWorld(World, 0, Target, OutError) && Target.LocalPlayer) return Target.LocalPlayer;
-			}
-			return PIEWorldResolver::ResolvePlayer(INDEX_NONE, 0, Target, OutError) ? Target.LocalPlayer : nullptr;
-		}
-
 		void PollLocal(FWatch& W, double NowMs)
 		{
 			const UInputAction* Action = LoadWatchedAction(W);
 			FString Err;
-			ULocalPlayer* LocalPlayer = Action ? ResolveOwnPlayer(Err) : nullptr;
+			// The same player an act with no client drives.
+			ULocalPlayer* LocalPlayer = Action ? PIERemotePlayers::FindOwnLocalPlayer(OwnPIEInstance, OwnLocalPlayer, Err) : nullptr;
 			bool bTriggered = false;
 			FVector Value = FVector::ZeroVector;
 			if (!Action) { W.bWatching = false; return; }
@@ -1955,6 +1953,8 @@ namespace MCPPIE
 		}
 
 		TMap<int32, FWatch> Watches;
+		int32 OwnPIEInstance = INDEX_NONE;
+		int32 OwnLocalPlayer = 0;
 	};
 
 	// ── Runner ──────────────────────────────────────────────────────────
@@ -2150,8 +2150,9 @@ namespace MCPPIE
 		}
 
 		NewRun.State = EScriptRunState::Armed;
-		StepDriver = MakeShared<FEditorScriptStepDriver>(NewRun.OutputDir);
-		TriggerSource = MakeShared<FEditorScriptTriggerSource>();
+		// An act entry with no client, and a triggered step on client 0, use the player the run observes.
+		StepDriver = MakeShared<FEditorScriptStepDriver>(NewRun.OutputDir, Cfg.PIEInstance, Cfg.ClientId);
+		TriggerSource = MakeShared<FEditorScriptTriggerSource>(Cfg.PIEInstance, Cfg.ClientId);
 		Run = MoveTemp(NewRun);
 		bHasRun = true;
 
@@ -2288,7 +2289,7 @@ namespace MCPPIE
 		NewRun.bOwnsReplayer = true;
 		NewRun.bEndPIEWhenSettled = Cfg.bAutoStopPIE;
 		NewRun.State = EScriptRunState::Armed;
-		TriggerSource = MakeShared<FEditorScriptTriggerSource>();
+		TriggerSource = MakeShared<FEditorScriptTriggerSource>(Cfg.PIEInstance, Cfg.ClientId);
 		Run = MoveTemp(NewRun);
 		bHasRun = true;
 

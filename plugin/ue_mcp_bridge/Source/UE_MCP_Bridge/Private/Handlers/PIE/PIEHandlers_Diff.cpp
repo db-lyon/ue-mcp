@@ -1,6 +1,7 @@
 // Pure offline diff of two PIE recordings. Reads both recording.csv files,
-// walks rows in lockstep by frame index, and emits a summary matching the
-// drift.json shape (without writing to disk).
+// pairs rows by index after a row offset that aligns the two runs (align=auto)
+// or none (align=index), and emits a summary matching the drift.json shape
+// (without writing to disk).
 
 #include "Handlers/PIE/PIEHandlers.h"
 #include "HandlerUtils.h"
@@ -109,6 +110,8 @@ TSharedPtr<FJsonValue> FPIEHandlers::PieRecordDiff(const TSharedPtr<FJsonObject>
 	const double ThrRot = OptionalNumber(Params, TEXT("rotation_deg"), 2.0);
 	const double ThrVel = OptionalNumber(Params, TEXT("velocity_cms"), 25.0);
 	const double ThrTrackedDefault = OptionalNumber(Params, TEXT("tracked_default"), 0.0);
+	const bool bAutoAlign = OptionalString(Params, TEXT("align"), TEXT("auto")) != TEXT("index");
+	const int32 MaxOffsetRows = FMath::Clamp(OptionalInt(Params, TEXT("max_offset_rows"), 30), 0, 100000);
 
 	// Per-tracked-path thresholds. Falls back to ThrTrackedDefault when a path
 	// is sampled in both CSVs but missing from this map. <= 0 means tracked
@@ -149,29 +152,74 @@ TSharedPtr<FJsonValue> FPIEHandlers::PieRecordDiff(const TSharedPtr<FJsonObject>
 		if (TrackedB.Contains(P)) SharedTracked.Add(P);
 	}
 
-	const int32 N = FMath::Min(RowsA.Num(), RowsB.Num());
+	// Row pairing. A replay whose input lands a few rows later than the recording's is the same motion shifted,
+	// and pairing rows by index reads that shift as drift (#2009). auto pairs A[i] with B[i + offset] for the
+	// offset within max_offset_rows that minimises the mean position delta; on a tie the smaller shift wins, so
+	// a run that matches unshifted keeps offset 0. index pairs rows as they are.
+	const auto MeanPositionDelta = [&RowsA, &RowsB](int32 Offset, int32& OutPairs)
+	{
+		const int32 First = FMath::Max(0, -Offset);
+		const int32 End = FMath::Min(RowsA.Num(), RowsB.Num() - Offset);
+		OutPairs = FMath::Max(0, End - First);
+		double Sum = 0.0;
+		for (int32 i = First; i < End; ++i) Sum += (RowsA[i].Loc - RowsB[i + Offset].Loc).Size();
+		return OutPairs > 0 ? Sum / OutPairs : TNumericLimits<double>::Max();
+	};
+	int32 Offset = 0;
+	int32 UnalignedPairs = 0;
+	const double UnalignedMean = MeanPositionDelta(0, UnalignedPairs);
+	double BestMean = UnalignedMean;
+	if (bAutoAlign)
+	{
+		// Each candidate must still pair at least half the shorter run, so a large shift cannot win by comparing a
+		// few still frames at the ends.
+		const int32 MinPairs = FMath::Max(1, FMath::Min(RowsA.Num(), RowsB.Num()) / 2);
+		for (int32 Shift = 1; Shift <= MaxOffsetRows; ++Shift)
+		{
+			for (const int32 Candidate : { Shift, -Shift })
+			{
+				int32 Pairs = 0;
+				const double Mean = MeanPositionDelta(Candidate, Pairs);
+				if (Pairs >= MinPairs && Mean < BestMean - 1e-4)
+				{
+					BestMean = Mean;
+					Offset = Candidate;
+				}
+			}
+		}
+	}
+
+	const int32 FirstA = FMath::Max(0, -Offset);
+	const int32 EndA = FMath::Min(RowsA.Num(), RowsB.Num() - Offset);
+	const int32 N = FMath::Max(0, EndA - FirstA);
 	float MaxPos = 0.f, MaxVel = 0.f, MaxRot = 0.f;
+	float UnalignedMaxPos = 0.f;
 	uint64 MaxPosFrame = 0;
 	int32 MontageMismatches = 0;
 	TArray<TSharedPtr<FJsonValue>> Over;
 	TMap<FString, double> MaxTrackedDeltas;
 	for (const FString& P : SharedTracked) MaxTrackedDeltas.Add(P, 0.0);
-
-	for (int32 i = 0; i < N; ++i)
+	for (int32 i = 0; i < FMath::Min(RowsA.Num(), RowsB.Num()); ++i)
 	{
-		const float P = static_cast<float>((RowsA[i].Loc - RowsB[i].Loc).Size());
-		const float V = static_cast<float>((RowsA[i].Vel - RowsB[i].Vel).Size());
-		const float R = static_cast<float>(FMath::Abs((RowsA[i].Rot - RowsB[i].Rot).Euler().Size()));
+		UnalignedMaxPos = FMath::Max(UnalignedMaxPos, static_cast<float>((RowsA[i].Loc - RowsB[i].Loc).Size()));
+	}
+
+	for (int32 i = FirstA; i < EndA; ++i)
+	{
+		const FCSVPawn& RowB = RowsB[i + Offset];
+		const float P = static_cast<float>((RowsA[i].Loc - RowB.Loc).Size());
+		const float V = static_cast<float>((RowsA[i].Vel - RowB.Vel).Size());
+		const float R = static_cast<float>(FMath::Abs((RowsA[i].Rot - RowB.Rot).Euler().Size()));
 		if (P > MaxPos) { MaxPos = P; MaxPosFrame = RowsA[i].Frame; }
 		if (V > MaxVel) MaxVel = V;
 		if (R > MaxRot) MaxRot = R;
-		if (RowsA[i].Montage != RowsB[i].Montage) MontageMismatches++;
+		if (RowsA[i].Montage != RowB.Montage) MontageMismatches++;
 
 		bool bTrackedOver = false;
 		for (const FString& Path : SharedTracked)
 		{
 			const double* VA = RowsA[i].Tracked.Find(Path);
-			const double* VB = RowsB[i].Tracked.Find(Path);
+			const double* VB = RowB.Tracked.Find(Path);
 			const double D = FMath::Abs((VA ? *VA : 0.0) - (VB ? *VB : 0.0));
 			double& Max = MaxTrackedDeltas.FindOrAdd(Path, 0.0);
 			if (D > Max) Max = D;
@@ -184,6 +232,7 @@ TSharedPtr<FJsonValue> FPIEHandlers::PieRecordDiff(const TSharedPtr<FJsonObject>
 		{
 			TSharedRef<FJsonObject> E = MakeShared<FJsonObject>();
 			E->SetNumberField(TEXT("frame"), static_cast<double>(RowsA[i].Frame));
+			if (Offset != 0) E->SetNumberField(TEXT("b_frame"), static_cast<double>(RowB.Frame));
 			E->SetNumberField(TEXT("position_delta_cm"), P);
 			E->SetNumberField(TEXT("velocity_delta_cms"), V);
 			E->SetNumberField(TEXT("rotation_delta_deg"), R);
@@ -203,6 +252,20 @@ TSharedPtr<FJsonValue> FPIEHandlers::PieRecordDiff(const TSharedPtr<FJsonObject>
 	Result->SetNumberField(TEXT("max_rotation_drift_deg"), MaxRot);
 	Result->SetNumberField(TEXT("montage_section_mismatches"), MontageMismatches);
 
+	TSharedRef<FJsonObject> Alignment = MakeShared<FJsonObject>();
+	Alignment->SetStringField(TEXT("mode"), bAutoAlign ? TEXT("auto") : TEXT("index"));
+	Alignment->SetNumberField(TEXT("offset_rows"), Offset);
+	if (RowsB.Num() > 1)
+	{
+		// Positive: b's rows lag a's, so b reaches the same motion that much later.
+		const double RowMs = (RowsB.Last().Time - RowsB[0].Time) * 1000.0 / (RowsB.Num() - 1);
+		Alignment->SetNumberField(TEXT("offset_ms"), Offset * RowMs);
+	}
+	Alignment->SetNumberField(TEXT("unaligned_max_position_drift_cm"), UnalignedMaxPos);
+	if (UnalignedPairs > 0) Alignment->SetNumberField(TEXT("unaligned_mean_position_drift_cm"), UnalignedMean);
+	if (N > 0) Alignment->SetNumberField(TEXT("mean_position_drift_cm"), BestMean);
+	Result->SetObjectField(TEXT("alignment"), Alignment);
+
 	TSharedRef<FJsonObject> TVD = MakeShared<FJsonObject>();
 	for (const TPair<FString, double>& KV : MaxTrackedDeltas)
 	{
@@ -211,7 +274,8 @@ TSharedPtr<FJsonValue> FPIEHandlers::PieRecordDiff(const TSharedPtr<FJsonObject>
 	Result->SetObjectField(TEXT("tracked_value_max_deltas"), TVD);
 
 	// Actor-scoped diff: optional tracked.jsonl sidecar in both recordings.
-	// Walks in lockstep by row index (frame). Per-actor entries that resolved
+	// Walks in lockstep by row index (frame), shifted by the same offset as the
+	// pawn rows. Per-actor entries that resolved
 	// in both rows contribute to max position / rotation / velocity deltas;
 	// unresolved frames are counted so consumers can spot intermittent
 	// resolution.
@@ -223,14 +287,15 @@ TSharedPtr<FJsonValue> FPIEHandlers::PieRecordDiff(const TSharedPtr<FJsonObject>
 		FString TErr;
 		if (LoadTrackedActorsJSONL(JsonlA, RowsTA, TErr) && LoadTrackedActorsJSONL(JsonlB, RowsTB, TErr))
 		{
-			const int32 NT = FMath::Min(RowsTA.Num(), RowsTB.Num());
+			const int32 FirstT = FMath::Max(0, -Offset);
+			const int32 EndT = FMath::Min(RowsTA.Num(), RowsTB.Num() - Offset);
 			TMap<FString, FActorDrift> ActorAcc;
-			for (int32 i = 0; i < NT; ++i)
+			for (int32 i = FirstT; i < EndT; ++i)
 			{
 				for (const TPair<FString, FActorState>& KV : RowsTA[i].Actors)
 				{
 					FActorDrift& Acc = ActorAcc.FindOrAdd(KV.Key);
-					const FActorState* SB = RowsTB[i].Actors.Find(KV.Key);
+					const FActorState* SB = RowsTB[i + Offset].Actors.Find(KV.Key);
 					if (!KV.Value.bResolved) { Acc.FramesUnresolvedInSource++; continue; }
 					if (!SB || !SB->bResolved) { Acc.FramesUnresolvedInReplay++; continue; }
 					const float DPos = static_cast<float>((KV.Value.Location - SB->Location).Size());

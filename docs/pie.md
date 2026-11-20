@@ -142,7 +142,7 @@ Every `track_values` path is checked when the pawn attaches. A path that does no
 | `replay_stop` | Stop and finalize the drift report |
 | `replay_status` | State, step progress, elapsed time, drift maxima, `last_result` |
 
-Replay drives the sequence through `UEnhancedInputLocalPlayerSubsystem::InjectInputForAction` and teleports the pawn to its frame 0 position first. Re-arming in the same session stops the running replay, teleports again and restarts. The source is one of `recording_id`, `sequence_path` or inline `steps`.
+Replay drives the sequence through `UEnhancedInputLocalPlayerSubsystem::InjectInputForAction` and teleports the pawn to its frame 0 position first. When the replayed player is a net client, the teleport moves the server's pawn for that player as well, so both start from the recorded position; `replay_status.start_alignment` says where it landed (`authority`, `server and client (<pawn>)`, or `not moved` with the reason, when the server runs outside the editor process). Re-arming in the same session stops the running replay, teleports again and restarts. The source is one of `recording_id`, `sequence_path` or inline `steps`.
 
 | Param | Default | Notes |
 |-------|---------|-------|
@@ -170,7 +170,7 @@ A spawn intro whose length varies between runs (the pawn falls, lands, and ignor
 { "start_when": { "pawn_at_rest": true, "max_speed_cms": 5, "hold_ms": 500, "log_contains": "Intro finished", "timeout_ms": 60000 } }
 ```
 
-The gate opens once the pawn has been at rest (speed at most `max_speed_cms` and, for a Character, on the ground) for `hold_ms`, and a session log line containing `log_contains` has appeared when one is given. Either condition may be dropped, not both. The steps then resume at the matching point of the recording: with `pawn_at_rest`, the moment the source pawn had been at rest for `hold_ms` in the rest that led into its first input, read from `recording.csv`; otherwise the first input itself. Frames before the gate are not compared. `drift.json` reports `alignment: "start_gate"` and `start_gate {passed, anchor (source_rest, first_input or start), source_ms, replay_ms, blocker}`. While the gate is shut, `replay_status.waiting_for` says what it waits on; a gate still shut after `timeout_ms` ends the replay with that reason as `last_error`.
+The gate opens once the pawn has been at rest (speed at most `max_speed_cms` and, for a Character, on the ground) for `hold_ms`, and a session log line containing `log_contains` has appeared when one is given. Either condition may be dropped, not both. The steps then resume at the matching point of the recording: with `pawn_at_rest`, the moment the source pawn had been at rest for `hold_ms` in the rest that led into its first input, read from `recording.csv`; otherwise the first input itself. Frames before the gate are not compared. `drift.json` reports `alignment: "start_gate"` and `start_gate {passed, anchor (source_rest, first_input or start), source_ms, replay_ms, blocker}`. While the gate is shut, `replay_status.waiting_for` says what it waits on; a gate still shut after `timeout_ms` ends the replay with that reason as `last_error`. The pawn is read from the target player's controller as it is on each frame, so a net client whose controller was replaced after the replay attached still opens the gate; when there is no pawn, the reason names the PIE instance, local player, world and controller it searched.
 
 With `capture_frame_every` set, replay saves JPEG frames under `<recording>/frames/` and composes a labelled contact sheet at `<recording>/captures/contact_<timestamp>.jpg`, a grid of keyframes with the frame index on each cell. `replay_status.last_result` returns `frame_dir`, `frame_count` and `contact_sheet_path`. GIF output is opt-in because a vision model cannot read GIF animation. For a frame of the live PIE viewport on demand, use `editor(capture_screenshot, target="pie")` or `editor(capture_scene_png, world="pie")`.
 
@@ -205,8 +205,8 @@ Enhanced Input never sees the cursor, so clicking or hovering a UMG button, navi
 | Action | Purpose |
 |--------|---------|
 | `replay_analyze` | The lead from a finalized `drift.json`: first divergence, top channels, errors, bracketing images. `frames_over_threshold` is paged by `limit` (default 50) and `offset`, with `frames_over_threshold_total` and `frames_over_threshold_next_offset` |
-| `replay_state` | The exact recorded pawn pose at `at_time` or `at_frame`, interpolated; `apply=true` teleports the live pawn to it |
-| `record_diff` | Compare two recordings without running PIE: position, rotation and velocity deltas plus `tracked_value_max_deltas` |
+| `replay_state` | The exact recorded pawn pose at `at_time` or `at_frame`, interpolated; `apply=true` teleports the live pawn of `pie_instance` and `client_id` to it. On a net client the server's pawn for that player moves too (`applied_on: "server_and_client"`), so the server does not pull it back to its own position |
+| `record_diff` | Compare two recordings without running PIE: position, rotation and velocity deltas plus `tracked_value_max_deltas`. With `align: "auto"` (the default) b's rows are shifted by the offset, up to `max_offset_rows` (30) either way, that best matches the two trajectories, so a replay whose input landed a few frames late is not read as drift. `alignment` reports `offset_rows`, `offset_ms` (positive when b lags a) and the unshifted maximum; `align: "index"` pairs rows by index |
 | `perf_summary` | Frametime avg, p50, p99 and max, game, render and GPU ms, peak memory, and the worst hitches with timestamps; the newest recording when none is named |
 
 ```text

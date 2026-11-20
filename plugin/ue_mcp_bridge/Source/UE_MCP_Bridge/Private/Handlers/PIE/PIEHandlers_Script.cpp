@@ -342,8 +342,8 @@ void FPIEHandlers::RegisterScriptHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("mode"), EType::String, TEXT("full (default) plays the script in PIE; manual starts no PIE, observer or recording, leaves auto steps unchecked and puts every manual step up for its verdict at once")).Enum({
 			TEXT("full"), TEXT("manual") }),
 		MCPParam::Optional(TEXT("default_within_ms"), EType::Integer, TEXT("Default auto-step window in game ms; overrides the script's (default 5000)")).Min(1),
-		MCPParam::Optional(TEXT("pie_instance"), EType::Integer, PieInstanceDoc).Min(0),
-		MCPParam::Optional(TEXT("client_id"), EType::Integer, ClientIdDoc).Min(0),
+		MCPParam::Optional(TEXT("pie_instance"), EType::Integer, TEXT("FWorldContext PIEInstance the run observes, and whose player act entries with no client drive and triggered steps on client 0 watch. Without it the observer takes the active PIE world and those entries take the editor's own player: the listen-server host, else the lowest PIE instance")).Min(0),
+		MCPParam::Optional(TEXT("client_id"), EType::Integer, TEXT("Local-player index inside that PIE world, for observing, client 0 act entries and client 0 triggered steps alike (default 0)")).Min(0),
 		MCPParam::Optional(TEXT("wait"), EType::Boolean, WaitDoc),
 		MCPParam::Optional(TEXT("timeout_seconds"), EType::Number, TimeoutDoc).Min(0),
 	}, MCPSpec::ExactlyOne({ { TEXT("script") }, { TEXT("steps") } })

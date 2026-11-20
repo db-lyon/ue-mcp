@@ -351,7 +351,9 @@ void FPIEHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("recording_dir"), EType::String, RecordingDirDoc),
 		MCPParam::Optional(TEXT("at_time"), EType::Number, TEXT("Seconds to sample, interpolated (default: the last frame)")),
 		MCPParam::Optional(TEXT("at_frame"), EType::Integer, TEXT("Frame index to sample, instead of at_time")).Min(0),
-		MCPParam::Optional(TEXT("apply"), EType::Boolean, TEXT("Teleport the live PIE pawn to the recorded pose (default false)")),
+		MCPParam::Optional(TEXT("apply"), EType::Boolean, TEXT("Teleport the live PIE pawn to the recorded pose (default false). On a net client the server's pawn for that player moves too, so the server does not correct it back")),
+		MCPParam::Optional(TEXT("pie_instance"), EType::Integer, TEXT("With apply: FWorldContext PIEInstance whose player to move (default the active PIE world)")).Min(0),
+		MCPParam::Optional(TEXT("client_id"), EType::Integer, TEXT("With apply: local-player index inside that PIE world (default 0)")).Min(0),
 	}, MCPSpec::ContractExempt(TEXT("With apply it moves the live PIE pawn")));
 
 	// Reproduction tests and assertions
@@ -394,6 +396,9 @@ void FPIEHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("velocity_cms"), EType::Number, TEXT("Velocity drift threshold (default 25)")),
 		MCPParam::Optional(TEXT("tracked_default"), EType::Number, TEXT("Default tracked-value threshold")),
 		MCPParam::Optional(TEXT("tracked_thresholds"), EType::Object, TEXT("Per-path tracked-value thresholds {path: threshold}")),
+		MCPParam::Optional(TEXT("align"), EType::String, TEXT("auto (default) pairs a's rows with b's shifted by the row offset that best matches the two trajectories, so input landing a few frames later is not read as drift; index pairs rows by index. The result's alignment reports the offset")).Enum({
+			TEXT("auto"), TEXT("index") }),
+		MCPParam::Optional(TEXT("max_offset_rows"), EType::Integer, TEXT("align=auto: largest shift tried, in rows either way (default 30)")).Min(0),
 	});
 
 	// Declarative scenarios
