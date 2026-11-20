@@ -5425,6 +5425,11 @@
         },
         {
           "suite": "live",
+          "file": "tests/live/bcov-asset-b-tables.test.ts",
+          "test": "remove_datatable_rows takes out the named rows, keeps the rest, and its rollback re-adds them"
+        },
+        {
+          "suite": "live",
           "file": "tests/live/datatable-csv-import.test.ts",
           "test": "fills the new table from csvString through the engine importer"
         },
@@ -8863,8 +8868,18 @@
       "tests": [
         {
           "suite": "automation",
+          "file": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Tests/DataTableRemoveRowsTests.cpp",
+          "test": "UE.MCP.Asset.DataTable.RemoveRowsKeepsEveryOtherRow"
+        },
+        {
+          "suite": "automation",
           "file": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Tests/DataTableRowWriteTests.cpp",
           "test": "UE.MCP.Asset.DataTable.EmptyReferenceSpellingsClear"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/bcov-asset-b-tables.test.ts",
+          "test": "remove_datatable_rows takes out the named rows, keeps the rest, and its rollback re-adds them"
         }
       ]
     },
@@ -10362,6 +10377,11 @@
           "suite": "live",
           "file": "tests/live/bcov-asset-b-tables.test.ts",
           "test": "reimport_datatable replaces the table from JSON"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/bcov-asset-b-tables.test.ts",
+          "test": "remove_datatable_rows takes out the named rows, keeps the rest, and its rollback re-adds them"
         },
         {
           "suite": "live",
@@ -19687,6 +19707,11 @@
         {
           "suite": "live",
           "file": "tests/live/bcov-asset-b-tables.test.ts",
+          "test": "remove_datatable_rows takes out the named rows, keeps the rest, and its rollback re-adds them"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/bcov-asset-b-tables.test.ts",
           "test": "rename_datatable_row moves the row to its new name"
         },
         {
@@ -21465,6 +21490,29 @@
           "suite": "live",
           "file": "tests/live/collection-entry-edits.test.ts",
           "test": "clones rows in a batch and rejects a bad later request before adding anything"
+        }
+      ]
+    },
+    {
+      "method": "remove_datatable_rows",
+      "category": "asset",
+      "registeredIn": "AssetHandlers.cpp",
+      "status": "covered",
+      "tests": [
+        {
+          "suite": "automation",
+          "file": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Tests/DataTableRemoveRowsTests.cpp",
+          "test": "UE.MCP.Asset.DataTable.RemoveRowsKeepsEveryOtherRow"
+        },
+        {
+          "suite": "automation",
+          "file": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Tests/DataTableRemoveRowsTests.cpp",
+          "test": "UE.MCP.Asset.DataTable.RemoveRowsRestoresAChangedTable"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/bcov-asset-b-tables.test.ts",
+          "test": "remove_datatable_rows takes out the named rows, keeps the rest, and its rollback re-adds them"
         }
       ]
     },

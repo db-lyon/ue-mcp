@@ -124,6 +124,39 @@ describe("data table rows", () => {
   }, 120_000);
 });
 
+describe("bulk row removal on a native row struct", () => {
+  const BULK = `${DIR}/DT_BCovB_Bulk`;
+  const rows = (names: string[]) => Object.fromEntries(names.map((n) => [n, { Tag: `BCov.${n}`, DevComment: `row ${n}` }]));
+  const order = async (): Promise<string[]> =>
+    ((await call("read_datatable", { assetPath: BULK })).rowNames as unknown[]).map(String);
+
+  it("remove_datatable_rows takes out the named rows, keeps the rest, and its rollback re-adds them", async () => {
+    await call("create_datatable", { name: "DT_BCovB_Bulk", packagePath: DIR, rowStruct: ROW_STRUCT });
+    await call("fill_datatable_from_json", { assetPath: BULK, rows: rows(["A", "B", "C", "D", "E"]) });
+
+    const preview = await call("remove_datatable_rows", { assetPath: BULK, rowNames: ["B", "Missing", "d"], dryRun: true });
+    expect(preview.wouldRemove).toEqual(["B", "D"]);
+    expect(preview.missingRowNames).toEqual(["Missing"]);
+    expect(preview.rowCountAfter).toBe(3);
+    expect(await order()).toEqual(["A", "B", "C", "D", "E"]);
+
+    const removed = await call("remove_datatable_rows", { assetPath: BULK, rowNames: ["B", "Missing", "d"] });
+    expect(removed.removedRows).toEqual(["B", "D"]);
+    expect(removed.missingRowNames).toEqual(["Missing"]);
+    expect(removed.saved).toBe(true);
+    expect(await order()).toEqual(["A", "C", "E"]);
+    const kept = await call("get_datatable_row", { assetPath: BULK, rowName: "C" });
+    expect(String((kept.fields as Json).DevComment)).toContain("row C");
+
+    const rollback = removed.rollback as { method: string; payload: Json };
+    expect(rollback.method).toBe("fill_datatable_from_json");
+    await call(rollback.method, rollback.payload);
+    expect((await order()).sort()).toEqual(["A", "B", "C", "D", "E"]);
+    const back = await call("get_datatable_row", { assetPath: BULK, rowName: "D" });
+    expect(String((back.fields as Json).DevComment)).toContain("row D");
+  }, 120_000);
+});
+
 describe("curve table rows", () => {
   it("set_curvetable_keys replaces a row's keys", async () => {
     const set = await call("set_curvetable_keys", {

@@ -3351,7 +3351,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::SetDataTableRow(const TSharedPtr<FJsonObj
 		}
 		else
 		{
-			DataTable->RemoveRow(RowKey);
+			RemoveDataTableRowSafely(DataTable, RowKey);
 		}
 		return MCPError(FString::Printf(
 			TEXT("Field '%s' on row '%s' did not store the requested value: %s. The row was left unchanged."),
@@ -3444,7 +3444,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::RemoveDataTableRow(const TSharedPtr<FJson
 		}
 	}
 
-	DataTable->RemoveRow(RowKey);
+	RemoveDataTableRowSafely(DataTable, RowKey);
 	DataTable->MarkPackageDirty();
 	FString SaveReason;
 	const bool bSaved = SaveAssetPackageChecked(DataTable, SaveReason);
@@ -3982,7 +3982,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::RenameDataTableRow(const TSharedPtr<FJson
 	RowStruct->CopyScriptStruct(NewRow, *OldPtr);
 
 	DataTable->AddRow(NewKey, *reinterpret_cast<FTableRowBase*>(NewRow));
-	DataTable->RemoveRow(OldKey);
+	RemoveDataTableRowSafely(DataTable, OldKey);
 	RowStruct->DestroyStruct(NewRow);
 	FMemory::Free(NewRow);
 

@@ -894,6 +894,14 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("rowNames"), EType::Array, TEXT("Rows to remove in one transaction, including clone rollback")).Items(EType::String),
 		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save after removing rows (default true)")).Default(true),
 	}, MCPSpec::ExactlyOne({ { TEXT("rowName") }, { TEXT("rowNames") } }));
+	// #1999: bulk removal that checks every other row survived unchanged and
+	// restores the whole table when one did not.
+	Registry.RegisterHandler(TEXT("remove_datatable_rows"), &RemoveDataTableRows, {
+		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("DataTable asset path")).Alias(TEXT("path")),
+		MCPParam::Required(TEXT("rowNames"), EType::Array, TEXT("1-500 rows to remove; names the table lacks are listed in missingRowNames")).Items(EType::String),
+		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save after removing rows (default true)")).Default(true),
+		MCPSharedParam::DryRun().Describe(TEXT("Return wouldRemove, missingRowNames and rowCountAfter without changing the table (default false)")),
+	});
 	// #535: single-row read, single-cell write, row rename, and bulk JSON fill.
 	Registry.RegisterHandler(TEXT("get_datatable_row"), &GetDataTableRow, {
 		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("DataTable asset path")).Alias(TEXT("path")),
