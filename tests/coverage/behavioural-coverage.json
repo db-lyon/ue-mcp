@@ -855,6 +855,21 @@
         },
         {
           "suite": "live",
+          "file": "tests/live/blueprint-defaults-timeline-wires.test.ts",
+          "test": "connect_pins reports the data wire a single-link input gave up"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/blueprint-defaults-timeline-wires.test.ts",
+          "test": "connect_pins reports the exec wire the schema replaced without a break flag"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/blueprint-defaults-timeline-wires.test.ts",
+          "test": "removes the template and its rollback restores the timeline with its tracks and name"
+        },
+        {
+          "suite": "live",
           "file": "tests/live/blueprint-delete-graph.test.ts",
           "test": "points at delete_node instead of orphaning the owning node"
         },
@@ -1644,6 +1659,11 @@
           "suite": "live",
           "file": "tests/live/bcov-blueprint-members.test.ts",
           "test": "remove_timeline drops the template so the name builds a fresh timeline (#1654)"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/blueprint-defaults-timeline-wires.test.ts",
+          "test": "removes the template and its rollback restores the timeline with its tracks and name"
         }
       ]
     },
@@ -4420,6 +4440,11 @@
         },
         {
           "suite": "live",
+          "file": "tests/live/blueprint-defaults-timeline-wires.test.ts",
+          "test": "removes the template and its rollback restores the timeline with its tracks and name"
+        },
+        {
+          "suite": "live",
           "file": "tests/live/crash-class-inputs.test.ts",
           "test": "compiles an open Blueprint and reports it compiled"
         },
@@ -4842,6 +4867,16 @@
         },
         {
           "suite": "live",
+          "file": "tests/live/blueprint-defaults-timeline-wires.test.ts",
+          "test": "connect_pins reports the data wire a single-link input gave up"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/blueprint-defaults-timeline-wires.test.ts",
+          "test": "connect_pins reports the exec wire the schema replaced without a break flag"
+        },
+        {
+          "suite": "live",
           "file": "tests/live/blueprint-guid-addressing.test.ts",
           "test": "wires the second getter, which no title could name"
         }
@@ -4862,6 +4897,11 @@
           "suite": "live",
           "file": "tests/live/bcov-blueprint-graph.test.ts",
           "test": "connect_pins_batch wires two exec edges that get_connections then reports"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/blueprint-defaults-timeline-wires.test.ts",
+          "test": "connect_pins_batch lists the wire each connection replaced"
         }
       ]
     },
@@ -5278,6 +5318,21 @@
           "suite": "live",
           "file": "tests/live/bcov-reflection.test.ts",
           "test": "inspect_save_game loads a slot the test wrote and reports its class"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/blueprint-defaults-timeline-wires.test.ts",
+          "test": "connect_pins reports the exec wire the schema replaced without a break flag"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/blueprint-defaults-timeline-wires.test.ts",
+          "test": "removes the template and its rollback restores the timeline with its tracks and name"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/blueprint-defaults-timeline-wires.test.ts",
+          "test": "set_class_default on an inherited native property shows on an actor spawned afterwards and on one placed before"
         },
         {
           "suite": "live",
@@ -7144,6 +7199,11 @@
           "suite": "automation",
           "file": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Tests/BlueprintDeleteNodePersistenceTests.cpp",
           "test": "UE.MCP.Blueprint.DeleteNode.NotSerialized"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/blueprint-defaults-timeline-wires.test.ts",
+          "test": "removes the template and its rollback restores the timeline with its tracks and name"
         },
         {
           "suite": "live",
@@ -9388,6 +9448,16 @@
         },
         {
           "suite": "live",
+          "file": "tests/live/blueprint-defaults-timeline-wires.test.ts",
+          "test": "set_actor_tick_settings reaches an actor spawned afterwards"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/blueprint-defaults-timeline-wires.test.ts",
+          "test": "set_class_default on an inherited native property shows on an actor spawned afterwards and on one placed before"
+        },
+        {
+          "suite": "live",
           "file": "tests/live/canvas.test.ts",
           "test": "assigns and clears a stencil on a placed actor, and applies the capture setters"
         },
@@ -9738,6 +9808,21 @@
           "suite": "live",
           "file": "tests/live/bcov-blueprint-graph.test.ts",
           "test": "disconnect_pins breaks only the named pin's link"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/blueprint-defaults-timeline-wires.test.ts",
+          "test": "connect_pins reports the data wire a single-link input gave up"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/blueprint-defaults-timeline-wires.test.ts",
+          "test": "connect_pins reports the exec wire the schema replaced without a break flag"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/blueprint-defaults-timeline-wires.test.ts",
+          "test": "connect_pins_batch lists the wire each connection replaced"
         },
         {
           "suite": "live",
@@ -18730,6 +18815,16 @@
         },
         {
           "suite": "live",
+          "file": "tests/live/blueprint-defaults-timeline-wires.test.ts",
+          "test": "set_actor_tick_settings reaches an actor spawned afterwards"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/blueprint-defaults-timeline-wires.test.ts",
+          "test": "set_class_default on an inherited native property shows on an actor spawned afterwards and on one placed before"
+        },
+        {
+          "suite": "live",
           "file": "tests/live/canvas.test.ts",
           "test": "assigns and clears a stencil on a placed actor, and applies the capture setters"
         },
@@ -22323,6 +22418,11 @@
           "suite": "live",
           "file": "tests/live/bcov-blueprint-members.test.ts",
           "test": "remove_timeline drops the template so the name builds a fresh timeline (#1654)"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/blueprint-defaults-timeline-wires.test.ts",
+          "test": "removes the template and its rollback restores the timeline with its tracks and name"
         }
       ]
     },
@@ -24181,6 +24281,11 @@
           "suite": "live",
           "file": "tests/live/bcov-blueprint-components.test.ts",
           "test": "set_actor_tick_settings changes PrimaryActorTick on the CDO"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/blueprint-defaults-timeline-wires.test.ts",
+          "test": "set_actor_tick_settings reaches an actor spawned afterwards"
         }
       ]
     },
@@ -24569,6 +24674,11 @@
           "suite": "live",
           "file": "tests/live/bcov-blueprint-components.test.ts",
           "test": "set_class_default writes through a subobject path"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/blueprint-defaults-timeline-wires.test.ts",
+          "test": "set_class_default on an inherited native property shows on an actor spawned afterwards and on one placed before"
         }
       ]
     },

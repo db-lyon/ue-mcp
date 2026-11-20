@@ -483,6 +483,7 @@ void FBlueprintHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Required(TEXT("t3d"), EType::String, TEXT("T3D blob from export_nodes_t3d, or copied from the Blueprint graph editor")).Alias(TEXT("text")),
 		MCPParam::Optional(TEXT("posX"), EType::Number, TEXT("Re-center pasted nodes around this X (with posY)")),
 		MCPParam::Optional(TEXT("posY"), EType::Number, TEXT("Re-center pasted nodes around this Y (with posX)")),
+		MCPParam::Optional(TEXT("timelineTemplates"), EType::Array, TEXT("Timeline templates a delete_node rollback carries: each is rebuilt for its pasted Timeline node, tracks and curve keys included, under its old name when that is free")).Items(EType::Object),
 	});
 
 	// issues #182/#183: C++ class CDO property access

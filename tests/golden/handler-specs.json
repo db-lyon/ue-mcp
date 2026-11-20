@@ -23689,6 +23689,13 @@
           "description": "Re-center pasted nodes around this Y (with posX)"
         },
         {
+          "name": "timelineTemplates",
+          "type": "array",
+          "required": false,
+          "description": "Timeline templates a delete_node rollback carries: each is rebuilt for its pasted Timeline node, tracks and curve keys included, under its old name when that is free",
+          "items": "object"
+        },
+        {
           "name": "save",
           "type": "boolean",
           "required": false,
