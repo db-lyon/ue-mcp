@@ -319,6 +319,8 @@ The pawn is resolved again every frame, so a drive keeps going after `OpenLevel`
 
 With Run Under One Process off, every client is a separate process the editor cannot reach directly. The tool attaches a replicated control component to each remote player's controller on the server and relays commands over the game connection. `inject_input`, `inject_input_start` and `inject_input_tape` take `client` 1..N; `inject_input_update` and `inject_input_stop` route by the returned id. `console` takes `client` 1..N only. The editor's own player console is `editor(execute_command, world="pie")`.
 
+Each remote player keeps the results of its newest 256 relayed requests, so `remote_result` reports an older id as no longer held. Error text in a result is cut to 512 characters. A caller-chosen `injection_id` can be up to 128 characters and must not be in use by another remote player's request. Results are cleared when PIE ends.
+
 `uat_run` opens the scenario's map, starts PIE with its players, waits for every remote player to join, and runs each step: drive input or console on any player, then judge the step from the host log and each client's own log file. A dedicated server needs `one_process: true`, its default. When the run ends it stops PIE, restores the play settings, saves them, and writes `report.md` and `report.json` to `report_dir`. The settings it overrides are first written to `Saved/UE_MCP/pie-uat-play-settings.json`, so a run the editor never finished (a crash or a forced quit) is undone on the next editor start.
 
 ```json
