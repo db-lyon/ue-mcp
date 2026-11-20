@@ -11359,6 +11359,16 @@
           "suite": "live",
           "file": "tests/live/pie-drive-pawn.test.ts",
           "test": "pie_drive_stop ends a running drive and reports alreadyStopped on a second stop"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/pie-script-place-delete.test.ts",
+          "test": "a place act puts the pawn at a location written as {x, y, z} or as [x, y, z]"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/pie-script-place-delete.test.ts",
+          "test": "refuses while PIE runs and leaves the script in place"
         }
       ]
     },
@@ -16535,6 +16545,21 @@
         },
         {
           "suite": "live",
+          "file": "tests/live/pie-script-place-delete.test.ts",
+          "test": "a place act puts the pawn at a location written as {x, y, z} or as [x, y, z]"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/pie-script-place-delete.test.ts",
+          "test": "refuses while PIE runs and leaves the script in place"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/pie-script-place-delete.test.ts",
+          "test": "reports deleted only once the .uasset is gone from disk"
+        },
+        {
+          "suite": "live",
           "file": "tests/live/pie-script-running-session.test.ts",
           "test": "ends the run with the reason when the controller possesses no pawn"
         },
@@ -17252,6 +17277,16 @@
           "suite": "live",
           "file": "tests/live/bcov-pie-assets.test.ts",
           "test": "script_runs lists a script's runs newest first with their steps, and script_list names each script's last run"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/pie-script-place-delete.test.ts",
+          "test": "a place act puts the pawn at a location written as {x, y, z} or as [x, y, z]"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/pie-script-place-delete.test.ts",
+          "test": "script_create refuses a location that is not three numbers, and the error shows the accepted shape"
         }
       ]
     },
@@ -17285,6 +17320,16 @@
           "suite": "live",
           "file": "tests/live/bcov-pie-assets.test.ts",
           "test": "script_create, script_read, script_update, script_list and script_delete round-trip one asset"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/pie-script-place-delete.test.ts",
+          "test": "refuses while PIE runs and leaves the script in place"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/pie-script-place-delete.test.ts",
+          "test": "reports deleted only once the .uasset is gone from disk"
         }
       ]
     },
@@ -17366,6 +17411,21 @@
           "suite": "live",
           "file": "tests/live/bcov-pie-assets.test.ts",
           "test": "script_create, script_read, script_update, script_list and script_delete round-trip one asset"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/pie-script-place-delete.test.ts",
+          "test": "a place act puts the pawn at a location written as {x, y, z} or as [x, y, z]"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/pie-script-place-delete.test.ts",
+          "test": "refuses while PIE runs and leaves the script in place"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/pie-script-place-delete.test.ts",
+          "test": "reports deleted only once the .uasset is gone from disk"
         },
         {
           "suite": "live",
@@ -17513,6 +17573,11 @@
         },
         {
           "suite": "live",
+          "file": "tests/live/pie-script-place-delete.test.ts",
+          "test": "a place act puts the pawn at a location written as {x, y, z} or as [x, y, z]"
+        },
+        {
+          "suite": "live",
           "file": "tests/live/pie-script-running-session.test.ts",
           "test": "ends the run with the reason when the controller possesses no pawn"
         },
@@ -17596,6 +17661,11 @@
           "suite": "live",
           "file": "tests/live/bcov-pie-scripts.test.ts",
           "test": "verdict with source agent needs evidence, honours agent_judgeable, and is counted apart from human verdicts"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/pie-script-place-delete.test.ts",
+          "test": "a place act puts the pawn at a location written as {x, y, z} or as [x, y, z]"
         },
         {
           "suite": "live",
@@ -17683,6 +17753,11 @@
         },
         {
           "suite": "live",
+          "file": "tests/live/pie-script-place-delete.test.ts",
+          "test": "script_create refuses a location that is not three numbers, and the error shows the accepted shape"
+        },
+        {
+          "suite": "live",
           "file": "tests/live/playtest-flow.test.ts",
           "test": "drafts, has the editor check the draft, and saves a script that reads back"
         }
@@ -17731,6 +17806,11 @@
           "suite": "live",
           "file": "tests/live/bcov-pie-scripts.test.ts",
           "test": "verdict with source agent needs evidence, honours agent_judgeable, and is counted apart from human verdicts"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/pie-script-place-delete.test.ts",
+          "test": "a place act puts the pawn at a location written as {x, y, z} or as [x, y, z]"
         }
       ]
     },

@@ -1,5 +1,6 @@
 #include "Handlers/PIE/PIEStepActions.h"
 
+#include "HandlerParams.h"
 #include "HandlerPathGuard.h"
 #include "Handlers/PIE/PIELog.h"
 #include "Handlers/PIE/PIERemotePlayers.h"
@@ -18,6 +19,8 @@
 #include "HAL/FileManager.h"
 #include "InputAction.h"
 #include "Misc/Paths.h"
+#include "Policies/CondensedJsonPrintPolicy.h"
+#include "Serialization/JsonSerializer.h"
 
 namespace MCPPIE
 {
@@ -45,7 +48,48 @@ namespace MCPPIE
 				if (A.Num() > 1) Out.Y = A[1]->AsNumber();
 				if (A.Num() > 2) Out.Z = A[2]->AsNumber();
 			}
+			else if (V->Type == EJson::Object)
+			{
+				ReadVec3Fields(V->AsObject(), Out);
+			}
 			return Out;
+		}
+
+		/** A place location or offset: [x, y, z] or {x, y, z}, three numbers either way. Anything else is
+		 *  refused rather than read as the origin, which teleported the pawn to (0, 0, 0) with ok:true (#1813). */
+		bool StepActionPoint(const TSharedPtr<FJsonValue>& V, const TCHAR* Field, FVector& Out, FString& Err)
+		{
+			bool bOk = false;
+			if (V.IsValid() && V->Type == EJson::Array)
+			{
+				const TArray<TSharedPtr<FJsonValue>>& A = V->AsArray();
+				bOk = A.Num() == 3;
+				for (int32 I = 0; bOk && I < 3; ++I)
+				{
+					bOk = A[I].IsValid() && A[I]->Type == EJson::Number;
+					if (bOk) Out[I] = A[I]->AsNumber();
+				}
+			}
+			else if (V.IsValid() && V->Type == EJson::Object)
+			{
+				const TSharedPtr<FJsonObject> O = V->AsObject();
+				double X = 0, Y = 0, Z = 0;
+				bOk = O.IsValid() && O->Values.Num() == 3
+					&& O->TryGetNumberField(TEXT("x"), X) && O->TryGetNumberField(TEXT("y"), Y) && O->TryGetNumberField(TEXT("z"), Z);
+				if (bOk) Out = FVector(X, Y, Z);
+			}
+			if (!bOk)
+			{
+				FString Given;
+				if (V.IsValid())
+				{
+					const TSharedRef<TJsonWriter<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>> W = TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&Given);
+					FJsonSerializer::Serialize(V, FString(), W);
+				}
+				Err = FString::Printf(TEXT("place %s must be [x, y, z] or {x, y, z} with three numbers, such as [-2500, 0, 200] or {\"x\": -2500, \"y\": 0, \"z\": 200}; got %s"),
+					Field, Given.IsEmpty() ? TEXT("nothing") : *Given);
+			}
+			return bOk;
 		}
 
 		FInputActionValue StepActionValue(const UInputAction* Input, const FVector& Value)
@@ -164,13 +208,11 @@ namespace MCPPIE
 			P->TryGetBoolField(TEXT("face"), Out.bFace);
 			if (P->TryGetStringField(TEXT("at"), Out.At) && !Out.At.IsEmpty())
 			{
-				if (P->HasField(TEXT("offset"))) Out.Offset = StepActionVector(P->TryGetField(TEXT("offset")));
-				return true;
+				return !P->HasField(TEXT("offset")) || StepActionPoint(P->TryGetField(TEXT("offset")), TEXT("offset"), Out.Offset, Err);
 			}
 			if (P->HasField(TEXT("location")))
 			{
-				Out.Value = StepActionVector(P->TryGetField(TEXT("location")));
-				return true;
+				return StepActionPoint(P->TryGetField(TEXT("location")), TEXT("location"), Out.Value, Err);
 			}
 			Err = TEXT("place needs at (an actor name or label) or location");
 			return false;

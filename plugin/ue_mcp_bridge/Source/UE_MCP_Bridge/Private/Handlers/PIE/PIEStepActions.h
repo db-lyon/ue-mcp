@@ -13,6 +13,7 @@ class UWorld;
  *   | { client?, inject: {action, value} } | { client?, console: "cmd" }
  *   | { client?, place: {at, offset?, face?} | {location, yaw?} } | { client?, capture: "label" | true } | { wait_ms }
  *
+ * A place location or offset is [x, y, z] or {x, y, z}; any other shape is a parse error, never the origin.
  * Client 0 is the editor's own player; a client above 0 is a remote player, reached through PIERemotePlayers.
  */
 namespace MCPPIE
