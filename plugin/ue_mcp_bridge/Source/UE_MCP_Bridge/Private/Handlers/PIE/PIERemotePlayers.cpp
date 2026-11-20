@@ -166,6 +166,41 @@ namespace MCPPIE::PIERemotePlayers
 	void RememberId(const FString& Id, UMCPPIERemoteControl* Control)
 	{
 		GIds.Add(Id, Control);
+		// Each player holds its newest FMCPPIERemoteReports::MaxRequests requests; an id its player dropped, or whose
+		// player left, routes nowhere and is forgotten here too.
+		if (GIds.Num() > FMCPPIERemoteReports::MaxRequests)
+		{
+			for (auto It = GIds.CreateIterator(); It; ++It)
+			{
+				const UMCPPIERemoteControl* Held = It->Value.Get();
+				if (!Held || !Held->OwnsRequest(It->Key))
+				{
+					It.RemoveCurrent();
+				}
+			}
+		}
+	}
+
+	bool CanClaimId(const FString& Id, const UMCPPIERemoteControl* Control, FString& OutError)
+	{
+		if (Id.Len() > FMCPPIERemoteReports::MaxIdLength)
+		{
+			OutError = FString::Printf(TEXT("injection_id is %d characters; a caller-chosen id is at most %d. Leave it out to have one minted."),
+				Id.Len(), FMCPPIERemoteReports::MaxIdLength);
+			return false;
+		}
+		const UMCPPIERemoteControl* Holder = FindById(Id);
+		if (Holder && Holder != Control && Holder->OwnsRequest(Id))
+		{
+			OutError = FString::Printf(TEXT("injection_id '%s' is already in use by another remote player's request. Stop it first, choose another id, or leave it out to have one minted."), *Id);
+			return false;
+		}
+		return true;
+	}
+
+	int32 NumRememberedIds()
+	{
+		return GIds.Num();
 	}
 
 	UMCPPIERemoteControl* FindById(const FString& Id)
