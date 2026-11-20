@@ -37,7 +37,7 @@ function writeCountsJson(counts: Counts): string {
 }
 
 /**
- * Replace em dashes with hyphens (CLAUDE.md style rule for public artifacts).
+ * Replace em dashes with hyphens (agent guide style rule for public artifacts).
  * The literal in the pattern is the character being stripped, so it is the one
  * place in this repo that has to keep it. Leave it alone during style sweeps.
  */

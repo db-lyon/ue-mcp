@@ -131,7 +131,7 @@ describe("one surface, one count", () => {
     // context, and no generator touched it, so it told agents 19 for a long
     // time. Anything that states a tool count in prose has to be right.
     const offenders: string[] = [];
-    for (const rel of ["skills/ue-mcp-workflow/SKILL.md", "CLAUDE.md", "README.md"]) {
+    for (const rel of ["skills/ue-mcp-workflow/SKILL.md", ".agents/README.md", "README.md"]) {
       for (const m of read(rel).matchAll(/(\d+)\s+category tools/g)) {
         if (parseInt(m[1], 10) !== counts.tools) {
           offenders.push(`${rel}: says ${m[1]} category tools, there are ${counts.tools}`);

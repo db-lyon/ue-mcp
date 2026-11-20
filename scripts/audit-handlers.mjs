@@ -2,7 +2,7 @@
 //
 // Compare bridge method names declared on the TS side (`bp(..., "method_name", ...)`)
 // against C++ `Registry.RegisterHandler(TEXT("method_name"), ...)` registrations.
-// Catches the silent-failure class CLAUDE.md warns about: drift between schema
+// Catches the silent-failure class the agent guide warns about: drift between schema
 // and handler names that turns a real action into "Unknown method".
 //
 // Exits non-zero when drift is found.

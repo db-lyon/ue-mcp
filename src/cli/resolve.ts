@@ -96,7 +96,7 @@ export function buildResolvePrompt(issueNum: number, issue: { title: string; bod
     `- src/tools/ - tool handlers (one file per category)`,
     `- src/ - core server (bridge.ts, types.ts, index.ts, instructions.ts)`,
     `- plugin/ - C++ Unreal Engine plugin source`,
-    `- Read CLAUDE.md for project conventions.`,
+    `- Read .agents/README.md for project conventions.`,
     ``,
     `## Instructions`,
     ``,

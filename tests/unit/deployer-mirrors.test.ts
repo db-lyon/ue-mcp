@@ -73,7 +73,7 @@ describe("the deployed tree is not the place to edit", () => {
     // The mirror only enforces this on the NEXT deploy, so somebody editing
     // the deployed tree silently loses that work until then. The prose is the
     // half the check cannot do.
-    const claude = fs.readFileSync(path.join(REPO, "CLAUDE.md"), "utf8");
-    expect(claude).toMatch(/never hand-copy|The deployer syncs|deployer does it/i);
+    const guide = fs.readFileSync(path.join(REPO, ".agents", "README.md"), "utf8");
+    expect(guide).toMatch(/never hand-copy|The deployer syncs|deployer does it/i);
   });
 });
