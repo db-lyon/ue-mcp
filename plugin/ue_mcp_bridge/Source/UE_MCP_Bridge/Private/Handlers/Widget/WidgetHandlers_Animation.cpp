@@ -2481,7 +2481,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::AuditWidgetAccessibility(const TSharedPt
 
 TSharedPtr<FJsonValue> FWidgetHandlers::GetRuntimeFocusPath(const TSharedPtr<FJsonObject>& Params)
 {
-	const bool bUserIndexGiven = Params.IsValid() && Params->HasField(TEXT("userIndex"));
+	const bool bUserIndexGiven = HasParam(Params, TEXT("userIndex"));
 	const int32 RequestedUserIndex = OptionalInt(Params, TEXT("userIndex"), 0);
 	const int32 PIEInstance = OptionalInt(Params, TEXT("pieInstance"), INDEX_NONE);
 
@@ -2576,7 +2576,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::SetRuntimeFocus(const TSharedPtr<FJsonOb
 	FString WidgetName;
 	if (auto Err = RequireString(Params, TEXT("widgetName"), WidgetName)) return Err;
 
-	const bool bUserIndexGiven = Params.IsValid() && Params->HasField(TEXT("userIndex"));
+	const bool bUserIndexGiven = HasParam(Params, TEXT("userIndex"));
 	const int32 RequestedUserIndex = OptionalInt(Params, TEXT("userIndex"), 0);
 	const FString ClassFilter = OptionalString(Params, TEXT("className"));
 	const int32 PIEInstance = OptionalInt(Params, TEXT("pieInstance"), INDEX_NONE);
