@@ -1,6 +1,7 @@
 #include "MaterialHandlers.h"
 #include "HandlerUtils.h"
 #include "HandlerJsonProperty.h"
+#include "HandlerMaterialCompile.h"
 #include "Materials/Material.h"
 #include "Materials/MaterialExpression.h"
 #include "UObject/StrongObjectPtr.h"
@@ -150,6 +151,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::InsertExpressionBetween(const TSharedP
 	Payload->SetObjectField(TEXT("insertion"), MakeShared<FJsonObject>(*Params));
 	Payload->SetObjectField(TEXT("previousSource"), SurgerySourceJson(Previous));
 	MCPSetRollback(Result, TEXT("restore_expression_insertion"), Payload);
+	MCPMaterialCompile::Report(Result, Material, MCPMaterialCompile::Finish(Material), MCPMaterialCompile::EOnError::Warn);
 	return MCPResult(Result);
 }
 
@@ -206,6 +208,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::RestoreExpressionInsertion(const TShar
 	auto Result = MCPSuccess();
 	Result->SetBoolField(TEXT("deleted"), true);
 	MCPSetRollback(Result, TEXT("insert_expression_between"), *Insertion);
+	MCPMaterialCompile::Report(Result, Material, MCPMaterialCompile::Finish(Material), MCPMaterialCompile::EOnError::Warn);
 	return MCPResult(Result);
 }
 

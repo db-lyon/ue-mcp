@@ -8,6 +8,7 @@
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
 #include "HandlerJsonProperty.h"
+#include "HandlerMaterialCompile.h"
 #include "Materials/Material.h"
 #include "Materials/MaterialInstance.h"
 #include "Materials/MaterialInstanceConstant.h"
@@ -161,7 +162,19 @@ TSharedPtr<FJsonValue> FMaterialHandlers::ValidateMaterial(const TSharedPtr<FJso
 		}
 	}
 
+	// A material that does not compile draws as the default material, so it is
+	// not valid however clean its graph looks (#1947). The compile is the one
+	// already cached for this editor's platform; nothing is recompiled or dirtied.
 	TSharedPtr<FJsonObject> Result = MCPSuccess();
+	const MCPMaterialCompile::FOutcome Compile = MCPMaterialCompile::Finish(Material);
+	for (const FString& Error : Compile.Errors)
+	{
+		TSharedPtr<FJsonObject> Issue = MakeShared<FJsonObject>();
+		Issue->SetStringField(TEXT("kind"), TEXT("compile_error"));
+		Issue->SetStringField(TEXT("message"), Error);
+		Issues.Add(MakeShared<FJsonValueObject>(Issue));
+	}
+	MCPMaterialCompile::Report(Result, Material, Compile, MCPMaterialCompile::EOnError::Report);
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetNumberField(TEXT("expressionCount"), AllExpressions.Num());
 	Result->SetNumberField(TEXT("reachableCount"), Referenced.Num());
@@ -271,7 +284,9 @@ TSharedPtr<FJsonValue> FMaterialHandlers::DeleteOrphanExpressions(const TSharedP
 	{
 		UMaterialEditingLibrary::DeleteMaterialExpression(Material, Expr);
 	}
-	UMaterialEditingLibrary::RecompileMaterial(Material);
+	// Orphans compile into nothing, so deleting them should not change the
+	// result; reported all the same, in the shape every material edit uses.
+	MCPMaterialCompile::Report(Result, Material, MCPMaterialCompile::Recompile(Material), MCPMaterialCompile::EOnError::Warn);
 	Material->MarkPackageDirty();
 	FString SaveError;
 	const bool bSaved = SaveAssetPackageChecked(Material, SaveError);
@@ -315,6 +330,26 @@ TSharedPtr<FJsonValue> FMaterialHandlers::GetMaterialShaderStats(const TSharedPt
 
 	// Shading/blend
 	Result->SetStringField(TEXT("shadingModel"), ShadingModelToString(Material->GetShadingModels().GetFirstShadingModel()));
+
+	// What the compiled shaders cost, from the same statistics the material
+	// editor shows. A material that does not compile has none, and its errors
+	// say why (#1947).
+	const MCPMaterialCompile::FOutcome Compile = MCPMaterialCompile::Finish(Material);
+	MCPMaterialCompile::Report(Result, Material, Compile, MCPMaterialCompile::EOnError::Report);
+	if (Compile.bChecked && Compile.Errors.Num() == 0)
+	{
+		const FMaterialStatistics Stats = UMaterialEditingLibrary::GetStatistics(Material);
+		TSharedPtr<FJsonObject> Compiled = MakeShared<FJsonObject>();
+		Compiled->SetNumberField(TEXT("vertexShaderInstructions"), Stats.NumVertexShaderInstructions);
+		Compiled->SetNumberField(TEXT("pixelShaderInstructions"), Stats.NumPixelShaderInstructions);
+		Compiled->SetNumberField(TEXT("samplers"), Stats.NumSamplers);
+		Compiled->SetNumberField(TEXT("vertexTextureSamples"), Stats.NumVertexTextureSamples);
+		Compiled->SetNumberField(TEXT("pixelTextureSamples"), Stats.NumPixelTextureSamples);
+		Compiled->SetNumberField(TEXT("virtualTextureSamples"), Stats.NumVirtualTextureSamples);
+		Compiled->SetNumberField(TEXT("uvScalars"), Stats.NumUVScalars);
+		Compiled->SetNumberField(TEXT("interpolatorScalars"), Stats.NumInterpolatorScalars);
+		Result->SetObjectField(TEXT("compiledStats"), Compiled);
+	}
 	return MCPResult(Result);
 }
 
@@ -557,28 +592,10 @@ bool FMaterialHandlers::MaterialPropertyHoldsExpressionInput(const FProperty* Pr
 
 bool FMaterialHandlers::CompileMaterialForErrors(UMaterial* Material, TArray<FString>& OutErrors)
 {
-	OutErrors.Reset();
 	// A -nullrhi editor compiles no shaders, so an empty list there says nothing.
-	if (!FApp::CanEverRender())
-	{
-		UMaterialEditingLibrary::RecompileMaterial(Material);
-		return false;
-	}
-#if UE_MCP_HAS_5_8_API
-	OutErrors = UMaterialEditingLibrary::RecompileMaterial(Material);
-	return true;
-#else
-	// RecompileMaterial returns void before 5.8; the resource holds the errors
-	// once its compile has finished.
-	UMaterialEditingLibrary::RecompileMaterial(Material);
-	if (FMaterialResource* Resource = Material->GetMaterialResource(GMaxRHIShaderPlatform))
-	{
-		Resource->FinishCompilation();
-		OutErrors = Resource->GetCompileErrors();
-		return true;
-	}
-	return false;
-#endif
+	const MCPMaterialCompile::FOutcome Outcome = MCPMaterialCompile::Recompile(Material);
+	OutErrors = Outcome.Errors;
+	return Outcome.bChecked;
 }
 
 
@@ -593,6 +610,8 @@ static TSharedPtr<FJsonValue> MaterialGraphReplaceFailure(const FString& Message
 	TArray<TSharedPtr<FJsonValue>> ErrorValues;
 	for (const FString& E : Errors) ErrorValues.Add(MakeShared<FJsonValueString>(E));
 	Error->SetArrayField(TEXT("compileErrors"), ErrorValues);
+	Error->SetBoolField(TEXT("compileChecked"), true);
+	Error->SetBoolField(TEXT("compiled"), false);
 	return MakeShared<FJsonValueObject>(Error);
 }
 
@@ -642,11 +661,11 @@ TSharedPtr<FJsonValue> FMaterialHandlers::ReplaceMaterialGraph(const TSharedPtr<
 	{
 		return MCPError(FString::Printf(TEXT("The replacement built on a trial copy but not on the material: %s The material's expressions were deleted and it was not saved; reload it from disk to discard the change."), *BuildError));
 	}
-	TArray<FString> Errors;
-	CompileMaterialForErrors(Material, Errors);
-	if (Errors.Num() > 0)
+	MCPMaterialCompile::FOutcome Compile;
+	Compile.bChecked = CompileMaterialForErrors(Material, Compile.Errors) && bErrorsKnown;
+	if (Compile.Errors.Num() > 0)
 	{
-		return MaterialGraphReplaceFailure(TEXT("The replacement compiled on a trial copy but not on the material, so it was not saved; reload the material from disk to discard the change."), Errors);
+		return MaterialGraphReplaceFailure(TEXT("The replacement compiled on a trial copy but not on the material, so it was not saved; reload the material from disk to discard the change."), Compile.Errors);
 	}
 	FString SaveError;
 	const bool bSaved = SaveAssetPackageChecked(Material, SaveError);
@@ -654,9 +673,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::ReplaceMaterialGraph(const TSharedPtr<
 	TSharedPtr<FJsonObject> Result = Built->AsObject();
 	MCPSetUpdated(Result);
 	Result->SetBoolField(TEXT("replaced"), true);
-	Result->SetBoolField(TEXT("compileChecked"), bErrorsKnown);
-	Result->SetArrayField(TEXT("compileErrors"), TArray<TSharedPtr<FJsonValue>>());
-	if (!bErrorsKnown) Result->SetStringField(TEXT("compileErrorsNote"), TEXT("This editor compiled no shaders (a -nullrhi session, or an engine that does not report the errors), so the replacement was saved without the compile check. recompile_material in a rendering editor reports them."));
+	MCPMaterialCompile::Report(Result, Material, Compile, MCPMaterialCompile::EOnError::Fail);
 	MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveError);
 	Result->SetStringField(TEXT("aliasOf"), TEXT("build_material_graph"));
 	Result->RemoveField(TEXT("rollbackPossible"));
@@ -1254,6 +1271,16 @@ TSharedPtr<FJsonValue> FMaterialHandlers::BuildMaterialGraphInto(const TSharedPt
 	Result->SetStringField(TEXT("rollbackNote"), FString::Printf(
 		TEXT("No single call undoes this: %d expression(s) were created, %d removed, %d wire(s) and %d property connection(s) written. Undo the additions with one delete_material_expression per name in createdExpressions, then reconnect anything listed in overwrittenProperties with connect_to_material_property; removed expressions are not restorable that way. Wrapping the build in begin_transaction / end_transaction gives a one-step undo instead."),
 		Specs.Num(), RemovedExpressionNames.Num(), Wires, Connections));
+
+	// The graph is saved as built either way. A graph built over several calls
+	// may not compile in between, so a failed compile is a warning with the
+	// compiler's text rather than a failed call (#1947); replace=true, which
+	// promises a finished graph, refuses instead. The replace path's trial copy
+	// (bSave false) runs its own compile check.
+	if (bSave)
+	{
+		MCPMaterialCompile::Report(Result, Material, MCPMaterialCompile::Finish(Material), MCPMaterialCompile::EOnError::Warn);
+	}
 	return MCPResult(Result);
 }
 

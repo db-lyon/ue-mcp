@@ -16,6 +16,7 @@
 #include "UE_MCP_BridgeModule.h"
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
+#include "HandlerMaterialCompile.h"
 #include "UObject/Class.h"
 #include "SceneTypes.h"
 #include "Materials/Material.h"
@@ -777,17 +778,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::BuildMaterial(const TSharedPtr<FJsonOb
 	}
 
 	// ── Recompile, then report what actually survived it ─────────────────────
-#if UE_MCP_HAS_5_8_API
-	const TArray<FString> CompileErrors = UMaterialEditingLibrary::RecompileMaterial(Material);
-#else
-	// RecompileMaterial returns void before 5.8, where it started handing back
-	// the compile errors it collected. The recompile itself is identical, so
-	// only the reporting differs: `compileErrors` below stays empty on 5.7 and
-	// the response says the list could not be read rather than implying the
-	// material compiled clean.
-	UMaterialEditingLibrary::RecompileMaterial(Material);
-	const TArray<FString> CompileErrors;
-#endif
+	const MCPMaterialCompile::FOutcome Compile = MCPMaterialCompile::Recompile(Material);
 	FString SaveError;
 	const bool bSaved = SaveAssetPackageChecked(Material, SaveError);
 
@@ -833,20 +824,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::BuildMaterial(const TSharedPtr<FJsonOb
 	Result->SetNumberField(TEXT("droppedConnections"), DroppedCount);
 	MCPNoteSaveOutcome(Result, Material->GetPathName(), bSaved, SaveError);
 
-	if (CompileErrors.Num() > 0)
-	{
-		TArray<TSharedPtr<FJsonValue>> Errors;
-		for (const FString& Error : CompileErrors) Errors.Add(MakeShared<FJsonValueString>(Error));
-		Result->SetArrayField(TEXT("compileErrors"), Errors);
-	}
-#if !UE_MCP_HAS_5_8_API
-	// Said out loud, because an absent compileErrors array otherwise reads as
-	// "the recompile produced no errors", and on this engine it means the call
-	// that recompiles does not report them at all.
-	Result->SetStringField(TEXT("compileErrorsNote"),
-		TEXT("compileErrors is not reported on this engine: UMaterialEditingLibrary::RecompileMaterial "
-		     "returns void before UE 5.8. The material was recompiled; read the editor log for its errors."));
-#endif
+	MCPMaterialCompile::Report(Result, Material, Compile, MCPMaterialCompile::EOnError::Fail);
 
 	// ── Optional: put the finished material on a mesh's slots ────────────────
 	// 'meshPath' is the spec's alias, renamed to assignToMesh before this runs.

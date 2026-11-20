@@ -4,6 +4,7 @@
 #include "HandlerUtils.h"
 #include "HandlerPagination.h"
 #include "HandlerAssetCreate.h"
+#include "HandlerMaterialCompile.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
 #include "Policies/CondensedJsonPrintPolicy.h"
@@ -2533,9 +2534,9 @@ TSharedPtr<FJsonValue> FMaterialHandlers::RecompileMaterial(const TSharedPtr<FJs
 
 	UE_LOG(LogMCPBridge, Log, TEXT("[UE-MCP] Recompiling material: %s"), *MaterialPath);
 
-	Material->PreEditChange(nullptr);
-	Material->PostEditChange();
-	Material->MarkPackageDirty();
+	// The editor's recompile, which re-caches the static-permutation instances
+	// too, finished and read before the call answers (#1947).
+	const MCPMaterialCompile::FOutcome Compile = MCPMaterialCompile::Recompile(Material);
 
 	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("path"), Material->GetPathName());
@@ -2587,6 +2588,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::RecompileMaterial(const TSharedPtr<FJs
 	Result->SetStringField(TEXT("idempotencyNote"),
 		TEXT("Recompiling an unchanged graph reaches the same end state every time, so a replayed or retried call cannot double-apply. It always does the work rather than reporting a no-op, because whether the existing shader maps are current is not something this handler can read back."));
 
+	MCPMaterialCompile::Report(Result, Material, Compile, MCPMaterialCompile::EOnError::Fail);
 	return MCPResult(Result);
 }
 
@@ -3956,54 +3958,10 @@ TSharedPtr<FJsonValue> FMaterialHandlers::SetMaterialStaticSwitch(const TSharedP
 		MCPSetRollback(Result, TEXT("set_material_static_switch"), Payload);
 	}
 
+	// A switch override gives the instance a shader permutation of its own,
+	// which compiles here and can fail where the parent does not (#1947).
+	MCPMaterialCompile::Report(Result, Instance, MCPMaterialCompile::Finish(Instance), MCPMaterialCompile::EOnError::Warn);
 	return MCPResult(Result);
-}
-
-namespace
-{
-	// #1441: what the renderer will draw for a material and its loaded instances
-	// that compile their own shader maps. A finished resource without a valid
-	// shader map renders as the default material. Read without blocking: a
-	// resource still compiling is reported as such, not waited on.
-	TSharedPtr<FJsonObject> DescribeMaterialShaderState(UMaterial* Material)
-	{
-		TSharedPtr<FJsonObject> State = MakeShared<FJsonObject>();
-		const FMaterialResource* Resource = Material ? Material->GetMaterialResource(GMaxRHIShaderPlatform) : nullptr;
-		const bool bFinished = Resource && Resource->IsCompilationFinished();
-		State->SetBoolField(TEXT("compiling"), Resource && !bFinished);
-		if (bFinished)
-		{
-			State->SetBoolField(TEXT("validShaderMap"), Resource->HasValidGameThreadShaderMap());
-			TArray<TSharedPtr<FJsonValue>> Errors;
-			for (const FString& Error : Resource->GetCompileErrors()) Errors.Add(MakeShared<FJsonValueString>(Error));
-			State->SetArrayField(TEXT("resourceCompileErrors"), Errors);
-		}
-
-		TArray<TSharedPtr<FJsonValue>> Fallbacks;
-		int32 PermutationChildren = 0;
-		int32 ChildrenCompiling = 0;
-		for (TObjectIterator<UMaterialInstance> It; It; ++It)
-		{
-			UMaterialInstance* Instance = *It;
-			if (!Instance || !Instance->bHasStaticPermutationResource || !Instance->IsChildOf(Material)) continue;
-			++PermutationChildren;
-			const FMaterialResource* ChildResource = Instance->GetMaterialResource(GMaxRHIShaderPlatform);
-			if (!ChildResource) continue;
-			if (!ChildResource->IsCompilationFinished()) { ++ChildrenCompiling; continue; }
-			if (!ChildResource->HasValidGameThreadShaderMap())
-			{
-				Fallbacks.Add(MakeShared<FJsonValueString>(Instance->GetPathName()));
-			}
-		}
-		State->SetNumberField(TEXT("staticPermutationChildren"), PermutationChildren);
-		State->SetNumberField(TEXT("childrenCompiling"), ChildrenCompiling);
-		State->SetArrayField(TEXT("childrenWithoutShaderMap"), Fallbacks);
-		if (!bFinished || ChildrenCompiling > 0)
-		{
-			State->SetStringField(TEXT("note"), TEXT("Shaders were still compiling when this call returned. editor(get_shader_compile_status, waitUntilIdle=true) waits for them."));
-		}
-		return State;
-	}
 }
 
 TSharedPtr<FJsonValue> FMaterialHandlers::SetExpressionValue(const TSharedPtr<FJsonObject>& Params)
@@ -4381,25 +4339,18 @@ TSharedPtr<FJsonValue> FMaterialHandlers::SetExpressionValue(const TSharedPtr<FJ
 	}
 
 	// #1441: a texture write recompiles through the editor's RecompileMaterial,
-	// which also re-caches child instances with static permutations. It balances
-	// the PreEditChange taken above.
+	// which also re-caches child instances with static permutations. Any other
+	// write recompiles through PostEdit. Either way the compile is finished and
+	// read before the call answers (#1947).
+	MCPMaterialCompile::FOutcome Compile;
 	if (bTextureChanged && Target.Material)
 	{
-#if UE_MCP_HAS_5_8_API
-		const TArray<FString> CompileErrors = UMaterialEditingLibrary::RecompileMaterial(Target.Material);
-		TArray<TSharedPtr<FJsonValue>> ErrorValues;
-		for (const FString& Error : CompileErrors) ErrorValues.Add(MakeShared<FJsonValueString>(Error));
-		Result->SetArrayField(TEXT("compileErrors"), ErrorValues);
-#else
-		UMaterialEditingLibrary::RecompileMaterial(Target.Material);
-		Result->SetStringField(TEXT("compileErrorsNote"),
-			TEXT("compileErrors is not reported on this engine: UMaterialEditingLibrary::RecompileMaterial returns void before UE 5.8. Read the editor log for its errors."));
-#endif
-		Result->SetObjectField(TEXT("shaderState"), DescribeMaterialShaderState(Target.Material));
+		Compile = MCPMaterialCompile::Recompile(Target.Material);
 	}
 	else
 	{
 		Target.PostEdit();
+		if (Target.Material) Compile = MCPMaterialCompile::Finish(Target.Material);
 	}
 
 	// #979: the value was written in memory and the package only marked dirty,
@@ -4441,6 +4392,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::SetExpressionValue(const TSharedPtr<FJ
 			: RollbackBlockedReason);
 	}
 
+	if (Target.Material) MCPMaterialCompile::Report(Result, Target.Material, Compile, MCPMaterialCompile::EOnError::Warn);
 	return MCPResult(Result);
 }
 UMaterialExpression* FMaterialHandlers::FindExpressionByName(UMaterial* Material, const FString& ExpressionName)
@@ -5030,6 +4982,13 @@ TSharedPtr<FJsonValue> FMaterialHandlers::SetCustomExpression(const TSharedPtr<F
 		Result->SetBoolField(TEXT("rollbackPossible"), false);
 		Result->SetStringField(TEXT("rollbackNote"),
 			TEXT("Nothing changed: every field supplied already held the value asked for (or none was supplied, which is the read form of this action). There is nothing to undo."));
+	}
+	// An edit that leaves the material not compiling says so in a warning: a node whose
+	// new inputs are wired by the next call is not compilable in between (#1947).
+	if (Target.Material)
+	{
+		MCPMaterialCompile::Report(Result, Target.Material, MCPMaterialCompile::Finish(Target.Material),
+			bChanged ? MCPMaterialCompile::EOnError::Warn : MCPMaterialCompile::EOnError::Report);
 	}
 	return MCPResult(Result);
 }
