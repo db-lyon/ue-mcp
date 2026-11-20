@@ -82,9 +82,9 @@ namespace MCPTimelineSnapshot
 	inline void ImportFields(const UStruct* Struct, void* Container, UObject* Owner, const TSharedPtr<FJsonObject>& Fields)
 	{
 		if (!Fields.IsValid()) return;
-		for (const TPair<FString, TSharedPtr<FJsonValue>>& Pair : Fields->Values)
+		for (const auto& Pair : Fields->Values)
 		{
-			const FProperty* Prop = Struct->FindPropertyByName(FName(*Pair.Key));
+			const FProperty* Prop = Struct->FindPropertyByName(FName(*FString(Pair.Key)));
 			if (!Prop || !Pair.Value.IsValid() || Prop->HasAnyPropertyFlags(CPF_Transient)) continue;
 			if (CastField<FObjectPropertyBase>(Prop) || TrackInner(Prop)) continue;
 			Prop->ImportText_Direct(*Pair.Value->AsString(), Prop->ContainerPtrToValuePtr<void>(Container), Owner, PPF_None);
