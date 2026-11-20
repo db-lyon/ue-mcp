@@ -1,5 +1,5 @@
 {
-  "handlerCount": 1414,
+  "handlerCount": 1415,
   "handlers": {
     "acquire_lock": {
       "category": "lock",
