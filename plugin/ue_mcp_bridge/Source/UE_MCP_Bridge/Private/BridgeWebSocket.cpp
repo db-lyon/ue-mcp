@@ -9,6 +9,10 @@
 
 // The HTTP upgrade handshake. The frame codec is BridgeFrameCodec.cpp, and the
 // connection loop that drives both lives in BridgeServer.cpp.
+//
+// Every log line here goes through UE_MCP_LOG_WIRE, which redacts credentials:
+// these lines quote what the client sent, and the request carries the session
+// token in its Authorization header (#1866).
 
 FString FMCPBridgeServer::PerformWebSocketHandshake(FMCPSocketHandle ClientSocketFD, TArray<uint8>& OutPipelinedBytes)
 {
@@ -30,13 +34,13 @@ FString FMCPBridgeServer::PerformWebSocketHandshake(FMCPSocketHandle ClientSocke
 
 		if (!RequestLine.StartsWith(TEXT("GET "), ESearchCase::CaseSensitive))
 		{
-			UE_LOG(LogMCPBridge, Warning, TEXT("[UE-MCP] Rejected non-GET upgrade request: %s"), *RequestLine.Left(80));
+			UE_MCP_LOG_WIRE(Warning, TEXT("[UE-MCP] Rejected non-GET upgrade request: %s"), *RequestLine.Left(80));
 			SendHttpError(ClientSocketFD, 405, TEXT("Method Not Allowed"), TEXT("The UE-MCP bridge only accepts GET WebSocket upgrades."));
 			return TEXT("");
 		}
 		if (!RequestLine.EndsWith(TEXT("HTTP/1.1"), ESearchCase::IgnoreCase))
 		{
-			UE_LOG(LogMCPBridge, Warning, TEXT("[UE-MCP] Rejected upgrade request with unsupported HTTP version: %s"), *RequestLine.Left(80));
+			UE_MCP_LOG_WIRE(Warning, TEXT("[UE-MCP] Rejected upgrade request with unsupported HTTP version: %s"), *RequestLine.Left(80));
 			SendHttpError(ClientSocketFD, 505, TEXT("HTTP Version Not Supported"), TEXT("WebSocket upgrades require HTTP/1.1."));
 			return TEXT("");
 		}
@@ -44,7 +48,7 @@ FString FMCPBridgeServer::PerformWebSocketHandshake(FMCPSocketHandle ClientSocke
 		FString UpgradeHeader;
 		if (!FindHeaderValue(Request, TEXT("Upgrade"), UpgradeHeader) || !UpgradeHeader.Contains(TEXT("websocket"), ESearchCase::IgnoreCase))
 		{
-			UE_LOG(LogMCPBridge, Warning, TEXT("[UE-MCP] Rejected request with no WebSocket Upgrade header"));
+			UE_MCP_LOG_WIRE(Warning, TEXT("[UE-MCP] Rejected request with no WebSocket Upgrade header"));
 			SendHttpError(ClientSocketFD, 426, TEXT("Upgrade Required"), TEXT("The UE-MCP bridge speaks WebSocket only."));
 			return TEXT("");
 		}
@@ -52,7 +56,7 @@ FString FMCPBridgeServer::PerformWebSocketHandshake(FMCPSocketHandle ClientSocke
 		FString ConnectionHeader;
 		if (!FindHeaderValue(Request, TEXT("Connection"), ConnectionHeader) || !ConnectionHeader.Contains(TEXT("upgrade"), ESearchCase::IgnoreCase))
 		{
-			UE_LOG(LogMCPBridge, Warning, TEXT("[UE-MCP] Rejected upgrade request with no 'Connection: Upgrade'"));
+			UE_MCP_LOG_WIRE(Warning, TEXT("[UE-MCP] Rejected upgrade request with no 'Connection: Upgrade'"));
 			SendHttpError(ClientSocketFD, 400, TEXT("Bad Request"), TEXT("A WebSocket upgrade needs 'Connection: Upgrade'."));
 			return TEXT("");
 		}
@@ -60,7 +64,7 @@ FString FMCPBridgeServer::PerformWebSocketHandshake(FMCPSocketHandle ClientSocke
 		FString VersionHeader;
 		if (!FindHeaderValue(Request, TEXT("Sec-WebSocket-Version"), VersionHeader) || FCString::Atoi(*VersionHeader) != 13)
 		{
-			UE_LOG(LogMCPBridge, Warning, TEXT("[UE-MCP] Rejected upgrade with Sec-WebSocket-Version '%s' (13 required)"), *VersionHeader);
+			UE_MCP_LOG_WIRE(Warning, TEXT("[UE-MCP] Rejected upgrade with Sec-WebSocket-Version '%s' (13 required)"), *VersionHeader);
 			SendHttpError(ClientSocketFD, 426, TEXT("Upgrade Required"), TEXT("The UE-MCP bridge speaks WebSocket version 13."));
 			return TEXT("");
 		}
@@ -82,7 +86,7 @@ FString FMCPBridgeServer::PerformWebSocketHandshake(FMCPSocketHandle ClientSocke
 		FString Origin;
 		if (FindHeaderValue(Request, TEXT("Origin"), Origin))
 		{
-			UE_LOG(LogMCPBridge, Warning, TEXT("[UE-MCP] Rejected browser-originated WebSocket upgrade from Origin: %s"), *Origin);
+			UE_MCP_LOG_WIRE(Warning, TEXT("[UE-MCP] Rejected browser-originated WebSocket upgrade from Origin: %s"), *Origin);
 			SendHttpError(ClientSocketFD, 403, TEXT("Forbidden"),
 				TEXT("The UE-MCP bridge does not accept upgrades from web pages. Connect from a local process instead."));
 			return TEXT("");
@@ -102,7 +106,7 @@ FString FMCPBridgeServer::PerformWebSocketHandshake(FMCPSocketHandle ClientSocke
 			UEMCPBridgeSessionToken::EvaluateAuthorization(bHasAuthorization, Authorization, SessionToken);
 		if (Decision != EMCPBridgeAuthDecision::Accepted)
 		{
-			UE_LOG(LogMCPBridge, Warning, TEXT("[UE-MCP] Refused WebSocket upgrade: %s"),
+			UE_MCP_LOG_WIRE(Warning, TEXT("[UE-MCP] Refused WebSocket upgrade: %s"),
 				Decision == EMCPBridgeAuthDecision::Missing ? TEXT("no session token (the client predates it)")
 				: Decision == EMCPBridgeAuthDecision::Malformed ? TEXT("malformed Authorization header")
 				: Decision == EMCPBridgeAuthDecision::Mismatch ? TEXT("session token does not match")
@@ -118,12 +122,12 @@ FString FMCPBridgeServer::PerformWebSocketHandshake(FMCPSocketHandle ClientSocke
 	FString WebSocketKey;
 	FindHeaderValue(Request, TEXT("Sec-WebSocket-Key"), WebSocketKey);
 
-	UE_LOG(LogMCPBridge, Log, TEXT("[UE-MCP] Extracted WebSocket-Key: %s"), *WebSocketKey);
+	UE_MCP_LOG_WIRE(Log, TEXT("[UE-MCP] Extracted WebSocket-Key: %s"), *WebSocketKey);
 
 	TArray<uint8> DecodedKey;
 	if (WebSocketKey.IsEmpty() || !FBase64::Decode(WebSocketKey, DecodedKey) || DecodedKey.Num() != 16)
 	{
-		UE_LOG(LogMCPBridge, Warning, TEXT("[UE-MCP] Rejected upgrade with a missing or malformed Sec-WebSocket-Key"));
+		UE_MCP_LOG_WIRE(Warning, TEXT("[UE-MCP] Rejected upgrade with a missing or malformed Sec-WebSocket-Key"));
 		SendHttpError(ClientSocketFD, 400, TEXT("Bad Request"), TEXT("Sec-WebSocket-Key must be 16 base64-encoded bytes."));
 		return TEXT("");
 	}
@@ -144,8 +148,8 @@ FString FMCPBridgeServer::PerformWebSocketHandshake(FMCPSocketHandle ClientSocke
 	Response += AuthSchemeLine;
 	Response += TEXT("\r\n");
 	
-	UE_LOG(LogMCPBridge, Log, TEXT("[UE-MCP] Accept key: %s"), *AcceptKey);
-	UE_LOG(LogMCPBridge, Log, TEXT("[UE-MCP] Response length: %d chars"), Response.Len());
+	UE_MCP_LOG_WIRE(Log, TEXT("[UE-MCP] Accept key: %s"), *AcceptKey);
+	UE_MCP_LOG_WIRE(Log, TEXT("[UE-MCP] Response length: %d chars"), Response.Len());
 
 	return Response;
 }
@@ -206,7 +210,7 @@ bool FMCPBridgeServer::ReadHttpRequest(FMCPSocketHandle SocketFD, FString& OutRe
 		const double Remaining = Deadline - FPlatformTime::Seconds();
 		if (Remaining <= 0.0)
 		{
-			UE_LOG(LogMCPBridge, Warning, TEXT("[UE-MCP] Timed out reading the WebSocket upgrade request (%d bytes read)"), Raw.Num());
+			UE_MCP_LOG_WIRE(Warning, TEXT("[UE-MCP] Timed out reading the WebSocket upgrade request (%d bytes read)"), Raw.Num());
 			return false;
 		}
 
@@ -221,7 +225,7 @@ bool FMCPBridgeServer::ReadHttpRequest(FMCPSocketHandle SocketFD, FString& OutRe
 		const int32 SelectResult = select(SocketFD + 1, &ReadSet, nullptr, nullptr, &Timeout);
 		if (SelectResult <= 0 || !FD_ISSET(SocketFD, &ReadSet))
 		{
-			UE_LOG(LogMCPBridge, Warning, TEXT("[UE-MCP] Timeout waiting for the WebSocket upgrade request"));
+			UE_MCP_LOG_WIRE(Warning, TEXT("[UE-MCP] Timeout waiting for the WebSocket upgrade request"));
 			return false;
 		}
 
@@ -237,11 +241,11 @@ bool FMCPBridgeServer::ReadHttpRequest(FMCPSocketHandle SocketFD, FString& OutRe
 			// upgrade and vanished, which is worth seeing.
 			if (Raw.Num() == 0)
 			{
-				UE_LOG(LogMCPBridge, Verbose, TEXT("[UE-MCP] Port probe connected and closed without an upgrade request"));
+				UE_MCP_LOG_WIRE(Verbose, TEXT("[UE-MCP] Port probe connected and closed without an upgrade request"));
 			}
 			else
 			{
-				UE_LOG(LogMCPBridge, Warning, TEXT("[UE-MCP] Connection closed part way through the upgrade request (%d bytes read)"), Raw.Num());
+				UE_MCP_LOG_WIRE(Warning, TEXT("[UE-MCP] Connection closed part way through the upgrade request (%d bytes read)"), Raw.Num());
 			}
 			return false;
 		}
@@ -261,7 +265,7 @@ bool FMCPBridgeServer::ReadHttpRequest(FMCPSocketHandle SocketFD, FString& OutRe
 
 		if (HeaderEnd == INDEX_NONE && Raw.Num() > MCPWebSocketLimits::kMaxUpgradeHeaderBytes)
 		{
-			UE_LOG(LogMCPBridge, Warning, TEXT("[UE-MCP] Upgrade request headers exceed %d bytes with no terminator; refusing"), MCPWebSocketLimits::kMaxUpgradeHeaderBytes);
+			UE_MCP_LOG_WIRE(Warning, TEXT("[UE-MCP] Upgrade request headers exceed %d bytes with no terminator; refusing"), MCPWebSocketLimits::kMaxUpgradeHeaderBytes);
 			SendHttpError(SocketFD, 431, TEXT("Request Header Fields Too Large"), TEXT("The upgrade request headers are too large for the UE-MCP bridge."));
 			return false;
 		}
@@ -280,7 +284,7 @@ bool FMCPBridgeServer::ReadHttpRequest(FMCPSocketHandle SocketFD, FString& OutRe
 		OutPipelinedBytes.Append(Raw.GetData() + HeaderEnd, Raw.Num() - HeaderEnd);
 	}
 
-	UE_LOG(LogMCPBridge, Log, TEXT("[UE-MCP] Read HTTP upgrade request (%d header bytes, %d pipelined):\n%s"),
+	UE_MCP_LOG_WIRE(Log, TEXT("[UE-MCP] Read HTTP upgrade request (%d header bytes, %d pipelined):\n%s"),
 		HeaderEnd, OutPipelinedBytes.Num(), *OutRequest.Left(200));
 
 	return true;

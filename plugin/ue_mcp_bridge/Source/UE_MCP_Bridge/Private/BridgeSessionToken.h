@@ -11,6 +11,7 @@
 
 #include "CoreMinimal.h"
 #include "MCPWireContract.h"
+#include "UE_MCP_BridgeModule.h"
 
 /** Outcome of checking an upgrade request's Authorization header. */
 enum class EMCPBridgeAuthDecision : uint8
@@ -73,6 +74,30 @@ namespace UEMCPBridgeSessionToken
 
 	/** The plain-text body of the 401 for a refusal. Never contains a token. */
 	FString DescribeRefusal(EMCPBridgeAuthDecision Decision, int32 Port);
+
+	/**
+	 * Text with every credential replaced by "[REDACTED]": the values of the
+	 * Authorization, Proxy-Authorization, X-UE-MCP-Token, Cookie and Set-Cookie
+	 * headers (keeping the scheme word, so "Bearer [REDACTED]"), any bearer or
+	 * basic credential, and a value assigned to a key named token, secret,
+	 * password or api_key. Mirrors redactCredentials in
+	 * src/core/redact-credentials.ts. Every handshake log line goes through it
+	 * by way of UE_MCP_LOG_WIRE (#1866).
+	 */
+	FString RedactCredentials(const FString& Text);
+}
+
+/**
+ * UE_LOG on LogMCPBridge with the formatted line passed through
+ * RedactCredentials. Every log line in the upgrade handshake uses it, because
+ * those lines quote what a client sent, and tests/unit/redact-credentials.test.ts
+ * fails on a plain UE_LOG in BridgeWebSocket.cpp.
+ */
+#define UE_MCP_LOG_WIRE(Verbosity, Format, ...) \
+	UE_LOG(LogMCPBridge, Verbosity, TEXT("%s"), *UEMCPBridgeSessionToken::RedactCredentials(FString::Printf(Format, ##__VA_ARGS__)))
+
+namespace UEMCPBridgeSessionToken
+{
 
 	/** Where token files live: UE_MCP_BRIDGE_TOKEN_DIR, else UserMcpDir()/bridge. Empty when no home can be found. */
 	FString TokenDirectory();
