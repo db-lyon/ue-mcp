@@ -4,6 +4,7 @@
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
 #include "HandlerAssetCreate.h"
+#include "HandlerAssetDelete.h"
 #include "HandlerWorld.h"
 #include "Handlers/PIE/MCPPIETestScript.h"
 #include "Handlers/PIE/MCPPIEObservationProfile.h"
@@ -607,6 +608,9 @@ TSharedPtr<FJsonValue> FPIEHandlers::PieScriptDelete(const TSharedPtr<FJsonObjec
 	if (PathErr) return PathErr;
 	if (!bConfirm) return MCPError(TEXT("confirm=true required to delete a test script"));
 	if (MCPIsProtectedAssetPath(Path)) return MCPError(FString::Printf(TEXT("Refusing to delete a protected path: %s. This cannot be overridden."), *Path));
+	// While PIE runs the asset library answers "does not exist" and refuses deletes, so the check below would
+	// report a script that is still on disk as already deleted (#1815).
+	if (MCPIsPlayInEditorActive()) return MCPDeleteDuringPlayError();
 
 	if (!UEditorAssetLibrary::DoesAssetExist(Path))
 	{
@@ -631,13 +635,30 @@ TSharedPtr<FJsonValue> FPIEHandlers::PieScriptDelete(const TSharedPtr<FJsonObjec
 	Recreate->SetStringField(TEXT("map"), Script->Map);
 	Recreate->SetNumberField(TEXT("default_within_ms"), Script->DefaultWithinMs);
 	Recreate->SetBoolField(TEXT("manual_only"), Script->bManualOnly);
+	Script = nullptr;
 
-	if (!UEditorAssetLibrary::DeleteAsset(Path)) return MCPError(FString::Printf(TEXT("Failed to delete: %s"), *Path));
+	// UEditorAssetLibrary::DeleteAsset can answer true with the .uasset still on disk and the package still
+	// loaded (#1815, #1243). The shared delete verifies the file is gone, and a delete that did not finish
+	// reports the same reasons asset(delete) does.
+	bool bRemovedOrphanFile = false;
+	if (!MCPDeleteAssetFromDisk(Path, bRemovedOrphanFile))
+	{
+		TSharedPtr<FJsonObject> Failed = MakeShared<FJsonObject>();
+		Failed->SetBoolField(TEXT("success"), false);
+		Failed->SetBoolField(TEXT("deleted"), false);
+		Failed->SetBoolField(TEXT("changed"), false);
+		Failed->SetStringField(TEXT("path"), Path);
+		Failed->SetStringField(TEXT("error"), FString::Printf(
+			TEXT("'%s' was not deleted; the script is still at this path. reason and the fields beside it say why."), *Path));
+		MCPApplyDeleteDiagnosticsToJson(Failed, MCPDiagnoseDeleteFailure(Path));
+		return MCPResult(Failed);
+	}
 
 	auto Result = MCPSuccess();
 	Result->SetBoolField(TEXT("deleted"), true);
 	Result->SetBoolField(TEXT("changed"), true);
 	Result->SetStringField(TEXT("path"), Path);
+	if (bRemovedOrphanFile) Result->SetBoolField(TEXT("removedOrphanFile"), true);
 	MCPSetRollback(Result, TEXT("pie_script_create"), Recreate);
 	return MCPResult(Result);
 }

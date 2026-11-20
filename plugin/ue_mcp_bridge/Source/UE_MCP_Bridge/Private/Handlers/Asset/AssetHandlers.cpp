@@ -2801,20 +2801,11 @@ TSharedPtr<FJsonValue> FAssetHandlers::MoveAsset(const TSharedPtr<FJsonObject>& 
 // UEditorAssetLibrary::DeleteAsset returns a bare bool with no reason on
 // failure, leaving callers to guess. Wrap it: detect open editors first
 // (and close them when force=true), and on failure report referencers
-// from the asset registry so the agent has something to act on.
+// from the asset registry so the agent has something to act on. The
+// failure diagnostics live in HandlerAssetDelete.h, shared with the
+// other handlers that delete assets.
 namespace
 {
-	struct FDeleteDiagnostics
-	{
-		bool bOpenInEditor = false;
-		TArray<FString> Referencers;       // on-disk (AssetRegistry) referencers
-		TArray<FString> InMemoryReferencers; // live UObject referencers (#601)
-		bool bInMemoryReferenced = false;  // #601
-		bool bPackageReadOnly = false;     // #601 - file read-only on disk
-		bool bPackageDirty = false;        // #601 - unsaved changes block delete
-		FString Reason;     // open_in_editor | has_referencers | in_memory_referenced | package_read_only | package_dirty | unknown
-	};
-
 	bool TryCloseAssetEditors(const FString& AssetPath, bool& bOutHadOpenEditor)
 	{
 		bOutHadOpenEditor = false;
@@ -2917,116 +2908,6 @@ namespace
 		return true;
 	}
 
-	FDeleteDiagnostics DiagnoseDeleteFailure(const FString& AssetPath)
-	{
-		FDeleteDiagnostics Diag;
-
-		if (GEditor)
-		{
-			if (UAssetEditorSubsystem* AES = GEditor->GetEditorSubsystem<UAssetEditorSubsystem>())
-			{
-				if (UObject* Asset = MCPLoadAssetObject(AssetPath))
-				{
-					Diag.bOpenInEditor = AES->FindEditorsForAsset(Asset).Num() > 0;
-				}
-			}
-		}
-
-		// AssetRegistry referencers - filtered to non-self.
-		FAssetRegistryModule& ARM = FModuleManager::LoadModuleChecked<FAssetRegistryModule>("AssetRegistry");
-		const FName PackageFName = *FPackageName::ObjectPathToPackageName(AssetPath);
-		TArray<FName> Refs;
-		ARM.Get().GetReferencers(PackageFName, Refs);
-		for (const FName& R : Refs)
-		{
-			if (R != PackageFName)
-			{
-				Diag.Referencers.Add(R.ToString());
-			}
-		}
-
-		// #601: when there are no editors/on-disk referencers the delete still
-		// fails for non-obvious reasons. Gather the common culprits so callers
-		// get something actionable instead of a bare "unknown".
-		if (UObject* Asset = MCPLoadAssetObject(AssetPath))
-		{
-			// Live (in-memory) references beyond the asset's own package.
-			FReferencerInformationList RefInfo;
-			if (IsReferenced(Asset, RF_Public | RF_Standalone, EInternalObjectFlags::Garbage, /*bCheckSubObjects=*/true, &RefInfo))
-			{
-				for (const FReferencerInformation& Ext : RefInfo.ExternalReferences)
-				{
-					if (Ext.Referencer && Ext.Referencer->GetOutermost() != Asset->GetOutermost())
-					{
-						Diag.bInMemoryReferenced = true;
-						if (Diag.InMemoryReferencers.Num() < 20)
-						{
-							Diag.InMemoryReferencers.Add(Ext.Referencer->GetPathName());
-						}
-					}
-				}
-			}
-
-			if (UPackage* Pkg = Asset->GetOutermost())
-			{
-				Diag.bPackageDirty = Pkg->IsDirty();
-				FString PkgFilename;
-				if (FPackageName::DoesPackageExist(Pkg->GetName(), &PkgFilename))
-				{
-					Diag.bPackageReadOnly = IFileManager::Get().IsReadOnly(*PkgFilename);
-				}
-			}
-		}
-
-		if (Diag.bOpenInEditor)               Diag.Reason = TEXT("open_in_editor");
-		else if (Diag.Referencers.Num())      Diag.Reason = TEXT("has_referencers");
-		else if (Diag.bInMemoryReferenced)    Diag.Reason = TEXT("in_memory_referenced");
-		else if (Diag.bPackageReadOnly)       Diag.Reason = TEXT("package_read_only");
-		else if (Diag.bPackageDirty)          Diag.Reason = TEXT("package_dirty");
-		else                                  Diag.Reason = TEXT("unknown");
-		return Diag;
-	}
-
-	void ApplyDiagnosticsToJson(const TSharedPtr<FJsonObject>& Out, const FDeleteDiagnostics& Diag)
-	{
-		Out->SetStringField(TEXT("reason"), Diag.Reason);
-		Out->SetBoolField(TEXT("openInEditor"), Diag.bOpenInEditor);
-		TArray<TSharedPtr<FJsonValue>> RefsJson;
-		for (const FString& R : Diag.Referencers)
-		{
-			RefsJson.Add(MakeShared<FJsonValueString>(R));
-		}
-		Out->SetArrayField(TEXT("referencers"), RefsJson);
-
-		// #601 richer diagnostics for the formerly-"unknown" cases.
-		Out->SetBoolField(TEXT("inMemoryReferenced"), Diag.bInMemoryReferenced);
-		if (Diag.InMemoryReferencers.Num() > 0)
-		{
-			TArray<TSharedPtr<FJsonValue>> InMemJson;
-			for (const FString& R : Diag.InMemoryReferencers)
-			{
-				InMemJson.Add(MakeShared<FJsonValueString>(R));
-			}
-			Out->SetArrayField(TEXT("inMemoryReferencers"), InMemJson);
-		}
-		Out->SetBoolField(TEXT("packageReadOnly"), Diag.bPackageReadOnly);
-		Out->SetBoolField(TEXT("packageDirty"), Diag.bPackageDirty);
-	}
-}
-
-namespace
-{
-	/** The editor asset library answers "does not exist" and refuses every delete while PIE runs, so a delete
-	 *  then would report alreadyDeleted for an asset that is still there. Refused up front instead. */
-	TSharedPtr<FJsonValue> DeleteDuringPlayError()
-	{
-		TSharedPtr<FJsonObject> Out = MakeShared<FJsonObject>();
-		Out->SetBoolField(TEXT("success"), false);
-		Out->SetStringField(TEXT("reason"), TEXT("play_in_editor"));
-		Out->SetStringField(TEXT("error"), TEXT("Assets cannot be deleted while a play-in-editor session is running; nothing was deleted. ")
-			TEXT("Stop it with editor(play_in_editor, pieAction=stop) and delete again."));
-		return MCPResult(Out);
-	}
 }
 
 TSharedPtr<FJsonValue> FAssetHandlers::DeleteAsset(const TSharedPtr<FJsonObject>& Params)
@@ -3036,7 +2917,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::DeleteAsset(const TSharedPtr<FJsonObject>
 	const bool bForce = OptionalBool(Params, TEXT("force"), false);
 
 	if (MCPIsProtectedAssetPath(AssetPath)) return MCPProtectedPathError(AssetPath);
-	if (MCPIsPlayInEditorActive()) return DeleteDuringPlayError();
+	if (MCPIsPlayInEditorActive()) return MCPDeleteDuringPlayError();
 
 	// Idempotent: if the asset doesn't exist, treat as already-deleted.
 	if (!UEditorAssetLibrary::DoesAssetExist(AssetPath))
@@ -3087,7 +2968,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::DeleteAsset(const TSharedPtr<FJsonObject>
 		Result->SetBoolField(TEXT("success"), false);
 		Result->SetStringField(TEXT("error"), FString::Printf(
 			TEXT("'%s' was not deleted; the asset is still at this path. reason and the fields beside it say why."), *AssetPath));
-		ApplyDiagnosticsToJson(Result, DiagnoseDeleteFailure(AssetPath));
+		MCPApplyDeleteDiagnosticsToJson(Result, MCPDiagnoseDeleteFailure(AssetPath));
 	}
 
 	// Scoped to what actually happened, the way the batch delete scopes its
@@ -3127,7 +3008,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::DeleteAssetBatch(const TSharedPtr<FJsonOb
 	int32 Refused = 0;
 	int32 ClosedEditors = 0;
 
-	if (MCPIsPlayInEditorActive()) return DeleteDuringPlayError();
+	if (MCPIsPlayInEditorActive()) return MCPDeleteDuringPlayError();
 	int32 Protected = 0;
 	for (const TSharedPtr<FJsonValue>& V : *PathsArr)
 	{
@@ -3179,7 +3060,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::DeleteAssetBatch(const TSharedPtr<FJsonOb
 			else
 			{
 				Entry->SetStringField(TEXT("status"), TEXT("failed"));
-				ApplyDiagnosticsToJson(Entry, DiagnoseDeleteFailure(Path));
+				MCPApplyDeleteDiagnosticsToJson(Entry, MCPDiagnoseDeleteFailure(Path));
 				Failed++;
 			}
 		}
