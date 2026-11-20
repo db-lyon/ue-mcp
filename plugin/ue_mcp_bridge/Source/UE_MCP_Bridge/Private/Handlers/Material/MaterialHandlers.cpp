@@ -16,6 +16,7 @@
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Materials/MaterialParameterCollection.h"
 #include "Materials/MaterialParameterCollectionInstance.h"
+#include "Materials/MaterialExpressionCollectionParameter.h"
 #include "Components/PrimitiveComponent.h"
 #include "Materials/MaterialExpressionFunctionInput.h"
 #include "Materials/MaterialExpressionFunctionOutput.h"
@@ -340,6 +341,19 @@ void FMaterialHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		SpecAssetPath(TEXT("MaterialParameterCollection asset path")),
 		MCPSharedParam::World().Describe(TEXT("World whose live collection instance to read: editor, pie or auto. Omit for the stored defaults only")),
 		MCPSharedParam::PieInstance(),
+	});
+	// #1950: by name, never by index, so each parameter keeps the Id its readers bind to.
+	Registry.RegisterHandler(TEXT("set_collection_parameter"), &SetCollectionParameter, {
+		SpecAssetPath(TEXT("MaterialParameterCollection asset path")),
+		MCPParam::Required(TEXT("parameterName"), EType::String, TEXT("Parameter to add or edit; added when the collection has no parameter of that name")),
+		MCPParam::Optional(TEXT("newName"), EType::String, TEXT("Rename the parameter; its id is kept, so CollectionParameter nodes stay bound")),
+		MCPParam::Optional(TEXT("type"), EType::String, TEXT("scalar | vector, for a new parameter; inferred from defaultValue when omitted")),
+		MCPParam::Optional(TEXT("defaultValue"), EType::Any, TEXT("A number (scalar) or a colour {r,g,b,a} or [r,g,b,a] (vector)")).Alias(TEXT("value")),
+		MCPParam::Optional(TEXT("id"), EType::String, TEXT("Re-add a removed parameter under its old id, as remove_collection_parameter's rollback does")),
+	});
+	Registry.RegisterHandler(TEXT("remove_collection_parameter"), &RemoveCollectionParameter, {
+		SpecAssetPath(TEXT("MaterialParameterCollection asset path")),
+		MCPParam::Required(TEXT("parameterName"), EType::String, TEXT("Scalar or vector parameter to remove")),
 	});
 	Registry.RegisterHandler(TEXT("set_material_instance_parent"), &SetMaterialInstanceParent, {
 		SpecAnyAssetPath(TEXT("MaterialInstanceConstant asset path")),
@@ -3120,6 +3134,313 @@ TSharedPtr<FJsonValue> FMaterialHandlers::ReadMaterialParameterCollection(const 
 		Result->SetStringField(TEXT("world"), bIsPlayWorld ? TEXT("pie") : TEXT("editor"));
 		Result->SetBoolField(TEXT("liveInstanceFound"), Live != nullptr);
 	}
+	return MCPResult(Result);
+}
+
+namespace
+{
+	// #1950: one collection parameter, addressed by name across both arrays.
+	struct FCollectionParameterRef
+	{
+		bool bVector = false;
+		int32 Index = INDEX_NONE;
+		bool IsValid() const { return Index != INDEX_NONE; }
+	};
+
+	FCollectionParameterRef FindCollectionParameter(const UMaterialParameterCollection* Collection, FName Name)
+	{
+		FCollectionParameterRef Ref;
+		for (int32 i = 0; i < Collection->ScalarParameters.Num(); ++i)
+		{
+			if (Collection->ScalarParameters[i].ParameterName == Name) { Ref.Index = i; return Ref; }
+		}
+		for (int32 i = 0; i < Collection->VectorParameters.Num(); ++i)
+		{
+			if (Collection->VectorParameters[i].ParameterName == Name) { Ref.bVector = true; Ref.Index = i; return Ref; }
+		}
+		return Ref;
+	}
+
+	bool CollectionHasParameterId(const UMaterialParameterCollection* Collection, const FGuid& Id)
+	{
+		for (const FCollectionScalarParameter& P : Collection->ScalarParameters) if (P.Id == Id) return true;
+		for (const FCollectionVectorParameter& P : Collection->VectorParameters) if (P.Id == Id) return true;
+		return false;
+	}
+
+	// Materials and material functions on disk whose CollectionParameter nodes
+	// read this parameter. A node resolves its parameter by Id, so these are
+	// the graphs a removal breaks and a rename leaves bound.
+	TArray<TSharedPtr<FJsonValue>> FindCollectionParameterReaders(UMaterialParameterCollection* Collection, const FGuid& Id)
+	{
+		TArray<TSharedPtr<FJsonValue>> Readers;
+		IAssetRegistry& Registry = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
+		TArray<FName> Referencers;
+		Registry.GetReferencers(Collection->GetOutermost()->GetFName(), Referencers);
+		for (const FName& PackageName : Referencers)
+		{
+			TArray<FAssetData> Assets;
+			Registry.GetAssetsByPackageName(PackageName, Assets);
+			for (const FAssetData& Data : Assets)
+			{
+				UObject* Asset = Data.GetAsset();
+				TArray<UMaterialExpression*> Expressions;
+				if (UMaterial* Material = Cast<UMaterial>(Asset))
+				{
+					for (UMaterialExpression* E : Material->GetExpressions()) Expressions.Add(E);
+				}
+				else if (UMaterialFunction* Function = Cast<UMaterialFunction>(Asset))
+				{
+					for (UMaterialExpression* E : Function->GetExpressions()) Expressions.Add(E);
+				}
+				for (UMaterialExpression* E : Expressions)
+				{
+					const UMaterialExpressionCollectionParameter* Node = Cast<UMaterialExpressionCollectionParameter>(E);
+					if (Node && Node->Collection == Collection && Node->ParameterId == Id)
+					{
+						TSharedPtr<FJsonObject> Row = MakeShared<FJsonObject>();
+						Row->SetStringField(TEXT("assetPath"), Asset->GetPathName());
+						Row->SetStringField(TEXT("expressionName"), Node->GetName());
+						Readers.Add(MakeShared<FJsonValueObject>(Row));
+					}
+				}
+			}
+		}
+		return Readers;
+	}
+
+	TSharedPtr<FJsonObject> DescribeCollectionParameter(const UMaterialParameterCollection* Collection, const FCollectionParameterRef& Ref)
+	{
+		TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
+		if (Ref.bVector)
+		{
+			const FCollectionVectorParameter& P = Collection->VectorParameters[Ref.Index];
+			Obj->SetStringField(TEXT("name"), P.ParameterName.ToString());
+			Obj->SetStringField(TEXT("type"), TEXT("vector"));
+			Obj->SetStringField(TEXT("id"), P.Id.ToString(EGuidFormats::DigitsWithHyphens));
+			Obj->SetObjectField(TEXT("defaultValue"), MCPLinearColorToJsonObject(P.DefaultValue));
+		}
+		else
+		{
+			const FCollectionScalarParameter& P = Collection->ScalarParameters[Ref.Index];
+			Obj->SetStringField(TEXT("name"), P.ParameterName.ToString());
+			Obj->SetStringField(TEXT("type"), TEXT("scalar"));
+			Obj->SetStringField(TEXT("id"), P.Id.ToString(EGuidFormats::DigitsWithHyphens));
+			Obj->SetNumberField(TEXT("defaultValue"), P.DefaultValue);
+		}
+		return Obj;
+	}
+
+	FProperty* CollectionArrayProperty(bool bVector)
+	{
+		return UMaterialParameterCollection::StaticClass()->FindPropertyByName(bVector ? TEXT("VectorParameters") : TEXT("ScalarParameters"));
+	}
+}
+
+// #1950: add, rename or set the default of one collection parameter by name.
+// The parameter keeps its Id, which is what a CollectionParameter node binds to.
+TSharedPtr<FJsonValue> FMaterialHandlers::SetCollectionParameter(const TSharedPtr<FJsonObject>& Params)
+{
+	FString AssetPath;
+	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
+	FString ParameterName;
+	if (auto Err = RequireString(Params, TEXT("parameterName"), ParameterName)) return Err;
+	const FString NewName = OptionalString(Params, TEXT("newName"));
+	const FString TypeName = OptionalString(Params, TEXT("type")).ToLower();
+	const FString IdText = OptionalString(Params, TEXT("id"));
+	double ScalarDefault = 0.0;
+	const bool bHasScalarDefault = TryGetNumberParam(Params, TEXT("defaultValue"), ScalarDefault);
+	FLinearColor VectorDefault(ForceInitToZero);
+	const bool bHasVectorDefault = !bHasScalarDefault && TryParseMaterialColorField(Params, TEXT("defaultValue"), VectorDefault);
+	if (TryGetParam(Params, TEXT("defaultValue")).IsValid() && !bHasScalarDefault && !bHasVectorDefault)
+	{
+		return MCPError(TEXT("defaultValue must be a number (scalar) or a colour {r,g,b,a} / [r,g,b,a] (vector)"));
+	}
+	if (!TypeName.IsEmpty() && TypeName != TEXT("scalar") && TypeName != TEXT("vector"))
+	{
+		return MCPError(FString::Printf(TEXT("type must be scalar or vector, not '%s'"), *TypeName));
+	}
+
+	UMaterialParameterCollection* Collection = LoadAssetByPath<UMaterialParameterCollection>(AssetPath);
+	if (!Collection) return MCPAssetLoadError(AssetPath, TEXT("MaterialParameterCollection"));
+
+	FCollectionParameterRef Ref = FindCollectionParameter(Collection, FName(*ParameterName));
+	const bool bAdding = !Ref.IsValid();
+	bool bVector = Ref.IsValid() ? Ref.bVector : (TypeName == TEXT("vector") || (TypeName.IsEmpty() && bHasVectorDefault));
+	if (bAdding && TypeName.IsEmpty() && !bHasScalarDefault && !bHasVectorDefault)
+	{
+		return MCPError(FString::Printf(TEXT("'%s' is not in %s yet, so adding it needs type (scalar or vector) or a defaultValue to infer it from. read_mpc lists the parameters it has."), *ParameterName, *AssetPath));
+	}
+	if (!bAdding && !TypeName.IsEmpty() && (TypeName == TEXT("vector")) != Ref.bVector)
+	{
+		return MCPError(FString::Printf(TEXT("'%s' is a %s parameter, not %s. Remove it with remove_collection_parameter first to change its type."), *ParameterName, Ref.bVector ? TEXT("vector") : TEXT("scalar"), *TypeName));
+	}
+	if ((bVector && bHasScalarDefault) || (!bVector && bHasVectorDefault))
+	{
+		return MCPError(FString::Printf(TEXT("'%s' is a %s parameter: defaultValue must be %s."), *ParameterName, bVector ? TEXT("vector") : TEXT("scalar"), bVector ? TEXT("a colour {r,g,b,a}") : TEXT("a number")));
+	}
+	if (bAdding && !NewName.IsEmpty())
+	{
+		return MCPError(FString::Printf(TEXT("newName renames an existing parameter, and %s has no '%s'. Pass the name to add as parameterName."), *AssetPath, *ParameterName));
+	}
+	const bool bRenaming = !NewName.IsEmpty() && NewName != ParameterName;
+	if (bRenaming && FindCollectionParameter(Collection, FName(*NewName)).IsValid())
+	{
+		return MCPError(FString::Printf(TEXT("%s already has a parameter named '%s'. Names are unique across scalar and vector parameters."), *AssetPath, *NewName));
+	}
+	FGuid RestoreId;
+	if (!IdText.IsEmpty())
+	{
+		if (!bAdding) return MCPError(TEXT("id restores a removed parameter under its old Id, so it only applies when parameterName is not in the collection."));
+		if (!FGuid::Parse(IdText, RestoreId) || !RestoreId.IsValid()) return MCPError(FString::Printf(TEXT("id '%s' is not a GUID"), *IdText));
+		if (CollectionHasParameterId(Collection, RestoreId)) return MCPError(FString::Printf(TEXT("Another parameter in %s already has id %s."), *AssetPath, *IdText));
+	}
+
+	// The state a rollback writes back.
+	TSharedPtr<FJsonObject> Previous = bAdding ? nullptr : DescribeCollectionParameter(Collection, Ref);
+	if (!bAdding)
+	{
+		const bool bDefaultChanges = bVector
+			? (bHasVectorDefault && !Collection->VectorParameters[Ref.Index].DefaultValue.Equals(VectorDefault, 0.0f))
+			: (bHasScalarDefault && Collection->ScalarParameters[Ref.Index].DefaultValue != (float)ScalarDefault);
+		if (!bRenaming && !bDefaultChanges)
+		{
+			TSharedPtr<FJsonObject> Unchanged = MCPSuccess();
+			Unchanged->SetBoolField(TEXT("unchanged"), true);
+			Unchanged->SetStringField(TEXT("assetPath"), Collection->GetPathName());
+			Unchanged->SetObjectField(TEXT("parameter"), Previous);
+			MCPSetNoRollback(Unchanged, TEXT("Nothing changed: the parameter already had this name and default."));
+			return MCPResult(Unchanged);
+		}
+	}
+
+	FProperty* ArrayProp = CollectionArrayProperty(bVector);
+	Collection->PreEditChange(ArrayProp);
+	if (bAdding)
+	{
+		if (bVector)
+		{
+			FCollectionVectorParameter& P = Collection->VectorParameters.AddDefaulted_GetRef();
+			P.ParameterName = FName(*ParameterName);
+			if (bHasVectorDefault) P.DefaultValue = VectorDefault;
+			if (RestoreId.IsValid()) P.Id = RestoreId;
+			Ref.Index = Collection->VectorParameters.Num() - 1;
+		}
+		else
+		{
+			FCollectionScalarParameter& P = Collection->ScalarParameters.AddDefaulted_GetRef();
+			P.ParameterName = FName(*ParameterName);
+			if (bHasScalarDefault) P.DefaultValue = (float)ScalarDefault;
+			if (RestoreId.IsValid()) P.Id = RestoreId;
+			Ref.Index = Collection->ScalarParameters.Num() - 1;
+		}
+		Ref.bVector = bVector;
+	}
+	else
+	{
+		FCollectionParameterBase& Base = bVector
+			? static_cast<FCollectionParameterBase&>(Collection->VectorParameters[Ref.Index])
+			: static_cast<FCollectionParameterBase&>(Collection->ScalarParameters[Ref.Index]);
+		if (bRenaming) Base.ParameterName = FName(*NewName);
+		if (bVector && bHasVectorDefault) Collection->VectorParameters[Ref.Index].DefaultValue = VectorDefault;
+		if (!bVector && bHasScalarDefault) Collection->ScalarParameters[Ref.Index].DefaultValue = (float)ScalarDefault;
+	}
+	// The collection's own notification sanitises names, updates its uniform
+	// buffer and recompiles the materials that read it.
+	FPropertyChangedEvent Changed(ArrayProp, bAdding ? EPropertyChangeType::ArrayAdd : EPropertyChangeType::ValueSet);
+	Collection->PostEditChangeProperty(Changed);
+	Collection->MarkPackageDirty();
+	FString SaveError;
+	const bool bSaved = SaveAssetPackageChecked(Collection, SaveError);
+
+	// SanitizeParameters may have adjusted the name; read back what is stored.
+	const TSharedPtr<FJsonObject> Stored = DescribeCollectionParameter(Collection, Ref);
+	TSharedPtr<FJsonObject> Result = MCPSuccess();
+	if (bAdding) MCPSetCreated(Result); else MCPSetUpdated(Result);
+	MCPNoteSaveOutcome(Result, Collection->GetPathName(), bSaved, SaveError);
+	Result->SetStringField(TEXT("assetPath"), Collection->GetPathName());
+	Result->SetObjectField(TEXT("parameter"), Stored);
+	if (Previous.IsValid()) Result->SetObjectField(TEXT("previous"), Previous);
+	if (bRenaming)
+	{
+		FGuid Id;
+		FGuid::Parse(Stored->GetStringField(TEXT("id")), Id);
+		Result->SetArrayField(TEXT("readers"), FindCollectionParameterReaders(Collection, Id));
+		Result->SetStringField(TEXT("readersNote"), TEXT("A CollectionParameter node binds to the parameter's id, which a rename keeps, so these materials still read it."));
+	}
+
+	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+	Payload->SetStringField(TEXT("assetPath"), Collection->GetPathName());
+	if (bAdding)
+	{
+		Payload->SetStringField(TEXT("parameterName"), Stored->GetStringField(TEXT("name")));
+		MCPSetRollback(Result, TEXT("remove_collection_parameter"), Payload);
+	}
+	else
+	{
+		Payload->SetStringField(TEXT("parameterName"), Stored->GetStringField(TEXT("name")));
+		if (bRenaming) Payload->SetStringField(TEXT("newName"), Previous->GetStringField(TEXT("name")));
+		Payload->SetField(TEXT("defaultValue"), Previous->TryGetField(TEXT("defaultValue")));
+		MCPSetRollback(Result, TEXT("set_collection_parameter"), Payload);
+	}
+	return MCPResult(Result);
+}
+
+// #1950: remove one collection parameter by name, reporting the graphs that read it.
+TSharedPtr<FJsonValue> FMaterialHandlers::RemoveCollectionParameter(const TSharedPtr<FJsonObject>& Params)
+{
+	FString AssetPath;
+	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
+	FString ParameterName;
+	if (auto Err = RequireString(Params, TEXT("parameterName"), ParameterName)) return Err;
+
+	UMaterialParameterCollection* Collection = LoadAssetByPath<UMaterialParameterCollection>(AssetPath);
+	if (!Collection) return MCPAssetLoadError(AssetPath, TEXT("MaterialParameterCollection"));
+
+	const FCollectionParameterRef Ref = FindCollectionParameter(Collection, FName(*ParameterName));
+	if (!Ref.IsValid())
+	{
+		TSharedPtr<FJsonObject> Unchanged = MCPSuccess();
+		Unchanged->SetBoolField(TEXT("unchanged"), true);
+		Unchanged->SetStringField(TEXT("assetPath"), Collection->GetPathName());
+		Unchanged->SetStringField(TEXT("note"), FString::Printf(TEXT("%s has no parameter '%s', so there was nothing to remove."), *Collection->GetPathName(), *ParameterName));
+		MCPSetNoRollback(Unchanged, TEXT("Nothing was removed."));
+		return MCPResult(Unchanged);
+	}
+
+	const TSharedPtr<FJsonObject> Removed = DescribeCollectionParameter(Collection, Ref);
+	const FGuid Id = Ref.bVector ? Collection->VectorParameters[Ref.Index].Id : Collection->ScalarParameters[Ref.Index].Id;
+	const TArray<TSharedPtr<FJsonValue>> Readers = FindCollectionParameterReaders(Collection, Id);
+
+	FProperty* ArrayProp = CollectionArrayProperty(Ref.bVector);
+	Collection->PreEditChange(ArrayProp);
+	if (Ref.bVector) Collection->VectorParameters.RemoveAt(Ref.Index);
+	else Collection->ScalarParameters.RemoveAt(Ref.Index);
+	FPropertyChangedEvent Changed(ArrayProp, EPropertyChangeType::ArrayRemove);
+	Collection->PostEditChangeProperty(Changed);
+	Collection->MarkPackageDirty();
+	FString SaveError;
+	const bool bSaved = SaveAssetPackageChecked(Collection, SaveError);
+
+	TSharedPtr<FJsonObject> Result = MCPSuccess();
+	MCPSetUpdated(Result);
+	MCPNoteSaveOutcome(Result, Collection->GetPathName(), bSaved, SaveError);
+	Result->SetStringField(TEXT("assetPath"), Collection->GetPathName());
+	Result->SetObjectField(TEXT("removed"), Removed);
+	Result->SetArrayField(TEXT("readers"), Readers);
+	if (Readers.Num() > 0)
+	{
+		Result->SetStringField(TEXT("readersNote"), TEXT("These CollectionParameter nodes read the removed parameter and no longer compile. The rollback restores it under the same id, which binds them again."));
+	}
+
+	// The id goes back with it, so the nodes listed in readers bind again.
+	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+	Payload->SetStringField(TEXT("assetPath"), Collection->GetPathName());
+	Payload->SetStringField(TEXT("parameterName"), Removed->GetStringField(TEXT("name")));
+	Payload->SetStringField(TEXT("type"), Removed->GetStringField(TEXT("type")));
+	Payload->SetField(TEXT("defaultValue"), Removed->TryGetField(TEXT("defaultValue")));
+	Payload->SetStringField(TEXT("id"), Removed->GetStringField(TEXT("id")));
+	MCPSetRollback(Result, TEXT("set_collection_parameter"), Payload);
 	return MCPResult(Result);
 }
 

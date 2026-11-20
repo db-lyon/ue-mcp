@@ -65,6 +65,9 @@ private:
 	static TSharedPtr<FJsonValue> ReadComponentMaterial(const TSharedPtr<FJsonObject>& Params);
 	// #1116: MPC defaults, plus live values from a world's collection instance.
 	static TSharedPtr<FJsonValue> ReadMaterialParameterCollection(const TSharedPtr<FJsonObject>& Params);
+	// #1950: edit collection parameters by name, keeping each parameter's Id.
+	static TSharedPtr<FJsonValue> SetCollectionParameter(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> RemoveCollectionParameter(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SetMaterialInstanceParent(const TSharedPtr<FJsonObject>& Params);
 	// #594 batch reparent + reassign params across many Material Instances
 	static TSharedPtr<FJsonValue> BatchSetInstances(const TSharedPtr<FJsonObject>& Params);
