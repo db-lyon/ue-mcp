@@ -6154,6 +6154,21 @@
         },
         {
           "suite": "live",
+          "file": "tests/live/delete-wp-map-externals.test.ts",
+          "test": "leaves another map's packages alone when that map sits under the deleted one's path"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/delete-wp-map-externals.test.ts",
+          "test": "refuses while the map is open, naming the way forward, and touches nothing"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/delete-wp-map-externals.test.ts",
+          "test": "removes the map's external actor and object packages from disk"
+        },
+        {
+          "suite": "live",
           "file": "tests/live/level-roots-and-templates.test.ts",
           "test": "refuses a template that does not exist and leaves the open map alone"
         },
@@ -7019,6 +7034,21 @@
         },
         {
           "suite": "live",
+          "file": "tests/live/delete-wp-map-externals.test.ts",
+          "test": "leaves another map's packages alone when that map sits under the deleted one's path"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/delete-wp-map-externals.test.ts",
+          "test": "refuses while the map is open, naming the way forward, and touches nothing"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/delete-wp-map-externals.test.ts",
+          "test": "removes the map's external actor and object packages from disk"
+        },
+        {
+          "suite": "live",
           "file": "tests/live/level-save-as.test.ts",
           "test": "level(save) refuses it by name and points at save_as"
         },
@@ -7064,6 +7094,11 @@
           "suite": "automation",
           "file": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Tests/AssetDeleteGuardTests.cpp",
           "test": "UE.MCP.Asset.Delete.ProtectedMountIsRefusedOnBothPaths"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/delete-wp-map-externals.test.ts",
+          "test": "refuses while the map is open, naming the way forward, and touches nothing"
         }
       ]
     },
@@ -7338,6 +7373,21 @@
           "suite": "live",
           "file": "tests/live/bcov-pcg.test.ts",
           "test": "export_level_to_pcg_asset writes a data asset update_pcg_level_assets re-exports"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/delete-wp-map-externals.test.ts",
+          "test": "leaves another map's packages alone when that map sits under the deleted one's path"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/delete-wp-map-externals.test.ts",
+          "test": "refuses while the map is open, naming the way forward, and touches nothing"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/delete-wp-map-externals.test.ts",
+          "test": "removes the map's external actor and object packages from disk"
         },
         {
           "suite": "live",
@@ -13466,6 +13516,11 @@
         },
         {
           "suite": "live",
+          "file": "tests/live/delete-wp-map-externals.test.ts",
+          "test": "leaves another map's packages alone when that map sits under the deleted one's path"
+        },
+        {
+          "suite": "live",
           "file": "tests/live/level-ofpa-delete-save.test.ts",
           "test": "deletes the actor files and the actors stay gone after a reload"
         },
@@ -15582,6 +15637,16 @@
           "suite": "live",
           "file": "tests/live/crash-class-inputs.test.ts",
           "test": "deletes a map while it is the loaded one, and the editor carries on"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/delete-wp-map-externals.test.ts",
+          "test": "leaves another map's packages alone when that map sits under the deleted one's path"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/delete-wp-map-externals.test.ts",
+          "test": "refuses while the map is open, naming the way forward, and touches nothing"
         },
         {
           "suite": "live",
@@ -18968,6 +19033,21 @@
         },
         {
           "suite": "live",
+          "file": "tests/live/delete-wp-map-externals.test.ts",
+          "test": "leaves another map's packages alone when that map sits under the deleted one's path"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/delete-wp-map-externals.test.ts",
+          "test": "refuses while the map is open, naming the way forward, and touches nothing"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/delete-wp-map-externals.test.ts",
+          "test": "removes the map's external actor and object packages from disk"
+        },
+        {
+          "suite": "live",
           "file": "tests/live/dialog-gate.test.ts",
           "test": "defer withholds the press calls on a plain asset read"
         },
@@ -19592,6 +19672,11 @@
           "suite": "live",
           "file": "tests/live/crash-class-inputs.test.ts",
           "test": "renames an open Blueprint: the new path reads, the old one does not"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/delete-wp-map-externals.test.ts",
+          "test": "removes the map's external actor and object packages from disk"
         },
         {
           "suite": "live",
@@ -23847,6 +23932,21 @@
           "suite": "live",
           "file": "tests/live/checkpoints.test.ts",
           "test": "a turn through the server"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/delete-wp-map-externals.test.ts",
+          "test": "leaves another map's packages alone when that map sits under the deleted one's path"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/delete-wp-map-externals.test.ts",
+          "test": "refuses while the map is open, naming the way forward, and touches nothing"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/delete-wp-map-externals.test.ts",
+          "test": "removes the map's external actor and object packages from disk"
         },
         {
           "suite": "live",
