@@ -38,6 +38,7 @@
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
 #include "WidgetGuidMap.h"
+#include "Handlers/PIE/PIEClientUI.h"
 
 #include "WidgetBlueprint.h"
 #include "Blueprint/UserWidget.h"
@@ -2575,14 +2576,27 @@ TSharedPtr<FJsonValue> FWidgetHandlers::SetRuntimeFocus(const TSharedPtr<FJsonOb
 	FString WidgetName;
 	if (auto Err = RequireString(Params, TEXT("widgetName"), WidgetName)) return Err;
 
-	const int32 UserIndex = OptionalInt(Params, TEXT("userIndex"), 0);
+	const bool bUserIndexGiven = Params.IsValid() && Params->HasField(TEXT("userIndex"));
+	const int32 RequestedUserIndex = OptionalInt(Params, TEXT("userIndex"), 0);
 	const FString ClassFilter = OptionalString(Params, TEXT("className"));
+	const int32 PIEInstance = OptionalInt(Params, TEXT("pieInstance"), INDEX_NONE);
 
 	if (!FSlateApplication::IsInitialized())
 	{
 		return MCPError(TEXT("Slate is not initialised in this process."));
 	}
-	UWorld* World = GetPIEWorld();
+	// The client whose widgets are searched and whose Slate user takes focus: the PIE instance named, else the
+	// editor's own player as script acts pick it, never the first world context (the server on a dedicated
+	// session, #2018).
+	MCPPIE::PIEClientUI::FUIPlayer Player;
+	FString ResolveError;
+	const bool bResolved = MCPPIE::PIEClientUI::Resolve(PIEInstance, 0, Player, ResolveError);
+	if (!bResolved && PIEInstance != INDEX_NONE)
+	{
+		return MCPError(ResolveError);
+	}
+	const int32 UserIndex = bUserIndexGiven || !bResolved ? RequestedUserIndex : Player.SlateUserIndex;
+	UWorld* World = bResolved ? Player.World : GetPIEWorld();
 	if (!World)
 	{
 		return MCPError(
@@ -2667,6 +2681,12 @@ TSharedPtr<FJsonValue> FWidgetHandlers::SetRuntimeFocus(const TSharedPtr<FJsonOb
 	// with no UMG name at all.
 	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
 	Payload->SetNumberField(TEXT("userIndex"), UserIndex);
+	if (bResolved)
+	{
+		Payload->SetNumberField(TEXT("pieInstance"), Player.PIEInstance);
+		Result->SetNumberField(TEXT("pieInstance"), Player.PIEInstance);
+		Result->SetStringField(TEXT("target"), Player.Description);
+	}
 	FString PreviousUmgName;
 	if (Previous.IsValid())
 	{

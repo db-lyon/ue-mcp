@@ -88,7 +88,7 @@ struct FMCPPIETestStep
 	FString ArrangeJson;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Step",
-		meta=(MultiLine="true", ToolTip="JSON array of step actions run after arrange, before the expectation is watched: tape, press, hold, inject, console, place, capture, wait_ms, as pie(uat_run) takes them."))
+		meta=(MultiLine="true", ToolTip="JSON array of step actions run after arrange, before the expectation is watched: tape, press, hold, inject, console, place, capture, key, wait_ms, as pie(uat_run) takes them."))
 	FString ActJson;
 };
 
