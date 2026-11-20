@@ -17,7 +17,7 @@ export type DaemonFeature = (typeof DAEMON_FEATURES)[number];
 export declare const DAEMON_FEATURES_BEYOND_ROUTES: {
     readonly [F in DaemonFeature]?: string;
 };
-export declare const EXTENSION_FEATURES: readonly ["callAction.dialogPrompt", "callAction.elicit", "callAction.access", "checkpoints", "checkpoints.assetDiff", "events.dialog", "events.script", "models.provider", "modes", "modes.playtest", "skills", "context.projection", "actions.effects", "extension.versions", "ui.scopedKeys", "ui.extensions", "extension.services", "flows.stepApproval", "dialogs.native", "permissions"];
+export declare const EXTENSION_FEATURES: readonly ["callAction.dialogPrompt", "callAction.elicit", "callAction.access", "callAction.signal", "checkpoints", "checkpoints.assetDiff", "events.dialog", "events.script", "models.provider", "modes", "modes.playtest", "skills", "context.projection", "actions.effects", "extension.versions", "ui.scopedKeys", "ui.extensions", "extension.services", "flows.stepApproval", "dialogs.native", "permissions"];
 export type ExtensionFeature = (typeof EXTENSION_FEATURES)[number];
 export declare const EXTENSION_FEATURE_MEMBERS: {
     readonly [F in ExtensionFeature]: keyof DaemonExtensionApi;
@@ -1077,6 +1077,7 @@ export interface CallActionOptions {
     dialogWaitMs?: number;
     elicit?: (params: ElicitParams) => Promise<ElicitResult>;
     access?: "read-write" | "read-only";
+    signal?: AbortSignal;
 }
 export interface ContextCallOptions extends CallActionOptions {
     strategy?: ContextStrategy;

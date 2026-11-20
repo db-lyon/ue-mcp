@@ -152,6 +152,7 @@ function callOptions(o: CallActionOptions | undefined): InProcessCallOptions {
     ...(o?.dialogWaitMs !== undefined ? { dialogWaitMs: o.dialogWaitMs } : {}),
     ...(o?.elicit ? { elicit: o.elicit } : {}),
     ...(o?.access ? { access: o.access } : {}),
+    ...(o?.signal ? { signal: o.signal } : {}),
   };
 }
 

@@ -12,6 +12,7 @@
     "tests/integration/cli-project.test.ts": 28.5,
     "tests/integration/cli-projects.test.ts": 22.1,
     "tests/integration/config.test.ts": 0,
+    "tests/integration/daemon-cancel.test.ts": 6.5,
     "tests/integration/daemon-cli.test.ts": 42.4,
     "tests/integration/daemon-composer.test.ts": 12,
     "tests/integration/daemon-http.test.ts": 10.5,

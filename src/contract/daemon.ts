@@ -95,6 +95,7 @@ export const EXTENSION_FEATURES = [
   "callAction.dialogPrompt",
   "callAction.elicit",
   "callAction.access",
+  "callAction.signal",
   "checkpoints",
   "checkpoints.assetDiff",
   "events.dialog",
@@ -121,6 +122,7 @@ export const EXTENSION_FEATURE_MEMBERS: { readonly [F in ExtensionFeature]: keyo
   "callAction.dialogPrompt": "callAction",
   "callAction.elicit": "callAction",
   "callAction.access": "callAction",
+  "callAction.signal": "callAction",
   checkpoints: "checkpoints",
   "checkpoints.assetDiff": "checkpoints",
   "events.dialog": "events",
@@ -1331,6 +1333,15 @@ export interface CallActionOptions {
    * read-write.
    */
   access?: "read-write" | "read-only";
+  /**
+   * Cancels the call (feature "callAction.signal"). Already aborted, the call
+   * is not dispatched and nothing reaches the editor. Aborted while the call
+   * runs, it resolves at once with a CANCELLED error, the editor is asked to
+   * cancel the request in flight, every later bridge call the action would
+   * make is refused, and the late result is dropped. An agent passes its
+   * turn's signal, so an interrupted turn dispatches nothing more.
+   */
+  signal?: AbortSignal;
 }
 
 /**
@@ -1397,7 +1408,8 @@ export interface DaemonExtensionApi {
    *   "callAction.elicit"        callAction takes `opts.elicit` for every other form
    *   "callAction.access"        callAction and context.call take `opts.access`, and `read-only`
    *                              refuses every call that may change state
-   *   "modes"                    `modes` reads and sets this project's feedback and dialog modes
+   *   "callAction.signal"        callAction and context.call take `opts.signal`, which cancels the call
+   *   "modes"                  `modes` reads and sets this project's feedback and dialog modes
    *   "modes.playtest"           `modes.get` carries `playtest` and `modes.setPlaytest` sets it
    *   "events.dialog"            dialog.opened, dialog.updated, dialog.answered, dialog.delegated
    *                              and dialog.closed on the event stream (see DialogEventData)
