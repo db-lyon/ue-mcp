@@ -229,8 +229,35 @@ namespace
 		TSharedRef<FJsonObject> Row;
 	};
 
+	// A parsed results.json row, kept until the file's timestamp or size changes. The row always
+	// carries its steps; a listing without them reads a copy. Game thread only.
+	struct FCachedRunRow
+	{
+		FDateTime Written;
+		int64 Size = 0;
+		FString RunId;
+		FString Script;
+		FString StartedAt;
+		TSharedPtr<FJsonObject> Row; // null when the file held no run_id
+	};
+
+	TMap<FString, FCachedRunRow>& ScriptRunRowCache()
+	{
+		static TMap<FString, FCachedRunRow> Cache;
+		return Cache;
+	}
+
+	TSharedRef<FJsonObject> WithoutSteps(const TSharedRef<FJsonObject>& Row)
+	{
+		TSharedRef<FJsonObject> Copy = MakeShared<FJsonObject>();
+		Copy->Values = Row->Values;
+		Copy->RemoveField(TEXT("steps"));
+		return Copy;
+	}
+
 	// Every script run the editor knows, newest first: the one it holds while it is active,
-	// then each results.json under Saved/MCPObservations.
+	// then each results.json under Saved/MCPObservations. A results.json is parsed once and
+	// again only when its timestamp or size changes, so a listing stats each folder and reads nothing else.
 	TArray<FScriptRunListEntry> ListScriptRunEntries(bool bSteps)
 	{
 		TArray<FScriptRunListEntry> Out;
@@ -254,13 +281,40 @@ namespace
 		const FString Root = DefaultScriptObservationsRoot();
 		TArray<FString> Dirs;
 		IFileManager::Get().FindFiles(Dirs, *(Root / TEXT("*")), false, true);
+		TMap<FString, FCachedRunRow>& Cache = ScriptRunRowCache();
+		TSet<FString> Present;
 		for (const FString& Dir : Dirs)
 		{
 			const FString Path = Root / Dir / TEXT("results.json");
 			// An observation with no script run has no results.json.
-			const FDateTime Written = IFileManager::Get().GetTimeStamp(*Path);
-			if (Written == FDateTime::MinValue()) continue;
-			Add(LoadJsonFile(Path), Path, false, Written);
+			const FFileStatData Stat = IFileManager::Get().GetStatData(*Path);
+			if (!Stat.bIsValid || Stat.bIsDirectory) continue;
+			Present.Add(Path);
+			FCachedRunRow* Hit = Cache.Find(Path);
+			if (!Hit || Hit->Written != Stat.ModificationTime || Hit->Size != Stat.FileSize)
+			{
+				FCachedRunRow Fresh;
+				Fresh.Written = Stat.ModificationTime;
+				Fresh.Size = Stat.FileSize;
+				const TSharedPtr<FJsonObject> Results = LoadJsonFile(Path);
+				if (Results.IsValid() && Results->TryGetStringField(TEXT("run_id"), Fresh.RunId) && !Fresh.RunId.IsEmpty())
+				{
+					FString ScriptField;
+					Results->TryGetStringField(TEXT("script"), ScriptField);
+					Fresh.Script = ScriptField.IsEmpty() ? FString() : FPackageName::ObjectPathToPackageName(ScriptField);
+					Results->TryGetStringField(TEXT("started_at"), Fresh.StartedAt);
+					Fresh.Row = ScriptRunListRow(Results, Path, false, true);
+				}
+				Hit = &Cache.Add(Path, MoveTemp(Fresh));
+			}
+			if (!Hit->Row.IsValid() || Seen.Contains(Hit->RunId)) continue;
+			Seen.Add(Hit->RunId);
+			const TSharedRef<FJsonObject> Row = bSteps ? Hit->Row.ToSharedRef() : WithoutSteps(Hit->Row.ToSharedRef());
+			Out.Add({ Hit->Script, Hit->StartedAt, Hit->Written, Row });
+		}
+		for (auto It = Cache.CreateIterator(); It; ++It)
+		{
+			if (!Present.Contains(It.Key())) It.RemoveCurrent();
 		}
 		Out.StableSort([](const FScriptRunListEntry& A, const FScriptRunListEntry& B)
 		{

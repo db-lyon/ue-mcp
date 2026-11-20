@@ -18283,6 +18283,11 @@
           "suite": "live",
           "file": "tests/live/bcov-pie-assets.test.ts",
           "test": "script_runs lists a script's runs newest first with their steps, and script_list names each script's last run"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/pie-script-results-cache.test.ts",
+          "test": "lists every written run, then follows edits, additions and deletions without a stale row"
         }
       ]
     },
