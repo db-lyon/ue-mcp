@@ -23,6 +23,7 @@
 #include "HandlerPackageSave.h"
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
+#include "Handlers/Diff/CheckpointDiffValue.h"
 #include "Handlers/Diff/CheckpointThumbnail.h"
 #include "Handlers/Diff/DiffHandlers.h"
 #include "Handlers/Diff/DiffHandlers_Revision.h"
@@ -32,6 +33,8 @@
 #include "Materials/Material.h"
 #include "Materials/MaterialExpressionConstant.h"
 #include "Materials/MaterialExpressionScalarParameter.h"
+#include "Materials/MaterialInstanceConstant.h"
+#include "Engine/Texture.h"
 #include "Misc/AutomationTest.h"
 #include "Misc/FileHelper.h"
 #include "Misc/PackageName.h"
@@ -646,6 +649,120 @@ bool FMCPCheckpointBlueprintGraphPictureTest::RunTest(const FString& Parameters)
 	}
 	TestTrue(TEXT("after names the added node"), Diff->GetObjectField(TEXT("after"))->GetObjectField(TEXT("graphPicture"))->GetNumberField(TEXT("changedNodes")) >= 1);
 	TestTrue(TEXT("the two versions are drawn differently"), Raws[0] != Raws[1]);
+	return true;
+}
+
+namespace
+{
+	FPropertySoftPath CkDiffTestPath(std::initializer_list<const TCHAR*> Elements)
+	{
+		TArray<FName> Chain;
+		for (const TCHAR* Element : Elements) Chain.Add(FName(Element));
+		return FPropertySoftPath(Chain);
+	}
+}
+
+// The values a checkpoint diff exports come from MCPCkDiffResolveLeaf. A path through an
+// indexed struct holding an object reference must reach that reference, and a path that
+// exists on only one side of the diff must come back empty on the other instead of
+// pairing a property with memory that is not its container (ue-mcp#2020).
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FMCPCheckpointDiffValueResolveTest,
+	"UE.MCP.Diff.CheckpointAsset.ValuePathsResolveSafely",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMCPCheckpointDiffValueResolveTest::RunTest(const FString& Parameters)
+{
+	UMaterialInterface* Material = UMaterial::GetDefaultMaterial(MD_Surface);
+	if (!TestNotNull(TEXT("default material"), Material)) return false;
+
+	// Side A has two material slots, both set. Side B has one slot with no material.
+	UStaticMesh* A = NewObject<UStaticMesh>(GetTransientPackage(), NAME_None, RF_Transient);
+	A->GetStaticMaterials().Add(FStaticMaterial(Material, TEXT("First")));
+	A->GetStaticMaterials().Add(FStaticMaterial(Material, TEXT("Second")));
+	UStaticMesh* B = NewObject<UStaticMesh>(GetTransientPackage(), NAME_None, RF_Transient);
+	B->GetStaticMaterials().Add(FStaticMaterial(nullptr, TEXT("First")));
+	const UClass* Class = UStaticMesh::StaticClass();
+
+	// An indexed struct element, and the object reference inside it.
+	const FMCPCkDiffLeaf Element = MCPCkDiffResolveLeaf(CkDiffTestPath({ TEXT("StaticMaterials"), TEXT("1") }), Class, A);
+	if (TestTrue(TEXT("indexed struct element resolves"), Element.IsValid()))
+	{
+		TestTrue(TEXT("element is the struct"), CastField<FStructProperty>(Element.Property) != nullptr);
+		TestTrue(TEXT("element address is the array's second entry"), Element.Value == static_cast<const void*>(&A->GetStaticMaterials()[1]));
+	}
+	const FMCPCkDiffLeaf Reference = MCPCkDiffResolveLeaf(CkDiffTestPath({ TEXT("StaticMaterials"), TEXT("1"), TEXT("MaterialInterface") }), Class, A);
+	if (TestTrue(TEXT("object reference inside an indexed struct resolves"), Reference.IsValid()))
+	{
+		const FObjectPropertyBase* ObjectProperty = CastField<FObjectPropertyBase>(Reference.Property);
+		if (TestNotNull(TEXT("reference is an object property"), ObjectProperty))
+		{
+			TestTrue(TEXT("reference reads the material"), ObjectProperty->GetObjectPropertyValue(Reference.Value) == Material);
+		}
+		FString Text;
+		Reference.Property->ExportTextItem_Direct(Text, Reference.Value, nullptr, nullptr, PPF_None);
+		TestTrue(TEXT("reference exports the material's path"), Text.Contains(Material->GetPathName()));
+	}
+
+	// Paths that exist on A only: an index past B's end, and members below a null reference.
+	TestFalse(TEXT("index past the end is empty"),
+		MCPCkDiffResolveLeaf(CkDiffTestPath({ TEXT("StaticMaterials"), TEXT("1"), TEXT("MaterialInterface") }), Class, B).IsValid());
+	TestFalse(TEXT("member below a null reference is empty"),
+		MCPCkDiffResolveLeaf(CkDiffTestPath({ TEXT("StaticMaterials"), TEXT("0"), TEXT("MaterialInterface"), TEXT("TwoSided") }), Class, B).IsValid());
+
+	// A member the referenced object or the struct does not have. FPropertySoftPath::Resolve
+	// stops at the last property it found and hands back the block below it, the material
+	// or the struct value, which is what the export read as a container and crashed on.
+	const FPropertySoftPath PastObject = CkDiffTestPath({ TEXT("StaticMaterials"), TEXT("0"), TEXT("MaterialInterface"), TEXT("NoSuchMember") });
+	const FResolvedProperty Engine = PastObject.Resolve(Class, A);
+	AddInfo(FString::Printf(TEXT("FPropertySoftPath::Resolve on a missing member returned property %s with block %s the material"),
+		Engine.Property ? *Engine.Property->GetName() : TEXT("none"), Engine.Object == Material ? TEXT("equal to") : TEXT("not")));
+	TestFalse(TEXT("missing member below an object is empty"), MCPCkDiffResolveLeaf(PastObject, Class, A).IsValid());
+	TestFalse(TEXT("missing member below a struct is empty"),
+		MCPCkDiffResolveLeaf(CkDiffTestPath({ TEXT("StaticMaterials"), TEXT("0"), TEXT("NoSuchMember") }), Class, A).IsValid());
+	TestFalse(TEXT("member below a leaf value is empty"),
+		MCPCkDiffResolveLeaf(CkDiffTestPath({ TEXT("StaticMaterials"), TEXT("0"), TEXT("MaterialSlotName"), TEXT("Extra") }), Class, A).IsValid());
+	TestFalse(TEXT("missing root is empty"), MCPCkDiffResolveLeaf(CkDiffTestPath({ TEXT("NoSuchRoot") }), Class, A).IsValid());
+
+	// The engine's own diff of two material instances whose editable texture parameters
+	// (an array of structs, each holding a texture reference) differ: every entry's value
+	// exports on each side it exists on.
+	UTexture* Texture = LoadObject<UTexture>(nullptr, TEXT("/Engine/EngineResources/DefaultTexture.DefaultTexture"));
+	if (!TestNotNull(TEXT("default texture"), Texture)) return false;
+	UMaterialInstanceConstant* MA = NewObject<UMaterialInstanceConstant>(GetTransientPackage(), NAME_None, RF_Transient);
+	UMaterialInstanceConstant* MB = NewObject<UMaterialInstanceConstant>(GetTransientPackage(), NAME_None, RF_Transient);
+	for (const TCHAR* Name : { TEXT("Albedo"), TEXT("Normal") })
+	{
+		FTextureParameterValue Value;
+		Value.ParameterInfo.Name = Name;
+		Value.ParameterValue = Texture;
+		MA->TextureParameterValues.Add(Value);
+	}
+	FTextureParameterValue Unset;
+	Unset.ParameterInfo.Name = TEXT("Albedo");
+	MB->TextureParameterValues.Add(Unset);
+
+	const UClass* MicClass = UMaterialInstanceConstant::StaticClass();
+	TArray<FSingleObjectDiffEntry> Entries;
+	DiffUtils::CompareUnrelatedStructs(MicClass, MA, MA, MicClass, MB, MB, Entries);
+	bool bSawParameters = false;
+	for (const FSingleObjectDiffEntry& Entry : Entries)
+	{
+		const FString Path = Entry.Identifier.ToDisplayName();
+		AddInfo(FString::Printf(TEXT("diff entry: %s"), *Path));
+		bSawParameters |= Path.StartsWith(TEXT("TextureParameterValues"));
+		for (const UMaterialInstanceConstant* Side : { MA, MB })
+		{
+			const FMCPCkDiffLeaf Leaf = MCPCkDiffResolveLeaf(Entry.Identifier, MicClass, Side);
+			if (!Leaf.IsValid()) continue;
+			FString Text;
+			Leaf.Property->ExportTextItem_Direct(Text, Leaf.Value, nullptr, nullptr, PPF_None);
+		}
+	}
+	TestTrue(TEXT("the diff reports the texture parameters"), bSawParameters);
+	const FPropertySoftPath SecondTexture = CkDiffTestPath({ TEXT("TextureParameterValues"), TEXT("1"), TEXT("ParameterValue") });
+	TestTrue(TEXT("second texture parameter resolves where it exists"), MCPCkDiffResolveLeaf(SecondTexture, MicClass, MA).IsValid());
+	TestFalse(TEXT("second texture parameter is empty where it does not"), MCPCkDiffResolveLeaf(SecondTexture, MicClass, MB).IsValid());
 	return true;
 }
 

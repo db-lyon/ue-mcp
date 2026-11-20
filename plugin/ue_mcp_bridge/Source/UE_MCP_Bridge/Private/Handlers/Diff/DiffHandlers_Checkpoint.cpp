@@ -2,6 +2,7 @@
 // package loaded with DiffUtils::LoadPackageForDiff, serialized as JSON, plus a
 // deterministic thumbnail of each version and the engine's diff window on request.
 #include "DiffHandlers.h"
+#include "CheckpointDiffValue.h"
 #include "CheckpointThumbnail.h"
 #include "DiffHandlers_Revision.h"
 #include "HandlerDiffPackage.h"
@@ -225,13 +226,12 @@ namespace
 		return Text;
 	}
 
-	/** A resolved property's value as FProperty::ExportText writes it, or null when the path does not resolve on this side. */
-	TSharedPtr<FJsonValue> CkDiffValue(const FResolvedProperty& Resolved, const FCkDiffNames& Names)
+	/** The value a path names on one side as FProperty::ExportText writes it, or null when the path does not exist on that side. */
+	TSharedPtr<FJsonValue> CkDiffValue(const FPropertySoftPath& Path, const UStruct* Struct, const void* Data, const FCkDiffNames& Names)
 	{
-		if (!Resolved.Property || !Resolved.Object) return MakeShared<FJsonValueNull>();
-		const void* Value = Resolved.Property->ContainerPtrToValuePtr<void>(Resolved.Object);
-		if (!Value) return MakeShared<FJsonValueNull>();
-		return MakeShared<FJsonValueString>(CkDiffExport(Resolved.Property, Value, Names));
+		const FMCPCkDiffLeaf Leaf = MCPCkDiffResolveLeaf(Path, Struct, Data);
+		if (!Leaf.IsValid()) return MakeShared<FJsonValueNull>();
+		return MakeShared<FJsonValueString>(CkDiffExport(Leaf.Property, Leaf.Value, Names));
 	}
 
 	/** The property at the root of a soft path, on the struct that declares it. */
@@ -286,8 +286,8 @@ namespace
 			if (bHidden) Rec->SetBoolField(TEXT("hidden"), true);
 			Rec->SetStringField(TEXT("diffType"), CkDiffPropertyTypeName(Entry.DiffType));
 			Rec->SetStringField(TEXT("displayString"), DiffViewUtils::PropertyDiffMessage(Entry, ObjectName).ToString());
-			Rec->SetField(TEXT("before"), CkDiffValue(Entry.Identifier.Resolve(StructA, A), Names));
-			Rec->SetField(TEXT("after"), CkDiffValue(Entry.Identifier.Resolve(StructB, B), Names));
+			Rec->SetField(TEXT("before"), CkDiffValue(Entry.Identifier, StructA, A, Names));
+			Rec->SetField(TEXT("after"), CkDiffValue(Entry.Identifier, StructB, B, Names));
 			Out.Add(MakeShared<FJsonValueObject>(Rec));
 		}
 	}
@@ -1599,8 +1599,8 @@ namespace
 					const UObject* OB = CkDiffSCSObject(HB, Entry.TreeIdentifier);
 					Rec->SetStringField(TEXT("path"), Entry.PropertyDiff.Identifier.ToDisplayName());
 					Rec->SetStringField(TEXT("propertyDiffType"), CkDiffPropertyTypeName(Entry.PropertyDiff.DiffType));
-					Rec->SetField(TEXT("before"), OA ? CkDiffValue(Entry.PropertyDiff.Identifier.Resolve(OA), Names) : MakeShared<FJsonValueNull>());
-					Rec->SetField(TEXT("after"), OB ? CkDiffValue(Entry.PropertyDiff.Identifier.Resolve(OB), Names) : MakeShared<FJsonValueNull>());
+					Rec->SetField(TEXT("before"), OA ? CkDiffValue(Entry.PropertyDiff.Identifier, OA->GetClass(), OA, Names) : MakeShared<FJsonValueNull>());
+					Rec->SetField(TEXT("after"), OB ? CkDiffValue(Entry.PropertyDiff.Identifier, OB->GetClass(), OB, Names) : MakeShared<FJsonValueNull>());
 				}
 				Records.Add(MakeShared<FJsonValueObject>(Rec));
 			}
