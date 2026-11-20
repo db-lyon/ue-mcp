@@ -21,6 +21,87 @@
 #include "HandlerAssetResolve.h"
 #include "HandlerSourceControl.h"
 
+// ── Save policy (#1910) ──────────────────────────────────────────────────────
+
+/** Whether the request being served asked for its writes to stay in memory.
+ *
+ *  An action that adopts the save policy (FMCPHandlerRegistry::AdoptSavePolicy)
+ *  takes save (default true). With save=false the registry runs the handler
+ *  inside an FScope that defers: SaveAssetPackage marks the package dirty and
+ *  writes nothing, the read-only and checkout checks are skipped because no file
+ *  is opened, and the result is stamped saved=false, saveDeferred=true with the
+ *  packages left dirty. The protected-mount refusal still applies, so the bridge
+ *  never edits engine or plugin content even in memory.
+ *
+ *  The policy lives here rather than in each handler so that every save a
+ *  handler reaches, including the callers and children an edit saves beside its
+ *  own asset, follows the same rule. */
+namespace MCPSavePolicy
+{
+	struct FState
+	{
+		bool bDeferring = false;
+		TArray<FString> DeferredPackages;
+	};
+
+	inline FState& State()
+	{
+		static thread_local FState Current;
+		return Current;
+	}
+
+	inline bool IsDeferring()
+	{
+		return State().bDeferring;
+	}
+
+	inline void NoteDeferred(UPackage* Package)
+	{
+		if (Package) State().DeferredPackages.AddUnique(Package->GetName());
+	}
+
+	/** One request's policy. Nests: an inner request that asks to save writes,
+	 *  and the outer request's deferred list comes back when the inner one ends. */
+	class FScope
+	{
+	public:
+		explicit FScope(bool bDefer)
+			: Previous(MoveTemp(State()))
+		{
+			State() = FState();
+			State().bDeferring = bDefer;
+		}
+		~FScope()
+		{
+			State() = MoveTemp(Previous);
+		}
+		FScope(const FScope&) = delete;
+		FScope& operator=(const FScope&) = delete;
+
+		const TArray<FString>& Deferred() const { return State().DeferredPackages; }
+
+	private:
+		FState Previous;
+	};
+
+	/** What save=false did, stamped on the result: saved=false, saveDeferred=true
+	 *  and the packages left dirty. A result that reports nothing deferred is
+	 *  left alone, because the handler changed nothing that needed a save. */
+	inline void StampDeferred(const TSharedPtr<FJsonValue>& Result, const TArray<FString>& Deferred)
+	{
+		const TSharedPtr<FJsonObject>* Body = nullptr;
+		if (Deferred.Num() == 0 || !Result.IsValid() || !Result->TryGetObject(Body) || !Body || !(*Body).IsValid()) return;
+		TArray<TSharedPtr<FJsonValue>> Names;
+		for (const FString& Name : Deferred) Names.Add(MakeShared<FJsonValueString>(Name));
+		(*Body)->SetBoolField(TEXT("saved"), false);
+		(*Body)->SetBoolField(TEXT("saveDeferred"), true);
+		(*Body)->SetArrayField(TEXT("dirtyPackages"), Names);
+		(*Body)->SetStringField(TEXT("saveNote"), TEXT(
+			"save=false: the edit is in memory and its package is marked dirty; nothing was written to disk. "
+			"editor(save_dirty) or the editor's own save writes it, and asset(force_reload, discardUnsaved=true) drops it."));
+	}
+}
+
 // ── Package save ─────────────────────────────────────────────────────────────
 
 /** True when the package is a map package, i.e. one whose on-disk form is a
@@ -97,6 +178,10 @@ inline bool MCPPackageWriteBlocked(UObject* Asset, FString& OutReason)
 			*PackageName, *MCPProtectedMountWayForward());
 		return true;
 	}
+
+	// save=false writes nothing, so a read-only file or a missing checkout is
+	// not a reason to refuse the edit, and nothing is checked out (#1910).
+	if (MCPSavePolicy::IsDeferring()) return false;
 
 	FString PackageFileName;
 	if (!ResolvePackageFileName(Package, PackageFileName))
@@ -247,6 +332,13 @@ inline bool SaveAssetPackage(UObject* Asset)
 
 	FString BlockedReason;
 	if (MCPPackageWriteBlocked(Asset, BlockedReason)) return false;
+
+	// save=false: the package stays dirty and the result says so (#1910).
+	if (MCPSavePolicy::IsDeferring())
+	{
+		MCPSavePolicy::NoteDeferred(Package);
+		return true;
+	}
 
 	// The extension has to follow the package, not the call site. Any handler
 	// that mutates an actor or component in the open level reaches this with a

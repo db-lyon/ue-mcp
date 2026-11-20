@@ -119,6 +119,8 @@ private:
 	// v1.0.0-rc.15 - agent-friendly BP authoring (#284 #285 #267 #277)
 	static TSharedPtr<FJsonValue> CompileBlueprints(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> CleanupGraph(const TSharedPtr<FJsonObject>& Params);
+	// #1908: what a Graph DSL Write or Edit would delete, without writing.
+	static TSharedPtr<FJsonValue> PreflightDslWrite(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> ConnectPinsBatch(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SetNodePosition(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> AutoLayoutGraph(const TSharedPtr<FJsonObject>& Params);

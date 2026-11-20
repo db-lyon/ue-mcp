@@ -341,6 +341,13 @@
           "type": "string",
           "required": true,
           "description": "Interface class path"
+        },
+        {
+          "name": "save",
+          "type": "boolean",
+          "required": false,
+          "description": "Write the edited package to disk (default true). false leaves it dirty in memory and writes nothing; editor(save_dirty) saves it later",
+          "default": true
         }
       ]
     },
@@ -453,6 +460,13 @@
           "type": "boolean",
           "required": false,
           "description": "Make this scene component the Blueprint's root: it replaces DefaultSceneRoot, whose children move under it, or takes the current root as its child. Applies to an existing component of this name too. Not combinable with parentComponent or parentSocket"
+        },
+        {
+          "name": "save",
+          "type": "boolean",
+          "required": false,
+          "description": "Write the edited package to disk (default true). false leaves it dirty in memory and writes nothing; editor(save_dirty) saves it later",
+          "default": true
         }
       ]
     },
@@ -650,6 +664,13 @@
           "type": "number",
           "required": false,
           "description": "Node Y position in the graph"
+        },
+        {
+          "name": "save",
+          "type": "boolean",
+          "required": false,
+          "description": "Write the edited package to disk (default true). false leaves it dirty in memory and writes nothing; editor(save_dirty) saves it later",
+          "default": true
         }
       ]
     },
@@ -863,6 +884,13 @@
           "required": false,
           "description": "Typed signature parameters [{name, type}]; type takes the add_variable vocabulary, containers included",
           "items": "object"
+        },
+        {
+          "name": "save",
+          "type": "boolean",
+          "required": false,
+          "description": "Write the edited package to disk (default true). false leaves it dirty in memory and writes nothing; editor(save_dirty) saves it later",
+          "default": true
         }
       ]
     },
@@ -1052,6 +1080,13 @@
           "type": "boolean",
           "required": false,
           "description": "Const parameter (default false)"
+        },
+        {
+          "name": "save",
+          "type": "boolean",
+          "required": false,
+          "description": "Write the edited package to disk (default true). false leaves it dirty in memory and writes nothing; editor(save_dirty) saves it later",
+          "default": true
         }
       ]
     },
@@ -1382,6 +1417,13 @@
           "aliases": [
             "type"
           ]
+        },
+        {
+          "name": "save",
+          "type": "boolean",
+          "required": false,
+          "description": "Write the edited package to disk (default true). false leaves it dirty in memory and writes nothing; editor(save_dirty) saves it later",
+          "default": true
         }
       ]
     },
@@ -1909,6 +1951,13 @@
           "type": "boolean",
           "required": false,
           "description": "Skip this write's compile (default false) so a sequence of node writes compiles once, with blueprint(compile), at the end"
+        },
+        {
+          "name": "save",
+          "type": "boolean",
+          "required": false,
+          "description": "Write the edited package to disk (default true). false leaves it dirty in memory and writes nothing; editor(save_dirty) saves it later",
+          "default": true
         }
       ]
     },
@@ -3367,6 +3416,13 @@
           "type": "string",
           "required": false,
           "description": "Existing curve asset to bind instead of keyframes: CurveFloat for float and event, CurveVector for vector, CurveLinearColor for color"
+        },
+        {
+          "name": "save",
+          "type": "boolean",
+          "required": false,
+          "description": "Write the edited package to disk (default true). false leaves it dirty in memory and writes nothing; editor(save_dirty) saves it later",
+          "default": true
         }
       ]
     },
@@ -3497,6 +3553,13 @@
           "type": "boolean",
           "required": false,
           "description": "true: EditAnywhere; false: EditDefaultsOnly. Omitted leaves the editor default"
+        },
+        {
+          "name": "save",
+          "type": "boolean",
+          "required": false,
+          "description": "Write the edited package to disk (default true). false leaves it dirty in memory and writes nothing; editor(save_dirty) saves it later",
+          "default": true
         }
       ]
     },
@@ -6321,6 +6384,13 @@
           "type": "boolean",
           "required": false,
           "description": "Capture previousPositions regardless of previousPositionsLimit (default false)"
+        },
+        {
+          "name": "save",
+          "type": "boolean",
+          "required": false,
+          "description": "Write the edited package to disk (default true). false leaves it dirty in memory and writes nothing; editor(save_dirty) saves it later",
+          "default": true
         }
       ]
     },
@@ -10481,6 +10551,13 @@
           "type": "string",
           "required": false,
           "description": "Graph to clean (default: every graph)"
+        },
+        {
+          "name": "save",
+          "type": "boolean",
+          "required": false,
+          "description": "Write the edited package to disk (default true). false leaves it dirty in memory and writes nothing; editor(save_dirty) saves it later",
+          "default": true
         }
       ]
     },
@@ -10954,6 +11031,13 @@
           "aliases": [
             "path"
           ]
+        },
+        {
+          "name": "save",
+          "type": "boolean",
+          "required": false,
+          "description": "Write the edited package to disk (default true). false leaves it dirty in memory and writes nothing; editor(save_dirty) saves it later",
+          "default": true
         }
       ]
     },
@@ -12074,6 +12158,13 @@
           "type": "boolean",
           "required": false,
           "description": "Skip this write's compile (default false) so a sequence of node writes compiles once, with blueprint(compile), at the end"
+        },
+        {
+          "name": "save",
+          "type": "boolean",
+          "required": false,
+          "description": "Write the edited package to disk (default true). false leaves it dirty in memory and writes nothing; editor(save_dirty) saves it later",
+          "default": true
         }
       ]
     },
@@ -12101,6 +12192,13 @@
           "required": true,
           "description": "[{sourceNode, sourcePin, targetNode, targetPin}]",
           "items": "object"
+        },
+        {
+          "name": "save",
+          "type": "boolean",
+          "required": false,
+          "description": "Write the edited package to disk (default true). false leaves it dirty in memory and writes nothing; editor(save_dirty) saves it later",
+          "default": true
         }
       ]
     },
@@ -12756,6 +12854,13 @@
           "type": "string",
           "required": false,
           "description": "skip (default) reports the existing entry; error refuses"
+        },
+        {
+          "name": "save",
+          "type": "boolean",
+          "required": false,
+          "description": "Write the edited package to disk (default true). false leaves it dirty in memory and writes nothing; editor(save_dirty) saves it later",
+          "default": true
         }
       ],
       "choices": [
@@ -12790,6 +12895,13 @@
           "type": "string",
           "required": false,
           "description": "skip (default) reports the existing entry; error refuses"
+        },
+        {
+          "name": "save",
+          "type": "boolean",
+          "required": false,
+          "description": "Write the edited package to disk (default true). false leaves it dirty in memory and writes nothing; editor(save_dirty) saves it later",
+          "default": true
         }
       ],
       "contractExempt": "Creates and saves an interface at the contract path; nothing it reads fails first"
@@ -13339,6 +13451,13 @@
           "type": "string",
           "required": false,
           "description": "skip (default) reports the existing entry; error refuses"
+        },
+        {
+          "name": "save",
+          "type": "boolean",
+          "required": false,
+          "description": "Write the edited package to disk (default true). false leaves it dirty in memory and writes nothing; editor(save_dirty) saves it later",
+          "default": true
         }
       ]
     },
@@ -13989,6 +14108,13 @@
           "type": "string",
           "required": false,
           "description": "skip (default) reports the existing entry; error refuses"
+        },
+        {
+          "name": "save",
+          "type": "boolean",
+          "required": false,
+          "description": "Write the edited package to disk (default true). false leaves it dirty in memory and writes nothing; editor(save_dirty) saves it later",
+          "default": true
         }
       ]
     },
@@ -15909,6 +16035,13 @@
           "type": "string",
           "required": true,
           "description": "Function name"
+        },
+        {
+          "name": "save",
+          "type": "boolean",
+          "required": false,
+          "description": "Write the edited package to disk (default true). false leaves it dirty in memory and writes nothing; editor(save_dirty) saves it later",
+          "default": true
         }
       ]
     },
@@ -15952,6 +16085,13 @@
           "type": "boolean",
           "required": false,
           "description": "Remove a graph still owned by a live node, or an event graph; both are refused without it"
+        },
+        {
+          "name": "save",
+          "type": "boolean",
+          "required": false,
+          "description": "Write the edited package to disk (default true). false leaves it dirty in memory and writes nothing; editor(save_dirty) saves it later",
+          "default": true
         }
       ]
     },
@@ -15994,6 +16134,13 @@
           "type": "string",
           "required": true,
           "description": "Macro graph name"
+        },
+        {
+          "name": "save",
+          "type": "boolean",
+          "required": false,
+          "description": "Write the edited package to disk (default true). false leaves it dirty in memory and writes nothing; editor(save_dirty) saves it later",
+          "default": true
         }
       ]
     },
@@ -16078,6 +16225,13 @@
           "type": "boolean",
           "required": false,
           "description": "Skip this write's compile (default false) so a sequence of node writes compiles once, with blueprint(compile), at the end"
+        },
+        {
+          "name": "save",
+          "type": "boolean",
+          "required": false,
+          "description": "Write the edited package to disk (default true). false leaves it dirty in memory and writes nothing; editor(save_dirty) saves it later",
+          "default": true
         }
       ]
     },
@@ -16157,6 +16311,13 @@
           "type": "string",
           "required": true,
           "description": "Variable name"
+        },
+        {
+          "name": "save",
+          "type": "boolean",
+          "required": false,
+          "description": "Write the edited package to disk (default true). false leaves it dirty in memory and writes nothing; editor(save_dirty) saves it later",
+          "default": true
         }
       ]
     },
@@ -16649,6 +16810,13 @@
           "type": "string",
           "required": false,
           "description": "With linkedNodeId, break only the link to this pin"
+        },
+        {
+          "name": "save",
+          "type": "boolean",
+          "required": false,
+          "description": "Write the edited package to disk (default true). false leaves it dirty in memory and writes nothing; editor(save_dirty) saves it later",
+          "default": true
         }
       ]
     },
@@ -16689,6 +16857,13 @@
           "type": "string",
           "required": true,
           "description": "Full destination asset path"
+        },
+        {
+          "name": "save",
+          "type": "boolean",
+          "required": false,
+          "description": "Write the edited package to disk (default true). false leaves it dirty in memory and writes nothing; editor(save_dirty) saves it later",
+          "default": true
         }
       ]
     },
@@ -16934,6 +17109,13 @@
           "type": "array",
           "required": false,
           "description": "The COMPLETE desired order, never a partial list"
+        },
+        {
+          "name": "save",
+          "type": "boolean",
+          "required": false,
+          "description": "Write the edited package to disk (default true). false leaves it dirty in memory and writes nothing; editor(save_dirty) saves it later",
+          "default": true
         }
       ]
     },
@@ -16987,6 +17169,13 @@
           "type": "any",
           "required": false,
           "description": "Default value as Unreal export text; an empty string clears it"
+        },
+        {
+          "name": "save",
+          "type": "boolean",
+          "required": false,
+          "description": "Write the edited package to disk (default true). false leaves it dirty in memory and writes nothing; editor(save_dirty) saves it later",
+          "default": true
         }
       ]
     },
@@ -17044,6 +17233,13 @@
           "required": false,
           "description": "[{fieldName or fieldGuid, tooltip?, editableOnInstance?, saveGame?, multiLineText?, widget3D?, metadata?}]",
           "items": "object"
+        },
+        {
+          "name": "save",
+          "type": "boolean",
+          "required": false,
+          "description": "Write the edited package to disk (default true). false leaves it dirty in memory and writes nothing; editor(save_dirty) saves it later",
+          "default": true
         }
       ]
     },
@@ -17352,6 +17548,13 @@
           "type": "string",
           "required": false,
           "description": "Tool arguments as a raw JSON string; wins over input"
+        },
+        {
+          "name": "allowDestructive",
+          "type": "boolean",
+          "required": false,
+          "description": "BlueprintDslToolset Write/Edit: apply a rewrite that deletes loose nodes, comment boxes or collapsed graphs the text does not carry (default false refuses it and lists them)",
+          "default": false
         }
       ],
       "contractExempt": "runs a registered engine tool"
@@ -17382,6 +17585,13 @@
           "type": "string",
           "required": false,
           "description": "Tool arguments as a raw JSON string; wins over input"
+        },
+        {
+          "name": "allowDestructive",
+          "type": "boolean",
+          "required": false,
+          "description": "BlueprintDslToolset Write/Edit: apply a rewrite that deletes loose nodes, comment boxes or collapsed graphs the text does not carry (default false refuses it and lists them)",
+          "default": false
         }
       ],
       "contractExempt": "runs a registered engine tool"
@@ -18634,6 +18844,13 @@
           "aliases": [
             "path"
           ]
+        },
+        {
+          "name": "save",
+          "type": "boolean",
+          "required": false,
+          "description": "Write the edited package to disk (default true). false leaves it dirty in memory and writes nothing; editor(save_dirty) saves it later",
+          "default": true
         }
       ]
     },
@@ -18648,6 +18865,13 @@
           "aliases": [
             "path"
           ]
+        },
+        {
+          "name": "save",
+          "type": "boolean",
+          "required": false,
+          "description": "Write the edited package to disk (default true). false leaves it dirty in memory and writes nothing; editor(save_dirty) saves it later",
+          "default": true
         }
       ]
     },
@@ -23439,6 +23663,13 @@
           "type": "number",
           "required": false,
           "description": "Re-center pasted nodes around this Y (with posX)"
+        },
+        {
+          "name": "save",
+          "type": "boolean",
+          "required": false,
+          "description": "Write the edited package to disk (default true). false leaves it dirty in memory and writes nothing; editor(save_dirty) saves it later",
+          "default": true
         }
       ]
     },
@@ -29009,6 +29240,13 @@
           "type": "string",
           "required": false,
           "description": "Implement this interface first when it is not present"
+        },
+        {
+          "name": "save",
+          "type": "boolean",
+          "required": false,
+          "description": "Write the edited package to disk (default true). false leaves it dirty in memory and writes nothing; editor(save_dirty) saves it later",
+          "default": true
         }
       ]
     },
@@ -32035,6 +32273,52 @@
         }
       ]
     },
+    "preflight_dsl_write": {
+      "category": "blueprint",
+      "params": [
+        {
+          "name": "assetPath",
+          "type": "string",
+          "required": true,
+          "description": "Blueprint asset path. Read and graph actions also accept a World/umap path, resolved to that map's level script Blueprint",
+          "aliases": [
+            "path"
+          ]
+        },
+        {
+          "name": "dsl",
+          "type": "string",
+          "required": false,
+          "description": "The document a Write would send"
+        },
+        {
+          "name": "edits",
+          "type": "array",
+          "required": false,
+          "description": "The replacements an Edit would send: [{oldString, newString}]",
+          "items": "object"
+        },
+        {
+          "name": "scope",
+          "type": "string",
+          "required": false,
+          "description": "The Write or Edit scope: empty for every event and function graph, GraphName, or GraphName/EntryName"
+        }
+      ],
+      "choices": [
+        {
+          "mode": "exactlyOne",
+          "branches": [
+            [
+              "dsl"
+            ],
+            [
+              "edits"
+            ]
+          ]
+        }
+      ]
+    },
     "press_window_button": {
       "category": "editor",
       "params": [
@@ -35034,6 +35318,13 @@
           "type": "boolean",
           "required": false,
           "description": "Also break the links holding orphaned pins alive, which removes those pins"
+        },
+        {
+          "name": "save",
+          "type": "boolean",
+          "required": false,
+          "description": "Write the edited package to disk (default true). false leaves it dirty in memory and writes nothing; editor(save_dirty) saves it later",
+          "default": true
         }
       ]
     },
@@ -35454,6 +35745,13 @@
           "type": "boolean",
           "required": false,
           "description": "Keep the implementations as ordinary Blueprint functions (default false)"
+        },
+        {
+          "name": "save",
+          "type": "boolean",
+          "required": false,
+          "description": "Write the edited package to disk (default true). false leaves it dirty in memory and writes nothing; editor(save_dirty) saves it later",
+          "default": true
         }
       ]
     },
@@ -35517,6 +35815,13 @@
           "type": "string",
           "required": true,
           "description": "SCS or inherited component name"
+        },
+        {
+          "name": "save",
+          "type": "boolean",
+          "required": false,
+          "description": "Write the edited package to disk (default true). false leaves it dirty in memory and writes nothing; editor(save_dirty) saves it later",
+          "default": true
         }
       ]
     },
@@ -35935,6 +36240,13 @@
           "type": "string",
           "required": true,
           "description": "Dispatcher name"
+        },
+        {
+          "name": "save",
+          "type": "boolean",
+          "required": false,
+          "description": "Write the edited package to disk (default true). false leaves it dirty in memory and writes nothing; editor(save_dirty) saves it later",
+          "default": true
         }
       ]
     },
@@ -37155,6 +37467,13 @@
           "type": "string",
           "required": true,
           "description": "Timeline name, as add_timeline_track and the Timeline node show it"
+        },
+        {
+          "name": "save",
+          "type": "boolean",
+          "required": false,
+          "description": "Write the edited package to disk (default true). false leaves it dirty in memory and writes nothing; editor(save_dirty) saves it later",
+          "default": true
         }
       ]
     },
@@ -37518,6 +37837,13 @@
           "type": "string",
           "required": true,
           "description": "New name"
+        },
+        {
+          "name": "save",
+          "type": "boolean",
+          "required": false,
+          "description": "Write the edited package to disk (default true). false leaves it dirty in memory and writes nothing; editor(save_dirty) saves it later",
+          "default": true
         }
       ]
     },
@@ -37602,6 +37928,13 @@
           "type": "string",
           "required": true,
           "description": "New name"
+        },
+        {
+          "name": "save",
+          "type": "boolean",
+          "required": false,
+          "description": "Write the edited package to disk (default true). false leaves it dirty in memory and writes nothing; editor(save_dirty) saves it later",
+          "default": true
         }
       ]
     },
@@ -38056,6 +38389,13 @@
           "type": "array",
           "required": true,
           "description": "The COMPLETE desired order, never a partial list"
+        },
+        {
+          "name": "save",
+          "type": "boolean",
+          "required": false,
+          "description": "Write the edited package to disk (default true). false leaves it dirty in memory and writes nothing; editor(save_dirty) saves it later",
+          "default": true
         }
       ]
     },
@@ -38118,6 +38458,13 @@
           "type": "array",
           "required": true,
           "description": "The COMPLETE desired order, never a partial list"
+        },
+        {
+          "name": "save",
+          "type": "boolean",
+          "required": false,
+          "description": "Write the edited package to disk (default true). false leaves it dirty in memory and writes nothing; editor(save_dirty) saves it later",
+          "default": true
         }
       ]
     },
@@ -38143,6 +38490,13 @@
           "type": "string",
           "required": true,
           "description": "New parent class: short name or full path"
+        },
+        {
+          "name": "save",
+          "type": "boolean",
+          "required": false,
+          "description": "Write the edited package to disk (default true). false leaves it dirty in memory and writes nothing; editor(save_dirty) saves it later",
+          "default": true
         }
       ]
     },
@@ -38169,6 +38523,13 @@
           "type": "string",
           "required": true,
           "description": "New parent component name"
+        },
+        {
+          "name": "save",
+          "type": "boolean",
+          "required": false,
+          "description": "Write the edited package to disk (default true). false leaves it dirty in memory and writes nothing; editor(save_dirty) saves it later",
+          "default": true
         }
       ]
     },
@@ -40902,6 +41263,13 @@
           "type": "number",
           "required": false,
           "description": "PrimaryActorTick.TickInterval in seconds"
+        },
+        {
+          "name": "save",
+          "type": "boolean",
+          "required": false,
+          "description": "Write the edited package to disk (default true). false leaves it dirty in memory and writes nothing; editor(save_dirty) saves it later",
+          "default": true
         }
       ]
     },
@@ -41315,6 +41683,13 @@
           "required": false,
           "description": "Validate values on transient copies without editing, compiling or saving (default false)",
           "default": false
+        },
+        {
+          "name": "save",
+          "type": "boolean",
+          "required": false,
+          "description": "Write the edited package to disk (default true). false leaves it dirty in memory and writes nothing; editor(save_dirty) saves it later",
+          "default": true
         }
       ]
     },
@@ -41347,6 +41722,13 @@
           "type": "any",
           "required": true,
           "description": "Value to write: a JSON value, or Unreal export text. null clears an object, class or interface reference"
+        },
+        {
+          "name": "save",
+          "type": "boolean",
+          "required": false,
+          "description": "Write the edited package to disk (default true). false leaves it dirty in memory and writes nothing; editor(save_dirty) saves it later",
+          "default": true
         }
       ]
     },
@@ -41379,6 +41761,13 @@
           "type": "string",
           "required": false,
           "description": "The function owning a local variable; omit for a member variable"
+        },
+        {
+          "name": "save",
+          "type": "boolean",
+          "required": false,
+          "description": "Write the edited package to disk (default true). false leaves it dirty in memory and writes nothing; editor(save_dirty) saves it later",
+          "default": true
         }
       ]
     },
@@ -41679,6 +42068,13 @@
           "type": "number",
           "required": false,
           "description": "Capsule radius (unscaled)"
+        },
+        {
+          "name": "save",
+          "type": "boolean",
+          "required": false,
+          "description": "Write the edited package to disk (default true). false leaves it dirty in memory and writes nothing; editor(save_dirty) saves it later",
+          "default": true
         }
       ]
     },
@@ -41702,6 +42098,13 @@
           "type": "any",
           "required": true,
           "description": "Value to write: a JSON value, or Unreal export text. null clears an object, class or interface reference"
+        },
+        {
+          "name": "save",
+          "type": "boolean",
+          "required": false,
+          "description": "Write the edited package to disk (default true). false leaves it dirty in memory and writes nothing; editor(save_dirty) saves it later",
+          "default": true
         }
       ]
     },
@@ -41728,6 +42131,13 @@
           "type": "any",
           "required": true,
           "description": "Value to write: a JSON value, or Unreal export text. null clears an object, class or interface reference"
+        },
+        {
+          "name": "save",
+          "type": "boolean",
+          "required": false,
+          "description": "Write the edited package to disk (default true). false leaves it dirty in memory and writes nothing; editor(save_dirty) saves it later",
+          "default": true
         }
       ]
     },
@@ -42117,6 +42527,13 @@
           "required": true,
           "description": "Material asset paths; an empty array clears",
           "items": "string"
+        },
+        {
+          "name": "save",
+          "type": "boolean",
+          "required": false,
+          "description": "Write the edited package to disk (default true). false leaves it dirty in memory and writes nothing; editor(save_dirty) saves it later",
+          "default": true
         }
       ]
     },
@@ -42819,6 +43236,13 @@
           "required": false,
           "description": "[{name or index, tooltip}] per-enumerator tooltips",
           "items": "object"
+        },
+        {
+          "name": "save",
+          "type": "boolean",
+          "required": false,
+          "description": "Write the edited package to disk (default true). false leaves it dirty in memory and writes nothing; editor(save_dirty) saves it later",
+          "default": true
         }
       ]
     },
@@ -43162,6 +43586,13 @@
           "type": "string",
           "required": false,
           "description": "Text shown at a deprecated function's call sites"
+        },
+        {
+          "name": "save",
+          "type": "boolean",
+          "required": false,
+          "description": "Write the edited package to disk (default true). false leaves it dirty in memory and writes nothing; editor(save_dirty) saves it later",
+          "default": true
         }
       ]
     },
@@ -45336,6 +45767,13 @@
           "type": "number",
           "required": false,
           "description": "Node Y position in the graph"
+        },
+        {
+          "name": "save",
+          "type": "boolean",
+          "required": false,
+          "description": "Write the edited package to disk (default true). false leaves it dirty in memory and writes nothing; editor(save_dirty) saves it later",
+          "default": true
         }
       ]
     },
@@ -45389,6 +45827,13 @@
           "type": "boolean",
           "required": false,
           "description": "Skip this write's compile (default false) so a sequence of node writes compiles once, with blueprint(compile), at the end"
+        },
+        {
+          "name": "save",
+          "type": "boolean",
+          "required": false,
+          "description": "Write the edited package to disk (default true). false leaves it dirty in memory and writes nothing; editor(save_dirty) saves it later",
+          "default": true
         }
       ]
     },
@@ -48360,6 +48805,13 @@
           "type": "string",
           "required": false,
           "description": "Resolve the member by its GUID, which is stable across renames"
+        },
+        {
+          "name": "save",
+          "type": "boolean",
+          "required": false,
+          "description": "Write the edited package to disk (default true). false leaves it dirty in memory and writes nothing; editor(save_dirty) saves it later",
+          "default": true
         }
       ]
     },
@@ -48830,6 +49282,13 @@
           "type": "boolean",
           "required": false,
           "description": "Also write the new default onto loaded instances (placed actors included) still holding the old one; overriding instances are left alone. Level packages are dirtied, not saved (default false)"
+        },
+        {
+          "name": "save",
+          "type": "boolean",
+          "required": false,
+          "description": "Write the edited package to disk (default true). false leaves it dirty in memory and writes nothing; editor(save_dirty) saves it later",
+          "default": true
         }
       ]
     },
@@ -48886,6 +49345,13 @@
           "type": "boolean",
           "required": false,
           "description": "ExposeOnSpawn flag"
+        },
+        {
+          "name": "save",
+          "type": "boolean",
+          "required": false,
+          "description": "Write the edited package to disk (default true). false leaves it dirty in memory and writes nothing; editor(save_dirty) saves it later",
+          "default": true
         }
       ]
     },

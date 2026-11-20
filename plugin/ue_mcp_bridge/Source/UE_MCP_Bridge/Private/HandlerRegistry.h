@@ -120,6 +120,16 @@ public:
 	// The same, with the spec's choices and contract exemption.
 	bool RegisterHandlerWithTimeout(const FString& MethodName, FHandlerFunction Handler, float TimeoutSeconds, const TArray<FMCPParamSpec>& Params, const FMCPSpecRules& Rules);
 
+	// #1910: put an already registered handler under the save policy. Its spec
+	// gains Save (unless it declares a save of its own), and a call with
+	// save=false runs inside MCPSavePolicy::FScope, so every package save it
+	// reaches marks the package dirty instead of writing it. Returns false, and
+	// logs, when MethodName has no spec to add the parameter to.
+	bool AdoptSavePolicy(const FString& MethodName, const FMCPParamSpec& Save);
+
+	// True when MethodName follows the save policy.
+	bool FollowsSavePolicy(const FString& MethodName) const { return SavePolicyMethods.Contains(MethodName); }
+
 	// Look up a per-handler timeout. Returns 0 if no override registered,
 	// in which case the caller should use its default.
 	float GetHandlerTimeout(const FString& MethodName) const;
@@ -183,6 +193,9 @@ private:
 	// Declared parameter contracts (#1057). Written during registration only,
 	// so the socket thread may read it for the capabilities payload.
 	TMap<FString, FMCPHandlerSpec> HandlerSpecs;
+
+	// Handlers whose save=false defers every package save they reach (#1910).
+	TSet<FString> SavePolicyMethods;
 
 	void TagCategory(const FString& MethodName);
 	void CheckRollback(const FString& MethodName, const TSharedPtr<FJsonValue>& Result) const;

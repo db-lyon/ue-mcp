@@ -26,7 +26,7 @@ import { ROUTING_PARAM_NAMES } from "./routing-params.js";
 import type { ActionEffectSource, ActionSpec, ParamDecl, ToolDef } from "./tool-types.js";
 import { paramZod, type ParamSpec, type ValueForm } from "./handler-spec.js";
 import type { ActionClass } from "./action-class.js";
-import { EPIC_ASSET_KEYS, EPIC_ENVELOPE_KEYS, epicForwardedParams, epicPropZod } from "./epic-input.js";
+import { EPIC_ASSET_KEYS, EPIC_ENVELOPE_KEYS, epicBridgeKeys, epicForwardedParams, epicPropZod } from "./epic-input.js";
 
 /** A readable schema summary, not a substitute for runtime validation. */
 export interface ValueSchema {
@@ -343,7 +343,7 @@ function computeAccepts(spec: ActionSpec): ActionAccepts | undefined {
     return { keys: new Set([...takes, ...spec.paramSpec.flatMap((p) => p.aliases ?? [])]), takes };
   }
   if (spec.kind === "bridge" && spec.epicTool) {
-    const takes = epicForwardedParams(spec.epicSchema);
+    const takes = [...epicForwardedParams(spec.epicSchema), ...epicBridgeKeys(spec.epicTool)];
     return { keys: new Set([...takes, ...EPIC_ENVELOPE_KEYS, ...EPIC_ASSET_KEYS]), takes };
   }
   if (!spec.params) return undefined;
@@ -370,7 +370,9 @@ export const ROUTING_PARAMS: ReadonlySet<string> = new Set(ROUTING_PARAM_NAMES);
 function documentedNames(spec: ActionSpec): Set<string> {
   if (spec.paramSpec) return new Set(spec.paramSpec.flatMap((p) => [p.name, ...(p.aliases ?? [])]));
   if (spec.params) return new Set(declaredNames(spec.params));
-  if (spec.kind === "bridge" && spec.epicTool) return new Set(epicForwardedParams(spec.epicSchema));
+  if (spec.kind === "bridge" && spec.epicTool) {
+    return new Set([...epicForwardedParams(spec.epicSchema), ...epicBridgeKeys(spec.epicTool)]);
+  }
   return new Set();
 }
 
