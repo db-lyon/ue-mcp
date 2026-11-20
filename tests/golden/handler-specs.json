@@ -1,5 +1,5 @@
 {
-  "handlerCount": 1413,
+  "handlerCount": 1414,
   "handlers": {
     "acquire_lock": {
       "category": "lock",
@@ -36006,6 +36006,41 @@
               "rowNames"
             ]
           ]
+        }
+      ]
+    },
+    "remove_datatable_rows": {
+      "category": "asset",
+      "params": [
+        {
+          "name": "assetPath",
+          "type": "string",
+          "required": true,
+          "description": "DataTable asset path",
+          "aliases": [
+            "path"
+          ]
+        },
+        {
+          "name": "rowNames",
+          "type": "array",
+          "required": true,
+          "description": "1-500 rows to remove; names the table lacks are listed in missingRowNames",
+          "items": "string"
+        },
+        {
+          "name": "save",
+          "type": "boolean",
+          "required": false,
+          "description": "Save after removing rows (default true)",
+          "default": true
+        },
+        {
+          "name": "dryRun",
+          "type": "boolean",
+          "required": false,
+          "description": "Return wouldRemove, missingRowNames and rowCountAfter without changing the table (default false)",
+          "default": false
         }
       ]
     },

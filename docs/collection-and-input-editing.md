@@ -51,6 +51,18 @@ Use `asset(read_datatable)` with `rowFilter` and `columns`, or `asset(get_datata
 
 Every source must exist before the call; a later clone cannot use a destination created by the same batch. Every destination must be unused, including case-insensitive row-name collisions. Rows containing instanced subobjects are refused. The complete batch is preflighted before mutation. `dryRun=true` returns `proposedRows`; a write returns `rows` with actual fields, `clonedCount`, `rowCount`, and persistence fields. `save` defaults to true. Editor undo covers the transaction. Rollback calls `remove_datatable_row` with the cloned `rowNames` and the same `save` policy. It is marked lossy because row change hook side effects are not reversed. Replay it before further edits to the cloned rows. The removal action accepts either one `rowName` or an array of `rowNames`; batch or unsaved removals use editor undo to restore deleted values.
 
+## Remove DataTable rows
+
+`asset(remove_datatable_rows)` removes the named rows in one undoable transaction:
+
+```json
+{"action":"remove_datatable_rows","assetPath":"/Game/Data/DT_Recipes","rowNames":["Recipe_Old","Recycle_Old","Recipe_Typo"],"dryRun":true}
+```
+
+Names match the way row lookups do, without regard to case, and `removedRows` reports the table's spelling. Names the table lacks are listed in `missingRowNames`; the call still removes the rest. `dryRun=true` returns `wouldRemove` and `rowCountAfter` and changes nothing. After removing, every kept row is checked for its place and value. If one changed, the table is restored from a copy taken before the call, the response has `rolledBack=true`, and nothing is saved. `save` defaults to true. Rollback re-adds the removed rows with `fill_datatable_from_json`, which appends them to the end of the table; editor undo puts them back in place.
+
+Rows are removed the way the DataTable editor's Delete Row removes them, which is safe on tables with a native C++ row struct. On UE 5.6, the engine's own `UDataTable::RemoveRow` crashes the editor on such tables.
+
 ## Per-mapping input settings
 
 `gameplay(read_imc)` reports each row's `mappingIndex`, `settingBehavior`, local `playerMappableKeySettings` and `effectivePlayerMappableKeySettings`. The local value is null when no override subobject exists. Effective settings follow `InheritSettingsFromAction`, `OverrideSettings`, or `IgnoreSettings`.
