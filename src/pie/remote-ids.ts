@@ -1,3 +1,4 @@
+// @session independent: It checks the parameters of one call and never reaches an editor.
 /**
  * Bounds on the request ids a caller names for PIE input and remote-player requests.
  *
