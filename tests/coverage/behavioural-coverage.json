@@ -16974,6 +16974,11 @@
       "status": "covered",
       "tests": [
         {
+          "suite": "automation",
+          "file": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Tests/PIERemoteReportsTests.cpp",
+          "test": "UE.MCP.PIE.RemoteControl.ReportsOwnedAndClearedAtEndPlay"
+        },
+        {
           "suite": "live",
           "file": "tests/live/bcov-pie-assets.test.ts",
           "test": "remote_result names a request that was never relayed"

@@ -234,6 +234,8 @@ TSharedPtr<FJsonValue> FPIEHandlers::InjectInputStart(const TSharedPtr<FJsonObje
 		{
 			return MCPError(TEXT("duration_seconds and control_rotation apply to a local player; a hold relayed to a remote player (client 1..N) runs until inject_input_stop"));
 		}
+		FString ClaimError;
+		if (!DesiredId.IsEmpty() && !MCPPIE::PIERemotePlayers::CanClaimId(DesiredId, Remote, ClaimError)) return MCPError(ClaimError);
 		const FString Id = DesiredId.IsEmpty() ? MCPPIE::PIERemotePlayers::NewId(TEXT("hold")) : DesiredId;
 		Remote->SendStartHold(Id, FSoftObjectPath(Action), RawValue(Params));
 		MCPPIE::PIERemotePlayers::RememberId(Id, Remote);
@@ -402,6 +404,8 @@ TSharedPtr<FJsonValue> FPIEHandlers::InjectInputTape(const TSharedPtr<FJsonObjec
 				TEXT("Split it into consecutive inject_input_tape calls of %d frames or fewer."),
 				UMCPPIERemoteControl::MaxTapeFrames, Vals.Num(), UMCPPIERemoteControl::MaxTapeFrames));
 		}
+		FString ClaimError;
+		if (!DesiredId.IsEmpty() && !MCPPIE::PIERemotePlayers::CanClaimId(DesiredId, Remote, ClaimError)) return MCPError(ClaimError);
 		const FString Id = DesiredId.IsEmpty() ? MCPPIE::PIERemotePlayers::NewId(TEXT("tape")) : DesiredId;
 		Remote->SendTape(Id, FSoftObjectPath(Action), Vals);
 		MCPPIE::PIERemotePlayers::RememberId(Id, Remote);
