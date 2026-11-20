@@ -51,6 +51,16 @@ namespace MCPPIE::PIERemotePlayers
 	void RememberId(const FString& Id, UMCPPIERemoteControl* Control);
 	UMCPPIERemoteControl* FindById(const FString& Id);
 
+	/**
+	 * Whether a caller may send a request under an id it chose to Control: no longer than
+	 * FMCPPIERemoteReports::MaxIdLength, and not an id another remote player still holds a request under, so one
+	 * caller's id cannot redirect or read another player's request. False with an error otherwise.
+	 */
+	bool CanClaimId(const FString& Id, const UMCPPIERemoteControl* Control, FString& OutError);
+
+	/** How many request ids are remembered, for a read-back of the pruning. */
+	int32 NumRememberedIds();
+
 	/** A new request id, unique for the session. */
 	FString NewId(const TCHAR* Prefix);
 }

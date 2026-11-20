@@ -42,6 +42,59 @@ struct UE_MCP_BRIDGERUNTIME_API FMCPPIERemoteTrigger
 	FVector Value = FVector::ZeroVector;
 };
 
+/**
+ * Server side: what a remote player has reported back, for the requests the server sent it.
+ *
+ * The client names the id of every report and writes its text, so nothing it sends is stored unless the server
+ * sent a request with that id first. The server keeps the newest MaxRequests requests per player, dropping the
+ * oldest along with its result and trigger, and cuts error text to MaxTextLength.
+ */
+struct UE_MCP_BRIDGERUNTIME_API FMCPPIERemoteReports
+{
+	/** Most requests, with their results and triggers, held per player. Past it the oldest is dropped. */
+	static constexpr int32 MaxRequests = 256;
+
+	/** Longest error or log path text kept from a client. */
+	static constexpr int32 MaxTextLength = 512;
+
+	/** Longest request id a caller may choose. */
+	static constexpr int32 MaxIdLength = 128;
+
+	/**
+	 * Records a request the server is sending under Id, as the newest. bFresh drops what an earlier request with
+	 * the same id reported; a follow-up to a running request (an update or a stop) keeps it.
+	 */
+	void Expect(const FString& Id, bool bFresh);
+
+	/** True when the server sent a request with Id and still holds it. */
+	bool IsExpected(const FString& Id) const { return Expected.Contains(Id); }
+
+	/** Stores a client's report for Id. False, storing nothing, when the server sent no request with that id. */
+	bool AcceptReport(const FString& Id, bool bOk, bool bFinished, const FString& Error);
+
+	/** Stores a client's trigger for Id. False, storing nothing, when the server sent no request with that id. */
+	bool AcceptTrigger(const FString& Id, const FVector& Value);
+
+	const FMCPPIERemoteResult* FindResult(const FString& Id) const { return Results.Find(Id); }
+	const FMCPPIERemoteTrigger* FindTrigger(const FString& Id) const { return Triggers.Find(Id); }
+
+	int32 NumExpected() const { return Order.Num(); }
+	int32 NumResults() const { return Results.Num(); }
+	int32 NumTriggers() const { return Triggers.Num(); }
+
+	/** Forgets every request, result and trigger. */
+	void Reset();
+
+private:
+	void Forget(const FString& Id);
+
+	/** The requests the server sent, oldest first. */
+	TArray<FString> Order;
+	TSet<FString> Expected;
+	TMap<FString, FMCPPIERemoteResult> Results;
+	TMap<FString, FMCPPIERemoteTrigger> Triggers;
+};
+
 /** Client side: one Input Action this process watches on its own player. */
 struct FMCPPIERemoteWatch
 {
@@ -78,7 +131,19 @@ public:
 	const FString& GetClientLogFile() const { return ClientLogFile; }
 
 	/** Server: the last result reported for a request id, if any. */
-	const FMCPPIERemoteResult* FindResult(const FString& Id) const { return Results.Find(Id); }
+	const FMCPPIERemoteResult* FindResult(const FString& Id) const { return Reports.FindResult(Id); }
+
+	/** Server: true when this player was sent a request with Id and its report is still held. */
+	bool OwnsRequest(const FString& Id) const { return Reports.IsExpected(Id); }
+
+	/** Server: the requests, results and triggers held for this player. */
+	const FMCPPIERemoteReports& GetReports() const { return Reports; }
+
+	/**
+	 * Server: true when a client report may be accepted, i.e. Owner is a player controller the server holds for a
+	 * remote player. The component is added for no other owner, and only that player's connection owns it.
+	 */
+	static bool IsRemotePlayerController(const AActor* Owner);
 
 	// Server-side senders. Each request carries a caller-chosen id the client echoes back.
 	void SendInject(const FString& Id, const FSoftObjectPath& Action, const FVector& Value);
@@ -100,7 +165,7 @@ public:
 	void SendStopWatch(const FString& Id);
 
 	/** Server: the trigger reported for a watch id, if any. */
-	const FMCPPIERemoteTrigger* FindTrigger(const FString& Id) const { return Triggers.Find(Id); }
+	const FMCPPIERemoteTrigger* FindTrigger(const FString& Id) const { return Reports.FindTrigger(Id); }
 
 	/** Most input values a single tape request may carry. */
 	static constexpr int32 MaxTapeFrames = 3600;
@@ -160,8 +225,7 @@ private:
 	// Server state.
 	bool bClientReady = false;
 	FString ClientLogFile;
-	TMap<FString, FMCPPIERemoteResult> Results;
-	TMap<FString, FMCPPIERemoteTrigger> Triggers;
+	FMCPPIERemoteReports Reports;
 
 	// Client state: the Input Action watches this component runs, polled at the end of every frame.
 	TArray<FMCPPIERemoteWatch> Watches;

@@ -72,10 +72,13 @@ TSharedPtr<FJsonValue> FPIEHandlers::PieRemoteResult(const TSharedPtr<FJsonObjec
 	FString Id;
 	if (auto E = RequireString(Params, TEXT("request_id"), Id)) return E;
 
+	// Only the player a request was sent to answers for it, and only while it still holds the request.
 	UMCPPIERemoteControl* Remote = MCPPIE::PIERemotePlayers::FindById(Id);
-	if (!Remote)
+	if (!Remote || !Remote->OwnsRequest(Id))
 	{
-		return MCPError(FString::Printf(TEXT("remote_result: '%s' is not a request relayed in this PIE session"), *Id));
+		return MCPError(FString::Printf(TEXT("remote_result: '%s' is not a request relayed in this PIE session, or is no longer held. ")
+			TEXT("Each remote player keeps its newest %d requests; send the request again to read a fresh result."),
+			*Id, FMCPPIERemoteReports::MaxRequests));
 	}
 
 	auto Result = MCPSuccess();

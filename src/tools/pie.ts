@@ -4,6 +4,7 @@ import { categoryTool } from "../surface/category-tool.js";
 import { specBp, schema as specSchema } from "./specs/pie.generated.js";
 import { scriptRunFollowUp, scriptStatusFollowUp } from "../pie/script-watch.js";
 import { driveFollowUp } from "../pie/drive-wait.js";
+import { boundedRequestIds } from "../pie/remote-ids.js";
 
 export const pieTool: ToolDef = categoryTool(
   "pie",
@@ -11,10 +12,10 @@ export const pieTool: ToolDef = categoryTool(
   {
     view_trace: specBp("read", "Trace the live PIE player viewpoint. Returns viewLocation, viewRotation, viewDirection and line; sweepRadius also returns a sphere sweep. Each hit includes component collision state, channel response, blocksVisibility and owner label/class. Ignores the viewing pawn by default; requires running PIE.", "pie_view_trace"),
     inject_input:         specBp("mutate", "Inject one frame of an Enhanced Input action into a PIE player. client 1..N relays to a remote player.", "pie_inject_input"),
-    inject_input_start:   specBp("mutate", "Start holding an input action every frame until inject_input_stop, PIE end, or duration_seconds of game time; control_rotation pins the controller's aim every frame while it runs. Hold several actions at once with one call each. Returns injection_id. Rolls back with inject_input_stop.", "pie_inject_input_start"),
-    inject_input_update:  specBp("mutate", "Change the value or control_rotation of a running hold.", "pie_inject_input_update"),
-    inject_input_stop:    specBp("mutate", "Stop a hold or tape by id; alreadyStopped when it had ended.", "pie_inject_input_stop"),
-    inject_input_tape:    specBp("mutate", "Play a per-frame value array through an input action; returns injection_id.", "pie_inject_input_tape"),
+    inject_input_start:   boundedRequestIds(specBp("mutate", "Start holding an input action every frame until inject_input_stop, PIE end, or duration_seconds of game time; control_rotation pins the controller's aim every frame while it runs. Hold several actions at once with one call each. Returns injection_id. Rolls back with inject_input_stop.", "pie_inject_input_start")),
+    inject_input_update:  boundedRequestIds(specBp("mutate", "Change the value or control_rotation of a running hold.", "pie_inject_input_update")),
+    inject_input_stop:    boundedRequestIds(specBp("mutate", "Stop a hold or tape by id; alreadyStopped when it had ended.", "pie_inject_input_stop")),
+    inject_input_tape:    boundedRequestIds(specBp("mutate", "Play a per-frame value array through an input action; returns injection_id.", "pie_inject_input_tape")),
     drive_pawn: {
       ...specBp("mutate", "Walk the PIE player's pawn: movement input every frame along direction or toward targetLocation, or mode=navigate for a navmesh move to targetLocation. Ends as completed, arrived, timeout, no_path, nav_ended, map_changed (stopOnMapChange), stopped or pie_ended. The pawn is found again every frame, so a drive carries on through a level change. With wait (default true) answers once it ends with a sampled track of location, rotation, controlRotation, velocity and map, plus mapChanges, distanceTravelled and the navPath taken; wait=false returns driveId at once.", "pie_drive_pawn"),
       followUp: driveFollowUp,
@@ -23,7 +24,7 @@ export const pieTool: ToolDef = categoryTool(
     drive_stop:           specBp("mutate", "End a pawn drive now and return its track; alreadyStopped when it had ended.", "pie_drive_stop"),
     clients:              specBp("read", "List a networked PIE session's players: client 0 is the editor's own player, 1..N remote players in join order with ready and log_file.", "pie_clients"),
     console:              specBp("mutate", "Run a console command in a remote player's own process (client 1..N). The editor's own PIE player is editor(execute_command, world=\"pie\").", "pie_console"),
-    remote_result:        specBp("read", "Whether a request relayed to a remote player ran: reported, ok, finished, error.", "pie_remote_result"),
+    remote_result:        boundedRequestIds(specBp("read", "Whether a request relayed to a remote player ran: reported, ok, finished, error.", "pie_remote_result")),
     uat_run:              specBp("mutate", "Run a multiplayer acceptance scenario unattended: opens its map, starts PIE with its players, drives each step, judges it from the host and client logs, stops PIE and writes report.md and report.json. Poll uat_status.", "pie_uat_run"),
     uat_status:           specBp("read", "State of the current or last acceptance run: per-step results, verdict and report_dir.", "pie_uat_status"),
     uat_abort:            specBp("mutate", "End the acceptance run early; it stops PIE and reports what it reached.", "pie_uat_abort"),

@@ -35,6 +35,9 @@ const CPP_ONLY: ReadonlySet<string> = new Set<string>([
   // Inverse of bulk_upsert_data_assets. Reached only through the rollback
   // descriptor that call emits, never authored by a caller by hand.
   "bulk_restore_data_assets",
+  // Inverse of import_texture_batch when it replaced textures: puts the saved
+  // packages back. Reached only through that call's rollback descriptor.
+  "restore_texture_import",
   // Reached through asset(migrate), which is a TS handler rather than a bare
   // bridge mapping: it resolves the destination editor's Content directory and
   // rescans that editor's asset registry afterwards (#817), so the call to this
