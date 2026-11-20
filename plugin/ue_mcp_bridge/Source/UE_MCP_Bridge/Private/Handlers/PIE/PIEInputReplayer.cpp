@@ -6,8 +6,10 @@
 #include "Handlers/PIE/PIESessionLog.h"
 #include "MCPPIEInputInjector.h"
 #include "Handlers/PIE/PIELog.h"
+#include "Handlers/PIE/PIERemotePlayers.h"
 #include "Editor.h"
 #include "Engine/Engine.h"
+#include "Engine/LocalPlayer.h"
 #include "Engine/World.h"
 #include "EditorWorldUtils.h"
 #include "EngineUtils.h"
@@ -272,7 +274,7 @@ namespace MCPPIE
 	void FPIEInputReplayer::EjectPlayer(UWorld* PIEWorld)
 	{
 		if (bEjected || !PIEWorld) return;
-		APlayerController* PC = TargetPlayerController.Get();
+		APlayerController* PC = CurrentTargetController();
 		if (!PC || PC->GetWorld() != PIEWorld)
 		{
 			return;
@@ -552,23 +554,63 @@ namespace MCPPIE
 		UE_LOG(LogMCPPIE, Log, TEXT("[PIE-REP] Fixed timestep restored"));
 	}
 
+	APlayerController* FPIEInputReplayer::CurrentTargetController()
+	{
+		// A net client's local player can be handed a new controller after the target was resolved, which leaves
+		// the cached one gone or pawnless while the player stands possessed (#2011). Read the local player's now.
+		if (ULocalPlayer* LocalPlayer = TargetLocalPlayer.Get())
+		{
+			APlayerController* PC = LocalPlayer->PlayerController;
+			if (PC && PC->GetWorld() == TargetWorld.Get())
+			{
+				TargetPlayerController = PC;
+				return PC;
+			}
+		}
+		return TargetPlayerController.Get();
+	}
+
+	APawn* FPIEInputReplayer::CurrentTargetPawn(UWorld* PIEWorld)
+	{
+		APlayerController* PC = CurrentTargetController();
+		if (!PC || !PIEWorld)
+		{
+			return nullptr;
+		}
+		if (APawn* Pawn = PC->GetPawn())
+		{
+			return Pawn;
+		}
+		// A client can see its pawn's Controller replicated before the controller's own Pawn.
+		for (TActorIterator<APawn> It(PIEWorld); It; ++It)
+		{
+			if (It->GetController() == PC)
+			{
+				return *It;
+			}
+		}
+		return nullptr;
+	}
+
+	FString FPIEInputReplayer::DescribeTarget() const
+	{
+		if (const ULocalPlayer* LocalPlayer = TargetLocalPlayer.Get())
+		{
+			return PIERemotePlayers::DescribeLocalPlayer(LocalPlayer);
+		}
+		return FString::Printf(TEXT("pie_instance %d local player %d"), ResolvedPIEInstance, Pending.ClientId);
+	}
+
 	bool FPIEInputReplayer::UpdateStartGate(UWorld* PIEWorld, double Now, FString& OutBlocker)
 	{
 		const FReplayStartGate& Gate = Pending.StartGate;
-		APlayerController* PC = TargetPlayerController.Get();
-		APawn* Pawn = nullptr;
-		if (bEjected)
-		{
-			Pawn = EjectedPawn.Get();
-		}
-		else if (PC)
-		{
-			Pawn = PC->GetPawn();
-		}
+		APawn* Pawn = bEjected ? EjectedPawn.Get() : CurrentTargetPawn(PIEWorld);
 		if (!Pawn)
 		{
 			GateRestSince = -1.0;
-			OutBlocker = TEXT("the player has no pawn");
+			const APlayerController* PC = CurrentTargetController();
+			OutBlocker = FString::Printf(TEXT("the player has no pawn: searched %s, controller %s"),
+				*DescribeTarget(), PC ? *PC->GetName() : TEXT("none"));
 			return false;
 		}
 
@@ -885,14 +927,9 @@ namespace MCPPIE
 					: (Pending.PinFPS > 0 ? Pending.PinFPS : ActiveSequence.SampleHz);
 				ApplyFPSPin(PIEWorld, Hz);
 
-				APlayerController* PC = TargetPlayerController.Get();
-				if (PC && PC->GetWorld() == PIEWorld)
+				if (APawn* Pawn = CurrentTargetPawn(PIEWorld))
 				{
-					APawn* Pawn = PC->GetPawn();
-					if (Pawn)
-					{
-						TeleportPawnToStart(Pawn);
-					}
+					TeleportPawnToStart(Pawn);
 				}
 
 				if (Pending.bLockInput && !Pending.bMonitor)
