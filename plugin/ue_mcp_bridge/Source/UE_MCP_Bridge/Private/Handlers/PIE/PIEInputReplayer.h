@@ -138,6 +138,8 @@ namespace MCPPIE
 		// While waiting: what the replay is waiting on (no player target, no
 		// pawn, or the start_when gate).
 		FString WaitingFor;
+		// Where the frame-0 teleport landed: authority, server and client, or not moved with the reason.
+		FString StartAlignment;
 	};
 
 	struct FLiveReplaySnapshot
@@ -243,6 +245,7 @@ namespace MCPPIE
 		TWeakObjectPtr<UWorld> TargetWorld;
 		TWeakObjectPtr<APlayerController> TargetPlayerController;
 		TWeakObjectPtr<ULocalPlayer> TargetLocalPlayer;
+		FString StartAlignment;
 		int32 ResolvedPIEInstance = INDEX_NONE;
 		bool bTargetResolved = false;
 		double TargetResolveStartSeconds = 0.0;

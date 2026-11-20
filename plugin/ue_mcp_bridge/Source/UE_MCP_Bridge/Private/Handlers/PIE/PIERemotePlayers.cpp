@@ -10,6 +10,7 @@
 #include "Engine/LocalPlayer.h"
 #include "Engine/World.h"
 #include "GameFramework/GameModeBase.h"
+#include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
 #include "GameFramework/PlayerState.h"
 #include "Misc/Guid.h"
@@ -149,6 +150,65 @@ namespace MCPPIE::PIERemotePlayers
 		const int32 Index = World->GetGameInstance() ? World->GetGameInstance()->GetLocalPlayers().IndexOfByKey(LocalPlayer) : INDEX_NONE;
 		return FString::Printf(TEXT("pie_instance %d local player %d in %s (%s)"),
 			Context ? Context->PIEInstance : INDEX_NONE, Index, *World->GetName(), *DescribePIENetMode(World));
+	}
+
+	APlayerController* FindAuthorityController(APlayerController* PC)
+	{
+		UWorld* World = PC ? PC->GetWorld() : nullptr;
+		if (!World)
+		{
+			return nullptr;
+		}
+		if (World->GetNetMode() != NM_Client)
+		{
+			return PC;
+		}
+		UWorld* Server = FindServerWorld();
+		if (!Server || !PC->PlayerState)
+		{
+			return nullptr;
+		}
+		const int32 PlayerId = PC->PlayerState->GetPlayerId();
+		for (FConstPlayerControllerIterator It = Server->GetPlayerControllerIterator(); It; ++It)
+		{
+			APlayerController* Candidate = It->Get();
+			if (Candidate && Candidate->PlayerState && Candidate->PlayerState->GetPlayerId() == PlayerId)
+			{
+				return Candidate;
+			}
+		}
+		return nullptr;
+	}
+
+	APawn* TeleportOnAuthority(APlayerController* PC, APawn* Pawn, const FVector& Location, const FRotator& Rotation, FString& OutError)
+	{
+		if (!Pawn)
+		{
+			OutError = TEXT("no pawn to move");
+			return nullptr;
+		}
+		APawn* Authority = Pawn;
+		UWorld* World = Pawn->GetWorld();
+		if (World && World->GetNetMode() == NM_Client)
+		{
+			APlayerController* AuthorityPC = FindAuthorityController(PC ? PC : Cast<APlayerController>(Pawn->GetController()));
+			Authority = AuthorityPC ? AuthorityPC->GetPawn() : nullptr;
+			if (!Authority)
+			{
+				OutError = FindServerWorld()
+					? FString::Printf(TEXT("the server holds no pawn for %s's player"), *Pawn->GetName())
+					: TEXT("the server runs outside the editor process, so it cannot be moved from here; a client-only move is undone by the server");
+				return nullptr;
+			}
+			Authority->SetActorLocationAndRotation(Location, Rotation, false, nullptr, ETeleportType::ResetPhysics);
+			AuthorityPC->SetControlRotation(Rotation);
+		}
+		Pawn->SetActorLocationAndRotation(Location, Rotation, false, nullptr, ETeleportType::ResetPhysics);
+		if (AController* Controller = PC ? PC : Pawn->GetController())
+		{
+			Controller->SetControlRotation(Rotation);
+		}
+		return Authority;
 	}
 
 	FString RunLocalConsole(UWorld* World, const FString& Command)

@@ -142,7 +142,7 @@ Every `track_values` path is checked when the pawn attaches. A path that does no
 | `replay_stop` | Stop and finalize the drift report |
 | `replay_status` | State, step progress, elapsed time, drift maxima, `last_result` |
 
-Replay drives the sequence through `UEnhancedInputLocalPlayerSubsystem::InjectInputForAction` and teleports the pawn to its frame 0 position first. Re-arming in the same session stops the running replay, teleports again and restarts. The source is one of `recording_id`, `sequence_path` or inline `steps`.
+Replay drives the sequence through `UEnhancedInputLocalPlayerSubsystem::InjectInputForAction` and teleports the pawn to its frame 0 position first. When the replayed player is a net client, the teleport moves the server's pawn for that player as well, so both start from the recorded position; `replay_status.start_alignment` says where it landed (`authority`, `server and client (<pawn>)`, or `not moved` with the reason, when the server runs outside the editor process). Re-arming in the same session stops the running replay, teleports again and restarts. The source is one of `recording_id`, `sequence_path` or inline `steps`.
 
 | Param | Default | Notes |
 |-------|---------|-------|
@@ -205,7 +205,7 @@ Enhanced Input never sees the cursor, so clicking or hovering a UMG button, navi
 | Action | Purpose |
 |--------|---------|
 | `replay_analyze` | The lead from a finalized `drift.json`: first divergence, top channels, errors, bracketing images. `frames_over_threshold` is paged by `limit` (default 50) and `offset`, with `frames_over_threshold_total` and `frames_over_threshold_next_offset` |
-| `replay_state` | The exact recorded pawn pose at `at_time` or `at_frame`, interpolated; `apply=true` teleports the live pawn to it |
+| `replay_state` | The exact recorded pawn pose at `at_time` or `at_frame`, interpolated; `apply=true` teleports the live pawn of `pie_instance` and `client_id` to it. On a net client the server's pawn for that player moves too (`applied_on: "server_and_client"`), so the server does not pull it back to its own position |
 | `record_diff` | Compare two recordings without running PIE: position, rotation and velocity deltas plus `tracked_value_max_deltas` |
 | `perf_summary` | Frametime avg, p50, p99 and max, game, render and GPU ms, peak memory, and the worst hitches with timestamps; the newest recording when none is named |
 

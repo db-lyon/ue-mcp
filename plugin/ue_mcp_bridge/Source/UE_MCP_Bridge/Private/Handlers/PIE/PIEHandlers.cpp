@@ -351,7 +351,9 @@ void FPIEHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("recording_dir"), EType::String, RecordingDirDoc),
 		MCPParam::Optional(TEXT("at_time"), EType::Number, TEXT("Seconds to sample, interpolated (default: the last frame)")),
 		MCPParam::Optional(TEXT("at_frame"), EType::Integer, TEXT("Frame index to sample, instead of at_time")).Min(0),
-		MCPParam::Optional(TEXT("apply"), EType::Boolean, TEXT("Teleport the live PIE pawn to the recorded pose (default false)")),
+		MCPParam::Optional(TEXT("apply"), EType::Boolean, TEXT("Teleport the live PIE pawn to the recorded pose (default false). On a net client the server's pawn for that player moves too, so the server does not correct it back")),
+		MCPParam::Optional(TEXT("pie_instance"), EType::Integer, TEXT("With apply: FWorldContext PIEInstance whose player to move (default the active PIE world)")).Min(0),
+		MCPParam::Optional(TEXT("client_id"), EType::Integer, TEXT("With apply: local-player index inside that PIE world (default 0)")).Min(0),
 	}, MCPSpec::ContractExempt(TEXT("With apply it moves the live PIE pawn")));
 
 	// Reproduction tests and assertions

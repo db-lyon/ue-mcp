@@ -487,16 +487,30 @@ namespace MCPPIE
 			return false;
 		}
 		APlayerController* PC = nullptr;
+		APlayerController* OwnClientPC = nullptr;
 		UMCPPIERemoteControl* Remote = nullptr;
 		if (A.Client > 0)
 		{
 			Remote = PIERemotePlayers::Find(A.Client, Err);
 			PC = Remote ? Cast<APlayerController>(Remote->GetOwner()) : nullptr;
 		}
-		else
+		else if (ULocalPlayer* Own = PIERemotePlayers::FindOwnLocalPlayer(OwnPIEInstance, OwnLocalPlayer, Err))
 		{
-			PC = World->GetFirstPlayerController();
-			PC = PC && PC->IsLocalController() ? PC : nullptr;
+			// Client 0 is a client window when the server is dedicated: move the server's pawn for that player, as
+			// for a remote client, and turn the client's own controller, which keeps its facing (#2010).
+			PC = PIERemotePlayers::FindAuthorityController(Own->PlayerController);
+			if (PC && PC != Own->PlayerController)
+			{
+				OwnClientPC = Own->PlayerController;
+			}
+			else if (!PC)
+			{
+				Err = TEXT("the server's copy of this player is not in the editor process");
+			}
+		}
+		if (PC)
+		{
+			World = PC->GetWorld();
 		}
 		APawn* Pawn = PC ? PC->GetPawn() : nullptr;
 		if (!Pawn)
@@ -549,7 +563,16 @@ namespace MCPPIE
 			return false;
 		}
 		PC->SetControlRotation(Rotation);
-		if (Remote)
+		if (OwnClientPC)
+		{
+			OwnClientPC->SetControlRotation(Rotation);
+			if (APawn* ClientPawn = OwnClientPC->GetPawn())
+			{
+				// The client's copy follows now instead of on the next correction.
+				ClientPawn->SetActorLocationAndRotation(Location, Rotation, false, nullptr, ETeleportType::ResetPhysics);
+			}
+		}
+		else if (Remote)
 		{
 			// The owning client keeps its own facing and moves from it; it has to turn itself.
 			const FString Id = PIERemotePlayers::NewId(TEXT("uat"));

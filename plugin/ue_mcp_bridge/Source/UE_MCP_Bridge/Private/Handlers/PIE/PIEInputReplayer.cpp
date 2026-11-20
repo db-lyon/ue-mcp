@@ -262,13 +262,19 @@ namespace MCPPIE
 	{
 		if (!Pawn || SourceFrames.Num() == 0) return;
 		const FSourceFrame& F0 = SourceFrames[0];
-		Pawn->SetActorLocationAndRotation(F0.PawnLocation, F0.PawnRotation, false, nullptr, ETeleportType::ResetPhysics);
-		if (AController* C = Pawn->GetController())
+		// On a net client the server's pawn moves too, or the server corrects the client back to its own spawn
+		// within a few frames and the replay starts from there (#2010).
+		FString Err;
+		APawn* Authority = PIERemotePlayers::TeleportOnAuthority(CurrentTargetController(), Pawn, F0.PawnLocation, F0.PawnRotation, Err);
+		if (!Authority)
 		{
-			C->SetControlRotation(F0.PawnRotation);
+			StartAlignment = FString::Printf(TEXT("not moved: %s"), *Err);
+			UE_LOG(LogMCPPIE, Warning, TEXT("[PIE-REP] Start teleport skipped: %s"), *Err);
+			return;
 		}
-		UE_LOG(LogMCPPIE, Log, TEXT("[PIE-REP] Teleported pawn to frame 0: %s %s"),
-			*F0.PawnLocation.ToString(), *F0.PawnRotation.ToString());
+		StartAlignment = Authority == Pawn ? TEXT("authority") : FString::Printf(TEXT("server and client (%s)"), *Authority->GetName());
+		UE_LOG(LogMCPPIE, Log, TEXT("[PIE-REP] Teleported pawn to frame 0: %s %s (%s)"),
+			*F0.PawnLocation.ToString(), *F0.PawnRotation.ToString(), *StartAlignment);
 	}
 
 	void FPIEInputReplayer::EjectPlayer(UWorld* PIEWorld)
@@ -676,6 +682,7 @@ namespace MCPPIE
 		TargetWorld.Reset();
 		TargetPlayerController.Reset();
 		TargetLocalPlayer.Reset();
+		StartAlignment.Reset();
 		ResolvedPIEInstance = INDEX_NONE;
 		bTargetResolved = false;
 		TargetResolveStartSeconds = FPlatformTime::Seconds();
@@ -1540,6 +1547,7 @@ namespace MCPPIE
 			}
 		}
 		S.bPIEActive = bPIEActive;
+		S.StartAlignment = StartAlignment;
 		S.LastError = TargetResolveError;
 		if (State == EReplayerState::WaitingForPawn)
 		{
