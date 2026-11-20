@@ -363,9 +363,11 @@ TSharedPtr<FJsonValue> FAssetHandlers::RemoveDataTableRows(const TSharedPtr<FJso
 	const TArray<TSharedPtr<FJsonValue>>* RequestedNames = nullptr;
 	TryGetArrayParam(Params, TEXT("rowNames"), RequestedNames);
 	const bool bSave = OptionalBool(Params, TEXT("save"), true);
+	const bool bDryRun = OptionalBool(Params, TEXT("dryRun"), false);
 	if (MissingAsset) return MissingAsset;
 	if (RequestedNames && !RowName.IsEmpty()) return MCPError(TEXT("Supply rowName or rowNames, not both"));
-	if (RequestedNames && (RequestedNames->IsEmpty() || RequestedNames->Num() > 500)) return MCPBatchTooLargeError(TEXT("rowNames must contain 1-500 names"), 500);
+	if (RequestedNames && (RequestedNames->IsEmpty() || RequestedNames->Num() > 500))
+		return MCPBatchTooLargeError(TEXT("rowNames must contain 1-500 names; split a longer list across calls"), 500);
 	TArray<FName> Names;
 	if (RequestedNames)
 	{
@@ -381,30 +383,127 @@ TSharedPtr<FJsonValue> FAssetHandlers::RemoveDataTableRows(const TSharedPtr<FJso
 	if (MCPIsProtectedAssetPath(AssetPath)) return MCPError(TEXT("Cannot edit a protected table. ") + MCPProtectedMountWayForward());
 	UDataTable* Table = LoadAssetByPath<UDataTable>(AssetPath);
 	if (!Table) return MCPAssetLoadError(AssetPath, TEXT("DataTable"));
+	const UScriptStruct* RowStruct = Table->GetRowStruct();
+
+	// Walk the table once in its own order. Row names match like FName, so the
+	// table's spelling is what gets reported, and every row not named is kept.
+	TSet<FName> Requested(Names);
+	TArray<FName> ToRemove, Kept;
+	for (const TPair<FName, uint8*>& Row : Table->GetRowMap())
+		(Requested.Contains(Row.Key) ? ToRemove : Kept).Add(Row.Key);
+	TArray<TSharedPtr<FJsonValue>> Missing;
+	for (const FName Name : Names)
+		if (!Table->GetRowMap().Contains(Name)) Missing.Add(MakeShared<FJsonValueString>(Name.ToString()));
+	auto NameValues = [](const TArray<FName>& In)
+	{
+		TArray<TSharedPtr<FJsonValue>> Out;
+		for (const FName Name : In) Out.Add(MakeShared<FJsonValueString>(Name.ToString()));
+		return Out;
+	};
+
+	auto Result = MCPSuccess();
+	Result->SetStringField(TEXT("assetPath"), AssetPath);
+	Result->SetArrayField(TEXT("missingRowNames"), Missing);
+	Result->SetBoolField(TEXT("dryRun"), bDryRun);
+	if (bDryRun)
+	{
+		Result->SetArrayField(TEXT("wouldRemove"), NameValues(ToRemove));
+		Result->SetNumberField(TEXT("rowCount"), Table->GetRowMap().Num());
+		Result->SetNumberField(TEXT("rowCountAfter"), Kept.Num());
+		MCPSetNoRollback(Result, TEXT("Dry run; nothing changed"));
+		return MCPResult(Result);
+	}
 	if (bSave) if (auto Blocked = MCPAssetWriteBlockedError(Table, AssetPath, TEXT("remove table rows"))) return Blocked;
-	TArray<TSharedPtr<FJsonValue>> Removed;
-	bool bHasRows = false;
-	for (const FName Name : Names) bHasRows |= Table->GetRowMap().Contains(Name);
-	if (bHasRows)
+
+	// Copy every row, in order, before anything changes. The copies are what
+	// the kept rows are checked against afterwards, and what the table is
+	// rebuilt from if that check fails.
+	TArray<TPair<FName, TSharedPtr<FStructOnScope>>> Snapshot;
+	TSharedPtr<FJsonObject> RemovedFields = MakeShared<FJsonObject>();
+	if (RowStruct && !ToRemove.IsEmpty())
+	{
+		for (const TPair<FName, uint8*>& Row : Table->GetRowMap())
+		{
+			auto Copy = MakeShared<FStructOnScope>(RowStruct);
+			RowStruct->CopyScriptStruct(Copy->GetStructMemory(), Row.Value);
+			Snapshot.Emplace(Row.Key, Copy);
+			if (Requested.Contains(Row.Key))
+				RemovedFields->SetObjectField(Row.Key.ToString(), AssetCollectionEdit::ReadStruct(RowStruct, Row.Value));
+		}
+	}
+
+	TArray<FName> Removed;
+	FString Failure;
+	if (!ToRemove.IsEmpty())
 	{
 		FScopedTransaction Transaction(NSLOCTEXT("UEMCP", "RemoveTableRows", "Remove table rows"));
 		Table->Modify();
-		for (const FName Name : Names)
+		for (const FName Name : ToRemove)
 		{
-			if (!Table->GetRowMap().Contains(Name)) continue;
-			RemoveDataTableRowSafely(Table, Name);
-			Removed.Add(MakeShared<FJsonValueString>(Name.ToString()));
+			if (RemoveDataTableRowSafely(Table, Name)) Removed.Add(Name);
+			else { Failure = FString::Printf(TEXT("Row '%s' could not be removed"), *Name.ToString()); break; }
 		}
-		Table->MarkPackageDirty();
+		// Every row the call did not name must still be there, in the same
+		// order, holding the same value. A row change hook that edits or drops
+		// a neighbour fails the call rather than being saved.
+		if (Failure.IsEmpty() && RowStruct)
+		{
+			TArray<FName> Order;
+			Table->GetRowMap().GenerateKeyArray(Order);
+			if (Order != Kept) Failure = TEXT("The rows left in the table are not the rows that were kept");
+			for (const auto& Entry : Snapshot)
+			{
+				if (!Failure.IsEmpty()) break;
+				if (Requested.Contains(Entry.Key)) continue;
+				uint8* const* Stored = Table->GetRowMap().Find(Entry.Key);
+				if (!Stored || !RowStruct->CompareScriptStruct(*Stored, Entry.Value->GetStructMemory(), PPF_None))
+					Failure = FString::Printf(TEXT("Kept row '%s' changed while the other rows were removed"), *Entry.Key.ToString());
+			}
+		}
+		if (!Failure.IsEmpty() && RowStruct)
+		{
+			// Rebuild the table from the copies. EmptyTable and AddRow of a row
+			// that exists never look up a removed row, so this route is safe on
+			// UE 5.6 as well. The rebuilt table matches the one found, so the
+			// transaction is dropped rather than left as an undo step.
+			Table->EmptyTable();
+			for (const auto& Entry : Snapshot)
+				Table->AddRow(Entry.Key, *reinterpret_cast<const FTableRowBase*>(Entry.Value->GetStructMemory()));
+			Transaction.Cancel();
+		}
+		else if (!Removed.IsEmpty()) Table->MarkPackageDirty();
 	}
-	auto Result = MCPSuccess();
-	Result->SetStringField(TEXT("assetPath"), AssetPath);
-	Result->SetArrayField(TEXT("removedRows"), Removed);
+
 	Result->SetNumberField(TEXT("rowCount"), Table->GetRowMap().Num());
+	if (!Failure.IsEmpty())
+	{
+		Result->SetBoolField(TEXT("success"), false);
+		Result->SetStringField(TEXT("error"), Failure + TEXT(". Every row was restored and nothing was saved."));
+		Result->SetBoolField(TEXT("rolledBack"), true);
+		Result->SetArrayField(TEXT("removedRows"), TArray<TSharedPtr<FJsonValue>>());
+		Result->SetBoolField(TEXT("saved"), false);
+		Result->SetBoolField(TEXT("persisted"), false);
+		MCPSetNoRollback(Result, TEXT("Nothing changed; the table was restored"));
+		return MCPResult(Result);
+	}
+	Result->SetArrayField(TEXT("removedRows"), NameValues(Removed));
+	Result->SetNumberField(TEXT("removedCount"), Removed.Num());
+	Result->SetNumberField(TEXT("keptCount"), Kept.Num());
 	Result->SetBoolField(TEXT("alreadyDeleted"), Removed.IsEmpty());
 	Result->SetBoolField(TEXT("unchanged"), Removed.IsEmpty());
-	if (!Removed.IsEmpty()) MCPSetUpdated(Result);
-	MCPSetNoRollback(Result, TEXT("Use editor undo to restore removed rows and their values; row change hook side effects may not be reversible"));
+	if (Removed.IsEmpty()) MCPSetNoRollback(Result, TEXT("No row was removed"));
+	else
+	{
+		MCPSetUpdated(Result);
+		auto Rollback = MakeShared<FJsonObject>();
+		Rollback->SetStringField(TEXT("assetPath"), AssetPath);
+		Rollback->SetObjectField(TEXT("rows"), RemovedFields);
+		MCPSetRollback(Result, TEXT("fill_datatable_from_json"), Rollback);
+		Result->SetBoolField(TEXT("rollbackLossy"), true);
+		Result->SetStringField(TEXT("rollbackNote"),
+			TEXT("Re-adds the removed rows with their field values and saves. They go to the end of the row map, and an FText ")
+			TEXT("field gets a fresh localization key. Editor undo restores the rows exactly, in place."));
+	}
 	AssetCollectionEdit::Persist(Table, bSave, Result);
 	return MCPResult(Result);
 }
