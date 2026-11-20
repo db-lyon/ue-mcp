@@ -26,6 +26,7 @@ import {
   removeUeMcpEntry,
 } from "../integrations/mcp-clients/mcp-client-config.js";
 import { packageVersion } from "../core/package-root.js";
+import { powershellEnv } from "../core/powershell-env.js";
 import { findUProject, isUProjectPath, projectDirOf } from "../config/uproject-path.js";
 import { RESET, BOLD, DIM, GREEN, RED, CYAN, YELLOW } from "../terminal/ansi.js";
 import { cliCommandNames } from "./cli-commands.js";
@@ -207,7 +208,7 @@ export function removeDeadClientEntries(projectDir: string, dead: DeadClientEntr
 
 function safeExec(cmd: string): string | null {
   try {
-    return execSync(cmd, { windowsHide: true, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] }).trim();
+    return execSync(cmd, { windowsHide: true, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"], env: powershellEnv() }).trim();
   } catch {
     return null;
   }
