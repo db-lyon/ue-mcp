@@ -652,6 +652,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::ReplaceMaterialGraph(const TSharedPtr<
 	const bool bSaved = SaveAssetPackageChecked(Material, SaveError);
 
 	TSharedPtr<FJsonObject> Result = Built->AsObject();
+	MCPSetUpdated(Result);
 	Result->SetBoolField(TEXT("replaced"), true);
 	Result->SetBoolField(TEXT("compileChecked"), bErrorsKnown);
 	Result->SetArrayField(TEXT("compileErrors"), TArray<TSharedPtr<FJsonValue>>());
