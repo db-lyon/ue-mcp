@@ -1,10 +1,13 @@
 #include "Handlers/PIE/PIERemotePlayers.h"
 
 #include "Handlers/PIE/PIELog.h"
+#include "Handlers/PIE/PIEWorldResolver.h"
 #include "MCPPIERemoteControl.h"
 #include "HandlerWorld.h"
 #include "Editor.h"
 #include "Engine/Engine.h"
+#include "Engine/GameInstance.h"
+#include "Engine/LocalPlayer.h"
 #include "Engine/World.h"
 #include "GameFramework/GameModeBase.h"
 #include "GameFramework/PlayerController.h"
@@ -88,6 +91,64 @@ namespace MCPPIE::PIERemotePlayers
 			World = GEditor->PlayWorld;
 		}
 		return World;
+	}
+
+	ULocalPlayer* FindOwnLocalPlayer(int32 PIEInstance, int32 LocalPlayerIndex, FString& OutError)
+	{
+		PIEWorldResolver::FPlayerTarget Target;
+		if (PIEInstance >= 0)
+		{
+			return PIEWorldResolver::ResolvePlayer(PIEInstance, LocalPlayerIndex, Target, OutError) ? Target.LocalPlayer : nullptr;
+		}
+		if (UWorld* Server = FindServerWorld(); Server && Server->GetNetMode() == NM_ListenServer)
+		{
+			FString HostError;
+			if (PIEWorldResolver::ResolvePlayerInWorld(Server, LocalPlayerIndex, Target, HostError))
+			{
+				return Target.LocalPlayer;
+			}
+		}
+		if (!GEngine)
+		{
+			OutError = TEXT("GEngine is unavailable");
+			return nullptr;
+		}
+		ULocalPlayer* Best = nullptr;
+		int32 BestInstance = MAX_int32;
+		FString LastError;
+		for (const FWorldContext& Context : GEngine->GetWorldContexts())
+		{
+			UWorld* World = Context.World();
+			if (!World || Context.WorldType != EWorldType::PIE || Context.PIEInstance >= BestInstance)
+			{
+				continue;
+			}
+			if (PIEWorldResolver::ResolvePlayerInWorld(World, LocalPlayerIndex, Target, LastError))
+			{
+				Best = Target.LocalPlayer;
+				BestInstance = Context.PIEInstance;
+			}
+		}
+		if (!Best)
+		{
+			OutError = LastError.IsEmpty()
+				? FString::Printf(TEXT("no PIE world has local player %d; is PIE running?"), LocalPlayerIndex)
+				: LastError;
+		}
+		return Best;
+	}
+
+	FString DescribeLocalPlayer(const ULocalPlayer* LocalPlayer)
+	{
+		UWorld* World = LocalPlayer ? LocalPlayer->GetWorld() : nullptr;
+		if (!World || !GEngine)
+		{
+			return TEXT("no player");
+		}
+		const FWorldContext* Context = GEngine->GetWorldContextFromWorld(World);
+		const int32 Index = World->GetGameInstance() ? World->GetGameInstance()->GetLocalPlayers().IndexOfByKey(LocalPlayer) : INDEX_NONE;
+		return FString::Printf(TEXT("pie_instance %d local player %d in %s (%s)"),
+			Context ? Context->PIEInstance : INDEX_NONE, Index, *World->GetName(), *DescribePIENetMode(World));
 	}
 
 	FString RunLocalConsole(UWorld* World, const FString& Command)

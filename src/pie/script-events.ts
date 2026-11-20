@@ -57,7 +57,7 @@ export interface ScriptStep {
   arrange?: Array<Record<string, unknown>>;
   act?: Array<Record<string, unknown>>;
   /**
-   * What arrange and act did: {status: running|done|failed|skipped, reason?, arranged, actions: [{index, action, ok, error?, at_ms}],
+   * What arrange and act did: {status: running|done|failed|skipped, reason?, arranged, actions: [{index, action, ok, error?, target?, at_ms}],
    * started_at_ms, ended_at_ms, duration_ms, wall_ms, captures?}. A skipped one carries only status and reason.
    */
   actResult?: Record<string, unknown>;

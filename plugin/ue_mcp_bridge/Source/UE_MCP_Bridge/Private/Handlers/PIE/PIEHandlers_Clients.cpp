@@ -34,7 +34,7 @@ TSharedPtr<FJsonValue> FPIEHandlers::PieClients(const TSharedPtr<FJsonObject>& P
 	Result->SetBoolField(TEXT("host_player"), Server && Server->GetNetMode() == NM_ListenServer);
 	Result->SetArrayField(TEXT("clients"), Players);
 	Result->SetStringField(TEXT("addressing"),
-		TEXT("client 0 = the editor's own player (listen server); clients 1..N = remote players in join order"));
+		TEXT("client 0 = the editor's own player (the listen-server host, else the lowest PIE instance's player); clients 1..N = remote players in join order"));
 	return MCPResult(Result);
 }
 

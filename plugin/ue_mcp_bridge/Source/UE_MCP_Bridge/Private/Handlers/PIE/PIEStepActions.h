@@ -84,6 +84,8 @@ namespace MCPPIE
 
 		TArray<FRelayed> Relayed;
 		TArray<FCapture> Captures;
+		/** Who the last Run drove: the exact local player, the remote client, or the placed pawn. Empty for a wait. */
+		FString LastTarget;
 
 	private:
 		bool Place(const FStepAction& A, FString& OutError);
@@ -107,6 +109,7 @@ namespace MCPPIE
 			FString Verb;
 			bool bOk = true;
 			FString Error;
+			FString Target;
 		};
 
 		void Begin(const TArray<FStepAction>& InActions);

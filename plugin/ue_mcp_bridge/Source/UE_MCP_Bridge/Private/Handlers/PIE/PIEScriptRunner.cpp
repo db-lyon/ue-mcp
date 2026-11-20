@@ -1766,6 +1766,7 @@ namespace MCPPIE
 					A->SetStringField(TEXT("action"), R.Verb);
 					A->SetBoolField(TEXT("ok"), R.bOk);
 					if (!R.Error.IsEmpty()) A->SetStringField(TEXT("error"), R.Error);
+					if (!R.Target.IsEmpty()) A->SetStringField(TEXT("target"), R.Target);
 					A->SetNumberField(TEXT("at_ms"), NowMs);
 					Report.Actions.Add(MakeShared<FJsonValueObject>(A));
 				}
@@ -1872,22 +1873,12 @@ namespace MCPPIE
 			return Action;
 		}
 
-		// The editor's own player: the first local player of the server world (a listen server's host), else of the play world.
-		static ULocalPlayer* ResolveOwnPlayer(FString& OutError)
-		{
-			PIEWorldResolver::FPlayerTarget Target;
-			if (UWorld* World = PIERemotePlayers::FindLocalPlayerWorld())
-			{
-				if (PIEWorldResolver::ResolvePlayerInWorld(World, 0, Target, OutError) && Target.LocalPlayer) return Target.LocalPlayer;
-			}
-			return PIEWorldResolver::ResolvePlayer(INDEX_NONE, 0, Target, OutError) ? Target.LocalPlayer : nullptr;
-		}
-
 		void PollLocal(FWatch& W, double NowMs)
 		{
 			const UInputAction* Action = LoadWatchedAction(W);
 			FString Err;
-			ULocalPlayer* LocalPlayer = Action ? ResolveOwnPlayer(Err) : nullptr;
+			// The same player an act with no client drives.
+			ULocalPlayer* LocalPlayer = Action ? PIERemotePlayers::FindOwnLocalPlayer(INDEX_NONE, 0, Err) : nullptr;
 			bool bTriggered = false;
 			FVector Value = FVector::ZeroVector;
 			if (!Action) { W.bWatching = false; return; }
