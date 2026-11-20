@@ -2796,6 +2796,11 @@
         },
         {
           "suite": "live",
+          "file": "tests/live/material-compile-render.test.ts",
+          "test": "fails each edit, recompile and the reads report it, in one shape"
+        },
+        {
+          "suite": "live",
           "file": "tests/live/material-graph-replace.test.ts",
           "test": "replaces the graph when the spec compiles, and its rollback restores the previous one"
         }
@@ -5903,6 +5908,11 @@
         },
         {
           "suite": "live",
+          "file": "tests/live/material-compile-render.test.ts",
+          "test": "fails each edit, recompile and the reads report it, in one shape"
+        },
+        {
+          "suite": "live",
           "file": "tests/live/material-niagara-font.test.ts",
           "test": "delete_orphans lists the unreachable nodes on a dry run and deletes exactly those"
         }
@@ -7508,6 +7518,11 @@
           "suite": "live",
           "file": "tests/live/input-mapping-settings.test.ts",
           "test": "duplicates triggers, modifiers and mappable settings as independent subobjects"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/material-compile-render.test.ts",
+          "test": "render_mesh_studio renders a mesh whose instance overrides a static switch"
         }
       ]
     },
@@ -8348,6 +8363,16 @@
           "suite": "live",
           "file": "tests/live/material-authoring-chain.test.ts",
           "test": "an export imported with replace into an empty material exports identically"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/material-compile-render.test.ts",
+          "test": "a dry run lists the sampler type it would change and changes nothing"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/material-compile-render.test.ts",
+          "test": "turning a texture linear fixes the sampler, recompiles the material once and keeps it drawing"
         },
         {
           "suite": "live",
@@ -10668,6 +10693,11 @@
           "suite": "live",
           "file": "tests/live/bcov-material-graph.test.ts",
           "test": "get_material_shader_stats counts the parameters the graph declares"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/material-compile-render.test.ts",
+          "test": "fails each edit, recompile and the reads report it, in one shape"
         }
       ]
     },
@@ -20644,6 +20674,11 @@
           "suite": "live",
           "file": "tests/live/bcov-material-instance.test.ts",
           "test": "recompile_material with recompileChildren reaches the instance"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/material-compile-render.test.ts",
+          "test": "fails each edit, recompile and the reads report it, in one shape"
         }
       ]
     },
@@ -24235,6 +24270,11 @@
           "suite": "live",
           "file": "tests/live/material-authoring-chain.test.ts",
           "test": "build_material_graph sets code, inputs, outputs, defines and includes before wiring by input name"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/material-compile-render.test.ts",
+          "test": "fails each edit, recompile and the reads report it, in one shape"
         }
       ]
     },
@@ -24489,6 +24529,11 @@
           "suite": "live",
           "file": "tests/live/bcov-material-graph.test.ts",
           "test": "set_expression_value swaps a TextureSample's texture through the native edit path (#1441)"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/material-compile-render.test.ts",
+          "test": "set_expression_value swaps the texture, and the instance draws the new one"
         }
       ]
     },
@@ -24949,6 +24994,11 @@
           "suite": "live",
           "file": "tests/live/bcov-material-instance.test.ts",
           "test": "set_material_static_switch overrides a switch list_material_static_switches reports"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/material-compile-render.test.ts",
+          "test": "set_material_static_switch compiles the instance's own permutation and says so"
         }
       ]
     },
@@ -24975,6 +25025,11 @@
           "suite": "live",
           "file": "tests/live/bcov-asset-b-mesh.test.ts",
           "test": "set_mesh_material assigns a slot that get_mesh_info reports"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/material-compile-render.test.ts",
+          "test": "render_mesh_studio renders a mesh whose instance overrides a static switch"
         }
       ]
     },
@@ -26595,6 +26650,21 @@
           "suite": "live",
           "file": "tests/live/bcov-asset-b-misc.test.ts",
           "test": "set_texture_settings writes the settings get_texture_info reports"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/material-compile-render.test.ts",
+          "test": "a dry run lists the sampler type it would change and changes nothing"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/material-compile-render.test.ts",
+          "test": "turning a texture linear fixes the sampler, recompiles the material once and keeps it drawing"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/material-compile-render.test.ts",
+          "test": "with fixSamplers off, a material left on the wrong sampler fails the call and names itself"
         }
       ]
     },
@@ -28067,6 +28137,16 @@
           "suite": "live",
           "file": "tests/live/bcov-material-graph.test.ts",
           "test": "validate_material reports an orphan node until it is removed"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/material-compile-render.test.ts",
+          "test": "fails each edit, recompile and the reads report it, in one shape"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/material-compile-render.test.ts",
+          "test": "turning a texture linear fixes the sampler, recompiles the material once and keeps it drawing"
         }
       ]
     },
