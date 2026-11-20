@@ -192,7 +192,7 @@ describe("a turn through the server", () => {
     await call("save_asset", { assetPath: BP_TURN });
     await call("create_material", { name: "M_CkTurn", packagePath: DIR });
     await call("save_asset", { assetPath: MAT });
-    await call("create_new_level", { levelPath: LEVEL });
+    await call("create_new_level", { levelPath: LEVEL, discardUnsaved: true });
     await call("save_level", {});
     server = await LiveServer.start({ projects: [(await liveTarget()).uproject] });
     await tool("editor", "clear_checkpoints");

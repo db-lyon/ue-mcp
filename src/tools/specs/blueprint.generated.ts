@@ -1872,6 +1872,13 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "Re-center pasted nodes around this Y (with posX)"
       },
       {
+        "name": "timelineTemplates",
+        "type": "array",
+        "required": false,
+        "description": "Timeline templates a delete_node rollback carries: each is rebuilt for its pasted Timeline node, tracks and curve keys included, under its old name when that is free",
+        "items": "object"
+      },
+      {
         "name": "save",
         "type": "boolean",
         "required": false,
@@ -3916,6 +3923,7 @@ export const schema: Record<string, z.ZodType> = {
   threadSafe: z.boolean().optional().describe("Safe to call off the game thread"),
   TickInterval: z.number().optional().describe("PrimaryActorTick.TickInterval in seconds"),
   timelineName: z.string().optional().describe("Timeline name (add_timeline_track). Timeline name, as add_timeline_track and the Timeline node show it (remove_timeline)"),
+  timelineTemplates: z.array(z.record(z.string(), z.unknown())).optional().describe("Timeline templates a delete_node rollback carries: each is rebuilt for its pasted Timeline node, tracks and curve keys included, under its old name when that is free"),
   titleFilter: z.string().optional().describe("Case-insensitive substring match on node title"),
   titles: z.array(z.string()).optional().describe("Case-insensitive substrings matched against each node title"),
   tooltip: z.string().optional().describe("Tooltip"),

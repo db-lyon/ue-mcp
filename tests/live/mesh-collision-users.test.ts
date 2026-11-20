@@ -89,7 +89,7 @@ beforeAll(async () => {
   // A known starting point: the engine cube's own collision is whatever the engine ships.
   await setShapes({ assetPath: CUBE, shapes: [BOX_A] });
 
-  await call("create_new_level", { levelPath: LEVEL });
+  await call("create_new_level", { levelPath: LEVEL, discardUnsaved: true });
   if ((await currentMap()) !== LEVEL) await call("load_level", { levelPath: LEVEL, discardUnsaved: true });
   await call("place_actor", { actorClass: "/Script/Engine.Actor", label: ACTOR, location: { x: 0, y: 0, z: 200 } });
   await call("add_component_to_actor", { actorLabel: ACTOR, componentClass: "SplineMeshComponent", componentName: RAIL });

@@ -211,6 +211,11 @@ void FLevelHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("includeExternalActors"), EType::Boolean, TEXT("Also save the level's loaded external actor and folder packages (default true)")),
 		MCPParam::Optional(TEXT("commitDeletes"), EType::Boolean, TEXT("Save through the editor's dirty-package save, which deletes the packages of deleted World Partition actors (default false)")),
 	}, MCPSpec::ContractExempt(TEXT("Saves the current level under the contract values; nothing it reads fails first")));
+	// #2007: LevelHandlers_Save.cpp. The editor's Save Current Level As, for a
+	// never-saved Untitled map as much as a saved one.
+	Registry.RegisterHandler(TEXT("save_level_as"), &SaveLevelAs, {
+		MCPParam::Required(TEXT("levelPath"), EType::String, TEXT("Long package path to save the open map under, e.g. /Game/Maps/MyLevel. Must not exist yet")),
+	}, MCPSpec::ContractExempt(TEXT("Saves the open map under the contract levelPath and moves the editor onto it before anything fails")));
 	Registry.RegisterHandler(TEXT("list_levels"), &ListLevels, {
 		SpecCursor, SpecLimit,
 	});
@@ -283,7 +288,8 @@ void FLevelHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Required(TEXT("levelPath"), EType::String, TEXT("Map package to open")),
 		MCPParam::Optional(TEXT("saveFirst"), EType::Boolean, TEXT("Save the open map and its dirty external actor packages before switching (default false)")).Alias(TEXT("saveCurrent")),
 		MCPParam::Optional(TEXT("discardUnsaved"), EType::Boolean, TEXT("Switch even though the open map has unsaved changes, discarding them (default false)")),
-	}, MCPSpec::ContractExempt(TEXT("Ends any play session, collects garbage and swaps the open map before the contract path can fail")));
+		MCPParam::Optional(TEXT("endPIE"), EType::Boolean, TEXT("End a running play session (Play, Simulate, ejected or queued) and switch; without it the switch is refused while one is up (default false)")),
+	}, MCPSpec::ContractExempt(TEXT("Ends a play session when asked, collects garbage and swaps the open map before the contract path can fail")));
 	Registry.RegisterHandler(TEXT("clear_level_script"), &ClearLevelScript, {
 		MCPParam::Optional(TEXT("dryRun"), EType::Boolean, TEXT("Report what would be removed without removing it (default true)")),
 		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save only the current level after a successful clear and compile (default false)")).Default(false),
@@ -2836,7 +2842,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::RemoveComponentFromActor(const TSharedPtr
 
 TSharedPtr<FJsonValue> FLevelHandlers::LoadLevel(const TSharedPtr<FJsonObject>& Params)
 {
-	MCPReadParamsAhead(Params, { TEXT("levelPath"), TEXT("saveFirst"), TEXT("discardUnsaved") });
+	MCPReadParamsAhead(Params, { TEXT("levelPath"), TEXT("saveFirst"), TEXT("discardUnsaved"), TEXT("endPIE") });
 	FString LevelPath;
 	if (auto Err = RequireString(Params, TEXT("levelPath"), LevelPath)) return Err;
 
@@ -2898,102 +2904,44 @@ TSharedPtr<FJsonValue> FLevelHandlers::LoadLevel(const TSharedPtr<FJsonObject>& 
 		return MCPError(FString::Printf(TEXT("Level '%s' does not exist on disk. Nothing was unloaded."), *LevelPath));
 	}
 
-	// Loading discards unsaved map and external actor packages, so it refuses unless told what to do with them (#1259).
-	const bool bSaveFirst = OptionalBool(Params, TEXT("saveFirst"), false);
-	const bool bDiscardUnsaved = OptionalBool(Params, TEXT("discardUnsaved"), false);
-	if (bSaveFirst && bDiscardUnsaved)
-	{
-		return MCPError(TEXT("Pass saveFirst or discardUnsaved, not both."));
-	}
-	// What the switch would lose, the open level's own packages included: a
-	// never-saved /Temp map can be missing from the editor's dirty-world list
-	// while the engine's LoadLevel still refuses on it (#1851).
-	auto CollectDirtyWorldPackages = []()
-	{
-		return MCPLevelSwitch::PackageNames(MCPLevelSwitch::CollectDirtyPackages(GetEditorWorld()));
-	};
-	TArray<FString> DirtyBefore = CollectDirtyWorldPackages();
-	TArray<FString> SavedFirst;
-	if (DirtyBefore.Num() > 0 && !bDiscardUnsaved)
-	{
-		if (!bSaveFirst)
-		{
-			TSharedPtr<FJsonObject> Refusal = MCPErrorObject(FString::Printf(
-				TEXT("The open map has %d unsaved package(s) that loading '%s' would discard. Pass saveFirst=true to save them first, or discardUnsaved=true to drop them. Nothing was unloaded."),
-				DirtyBefore.Num(), *LevelPath));
-			Refusal->SetArrayField(TEXT("dirtyPackages"), MCPStringListToJson(DirtyBefore));
-			return MCPResult(Refusal);
-		}
-		// An untitled map has no path to save to, and saving it would raise a modal Save As dialog.
-		for (const FString& Name : DirtyBefore)
-		{
-			if (MCPLevelSwitch::IsUnsavedMapPackage(Name))
-			{
-				TSharedPtr<FJsonObject> Refusal = MCPErrorObject(FString::Printf(
-					TEXT("'%s' is an untitled map with no file to save to. Save it under a path first, or pass discardUnsaved=true. Nothing was unloaded."), *Name));
-				Refusal->SetArrayField(TEXT("dirtyPackages"), MCPStringListToJson(DirtyBefore));
-				return MCPResult(Refusal);
-			}
-		}
-		UEditorLoadingAndSavingUtils::SaveDirtyPackages(/*bSaveMapPackages*/ true, /*bSaveContentPackages*/ false);
-		const TArray<FString> StillDirty = CollectDirtyWorldPackages();
-		if (StillDirty.Num() > 0)
-		{
-			TSharedPtr<FJsonObject> Refusal = MCPErrorObject(FString::Printf(
-				TEXT("saveFirst could not save %d package(s); the output log carries the reason. Nothing was unloaded."), StillDirty.Num()));
-			Refusal->SetArrayField(TEXT("stillDirty"), MCPStringListToJson(StillDirty));
-			return MCPResult(Refusal);
-		}
-		SavedFirst = DirtyBefore;
-	}
-
-	// #590/#589: loading a map right after a PIE session (or a level-script
-	// recompile / duplicate) fatally asserts "World Memory Leaks: N leaks
-	// objects and packages" - the previous world's objects are still
-	// referenced when the engine tears it down. End any in-flight play session
-	// and force a full GC first so those references are released before the map
-	// swap. Mirrors what the editor does between map loads.
-	bool bEndedPIE = false;
-	if (GEditor->PlayWorld != nullptr || GEditor->bIsSimulatingInEditor)
-	{
-		GEditor->EndPlayMap();
-		bEndedPIE = true;
-	}
-	// Trim transient/PIE packages then collect twice - the first pass unroots
-	// the world, the second reaps objects the first pass' cluster dissolve freed.
-	CollectGarbage(GARBAGE_COLLECTION_KEEPFLAGS, /*bPerformFullPurge*/ true);
-	CollectGarbage(GARBAGE_COLLECTION_KEEPFLAGS, /*bPerformFullPurge*/ true);
-
-	// Use the LevelEditorSubsystem to load the level
 	ULevelEditorSubsystem* LevelEditorSubsystem = GEditor->GetEditorSubsystem<ULevelEditorSubsystem>();
 	if (!LevelEditorSubsystem)
 	{
 		return MCPError(TEXT("LevelEditorSubsystem not available"));
 	}
 
-	// discardUnsaved is carried out here rather than left to the engine. Its
-	// LoadLevel refuses on any dirty level package from UE 5.9 unless told to
-	// discard, and on every version a world whose package is still dirty is
-	// kept loaded through the switch. Clearing the flags first is what
-	// editor(discard_dirty) does, and is the recovery that already worked.
-	if (bDiscardUnsaved && DirtyBefore.Num() > 0)
+	// Loading replaces the editor world, which ends a play session and drops
+	// unsaved map and external actor packages, so it refuses unless told what
+	// to do with each (#1912, #1259). The open level's own packages count: a
+	// never-saved /Temp map can be missing from the editor's dirty-world list
+	// while the engine's LoadLevel still refuses on it (#1851).
+	MCPLevelSwitch::FSwitchPreparation Prepared;
+	if (TSharedPtr<FJsonObject> Refusal = MCPLevelSwitch::Prepare(Params, FString::Printf(TEXT("loading '%s'"), *LevelPath), Prepared))
 	{
-		const TArray<FString> StillDirty = MCPLevelSwitch::DiscardChanges(MCPLevelSwitch::CollectDirtyPackages(GetEditorWorld()));
-		if (StillDirty.Num() > 0)
-		{
-			TSharedPtr<FJsonObject> Refusal = MCPErrorObject(FString::Printf(
-				TEXT("discardUnsaved could not discard %d package(s): each was dirty again as soon as its flag was cleared. Nothing was unloaded."), StillDirty.Num()));
-			Refusal->SetArrayField(TEXT("stillDirty"), MCPStringListToJson(StillDirty));
-			Refusal->SetBoolField(TEXT("endedPlaySession"), bEndedPIE);
-			return MCPResult(Refusal);
-		}
+		return MCPResult(Refusal);
 	}
+	const bool bDiscardUnsaved = OptionalBool(Params, TEXT("discardUnsaved"), false);
 
+	// #590/#589: loading a map right after a PIE session (or a level-script
+	// recompile / duplicate) fatally asserts "World Memory Leaks: N leaks
+	// objects and packages" - the previous world's objects are still
+	// referenced when the engine tears it down. The session was ended above;
+	// a full GC releases those references before the map swap. Mirrors what
+	// the editor does between map loads. Collect twice - the first pass unroots
+	// the world, the second reaps objects the first pass' cluster dissolve freed.
+	CollectGarbage(GARBAGE_COLLECTION_KEEPFLAGS, /*bPerformFullPurge*/ true);
+	CollectGarbage(GARBAGE_COLLECTION_KEEPFLAGS, /*bPerformFullPurge*/ true);
+
+	auto CollectDirtyWorldPackages = []()
+	{
+		return MCPLevelSwitch::PackageNames(MCPLevelSwitch::CollectDirtyPackages(GetEditorWorld()));
+	};
 	bool bSuccess = MCPLevelSwitch::LoadLevel(*LevelEditorSubsystem, LevelPath, bDiscardUnsaved);
 	if (!bSuccess)
 	{
 		TSharedPtr<FJsonObject> Failure = MCPErrorObject(FString::Printf(
 			TEXT("Failed to load level: %s. The engine refused the switch; the output log carries its reason."), *LevelPath));
+		Failure->SetBoolField(TEXT("endedPlaySession"), Prepared.bEndedPlaySession);
 		const TArray<FString> DirtyNow = CollectDirtyWorldPackages();
 		if (DirtyNow.Num() > 0) Failure->SetArrayField(TEXT("dirtyPackages"), MCPStringListToJson(DirtyNow));
 		Failure->SetStringField(TEXT("openMap"), MCPLevelSwitch::OpenMapPackageName());
@@ -3013,9 +2961,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::LoadLevel(const TSharedPtr<FJsonObject>& 
 	Result->SetStringField(TEXT("worldPath"), World->GetPathName());
 	Result->SetStringField(TEXT("levelPath"), LevelPath);
 	Result->SetStringField(TEXT("levelName"), FPackageName::GetShortName(RequestedPackageName));
-	Result->SetBoolField(TEXT("endedPlaySession"), bEndedPIE);
-	if (SavedFirst.Num() > 0) Result->SetArrayField(TEXT("savedPackages"), MCPStringListToJson(SavedFirst));
-	if (bDiscardUnsaved && DirtyBefore.Num() > 0) Result->SetArrayField(TEXT("discardedPackages"), MCPStringListToJson(DirtyBefore));
+	MCPLevelSwitch::ReportPreparation(Result, Prepared);
 	// The already-open case returned above, so reaching here is a real load.
 	Result->SetBoolField(TEXT("alreadyOpen"), false);
 	Result->SetBoolField(TEXT("unchanged"), false);

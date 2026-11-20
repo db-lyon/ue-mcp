@@ -42,7 +42,7 @@ async function currentMap(): Promise<string | undefined> {
 async function openNewMap(path: string, extra: Json = {}): Promise<Json> {
   await callBridge(bridge, "load_level", { levelPath: HOME, discardUnsaved: true });
   await callBridge(bridge, "delete_asset", { assetPath: path, force: true });
-  const created = await call("create_new_level", { levelPath: path, ...extra });
+  const created = await call("create_new_level", { levelPath: path, discardUnsaved: true, ...extra });
   expect(await currentMap()).toBe(path);
   return created;
 }

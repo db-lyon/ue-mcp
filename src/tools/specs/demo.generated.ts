@@ -27,6 +27,12 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "boolean",
         "required": false,
         "description": "Switch even though the open map has unsaved changes, discarding them (default false)"
+      },
+      {
+        "name": "endPIE",
+        "type": "boolean",
+        "required": false,
+        "description": "End a running play session and switch; without it the switch is refused while one is up (default false)"
       }
     ],
     "contractExempt": "Creates the home level if missing and opens it before the contract path can fail"
@@ -50,6 +56,7 @@ export const handlerSpecs: HandlerSpecs = {
 /** Every key the spec'd demo handlers declare, aliases included. */
 export const schema: Record<string, z.ZodType> = {
   discardUnsaved: z.boolean().optional().describe("Switch even though the open map has unsaved changes, discarding them (default false)"),
+  endPIE: z.boolean().optional().describe("End a running play session and switch; without it the switch is refused while one is up (default false)"),
   step: z.number().int().optional().describe("Step index to execute, 1 to 19. Omit for the step list"),
   stepIndex: z.number().int().optional().describe("Alias for step"),
 };

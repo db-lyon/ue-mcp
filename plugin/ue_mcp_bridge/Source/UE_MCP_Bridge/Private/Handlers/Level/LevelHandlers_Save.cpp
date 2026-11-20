@@ -35,8 +35,10 @@
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
 #include "HandlerCommitSave.h"
+#include "HandlerLevelSwitch.h"
 
 #include "Editor.h"
+#include "FileHelpers.h"
 #include "Engine/Level.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
@@ -301,6 +303,17 @@ TSharedPtr<FJsonValue> FLevelHandlers::SaveLevel(const TSharedPtr<FJsonObject>& 
 	UPackage* LevelPackage = Level->GetOutermost();
 	if (!LevelPackage) return MCPError(TEXT("The current level has no package"));
 
+	// A never-saved Untitled map lives under /Temp, which no project file
+	// backs: a write there is not a save anyone can reopen (#2007).
+	if (MCPLevelSwitch::IsUnsavedMapPackage(World->GetOutermost()->GetName()))
+	{
+		TSharedPtr<FJsonObject> Refusal = MCPErrorObject(FString::Printf(
+			TEXT("'%s' is an untitled map with no file to save to. Save it under a path with level(save_as, levelPath=\"/Game/Maps/MyLevel\"). Nothing was written."),
+			*World->GetOutermost()->GetName()));
+		Refusal->SetStringField(TEXT("reason"), TEXT("untitled_map"));
+		return MCPResult(Refusal);
+	}
+
 	const bool bForce = OptionalBool(Params, TEXT("force"), false);
 	const bool bIncludeExternalActors = OptionalBool(Params, TEXT("includeExternalActors"), true);
 
@@ -381,5 +394,145 @@ TSharedPtr<FJsonValue> FLevelHandlers::SaveLevel(const TSharedPtr<FJsonObject>& 
 	Result->SetStringField(TEXT("message"), Saved.Num() + Deleted.Num() > 0
 		? FString::Printf(TEXT("Saved %d and deleted %d package(s) for level '%s'"), Saved.Num(), Deleted.Num(), *World->GetName())
 		: FString::Printf(TEXT("Level '%s' was already saved; nothing needed writing"), *World->GetName()));
+	return MCPResult(Result);
+}
+
+
+// level(save_as): save the open map under a new package path (#2007).
+//
+// level(save) writes the package the map already has, and a never-saved
+// Untitled map has none, so an agent that built a level in one had to reach
+// for execute_python and EditorLoadingAndSavingUtils.save_map. This is that
+// call, made safe to drive unattended: every case in which the engine's
+// SaveWorld would open a message box (a name in use, a path outside the
+// content roots, a read-only file) is refused here first, and the engine runs
+// as an unattended script so nothing it reaches can raise a modal either.
+TSharedPtr<FJsonValue> FLevelHandlers::SaveLevelAs(const TSharedPtr<FJsonObject>& Params)
+{
+	FString LevelPath;
+	if (auto Err = RequireString(Params, TEXT("levelPath"), LevelPath)) return Err;
+	REQUIRE_EDITOR_WORLD(World);
+
+	if (MCPLevelSwitch::IsPlaySessionActive())
+	{
+		return MCPError(FString::Printf(TEXT("A play session (%s) is running, and a map cannot be saved while it is up. %s"),
+			*MCPLevelSwitch::PlaySessionMode(), *MCPStopPlayInEditorStep()));
+	}
+
+	const FString PackageName = FPackageName::ObjectPathToPackageName(LevelPath);
+	FText InvalidReason;
+	if (!FPackageName::IsValidLongPackageName(PackageName, /*bIncludeReadOnlyRoots*/ false, &InvalidReason) || FPackageName::IsTempPackage(PackageName))
+	{
+		return MCPError(FString::Printf(TEXT("levelPath '%s' is not a package path a map can be saved to%s%s. Use a mounted content root, e.g. \"/Game/Maps/MyLevel\". Nothing was written."),
+			*LevelPath, InvalidReason.IsEmpty() ? TEXT("") : TEXT(": "), *InvalidReason.ToString()));
+	}
+	FString Filename;
+	if (!FPackageName::TryConvertLongPackageNameToFilename(PackageName, Filename, FPackageName::GetMapPackageExtension()))
+	{
+		return MCPError(FString::Printf(TEXT("levelPath '%s' is not under a mounted content root. Use one such as \"/Game/Maps/MyLevel\". Nothing was written."), *LevelPath));
+	}
+
+	UPackage* PreviousPackage = World->GetOutermost();
+	const FString PreviousName = PreviousPackage ? PreviousPackage->GetName() : FString();
+	if (PreviousName == PackageName)
+	{
+		return MCPError(FString::Printf(TEXT("'%s' is already the open map's path. Save it in place with level(save). Nothing was written."), *PackageName));
+	}
+	if (FPackageName::DoesPackageExist(PackageName))
+	{
+		return MCPError(FString::Printf(TEXT("An asset already exists at '%s'. Pass another levelPath, or delete that asset first with asset(delete, assetPath=\"%s\"). Nothing was written."),
+			*PackageName, *PackageName));
+	}
+	if (FindPackage(nullptr, *PackageName))
+	{
+		return MCPError(FString::Printf(TEXT("A package named '%s' is loaded in memory without a file: an unsaved asset, or one deleted this session that the editor still holds. Pass another levelPath. Nothing was written."),
+			*PackageName));
+	}
+	if (IFileManager::Get().FileExists(*Filename) && IFileManager::Get().IsReadOnly(*Filename))
+	{
+		return MCPError(FString::Printf(TEXT("'%s' is read-only. Make it writable, check it out, or pass another levelPath. Nothing was written."), *Filename));
+	}
+
+	const bool bWasUntitled = MCPLevelSwitch::IsUnsavedMapPackage(PreviousName);
+	bool bEngineSaved = false;
+	{
+		TGuardValue<bool> Unattended(GIsRunningUnattendedScript, true);
+		bEngineSaved = UEditorLoadingAndSavingUtils::SaveMap(World, PackageName);
+	}
+
+	// A map that already has a file is not renamed by the engine: SaveWorld
+	// writes a duplicate at the new path, so the objects in the two maps get
+	// their own guids, and leaves the original open with its edits still
+	// unsaved. Save As means the editor carries on in the copy, so the copy is
+	// opened from disk. The original's unsaved edits are in the copy, and its
+	// own file keeps its last saved state, so its dirty flags are cleared
+	// rather than offered for saving.
+	bool bReopened = false;
+	if (bEngineSaved && !bWasUntitled && MCPLevelSwitch::OpenMapPackageName() == PreviousName && FPackageName::DoesPackageExist(PackageName))
+	{
+		ULevelEditorSubsystem* LevelEditorSubsystem = GEditor->GetEditorSubsystem<ULevelEditorSubsystem>();
+		if (!LevelEditorSubsystem) return MCPError(TEXT("LevelEditorSubsystem not available"));
+		MCPLevelSwitch::DiscardChanges(MCPLevelSwitch::CollectDirtyPackages(World));
+		CollectGarbage(GARBAGE_COLLECTION_KEEPFLAGS, /*bPerformFullPurge*/ true);
+		CollectGarbage(GARBAGE_COLLECTION_KEEPFLAGS, /*bPerformFullPurge*/ true);
+		MCPLevelSwitch::LoadLevel(*LevelEditorSubsystem, PackageName, /*bDiscardUnsaved*/ true);
+		bReopened = true;
+	}
+
+	// The open world under the new name, and a file on disk, are the proof.
+	// The world is read again rather than trusted from before the save.
+	UWorld* Saved = GetEditorWorld();
+	const FString OpenMap = MCPLevelSwitch::OpenMapPackageName();
+	const bool bFileExists = FPackageName::DoesPackageExist(PackageName);
+	if (!bEngineSaved || !Saved || OpenMap != PackageName || !bFileExists)
+	{
+		TSharedPtr<FJsonObject> Failure = MCPErrorObject(FString::Printf(
+			TEXT("Saving the open map as '%s' did not complete: the engine reported %s, the open map is '%s' and the file %s. The output log carries the engine's reason."),
+			*PackageName, bEngineSaved ? TEXT("success") : TEXT("failure"), *OpenMap, bFileExists ? TEXT("exists") : TEXT("does not exist")));
+		Failure->SetStringField(TEXT("openMap"), OpenMap);
+		Failure->SetBoolField(TEXT("fileExists"), bFileExists);
+		return MCPResult(Failure);
+	}
+
+	// SaveWorld writes the map and the external packages it renamed. Anything
+	// of the map still dirty afterwards (an actor package it left alone) is
+	// written now, so the map on disk is the map in the editor.
+	TArray<UPackage*> StillDirty = MCPLevelSwitch::CollectDirtyPackages(Saved);
+	int32 ExtraSaved = 0;
+	if (StillDirty.Num() > 0)
+	{
+		ExtraSaved = StillDirty.Num();
+		UEditorLoadingAndSavingUtils::SavePackages(StillDirty, /*bOnlyDirty*/ true);
+		StillDirty = MCPLevelSwitch::CollectDirtyPackages(Saved);
+		ExtraSaved -= StillDirty.Num();
+	}
+
+	ULevel* Persistent = Saved->PersistentLevel;
+	const bool bExternal = Persistent && Persistent->IsUsingExternalObjects();
+	auto Result = MCPSuccess();
+	MCPSetCreated(Result);
+	Result->SetStringField(TEXT("levelPath"), PackageName);
+	Result->SetStringField(TEXT("previousLevelPath"), PreviousName);
+	Result->SetBoolField(TEXT("wasUntitled"), bWasUntitled);
+	Result->SetBoolField(TEXT("reopenedFromDisk"), bReopened);
+	Result->SetStringField(TEXT("worldName"), Saved->GetName());
+	Result->SetStringField(TEXT("worldPath"), Saved->GetPathName());
+	Result->SetStringField(TEXT("filename"), FPaths::ConvertRelativePathToFull(Filename));
+	Result->SetBoolField(TEXT("worldPartition"), Saved->IsPartitionedWorld());
+	Result->SetBoolField(TEXT("externalActors"), bExternal);
+	if (bExternal) Result->SetNumberField(TEXT("externalPackages"), Persistent->GetLoadedExternalObjectPackages().Num());
+	Result->SetNumberField(TEXT("additionalPackagesSaved"), ExtraSaved);
+	MCPSetNoRollback(Result, bWasUntitled
+		? TEXT("The Untitled map now lives at levelPath; there is no file to return it to. Delete the saved map with asset(delete) if it should not exist.")
+		: TEXT("The editor now has the map open under levelPath. The previous map's file on disk is untouched and holds its last saved state; reopen it with level(load) and delete the copy with asset(delete) to go back."));
+
+	if (StillDirty.Num() > 0)
+	{
+		Result->SetBoolField(TEXT("success"), false);
+		Result->SetArrayField(TEXT("stillDirty"), MCPStringListToJson(MCPLevelSwitch::PackageNames(StillDirty)));
+		Result->SetStringField(TEXT("error"), FString::Printf(
+			TEXT("The map was saved as '%s', but %d of its package(s) are still unsaved; the output log carries the reason. Run level(save) to retry them."),
+			*PackageName, StillDirty.Num()));
+	}
 	return MCPResult(Result);
 }
