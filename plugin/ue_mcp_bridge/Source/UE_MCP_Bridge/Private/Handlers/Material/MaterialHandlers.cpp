@@ -394,7 +394,8 @@ void FMaterialHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		SpecGraphMaterialPath, SpecGraphFunctionPath,
 		SpecExpressionIndex,
 		MCPParam::Optional(TEXT("code"), EType::String, TEXT("HLSL code body (#617)")),
-		MCPParam::Optional(TEXT("inputs"), EType::Array, TEXT("Named input pins; rebuilds the node's inputs (#617)")).Items(EType::String),
+		MCPParam::Optional(TEXT("inputs"), EType::Array, TEXT("Named input pins; rebuilds the node's inputs, and an input that keeps its name keeps its wire (#617, #1907)")).Items(EType::String),
+		MCPParam::Optional(TEXT("preserveConnections"), EType::Boolean, TEXT("Carry each wire to the new input of the same name (default true); false disconnects every input")),
 		MCPParam::Optional(TEXT("outputType"), EType::String, TEXT("float1 | float2 | float3 | float4 | materialAttributes (#617)")),
 		MCPParam::Optional(TEXT("description"), EType::String, TEXT("Node description")),
 	}, GraphChoice);
@@ -4707,7 +4708,7 @@ namespace
 TSharedPtr<FJsonValue> FMaterialHandlers::SetCustomExpression(const TSharedPtr<FJsonObject>& Params)
 {
 	// Read after the graph load and the node lookup.
-	MCPReadParamsAhead(Params, { TEXT("expressionIndex"), TEXT("code"), TEXT("description"), TEXT("outputType"), TEXT("inputs") });
+	MCPReadParamsAhead(Params, { TEXT("expressionIndex"), TEXT("code"), TEXT("description"), TEXT("outputType"), TEXT("inputs"), TEXT("preserveConnections") });
 	// #1138: functionPath targets a Custom node inside a MaterialFunction.
 	FMaterialGraphTarget Target;
 	if (auto Err = ResolveMaterialGraphTarget(Params, Target)) return Err;
@@ -4797,12 +4798,16 @@ TSharedPtr<FJsonValue> FMaterialHandlers::SetCustomExpression(const TSharedPtr<F
 		}
 	}
 
-	// Inputs: array of input names (rebuilds the input pin list). Wire them
-	// afterward with connect_expressions targetInput=<name>.
+	// Inputs: array of input names (rebuilds the input pin list). #1907: an
+	// input that keeps its name keeps its wire, unless preserveConnections is
+	// false; the wires that had nowhere to go are reported.
+	const bool bPreserveConnections = OptionalBool(Params, TEXT("preserveConnections"), true);
+	TArray<TSharedPtr<FJsonValue>> KeptConnections;
+	TArray<TSharedPtr<FJsonValue>> DisconnectedInputs;
 	const TArray<TSharedPtr<FJsonValue>>* InputsArr = nullptr;
 	if (TryGetArrayParam(Params, TEXT("inputs"), InputsArr) && InputsArr)
 	{
-		Custom->Inputs.Empty();
+		TArray<FCustomInput> NewInputs;
 		for (const TSharedPtr<FJsonValue>& V : *InputsArr)
 		{
 			FString InName;
@@ -4810,18 +4815,54 @@ TSharedPtr<FJsonValue> FMaterialHandlers::SetCustomExpression(const TSharedPtr<F
 			{
 				FCustomInput CI;
 				CI.InputName = FName(*InName);
-				Custom->Inputs.Add(CI);
+				NewInputs.Add(CI);
 			}
 		}
-		bChanged = true;
-		bInputsRebuilt = true;
+		TSet<FName> Carried;
+		for (FCustomInput& NewInput : NewInputs)
+		{
+			const FCustomInput* Old = Custom->Inputs.FindByPredicate([&NewInput](const FCustomInput& CI) { return CI.InputName == NewInput.InputName; });
+			if (bPreserveConnections && Old && Old->Input.Expression && !Carried.Contains(NewInput.InputName))
+			{
+				NewInput.Input = Old->Input;
+				Carried.Add(NewInput.InputName);
+				KeptConnections.Add(MakeShared<FJsonValueString>(NewInput.InputName.ToString()));
+			}
+		}
+		for (const FCustomInput& Old : Custom->Inputs)
+		{
+			if (!Old.Input.Expression || Carried.Contains(Old.InputName)) continue;
+			TSharedPtr<FJsonObject> Lost = MakeShared<FJsonObject>();
+			Lost->SetStringField(TEXT("input"), Old.InputName.ToString());
+			Lost->SetStringField(TEXT("from"), Old.Input.Expression->GetName());
+			Lost->SetNumberField(TEXT("fromOutput"), Old.Input.OutputIndex);
+			DisconnectedInputs.Add(MakeShared<FJsonValueObject>(Lost));
+		}
+
+		// Same names in the same order, every wire carried: nothing to rebuild.
+		bool bSameInputs = NewInputs.Num() == Custom->Inputs.Num() && DisconnectedInputs.Num() == 0;
+		for (int32 i = 0; bSameInputs && i < NewInputs.Num(); ++i)
+		{
+			bSameInputs = NewInputs[i].InputName == Custom->Inputs[i].InputName;
+		}
+		if (!bSameInputs)
+		{
+			Custom->Modify();
+			Custom->Inputs = MoveTemp(NewInputs);
+			bChanged = true;
+			bInputsRebuilt = true;
+		}
 	}
 
 	bool bSaved = true;
 	FString SaveError;
 	if (bChanged)
 	{
-		Custom->PostEditChange();
+		// Named after Inputs when they changed, so an open material editor
+		// reconstructs the node's pins.
+		FProperty* InputsProp = bInputsRebuilt ? UMaterialExpressionCustom::StaticClass()->FindPropertyByName(TEXT("Inputs")) : nullptr;
+		FPropertyChangedEvent CustomChanged(InputsProp, EPropertyChangeType::ValueSet);
+		Custom->PostEditChangeProperty(CustomChanged);
 		Target.PostEdit();
 		Target.GetAsset()->MarkPackageDirty();
 		bSaved = SaveAssetPackageChecked(Target.GetAsset(), SaveError);
@@ -4845,6 +4886,11 @@ TSharedPtr<FJsonValue> FMaterialHandlers::SetCustomExpression(const TSharedPtr<F
 		InNames.Add(MakeShared<FJsonValueString>(CI.InputName.ToString()));
 	}
 	Result->SetArrayField(TEXT("inputs"), InNames);
+	if (InputsArr)
+	{
+		Result->SetArrayField(TEXT("keptConnections"), KeptConnections);
+		Result->SetArrayField(TEXT("disconnectedInputs"), DisconnectedInputs);
+	}
 
 	if (bChanged)
 	{
@@ -4866,15 +4912,14 @@ TSharedPtr<FJsonValue> FMaterialHandlers::SetCustomExpression(const TSharedPtr<F
 		}
 		MCPSetRollback(Result, TEXT("set_custom_expression"), Payload);
 
-		// Rebuilding the input list empties FCustomInput entries wholesale, and
-		// each entry carries its own FExpressionInput. Restoring the names does
-		// not restore what was plugged into them.
-		const bool bLossy = bInputsRebuilt && bPreviousInputWasWired;
+		// A wire that survived under its name comes back with the rollback,
+		// which carries it by name too. One listed in disconnectedInputs does not.
+		const bool bLossy = bInputsRebuilt && bPreviousInputWasWired && DisconnectedInputs.Num() > 0;
 		Result->SetBoolField(TEXT("rollbackLossy"), bLossy);
 		if (bLossy)
 		{
 			Result->SetStringField(TEXT("rollbackNote"),
-				TEXT("The rollback restores code, description, output type and the input pin NAMES. It does not restore what was wired into those pins: rebuilding Inputs discarded each pin's connection. Rewire them with connect_material_expressions targetInput=<name>."));
+				TEXT("The rollback restores code, description, output type and the input pin names, and the wires listed in keptConnections. The wires in disconnectedInputs had no input of the same name to move to and are not restored. Rewire them with connect_material_expressions targetInput=<name>."));
 		}
 	}
 	else

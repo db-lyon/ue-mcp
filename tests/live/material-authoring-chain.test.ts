@@ -8,6 +8,7 @@
  *   collection parameter's id (#1946).
  * - Collection parameters are added, renamed and removed by name, and each
  *   keeps the id its readers bind to, through set_property as well (#1950).
+ * - set_custom_expression carries each wire to the input of the same name (#1907).
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { closeLiveBridges, liveBridge, liveTarget } from "./harness.js";
@@ -17,7 +18,8 @@ await liveTarget();
 const DIR = "/Game/MCP_LiveMaterialAuthoring";
 const MPC = `${DIR}/MPC_Chain`;
 const M_MPC = `${DIR}/M_ChainMpc`;
-const ALL_ASSETS = [M_MPC, MPC];
+const M_CUSTOM = `${DIR}/M_ChainCustom`;
+const ALL_ASSETS = [M_CUSTOM, M_MPC, MPC];
 
 type Json = Record<string, unknown>;
 type MpcParam = { name: string; id: string; defaultValue: unknown };
@@ -54,6 +56,7 @@ beforeAll(async () => {
   await call("create_asset_by_class", { name: "MPC_Chain", className: "MaterialParameterCollection", packagePath: DIR });
   await call("set_asset_property", { assetPath: MPC, propertyName: "ScalarParameters", value: [{ ParameterName: "Amount", DefaultValue: 0 }] });
   await call("create_material", { name: "M_ChainMpc", packagePath: DIR });
+  await call("create_material", { name: "M_ChainCustom", packagePath: DIR });
 }, 180_000);
 
 afterAll(async () => {
@@ -129,5 +132,52 @@ describe("collection parameters are edited by name (#1950)", () => {
     await call(rollback.method, rollback.payload);
     const restored = (await scalarParams()).find((p) => p.name === "Alpha");
     expect(normalizeGuid(restored?.id)).toBe(amountId);
+  }, 180_000);
+});
+
+type InputRow = { inputName: string; connectedExpressionIndex?: number };
+async function customInputs(materialPath: string, index: number): Promise<InputRow[]> {
+  const listed = await call("list_material_expressions", { materialPath, includeInputs: true, limit: 100 });
+  const row = (listed.expressions as Array<{ nodeId: string; inputs: InputRow[] }>).find((e) => e.nodeId === String(index));
+  return row?.inputs ?? [];
+}
+
+describe("set_custom_expression keeps wires by input name (#1907)", () => {
+  it("an input that keeps its name keeps its wire, and a dropped one is reported", async () => {
+    const built = await call("build_material_graph", {
+      assetPath: M_CUSTOM,
+      nodes: [
+        { name: "One", class: "Constant", value: 1 },
+        { name: "Two", class: "Constant", value: 2 },
+        { name: "Mix", class: "Custom" },
+      ],
+      propertyConnections: [{ property: "EmissiveColor", from: "Mix" }],
+    });
+    const nodes = built.nodes as Array<{ name: string; expressionName: string; expressionIndex: number }>;
+    const mix = nodes.find((n) => n.name === "Mix")!;
+    const one = nodes.find((n) => n.name === "One")!;
+    await call("set_custom_expression", { materialPath: M_CUSTOM, expressionIndex: mix.expressionIndex, code: "return A + B;", inputs: ["A", "B"] });
+    await call("build_material_graph", {
+      assetPath: M_CUSTOM, nodes: [],
+      connections: [{ from: "One", to: mix.expressionName, toInput: "A" }, { from: "Two", to: mix.expressionName, toInput: "B" }],
+    });
+
+    const edited = await call("set_custom_expression", {
+      materialPath: M_CUSTOM, expressionIndex: mix.expressionIndex, code: "return A * C;", inputs: ["A", "C"],
+    });
+    expect(edited.keptConnections).toEqual(["A"]);
+    expect((edited.disconnectedInputs as Json[]).map((d) => d.input)).toEqual(["B"]);
+    expect(edited.rollbackLossy).toBe(true);
+
+    const inputs = await customInputs(M_CUSTOM, mix.expressionIndex);
+    expect(inputs.map((i) => i.inputName)).toEqual(["A", "C"]);
+    expect(inputs[0].connectedExpressionIndex).toBe(one.expressionIndex);
+    expect(inputs[1].connectedExpressionIndex ?? -1).toBe(-1);
+
+    const wiped = await call("set_custom_expression", {
+      materialPath: M_CUSTOM, expressionIndex: mix.expressionIndex, inputs: ["A", "C"], preserveConnections: false,
+    });
+    expect((wiped.disconnectedInputs as Json[]).map((d) => d.input)).toEqual(["A"]);
+    expect((await customInputs(M_CUSTOM, mix.expressionIndex))[0].connectedExpressionIndex ?? -1).toBe(-1);
   }, 180_000);
 });
