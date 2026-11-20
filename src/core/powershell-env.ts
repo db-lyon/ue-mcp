@@ -1,3 +1,4 @@
+// @session independent: Builds an environment for PowerShell children from the temp folder. Acts on no editor.
 import * as os from "node:os";
 import * as path from "node:path";
 
