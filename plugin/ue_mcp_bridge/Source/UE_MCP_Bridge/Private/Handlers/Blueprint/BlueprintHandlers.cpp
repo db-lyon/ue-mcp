@@ -758,6 +758,42 @@ void FBlueprintHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("tooltip"), EType::String, TEXT("Tooltip")),
 		MCPParam::Optional(TEXT("fields"), EType::Array, TEXT("[{fieldName or fieldGuid, tooltip?, editableOnInstance?, saveGame?, multiLineText?, widget3D?, metadata?}]")).Items(EType::Object),
 	});
+
+	// #1910: the Blueprint save policy. Every action here that changes a
+	// Blueprint, interface, enum or struct asset saves it by default, and with
+	// save=false marks its package dirty and writes nothing; the registry applies
+	// it to every save the handler reaches, so callers and child Blueprints an
+	// edit saves beside its own asset follow it too. A new write action goes on
+	// this list. export_blueprint_batch (writes export files, not packages) and
+	// run_construction_script (spawns a throwaway actor) save nothing and are not
+	// listed.
+	static const TCHAR* const SavePolicyActions[] = {
+		TEXT("create_blueprint"), TEXT("duplicate_blueprint"), TEXT("create_blueprint_interface"),
+		TEXT("reparent_blueprint"), TEXT("compile_blueprint"), TEXT("compile_blueprints"),
+		TEXT("add_variable"), TEXT("delete_variable"), TEXT("set_variable_properties"), TEXT("set_variable_default"),
+		TEXT("rename_blueprint_variable"), TEXT("set_blueprint_variable_metadata"),
+		TEXT("add_local_variable"), TEXT("edit_local_variable"),
+		TEXT("create_function"), TEXT("delete_function"), TEXT("rename_function"), TEXT("override_function"),
+		TEXT("set_function_properties"), TEXT("add_function_parameter"), TEXT("edit_graph_parameters"),
+		TEXT("create_macro"), TEXT("delete_macro"), TEXT("delete_graph"), TEXT("add_custom_event"),
+		TEXT("add_event_dispatcher"), TEXT("remove_event_dispatcher"),
+		TEXT("add_blueprint_interface"), TEXT("remove_blueprint_interface"),
+		TEXT("add_node"), TEXT("delete_node"), TEXT("refresh_node"), TEXT("set_node_property"), TEXT("set_node_position"),
+		TEXT("connect_pins"), TEXT("connect_pins_batch"), TEXT("disconnect_pins"), TEXT("import_nodes_t3d"),
+		TEXT("cleanup_graph"), TEXT("auto_layout_graph"),
+		TEXT("add_component"), TEXT("remove_component"), TEXT("reparent_component"),
+		TEXT("set_blueprint_component_property"), TEXT("set_blueprint_component_properties_batch"),
+		TEXT("set_component_override_materials"), TEXT("set_capsule_size"),
+		TEXT("flush_inheritable_component_handler"), TEXT("flush_blueprint_component_templates"),
+		TEXT("add_timeline_track"), TEXT("remove_timeline"),
+		TEXT("set_class_default"), TEXT("set_cdo_property"), TEXT("set_actor_tick_settings"),
+		TEXT("reorder_enum_values"), TEXT("set_enum_metadata"),
+		TEXT("set_struct_field_default"), TEXT("reorder_struct_fields"), TEXT("edit_struct_metadata"),
+	};
+	for (const TCHAR* Action : SavePolicyActions)
+	{
+		Registry.AdoptSavePolicy(Action, MCPSharedParam::Save());
+	}
 }
 
 // ---------------------------------------------------------------------------

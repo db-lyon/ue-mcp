@@ -24,6 +24,13 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "string",
         "required": true,
         "description": "Interface class path"
+      },
+      {
+        "name": "save",
+        "type": "boolean",
+        "required": false,
+        "description": "Write the edited package to disk (default true). false leaves it dirty in memory and writes nothing; editor(save_dirty) saves it later",
+        "default": true
       }
     ]
   },
@@ -80,6 +87,13 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "boolean",
         "required": false,
         "description": "Make this scene component the Blueprint's root: it replaces DefaultSceneRoot, whose children move under it, or takes the current root as its child. Applies to an existing component of this name too. Not combinable with parentComponent or parentSocket"
+      },
+      {
+        "name": "save",
+        "type": "boolean",
+        "required": false,
+        "description": "Write the edited package to disk (default true). false leaves it dirty in memory and writes nothing; editor(save_dirty) saves it later",
+        "default": true
       }
     ]
   },
@@ -143,6 +157,13 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "number",
         "required": false,
         "description": "Node Y position in the graph"
+      },
+      {
+        "name": "save",
+        "type": "boolean",
+        "required": false,
+        "description": "Write the edited package to disk (default true). false leaves it dirty in memory and writes nothing; editor(save_dirty) saves it later",
+        "default": true
       }
     ]
   },
@@ -167,6 +188,13 @@ export const handlerSpecs: HandlerSpecs = {
         "required": false,
         "description": "Typed signature parameters [{name, type}]; type takes the add_variable vocabulary, containers included",
         "items": "object"
+      },
+      {
+        "name": "save",
+        "type": "boolean",
+        "required": false,
+        "description": "Write the edited package to disk (default true). false leaves it dirty in memory and writes nothing; editor(save_dirty) saves it later",
+        "default": true
       }
     ]
   },
@@ -217,6 +245,13 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "boolean",
         "required": false,
         "description": "Const parameter (default false)"
+      },
+      {
+        "name": "save",
+        "type": "boolean",
+        "required": false,
+        "description": "Write the edited package to disk (default true). false leaves it dirty in memory and writes nothing; editor(save_dirty) saves it later",
+        "default": true
       }
     ]
   },
@@ -252,6 +287,13 @@ export const handlerSpecs: HandlerSpecs = {
         "aliases": [
           "type"
         ]
+      },
+      {
+        "name": "save",
+        "type": "boolean",
+        "required": false,
+        "description": "Write the edited package to disk (default true). false leaves it dirty in memory and writes nothing; editor(save_dirty) saves it later",
+        "default": true
       }
     ]
   },
@@ -290,6 +332,13 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "boolean",
         "required": false,
         "description": "Skip this write's compile (default false) so a sequence of node writes compiles once, with blueprint(compile), at the end"
+      },
+      {
+        "name": "save",
+        "type": "boolean",
+        "required": false,
+        "description": "Write the edited package to disk (default true). false leaves it dirty in memory and writes nothing; editor(save_dirty) saves it later",
+        "default": true
       }
     ]
   },
@@ -335,6 +384,13 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "string",
         "required": false,
         "description": "Existing curve asset to bind instead of keyframes: CurveFloat for float and event, CurveVector for vector, CurveLinearColor for color"
+      },
+      {
+        "name": "save",
+        "type": "boolean",
+        "required": false,
+        "description": "Write the edited package to disk (default true). false leaves it dirty in memory and writes nothing; editor(save_dirty) saves it later",
+        "default": true
       }
     ]
   },
@@ -388,6 +444,13 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "boolean",
         "required": false,
         "description": "true: EditAnywhere; false: EditDefaultsOnly. Omitted leaves the editor default"
+      },
+      {
+        "name": "save",
+        "type": "boolean",
+        "required": false,
+        "description": "Write the edited package to disk (default true). false leaves it dirty in memory and writes nothing; editor(save_dirty) saves it later",
+        "default": true
       }
     ]
   },
@@ -498,6 +561,13 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "boolean",
         "required": false,
         "description": "Capture previousPositions regardless of previousPositionsLimit (default false)"
+      },
+      {
+        "name": "save",
+        "type": "boolean",
+        "required": false,
+        "description": "Write the edited package to disk (default true). false leaves it dirty in memory and writes nothing; editor(save_dirty) saves it later",
+        "default": true
       }
     ]
   },
@@ -518,6 +588,13 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "string",
         "required": false,
         "description": "Graph to clean (default: every graph)"
+      },
+      {
+        "name": "save",
+        "type": "boolean",
+        "required": false,
+        "description": "Write the edited package to disk (default true). false leaves it dirty in memory and writes nothing; editor(save_dirty) saves it later",
+        "default": true
       }
     ]
   },
@@ -580,6 +657,13 @@ export const handlerSpecs: HandlerSpecs = {
         "aliases": [
           "path"
         ]
+      },
+      {
+        "name": "save",
+        "type": "boolean",
+        "required": false,
+        "description": "Write the edited package to disk (default true). false leaves it dirty in memory and writes nothing; editor(save_dirty) saves it later",
+        "default": true
       }
     ]
   },
@@ -679,6 +763,13 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "boolean",
         "required": false,
         "description": "Skip this write's compile (default false) so a sequence of node writes compiles once, with blueprint(compile), at the end"
+      },
+      {
+        "name": "save",
+        "type": "boolean",
+        "required": false,
+        "description": "Write the edited package to disk (default true). false leaves it dirty in memory and writes nothing; editor(save_dirty) saves it later",
+        "default": true
       }
     ]
   },
@@ -706,6 +797,13 @@ export const handlerSpecs: HandlerSpecs = {
         "required": true,
         "description": "[{sourceNode, sourcePin, targetNode, targetPin}]",
         "items": "object"
+      },
+      {
+        "name": "save",
+        "type": "boolean",
+        "required": false,
+        "description": "Write the edited package to disk (default true). false leaves it dirty in memory and writes nothing; editor(save_dirty) saves it later",
+        "default": true
       }
     ]
   },
@@ -744,6 +842,13 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "string",
         "required": false,
         "description": "skip (default) reports the existing entry; error refuses"
+      },
+      {
+        "name": "save",
+        "type": "boolean",
+        "required": false,
+        "description": "Write the edited package to disk (default true). false leaves it dirty in memory and writes nothing; editor(save_dirty) saves it later",
+        "default": true
       }
     ],
     "choices": [
@@ -778,6 +883,13 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "string",
         "required": false,
         "description": "skip (default) reports the existing entry; error refuses"
+      },
+      {
+        "name": "save",
+        "type": "boolean",
+        "required": false,
+        "description": "Write the edited package to disk (default true). false leaves it dirty in memory and writes nothing; editor(save_dirty) saves it later",
+        "default": true
       }
     ],
     "contractExempt": "Creates and saves an interface at the contract path; nothing it reads fails first"
@@ -805,6 +917,13 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "string",
         "required": false,
         "description": "skip (default) reports the existing entry; error refuses"
+      },
+      {
+        "name": "save",
+        "type": "boolean",
+        "required": false,
+        "description": "Write the edited package to disk (default true). false leaves it dirty in memory and writes nothing; editor(save_dirty) saves it later",
+        "default": true
       }
     ]
   },
@@ -845,6 +964,13 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "string",
         "required": false,
         "description": "skip (default) reports the existing entry; error refuses"
+      },
+      {
+        "name": "save",
+        "type": "boolean",
+        "required": false,
+        "description": "Write the edited package to disk (default true). false leaves it dirty in memory and writes nothing; editor(save_dirty) saves it later",
+        "default": true
       }
     ]
   },
@@ -865,6 +991,13 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "string",
         "required": true,
         "description": "Function name"
+      },
+      {
+        "name": "save",
+        "type": "boolean",
+        "required": false,
+        "description": "Write the edited package to disk (default true). false leaves it dirty in memory and writes nothing; editor(save_dirty) saves it later",
+        "default": true
       }
     ]
   },
@@ -897,6 +1030,13 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "boolean",
         "required": false,
         "description": "Remove a graph still owned by a live node, or an event graph; both are refused without it"
+      },
+      {
+        "name": "save",
+        "type": "boolean",
+        "required": false,
+        "description": "Write the edited package to disk (default true). false leaves it dirty in memory and writes nothing; editor(save_dirty) saves it later",
+        "default": true
       }
     ]
   },
@@ -917,6 +1057,13 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "string",
         "required": true,
         "description": "Macro graph name"
+      },
+      {
+        "name": "save",
+        "type": "boolean",
+        "required": false,
+        "description": "Write the edited package to disk (default true). false leaves it dirty in memory and writes nothing; editor(save_dirty) saves it later",
+        "default": true
       }
     ]
   },
@@ -958,6 +1105,13 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "boolean",
         "required": false,
         "description": "Skip this write's compile (default false) so a sequence of node writes compiles once, with blueprint(compile), at the end"
+      },
+      {
+        "name": "save",
+        "type": "boolean",
+        "required": false,
+        "description": "Write the edited package to disk (default true). false leaves it dirty in memory and writes nothing; editor(save_dirty) saves it later",
+        "default": true
       }
     ]
   },
@@ -978,6 +1132,13 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "string",
         "required": true,
         "description": "Variable name"
+      },
+      {
+        "name": "save",
+        "type": "boolean",
+        "required": false,
+        "description": "Write the edited package to disk (default true). false leaves it dirty in memory and writes nothing; editor(save_dirty) saves it later",
+        "default": true
       }
     ]
   },
@@ -1070,6 +1231,13 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "string",
         "required": false,
         "description": "With linkedNodeId, break only the link to this pin"
+      },
+      {
+        "name": "save",
+        "type": "boolean",
+        "required": false,
+        "description": "Write the edited package to disk (default true). false leaves it dirty in memory and writes nothing; editor(save_dirty) saves it later",
+        "default": true
       }
     ]
   },
@@ -1087,6 +1255,13 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "string",
         "required": true,
         "description": "Full destination asset path"
+      },
+      {
+        "name": "save",
+        "type": "boolean",
+        "required": false,
+        "description": "Write the edited package to disk (default true). false leaves it dirty in memory and writes nothing; editor(save_dirty) saves it later",
+        "default": true
       }
     ]
   },
@@ -1161,6 +1336,13 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "array",
         "required": false,
         "description": "The COMPLETE desired order, never a partial list"
+      },
+      {
+        "name": "save",
+        "type": "boolean",
+        "required": false,
+        "description": "Write the edited package to disk (default true). false leaves it dirty in memory and writes nothing; editor(save_dirty) saves it later",
+        "default": true
       }
     ]
   },
@@ -1214,6 +1396,13 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "any",
         "required": false,
         "description": "Default value as Unreal export text; an empty string clears it"
+      },
+      {
+        "name": "save",
+        "type": "boolean",
+        "required": false,
+        "description": "Write the edited package to disk (default true). false leaves it dirty in memory and writes nothing; editor(save_dirty) saves it later",
+        "default": true
       }
     ]
   },
@@ -1241,6 +1430,13 @@ export const handlerSpecs: HandlerSpecs = {
         "required": false,
         "description": "[{fieldName or fieldGuid, tooltip?, editableOnInstance?, saveGame?, multiLineText?, widget3D?, metadata?}]",
         "items": "object"
+      },
+      {
+        "name": "save",
+        "type": "boolean",
+        "required": false,
+        "description": "Write the edited package to disk (default true). false leaves it dirty in memory and writes nothing; editor(save_dirty) saves it later",
+        "default": true
       }
     ]
   },
@@ -1336,6 +1532,13 @@ export const handlerSpecs: HandlerSpecs = {
         "aliases": [
           "path"
         ]
+      },
+      {
+        "name": "save",
+        "type": "boolean",
+        "required": false,
+        "description": "Write the edited package to disk (default true). false leaves it dirty in memory and writes nothing; editor(save_dirty) saves it later",
+        "default": true
       }
     ]
   },
@@ -1350,6 +1553,13 @@ export const handlerSpecs: HandlerSpecs = {
         "aliases": [
           "path"
         ]
+      },
+      {
+        "name": "save",
+        "type": "boolean",
+        "required": false,
+        "description": "Write the edited package to disk (default true). false leaves it dirty in memory and writes nothing; editor(save_dirty) saves it later",
+        "default": true
       }
     ]
   },
@@ -1660,6 +1870,13 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "number",
         "required": false,
         "description": "Re-center pasted nodes around this Y (with posX)"
+      },
+      {
+        "name": "save",
+        "type": "boolean",
+        "required": false,
+        "description": "Write the edited package to disk (default true). false leaves it dirty in memory and writes nothing; editor(save_dirty) saves it later",
+        "default": true
       }
     ]
   },
@@ -1922,6 +2139,13 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "string",
         "required": false,
         "description": "Implement this interface first when it is not present"
+      },
+      {
+        "name": "save",
+        "type": "boolean",
+        "required": false,
+        "description": "Write the edited package to disk (default true). false leaves it dirty in memory and writes nothing; editor(save_dirty) saves it later",
+        "default": true
       }
     ]
   },
@@ -2205,6 +2429,13 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "boolean",
         "required": false,
         "description": "Also break the links holding orphaned pins alive, which removes those pins"
+      },
+      {
+        "name": "save",
+        "type": "boolean",
+        "required": false,
+        "description": "Write the edited package to disk (default true). false leaves it dirty in memory and writes nothing; editor(save_dirty) saves it later",
+        "default": true
       }
     ]
   },
@@ -2231,6 +2462,13 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "boolean",
         "required": false,
         "description": "Keep the implementations as ordinary Blueprint functions (default false)"
+      },
+      {
+        "name": "save",
+        "type": "boolean",
+        "required": false,
+        "description": "Write the edited package to disk (default true). false leaves it dirty in memory and writes nothing; editor(save_dirty) saves it later",
+        "default": true
       }
     ]
   },
@@ -2251,6 +2489,13 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "string",
         "required": true,
         "description": "SCS or inherited component name"
+      },
+      {
+        "name": "save",
+        "type": "boolean",
+        "required": false,
+        "description": "Write the edited package to disk (default true). false leaves it dirty in memory and writes nothing; editor(save_dirty) saves it later",
+        "default": true
       }
     ]
   },
@@ -2271,6 +2516,13 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "string",
         "required": true,
         "description": "Dispatcher name"
+      },
+      {
+        "name": "save",
+        "type": "boolean",
+        "required": false,
+        "description": "Write the edited package to disk (default true). false leaves it dirty in memory and writes nothing; editor(save_dirty) saves it later",
+        "default": true
       }
     ]
   },
@@ -2291,6 +2543,13 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "string",
         "required": true,
         "description": "Timeline name, as add_timeline_track and the Timeline node show it"
+      },
+      {
+        "name": "save",
+        "type": "boolean",
+        "required": false,
+        "description": "Write the edited package to disk (default true). false leaves it dirty in memory and writes nothing; editor(save_dirty) saves it later",
+        "default": true
       }
     ]
   },
@@ -2317,6 +2576,13 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "string",
         "required": true,
         "description": "New name"
+      },
+      {
+        "name": "save",
+        "type": "boolean",
+        "required": false,
+        "description": "Write the edited package to disk (default true). false leaves it dirty in memory and writes nothing; editor(save_dirty) saves it later",
+        "default": true
       }
     ]
   },
@@ -2343,6 +2609,13 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "string",
         "required": true,
         "description": "New name"
+      },
+      {
+        "name": "save",
+        "type": "boolean",
+        "required": false,
+        "description": "Write the edited package to disk (default true). false leaves it dirty in memory and writes nothing; editor(save_dirty) saves it later",
+        "default": true
       }
     ]
   },
@@ -2363,6 +2636,13 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "array",
         "required": true,
         "description": "The COMPLETE desired order, never a partial list"
+      },
+      {
+        "name": "save",
+        "type": "boolean",
+        "required": false,
+        "description": "Write the edited package to disk (default true). false leaves it dirty in memory and writes nothing; editor(save_dirty) saves it later",
+        "default": true
       }
     ]
   },
@@ -2383,6 +2663,13 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "array",
         "required": true,
         "description": "The COMPLETE desired order, never a partial list"
+      },
+      {
+        "name": "save",
+        "type": "boolean",
+        "required": false,
+        "description": "Write the edited package to disk (default true). false leaves it dirty in memory and writes nothing; editor(save_dirty) saves it later",
+        "default": true
       }
     ]
   },
@@ -2403,6 +2690,13 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "string",
         "required": true,
         "description": "New parent class: short name or full path"
+      },
+      {
+        "name": "save",
+        "type": "boolean",
+        "required": false,
+        "description": "Write the edited package to disk (default true). false leaves it dirty in memory and writes nothing; editor(save_dirty) saves it later",
+        "default": true
       }
     ]
   },
@@ -2429,6 +2723,13 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "string",
         "required": true,
         "description": "New parent component name"
+      },
+      {
+        "name": "save",
+        "type": "boolean",
+        "required": false,
+        "description": "Write the edited package to disk (default true). false leaves it dirty in memory and writes nothing; editor(save_dirty) saves it later",
+        "default": true
       }
     ]
   },
@@ -2710,6 +3011,13 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "number",
         "required": false,
         "description": "PrimaryActorTick.TickInterval in seconds"
+      },
+      {
+        "name": "save",
+        "type": "boolean",
+        "required": false,
+        "description": "Write the edited package to disk (default true). false leaves it dirty in memory and writes nothing; editor(save_dirty) saves it later",
+        "default": true
       }
     ]
   },
@@ -2787,6 +3095,13 @@ export const handlerSpecs: HandlerSpecs = {
         "required": false,
         "description": "Validate values on transient copies without editing, compiling or saving (default false)",
         "default": false
+      },
+      {
+        "name": "save",
+        "type": "boolean",
+        "required": false,
+        "description": "Write the edited package to disk (default true). false leaves it dirty in memory and writes nothing; editor(save_dirty) saves it later",
+        "default": true
       }
     ]
   },
@@ -2819,6 +3134,13 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "any",
         "required": true,
         "description": "Value to write: a JSON value, or Unreal export text. null clears an object, class or interface reference"
+      },
+      {
+        "name": "save",
+        "type": "boolean",
+        "required": false,
+        "description": "Write the edited package to disk (default true). false leaves it dirty in memory and writes nothing; editor(save_dirty) saves it later",
+        "default": true
       }
     ]
   },
@@ -2851,6 +3173,13 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "string",
         "required": false,
         "description": "The function owning a local variable; omit for a member variable"
+      },
+      {
+        "name": "save",
+        "type": "boolean",
+        "required": false,
+        "description": "Write the edited package to disk (default true). false leaves it dirty in memory and writes nothing; editor(save_dirty) saves it later",
+        "default": true
       }
     ]
   },
@@ -2883,6 +3212,13 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "number",
         "required": false,
         "description": "Capsule radius (unscaled)"
+      },
+      {
+        "name": "save",
+        "type": "boolean",
+        "required": false,
+        "description": "Write the edited package to disk (default true). false leaves it dirty in memory and writes nothing; editor(save_dirty) saves it later",
+        "default": true
       }
     ]
   },
@@ -2906,6 +3242,13 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "any",
         "required": true,
         "description": "Value to write: a JSON value, or Unreal export text. null clears an object, class or interface reference"
+      },
+      {
+        "name": "save",
+        "type": "boolean",
+        "required": false,
+        "description": "Write the edited package to disk (default true). false leaves it dirty in memory and writes nothing; editor(save_dirty) saves it later",
+        "default": true
       }
     ]
   },
@@ -2932,6 +3275,13 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "any",
         "required": true,
         "description": "Value to write: a JSON value, or Unreal export text. null clears an object, class or interface reference"
+      },
+      {
+        "name": "save",
+        "type": "boolean",
+        "required": false,
+        "description": "Write the edited package to disk (default true). false leaves it dirty in memory and writes nothing; editor(save_dirty) saves it later",
+        "default": true
       }
     ]
   },
@@ -2959,6 +3309,13 @@ export const handlerSpecs: HandlerSpecs = {
         "required": true,
         "description": "Material asset paths; an empty array clears",
         "items": "string"
+      },
+      {
+        "name": "save",
+        "type": "boolean",
+        "required": false,
+        "description": "Write the edited package to disk (default true). false leaves it dirty in memory and writes nothing; editor(save_dirty) saves it later",
+        "default": true
       }
     ]
   },
@@ -2986,6 +3343,13 @@ export const handlerSpecs: HandlerSpecs = {
         "required": false,
         "description": "[{name or index, tooltip}] per-enumerator tooltips",
         "items": "object"
+      },
+      {
+        "name": "save",
+        "type": "boolean",
+        "required": false,
+        "description": "Write the edited package to disk (default true). false leaves it dirty in memory and writes nothing; editor(save_dirty) saves it later",
+        "default": true
       }
     ]
   },
@@ -3072,6 +3436,13 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "string",
         "required": false,
         "description": "Text shown at a deprecated function's call sites"
+      },
+      {
+        "name": "save",
+        "type": "boolean",
+        "required": false,
+        "description": "Write the edited package to disk (default true). false leaves it dirty in memory and writes nothing; editor(save_dirty) saves it later",
+        "default": true
       }
     ]
   },
@@ -3113,6 +3484,13 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "number",
         "required": false,
         "description": "Node Y position in the graph"
+      },
+      {
+        "name": "save",
+        "type": "boolean",
+        "required": false,
+        "description": "Write the edited package to disk (default true). false leaves it dirty in memory and writes nothing; editor(save_dirty) saves it later",
+        "default": true
       }
     ]
   },
@@ -3166,6 +3544,13 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "boolean",
         "required": false,
         "description": "Skip this write's compile (default false) so a sequence of node writes compiles once, with blueprint(compile), at the end"
+      },
+      {
+        "name": "save",
+        "type": "boolean",
+        "required": false,
+        "description": "Write the edited package to disk (default true). false leaves it dirty in memory and writes nothing; editor(save_dirty) saves it later",
+        "default": true
       }
     ]
   },
@@ -3198,6 +3583,13 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "string",
         "required": false,
         "description": "Resolve the member by its GUID, which is stable across renames"
+      },
+      {
+        "name": "save",
+        "type": "boolean",
+        "required": false,
+        "description": "Write the edited package to disk (default true). false leaves it dirty in memory and writes nothing; editor(save_dirty) saves it later",
+        "default": true
       }
     ]
   },
@@ -3230,6 +3622,13 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "boolean",
         "required": false,
         "description": "Also write the new default onto loaded instances (placed actors included) still holding the old one; overriding instances are left alone. Level packages are dirtied, not saved (default false)"
+      },
+      {
+        "name": "save",
+        "type": "boolean",
+        "required": false,
+        "description": "Write the edited package to disk (default true). false leaves it dirty in memory and writes nothing; editor(save_dirty) saves it later",
+        "default": true
       }
     ]
   },
@@ -3286,6 +3685,13 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "boolean",
         "required": false,
         "description": "ExposeOnSpawn flag"
+      },
+      {
+        "name": "save",
+        "type": "boolean",
+        "required": false,
+        "description": "Write the edited package to disk (default true). false leaves it dirty in memory and writes nothing; editor(save_dirty) saves it later",
+        "default": true
       }
     ]
   },
@@ -3442,7 +3848,7 @@ export const schema: Record<string, z.ZodType> = {
   reliable: z.boolean().optional().describe("Send the replicated event reliably (default true; ignored when netMode is none)"),
   reverse: z.boolean().optional().describe("true reports the referencers of this asset instead"),
   rowGap: z.number().int().optional().describe("Vertical spacing between rows (default 200)"),
-  save: z.boolean().optional().describe("Persist on success (default true)"),
+  save: z.boolean().optional().describe("Write the edited package to disk (default true). false leaves it dirty in memory and writes nothing; editor(save_dirty) saves it later (add_blueprint_interface, add_component, add_custom_event, add_event_dispatcher, add_function_parameter, add_local_variable, add_node, add_timeline_track, add_variable, auto_layout_graph, cleanup_graph, compile_blueprint, connect_pins, connect_pins_batch, create_blueprint, create_blueprint_interface, create_function, create_macro, delete_function, delete_graph, delete_macro, delete_node, delete_variable, disconnect_pins, duplicate_blueprint, edit_graph_parameters, edit_local_variable, edit_struct_metadata, flush_blueprint_component_templates, flush_inheritable_component_handler, import_nodes_t3d, override_function, refresh_node, remove_blueprint_interface, remove_component, remove_event_dispatcher, remove_timeline, rename_blueprint_variable, rename_function, reorder_enum_values, reorder_struct_fields, reparent_blueprint, reparent_component, set_actor_tick_settings, set_blueprint_component_properties_batch, set_blueprint_component_property, set_blueprint_variable_metadata, set_capsule_size, set_cdo_property, set_class_default, set_component_override_materials, set_enum_metadata, set_function_properties, set_node_position, set_node_property, set_struct_field_default, set_variable_default, set_variable_properties). Persist on success (default true) (compile_blueprints)"),
   scanReferencers: z.boolean().optional().describe("Also scan every Blueprint package that depends on an audited one for references (default true)"),
   source: z.string().optional().describe("Advisory hint for where the function comes from: auto (default), interface or parent. Echoed back"),
   sourceNode: z.string().optional().describe("Alias for sourceNodeId"),

@@ -1713,6 +1713,11 @@
           "test": "UE.MCP.Blueprint.EditGraphParameters.RenamePersists"
         },
         {
+          "suite": "automation",
+          "file": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Tests/BlueprintSavePolicyTests.cpp",
+          "test": "UE.MCP.Blueprint.SavePolicy.SaveFalseLeavesPackageDirty"
+        },
+        {
           "suite": "live",
           "file": "tests/live/bcov-animation-a-controlrig.test.ts",
           "test": "list_control_rig_variables lists a variable added to the rig"
@@ -5133,6 +5138,11 @@
           "suite": "automation",
           "file": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Tests/BlueprintParameterRenameTests.cpp",
           "test": "UE.MCP.Blueprint.EditGraphParameters.RenamePersists"
+        },
+        {
+          "suite": "automation",
+          "file": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Tests/BlueprintSavePolicyTests.cpp",
+          "test": "UE.MCP.Blueprint.SavePolicy.SaveFalseLeavesPackageDirty"
         },
         {
           "suite": "automation",
@@ -19044,6 +19054,11 @@
           "suite": "automation",
           "file": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Tests/BlueprintHandlerSurfaceTests.cpp",
           "test": "UE.MCP.Blueprint.Surface.NotFoundReporting"
+        },
+        {
+          "suite": "automation",
+          "file": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Tests/BlueprintSavePolicyTests.cpp",
+          "test": "UE.MCP.Blueprint.SavePolicy.SaveFalseLeavesPackageDirty"
         },
         {
           "suite": "live",
