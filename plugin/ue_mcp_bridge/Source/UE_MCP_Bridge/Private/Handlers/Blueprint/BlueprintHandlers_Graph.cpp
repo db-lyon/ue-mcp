@@ -34,6 +34,7 @@
 #include "K2Node_Composite.h"
 #include "K2Node_AddComponent.h"
 #include "K2Node_Timeline.h"
+#include "BlueprintHandlers_TimelineSnapshot.h"
 // K2Node_AddComponent.h only forward-declares UActorComponent, and the delete
 // path below names one to report which template it left registered.
 #include "Components/ActorComponent.h"
@@ -140,6 +141,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddNode(const TSharedPtr<FJsonObject>
 	else if (NodeClass == TEXT("Return") || NodeClass == TEXT("FunctionResult")) ResolvedClass = TEXT("K2Node_FunctionResult");
 	else if (NodeClass == TEXT("ComponentBoundEvent")) ResolvedClass = TEXT("K2Node_ComponentBoundEvent");
 	else if (NodeClass == TEXT("InputAction") || NodeClass == TEXT("EnhancedInputAction")) ResolvedClass = TEXT("K2Node_EnhancedInputAction");
+	else if (NodeClass == TEXT("Timeline")) ResolvedClass = TEXT("K2Node_Timeline");
 
 	// Find the UEdGraphNode subclass by name (works for K2, AnimGraph, and any
 	// other graph node types). #823: shared resolution, restricted to graph
@@ -627,6 +629,42 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddNode(const TSharedPtr<FJsonObject>
 		}
 	}
 
+	// A Timeline node needs a UTimelineTemplate of its name in the Blueprint,
+	// which the editor's node spawner creates (UK2Node_Timeline::GetMenuActions)
+	// and PostPlacedNewNode does not. Without it the node compiles to an error
+	// and a delete has no template to capture (#1911). nodeParams.timelineName
+	// binds to a template add_timeline_track made that no node holds yet, or
+	// names the new one; otherwise the name is the editor's next free one.
+	FString TimelineNodeName;
+	if (UK2Node_Timeline* TimelineNode = Cast<UK2Node_Timeline>(NewNode))
+	{
+		FString Requested;
+		if (NodeParams) (*NodeParams)->TryGetStringField(TEXT("timelineName"), Requested);
+		const FName Name = Requested.IsEmpty() ? FBlueprintEditorUtils::FindUniqueTimelineName(Blueprint) : FName(*Requested);
+		if (Blueprint->FindTimelineTemplateByVariableName(Name))
+		{
+			TArray<UK2Node_Timeline*> Existing;
+			FBlueprintEditorUtils::GetAllNodesOfClass(Blueprint, Existing);
+			for (const UK2Node_Timeline* Other : Existing)
+			{
+				if (Other && Other != TimelineNode && Other->TimelineName == Name)
+				{
+					return MCPError(FString::Printf(TEXT(
+						"Timeline '%s' already has a node (%s), and a timeline drives one node. Pass another "
+						"timelineName, or omit it for the next free name."), *Name.ToString(), *Other->NodeGuid.ToString()));
+				}
+			}
+		}
+		else if (!FBlueprintEditorUtils::AddNewTimeline(Blueprint, Name))
+		{
+			return MCPError(FString::Printf(TEXT(
+				"Could not add timeline '%s': the name is taken by another member, or this Blueprint's class does "
+				"not support timelines (only Actor-based Blueprints do)."), *Name.ToString()));
+		}
+		TimelineNode->TimelineName = Name;
+		TimelineNodeName = Name.ToString();
+	}
+
 	// #427: K2Node_ComponentBoundEvent identity = (componentName,
 	// delegateName). Without these the node title shows "BoundEvent None"
 	// and pin types don't match the delegate signature. Resolve the
@@ -761,6 +799,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddNode(const TSharedPtr<FJsonObject>
 	Result->SetStringField(TEXT("nodeClass"), NewNode->GetClass()->GetName());
 	const FString NodeIdStr = NewNode->NodeGuid.ToString();
 	Result->SetStringField(TEXT("nodeId"), NodeIdStr);
+	if (!TimelineNodeName.IsEmpty()) Result->SetStringField(TEXT("timelineName"), TimelineNodeName);
 	Result->SetStringField(TEXT("title"), NewNode->GetNodeTitle(ENodeTitleType::FullTitle).ToString());
 
 	// Return pin info so the caller knows what to connect
@@ -1206,6 +1245,14 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::ConnectPins(const TSharedPtr<FJsonObj
 
 	if (bConnected)
 	{
+		const TArray<TSharedPtr<FJsonValue>> BrokenSourceDetail = MCPPinLinksSevered(SourceNode, SourceSelf, SourceLinksBefore);
+		const TArray<TSharedPtr<FJsonValue>> BrokenTargetDetail = MCPPinLinksSevered(TargetNode, TargetSelf, TargetLinksBefore);
+		const int32 BrokenSourceLinks = BrokenSourceDetail.Num();
+		const int32 BrokenTargetLinks = BrokenTargetDetail.Num();
+		// The links the schema removed on its own, beyond what a flag asked for.
+		const int32 ReplacedLinks = FMath::Max(0, BrokenSourceLinks - PreviousSourceLinks.Num())
+			+ FMath::Max(0, BrokenTargetLinks - PreviousTargetLinks.Num());
+
 		for (UEdGraphPin* PreviousPin : PreviousSourceLinks)
 		{
 			if (PreviousPin && PreviousPin != TargetPin && PreviousPin->GetOwningNode())
@@ -1245,14 +1292,6 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::ConnectPins(const TSharedPtr<FJsonObj
 			MCPSetCreated(Result);
 		}
 		Result->SetStringField(TEXT("path"), AssetPath);
-		const TArray<TSharedPtr<FJsonValue>> BrokenSourceDetail = MCPPinLinksSevered(SourceNode, SourceSelf, SourceLinksBefore);
-		const TArray<TSharedPtr<FJsonValue>> BrokenTargetDetail = MCPPinLinksSevered(TargetNode, TargetSelf, TargetLinksBefore);
-		const int32 BrokenSourceLinks = BrokenSourceDetail.Num();
-		const int32 BrokenTargetLinks = BrokenTargetDetail.Num();
-		// The links the schema removed on its own, beyond what a flag asked for.
-		const int32 ReplacedLinks = FMath::Max(0, BrokenSourceLinks - PreviousSourceLinks.Num())
-			+ FMath::Max(0, BrokenTargetLinks - PreviousTargetLinks.Num());
-
 		Result->SetStringField(TEXT("graphName"), GraphName);
 		Result->SetStringField(TEXT("sourceNodeId"), SourceNodeId);
 		Result->SetStringField(TEXT("sourcePinName"), SourcePinName);
@@ -1263,6 +1302,15 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::ConnectPins(const TSharedPtr<FJsonObj
 		Result->SetNumberField(TEXT("brokenTargetLinks"), BrokenTargetLinks);
 		Result->SetArrayField(TEXT("brokenSourceLinkDetail"), BrokenSourceDetail);
 		Result->SetArrayField(TEXT("brokenTargetLinkDetail"), BrokenTargetDetail);
+		if (ReplacedLinks > 0)
+		{
+			// Said outright, because nothing in the call asked for it.
+			Result->SetNumberField(TEXT("replacedLinks"), ReplacedLinks);
+			Result->SetStringField(TEXT("replacedLinksNote"), FString::Printf(TEXT(
+				"%d existing link(s) were removed without a break flag: the pin takes a single link, so the graph "
+				"schema replaced the old wire with this one. They are included in brokenSourceLinkDetail and "
+				"brokenTargetLinkDetail."), ReplacedLinks));
+		}
 
 		const int32 BrokenTotal = BrokenSourceLinks + BrokenTargetLinks;
 		if (bAlreadyLinked)
@@ -1302,15 +1350,6 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::ConnectPins(const TSharedPtr<FJsonObj
 	{
 		// Capture the failure before restoring the exact previous graph state.
 		FString ErrorMsg = TEXT("TryCreateConnection failed. Pins may be incompatible.");
-		if (ReplacedLinks > 0)
-		{
-			// Said outright, because nothing in the call asked for it.
-			Result->SetNumberField(TEXT("replacedLinks"), ReplacedLinks);
-			Result->SetStringField(TEXT("replacedLinksNote"), FString::Printf(TEXT(
-				"%d existing link(s) were removed without a break flag: the pin takes a single link, so the graph "
-				"schema replaced the old wire with this one. They are included in brokenSourceLinkDetail and "
-				"brokenTargetLinkDetail."), ReplacedLinks));
-		}
 		FPinConnectionResponse Response = Schema->CanCreateConnection(SourcePin, TargetPin);
 		if (!Response.Message.IsEmpty())
 		{
@@ -1470,9 +1509,20 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::DeleteNode(const TSharedPtr<FJsonObje
 	{
 		if (Pin) DeletedLinkCount += Pin->LinkedTo.Num();
 	}
+	// The timeline template the node is bound to, captured whole before the
+	// removal below drops it (#1911). UK2Node_Timeline::PrepareForCopying
+	// check()s that this template exists, so a node whose template is already
+	// gone is exported without that step rather than taking the editor down.
+	TSharedPtr<FJsonObject> TimelineSnapshot;
+	FString TimelineName;
+	if (const UK2Node_Timeline* AsTimeline = Cast<UK2Node_Timeline>(NodeToDelete))
+	{
+		TimelineName = AsTimeline->TimelineName.ToString();
+		TimelineSnapshot = MCPTimelineSnapshot::Capture(Blueprint->FindTimelineTemplateByVariableName(AsTimeline->TimelineName));
+	}
 	if (NodeToDelete->CanDuplicateNode())
 	{
-		NodeToDelete->PrepareForCopying();
+		if (!bIsTimeline || TimelineSnapshot.IsValid()) NodeToDelete->PrepareForCopying();
 		TSet<UObject*> NodeSet;
 		NodeSet.Add(NodeToDelete);
 		FEdGraphUtilities::ExportNodesToText(NodeSet, DeletedT3D);
@@ -1511,7 +1561,9 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::DeleteNode(const TSharedPtr<FJsonObje
 	//
 	// Exactly two overrides do something else. They unregister a Blueprint
 	// LEVEL archetype that is outered to the generated class rather than to
-	// the node, so it is not an inner and the T3D above never carried it:
+	// the node, so it is not an inner and the T3D above never carried it.
+	// The timeline one now goes through the editor's removal anyway, because
+	// its template is captured into the rollback payload instead (see below):
 	//
 	//   UK2Node_AddComponent::DestroyNode does
 	//   BlueprintObj->ComponentTemplates.Remove(Template)
@@ -1538,12 +1590,19 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::DeleteNode(const TSharedPtr<FJsonObje
 	//   garbage-marked object survives that search only until the next
 	//   collection.
 	//
-	// So those two keep the plain graph removal, which is what this handler
-	// did for every class before the composite fix and which leaves the
-	// archetype registered for the rollback to find. Two costs, both stated
-	// rather than hidden: the template stays in the Blueprint after the delete,
-	// which the rollback note below says outright, and a breakpoint or pin
-	// watch on the node is not cleared, because that cleanup lives in
+	// The timeline used to keep the plain graph removal too, and the template
+	// it left behind kept compiling into a TimelineComponent variable with no
+	// node to remove it through (#1911). Now the template's settings, tracks
+	// and curve keys are captured into the rollback payload above, the node is
+	// destroyed as the editor destroys it, and import_nodes_t3d rebuilds the
+	// template from that payload for PostPasteNode to find.
+	//
+	// So only the Add Component node keeps the plain graph removal, which is
+	// what this handler did for every class before the composite fix and which
+	// leaves the archetype registered for the rollback to find. Two costs, both
+	// stated rather than hidden: the template stays in the Blueprint after the
+	// delete, which the rollback note below says outright, and a breakpoint or
+	// pin watch on the node is not cleared, because that cleanup lives in
 	// FBlueprintEditorUtils::RemoveNode alongside the DestroyNode call this
 	// branch is avoiding. A stale breakpoint keeps the removed node alive and
 	// displays nowhere; losing a configured component template is worse.
@@ -1557,7 +1616,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::DeleteNode(const TSharedPtr<FJsonObje
 	// reaches RemoveGraph with EGraphRemoveFlags::Recompile, and that calls
 	// MarkBlueprintAsStructurallyModified on its own way out
 	// (BlueprintEditorUtils.cpp:2575-2578).
-	const bool bDestroyUnregistersArchetype = bIsAddComponent || bIsTimeline;
+	const bool bDestroyUnregistersArchetype = bIsAddComponent;
 	// A state machine node (state, conduit, alias, transition) goes through the
 	// same teardown as animation(remove_state): every transition touching it and
 	// every bound graph, or the next compile fails.
@@ -1597,6 +1656,12 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::DeleteNode(const TSharedPtr<FJsonObje
 	Result->SetStringField(TEXT("graphName"), GraphName);
 	Result->SetStringField(TEXT("nodeId"), NodeId);
 	Result->SetBoolField(TEXT("deleted"), true);
+	if (bIsTimeline)
+	{
+		Result->SetStringField(TEXT("timelineName"), TimelineName);
+		Result->SetBoolField(TEXT("timelineTemplateRemoved"),
+			Blueprint->FindTimelineTemplateByVariableName(FName(*TimelineName)) == nullptr);
+	}
 	if (AnimStateNode)
 	{
 		Result->SetArrayField(TEXT("removedTransitions"), AnimTeardown.RemovedTransitions);
@@ -1621,6 +1686,10 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::DeleteNode(const TSharedPtr<FJsonObje
 		Payload->SetStringField(TEXT("path"), AssetPath);
 		Payload->SetStringField(TEXT("graphName"), GraphName);
 		Payload->SetStringField(TEXT("t3d"), DeletedT3D);
+		if (TimelineSnapshot.IsValid())
+		{
+			Payload->SetArrayField(TEXT("timelineTemplates"), { MakeShared<FJsonValueObject>(TimelineSnapshot) });
+		}
 		MCPSetRollback(Result, TEXT("import_nodes_t3d"), Payload);
 		Result->SetBoolField(TEXT("rollbackLossy"), true);
 
@@ -1662,19 +1731,20 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::DeleteNode(const TSharedPtr<FJsonObje
 				"original stays alongside the copy the paste created."),
 				*AddComponentTemplateName);
 		}
-		if (bIsTimeline)
+		if (bIsTimeline && TimelineSnapshot.IsValid())
 		{
-			Note += TEXT(
-				" This node's timeline template survives the delete on purpose, for the same reason: the template is "
-				"outered to the generated class, the exported text carries only the node's TimelineGuid, and "
-				"UK2Node_Timeline::PostPasteNode recovers the curve tracks by finding a live UTimelineTemplate with "
-				"that guid. Destroying the node would have dropped the template from Blueprint->Timelines and marked "
-				"it garbage, which makes the curve tracks unrecoverable at the next garbage collection - and the "
-				"compile this delete runs can be the thing that triggers it. What the paste does NOT restore is the "
-				"timeline's NAME: PostPasteNode assigns FindUniqueTimelineName unconditionally, and that returns "
-				"'Timeline' or 'Timeline_<n>' regardless of what the timeline was called, so the timeline variable "
-				"comes back renamed and anything referring to it by the old name has to be repointed. The original "
-				"template also stays in the Blueprint alongside the copy the paste duplicates from.");
+			Note += FString::Printf(TEXT(
+				" The timeline template '%s' was removed with the node, as the editor's delete removes it, so the "
+				"Blueprint no longer compiles a TimelineComponent for it. Its length, flags, tick group, tracks and "
+				"curve keys travel in timelineTemplates, which import_nodes_t3d rebuilds before pasting so the node "
+				"comes back with the same timeline under the same name, unless that name has been taken since."),
+				*TimelineName);
+		}
+		else if (bIsTimeline)
+		{
+			Note += FString::Printf(TEXT(
+				" The node named timeline '%s', but the Blueprint held no template of that name, so nothing was "
+				"captured: the paste gets a new empty timeline."), *TimelineName);
 		}
 		if (bIsMacroInstance)
 		{
@@ -2663,6 +2733,9 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::ImportNodesT3D(const TSharedPtr<FJson
 	double AnchorX = 0.0, AnchorY = 0.0;
 	const bool bHasAnchorX = TryGetNumberParam(Params, TEXT("posX"), AnchorX);
 	const bool bHasAnchorY = TryGetNumberParam(Params, TEXT("posY"), AnchorY);
+	// Timeline templates delete_node captured for its rollback (#1911).
+	const TArray<TSharedPtr<FJsonValue>>* TimelineTemplatesParam = nullptr;
+	TryGetArrayParam(Params, TEXT("timelineTemplates"), TimelineTemplatesParam);
 
 	UBlueprint* Blueprint = LoadBlueprint(AssetPath);
 	if (!Blueprint)
@@ -2681,8 +2754,62 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::ImportNodesT3D(const TSharedPtr<FJson
 		return MCPError(TEXT("T3D text is not importable into this graph (schema mismatch or malformed)"));
 	}
 
+	// Each captured template is rebuilt outside the Blueprint under its old
+	// TimelineGuid, which is what UK2Node_Timeline::PostPasteNode searches for
+	// when the pasted node arrives; it then duplicates it into the Blueprint.
+	struct FRestoringTimeline
+	{
+		UTimelineTemplate* Template = nullptr;
+		FGuid Guid;
+		FName OriginalName;
+	};
+	TArray<FRestoringTimeline> RestoringTimelines;
+	if (TimelineTemplatesParam)
+	{
+		for (const TSharedPtr<FJsonValue>& Value : *TimelineTemplatesParam)
+		{
+			const TSharedPtr<FJsonObject> Snap = Value.IsValid() ? Value->AsObject() : nullptr;
+			FRestoringTimeline Entry;
+			Entry.Template = MCPTimelineSnapshot::Restore(Snap);
+			if (!Entry.Template) continue;
+			Entry.Guid = Entry.Template->TimelineGuid;
+			Entry.OriginalName = FName(*Snap->GetStringField(TEXT("timelineName")));
+			RestoringTimelines.Add(Entry);
+		}
+	}
+
 	TSet<UEdGraphNode*> PastedNodes;
 	FEdGraphUtilities::ImportNodesFromText(TargetGraph, T3D, /*out*/ PastedNodes);
+
+	// The pasted node took the timeline under a fresh unique name; give it back
+	// the one it had when that name is still free.
+	TArray<TSharedPtr<FJsonValue>> RestoredTimelines;
+	for (const FRestoringTimeline& Entry : RestoringTimelines)
+	{
+		for (UEdGraphNode* Node : PastedNodes)
+		{
+			UK2Node_Timeline* AsTimeline = Cast<UK2Node_Timeline>(Node);
+			if (!AsTimeline || AsTimeline->TimelineGuid != Entry.Guid) continue;
+			const FName Pasted = AsTimeline->TimelineName;
+			bool bRenamed = Pasted == Entry.OriginalName;
+			if (!bRenamed && !Entry.OriginalName.IsNone()
+				&& !Blueprint->FindTimelineTemplateByVariableName(Entry.OriginalName))
+			{
+				bRenamed = FBlueprintEditorUtils::RenameTimeline(Blueprint, Pasted, Entry.OriginalName);
+			}
+			const UTimelineTemplate* Now = Blueprint->FindTimelineTemplateByVariableName(AsTimeline->TimelineName);
+			TSharedPtr<FJsonObject> Row = MakeShared<FJsonObject>();
+			Row->SetStringField(TEXT("timelineName"), AsTimeline->TimelineName.ToString());
+			Row->SetStringField(TEXT("originalName"), Entry.OriginalName.ToString());
+			Row->SetBoolField(TEXT("nameRestored"), bRenamed);
+			Row->SetNumberField(TEXT("trackCount"), Now
+				? Now->FloatTracks.Num() + Now->EventTracks.Num() + Now->VectorTracks.Num() + Now->LinearColorTracks.Num()
+				: 0);
+			RestoredTimelines.Add(MakeShared<FJsonValueObject>(Row));
+			break;
+		}
+		MCPTimelineSnapshot::Discard(Entry.Template);
+	}
 
 	if (PastedNodes.Num() == 0)
 	{
@@ -2762,6 +2889,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::ImportNodesT3D(const TSharedPtr<FJson
 	Result->SetStringField(TEXT("graphName"), GraphName);
 	Result->SetArrayField(TEXT("nodeIds"), NodeIds);
 	Result->SetNumberField(TEXT("count"), NodeIds.Num());
+	if (RestoringTimelines.Num() > 0) Result->SetArrayField(TEXT("restoredTimelines"), RestoredTimelines);
 
 	// A rollback record is one call, and delete_node takes one nodeId. A paste
 	// of exactly one node therefore has an exact inverse; a bulk paste does not,
@@ -3105,10 +3233,22 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::ConnectPinsBatch(const TSharedPtr<FJs
 			Existed++;
 			continue;
 		}
+		// A single-link pin makes the schema drop its old wire (#1905).
+		const FMCPPinLinkRecord SrcSelf = MCPRecordPin(SP);
+		const FMCPPinLinkRecord TgtSelf = MCPRecordPin(TP);
+		const TArray<FMCPPinLinkRecord> SrcBefore = MCPRecordPinLinks(SP, TP);
+		const TArray<FMCPPinLinkRecord> TgtBefore = MCPRecordPinLinks(TP, SP);
 		if (Schema->TryCreateConnection(SP, TP))
 		{
 			EntryResult->SetStringField(TEXT("status"), TEXT("connected"));
 			Connected++;
+			TArray<TSharedPtr<FJsonValue>> Severed = MCPPinLinksSevered(Src, SrcSelf, SrcBefore);
+			Severed.Append(MCPPinLinksSevered(Tgt, TgtSelf, TgtBefore));
+			if (Severed.Num() > 0)
+			{
+				EntryResult->SetArrayField(TEXT("brokenLinks"), Severed);
+				BrokenLinks += Severed.Num();
+			}
 		}
 		else
 		{
@@ -3137,6 +3277,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::ConnectPinsBatch(const TSharedPtr<FJs
 	Result->SetNumberField(TEXT("connected"), Connected);
 	Result->SetNumberField(TEXT("existed"), Existed);
 	Result->SetNumberField(TEXT("failed"), Failed);
+	Result->SetNumberField(TEXT("brokenLinks"), BrokenLinks);
 	Result->SetArrayField(TEXT("results"), Detail);
 	Result->SetBoolField(TEXT("unchanged"), Connected == 0);
 
@@ -3233,22 +3374,10 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AutoLayoutGraph(const TSharedPtr<FJso
 
 	UBlueprint* Blueprint = LoadBlueprint(AssetPath);
 	if (!Blueprint) return BlueprintNotFoundError(AssetPath);
-		// A single-link pin makes the schema drop its old wire (#1905).
-		const FMCPPinLinkRecord SrcSelf = MCPRecordPin(SP);
-		const FMCPPinLinkRecord TgtSelf = MCPRecordPin(TP);
-		const TArray<FMCPPinLinkRecord> SrcBefore = MCPRecordPinLinks(SP, TP);
-		const TArray<FMCPPinLinkRecord> TgtBefore = MCPRecordPinLinks(TP, SP);
 	UEdGraph* Graph = FindGraph(Blueprint, GraphName);
 	if (!Graph) return MCPError(FString::Printf(TEXT("Graph not found: %s"), *GraphName));
 
 	// Compute a column index per node: longest predecessor chain through exec
-			TArray<TSharedPtr<FJsonValue>> Severed = MCPPinLinksSevered(Src, SrcSelf, SrcBefore);
-			Severed.Append(MCPPinLinksSevered(Tgt, TgtSelf, TgtBefore));
-			if (Severed.Num() > 0)
-			{
-				EntryResult->SetArrayField(TEXT("brokenLinks"), Severed);
-				BrokenLinks += Severed.Num();
-			}
 	// pins (or any input pin if exec is absent).
 	TMap<UEdGraphNode*, int32> Column;
 	TArray<UEdGraphNode*> Order = Graph->Nodes;
@@ -3277,7 +3406,6 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AutoLayoutGraph(const TSharedPtr<FJso
 			int32 Col = 0;
 			for (UEdGraphNode* Inc : GetIncoming(Node))
 			{
-	Result->SetNumberField(TEXT("brokenLinks"), BrokenLinks);
 				if (int32* InCol = Column.Find(Inc)) Col = FMath::Max(Col, *InCol + 1);
 			}
 			int32* Existing = Column.Find(Node);

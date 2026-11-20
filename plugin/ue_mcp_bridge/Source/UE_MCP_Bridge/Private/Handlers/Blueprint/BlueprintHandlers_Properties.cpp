@@ -2222,8 +2222,8 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddTimelineTrack(const TSharedPtr<FJs
 // FBlueprintEditorUtils::RemoveNode, whose DestroyNode calls RemoveTimeline;
 // a template with no node left is removed with RemoveTimeline directly. The
 // compile then drops the generated TimelineComponent variable.
-// delete_node keeps the template on purpose so its rollback can paste the
-// curves back; this is the action that drops it.
+// delete_node on one Timeline node removes its template the same way (#1911);
+// this is the action that drops a timeline by name, with or without a node.
 // ---------------------------------------------------------------------------
 TSharedPtr<FJsonValue> FBlueprintHandlers::RemoveTimeline(const TSharedPtr<FJsonObject>& Params)
 {
