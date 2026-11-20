@@ -9,6 +9,7 @@
  * Default is info; a process can lower its own default with setDefaultLogLevel.
  */
 import { readEnv } from "./env.js";
+import { redactCredentials } from "./redact-credentials.js";
 
 type Level = "debug" | "info" | "warn" | "error";
 
@@ -33,11 +34,16 @@ export function stampLogs(on = true): void {
   stamped = on;
 }
 
+/**
+ * The one place a log line is built. Every level goes through it, so the
+ * redaction here covers every call site, including an error whose message
+ * quotes a request or its headers (#1866).
+ */
 function fmt(level: Level, component: string, msg: string, err?: unknown): string {
   const detail = err === undefined
     ? ""
     : ` :: ${err instanceof Error ? `${err.name}: ${err.message}` : String(err)}`;
-  return `[ue-mcp] ${stamped ? `${new Date().toISOString()} ` : ""}${level} ${component}: ${msg}${detail}`;
+  return redactCredentials(`[ue-mcp] ${stamped ? `${new Date().toISOString()} ` : ""}${level} ${component}: ${msg}${detail}`);
 }
 
 export function debug(component: string, msg: string, err?: unknown): void {
