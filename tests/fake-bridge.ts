@@ -91,7 +91,10 @@ export class FakeBridge {
 
         const handler = this.handlers[msg.method];
         if (handler) {
-          ws.send(JSON.stringify({ id: msg.id, result: handler(params) }));
+          const result = handler(params);
+          // A handler that defers its answer, as a slow editor call does.
+          if (result instanceof Promise) void result.then((r) => ws.send(JSON.stringify({ id: msg.id, result: r })));
+          else ws.send(JSON.stringify({ id: msg.id, result }));
           return;
         }
         if (this.answerAnything) {

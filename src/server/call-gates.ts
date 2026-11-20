@@ -314,7 +314,7 @@ export async function runCall(deps: GateDeps, call: ActionCall<EditorSession>): 
     // guard that allows overrides asks the person who sent it and nobody else.
     lock: (_c, next) =>
       withCallAsker(
-        { elicit: asker.elicit, ...(isFlow ? {} : { subject: task }), access: asker.access },
+        { elicit: asker.elicit, ...(isFlow ? {} : { subject: task }), access: asker.access, signal: asker.signal },
         () => withAssetLocks(session.guarded, deps.lockingCfg, task, call.params, next, session.lockOwnerId, graph()),
       ),
 
@@ -339,10 +339,46 @@ export async function runCall(deps: GateDeps, call: ActionCall<EditorSession>): 
     },
   };
 
-  try {
-    return await runGates(call, gates);
-  } catch (e) {
-    const code = e instanceof McpError ? e.code : ErrorCode.UNKNOWN;
-    return failed(code, e instanceof Error ? e.message : String(e), !isFlow, machineDetails(e));
-  }
+  const run = async (): Promise<CallOutcome> => {
+    try {
+      return await runGates(call, gates);
+    } catch (e) {
+      const code = e instanceof McpError ? e.code : ErrorCode.UNKNOWN;
+      return failed(code, e instanceof Error ? e.message : String(e), !isFlow, machineDetails(e));
+    }
+  };
+  const signal = asker.signal;
+  if (!signal) return run();
+  // A call its caller cancelled first, such as the next call of an interrupted
+  // agent turn, is never dispatched (#1902).
+  if (signal.aborted) return cancelledOutcome(task, false, !isFlow);
+  // Cancelled while it runs: answered now. The work already handed to the
+  // editor may finish, but its result is dropped, and the guarded bridge
+  // refuses every bridge call the action would make after this.
+  return new Promise<CallOutcome>((resolve) => {
+    const onAbort = (): void => resolve(cancelledOutcome(task, true, !isFlow));
+    signal.addEventListener("abort", onAbort, { once: true });
+    void run().then((outcome) => {
+      signal.removeEventListener("abort", onAbort);
+      resolve(outcome);
+    });
+  });
+}
+
+/** The answer to a call its caller cancelled, before it was dispatched or while it ran. */
+export function cancelledOutcome(task: string, started: boolean, attributed: boolean): CallOutcome {
+  const dot = task.indexOf(".");
+  const label = dot > 0 ? `${task.slice(0, dot)}(${task.slice(dot + 1)})` : task;
+  return started
+    ? failed(
+        ErrorCode.CANCELLED,
+        `${label} was cancelled by its caller while it ran. What it had already sent to the editor may have taken ` +
+          "effect, and nothing more was sent; read the state back before running it again.",
+        attributed,
+        { outcome: "unknown", task },
+      )
+    : failed(ErrorCode.CANCELLED, `${label} was not run: its caller cancelled it first. Nothing was sent to the editor.`, attributed, {
+        outcome: "failed",
+        task,
+      });
 }

@@ -184,3 +184,5 @@ dist-extensions/
 tests/.shards/
 # Per-step logs and timing from scripts/release-run.mjs (#1465)
 release-logs/
+# PowerShell module cache a Windows test run can drop in the repo root (#1956)
+/Microsoft/

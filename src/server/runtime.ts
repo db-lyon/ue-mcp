@@ -115,6 +115,11 @@ export interface Runtime {
   ): Promise<ToolResult>;
 }
 
+/** The caller's cancel signal, carried to the pipeline the way an MCP request's is. */
+function cancelExtra(opts: InProcessCallOptions): { signal?: AbortSignal } {
+  return opts.signal ? { signal: opts.signal } : {};
+}
+
 /**
  * Register one session per project argument, reporting each by name. A
  * positional that fails to load is named rather than silently dropped, and
@@ -378,7 +383,7 @@ export async function createRuntime(projectArgs: string[]): Promise<Runtime> {
     }
     const tool = (load ?? primaryLoad).surface.tools.find((t) => t.name === category);
     if (!tool) throw new Error(`unknown category '${category}'`);
-    return categoryCallOutcome(inProcessDeps(opts), tool, false, { ...args, action }, {});
+    return categoryCallOutcome(inProcessDeps(opts), tool, false, { ...args, action }, cancelExtra(opts));
   };
 
   /**
@@ -435,11 +440,11 @@ export async function createRuntime(projectArgs: string[]): Promise<Runtime> {
     callActionOutcome,
     callTool(tool, input, opts = {}) {
       const deps = inProcessDeps(opts);
-      if (tool === flowTool) return dispatchFlowCall(deps, input);
-      return dispatchCategoryCall(deps, tool, opts.envelope ?? false, input, {});
+      if (tool === flowTool) return dispatchFlowCall(deps, input, cancelExtra(opts));
+      return dispatchCategoryCall(deps, tool, opts.envelope ?? false, input, cancelExtra(opts));
     },
     callFlowOutcome(input, opts = {}) {
-      return flowCallOutcome(inProcessDeps(opts), input);
+      return flowCallOutcome(inProcessDeps(opts), input, cancelExtra(opts));
     },
     async flowRequest(input, approval) {
       return flowCallOutcome(httpDeps, input, {}, approval);

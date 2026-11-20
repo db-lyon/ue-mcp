@@ -19,6 +19,8 @@ import { GuardRegistry, makeCallContext, type ResolveExistingFile } from "./guar
 import { callIsReadOnly, readOnlyGuard } from "./session-access.js";
 import { ensureGuard, existingGuard, refuseIfBlocked } from "../editor/dialog-guard.js";
 import { listsDialogs, nativeDialogReply, repliesToNativeDialog } from "../editor/native-dialog-reply.js";
+import { currentCallAsker } from "./call-elicit.js";
+import { McpError, ErrorCode } from "../core/errors.js";
 
 export type { ResolveExistingFile } from "./guard.js";
 
@@ -234,6 +236,15 @@ export class GuardedBridge extends ForwardingBridge {
     timeoutMs?: number,
     options?: BridgeCallOptions,
   ): Promise<unknown> {
+    // The call this belongs to was cancelled: an action that makes several
+    // bridge calls stops at the next one instead of carrying on unseen (#1902).
+    if (currentCallAsker()?.signal?.aborted) {
+      throw new McpError(
+        ErrorCode.CANCELLED,
+        `Bridge call '${method}' was not sent: the call it belongs to was cancelled by its caller.`,
+        { outcome: "failed", method },
+      );
+    }
     try {
       // `runGuarded` is already a pass-through on an empty registry, but building
       // the context is not free and every bridge call lands here. Most servers run

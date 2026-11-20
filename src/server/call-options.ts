@@ -28,4 +28,9 @@ export interface InProcessCallOptions {
    * call it would make. Default read-write.
    */
   access?: "read-write" | "read-only";
+  /**
+   * Cancels the call. Already aborted, it is not dispatched; aborted while it
+   * runs, it answers CANCELLED at once and sends nothing more to the editor.
+   */
+  signal?: AbortSignal;
 }

@@ -2406,6 +2406,16 @@
       "tests": [
         {
           "suite": "integration",
+          "file": "tests/integration/daemon-cancel.test.ts",
+          "test": "answers the call in flight as cancelled at once, sends nothing more, and leaves the next turn clean"
+        },
+        {
+          "suite": "integration",
+          "file": "tests/integration/daemon-cancel.test.ts",
+          "test": "offers callAction.signal to extensions"
+        },
+        {
+          "suite": "integration",
           "file": "tests/integration/extensions.test.ts",
           "test": "loads the compatible extensions and serves their routes inside the daemon"
         },
