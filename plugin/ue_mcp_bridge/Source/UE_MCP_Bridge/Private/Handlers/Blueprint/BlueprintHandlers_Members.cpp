@@ -49,6 +49,7 @@
 #include "Engine/Blueprint.h"
 #include "Kismet2/BlueprintEditorUtils.h"
 #include "Kismet2/KismetEditorUtilities.h"
+#include "Kismet2/CompilerResultsLog.h"
 #include "EdGraph/EdGraph.h"
 #include "EdGraph/EdGraphPin.h"
 #include "EdGraphSchema_K2.h"
@@ -61,6 +62,10 @@
 #include "K2Node_CustomEvent.h"
 #include "K2Node_Event.h"
 #include "K2Node_Variable.h"
+#include "K2Node_VariableGet.h"
+#include "K2Node_CallFunction.h"
+#include "AssetRegistry/AssetRegistryModule.h"
+#include "AssetRegistry/IAssetRegistry.h"
 #include "UObject/UnrealType.h"
 #include "UObject/TopLevelAssetPath.h"
 #include "UObject/Interface.h"
@@ -377,6 +382,50 @@ static bool RecompileAfterStructuralEdit(UBlueprint* Blueprint, FString& OutSave
 	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
 	FKismetEditorUtilities::CompileBlueprint(Blueprint);
 	return SaveAssetPackageChecked(Blueprint, OutSaveError);
+}
+
+/** The nodes outside a parameter's owner that carry a pin for it: function
+ *  call sites and macro instances, with the Blueprints they live in. The same
+ *  gather the editor's own parameter rename runs. */
+struct FMCPParamRenameCallers : public FBasePinChangeHelper
+{
+	TSet<UBlueprint*> Blueprints;
+	TSet<UK2Node*> Nodes;
+
+	virtual void EditMacroInstance(UK2Node_MacroInstance* MacroInstance, UBlueprint* InBlueprint) override
+	{
+		Nodes.Add(MacroInstance);
+		if (InBlueprint) Blueprints.Add(InBlueprint);
+	}
+
+	virtual void EditCallSite(UK2Node_CallFunction* CallSite, UBlueprint* InBlueprint) override
+	{
+		Nodes.Add(CallSite);
+		if (InBlueprint) Blueprints.Add(InBlueprint);
+	}
+};
+
+/** Load every Blueprint whose package references this one. The call-site
+ *  gather only sees loaded nodes, and a caller that stays unloaded keeps a pin
+ *  under the old name that is orphaned the next time it opens. */
+static void LoadReferencingBlueprints(UBlueprint* Blueprint)
+{
+	IAssetRegistry& Registry = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
+	TArray<FName> Referencers;
+	Registry.GetReferencers(Blueprint->GetOutermost()->GetFName(), Referencers, UE::AssetRegistry::EDependencyCategory::Package);
+	for (const FName& Referencer : Referencers)
+	{
+		TArray<FAssetData> Assets;
+		Registry.GetAssetsByPackageName(Referencer, Assets);
+		for (const FAssetData& Asset : Assets)
+		{
+			UClass* AssetClass = Asset.GetClass();
+			if (AssetClass && AssetClass->IsChildOf(UBlueprint::StaticClass()))
+			{
+				Asset.GetAsset();
+			}
+		}
+	}
 }
 
 } // namespace MCPBlueprintDepth
@@ -1189,6 +1238,12 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::EditGraphParameters(const TSharedPtr<
 				TEXT("%s has no %s named '%s'. Parameters: %s"),
 				*TargetLabel, Direction, *ParameterName, *UserPinNameList(Owner)));
 		}
+		// The names the editor's own rename refuses.
+		if (NewName.Equals(TEXT("None"), ESearchCase::IgnoreCase) || NewName.Equals(TEXT("Self"), ESearchCase::IgnoreCase))
+		{
+			return MCPError(FString::Printf(
+				TEXT("'%s' is a reserved name and cannot name a parameter. Pick another name."), *NewName));
+		}
 
 		// Ask before doing: the test pass reports a collision without leaving
 		// the node half-renamed.
@@ -1196,7 +1251,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::EditGraphParameters(const TSharedPtr<
 		if (Probe == ERenamePinResult_NameCollision)
 		{
 			return MCPError(FString::Printf(
-				TEXT("%s already has a pin named '%s'. Parameters: %s"),
+				TEXT("%s already has a pin or local variable named '%s'. Parameters: %s"),
 				*TargetLabel, *NewName, *UserPinNameList(Owner)));
 		}
 		if (Probe != ERenamePinResult_Success)
@@ -1205,13 +1260,97 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::EditGraphParameters(const TSharedPtr<
 				TEXT("%s cannot rename '%s' to '%s'. Parameters: %s"),
 				*TargetLabel, *ParameterName, *NewName, *UserPinNameList(Owner)));
 		}
-		Owner->Modify();
-		Owner->RenameUserDefinedPin(OldPin, NewPin, /*bTest=*/false);
+
+		// #2003: the same steps as the editor's own parameter rename. Every
+		// return node of a function carries the output pins, so an output
+		// rename covers all of them.
+		TArray<UK2Node_EditablePinBase*> Terminals;
+		Terminals.Add(Owner);
+		if (Owner->IsA<UK2Node_FunctionResult>())
+		{
+			for (UEdGraphNode* Node : Graph->Nodes)
+			{
+				UK2Node_FunctionResult* Other = Cast<UK2Node_FunctionResult>(Node);
+				if (Other && Other != Owner) Terminals.Add(Other);
+			}
+		}
+
+		// Callers in other Blueprints are renamed too, so they are loaded first.
+		LoadReferencingBlueprints(Blueprint);
+		FMCPParamRenameCallers Callers;
+		Callers.Broadcast(Blueprint, Owner, Graph);
+		Callers.Blueprints.Remove(Blueprint);
+
+		TArray<UK2Node*> ToRename;
+		for (UK2Node_EditablePinBase* Terminal : Terminals) ToRename.Add(Terminal);
+		for (UK2Node* Caller : Callers.Nodes)
+		{
+			if (Caller && !ToRename.Contains(Caller)) ToRename.Add(Caller);
+		}
+		for (UK2Node* Node : ToRename)
+		{
+			if (Node->RenameUserDefinedPin(OldPin, NewPin, /*bTest=*/true) == ERenamePinResult_NameCollision)
+			{
+				return MCPError(FString::Printf(
+					TEXT("Renaming '%s' to '%s' would collide with an existing pin on '%s' in %s. Nothing was changed."),
+					*ParameterName, *NewName, *Node->GetNodeTitle(ENodeTitleType::ListView).ToString(),
+					*GetNameSafe(Node->GetTypedOuter<UBlueprint>())));
+			}
+		}
+
+		int32 CallSitesRenamed = 0;
+		for (UK2Node* Node : ToRename)
+		{
+			Node->Modify();
+			const ERenamePinResult Renamed = Node->RenameUserDefinedPin(OldPin, NewPin, /*bTest=*/false);
+			if (Renamed == ERenamePinResult_Success && !Terminals.Contains(Cast<UK2Node_EditablePinBase>(Node)))
+			{
+				++CallSitesRenamed;
+			}
+		}
+
+		// RenameUserDefinedPin renames the live pin only. UserDefinedPins is the
+		// parameter definition the node is rebuilt from on load, so a rename
+		// that skips it comes back under the old name after a restart, with
+		// every wire to it orphaned.
+		for (UK2Node_EditablePinBase* Terminal : Terminals)
+		{
+			for (TSharedPtr<FUserPinInfo>& Info : Terminal->UserDefinedPins)
+			{
+				if (Info.IsValid() && Info->PinName == OldPin) Info->PinName = NewPin;
+			}
+		}
+
+		// Getters of the parameter inside the function graph name it too.
+		if (Owner->IsA<UK2Node_FunctionEntry>())
+		{
+			TArray<UK2Node_VariableGet*> Getters;
+			Graph->GetNodesOfClass<UK2Node_VariableGet>(Getters);
+			for (UK2Node_VariableGet* Getter : Getters)
+			{
+				if (Getter && Getter->ReferencesVariable(OldPin, nullptr))
+				{
+					Getter->HandleVariableRenamed(Blueprint, Blueprint->GeneratedClass, Graph, OldPin, NewPin);
+				}
+			}
+		}
+
+		// Read the definition back rather than trusting the calls above.
+		for (UK2Node_EditablePinBase* Terminal : Terminals)
+		{
+			if (FindUserPin(Terminal, NewPin) == INDEX_NONE || FindUserPin(Terminal, OldPin) != INDEX_NONE || !Terminal->FindPin(NewPin))
+			{
+				return MCPError(FString::Printf(
+					TEXT("The rename of '%s' to '%s' on %s did not reach the parameter definition (parameters now: %s). The Blueprint was not saved; reload it to discard the partial edit."),
+					*ParameterName, *NewName, *TargetLabel, *UserPinNameList(Terminal)));
+			}
+		}
 
 		auto Result = MCPSuccess();
 		MCPSetUpdated(Result);
 		Result->SetStringField(TEXT("parameterName"), NewName);
 		Result->SetStringField(TEXT("previousName"), ParameterName);
+		Result->SetNumberField(TEXT("callSitesRenamed"), CallSitesRenamed);
 
 		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
 		Payload->SetStringField(TEXT("assetPath"), AssetPath);
@@ -1222,7 +1361,28 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::EditGraphParameters(const TSharedPtr<
 		Payload->SetStringField(TEXT("newName"), ParameterName);
 		Payload->SetBoolField(TEXT("isOutput"), bIsOutput);
 		MCPSetRollback(Result, TEXT("edit_graph_parameters"), Payload);
-		return Finish(Result);
+		TSharedPtr<FJsonValue> Out = Finish(Result);
+
+		// Callers in other Blueprints are compiled against the new signature,
+		// which exists only once the owner has compiled, and saved, so none of
+		// them reopens with an orphaned pin.
+		TArray<TSharedPtr<FJsonValue>> CallerReports;
+		for (UBlueprint* CallerBlueprint : Callers.Blueprints)
+		{
+			if (!CallerBlueprint) continue;
+			FCompilerResultsLog CallerLog;
+			FKismetEditorUtilities::CompileBlueprint(CallerBlueprint, EBlueprintCompileOptions::None, &CallerLog);
+			FString CallerSaveError;
+			const bool bCallerSaved = SaveAssetPackageChecked(CallerBlueprint, CallerSaveError);
+			TSharedPtr<FJsonObject> Report = MakeShared<FJsonObject>();
+			Report->SetStringField(TEXT("path"), CallerBlueprint->GetPathName());
+			Report->SetNumberField(TEXT("compileErrors"), CallerLog.NumErrors);
+			Report->SetBoolField(TEXT("saved"), bCallerSaved);
+			if (!bCallerSaved) Report->SetStringField(TEXT("saveError"), CallerSaveError);
+			CallerReports.Add(MakeShared<FJsonValueObject>(Report));
+		}
+		Result->SetArrayField(TEXT("callerBlueprints"), CallerReports);
+		return Out;
 	}
 
 	// ── set_type ─────────────────────────────────────────────────────────────

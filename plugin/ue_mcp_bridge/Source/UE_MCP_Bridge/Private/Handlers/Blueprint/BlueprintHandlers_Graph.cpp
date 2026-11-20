@@ -20,6 +20,7 @@
 #include "EdGraphUtilities.h"
 #include "K2Node.h"
 #include "K2Node_CallFunction.h"
+#include "K2Node_CallArrayFunction.h"
 #include "K2Node_CallParentFunction.h"
 #include "K2Node_Event.h"
 #include "K2Node_FunctionEntry.h"
@@ -298,6 +299,22 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddNode(const TSharedPtr<FJsonObject>
 					if (MatchCount == 1) FoundFunc = UniqueMatch;
 				}
 
+				// #2004: a function taking a wildcard array (Array_Add, Array_Length,
+				// Array_Clear and the rest of KismetArrayLibrary) needs the node class
+				// the editor's palette spawns for it, UK2Node_CallArrayFunction. Only
+				// that class infers the element type from what is wired in. On a plain
+				// call node the array pins stay wildcards, and the compile then fails
+				// with "the type of Target Array is undetermined". An explicitly
+				// requested subclass is left alone.
+				if (FoundFunc && NodeUClass == UK2Node_CallFunction::StaticClass()
+					&& FoundFunc->HasMetaData(FBlueprintMetadata::MD_ArrayParam))
+				{
+					UEdGraphNode* Plain = NewNode;
+					NewNode = NewObject<UK2Node_CallArrayFunction>(TargetGraph, NAME_None, RF_Transactional);
+					Plain->Rename(nullptr, GetTransientPackage(), REN_DontCreateRedirectors | REN_NonTransactional);
+					Plain->MarkAsGarbage();
+					CallNode = CastChecked<UK2Node_CallFunction>(NewNode);
+				}
 				if (FoundFunc)
 				{
 					CallNode->SetFromFunction(FoundFunc);
@@ -753,6 +770,8 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddNode(const TSharedPtr<FJsonObject>
 		TSharedPtr<FJsonObject> PinObj = MakeShared<FJsonObject>();
 		PinObj->SetStringField(TEXT("name"), Pin->PinName.ToString());
 		PinObj->SetStringField(TEXT("type"), Pin->PinType.PinCategory.ToString());
+		bool bTypeRoundTrips = true;
+		PinObj->SetStringField(TEXT("typeSpec"), PinTypeSpec(Pin->PinType, bTypeRoundTrips));
 		PinObj->SetStringField(TEXT("direction"), Pin->Direction == EGPD_Input ? TEXT("Input") : TEXT("Output"));
 		PinsArray.Add(MakeShared<FJsonValueObject>(PinObj));
 	}
@@ -2809,15 +2828,27 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::CompileBlueprints(const TSharedPtr<FJ
 		FCompilerResultsLog CompileLog;
 		FKismetEditorUtilities::CompileBlueprint(Blueprint, EBlueprintCompileOptions::None, &CompileLog);
 
-		const bool bItemChanged = !bWasUpToDate || CompileLog.NumErrors > 0;
+		// #2004: wired nodes the compiler pruned before its wildcard check.
+		TArray<TSharedPtr<FJsonValue>> UndeterminedPins;
+		TArray<FString> UndeterminedMessages;
+		int32 UndeterminedWarnings = 0;
+		const int32 UndeterminedErrors = MCPCollectUndeterminedPins(Blueprint, UndeterminedPins, UndeterminedMessages, UndeterminedWarnings);
+		if (UndeterminedPins.Num() > 0)
+		{
+			Item->SetArrayField(TEXT("undeterminedPins"), UndeterminedPins);
+		}
+		const int32 ItemErrors = CompileLog.NumErrors + UndeterminedErrors;
+		const int32 ItemWarnings = CompileLog.NumWarnings + UndeterminedWarnings;
+
+		const bool bItemChanged = !bWasUpToDate || ItemErrors > 0;
 		Item->SetBoolField(TEXT("changed"), bItemChanged);
 		if (bItemChanged) StatusChanged++;
 
-		if (CompileLog.NumErrors > 0)
+		if (ItemErrors > 0)
 		{
 			Item->SetStringField(TEXT("status"), TEXT("failed"));
-			Item->SetNumberField(TEXT("errors"), CompileLog.NumErrors);
-			Item->SetNumberField(TEXT("warnings"), CompileLog.NumWarnings);
+			Item->SetNumberField(TEXT("errors"), ItemErrors);
+			Item->SetNumberField(TEXT("warnings"), ItemWarnings);
 			Failed++;
 		}
 		else
@@ -2834,7 +2865,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::CompileBlueprints(const TSharedPtr<FJ
 				}
 			}
 			Item->SetStringField(TEXT("status"), TEXT("compiled"));
-			Item->SetNumberField(TEXT("warnings"), CompileLog.NumWarnings);
+			Item->SetNumberField(TEXT("warnings"), ItemWarnings);
 			Compiled++;
 		}
 		Results.Add(MakeShared<FJsonValueObject>(Item));

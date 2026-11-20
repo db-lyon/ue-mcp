@@ -2163,12 +2163,11 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddVariable(const TSharedPtr<FJsonObj
 
 		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
 		Payload->SetStringField(TEXT("path"), AssetPath);
-		// delete_variable reads the variable name from `name`. The `variableName`
-		// key below is what this handler REPORTS, and a payload carrying only
-		// that spelling made the inverse fail its own required-parameter check
-		// every time a flow tried to replay it.
+		// delete_variable reads the variable name from `name` and declares no
+		// other spelling. A payload carrying `variableName` (what this handler
+		// REPORTS) failed the inverse's required-parameter check, and carrying
+		// both trips the bridge's undeclared-key check on the rollback.
 		Payload->SetStringField(TEXT("name"), VarName);
-		Payload->SetStringField(TEXT("variableName"), VarName);
 		MCPSetRollback(Result, TEXT("delete_variable"), Payload);
 
 		return MCPResult(Result);
@@ -2607,15 +2606,27 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::CompileBlueprint(const TSharedPtr<FJs
 		Messages.Add(MakeShared<FJsonValueString>(Msg->ToText().ToString()));
 	}
 
-	const bool bCompiled = CompileLog.NumErrors == 0 &&
+	// #2004: the compiler never sees a node that nothing on the execution path
+	// reaches, so a wired node with an unresolved pin compiled to "0 errors".
+	TArray<TSharedPtr<FJsonValue>> UndeterminedPins;
+	TArray<FString> UndeterminedMessages;
+	int32 UndeterminedWarnings = 0;
+	const int32 UndeterminedErrors = MCPCollectUndeterminedPins(Blueprint, UndeterminedPins, UndeterminedMessages, UndeterminedWarnings);
+	for (const FString& Message : UndeterminedMessages)
+	{
+		Messages.Add(MakeShared<FJsonValueString>(Message));
+	}
+
+	const bool bCompiled = CompileLog.NumErrors == 0 && UndeterminedErrors == 0 &&
 		Blueprint->Status != EBlueprintStatus::BS_Error;
 
 	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("path"), AssetPath);
 	Result->SetBoolField(TEXT("compiled"), bCompiled);
-	Result->SetNumberField(TEXT("errors"), CompileLog.NumErrors);
-	Result->SetNumberField(TEXT("warnings"), CompileLog.NumWarnings);
+	Result->SetNumberField(TEXT("errors"), CompileLog.NumErrors + UndeterminedErrors);
+	Result->SetNumberField(TEXT("warnings"), CompileLog.NumWarnings + UndeterminedWarnings);
 	Result->SetArrayField(TEXT("messages"), Messages);
+	Result->SetArrayField(TEXT("undeterminedPins"), UndeterminedPins);
 
 	// No no-op flag is reported here, and the earlier draft that reported one
 	// was wrong. FKismetEditorUtilities::CompileBlueprint rebuilds the generated
