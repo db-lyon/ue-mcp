@@ -11,6 +11,7 @@
 #include "UObject/GCObjectScopeGuard.h"
 #include "HandlerFunctionCall.h"
 #include "HandlerJsonProperty.h"
+#include "Handlers/PIE/PIEClientUI.h"
 #include "HandlerPlaySession.h"
 #include "JsonSerializer.h"
 #include "Containers/Ticker.h"
@@ -2537,10 +2538,27 @@ TSharedPtr<FJsonValue> FEditorHandlers::PoseDebugCamera(const TSharedPtr<FJsonOb
 // game viewport) so injected/simulated input reaches the pawn.
 TSharedPtr<FJsonValue> FEditorHandlers::StageGameInput(const TSharedPtr<FJsonObject>& Params)
 {
-	FWorldContext* PieCtx = GEditor ? GEditor->GetPIEWorldContext() : nullptr;
-	UWorld* World = PieCtx ? PieCtx->World() : nullptr;
-	if (!World) return MCPError(TEXT("PIE not running"));
-	APlayerController* PC = World->GetFirstPlayerController();
+	// The player whose input mode is set: the PIE instance named, else the editor's own player, never the first
+	// world context, which is the server on a dedicated session (#2018).
+	const int32 PIEInstance = OptionalInt(Params, TEXT("pieInstance"), INDEX_NONE);
+	MCPPIE::PIEClientUI::FUIPlayer Player;
+	FString ResolveError;
+	const bool bResolved = MCPPIE::PIEClientUI::Resolve(PIEInstance, 0, Player, ResolveError);
+	if (!bResolved && PIEInstance != INDEX_NONE) return MCPError(ResolveError);
+	UWorld* World = nullptr;
+	APlayerController* PC = nullptr;
+	if (bResolved)
+	{
+		World = Player.World;
+		PC = Player.PlayerController;
+	}
+	else
+	{
+		FWorldContext* PieCtx = GEditor ? GEditor->GetPIEWorldContext() : nullptr;
+		World = PieCtx ? PieCtx->World() : nullptr;
+		if (!World) return MCPError(TEXT("PIE not running"));
+		PC = World->GetFirstPlayerController();
+	}
 	if (!PC) return MCPError(TEXT("No PIE player controller"));
 
 	const bool bPreviousShowMouseCursor = PC->bShowMouseCursor != 0;
@@ -2565,6 +2583,11 @@ TSharedPtr<FJsonValue> FEditorHandlers::StageGameInput(const TSharedPtr<FJsonObj
 
 	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("inputMode"), Mode);
+	if (bResolved)
+	{
+		Result->SetNumberField(TEXT("pieInstance"), Player.PIEInstance);
+		Result->SetStringField(TEXT("target"), Player.Description);
+	}
 	Result->SetBoolField(TEXT("showMouseCursor"), bShowCursor);
 	Result->SetBoolField(TEXT("previousShowMouseCursor"), bPreviousShowMouseCursor);
 	// Half the write is comparable and half is not: the cursor flag is readable,

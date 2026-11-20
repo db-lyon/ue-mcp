@@ -3,6 +3,7 @@
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
 #include "WidgetGuidMap.h"
+#include "Handlers/PIE/PIEClientUI.h"
 #include "WidgetClassDefaults.h"
 #include "HandlerPagination.h"
 #include "HandlerAssetCreate.h"
@@ -518,6 +519,7 @@ void FWidgetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("add_to_viewport"), &AddWidgetToViewport, {
 		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("Widget Blueprint or Editor Utility asset path, e.g. /Game/UI/WBP_Example (#798)")).Alias(TEXT("path")).Alias(TEXT("widgetBlueprintPath")),
 		MCPParam::Optional(TEXT("zOrder"), EType::Number, TEXT("Viewport Z-order (#602)")),
+		MCPSharedParam::PieInstance().Describe(TEXT("PIE client that creates the widget and shows it in its own viewport: its FWorldContext::PIEInstance (see pie(clients)). Omitted: the editor's own player")),
 	});
 	// Needs a PIE world, and a widget the contract values name nothing of.
 	Registry.RegisterHandler(TEXT("invoke_runtime_function"), &InvokeRuntimeWidgetFunction, {
@@ -637,11 +639,13 @@ void FWidgetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	});
 	Registry.RegisterHandler(TEXT("get_runtime_focus_path"), &GetRuntimeFocusPath, {
 		UserIndex(),
+		MCPSharedParam::PieInstance().Describe(TEXT("PIE client whose viewport and Slate user are read: its FWorldContext::PIEInstance (see pie(clients)). Omitted: the editor's own player, never the first world context, which is the server on a dedicated session")),
 	});
 	Registry.RegisterHandler(TEXT("set_runtime_focus"), &SetRuntimeFocus, {
 		MCPParam::Required(TEXT("widgetName"), EType::String, TEXT("Named child of a live PIE widget, or the live UserWidget's own name")),
 		UserIndex(),
 		ClassName(),
+		MCPSharedParam::PieInstance().Describe(TEXT("PIE client whose widgets are searched and whose Slate user takes focus: its FWorldContext::PIEInstance (see pie(clients)). Omitted: the editor's own player")),
 	});
 
 	// CommonUI. Bodies live in WidgetHandlers_CommonUI.cpp.
@@ -3225,8 +3229,18 @@ TSharedPtr<FJsonValue> FWidgetHandlers::AddWidgetToViewport(const TSharedPtr<FJs
 	FString AssetPath;
 	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
 	const int32 ZOrder = OptionalInt(Params, TEXT("zOrder"), 0);
+	const int32 PIEInstance = OptionalInt(Params, TEXT("pieInstance"), INDEX_NONE);
 
-	UWorld* World = ResolveWidgetRuntimeWorld();
+	// The widget belongs to one player: the PIE instance named, else the editor's own player, never the first
+	// world context, which is the server on a dedicated session and has no viewport (#2018).
+	MCPPIE::PIEClientUI::FUIPlayer Player;
+	FString ResolveError;
+	const bool bResolved = MCPPIE::PIEClientUI::Resolve(PIEInstance, 0, Player, ResolveError);
+	if (!bResolved && PIEInstance != INDEX_NONE)
+	{
+		return MCPError(ResolveError);
+	}
+	UWorld* World = bResolved ? Player.World : ResolveWidgetRuntimeWorld();
 	if (!World)
 	{
 		return MCPError(MCPNoPlayWorldMessage());
@@ -3250,7 +3264,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::AddWidgetToViewport(const TSharedPtr<FJs
 		return MCPError(FString::Printf(TEXT("Could not resolve a UserWidget class from '%s'"), *AssetPath));
 	}
 
-	APlayerController* PC = World->GetFirstPlayerController();
+	APlayerController* PC = bResolved && Player.PlayerController ? Player.PlayerController : World->GetFirstPlayerController();
 	UUserWidget* Widget = PC
 		? CreateWidget<UUserWidget>(PC, WidgetClass)
 		: CreateWidget<UUserWidget>(World, WidgetClass);
@@ -3262,6 +3276,11 @@ TSharedPtr<FJsonValue> FWidgetHandlers::AddWidgetToViewport(const TSharedPtr<FJs
 
 	auto Result = MCPSuccess();
 	MCPSetCreated(Result);
+	if (bResolved)
+	{
+		Result->SetNumberField(TEXT("pieInstance"), Player.PIEInstance);
+		Result->SetStringField(TEXT("target"), Player.Description);
+	}
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetStringField(TEXT("instanceName"), Widget->GetName());
 	Result->SetStringField(TEXT("class"), WidgetClass->GetName());

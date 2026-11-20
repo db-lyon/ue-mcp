@@ -12,6 +12,10 @@ class UWorld;
  *   { client?, tape: {action, values, hz?} } | { client?, press: {action, frames?} } | { client?, hold: {action, value, ms} }
  *   | { client?, inject: {action, value} } | { client?, console: "cmd" }
  *   | { client?, place: {at, offset?, face?} | {location, yaw?} } | { client?, capture: "label" | true } | { wait_ms }
+ *   | { key: {key | text, event?: press|down|up} }
+ *
+ * A key goes through Slate to the UI of the run's own player (client 0, as pie_instance and client_id name it). A remote
+ * player in another process has no Slate path from here, so a key with client above 0 is refused.
  *
  * A place location or offset is [x, y, z] or {x, y, z}; any other shape is a parse error, never the origin.
  * Client 0 is the editor's own player; a client above 0 is a remote player, reached through PIERemotePlayers.
@@ -22,9 +26,13 @@ namespace MCPPIE
 
 	struct FStepAction
 	{
-		enum class EKind { Tape, Hold, Inject, Console, Wait, Place, Capture } Kind = EKind::Wait;
-		// The verb as written: tape, press, hold, inject, console, place, capture or wait_ms.
+		enum class EKind { Tape, Hold, Inject, Console, Wait, Place, Capture, Key } Kind = EKind::Wait;
+		// The verb as written: tape, press, hold, inject, console, place, capture, key or wait_ms.
 		FString Verb;
+		// Key: an FKey name or typed text, and press (default) | down | up. Slate input for the player's UI (#2018).
+		FString KeyName;
+		FString KeyText;
+		FString KeyEvent;
 		int32 Client = 0;
 		FString ActionPath;
 		TArray<FVector> Values;

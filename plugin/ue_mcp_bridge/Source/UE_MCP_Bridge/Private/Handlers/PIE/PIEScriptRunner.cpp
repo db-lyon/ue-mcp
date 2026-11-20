@@ -681,7 +681,7 @@ namespace MCPPIE
 		else if (bWrongType)
 		{
 			Field = TEXT("act");
-			OutError = FString::Printf(TEXT("%s.act must be an array of step actions (tape, press, hold, inject, console, place, capture, wait_ms)"), *Where);
+			OutError = FString::Printf(TEXT("%s.act must be an array of step actions (tape, press, hold, inject, console, place, capture, key, wait_ms)"), *Where);
 			return false;
 		}
 

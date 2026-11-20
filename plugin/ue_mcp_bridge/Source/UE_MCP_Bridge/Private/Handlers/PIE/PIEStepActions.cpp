@@ -3,6 +3,7 @@
 #include "HandlerParams.h"
 #include "HandlerPathGuard.h"
 #include "HandlerWorld.h"
+#include "Handlers/PIE/PIEClientUI.h"
 #include "Handlers/PIE/PIELog.h"
 #include "Handlers/PIE/PIERemotePlayers.h"
 #include "MCPPIEInputInjector.h"
@@ -234,7 +235,27 @@ namespace MCPPIE
 			}
 			return true;
 		}
-		Err = TEXT("an action must be one of tape, press, hold, inject, console, place, capture, wait_ms");
+		if (O->TryGetObjectField(TEXT("key"), Body))
+		{
+			Out.Kind = FStepAction::EKind::Key;
+			Out.Verb = TEXT("key");
+			(*Body)->TryGetStringField(TEXT("key"), Out.KeyName);
+			(*Body)->TryGetStringField(TEXT("text"), Out.KeyText);
+			(*Body)->TryGetStringField(TEXT("event"), Out.KeyEvent);
+			if (Out.KeyName.IsEmpty() == Out.KeyText.IsEmpty())
+			{
+				Err = TEXT("a key action takes exactly one of key (an FKey name such as Right or Enter) or text");
+				return false;
+			}
+			PIEClientUI::EKeyPhase Phase;
+			if (!PIEClientUI::ParseKeyPhase(Out.KeyEvent, Phase))
+			{
+				Err = FString::Printf(TEXT("a key action's event must be press, down or up, not '%s'"), *Out.KeyEvent);
+				return false;
+			}
+			return true;
+		}
+		Err = TEXT("an action must be one of tape, press, hold, inject, console, place, capture, key, wait_ms");
 		return false;
 	}
 
@@ -270,6 +291,26 @@ namespace MCPPIE
 		if (A.Kind == FStepAction::EKind::Capture)
 		{
 			return RequestCapture(A, Err);
+		}
+		if (A.Kind == FStepAction::EKind::Key)
+		{
+			if (A.Client > 0)
+			{
+				Err = FString::Printf(TEXT("key cannot target remote client %d: a remote player runs in another process with no Slate path from here. Aim the run at that client's window with pie_instance (script_run) and leave client off."), A.Client);
+				return false;
+			}
+			PIEClientUI::FUIPlayer Player;
+			if (!PIEClientUI::Resolve(OwnPIEInstance, OwnLocalPlayer, Player, Err))
+			{
+				return false;
+			}
+			LastTarget = Player.Description;
+			PIEClientUI::EKeyPhase Phase = PIEClientUI::EKeyPhase::Press;
+			PIEClientUI::ParseKeyPhase(A.KeyEvent, Phase);
+			PIEClientUI::FKeyResult Sent;
+			return A.KeyName.IsEmpty()
+				? PIEClientUI::SendText(Player, A.KeyText, Sent, Err)
+				: PIEClientUI::SendKey(Player, A.KeyName, Phase, Sent, Err);
 		}
 
 		if (A.Client > 0)

@@ -271,6 +271,7 @@ Observation output goes to `Saved/MCPObservations/<run_id>/`: `manifest.json`, `
 | `inject_input_update` | Change the value or `control_rotation` of a running hold |
 | `inject_input_stop` | Release a hold or stop a tape |
 | `inject_input_tape` | Play a per-frame value array at a given rate |
+| `send_key` | Send a key or typed text through Slate to one player's UI (`pie_instance`, `client_id`), for menus in UI-only input mode |
 
 A hold keeps the action triggered every frame. `duration_seconds` releases it after that many game seconds, and `control_rotation` pins the player controller's aim at the end of every frame while it runs. Start one hold per action to press several at once:
 
@@ -343,7 +344,7 @@ Each remote player keeps the results of its newest 256 relayed requests, so `rem
 }
 ```
 
-Step actions, each with `client`: `tape {action, values, hz}` (`hz` default 60, entries spaced `1/hz` apart on the world clock), `press {action, frames}`, `hold {action, value, ms}`, `inject {action, value}`, `console "cmd"`, `place {at, offset, face}` or `place {location, yaw}`, and `capture` (a label or `true`); plus `wait_ms`. `place` teleports the player's pawn on the server, to the nearest free spot within 360 units when the exact one is taken, and turns it on its own machine; the step fails if the client never confirms the turn. `capture` saves that player's view as a JPEG, embedded next to its step in `report.md`.
+Step actions, each with `client`: `tape {action, values, hz}` (`hz` default 60, entries spaced `1/hz` apart on the world clock), `press {action, frames}`, `hold {action, value, ms}`, `inject {action, value}`, `console "cmd"`, `place {at, offset, face}` or `place {location, yaw}`, and `capture` (a label or `true`); plus `key {key, event}` or `key {text}` (Slate input to the run's own player, so `client` must be 0) and `wait_ms`. `place` teleports the player's pawn on the server, to the nearest free spot within 360 units when the exact one is taken, and turns it on its own machine; the step fails if the client never confirms the turn. `capture` saves that player's view as a JPEG, embedded next to its step in `report.md`.
 
 `expect` rules take `min` and `max` match counts, and `since: "run"` judges every line since PIE started instead of only the step's own lines. By default a rule reads only lines logged after its step began, so a line printed before the step, or one printed every 10 s against a 4 s `window_ms`, is not seen; use `since: "run"` or a longer window. A pattern that is not a valid regex is refused when the scenario is loaded. A missed expectation's detail names how many lines it searched and, when the line was logged earlier in the run, how many times and an example. A step passes when every expectation is met and no `forbid` pattern matched in its window. It ends early once its expectations are met unless it forbids something, in which case it watches the whole window.
 

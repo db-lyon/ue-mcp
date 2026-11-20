@@ -28,6 +28,13 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "number",
         "required": false,
         "description": "Viewport Z-order (#602)"
+      },
+      {
+        "name": "pieInstance",
+        "type": "integer",
+        "required": false,
+        "description": "PIE client that creates the widget and shows it in its own viewport: its FWorldContext::PIEInstance (see pie(clients)). Omitted: the editor's own player",
+        "minimum": 0
       }
     ]
   },
@@ -891,6 +898,13 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "integer",
         "required": false,
         "description": "Local player user index (default 0)"
+      },
+      {
+        "name": "pieInstance",
+        "type": "integer",
+        "required": false,
+        "description": "PIE client whose viewport and Slate user are read: its FWorldContext::PIEInstance (see pie(clients)). Omitted: the editor's own player, never the first world context, which is the server on a dedicated session",
+        "minimum": 0
       }
     ]
   },
@@ -1660,6 +1674,13 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "string",
         "required": false,
         "description": "Widget class name that locates the live host widget"
+      },
+      {
+        "name": "pieInstance",
+        "type": "integer",
+        "required": false,
+        "description": "PIE client whose widgets are searched and whose Slate user takes focus: its FWorldContext::PIEInstance (see pie(clients)). Omitted: the editor's own player",
+        "minimum": 0
       }
     ]
   },
@@ -2030,7 +2051,7 @@ export const schema: Record<string, z.ZodType> = {
   parentClass: z.string().optional().describe("UUserWidget subclass: a short name or a class path (default UserWidget)"),
   parentWidgetName: z.string().optional().describe("Name of the parent panel widget (#798) (add_widget). Panel to build under (default: the root panel, or the tree root when there is none) (build_tree). Alias for newParentWidgetName (move_widget)"),
   path: z.string().optional().describe("Alias for assetPath"),
-  pieInstance: z.number().int().min(0).optional().describe("PIE instance id for multi-client sessions"),
+  pieInstance: z.number().int().min(0).optional().describe("PIE client that creates the widget and shows it in its own viewport: its FWorldContext::PIEInstance (see pie(clients)). Omitted: the editor's own player (add_to_viewport). PIE client whose viewport and Slate user are read: its FWorldContext::PIEInstance (see pie(clients)). Omitted: the editor's own player, never the first world context, which is the server on a dedicated session (get_runtime_focus_path). PIE instance id for multi-client sessions (inspect_runtime_instances). PIE client whose widgets are searched and whose Slate user takes focus: its FWorldContext::PIEInstance (see pie(clients)). Omitted: the editor's own player (set_runtime_focus)"),
   previous: z.array(z.record(z.string(), z.unknown())).optional().describe("The captured navigation snapshot set_navigation / clear_navigation return in their rollback payload"),
   properties: z.array(z.record(z.string(), z.unknown())).optional().describe("[{widgetName, propertyName, value}] (#563)"),
   propertyName: z.string().optional().describe("Reflected property name on the widget"),

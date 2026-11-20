@@ -986,6 +986,7 @@ void FEditorHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("stage_game_input"), &StageGameInput, {
 		MCPParam::Optional(TEXT("inputMode"), EType::String, TEXT("gameOnly (default) | gameAndUI | uiOnly")),
 		MCPParam::Optional(TEXT("showMouseCursor"), EType::Boolean, TEXT("Show the mouse cursor (default false for gameOnly, true otherwise)")),
+		MCPSharedParam::PieInstance().Describe(TEXT("PIE client whose player controller gets the input mode: its FWorldContext::PIEInstance (see pie(clients)). Omitted: the editor's own player, never the first world context, which is the server on a dedicated session")),
 	}, MCPSpec::ContractExempt(TEXT("sets the running PIE player's input mode")));
 	// #455: discover UBlueprintFunctionLibrary classes (GeometryScript,
 	// Kismet, anything user-defined). Pair with editor.invoke_function to
