@@ -1,0 +1,275 @@
+# ue-mcp agent guide
+
+Build, test, and release instructions for agents working in this repository.
+
+## Repo at a glance
+
+- **TS server** (`src/`) - the MCP server. Wraps the UE bridge over WebSocket, exposes <!-- count:tools -->31<!-- /count --> category tools with <!-- count:actions -->3714+<!-- /count --> actions. The numbers between those markers are stamped by `npm run generate` (`scripts/generate-tool-metadata.ts`) from `ALL_TOOLS`; do not hand-edit them, and do not remove the markers, because a hand-written count here is the first thing every agent reads and the last thing anyone remembers to update.
+- **C++ plugin** (`plugin/ue_mcp_bridge/`) - the editor-side bridge. Lives in `Private/Handlers/<Category>/*.cpp`, registers actions with `FMCPHandlerRegistry`.
+- **Test project** (`tests/ue_mcp/`) - the dedicated UE project used for smoke testing. The plugin is deployed here from `plugin/` via the deployer. This is the **only** safe target for live tests.
+- **Docs** (`docs/`) - MkDocs site. Release bodies are drafted outside the repo (see Release process).
+
+Edit only under `plugin/ue_mcp_bridge/`. The deployer syncs to `tests/ue_mcp/Plugins/UE_MCP_Bridge/` - never hand-copy.
+
+### The in-editor client lives elsewhere
+
+The paid in-editor client (its UI, the daemon extension that runs its agent, the `UE_MCP_Studio` editor plugin, the model gateway and billing) lives in the private `db-lyon/ue-mcp-studio` repo. Dependencies run one way:
+
+- This repo never depends on it, imports from it, or carries code only it needs. A feature Studio wants goes in here as a general one the free path can use.
+- Studio reaches ue-mcp only through the `ue-mcp/daemon` export and the daemon's HTTP API, both versioned (`DAEMON_API_VERSION`, `EXTENSION_API_VERSION`). Change them additively, or bump the version.
+
+## Development workflow
+
+### Git and commits
+
+- **Atomic commits per logical change.** One fix or feature per commit with a clear message explaining the *why*. Don't batch unrelated changes.
+- **No batching "housekeeping" commits** that sweep up everything at once. If you wrote five fixes, write five commits.
+- Handle Git operations for the user when authorized.
+
+#### Squash or merge commit
+
+The merge style follows the commit count, and writing five commits only to squash them back into one throws the work away.
+
+- **One logical change in the PR: squash-merge.** `gh pr merge <n> --squash --delete-branch`. Review fixups and typo passes are noise on main.
+- **Several independently meaningful commits: merge commit.** `gh pr merge <n> --merge`. Each fix keeps its own SHA, which is what issue comments cite when they say which commit closed the issue. Squashing seven fixes leaves seven issues pointing at one SHA whose message describes something else.
+- **Never rewrite a SHA that has already been cited** in an issue, a release note, or a comment. The citation is a promise that the commit exists.
+
+### Versioning
+
+**Hard rule: patch-level bumps only.** Version bumps in this repo are always `X.Y.Z → X.Y.(Z+1)`. Never increment major or minor without explicit sign-off. This holds even for genuinely large features - the answer is still a patch bump, and if you think otherwise, ask first.
+
+- A signed-off major or minor version goes on its own line in `.github/version-signoff`, in the same commit as the bump. The `version-delta` gate allows exactly the versions listed there.
+
+- Bump `package.json` version.
+- Commit and push. **Do not create git tags.** CI detects the version bump on `main` and publishes to npm + creates the GitHub release automatically.
+
+### Building the plugin
+
+- TS: `npx tsc --noEmit` for type-checking, `npx tsc` for emit. Build output goes to `dist/`.
+- UE C++: `npm run build`. This calls `scripts/build.js`, which always builds the `ue_mcpEditor` target against `tests/ue_mcp/ue_mcp.uproject` and nothing else.
+- Test builds pass `-NoEngineChanges`, so Unreal aborts with the offending file list if the build would overwrite anything already in the engine tree. Set `UE_MCP_ALLOW_TEST_ENGINE_CHANGES=true` only to bootstrap engine outputs in an engine you are willing to have written to.
+- Optional: `UE_MCP_TEST_ENGINE_ROOT` (or, after it, `UE_ROOT`) pins the engine to build and run with, and `UE_MCP_PROTECTED_ENGINE_ROOTS` is a deny list of roots the scripts refuse to touch at all. The deny list outranks every other setting, including the opt-in above.
+- `npm run up:build` stops the editor, builds, and relaunches. Use when iterating live.
+- The deployer (`scripts/deploy.mjs`) syncs `plugin/` → `tests/ue_mcp/Plugins/UE_MCP_Bridge/`. Neither `npm run up` nor `npm run build` runs it, so run it after plugin source edits and before building.
+
+### Smoke tests
+
+`npm run test:smoke` exercises every registered handler via the live WebSocket bridge. A release runs `node scripts/smoke-test.js --uncovered`, only the actions no behavioural test dispatches, because the live and automation tests already call the rest and assert their effect. Run the full sweep after a change to the registration or dispatch layer.
+
+- Target **only** `tests/ue_mcp/ue_mcp.uproject`. Confirm the MCP connection via `project(get_status)` before running. If the editor is connected to anything else (the user's real project, another workspace), abort.
+- Smoke tests execute real mutations (create blueprints, delete assets, modify levels). A misrouted run against a real project can corrupt an active editor session.
+- <!-- count:bridgeActions -->1395<!-- /count --> bridge actions. Pass = every handler responds either with success or an expected parameter-validation error. Any timeout or `Unknown method` is a real failure.
+
+### Generated files - one command
+
+`npm run generate` (`scripts/generate.mjs`) regenerates every committed generated file in dependency order: the spec'd and Epic action modules, `docs/native-tools.md`, `docs/tool-reference.md` and every `<!-- count:* -->` marker, the package stamp (`.uplugin` VersionName and description, the npm description, the overview image), the golden baseline and both coverage inventories. Run it after any change to an action, a C++ spec, a recorded catalog or a test, and commit what it changes in the same commit as the source.
+
+- The steps that record from a live editor (`specs:record`, `epic:record`, the connected golden) run only with `npm run generate -- --editor`, against an editor on `tests/ue_mcp` built from your checkout. Without the flag they are skipped with a line saying how to run them.
+- `npm run generate -- --list` prints the steps and the npm script that runs each alone (`specs:generate`, `generate:metadata`, `stamp:package`, `golden:record`, `coverage:behavioural` and so on); those still work.
+- **Drift gate.** The `generated` release gate runs `npm run generate -- --check` in CI and fails when an editor-free step changed a committed file. CI cannot record C++ specs (no Unreal install), so `tests/unit/handler-spec-source.test.ts` compares a fingerprint of the spec source, stored beside the recording in `tests/golden/handler-specs.source.json`, and fails when a spec changed without a re-record.
+- Count markers are found by scanning tracked Markdown, so a page gains a stamped count by carrying the marker; there is no list to add it to.
+- Regenerating the golden baseline does not make its diff reviewed. Read it before committing.
+
+### Golden baseline - the advertised surface
+
+`tests/golden/editor-down.json` is a recording of what a client is handed at startup with one project and no editor running: the `initialize` instructions and every tool in `tools/list` with its full input schema. `tests/unit/golden-editor-down.test.ts` starts the real server over stdio, records the same thing again, and fails if the two differ. It runs as part of `npm run test:unit`, so CI gates on it.
+
+- **A failure is not automatically a bug.** It says the startup contract moved. Read the diff.
+- **Re-record intentionally** with `npm run generate` (or `npm run golden:record` alone), then review the diff before committing it. Never edit the JSON by hand.
+- It records the `full` context strategy, pinned, because that is the surface every category tool, action enum and signature line is on. `micro` is the default a client gets; it and `lean` are projections of `full`, covered by the unit tests and the `context-tax` release gate.
+- The recording is hermetic: a throwaway project in a temp directory, `UE_MCP_PORT=1` so nothing can be listening, every inherited `UE_MCP_*` variable dropped, and the user-scoped config/state/auth files redirected. Absolute paths are rewritten before serialization and asserted absent, so the file verifies on any machine.
+- The `epic_*` actions enrichment injects are **sorted in the recording**, alongside the path, port and timestamp rewrites. Unreal's toolset registry promises the set of tools, not the sequence, and a restart that reshuffles it would otherwise report a surface change on a healthy editor. Only the snapshot is normalised; the server advertises exactly what it always did. A category's own actions keep their declared order, which is authored and does carry meaning.
+- The editor-connected half (`tests/golden/editor-connected.json`) is the same recording made with a live editor attached, guarded by `tests/live/golden-connected.test.ts` in the live tests because it needs a running editor. Re-record it with `npm run golden:record -- --connected`. The recorder asserts the surface really was enriched from the live editor rather than a cache or the baked snapshot, so the two baselines cannot be recorded from the same source by accident.
+
+### C++ automation tests
+
+`npm run test:automation` runs the plugin's own `UE.MCP.*` suite inside a running editor and prints one line per failure. Same target guard as the smoke harness: it confirms the attached editor has `tests/ue_mcp` open and aborts otherwise. `--filter` narrows, `--verbose` prints every error line.
+
+- These tests only exist inside Unreal, so the bridge is the only way to reach them. Do not hand-roll a WebSocket script for it.
+- The suite is green on main (#1079, #1080 fixed the last reds), and it runs twice in one editor process. A failure is yours until proven otherwise.
+- A run that never returns is usually a test that took the editor down; the runner says so rather than hanging.
+
+### Live tests
+
+`npm run test:live` runs every file in `tests/live/` through the shipped server, sharded across editors it launches itself, with time goals: the whole run in 10 minutes and every test within its own budget (#1436). The goals are reported, never a failure.
+
+- **Shards.** Each shard is a copy of `tests/ue_mcp` under `tests/.shards/<name>/ue_mcp` with its own editor and port, verified by asking the editor which project it has open before anything is sent. The headless and `none` files are one queue, longest first by `tests/live/timing-baseline.json`: each headless editor takes batches that shrink as it drains, and another starts whenever one fits and the queue holds a launch's worth of work. The other kinds keep fixed shards split by measured time and launch first. The results are merged into one report. Shards copy their build output from a snapshot in `tests/.shards/_build`, taken at the start of the run (`--stage-build` takes one alone, `--staged-build` reuses it).
+- **Editor kinds.** Every live file starts with `// @live-editor <kind>`, and `tests/unit/live-shards.test.ts` fails on a file without one:
+  - `headless`: `-nullrhi -unattended`. The default for anything that does not draw.
+  - `render`: `-RenderOffScreen -unattended`, for rendering, shader, landscape-edit, Niagara and skeletal-export cases.
+  - `interactive`: `-RenderOffScreen` without `-unattended`, so modal dialogs come up. No window is shown.
+  - `base`: headless on `tests/ue_mcp` itself, for cases that need its build intermediates (Live Coding). It attaches to an editor already running there and leaves it running.
+  - `scm`: headless, in a copy made into a throwaway git repository with a bare remote and the Git provider on.
+  - `none` needs no editor; `lifecycle` runs only under `--lifecycle`.
+  Tag a file by what it needs, proven by running it headless first. Never move a file to a heavier editor to hide a handler bug.
+- **Memory.** The runner reads free memory at launch, keeps `max(4 GB, 12%)` free for the rest of the machine, and starts only as many headless shards as fit beside the other editors (`EDITOR_PEAK_MB` in `scripts/live-shards.mjs`: about 3.6 GB headless, 4.6 GB render). Each editor waits for room before it starts. `--shards N` caps the headless count; it never raises it past what fits.
+- **An editor that dies** is reported with its cause from its own log (crash, quit, or no crash recorded), and the files it never ran go to a fresh editor. The file it died in stays a failure.
+- **Gates.** The run fails on any failed or skipped test, any file that did not run, or an editor that would not start or died. A test over its budget (`tests/live/budgets.json`, a default plus named exceptions) or a run over the wall-clock budget is a missed time goal: printed as a warning and recorded under `timeGoalsMissed` in `tests/.shards/last-run.json`, never a failure. Every run prints the 15 slowest tests.
+- **One shard:** `npm run test:live -- --shard r1`, with the shard names the run prints, or `--shard headless` for the headless queue. `--kinds a,b` runs only the files of those kinds. `--files a,b` runs only files whose path contains one of the strings. `--record-timing` on a full run rewrites the committed baseline.
+- **Attach mode:** `--attach`, `--only <file>`, `--record-golden` and `--lifecycle` drive the `tests/ue_mcp` editor that is already running, as the suite did before sharding.
+- The leak assertions need the parameter echo, which shard editors are launched with. In attach mode, launch with `UE_MCP_PARAM_ECHO=1` to include them.
+- `tests/live/matrix.ts` is the written form of plan item 7.3 of #817: every case, and where its assertion lives (live, engine-free and referenced, owned by the C++ suite, or pending on unshipped work). `tests/live/coverage.test.ts` fails when a reference stops resolving.
+- `npm run test:live -- --lifecycle` runs only `tests/live/editor-lifecycle.test.ts`: stop_editor, start_editor, stop_editor after a real crash with the crash reporter up (#1221), build_project against a locked output, and the rebuild flow. It stops, crashes and restarts the tests/ue_mcp editor and leaves one running.
+
+### Behavioural coverage gate
+
+`tests/coverage/behavioural-coverage.json` maps every registered bridge action to the live and `UE.MCP.*` automation tests whose body dispatches it and asserts more than that the call answered (#1223). `npm run generate` regenerates it (`npm run coverage:behavioural` alone); `tests/unit/behavioural-coverage.test.ts` fails when it is stale or an action has no test.
+
+- A new action needs a behavioural test, or an exemption with a reason in `tests/coverage/behavioural-exemptions.json`. Never add it to `tests/coverage/behavioural-gaps.json`.
+- The gap list is the backlog grandfathered when the gate landed. It only shrinks: the unit test fails on an entry that has gained a test (`npm run coverage:behavioural -- --shrink-ratchet`), and the `behavioural-coverage` release gate fails on any entry the merge base did not have.
+- Registration, preflight and refusal suites, file-level fixtures and `expect(x.ok)` do not count. Read the header of `scripts/behavioural-coverage.ts` for the rule.
+
+### Integration coverage gate
+
+Everything a user drives that is not a bridge action (CLI commands, server startup per strategy and mode, the gateway, flows, plugins, the daemon, feedback, auth, config) is listed by id in `tests/coverage/integration-surfaces.json`. `npm run test:integration` runs `tests/integration`: the real CLI, server and daemon spawned in hermetic sandboxes (`tests/integration/harness.ts`) with local fakes for the bridge, npm, the registry, the feedback service and GitHub. It runs in CI.
+
+- A test claims a surface with `covers("<id>")` from `tests/helpers/covers.ts`, and is credited when it asserts on what the process did. `npm run generate` regenerates `tests/coverage/integration-coverage.json` (`npm run coverage:integration` alone); `tests/unit/integration-coverage.test.ts` fails when it is stale, a surface is unexplained, or a test claims an id the manifest lacks.
+- A new surface goes into the manifest with its test, or with a reasoned exemption in `tests/coverage/integration-exemptions.json`. `tests/coverage/integration-gaps.json` only shrinks, enforced by the `integration-coverage` release gate.
+- A surface that needs a live editor gets its test in `tests/live`, which the inventory also reads.
+- Never point a test at a real service or the developer's home: start from `Sandbox.env()`, which closes every service origin and redirects every per-user file.
+
+### Clean plugin rebuild recipe
+
+If new handlers return `"Unknown method"` at runtime even though source + build reported success:
+
+1. Delete `tests/ue_mcp/Plugins/UE_MCP_Bridge/` entirely.
+2. Redeploy (`node scripts/deploy.mjs`), then `npm run build`.
+
+`npm run build` already deletes stale Live Coding `*.patch_*` binaries and warns about orphaned sources in the deployed tree (`scripts/pre-build-hygiene.mjs`).
+
+UBT's incremental build + Live Coding can mask registration failures from earlier compile errors. A clean rebuild surfaces the real error.
+
+## Release process
+
+CI **gates the publish job** on a single pre-staged input: the draft GitHub release for `vX.Y.Z`. The draft body must begin with YAML frontmatter declaring a `headline:` array. CI parses, validates against the regex enforced by `scripts/release-headline.mjs`, joins with ` · `, posts the `landing/headline` commit status itself, strips the frontmatter from the body, then promotes the draft. No manual `gh api ... statuses` step.
+
+**One command, from the release worktree** (`node scripts/release-worktree.mjs` creates `../ue-mcp-release` once and moves it to `origin/main` after that, keeping its build output):
+
+```bash
+npm run release -- --version X.Y.Z[-beta.N] --notes /path/to/notes.md
+```
+
+It checks the notes, bumps on `bump/<version>` with `npm run generate:metadata`, selects the tests, creates the draft, pushes and opens the PR, then runs in parallel: the PR's CI (unit, integration, release gates, once), the bridge binaries (incremental, uploaded to the draft), one editor on `tests/ue_mcp` beside the binaries compile for the lifecycle cases when selected, smoke over the actions no behavioural test dispatches and the selected `UE.MCP.*` automation tests when `plugin/` changed, and the base live files, and once the compile is done, the other selected live files against copies of `tests/ue_mcp`. The run closes every editor it started. `npm run release -- --rehearsal --since <tag>` runs the same lanes on the checkout without publishing anything, replaying that release's plugin changes into the binaries compile, to measure a run. It merges when all of them are green, and the merge publishes. Each run appends its timing to `release-logs/release-timing.json`, which keeps every run. The target is a release in under 10 minutes; the runner prints a warning when a run goes over 600 s, and an overrun is a defect to fix, not a budget to raise.
+
+**Test selection** (`scripts/select-tests.ts`, #1509). The runner diffs against the previous release tag, prints what it chose and why, and writes `release-logs/selection.json`, which `test:live -- --files-from` and `scripts/automation-tests.mjs --filters-from` read. Run it alone with `npx tsx scripts/select-tests.ts --base <tag>` or `--files a,b`; `--related` also runs `vitest related` over the unit and integration suites.
+
+- The graph (`scripts/lib/test-graph.ts`): TS imports from the TypeScript compiler's `preProcessFile`, C++ includes from a regex scan of the plugin (clang-scan-deps is not installed with the toolchains here), the actions each `.cpp` registers and defines, and the actions each live and automation test sends. Per-file parses are cached in `node_modules/.cache/ue-mcp/test-graph.json`.
+- Selected: every test that sends an action a changed file reaches, imports or includes a changed file, or is itself changed. A shared header or the dispatch path reaches every action, so the graph selects the full suite. A category module under `src/tools` reaches its own category only.
+- The full suite, because the graph cannot see them: Build.cs, the `.uplugin`, `Config/`, `tests/ue_mcp`, `package.json`, the lockfile, the test runners, and any plugin file that reaches no action or test. A stable release always runs the full suite.
+- A new kind of runtime edge the scan misses (a process spawn, a registry that is not category-keyed) goes into the graph builder with a fixture test in `tests/unit/test-selection.test.ts`, never into a hand-kept list of paths.
+
+Main and `release/*` take only pull requests that are up to date with them and whose `build` check passed (ruleset "Tested once, up to date"). CI builds and tests a commit once, on its PR; the push to main only publishes.
+
+1. **Author release notes locally** with frontmatter. Notes file lives anywhere (gitignored, scratch, /tmp). The frontmatter must be the first thing in the file:
+   ```yaml
+   ---
+   headline:
+     - First feature noun phrase
+     - Second feature noun phrase
+     - Third feature noun phrase
+   ---
+
+   ## vX.Y.Z
+
+   One-line summary.
+
+   ### Server / Bug fixes / Internals
+   ...
+   ```
+   **Headline rules** (enforced by CI; format violations fail the publish job):
+   - 1-6 items, each 3-30 chars (keep them tight; concrete noun phrases).
+   - Allowed characters: letters, digits, spaces, `_ - / ( ) . , +`.
+   - **Forbidden:** `:`, `;`, `?`, `!`, the `·` joiner, leading/trailing whitespace.
+   - Joined string (`items.join(" · ")`) must be ≤140 chars.
+   - Style: concrete noun phrases naming features. **No sentences. No editorializing the value.** Match the historical voice (see prior releases on the GitHub releases page).
+
+2. **Binaries.** `npm run release` builds and uploads them. By hand: `npm run binaries:build` compiles the plugin's editor modules per installed engine in a host project kept under the temp folder between runs, so an unchanged plugin takes seconds and a cold one a few minutes, then `npm run binaries:upload` attaches the zips and manifest to the draft. `--engines 5.7,5.8` narrows the build; `UE_MCP_BINARY_ENGINES="5.4=D:/UE_5.4;5.5=..."` names engines outside the launcher's location. The publish job fails before npm when the draft does not carry `UE_MCP_Bridge-<version>-UE5.7-Win64.zip`, `-UE5.8-Win64.zip` and `UE_MCP_Bridge-<version>-manifest.json` (`scripts/release-binaries.mjs`).
+
+3. **CI validates, publishes and promotes** on the merge to main. If the headline frontmatter is missing or malformed, the publish job fails before npm publish runs. On success, the release page shows the body with frontmatter stripped, and the `landing/headline` commit status is posted automatically.
+
+Release notes structure (below the frontmatter): **`## Features` / `## Fixes` / `## Mentions` / `## Contributions`**, in that order. Read `docs/release-notes-style.md` before writing any of it. The rules that get broken most:
+
+- **The engine range is <!-- count:engineRange -->5.4 to 5.9<!-- /count -->.** Say the range. It is declared once, in `scripts/lib/engine-range.mjs`, and stamped everywhere else by `npm run generate`. Never annotate it with which versions have been compiled, verified or gated. A user on 5.5 who hits a problem files an issue; that is the system working, not something to pre-empt in public copy.
+- **No thesis sentence, no three-part summary.** The opening is a compatibility line, an install block, and at most one plain sentence of scale. "N new actions across M categories, every X doing Y, and the Z now W" is a bulleted list flattened into prose.
+- **Cumulative, not archaeological.** A stable release never mentions its own betas or what an earlier release got wrong.
+- **Credit contributors** from `gh api repos/OWNER/REPO/compare/vPREV...vNEW --jq '.commits[].author.login'`, not from memory.
+
+`.github/RELEASE_TEMPLATE.md` is the skeleton, `.github/PULL_REQUEST_TEMPLATE.md` collects the notes line per PR.
+
+### Prereleases
+
+A version with a prerelease suffix (`1.2.0-beta`, `1.2.0-beta.2`, `1.3.0-rc.1`) goes through the exact same flow: draft release with headline frontmatter, bump, push. CI routes it to its own channel automatically.
+
+- **npm dist-tag** comes from the first prerelease identifier, so `1.2.0-beta` and `1.2.0-beta.2` publish under `beta` and `1.3.0-rc.1` under `rc`. `npx ue-mcp` keeps resolving to the newest plain `X.Y.Z`; testers opt in with `ue-mcp@beta`.
+- **The GitHub release** is marked as a prerelease, so it does not take the "Latest" badge or answer `/releases/latest`.
+- **The publish gate** asks whether that exact version is already on the registry, so a prerelease does not wedge every later push.
+- The rules live in `scripts/release-version.mjs` (unit tested in `tests/unit/release-version.test.ts`), mirrored for the shipped CLI in `src/core/version-check.ts`. Change one and the parity test will tell you to change the other.
+
+The tag name still has to match the version exactly: `gh release create v1.2.0-beta --draft --notes-file ...`.
+
+#### Cutting the stable release the betas led up to
+
+Prerelease notes stay incremental: the `1.2.0-beta.3` page says what changed since `beta.2`. Stable notes are cumulative, because the betas never took the "Latest" badge and everything they shipped is invisible from the `1.2.0` page otherwise. `npm run release:notes -- --version 1.2.0 --notes-file <what landed since the last beta> --out /tmp/v1.2.0.md` builds that union: it reads every published prerelease of the same `X.Y.Z` in semver order, merges their bodies section by section, folds bullets that repeat or cite the same issue number, and unions the headlines back off the `landing/headline` commit statuses. It prints what it merged, what it deduped and any headline item it had to drop for the six-item cap, then runs its own output through `scripts/release-headline.mjs` so the file cannot fail the publish gate later. Reread the summary paragraph before you create the draft, since it may have come from a beta. A stable release with no prereleases passes its notes file straight through.
+
+When `main` has moved past the beta being promoted, cut the stable from the beta's commit instead: `git branch release/X.Y.Z vX.Y.Z-beta.N`, bump to `X.Y.Z` with `npm run generate:metadata` on that branch, create the draft (`gh release create vX.Y.Z --draft --notes-file ...`), then push the branch. CI publishes from `release/*` exactly as from `main`. Create the draft before the push: the publish job waits only about a minute for it.
+
+## Issue handling
+
+- **Never close an issue without shipping code that resolves it.** Not "out of scope for this patch", not "prerequisite shipped", not "follow-up". Issues close only when the fix ships.
+- If you can't implement now, label it `planned` (feature deferred), `limitation` (blocked by engine/private API), or leave open with a comment.
+- "Resolve all open issues" means **implement them**, not close them.
+- Release notes can reference deferred work but must not double as a closure justification.
+
+## Code conventions
+
+### Handler conventions
+
+Each category has a folder `Private/Handlers/<Category>/` holding a paired `<Category>Handlers.{h,cpp}`, its split files, and the helper headers only it uses. Handler methods are static, take `const TSharedPtr<FJsonObject>& Params`, and return `TSharedPtr<FJsonValue>`. They self-register in `RegisterHandlers(FMCPHandlerRegistry&)`.
+
+- Use the helpers `Public/HandlerUtils.h` gathers from the `Public/Handler*.h` headers: `MCPError`, `MCPSuccess`, `MCPResult`, `MCPSetCreated`/`Existed`/`Updated`, `MCPSetRollback`, `RequireString`, `OptionalString`/`Int`/`Number`/`Bool`, `REQUIRE_EDITOR_WORLD`.
+- For JSON-driven property assignment (TArray, TSet, nested structs, UObject path refs, dotted paths), use `Private/HandlerJsonProperty.h::MCPJsonProperty::SetJsonOnProperty`. Introduced for `set_pcg_node_settings` (#149), now also used by `blueprint(set_component_property)` and `level(set_water_body_property)`.
+- **Param names must exactly match between the TS schema and the C++ handler.** Drift is how silent failures start. Audit new actions in both places.
+- Modules that may not be loaded (Water, WaterSpline, etc.) should be reached via `LoadClass<>()` at runtime rather than a `Build.cs` dependency. Fail with a clear "plugin X not available" error instead of a link-time break.
+- **Never copy a file-local helper into a second handler file.** The module is compiled as a unity build, so two `.cpp` files sharing a blob merge their anonymous namespaces and the second definition is a redefinition (`error C2084`). Unity grouping shifts with file count, file order, and the `git status` derived adaptive-unity working set, so a duplicate builds clean locally and breaks on the next machine. Shared helper goes in a header: one of the `Public/Handler*.h` pieces `HandlerUtils.h` includes. `npm run audit:unity` reports duplicates and is gated by a unit test in CI. Copies drift as well as collide - the protected-mount guardrail had four copies and two of them enforced weaker rules.
+
+### Writing style - public artifacts
+
+- **No em dashes (`—`).** Use hyphens (` - `), colons, parentheses, or split into sentences. Applies to commit messages, release notes, docs, PR bodies, code comments. <!-- em-dash-allowed: the rule has to show the character it bans -->
+  Enforced in CI and locally. `.husky/pre-commit` scans the staged files and `.husky/commit-msg` scans the message, so a bad character is rejected before the commit exists rather than after a runner picks the job up. Run `npm run lint:prose` for the whole tracked tree, and `npm run lint:prose -- --explain` for every rule and the exemption policy.
+- **Never name competitor or comparison projects in public artifacts.** Commit messages, release notes, PR bodies, GitHub release bodies, code comments, docs - any of these. Even when the work is literally closing a gap against another project, describe the work on its own terms ("adds module input authoring"), not as "catching up to X" or "matching Y". Gap-analysis context belongs in private discussion, never in public git history.
+
+### MCP design principle
+
+The bridge must be self-sufficient. Every system (Niagara, materials, PCG, blueprints, etc.) should be fully creatable and configurable through the bridge without manual editor work or pre-existing placeholder assets. If a handler can't do something, **extend the handler** rather than punt to a Python escape hatch or editor workflow. Every `execute_python` fallback is a gap, and tracked as agent feedback.
+
+Core is a provider-neutral bridge to engine modules and engine-bundled Epic plugins. It holds no third-party credentials and calls no third-party service, except the first-party infrastructure the server needs. Third-party integrations, provider-specific behaviour, opinionated workflows and anything needing an external service or credential belong in a plugin. The full rule is in `docs/plugins.md` under "What belongs in core and what belongs in a plugin".
+
+## Useful commands
+
+```bash
+npm run up              # Launch the editor on tests/ue_mcp
+npm run up:build        # Stop editor, build plugin, relaunch
+npm run build           # Build the UE C++ plugin only
+npx tsc --noEmit        # Type-check TS
+npm run test:smoke      # Live smoke tests (tests/ue_mcp only)
+npm run test:live       # Live tests against a running editor (tests/ue_mcp only)
+npm run test:automation # The plugin's C++ UE.MCP.* suite, through the bridge
+npm run generate        # Regenerate every generated file in order (review the golden diff)
+npm run generate -- --editor # Also record specs, Epic catalog and connected golden from tests/ue_mcp
+npm run generate -- --list   # The steps, and the npm script that runs each alone
+npm run test:integration     # Spawned CLI, server and daemon in sandboxes (no editor)
+npm run release:notes   # Compose cumulative stable notes from a version's prereleases
+npm test                # Unit, multi-editor and integration suites (no editor needed)
+npm run test:suites     # Vitest smoke suites (tests/ue_mcp only)
+node scripts/deploy.mjs # Sync plugin/ → tests/ue_mcp/Plugins/
+```
+
+## Don'ts
+
+- Don't create git tags; CI handles releases from version bumps on main.
+- Don't push a version bump without first creating the draft release. CI fails the publish job if it's missing or its body lacks valid `headline:` frontmatter.
+- Don't post the `landing/headline` commit status manually anymore - CI authors it from the validated frontmatter array. Manual posts are overwritten and waste an API call.
+- Don't manually copy plugin files to `tests/ue_mcp/`. The deployer does it.
+- Don't use `TaskOutput` with `block=true` on long-running background tasks; it freezes the conversation. Background + poll or notify.
+- Don't run live tests without verifying the MCP target first.
+- Don't close issues "because a prerequisite shipped". Keep them open and label instead.

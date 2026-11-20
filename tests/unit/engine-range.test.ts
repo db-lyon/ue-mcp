@@ -3,7 +3,7 @@
  * scripts/lib/engine-range.mjs, and every other statement of it follows.
  *
  * It used to be typed into the README, the overview image, five docs pages, the
- * release template, CLAUDE.md and the prose lint, and each had to be found by
+ * release template, the agent guide and the prose lint, and each had to be found by
  * hand when an engine was added. This holds the stamped copies to the source,
  * fails on a range stated in prose without a marker, and checks the places
  * that cannot read the source (the engine probe list, the release binaries

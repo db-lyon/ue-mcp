@@ -98,7 +98,7 @@ if (!rehearsal) {
   fs.writeFileSync(pkgPath, `${JSON.stringify(pkg, null, 2)}\n`);
   sh(npm, ["install", "--package-lock-only", "--ignore-scripts", "--no-audit", "--no-fund"], { shell: process.platform === "win32" });
   sh(npm, ["run", "generate:metadata"], { shell: process.platform === "win32", stdio: ["ignore", "ignore", "inherit"] });
-  git("add", "-A", "package.json", "package-lock.json", "plugin/", "src/", "docs/", "CLAUDE.md", "README.md");
+  git("add", "-A", "package.json", "package-lock.json", "plugin/", "src/", "docs/", ".agents/README.md", "README.md");
   git("commit", "-m", `chore(release): ${version}`);
 }
 

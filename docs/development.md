@@ -115,7 +115,7 @@ docs/                      # Documentation
 
 ## Testing
 
-`CLAUDE.md` at the repo root holds the full test and release workflow. In short:
+The repository agent guide at `.agents/README.md` holds the full test and release workflow. In short:
 
 | Command | What it runs | Editor |
 |---------|--------------|--------|
@@ -199,7 +199,7 @@ A category handler that calls another action in its own category routes that cal
 3. Follow [Handler Conventions](handler-conventions.md) for idempotency and rollback.
 4. Deploy, build, open the editor on `tests/ue_mcp`, then `npm run generate -- --editor`. It records the specs and regenerates everything that depends on them; CI fails while a spec change is not re-recorded.
 
-Every new action needs a behavioural test (see the behavioural coverage gate in `CLAUDE.md`).
+Every new action needs a behavioural test. See the behavioural coverage gate in `.agents/README.md`.
 
 ## C++ plugin notes
 
