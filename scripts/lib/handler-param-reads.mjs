@@ -245,6 +245,26 @@ export function paramReadsInBody(body, bag, sources, bindings = new Map(), depth
   return { keys, opaque };
 }
 
+const savePolicyCache = new WeakMap();
+
+/**
+ * The methods under the save policy (#1910): every name in a
+ * `SavePolicyActions[]` list, which RegisterHandlers hands to
+ * FMCPHandlerRegistry::AdoptSavePolicy. The registry reads their `save` before
+ * the handler runs, so it counts as read without appearing in the body.
+ */
+export function savePolicyMethods(sources = readAllSources()) {
+  if (savePolicyCache.has(sources)) return savePolicyCache.get(sources);
+  const methods = new Set();
+  for (const text of sources.values()) {
+    for (const list of stripComments(text).matchAll(/SavePolicyActions\s*\[\s*\]\s*=\s*\{([^}]*)\}/g)) {
+      for (const name of list[1].matchAll(/TEXT\(\s*"(\w+)"\s*\)/g)) methods.add(name[1]);
+    }
+  }
+  savePolicyCache.set(sources, methods);
+  return methods;
+}
+
 /** The keys one registered bridge method's handler reads, or null when its body is not found. */
 export function handlerParamReads(method, { registrations = readRegistrations(), sources = readAllSources() } = {}) {
   const reg = registrations.get(method);
@@ -254,5 +274,7 @@ export function handlerParamReads(method, { registrations = readRegistrations(),
   const signature = /\(\s*const\s+TSharedPtr<FJsonObject>\s*&\s*(\w+)\s*\)/.exec(
     sources.get(found.file).slice(Math.max(0, found.start - 300), found.start + 1),
   );
-  return { ...paramReadsInBody(found.body, signature ? signature[1] : "Params", sources), file: found.file };
+  const reads = paramReadsInBody(found.body, signature ? signature[1] : "Params", sources);
+  if (savePolicyMethods(sources).has(method)) reads.keys.add("save");
+  return { ...reads, file: found.file };
 }

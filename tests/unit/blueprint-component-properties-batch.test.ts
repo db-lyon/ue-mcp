@@ -75,7 +75,7 @@ describe("blueprint.set_component_properties_batch", () => {
     const schema = actionSchema(blueprintTool, ACTION);
     expect(schema.bridge).toBe(METHOD);
     expect(schema.params.map((param) => param.name).filter((name) => !ROUTING_PARAM_NAMES.includes(name)).sort()).toEqual([
-      "classFilter", "componentName", "directory", "dryRun", "items", "maxBlueprints", "properties", "recursive",
+      "classFilter", "componentName", "directory", "dryRun", "items", "maxBlueprints", "properties", "recursive", "save",
     ]);
     expect(blueprintTool.schema.items.safeParse([{ assetPath: "/Game/BP", componentName: "Combat",
       properties: { Montage: null } }]).success).toBe(true);
