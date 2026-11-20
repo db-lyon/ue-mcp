@@ -49106,14 +49106,21 @@
           "name": "save",
           "type": "boolean",
           "required": false,
-          "description": "Save changed textures (default false; otherwise leave the packages dirty)",
+          "description": "Save changed textures, and materials whose sampler type was fixed (default false; otherwise leave the packages dirty)",
           "default": false
+        },
+        {
+          "name": "fixSamplers",
+          "type": "boolean",
+          "required": false,
+          "description": "Set each material node sampling a changed texture to the sampler type it now needs (default true); the affected materials recompile once either way",
+          "default": true
         },
         {
           "name": "dryRun",
           "type": "boolean",
           "required": false,
-          "description": "Validate and report without importing, writing or saving (default false)",
+          "description": "Validate and report without importing, writing or saving; samplerFixes lists what fixSamplers would change (default false)",
           "default": false
         }
       ],
@@ -49139,6 +49146,13 @@
           "type": "object",
           "required": true,
           "description": "Texture paths per profile: {normal?, grayscale?, baseColor?, hdr?}"
+        },
+        {
+          "name": "fixSamplers",
+          "type": "boolean",
+          "required": false,
+          "description": "Set each material node sampling a changed texture to the sampler type it now needs (default true); the affected materials recompile once either way",
+          "default": true
         }
       ]
     },

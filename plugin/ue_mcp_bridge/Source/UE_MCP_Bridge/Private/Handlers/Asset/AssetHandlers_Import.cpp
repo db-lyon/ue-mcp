@@ -5,6 +5,7 @@
 
 #include "AssetHandlers.h"
 #include "AssetHandlers_TextureSettings.h"
+#include "HandlerTextureSamplers.h"
 #include "../Material/MaterialHandlers.h"
 #include "Materials/MaterialInstance.h"
 #include "AssetRegistry/AssetRegistryModule.h"
@@ -1328,6 +1329,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::SetTextureProperties(const TSharedPtr<FJs
 	const bool bBatch = TryGetArrayParam(Params, TEXT("assetPaths"), Paths);
 	const bool bSave = OptionalBool(Params, TEXT("save"), false);
 	const bool bDryRun = OptionalBool(Params, TEXT("dryRun"), false);
+	const bool bFixSamplers = OptionalBool(Params, TEXT("fixSamplers"), true);
 	TSharedPtr<FJsonObject> Settings;
 	FString Error;
 	if (!AssetTextureSettings::Parse(Params, Settings, Error)) return MCPError(Error);
@@ -1427,6 +1429,42 @@ TSharedPtr<FJsonValue> FAssetHandlers::SetTextureProperties(const TSharedPtr<FJs
 		Result->SetStringField(TEXT("rollbackNote"), TEXT("Restores only the requested settings on each texture, using the same save choice."));
 	}
 	else Result->SetBoolField(TEXT("unchanged"), true);
+
+	// The materials sampling these textures, once for the whole batch (#1994).
+	TArray<UTexture*> Changed;
+	for (UTexture2D* Texture : Textures) Changed.Add(Texture);
+	if (!bDryRun)
+	{
+		MCPTextureSamplers::UpdateMaterialsForTextures(Result, Changed, bFixSamplers, false, bSave);
+		return MCPResult(Result);
+	}
+	// A dry run judges the samplers against the requested settings: the fields the sampler type is read
+	// from are set in memory for the check and put back before anything else can see them.
+	struct FSavedSettings
+	{
+		TEnumAsByte<TextureCompressionSettings> Compression;
+		TEnumAsByte<TextureGroup> LodGroup;
+		bool bSRGB, bNeverStream, bFlipGreen;
+		int32 MaxSize;
+	};
+	TArray<FSavedSettings> Saved;
+	for (UTexture2D* Texture : Textures)
+	{
+		Saved.Add({ Texture->CompressionSettings, Texture->LODGroup, Texture->SRGB != 0, Texture->NeverStream != 0, Texture->bFlipGreenChannel != 0, Texture->MaxTextureSize });
+		AssetTextureSettings::Apply(Texture, Settings);
+	}
+	MCPTextureSamplers::UpdateMaterialsForTextures(Result, Changed, bFixSamplers, true, false);
+	for (int32 Index = 0; Index < Textures.Num(); ++Index)
+	{
+		UTexture2D* Texture = Textures[Index];
+		const FSavedSettings& Was = Saved[Index];
+		Texture->CompressionSettings = Was.Compression;
+		Texture->LODGroup = Was.LodGroup;
+		Texture->SRGB = Was.bSRGB;
+		Texture->NeverStream = Was.bNeverStream;
+		Texture->bFlipGreenChannel = Was.bFlipGreen;
+		Texture->MaxTextureSize = Was.MaxSize;
+	}
 	return MCPResult(Result);
 }
 

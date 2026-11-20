@@ -6770,14 +6770,21 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "save",
         "type": "boolean",
         "required": false,
-        "description": "Save changed textures (default false; otherwise leave the packages dirty)",
+        "description": "Save changed textures, and materials whose sampler type was fixed (default false; otherwise leave the packages dirty)",
         "default": false
+      },
+      {
+        "name": "fixSamplers",
+        "type": "boolean",
+        "required": false,
+        "description": "Set each material node sampling a changed texture to the sampler type it now needs (default true); the affected materials recompile once either way",
+        "default": true
       },
       {
         "name": "dryRun",
         "type": "boolean",
         "required": false,
-        "description": "Validate and report without importing, writing or saving (default false)",
+        "description": "Validate and report without importing, writing or saving; samplerFixes lists what fixSamplers would change (default false)",
         "default": false
       }
     ],
@@ -6803,6 +6810,13 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "object",
         "required": true,
         "description": "Texture paths per profile: {normal?, grayscale?, baseColor?, hdr?}"
+      },
+      {
+        "name": "fixSamplers",
+        "type": "boolean",
+        "required": false,
+        "description": "Set each material node sampling a changed texture to the sampler type it now needs (default true); the affected materials recompile once either way",
+        "default": true
       }
     ]
   },
@@ -7284,7 +7298,7 @@ export const schema: Record<string, z.ZodType> = {
   discardAttributes: z.boolean().optional().describe("Throw away UVs, normals and material IDs so the remesher moves freely (default false)"),
   discardUnsaved: z.boolean().optional().describe("Reload even when a package has unsaved changes, discarding them (default false)"),
   displayName: z.string().optional().describe("Display text for the enumerator (add_value, rename_value)"),
-  dryRun: z.boolean().optional().describe("Run the operation and report the result without writing (default false) (apply_mesh_fracture, apply_mesh_hole_fill, apply_mesh_mirror, apply_mesh_remesh, apply_mesh_simplify, generate_mesh_collision). Preflight and report without writing (default false) (bulk_set_asset_properties, set_mesh_materials_batch, set_mesh_simple_collision). Run the full preflight and report the planned statuses without writing (default false) (bulk_upsert_data_assets). Validate the entire batch and return proposedRows without changes (default false) (clone_datatable_rows). Validate and return proposedValue without changing the asset (default false) (edit_collection_entry). Validate and report without importing, writing or saving (default false) (export_asset, import_skeletal_mesh, import_texture_batch, set_texture_settings). Name every asset and destination without changing anything (default TRUE) (fix_asset_hygiene). Report the redirectors, referencers and packages it would load and save, and stop (default false) (fixup_redirectors). Report without writing (generate_lightmap_uvs, set_uv_channel_count, transform_uvs, unwrap_uvs). Report each mesh's LODs and what would happen without changing anything (generate_skeletal_mesh_lods). Run the boolean and report the counts without writing (default false) (mesh_boolean). Return wouldRemove, missingRowNames and rowCountAfter without changing the table (default false) (remove_datatable_rows). Validate every cell and report what would change without writing (default false) (set_datatable_cells). Validate every LOD and report what would move without writing anything (transform_skinned_part)"),
+  dryRun: z.boolean().optional().describe("Run the operation and report the result without writing (default false) (apply_mesh_fracture, apply_mesh_hole_fill, apply_mesh_mirror, apply_mesh_remesh, apply_mesh_simplify, generate_mesh_collision). Preflight and report without writing (default false) (bulk_set_asset_properties, set_mesh_materials_batch, set_mesh_simple_collision). Run the full preflight and report the planned statuses without writing (default false) (bulk_upsert_data_assets). Validate the entire batch and return proposedRows without changes (default false) (clone_datatable_rows). Validate and return proposedValue without changing the asset (default false) (edit_collection_entry). Validate and report without importing, writing or saving (default false) (export_asset, import_skeletal_mesh, import_texture_batch). Name every asset and destination without changing anything (default TRUE) (fix_asset_hygiene). Report the redirectors, referencers and packages it would load and save, and stop (default false) (fixup_redirectors). Report without writing (generate_lightmap_uvs, set_uv_channel_count, transform_uvs, unwrap_uvs). Report each mesh's LODs and what would happen without changing anything (generate_skeletal_mesh_lods). Run the boolean and report the counts without writing (default false) (mesh_boolean). Return wouldRemove, missingRowNames and rowCountAfter without changing the table (default false) (remove_datatable_rows). Validate every cell and report what would change without writing (default false) (set_datatable_cells). Validate and report without importing, writing or saving; samplerFixes lists what fixSamplers would change (default false) (set_texture_settings). Validate every LOD and report what would move without writing anything (transform_skinned_part)"),
   dumpToFile: z.boolean().optional().describe("Write the geometry JSON to a file instead of returning it (get_mesh_geometry). Stream the complete snapshot to a JSON file instead of a page (default false); omit elementType, elementOffset and pageSize (get_static_mesh_geometry). Write the whole selection to a JSON file and return only the summary (read_skeletal_mesh_vertices)"),
   duplicateMethod: z.string().optional().describe("content (same class, size and saved hash) | name (same name and class in several folders) | both (default)"),
   edgeLength: z.number().optional().describe("Target edge length in centimetres (simplifyMode edgeLength or clusterEdgeLength)"),
@@ -7311,6 +7325,7 @@ export const schema: Record<string, z.ZodType> = {
   fillHoles: z.boolean().optional().describe("Cap each piece where the plane cut it (default true) (apply_mesh_fracture). Close the holes the cut opens (default true) (mesh_boolean)"),
   fillMethod: z.string().optional().describe("Automatic (default) | MinimalFill | PolygonTriangulation | TriangleFan | PlanarProjection"),
   fix: z.string().optional().describe("naming (rename to the convention) | unreferenced (quarantine or delete)"),
+  fixSamplers: z.boolean().optional().describe("Set each material node sampling a changed texture to the sampler type it now needs (default true); the affected materials recompile once either way"),
   flipCutSide: z.boolean().optional().describe("Keep the other side of the plane instead (default false)"),
   flipGreenChannel: z.boolean().optional().describe("Flip the normal green channel; normal preset defaults to false"),
   flipU: z.boolean().optional().describe("Mirror across U"),
@@ -7495,7 +7510,7 @@ export const schema: Record<string, z.ZodType> = {
   rows: z.record(z.string(), z.unknown()).optional().describe("Rows to upsert: {rowName: {field: value}}"),
   rowStruct: z.string().optional().describe("Row struct, e.g. /Script/Module.MyRow or a UserDefinedStruct path (create_datatable). For a .csv: the DataTable row struct the DataTable Options dialog would ask for (default: the row struct of a DataTable already at the destination). An unattended .csv import with neither is refused (import_file)"),
   sampleLimit: z.number().int().optional().describe("Sample asset names per group (default 5, max 25)"),
-  save: z.boolean().optional().describe("Save the asset after the edit (default true) (add_graph_node, connect_graph_pins, disconnect_graph_pins, remove_graph_node). Save the package after the write (default true) (append_asset_array_elements, remove_asset_array_elements, set_asset_property). Save the written asset (default true) (apply_mesh_fracture, apply_mesh_hole_fill, apply_mesh_mirror, apply_mesh_remesh, apply_mesh_simplify, generate_mesh_collision, mesh_boolean). Save the changed packages (default true) (bulk_set_asset_properties, bulk_upsert_data_assets). Save the table after editing (default true) (clone_datatable_rows). Save the new asset (default true) (create_customizable_object). Save the owning package (default true) (create_subobject). Save the package after editing (default true) (edit_collection_entry). Save what changed (default true) (fix_asset_hygiene). Save the repointed referencers (default true); false leaves them dirty in memory and keeps every redirector they reference (fixup_redirectors). Save the mesh (default true) (generate_lightmap_uvs, set_mesh_simple_collision, set_uv_channel_count, transform_uvs, unwrap_uvs). Save each changed mesh (default true) (generate_skeletal_mesh_lods, set_mesh_materials_batch). Save each imported asset and report saved per asset (default true; false leaves them dirty) (import_file). Save all imported assets (default false) (import_skeletal_mesh). Save the table (default true) (import_stringtable_csv). Save changed assets (default true) (import_texture_batch). Save the reimported asset's package (default false: it is left dirty) (reimport_asset). Save after removing rows (default true) (remove_datatable_row, remove_datatable_rows). Save the mesh after the rebuild (default true) (scale_mesh_geometry, set_static_mesh_build_settings, transform_skinned_part). Save the package (default true); false leaves it dirty (set_curve_keys). Save the package after the write (default false) (set_datatable_cells). Save changed textures (default false; otherwise leave the packages dirty) (set_texture_settings)"),
+  save: z.boolean().optional().describe("Save the asset after the edit (default true) (add_graph_node, connect_graph_pins, disconnect_graph_pins, remove_graph_node). Save the package after the write (default true) (append_asset_array_elements, remove_asset_array_elements, set_asset_property). Save the written asset (default true) (apply_mesh_fracture, apply_mesh_hole_fill, apply_mesh_mirror, apply_mesh_remesh, apply_mesh_simplify, generate_mesh_collision, mesh_boolean). Save the changed packages (default true) (bulk_set_asset_properties, bulk_upsert_data_assets). Save the table after editing (default true) (clone_datatable_rows). Save the new asset (default true) (create_customizable_object). Save the owning package (default true) (create_subobject). Save the package after editing (default true) (edit_collection_entry). Save what changed (default true) (fix_asset_hygiene). Save the repointed referencers (default true); false leaves them dirty in memory and keeps every redirector they reference (fixup_redirectors). Save the mesh (default true) (generate_lightmap_uvs, set_mesh_simple_collision, set_uv_channel_count, transform_uvs, unwrap_uvs). Save each changed mesh (default true) (generate_skeletal_mesh_lods, set_mesh_materials_batch). Save each imported asset and report saved per asset (default true; false leaves them dirty) (import_file). Save all imported assets (default false) (import_skeletal_mesh). Save the table (default true) (import_stringtable_csv). Save changed assets (default true) (import_texture_batch). Save the reimported asset's package (default false: it is left dirty) (reimport_asset). Save after removing rows (default true) (remove_datatable_row, remove_datatable_rows). Save the mesh after the rebuild (default true) (scale_mesh_geometry, set_static_mesh_build_settings, transform_skinned_part). Save the package (default true); false leaves it dirty (set_curve_keys). Save the package after the write (default false) (set_datatable_cells). Save changed textures, and materials whose sampler type was fixed (default false; otherwise leave the packages dirty) (set_texture_settings)"),
   saveContentPackages: z.boolean().optional().describe("Include content packages (default true)"),
   saveMapPackages: z.boolean().optional().describe("Include map packages (default true)"),
   scale: z.record(z.string(), z.unknown()).optional().describe("UV-space scale {u, v}; a zero component is refused"),
