@@ -206,7 +206,7 @@ Enhanced Input never sees the cursor, so clicking or hovering a UMG button, navi
 |--------|---------|
 | `replay_analyze` | The lead from a finalized `drift.json`: first divergence, top channels, errors, bracketing images. `frames_over_threshold` is paged by `limit` (default 50) and `offset`, with `frames_over_threshold_total` and `frames_over_threshold_next_offset` |
 | `replay_state` | The exact recorded pawn pose at `at_time` or `at_frame`, interpolated; `apply=true` teleports the live pawn of `pie_instance` and `client_id` to it. On a net client the server's pawn for that player moves too (`applied_on: "server_and_client"`), so the server does not pull it back to its own position |
-| `record_diff` | Compare two recordings without running PIE: position, rotation and velocity deltas plus `tracked_value_max_deltas` |
+| `record_diff` | Compare two recordings without running PIE: position, rotation and velocity deltas plus `tracked_value_max_deltas`. With `align: "auto"` (the default) b's rows are shifted by the offset, up to `max_offset_rows` (30) either way, that best matches the two trajectories, so a replay whose input landed a few frames late is not read as drift. `alignment` reports `offset_rows`, `offset_ms` (positive when b lags a) and the unshifted maximum; `align: "index"` pairs rows by index |
 | `perf_summary` | Frametime avg, p50, p99 and max, game, render and GPU ms, peak memory, and the worst hitches with timestamps; the newest recording when none is named |
 
 ```text

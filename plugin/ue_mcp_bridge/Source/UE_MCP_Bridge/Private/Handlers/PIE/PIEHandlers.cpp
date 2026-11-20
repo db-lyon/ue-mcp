@@ -396,6 +396,9 @@ void FPIEHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("velocity_cms"), EType::Number, TEXT("Velocity drift threshold (default 25)")),
 		MCPParam::Optional(TEXT("tracked_default"), EType::Number, TEXT("Default tracked-value threshold")),
 		MCPParam::Optional(TEXT("tracked_thresholds"), EType::Object, TEXT("Per-path tracked-value thresholds {path: threshold}")),
+		MCPParam::Optional(TEXT("align"), EType::String, TEXT("auto (default) pairs a's rows with b's shifted by the row offset that best matches the two trajectories, so input landing a few frames later is not read as drift; index pairs rows by index. The result's alignment reports the offset")).Enum({
+			TEXT("auto"), TEXT("index") }),
+		MCPParam::Optional(TEXT("max_offset_rows"), EType::Integer, TEXT("align=auto: largest shift tried, in rows either way (default 30)")).Min(0),
 	});
 
 	// Declarative scenarios
