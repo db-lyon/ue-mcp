@@ -6,6 +6,7 @@
 #include "HandlerAssetCreate.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
+#include "Policies/CondensedJsonPrintPolicy.h"
 #include "MaterialDomain.h"
 #include "MaterialShared.h"
 #include "UObject/UObjectIterator.h"
@@ -163,6 +164,14 @@ void FMaterialHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 			MCPParam::OptionalField(TEXT("channels"), EType::Object, TEXT("ComponentMask channels {r,g,b,a} as booleans")),
 			MCPParam::OptionalField(TEXT("texturePath"), EType::String, TEXT("Texture on a TextureSample, TextureSampleParameter2D or TextureObject node")),
 			MCPParam::OptionalField(TEXT("properties"), EType::Object, TEXT("Any other UPROPERTY on the node by name, e.g. {SamplerType: 'Masks', ConstA: 1}")),
+			// #1948: a Custom node whole in one call, applied before the connections.
+			MCPParam::OptionalField(TEXT("code"), EType::String, TEXT("Custom node HLSL body")),
+			MCPParam::OptionalField(TEXT("inputs"), EType::Array, TEXT("Custom node input names, which connections can name as toInput")),
+			MCPParam::OptionalField(TEXT("outputType"), EType::String, TEXT("Custom node return type: float1 | float2 | float3 | float4 | materialAttributes")),
+			MCPParam::OptionalField(TEXT("description"), EType::String, TEXT("Custom node title")),
+			MCPParam::OptionalField(TEXT("additionalOutputs"), EType::Array, TEXT("Custom node extra outputs: names, or {name, type}; connections can name them as fromOutput")),
+			MCPParam::OptionalField(TEXT("additionalDefines"), EType::Array, TEXT("Custom node defines: {name, value} or 'NAME=VALUE'")),
+			MCPParam::OptionalField(TEXT("includeFilePaths"), EType::Array, TEXT("Custom node include files, as virtual shader paths")),
 		});
 	};
 	auto SpecGraphConnections = []()
@@ -348,7 +357,7 @@ void FMaterialHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Required(TEXT("parameterName"), EType::String, TEXT("Parameter to add or edit; added when the collection has no parameter of that name")),
 		MCPParam::Optional(TEXT("newName"), EType::String, TEXT("Rename the parameter; its id is kept, so CollectionParameter nodes stay bound")),
 		MCPParam::Optional(TEXT("type"), EType::String, TEXT("scalar | vector, for a new parameter; inferred from defaultValue when omitted")),
-		MCPParam::Optional(TEXT("defaultValue"), EType::Any, TEXT("A number (scalar) or a colour {r,g,b,a} or [r,g,b,a] (vector)")).Alias(TEXT("value")),
+		MCPParam::Optional(TEXT("defaultValue"), EType::Number, TEXT("A number (scalar) or a colour {r,g,b,a} (vector)")).Or(EType::Object),
 		MCPParam::Optional(TEXT("id"), EType::String, TEXT("Re-add a removed parameter under its old id, as remove_collection_parameter's rollback does")),
 	});
 	Registry.RegisterHandler(TEXT("remove_collection_parameter"), &RemoveCollectionParameter, {
@@ -398,6 +407,9 @@ void FMaterialHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("preserveConnections"), EType::Boolean, TEXT("Carry each wire to the new input of the same name (default true); false disconnects every input")),
 		MCPParam::Optional(TEXT("outputType"), EType::String, TEXT("float1 | float2 | float3 | float4 | materialAttributes (#617)")),
 		MCPParam::Optional(TEXT("description"), EType::String, TEXT("Node description")),
+		MCPParam::Optional(TEXT("additionalOutputs"), EType::Array, TEXT("Extra outputs: names, or {name, type}; replaces the list (#1948)")),
+		MCPParam::Optional(TEXT("additionalDefines"), EType::Array, TEXT("Defines: {name, value} or 'NAME=VALUE'; replaces the list (#1948)")),
+		MCPParam::Optional(TEXT("includeFilePaths"), EType::Array, TEXT("Include files as virtual shader paths; replaces the list (#1948)")).Items(EType::String),
 	}, GraphChoice);
 
 	// Expression graph operations
@@ -4708,7 +4720,8 @@ namespace
 TSharedPtr<FJsonValue> FMaterialHandlers::SetCustomExpression(const TSharedPtr<FJsonObject>& Params)
 {
 	// Read after the graph load and the node lookup.
-	MCPReadParamsAhead(Params, { TEXT("expressionIndex"), TEXT("code"), TEXT("description"), TEXT("outputType"), TEXT("inputs"), TEXT("preserveConnections") });
+	MCPReadParamsAhead(Params, { TEXT("expressionIndex"), TEXT("code"), TEXT("description"), TEXT("outputType"), TEXT("inputs"), TEXT("preserveConnections"),
+		TEXT("additionalOutputs"), TEXT("additionalDefines"), TEXT("includeFilePaths") });
 	// #1138: functionPath targets a Custom node inside a MaterialFunction.
 	FMaterialGraphTarget Target;
 	if (auto Err = ResolveMaterialGraphTarget(Params, Target)) return Err;
@@ -4854,6 +4867,77 @@ TSharedPtr<FJsonValue> FMaterialHandlers::SetCustomExpression(const TSharedPtr<F
 		}
 	}
 
+	// #1948: the rest of a Custom node's spec, written the way a node spec in
+	// build_material_graph writes it. Each one's previous value goes into the rollback.
+	auto DescribeOutputs = [](const UMaterialExpressionCustom* Node)
+	{
+		TArray<TSharedPtr<FJsonValue>> Out;
+		for (const FCustomOutput& O : Node->AdditionalOutputs)
+		{
+			TSharedPtr<FJsonObject> Row = MakeShared<FJsonObject>();
+			Row->SetStringField(TEXT("name"), O.OutputName.ToString());
+			Row->SetStringField(TEXT("type"), CustomOutputTypeName((int32)O.OutputType));
+			Out.Add(MakeShared<FJsonValueObject>(Row));
+		}
+		return Out;
+	};
+	auto DescribeDefines = [](const UMaterialExpressionCustom* Node)
+	{
+		TArray<TSharedPtr<FJsonValue>> Out;
+		for (const FCustomDefine& D : Node->AdditionalDefines)
+		{
+			TSharedPtr<FJsonObject> Row = MakeShared<FJsonObject>();
+			Row->SetStringField(TEXT("name"), D.DefineName);
+			Row->SetStringField(TEXT("value"), D.DefineValue);
+			Out.Add(MakeShared<FJsonValueObject>(Row));
+		}
+		return Out;
+	};
+	auto DescribeIncludes = [](const UMaterialExpressionCustom* Node)
+	{
+		TArray<TSharedPtr<FJsonValue>> Out;
+		for (const FString& P : Node->IncludeFilePaths) Out.Add(MakeShared<FJsonValueString>(P));
+		return Out;
+	};
+	auto SameJson = [](const TArray<TSharedPtr<FJsonValue>>& A, const TArray<TSharedPtr<FJsonValue>>& B)
+	{
+		FString SA, SB;
+		auto WA = TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&SA);
+		FJsonSerializer::Serialize(A, WA);
+		auto WB = TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&SB);
+		FJsonSerializer::Serialize(B, WB);
+		return SA == SB;
+	};
+	const TArray<TSharedPtr<FJsonValue>> PreviousOutputs = DescribeOutputs(Custom);
+	const TArray<TSharedPtr<FJsonValue>> PreviousDefines = DescribeDefines(Custom);
+	const TArray<TSharedPtr<FJsonValue>> PreviousIncludes = DescribeIncludes(Custom);
+	TSharedPtr<FJsonObject> ExtraSpec = MakeShared<FJsonObject>();
+	for (const TCHAR* Key : { TEXT("additionalOutputs"), TEXT("additionalDefines"), TEXT("includeFilePaths") })
+	{
+		const TArray<TSharedPtr<FJsonValue>>* Arr = nullptr;
+		if (TryGetArrayParam(Params, Key, Arr) && Arr) ExtraSpec->SetArrayField(Key, *Arr);
+	}
+	bool bOutputsChanged = false, bDefinesChanged = false, bIncludesChanged = false;
+	if (ExtraSpec->Values.Num() > 0)
+	{
+		const TArray<FCustomOutput> SavedOutputs = Custom->AdditionalOutputs;
+		const TArray<FCustomDefine> SavedDefines = Custom->AdditionalDefines;
+		const TArray<FString> SavedIncludes = Custom->IncludeFilePaths;
+		FString SpecError;
+		if (!ApplyCustomNodeSpec(Custom, ExtraSpec, SpecError))
+		{
+			Custom->AdditionalOutputs = SavedOutputs;
+			Custom->AdditionalDefines = SavedDefines;
+			Custom->IncludeFilePaths = SavedIncludes;
+			Custom->RebuildOutputs();
+			return MCPError(FString::Printf(TEXT("%s. The node's additional outputs, defines and includes are as they were."), *SpecError));
+		}
+		bOutputsChanged = !SameJson(PreviousOutputs, DescribeOutputs(Custom));
+		bDefinesChanged = !SameJson(PreviousDefines, DescribeDefines(Custom));
+		bIncludesChanged = !SameJson(PreviousIncludes, DescribeIncludes(Custom));
+		bChanged |= bOutputsChanged || bDefinesChanged || bIncludesChanged;
+	}
+
 	bool bSaved = true;
 	FString SaveError;
 	if (bChanged)
@@ -4886,6 +4970,9 @@ TSharedPtr<FJsonValue> FMaterialHandlers::SetCustomExpression(const TSharedPtr<F
 		InNames.Add(MakeShared<FJsonValueString>(CI.InputName.ToString()));
 	}
 	Result->SetArrayField(TEXT("inputs"), InNames);
+	Result->SetArrayField(TEXT("additionalOutputs"), DescribeOutputs(Custom));
+	Result->SetArrayField(TEXT("additionalDefines"), DescribeDefines(Custom));
+	Result->SetArrayField(TEXT("includeFilePaths"), DescribeIncludes(Custom));
 	if (InputsArr)
 	{
 		Result->SetArrayField(TEXT("keptConnections"), KeptConnections);
@@ -4910,6 +4997,9 @@ TSharedPtr<FJsonValue> FMaterialHandlers::SetCustomExpression(const TSharedPtr<F
 		{
 			Payload->SetArrayField(TEXT("inputs"), PreviousInputNames);
 		}
+		if (bOutputsChanged) Payload->SetArrayField(TEXT("additionalOutputs"), PreviousOutputs);
+		if (bDefinesChanged) Payload->SetArrayField(TEXT("additionalDefines"), PreviousDefines);
+		if (bIncludesChanged) Payload->SetArrayField(TEXT("includeFilePaths"), PreviousIncludes);
 		MCPSetRollback(Result, TEXT("set_custom_expression"), Payload);
 
 		// A wire that survived under its name comes back with the rollback,

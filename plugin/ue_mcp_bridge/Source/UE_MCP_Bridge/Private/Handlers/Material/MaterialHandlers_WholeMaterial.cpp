@@ -23,6 +23,7 @@
 #include "Materials/MaterialExpressionMultiply.h"
 #include "Materials/MaterialExpressionCustomOutput.h"
 #include "Materials/MaterialExpressionNamedReroute.h"
+#include "Materials/MaterialExpressionCustom.h"
 #include "MaterialEditingLibrary.h"
 #include "Factories/MaterialFactoryNew.h"
 #include "AssetToolsModule.h"
@@ -487,6 +488,165 @@ bool FMaterialHandlers::ApplyExpressionProperties(UMaterialExpression* Expressio
 }
 
 
+bool FMaterialHandlers::ParseCustomOutputType(const FString& Text, int32& OutTypeValue)
+{
+	ECustomMaterialOutputType OutType = CMOT_Float1;
+	const FString L = Text.ToLower();
+	if (L == TEXT("float1") || L == TEXT("cmot_float1")) OutType = CMOT_Float1;
+	else if (L == TEXT("float2") || L == TEXT("cmot_float2")) OutType = CMOT_Float2;
+	else if (L == TEXT("float3") || L == TEXT("cmot_float3")) OutType = CMOT_Float3;
+	else if (L == TEXT("float4") || L == TEXT("cmot_float4")) OutType = CMOT_Float4;
+	else if (L.Contains(TEXT("materialattributes"))) OutType = CMOT_MaterialAttributes;
+	else return false;
+	OutTypeValue = (int32)OutType;
+	return true;
+}
+
+FString FMaterialHandlers::CustomOutputTypeName(int32 TypeValue)
+{
+	switch ((ECustomMaterialOutputType)TypeValue)
+	{
+	case CMOT_Float1: return TEXT("float1");
+	case CMOT_Float2: return TEXT("float2");
+	case CMOT_Float3: return TEXT("float3");
+	case CMOT_Float4: return TEXT("float4");
+	case CMOT_MaterialAttributes: return TEXT("materialattributes");
+	default: return FString();
+	}
+}
+
+const TArray<FString>& FMaterialHandlers::CustomNodeSpecKeys()
+{
+	static const TArray<FString> Keys = {
+		TEXT("code"), TEXT("inputs"), TEXT("outputType"), TEXT("additionalOutputs"), TEXT("additionalDefines"), TEXT("includeFilePaths"),
+	};
+	return Keys;
+}
+
+bool FMaterialHandlers::ApplyCustomNodeSpec(UMaterialExpressionCustom* Custom, const TSharedPtr<FJsonObject>& Spec, FString& OutError)
+{
+	if (!Custom || !Spec.IsValid()) return true;
+	// An entry is a bare name or an object carrying one under name (or the
+	// engine's own field name).
+	auto EntryName = [](const TSharedPtr<FJsonValue>& V, const TCHAR* EngineKey, FString& Out) -> TSharedPtr<FJsonObject>
+	{
+		Out.Reset();
+		if (!V.IsValid()) return nullptr;
+		if (V->TryGetString(Out)) return nullptr;
+		const TSharedPtr<FJsonObject>* Obj = nullptr;
+		if (V->TryGetObject(Obj) && Obj && (*Obj).IsValid())
+		{
+			if (!(*Obj)->TryGetStringField(TEXT("name"), Out)) (*Obj)->TryGetStringField(EngineKey, Out);
+			return *Obj;
+		}
+		return nullptr;
+	};
+
+	Custom->Modify();
+	TArray<FName> Changed;
+	FString Text;
+	if (Spec->TryGetStringField(TEXT("code"), Text)) { Custom->Code = Text; Changed.Add(TEXT("Code")); }
+	if (Spec->TryGetStringField(TEXT("description"), Text)) { Custom->Description = Text; Changed.Add(TEXT("Description")); }
+	if (Spec->TryGetStringField(TEXT("outputType"), Text))
+	{
+		int32 Type = 0;
+		if (!ParseCustomOutputType(Text, Type))
+		{
+			OutError = FString::Printf(TEXT("outputType '%s' is not float1, float2, float3, float4 or materialAttributes"), *Text);
+			return false;
+		}
+		Custom->OutputType = (ECustomMaterialOutputType)Type;
+		Changed.Add(TEXT("OutputType"));
+	}
+	const TArray<TSharedPtr<FJsonValue>>* Arr = nullptr;
+	if (Spec->TryGetArrayField(TEXT("inputs"), Arr))
+	{
+		TArray<FCustomInput> Inputs;
+		for (int32 i = 0; i < Arr->Num(); ++i)
+		{
+			FString Name;
+			EntryName((*Arr)[i], TEXT("InputName"), Name);
+			if (Name.IsEmpty()) { OutError = FString::Printf(TEXT("inputs[%d] needs a name"), i); return false; }
+			FCustomInput& In = Inputs.AddDefaulted_GetRef();
+			In.InputName = FName(*Name);
+		}
+		Custom->Inputs = MoveTemp(Inputs);
+		Changed.Add(TEXT("Inputs"));
+	}
+	if (Spec->TryGetArrayField(TEXT("additionalOutputs"), Arr))
+	{
+		TArray<FCustomOutput> Outputs;
+		for (int32 i = 0; i < Arr->Num(); ++i)
+		{
+			FString Name;
+			const TSharedPtr<FJsonObject> Obj = EntryName((*Arr)[i], TEXT("OutputName"), Name);
+			if (Name.IsEmpty()) { OutError = FString::Printf(TEXT("additionalOutputs[%d] needs a name"), i); return false; }
+			FCustomOutput& Out = Outputs.AddDefaulted_GetRef();
+			Out.OutputName = FName(*Name);
+			int32 Type = (int32)CMOT_Float1;
+			FString TypeText;
+			if (Obj.IsValid() && (Obj->TryGetStringField(TEXT("type"), TypeText) || Obj->TryGetStringField(TEXT("OutputType"), TypeText)))
+			{
+				if (!ParseCustomOutputType(TypeText, Type))
+				{
+					OutError = FString::Printf(TEXT("additionalOutputs[%d] type '%s' is not float1, float2, float3, float4 or materialAttributes"), i, *TypeText);
+					return false;
+				}
+			}
+			Out.OutputType = (ECustomMaterialOutputType)Type;
+		}
+		Custom->AdditionalOutputs = MoveTemp(Outputs);
+		Changed.Add(TEXT("AdditionalOutputs"));
+	}
+	if (Spec->TryGetArrayField(TEXT("additionalDefines"), Arr))
+	{
+		TArray<FCustomDefine> Defines;
+		for (int32 i = 0; i < Arr->Num(); ++i)
+		{
+			FString Name, Value;
+			const TSharedPtr<FJsonObject> Obj = EntryName((*Arr)[i], TEXT("DefineName"), Name);
+			if (Obj.IsValid())
+			{
+				if (!Obj->TryGetStringField(TEXT("value"), Value)) Obj->TryGetStringField(TEXT("DefineValue"), Value);
+			}
+			else if (Name.Split(TEXT("="), &Name, &Value)) {}
+			if (Name.IsEmpty()) { OutError = FString::Printf(TEXT("additionalDefines[%d] needs a name ({name, value} or 'NAME=VALUE')"), i); return false; }
+			FCustomDefine& Define = Defines.AddDefaulted_GetRef();
+			Define.DefineName = Name;
+			Define.DefineValue = Value;
+		}
+		Custom->AdditionalDefines = MoveTemp(Defines);
+		Changed.Add(TEXT("AdditionalDefines"));
+	}
+	if (Spec->TryGetArrayField(TEXT("includeFilePaths"), Arr))
+	{
+		TArray<FString> Paths;
+		for (int32 i = 0; i < Arr->Num(); ++i)
+		{
+			FString Path;
+			if (!(*Arr)[i].IsValid() || !(*Arr)[i]->TryGetString(Path) || Path.IsEmpty())
+			{
+				OutError = FString::Printf(TEXT("includeFilePaths[%d] must be a virtual shader path such as /Project/Shaders/Grade.ush"), i);
+				return false;
+			}
+			Paths.Add(Path);
+		}
+		Custom->IncludeFilePaths = MoveTemp(Paths);
+		Changed.Add(TEXT("IncludeFilePaths"));
+	}
+
+	// The node's own notification strips spaces from input names, rebuilds its
+	// outputs from AdditionalOutputs and reconstructs an open editor's pins.
+	for (const FName& Name : Changed)
+	{
+		FProperty* Prop = UMaterialExpressionCustom::StaticClass()->FindPropertyByName(Name);
+		FPropertyChangedEvent Event(Prop, EPropertyChangeType::ValueSet);
+		Custom->PostEditChangeProperty(Event);
+	}
+	return true;
+}
+
+
 TSharedPtr<FJsonValue> FMaterialHandlers::BuildMaterialGraph(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath;
@@ -556,6 +716,16 @@ TSharedPtr<FJsonValue> FMaterialHandlers::BuildMaterialGraph(const TSharedPtr<FJ
 		{
 			return MCPError(FString::Printf(TEXT("nodes[%d] '%s': unknown expression class '%s' (list_expression_types lists them)"), i, *Name, *ClassName));
 		}
+		if (!Cls->IsChildOf(UMaterialExpressionCustom::StaticClass()))
+		{
+			for (const FString& Key : CustomNodeSpecKeys())
+			{
+				if ((*NodeObj)->HasField(Key))
+				{
+					return MCPError(FString::Printf(TEXT("nodes[%d] '%s': %s applies to a Custom node, and this one is %s"), i, *Name, *Key, *Cls->GetName()));
+				}
+			}
+		}
 		SpecNames.Add(Name);
 		Specs.Add({ Name, Cls, *NodeObj });
 	}
@@ -598,6 +768,16 @@ TSharedPtr<FJsonValue> FMaterialHandlers::BuildMaterialGraph(const TSharedPtr<FJ
 		// The node name becomes its description, so later calls can address it by that name.
 		ApplyExpressionSpec(Expr, Spec.Obj);
 		if (Expr->Desc.IsEmpty()) Expr->Desc = Spec.Name;
+
+		// #1948: before this call's connections, so they can wire the inputs by name.
+		if (UMaterialExpressionCustom* Custom = Cast<UMaterialExpressionCustom>(Expr))
+		{
+			FString CustomError;
+			if (!ApplyCustomNodeSpec(Custom, Spec.Obj, CustomError))
+			{
+				return Abort(FString::Printf(TEXT("Node '%s': %s."), *Spec.Name, *CustomError));
+			}
+		}
 
 		FString TexturePath;
 		if (Spec.Obj->TryGetStringField(TEXT("texturePath"), TexturePath) && !TexturePath.IsEmpty())

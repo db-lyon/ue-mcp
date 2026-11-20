@@ -9,6 +9,8 @@
  * - Collection parameters are added, renamed and removed by name, and each
  *   keeps the id its readers bind to, through set_property as well (#1950).
  * - set_custom_expression carries each wire to the input of the same name (#1907).
+ * - A Custom node's whole spec goes on its build_material_graph node, applied
+ *   before that call's connections (#1948).
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { closeLiveBridges, liveBridge, liveTarget } from "./harness.js";
@@ -19,7 +21,8 @@ const DIR = "/Game/MCP_LiveMaterialAuthoring";
 const MPC = `${DIR}/MPC_Chain`;
 const M_MPC = `${DIR}/M_ChainMpc`;
 const M_CUSTOM = `${DIR}/M_ChainCustom`;
-const ALL_ASSETS = [M_CUSTOM, M_MPC, MPC];
+const M_CUSTOM_BUILD = `${DIR}/M_ChainCustomBuild`;
+const ALL_ASSETS = [M_CUSTOM_BUILD, M_CUSTOM, M_MPC, MPC];
 
 type Json = Record<string, unknown>;
 type MpcParam = { name: string; id: string; defaultValue: unknown };
@@ -57,6 +60,7 @@ beforeAll(async () => {
   await call("set_asset_property", { assetPath: MPC, propertyName: "ScalarParameters", value: [{ ParameterName: "Amount", DefaultValue: 0 }] });
   await call("create_material", { name: "M_ChainMpc", packagePath: DIR });
   await call("create_material", { name: "M_ChainCustom", packagePath: DIR });
+  await call("create_material", { name: "M_ChainCustomBuild", packagePath: DIR });
 }, 180_000);
 
 afterAll(async () => {
@@ -180,4 +184,59 @@ describe("set_custom_expression keeps wires by input name (#1907)", () => {
     expect((wiped.disconnectedInputs as Json[]).map((d) => d.input)).toEqual(["A"]);
     expect((await customInputs(M_CUSTOM, mix.expressionIndex))[0].connectedExpressionIndex ?? -1).toBe(-1);
   }, 180_000);
+});
+
+describe("a Custom node is built whole in one call (#1948)", () => {
+  it("build_material_graph sets code, inputs, outputs, defines and includes before wiring by input name", async () => {
+    const built = await call("build_material_graph", {
+      assetPath: M_CUSTOM_BUILD,
+      nodes: [
+        { name: "Base", class: "Constant3Vector", value: { r: 0.2, g: 0.4, b: 0.6 } },
+        { name: "Gain", class: "Constant", value: 2 },
+        {
+          name: "Grade", class: "Custom",
+          code: "Extra = InColor.r;\nreturn InColor * Amount * GRADE_SCALE;",
+          description: "Grade", outputType: "float3",
+          inputs: ["InColor", { name: "Amount" }],
+          additionalOutputs: [{ name: "Extra", type: "float1" }],
+          additionalDefines: [{ name: "GRADE_SCALE", value: "1.0" }, "GRADE_MODE=2"],
+          includeFilePaths: ["/Engine/Private/Common.ush"],
+        },
+        { name: "Mask", class: "Multiply" },
+      ],
+      connections: [
+        { from: "Base", to: "Grade", toInput: "InColor" },
+        { from: "Gain", to: "Grade", toInput: "Amount" },
+        { from: "Grade", fromOutput: "Extra", to: "Mask", toInput: "A" },
+      ],
+      propertyConnections: [{ property: "EmissiveColor", from: "Grade" }],
+    });
+    expect(built.wiresMade).toBe(3);
+    const grade = (built.nodes as Array<{ name: string; expressionIndex: number }>).find((n) => n.name === "Grade")!;
+
+    const read = await call("set_custom_expression", { materialPath: M_CUSTOM_BUILD, expressionIndex: grade.expressionIndex });
+    expect(read.unchanged).toBe(true);
+    expect(read.code).toContain("GRADE_SCALE");
+    expect(read.description).toBe("Grade");
+    expect(read.inputs).toEqual(["InColor", "Amount"]);
+    expect(read.additionalOutputs).toEqual([{ name: "Extra", type: "float1" }]);
+    expect(read.additionalDefines).toEqual([{ name: "GRADE_SCALE", value: "1.0" }, { name: "GRADE_MODE", value: "2" }]);
+    expect(read.includeFilePaths).toEqual(["/Engine/Private/Common.ush"]);
+    const inputs = await customInputs(M_CUSTOM_BUILD, grade.expressionIndex);
+    expect(inputs.every((i) => typeof i.connectedExpressionIndex === "number" && i.connectedExpressionIndex >= 0)).toBe(true);
+
+    const edited = await call("set_custom_expression", {
+      materialPath: M_CUSTOM_BUILD, expressionIndex: grade.expressionIndex, includeFilePaths: [], additionalDefines: ["GRADE_SCALE=0.5"],
+    });
+    expect(edited.includeFilePaths).toEqual([]);
+    expect(((edited.rollback as Json).payload as Json).includeFilePaths).toEqual(["/Engine/Private/Common.ush"]);
+  }, 180_000);
+
+  it("refuses Custom fields on a node of another class before anything is built", async () => {
+    const refused = await attempt("build_material_graph", {
+      assetPath: M_CUSTOM_BUILD, nodes: [{ name: "NotCustom", class: "Multiply", code: "return 1;" }],
+    });
+    expect(refused.success).toBe(false);
+    expect(String(refused.error)).toContain("code applies to a Custom node");
+  }, 120_000);
 });

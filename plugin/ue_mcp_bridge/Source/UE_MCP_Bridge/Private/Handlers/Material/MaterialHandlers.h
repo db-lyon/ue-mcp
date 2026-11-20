@@ -191,6 +191,14 @@ private:
 	// Any UPROPERTY on the node by name (ConstB, ConstY, ConstExponent), for
 	// add_material_expression and build_material_graph's properties map (#1461).
 	static bool ApplyExpressionProperties(UMaterialExpression* Expression, const TSharedPtr<FJsonObject>& Properties, FString& OutError);
+	// #1948: a Custom node's code, description, outputType, inputs,
+	// additionalOutputs, additionalDefines and includeFilePaths from a node
+	// spec, each applied through the node's PostEditChangeProperty.
+	static bool ApplyCustomNodeSpec(class UMaterialExpressionCustom* Custom, const TSharedPtr<FJsonObject>& Spec, FString& OutError);
+	static const TArray<FString>& CustomNodeSpecKeys();
+	// float1..float4 | materialAttributes, as an ECustomMaterialOutputType value.
+	static bool ParseCustomOutputType(const FString& Text, int32& OutType);
+	static FString CustomOutputTypeName(int32 Type);
 	static bool ResolveExpressionInputIndex(UMaterialExpression* Expression, const FString& Pin, int32& OutIndex, FString& OutError);
 	static bool ResolveExpressionOutputIndex(UMaterialExpression* Expression, const FString& Pin, int32& OutIndex, FString& OutError);
 
