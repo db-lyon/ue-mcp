@@ -15,6 +15,7 @@
  * checkout's tests/ue_mcp.
  */
 import { execFileSync } from "node:child_process";
+import { powershellEnv } from "./lib/powershell-env.mjs";
 import { askOnce, extractReportedProjectDir, isProcessAlive, isTestProjectDir, normalizeProjectRoot, PROJECT_IDENTITY_PYTHON, readPortLockfile, TEST_PROJECT_UPROJECT } from "./bridge-target.mjs";
 
 const lock = readPortLockfile();
@@ -27,7 +28,7 @@ if (!lock.pidAlive || !lock.port) {
 function opensTestProject(pid) {
   if (process.platform !== "win32") return false;
   try {
-    const line = execFileSync("powershell", ["-NoProfile", "-Command", `(Get-CimInstance Win32_Process -Filter "ProcessId = ${Number(pid)}").CommandLine`], { encoding: "utf8" });
+    const line = execFileSync("powershell", ["-NoProfile", "-Command", `(Get-CimInstance Win32_Process -Filter "ProcessId = ${Number(pid)}").CommandLine`], { encoding: "utf8", env: powershellEnv() });
     return normalizeProjectRoot(line.replace(/"/g, "")).includes(normalizeProjectRoot(TEST_PROJECT_UPROJECT));
   } catch {
     return false;
