@@ -244,4 +244,52 @@ bool FMCPBridgeSessionTokenDirectoryTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FMCPBridgeSessionTokenRedactionTest,
+	"UE.MCP.Bridge.SessionToken.Redaction",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMCPBridgeSessionTokenRedactionTest::RunTest(const FString& Parameters)
+{
+	using namespace UEMCPBridgeSessionToken;
+
+	// The upgrade request the handshake used to log verbatim (#1866).
+	const FString Token = MCPSessionTokenTest_Repeat(TEXT('f'), 64);
+	const FString Request =
+		TEXT("GET / HTTP/1.1\r\n")
+		TEXT("Sec-WebSocket-Version: 13\r\n")
+		TEXT("Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n")
+		TEXT("Connection: Upgrade\r\n")
+		TEXT("Upgrade: websocket\r\n")
+		TEXT("authorization: Bearer ") + Token + TEXT("\r\n")
+		TEXT("X-UE-MCP-Token: ") + Token + TEXT("\r\n")
+		TEXT("Host: 127.0.0.1:9877\r\n\r\n");
+	const FString Redacted = RedactCredentials(Request);
+	TestFalse(TEXT("the token is gone from the request"), Redacted.Contains(Token));
+	TestTrue(TEXT("the scheme stays, so the log still says a token was sent"), Redacted.Contains(TEXT("authorization: Bearer [REDACTED]\r\n")));
+	TestTrue(TEXT("a token header keeps its name"), Redacted.Contains(TEXT("X-UE-MCP-Token: [REDACTED]\r\n")));
+	TestTrue(TEXT("other headers are untouched"), Redacted.Contains(TEXT("Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n")));
+	TestTrue(TEXT("the request still ends with its blank line"), Redacted.EndsWith(TEXT("\r\n\r\n")));
+
+	// A request cut off part way through the token, as the 200-character dump does.
+	TestFalse(TEXT("a truncated header value is still redacted"),
+		RedactCredentials(TEXT("GET / HTTP/1.1\r\nAuthorization: Bearer ") + Token.Left(20)).Contains(Token.Left(20)));
+
+	TestEqual(TEXT("a bearer credential outside a header"),
+		RedactCredentials(TEXT("sent Bearer ") + Token + TEXT(" to the bridge")), FString(TEXT("sent Bearer [REDACTED] to the bridge")));
+	TestEqual(TEXT("a token in a query string"),
+		RedactCredentials(TEXT("GET /?token=") + Token + TEXT("&x=1 HTTP/1.1")), FString(TEXT("GET /?token=[REDACTED]&x=1 HTTP/1.1")));
+	TestEqual(TEXT("a JSON access_token"),
+		RedactCredentials(TEXT("{\"access_token\": \"") + Token + TEXT("\"}")), FString(TEXT("{\"access_token\": \"[REDACTED]\"}")));
+
+	TestEqual(TEXT("usage text naming the shape is left alone"),
+		RedactCredentials(TEXT("The Authorization header must be 'Bearer <session token>'.")),
+		FString(TEXT("The Authorization header must be 'Bearer <session token>'.")));
+	TestEqual(TEXT("a line with no credential is unchanged"),
+		RedactCredentials(TEXT("[UE-MCP] Session token published to C:/Users/x/.ue-mcp/bridge/9877.token")),
+		FString(TEXT("[UE-MCP] Session token published to C:/Users/x/.ue-mcp/bridge/9877.token")));
+	TestEqual(TEXT("redaction is idempotent"), RedactCredentials(Redacted), Redacted);
+	return true;
+}
+
 #endif

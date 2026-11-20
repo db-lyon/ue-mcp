@@ -118,7 +118,8 @@ const BASELINE = {
   // inventing an `unchanged` flag about somebody else's code.
   mutationsWithoutIdempotency: 0,
   // 23: pie_start_ignoring_blueprint_errors, split out of pie_control (#1057).
-  orphanedHandlers: 23,
+  // 24: restore_texture_import, the inverse of a replacing import_texture_batch (#1860).
+  orphanedHandlers: 24,
 };
 
 /**
@@ -134,6 +135,8 @@ const KNOWN_ORPHANS: Record<string, string> = {
   // These two carry the same reasons as tests/unit/drift.test.ts's CPP_ONLY.
   bulk_restore_data_assets:
     "Inverse of bulk_upsert_data_assets, reached only through the rollback descriptor that call emits.",
+  restore_texture_import:
+    "Inverse of import_texture_batch when it replaced textures, reached only through the rollback descriptor that call emits (#1860).",
   migrate:
     "asset(migrate) is a TS handler that resolves the destination editor and rescans its registry, "
     + "so it calls this from code rather than declaring it as an action's bridge.",

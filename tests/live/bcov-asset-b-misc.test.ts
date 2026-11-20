@@ -27,6 +27,12 @@ const ONE_PIXEL_PNG = Buffer.from(
   "base64",
 );
 
+/** A 2x2 PNG, so a replace is visible in the texture's size. */
+const TWO_PIXEL_PNG = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAADklEQVR4nGP4DwUMMAYAj4IP8TylVlEAAAAASUVORK5CYII=",
+  "base64",
+);
+
 type Json = Record<string, unknown>;
 type Row = { path: string; name: string; className?: string; class?: string };
 const body = (r: TestResult): Json => (r.result && typeof r.result === "object" ? (r.result as Json) : {});
@@ -97,6 +103,45 @@ describe("textures", () => {
     expect(await exists(`${DIR}/T_BCovB_BatchA`)).toBe(true);
     expect(await exists(`${DIR}/T_BCovB_BatchB`)).toBe(true);
   }, 180_000);
+
+  it("import_texture_batch over a saved texture reports a replace, and restore_texture_import puts the original back", async () => {
+    // #1860: a replace was reported as a create, and its rollback deleted the texture it had overwritten.
+    const name = "T_BCovB_Replace";
+    const path = `${DIR}/${name}`;
+    const first = await call("import_texture_batch", { items: [{ filePath: png("bcov_replace_1x1.png"), packagePath: DIR, name }], save: true });
+    expect(first.created).toBe(true);
+    expect((await textureInfo(path)).sizeX).toBe(1);
+
+    const twoByTwo = join(scratch, "bcov_replace_2x2.png");
+    writeFileSync(twoByTwo, TWO_PIXEL_PNG);
+    const replaced = await call("import_texture_batch", {
+      items: [
+        { filePath: twoByTwo, packagePath: DIR, name, replaceExisting: true },
+        { filePath: png("bcov_replace_new.png"), packagePath: DIR, name: "T_BCovB_ReplaceNew" },
+      ],
+      save: true,
+    });
+    const rows = replaced.items as Json[];
+    expect(rows[0]).toMatchObject({ replacedExisting: true, existed: true, created: false });
+    expect(rows[1]).toMatchObject({ replacedExisting: false, existed: false, created: true });
+    expect(replaced).toMatchObject({ replacedCount: 1, createdCount: 1, updated: true });
+    expect((await textureInfo(path)).sizeX).toBe(2);
+
+    const rollback = replaced.rollback as { method: string; payload: Json };
+    expect(rollback.method).toBe("restore_texture_import");
+    expect((rollback.payload.createdAssetPaths as string[]).some((p) => p.includes(`/${name}.`))).toBe(false);
+    const restored = await call("restore_texture_import", rollback.payload);
+    expect(restored.restoredCount).toBe(1);
+    expect(restored.deletedCount).toBe(1);
+    expect(await exists(path)).toBe(true);
+    expect((await textureInfo(path)).sizeX).toBe(1);
+    expect(await exists(`${DIR}/T_BCovB_ReplaceNew`)).toBe(false);
+
+    // A batch that only replaces reports existed, not created.
+    const onlyReplace = await call("import_texture_batch", { items: [{ filePath: twoByTwo, packagePath: DIR, name }], save: true });
+    expect(onlyReplace).toMatchObject({ existed: true, created: false, updated: true, replacedExisting: true });
+    expect((onlyReplace.rollback as { method: string }).method).toBe("restore_texture_import");
+  }, 240_000);
 
   it("set_texture_settings writes the settings get_texture_info reports", async () => {
     await call("set_texture_settings", { assetPath: TEX, compressionSettings: "Grayscale", lodGroup: "UI", sRGB: false, neverStream: true });
