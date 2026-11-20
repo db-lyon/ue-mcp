@@ -20,6 +20,7 @@ import { askOnce, extractReportedProjectDir, normalizeProjectRoot, PROJECT_IDENT
 import { resolveTestEngine } from "./build-utils.js";
 import { TEST_EDITOR_ARGS } from "./test-editor-args.mjs";
 import { guardUserLayouts } from "./user-layout-guard.mjs";
+import { powershellEnv } from "./lib/powershell-env.mjs";
 import {
   KIND_FLAGS, EDITOR_PEAK_MB, KEEP_IN_SHARD, liveFiles, planFixedShards, poolQueue, poolWantsEditor, nextLaunch, nextBatch, POOL_EDITOR_WORK_MS, POOL_MIN_SHARE_MS, mirror, buildOutputFilter,
   timingFromReports, overBudget, runVerdict, slowest, headroomMB, editorFits, launchOrder, splitAtDeath, undeployedSources, deathOf, awaitEditorStartup,
@@ -47,7 +48,7 @@ function editorPidsFor(projectDir) {
   if (process.platform !== "win32") return [];
   const out = execFileSync("powershell", ["-NoProfile", "-Command",
     "Get-CimInstance Win32_Process -Filter \"Name like 'UnrealEditor%'\" | ForEach-Object { \"$($_.ProcessId)|$($_.CommandLine)\" }"],
-  { encoding: "utf8" });
+  { encoding: "utf8", env: powershellEnv() });
   const needle = normalizeProjectRoot(path.join(projectDir, "ue_mcp.uproject"));
   return out.split(/\r?\n/).filter(Boolean).flatMap((line) => {
     const [pid, ...rest] = line.split("|");
@@ -60,7 +61,7 @@ export function processMemoryMB(pid) {
   if (process.platform !== "win32") return null;
   try {
     const out = execFileSync("powershell", ["-NoProfile", "-Command",
-      `$p = Get-Process -Id ${pid}; "$($p.WorkingSet64) $($p.PrivateMemorySize64) $($p.PeakWorkingSet64)"`], { encoding: "utf8" }).trim();
+      `$p = Get-Process -Id ${pid}; "$($p.WorkingSet64) $($p.PrivateMemorySize64) $($p.PeakWorkingSet64)"`], { encoding: "utf8", env: powershellEnv() }).trim();
     const [ws, priv, peak] = out.split(" ").map((n) => Math.round(Number(n) / MB));
     return { workingSetMB: ws, privateMB: priv, peakWorkingSetMB: peak };
   } catch {

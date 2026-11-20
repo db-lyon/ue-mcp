@@ -26,6 +26,7 @@ import { spawn, execFile, type ChildProcess } from "node:child_process";
 import { promisify } from "node:util";
 import * as log from "../core/log.js";
 import { readEnv } from "../core/env.js";
+import { powershellEnv } from "../core/powershell-env.js";
 import { extractProjectPath, sameProjectFile } from "./engine-observer.js";
 
 const execFileAsync = promisify(execFile);
@@ -500,7 +501,7 @@ export class NativeDialogWatcher {
       child = spawn(
         "powershell.exe",
         ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-EncodedCommand", encoded(watchScript(process.pid, this.intervalMs, this.processNames))],
-        { windowsHide: true, stdio: ["ignore", "pipe", "ignore"] },
+        { windowsHide: true, stdio: ["ignore", "pipe", "ignore"], env: powershellEnv() },
       );
     } catch (e) {
       log.debug("native-dialogs", "could not start the window scan", e);
@@ -637,7 +638,7 @@ export async function pressNativeDialog(
     const { stdout } = await execFileAsync(
       "powershell.exe",
       ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-EncodedCommand", encoded(pressScript(listed.hwnd, listed.pid, button, opts.waitMs ?? 5000))],
-      { timeout: 30_000, windowsHide: true },
+      { timeout: 30_000, windowsHide: true, env: powershellEnv() },
     );
     const code = Number(stdout.trim().split(/\r?\n/).pop());
     const result = PRESS_CODES[code] ?? { pressed: false, closed: false, error: `The press script answered ${JSON.stringify(stdout.trim())}.` };

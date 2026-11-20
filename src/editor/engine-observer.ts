@@ -26,6 +26,7 @@ import * as path from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import * as log from "../core/log.js";
+import { powershellEnv } from "../core/powershell-env.js";
 import { bridgeStateDir, STATE_FILES } from "../bridge/wire-contract.js";
 
 const execFileAsync = promisify(execFile);
@@ -37,7 +38,7 @@ async function powershell(script: string, timeoutMs: number): Promise<string> {
   const { stdout } = await execFileAsync(
     "powershell.exe",
     ["-NoProfile", "-NonInteractive", "-EncodedCommand", encoded],
-    { timeout: timeoutMs, maxBuffer: 4 * 1024 * 1024, windowsHide: true },
+    { timeout: timeoutMs, maxBuffer: 4 * 1024 * 1024, windowsHide: true, env: powershellEnv() },
   );
   return stdout;
 }
