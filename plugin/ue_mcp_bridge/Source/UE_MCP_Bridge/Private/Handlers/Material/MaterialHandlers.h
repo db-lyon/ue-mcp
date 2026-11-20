@@ -65,6 +65,9 @@ private:
 	static TSharedPtr<FJsonValue> ReadComponentMaterial(const TSharedPtr<FJsonObject>& Params);
 	// #1116: MPC defaults, plus live values from a world's collection instance.
 	static TSharedPtr<FJsonValue> ReadMaterialParameterCollection(const TSharedPtr<FJsonObject>& Params);
+	// #1950: edit collection parameters by name, keeping each parameter's Id.
+	static TSharedPtr<FJsonValue> SetCollectionParameter(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> RemoveCollectionParameter(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SetMaterialInstanceParent(const TSharedPtr<FJsonObject>& Params);
 	// #594 batch reparent + reassign params across many Material Instances
 	static TSharedPtr<FJsonValue> BatchSetInstances(const TSharedPtr<FJsonObject>& Params);
@@ -188,6 +191,25 @@ private:
 	// Any UPROPERTY on the node by name (ConstB, ConstY, ConstExponent), for
 	// add_material_expression and build_material_graph's properties map (#1461).
 	static bool ApplyExpressionProperties(UMaterialExpression* Expression, const TSharedPtr<FJsonObject>& Properties, FString& OutError);
+	// #1948: a Custom node's code, description, outputType, inputs,
+	// additionalOutputs, additionalDefines and includeFilePaths from a node
+	// spec, each applied through the node's PostEditChangeProperty.
+	static bool ApplyCustomNodeSpec(class UMaterialExpressionCustom* Custom, const TSharedPtr<FJsonObject>& Spec, FString& OutError);
+	static const TArray<FString>& CustomNodeSpecKeys();
+	// float1..float4 | materialAttributes, as an ECustomMaterialOutputType value.
+	static bool ParseCustomOutputType(const FString& Text, int32& OutType);
+	static FString CustomOutputTypeName(int32 Type);
+	// #1951: what export_material_graph writes and a graph spec takes back.
+	static TArray<TPair<EMaterialProperty, FString>> WireableMaterialProperties();
+	static const TArray<FProperty*>& ExportedMaterialSettings();
+	static bool MaterialPropertyHoldsExpressionInput(const FProperty* Prop);
+	// build_material_graph into Target (the material at assetPath when null),
+	// saving only when bSave. import_material_graph's replace builds a trial
+	// copy first and saves nothing until it compiles.
+	static TSharedPtr<FJsonValue> BuildMaterialGraphInto(const TSharedPtr<FJsonObject>& Params, UMaterial* Target, bool bSave);
+	// Recompiles and returns the compile errors; false when this engine cannot report them.
+	static bool CompileMaterialForErrors(UMaterial* Material, TArray<FString>& OutErrors);
+	static TSharedPtr<FJsonValue> ReplaceMaterialGraph(const TSharedPtr<FJsonObject>& Params);
 	static bool ResolveExpressionInputIndex(UMaterialExpression* Expression, const FString& Pin, int32& OutIndex, FString& OutError);
 	static bool ResolveExpressionOutputIndex(UMaterialExpression* Expression, const FString& Pin, int32& OutIndex, FString& OutError);
 
