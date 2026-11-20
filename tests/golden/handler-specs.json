@@ -1,5 +1,5 @@
 {
-  "handlerCount": 1411,
+  "handlerCount": 1413,
   "handlers": {
     "acquire_lock": {
       "category": "lock",
@@ -7544,6 +7544,48 @@
               "type": "object",
               "required": false,
               "description": "Any other UPROPERTY on the node by name, e.g. {SamplerType: 'Masks', ConstA: 1}"
+            },
+            {
+              "name": "code",
+              "type": "string",
+              "required": false,
+              "description": "Custom node HLSL body"
+            },
+            {
+              "name": "inputs",
+              "type": "array",
+              "required": false,
+              "description": "Custom node input names, which connections can name as toInput"
+            },
+            {
+              "name": "outputType",
+              "type": "string",
+              "required": false,
+              "description": "Custom node return type: float1 | float2 | float3 | float4 | materialAttributes"
+            },
+            {
+              "name": "description",
+              "type": "string",
+              "required": false,
+              "description": "Custom node title"
+            },
+            {
+              "name": "additionalOutputs",
+              "type": "array",
+              "required": false,
+              "description": "Custom node extra outputs: names, or {name, type}; connections can name them as fromOutput"
+            },
+            {
+              "name": "additionalDefines",
+              "type": "array",
+              "required": false,
+              "description": "Custom node defines: {name, value} or 'NAME=VALUE'"
+            },
+            {
+              "name": "includeFilePaths",
+              "type": "array",
+              "required": false,
+              "description": "Custom node include files, as virtual shader paths"
             }
           ]
         },
@@ -7752,6 +7794,48 @@
               "type": "object",
               "required": false,
               "description": "Any other UPROPERTY on the node by name, e.g. {SamplerType: 'Masks', ConstA: 1}"
+            },
+            {
+              "name": "code",
+              "type": "string",
+              "required": false,
+              "description": "Custom node HLSL body"
+            },
+            {
+              "name": "inputs",
+              "type": "array",
+              "required": false,
+              "description": "Custom node input names, which connections can name as toInput"
+            },
+            {
+              "name": "outputType",
+              "type": "string",
+              "required": false,
+              "description": "Custom node return type: float1 | float2 | float3 | float4 | materialAttributes"
+            },
+            {
+              "name": "description",
+              "type": "string",
+              "required": false,
+              "description": "Custom node title"
+            },
+            {
+              "name": "additionalOutputs",
+              "type": "array",
+              "required": false,
+              "description": "Custom node extra outputs: names, or {name, type}; connections can name them as fromOutput"
+            },
+            {
+              "name": "additionalDefines",
+              "type": "array",
+              "required": false,
+              "description": "Custom node defines: {name, value} or 'NAME=VALUE'"
+            },
+            {
+              "name": "includeFilePaths",
+              "type": "array",
+              "required": false,
+              "description": "Custom node include files, as virtual shader paths"
             }
           ]
         },
@@ -7827,6 +7911,12 @@
           "required": false,
           "description": "Existing expressions to delete once the new nodes are wired, named as delete_expression takes them (description, class, parameter name, index or engine name). Resolved before anything changes; a connection may not use one (#1461)",
           "items": "string"
+        },
+        {
+          "name": "materialSettings",
+          "type": "object",
+          "required": false,
+          "description": "Material-level properties by name, as export_material_graph writes them: MaterialDomain, BlendMode, ShadingModel, TwoSided, BlendableLocation, bUsedWith* and the rest (#1951)"
         }
       ]
     },
@@ -23179,6 +23269,48 @@
               "type": "object",
               "required": false,
               "description": "Any other UPROPERTY on the node by name, e.g. {SamplerType: 'Masks', ConstA: 1}"
+            },
+            {
+              "name": "code",
+              "type": "string",
+              "required": false,
+              "description": "Custom node HLSL body"
+            },
+            {
+              "name": "inputs",
+              "type": "array",
+              "required": false,
+              "description": "Custom node input names, which connections can name as toInput"
+            },
+            {
+              "name": "outputType",
+              "type": "string",
+              "required": false,
+              "description": "Custom node return type: float1 | float2 | float3 | float4 | materialAttributes"
+            },
+            {
+              "name": "description",
+              "type": "string",
+              "required": false,
+              "description": "Custom node title"
+            },
+            {
+              "name": "additionalOutputs",
+              "type": "array",
+              "required": false,
+              "description": "Custom node extra outputs: names, or {name, type}; connections can name them as fromOutput"
+            },
+            {
+              "name": "additionalDefines",
+              "type": "array",
+              "required": false,
+              "description": "Custom node defines: {name, value} or 'NAME=VALUE'"
+            },
+            {
+              "name": "includeFilePaths",
+              "type": "array",
+              "required": false,
+              "description": "Custom node include files, as virtual shader paths"
             }
           ]
         },
@@ -23254,6 +23386,18 @@
           "required": false,
           "description": "Existing expressions to delete once the new nodes are wired, named as delete_expression takes them (description, class, parameter name, index or engine name). Resolved before anything changes; a connection may not use one (#1461)",
           "items": "string"
+        },
+        {
+          "name": "materialSettings",
+          "type": "object",
+          "required": false,
+          "description": "Material-level properties by name, as export_material_graph writes them: MaterialDomain, BlendMode, ShadingModel, TwoSided, BlendableLocation, bUsedWith* and the rest (#1951)"
+        },
+        {
+          "name": "replace",
+          "type": "boolean",
+          "required": false,
+          "description": "Replace every expression with the spec instead of adding to the graph, saving only when the result compiles; otherwise nothing changes and compileErrors lists why (#1951)"
         }
       ]
     },
@@ -35336,6 +35480,26 @@
         }
       ]
     },
+    "remove_collection_parameter": {
+      "category": "material",
+      "params": [
+        {
+          "name": "assetPath",
+          "type": "string",
+          "required": true,
+          "description": "MaterialParameterCollection asset path",
+          "aliases": [
+            "path"
+          ]
+        },
+        {
+          "name": "parameterName",
+          "type": "string",
+          "required": true,
+          "description": "Scalar or vector parameter to remove"
+        }
+      ]
+    },
     "remove_component": {
       "category": "blueprint",
       "params": [
@@ -41599,6 +41763,53 @@
         }
       ]
     },
+    "set_collection_parameter": {
+      "category": "material",
+      "params": [
+        {
+          "name": "assetPath",
+          "type": "string",
+          "required": true,
+          "description": "MaterialParameterCollection asset path",
+          "aliases": [
+            "path"
+          ]
+        },
+        {
+          "name": "parameterName",
+          "type": "string",
+          "required": true,
+          "description": "Parameter to add or edit; added when the collection has no parameter of that name"
+        },
+        {
+          "name": "newName",
+          "type": "string",
+          "required": false,
+          "description": "Rename the parameter; its id is kept, so CollectionParameter nodes stay bound"
+        },
+        {
+          "name": "type",
+          "type": "string",
+          "required": false,
+          "description": "scalar | vector, for a new parameter; inferred from defaultValue when omitted"
+        },
+        {
+          "name": "defaultValue",
+          "type": "number",
+          "required": false,
+          "description": "A number (scalar) or a colour {r,g,b,a} (vector)",
+          "orTypes": [
+            "object"
+          ]
+        },
+        {
+          "name": "id",
+          "type": "string",
+          "required": false,
+          "description": "Re-add a removed parameter under its old id, as remove_collection_parameter's rollback does"
+        }
+      ]
+    },
     "set_collision": {
       "category": "physics",
       "params": [
@@ -42185,8 +42396,14 @@
           "name": "inputs",
           "type": "array",
           "required": false,
-          "description": "Named input pins; rebuilds the node's inputs (#617)",
+          "description": "Named input pins; rebuilds the node's inputs, and an input that keeps its name keeps its wire (#617, #1907)",
           "items": "string"
+        },
+        {
+          "name": "preserveConnections",
+          "type": "boolean",
+          "required": false,
+          "description": "Carry each wire to the new input of the same name (default true); false disconnects every input"
         },
         {
           "name": "outputType",
@@ -42199,6 +42416,25 @@
           "type": "string",
           "required": false,
           "description": "Node description"
+        },
+        {
+          "name": "additionalOutputs",
+          "type": "array",
+          "required": false,
+          "description": "Extra outputs: names, or {name, type}; replaces the list (#1948)"
+        },
+        {
+          "name": "additionalDefines",
+          "type": "array",
+          "required": false,
+          "description": "Defines: {name, value} or 'NAME=VALUE'; replaces the list (#1948)"
+        },
+        {
+          "name": "includeFilePaths",
+          "type": "array",
+          "required": false,
+          "description": "Include files as virtual shader paths; replaces the list (#1948)",
+          "items": "string"
         }
       ],
       "choices": [

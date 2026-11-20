@@ -80,6 +80,7 @@
 // Collision / BodySetup
 #include "PhysicsEngine/BodySetup.h"
 #include "AI/Navigation/NavCollisionBase.h"
+#include "Materials/MaterialParameterCollection.h"
 
 // ─── Protected mount guardrail ──────────────────────────────────────────
 // The rule itself is MCPIsProtectedAssetPath in HandlerUtils.h, and the
@@ -5348,6 +5349,23 @@ TSharedPtr<FJsonValue> FAssetHandlers::SetAssetProperty(const TSharedPtr<FJsonOb
 	FScopedTransaction Transaction(NSLOCTEXT("UEMCPBridge", "SetAssetProperty", "Set asset property"));
 	Asset->Modify();
 	if (LeafOwner && LeafOwner != Asset) LeafOwner->Modify();
+
+	// #1950: an array write lands element by element on the same index, so a
+	// collection parameter would keep the Id of whatever sat at its index. A
+	// CollectionParameter node binds by Id, so the Ids are carried by name
+	// instead, and a name new to the collection keeps the fresh Id it needs.
+	UMaterialParameterCollection* Collection = Cast<UMaterialParameterCollection>(Asset);
+	const bool bCollectionArray = Collection
+		&& (FinalProp->GetFName() == TEXT("ScalarParameters") || FinalProp->GetFName() == TEXT("VectorParameters"))
+		&& FinalProp->GetOwnerStruct() == UMaterialParameterCollection::StaticClass();
+	TMap<FName, FGuid> CollectionIdsByName;
+	if (bCollectionArray)
+	{
+		for (const FCollectionScalarParameter& P : Collection->ScalarParameters) CollectionIdsByName.Add(P.ParameterName, P.Id);
+		for (const FCollectionVectorParameter& P : Collection->VectorParameters) CollectionIdsByName.Add(P.ParameterName, P.Id);
+		Collection->PreEditChange(FinalProp);
+	}
+
 	FString SetErr;
 	if (!MCPJsonProperty::SetJsonOnPropertyWithOwner(FinalProp, ValuePtr, ValueField, LeafOwner ? LeafOwner : Asset, SetErr))
 	{
@@ -5355,8 +5373,23 @@ TSharedPtr<FJsonValue> FAssetHandlers::SetAssetProperty(const TSharedPtr<FJsonOb
 		return MCPError(FString::Printf(TEXT("Failed to set '%s': %s%s"), *PropertyName, *SetErr, *AssetSocketPropertyHint(Asset, PropertyName)));
 	}
 
+	if (bCollectionArray)
+	{
+		TSet<FGuid> OldIds;
+		for (const TPair<FName, FGuid>& Pair : CollectionIdsByName) OldIds.Add(Pair.Value);
+		auto Rekey = [&CollectionIdsByName, &OldIds](FCollectionParameterBase& P)
+		{
+			if (const FGuid* Kept = CollectionIdsByName.Find(P.ParameterName)) P.Id = *Kept;
+			else if (OldIds.Contains(P.Id) || !P.Id.IsValid()) P.Id = FGuid::NewGuid();
+		};
+		for (FCollectionScalarParameter& P : Collection->ScalarParameters) Rekey(P);
+		for (FCollectionVectorParameter& P : Collection->VectorParameters) Rekey(P);
+		FPropertyChangedEvent CollectionChanged(FinalProp, EPropertyChangeType::ValueSet);
+		Collection->PostEditChangeProperty(CollectionChanged);
+	}
+
 	if (LeafOwner) LeafOwner->PostEditChange();
-	Asset->PostEditChange();
+	if (!bCollectionArray) Asset->PostEditChange();
 	Asset->MarkPackageDirty();
 	MCPNoteBlueprintCDOWrite(OwningBlueprint, PropertyName);
 
