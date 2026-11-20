@@ -520,6 +520,12 @@ void FBlueprintHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		SpecAssetPath,
 		MCPParam::Optional(TEXT("graphName"), EType::String, TEXT("Graph to clean (default: every graph)")),
 	});
+	Registry.RegisterHandler(TEXT("preflight_dsl_write"), &PreflightDslWrite, {
+		SpecAssetPath,
+		MCPParam::Optional(TEXT("dsl"), EType::String, TEXT("The document a Write would send")),
+		MCPParam::Optional(TEXT("edits"), EType::Array, TEXT("The replacements an Edit would send: [{oldString, newString}]")).Items(EType::Object),
+		MCPParam::Optional(TEXT("scope"), EType::String, TEXT("The Write or Edit scope: empty for every event and function graph, GraphName, or GraphName/EntryName")),
+	}, MCPSpec::ExactlyOne({ { TEXT("dsl") }, { TEXT("edits") } }));
 	Registry.RegisterHandler(TEXT("connect_pins_batch"), &ConnectPinsBatch, {
 		SpecAssetPath,
 		SpecGraphName,
