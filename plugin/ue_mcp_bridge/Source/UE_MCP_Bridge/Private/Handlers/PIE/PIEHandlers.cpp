@@ -245,6 +245,14 @@ void FPIEHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Required(TEXT("command"), EType::String, TEXT("Console command")),
 		MCPParam::Required(TEXT("client"), EType::Integer, TEXT("Remote player 1..N (join order)")).Min(1),
 	}, MCPSpec::ContractExempt(TEXT("Runs a console command in a remote player's process")));
+	// Slate key events for one PIE player's UI (#2018, #1928).
+	Registry.RegisterHandler(TEXT("pie_send_key"), &PieSendKey, {
+		MCPParam::Optional(TEXT("key"), EType::String, TEXT("FKey name: Right, Left, Up, Down, Tab, Enter, SpaceBar, Escape, Gamepad_DPad_Down, Gamepad_FaceButton_Bottom...")),
+		MCPParam::Optional(TEXT("text"), EType::String, TEXT("Characters to type into the focused widget, one character event each, instead of a key")),
+		MCPParam::Optional(TEXT("event"), EType::String, TEXT("press (default: down then up) | down | up")).Enum({ TEXT("press"), TEXT("down"), TEXT("up") }),
+		MCPParam::Optional(TEXT("pie_instance"), EType::Integer, TEXT("FWorldContext::PIEInstance of the client whose UI gets the key. Omitted picks the editor's own player: the listen-server host, else the lowest client PIE instance")).Min(0),
+		MCPParam::Optional(TEXT("client_id"), EType::Integer, ClientIdDoc).Min(0),
+	}, MCPSpec::ExactlyOne({ { TEXT("key") }, { TEXT("text") } }).ContractExempt(TEXT("Sends key events into the running PIE session")));
 	Registry.RegisterHandler(TEXT("pie_remote_result"), &PieRemoteResult, {
 		MCPParam::Required(TEXT("request_id"), EType::String, TEXT("injection_id or request_id a relayed call returned")).Alias(TEXT("injection_id")),
 	});

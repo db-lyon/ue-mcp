@@ -59,6 +59,7 @@ public:
 	static TSharedPtr<FJsonValue> PieClients(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> PieConsole(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> PieRemoteResult(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> PieSendKey(const TSharedPtr<FJsonObject>& Params);
 
 	// Multiplayer acceptance runs
 	static TSharedPtr<FJsonValue> PieUatRun(const TSharedPtr<FJsonObject>& Params);

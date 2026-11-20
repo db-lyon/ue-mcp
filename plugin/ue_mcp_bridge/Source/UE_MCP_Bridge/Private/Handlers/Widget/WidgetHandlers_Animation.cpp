@@ -2480,7 +2480,9 @@ TSharedPtr<FJsonValue> FWidgetHandlers::AuditWidgetAccessibility(const TSharedPt
 
 TSharedPtr<FJsonValue> FWidgetHandlers::GetRuntimeFocusPath(const TSharedPtr<FJsonObject>& Params)
 {
-	const int32 UserIndex = OptionalInt(Params, TEXT("userIndex"), 0);
+	const bool bUserIndexGiven = Params.IsValid() && Params->HasField(TEXT("userIndex"));
+	const int32 RequestedUserIndex = OptionalInt(Params, TEXT("userIndex"), 0);
+	const int32 PIEInstance = OptionalInt(Params, TEXT("pieInstance"), INDEX_NONE);
 
 	if (!FSlateApplication::IsInitialized())
 	{
@@ -2494,12 +2496,39 @@ TSharedPtr<FJsonValue> FWidgetHandlers::GetRuntimeFocusPath(const TSharedPtr<FJs
 			TEXT("because it is the editor UI, not the game's."));
 	}
 
+	// The player whose viewport the focus is judged against: the PIE instance named, else the editor's own
+	// player as script acts pick it, never the first world context, which is the server on a dedicated
+	// session (#2018). Its Slate user is the one read unless userIndex names another.
+	MCPPIE::PIEClientUI::FUIPlayer Player;
+	FString ResolveError;
+	const bool bResolved = MCPPIE::PIEClientUI::Resolve(PIEInstance, 0, Player, ResolveError);
+	if (!bResolved && PIEInstance != INDEX_NONE)
+	{
+		return MCPError(ResolveError);
+	}
+	const int32 UserIndex = bUserIndexGiven || !bResolved ? RequestedUserIndex : Player.SlateUserIndex;
+
 	FSlateApplication& Slate = FSlateApplication::Get();
 	TSharedPtr<SWidget> Focused = Slate.GetUserFocusedWidget(static_cast<uint32>(UserIndex));
 
 	auto Result = MCPSuccess();
 	Result->SetNumberField(TEXT("userIndex"), UserIndex);
 	Result->SetBoolField(TEXT("hasFocus"), Focused.IsValid());
+	if (bResolved)
+	{
+		const bool bInViewport = Focused.IsValid() && MCPPIE::PIEClientUI::IsInsideViewport(Player, Focused);
+		Result->SetNumberField(TEXT("pieInstance"), Player.PIEInstance);
+		Result->SetStringField(TEXT("target"), Player.Description);
+		Result->SetBoolField(TEXT("inTargetViewport"), bInViewport);
+		Result->SetStringField(TEXT("focusedWidgetName"), MCPPIE::PIEClientUI::FindUmgName(Player, Focused));
+		if (Focused.IsValid() && !bInViewport)
+		{
+			Result->SetStringField(TEXT("viewportNote"),
+				FString::Printf(TEXT("User %d's focus is outside %s's viewport, on another client's window or the editor's. Every PIE ")
+					TEXT("window in one process shares this user, so keys go there; call widget(set_runtime_focus) with ")
+					TEXT("pieInstance=%d to bring focus to this client."), UserIndex, *Player.Description, Player.PIEInstance));
+		}
+	}
 
 	if (!Focused.IsValid())
 	{
