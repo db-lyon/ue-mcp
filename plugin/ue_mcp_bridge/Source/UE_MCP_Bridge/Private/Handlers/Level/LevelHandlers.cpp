@@ -211,6 +211,11 @@ void FLevelHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("includeExternalActors"), EType::Boolean, TEXT("Also save the level's loaded external actor and folder packages (default true)")),
 		MCPParam::Optional(TEXT("commitDeletes"), EType::Boolean, TEXT("Save through the editor's dirty-package save, which deletes the packages of deleted World Partition actors (default false)")),
 	}, MCPSpec::ContractExempt(TEXT("Saves the current level under the contract values; nothing it reads fails first")));
+	// #2007: LevelHandlers_Save.cpp. The editor's Save Current Level As, for a
+	// never-saved Untitled map as much as a saved one.
+	Registry.RegisterHandler(TEXT("save_level_as"), &SaveLevelAs, {
+		MCPParam::Required(TEXT("levelPath"), EType::String, TEXT("Long package path to save the open map under, e.g. /Game/Maps/MyLevel. Must not exist yet")),
+	}, MCPSpec::ContractExempt(TEXT("Saves the open map under the contract levelPath and moves the editor onto it before anything fails")));
 	Registry.RegisterHandler(TEXT("list_levels"), &ListLevels, {
 		SpecCursor, SpecLimit,
 	});
