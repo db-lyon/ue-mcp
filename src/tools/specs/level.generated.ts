@@ -2831,9 +2831,15 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "boolean",
         "required": false,
         "description": "Switch even though the open map has unsaved changes, discarding them (default false)"
+      },
+      {
+        "name": "endPIE",
+        "type": "boolean",
+        "required": false,
+        "description": "End a running play session (Play, Simulate, ejected or queued) and switch; without it the switch is refused while one is up (default false)"
       }
     ],
-    "contractExempt": "Ends any play session, collects garbage and swaps the open map before the contract path can fail"
+    "contractExempt": "Ends a play session when asked, collects garbage and swaps the open map before the contract path can fail"
   },
   "load_region": {
     "category": "level",
@@ -4381,6 +4387,18 @@ export const handlerSpecs: HandlerSpecs = {
       }
     ],
     "contractExempt": "Saves the current level under the contract values; nothing it reads fails first"
+  },
+  "save_level_as": {
+    "category": "level",
+    "params": [
+      {
+        "name": "levelPath",
+        "type": "string",
+        "required": true,
+        "description": "Long package path to save the open map under, e.g. /Game/Maps/MyLevel. Must not exist yet"
+      }
+    ],
+    "contractExempt": "Saves the open map under the contract levelPath and moves the editor onto it before anything fails"
   },
   "scatter_along_spline": {
     "category": "level",
@@ -6895,6 +6913,7 @@ export const schema: Record<string, z.ZodType> = {
   enableWorldBoundsChecks: z.boolean().optional().describe("Enable world bounds checks"),
   end: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Ray end; pass end or direction and distance"),
   endOffset: z.number().optional().describe("Distance along the spline to leave empty at its end, in centimetres"),
+  endPIE: z.boolean().optional().describe("End a running play session (Play, Simulate, ejected or queued) and switch; without it the switch is refused while one is up (default false)"),
   exactClass: z.boolean().optional().describe("Require classFilter to be the exact class (default true) (convert_brushes_to_static_mesh). Require classFilter to be the exact class name (get_world_outliner)"),
   exposure: z.number().optional().describe("Fixed adaptation brightness, written to both min and max"),
   extent: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Query extent (default 100, 100, 100) (nav_project_point). Half extent of the cube brush (default 100, 100, 100) (spawn_volume)"),
@@ -6961,7 +6980,7 @@ export const schema: Record<string, z.ZodType> = {
   labelContains: z.string().optional().describe("Case-insensitive substring over the actor's editor label"),
   labelPrefix: z.string().optional().describe("Case-sensitive prefix over the actor's editor label (batch_set_actor_properties, bulk_set_component_property, delete_actors, get_actors_by_class, recreate_physics_state, remove_components_by_class, set_actor_folder_path, set_actor_hlod_layer, set_component_materials). Label prefix for the spawned actors (spawn_actors_batch). Label prefix for the spawned actors (default Grid) (spawn_grid)"),
   levelName: z.string().optional().describe("Streaming sub-level name or package path (remove_streaming_sublevel, set_streaming_sublevel_properties). Loaded sub-level to make current (set_current_edit_level)"),
-  levelPath: z.string().optional().describe("Map package to add as a streaming sub-level (add_streaming_sublevel). Map package to open (load_level). Query another map: opened temporarily, refused while anything is dirty, and the open map restored (query_components). Alias for levelName (remove_streaming_sublevel, set_current_edit_level, set_streaming_sublevel_properties)"),
+  levelPath: z.string().optional().describe("Map package to add as a streaming sub-level (add_streaming_sublevel). Map package to open (load_level). Query another map: opened temporarily, refused while anything is dirty, and the open map restored (query_components). Alias for levelName (remove_streaming_sublevel, set_current_edit_level, set_streaming_sublevel_properties). Long package path to save the open map under, e.g. /Game/Maps/MyLevel. Must not exist yet (save_level_as)"),
   levels: z.array(z.object({ levelPath: z.string().describe("Long package name of the .umap, such as /Game/Maps/Arena"), actorLabels: z.array(z.string()).describe("Exact editor labels to delete in that map, at most 256, no duplicates"), expectedClassPath: z.string().optional().describe("Actor class every matched actor must be, such as /Script/Engine.StaticMeshActor") })).optional().describe("Per-map targets, at most 16"),
   lightType: z.string().optional().describe("point | spot | directional | rect | sky"),
   limit: z.number().int().optional().describe("Rows returned (default 200, max 2000) (actors_in_box, query_components). Selected vertices to return inline, 1 to 20000 (default 2000); ignored with dumpToFile (get_skinned_vertices). Rows on this page (get_world_outliner, list_actor_descs, list_actor_tags, list_levels, list_loaded_regions, list_transient_actors, list_volumes). Candidates returned per blockout (default 5) (match_asset_to_blockout)"),
