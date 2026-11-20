@@ -62,6 +62,12 @@ namespace MCPPIE
 		/** Captures go to <CaptureRoot>/captures/step<NN>_client<C>_<label>.jpg; File is relative to CaptureRoot. */
 		FString CaptureRoot;
 		int32 StepNumber = 1;
+		/**
+		 * The player an entry with no client (client 0) drives: local player OwnLocalPlayer of PIE instance
+		 * OwnPIEInstance, as pie(inject_input) takes pie_instance and client_id. INDEX_NONE means the editor's own player.
+		 */
+		int32 OwnPIEInstance = INDEX_NONE;
+		int32 OwnLocalPlayer = 0;
 
 		/** Runs one action now. A wait does nothing here; FStepActionSequence times it. */
 		bool Run(const FStepAction& A, FString& OutError);
@@ -84,6 +90,8 @@ namespace MCPPIE
 
 		TArray<FRelayed> Relayed;
 		TArray<FCapture> Captures;
+		/** Who the last Run drove: the exact local player, the remote client, or the placed pawn. Empty for a wait. */
+		FString LastTarget;
 
 	private:
 		bool Place(const FStepAction& A, FString& OutError);
@@ -107,6 +115,7 @@ namespace MCPPIE
 			FString Verb;
 			bool bOk = true;
 			FString Error;
+			FString Target;
 		};
 
 		void Begin(const TArray<FStepAction>& InActions);

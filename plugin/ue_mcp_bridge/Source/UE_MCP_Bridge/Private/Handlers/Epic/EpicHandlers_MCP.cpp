@@ -8,6 +8,7 @@
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
 #include "HandlerDeferred.h"
+#include "HandlerDslPreflight.h"
 
 #include "HAL/PlatformProcess.h"
 #include "Misc/Guid.h"
@@ -273,6 +274,16 @@ TSharedPtr<FJsonValue> FEpicHandlers::CallMCPTool(const TSharedPtr<FJsonObject>&
 	FString ToolName;
 	if (TSharedPtr<FJsonValue> Err = RequireString(Params, TEXT("tool"), ToolName)) return Err;
 	const FString Input = UEMCPEpicMCP::ReadInputJson(Params);
+	// #1908: Epic's eager mode registers each registry tool under its qualified
+	// name, so the DSL Write and Edit get the same guard as epic(call_tool).
+	const bool bAllowDestructive = OptionalBool(Params, TEXT("allowDestructive"), false);
+	if (ToolName.StartsWith(FString(MCPDslPreflight::DslToolset()) + TEXT("."), ESearchCase::IgnoreCase))
+	{
+		if (TSharedPtr<FJsonValue> Refusal = MCPDslPreflight::GuardCall(MCPDslPreflight::DslToolset(), ToolName, Input, bAllowDestructive))
+		{
+			return Refusal;
+		}
+	}
 #if WITH_UEMCP_EPIC_MCP
 	IModelContextProtocolModule* Module = UEMCPEpicMCP::Module();
 	if (!Module) return UEMCPEpicMCP::Unavailable(false, nullptr);

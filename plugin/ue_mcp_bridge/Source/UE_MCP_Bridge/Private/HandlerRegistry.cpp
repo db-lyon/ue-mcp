@@ -847,7 +847,18 @@ TSharedPtr<FJsonValue> FMCPHandlerRegistry::ExecuteHandler(const FString& Method
 		}
 		// #1057: a key the handler never read had no effect, so say so.
 		FMCPParamReadScope ReadScope(Effective);
+		// #1910: save=false keeps every package this call saves in memory, dirty.
+		TOptional<MCPSavePolicy::FScope> SaveScope;
+		if (SavePolicyMethods.Contains(MethodName))
+		{
+			SaveScope.Emplace(!OptionalBool(Effective, TEXT("save"), true));
+		}
 		TSharedPtr<FJsonValue> Result = (*Handler)(Effective);
+		if (SaveScope.IsSet())
+		{
+			MCPSavePolicy::StampDeferred(Result, SaveScope->Deferred());
+			SaveScope.Reset();
+		}
 		MCPAttachParamsNotRead(Result, ReadScope.Unread());
 		MCPSourceControl::AttachAutoCheckouts(Result, CheckoutMark);
 		CheckRollback(MethodName, Result);
@@ -965,4 +976,21 @@ void FMCPHandlerRegistry::Clear()
 	HandlerFacts.Empty();
 	HandlerCategories.Empty();
 	HandlerSpecs.Empty();
+	SavePolicyMethods.Empty();
+}
+
+bool FMCPHandlerRegistry::AdoptSavePolicy(const FString& MethodName, const FMCPParamSpec& Save)
+{
+	FMCPHandlerSpec* Spec = HandlerSpecs.Find(MethodName);
+	if (!Spec)
+	{
+		UE_LOG(LogMCPBridge, Error, TEXT("[UE-MCP] AdoptSavePolicy: '%s' is not registered with a spec, so it cannot take '%s'."),
+			*MethodName, *Save.Name);
+		return false;
+	}
+	const bool bDeclared = Spec->Params.ContainsByPredicate(
+		[&Save](const FMCPParamSpec& Param) { return Param.Name == Save.Name; });
+	if (!bDeclared) Spec->Params.Add(Save);
+	SavePolicyMethods.Add(MethodName);
+	return true;
 }

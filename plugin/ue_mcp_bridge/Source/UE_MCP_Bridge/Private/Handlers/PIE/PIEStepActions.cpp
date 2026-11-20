@@ -2,6 +2,7 @@
 
 #include "HandlerParams.h"
 #include "HandlerPathGuard.h"
+#include "HandlerWorld.h"
 #include "Handlers/PIE/PIELog.h"
 #include "Handlers/PIE/PIERemotePlayers.h"
 #include "MCPPIEInputInjector.h"
@@ -12,6 +13,7 @@
 #include "Editor.h"
 #include "Engine/Engine.h"
 #include "Engine/GameViewportClient.h"
+#include "Engine/LocalPlayer.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "GameFramework/Pawn.h"
@@ -249,6 +251,7 @@ namespace MCPPIE
 
 	bool FStepActionRunner::Run(const FStepAction& A, FString& Err)
 	{
+		LastTarget.Reset();
 		UInputAction* Input = nullptr;
 		if (A.UsesInputAction())
 		{
@@ -278,6 +281,7 @@ namespace MCPPIE
 			}
 			const FString Id = PIERemotePlayers::NewId(TEXT("uat"));
 			PIERemotePlayers::RememberId(Id, Remote);
+			LastTarget = FString::Printf(TEXT("remote client %d"), A.Client);
 			FString What;
 			switch (A.Kind)
 			{
@@ -304,12 +308,22 @@ namespace MCPPIE
 			return true;
 		}
 
-		// The editor's own player.
+		// The editor's own player, resolved to one exact local player: left to the injector, the input went to
+		// whichever PIE world was active, which in a one-process session with a second client was the client (#1814).
+		ULocalPlayer* Own = PIERemotePlayers::FindOwnLocalPlayer(OwnPIEInstance, OwnLocalPlayer, Err);
+		if (!Own)
+		{
+			Err = OwnPIEInstance >= 0
+				? FString::Printf(TEXT("%s: the run's pie_instance %d client_id %d has no local player (%s)"), *A.Verb, OwnPIEInstance, OwnLocalPlayer, *Err)
+				: FString::Printf(TEXT("%s: client 0 has no local player (%s)"), *A.Verb, *Err);
+			return false;
+		}
+		LastTarget = PIERemotePlayers::DescribeLocalPlayer(Own);
 		switch (A.Kind)
 		{
 		case FStepAction::EKind::Tape:
 		{
-			const FString Id = FPIEInputInjector::StartTape(Input, A.Values, A.Hz, FString(), Err);
+			const FString Id = FPIEInputInjector::StartTape(Input, A.Values, A.Hz, FString(), Err, 0, INDEX_NONE, Own);
 			if (Id.IsEmpty())
 			{
 				return false;
@@ -318,11 +332,11 @@ namespace MCPPIE
 			return true;
 		}
 		case FStepAction::EKind::Inject:
-			return FPIEInputInjector::InjectOnce(Input, StepActionValue(Input, A.Value), Err);
+			return FPIEInputInjector::InjectOnce(Input, StepActionValue(Input, A.Value), Err, 0, INDEX_NONE, Own);
 		case FStepAction::EKind::Hold:
 		{
 			// Timed by the wall clock, like a remote hold; a tape would stretch with the frame rate.
-			const FString Id = FPIEInputInjector::StartHold(Input, StepActionValue(Input, A.Value), FString(), Err);
+			const FString Id = FPIEInputInjector::StartHold(Input, StepActionValue(Input, A.Value), FString(), Err, 0, INDEX_NONE, Own);
 			if (Id.IsEmpty())
 			{
 				return false;
@@ -332,8 +346,7 @@ namespace MCPPIE
 		}
 		case FStepAction::EKind::Console:
 		{
-			UWorld* World = PIERemotePlayers::FindLocalPlayerWorld();
-			if (PIERemotePlayers::RunLocalConsole(World, A.Command).IsEmpty())
+			if (PIERemotePlayers::RunLocalConsole(Own->GetWorld(), A.Command).IsEmpty())
 			{
 				Err = FString::Printf(TEXT("console '%s' found no local player to run on"), *A.Command);
 				return false;
@@ -474,16 +487,30 @@ namespace MCPPIE
 			return false;
 		}
 		APlayerController* PC = nullptr;
+		APlayerController* OwnClientPC = nullptr;
 		UMCPPIERemoteControl* Remote = nullptr;
 		if (A.Client > 0)
 		{
 			Remote = PIERemotePlayers::Find(A.Client, Err);
 			PC = Remote ? Cast<APlayerController>(Remote->GetOwner()) : nullptr;
 		}
-		else
+		else if (ULocalPlayer* Own = PIERemotePlayers::FindOwnLocalPlayer(OwnPIEInstance, OwnLocalPlayer, Err))
 		{
-			PC = World->GetFirstPlayerController();
-			PC = PC && PC->IsLocalController() ? PC : nullptr;
+			// Client 0 is a client window when the server is dedicated: move the server's pawn for that player, as
+			// for a remote client, and turn the client's own controller, which keeps its facing (#2010).
+			PC = PIERemotePlayers::FindAuthorityController(Own->PlayerController);
+			if (PC && PC != Own->PlayerController)
+			{
+				OwnClientPC = Own->PlayerController;
+			}
+			else if (!PC)
+			{
+				Err = TEXT("the server's copy of this player is not in the editor process");
+			}
+		}
+		if (PC)
+		{
+			World = PC->GetWorld();
 		}
 		APawn* Pawn = PC ? PC->GetPawn() : nullptr;
 		if (!Pawn)
@@ -536,7 +563,16 @@ namespace MCPPIE
 			return false;
 		}
 		PC->SetControlRotation(Rotation);
-		if (Remote)
+		if (OwnClientPC)
+		{
+			OwnClientPC->SetControlRotation(Rotation);
+			if (APawn* ClientPawn = OwnClientPC->GetPawn())
+			{
+				// The client's copy follows now instead of on the next correction.
+				ClientPawn->SetActorLocationAndRotation(Location, Rotation, false, nullptr, ETeleportType::ResetPhysics);
+			}
+		}
+		else if (Remote)
 		{
 			// The owning client keeps its own facing and moves from it; it has to turn itself.
 			const FString Id = PIERemotePlayers::NewId(TEXT("uat"));
@@ -545,6 +581,7 @@ namespace MCPPIE
 			Relayed.Add({ Id, A.Client, FString::Printf(TEXT("turning to yaw %.0f"), Rotation.Yaw) });
 		}
 		UE_LOG(LogMCPPIE, Log, TEXT("[PIE-ACT] placed %s at %s yaw %.0f"), *Pawn->GetName(), *Location.ToCompactString(), Rotation.Yaw);
+		LastTarget = FString::Printf(TEXT("%s in %s (%s)"), *Pawn->GetName(), *World->GetName(), *DescribePIENetMode(World));
 		return true;
 	}
 
@@ -581,7 +618,9 @@ namespace MCPPIE
 				WaitUntil = Now + A.Ms / 1000.0;
 				return EOutcome::Running;
 			}
-			if (!Runner.Run(A, OutError))
+			const bool bRan = Runner.Run(A, OutError);
+			R.Target = Runner.LastTarget;
+			if (!bRan)
 			{
 				R.bOk = false;
 				R.Error = OutError;

@@ -8,6 +8,7 @@
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
 #include "HandlerJsonProperty.h"
+#include "HandlerDslPreflight.h"
 #include "Handlers/Animation/HandlerAnimStateGraph.h"
 #include "Kismet2/BlueprintEditorUtils.h"
 #include "Kismet2/KismetEditorUtilities.h"
@@ -3368,5 +3369,37 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AutoLayoutGraph(const TSharedPtr<FJso
 			"captured and the old layout is gone. Pass capturePreviousPositions=true (or raise "
 			"previousPositionsLimit) BEFORE running this if you need to be able to put it back."),
 			NodeCount, PositionsLimit));
+	return MCPResult(Result);
+}
+
+TSharedPtr<FJsonValue> FBlueprintHandlers::PreflightDslWrite(const TSharedPtr<FJsonObject>& Params)
+{
+	FString AssetPath;
+	if (TSharedPtr<FJsonValue> Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
+
+	// The same input shape the DSL tools take, so the analysis reads it the way
+	// the epic(call_tool) guard does.
+	TSharedPtr<FJsonObject> Input = MakeShared<FJsonObject>();
+	const TArray<TSharedPtr<FJsonValue>>* Edits = nullptr;
+	const bool bIsEdit = TryGetArrayParam(Params, TEXT("edits"), Edits) && Edits;
+	const FString Dsl = OptionalString(Params, TEXT("dsl"), TEXT(""));
+	if (bIsEdit) Input->SetArrayField(TEXT("edits"), *Edits);
+	else Input->SetStringField(TEXT("dsl"), Dsl);
+	const FString Scope = OptionalString(Params, TEXT("scope"), TEXT(""));
+
+	UBlueprint* Blueprint = LoadBlueprint(AssetPath);
+	if (!Blueprint) return BlueprintNotFoundError(AssetPath);
+
+	TSharedPtr<FJsonObject> Result = MCPDslPreflight::Analyze(Blueprint, MCPDslPreflight::InputText(Input, bIsEdit), Scope, bIsEdit);
+	Result->SetBoolField(TEXT("success"), true);
+	Result->SetStringField(TEXT("assetPath"), AssetPath);
+	if (Result->GetBoolField(TEXT("constructionScriptTombstone")))
+	{
+		Result->SetStringField(TEXT("refusal"), MCPDslPreflight::ConstructionScriptWayForward());
+	}
+	else if (Result->GetBoolField(TEXT("destructive")))
+	{
+		Result->SetStringField(TEXT("wayForward"), MCPDslPreflight::WayForward());
+	}
 	return MCPResult(Result);
 }

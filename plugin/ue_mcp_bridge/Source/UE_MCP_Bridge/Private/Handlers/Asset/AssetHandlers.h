@@ -114,6 +114,11 @@ private:
 	static TSharedPtr<FJsonValue> SetDataTableRow(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> CloneDataTableRows(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> RemoveDataTableRows(const TSharedPtr<FJsonObject>& Params);
+	// #1999: every handler removes a DataTable row through this, never through
+	// UDataTable::RemoveRow. On UE 5.6 that call ends in
+	// HandleDataTableChanged(<removed row>), which looks the removed row up and
+	// asserts when the row struct is native. Returns whether a row was removed.
+	static bool RemoveDataTableRowSafely(class UDataTable* Table, FName RowName);
 	static TSharedPtr<FJsonValue> EditCollectionEntry(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> RemoveDataTableRow(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> GetDataTableRow(const TSharedPtr<FJsonObject>& Params);

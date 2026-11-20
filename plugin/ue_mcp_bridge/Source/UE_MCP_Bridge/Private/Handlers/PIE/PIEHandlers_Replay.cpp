@@ -51,6 +51,10 @@ namespace
 		{
 			R->SetStringField(TEXT("waiting_for"), S.WaitingFor);
 		}
+		if (!S.StartAlignment.IsEmpty())
+		{
+			R->SetStringField(TEXT("start_alignment"), S.StartAlignment);
+		}
 		if (S.State == EReplayerState::WaitingForPawn)
 		{
 			R->SetArrayField(TEXT("pie_worlds"), PIEWorldResolver::DescribePlayWorlds());
