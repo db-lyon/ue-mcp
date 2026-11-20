@@ -81,6 +81,28 @@ afterAll(async () => {
 }, 300_000);
 
 describe("delete_asset on a World Partition map", () => {
+  it("refuses while the map is open, naming the way forward, and touches nothing", async () => {
+    await makeMap(MAP, LABELS);
+    await call("load_level", { levelPath: MAP });
+    const before = packagesUnder(externalActors(`${REL}/L_DeleteWpMap`));
+    expect(before.length).toBeGreaterThanOrEqual(LABELS.length);
+
+    const single = await callBridge(bridge, "delete_asset", { assetPath: MAP, force: true });
+    expect(body(single).success).toBe(false);
+    expect(body(single).reason).toBe("map_open");
+    expect(String(body(single).error)).toContain("level(load");
+
+    const batch = body(await callBridge(bridge, "delete_asset_batch", { assetPaths: [MAP], force: true }));
+    const entry = (batch.results as Json[] | undefined)?.[0] ?? (batch.paths as Json[] | undefined)?.[0];
+    expect(JSON.stringify(batch)).toContain("map_open");
+    expect(entry === undefined || entry.status === "refused").toBe(true);
+
+    expect(packagesUnder(externalActors(`${REL}/L_DeleteWpMap`))).toEqual(before);
+    await call("demo_go_home", { discardUnsaved: true });
+    await call("delete_asset", { assetPath: MAP, force: true });
+    expect(packagesUnder(externalActors(`${REL}/L_DeleteWpMap`))).toEqual([]);
+  }, 300_000);
+
   it("removes the map's external actor and object packages from disk", async () => {
     await makeMap(MAP, LABELS);
     const before = packagesUnder(externalActors(`${REL}/L_DeleteWpMap`));
@@ -98,15 +120,15 @@ describe("delete_asset on a World Partition map", () => {
 
   it("leaves another map's packages alone when that map sits under the deleted one's path", async () => {
     // <Map>/L_Nested keeps its actors inside <Map>'s external folder, so a folder-wide delete would take them too.
+    // Only the nested map exists: the outer path has no map, which is the repeat-delete case. (Creating the outer
+    // map clears its external folder, and creating the nested one under an existing outer map crashes the engine.)
+    await callBridge(bridge, "delete_asset", { assetPath: MAP, force: true });
     await makeMap(SIBLING, ["DeleteWp_Nested"]);
-    await makeMap(MAP, LABELS);
     const nestedBefore = packagesUnder(externalActors(`${REL}/L_DeleteWpMap/L_Nested`));
     expect(nestedBefore.length).toBeGreaterThanOrEqual(1);
 
     await call("delete_asset", { assetPath: MAP, force: true });
     expect(packagesUnder(externalActors(`${REL}/L_DeleteWpMap/L_Nested`))).toEqual(nestedBefore);
-    const left = packagesUnder(externalActors(`${REL}/L_DeleteWpMap`)).filter((p) => !p.startsWith(`L_Nested${path.sep}`));
-    expect(left).toEqual([]);
 
     // And the nested map still opens with its actor.
     await call("load_level", { levelPath: SIBLING });

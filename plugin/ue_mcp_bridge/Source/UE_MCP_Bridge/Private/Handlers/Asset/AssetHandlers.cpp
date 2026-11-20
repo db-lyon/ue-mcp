@@ -2944,7 +2944,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::DeleteAsset(const TSharedPtr<FJsonObject>
 		// all go on the first call, leaves them behind with no map to own them.
 		// Repeating the delete is the documented retry, so it finishes the job.
 		// Not for a folder path, whose external folder also holds the packages of every map inside it.
-		if (!PackageName.IsEmpty() && !FPackageName::DoesPackageExist(PackageName) && !UEditorAssetLibrary::DoesDirectoryExist(PackageName))
+		if (!PackageName.IsEmpty() && !FPackageName::DoesPackageExist(PackageName) && !MCPMapExternalPackages::MapFileExists(PackageName) && !UEditorAssetLibrary::DoesDirectoryExist(PackageName))
 		{
 			const TArray<FString> Orphans = MCPMapExternalPackages::Find(PackageName);
 			if (Orphans.Num() > 0)
@@ -2969,6 +2969,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::DeleteAsset(const TSharedPtr<FJsonObject>
 	// A World Partition map's actors live outside the map package (#1851).
 	// Listed before the delete, while the map still says what it is.
 	const bool bIsMap = IsWorldAsset(AssetPath);
+	if (bIsMap && MCPMapExternalPackages::IsOpen(PackageName)) return MCPMapExternalPackages::OpenMapError(AssetPath);
 	const TArray<FString> ExternalPackages = bIsMap ? MCPMapExternalPackages::Find(PackageName) : TArray<FString>();
 
 	// #976: the delete below is a force delete, so the reference check has to
@@ -3085,6 +3086,13 @@ TSharedPtr<FJsonValue> FAssetHandlers::DeleteAssetBatch(const TSharedPtr<FJsonOb
 		{
 			Entry->SetStringField(TEXT("status"), TEXT("absent"));
 			Absent++;
+		}
+		else if (IsWorldAsset(Path) && MCPMapExternalPackages::IsOpen(FPackageName::ObjectPathToPackageName(FPackageName::ExportTextPathToObjectPath(Path).TrimStartAndEnd())))
+		{
+			Entry->SetStringField(TEXT("status"), TEXT("refused"));
+			Entry->SetStringField(TEXT("reason"), TEXT("map_open"));
+			Entry->SetStringField(TEXT("error"), TEXT("This is the open map; nothing was deleted. Open another map with level(load, levelPath=<other map>, discardUnsaved=true) or demo(go_home), then delete again."));
+			Refused++;
 		}
 		else if (!bForce && CheckedDeleteRefusal(Path, Entry))
 		{

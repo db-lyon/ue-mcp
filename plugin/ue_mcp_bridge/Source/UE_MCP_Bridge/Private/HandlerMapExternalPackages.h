@@ -8,7 +8,10 @@
 
 #include "CoreMinimal.h"
 #include "Dom/JsonObject.h"
+#include "Editor.h"
 #include "Engine/Level.h"
+#include "Engine/World.h"
+#include "HAL/PlatformProcess.h"
 #include "ExternalPackageHelper.h"
 #include "HAL/FileManager.h"
 #include "Misc/PackageName.h"
@@ -20,6 +23,35 @@
 
 namespace MCPMapExternalPackages
 {
+	/** Whether the map is the open editor map, or a level loaded into it. */
+	inline bool IsOpen(const FString& MapPackageName)
+	{
+		if (!GEditor) return false;
+		for (const FWorldContext& Context : GEditor->GetWorldContexts())
+		{
+			const UWorld* World = Context.World();
+			if (!World) continue;
+			if (World->GetOutermost()->GetName() == MapPackageName) return true;
+			for (const ULevel* Level : World->GetLevels())
+			{
+				if (Level && Level->GetOutermost()->GetName() == MapPackageName) return true;
+			}
+		}
+		return false;
+	}
+
+	/** Refusal for deleting a map that is open, with the call that gets past it. Nothing has been touched. */
+	inline TSharedPtr<FJsonValue> OpenMapError(const FString& AssetPath)
+	{
+		TSharedPtr<FJsonObject> Out = MakeShared<FJsonObject>();
+		Out->SetBoolField(TEXT("success"), false);
+		Out->SetStringField(TEXT("reason"), TEXT("map_open"));
+		Out->SetStringField(TEXT("error"), FString::Printf(
+			TEXT("'%s' is the open map, and deleting it would pull the level out from under the editor; nothing was deleted. ")
+			TEXT("Open another map with level(load, levelPath=<other map>, discardUnsaved=true) or demo(go_home), then delete again."), *AssetPath));
+		return MCPResult(Out);
+	}
+
 	/** The map's external actor and external object folders, as long package paths, from the engine's own helpers. */
 	inline TArray<FString> Roots(const FString& MapPackageName)
 	{
@@ -27,6 +59,14 @@ namespace MCPMapExternalPackages
 			ULevel::GetExternalActorsPath(MapPackageName),
 			FExternalPackageHelper::GetExternalObjectsPath(MapPackageName),
 		};
+	}
+
+	/** Whether a map file is on disk, asked of the file system because FPackageName::DoesPackageExist answers from a cache that lags a save or a delete. */
+	inline bool MapFileExists(const FString& PackageName)
+	{
+		FString File;
+		return FPackageName::TryConvertLongPackageNameToFilename(PackageName, File, FPackageName::GetMapPackageExtension())
+			&& IFileManager::Get().FileExists(*File);
 	}
 
 	/**
@@ -47,7 +87,7 @@ namespace MCPMapExternalPackages
 			Rel = Rel.IsEmpty() ? Parts[Index] : Rel + TEXT("/") + Parts[Index];
 			const FString Candidate = MapPackageName + TEXT("/") + Rel;
 			bool* Known = Cache.Find(Candidate);
-			const bool bIsMap = Known ? *Known : Cache.Add(Candidate, FPackageName::DoesPackageExist(Candidate));
+			const bool bIsMap = Known ? *Known : Cache.Add(Candidate, MapFileExists(Candidate));
 			if (bIsMap) return true;
 		}
 		return false;
@@ -112,14 +152,27 @@ namespace MCPMapExternalPackages
 			else ToDelete.Add(Name);
 		}
 
-		if (ToDelete.Num() > 0)
+		// Whether the file is on disk is asked of the file system. FPackageName::DoesPackageExist
+		// answers from a cache that still lists a package for a while after its file is gone, so
+		// it reported every delete as failed (#1851).
+		const auto OnDisk = [](const FString& Name)
+		{
+			FString File;
+			return FPackageName::TryConvertLongPackageNameToFilename(Name, File, FPackageName::GetAssetPackageExtension())
+				&& IFileManager::Get().FileExists(*File);
+		};
+		// The engine's own map delete already removes the external packages it had loaded, so
+		// only what is still on disk goes to the helper (it warns on a file that is already gone).
+		TArray<FString> Pending = ToDelete.FilterByPredicate(OnDisk);
+		if (Pending.Num() > 0)
 		{
 			FPackageSourceControlHelper Helper;
-			Helper.Delete(ToDelete, /*bErrorsAsWarnings*/ true);
+			Helper.Delete(Pending, /*bErrorsAsWarnings*/ true);
+			Pending = Pending.FilterByPredicate(OnDisk);
 		}
 		for (const FString& Name : ToDelete)
 		{
-			if (FPackageName::DoesPackageExist(Name)) Result.Failed.Add(Name);
+			if (Pending.Contains(Name)) Result.Failed.Add(Name);
 			else Result.Deleted.Add(Name);
 		}
 
