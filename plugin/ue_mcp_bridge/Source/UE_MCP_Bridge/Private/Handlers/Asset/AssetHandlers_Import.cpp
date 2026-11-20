@@ -11,6 +11,9 @@
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
 #include "HandlerAssetCreate.h"
+#include "HandlerAssetDelete.h"
+#include "PackageTools.h"
+#include "Subsystems/AssetEditorSubsystem.h"
 #include "HandlerJsonProperty.h"
 #include "JsonSerializer.h"
 #include "AssetToolsModule.h"
@@ -1427,6 +1430,209 @@ TSharedPtr<FJsonValue> FAssetHandlers::SetTextureProperties(const TSharedPtr<FJs
 	return MCPResult(Result);
 }
 
+namespace
+{
+/** Where import_texture_batch keeps the packages it overwrote. restore_texture_import reads nothing outside it. */
+FString MCPTextureImportBackupRoot()
+{
+	return FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir() / TEXT("UE_MCP") / TEXT("TextureImportBackups"));
+}
+
+/** The files a package is stored in: <Name>.uasset and the sidecars that share its base name. */
+TArray<FString> MCPPackageFilesIn(const FString& Directory, const FString& BaseName)
+{
+	static const TCHAR* Extensions[] = { TEXT(".uasset"), TEXT(".uexp"), TEXT(".ubulk"), TEXT(".uptnl"), TEXT(".m.ubulk") };
+	TArray<FString> Files;
+	for (const TCHAR* Extension : Extensions)
+	{
+		const FString Candidate = Directory / (BaseName + Extension);
+		if (IFileManager::Get().FileExists(*Candidate)) Files.Add(FString(BaseName + Extension));
+	}
+	return Files;
+}
+
+/** Copies an asset's saved package files into a fresh folder under the backup root and returns that folder,
+ *  or an empty string with the reason. A package with unsaved changes is refused: its file is not the state
+ *  the caller would expect a rollback to restore. */
+FString MCPBackupAssetPackage(const FString& AssetPath, FString& OutError)
+{
+	const FString PackageName = FPackageName::ObjectPathToPackageName(AssetPath);
+	if (UPackage* Loaded = FindPackage(nullptr, *PackageName))
+	{
+		if (Loaded->IsDirty())
+		{
+			OutError = TEXT("The texture had unsaved changes, so its package file is not the state to restore.");
+			return FString();
+		}
+	}
+	FString PackageFile;
+	if (!FPackageName::DoesPackageExist(PackageName, &PackageFile))
+	{
+		OutError = TEXT("The texture has never been saved, so there is no package file to restore.");
+		return FString();
+	}
+	PackageFile = FPaths::ConvertRelativePathToFull(PackageFile);
+	const FString SourceDir = FPaths::GetPath(PackageFile);
+	const FString BaseName = FPackageName::GetShortName(PackageName);
+	const FString BackupDir = MCPTextureImportBackupRoot() / FGuid::NewGuid().ToString(EGuidFormats::Digits);
+	for (const FString& File : MCPPackageFilesIn(SourceDir, BaseName))
+	{
+		if (IFileManager::Get().Copy(*(BackupDir / File), *(SourceDir / File), /*Replace*/ true, /*EvenIfReadOnly*/ true) != COPY_OK)
+		{
+			IFileManager::Get().DeleteDirectory(*BackupDir, /*RequireExists*/ false, /*Tree*/ true);
+			OutError = FString::Printf(TEXT("Could not copy %s to %s."), *(SourceDir / File), *BackupDir);
+			return FString();
+		}
+	}
+	return BackupDir;
+}
+} // namespace
+
+TSharedPtr<FJsonValue> FAssetHandlers::RestoreTextureImport(const TSharedPtr<FJsonObject>& Params)
+{
+	const TArray<TSharedPtr<FJsonValue>>* Items = nullptr;
+	TryGetArrayParam(Params, TEXT("items"), Items);
+	const TArray<TSharedPtr<FJsonValue>>* CreatedAssetPaths = nullptr;
+	TryGetArrayParam(Params, TEXT("createdAssetPaths"), CreatedAssetPaths);
+	if (GEditor && GEditor->PlayWorld)
+	{
+		return MCPErrorWithCode(TEXT("pie_running"), TEXT("Restoring replaced textures is refused while Play In Editor runs. ") + MCPStopPlayInEditorStep());
+	}
+
+	struct FRestore
+	{
+		FString AssetPath;
+		FString PackageName;
+		FString BackupDir;
+		FString TargetDir;
+		FString BaseName;
+		TArray<FString> Files;
+	};
+	TArray<FRestore> Restores;
+	TArray<TSharedPtr<FJsonValue>> Errors;
+	const FString BackupRoot = MCPTextureImportBackupRoot();
+	if (Items)
+	{
+		for (int32 Index = 0; Index < Items->Num(); ++Index)
+		{
+			const TSharedPtr<FJsonObject>* Item = nullptr;
+			FRestore Restore;
+			if (!(*Items)[Index].IsValid() || !(*Items)[Index]->TryGetObject(Item) || !Item || !Item->IsValid()
+				|| !(*Item)->TryGetStringField(TEXT("assetPath"), Restore.AssetPath)
+				|| !(*Item)->TryGetStringField(TEXT("backupDir"), Restore.BackupDir))
+			{
+				Errors.Add(MakeShared<FJsonValueString>(FString::Printf(TEXT("items[%d] needs assetPath and backupDir"), Index)));
+				continue;
+			}
+			Restore.PackageName = FPackageName::ObjectPathToPackageName(Restore.AssetPath);
+			Restore.BackupDir = FPaths::ConvertRelativePathToFull(Restore.BackupDir);
+			FPaths::NormalizeDirectoryName(Restore.BackupDir);
+			FString Relative = Restore.BackupDir;
+			// Only folders this handler's own import wrote are read, so a payload cannot copy arbitrary files into Content.
+			if (!FPaths::MakePathRelativeTo(Relative, *(BackupRoot / TEXT(""))) || Relative.StartsWith(TEXT("..")) || Relative.Contains(TEXT("/")) || Relative.IsEmpty())
+			{
+				Errors.Add(MakeShared<FJsonValueString>(FString::Printf(TEXT("items[%d].backupDir is not a folder import_texture_batch wrote under %s"), Index, *BackupRoot)));
+				continue;
+			}
+			FString TargetBase;
+			if (MCPIsProtectedAssetPath(Restore.AssetPath) || !FPackageName::TryConvertLongPackageNameToFilename(Restore.PackageName, TargetBase))
+			{
+				Errors.Add(MakeShared<FJsonValueString>(FString::Printf(TEXT("items[%d].assetPath '%s' is not a writable package"), Index, *Restore.AssetPath)));
+				continue;
+			}
+			TargetBase = FPaths::ConvertRelativePathToFull(TargetBase);
+			Restore.TargetDir = FPaths::GetPath(TargetBase);
+			Restore.BaseName = FPackageName::GetShortName(Restore.PackageName);
+			Restore.Files = MCPPackageFilesIn(Restore.BackupDir, Restore.BaseName);
+			if (!Restore.Files.Contains(Restore.BaseName + FPackageName::GetAssetPackageExtension()))
+			{
+				Errors.Add(MakeShared<FJsonValueString>(FString::Printf(TEXT("No saved package for '%s' in %s; it may have been cleaned up"), *Restore.AssetPath, *Restore.BackupDir)));
+				continue;
+			}
+			Restores.Add(MoveTemp(Restore));
+		}
+	}
+
+	// Let go of each loaded package's file so it can be rewritten, then copy the saved files back and reload.
+	FlushAsyncLoading();
+	UAssetEditorSubsystem* Editors = GEditor ? GEditor->GetEditorSubsystem<UAssetEditorSubsystem>() : nullptr;
+	TArray<UPackage*> ToReload;
+	TArray<FString> Scanned;
+	TArray<TSharedPtr<FJsonValue>> Restored;
+	for (const FRestore& Restore : Restores)
+	{
+		UPackage* Package = FindPackage(nullptr, *Restore.PackageName);
+		if (Package)
+		{
+			if (Editors)
+			{
+				if (UObject* Asset = FindObject<UObject>(Package, *Restore.BaseName)) Editors->CloseAllEditorsForAsset(Asset);
+			}
+			ResetLoaders(Package);
+		}
+		for (const FString& Stale : MCPPackageFilesIn(Restore.TargetDir, Restore.BaseName))
+		{
+			if (!Restore.Files.Contains(Stale)) IFileManager::Get().Delete(*(Restore.TargetDir / Stale), false, /*EvenReadOnly*/ true, /*Quiet*/ true);
+		}
+		bool bCopied = true;
+		for (const FString& File : Restore.Files)
+		{
+			const FString Target = Restore.TargetDir / File;
+			if (IFileManager::Get().Copy(*Target, *(Restore.BackupDir / File), /*Replace*/ true, /*EvenIfReadOnly*/ true) != COPY_OK)
+			{
+				Errors.Add(MakeShared<FJsonValueString>(FString::Printf(TEXT("Could not write %s back from %s"), *Target, *Restore.BackupDir)));
+				bCopied = false;
+				break;
+			}
+			Scanned.Add(Target);
+		}
+		if (!bCopied) continue;
+		if (Package) ToReload.Add(Package);
+		Restored.Add(MakeShared<FJsonValueString>(Restore.AssetPath));
+	}
+	FText ReloadError;
+	if (ToReload.Num() > 0)
+	{
+		UPackageTools::ReloadPackages(ToReload, ReloadError, UPackageTools::EReloadPackagesInteractionMode::AssumePositive);
+	}
+	if (Scanned.Num() > 0)
+	{
+		FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get().ScanModifiedAssetFiles(Scanned);
+	}
+
+	TArray<TSharedPtr<FJsonValue>> Deleted;
+	if (CreatedAssetPaths)
+	{
+		for (int32 Index = CreatedAssetPaths->Num() - 1; Index >= 0; --Index)
+		{
+			FString AssetPath;
+			if (!(*CreatedAssetPaths)[Index].IsValid() || !(*CreatedAssetPaths)[Index]->TryGetString(AssetPath) || MCPIsProtectedAssetPath(AssetPath))
+			{
+				Errors.Add(MakeShared<FJsonValueString>(FString::Printf(TEXT("createdAssetPaths[%d] is invalid"), Index)));
+				continue;
+			}
+			if (!UEditorAssetLibrary::DoesAssetExist(AssetPath)) continue;
+			bool bRemovedOrphanFile = false;
+			if (MCPDeleteAssetFromDisk(AssetPath, bRemovedOrphanFile)) Deleted.Add(MakeShared<FJsonValueString>(AssetPath));
+			else Errors.Add(MakeShared<FJsonValueString>(FString::Printf(TEXT("Could not delete created texture '%s'; it may still be referenced"), *AssetPath)));
+		}
+	}
+
+	auto Result = MCPSuccess();
+	Result->SetBoolField(TEXT("success"), Errors.Num() == 0);
+	if (Errors.Num() > 0) Result->SetStringField(TEXT("error"), FString::Printf(TEXT("%d rollback step(s) failed; see errors"), Errors.Num()));
+	if (!ReloadError.IsEmpty()) Result->SetStringField(TEXT("warning"), ReloadError.ToString());
+	Result->SetArrayField(TEXT("restored"), Restored);
+	Result->SetArrayField(TEXT("deleted"), Deleted);
+	Result->SetArrayField(TEXT("errors"), Errors);
+	Result->SetNumberField(TEXT("restoredCount"), Restored.Num());
+	Result->SetNumberField(TEXT("deletedCount"), Deleted.Num());
+	if (Restored.Num() + Deleted.Num() > 0) MCPSetUpdated(Result);
+	else Result->SetBoolField(TEXT("unchanged"), true);
+	MCPSetNoRollback(Result, TEXT("This is the inverse of import_texture_batch. Running the import again redoes it."));
+	return MCPResult(Result);
+}
+
 TSharedPtr<FJsonValue> FAssetHandlers::ImportTextureBatch(const TSharedPtr<FJsonObject>& Params)
 {
 	const TArray<TSharedPtr<FJsonValue>>* Items = nullptr;
@@ -1465,20 +1671,27 @@ TSharedPtr<FJsonValue> FAssetHandlers::ImportTextureBatch(const TSharedPtr<FJson
 		const FString Destination = Folder / Name;
 		if (Name.IsEmpty() || Name.Contains(TEXT("/")) || Name.Contains(TEXT(".")) || !FPackageName::IsValidLongPackageName(Destination)) return MCPError(TEXT("Invalid texture destination: ") + Destination);
 		if (MCPIsProtectedAssetPath(Destination)) return MCPError(TEXT("Cannot import to a protected mount: ") + Destination + TEXT(". This cannot be overridden; import into /Game or a plugin content folder."));
-		if (UObject* Existing = MCPLoadAssetObject(Destination))
+		UObject* Existing = MCPLoadAssetObject(Destination);
+		if (Existing)
 		{
 			if (auto Blocked = MCPAssetWriteBlockedError(Existing, Destination, TEXT("import texture"))) return Blocked;
 		}
 		if (Destinations.Contains(Destination.ToLower())) return MCPError(TEXT("Duplicate destination: ") + Destination);
 		Destinations.Add(Destination.ToLower());
-		const bool bExists = UEditorAssetLibrary::DoesAssetExist(Destination);
+		// The asset registry is only one witness. UEditorAssetLibrary answers false during Play In Editor and
+		// while the registry is behind, and a replace reported as a create hands back a rollback that deletes
+		// the asset the call overwrote (#1860). The loaded object and the package file decide it as well.
+		const bool bExists = Existing != nullptr
+			|| FPackageName::DoesPackageExist(Destination)
+			|| UEditorAssetLibrary::DoesAssetExist(Destination);
 		if (bExists && !bReplace) return MCPError(TEXT("Destination exists and replaceExisting is false: ") + Destination);
-		if (bExists && !LoadAssetByPath<UTexture2D>(Destination)) return MCPError(TEXT("Destination is not a Texture2D: ") + Destination);
+		if (bExists && !Cast<UTexture2D>(Existing ? Existing : LoadAssetByPath<UTexture2D>(Destination))) return MCPError(TEXT("Destination is not a Texture2D: ") + Destination);
 		auto Row = MCPSuccess();
 		Row->SetStringField(TEXT("filePath"), FilePath);
 		Row->SetStringField(TEXT("packagePath"), Folder);
 		Row->SetStringField(TEXT("name"), Name);
 		Row->SetBoolField(TEXT("replacedExisting"), bExists);
+		Row->SetBoolField(TEXT("existed"), bExists);
 		Row->SetObjectField(TEXT("requestedSettings"), Parsed);
 		Rows.Add(MakeShared<FJsonValueObject>(Row));
 		Settings.Add(Parsed);
@@ -1496,13 +1709,30 @@ TSharedPtr<FJsonValue> FAssetHandlers::ImportTextureBatch(const TSharedPtr<FJson
 		Task->Factory = Factory;
 		Tasks.Add(Task);
 	}
-	if (!bDryRun) FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools")).Get().ImportAssetTasks(Tasks);
+	if (!bDryRun)
+	{
+		// Every entry is valid by now. Keep each replaced texture's saved package so the rollback can put the
+		// original back rather than delete it (#1860).
+		for (const auto& RowValue : Rows)
+		{
+			auto Row = RowValue->AsObject();
+			if (!Row->GetBoolField(TEXT("replacedExisting"))) continue;
+			FString BackupError;
+			const FString BackupDir = MCPBackupAssetPackage(Row->GetStringField(TEXT("packagePath")) / Row->GetStringField(TEXT("name")), BackupError);
+			if (BackupDir.IsEmpty()) Row->SetStringField(TEXT("restoreUnavailable"), BackupError);
+			else Row->SetStringField(TEXT("backupDir"), BackupDir);
+		}
+		FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools")).Get().ImportAssetTasks(Tasks);
+	}
 	int32 Imported = 0;
 	TArray<TSharedPtr<FJsonValue>> CreatedPaths;
-	bool bReplaced = false;
+	TArray<TSharedPtr<FJsonValue>> RestoreItems;
+	TArray<FString> Unrestorable;
+	int32 ReplacedCount = 0;
 	for (int32 Index = 0; Index < Tasks.Num(); ++Index)
 	{
 		auto Row = Rows[Index]->AsObject();
+		const bool bRowExisted = Row->GetBoolField(TEXT("replacedExisting"));
 		TArray<TSharedPtr<FJsonValue>> ImportedPaths, ReadBack;
 		bool bSaved = bSave;
 		for (UObject* Object : Tasks[Index]->GetObjects())
@@ -1525,8 +1755,21 @@ TSharedPtr<FJsonValue> FAssetHandlers::ImportTextureBatch(const TSharedPtr<FJson
 			auto ReadParams = MakeShared<FJsonObject>();
 			ReadParams->SetStringField(TEXT("assetPath"), Texture->GetPathName());
 			ReadBack.Add(ListTextureProperties(ReadParams));
-			if (!Row->GetBoolField(TEXT("replacedExisting"))) CreatedPaths.Add(MakeShared<FJsonValueString>(Texture->GetPathName()));
-			else bReplaced = true;
+			if (!bRowExisted) CreatedPaths.Add(MakeShared<FJsonValueString>(Texture->GetPathName()));
+		}
+		Row->SetBoolField(TEXT("created"), !bRowExisted && ImportedPaths.Num() > 0);
+		if (bRowExisted && ImportedPaths.Num() > 0)
+		{
+			++ReplacedCount;
+			FString BackupDir;
+			if (Row->TryGetStringField(TEXT("backupDir"), BackupDir))
+			{
+				auto Restore = MakeShared<FJsonObject>();
+				Restore->SetStringField(TEXT("assetPath"), Row->GetStringField(TEXT("packagePath")) / Row->GetStringField(TEXT("name")));
+				Restore->SetStringField(TEXT("backupDir"), BackupDir);
+				RestoreItems.Add(MakeShared<FJsonValueObject>(Restore));
+			}
+			else Unrestorable.Add(Row->GetStringField(TEXT("packagePath")) / Row->GetStringField(TEXT("name")));
 		}
 		Row->SetArrayField(TEXT("importedAssets"), ImportedPaths);
 		Row->SetArrayField(TEXT("readBack"), ReadBack);
@@ -1545,17 +1788,41 @@ TSharedPtr<FJsonValue> FAssetHandlers::ImportTextureBatch(const TSharedPtr<FJson
 	bool bSuccess = true;
 	for (const auto& Row : Rows) bSuccess &= Row->AsObject()->GetBoolField(TEXT("success"));
 	Result->SetBoolField(TEXT("success"), bSuccess);
+	Result->SetNumberField(TEXT("createdCount"), CreatedPaths.Num());
+	Result->SetNumberField(TEXT("replacedCount"), ReplacedCount);
+	Result->SetBoolField(TEXT("replacedExisting"), ReplacedCount > 0);
+	// created/existed describe the batch: created when any entry made a new texture, existed when every
+	// texture it wrote was already there. updated marks that existing textures were overwritten.
 	if (CreatedPaths.Num() > 0) MCPSetCreated(Result);
-	if (bReplaced) MCPSetUpdated(Result);
-	if (CreatedPaths.Num() > 0)
+	else if (ReplacedCount > 0) MCPSetExisted(Result);
+	if (ReplacedCount > 0) MCPSetUpdated(Result);
+	if (bDryRun || Imported == 0)
+	{
+		MCPSetNoRollback(Result, bDryRun ? TEXT("Dry run: nothing was imported.") : TEXT("No texture was imported, so there is nothing to undo."));
+	}
+	else if (ReplacedCount > 0)
+	{
+		// A replace is undone by putting the saved package back, never by deleting the asset.
+		auto Rollback = MakeShared<FJsonObject>();
+		Rollback->SetArrayField(TEXT("items"), RestoreItems);
+		Rollback->SetArrayField(TEXT("createdAssetPaths"), CreatedPaths);
+		MCPSetRollback(Result, TEXT("restore_texture_import"), Rollback);
+		Result->SetBoolField(TEXT("rollbackLossy"), Unrestorable.Num() > 0);
+		FString Note = TEXT("Rollback restores each replaced texture from the package saved before the import and deletes only the textures this call created, subject to referencer checks.");
+		if (Unrestorable.Num() > 0)
+		{
+			Note += TEXT(" These replaced textures had unsaved changes or no package file, so the rollback leaves them as imported rather than delete them: ") + FString::Join(Unrestorable, TEXT(", ")) + TEXT(".");
+		}
+		Result->SetStringField(TEXT("rollbackNote"), Note);
+	}
+	else
 	{
 		auto Rollback = MakeShared<FJsonObject>();
 		Rollback->SetArrayField(TEXT("assetPaths"), CreatedPaths);
 		MCPSetRollback(Result, TEXT("delete_asset_batch"), Rollback);
+		Result->SetBoolField(TEXT("rollbackLossy"), false);
+		Result->SetStringField(TEXT("rollbackNote"), TEXT("Rollback deletes the textures this call created, subject to referencer checks."));
 	}
-	else Result->SetBoolField(TEXT("rollbackPossible"), false);
-	Result->SetBoolField(TEXT("rollbackLossy"), bReplaced);
-	Result->SetStringField(TEXT("rollbackNote"), TEXT("Rollback deletes only newly created textures, subject to referencer checks. Replaced source pixels cannot be restored; restore those assets from a backup."));
 	return MCPResult(Result);
 }
 
