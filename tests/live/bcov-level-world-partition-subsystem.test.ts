@@ -71,7 +71,7 @@ beforeAll(async () => {
   originalMap = await currentMap();
   await call("demo_go_home");
   await callBridge(bridge, "delete_asset", { assetPath: MAP, force: true });
-  const created = await call("create_new_level", { levelPath: MAP, worldPartition: true });
+  const created = await call("create_new_level", { levelPath: MAP, worldPartition: true, discardUnsaved: true });
   expect(created.worldPartition).toBe(true);
   await call("place_actor", { actorClass: "/Script/Engine.StaticMeshActor", label: CUBE_LABEL, staticMesh: CUBE, location: { x: 0, y: 0, z: 100 } });
   await call("save_level");

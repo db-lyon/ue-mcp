@@ -66,7 +66,7 @@ beforeAll(async () => {
   await call("demo_go_home");
   await callBridge(bridge, "load_level", { levelPath: HOME, discardUnsaved: true });
   await callBridge(bridge, "delete_asset", { assetPath: WP, force: true });
-  const created = await call("create_new_level", { levelPath: WP, worldPartition: true });
+  const created = await call("create_new_level", { levelPath: WP, worldPartition: true, discardUnsaved: true });
   expect(created.worldPartition).toBe(true);
   await cube(LABEL_A, { x: 0, y: 0, z: 100 });
   await cube(LABEL_B, { x: 20000, y: 0, z: 100 });

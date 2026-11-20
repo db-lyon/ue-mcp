@@ -239,9 +239,9 @@ const HOME_LEVEL = "/Game/MCP_Home";
 // we're not currently sitting on the scratch we're about to delete.
 async function preFlight(ws, idGen) {
   console.log(`${DIM}  preflight: anchor MCP_Home + create blank ${SCRATCH_LEVEL}${RESET}`);
-  await rpcRaw(ws, "demo_go_home", { discardUnsaved: true }, idGen());
+  await rpcRaw(ws, "demo_go_home", { discardUnsaved: true, endPIE: true }, idGen());
   await rpcRaw(ws, "delete_asset", { assetPath: SCRATCH_LEVEL, force: true }, idGen());
-  const r = await rpcRaw(ws, "create_new_level", { levelPath: SCRATCH_LEVEL }, idGen());
+  const r = await rpcRaw(ws, "create_new_level", { levelPath: SCRATCH_LEVEL, discardUnsaved: true, endPIE: true }, idGen());
   if (r.error) {
     console.error(`${YELLOW}  preflight warning: create_new_level failed: ${r.error.message}${RESET}`);
   }
@@ -257,7 +257,8 @@ async function teardown(ws, idGen) {
   await rpcRaw(ws, "delete_asset", { assetPath: HOME_LEVEL, force: true }, idGen());
   // Create a fresh blank MCP_Home; this also switches the editor to it,
   // unloading SCRATCH.
-  await rpcRaw(ws, "create_new_level", { levelPath: HOME_LEVEL }, idGen());
+  // The scratch map is full of unsaved smoke spawns, and a smoke case may have left play running.
+  await rpcRaw(ws, "create_new_level", { levelPath: HOME_LEVEL, discardUnsaved: true, endPIE: true }, idGen());
   await rpcRaw(ws, "save_level", {}, idGen());
   // SCRATCH now unloaded; safe to delete.
   await rpcRaw(ws, "delete_asset", { assetPath: SCRATCH_LEVEL, force: true }, idGen());

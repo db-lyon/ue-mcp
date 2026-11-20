@@ -30,7 +30,7 @@ beforeAll(async () => {
   await callBridge(bridge, "demo_go_home", { discardUnsaved: true });
   await callBridge(bridge, "load_level", { levelPath: HOME });
   await callBridge(bridge, "delete_asset", { assetPath: MAP, force: true });
-  const created = await callBridge(bridge, "create_new_level", { levelPath: MAP });
+  const created = await callBridge(bridge, "create_new_level", { levelPath: MAP, discardUnsaved: true });
   expect(created.ok, created.error).toBe(true);
   expect((created.result as Json).success, JSON.stringify(created.result)).not.toBe(false);
   await callBridge(bridge, "save_level", {});

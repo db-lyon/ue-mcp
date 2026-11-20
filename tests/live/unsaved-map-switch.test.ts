@@ -16,6 +16,7 @@ const HOME = "/Game/MCP_Home";
 const DIR = `${TEST_PREFIX}/UnsavedSwitch`;
 const SCRATCH = `${DIR}/L_UnsavedSwitchScratch`;
 const TARGET = `${DIR}/L_UnsavedSwitchTarget`;
+const CREATED = `${DIR}/L_UnsavedSwitchCreated`;
 const CUBE = "/Engine/BasicShapes/Cube.Cube";
 const LABEL = "UnsavedSwitch_Cube";
 
@@ -38,7 +39,7 @@ async function currentMap(): Promise<string> {
 /** Put the editor on a never-saved /Temp map with an unsaved change, and return that map's package name. */
 async function onDirtyUntitledMap(): Promise<string> {
   await callBridge(bridge, "delete_asset", { assetPath: SCRATCH, force: true });
-  await call("create_new_level", { levelPath: SCRATCH });
+  await call("create_new_level", { levelPath: SCRATCH, discardUnsaved: true });
   if ((await currentMap()) !== SCRATCH) await call("load_level", { levelPath: SCRATCH, discardUnsaved: true });
   expect(await currentMap()).toBe(SCRATCH);
   // Deleting the open map swaps the editor to a blank world first.
@@ -53,7 +54,7 @@ beforeAll(async () => {
   bridge = await getBridge();
   await call("demo_go_home", { discardUnsaved: true });
   await callBridge(bridge, "delete_asset", { assetPath: TARGET, force: true });
-  await call("create_new_level", { levelPath: TARGET });
+  await call("create_new_level", { levelPath: TARGET, discardUnsaved: true });
   await call("demo_go_home", { discardUnsaved: true });
 }, 300_000);
 
@@ -62,6 +63,7 @@ afterAll(async () => {
   await callBridge(bridge, "load_level", { levelPath: HOME, discardUnsaved: true });
   await callBridge(bridge, "delete_asset", { assetPath: TARGET, force: true });
   await callBridge(bridge, "delete_asset", { assetPath: SCRATCH, force: true });
+  await callBridge(bridge, "delete_asset", { assetPath: CREATED, force: true });
   await callBridge(bridge, "delete_folder", { path: DIR, force: true });
   disconnectBridge();
 }, 300_000);
@@ -105,6 +107,40 @@ describe("load_level(discardUnsaved=true) on a dirty never-saved map", () => {
     expect(loaded.discardedPackages as string[]).toContain(untitled);
     expect(await currentMap()).toBe(TARGET);
     // The placed actor belonged to the discarded map, not to the one now open.
+    expect(succeeded(await callBridge(bridge, "get_actor_details", { actorLabel: LABEL }))).toBe(false);
+  }, 300_000);
+});
+
+describe("create_new_level on a dirty never-saved map (#1912)", () => {
+  it("refuses without a flag, names the map, and creates nothing", async () => {
+    const untitled = await onDirtyUntitledMap();
+    await callBridge(bridge, "delete_asset", { assetPath: CREATED, force: true });
+    const r = await callBridge(bridge, "create_new_level", { levelPath: CREATED });
+    expect(succeeded(r), "create_new_level must not drop unsaved work without being asked").toBe(false);
+    expect(body(r).reason).toBe("unsaved_changes");
+    expect(body(r).dirtyPackages as string[]).toContain(untitled);
+    expect(await currentMap()).toBe(untitled);
+    expect(succeeded(await callBridge(bridge, "read_asset", { assetPath: CREATED })), "nothing may be created at the refused path").toBe(false);
+    // The actor is still there to save.
+    expect(succeeded(await callBridge(bridge, "get_actor_details", { actorLabel: LABEL }))).toBe(true);
+  }, 300_000);
+
+  it("refuses saveFirst on a never-saved map and points at save_as", async () => {
+    const untitled = await currentMap();
+    expect(untitled.startsWith("/Temp/")).toBe(true);
+    const r = await callBridge(bridge, "create_new_level", { levelPath: CREATED, saveFirst: true });
+    expect(succeeded(r)).toBe(false);
+    expect(body(r).reason).toBe("untitled_map");
+    expect(String(body(r).error)).toContain("save_as");
+    expect(await currentMap()).toBe(untitled);
+  }, 300_000);
+
+  it("drops the changes with discardUnsaved=true and opens the new level", async () => {
+    const untitled = await currentMap();
+    const created = await call("create_new_level", { levelPath: CREATED, discardUnsaved: true });
+    expect(created.discardedPackages as string[]).toContain(untitled);
+    expect(created.endedPlaySession).toBe(false);
+    expect(await currentMap()).toBe(CREATED);
     expect(succeeded(await callBridge(bridge, "get_actor_details", { actorLabel: LABEL }))).toBe(false);
   }, 300_000);
 });
