@@ -1179,29 +1179,17 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::ConnectPins(const TSharedPtr<FJsonObj
 	// Everything the failure path must restore, the requested wire included.
 	const TArray<UEdGraphPin*> RestoreSourceLinks = bBreakExistingSource ? SourcePin->LinkedTo : TArray<UEdGraphPin*>();
 	const TArray<UEdGraphPin*> RestoreTargetLinks = bBreakExistingTarget ? TargetPin->LinkedTo : TArray<UEdGraphPin*>();
-	const int32 BrokenSourceLinks = PreviousSourceLinks.Num();
-	const int32 BrokenTargetLinks = PreviousTargetLinks.Num();
 
-	// Identity of every link about to be broken, recorded while the pins are
-	// still linked, so connect_pins can re-make each one.
-	auto DescribeLinks = [](const TArray<UEdGraphPin*>& Links)
-	{
-		TArray<TSharedPtr<FJsonValue>> Out;
-		for (const UEdGraphPin* LinkedPin : Links)
-		{
-			if (!LinkedPin) continue;
-			const UEdGraphNode* Owner = LinkedPin->GetOwningNode();
-			TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
-			O->SetStringField(TEXT("nodeId"), Owner ? Owner->NodeGuid.ToString() : FString());
-			O->SetStringField(TEXT("pinName"), LinkedPin->PinName.ToString());
-			O->SetStringField(TEXT("direction"),
-				LinkedPin->Direction == EGPD_Input ? TEXT("input") : TEXT("output"));
-			Out.Add(MakeShared<FJsonValueObject>(O));
-		}
-		return Out;
-	};
-	const TArray<TSharedPtr<FJsonValue>> BrokenSourceDetail = DescribeLinks(PreviousSourceLinks);
-	const TArray<TSharedPtr<FJsonValue>> BrokenTargetDetail = DescribeLinks(PreviousTargetLinks);
+	// Every other link on both pins, recorded while they are still linked. The
+	// break flags are not the only thing that removes one: a pin that takes a
+	// single link makes the schema answer BREAK_OTHERS_A or _B, and
+	// TryCreateConnection drops the old link itself. What was severed is read
+	// by comparing these against the pins afterwards, so the count and the
+	// detail say what happened whichever flags were passed (#1905).
+	const FMCPPinLinkRecord SourceSelf = MCPRecordPin(SourcePin);
+	const FMCPPinLinkRecord TargetSelf = MCPRecordPin(TargetPin);
+	const TArray<FMCPPinLinkRecord> SourceLinksBefore = MCPRecordPinLinks(SourcePin, TargetPin);
+	const TArray<FMCPPinLinkRecord> TargetLinksBefore = MCPRecordPinLinks(TargetPin, SourcePin);
 	UPackage* Package = Blueprint->GetOutermost();
 	const bool bWasPackageDirty = Package && Package->IsDirty();
 
@@ -1257,6 +1245,14 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::ConnectPins(const TSharedPtr<FJsonObj
 			MCPSetCreated(Result);
 		}
 		Result->SetStringField(TEXT("path"), AssetPath);
+		const TArray<TSharedPtr<FJsonValue>> BrokenSourceDetail = MCPPinLinksSevered(SourceNode, SourceSelf, SourceLinksBefore);
+		const TArray<TSharedPtr<FJsonValue>> BrokenTargetDetail = MCPPinLinksSevered(TargetNode, TargetSelf, TargetLinksBefore);
+		const int32 BrokenSourceLinks = BrokenSourceDetail.Num();
+		const int32 BrokenTargetLinks = BrokenTargetDetail.Num();
+		// The links the schema removed on its own, beyond what a flag asked for.
+		const int32 ReplacedLinks = FMath::Max(0, BrokenSourceLinks - PreviousSourceLinks.Num())
+			+ FMath::Max(0, BrokenTargetLinks - PreviousTargetLinks.Num());
+
 		Result->SetStringField(TEXT("graphName"), GraphName);
 		Result->SetStringField(TEXT("sourceNodeId"), SourceNodeId);
 		Result->SetStringField(TEXT("sourcePinName"), SourcePinName);
@@ -1294,9 +1290,9 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::ConnectPins(const TSharedPtr<FJsonObj
 			{
 				Result->SetBoolField(TEXT("rollbackLossy"), true);
 				Result->SetStringField(TEXT("rollbackNote"), FString::Printf(TEXT(
-					"disconnect_pins removes the wire this call made. The %d link(s) that breakExistingSource or "
-					"breakExistingTarget severed are named in brokenSourceLinkDetail and brokenTargetLinkDetail; "
-					"feed each back through connect_pins to re-make it."),
+					"disconnect_pins removes the wire this call made. The %d link(s) this connection severed, by a "
+					"break flag or because a single-link pin was rewired, are named in brokenSourceLinkDetail and "
+					"brokenTargetLinkDetail; feed each back through connect_pins to re-make it."),
 					BrokenTotal));
 			}
 		}
@@ -1306,6 +1302,15 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::ConnectPins(const TSharedPtr<FJsonObj
 	{
 		// Capture the failure before restoring the exact previous graph state.
 		FString ErrorMsg = TEXT("TryCreateConnection failed. Pins may be incompatible.");
+		if (ReplacedLinks > 0)
+		{
+			// Said outright, because nothing in the call asked for it.
+			Result->SetNumberField(TEXT("replacedLinks"), ReplacedLinks);
+			Result->SetStringField(TEXT("replacedLinksNote"), FString::Printf(TEXT(
+				"%d existing link(s) were removed without a break flag: the pin takes a single link, so the graph "
+				"schema replaced the old wire with this one. They are included in brokenSourceLinkDetail and "
+				"brokenTargetLinkDetail."), ReplacedLinks));
+		}
 		FPinConnectionResponse Response = Schema->CanCreateConnection(SourcePin, TargetPin);
 		if (!Response.Message.IsEmpty())
 		{
@@ -3056,7 +3061,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::ConnectPinsBatch(const TSharedPtr<FJs
 		return nullptr;
 	};
 
-	int32 Connected = 0, Existed = 0, Failed = 0;
+	int32 Connected = 0, Existed = 0, Failed = 0, BrokenLinks = 0;
 	TArray<TSharedPtr<FJsonValue>> Detail;
 	for (const TSharedPtr<FJsonValue>& Entry : *ConnectionsArray)
 	{
@@ -3228,10 +3233,22 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AutoLayoutGraph(const TSharedPtr<FJso
 
 	UBlueprint* Blueprint = LoadBlueprint(AssetPath);
 	if (!Blueprint) return BlueprintNotFoundError(AssetPath);
+		// A single-link pin makes the schema drop its old wire (#1905).
+		const FMCPPinLinkRecord SrcSelf = MCPRecordPin(SP);
+		const FMCPPinLinkRecord TgtSelf = MCPRecordPin(TP);
+		const TArray<FMCPPinLinkRecord> SrcBefore = MCPRecordPinLinks(SP, TP);
+		const TArray<FMCPPinLinkRecord> TgtBefore = MCPRecordPinLinks(TP, SP);
 	UEdGraph* Graph = FindGraph(Blueprint, GraphName);
 	if (!Graph) return MCPError(FString::Printf(TEXT("Graph not found: %s"), *GraphName));
 
 	// Compute a column index per node: longest predecessor chain through exec
+			TArray<TSharedPtr<FJsonValue>> Severed = MCPPinLinksSevered(Src, SrcSelf, SrcBefore);
+			Severed.Append(MCPPinLinksSevered(Tgt, TgtSelf, TgtBefore));
+			if (Severed.Num() > 0)
+			{
+				EntryResult->SetArrayField(TEXT("brokenLinks"), Severed);
+				BrokenLinks += Severed.Num();
+			}
 	// pins (or any input pin if exec is absent).
 	TMap<UEdGraphNode*, int32> Column;
 	TArray<UEdGraphNode*> Order = Graph->Nodes;
@@ -3260,6 +3277,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AutoLayoutGraph(const TSharedPtr<FJso
 			int32 Col = 0;
 			for (UEdGraphNode* Inc : GetIncoming(Node))
 			{
+	Result->SetNumberField(TEXT("brokenLinks"), BrokenLinks);
 				if (int32* InCol = Column.Find(Inc)) Col = FMath::Max(Col, *InCol + 1);
 			}
 			int32* Existing = Column.Find(Node);

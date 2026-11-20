@@ -367,6 +367,91 @@ inline USCS_Node* MCPFindSCSNode(USimpleConstructionScript* SCS, const FString& 
 	return nullptr;
 }
 
+/** One link on a pin, recorded by identity before a schema connection so the
+ *  links the connection removed can be named afterwards (#1905). A pin that
+ *  takes one link (a pose or exec output, a data input) answers
+ *  CONNECT_RESPONSE_BREAK_OTHERS_A or _B, and TryCreateConnection then drops
+ *  the old link with no flag asking for it. Pin is compared, never
+ *  dereferenced after the connection, because the connection can rebuild pins. */
+struct FMCPPinLinkRecord
+{
+	const UEdGraphPin* Pin = nullptr;
+	FGuid PinId;
+	FGuid NodeGuid;
+	FName PinName;
+	EEdGraphPinDirection Direction = EGPD_Input;
+};
+
+inline FMCPPinLinkRecord MCPRecordPin(const UEdGraphPin* Pin)
+{
+	FMCPPinLinkRecord Rec;
+	Rec.Pin = Pin;
+	if (!Pin) return Rec;
+	Rec.PinId = Pin->PinId;
+	const UEdGraphNode* Owner = Pin->GetOwningNode();
+	Rec.NodeGuid = Owner ? Owner->NodeGuid : FGuid();
+	Rec.PinName = Pin->PinName;
+	Rec.Direction = Pin->Direction;
+	return Rec;
+}
+
+/** Same logical pin: the pointer, the pin id, or the owning node's guid with
+ *  the pin's name and direction, which survives a pin rebuild. */
+inline bool MCPPinMatchesRecord(const UEdGraphPin* Pin, const FMCPPinLinkRecord& Rec)
+{
+	if (!Pin) return false;
+	if (Pin == Rec.Pin) return true;
+	if (Pin->PinId.IsValid() && Rec.PinId.IsValid() && Pin->PinId == Rec.PinId) return true;
+	const UEdGraphNode* Owner = Pin->GetOwningNode();
+	return Owner && Rec.NodeGuid.IsValid() && Owner->NodeGuid == Rec.NodeGuid
+		&& Pin->PinName == Rec.PinName && Pin->Direction == Rec.Direction;
+}
+
+/** Every link on Pin except the one to Except. */
+inline TArray<FMCPPinLinkRecord> MCPRecordPinLinks(const UEdGraphPin* Pin, const UEdGraphPin* Except)
+{
+	TArray<FMCPPinLinkRecord> Out;
+	if (!Pin) return Out;
+	const FMCPPinLinkRecord ExceptRec = MCPRecordPin(Except);
+	for (const UEdGraphPin* Linked : Pin->LinkedTo)
+	{
+		if (!Linked || (Except && MCPPinMatchesRecord(Linked, ExceptRec))) continue;
+		Out.Add(MCPRecordPin(Linked));
+	}
+	return Out;
+}
+
+inline TSharedPtr<FJsonValue> MCPDescribePinLinkRecord(const FMCPPinLinkRecord& Rec)
+{
+	TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
+	O->SetStringField(TEXT("nodeId"), Rec.NodeGuid.IsValid() ? Rec.NodeGuid.ToString() : FString());
+	O->SetStringField(TEXT("pinName"), Rec.PinName.ToString());
+	O->SetStringField(TEXT("direction"), Rec.Direction == EGPD_Input ? TEXT("input") : TEXT("output"));
+	return MakeShared<FJsonValueObject>(O);
+}
+
+/** The recorded links that Self (found again on its node by name and
+ *  direction) no longer holds, described as connect_pins takes them back. */
+inline TArray<TSharedPtr<FJsonValue>> MCPPinLinksSevered(const UEdGraphNode* Node, const FMCPPinLinkRecord& Self,
+	const TArray<FMCPPinLinkRecord>& Before)
+{
+	TArray<TSharedPtr<FJsonValue>> Out;
+	const UEdGraphPin* Now = Node ? Node->FindPin(Self.PinName, Self.Direction) : nullptr;
+	for (const FMCPPinLinkRecord& Rec : Before)
+	{
+		bool bStill = false;
+		if (Now)
+		{
+			for (const UEdGraphPin* Linked : Now->LinkedTo)
+			{
+				if (MCPPinMatchesRecord(Linked, Rec)) { bStill = true; break; }
+			}
+		}
+		if (!bStill) Out.Add(MCPDescribePinLinkRecord(Rec));
+	}
+	return Out;
+}
+
 /** Reports whether a node-level write compiled, or left it to blueprint(compile) (#1346). */
 inline void MCPNoteCompileDeferred(const TSharedPtr<FJsonObject>& Result, bool bDeferred)
 {
