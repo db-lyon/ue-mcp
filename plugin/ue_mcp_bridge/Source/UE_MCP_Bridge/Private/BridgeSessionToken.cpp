@@ -388,6 +388,187 @@ FString UEMCPBridgeSessionToken::DescribeRefusal(EMCPBridgeAuthDecision Decision
 	}
 }
 
+namespace
+{
+	const TCHAR* const MCPRedactedMarker = TEXT("[REDACTED]");
+
+	bool MCPRedact_IsCredentialHeader(const FString& Name)
+	{
+		static const TCHAR* const Names[] = {
+			TEXT("Authorization"), TEXT("Proxy-Authorization"), TEXT("X-UE-MCP-Token"), TEXT("Cookie"), TEXT("Set-Cookie") };
+		for (const TCHAR* Candidate : Names)
+		{
+			if (Name.Equals(Candidate, ESearchCase::IgnoreCase))
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/** "Bearer <token>" or "Bearer ...": usage text naming the shape, not a value. */
+	bool MCPRedact_IsPlaceholder(const FString& Value)
+	{
+		FString Rest = Value;
+		int32 Space = INDEX_NONE;
+		if (Rest.FindChar(TEXT(' '), Space))
+		{
+			Rest = Rest.Mid(Space + 1).TrimStart();
+		}
+		return Rest == TEXT("...") || (Rest.StartsWith(TEXT("<")) && Rest.EndsWith(TEXT(">")));
+	}
+
+	/** The leading scheme word of a header value ("Bearer abc" gives "Bearer"), or empty. */
+	FString MCPRedact_SchemeWord(const FString& Value)
+	{
+		int32 End = 0;
+		while (End < Value.Len() && (FChar::IsAlnum(Value[End]) || Value[End] == TEXT('-')))
+		{
+			++End;
+		}
+		if (End == 0 || !FChar::IsAlpha(Value[0]) || End >= Value.Len() || !FChar::IsWhitespace(Value[End]))
+		{
+			return FString();
+		}
+		return Value.Left(End);
+	}
+
+	/** Replace the value of every credential header line, keeping the scheme word. */
+	FString MCPRedact_HeaderLines(const FString& Text)
+	{
+		TArray<FString> Lines;
+		Text.ParseIntoArray(Lines, TEXT("\n"), /*InCullEmpty*/ false);
+		for (FString& Line : Lines)
+		{
+			const int32 Colon = Line.Find(TEXT(":"), ESearchCase::CaseSensitive);
+			if (Colon == INDEX_NONE)
+			{
+				continue;
+			}
+			FString Name = Line.Left(Colon).TrimStartAndEnd().TrimQuotes();
+			if (!MCPRedact_IsCredentialHeader(Name))
+			{
+				continue;
+			}
+			const bool bCarriageReturn = Line.EndsWith(TEXT("\r"));
+			const FString Value = Line.Mid(Colon + 1).TrimStartAndEnd();
+			if (Value.IsEmpty() || Value == MCPRedactedMarker || MCPRedact_IsPlaceholder(Value))
+			{
+				continue;
+			}
+			const FString Scheme = MCPRedact_SchemeWord(Value);
+			Line = Line.Left(Colon + 1) + TEXT(" ") + (Scheme.IsEmpty() ? FString() : Scheme + TEXT(" ")) + MCPRedactedMarker
+				+ (bCarriageReturn ? TEXT("\r") : TEXT(""));
+		}
+		return FString::Join(Lines, TEXT("\n"));
+	}
+
+	bool MCPRedact_MatchesAt(const FString& Text, int32 Index, const TCHAR* Word)
+	{
+		const int32 Len = FCString::Strlen(Word);
+		return Index + Len <= Text.Len() && FCString::Strnicmp(*Text + Index, Word, Len) == 0;
+	}
+
+	/**
+	 * Find each Word that starts a word, let Value say where its credential
+	 * starts (or INDEX_NONE), and replace a run of at least 8 characters that
+	 * IsValueChar accepts there.
+	 */
+	template <typename FValueStart, typename FIsValueChar>
+	FString MCPRedact_ScanWords(const FString& Text, const TArray<const TCHAR*>& Words, FValueStart ValueStart, FIsValueChar IsValueChar)
+	{
+		FString Out;
+		Out.Reserve(Text.Len());
+		int32 Index = 0;
+		while (Index < Text.Len())
+		{
+			bool bReplaced = false;
+			if (Index == 0 || !FChar::IsAlnum(Text[Index - 1]))
+			{
+				for (const TCHAR* Word : Words)
+				{
+					if (!MCPRedact_MatchesAt(Text, Index, Word))
+					{
+						continue;
+					}
+					const int32 Start = ValueStart(Text, Index + FCString::Strlen(Word));
+					if (Start == INDEX_NONE)
+					{
+						continue;
+					}
+					int32 End = Start;
+					while (End < Text.Len() && IsValueChar(Text[End]))
+					{
+						++End;
+					}
+					if (End - Start >= 8)
+					{
+						Out += Text.Mid(Index, Start - Index);
+						Out += MCPRedactedMarker;
+						Index = End;
+						bReplaced = true;
+					}
+					break;
+				}
+			}
+			if (!bReplaced)
+			{
+				Out.AppendChar(Text[Index]);
+				++Index;
+			}
+		}
+		return Out;
+	}
+}
+
+FString UEMCPBridgeSessionToken::RedactCredentials(const FString& Text)
+{
+	if (Text.IsEmpty())
+	{
+		return Text;
+	}
+
+	FString Out = MCPRedact_HeaderLines(Text);
+
+	// A bearer or basic credential wherever it appears.
+	Out = MCPRedact_ScanWords(Out, { TEXT("Bearer"), TEXT("Basic") },
+		[](const FString& S, int32 After)
+		{
+			int32 At = After;
+			while (At < S.Len() && (S[At] == TEXT(' ') || S[At] == TEXT('\t')))
+			{
+				++At;
+			}
+			return At > After ? At : INDEX_NONE;
+		},
+		[](TCHAR C)
+		{
+			return FChar::IsAlnum(C) || C == TEXT('.') || C == TEXT('_') || C == TEXT('~') || C == TEXT('+')
+				|| C == TEXT('/') || C == TEXT('=') || C == TEXT('-');
+		});
+
+	// token=..., access_token: ..., "api_key": "...": a key named like a secret, then its value.
+	Out = MCPRedact_ScanWords(Out, { TEXT("token"), TEXT("secret"), TEXT("password"), TEXT("api_key"), TEXT("api-key"), TEXT("apikey") },
+		[](const FString& S, int32 After)
+		{
+			int32 At = After;
+			if (At < S.Len() && (S[At] == TEXT('"') || S[At] == TEXT('\''))) ++At;
+			while (At < S.Len() && (S[At] == TEXT(' ') || S[At] == TEXT('\t'))) ++At;
+			if (At >= S.Len() || (S[At] != TEXT(':') && S[At] != TEXT('='))) return (int32)INDEX_NONE;
+			++At;
+			while (At < S.Len() && (S[At] == TEXT(' ') || S[At] == TEXT('\t'))) ++At;
+			if (At < S.Len() && (S[At] == TEXT('"') || S[At] == TEXT('\''))) ++At;
+			return At;
+		},
+		[](TCHAR C)
+		{
+			return !FChar::IsWhitespace(C) && C != TEXT('"') && C != TEXT('\'') && C != TEXT(',') && C != TEXT(';')
+				&& C != TEXT('&') && C != TEXT('}');
+		});
+
+	return Out;
+}
+
 FString UEMCPBridgeSessionToken::UserMcpDir()
 {
 	// os.homedir() reads USERPROFILE on Windows and HOME elsewhere before it
