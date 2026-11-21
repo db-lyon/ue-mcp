@@ -679,7 +679,7 @@ export const actions: Record<string, ActionSpec> = {
   epic_get_virtual_paths: {
     epicSchema: S_epic_get_virtual_paths,
     epicTool: { toolset: "EditorToolset.AssetToolset", name: "EditorToolset.AssetToolset.GetVirtualPaths", engines: ["5.9"] },
-    ...bp("read", "[Epic EditorToolset.AssetToolset] Converts internal asset/folder paths to their Content Browser virtual path. In most projects this is the same as the input. In UEFN/Valkyrie projects it can differ (e.g. an engine plugin's content grouped under a friendly display path) -- use this only to present a path to the user in conversation. The result may not be a valid input to other tools; pass the original path (e.g. from FindAssets) to other tools instead. Available on UE 5.9; absent from UE 5.8.", "epic_call_tool"),
+    ...bp("read", "[Epic EditorToolset.AssetToolset] Converts internal asset/folder paths to their Content Browser virtual path. In most projects this is the same as the input. In a UEFN project it can differ (e.g. an engine plugin's content grouped under a friendly display path) -- use this only to present a path to the user in conversation. The result may not be a valid input to other tools; pass the original path (e.g. from FindAssets) to other tools instead. Available on UE 5.9; absent from UE 5.8.", "epic_call_tool"),
   },
   epic_import_file: {
     epicSchema: S_epic_import_file,
@@ -1092,7 +1092,7 @@ export const schema: Record<string, z.ZodType> = {
   bReplaceExisting: z.boolean().optional().describe("Overwrite an existing CurveTable of the same name instead of failing. A file the CSV reader cannot read fails the import and leaves the existing table untouche…"),
   bSave: z.boolean().optional().describe("Save the imported asset; otherwise it is left unsaved."),
   bSaveGame: z.boolean().optional().describe("Whether the variable is included in SaveGame serialization."),
-  bWritable: z.boolean().optional().describe("If true, only returns roots you can actually create/write to (e.g. a UEFN/Valkyrie project narrows this to plugins it owns) -- use this instead of trying Creat…"),
+  bWritable: z.boolean().optional().describe("If true, only returns roots you can actually create/write to (e.g. a UEFN project narrows this to plugins it owns) -- use this instead of trying CreateFolder/M…"),
   channel: z.string().optional().describe("The channel to read."),
   chaosClothAssetPath: z.string().optional().describe("Object path to the source UChaosClothAssetBase (cloth or outfit asset)."),
   classFilter: z.array(z.unknown()).optional().describe("Same semantics as Search::ClassFilter. See Search for the list of currently-indexed base classes. Pass an empty array for no class filter."),

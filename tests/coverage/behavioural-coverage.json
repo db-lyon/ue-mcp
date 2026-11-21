@@ -8125,7 +8125,7 @@
         {
           "suite": "live",
           "file": "tests/live/epic-mcp.test.ts",
-          "test": "runs a legacy MCP tool library function"
+          "test": "runs a legacy MCP tool library function before 5.9 and has none to run from 5.9"
         },
         {
           "suite": "live",
@@ -8245,7 +8245,7 @@
         {
           "suite": "live",
           "file": "tests/live/epic-mcp.test.ts",
-          "test": "runs a legacy MCP tool library function"
+          "test": "runs a legacy MCP tool library function before 5.9 and has none to run from 5.9"
         }
       ]
     },

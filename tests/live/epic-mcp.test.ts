@@ -17,6 +17,8 @@ const body = (r: TestResult): Json => (r.result && typeof r.result === "object" 
 interface McpTool { name: string; description: string; source: string; library?: string; inputSchema?: Json }
 
 let bridge: EditorBridge;
+/** Epic removed the legacy MCP tool library in 5.9; the fixture registers one only before that. */
+let hasLegacyToolLibrary = true;
 
 async function call(method: string, params: Json): Promise<Json> {
   const r = await callBridge(bridge, method, params);
@@ -50,6 +52,9 @@ async function slowState(): Promise<{ cancellations: number; completions: number
 
 beforeAll(async () => {
   bridge = await getBridge();
+  const caps = body(await callBridge(bridge, "get_bridge_capabilities", {}));
+  const [major, minor] = String(caps.engineVersion).split(".").map(Number);
+  hasLegacyToolLibrary = major === 5 && minor < 9;
 }, 60_000);
 
 afterAll(() => {
@@ -65,8 +70,13 @@ describe("epic_list_mcp_tools", () => {
     }
     expect(byName.get("ue_mcp_fixture_echo")?.description).toContain("Echoes message back");
     const greet = byName.get("UeMcpFixtureLibraryGreet");
-    expect(greet?.source).toBe("toolLibrary");
-    expect(greet?.library).toBe("/Script/UEMCPEpicMCPFixture.UEMCPFixtureToolLibrary");
+    if (hasLegacyToolLibrary) {
+      expect(greet?.source).toBe("toolLibrary");
+      expect(greet?.library).toBe("/Script/UEMCPEpicMCPFixtureLegacy.UEMCPFixtureToolLibrary");
+    } else {
+      expect(greet).toBeUndefined();
+      expect(tools.some((t) => t.source === "toolLibrary")).toBe(false);
+    }
     // Epic's tool-search mode registers list_toolsets, describe_toolset and call_tool
     // on 5.8; 5.9 folds describe_toolset into list_toolsets and registers two.
     expect(registryAdapterCount).toBeGreaterThanOrEqual(2);
@@ -95,8 +105,13 @@ describe("epic_call_mcp_tool", () => {
     expect(raw.structuredContent).toEqual({ message: "raw", length: 3 });
   }, 60_000);
 
-  it("runs a legacy MCP tool library function", async () => {
+  it("runs a legacy MCP tool library function before 5.9 and has none to run from 5.9", async () => {
     const { tools } = await listTools({ nameFilter: "UeMcpFixtureLibraryGreet", includeSchemas: true });
+    if (!hasLegacyToolLibrary) {
+      expect(tools).toEqual([]);
+      expect(await refused("epic_call_mcp_tool", { tool: "UeMcpFixtureLibraryGreet" })).toContain("No MCP tool named 'UeMcpFixtureLibraryGreet'");
+      return;
+    }
     const param = Object.keys((tools[0].inputSchema?.properties as Json) ?? {})[0];
     expect(param, JSON.stringify(tools[0].inputSchema)).toBeTruthy();
     const r = await call("epic_call_mcp_tool", { tool: "UeMcpFixtureLibraryGreet", input: { [param]: "library" } });
