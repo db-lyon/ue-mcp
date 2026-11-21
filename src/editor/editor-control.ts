@@ -63,7 +63,7 @@ const NO_EDITOR_BINARY_MSG =
  * `engineEditorBinaries` covers. On macOS the launchable one is inside the .app
  * bundle.
  */
-function findEditorExecutable(project?: ProjectContext): string | null {
+export function findEditorExecutable(project?: ProjectContext): string | null {
   // Same rule as the build tool: the env var is the global default and wins,
   // `editor.path` is how one project names its own binary (#817).
   const pinned = resolveSetting("editorPath", { config: project?.config.editor?.path }).value;
