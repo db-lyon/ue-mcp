@@ -179,6 +179,7 @@ describe("pie stream", () => {
   it("stream_stop disconnects the streamer and a second stop is a no-op", async () => {
     const stopped = await call("pie_stream_stop", {});
     expect(stopped).toMatchObject({ streaming: false, armed: false, stopped: true, alreadyStopped: false });
+    expect(stopped.rollback).toMatchObject({ method: "pie_stream_start", payload: { signallingUrl: url, streamerId: "studio", codec: "VP8", fps: 24 } });
     expect(await waitFor(() => stub.sockets.size === 0, 30_000), "streamer stayed connected after stream_stop").toBe(true);
     expect(await call("pie_stream_stop", {})).toMatchObject({ stopped: false, alreadyStopped: true });
     expect(await call("pie_stream_status", {})).toMatchObject({ streaming: false, armed: false, streamerId: null });

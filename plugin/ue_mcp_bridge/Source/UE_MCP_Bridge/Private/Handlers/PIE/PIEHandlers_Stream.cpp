@@ -187,6 +187,8 @@ TSharedPtr<FJsonValue> FPIEHandlers::PieStreamStart(const TSharedPtr<FJsonObject
 	MCPStreamWriteConfig(Result, Config);
 	Backend->WriteLiveState(Result);
 	Result->SetBoolField(TEXT("replaced"), bReplaced);
+	if (bReplaced) MCPSetUpdated(Result);
+	else MCPSetCreated(Result);
 	if (Result->GetBoolField(TEXT("armed")))
 	{
 		Result->SetStringField(TEXT("note"), TEXT("No PIE session is running, so the stream is armed: the streamer connects to signalling when PIE starts and disconnects when it ends, for every PIE session until stream_stop."));
@@ -199,13 +201,30 @@ TSharedPtr<FJsonValue> FPIEHandlers::PieStreamStop(const TSharedPtr<FJsonObject>
 {
 	MCP_CHECK_GAME_THREAD();
 	IMCPStreamBackend* Backend = UEMCP::GetStreamBackend();
+	const FMCPStreamConfig* Active = Backend ? Backend->GetActiveConfig() : nullptr;
+	const TOptional<FMCPStreamConfig> Stopping = Active ? TOptional<FMCPStreamConfig>(*Active) : TOptional<FMCPStreamConfig>();
 	const bool bStopped = Backend && Backend->Stop();
 	auto Result = MCPSuccess();
 	Result->SetBoolField(TEXT("streaming"), false);
 	Result->SetBoolField(TEXT("armed"), false);
 	Result->SetBoolField(TEXT("stopped"), bStopped);
 	Result->SetBoolField(TEXT("alreadyStopped"), !bStopped);
-	MCPSetNoRollback(Result, TEXT("The stopped stream's settings are not kept; start it again with stream_start"));
+	if (bStopped && Stopping.IsSet())
+	{
+		// Starting the same stream again is the inverse.
+		auto Payload = MakeShared<FJsonObject>();
+		MCPStreamWriteConfig(Payload, Stopping.GetValue());
+		Payload->RemoveField(TEXT("resolution"));
+		if (Stopping->Resolution != FIntPoint::ZeroValue)
+		{
+			Payload->SetStringField(TEXT("resolution"), MCPStreamResolutionText(Stopping->Resolution));
+		}
+		MCPSetRollback(Result, TEXT("pie_stream_start"), Payload);
+	}
+	else
+	{
+		MCPSetNoRollback(Result, TEXT("Nothing was streaming, so nothing changed"));
+	}
 	return MCPResult(Result);
 }
 
