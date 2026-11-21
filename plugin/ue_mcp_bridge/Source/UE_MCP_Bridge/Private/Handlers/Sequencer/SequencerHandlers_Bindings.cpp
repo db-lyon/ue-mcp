@@ -242,7 +242,7 @@ namespace UEMCP::SequencerBindings
 		};
 		for (UActorComponent* Comp : Actor->GetComponents()) if (Comp) Add(Comp, Comp->GetFName(), TEXT("instance"));
 		TArray<UObject*> Inner;
-		GetObjectsWithOuter(Actor, Inner, false);
+		MCPGetDirectSubobjects(Actor, Inner);
 		for (UObject* Obj : Inner)
 		{
 			if (UActorComponent* Comp = Cast<UActorComponent>(Obj)) Add(Comp, Comp->GetFName(), TEXT("instance"));

@@ -237,12 +237,60 @@ export function readUeMcpConfig(projectDir: string): UeMcpConfig {
   return config;
 }
 
+/**
+ * A stat younger than this, measured from when it was read, is not trusted to
+ * show a later write: a filesystem stamps mtime in ticks (2 s on FAT), so an
+ * edit in the same tick as the read leaves size and mtime unchanged. Inside the
+ * window the file is read again, as git does for racily clean index entries.
+ */
+const UPROJECT_RACY_WINDOW_MS = 2000;
+
+interface UProjectStamp {
+  mtimeMs: number;
+  size: number;
+  readAtMs: number;
+}
+
+/**
+ * EngineAssociation as the .uproject says it now, or null when it is unset,
+ * unreadable or not a .uproject. The one parser every caller uses, so the
+ * engine a build compiles with and the editor a launch starts cannot disagree.
+ */
+export function readEngineAssociation(projectPath: string): string | null {
+  let raw: unknown;
+  try {
+    raw = JSON.parse(fs.readFileSync(projectPath, "utf-8"));
+  } catch (e) {
+    warn("project", `.uproject at ${projectPath} was not valid JSON - engine association unknown`, e);
+    return null;
+  }
+  const parsed = UProjectSchema.safeParse(raw);
+  if (!parsed.success) {
+    warn("project", `.uproject at ${projectPath} did not match expected shape - engine association unknown`, parsed.error);
+    return null;
+  }
+  return parsed.data.EngineAssociation ?? null;
+}
+
 export class ProjectContext {
   projectPath: string | null = null;
   projectName: string | null = null;
   contentDir: string | null = null;
-  engineAssociation: string | null = null;
   config: UeMcpConfig = {};
+
+  private _engineAssociation: string | null = null;
+  private _uprojectStamp: UProjectStamp | null = null;
+
+  /**
+   * EngineAssociation from the .uproject on disk. A session outlives edits to
+   * the file (a project moved from 5.8 to 5.9 while the daemon runs), so this
+   * re-parses whenever the file's size or mtime moved since the last read,
+   * rather than answering with what it said when the project was loaded.
+   */
+  get engineAssociation(): string | null {
+    this.refreshUProject();
+    return this._engineAssociation;
+  }
 
   get isLoaded(): boolean {
     return this.projectPath !== null;
@@ -258,7 +306,8 @@ export class ProjectContext {
     // The cache is keyed to nothing but the process, so a switch would keep
     // resolving /MyPlugin/ paths against the project we just left.
     this._pluginCache = null;
-    this.parseUProject();
+    this._uprojectStamp = null;
+    this.refreshUProject();
     this.loadConfig();
   }
 
@@ -453,21 +502,31 @@ export class ProjectContext {
     return null;
   }
 
-  private parseUProject(): void {
+  /** Re-parse the .uproject when it changed on disk since the last read. */
+  private refreshUProject(): void {
     if (!this.projectPath) return;
+    let stat: fs.Stats;
     try {
-      const raw = JSON.parse(fs.readFileSync(this.projectPath, "utf-8"));
-      const parsed = UProjectSchema.safeParse(raw);
-      if (!parsed.success) {
-        warn("project", `.uproject at ${this.projectPath} did not match expected shape - engine association unknown`, parsed.error);
-        this.engineAssociation = null;
-        return;
-      }
-      this.engineAssociation = parsed.data.EngineAssociation ?? null;
-    } catch (e) {
-      warn("project", `.uproject at ${this.projectPath} was not valid JSON - engine association unknown`, e);
-      this.engineAssociation = null;
+      stat = fs.statSync(this.projectPath);
+    } catch {
+      // Gone or unreadable: keep the last answer rather than warn on every read.
+      return;
     }
+    const last = this._uprojectStamp;
+    if (
+      last &&
+      last.mtimeMs === stat.mtimeMs &&
+      last.size === stat.size &&
+      last.readAtMs - last.mtimeMs > UPROJECT_RACY_WINDOW_MS
+    ) {
+      return;
+    }
+    const previous = this._engineAssociation;
+    this._engineAssociation = readEngineAssociation(this.projectPath);
+    this._uprojectStamp = { mtimeMs: stat.mtimeMs, size: stat.size, readAtMs: Date.now() };
+    // Engine plugin mounts come from the engine the association names, so a
+    // different engine means a different set of mounts.
+    if (last && previous !== this._engineAssociation) this._pluginCache = null;
   }
 
   private loadConfig(): void {

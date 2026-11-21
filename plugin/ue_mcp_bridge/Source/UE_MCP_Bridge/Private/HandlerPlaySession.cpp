@@ -3,6 +3,7 @@
 #include "Editor.h"
 #include "Editor/EditorEngine.h"
 #include "Framework/Application/SlateApplication.h"
+#include "HandlerEngineVersion.h"
 #include "IAssetViewport.h"
 #include "LevelEditor.h"
 #include "Modules/ModuleManager.h"
@@ -34,12 +35,16 @@ namespace MCPPlaySession
 	{
 		const ULevelEditorPlaySettings* Settings = GetDefault<ULevelEditorPlaySettings>();
 		if (!Settings) return EMCPPlayMode::Viewport;
-		// Compared as integers so the deprecated preview enumerators are never named.
 		const int32 Type = static_cast<int32>(Settings->LastExecutedPlayModeType.GetValue());
 		if (Type == static_cast<int32>(PlayMode_InEditorFloating)) return EMCPPlayMode::NewWindow;
 		if (Type == static_cast<int32>(PlayMode_InNewProcess)
 			|| Type == static_cast<int32>(PlayMode_InMobilePreview)
-			|| Type == static_cast<int32>(PlayMode_InTargetedMobilePreview))
+#if !UE_MCP_HAS_5_8_API
+			// Targeted mobile preview was folded into mobile preview in 5.8, and
+			// the enumerator is deprecated from there on.
+			|| Type == static_cast<int32>(PlayMode_InTargetedMobilePreview)
+#endif
+			)
 		{
 			return EMCPPlayMode::Standalone;
 		}
