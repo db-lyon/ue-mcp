@@ -1170,18 +1170,18 @@ TSharedPtr<FJsonValue> FMaterialHandlers::BuildMaterialGraphInto(const TSharedPt
 			ReadPin(*ConnObj, TEXT("fromOutput"), FromOutput);
 			ReadPin(*ConnObj, TEXT("toInput"), ToInput);
 			UMaterialExpression* Source = FindNode(From);
-			UMaterialExpression* Target = FindNode(To);
+			UMaterialExpression* Dest = FindNode(To);
 			if (!Source) return Abort(FString::Printf(TEXT("connections[%d]: no node '%s'."), i, *From));
-			if (!Target) return Abort(FString::Printf(TEXT("connections[%d]: no node '%s'."), i, *To));
-			if (ToRemove.Contains(Source) || ToRemove.Contains(Target))
+			if (!Dest) return Abort(FString::Printf(TEXT("connections[%d]: no node '%s'."), i, *To));
+			if (ToRemove.Contains(Source) || ToRemove.Contains(Dest))
 			{
 				return Abort(FString::Printf(TEXT("connections[%d]: '%s' is listed in removeExpressions, so a wire to it would be deleted with it."), i, ToRemove.Contains(Source) ? *From : *To));
 			}
 			int32 OutIndex = 0, InIndex = 0;
 			FString PinError;
 			if (!ResolveExpressionOutputIndex(Source, FromOutput, OutIndex, PinError)) return Abort(FString::Printf(TEXT("connections[%d]: %s."), i, *PinError));
-			if (!ResolveExpressionInputIndex(Target, ToInput, InIndex, PinError)) return Abort(FString::Printf(TEXT("connections[%d]: %s."), i, *PinError));
-			Target->GetInput(InIndex)->Connect(OutIndex, Source);
+			if (!ResolveExpressionInputIndex(Dest, ToInput, InIndex, PinError)) return Abort(FString::Printf(TEXT("connections[%d]: %s."), i, *PinError));
+			Dest->GetInput(InIndex)->Connect(OutIndex, Source);
 			++Wires;
 		}
 	}

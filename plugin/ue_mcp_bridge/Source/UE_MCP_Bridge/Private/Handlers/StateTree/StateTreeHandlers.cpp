@@ -13,7 +13,7 @@
 #include "StateTreeEditorData.h"
 #include "StateTreeState.h"
 #include "StateTreeEditorNode.h"
-#include "StateTreeEditingSubsystem.h"
+#include "HandlerStateTreeEditingSubsystem.h"
 #include "StateTreeEditorPropertyBindings.h"
 #include "StateTreeCompilerLog.h"
 #include "StateTreeTypes.h"

@@ -211,7 +211,7 @@ namespace
 			return Snapshot;
 		}
 		TArray<UObject*> Objects;
-		GetObjectsWithOuter(Actor, Objects, /*bIncludeNestedObjects*/ true);
+		MCPGetNestedSubobjects(Actor, Objects);
 		Objects.RemoveAll([](const UObject* Object)
 		{
 			return !IsValid(Object) || Object->HasAnyFlags(RF_Transient);

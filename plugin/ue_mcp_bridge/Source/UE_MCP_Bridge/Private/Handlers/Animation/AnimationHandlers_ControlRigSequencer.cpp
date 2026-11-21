@@ -31,6 +31,7 @@ namespace
 #include "Animation/Skeleton.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "ControlRig.h"
+#include "ControlRigAssetReference.h"
 #include "ControlRigSequencerEditorLibrary.h"
 #include "EditorAssetLibrary.h"
 #include "Editor.h"
@@ -1173,10 +1174,49 @@ namespace
 		return true;
 	}
 
+	// UE 5.9 deprecates FRigControlElement::Settings: the hierarchy keeps the
+	// topology half of the settings (type, axis, enum, animation type) and the
+	// element's copy is no longer the source. The topology struct carries every
+	// field this file reads, under the same names as FRigControlSettings.
+#if UE_MCP_HAS_5_9_API
+	using FControlRigSequencerControlSettings = FControlSettingsTopology;
+#else
+	using FControlRigSequencerControlSettings = FRigControlSettings;
+#endif
+
+	const FControlRigSequencerControlSettings& ControlRigSequencerControlSettings(
+		const UControlRig* ControlRig, const FRigControlElement* Control)
+	{
+#if UE_MCP_HAS_5_9_API
+		return ControlRig->GetHierarchy()->GetControlSettingsTopology(Control);
+#else
+		return Control->Settings;
+#endif
+	}
+
+	ERigControlType ControlRigSequencerControlType(const FRigControlElement* Control)
+	{
+#if UE_MCP_HAS_5_9_API
+		return Control->GetControlType();
+#else
+		return Control->Settings.ControlType;
+#endif
+	}
+
+	/** Every control in the hierarchy, in storage order. */
+	TArray<FRigControlElement*> ControlRigSequencerControls(const URigHierarchy* Hierarchy)
+	{
+#if UE_MCP_HAS_5_9_API
+		return Hierarchy->GetControlElements();
+#else
+		return Hierarchy->GetControls();
+#endif
+	}
+
 	bool ControlRigSequencerIsTransformControl(const FRigControlElement* Control)
 	{
 		if (!Control) return false;
-		switch (Control->Settings.ControlType)
+		switch (ControlRigSequencerControlType(Control))
 		{
 			case ERigControlType::Position:
 			case ERigControlType::Scale:
@@ -1192,8 +1232,8 @@ namespace
 
 	bool ControlRigSequencerIsFloatControl(const FRigControlElement* Control)
 	{
-		return Control && (Control->Settings.ControlType == ERigControlType::Float
-			|| Control->Settings.ControlType == ERigControlType::ScaleFloat);
+		return Control && (ControlRigSequencerControlType(Control) == ERigControlType::Float
+			|| ControlRigSequencerControlType(Control) == ERigControlType::ScaleFloat);
 	}
 
 	bool ControlRigSequencerReadLocalControlValues(
@@ -1204,7 +1244,7 @@ namespace
 	{
 		if (!Control) return false;
 		const FName Name = Control->GetFName();
-		switch (Control->Settings.ControlType)
+		switch (ControlRigSequencerControlType(Control))
 		{
 			case ERigControlType::Position:
 			{
@@ -1283,7 +1323,7 @@ namespace
 		TArray<TSharedPtr<FJsonValue>> Result;
 		if (!ControlRig || !ControlRig->GetHierarchy()) return Result;
 
-		TArray<FRigControlElement*> Controls = ControlRig->GetHierarchy()->GetControls();
+		TArray<FRigControlElement*> Controls = ControlRigSequencerControls(ControlRig->GetHierarchy());
 		Controls.Sort([](const FRigControlElement& A, const FRigControlElement& B)
 		{
 			return A.GetFName().LexicalLess(B.GetFName());
@@ -1292,15 +1332,16 @@ namespace
 		{
 			if (!Control) continue;
 			if (ControlFilter && !ControlFilter->Contains(Control->GetFName())) continue;
+			const FControlRigSequencerControlSettings& Settings = ControlRigSequencerControlSettings(ControlRig, Control);
 			auto Object = MakeShared<FJsonObject>();
 			Object->SetStringField(TEXT("name"), Control->GetFName().ToString());
 			const FString ControlType = StaticEnum<ERigControlType>()->GetNameStringByValue(
-				static_cast<int64>(Control->Settings.ControlType));
+				static_cast<int64>(Settings.ControlType));
 			Object->SetStringField(TEXT("type"), ControlType);
 			Object->SetStringField(TEXT("controlType"), ControlType);
 			Object->SetBoolField(TEXT("transformControl"), ControlRigSequencerIsTransformControl(Control));
-			Object->SetBoolField(TEXT("animatable"), Control->Settings.IsAnimatable());
-			if (const UEnum* ControlEnum = Control->Settings.ControlEnum.Get())
+			Object->SetBoolField(TEXT("animatable"), Settings.IsAnimatable());
+			if (const UEnum* ControlEnum = Settings.ControlEnum.Get())
 			{
 				Object->SetStringField(TEXT("enumName"), ControlEnum->GetName());
 				Object->SetStringField(TEXT("enumPath"), ControlEnum->GetPathName());
@@ -2294,9 +2335,18 @@ TSharedPtr<FJsonValue> FAnimationHandlers::BeginControlRigEdit(const TSharedPtr<
 						{
 							UAnimSeqExportOption* ExportOptions = NewObject<UAnimSeqExportOption>();
 							FControlRigSampleRawAnimation SampleRaw;
+#if UE_MCP_HAS_5_9_API
+							// The class overload is deprecated. Wrap the class as TSubclassOf so the
+							// reference takes its class constructor, not the UObject* (asset) one.
+							bBakeSucceeded = UControlRigSequencerEditorLibrary::BakeToControlRigFromReference(
+								GetEditorWorld(), Sequence,
+								FControlRigAssetStrongReference(TSubclassOf<UControlRig>(ControlRigClass)), ExportOptions,
+								false, 0.001f, FMovieSceneBindingProxy(BindingGuid, Sequence), true);
+#else
 							bBakeSucceeded = UControlRigSequencerEditorLibrary::BakeToControlRig(
 								GetEditorWorld(), Sequence, ControlRigClass, ExportOptions,
 								false, 0.001f, FMovieSceneBindingProxy(BindingGuid, Sequence), true);
+#endif
 							if (!bBakeSucceeded)
 							{
 								BakeError = TEXT("Unreal failed to bake the source animation to the Control Rig");
@@ -2433,7 +2483,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ReadControlRigEdit(const TSharedPtr<F
 			{
 				TransformControlNames.AddUnique(Name);
 			}
-			else if (Control->Settings.ControlType == ERigControlType::Bool)
+			else if (ControlRigSequencerControlType(Control) == ERigControlType::Bool)
 			{
 				BoolControlNames.AddUnique(Name);
 			}
@@ -2441,7 +2491,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ReadControlRigEdit(const TSharedPtr<F
 			{
 				FloatControlNames.AddUnique(Name);
 			}
-			else if (Control->Settings.ControlType == ERigControlType::Integer)
+			else if (ControlRigSequencerControlType(Control) == ERigControlType::Integer)
 			{
 				IntControlNames.AddUnique(Name);
 			}
@@ -2453,14 +2503,14 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ReadControlRigEdit(const TSharedPtr<F
 	}
 	else
 	{
-		for (FRigControlElement* Control : Session.ControlRig->GetHierarchy()->GetControls())
+		for (FRigControlElement* Control : ControlRigSequencerControls(Session.ControlRig->GetHierarchy()))
 		{
 			if (ControlRigSequencerIsTransformControl(Control))
 			{
 				ControlNames.Add(Control->GetFName());
 				TransformControlNames.Add(Control->GetFName());
 			}
-			else if (Control->Settings.ControlType == ERigControlType::Bool)
+			else if (ControlRigSequencerControlType(Control) == ERigControlType::Bool)
 			{
 				ControlNames.Add(Control->GetFName());
 				BoolControlNames.Add(Control->GetFName());
@@ -2470,7 +2520,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ReadControlRigEdit(const TSharedPtr<F
 				ControlNames.Add(Control->GetFName());
 				FloatControlNames.Add(Control->GetFName());
 			}
-			else if (Control->Settings.ControlType == ERigControlType::Integer)
+			else if (ControlRigSequencerControlType(Control) == ERigControlType::Integer)
 			{
 				ControlNames.Add(Control->GetFName());
 				IntControlNames.Add(Control->GetFName());
@@ -2587,7 +2637,8 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ReadControlRigEdit(const TSharedPtr<F
 			Session.Sequence, Session.ControlRig, ControlName, Frames, EMovieSceneTimeUnit::DisplayRate);
 		if (IntValues.Num() != Frames.Num()) return MCPError(TEXT("Control Rig integer evaluation returned an incomplete frame set"));
 		const FRigControlElement* Control = Session.ControlRig->FindControl(ControlName);
-		const UEnum* ControlEnum = Control ? Control->Settings.ControlEnum.Get() : nullptr;
+		const UEnum* ControlEnum = Control
+			? ControlRigSequencerControlSettings(Session.ControlRig, Control).ControlEnum.Get() : nullptr;
 		auto ControlObject = MakeShared<FJsonObject>();
 		ControlObject->SetStringField(TEXT("control"), ControlName.ToString());
 		ControlObject->SetStringField(TEXT("valueType"), ControlEnum ? TEXT("enum") : TEXT("int"));
@@ -2675,16 +2726,17 @@ TSharedPtr<FJsonValue> FAnimationHandlers::CaptureControlRigPose(const TSharedPt
 	{
 		FRigControlElement* Control = Session.ControlRig->FindControl(ControlName);
 		if (!Control) return MCPError(FString::Printf(TEXT("Control not found: %s"), *ControlName.ToString()));
-		if (!Control->Settings.IsAnimatable())
+		const FControlRigSequencerControlSettings& Settings = ControlRigSequencerControlSettings(Session.ControlRig, Control);
+		if (!Settings.IsAnimatable())
 			return MCPError(FString::Printf(TEXT("Control is not animatable: %s"), *ControlName.ToString()));
 		const FRigControlValue Value = Session.ControlRig->GetControlValue(Control, ERigControlValueType::Current);
 		auto ControlObject = MakeShared<FJsonObject>();
 		ControlObject->SetStringField(TEXT("control"), ControlName.ToString());
 		ControlObject->SetStringField(TEXT("controlType"), StaticEnum<ERigControlType>()->GetNameStringByValue(
-			static_cast<int64>(Control->Settings.ControlType)));
+			static_cast<int64>(ControlRigSequencerControlType(Control))));
 		if (ControlRigSequencerIsTransformControl(Control))
 		{
-			const FTransform Transform = Value.GetAsTransform(Control->Settings.ControlType, Control->Settings.PrimaryAxis);
+			const FTransform Transform = Value.GetAsTransform(Settings.ControlType, Settings.PrimaryAxis);
 			const FVector Translation = Transform.GetTranslation();
 			const FQuat Rotation = Transform.GetRotation();
 			const FVector Scale = Transform.GetScale3D();
@@ -2696,7 +2748,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::CaptureControlRigPose(const TSharedPt
 			ControlObject->SetStringField(TEXT("valueType"), TEXT("transform"));
 			ControlObject->SetObjectField(TEXT("transform"), ControlRigSequencerLiveTransformJson(Transform));
 		}
-		else if (Control->Settings.ControlType == ERigControlType::Bool)
+		else if (ControlRigSequencerControlType(Control) == ERigControlType::Bool)
 		{
 			ControlObject->SetStringField(TEXT("valueType"), TEXT("bool"));
 			ControlObject->SetBoolField(TEXT("value"), Value.Get<bool>());
@@ -2709,9 +2761,9 @@ TSharedPtr<FJsonValue> FAnimationHandlers::CaptureControlRigPose(const TSharedPt
 			ControlObject->SetStringField(TEXT("valueType"), TEXT("float"));
 			ControlObject->SetNumberField(TEXT("value"), Number);
 		}
-		else if (Control->Settings.ControlType == ERigControlType::Integer)
+		else if (ControlRigSequencerControlType(Control) == ERigControlType::Integer)
 		{
-			ControlObject->SetStringField(TEXT("valueType"), Control->Settings.ControlEnum != nullptr ? TEXT("enum") : TEXT("int"));
+			ControlObject->SetStringField(TEXT("valueType"), Settings.ControlEnum != nullptr ? TEXT("enum") : TEXT("int"));
 			ControlObject->SetNumberField(TEXT("value"), Value.Get<int32>());
 		}
 		else
@@ -2807,11 +2859,12 @@ namespace
 			const FControlRigLivePoseValue* AcceptedValue = Accepted.Controls.Find(ControlName);
 			if (!Control || !BaselineValue || !AcceptedValue)
 				return MCPError(FString::Printf(TEXT("operations[%d] control '%s' is absent from the rig or either complete snapshot"), OperationIndex, *ControlString));
-			if (!Control->Settings.IsAnimatable() || Control->Settings.ControlType != BaselineValue->ControlType)
+			if (!ControlRigSequencerControlSettings(Session.ControlRig, Control).IsAnimatable()
+				|| ControlRigSequencerControlType(Control) != BaselineValue->ControlType)
 				return MCPError(FString::Printf(TEXT("operations[%d] control '%s' is no longer the captured animatable type"), OperationIndex, *ControlString));
 			const EControlRigPreparedValueType ExpectedValueType = ControlRigSequencerIsTransformControl(Control)
 				? EControlRigPreparedValueType::Transform
-				: Control->Settings.ControlType == ERigControlType::Bool
+				: ControlRigSequencerControlType(Control) == ERigControlType::Bool
 					? EControlRigPreparedValueType::Bool
 					: ControlRigSequencerIsFloatControl(Control)
 						? EControlRigPreparedValueType::Float
@@ -2896,7 +2949,7 @@ namespace
 			{
 				if (Mode != TEXT("fixed")) return MCPError(FString::Printf(TEXT("Integer/enum propagation control '%s' supports fixed mode only"), *ControlString));
 				if (BaselineValue->IntValue != AcceptedValue->IntValue) Write.ChangedChannels.Add(TEXT("value"));
-				if (const UEnum* ControlEnum = Control->Settings.ControlEnum.Get())
+				if (const UEnum* ControlEnum = ControlRigSequencerControlSettings(Session.ControlRig, Control).ControlEnum.Get())
 				{
 					if (!ControlRigSequencerIsValidEnumValue(ControlEnum, AcceptedValue->IntValue))
 						return MCPError(FString::Printf(TEXT("Accepted value for '%s' is not a selectable enum option"), *ControlString));
@@ -2991,7 +3044,8 @@ namespace
 
 	/** set, set_bool, set_float and set_int: the frames and, for the scalar ops, the value. */
 	TSharedPtr<FJsonValue> ControlRigEditsReadValueOperation(
-		const TSharedPtr<FJsonObject>& Operation, int32 OperationIndex, const FRigControlElement* Control,
+		const TSharedPtr<FJsonObject>& Operation, int32 OperationIndex,
+		const UControlRig* ControlRig, const FRigControlElement* Control,
 		bool bBoolOperation, bool bFloatOperation, bool bIntOperation, FControlRigPreparedWrite& Write)
 	{
 		FString Error;
@@ -3024,7 +3078,7 @@ namespace
 				return MCPError(FString::Printf(TEXT("operations[%d].value must be a 32-bit integer"), OperationIndex));
 			}
 			Write.IntValue = static_cast<int32>(FMath::RoundToInt(Value));
-			if (const UEnum* ControlEnum = Control->Settings.ControlEnum.Get())
+			if (const UEnum* ControlEnum = ControlRigSequencerControlSettings(ControlRig, Control).ControlEnum.Get())
 			{
 				if (Write.IntValue < 0 || Write.IntValue > MAX_uint8)
 				{
@@ -3156,7 +3210,7 @@ namespace
 			&& (*TargetObject)->HasField(TEXT("rotationQuaternion"));
 		const bool bTargetRotation = bExplicitTargetRotation
 			|| (bCaptureRelativeTarget
-				&& ControlRigSequencerControlHasRotation(Control->Settings.ControlType));
+				&& ControlRigSequencerControlHasRotation(ControlRigSequencerControlType(Control)));
 		if (bHasTarget
 			&& (!(*TargetObject)->HasField(TEXT("translation"))
 				|| (*TargetObject)->Values.Num() != ((*TargetObject)->HasField(TEXT("rotationQuaternion")) ? 2 : 1)))
@@ -3165,7 +3219,7 @@ namespace
 				TEXT("operations[%d].target must contain translation and optional rotationQuaternion only"),
 				OperationIndex));
 		}
-		if (bExplicitTargetRotation && !ControlRigSequencerControlHasRotation(Control->Settings.ControlType))
+		if (bExplicitTargetRotation && !ControlRigSequencerControlHasRotation(ControlRigSequencerControlType(Control)))
 		{
 			return MCPError(FString::Printf(
 				TEXT("contact_lock driver control must support rotation when target.rotationQuaternion is set: %s"),
@@ -3341,8 +3395,8 @@ namespace
 					const FName ChainControl = UFKControlRig::GetControlName(
 						ReferenceSkeleton.GetBoneName(BoneIndex), ERigElementType::Bone);
 					const FRigControlElement* ChainElement = Session.ControlRig->FindControl(ChainControl);
-					if (!ChainElement || !ChainElement->Settings.IsAnimatable()
-						|| !ControlRigSequencerControlHasRotation(ChainElement->Settings.ControlType))
+					if (!ChainElement || !ControlRigSequencerControlSettings(Session.ControlRig, ChainElement).IsAnimatable()
+						|| !ControlRigSequencerControlHasRotation(ControlRigSequencerControlType(ChainElement)))
 					{
 						return MCPError(FString::Printf(
 							TEXT("FK contact_lock rotation-chain control is unavailable: %s"),
@@ -3410,10 +3464,10 @@ namespace
 						OperationIndex));
 				}
 				FRigControlElement* Stabilizer = Session.ControlRig->FindControl(StabilizerName);
-				if (!Stabilizer || !Stabilizer->Settings.IsAnimatable()
+				if (!Stabilizer || !ControlRigSequencerControlSettings(Session.ControlRig, Stabilizer).IsAnimatable()
 					|| !ControlRigSequencerIsTransformControl(Stabilizer)
-					|| (!ControlRigSequencerControlHasTranslation(Stabilizer->Settings.ControlType)
-						&& !ControlRigSequencerControlHasRotation(Stabilizer->Settings.ControlType)))
+					|| (!ControlRigSequencerControlHasTranslation(ControlRigSequencerControlType(Stabilizer))
+						&& !ControlRigSequencerControlHasRotation(ControlRigSequencerControlType(Stabilizer))))
 				{
 					return MCPError(FString::Printf(
 						TEXT("contact_lock stabilizer must be an animatable position and/or rotation control: %s"),
@@ -3546,7 +3600,7 @@ namespace
 		ContactQA.Control = ControlName;
 		ContactQA.DrivenReference = DrivenReference;
 		ContactQA.TargetReference = TargetReference;
-		ContactQA.ControlType = Control->Settings.ControlType;
+		ContactQA.ControlType = ControlRigSequencerControlType(Control);
 		ContactQA.bHasDrivenReference = bHasDrivenReference;
 		ContactQA.bHasTargetReference = bHasTargetReference;
 		ContactQA.bCapturedRelativeTarget = bCaptureRelativeTarget;
@@ -3593,7 +3647,7 @@ namespace
 				FTransform DriverTarget = SubjectRelativeToDriver.GetRelativeTransformReverse(
 					ContactQA.ExpectedSubject[Index]);
 				DriverTarget.SetScale3D(Write.Before[Index].GetScale3D());
-				if (!ControlRigSequencerControlHasRotation(Control->Settings.ControlType))
+				if (!ControlRigSequencerControlHasRotation(ControlRigSequencerControlType(Control)))
 				{
 					DriverTarget.SetRotation(Write.Before[Index].GetRotation());
 				}
@@ -3757,7 +3811,7 @@ namespace
 			StabilizerWrite.After.SetNum(Write.Frames.Num());
 			const FTransform Anchor = StabilizerWrite.Before[0];
 			const bool bStabilizeRotation =
-				ControlRigSequencerControlHasRotation(Stabilizer->Settings.ControlType);
+				ControlRigSequencerControlHasRotation(ControlRigSequencerControlType(Stabilizer));
 			for (int32 Index = 0; Index < Write.Frames.Num(); ++Index)
 			{
 				StabilizerWrite.After[Index] = ControlRigSequencerBlendContactTransform(
@@ -3766,7 +3820,7 @@ namespace
 
 			FControlRigContactStabilizerQA StabilizerQA;
 			StabilizerQA.Control = StabilizerName;
-			StabilizerQA.ControlType = Stabilizer->Settings.ControlType;
+			StabilizerQA.ControlType = ControlRigSequencerControlType(Stabilizer);
 			StabilizerQA.Expected = StabilizerWrite.After;
 			ContactQA.Stabilizers.Add(MoveTemp(StabilizerQA));
 			Prepared.Add(MoveTemp(StabilizerWrite));
@@ -3841,7 +3895,7 @@ namespace
 			FControlRigTransformPatch Patch;
 			if (!ControlRigSequencerReadTransformPatch(Operation, true, Patch, Error))
 				return MCPError(FString::Printf(TEXT("operations[%d]: %s"), OperationIndex, *Error));
-			if (!ControlRigSequencerPatchAffectsControl(Patch, Control->Settings.ControlType))
+			if (!ControlRigSequencerPatchAffectsControl(Patch, ControlRigSequencerControlType(Control)))
 			{
 				return MCPError(FString::Printf(
 					TEXT("operations[%d] does not change a channel supported by %s"),
@@ -3881,7 +3935,7 @@ namespace
 		const FName ControlName(*ControlString);
 		FRigControlElement* Control = Session.ControlRig->FindControl(ControlName);
 		if (!Control) return MCPError(FString::Printf(TEXT("Control not found: %s"), *ControlString));
-		if (!Control->Settings.IsAnimatable()) return MCPError(FString::Printf(TEXT("Control is not animatable: %s"), *ControlString));
+		if (!ControlRigSequencerControlSettings(Session.ControlRig, Control).IsAnimatable()) return MCPError(FString::Printf(TEXT("Control is not animatable: %s"), *ControlString));
 		const bool bSetOperation = Op == TEXT("set");
 		const bool bSetKeysOperation = Op == TEXT("set_keys");
 		const bool bOffsetOperation = Op == TEXT("offset");
@@ -3898,7 +3952,7 @@ namespace
 		}
 		if (bBoolOperation)
 		{
-			if (Control->Settings.ControlType != ERigControlType::Bool)
+			if (ControlRigSequencerControlType(Control) != ERigControlType::Bool)
 				return MCPError(FString::Printf(TEXT("Bool control not found: %s"), *ControlString));
 		}
 		else if (bFloatOperation)
@@ -3908,14 +3962,14 @@ namespace
 		}
 		else if (bIntOperation)
 		{
-			if (Control->Settings.ControlType != ERigControlType::Integer)
+			if (ControlRigSequencerControlType(Control) != ERigControlType::Integer)
 				return MCPError(FString::Printf(TEXT("Integer control not found: %s"), *ControlString));
 		}
 		else if (!ControlRigSequencerIsTransformControl(Control))
 		{
 			return MCPError(FString::Printf(TEXT("Transform control not found: %s"), *ControlString));
 		}
-		else if (bContactOperation && !ControlRigSequencerControlHasTranslation(Control->Settings.ControlType))
+		else if (bContactOperation && !ControlRigSequencerControlHasTranslation(ControlRigSequencerControlType(Control)))
 		{
 			return MCPError(FString::Printf(
 				TEXT("contact_lock driver control must support translation: %s"), *ControlString));
@@ -3952,7 +4006,7 @@ namespace
 		else if (bSetOperation || bBoolOperation || bFloatOperation || bIntOperation)
 		{
 			if (auto Refusal = ControlRigEditsReadValueOperation(
-				Operation, OperationIndex, Control, bBoolOperation, bFloatOperation, bIntOperation, Write))
+				Operation, OperationIndex, Session.ControlRig, Control, bBoolOperation, bFloatOperation, bIntOperation, Write))
 			{
 				return Refusal;
 			}
@@ -4081,7 +4135,7 @@ namespace
 				const FTransform& ActualTransform = bPropagationRead
 					? PropagationActual[Index] : Actual[0].Transforms[Index];
 				bMatches = ControlRigSequencerTransformMatches(
-					Write.After[Index], ActualTransform, Control->Settings.ControlType);
+					Write.After[Index], ActualTransform, ControlRigSequencerControlType(Control));
 			}
 			if (!bMatches)
 			{
