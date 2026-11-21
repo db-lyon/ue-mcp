@@ -167,6 +167,11 @@
 			"Name": "NNERuntimeLiteRT",
 			"Enabled": true,
 			"Optional": true
+		},
+		{
+			"Name": "PixelStreaming2",
+			"Enabled": true,
+			"Optional": true
 		}
 	]
 }

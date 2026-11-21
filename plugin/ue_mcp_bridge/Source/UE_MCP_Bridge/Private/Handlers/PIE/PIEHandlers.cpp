@@ -170,8 +170,22 @@ void FPIEHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("ignorePawn"), EType::Boolean, TEXT("Ignore the viewing player's pawn (default true)")),
 	});
 
+	// Live streaming over Pixel Streaming 2
+	Registry.RegisterHandler(TEXT("pie_stream_start"), &PieStreamStart, {
+		MCPParam::Required(TEXT("signallingUrl"), EType::String, TEXT("ws:// or wss:// URL of the signalling server the editor's streamer connects to")),
+		MCPParam::Optional(TEXT("streamerId"), EType::String, TEXT("Id the streamer identifies itself with at the signalling server (default ue-mcp)")),
+		MCPParam::Optional(TEXT("source"), EType::String, TEXT("pie (default): the PIE viewport, armed until PIE starts; level_viewport: the active level viewport; editor: the whole editor")).Enum({ TEXT("pie"), TEXT("level_viewport"), TEXT("editor") }),
+		MCPParam::Optional(TEXT("resolution"), EType::String, TEXT("WIDTHxHEIGHT such as 1280x720. Resizes the offscreen editor's window, or fixes the level viewport's size")),
+		MCPParam::Optional(TEXT("fps"), EType::Integer, TEXT("Encoded frame rate (default 30)")).Min(1),
+		MCPParam::Optional(TEXT("maxBitrateKbps"), EType::Integer, TEXT("Ceiling on the WebRTC bitrate in kbps (default 4000)")).Min(100),
+		MCPParam::Optional(TEXT("codec"), EType::String, TEXT("Video codec (default H264)")).Enum({ TEXT("H264"), TEXT("VP8"), TEXT("VP9"), TEXT("AV1") }),
+	});
+	Registry.RegisterHandler(TEXT("pie_stream_stop"), &PieStreamStop, {},
+		MCPSpec::ContractExempt(TEXT("Takes no parameters and stops and disarms the stream")));
+	Registry.RegisterHandler(TEXT("pie_stream_status"), &PieStreamStatus, {});
+
 	// Input injection
-	Registry.RegisterHandler(TEXT("pie_inject_input"), &InjectInput, {
+	Registry.RegisterHandler(TEXT("pie_inject_input"),&InjectInput, {
 		MCPParam::Required(TEXT("action_path"), EType::String, TEXT("InputAction asset path")),
 		MCPParam::Optional(TEXT("value_x"), EType::Number, ValueXDoc),
 		MCPParam::Optional(TEXT("value_y"), EType::Number, ValueYDoc),

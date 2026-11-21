@@ -1,5 +1,5 @@
 {
-  "handlerCount": 1416,
+  "handlerCount": 1419,
   "handlers": {
     "acquire_lock": {
       "category": "lock",
@@ -31736,6 +31736,75 @@
         }
       ],
       "contractExempt": "starts Play In Editor"
+    },
+    "pie_stream_start": {
+      "category": "pie",
+      "params": [
+        {
+          "name": "signallingUrl",
+          "type": "string",
+          "required": true,
+          "description": "ws:// or wss:// URL of the signalling server the editor's streamer connects to"
+        },
+        {
+          "name": "streamerId",
+          "type": "string",
+          "required": false,
+          "description": "Id the streamer identifies itself with at the signalling server (default ue-mcp)"
+        },
+        {
+          "name": "source",
+          "type": "string",
+          "required": false,
+          "description": "pie (default): the PIE viewport, armed until PIE starts; level_viewport: the active level viewport; editor: the whole editor",
+          "enum": [
+            "pie",
+            "level_viewport",
+            "editor"
+          ]
+        },
+        {
+          "name": "resolution",
+          "type": "string",
+          "required": false,
+          "description": "WIDTHxHEIGHT such as 1280x720. Resizes the offscreen editor's window, or fixes the level viewport's size"
+        },
+        {
+          "name": "fps",
+          "type": "integer",
+          "required": false,
+          "description": "Encoded frame rate (default 30)",
+          "minimum": 1
+        },
+        {
+          "name": "maxBitrateKbps",
+          "type": "integer",
+          "required": false,
+          "description": "Ceiling on the WebRTC bitrate in kbps (default 4000)",
+          "minimum": 100
+        },
+        {
+          "name": "codec",
+          "type": "string",
+          "required": false,
+          "description": "Video codec (default H264)",
+          "enum": [
+            "H264",
+            "VP8",
+            "VP9",
+            "AV1"
+          ]
+        }
+      ]
+    },
+    "pie_stream_status": {
+      "category": "pie",
+      "params": []
+    },
+    "pie_stream_stop": {
+      "category": "pie",
+      "params": [],
+      "contractExempt": "Takes no parameters and stops and disarms the stream"
     },
     "pie_test_list": {
       "category": "pie",
