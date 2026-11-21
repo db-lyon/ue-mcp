@@ -19,7 +19,7 @@ import {
   type PristineGraph,
 } from "../surface/category-state.js";
 import { epicToolsetsOf } from "../surface/registered-surface.js";
-import { baseGraphFor, unionSurface, type SessionSurface, type UnionSurface } from "./session-surface.js";
+import { baseGraphFor, unionSurface, type ProjectSurface, type SessionSurface, type UnionSurface } from "./session-surface.js";
 import { applyLeanContext } from "../surface/context/lean-context.js";
 import type { ContextStrategy } from "../config/context-strategy.js";
 import { buildMicroGateway } from "../surface/context/micro-context.js";
@@ -121,9 +121,21 @@ export async function buildSessionLoad(
   packageVersion: string,
   multi: boolean,
 ): Promise<SessionLoad> {
-  const project = session.project;
+  const load = await buildProjectLoad(session.project, packageVersion, multi ? `editor '${session.name}': ` : "");
+  return { ...load, surface: { session, ...load.surface } };
+}
+
+/**
+ * The surface one project builds, held by no session yet: what a server
+ * starting on it will advertise. Opens no editor connection.
+ */
+export async function buildProjectLoad(
+  project: ProjectContext,
+  packageVersion: string,
+  /** Prefixes this load's log lines, to say which editor they are about. */
+  label = "",
+): Promise<Omit<SessionLoad, "surface"> & { surface: ProjectSurface }> {
   const configDir = project.projectDir ?? undefined;
-  const label = multi ? `editor '${session.name}': ` : "";
 
   // Plugins are resolved, validated and injected BEFORE the flow registry is
   // built so plugin tasks register cleanly.
@@ -152,7 +164,6 @@ export async function buildSessionLoad(
 
   return {
     surface: {
-      session,
       tools,
       disabled: new Set(categories.all),
       pluginRecords: pluginLoad.records,

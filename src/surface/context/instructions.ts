@@ -2,7 +2,7 @@
 import { ALL_TOOLS } from "../../tools.js";
 import { SIGNATURE_LEGEND } from "../action-signature.js";
 import { DEFAULT_BRIDGE_TIMEOUT_MS } from "../../bridge/bridge-timeouts.js";
-import { unionKnowledge, type SessionSurface } from "../../sessions/session-surface.js";
+import { unionKnowledge, type ProjectSurface } from "../../sessions/session-surface.js";
 import type { ContextStrategy } from "../../config/context-strategy.js";
 import type { ToolDef } from "../tool-types.js";
 import { CORE_ISSUES_URL } from "../../github/repos.js";
@@ -351,7 +351,7 @@ function buildKnowledgeBlock(knowledgeByCategory: Record<string, string[]>): str
  * manifest declares. Empty string when every configured plugin loaded whole,
  * which is the usual case and leaves the initialize payload untouched.
  */
-function buildPluginWarningBlock(surfaces: SessionSurface[]): string {
+function buildPluginWarningBlock(surfaces: ProjectSurface[]): string {
   const lines: string[] = [];
   const seen = new Set<string>();
   for (const surface of surfaces) {
@@ -378,7 +378,7 @@ function buildPluginWarningBlock(surfaces: SessionSurface[]): string {
  * Whether some editor can run feedback(submit): it is in scope and at least one
  * session has not disabled it. With no sessions nothing says otherwise.
  */
-export function feedbackAvailable(surfaces: SessionSurface[], scope?: readonly ToolDef[]): boolean {
+export function feedbackAvailable(surfaces: ProjectSurface[], scope?: readonly ToolDef[]): boolean {
   if (scope && !scope.some((t) => t.name === "feedback")) return false;
   if (surfaces.length === 0) return true;
   return surfaces.some((s) => !s.disabled.has("feedback") && s.tools.some((t) => t.name === "feedback"));
@@ -391,7 +391,7 @@ export function feedbackAvailable(surfaces: SessionSurface[], scope?: readonly T
  */
 export function composeServerInstructions(
   strategy: ContextStrategy,
-  surfaces: SessionSurface[],
+  surfaces: ProjectSurface[],
   sessionNames: string[],
   activeName: string,
   /** Narrow the text to these categories: their counts, their list, their plugin knowledge. */

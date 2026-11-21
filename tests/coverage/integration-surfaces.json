@@ -487,6 +487,11 @@
       "summary": "a server whose daemon cannot start serves in process instead"
     },
     {
+      "id": "server.mode.initialize-first",
+      "group": "server",
+      "summary": "a server relaying to a daemon answers initialize before the daemon is listening"
+    },
+    {
       "id": "server.no-project",
       "group": "server",
       "summary": "a server started with no project serves the default bridge"
