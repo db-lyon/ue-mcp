@@ -100,6 +100,16 @@ function listFiles(dir: string, base = dir): string[] {
  * `trustedKeys` picks the keys from the manifest's name.
  */
 export function verifyBundle(dir: string, trustedKeys: readonly crypto.KeyObject[] | ((name: string) => readonly crypto.KeyObject[])): UiManifest {
+  const manifest = readSignedManifest(dir, trustedKeys);
+  checkBundleFiles(dir, manifest);
+  return manifest;
+}
+
+/**
+ * The manifest of a bundle directory, once its signature verifies and its
+ * shape is sound. Reads two small files; the files it lists are not checked.
+ */
+function readSignedManifest(dir: string, trustedKeys: readonly crypto.KeyObject[] | ((name: string) => readonly crypto.KeyObject[])): UiManifest {
   const manifestPath = path.join(dir, "manifest.json");
   const sigPath = path.join(dir, "manifest.sig");
   if (!fs.existsSync(manifestPath) || !fs.existsSync(sigPath)) throw new Error(`${dir} has no manifest.json and manifest.sig`);
@@ -122,6 +132,11 @@ export function verifyBundle(dir: string, trustedKeys: readonly crypto.KeyObject
   if (mod !== undefined && (typeof mod?.entry !== "string" || typeof mod.host !== "string" || !(mod.entry in manifest.files))) {
     throw new Error(`${dir}: module must name a host and an entry listed in files`);
   }
+  return manifest;
+}
+
+/** Throw unless every file the manifest lists is present and matches its hash, and nothing else is there. */
+function checkBundleFiles(dir: string, manifest: UiManifest): void {
   for (const [rel, hash] of Object.entries(manifest.files)) {
     if (rel.includes("..") || path.isAbsolute(rel)) throw new Error(`${dir}: unsafe path ${rel}`);
     const file = path.join(dir, rel);
@@ -133,7 +148,6 @@ export function verifyBundle(dir: string, trustedKeys: readonly crypto.KeyObject
     if (rel === "manifest.json" || rel === "manifest.sig") continue;
     if (!listed.has(rel)) throw new Error(`${dir}: ${rel} is not in the manifest`);
   }
-  return manifest;
 }
 
 export class UiBundleStore {
@@ -152,7 +166,13 @@ export class UiBundleStore {
     const key = crypto.createPublicKey(pem);
     if (key.asymmetricKeyType !== "ed25519") throw new Error("UI signing keys must be Ed25519");
     this.keys.push(owner ? { key, owner } : { key });
+    this.invalidate();
+  }
+
+  /** Read the store again on the next lookup, files included, as after a change to it or to what it trusts. */
+  private invalidate(): void {
     this.candidates = null;
+    this.filesChecked.clear();
   }
 
   /** The keys a bundle with this manifest name verifies against. */
@@ -164,7 +184,7 @@ export class UiBundleStore {
   /** The loaded extensions whose bundles are held to their versions. Replaces the previous set. */
   setOwners(owners: readonly UiBundleOwner[]): void {
     this.owners = [...owners];
-    this.candidates = null;
+    this.invalidate();
   }
 
   /** Verify a bundle and copy it into the store. Returns its manifest. */
@@ -177,12 +197,17 @@ export class UiBundleStore {
     verifyBundle(staging, this.keysFor);
     fs.rmSync(target, { recursive: true, force: true });
     fs.renameSync(staging, target);
-    this.candidates = null;
+    this.invalidate();
     return manifest;
   }
 
-  /** Installed bundles that verify and support this daemon's API. */
-  private verified(): UiBundle[] {
+  /**
+   * Installed bundles whose signed manifest verifies and supports this
+   * daemon's API. Their files are checked only when one is chosen (pick):
+   * the store keeps every version ever installed, and hashing all of them
+   * on every startup read tens of megabytes to serve one.
+   */
+  private signed(): UiBundle[] {
     if (this.candidates) return this.candidates;
     const candidates: UiBundle[] = [];
     if (fs.existsSync(this.root) && this.keys.length > 0) {
@@ -190,10 +215,10 @@ export class UiBundleStore {
         if (!e.isDirectory() || e.name.includes(".staging-")) continue;
         const dir = path.join(this.root, e.name);
         try {
-          const manifest = verifyBundle(dir, this.keysFor);
+          const manifest = readSignedManifest(dir, this.keysFor);
           if (apiVersionsOverlap(manifest.api, { min: this.apiVersion, max: this.apiVersion })) candidates.push({ manifest, dir });
         } catch {
-          // Not ours, tampered, or for a key no extension trusts: never served.
+          // Not ours, or for a key no extension trusts: never served.
         }
       }
     }
@@ -201,15 +226,43 @@ export class UiBundleStore {
     return candidates;
   }
 
+  /** Whether a bundle's files match its manifest, by directory, since the store was last invalidated. */
+  private readonly filesChecked = new Map<string, boolean>();
+
+  private filesMatch(bundle: UiBundle): boolean {
+    let ok = this.filesChecked.get(bundle.dir);
+    if (ok === undefined) {
+      try {
+        checkBundleFiles(bundle.dir, bundle.manifest);
+        ok = true;
+      } catch {
+        // Tampered or incomplete: never served, and the next choice is tried.
+        ok = false;
+      }
+      this.filesChecked.set(bundle.dir, ok);
+    }
+    return ok;
+  }
+
+  /** The bundle `choose` picks among those whose files match, checking only the ones it picks. */
+  private pick(choose: (pool: readonly UiBundle[]) => UiBundle | null): UiBundle | null {
+    let pool = this.signed();
+    for (;;) {
+      const chosen = choose(pool);
+      if (!chosen || this.filesMatch(chosen)) return chosen;
+      pool = pool.filter((c) => c !== chosen);
+    }
+  }
+
   /** The bundle served at /ui/ (selectBundle), or null. */
   active(): UiBundle | null {
-    return selectBundle(this.verified(), this.owners);
+    return this.pick((pool) => selectBundle(pool, this.owners));
   }
 
   /** The bundle a loaded extension serves at /ui/ext/<name>/ (selectOwnerBundle), or null. */
   own(name: string): UiBundle | null {
     const owner = this.owners.find((o) => o.name === name);
-    return owner ? selectOwnerBundle(this.verified(), owner) : null;
+    return owner ? this.pick((pool) => selectOwnerBundle(pool, owner)) : null;
   }
 
   /** Every loaded extension's own bundle, in load order, with the base it is served at. */
