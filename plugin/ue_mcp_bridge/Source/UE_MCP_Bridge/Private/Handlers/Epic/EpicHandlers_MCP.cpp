@@ -47,7 +47,7 @@ namespace UEMCPEpicMCP
 		return FModelContextProtocolToolRequestId(Id);
 #else
 		const FGuid InvocationId = FGuid::NewGuid();
-#if PLATFORM_WINDOWS && PLATFORM_64BITS && defined(_MSC_VER)
+#if PLATFORM_WINDOWS && defined(_MSC_VER) // 64-bit only, which UE 5.9 deprecates PLATFORM_64BITS for
 		// FModelContextProtocolToolRequestId(const TSharedPtr<FJsonValue>&, const FGuid&), as the DLL exports it.
 		using FCtor = void* (*)(void* This, const TSharedPtr<FJsonValue>& InRequestId, const FGuid& InInvocationId);
 		static FCtor Ctor = nullptr;
