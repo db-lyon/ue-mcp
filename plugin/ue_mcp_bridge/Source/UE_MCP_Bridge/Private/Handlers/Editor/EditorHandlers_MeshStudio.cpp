@@ -370,9 +370,10 @@ namespace MeshStudioRender
 		double StartedAt = FPlatformTime::Seconds();
 		double ItemStartedAt = 0;
 		bool bAllRendered = true;
-		UWorld* World = nullptr;
-		TArray<UObject*> Assets;
-		TArray<UTexture*> Textures;
+		// TObjectPtr so AddReferencedObjects reports them safely under incremental GC.
+		TObjectPtr<UWorld> World = nullptr;
+		TArray<TObjectPtr<UObject>> Assets;
+		TArray<TObjectPtr<UTexture>> Textures;
 		TArray<UMeshComponent*> Meshes;
 		TArray<TSharedPtr<FJsonValue>> Outcomes;
 		TArray<FColor> FirstPixels;
