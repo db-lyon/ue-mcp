@@ -2892,6 +2892,8 @@ export const EPIC_TOOL_EFFECTS: Record<string, ActionEffect> = {
   "FabToolset.FabToolset.SearchFabListings": "read", // EPIC accessMode=read
   // Searches everything the user has a license to on Fab, as JSON: { query, results: [...], nextCursor }. Only the
   "FabToolset.FabToolset.SearchFabMyLibrary": "read", // EPIC accessMode=read
+  // Searches Fab sellers by name, as JSON with a nextCursor for the next page.
+  "FabToolset.FabToolset.SearchFabSellers": "read", // EPIC accessMode=read
 
   /* ── FileSystemToolset.FileSystemToolset ───────────────────────── */
   // Creates a directory and any missing parents. A directory that already exists is a success.

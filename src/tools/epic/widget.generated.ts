@@ -694,7 +694,7 @@ export const actions: Record<string, ActionSpec> = {
   epic_screenshot: {
     epicSchema: S_epic_screenshot,
     epicTool: { toolset: "SlateInspectorToolset.SlateInspectorToolset", name: "SlateInspectorToolset.SlateInspectorToolset.Screenshot", engines: ["5.8","5.9"] },
-    ...bp("mutate", "[Epic SlateInspectorToolset.SlateInspectorToolset] Screenshot a Slate widget or an editor window. Prefer this over SceneTools.take_screenshot for Editor UI; use SceneTools only for 3D viewport. Pass a window ref from Windows(\"list\") to capture a specific window; with no ref it captures the active window, falling back to the main editor window when nothing is active. A widget partly outside its window is cropped to the part inside it. Fails with an error naming the reason when there is nothing to capture: an unknown ref, a widget in no visible window, or one entirely outside it.", "epic_call_tool"),
+    ...bp("mutate", "[Epic SlateInspectorToolset.SlateInspectorToolset] Screenshot a Slate widget or an editor window. Prefer this over SceneTools.take_screenshot for Editor UI; use SceneTools only for 3D viewport. Pass a window ref from Windows(\"list\") to capture a specific window; with no ref it captures the active window, falling back to the main editor window when nothing is active. A widget partly outside its window is cropped to the part inside it. Fails with an error naming the reason when there is nothing to capture: rendering is disabled (-nullrhi), an unknown ref, a widget in no visible window, or one entirely outside it.", "epic_call_tool"),
   },
   epic_scroll: {
     epicSchema: S_epic_scroll,

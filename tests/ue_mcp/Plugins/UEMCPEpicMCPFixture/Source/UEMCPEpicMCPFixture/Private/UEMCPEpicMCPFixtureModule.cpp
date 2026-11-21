@@ -1,8 +1,8 @@
 // Test-only tools and a resource provider registered with Epic's Unreal MCP
 // plugin, so the live tests can prove ue-mcp lists, calls, cancels and reads
 // them. Never shipped: it lives in the test project, not in the bridge.
-
-#include "UEMCPFixtureToolLibrary.h"
+// The legacy MCP Tool Library fixture is in UEMCPEpicMCPFixtureLegacy, loaded
+// below on engines that still ship its base class.
 
 #include "Containers/Ticker.h"
 #include "IModelContextProtocolModule.h"
@@ -213,11 +213,6 @@ namespace UEMCPFixture
 	};
 }
 
-FString UUEMCPFixtureToolLibrary::UeMcpFixtureLibraryGreet(const FString& Name)
-{
-	return FString::Printf(TEXT("hello, %s"), *Name);
-}
-
 class FUEMCPEpicMCPFixtureModule : public IModuleInterface
 {
 public:
@@ -234,6 +229,10 @@ public:
 		Module.AddResourceProvider(Provider.ToSharedRef());
 		// RefreshTools drops every tool; providers put theirs back.
 		RefreshHandle = Module.OnRefreshTools().AddRaw(this, &FUEMCPEpicMCPFixtureModule::OnRefresh);
+
+#if UEMCP_FIXTURE_LEGACY_TOOL_LIBRARY
+		FModuleManager::Get().LoadModule(TEXT("UEMCPEpicMCPFixtureLegacy"));
+#endif
 	}
 
 	virtual void ShutdownModule() override
