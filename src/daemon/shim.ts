@@ -4,18 +4,26 @@
  * daemon is on. It finds the project's daemon (starting one if none is
  * running) and relays MCP messages to it over a WebSocket.
  *
+ * The shim answers `initialize` itself, from instructions it composes for the
+ * project, without waiting for the daemon: a cold daemon can take longer to
+ * start than a client waits for a server to initialize. Every other request
+ * waits for the daemon and is relayed once it is up.
+ *
  * The client's connection is to the shim, so an editor restart is invisible to
- * it, and a daemon restart costs only a reconnect: the shim replays the
- * client's `initialize` to the new daemon itself and swallows the answer. A
- * request in flight when the daemon went away is answered with an error, never
- * left hanging, because its outcome is unknown.
+ * it, and a daemon restart costs only a reconnect: on every connection the
+ * shim sends the client's `initialize` to the daemon itself and swallows the
+ * answer. A request in flight when the daemon went away is answered with an
+ * error, never left hanging, because its outcome is unknown. A daemon that
+ * cannot be started at all is replaced by a server in this process, behind the
+ * same stdio connection.
  */
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { spawnOutsideTree } from "../core/spawn-outside-tree.js";
 import WebSocket from "ws";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import type { JSONRPCMessage } from "@modelcontextprotocol/sdk/types.js";
+import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
+import { LATEST_PROTOCOL_VERSION, SUPPORTED_PROTOCOL_VERSIONS, type JSONRPCMessage, type JSONRPCRequest } from "@modelcontextprotocol/sdk/types.js";
 import { info, warn, error } from "../core/log.js";
 import { packageVersion, selfCliArgs } from "../core/package-root.js";
 import { compareVersions } from "../core/semver.js";
@@ -120,43 +128,164 @@ function spawnDaemon(uproject: string, version: string, projectDir: string, logD
   return true;
 }
 
-export async function runShim(uproject: string): Promise<void> {
+/**
+ * What `initialize` is answered with before any server is up. The servers
+ * behind the shim (the daemon's, and the in-process fallback) advertise the
+ * same; `listChanged` is what lets a tool list that changes after initialize
+ * reach the client.
+ */
+export const SHIM_CAPABILITIES = {
+  tools: { listChanged: true },
+  resources: { listChanged: true },
+  prompts: { listChanged: true },
+} as const;
+
+/** The protocol version a server answers a client's initialize with: the client's when supported, else the newest. */
+export function negotiatedProtocolVersion(requested: unknown): string {
+  return typeof requested === "string" && SUPPORTED_PROTOCOL_VERSIONS.includes(requested) ? requested : LATEST_PROTOCOL_VERSION;
+}
+
+/** The id the shim gives its own `initialize` to a server, never one a client uses. */
+const SHIM_INITIALIZE_ID = "ue-mcp-shim-initialize";
+
+/** A server in this process, served when no daemon can be started. */
+export interface InProcessServer {
+  /** The client end of a transport the server is connected to. */
+  transport: Transport;
+  /** Keep the process alive after the MCP client goes, for the flow HTTP surface. */
+  outlivesClient: boolean;
+}
+
+export interface ShimOptions {
+  /** The instructions `initialize` is answered with. A failure answers with none. */
+  instructions: () => Promise<string>;
+  /** Start a server in this process; called when the daemon cannot be started. */
+  inProcess: () => Promise<InProcessServer>;
+}
+
+/** One server the shim relays to: the daemon over its socket, or a server in this process. */
+interface Backend {
+  send(m: JSONRPCMessage): void;
+  close(): void;
+}
+
+export async function runShim(uproject: string, opts: ShimOptions): Promise<void> {
   const stdio = new StdioServerTransport();
-  let ws: WebSocket | null = null;
-  let initialize: JSONRPCMessage | null = null;
-  let initialized: JSONRPCMessage | null = null;
-  /** Ids of requests the client is waiting on. */
+  let backend: Backend | null = null;
+  /** True once the current backend has answered the shim's initialize. */
+  let ready = false;
+  let everReady = false;
+  let initialize: JSONRPCRequest | null = null;
+  let resolveInitialize!: () => void;
+  const initializeArrived = new Promise<void>((resolve) => (resolveInitialize = resolve));
+  /** Ids of client requests sent to the current backend and not answered yet. */
   const waiting = new Set<string | number>();
-  /** Messages from the client that arrived while there was no daemon socket. */
+  /** Client messages held until a backend is ready. */
   const queue: JSONRPCMessage[] = [];
-  /** Id of a replayed initialize whose answer is the shim's, not the client's. */
-  let swallow: string | number | null = null;
+  /** Whether the client asked for the tool list before any backend was ready, and may have given up on it. */
+  let listedEarly = false;
   let closed = false;
+  let outlivesClient = false;
+  /** The instructions this client was given, compared with the backend's own. */
+  let answeredInstructions: string | null = null;
+
+  // Composed from the start, so the answer is ready by the time initialize arrives.
+  const instructions = opts.instructions().catch((e: unknown) => {
+    warn("shim", "could not compose the initialize instructions; answering without them", e);
+    return "";
+  });
 
   /** The MCP client's own name once it has sent initialize, so the daemon's activity feed names it. */
   const clientName = (): string =>
     ((initialize as { params?: { clientInfo?: { name?: string } } } | null)?.params?.clientInfo?.name) ?? "stdio-shim";
 
-  const toDaemon = (m: JSONRPCMessage): void => {
-    if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(m));
-    else queue.push(m);
+  const sendToBackend = (m: JSONRPCMessage): void => {
+    if ("id" in m && "method" in m) waiting.add(m.id as string | number);
+    backend!.send(m);
+  };
+
+  const answerInitialize = async (m: JSONRPCRequest): Promise<void> => {
+    const text = await instructions;
+    answeredInstructions = text;
+    await stdio.send({
+      jsonrpc: "2.0",
+      id: m.id,
+      result: {
+        protocolVersion: negotiatedProtocolVersion((m.params as { protocolVersion?: unknown } | undefined)?.protocolVersion),
+        capabilities: SHIM_CAPABILITIES,
+        serverInfo: { name: "ue-mcp", version: packageVersion() },
+        ...(text ? { instructions: text } : {}),
+      },
+    } as JSONRPCMessage);
   };
 
   stdio.onmessage = (m) => {
-    if ("method" in m && m.method === "initialize") initialize = m;
-    if ("method" in m && m.method === "notifications/initialized") initialized = m;
-    if ("id" in m && "method" in m) waiting.add(m.id as string | number);
-    toDaemon(m);
+    if ("method" in m && m.method === "initialize" && "id" in m) {
+      initialize = m as JSONRPCRequest;
+      resolveInitialize();
+      void answerInitialize(m as JSONRPCRequest);
+      return;
+    }
+    // The shim sends its own initialized to each backend after the handshake.
+    if ("method" in m && m.method === "notifications/initialized") return;
+    if ("method" in m && m.method === "ping" && "id" in m) {
+      void stdio.send({ jsonrpc: "2.0", id: m.id, result: {} } as JSONRPCMessage);
+      return;
+    }
+    if (ready) {
+      sendToBackend(m);
+      return;
+    }
+    if (!everReady && "method" in m && m.method === "tools/list") listedEarly = true;
+    queue.push(m);
   };
   stdio.onclose = () => {
     closed = true;
-    ws?.close();
-    process.exit(0);
+    backend?.close();
+    if (!outlivesClient) process.exit(0);
   };
   process.stdin.once("end", () => void stdio.close());
 
-  const connect = async (replay: boolean): Promise<void> => {
+  /** Handle one message from the current backend. */
+  const fromBackend = (m: JSONRPCMessage): void => {
+    if ("id" in m && !("method" in m)) {
+      if (m.id === SHIM_INITIALIZE_ID) {
+        handshakeDone(m);
+        return;
+      }
+      waiting.delete(m.id as string | number);
+    }
+    void stdio.send(m);
+  };
+
+  const handshakeDone = (m: JSONRPCMessage): void => {
+    // A refusal is logged and the calls still go through, so the client hears
+    // the server's own errors rather than waiting on a queue.
+    if ("error" in m) error("shim", "the server refused initialize", m.error);
+    const theirs = (m as { result?: { instructions?: string } }).result?.instructions ?? "";
+    if ("result" in m && answeredInstructions !== null && theirs !== answeredInstructions) {
+      warn("shim", "the server's initialize instructions differ from the ones this client was given; the client keeps its own until it reconnects");
+    }
+    backend!.send({ jsonrpc: "2.0", method: "notifications/initialized" } as JSONRPCMessage);
+    ready = true;
+    const first = !everReady;
+    everReady = true;
+    while (queue.length > 0 && ready) sendToBackend(queue.shift()!);
+    // A client that gave up waiting for its first tool list fetches it again on this.
+    if (first && listedEarly) void stdio.send({ jsonrpc: "2.0", method: "notifications/tools/list_changed" } as JSONRPCMessage);
+  };
+
+  /** Make `next` the backend and introduce the client to it. */
+  const attach = (next: Backend): void => {
+    backend = next;
+    ready = false;
+    next.send({ ...initialize!, id: SHIM_INITIALIZE_ID } as JSONRPCMessage);
+  };
+
+  const connectDaemon = async (): Promise<void> => {
     const d = await ensureDaemon(uproject);
+    // The socket carries the client's name, which only its initialize says.
+    await initializeArrived;
     const socket = new WebSocket(`ws://127.0.0.1:${d.port}${routePath("mcp")}`, {
       headers: { ...bearer(d), [DAEMON_HEADERS.client]: clientName() },
     });
@@ -164,8 +293,7 @@ export async function runShim(uproject: string): Promise<void> {
       socket.once("open", () => resolve());
       socket.once("error", reject);
     });
-    ws = socket;
-
+    const self: Backend = { send: (m) => socket.send(JSON.stringify(m)), close: () => socket.close() };
     socket.on("message", (data) => {
       let m: JSONRPCMessage;
       try {
@@ -173,20 +301,12 @@ export async function runShim(uproject: string): Promise<void> {
       } catch {
         return;
       }
-      if ("id" in m && !("method" in m)) {
-        if (m.id === swallow) {
-          swallow = null;
-          if (initialized) socket.send(JSON.stringify(initialized));
-          flush();
-          return;
-        }
-        waiting.delete(m.id as string | number);
-      }
-      void stdio.send(m);
+      fromBackend(m);
     });
     socket.on("close", () => {
-      if (closed) return;
-      ws = null;
+      if (closed || backend !== self) return;
+      backend = null;
+      ready = false;
       // Whatever was out is unknowable now; say so rather than hang.
       for (const id of waiting) {
         void stdio.send({
@@ -199,23 +319,13 @@ export async function runShim(uproject: string): Promise<void> {
       warn("shim", "daemon connection lost; reconnecting");
       void reconnect();
     });
-
-    if (replay && initialize) {
-      swallow = (initialize as { id: string | number }).id;
-      socket.send(JSON.stringify(initialize));
-    } else {
-      flush();
-    }
-  };
-
-  const flush = (): void => {
-    while (queue.length > 0 && ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(queue.shift()));
+    attach(self);
   };
 
   const reconnect = async (): Promise<void> => {
     for (let attempt = 0; !closed; attempt++) {
       try {
-        await connect(true);
+        await connectDaemon();
         info("shim", "reconnected to daemon");
         return;
       } catch (e) {
@@ -225,12 +335,24 @@ export async function runShim(uproject: string): Promise<void> {
     }
   };
 
-  // Read stdin from the start so nothing the client sends is lost while the daemon starts.
+  // Read stdin from the start: initialize is answered here, and nothing the
+  // client sends while the daemon starts is lost.
   await stdio.start();
   try {
-    await connect(false);
+    await connectDaemon();
+    return;
   } catch (e) {
-    error("shim", "could not reach or start the daemon", e);
+    warn("shim", "daemon unavailable; serving in process", e);
+  }
+  try {
+    const local = await opts.inProcess();
+    outlivesClient = local.outlivesClient;
+    await initializeArrived;
+    local.transport.onmessage = fromBackend;
+    await local.transport.start();
+    attach({ send: (m) => void local.transport.send(m), close: () => void local.transport.close() });
+  } catch (e) {
+    error("shim", "could not start a server in process either", e);
     process.exit(1);
   }
 }

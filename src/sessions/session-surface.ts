@@ -33,6 +33,9 @@ export interface SessionSurface {
   knowledgeByCategory: Record<string, string[]>;
 }
 
+/** A surface as its project builds it, before any session holds it. */
+export type ProjectSurface = Omit<SessionSurface, "session">;
+
 /** Which sessions provide one action, and which of them disabled its category. */
 export interface ActionProviders {
   /** Session names whose graph declares the action. */
@@ -163,7 +166,7 @@ export function explainMissingAction(
 }
 
 /** Union of every session's plugin knowledge, first contributor wins per blob. */
-export function unionKnowledge(surfaces: SessionSurface[]): Record<string, string[]> {
+export function unionKnowledge(surfaces: ProjectSurface[]): Record<string, string[]> {
   const out: Record<string, string[]> = {};
   const seen = new Set<string>();
   for (const surface of surfaces) {

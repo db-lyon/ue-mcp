@@ -133,7 +133,10 @@ describe("the daemon path", () => {
     const [a, b] = await Promise.all([viaShim.listTools(), inProcess.listTools()]);
     expect(a.tools.map((t) => t.name)).toEqual(b.tools.map((t) => t.name));
     expect(JSON.stringify(a.tools)).toBe(JSON.stringify(b.tools));
+    // The shim answers initialize itself, so these are its own, held to the server's.
     expect(viaShim.getInstructions()).toBe(inProcess.getInstructions());
+    expect(viaShim.getServerCapabilities()).toEqual(inProcess.getServerCapabilities());
+    expect(viaShim.getServerVersion()).toEqual(inProcess.getServerVersion());
   }, 60_000);
 
   it("publishes a discovery file and refuses a request without the token", async () => {

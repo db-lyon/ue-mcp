@@ -49,6 +49,8 @@ The daemon holds one `Runtime` (`src/server/runtime.ts`): the editor sessions wi
 
 **The shim** (`src/daemon/shim.ts`) reads the discovery file. If no live daemon of a usable version answers, it starts one detached, under a start lock so concurrent launches start one daemon. It then opens `ws://127.0.0.1:<port>/v1/mcp` with the token. If the daemon goes away, the shim answers each request in flight with an error (code `-32001`, outcome unknown), reconnects, and replays the client's `initialize` itself.
 
+The shim answers `initialize` on its own, without waiting for the daemon, because a daemon starting cold can take longer than a client gives a server to initialize. It composes the instructions from the project's config and plugins the way the daemon does (`src/server/startup-instructions.ts`) and advertises `listChanged` for tools, resources and prompts. Every other request waits until the daemon is up and is then relayed. A client that asked for the tool list before then is also sent `notifications/tools/list_changed`, in case it stopped waiting.
+
 **Versions.** When the project has a binary bridge newer than the shim's package, the shim runs that release's daemon through `npx ue-mcp@<version>`. A newer daemon starting for a project asks the older one to hand off (`POST /v1/handoff`), and the older one exits once no call is in flight.
 
 **Lifetime.** The daemon exits after 30 minutes with no client, event stream, connected editor or busy extension (`UE_MCP_DAEMON_IDLE_MS`), on `POST /v1/shutdown`, or on `ue-mcp daemon stop`.
