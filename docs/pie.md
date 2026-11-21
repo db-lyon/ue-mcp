@@ -361,6 +361,26 @@ Step actions, each with `client`: `tape {action, values, hz}` (`hz` default 60, 
 
 Both session actions default to the live or most recent session; pass `session` to read a finished one from `Saved/MCPSessions/`. Actor and subsystem properties are `editor(get_object_properties, world="pie")` (`target="subsystem"` with `subsystemClass`) and `editor(get_runtime_values)`.
 
+### Live streaming
+
+The editor streams PIE, the level viewport or the whole editor over Pixel Streaming 2, the WebRTC streaming plugin that ships with the engine. Video goes peer to peer to each viewer; the signalling server, which you supply, only carries the connection offers.
+
+| Action | Purpose |
+|--------|---------|
+| `stream_start` | Connect a streamer to `signallingUrl` (ws:// or wss://) as `streamerId` (default `ue-mcp`), streaming `source`: `pie` (default), `level_viewport` or `editor`. `codec` (H264, VP8, VP9, AV1), `fps` (default 30), `maxBitrateKbps` (default 4000) and `resolution` (such as `1280x720`) shape the stream |
+| `stream_status` | Whether streaming is available, and the running stream's settings, `signallingConnected` and `connectedPeers` |
+| `stream_stop` | Stop the stream; calling it again does nothing |
+
+With `source="pie"` the streamer is connected to signalling only while PIE runs. Called with no PIE running, `stream_start` returns `armed: true` and `streaming: false`; the streamer connects when PIE starts and disconnects when it ends, every session until `stream_stop`, so a viewer can tell a waiting stream from a live one. `signallingUrl` reaches the streamer exactly as given, so a secret in its path is kept.
+
+Requirements:
+
+- Pixel Streaming 2 enabled in the project. `stream_start` refuses until it is, naming `project(enable_plugin, pluginName="PixelStreaming2")` and the restart that follows.
+- UE 5.7 or later.
+- An editor that renders. An offscreen editor (`editor(start_editor, window="offscreen")`) streams with no window on screen and needs no extra launch arguments; a `-nullrhi` editor cannot stream. `resolution` resizes an offscreen editor's window, and fixes the level viewport's size when that is the source; a visible editor's window is left alone.
+
+Pixel Streaming 2 also streams every PIE session to a local signalling server by default (`PixelStreaming2.Editor.AutoStreamPIE`). `stream_start` turns that off while its own stream runs. To turn it off for good, set `PixelStreaming2.Editor.AutoStreamPIE=0` under `[SystemSettings]` in the project's `DefaultEngine.ini`.
+
 ### Rendering validation in PIE
 
 These are the native routes for a before/after or performance pass on a running game (#1645).

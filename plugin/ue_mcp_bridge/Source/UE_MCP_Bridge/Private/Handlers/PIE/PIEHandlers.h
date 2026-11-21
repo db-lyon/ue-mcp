@@ -22,6 +22,11 @@ public:
 
 	static TSharedPtr<FJsonValue> ViewTrace(const TSharedPtr<FJsonObject>& Params);
 
+	// Live streaming over Pixel Streaming 2 (PIEHandlers_Stream.cpp)
+	static TSharedPtr<FJsonValue> PieStreamStart(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> PieStreamStop(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> PieStreamStatus(const TSharedPtr<FJsonObject>& Params);
+
 	// PIE inspection
 	static TSharedPtr<FJsonValue> GetPieAnimState(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> GetPieAnimProperties(const TSharedPtr<FJsonObject>& Params);
