@@ -3,7 +3,7 @@
 !!! note "Official - Unreal Engine 5.8 and later"
     The actions on this page wrap Unreal's native AI Toolset Registry (the plugin behind Unreal's own MCP server). Each one is a declared ue-mcp action inside the matching category: it states what it does to the editor, declares its own parameters, and goes through the same guards, locks and dispatch as every other action here. Pass a tool's arguments as ordinary top-level parameters, or as `input` when you prefer. Requires UE 5.8+ with the `ToolsetRegistry` plugin (and the toolset plugins you want) enabled. The `epic` category discovers the live registry (`status` / `list_toolsets` / `describe_toolset` / `call_tool`).
 
-ue-mcp currently wraps **2177 official tools** across **138 toolsets**, grouped below by the ue-mcp category they surface in. Domains ue-mcp has no native handlers for still get their own category (`dataflow`, `conversation`); only the registry's own meta-tooling lives under `epic`.
+ue-mcp currently wraps **2177 official tools** across **139 toolsets**, grouped below by the ue-mcp category they surface in. Domains ue-mcp has no native handlers for still get their own category (`dataflow`, `conversation`); only the registry's own meta-tooling lives under `epic`.
 
 ## Engine availability
 
@@ -11,7 +11,7 @@ The list is the union of every recorded engine's registry. A tool that is not on
 
 | Engine | Toolsets | Tools | Only on this engine |
 | --- | --- | --- | --- |
-| UE 5.8 | 52 | 830 | 549 |
+| UE 5.8 | 53 | 832 | 551 |
 | UE 5.9 | 110 | 1920 | 1639 |
 
 ## project

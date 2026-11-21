@@ -37,6 +37,12 @@ export const EPIC_TOOL_EFFECTS: Record<string, ActionEffect> = {
   // Lists available capabilities from the current agent plugin directories and working directory. Discovery fails 
   "AgentPluginToolset.AgentPluginToolset.ListCapabilities": "read", // EPIC accessMode=read
 
+  /* ── AIAssistant.AIAssistantToolset ────────────────────────────── */
+  // Returns the asset, graph and selected nodes of the editor the assistant is docked into. Reports state, changes nothing.
+  "AIAssistant.AIAssistantToolset.GetDockedContext": "read",
+  // Returns important information about the current project and/or current user. Reports state, changes nothing.
+  "AIAssistant.AIAssistantToolset.GetProjectContext": "read",
+
   /* ── AIAssistantEditor.AIAssistantToolset ──────────────────────── */
   // Returns the UE tab layout and editor context in the window hosting the assistant. Tab information is available
   "AIAssistantEditor.AIAssistantToolset.GetDockedContext": "read", // EPIC accessMode=read

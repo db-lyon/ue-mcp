@@ -1,8 +1,125 @@
 {
   "engineAssociation": "5.8",
-  "recordedToolsets": 52,
-  "recordedTools": 830,
+  "recordedToolsets": 53,
+  "recordedTools": 832,
   "toolsets": [
+    {
+      "name": "AIAssistant.AIAssistantToolset",
+      "version": "1.0",
+      "description": "These functions help the AI assistant inspect its state as it relates to the larger Unreal Editor.",
+      "toolCount": 2,
+      "tools": [
+        {
+          "description": "Returns information about the part of the unreal UI that the assistant is docked into.\nFor example, if the assistant is docked with a Blueprint asset editor, this returns\nthe Blueprint asset that is being edited, which graph is in focus, etc.  If the assistant\nis closed or not docked to an asset editor, this information will be empty.",
+          "name": "AIAssistant.AIAssistantToolset.GetDockedContext",
+          "inputSchema": {
+            "type": "object"
+          },
+          "outputSchema": {
+            "type": "object",
+            "properties": {
+              "returnValue": {
+                "title": "AIAssistantDockContext",
+                "type": "object",
+                "properties": {
+                  "asset": {
+                    "type": "object",
+                    "title": "/Script/CoreUObject.Object",
+                    "description": "The asset instance that is currently being edited (if any).",
+                    "properties": {
+                      "refPath": {
+                        "type": "string",
+                        "description": "The reference stored as a soft path string."
+                      }
+                    },
+                    "required": [
+                      "refPath"
+                    ]
+                  },
+                  "graph": {
+                    "type": "object",
+                    "title": "/Script/Engine.EdGraph",
+                    "description": "The graph instance that is currently being edited (if any).",
+                    "properties": {
+                      "refPath": {
+                        "type": "string",
+                        "description": "The reference stored as a soft path string."
+                      }
+                    },
+                    "required": [
+                      "refPath"
+                    ]
+                  },
+                  "selectedNodes": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "title": "/Script/Engine.EdGraphNode",
+                      "properties": {
+                        "refPath": {
+                          "type": "string",
+                          "description": "The reference stored as a soft path string."
+                        }
+                      },
+                      "required": [
+                        "refPath"
+                      ]
+                    },
+                    "description": "The list of selected graph nodes edited (if any)."
+                  }
+                },
+                "required": [
+                  "asset",
+                  "graph",
+                  "selectedNodes"
+                ]
+              }
+            },
+            "required": [
+              "returnValue"
+            ]
+          }
+        },
+        {
+          "description": "Returns important information about the current project and/or current user.",
+          "name": "AIAssistant.AIAssistantToolset.GetProjectContext",
+          "inputSchema": {
+            "type": "object"
+          },
+          "outputSchema": {
+            "type": "object",
+            "properties": {
+              "returnValue": {
+                "title": "AIAssistantContext",
+                "type": "object",
+                "properties": {
+                  "unrealContext": {
+                    "type": "string",
+                    "description": "Describes important context about how to work with the Unreal engine."
+                  },
+                  "projectContext": {
+                    "type": "string",
+                    "description": "Describes important context about the currently active Unreal project."
+                  },
+                  "userContext": {
+                    "type": "string",
+                    "description": "Describes important context about the currently active UnrealEd user."
+                  }
+                },
+                "required": [
+                  "unrealContext",
+                  "projectContext",
+                  "userContext"
+                ]
+              }
+            },
+            "required": [
+              "returnValue"
+            ]
+          }
+        }
+      ]
+    },
     {
       "name": "aimodule_toolset.toolsets.behavior_tree.BehaviorTreeTools",
       "version": "1.0",

@@ -18,9 +18,11 @@ const S_epic_create_markdown_knowledge_base = {"properties":{"alias":{"type":"st
 const S_epic_create_skill = {"properties":{"folderPath":{"type":"string"},"assetName":{"type":"string"},"description":{"type":"string"},"details":{"type":"object","properties":{"instructions":{"type":"string"}}}},"required":["folderPath","assetName","description","details"]} as const;
 const S_epic_execute_tool_script = {"properties":{"script":{"type":"string"}},"required":["script"]} as const;
 const S_epic_get_docked_context = {"properties":{}} as const;
+const S_epic_get_docked_context__1 = {"properties":{}} as const;
 const S_epic_get_execution_environment = {"properties":{}} as const;
 const S_epic_get_knowledge_entry = {"properties":{"alias":{"type":"string"},"entryId":{"type":"string"}},"required":["alias","entryId"]} as const;
 const S_epic_get_project_context = {"properties":{}} as const;
+const S_epic_get_project_context__1 = {"properties":{}} as const;
 const S_epic_get_skills = {"properties":{"skillPaths":{"type":"array","items":{"type":"string"}}},"required":["skillPaths"]} as const;
 const S_epic_list_knowledge_base_tags = {"properties":{"alias":{"type":"string"},"prefix":{"type":"string"},"limit":{"type":"integer"}},"required":["alias","prefix"]} as const;
 const S_epic_list_knowledge_bases = {"properties":{}} as const;
@@ -48,8 +50,8 @@ export const actions: Record<string, ActionSpec> = {
   },
   epic_get_docked_context: {
     epicSchema: S_epic_get_docked_context,
-    epicTool: { toolset: "AIAssistantEditor.AIAssistantToolset", name: "AIAssistantEditor.AIAssistantToolset.GetDockedContext", engines: ["5.9"] },
-    ...bp("read", "[Epic AIAssistantEditor.AIAssistantToolset] Returns the UE tab layout and editor context in the window hosting the assistant. Tab information is available for tool windows with no asset editor. The result is empty when the assistant is closed or detached from a window. Available on UE 5.9; absent from UE 5.8.", "epic_call_tool"),
+    epicTool: { toolset: "AIAssistant.AIAssistantToolset", name: "AIAssistant.AIAssistantToolset.GetDockedContext", engines: ["5.8"], successors: [{ toolset: "AIAssistantEditor.AIAssistantToolset", name: "AIAssistantEditor.AIAssistantToolset.GetDockedContext", engines: ["5.9"], schema: S_epic_get_docked_context__1 }] },
+    ...bp("read", "[Epic AIAssistant.AIAssistantToolset] Returns information about the part of the unreal UI that the assistant is docked into. For example, if the assistant is docked with a Blueprint asset editor, this returns the Blueprint asset that is being edited, which graph is in focus, etc. If the assistant is closed or not docked to an asset editor, this information will be empty. On UE 5.9 it calls AIAssistantEditor.AIAssistantToolset.GetDockedContext.", "epic_call_tool"),
   },
   epic_get_execution_environment: {
     epicSchema: S_epic_get_execution_environment,
@@ -63,8 +65,8 @@ export const actions: Record<string, ActionSpec> = {
   },
   epic_get_project_context: {
     epicSchema: S_epic_get_project_context,
-    epicTool: { toolset: "AIAssistantEditor.AIAssistantToolset", name: "AIAssistantEditor.AIAssistantToolset.GetProjectContext", engines: ["5.9"] },
-    ...bp("read", "[Epic AIAssistantEditor.AIAssistantToolset] Returns important information about the current project and/or current user. Available on UE 5.9; absent from UE 5.8.", "epic_call_tool"),
+    epicTool: { toolset: "AIAssistant.AIAssistantToolset", name: "AIAssistant.AIAssistantToolset.GetProjectContext", engines: ["5.8"], successors: [{ toolset: "AIAssistantEditor.AIAssistantToolset", name: "AIAssistantEditor.AIAssistantToolset.GetProjectContext", engines: ["5.9"], schema: S_epic_get_project_context__1 }] },
+    ...bp("read", "[Epic AIAssistant.AIAssistantToolset] Returns important information about the current project and/or current user. On UE 5.9 it calls AIAssistantEditor.AIAssistantToolset.GetProjectContext.", "epic_call_tool"),
   },
   epic_get_skills: {
     epicSchema: S_epic_get_skills,

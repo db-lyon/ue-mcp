@@ -60,7 +60,7 @@ export const EPIC_TOOLSETS_BY_CATEGORY: Readonly<Record<string, readonly string[
   conversation: ["conversation_toolset.toolsets.conversation.ConversationTools"],
   dataflow: ["DataflowAgent.DataflowAgentToolset","DataflowEditor.DataflowScriptingSubsystem"],
   editor: ["CheatsToolset.CheatsToolset","ConsoleToolset.ConsoleToolset","ConsoleToolset.LogsToolset","EditorToolset.EditorAppToolset","EditorToolset.LogsToolset","EditorToolset.UndoHistoryToolset","MediaToolset.MediaToolset","PerfToolset.CsvProfilerToolset","PerfToolset.GpuProfilerToolset","PerfToolset.StatsToolset","RewindDebuggerToolset.RewindDebuggerToolset","SceneCaptureToolset.SceneCaptureToolset","editor_toolset.toolsets.python_scripting.PythonScriptingTools"],
-  epic: ["AIAssistantEditor.AIAssistantToolset","KnowledgeBaseToolset.KnowledgeBaseTools","ToolsetRegistry.AgentSkillToolset","editor_toolset.toolsets.programmatic.ProgrammaticToolset"],
+  epic: ["AIAssistant.AIAssistantToolset","AIAssistantEditor.AIAssistantToolset","KnowledgeBaseToolset.KnowledgeBaseTools","ToolsetRegistry.AgentSkillToolset","editor_toolset.toolsets.programmatic.ProgrammaticToolset"],
   fab: ["FabToolset.FabToolset"],
   gameplay: ["AIModuleToolset.BehaviorTreeToolset","AIModuleToolset.EnvironmentQueryToolset","GameplayTagsToolset.GameplayTagsToolset","InputToolset.InputToolset","NavMeshToolset.NavMeshToolset","PhysicsToolsets.PhysicsAssetToolset","WorldConditionsToolset.WorldConditionTools","aimodule_toolset.toolsets.behavior_tree.BehaviorTreeTools"],
   gas: ["GASToolsets.AbilitySystemInspectorToolset","GASToolsets.AttributeSetToolset","GASToolsets.GameplayAbilityToolset","GASToolsets.GameplayCueToolset"],
