@@ -8,8 +8,8 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
-import { readUeMcpConfig } from "../config/project.js";
-import { EngineResolutionError, engineLookupFor, selectEngine } from "./engine-root.js";
+import { readEngineAssociation, readUeMcpConfig } from "../config/project.js";
+import { EngineResolutionError, engineLookupFor, selectEngine, type EngineLookup } from "./engine-root.js";
 import { invalidatePluginFreshness } from "./bridge-freshness.js";
 import { clearPendingBuild, markPendingBuildFailed } from "./pending-build.js";
 import { readEnv } from "../core/env.js";
@@ -34,14 +34,12 @@ function readProjectEditorConfig(projectPath: string): { path?: string; buildToo
   }
 }
 
-/** Read EngineAssociation from a .uproject, or null if unreadable. */
-function readEngineAssociation(projectPath: string): string | null {
-  try {
-    const parsed = JSON.parse(fs.readFileSync(projectPath, "utf-8"));
-    return typeof parsed?.EngineAssociation === "string" ? parsed.EngineAssociation : null;
-  } catch {
-    return null;
-  }
+/**
+ * The engine lookup a build of this .uproject resolves with: its association
+ * and its `editor:` config, both read from disk at the time of the build.
+ */
+export function buildEngineLookup(projectPath: string): EngineLookup {
+  return engineLookupFor(projectPath, readEngineAssociation(projectPath), readProjectEditorConfig(projectPath));
 }
 
 export interface BuildResult {
@@ -320,14 +318,7 @@ export async function buildProject(
   // all read identically (#974).
   let buildTool: string;
   try {
-    const engine = selectEngine(
-      engineLookupFor(
-        resolvedPath,
-        readEngineAssociation(resolvedPath),
-        readProjectEditorConfig(resolvedPath),
-      ),
-      "buildTool",
-    );
+    const engine = selectEngine(buildEngineLookup(resolvedPath), "buildTool");
     if (!engine.buildTool) throw new EngineResolutionError("Resolved engine names no build tool.", []);
     buildTool = engine.buildTool;
   } catch (err) {
