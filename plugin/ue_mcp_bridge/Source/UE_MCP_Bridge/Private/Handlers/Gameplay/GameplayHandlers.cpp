@@ -14,7 +14,7 @@
 #include "StateTreeEditorData.h"
 #include "StateTreeSchema.h"
 #if UE_MCP_HAS_5_5_API
-#include "StateTreeEditingSubsystem.h"
+#include "HandlerStateTreeEditingSubsystem.h"
 #else
 // 5.4 has no editing subsystem; FStateTreeCompiler is the compile entry point
 // there and lives in the editor module this plugin already links.

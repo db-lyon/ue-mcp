@@ -81,7 +81,7 @@
 #include "StateTree.h"
 #include "StateTreeConditionBase.h"
 #include "StateTreeConsiderationBase.h"
-#include "StateTreeEditingSubsystem.h"
+#include "HandlerStateTreeEditingSubsystem.h"
 #include "StateTreeEditorData.h"
 #include "StateTreeEditorNode.h"
 #include "StateTreeEditorTypes.h"
