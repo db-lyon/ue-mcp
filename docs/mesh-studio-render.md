@@ -1,3 +1,7 @@
+---
+description: "Rendering static meshes, skeletal meshes and mesh assemblies as PNG reference images with editor(render_mesh_studio)."
+---
+
 # Studio mesh reference images
 
 `editor(render_mesh_studio)` renders static meshes, skeletal meshes in their reference pose, or assemblies of mesh parts as PNG reference images. It supplies its own studio lighting in a disposable preview world. The current level's actors, lights, post processing and viewport camera do not participate.

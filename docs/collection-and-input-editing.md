@@ -1,3 +1,7 @@
+---
+description: "Editing one element of an array, set or map, cloning and removing DataTable rows, and changing per-mapping input settings."
+---
+
 # Collection and input editing
 
 For a single nested field in a struct array, `asset(set_property)` accepts a key selector:

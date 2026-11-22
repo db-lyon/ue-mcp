@@ -1,3 +1,7 @@
+---
+description: "Declaring guards in ue-mcp.yml that check or act on every bridge call, with scopes, hooks, and how a person can override a denial."
+---
+
 # Guards
 
 A guard gates every bridge call. Guards are declared in the `guards:` section of a project's `ue-mcp.yml` and need no plugin. A plugin can ship guards too, declared in the same shape in its manifest. They run in an ordered pipeline around each bridge call: a `before` hook can deny the call or act on it (for example check a file out), and an `after` hook can observe or replace the result. Source control, access policy, audit and rate limiting are all guards.

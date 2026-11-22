@@ -1,3 +1,7 @@
+---
+description: "Configuring MCP clients, the project's ue-mcp.yml, context strategies, the daemon, the bridge connection, CLI subcommands and environment variables."
+---
+
 # Configuration
 
 ## MCP Client Configuration

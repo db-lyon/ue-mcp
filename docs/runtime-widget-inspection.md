@@ -1,3 +1,7 @@
+---
+description: "Reading live UMG widgets in a PIE or game world, including several instances of one class, multi-client sessions and screen bounds."
+---
+
 # Runtime widget inspection
 
 These `widget` actions read and drive live UMG widgets. Each needs a running PIE

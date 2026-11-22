@@ -1,3 +1,7 @@
+---
+description: "Every ue-mcp category tool and action, with its parameter signature and a one-line description."
+---
+
 # Tool Reference
 
 This page lists ue-mcp's own category tools and actions. For the official Unreal tools (UE 5.8+) that ue-mcp wraps (surfaced inside these same categories), see [Native Tools](native-tools.md).

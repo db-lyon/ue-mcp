@@ -1,3 +1,7 @@
+---
+description: "Importing textures and skeletal meshes, inspecting meshes and materials, querying the Asset Registry, and exporting assets for a round trip through a DCC tool."
+---
+
 # Native asset import, inspection and round-trip export
 
 These workflows use the asset and material categories. Paths such as `/Game/Props/T_Normal.T_Normal` are object paths; imports take a disk `filePath` and a content folder `packagePath`.

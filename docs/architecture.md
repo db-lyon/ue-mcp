@@ -1,3 +1,7 @@
+---
+description: "How ue-mcp is built: the per-project daemon, the stdio relay MCP clients launch, the C++ bridge plugin inside the editor, and how a call travels between them."
+---
+
 # Architecture
 
 UE-MCP has three parts:

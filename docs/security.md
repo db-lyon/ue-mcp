@@ -1,3 +1,7 @@
+---
+description: "What ue-mcp and Studio run on your computer, what leaves it, how the Remote control relay handles traffic, and when the agent asks for approval."
+---
+
 # Security
 
 ue-mcp and Studio run on your computer, next to the editor. Your project, the editor and the agent's tools stay there. Data leaves the computer for the model provider you choose, for installs and updates, for feedback reports you allow, and, only when you turn on Remote control, through an end-to-end encrypted relay.

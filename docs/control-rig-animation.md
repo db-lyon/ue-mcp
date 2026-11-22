@@ -1,3 +1,7 @@
+---
+description: "Authoring and editing animation through Control Rig and Sequencer: engine compatibility, IK and retarget context, the authoring loop and validation."
+---
+
 # Native Control Rig Animation
 
 UE-MCP authors and edits animation through Unreal's Control Rig and Sequencer.

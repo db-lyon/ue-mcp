@@ -1,3 +1,7 @@
+---
+description: "Capturing a read-only layout snapshot of a live widget tree during PIE, and comparing captures to debug a layout."
+---
+
 # Runtime widget layout diagnostics
 
 `widget(get_runtime)` can return a read-only layout snapshot for every node of a

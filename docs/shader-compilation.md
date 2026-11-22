@@ -1,3 +1,7 @@
+---
+description: "Reading the editor's outstanding shader jobs and pending material shader maps with editor(get_shader_compile_status)."
+---
+
 # Shader compilation status
 
 `editor(action="get_shader_compile_status")` returns a read-only snapshot:

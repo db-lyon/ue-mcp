@@ -1,3 +1,7 @@
+---
+description: "The mutation journal, which records what a group of calls changed so a client can revert one chat turn or everything after it."
+---
+
 # Mutation journal
 
 The mutation journal records what a group of calls changed, so a client can revert one chat turn, or everything after one, across call boundaries and restarts.

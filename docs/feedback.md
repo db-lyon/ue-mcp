@@ -1,3 +1,7 @@
+---
+description: "How feedback(submit) files a GitHub issue about a tool gap: routing, approval, what gets scrubbed, and how to turn it off."
+---
+
 # Feedback
 
 `feedback(submit)` files a GitHub issue describing a tool gap, so maintainers can close it with a native handler. It files against the tracker that owns the surface: ue-mcp core, or the plugin that provides it, found through the [plugin registry](https://plugins.ue-mcp.com). Nothing posts without your approval, and the body is scrubbed for credentials and personal identifiers on your machine first.

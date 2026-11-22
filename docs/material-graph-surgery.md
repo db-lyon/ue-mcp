@@ -1,3 +1,7 @@
+---
+description: "Inserting a material expression into an existing wire without losing its source output or channel masks, and reading a filtered view of a material graph."
+---
+
 # Material insertion and filtered inspection
 
 `material(insert_expression_between)` inserts a node into a wire without

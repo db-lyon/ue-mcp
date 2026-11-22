@@ -1,3 +1,7 @@
+---
+description: "Fixes for common problems: an editor that does not connect, plugin build failures, an install stuck on an old version, asset paths and class names."
+---
+
 # Troubleshooting
 
 ## Connection Issues

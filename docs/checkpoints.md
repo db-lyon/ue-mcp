@@ -1,3 +1,7 @@
+---
+description: "The shadow history of the files an agent changes, which lets a client keep or revert each change, with asset diffs and the daemon API."
+---
+
 # Checkpoints
 
 Checkpoints keep a shadow history of the files an agent changes, so a client can let it edit the project live and then keep or revert its changes file by file. Edits apply to the real project as usual: the viewport and asset editors show them as they happen.

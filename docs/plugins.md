@@ -1,3 +1,7 @@
+---
+description: "What ue-mcp plugins are, how they load, the shapes they take, and what belongs in core rather than a plugin."
+---
+
 # Plugins
 
 A ue-mcp plugin is an npm package that extends the server. It can:

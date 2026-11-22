@@ -1,3 +1,7 @@
+---
+description: "Recording, replaying and observing Play-In-Editor sessions with the pie tool, driving input on any player, and running multiplayer acceptance scenarios."
+---
+
 # PIE testing
 
 The `pie` tool records, replays and observes Play-In-Editor sessions, drives input on any player, runs multiplayer acceptance scenarios and turns a recording into a test that verifies a fix. It is built into ue-mcp. Starting PIE itself is `editor(play_in_editor)`.

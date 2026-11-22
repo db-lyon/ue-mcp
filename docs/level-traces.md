@@ -1,3 +1,7 @@
+---
+description: "Line traces, shape sweeps, box region queries and component collision inspection in the editor or PIE world."
+---
+
 # Level traces and collision inspection
 
 `level(action="line_trace")`, `level(action="shape_trace")` and `level(action="bulk_line_trace")` use the same world and collision channel resolution. `world` is `editor` by default; use `pie` to query live geometry, with `pieInstance` to select an exact instance. An unavailable PIE world fails instead of tracing the editor world. Channel names include project-renamed channels and default to Visibility. `traceComplex` defaults to false; `ignoreActors` takes labels or full paths in the selected world, ignoring every label match.

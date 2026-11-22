@@ -1,3 +1,7 @@
+---
+description: "The validation rules the plugin loader enforces, and what each common plugin error means."
+---
+
 # Validation and troubleshooting
 
 The rules the loader enforces, and what the common failures mean.

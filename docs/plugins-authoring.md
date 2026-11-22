@@ -1,3 +1,7 @@
+---
+description: "Scaffolding, writing and publishing a plugin: package layout, manifest, categories, tasks, flows, knowledge files and skills."
+---
+
 # Authoring a plugin
 
 How to build and publish a plugin. To use one, see [Using plugins](plugins-using.md). [Native C++ modules](plugins-native-modules.md) have their own page. A plugin can also ship [guards](guards.md), declared in the same shape as a project's.
