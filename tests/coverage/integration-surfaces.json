@@ -337,16 +337,6 @@
       "summary": "ue-mcp tools enable|disable <category|toolset> [--native|--epic] writes disable in ue-mcp.yml and the engine setting file with no editor, goes through the daemon when one serves the project, and refuses an engine change while an editor holds the project without answering"
     },
     {
-      "id": "cli.surface.stdio",
-      "group": "cli",
-      "summary": "ue-mcp surface -- <command> starts any stdio MCP server hidden, sends initialize and tools/list, and prints the tool count, action count (one per enum value of a top-level action, operation or command parameter, else 1) and schema size as text or --json, with no editor"
-    },
-    {
-      "id": "cli.surface.url",
-      "group": "cli",
-      "summary": "ue-mcp surface --url <url> measures a streamable HTTP MCP server the same way, and exits 1 with the reason when nothing answers"
-    },
-    {
       "id": "cli.resolve",
       "group": "cli",
       "summary": "ue-mcp resolve works a GitHub issue into a pull request through gh, git and claude"
