@@ -80,6 +80,21 @@ describe("one product, one version", () => {
     ).toBe(pkg.version);
   });
 
+  it("describes the same server and version to the MCP registry as package.json", () => {
+    // The registry verifies ownership by matching `mcpName` in the PUBLISHED
+    // package.json against server.json's `name`, and refuses a version npm
+    // does not have, so a stale server.json cannot be published at all.
+    const server = readJson("server.json");
+    expect(server.name, "server.json name must equal package.json mcpName").toBe(pkg.mcpName);
+    expect(server.version, `server.json version is stale. ${REGENERATE}`).toBe(pkg.version);
+    expect(server.description, `server.json description is stale. ${REGENERATE}`).toBe(pkg.description);
+    expect(server.description.length, "the registry caps description at 100 characters").toBeLessThanOrEqual(100);
+    const npm = (server.packages ?? []).find((p: any) => p.registryType === "npm");
+    expect(npm?.identifier).toBe(pkg.name);
+    expect(npm?.version, `server.json package version is stale. ${REGENERATE}`).toBe(pkg.version);
+    expect(npm?.transport?.type).toBe("stdio");
+  });
+
   it("reports the package version to MCP clients rather than a literal", () => {
     // The bug this catches was a hardcoded "0.6.4" that survived nine minor
     // releases, so asserting the value is not enough: assert that no literal
