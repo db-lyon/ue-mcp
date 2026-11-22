@@ -244,6 +244,32 @@ void FMCPBridgeServer::ReleaseConnectionSlot()
 	ActiveConnectionCount.Decrement();
 }
 
+void FMCPBridgeServer::BroadcastNotification(const FString& Method, const TSharedRef<FJsonObject>& Params)
+{
+	if (bShouldStop) return;
+
+	TArray<TSharedRef<FMCPConnectionWriter, ESPMode::ThreadSafe>> Writers;
+	{
+		FScopeLock Lock(&ConnectionsMutex);
+		Writers = LiveWriters;
+	}
+	if (Writers.Num() == 0) return;
+
+	TSharedRef<FJsonObject> Frame = MakeShared<FJsonObject>();
+	Frame->SetStringField(TEXT("jsonrpc"), TEXT("2.0"));
+	Frame->SetStringField(TEXT("method"), Method);
+	Frame->SetObjectField(TEXT("params"), Params);
+	FString Out;
+	TSharedRef<TJsonWriter<>> JsonWriter = TJsonWriterFactory<>::Create(&Out);
+	FJsonSerializer::Serialize(Frame, JsonWriter);
+
+	const TArray<uint8> Bytes = MCPFrameCodec::CreateTextFrame(Out);
+	for (const TSharedRef<FMCPConnectionWriter, ESPMode::ThreadSafe>& Writer : Writers)
+	{
+		Writer->Send(Bytes);
+	}
+}
+
 void FMCPBridgeServer::WakeAllConnections()
 {
 	FScopeLock Lock(&ConnectionsMutex);
@@ -1151,7 +1177,18 @@ void FMCPBridgeServer::ProcessWebSocketMessages(FMCPSocketHandle ClientSocketFD,
 	// a deferred answer's thread writes here too. Closed to writers on the way
 	// out, before the socket itself closes.
 	const TSharedRef<FMCPConnectionWriter, ESPMode::ThreadSafe> Writer = MakeShared<FMCPConnectionWriter, ESPMode::ThreadSafe>(ClientSocketFD);
-	ON_SCOPE_EXIT { Writer->Retire(); };
+	{
+		FScopeLock Lock(&ConnectionsMutex);
+		LiveWriters.Add(Writer);
+	}
+	ON_SCOPE_EXIT
+	{
+		{
+			FScopeLock Lock(&ConnectionsMutex);
+			LiveWriters.Remove(Writer);
+		}
+		Writer->Retire();
+	};
 
 	// Reassembly state for a fragmented message (a data frame with FIN clear
 	// followed by continuation frames).

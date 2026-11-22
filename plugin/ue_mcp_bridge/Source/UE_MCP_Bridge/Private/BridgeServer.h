@@ -185,6 +185,14 @@ public:
 	 *  parameter echo pair, cancel_request), registered like any handler. */
 	void RegisterBuiltInMethods();
 
+	/**
+	 * Write an unrequested JSON-RPC notification (a frame with a method and no
+	 * id) to every connected client, for news the editor has that nobody asked
+	 * for, such as a Play session the user started by hand. Callable from any
+	 * thread. A client that has gone away is skipped, not waited for.
+	 */
+	void BroadcastNotification(const FString& Method, const TSharedRef<FJsonObject>& Params);
+
 private:
 	// The bound port once Run() has bound one; until then the port to try first.
 	int32 ServerPort;
@@ -273,6 +281,11 @@ private:
 
 	FCriticalSection ConnectionsMutex;
 	TSet<FMCPSocketHandle> LiveConnections;
+
+	// The writer of every connection that finished its upgrade, which is who a
+	// broadcast reaches. Guarded by ConnectionsMutex; a broadcast copies it and
+	// sends outside the lock, and a retired writer refuses the send.
+	TArray<TSharedRef<FMCPConnectionWriter, ESPMode::ThreadSafe>> LiveWriters;
 	FThreadSafeCounter ActiveConnectionCount;
 
 	// #821: identity for this server object, so a record on disk can say which

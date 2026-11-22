@@ -1,5 +1,5 @@
 {
-  "recordedAt": "2026-11-17",
+  "recordedAt": "2026-11-22",
   "source": "seconds per test file, from vitest JSON reports. Refresh with scripts/vitest-weights.mjs.",
   "files": {
     "tests/integration/agent-guides.test.ts": 20.4,
@@ -17,6 +17,7 @@
     "tests/integration/daemon-composer.test.ts": 12,
     "tests/integration/daemon-http.test.ts": 10.5,
     "tests/integration/daemon-leases.test.ts": 14,
+    "tests/integration/daemon-pie-events.test.ts": 14.7,
     "tests/integration/daemon-script-events.test.ts": 2.6,
     "tests/integration/daemon-server-mode.test.ts": 26.2,
     "tests/integration/daemon-sessions.test.ts": 7.1,
@@ -111,11 +112,9 @@
     "tests/unit/bridge-live-address.test.ts": 0,
     "tests/unit/bridge-parity.test.ts": 0,
     "tests/unit/bridge-port-config-parity.test.ts": 0,
-    "tests/unit/bridge-protocol-parity.test.ts": 0,
     "tests/unit/bridge-reattach-wait.test.ts": 3,
     "tests/unit/bridge-retarget.test.ts": 0,
     "tests/unit/bridge-target.test.ts": 0,
-    "tests/unit/bridge-timeout-parity.test.ts": 0.1,
     "tests/unit/bridge-update.test.ts": 0.1,
     "tests/unit/bridge.test.ts": 0.3,
     "tests/unit/build-failure.test.ts": 0,

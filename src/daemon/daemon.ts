@@ -13,7 +13,7 @@ import * as http from "node:http";
 import * as net from "node:net";
 import * as path from "node:path";
 import { WebSocketServer } from "ws";
-import { info, warn, error, stampLogs } from "../core/log.js";
+import { debug, info, warn, error, stampLogs } from "../core/log.js";
 import { editorStepFailure } from "./editor-step.js";
 import { readEnv } from "../core/env.js";
 import { packageVersion } from "../core/package-root.js";
@@ -98,6 +98,7 @@ import { checkpointsFor, subscribeCheckpointEvents } from "../checkpoints/servic
 import { listDaemonSkills } from "../extensions/skills-list.js";
 import { ContextProjectionError, ContextProjector, enabledGraph } from "../server/context-projection.js";
 import { actionEffectInfo } from "../surface/action-effects.js";
+import { PIE_RESYNC_TIMEOUT_MS, pieEventFromNotification, pieEventFromStatus } from "./pie-events.js";
 import type { ContextStrategy } from "../config/context-strategy.js";
 
 const DEFAULT_IDLE_MS = 30 * 60_000;
@@ -254,6 +255,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
           pid: state.pid,
           pluginVersion: records.get(session)?.pluginVersion ?? null,
         });
+        void resyncPie(session);
         return;
       }
       state.connected = false;
@@ -271,6 +273,14 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
       });
     });
 
+    // Play sessions the editor pushes, however they were started, as pie.<state>.
+    session.bridge.onNotification((n) => {
+      const data = pieEventFromNotification(session.name, n);
+      if (data) events.publish(`pie.${data.state}`, data as unknown as Record<string, unknown>);
+    });
+    // Attached before this subscribed: read the state now rather than wait for a reconnect.
+    if (session.bridge.isConnected) void resyncPie(session);
+
     // Reattach as soon as an editor publishes its record, not at the next tick.
     if (dir) {
       let timer: NodeJS.Timeout | null = null;
@@ -280,6 +290,20 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
         timer = setTimeout(() => void pokeWithBackoff(session), 250);
       }, { watch: opts.watch });
       watchers.push(watcher);
+    }
+  };
+
+  // A pie.* event missed while the editor was away (or before the daemon
+  // started) would leave a client showing the wrong state for the rest of the
+  // session, so every attach reads the state once and publishes it.
+  const resyncPie = async (session: EditorSession): Promise<void> => {
+    try {
+      const status = await session.bridge.call("pie_control", { pieAction: "status" }, PIE_RESYNC_TIMEOUT_MS);
+      if (!session.bridge.isConnected) return;
+      const data = pieEventFromStatus(session.name, status);
+      if (data) events.publish(`pie.${data.state}`, data as unknown as Record<string, unknown>);
+    } catch (e) {
+      debug("daemon", `PIE state resync for ${session.name} failed: ${e instanceof Error ? e.message : String(e)}`);
     }
   };
 
