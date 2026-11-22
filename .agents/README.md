@@ -196,6 +196,10 @@ Release notes structure (below the frontmatter): **`## Features` / `## Fixes` / 
 
 `.github/RELEASE_TEMPLATE.md` is the skeleton, `.github/PULL_REQUEST_TEMPLATE.md` collects the notes line per PR.
 
+### MCP registry listing
+
+`server.json` describes the server to the official MCP registry (registry.modelcontextprotocol.io). `npm run generate` stamps its version and description from `package.json`, and `tests/unit/artifact-consistency.test.ts` fails when they differ. The registry matches `mcpName` in the published `package.json` against its `name`, so a version can be listed only after npm has it. Listing it takes an interactive GitHub sign-in, so the maintainer runs it by hand from the repo root: `mcp-publisher login github`, then `mcp-publisher publish`.
+
 ### Prereleases
 
 A version with a prerelease suffix (`1.2.0-beta`, `1.2.0-beta.2`, `1.3.0-rc.1`) goes through the exact same flow: draft release with headline frontmatter, bump, push. CI routes it to its own channel automatically.

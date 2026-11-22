@@ -94,7 +94,7 @@ export const STEPS = [
     name: "stamp:package",
     npm: "stamp:package",
     cmd: tsx("scripts/stamp-package.ts"),
-    outputs: ["plugin/ue_mcp_bridge/*.uplugin", "package.json description", "docs/assets/ue-mcp-overview.png"],
+    outputs: ["plugin/ue_mcp_bridge/*.uplugin", "package.json description", "server.json", "docs/assets/ue-mcp-overview.png"],
   },
   {
     name: "config",

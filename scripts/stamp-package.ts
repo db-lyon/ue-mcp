@@ -5,6 +5,7 @@
  *   plugin/ue_mcp_bridge/*.uplugin   VersionName = package.json version, and the
  *                                    description's bridge action count
  *   package.json                     the description npmjs.org shows
+ *   server.json                      version and description for the MCP registry
  *   docs/assets/ue-mcp-overview.png  the README's overview image
  *
  * The release flow bumps package.json and runs `npm run generate:metadata`,
@@ -59,6 +60,27 @@ function stampPackageDescription(counts: Counts): boolean {
   return writeJsonIfChanged(file, raw, pkg, 2);
 }
 
+/**
+ * server.json is what the official MCP registry (registry.modelcontextprotocol.io)
+ * lists. `mcp-publisher publish` refuses a version npm does not have, and the
+ * registry checks `mcpName` in the published package.json against `name`, so
+ * the version, package version and description follow package.json exactly.
+ */
+function stampServerJson(counts: Counts): boolean {
+  const file = path.join(repo, "server.json");
+  if (!fs.existsSync(file)) return false;
+  const raw = fs.readFileSync(file, "utf8");
+  const server = JSON.parse(raw);
+  const pkg = JSON.parse(fs.readFileSync(path.join(repo, "package.json"), "utf8"));
+  server.name = pkg.mcpName;
+  server.description = pkg.description;
+  server.version = counts.version;
+  for (const p of server.packages ?? []) {
+    if (p.registryType === "npm" && p.identifier === pkg.name) p.version = counts.version;
+  }
+  return writeJsonIfChanged(file, raw, server, 2);
+}
+
 function stampPluginDescriptor(counts: Counts): boolean {
   const file = findUpluginPath();
   if (!file) return false;
@@ -75,6 +97,7 @@ async function main(): Promise<void> {
   const counts = computeCounts();
   if (stampPluginDescriptor(counts)) console.log(`stamped the .uplugin: VersionName ${counts.version}, description`);
   if (stampPackageDescription(counts)) console.log("stamped the package.json description");
+  if (stampServerJson(counts)) console.log(`stamped server.json: version ${counts.version}, description`);
   const image = await renderOverviewImage(counts);
   console.log(image.rendered ? `rendered ${image.png}` : `${image.png} already shows these counts`);
 }

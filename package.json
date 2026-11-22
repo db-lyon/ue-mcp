@@ -47,6 +47,7 @@
   ],
   "author": "David Lyon",
   "license": "MIT",
+  "mcpName": "io.github.db-lyon/ue-mcp",
   "repository": {
     "type": "git",
     "url": "https://github.com/db-lyon/ue-mcp.git"
