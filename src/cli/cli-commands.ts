@@ -55,6 +55,7 @@ export const CLI_COMMANDS: readonly CliCommand[] = [
   { name: "plugin", summary: "Install, create and publish plugins", load: () => import("./plugin-cli.js") },
   { name: "context", summary: "Read or set the context strategy", load: () => import("./context-cli.js"), ownHelp: true },
   { name: "tools", summary: "List, enable or disable categories and Unreal toolsets", load: () => import("./tools-cli.js") },
+  { name: "surface", summary: "Measure any MCP server's tools, actions and schema size: surface -- <command>", load: () => import("./surface-cli.js") },
   {
     name: "version",
     aliases: ["--version", "-v"],
