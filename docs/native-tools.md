@@ -1,9 +1,13 @@
+---
+description: Every tool from Unreal's AI Toolset Registry (UE 5.8 and later) that ue-mcp wraps as an action, grouped by category, with the engines each one is on.
+---
+
 # Native Unreal Tools
 
 !!! note "Official - Unreal Engine 5.8 and later"
     The actions on this page wrap Unreal's native AI Toolset Registry (the plugin behind Unreal's own MCP server). Each one is a declared ue-mcp action inside the matching category: it states what it does to the editor, declares its own parameters, and goes through the same guards, locks and dispatch as every other action here. Pass a tool's arguments as ordinary top-level parameters, or as `input` when you prefer. Requires UE 5.8+ with the `ToolsetRegistry` plugin (and the toolset plugins you want) enabled. The `epic` category discovers the live registry (`status` / `list_toolsets` / `describe_toolset` / `call_tool`).
 
-ue-mcp currently wraps **2177 official tools** across **139 toolsets**, grouped below by the ue-mcp category they surface in. Domains ue-mcp has no native handlers for still get their own category (`dataflow`, `conversation`); only the registry's own meta-tooling lives under `epic`.
+ue-mcp currently wraps **<!-- count:nativeToolActions -->2191<!-- /count --> official tools** across **<!-- count:nativeToolsets -->139<!-- /count --> toolsets**, grouped below by the ue-mcp category they surface in. Domains ue-mcp has no native handlers for still get their own category (`dataflow`, `conversation`); only the registry's own meta-tooling lives under `epic`.
 
 ## Engine availability
 
@@ -2149,6 +2153,25 @@ Wraps 40 official tools.
 - `plugins(epic_update_plugin_dependency)` *(UE 5.9)* - [Epic PluginToolset.PluginToolset] Changes the settings of an existing dependency entry in a plugin's Plugins array in its .uplugin file. Anything not provided keeps its current value, as do fields the plugin editor doesn't show, such as platform lists. Available on UE 5.9; absent from UE 5.8.
 - `plugins(epic_update_plugin_descriptor)` - [Epic PluginToolset.PluginToolset] Updates a plugin's descriptor fields and writes them to its .uplugin file. Checks out the file via source control if source control is enabled. No-ops if the serialized descriptor is unchanged (file is not touched).
 - `plugins(epic_validate_new_plugin_name_and_location)` - [Epic PluginToolset.PluginToolset] Validates that PluginName and RelativePluginLocation are acceptable for a new plugin.
+
+## epic
+
+Wraps 14 official tools.
+
+- `epic(epic_create_markdown_knowledge_base)` *(UE 5.9)* - [Epic KnowledgeBaseToolset.KnowledgeBaseTools] Creates an empty markdown base under the project's Content/KnowledgeBases folder, writes the marker file that lets it be rediscovered on restart, and registers it. An empty base is valid; the first WriteKnowledge creates its first file. Raises an error if the alias is already registered or not a valid identifier, if RelativePath is not one or two plain segments, if the directory already belongs to another base, or if it cannot be written. Available on UE 5.9; absent from UE 5.8.
+- `epic(epic_create_skill)` - [Epic ToolsetRegistry.AgentSkillToolset] Creates a new AgentSkill. This should ONLY be called after getting explicit direction or permission from the user.
+- `epic(epic_execute_tool_script)` *(UE 5.8)* - [Epic editor_toolset.toolsets.programmatic.ProgrammaticToolset] Execute a Python script against the toolset APIs. Use this to batch multiple tool calls into a single script execution, reducing round-trips and context usage. IMPORTANT: Available modules and usage instructions are described by the value returned by `get_execution_environment`. You MUST call `get_execution_environment` once in the conversation before using this tool. Read the value in the `instructions` field in the returned environment info prior to calling this function, so that you understand what APIs are available and how to use them. Before writing a script that calls multiple tools, look up the output schemas (if available) for any tools you plan to use. This returns the JSON schema describing each tool's return value, so you know how to parse results and pass data between calls. Available on UE 5.8; absent from UE 5.9.
+- `epic(epic_get_docked_context)` *(UE 5.8)* - [Epic AIAssistant.AIAssistantToolset] Returns information about the part of the unreal UI that the assistant is docked into. For example, if the assistant is docked with a Blueprint asset editor, this returns the Blueprint asset that is being edited, which graph is in focus, etc. If the assistant is closed or not docked to an asset editor, this information will be empty. On UE 5.9 it calls AIAssistantEditor.AIAssistantToolset.GetDockedContext.
+- `epic(epic_get_execution_environment)` *(UE 5.8)* - [Epic editor_toolset.toolsets.programmatic.ProgrammaticToolset] Get details about execution environment. This includes instructions on how to write scripts, and constraints, such as what modules may be imported and the script entrypoint and function signature. Available on UE 5.8; absent from UE 5.9.
+- `epic(epic_get_knowledge_entry)` *(UE 5.9)* - [Epic KnowledgeBaseToolset.KnowledgeBaseTools] Returns one entry by id with its full body. Ids are exact, so take them from QueryKnowledgeBase hits rather than composing them; a miss names the nearest ids the base holds. Raises an error if the alias is not registered or no entry has that id. Available on UE 5.9; absent from UE 5.8.
+- `epic(epic_get_project_context)` *(UE 5.8)* - [Epic AIAssistant.AIAssistantToolset] Returns important information about the current project and/or current user. On UE 5.9 it calls AIAssistantEditor.AIAssistantToolset.GetProjectContext.
+- `epic(epic_get_skills)` - [Epic ToolsetRegistry.AgentSkillToolset] Returns detailed information about a specific set of AgentSkills.
+- `epic(epic_list_knowledge_base_tags)` *(UE 5.9)* - [Epic KnowledgeBaseToolset.KnowledgeBaseTools] Lists the tags a base's entries carry, most common first, so a Tags filter is spelled from what exists rather than guessed. Tags are exact strings: "simulation" does not match "Simulation". Raises an error if the alias is not registered or the base fails to build. Available on UE 5.9; absent from UE 5.8.
+- `epic(epic_list_knowledge_bases)` *(UE 5.9)* - [Epic KnowledgeBaseToolset.KnowledgeBaseTools] Lists every registered knowledge base. Call this first: aliases are the handle every other tool takes and they vary by project. Choose a base by its Description. A base with a "vocabulary" consumer is the catalogue that tool's input is spelled from, so query it before calling that tool. Builds nothing. Available on UE 5.9; absent from UE 5.8.
+- `epic(epic_list_skills)` - [Epic ToolsetRegistry.AgentSkillToolset] Gets a summary of all AgentSkills in the project.
+- `epic(epic_query_knowledge_base)` *(UE 5.9)* - [Epic KnowledgeBaseToolset.KnowledgeBaseTools] Searches one base. Text is matched as plain words and ranked; Tags keep only entries carrying all of them; both empty lists the whole base. Bodies are truncated; GetKnowledgeEntry returns a hit's full payload. Raises an error if the alias is not registered or the base fails to build. Available on UE 5.9; absent from UE 5.8.
+- `epic(epic_update_skill)` - [Epic ToolsetRegistry.AgentSkillToolset] Updates an existing AgentSkill. This should ONLY be called after getting explicit direction or permission from the user.
+- `epic(epic_write_knowledge)` *(UE 5.9)* - [Epic KnowledgeBaseToolset.KnowledgeBaseTools] Writes a structured entry into a markdown base as a JSON block, preserving the prose and other blocks in the file. An existing EntryId is replaced in the file that holds it, wherever that is; an empty EntryId appends a new entry to the file FileId names, creating the file if absent. Reuse the stem of a hit's Source as FileId so a topic accumulates rather than sprawls. Only markdown bases are writable; check bWritable in ListKnowledgeBases first. Raises an error if the alias is not registered, the base is read-only, BodyJson is not a JSON object, or the file cannot be written. Available on UE 5.9; absent from UE 5.8.
 
 ## fab
 
