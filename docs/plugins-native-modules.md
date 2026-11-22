@@ -1,3 +1,7 @@
+---
+description: "Shipping a UE C++ module in a plugin so its handlers become actions: typed contracts, package layout, install and the bridge ABI."
+---
+
 # Native C++ modules
 
 A plugin that needs engine APIs the bridge does not expose ships a UE C++ module in its npm package. `ue-mcp plugin install` copies the module into the project, the project build compiles it, and its `StartupModule` registers handlers on the bridge with `UEMCP::RegisterExternalHandler`.

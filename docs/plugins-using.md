@@ -1,3 +1,7 @@
+---
+description: "Installing, updating, removing and inspecting plugins in a project, and how ordering and name collisions resolve."
+---
+
 # Using plugins
 
 Installing, configuring and managing plugins in a project. To write one, see [Authoring a plugin](plugins-authoring.md).

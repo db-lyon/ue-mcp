@@ -176,6 +176,10 @@ export function applyCountMarkers(text: string, counts: Counts): string {
       /<!--\s*count:nativeToolActions\s*-->[^<]*<!--\s*\/count\s*-->/g,
       `<!-- count:nativeToolActions -->${counts.nativeToolActions}<!-- /count -->`,
     )
+    .replace(
+      /<!--\s*count:nativeToolsets\s*-->[^<]*<!--\s*\/count\s*-->/g,
+      `<!-- count:nativeToolsets -->${counts.nativeToolsets}<!-- /count -->`,
+    )
     // The actions that dispatch to the C++ bridge, which is what the smoke
     // suite exercises and therefore the number the agent guide quotes for it.
     .replace(

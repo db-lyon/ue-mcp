@@ -1,3 +1,7 @@
+---
+description: "Setting several component template properties across several Blueprints in one call, with validation, saves and rollback."
+---
+
 # Batch component template properties
 
 `blueprint(set_component_properties_batch)` writes several properties on

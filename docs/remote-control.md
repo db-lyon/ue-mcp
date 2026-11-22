@@ -1,3 +1,7 @@
+---
+description: "Using Studio from a phone or another computer with the paid Remote control plan: requirements, signing in, upgrading, pairing a device and cancelling."
+---
+
 # Remote control
 
 Remote control lets you use [Studio](studio.md) from a phone or another computer. The project, the editor and the agent stay on the computer running Studio. The paired device sends requests and shows the answers. Traffic between them is encrypted end to end through the relay at `remote.ue-mcp.com`, so the relay cannot read it. See [Security](security.md).

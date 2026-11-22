@@ -42,13 +42,16 @@ const CATS = ALL_TOOLS.map((t) => t.name);
  *
  * Nothing is re-derived here. The rows ARE the declared actions, with the
  * description and effect they carry, so the page cannot drift from what a
- * client is handed. The `epic` category is excluded: its four actions are
- * ue-mcp's own gateway into the registry, not wrapped tools.
+ * client is handed. Every `epic_*` action counts, in every category, which is
+ * the same rule scripts/lib/tool-counts.ts uses for `nativeToolActions`, so
+ * the total printed here is the total the site and the README print. The
+ * `epic` category's gateway actions (status, list_toolsets, call_tool and the
+ * rest) are ue-mcp's own and carry no prefix; its prefixed actions wrap the
+ * registry's own tools (skills, knowledge bases, tool scripts) and are listed.
  */
 function wrappedByCategory() {
   const out = {};
   for (const t of ALL_TOOLS) {
-    if (t.name === "epic") continue;
     const rows = Object.entries(t.actions)
       .filter(([k]) => k.startsWith("epic_"))
       .map(([k, spec]) => ({
@@ -71,6 +74,13 @@ function main() {
   const toolsetCount = merged.toolsets.length;
 
   const lines = [];
+  lines.push("---");
+  lines.push(
+    "description: Every tool from Unreal's AI Toolset Registry (UE 5.8 and later) that ue-mcp wraps as an action, " +
+    "grouped by category, with the engines each one is on.",
+  );
+  lines.push("---");
+  lines.push("");
   lines.push("# Native Unreal Tools");
   lines.push("");
   // MkDocs admonition -> the landing converter renders this as a Fumadocs
@@ -87,7 +97,11 @@ function main() {
   );
   lines.push("");
   lines.push(
-    `ue-mcp currently wraps **${total} official tools** across **${toolsetCount} toolsets**, grouped below by the ` +
+    // Count markers, so the landing site can restamp these from the release it
+    // takes every other number from. The values are the same ones
+    // scripts/lib/tool-counts.ts computes as nativeToolActions/nativeToolsets.
+    `ue-mcp currently wraps **<!-- count:nativeToolActions -->${total}<!-- /count --> official tools** across ` +
+    `**<!-- count:nativeToolsets -->${toolsetCount}<!-- /count --> toolsets**, grouped below by the ` +
     "ue-mcp category they surface in. Domains ue-mcp has no native handlers for still get their own " +
     "category (`dataflow`, `conversation`); only the registry's own meta-tooling lives under `epic`.",
   );

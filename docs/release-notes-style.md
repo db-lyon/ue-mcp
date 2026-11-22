@@ -1,3 +1,7 @@
+---
+description: "For maintainers: the structure, voice and headline frontmatter every ue-mcp release note follows."
+---
+
 # Release notes style
 
 Every release uses this format. Match the previous stable release rather than

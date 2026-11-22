@@ -1,3 +1,7 @@
+---
+description: "Authoring UMG Widget Blueprints and driving live widgets during Play-In-Editor, with fixes for the common authoring failures."
+---
+
 # Widgets
 
 The `widget` category authors UMG assets and drives live widgets while

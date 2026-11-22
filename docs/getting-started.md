@@ -1,3 +1,7 @@
+---
+description: "Installing ue-mcp with npx ue-mcp init, connecting an MCP client to the Unreal Editor, and running a first task."
+---
+
 # Getting Started
 
 <Badge variant="time">⏱ ~5 minutes</Badge>

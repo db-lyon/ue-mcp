@@ -1,3 +1,7 @@
+---
+description: "How an agent turns a request such as 'turn the hood a bit clockwise' into an exact axis, angle and coordinate frame, and then verifies the edit."
+---
+
 # Spatial instructions
 
 A person says "turn the hood a bit clockwise". An editor needs an axis, an angle,

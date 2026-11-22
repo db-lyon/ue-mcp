@@ -1,3 +1,7 @@
+---
+description: "Installing and using Studio, the agent client that works inside Unreal Editor through ue-mcp: models, chat, approvals, checkpoints, playtests and settings."
+---
+
 # UE-MCP Studio
 
 UE-MCP Studio is an agent that works inside Unreal Editor through ue-mcp's actions. You chat with it in a window beside the editor or docked in an editor tab, and it reads and changes your project with the same actions an MCP client gets. Studio is free and open source under the MIT license.

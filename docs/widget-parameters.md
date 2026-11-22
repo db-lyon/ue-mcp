@@ -1,3 +1,7 @@
+---
+description: "The parameter names every widget action shares, the aliases they accept, and how the epic_* widget actions take them."
+---
+
 # Widget parameter contract
 
 Every action in the `widget` category takes the same parameter names for the

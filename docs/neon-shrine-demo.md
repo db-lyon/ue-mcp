@@ -1,3 +1,7 @@
+---
+description: "The built-in 19-step demo that builds a lit scene from scratch, how to run it, and how to clean up after it."
+---
+
 # Neon Shrine Demo
 
 The Neon Shrine is a built-in 19-step demo that builds a lit scene from scratch: materials, geometry, lights, fog, post process, Niagara, PCG, a level sequence and an editor utility widget. Running it checks that the bridge works end to end after install.

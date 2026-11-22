@@ -1,3 +1,7 @@
+---
+description: "For contributors: setting up, building and testing the ue-mcp repository, and adding an action or category."
+---
+
 # Development
 
 ## Prerequisites

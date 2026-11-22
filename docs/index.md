@@ -1,3 +1,7 @@
+---
+description: "What ue-mcp is, what its category tools cover, and where to start in these docs."
+---
+
 # UE-MCP
 
 **Unreal Engine Model Context Protocol Server.** It lets AI assistants drive the Unreal Editor through <!-- count:tools -->31<!-- /count --> category tools covering <!-- count:actions -->3724+<!-- /count --> actions.

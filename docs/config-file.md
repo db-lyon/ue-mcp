@@ -1,3 +1,7 @@
+---
+description: "Reference for ue-mcp.yml: its layout, how config layers combine, where each setting belongs, and every key in the ue-mcp block."
+---
+
 # The `ue-mcp.yml` config file
 
 `ue-mcp.yml` sits next to your `.uproject` and declares the project's ue-mcp surface: which tool categories are on, the content roots to search, the bridge port, the context strategy, and your custom `tasks:` and `flows:`. `npx ue-mcp init` creates and maintains it. It is plain YAML, and hand-editing is expected.

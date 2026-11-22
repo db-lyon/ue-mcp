@@ -1,3 +1,7 @@
+---
+description: "When blueprint actions save an asset to disk, and how a graph DSL rewrite replaces part of a Blueprint graph."
+---
+
 # Blueprint edits: saving and graph rewrites
 
 ## When an edit is saved

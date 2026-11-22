@@ -1,3 +1,7 @@
+---
+description: "Capturing a static mesh LOD's geometry without modifying it, reading the capture, and exporting a complete snapshot."
+---
+
 # Static mesh geometry inspection
 
 `asset.get_static_mesh_geometry` captures a StaticMesh LOD without building,

@@ -1,3 +1,7 @@
+---
+description: "For contributors: how mutating C++ bridge handlers support safe replay and rollback, with the helpers and patterns to use."
+---
+
 # Handler Conventions
 
 How mutating C++ handlers participate in **idempotency** (safe replay) and **rollback** (failure recovery).

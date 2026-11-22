@@ -1,3 +1,7 @@
+---
+description: "The diagram actions that draw Blueprint, animation, StateTree, behavior tree and other graphs as Mermaid text or an image."
+---
+
 # Graph diagrams
 
 Every category with a graph reader also has a `diagram` action. It reads the

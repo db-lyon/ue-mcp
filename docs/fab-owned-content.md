@@ -1,3 +1,7 @@
+---
+description: "Bringing content you own on Fab into a project from a conversation: signing in, syncing your library, and finding, downloading and installing an item."
+---
+
 # Owned Fab content
 
 The `fab` category takes content you own on Fab from your library into the project without leaving the conversation: sign in, sync your library, find the item, download it, install it. `fab(open_search)` opens fab.com's search page at a query.

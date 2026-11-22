@@ -1,3 +1,7 @@
+---
+description: "Calling functions and delegates on a live UMG widget during Play-In-Editor with widget(invoke_runtime_function)."
+---
+
 # Runtime widget interaction
 
 `widget(action="invoke_runtime_function")` drives a live UMG widget while Play-In-Editor is running. It covers two shapes:

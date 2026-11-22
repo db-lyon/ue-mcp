@@ -1,3 +1,7 @@
+---
+description: "Declaring YAML flows that run actions, shell commands and other flows as one call, with step references, hooks, retries and rollback on failure."
+---
+
 # Flows
 
 A flow is a named sequence of steps declared in YAML and run as one operation. Flows run on [`@db-lyon/flowkit`](https://github.com/db-lyon/flowkit). A step can call any action, run a shell command, run another flow, or run a task you wrote.
