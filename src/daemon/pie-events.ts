@@ -1,3 +1,4 @@
+// @session per-session: Turns one editor's pushed play frames into events, and resyncs against that editor on attach.
 /**
  * Play session events for the daemon's event stream. The editor pushes a
  * notifications/pie frame whenever a session starts, pauses, resumes or ends,
