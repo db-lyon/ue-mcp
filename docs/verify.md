@@ -50,7 +50,7 @@ Measured on 2026-11-21 on Windows 11 with Node 26, with no editor running. Each 
 | unreal-engine-mcp-server 0.6.0 (EngineWire stdio proxy) | `npx ue-mcp surface -- npx -y unreal-engine-mcp-server@0.6.0` | 1 | 4 | 140 B, ~35 tokens | 378 B, ~95 tokens |
 | GenOrca/unreal-mcp at commit `f7986db` (reports UnrealMCP 1.9.3) | `npx ue-mcp surface -- uv --directory <clone>/mcp-server run --python 3.12 src/unreal_mcp/main.py` | 21 | 21 | 7,167 B, ~1,792 tokens | 14,683 B, ~3,671 tokens <!-- lint-prose-allow: competitor --> |
 
-The ue-mcp rows were measured from the source at that commit. The last row uses the start command from that server's README, run in a clone checked out at that commit; `uv sync --python 3.12` beforehand installs its locked dependencies.
+The ue-mcp rows were measured from the source at that commit. The `full` row is one tool and three actions above the counts stamped elsewhere in these docs, which count category tools only; the extra tool is `flow`. The last row uses the start command from that server's README, run in a clone checked out at that commit; `uv sync --python 3.12` beforehand installs its locked dependencies.
 
 ## 2. Check the comparison grades
 
