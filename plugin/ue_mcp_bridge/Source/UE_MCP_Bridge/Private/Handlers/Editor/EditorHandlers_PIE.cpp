@@ -247,6 +247,10 @@ static TSharedPtr<FJsonValue> MCPRunPieControl(
 	{
 		bool bIsPlaying = (GEditor->PlayWorld != nullptr);
 		Result->SetBoolField(TEXT("isPlaying"), bIsPlaying);
+		// What a client resyncing its view of the session needs beside
+		// isPlaying, the same facts the notifications/pie frames carry.
+		Result->SetBoolField(TEXT("isSimulating"), bIsPlaying && GEditor->bIsSimulatingInEditor);
+		Result->SetBoolField(TEXT("isPaused"), bIsPlaying && GEditor->PlayWorld->bDebugPauseExecution);
 		Result->SetStringField(TEXT("action"), Action);
 		// action=status only reads. Stated rather than left blank, because the
 		// same handler mutates under the other two actions.

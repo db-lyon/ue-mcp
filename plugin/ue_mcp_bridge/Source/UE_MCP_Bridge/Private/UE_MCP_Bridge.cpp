@@ -5,6 +5,7 @@
 #include "BridgeServer.h"
 #include "MCPWireContract.h"
 #include "EngineStatusHooks.h"
+#include "PIENotifyHooks.h"
 #include "DeletedActorPackages.h"
 #include "HandlerSceneCaptureJob.h"
 #include "MCPEngineStatus.h"
@@ -153,6 +154,12 @@ void FUE_MCP_BridgeModule::StartupModule()
 	// Recorder, replayer, observer, script runner, the PIE Studio panel and its Record button.
 	FPIEHandlers::StartupSystems();
 
+	// Play sessions however they start, pushed to every connected client.
+	FMCPPieNotifyHooks::Install([](const FString& Method, const TSharedRef<FJsonObject>& Params)
+	{
+		if (G_BridgeServer.IsValid()) G_BridgeServer->BroadcastNotification(Method, Params);
+	});
+
 	// NO POLICIES ARE ARMED HERE, AND NONE MAY BE.
 	//
 	// This module used to arm its own at load time - "Save Content", "Save
@@ -236,6 +243,7 @@ void FUE_MCP_BridgeModule::ShutdownModule()
 	}
 	FDialogHandlers::RemoveDialogHook();
 	FMCPDeletedActorPackages::Remove();
+	FMCPPieNotifyHooks::Remove();
 	FPIEHandlers::ShutdownSystems();
 	FCheckpointHandlers::Shutdown();
 	// Unbinds the quick_search index from the Asset Registry while it is still loaded.

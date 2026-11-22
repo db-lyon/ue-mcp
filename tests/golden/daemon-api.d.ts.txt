@@ -12,12 +12,12 @@ export declare function apiVersionsOverlap(a: ApiVersionRange, b: ApiVersionRang
 export declare const DAEMON_API_RANGE: ApiVersionRange;
 export declare const EXTENSION_API_RANGE: ApiVersionRange;
 export declare function extensionApiSupported(min: number, max: number): boolean;
-export declare const DAEMON_FEATURES: readonly ["checkpoints", "checkpoints.assetDiff", "skills", "context.projection", "actions.effects", "install.pendingBuild", "editor.rebuild", "ui.scopedKeys", "ui.extensions", "flows.stepApproval", "sessions.access", "journal", "tools.categories", "leases", "dialogs.native"];
+export declare const DAEMON_FEATURES: readonly ["checkpoints", "checkpoints.assetDiff", "skills", "context.projection", "actions.effects", "install.pendingBuild", "editor.rebuild", "ui.scopedKeys", "ui.extensions", "flows.stepApproval", "sessions.access", "journal", "tools.categories", "leases", "dialogs.native", "events.pie"];
 export type DaemonFeature = (typeof DAEMON_FEATURES)[number];
 export declare const DAEMON_FEATURES_BEYOND_ROUTES: {
     readonly [F in DaemonFeature]?: string;
 };
-export declare const EXTENSION_FEATURES: readonly ["callAction.dialogPrompt", "callAction.elicit", "callAction.access", "callAction.signal", "checkpoints", "checkpoints.assetDiff", "events.dialog", "events.script", "models.provider", "modes", "modes.playtest", "skills", "context.projection", "actions.effects", "extension.versions", "ui.scopedKeys", "ui.extensions", "extension.services", "flows.stepApproval", "dialogs.native", "permissions"];
+export declare const EXTENSION_FEATURES: readonly ["callAction.dialogPrompt", "callAction.elicit", "callAction.access", "callAction.signal", "checkpoints", "checkpoints.assetDiff", "events.dialog", "events.script", "models.provider", "modes", "modes.playtest", "skills", "context.projection", "actions.effects", "extension.versions", "ui.scopedKeys", "ui.extensions", "extension.services", "flows.stepApproval", "dialogs.native", "permissions", "events.pie"];
 export type ExtensionFeature = (typeof EXTENSION_FEATURES)[number];
 export declare const EXTENSION_FEATURE_MEMBERS: {
     readonly [F in ExtensionFeature]: keyof DaemonExtensionApi;
@@ -328,7 +328,17 @@ export declare const DAEMON_HEADERS: {
     readonly access: "x-ue-mcp-access";
     readonly flowToken: "x-ue-mcp-token";
 };
-export declare const DAEMON_EVENT_TYPES: readonly ["daemon.started", "daemon.stopping", "editor.connected", "editor.disconnected", "editor.operation", "client.connected", "client.disconnected", "call.started", "call.finished", "session.access", "leases.released", "plugins.changed", "update.available", "update.staged", "update.building", "update.applied", "update.failed", "dialog.opened", "dialog.updated", "dialog.answered", "dialog.delegated", "dialog.closed", "flow.run_started", "flow.step_started", "flow.step_completed", "flow.step_failed", "flow.run_completed", "script.run_started", "script.step_started", "script.step_acted", "script.step_passed", "script.step_failed", "script.verdict_requested", "script.verdict", "script.run_finished", "checkpoint.created", "checkpoint.restored", "checkpoints.toggled", "checkpoints.cleared"];
+export declare const DAEMON_EVENT_TYPES: readonly ["daemon.started", "daemon.stopping", "editor.connected", "editor.disconnected", "editor.operation", "client.connected", "client.disconnected", "call.started", "call.finished", "session.access", "leases.released", "plugins.changed", "update.available", "update.staged", "update.building", "update.applied", "update.failed", "dialog.opened", "dialog.updated", "dialog.answered", "dialog.delegated", "dialog.closed", "flow.run_started", "flow.step_started", "flow.step_completed", "flow.step_failed", "flow.run_completed", "script.run_started", "script.step_started", "script.step_acted", "script.step_passed", "script.step_failed", "script.verdict_requested", "script.verdict", "script.run_finished", "checkpoint.created", "checkpoint.restored", "checkpoints.toggled", "checkpoints.cleared", "pie.started", "pie.ended", "pie.paused", "pie.resumed"];
+export declare const PIE_STATES: readonly ["started", "ended", "paused", "resumed"];
+export type PieState = (typeof PIE_STATES)[number];
+export interface PieEventData {
+    editor: string;
+    state: PieState;
+    simulate: boolean;
+    at: string;
+    resync?: boolean;
+    paused?: boolean;
+}
 export type DaemonEventType = (typeof DAEMON_EVENT_TYPES)[number];
 export declare const DAEMON_GAP_EVENT = "gap";
 export interface DaemonEvent {

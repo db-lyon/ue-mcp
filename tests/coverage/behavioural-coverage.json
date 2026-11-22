@@ -8478,6 +8478,11 @@
         },
         {
           "suite": "live",
+          "file": "tests/live/pie-notify.test.ts",
+          "test": "pushes started and ended for a session begun and ended outside the bridge's pie actions"
+        },
+        {
+          "suite": "live",
           "file": "tests/live/spatial-communication.test.ts",
           "test": "rejects reversed or overflowing focus framing before capture"
         }
@@ -17237,6 +17242,11 @@
           "suite": "live",
           "file": "tests/live/pie-multiplayer-scripts.test.ts",
           "test": "stops"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/pie-notify.test.ts",
+          "test": "pushes started and ended for a session begun and ended outside the bridge's pie actions"
         },
         {
           "suite": "live",

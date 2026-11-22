@@ -78,6 +78,7 @@ export const DAEMON_FEATURES = [
   "tools.categories",
   "leases",
   "dialogs.native",
+  "events.pie",
 ] as const;
 
 export type DaemonFeature = (typeof DAEMON_FEATURES)[number];
@@ -88,6 +89,8 @@ export const DAEMON_FEATURES_BEYOND_ROUTES: { readonly [F in DaemonFeature]?: st
     "GET /v1/install carries plugin.pendingBuild, a source bridge deployed and not built yet, which the next start through ue-mcp builds first",
   "ui.scopedKeys": "a bundle named for a loaded extension is installed and served only when signed by a key that extension trusted",
   "flows.stepApproval": "POST /v1/flows/<name>/run takes `stepApproval: { approver, token }`",
+  "events.pie":
+    "GET /v1/events carries pie.started, pie.ended, pie.paused and pie.resumed whenever a Play session changes, however it was started, and the current state once each time an editor attaches",
 };
 
 /** What the extension API offers beyond EXTENSION_API_VERSION, in the order `api.features` lists them. */
@@ -113,6 +116,7 @@ export const EXTENSION_FEATURES = [
   "flows.stepApproval",
   "dialogs.native",
   "permissions",
+  "events.pie",
 ] as const;
 
 export type ExtensionFeature = (typeof EXTENSION_FEATURES)[number];
@@ -140,6 +144,7 @@ export const EXTENSION_FEATURE_MEMBERS: { readonly [F in ExtensionFeature]: keyo
   "flows.stepApproval": "flows",
   "dialogs.native": "nativeDialogs",
   permissions: "registryAccount",
+  "events.pie": "events",
 };
 
 // ── Routes ────────────────────────────────────────────────────────
@@ -303,7 +308,30 @@ export const DAEMON_EVENT_TYPES = [
   "checkpoint.restored",
   "checkpoints.toggled",
   "checkpoints.cleared",
+  "pie.started",
+  "pie.ended",
+  "pie.paused",
+  "pie.resumed",
 ] as const;
+
+/** The Play session states the editor pushes, each published as `pie.<state>`. */
+export const PIE_STATES = ["started", "ended", "paused", "resumed"] as const;
+export type PieState = (typeof PIE_STATES)[number];
+
+/**
+ * The data of a `pie.*` event. `resync` marks the one published when the
+ * daemon (re)attaches to an editor, read from the editor rather than pushed by
+ * it: a client that missed events while the editor was away takes it as the
+ * current state. `at` is the editor's clock for a pushed event.
+ */
+export interface PieEventData {
+  editor: string;
+  state: PieState;
+  simulate: boolean;
+  at: string;
+  resync?: boolean;
+  paused?: boolean;
+}
 
 export type DaemonEventType = (typeof DAEMON_EVENT_TYPES)[number];
 
@@ -1440,6 +1468,8 @@ export interface DaemonExtensionApi {
    *                              `nativeDialogs` lists and presses them
    *   "permissions"              `registryAccount` answers only an extension declaring "registry.account"
    *                              in `ueMcpExtension.permissions` (EXTENSION_PERMISSIONS)
+   *   "events.pie"               pie.started, pie.ended, pie.paused and pie.resumed on the event stream
+   *                              whenever a Play session changes, however it was started (see PieEventData)
    * EXTENSION_FEATURE_MEMBERS names the member each one adds to or changes.
    * Absent on a daemon older than the field.
    */
