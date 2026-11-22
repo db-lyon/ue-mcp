@@ -13,7 +13,7 @@ Edit only under `plugin/ue_mcp_bridge/`. The deployer syncs to `tests/ue_mcp/Plu
 
 ### The in-editor client lives elsewhere
 
-The paid in-editor client (its UI, the daemon extension that runs its agent, the `UE_MCP_Studio` editor plugin, the model gateway and billing) lives in the private `db-lyon/ue-mcp-studio` repo. Dependencies run one way:
+The in-editor client, Studio (its UI, the daemon extension that runs its agent and the `UE_MCP_Studio` editor plugin), lives in the public, MIT-licensed `db-lyon/ue-mcp-studio` repo. Studio is free; Remote control is a paid add-on. The model gateway and billing live in the private `db-lyon/ue-mcp-gateway` repo. Dependencies run one way:
 
 - This repo never depends on it, imports from it, or carries code only it needs. A feature Studio wants goes in here as a general one the free path can use.
 - Studio reaches ue-mcp only through the `ue-mcp/daemon` export and the daemon's HTTP API, both versioned (`DAEMON_API_VERSION`, `EXTENSION_API_VERSION`). Change them additively, or bump the version.
