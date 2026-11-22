@@ -199,6 +199,18 @@ export class FakeBridge {
     return this.calls.map((c) => c.method);
   }
 
+  /** Push an unrequested notification frame to every connected client, as the plugin does for a Play session. */
+  notify(method: string, params: Record<string, unknown>): void {
+    const frame = JSON.stringify({ jsonrpc: "2.0", method, params });
+    for (const ws of this.sockets) ws.send(frame);
+  }
+
+  /** Drop every client socket while staying up, so a client reconnects. */
+  dropClients(): void {
+    for (const ws of this.sockets) ws.terminate();
+    this.sockets.clear();
+  }
+
   async stop(): Promise<void> {
     for (const ws of this.sockets) ws.terminate();
     this.sockets.clear();

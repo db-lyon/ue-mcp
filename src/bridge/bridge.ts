@@ -198,6 +198,21 @@ function isProgressFrame(msg: unknown): msg is BridgeProgressFrame {
   return !!msg && typeof msg === "object" && (msg as { method?: unknown }).method === "notifications/progress";
 }
 
+/**
+ * A notification the plugin pushes unasked to every connected client, such as
+ * notifications/pie when a Play session starts or ends: a method and no id.
+ */
+export interface BridgeNotification {
+  method: string;
+  params: Record<string, unknown>;
+}
+
+function isNotificationFrame(msg: unknown): msg is { method: string; params?: unknown; id?: undefined } {
+  if (!msg || typeof msg !== "object") return false;
+  const m = msg as { method?: unknown; id?: unknown };
+  return typeof m.method === "string" && (m.id === undefined || m.id === null);
+}
+
 /** The error a cancelled call rejects with. The editor may still have run it. */
 function cancelledError(method: string, operationId?: string): McpError {
   return new McpError(
@@ -266,6 +281,8 @@ export function callBridgeOnce(
       clearTimeout(timer);
       try {
         const msg = JSON.parse(String(data)) as { error?: unknown; result?: Record<string, unknown> };
+        // A notification the editor pushes to every client is not this call's answer.
+        if (isNotificationFrame(msg)) return;
         if (msg.error) return finish({ answered: true, methodError: true, refused: false, result: null });
         const result = msg.result && typeof msg.result === "object" ? msg.result : null;
         return finish({ answered: true, methodError: false, refused: result?.success === false, result });
@@ -590,6 +607,27 @@ export class EditorBridge implements IBridge {
   onConnectionChanged(listener: (change: BridgeConnectionChange) => void): () => void {
     this.connectionListeners.add(listener);
     return () => this.connectionListeners.delete(listener);
+  }
+
+  private readonly notificationListeners = new Set<(notification: BridgeNotification) => void>();
+
+  /** Called for each notification the editor pushes unasked (not progress). Returns the unsubscribe. */
+  onNotification(listener: (notification: BridgeNotification) => void): () => void {
+    this.notificationListeners.add(listener);
+    return () => this.notificationListeners.delete(listener);
+  }
+
+  private emitNotification(frame: { method: string; params?: unknown }): void {
+    const params = frame.params && typeof frame.params === "object" && !Array.isArray(frame.params)
+      ? (frame.params as Record<string, unknown>)
+      : {};
+    for (const listener of this.notificationListeners) {
+      try {
+        listener({ method: frame.method, params });
+      } catch (e) {
+        warn("bridge", "notification listener failed", e);
+      }
+    }
   }
 
   private setConnected(connected: boolean, detail?: string): void {
@@ -1264,6 +1302,10 @@ export class EditorBridge implements IBridge {
               message: typeof parsed.params.message === "string" ? parsed.params.message : "",
             });
           }
+          return;
+        }
+        if (isNotificationFrame(parsed)) {
+          this.emitNotification(parsed);
           return;
         }
         const msg = parsed as BridgeResponse;
