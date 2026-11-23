@@ -70,7 +70,8 @@ Every route is on `127.0.0.1` and needs `Authorization: Bearer <token>`. The ser
 | `WS /v1/mcp` | One MCP session per socket |
 | `GET /v1/sessions`, `GET`/`PUT /v1/sessions/<id>/access` | Open MCP sessions and each one's access mode (`read-write` or `read-only`) |
 | `GET /v1/install`, `GET /v1/update`, `POST /v1/update/apply` | Install state and updates |
-| `POST /v1/editor/{start,stop,restart,rebuild}` | Editor operations, announced on the event stream |
+| `POST /v1/editor/{start,stop,restart,rebuild}` | Editor operations, announced on the event stream; a stop, restart or rebuild waits for the other sessions' consent |
+| `/v1/disruptions` | Requests to stop, restart, rebuild or patch the editor: participants, holds, answers, and a person's approve or deny |
 | `/v1/checkpoints` | Checkpoints per editor session (see [Checkpoints](checkpoints.md)) |
 | `/v1/journal` | The mutation journal per editor session: its groups, and reverting them |
 | `/v1/tools`, `/v1/leases` | Turn categories and Unreal toolsets on and off, and list asset leases |
