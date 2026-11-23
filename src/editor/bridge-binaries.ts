@@ -14,9 +14,10 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { extractZip, sha256Of } from "../core/archive.js";
 import { readEnv } from "../core/env.js";
-import { BRIDGE_PLUGIN_NAME, writeInstallMarker, type InstallMarker } from "./install-marker.js";
+import { BRIDGE_PLUGIN_NAME, INSTALL_MARKER_NAME, writeInstallMarker, type InstallMarker } from "./install-marker.js";
 import { treeFiles, verifyBridgeTree } from "./bridge-tree.js";
 import { isPidAlive } from "../bridge/editor-target.js";
+import { EngineBuildMismatchError, buildIdsDiffer, pluginBuildId } from "./engine-build-id.js";
 
 export interface BinaryTarget {
   version: string;
@@ -24,6 +25,12 @@ export interface BinaryTarget {
   engine: string;
   /** Win64, Mac or Linux. */
   platform: string;
+  /**
+   * The target engine's BuildId (engine-build-id.ts). When set, binaries built
+   * for another BuildId are refused with EngineBuildMismatchError, since Unreal
+   * would skip every module in them. Null or unset skips the check.
+   */
+  engineBuildId?: string | null;
 }
 
 export const DEFAULT_BINARIES_BASE = "https://github.com/db-lyon/ue-mcp/releases/download";
@@ -39,7 +46,8 @@ export function binaryManifestName(version: string): string {
 
 export interface BinaryManifest {
   version: string;
-  assets: Array<{ engine: string; platform: string; file: string; sha256: string; size: number }>;
+  /** `buildId` is the engine build the archive's modules were compiled against; manifests before #2072 have none. */
+  assets: Array<{ engine: string; platform: string; file: string; sha256: string; size: number; buildId?: string }>;
 }
 
 export function binaryArchiveUrl(t: BinaryTarget, base: string = DEFAULT_BINARIES_BASE): string {
@@ -95,7 +103,7 @@ async function download(url: string, dest: string, t: BinaryTarget): Promise<voi
  * download is never installed unverified: no manifest, no entry, or a
  * different hash all refuse.
  */
-export async function verifyDownload(zipUrl: string, zipPath: string, t: BinaryTarget): Promise<void> {
+export async function verifyDownload(zipUrl: string, zipPath: string, t: BinaryTarget): Promise<BinaryManifest["assets"][number]> {
   const manifestUrl = zipUrl.replace(/[^/]+$/, binaryManifestName(t.version));
   const res = await fetch(manifestUrl);
   if (!res.ok) throw new Error(`no binary manifest at ${manifestUrl} (${res.status}); refusing to install unverified binaries`);
@@ -107,6 +115,7 @@ export async function verifyDownload(zipUrl: string, zipPath: string, t: BinaryT
   if (actual !== entry.sha256.toLowerCase()) {
     throw new Error(`${name} does not match its manifest hash (expected ${entry.sha256}, got ${actual}); refusing to install it`);
   }
+  return entry;
 }
 
 export interface BinaryInstallResult {
@@ -116,12 +125,46 @@ export interface BinaryInstallResult {
 }
 
 export interface StagedBinaries {
-  /** A complete plugin tree in the update work directory, marker written, ready to swap in. */
+  /**
+   * A complete plugin tree in the update work directory, ready to swap in. It
+   * has no install marker yet: writeMarkerFromTree writes it once the tree is
+   * where it will be used, so the marker never claims a tree that is not there.
+   */
   staging: string;
   from: string;
+  /** The marker writeMarkerFromTree will write for this tree. */
   marker: InstallMarker;
-  /** Every file the release ships, relative to the plugin root, marker included. */
+  /** Every file the installed release holds, relative to the plugin root, marker included. */
   files: string[];
+  /** The BuildId the staged modules were built for, or null when the manifest names none. */
+  buildId: string | null;
+}
+
+/** The VersionName a plugin tree's descriptor carries, or null. */
+function descriptorVersion(pluginDir: string): string | null {
+  try {
+    const v = JSON.parse(fs.readFileSync(path.join(pluginDir, `${BRIDGE_PLUGIN_NAME}.uplugin`), "utf-8")).VersionName;
+    return typeof v === "string" && v.length > 0 ? v : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Write the binary install marker for the tree at `pluginDir`, from what that
+ * tree holds: the version is its descriptor's VersionName, and a tree that is
+ * not `t.version` gets no marker and an error instead. Called last, once the
+ * tree is in place, so an interrupted install never leaves a marker naming a
+ * release whose files are not there.
+ */
+export function writeMarkerFromTree(pluginDir: string, t: BinaryTarget): InstallMarker {
+  const version = descriptorVersion(pluginDir);
+  if (version !== t.version) {
+    throw new Error(`${pluginDir} holds bridge ${version ?? "with no VersionName"}, not ${t.version}, so no install marker was written`);
+  }
+  const marker: InstallMarker = { kind: "binary", engine: t.engine, platform: t.platform, version };
+  writeInstallMarker(pluginDir, marker);
+  return marker;
 }
 
 /**
@@ -192,13 +235,14 @@ export async function stageBinaryPlugin(
   const work = fs.mkdtempSync(path.join(os.tmpdir(), "ue-mcp-bin-"));
   try {
     let extracted: string;
+    let listed: BinaryManifest["assets"][number] | null = null;
     if (source.kind === "dir") {
       extracted = source.path;
     } else {
       const zip = source.kind === "zip" ? source.path : path.join(work, binaryArchiveName(t));
       if (source.kind === "url") {
         await download(source.url, zip, t);
-        await verifyDownload(source.url, zip, t);
+        listed = await verifyDownload(source.url, zip, t);
       }
       extracted = path.join(work, "x");
       extractZip(zip, extracted);
@@ -210,19 +254,28 @@ export async function stageBinaryPlugin(
     if (!fs.existsSync(binDir)) {
       throw new Error(`${describeBinarySource(source)} has no Binaries/${t.platform}; it was built for another platform`);
     }
+    // The archive's own manifest is what Unreal compares, so it outranks the release manifest's note.
+    const buildId = pluginBuildId(root, t.platform) ?? listed?.buildId ?? null;
+    if (t.engineBuildId && buildId && buildIdsDiffer(t.engineBuildId, buildId)) {
+      throw new EngineBuildMismatchError(t.engineBuildId, buildId, t.engine, describeBinarySource(source));
+    }
+    const shipped = descriptorVersion(root);
+    if (shipped !== t.version) {
+      throw new Error(`${describeBinarySource(source)} holds bridge ${shipped ?? "with no VersionName"}, not ${t.version}`);
+    }
 
     const staging = stagingDir(targetPluginDir);
     try {
       fs.cpSync(root, staging, { recursive: true });
       fs.rmSync(path.join(staging, "Source"), { recursive: true, force: true });
       fs.rmSync(path.join(staging, "Intermediate"), { recursive: true, force: true });
-      const marker: InstallMarker = { kind: "binary", engine: t.engine, platform: t.platform, version: t.version };
-      writeInstallMarker(staging, marker);
-      const problems = verifyBridgeTree(staging, { version: t.version, platform: t.platform });
+      fs.rmSync(path.join(staging, INSTALL_MARKER_NAME), { force: true });
+      const problems = verifyBridgeTree(staging, { version: t.version, platform: t.platform, checkMarker: false });
       if (problems.length) {
         throw new Error(`the bridge in ${describeBinarySource(source)} would not load: ${problems.join("; ")}`);
       }
-      return { staging, from: describeBinarySource(source), marker, files: treeFiles(staging) };
+      const marker: InstallMarker = { kind: "binary", engine: t.engine, platform: t.platform, version: t.version };
+      return { staging, from: describeBinarySource(source), marker, files: [...treeFiles(staging), INSTALL_MARKER_NAME], buildId };
     } catch (e) {
       fs.rmSync(staging, { recursive: true, force: true });
       dropEmptyWorkDir(path.dirname(staging));
@@ -234,8 +287,26 @@ export async function stageBinaryPlugin(
 }
 
 /**
+ * Swap a staged tree in as the whole plugin folder, check it, then write the
+ * marker from what landed. A tree that fails the check, or a folder that cannot
+ * be moved (a running editor holds its DLLs), leaves the previous tree as it
+ * was and throws naming why.
+ */
+export function swapInStaged(
+  staged: StagedBinaries,
+  targetPluginDir: string,
+  t: BinaryTarget,
+  verify: (files: string[]) => string[] = (files) =>
+    verifyBridgeTree(targetPluginDir, { version: t.version, platform: t.platform, files, checkMarker: false }),
+): InstallMarker {
+  const withoutMarker = staged.files.filter((f) => f !== INSTALL_MARKER_NAME);
+  swapIn(staged.staging, targetPluginDir, { verify: () => verify(withoutMarker) });
+  return writeMarkerFromTree(targetPluginDir, t);
+}
+
+/**
  * Install prebuilt binaries for `t` into `targetPluginDir`, replacing whatever
- * is there, and write the `binary` marker.
+ * is there, and write the `binary` marker last.
  */
 export async function installBinaryPlugin(
   targetPluginDir: string,
@@ -243,10 +314,8 @@ export async function installBinaryPlugin(
   source: BinarySource = resolveBinarySource(t),
 ): Promise<BinaryInstallResult> {
   const staged = await stageBinaryPlugin(targetPluginDir, t, source);
-  swapIn(staged.staging, targetPluginDir, {
-    verify: () => verifyBridgeTree(targetPluginDir, { version: t.version, platform: t.platform, files: staged.files }),
-  });
-  return { pluginDir: targetPluginDir, from: staged.from, marker: staged.marker };
+  const marker = swapInStaged(staged, targetPluginDir, t);
+  return { pluginDir: targetPluginDir, from: staged.from, marker };
 }
 
 function removeQuietly(dir: string): boolean {
@@ -281,7 +350,8 @@ export function swapIn(staging: string, target: string, opts: SwapOptions = {}):
     } catch (e) {
       removeQuietly(staging);
       throw new Error(
-        `could not replace ${target} (${e instanceof Error ? e.message : String(e)}). Close the editor and run again.`,
+        `could not replace ${target} (${e instanceof Error ? e.message : String(e)}), so the previous bridge is unchanged. ` +
+          "A running editor or another program holds a file in it; close it and run again.",
       );
     }
   }
@@ -348,7 +418,7 @@ export function sweepUpdateWork(pluginDir: string, keep: string[] = []): void {
     const full = path.join(updateDir, name);
     if (kept.has(full.toLowerCase())) continue;
     // Another process staging right now is left alone; a tree retired by anyone goes.
-    const staging = /^staging-(d+)-/.exec(name);
+    const staging = /^staging-(\d+)-/.exec(name);
     if (staging && Number(staging[1]) !== process.pid && isPidAlive(Number(staging[1]))) continue;
     removeQuietly(full);
   }

@@ -30,7 +30,16 @@ import { trySelectEngine } from "./engine-root.js";
 import { ProjectContext } from "../config/project.js";
 import { packageRoot } from "../core/package-root.js";
 import { isUProjectPath } from "../config/uproject-path.js";
-import { defaultPluginDir, installKindOf, resolvePluginDir, type InstallKind } from "./install-marker.js";
+import {
+  defaultPluginDir,
+  findProjectPlugin,
+  installKindOf,
+  readInstallMarker,
+  resolvePluginDir,
+  unrealPlatform,
+  type InstallKind,
+} from "./install-marker.js";
+import { inspectEngineMatch, projectEngineBuildId, type EngineMismatch } from "./engine-build-id.js";
 import { readPendingBuild, type PendingBuild } from "./pending-build.js";
 
 /**
@@ -269,9 +278,14 @@ export interface InstallProblem {
     | "bridge_not_enabled"
     | "bridge_never_compiled"
     | "bridge_build_stale"
-    | "bridge_version_mismatch";
+    | "bridge_version_mismatch"
+    | "bridge_engine_mismatch";
   what: string;
   fix: string;
+  /** The one-step remedy a UI can offer as a button, when there is one. */
+  action?: "rebuild";
+  /** On bridge_engine_mismatch: the BuildIds and versions that disagree. */
+  engineMismatch?: EngineMismatch;
 }
 
 export interface InstallReport {
@@ -441,6 +455,31 @@ export function inspectInstall(uprojectPath: string, options: InspectInstallOpti
         fix: pendingBuild
           ? `The ${pendingBuild.version} source was deployed while the editor ran. editor(action='restart_editor') builds it before the editor opens again, or build with the editor STOPPED: project(action='build').`
           : "Rebuild with the editor STOPPED: project(action='build').",
+      });
+    }
+    const marker = readInstallMarker(deployedPluginDir);
+    const platform = marker?.platform ?? unrealPlatform();
+    const mismatch = inspectEngineMatch({
+      engineBuildId: projectEngineBuildId(resolved, platform),
+      bridgeDir: deployedPluginDir,
+      studioDir: findProjectPlugin(path.dirname(resolved), "UE_MCP_Studio"),
+      platform,
+      markerVersion: marker?.version ?? null,
+      descriptorVersion: installedVersion,
+    });
+    if (mismatch) {
+      problems.push({
+        code: "bridge_engine_mismatch",
+        what: mismatch.reasons.join(" "),
+        fix: binary
+          ? "Rebuild the bridge for this engine with the editor STOPPED: project(action='build') replaces the prebuilt binaries with source "
+            + "and compiles it here, which needs a C++ toolchain. Without one, "
+            + (mismatch.bridgeBuildId && mismatch.engineBuildId && mismatch.bridgeBuildId !== mismatch.engineBuildId
+              ? `update the engine to build ${mismatch.bridgeBuildId}, or install the toolchain and run project(action='build').`
+              : `run 'npx ue-mcp update ${resolved}' to reinstall the binaries.`)
+          : "Rebuild with the editor STOPPED: project(action='build').",
+        action: "rebuild",
+        engineMismatch: mismatch,
       });
     }
   }

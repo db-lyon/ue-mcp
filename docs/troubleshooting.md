@@ -78,6 +78,16 @@ The reason names each missing module and who owns it:
 - **A project module or project plugin module** is reported as `Not built: <Module>`. Build with `project(build)`, fix what it reports, then answer the prompt or stop the editor.
 - **A module of an engine plugin** (its `.uplugin` sits under the engine's `Engine/Plugins` folder) is reported with the plugin name and its `.uplugin` path. A project build cannot compile it. Verify the engine install in the Epic Games Launcher, or disable that plugin for the project by adding `{"Name": "<Plugin>", "Enabled": false}` to the `Plugins` array of the `.uproject`, then start the editor again.
 
+### The bridge was built for a different engine build
+
+**Symptom:** the editor asks to rebuild `UE_MCP_Bridge` on every launch, its log says `Skipping out-of-date modules in manifest ... (BuildId A != B)`, and `ue-mcp status` reports `bridge_engine_mismatch`.
+
+Unreal loads a plugin module only when its BuildId matches the engine's. Two previews or hotfixes of one engine version have different BuildIds, so prebuilt binaries from one do not load in the other. The engine's BuildId is in `Engine/Binaries/Win64/UnrealEditor.modules`, and the plugin's is in its own `Binaries/Win64/UnrealEditor.modules`.
+
+A binary install compares the two before laying anything down. With a C++ toolchain on the machine it installs the bridge source instead and builds it at the next start through ue-mcp. Without one it stops with both BuildIds named. Install the toolchain and run the command again, or update the engine to the build the binaries name.
+
+`bridge_engine_mismatch` also covers a project's `UE_MCP_Studio` plugin built for another engine build, plugin module manifests that disagree with each other, and an install marker naming a different release than the plugin descriptor, which means the folder mixes files from two releases. To fix any of these, stop the editor and run `project(build)`. For a binary install this replaces the prebuilt binaries with source and compiles it, which needs a C++ toolchain. The problem carries `action: "rebuild"` and the BuildIds in `engineMismatch`.
+
 ### A call timed out: did it happen or not?
 
 **Symptom:** a mutating call such as `widget(add_widget)` returns `timed out after 30s`, and reading the asset back shows the change is already there and saved.

@@ -79,6 +79,7 @@ export const DAEMON_FEATURES = [
   "leases",
   "dialogs.native",
   "events.pie",
+  "install.engineMismatch",
 ] as const;
 
 export type DaemonFeature = (typeof DAEMON_FEATURES)[number];
@@ -91,6 +92,8 @@ export const DAEMON_FEATURES_BEYOND_ROUTES: { readonly [F in DaemonFeature]?: st
   "flows.stepApproval": "POST /v1/flows/<name>/run takes `stepApproval: { approver, token }`",
   "events.pie":
     "GET /v1/events carries pie.started, pie.ended, pie.paused and pie.resumed whenever a Play session changes, however it was started, and the current state once each time an editor attaches",
+  "install.engineMismatch":
+    "GET /v1/install reports the problem bridge_engine_mismatch, with action `rebuild` and engineMismatch naming the BuildIds, when the bridge or the project's UE_MCP_Studio plugin is built for another engine build, their module manifests disagree, or the install marker names another release than the descriptor",
 };
 
 /** What the extension API offers beyond EXTENSION_API_VERSION, in the order `api.features` lists them. */
@@ -802,9 +805,37 @@ export interface InstallProblem {
     | "bridge_not_enabled"
     | "bridge_never_compiled"
     | "bridge_build_stale"
-    | "bridge_version_mismatch";
+    | "bridge_version_mismatch"
+    | "bridge_engine_mismatch";
   what: string;
   fix: string;
+  /** The one-step remedy a UI can offer as a button, when there is one; `rebuild` is POST /v1/editor/rebuild. */
+  action?: "rebuild";
+  /** On bridge_engine_mismatch: the BuildIds and versions that disagree. */
+  engineMismatch?: EngineMismatch;
+}
+
+/**
+ * Why bridge_engine_mismatch was reported: the bridge, or the project's
+ * UE_MCP_Studio plugin, is built for another engine build than the one it
+ * loads in, its module manifests disagree, or its install marker names
+ * another release than its descriptor.
+ */
+export interface EngineMismatch {
+  /** The engine's BuildId, or null when it could not be read. */
+  engineBuildId: string | null;
+  /** The BuildId in the bridge's Binaries/<Platform>/UnrealEditor.modules. */
+  bridgeBuildId: string | null;
+  /** The same for the project's UE_MCP_Studio plugin, or null when it has none. */
+  studioBuildId: string | null;
+  /** Every distinct BuildId the bridge and Studio module manifests name, sorted. */
+  manifestBuildIds: string[];
+  /** The version the bridge's install marker claims. */
+  markerVersion: string | null;
+  /** The VersionName in the bridge's descriptor. */
+  descriptorVersion: string | null;
+  /** One sentence per thing found wrong. */
+  reasons: string[];
 }
 
 export interface ClientStatus {

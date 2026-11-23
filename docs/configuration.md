@@ -385,7 +385,7 @@ A minute after it starts, and every six hours, the daemon looks for a newer rele
 
 Unreal rebuilds a module on start only when its DLL is missing, never when its source is newer, so ue-mcp always builds a source update itself. An owed build shows as `plugin.pendingBuild` in `GET /v1/install`, and `POST /v1/editor/rebuild` stops the editor, builds, and starts it again only when the build passed; a failed step carries `reason`. Running `ue-mcp update --apply-only` again with the editor down also finishes an owed build.
 
-Each step is reported as `update.staged`, `update.building`, `update.applied` or `update.failed`. A downloaded archive is installed only when the release manifest lists it with a matching SHA-256, and source is never written over a binary install. `UE_MCP_DISABLE_UPDATE_CHECK=1` turns the periodic check off, here and in the server.
+Each step is reported as `update.staged`, `update.building`, `update.applied` or `update.failed`. A downloaded archive is installed only when the release manifest lists it with a matching SHA-256 and its modules were built for the project's engine build. When they were built for another build of the same engine version, a machine with a C++ toolchain gets the bridge source with its build owed, reported as `sourceFallback` on the result, and one without gets an error naming both builds. Apart from that fallback, source is never written over a binary install. `GET /v1/install` reports a bridge built for another engine build as the problem `bridge_engine_mismatch`, with `action: "rebuild"` (see [Troubleshooting](troubleshooting.md#the-bridge-was-built-for-a-different-engine-build)). `UE_MCP_DISABLE_UPDATE_CHECK=1` turns the periodic check off, here and in the server.
 
 ## Bridge Connection
 

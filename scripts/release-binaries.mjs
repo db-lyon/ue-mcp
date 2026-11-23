@@ -7,8 +7,9 @@
  *     | node scripts/release-binaries.mjs --version X.Y.Z [--manifest <manifest.json>]
  *
  * Reads the draft's asset names, one per line, on stdin. `--manifest` names the
- * release's own manifest, whose engines are the build set. Exits 1 naming each
- * missing file and how to build and attach them.
+ * release's own manifest, whose engines are the build set; each asset's engine
+ * BuildId is printed, with a warning for one that records none. Exits 1 naming
+ * each missing file and how to build and attach them.
  */
 import * as fs from "node:fs";
 import { pathToFileURL } from "node:url";
@@ -37,6 +38,24 @@ export function requiredEngines(built = []) {
 export function manifestEngines(manifest, platform = PLATFORM) {
   const re = new RegExp(`-UE(\\d+\\.\\d+)-${platform}\\.zip$`);
   return (manifest?.assets ?? []).map((a) => re.exec(a.file ?? "")?.[1]).filter(Boolean);
+}
+
+/** The BuildId a module manifest (`UnrealEditor.modules`) names, or null when it cannot be read. */
+export function modulesBuildId(file) {
+  try {
+    const parsed = JSON.parse(fs.readFileSync(file, "utf8").replace(/^﻿/, ""));
+    return typeof parsed.BuildId === "string" && parsed.BuildId.length > 0 ? parsed.BuildId : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Each asset's engine BuildId by file name. The installer compares it with the
+ * user's engine (#2072); a manifest from before that has none, and still installs.
+ */
+export function manifestBuildIds(manifest) {
+  return Object.fromEntries((manifest?.assets ?? []).map((a) => [a.file, typeof a.buildId === "string" && a.buildId ? a.buildId : null]));
 }
 
 /** The files a release for `version` must carry. */
@@ -74,9 +93,14 @@ function main() {
     process.exit(1);
   }
   const manifestFile = arg("--manifest");
-  const built = manifestFile && fs.existsSync(manifestFile)
-    ? manifestEngines(JSON.parse(fs.readFileSync(manifestFile, "utf8")))
-    : [];
+  const manifest = manifestFile && fs.existsSync(manifestFile) ? JSON.parse(fs.readFileSync(manifestFile, "utf8")) : null;
+  const built = manifestEngines(manifest);
+  const buildIds = Object.entries(manifestBuildIds(manifest));
+  for (const [file, id] of buildIds) console.log(`${file}: engine BuildId ${id ?? "not recorded"}`);
+  const unrecorded = buildIds.filter(([, id]) => !id).map(([file]) => file);
+  if (unrecorded.length) {
+    console.warn(`::warning::${unrecorded.join(", ")} record no engine BuildId, so the manifest does not say which engine build each is for; rebuild them with npm run binaries:build`);
+  }
   const engines = requiredEngines(built);
   const assets = fs.readFileSync(0, "utf8").split(/\r?\n/);
   const missing = missingBinaries(version, assets, engines);

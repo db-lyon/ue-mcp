@@ -11,7 +11,8 @@
  * `ue-mcp init` asks for: the editor binaries, Resources and the installed
  * descriptor, as BuildPlugin packages them less Source and Intermediate. It writes
  * UE_MCP_Bridge-<version>-manifest.json with each zip's SHA-256, which the
- * installer checks before installing anything.
+ * installer checks before installing anything, and the engine BuildId its
+ * modules were built against.
  *
  * --from-test-build packages the engine tests/ue_mcp builds against from that build, when it is
  * current, instead of compiling the plugin for it a second time (the release runner passes it).
@@ -28,7 +29,7 @@ import { execFileSync, spawn, spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { isSameOrUnder, protectedEngineRoots, resolveTestEngine } from "./build-utils.js";
 import { undeployedSources } from "./live-shards.mjs";
-import { ENGINES } from "./release-binaries.mjs";
+import { ENGINES, modulesBuildId } from "./release-binaries.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const PLUGIN = path.join(ROOT, "plugin", "ue_mcp_bridge", "UE_MCP_Bridge.uplugin");
@@ -208,10 +209,13 @@ function packageEngine(engine, stage, hostPlugin, products, started) {
   descriptor.Installed = true;
   fs.writeFileSync(path.join(pkg, path.basename(PLUGIN)), JSON.stringify(descriptor, null, "\t"));
 
+  // The engine build the modules load in; the installer refuses the zip on any other (#2072).
+  const buildId = modulesBuildId(path.join(pkg, "Binaries", platform, "UnrealEditor.modules"));
+  if (!buildId) throw new Error(`UE ${engine.version}: the packaged UnrealEditor.modules has no BuildId`);
   const zip = path.join(out, zipName(engine.version));
   zipDir(pkgRoot, "UE_MCP_Bridge", zip);
-  console.log(`== UE ${engine.version}: ${zipName(engine.version)} in ${Math.round((Date.now() - started) / 1000)} s`);
-  return { engine: engine.version, platform, file: zipName(engine.version), sha256: sha256(zip), size: fs.statSync(zip).size };
+  console.log(`== UE ${engine.version}: ${zipName(engine.version)} (BuildId ${buildId}) in ${Math.round((Date.now() - started) / 1000)} s`);
+  return { engine: engine.version, platform, file: zipName(engine.version), sha256: sha256(zip), size: fs.statSync(zip).size, buildId };
 }
 
 /**

@@ -9,11 +9,13 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { apply, plan, type InitChoices } from "../../src/cli/init-core.js";
 import { installBinaryPlugin } from "../../src/editor/bridge-binaries.js";
-import { readInstallMarker, unrealPlatform } from "../../src/editor/install-marker.js";
+import { readInstallMarker, unrealPlatform, writeInstallMarker } from "../../src/editor/install-marker.js";
 import { packageVersion } from "../../src/core/package-root.js";
 import type { ProbeHooks } from "../../src/editor/install-check.js";
 import { ProjectFixture } from "../helpers/project-fixture.js";
 import { restoreEnv } from "../helpers/env.js";
+import { fakeEngine } from "../helpers/engine-fixture.js";
+import { readPendingBuild } from "../../src/editor/pending-build.js";
 
 const WITH_TOOLCHAIN: ProbeHooks = { platform: "linux", env: {}, exists: () => true, run: () => "clang version 18" };
 const NO_TOOLCHAIN: ProbeHooks = { platform: "linux", env: {}, exists: () => false, run: () => null };
@@ -120,6 +122,23 @@ describe("install order matrix", () => {
     expect(endState(uproject).duplicatePlugins).toBe(false);
   });
 
+  it("binaries for another engine build: init deploys source with its build owed, or fails naming both builds", async () => {
+    process.env.UE_MCP_TEST_ENGINE_ROOT = fakeEngine(path.join(fixture.root, "UE_5.6"), "5.6", "2", unrealPlatform());
+    const uproject = fixture.makeProject("OtherBuild");
+
+    const refused = await apply(plan(choices(uproject, { install: "binary" }), NO_TOOLCHAIN));
+    expect(refused.ok).toBe(false);
+    expect(refused.error).toMatch(/built for UE 5\.6 build 1, and this engine is build 2/);
+    expect(fs.existsSync(path.join(path.dirname(uproject), "Plugins", "UE_MCP_Bridge"))).toBe(false);
+
+    const result = await init(uproject, WITH_TOOLCHAIN, { install: "binary" });
+    expect(result.steps.find((s) => s.id === "plugin")?.detail).toMatch(/source.*engine build 1.*build 2/);
+    const s = endState(uproject);
+    expect(s.marker?.kind).toBe("source");
+    expect(s.hasSource).toBe(true);
+    expect(readPendingBuild(uproject)?.reason).toMatch(/build 1, this engine is build 2/);
+  });
+
   it("binary path run twice: the second run fetches nothing", async () => {
     const uproject = fixture.makeProject("BinTwice");
     await init(uproject, NO_TOOLCHAIN);
@@ -161,8 +180,10 @@ describe("install order matrix", () => {
   it("installer then update: an older binary install gets binaries, not source", async () => {
     const uproject = fixture.makeProject("Update");
     const pluginDir = path.join(path.dirname(uproject), "Plugins", "UE_MCP_Bridge");
-    await installBinaryPlugin(pluginDir, { version: "0.0.1", engine: "5.6", platform: unrealPlatform() }, { kind: "dir", path: binaries });
+    // An older release: the installer writes the marker from the tree, so the tree is aged after it.
+    await installBinaryPlugin(pluginDir, { version: packageVersion(), engine: "5.6", platform: unrealPlatform() }, { kind: "dir", path: binaries });
     fs.writeFileSync(path.join(pluginDir, "UE_MCP_Bridge.uplugin"), JSON.stringify({ VersionName: "0.0.1" }));
+    writeInstallMarker(pluginDir, { kind: "binary", engine: "5.6", platform: unrealPlatform(), version: "0.0.1" });
 
     // What `ue-mcp update` runs for a binary install.
     const planned = plan(choices(uproject, { install: "binary" }), WITH_TOOLCHAIN);
