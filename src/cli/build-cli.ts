@@ -6,6 +6,9 @@ import { selectProjectOrExit } from "./editor-flag.js";
 import { findUProject, isUProjectPath } from "../config/uproject-path.js";
 import { RESET, BOLD, GREEN, RED, CYAN } from "../terminal/ansi.js";
 import type { CliUsage } from "./cli-main.js";
+import type { EditorDisruptionRequest } from "../contract/daemon.js";
+import { daemonRequest } from "../daemon/client.js";
+import { readAnsweringDiscovery } from "../daemon/discovery.js";
 
 function targetUProject(argv: string[]): string | null {
   const arg = selectProjectOrExit(argv, { positional: true }).projectPath;
@@ -13,6 +16,30 @@ function targetUProject(argv: string[]): string | null {
   // than silently replaced by whatever project cwd holds.
   if (arg && isUProjectPath(arg)) return path.resolve(arg);
   return (arg && findUProject(arg)) || findUProject(process.cwd());
+}
+
+/**
+ * Why the build must not run yet, or null. Only a running daemon with an
+ * editor attached is asked: with no daemon there are no sessions to ask, and
+ * with no editor up a build takes nothing away.
+ */
+async function buildConsentRefusal(uprojectPath: string): Promise<string | null> {
+  const daemon = await readAnsweringDiscovery(path.dirname(uprojectPath));
+  if (!daemon) return null;
+  try {
+    const health = await daemonRequest(daemon, "health");
+    const editors = (health.json as { editors?: Array<{ connected?: boolean }> } | undefined)?.editors ?? [];
+    if (!editors.some((e) => e.connected)) return null;
+    const res = await daemonRequest(daemon, "disruptions.request", { method: "POST", body: { op: "build", requester: "ue-mcp build" } });
+    if (res.status === 404) return null; // an older daemon without the consent routes
+    const r = res.json as EditorDisruptionRequest | undefined;
+    if (!r || r.state === "approved") return null;
+    const answers = r.answers.map((a) => `    ${a.label} (${a.session}): ${a.answer.replace(/_/g, " ")}, ${a.reason}`).join("\n");
+    return `Not built: other sessions are using the editor (request ${r.id}, ${r.state}).\n${answers}\n`
+      + `  Approve it with \`ue-mcp editor approve ${r.id}\` and run ue-mcp build again, or wait for them to answer go.`;
+  } catch {
+    return null;
+  }
 }
 
 async function main(argv: string[]) {
@@ -30,6 +57,14 @@ async function main(argv: string[]) {
   console.log(`  Project: ${GREEN}${projectName}${RESET}`);
   console.log(`  Path:    ${uprojectPath}`);
   console.log("");
+
+  // Building under an editor other agent sessions are using takes it away from
+  // them, so the project's daemon is asked first (#2075).
+  const refusal = await buildConsentRefusal(uprojectPath);
+  if (refusal) {
+    console.log(`  ${RED}${refusal}${RESET}`);
+    process.exit(1);
+  }
 
   const result = await buildProject(uprojectPath, { onOutput: (text) => process.stdout.write(text) });
 

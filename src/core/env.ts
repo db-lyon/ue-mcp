@@ -75,6 +75,8 @@ export const ENV_VARS = {
   extensionFloor: "UE_MCP_EXTENSION_FLOOR",
   /** How long a daemon with no editor, client or stream attached waits before exiting, in milliseconds. */
   daemonIdleMs: "UE_MCP_DAEMON_IDLE_MS",
+  /** The daemon session id of the agent that started this client (a subagent's primary), sent as x-ue-mcp-parent so the subagent is attributed to it. */
+  parentSession: "UE_MCP_PARENT_SESSION",
   /** Directory daemon extensions are loaded from. Unset means ~/.ue-mcp/extensions. */
   extensionsDir: "UE_MCP_EXTENSIONS_DIR",
   /** JSON file of the names `ue-mcp install <name>` resolves, replacing the built-in list. */

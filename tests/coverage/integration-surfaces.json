@@ -122,6 +122,11 @@
       "summary": "ue-mcp build runs the engine's build script for the project's editor target and reports its exit"
     },
     {
+      "id": "cli.editor",
+      "group": "cli",
+      "summary": "ue-mcp editor requests lists the daemon's requests to stop, restart or rebuild the editor with every session's answer, and approve or deny decides one as a person"
+    },
+    {
       "id": "cli.doctor",
       "group": "cli",
       "summary": "ue-mcp doctor reports installed versions, client configs and running servers"
@@ -800,6 +805,11 @@
       "id": "daemon.leases",
       "group": "daemon",
       "summary": "two MCP sessions on one daemon: a lease one holds refuses the other's change naming the holder, a change takes a lease while two sessions share the editor, GET /v1/leases lists them, and they go when the session ends"
+    },
+    {
+      "id": "daemon.editor-consent",
+      "group": "daemon",
+      "summary": "stopping, restarting, rebuilding or patching a shared editor waits for consent: a lone session attests to its own subagents, other sessions are told in their next response and answer go, wait or block, holds and releases, external participants over /v1/disruptions, POST /v1/editor/* answering 409 until agreed, and people approving or denying"
     },
     {
       "id": "package.dist-server",

@@ -12,12 +12,12 @@ export declare function apiVersionsOverlap(a: ApiVersionRange, b: ApiVersionRang
 export declare const DAEMON_API_RANGE: ApiVersionRange;
 export declare const EXTENSION_API_RANGE: ApiVersionRange;
 export declare function extensionApiSupported(min: number, max: number): boolean;
-export declare const DAEMON_FEATURES: readonly ["checkpoints", "checkpoints.assetDiff", "skills", "context.projection", "actions.effects", "install.pendingBuild", "editor.rebuild", "ui.scopedKeys", "ui.extensions", "flows.stepApproval", "sessions.access", "journal", "tools.categories", "leases", "dialogs.native", "events.pie", "install.engineMismatch"];
+export declare const DAEMON_FEATURES: readonly ["checkpoints", "checkpoints.assetDiff", "skills", "context.projection", "actions.effects", "install.pendingBuild", "editor.rebuild", "ui.scopedKeys", "ui.extensions", "flows.stepApproval", "sessions.access", "journal", "tools.categories", "leases", "dialogs.native", "events.pie", "install.engineMismatch", "editor.consent"];
 export type DaemonFeature = (typeof DAEMON_FEATURES)[number];
 export declare const DAEMON_FEATURES_BEYOND_ROUTES: {
     readonly [F in DaemonFeature]?: string;
 };
-export declare const EXTENSION_FEATURES: readonly ["callAction.dialogPrompt", "callAction.elicit", "callAction.access", "callAction.signal", "checkpoints", "checkpoints.assetDiff", "events.dialog", "events.script", "models.provider", "modes", "modes.playtest", "skills", "context.projection", "actions.effects", "extension.versions", "ui.scopedKeys", "ui.extensions", "extension.services", "flows.stepApproval", "dialogs.native", "permissions", "events.pie"];
+export declare const EXTENSION_FEATURES: readonly ["callAction.dialogPrompt", "callAction.elicit", "callAction.access", "callAction.signal", "checkpoints", "checkpoints.assetDiff", "events.dialog", "events.script", "models.provider", "modes", "modes.playtest", "skills", "context.projection", "actions.effects", "extension.versions", "ui.scopedKeys", "ui.extensions", "extension.services", "flows.stepApproval", "dialogs.native", "permissions", "events.pie", "callAction.session", "editor.consent"];
 export type ExtensionFeature = (typeof EXTENSION_FEATURES)[number];
 export declare const EXTENSION_FEATURE_MEMBERS: {
     readonly [F in ExtensionFeature]: keyof DaemonExtensionApi;
@@ -141,6 +141,60 @@ export declare const DAEMON_ROUTES: {
     readonly "editor.rebuild": {
         readonly method: "POST";
         readonly path: "/v1/editor/rebuild";
+        readonly feature?: DaemonFeature;
+        readonly summary: string;
+    };
+    readonly "disruptions.list": {
+        readonly method: "GET";
+        readonly path: "/v1/disruptions";
+        readonly feature?: DaemonFeature;
+        readonly summary: string;
+    };
+    readonly "disruptions.request": {
+        readonly method: "POST";
+        readonly path: "/v1/disruptions";
+        readonly feature?: DaemonFeature;
+        readonly summary: string;
+    };
+    readonly "disruptions.participant": {
+        readonly method: "ANY";
+        readonly path: "/v1/disruptions/participants/:id";
+        readonly feature?: DaemonFeature;
+        readonly summary: string;
+    };
+    readonly "disruptions.hold": {
+        readonly method: "POST";
+        readonly path: "/v1/disruptions/participants/:id/hold";
+        readonly feature?: DaemonFeature;
+        readonly summary: string;
+    };
+    readonly "disruptions.release": {
+        readonly method: "POST";
+        readonly path: "/v1/disruptions/participants/:id/release";
+        readonly feature?: DaemonFeature;
+        readonly summary: string;
+    };
+    readonly "disruptions.vote": {
+        readonly method: "POST";
+        readonly path: "/v1/disruptions/:id/vote";
+        readonly feature?: DaemonFeature;
+        readonly summary: string;
+    };
+    readonly "disruptions.confirm": {
+        readonly method: "POST";
+        readonly path: "/v1/disruptions/:id/confirm";
+        readonly feature?: DaemonFeature;
+        readonly summary: string;
+    };
+    readonly "disruptions.approve": {
+        readonly method: "POST";
+        readonly path: "/v1/disruptions/:id/approve";
+        readonly feature?: DaemonFeature;
+        readonly summary: string;
+    };
+    readonly "disruptions.deny": {
+        readonly method: "POST";
+        readonly path: "/v1/disruptions/:id/deny";
         readonly feature?: DaemonFeature;
         readonly summary: string;
     };
@@ -327,8 +381,9 @@ export declare const DAEMON_HEADERS: {
     readonly client: "x-ue-mcp-client";
     readonly access: "x-ue-mcp-access";
     readonly flowToken: "x-ue-mcp-token";
+    readonly parent: "x-ue-mcp-parent";
 };
-export declare const DAEMON_EVENT_TYPES: readonly ["daemon.started", "daemon.stopping", "editor.connected", "editor.disconnected", "editor.operation", "client.connected", "client.disconnected", "call.started", "call.finished", "session.access", "leases.released", "plugins.changed", "update.available", "update.staged", "update.building", "update.applied", "update.failed", "dialog.opened", "dialog.updated", "dialog.answered", "dialog.delegated", "dialog.closed", "flow.run_started", "flow.step_started", "flow.step_completed", "flow.step_failed", "flow.run_completed", "script.run_started", "script.step_started", "script.step_acted", "script.step_passed", "script.step_failed", "script.verdict_requested", "script.verdict", "script.run_finished", "checkpoint.created", "checkpoint.restored", "checkpoints.toggled", "checkpoints.cleared", "pie.started", "pie.ended", "pie.paused", "pie.resumed"];
+export declare const DAEMON_EVENT_TYPES: readonly ["daemon.started", "daemon.stopping", "editor.connected", "editor.disconnected", "editor.operation", "client.connected", "client.disconnected", "call.started", "call.finished", "session.access", "leases.released", "plugins.changed", "update.available", "update.staged", "update.building", "update.applied", "update.failed", "dialog.opened", "dialog.updated", "dialog.answered", "dialog.delegated", "dialog.closed", "flow.run_started", "flow.step_started", "flow.step_completed", "flow.step_failed", "flow.run_completed", "script.run_started", "script.step_started", "script.step_acted", "script.step_passed", "script.step_failed", "script.verdict_requested", "script.verdict", "script.run_finished", "checkpoint.created", "checkpoint.restored", "checkpoints.toggled", "checkpoints.cleared", "pie.started", "pie.ended", "pie.paused", "pie.resumed", "disruption.requested", "disruption.updated", "disruption.hold"];
 export declare const PIE_STATES: readonly ["started", "ended", "paused", "resumed"];
 export type PieState = (typeof PIE_STATES)[number];
 export interface PieEventData {
@@ -549,6 +604,51 @@ export interface McpSessionInfo {
     client: string;
     connectedAt: string;
     access: "read-write" | "read-only";
+}
+export type EditorDisruptionOp = "stop" | "restart" | "rebuild" | "build" | "live_coding";
+export interface EditorDisruptionAnswer {
+    session: string;
+    label: string;
+    parent?: string;
+    answer: "go" | "wait_until_released" | "block" | "unanswered";
+    reason: string;
+    auto: boolean;
+    touched?: string[];
+}
+export interface EditorDisruptionRequest {
+    id: string;
+    op: EditorDisruptionOp;
+    action: string;
+    requester: {
+        id: string;
+        label: string;
+        parent?: string;
+    };
+    reason?: string;
+    state: "pending" | "confirm" | "blocked" | "approved" | "done" | "denied" | "expired";
+    createdAt: string;
+    expiresAt: string;
+    answers: EditorDisruptionAnswer[];
+    self: {
+        attestationRequired: boolean;
+        attested: "none" | "paused" | null;
+        inflight: string[];
+    };
+    override?: {
+        decision: "approve" | "deny";
+        by: string;
+        at: string;
+    };
+}
+export interface EditorOperationOptions {
+    session?: {
+        id: string;
+        label?: string;
+        parent?: string;
+    };
+    subagents?: "none" | "paused";
+    reason?: string;
+    person?: boolean;
 }
 export interface UiManifest {
     name: string;
@@ -1099,6 +1199,11 @@ export interface CallActionOptions {
     elicit?: (params: ElicitParams) => Promise<ElicitResult>;
     access?: "read-write" | "read-only";
     signal?: AbortSignal;
+    session?: {
+        id: string;
+        label?: string;
+        parent?: string;
+    };
 }
 export interface ContextCallOptions extends CallActionOptions {
     strategy?: ContextStrategy;
@@ -1200,7 +1305,7 @@ export interface DaemonExtensionApi {
         installed: string[];
     };
     editors(): EditorStatus[];
-    editorOperation(op: "start" | "stop" | "restart" | "rebuild"): Promise<Record<string, unknown>>;
+    editorOperation(op: "start" | "stop" | "restart" | "rebuild", opts?: EditorOperationOptions): Promise<Record<string, unknown>>;
     setBusy(busy: () => boolean): void;
     ui: {
         trustKey(pem: string): void;

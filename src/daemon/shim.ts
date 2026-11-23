@@ -25,6 +25,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import { LATEST_PROTOCOL_VERSION, SUPPORTED_PROTOCOL_VERSIONS, type JSONRPCMessage, type JSONRPCRequest } from "@modelcontextprotocol/sdk/types.js";
 import { info, warn, error } from "../core/log.js";
+import { readEnv } from "../core/env.js";
 import { packageVersion, selfCliArgs } from "../core/package-root.js";
 import { compareVersions } from "../core/semver.js";
 import { apiVersionsOverlap, DAEMON_API_RANGE, DAEMON_HEADERS, routePath, type DaemonDiscovery } from "../contract/daemon.js";
@@ -287,7 +288,12 @@ export async function runShim(uproject: string, opts: ShimOptions): Promise<void
     // The socket carries the client's name, which only its initialize says.
     await initializeArrived;
     const socket = new WebSocket(`ws://127.0.0.1:${d.port}${routePath("mcp")}`, {
-      headers: { ...bearer(d), [DAEMON_HEADERS.client]: clientName() },
+      headers: {
+        ...bearer(d),
+        [DAEMON_HEADERS.client]: clientName(),
+        // A subagent with its own connection names its primary (#2075).
+        ...(readEnv("parentSession") ? { [DAEMON_HEADERS.parent]: readEnv("parentSession")! } : {}),
+      },
     });
     await new Promise<void>((resolve, reject) => {
       socket.once("open", () => resolve());

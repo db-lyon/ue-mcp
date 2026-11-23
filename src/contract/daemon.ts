@@ -80,6 +80,7 @@ export const DAEMON_FEATURES = [
   "dialogs.native",
   "events.pie",
   "install.engineMismatch",
+  "editor.consent",
 ] as const;
 
 export type DaemonFeature = (typeof DAEMON_FEATURES)[number];
@@ -94,6 +95,8 @@ export const DAEMON_FEATURES_BEYOND_ROUTES: { readonly [F in DaemonFeature]?: st
     "GET /v1/events carries pie.started, pie.ended, pie.paused and pie.resumed whenever a Play session changes, however it was started, and the current state once each time an editor attaches",
   "install.engineMismatch":
     "GET /v1/install reports the problem bridge_engine_mismatch, with action `rebuild` and engineMismatch naming the BuildIds, when the bridge or the project's UE_MCP_Studio plugin is built for another engine build, their module manifests disagree, or the install marker names another release than the descriptor",
+  "editor.consent":
+    "POST /v1/editor/{stop,restart,rebuild} answers 409 { error, request: EditorDisruptionRequest } while other sessions using the editor have not agreed, and takes { requestId?, force?, requester?, reason? }; GET /v1/events carries disruption.requested, disruption.updated and disruption.hold",
 };
 
 /** What the extension API offers beyond EXTENSION_API_VERSION, in the order `api.features` lists them. */
@@ -120,6 +123,8 @@ export const EXTENSION_FEATURES = [
   "dialogs.native",
   "permissions",
   "events.pie",
+  "callAction.session",
+  "editor.consent",
 ] as const;
 
 export type ExtensionFeature = (typeof EXTENSION_FEATURES)[number];
@@ -148,6 +153,8 @@ export const EXTENSION_FEATURE_MEMBERS: { readonly [F in ExtensionFeature]: keyo
   "dialogs.native": "nativeDialogs",
   permissions: "registryAccount",
   "events.pie": "events",
+  "callAction.session": "callAction",
+  "editor.consent": "editorOperation",
 };
 
 // ── Routes ────────────────────────────────────────────────────────
@@ -196,6 +203,15 @@ export const DAEMON_ROUTES = routeTable({
   "editor.stop": { method: "POST", path: "/v1/editor/stop", summary: "stop the editor" },
   "editor.restart": { method: "POST", path: "/v1/editor/restart", summary: "restart the editor, announced as restarting" },
   "editor.rebuild": { method: "POST", path: "/v1/editor/rebuild", feature: "editor.rebuild", summary: "stop the editor, build, and start it again only when the build passed; a failed step carries `reason`" },
+  "disruptions.list": { method: "GET", path: "/v1/disruptions", feature: "editor.consent", summary: "requests to stop, restart, rebuild or patch the editor, and what each session is doing ({ enforcing, requests: EditorDisruptionRequest[], sessions })" },
+  "disruptions.request": { method: "POST", path: "/v1/disruptions", feature: "editor.consent", summary: "{ op, requester?, reason?, participant?, subagents? }: open or re-read a request: a person's, or with participant, that participant's (EditorDisruptionRequest)" },
+  "disruptions.participant": { method: "ANY", path: "/v1/disruptions/participants/:id", feature: "editor.consent", summary: "PUT { label?, parent?, busy?: string[], pie?, transactions? } registers a participant an external runtime drives and reports its work ([] is idle); DELETE removes it with its hold and votes" },
+  "disruptions.hold": { method: "POST", path: "/v1/disruptions/participants/:id/hold", feature: "editor.consent", summary: "{ reason, ttlSeconds? }: the participant holds the editor" },
+  "disruptions.release": { method: "POST", path: "/v1/disruptions/participants/:id/release", feature: "editor.consent", summary: "the participant releases its hold, and its wait_until_released votes become go" },
+  "disruptions.vote": { method: "POST", path: "/v1/disruptions/:id/vote", feature: "editor.consent", summary: "{ participant, vote, reason? }: the participant answers go, wait_until_released or block (EditorDisruptionRequest)" },
+  "disruptions.confirm": { method: "POST", path: "/v1/disruptions/:id/confirm", feature: "editor.consent", summary: "{ participant, subagents }: the requesting participant says its own subagents are none or paused (EditorDisruptionRequest)" },
+  "disruptions.approve": { method: "POST", path: "/v1/disruptions/:id/approve", feature: "editor.consent", summary: "{ by? }: a person approves the request, whatever the sessions answered (EditorDisruptionRequest)" },
+  "disruptions.deny": { method: "POST", path: "/v1/disruptions/:id/deny", feature: "editor.consent", summary: "{ by? }: a person denies the request (EditorDisruptionRequest)" },
   "checkpoints.state": { method: "GET", path: "/v1/checkpoints", feature: "checkpoints", summary: "?editor&limit: state and history, newest first (CheckpointState)" },
   "checkpoints.setEnabled": { method: "PUT", path: "/v1/checkpoints/enabled", feature: "checkpoints", summary: "{ editor?, enabled: true | false | null }: the per-session override, kept for the daemon's lifetime" },
   "checkpoints.create": { method: "POST", path: "/v1/checkpoints", feature: "checkpoints", summary: "{ editor?, label? } (CheckpointResult)" },
@@ -262,6 +278,12 @@ export const DAEMON_HEADERS = {
   access: "x-ue-mcp-access",
   /** The flow HTTP server's token, accepted beside a bearer token. */
   flowToken: "x-ue-mcp-token",
+  /**
+   * Sent on the /v1/mcp upgrade: the session that started this one, so a
+   * subagent with its own connection is attributed to its primary. The shim
+   * sends UE_MCP_PARENT_SESSION here.
+   */
+  parent: "x-ue-mcp-parent",
 } as const;
 
 // ── Events ────────────────────────────────────────────────────────
@@ -315,6 +337,9 @@ export const DAEMON_EVENT_TYPES = [
   "pie.ended",
   "pie.paused",
   "pie.resumed",
+  "disruption.requested",
+  "disruption.updated",
+  "disruption.hold",
 ] as const;
 
 /** The Play session states the editor pushes, each published as `pie.<state>`. */
@@ -659,6 +684,56 @@ export interface McpSessionInfo {
   connectedAt: string;
   /** `read-only` refuses every call whose declared effect is `mutate` or `unknown`. */
   access: "read-write" | "read-only";
+}
+
+// ── Editor consent ────────────────────────────────────────────────
+
+/** What a disruptive request would do to the editor (feature "editor.consent"). */
+export type EditorDisruptionOp = "stop" | "restart" | "rebuild" | "build" | "live_coding";
+
+/** One participant's answer to a request. `unanswered` counts as a wait. */
+export interface EditorDisruptionAnswer {
+  session: string;
+  label: string;
+  /** The participant that started this one, when known. */
+  parent?: string;
+  answer: "go" | "wait_until_released" | "block" | "unanswered";
+  reason: string;
+  /** True when read from what the participant is doing rather than said by it. */
+  auto: boolean;
+  /** Assets it holds leases on. */
+  touched?: string[];
+}
+
+/**
+ * A request to stop, restart, rebuild, build under or Live Coding patch the
+ * editor (feature "editor.consent"). `confirm` waits on the requester saying
+ * its own subagents are none or paused; `self.inflight` lists its other work
+ * in flight, which holds the request too.
+ */
+export interface EditorDisruptionRequest {
+  id: string;
+  op: EditorDisruptionOp;
+  action: string;
+  requester: { id: string; label: string; parent?: string };
+  reason?: string;
+  state: "pending" | "confirm" | "blocked" | "approved" | "done" | "denied" | "expired";
+  createdAt: string;
+  expiresAt: string;
+  answers: EditorDisruptionAnswer[];
+  self: { attestationRequired: boolean; attested: "none" | "paused" | null; inflight: string[] };
+  override?: { decision: "approve" | "deny"; by: string; at: string };
+}
+
+/** Options for api.editorOperation (feature "editor.consent"). */
+export interface EditorOperationOptions {
+  /** The participant asking, as registered or passed to callAction; absent is the extension itself. */
+  session?: { id: string; label?: string; parent?: string };
+  /** The requester's own subagents are none or paused. */
+  subagents?: "none" | "paused";
+  reason?: string;
+  /** A person asked (a button press), so no subagent attestation is owed. */
+  person?: boolean;
 }
 
 // ── UI bundles ────────────────────────────────────────────────────
@@ -1401,6 +1476,12 @@ export interface CallActionOptions {
    * turn's signal, so an interrupted turn dispatches nothing more.
    */
   signal?: AbortSignal;
+  /**
+   * The agent session the call belongs to (feature "callAction.session"): its
+   * asset leases and its activity are that session's, so another session's
+   * request to stop the editor waits on its calls. Absent is the daemon itself.
+   */
+  session?: { id: string; label?: string; parent?: string };
 }
 
 /**
@@ -1618,8 +1699,13 @@ export interface DaemonExtensionApi {
   versions?(): { loaded: string; recorded: string | null; installed: string[] };
 
   editors(): EditorStatus[];
-  /** Start, stop, restart or rebuild the editor, with the cause announced first. */
-  editorOperation(op: "start" | "stop" | "restart" | "rebuild"): Promise<Record<string, unknown>>;
+  /**
+   * Start, stop, restart or rebuild the editor, with the cause announced first.
+   * A stop, restart or rebuild other sessions have not agreed to runs no step
+   * and answers `{ op, steps: [{ step: "consent", ok: false, reason }], request }`
+   * (feature "editor.consent").
+   */
+  editorOperation(op: "start" | "stop" | "restart" | "rebuild", opts?: EditorOperationOptions): Promise<Record<string, unknown>>;
 
   /** Report whether this extension has work in progress; the daemon does not idle-exit while it does. */
   setBusy(busy: () => boolean): void;
