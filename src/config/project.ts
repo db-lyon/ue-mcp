@@ -85,6 +85,13 @@ export interface UeMcpConfig {
     mode?: "auto" | "on" | "off";
     ttlSeconds?: number;
   };
+  /** Consent before a session stops, restarts, rebuilds or patches the editor
+   *  other sessions are using (see dispatch/disruption.ts). `auto` by default. */
+  disruption?: {
+    mode?: "auto" | "off";
+    idleSeconds?: number;
+    requestTtlSeconds?: number;
+  };
   /** Optional HTTP surface for flow.run (#144). Disabled by default. */
   http?: {
     enabled?: boolean;

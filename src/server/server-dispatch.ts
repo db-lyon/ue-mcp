@@ -145,7 +145,7 @@ export interface DispatchDeps extends GateDeps {
    * The MCP session calls are attributed to for asset leases. The daemon
    * gives each connection its own; absent is this process.
    */
-  leaseHolder?: () => { id: string; label: string };
+  leaseHolder?: () => { id: string; label: string; parent?: string };
 }
 
 /** The caller of one call, read off the route's deps and the request. */

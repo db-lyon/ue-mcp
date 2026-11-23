@@ -88,7 +88,8 @@ async function stopEditor(): Promise<Json> {
   // would raise the engine's save prompt on close, so a saved map is loaded over it first.
   await server.call("level", { action: "load", levelPath: "/Game/MCP_Home", discardUnsaved: true });
   await server.call("editor", { action: "save_dirty", includeMaps: true });
-  return body(await server.call("editor", { action: "stop_editor" }));
+  // The test is the editor's only session and starts no subagents (#2075).
+  return body(await server.call("editor", { action: "stop_editor", subagents: "none" }));
 }
 
 async function startEditor(
@@ -227,7 +228,7 @@ function forceRelink(): void {
 }
 
 async function build(): Promise<Json> {
-  return body(await server.call("project", { action: "build", timeoutMs: BUILD_TIMEOUT_MS }));
+  return body(await server.call("project", { action: "build", timeoutMs: BUILD_TIMEOUT_MS, subagents: "none" }));
 }
 
 describe.skipIf(!ENABLED)("editor lifecycle (opt-in: npm run test:live -- --lifecycle)", () => {
@@ -426,6 +427,7 @@ describe.skipIf(!ENABLED)("editor lifecycle (opt-in: npm run test:live -- --life
       const run = await server.call("flow", {
         action: "run",
         flowName: "live_lifecycle_rebuild",
+        subagents: "none",
         timeoutMs: BUILD_TIMEOUT_MS + START_TIMEOUT_S * 1000,
       });
       expect(run.isError, run.text).toBe(false);

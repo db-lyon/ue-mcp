@@ -21,6 +21,7 @@ import { ensureGuard, existingGuard, refuseIfBlocked } from "../editor/dialog-gu
 import { listsDialogs, nativeDialogReply, repliesToNativeDialog } from "../editor/native-dialog-reply.js";
 import { currentCallAsker } from "./call-elicit.js";
 import { McpError, ErrorCode } from "../core/errors.js";
+import { askConsent, attestationOf, consentError, disruptiveBridgeOp, withDisruptionGrant } from "../dispatch/disruption-gate.js";
 
 export type { ResolveExistingFile } from "./guard.js";
 
@@ -244,6 +245,29 @@ export class GuardedBridge extends ForwardingBridge {
         `Bridge call '${method}' was not sent: the call it belongs to was cancelled by its caller.`,
         { outcome: "failed", method },
       );
+    }
+    // A Live Coding patch or a quit takes the editor away from every session
+    // using it, so it waits for them to agree (#2075). Flow and batch steps
+    // reach the editor only through here; an MCP call was already asked at
+    // dispatch and runs under that grant.
+    // `subagents` is the caller's attestation for the consent gate, never the editor's.
+    const subagents = attestationOf(params);
+    if (params && "subagents" in params) {
+      const { subagents: _attested, ...rest } = params;
+      params = rest;
+    }
+    const disruptive = disruptiveBridgeOp(method, params);
+    if (disruptive) {
+      const decision = askConsent(this.session?.disruptions, disruptive, `bridge method ${method}`, subagents ? { subagents } : {});
+      if (!decision.proceed) throw consentError(decision);
+      if (decision.request) {
+        const request = decision.request;
+        try {
+          return await withDisruptionGrant(request.id, () => this.call(method, params, timeoutMs, options));
+        } finally {
+          this.session?.disruptions?.complete(request.id);
+        }
+      }
     }
     try {
       // `runGuarded` is already a pass-through on an empty registry, but building

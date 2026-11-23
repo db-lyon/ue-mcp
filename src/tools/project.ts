@@ -16,6 +16,7 @@ import { installActions } from "./project/install.js";
 import { localizationActions } from "./project/localization.js";
 import { categoryActions, categorySchema } from "./project/categories.js";
 import { leaseActions, leaseSchema } from "./project/leases.js";
+import { SUBAGENTS_PARAM } from "./editor/disruption.js";
 
 export { envWarningsFor } from "./project/sessions.js";
 
@@ -76,6 +77,7 @@ export const projectTool: ToolDef = categoryTool(
     configuration: z.string().optional().describe("Build configuration: Development, Debug, Shipping"),
     platform: z.string().optional().describe("Target platform: Win64, Linux, Mac. resolve_setting / explain_setting / diff_config_from_default: the config platform (Windows, Mac, Linux, Android, IOS; default this machine's)"),
     clean: z.boolean().optional().describe("Clean build"),
+    subagents: SUBAGENTS_PARAM,
     symbol: z.string().optional().describe("Symbol name for find_engine_symbol / find_example_usage / class_hierarchy / find_references / find_callers / find_callees / symbol_context"),
     names: z.union([z.string(), z.array(z.string())]).optional().describe("verify_symbols / suggest_build_deps: engine symbol names, as an array or a comma-separated string (max 200)"),
     refresh: z.boolean().optional().describe("build_engine_index: rebuild even when a valid cache exists"),

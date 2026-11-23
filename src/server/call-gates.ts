@@ -27,6 +27,17 @@ import { explainMissingAction } from "../sessions/session-surface.js";
 import { disabledActionRefusal } from "../surface/category-state.js";
 import { leaseConflictMessage } from "../dispatch/leases.js";
 import { leasePathsOf } from "../dispatch/lease-paths.js";
+import {
+  askConsent,
+  attestationOf,
+  consentDetails,
+  withDisruptionCall,
+  currentDisruptionCaller,
+  disruptiveCallOf,
+  projectEditorRunning,
+  withDisruptionCaller,
+  withDisruptionGrant,
+} from "../dispatch/disruption-gate.js";
 import { sessionContext } from "../surface/target-params.js";
 import {
   failed,
@@ -135,6 +146,41 @@ export async function runCall(deps: GateDeps, call: ActionCall<EditorSession>): 
       if (asker.origin !== "mcp") return next();
       const refusal = playtestRefusal(task, session.project.projectDir);
       return refusal ? refused(refusal, true) : next();
+    },
+
+    // Stopping, restarting, rebuilding or patching the editor waits until the
+    // other sessions using it agree (#2075). The handlers and the guarded
+    // bridge ask too, for the routes that never pass through here (flow steps,
+    // batch steps); the grant below keeps them from asking twice.
+    consent: async (_c, next) => {
+      // `subagents` is the caller's attestation, read here and never sent to the editor.
+      const subagents = attestationOf(call.params);
+      if ("subagents" in call.params) {
+        delete call.params.subagents;
+        if (target.kind === "flow") delete target.input.subagents;
+        if (target.kind === "task") {
+          delete target.registryParams.subagents;
+          // Through the micro gateway the action's own parameters are `args`.
+          const args = target.registryParams.args;
+          if (args && typeof args === "object" && !Array.isArray(args)) delete (args as Record<string, unknown>).subagents;
+        }
+      }
+      const registry = sessions.disruptions;
+      // A flow asks when its editor.restart or editor.rebuild step runs; the attestation rides along to it.
+      if (isFlow) return subagents ? withDisruptionCaller(asker.leaseHolder, next, { subagents }) : next();
+      if (!registry?.enforcing) return next();
+      const hit = disruptiveCallOf(task, call.params);
+      if (!hit) return next();
+      if (hit.whileRunning && !projectEditorRunning(session.project.projectDir, session.bridge)) return next();
+      const decision = askConsent(registry, hit.op, task, subagents ? { subagents } : {});
+      if (!decision.proceed) return failed(ErrorCode.EDITOR_IN_USE, decision.message, true, consentDetails(decision.request));
+      const request = decision.request;
+      if (!request) return next();
+      try {
+        return await withDisruptionGrant(request.id, next);
+      } finally {
+        registry.complete(request.id);
+      }
     },
 
     // One guard per editor, shared by every route; the mode is read per call.
@@ -339,7 +385,7 @@ export async function runCall(deps: GateDeps, call: ActionCall<EditorSession>): 
     },
   };
 
-  const run = async (): Promise<CallOutcome> => {
+  const gated = async (): Promise<CallOutcome> => {
     try {
       return await runGates(call, gates);
     } catch (e) {
@@ -347,6 +393,22 @@ export async function runCall(deps: GateDeps, call: ActionCall<EditorSession>): 
       return failed(code, e instanceof Error ? e.message : String(e), !isFlow, machineDetails(e));
     }
   };
+  // Every call is counted for the session that made it, so a request to stop
+  // the editor can see who is using it. A call made in process on someone's
+  // behalf (a flow step, a daemon operation's step) is counted for them.
+  const run = (): Promise<CallOutcome> => withDisruptionCaller(asker.leaseHolder, async () => {
+    const registry = sessions.disruptions;
+    if (!registry) return gated();
+    const caller = currentDisruptionCaller();
+    const token = registry.callStarted(caller, task);
+    let outcome: CallOutcome | undefined;
+    try {
+      outcome = await withDisruptionCall(token, gated);
+      return outcome;
+    } finally {
+      registry.callFinished(caller.id, token, task, call.params, outcome !== undefined && !isFailure(outcome));
+    }
+  });
   const signal = asker.signal;
   if (!signal) return run();
   // A call its caller cancelled first, such as the next call of an interrupted

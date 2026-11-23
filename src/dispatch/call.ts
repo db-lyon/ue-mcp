@@ -25,6 +25,9 @@ import type { ProgressFn } from "../core/progress.js";
  *  - playtest: an MCP client does not start playtests a person runs by hand.
  *  - dialog: nothing runs past a blocking modal, and what failed under one is
  *    reported as the dialog it was.
+ *  - consent: stopping, restarting, rebuilding or patching the editor waits
+ *    for the other sessions using it to agree (#2075). After the dialog gate,
+ *    so a modal is reported as the modal rather than opening a request.
  *  - disabled: the project's `disable:` turned the action off.
  *  - known: the editor provides the action and the category has it.
  *  - engine: the attached engine has the engine tool the action wraps.
@@ -43,6 +46,7 @@ export const GATE_ORDER = [
   "read-only",
   "playtest",
   "dialog",
+  "consent",
   "disabled",
   "known",
   "engine",
@@ -77,8 +81,12 @@ export interface Asker {
   client?: { name: string; version?: string };
   /** The caller's access mode, read when a gate asks. Absent is read-write. */
   access?: () => "read-write" | "read-only";
-  /** Who the call's asset leases are held under. */
-  leaseHolder: { id: string; label: string };
+  /**
+   * Who the call's asset leases are held under, which is also the session its
+   * activity is counted for. `parent` is the session that started it, when the
+   * client says so.
+   */
+  leaseHolder: { id: string; label: string; parent?: string };
   onProgress?: ProgressFn;
   /** Aborted when the caller cancels the call. */
   signal?: AbortSignal;

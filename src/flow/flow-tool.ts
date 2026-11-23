@@ -141,6 +141,7 @@ export function createFlowTool(
       skip: z.array(z.string()).optional().describe("run: step names or numbers to skip"),
       params: unknownRecord().optional().describe("run: runtime options merged into every step's options (highest priority)"),
       rollback_on_failure: z.boolean().optional().describe("run: invoke inverse tasks in reverse order on failure"),
+      subagents: z.enum(["none", "paused"]).optional().describe("run: for a flow that stops, restarts or rebuilds the editor, your own subagents are none or paused"),
       select: SELECT_PARAM,
       omit: OMIT_PARAM,
     },

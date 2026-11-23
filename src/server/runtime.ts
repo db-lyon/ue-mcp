@@ -39,6 +39,8 @@ import { loadFlowConfig } from "../flow/loader.js";
 import { createFlowTool } from "../flow/flow-tool.js";
 import { resolveLockingConfig, type LockingConfig } from "../dispatch/locking.js";
 import { resolveLeaseConfig } from "../dispatch/leases.js";
+import { resolveDisruptionConfig } from "../dispatch/disruption.js";
+import { SESSION_ID } from "../dispatch/lock-owner.js";
 import { collapsingEnvWarnings } from "../config/session-env.js";
 import { checkPluginFreshness } from "../editor/bridge-freshness.js";
 import { unionSurface } from "../sessions/session-surface.js";
@@ -240,6 +242,11 @@ export async function createRuntime(projectArgs: string[]): Promise<Runtime> {
   // Asset leases for agents sharing this server's editors. The mode is the
   // first project's, like every process-level choice.
   sessions.leases.config = resolveLeaseConfig(project.config.leases);
+  // Consent before a session stops, restarts, rebuilds or patches the editor
+  // the others are using (#2075). A session's leases are the work it touched.
+  sessions.disruptions.config = resolveDisruptionConfig(project.config.disruption);
+  sessions.disruptions.processId = SESSION_ID;
+  sessions.disruptions.touched = (id) => sessions.leases.list().filter((l) => l.holder === id).map((l) => l.path);
 
   // One task registry and guard pipeline per session, built from its own graph.
   await loads.finishStartup();
@@ -361,6 +368,15 @@ export async function createRuntime(projectArgs: string[]): Promise<Runtime> {
       flow: { tool: flowTool, ctx: baseCtx },
       ...(opts.access ? { access: () => opts.access! } : {}),
       ...(opts.loadView ? { loadView: opts.loadView } : {}),
+      ...(opts.session
+        ? {
+            leaseHolder: () => ({
+              id: opts.session!.id,
+              label: opts.session!.label ?? opts.session!.id,
+              ...(opts.session!.parent ? { parent: opts.session!.parent } : {}),
+            }),
+          }
+        : {}),
     };
   };
 

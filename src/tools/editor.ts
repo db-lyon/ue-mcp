@@ -8,6 +8,8 @@ import { CORE_ISSUES_URL } from "../github/repos.js";
 import { WORKAROUND_REPORT_FIELDS } from "./feedback.js";
 import { startEditor, stopEditor, restartEditor, resolveOwnedEditor, connectedEditorOf } from "../editor/editor-control.js";
 import { buildProjectAction } from "./project/install.js";
+import { consentOptions, withEditorConsent } from "../dispatch/disruption-gate.js";
+import { disruptionActions, disruptionSchema } from "./editor/disruption.js";
 import { startProgress } from "../terminal/progress.js";
 import { clientAdvertisesElicitation } from "../editor/dialog-mode.js";
 import { readEngineState, withBridgeSnapshot, type EngineSnapshot } from "../editor/engine-observer.js";
@@ -237,13 +239,14 @@ export const editorTool: ToolDef = categoryTool(
       kind: "handler",
       effect: "mutate",
       offline: "Asks the editor that published this project's port lockfile to quit. With no lockfile it refuses and names the file it checked. With no editor of this project left running, it ends a crash reporter a crashed one left holding the project's binaries.",
-      params: { optional: ["discardTransient"] },
+      params: { optional: ["discardTransient", "subagents"] },
       description: "Close Unreal Editor gracefully (asks the editor to quit itself via the bridge; never an OS kill of an editor). Acts only on the editor for the loaded project, resolved from the port lockfile that editor published at <project>/Saved/UE_MCP_Bridge/port.json. With no lockfile there is no port to aim at and the call refuses, naming the file it checked, rather than probing a default port that another project's editor could answer on (#819). With no editor of this project running there is nothing to quit, and the call fails saying so, with alreadyStopped=true marking that reason apart from a running editor that cannot be reached or refuses on unsaved work. A flow that stops the editor before building sets ignore_failure: true on the stop step. With more than one editor of this project open it closes the one the lockfile names and reports the rest under remainingInstances, so plain success never has to be read as 'no editor of this project is running' (#1072). Unsaved work: the quit is sent and the EDITOR decides. It refuses inside the engine and names every dirty package without scheduling a close, so nothing is lost and no quit is left pending; save them with editor(save_dirty), or close the editor yourself and answer its save prompt by hand. There is deliberately no flag that discards real content. discardTransient=true clears, before the quit, only packages nobody can save (the transient package and /Engine maps such as the /Engine/Maps/Entry startup map, as editor(discard_dirty) judges them), so a prompt that would ask only about those never comes up; anything else still reaches the editor's save prompt, and what was cleared is reported under discarded. This action has no dialog behaviour of its own: a modal blocks it exactly as it blocks every other action, refused by the same gate with the same fields. Read the dialog with editor(list_dialogs) and answer it with editor(respond_to_dialog). On Windows, once no editor of this project is left running (after the stop, or when there was nothing to stop), it ends any CrashReportClient process a crashed editor of this project left behind, because it keeps the project's module DLLs open and the next build_project fails with LNK1104; each one is reported under crashReporters with its pid and the reason it was judged this project's (a path under the project on its command line, or a project binary it holds open). A reporter still watching a live editor, or one of another project, is never touched. A success names the editor it quit under stopped {project, pid}, and an editor name that matches no registered session refuses rather than stopping the active editor (#1278).",
       handler: async (ctx: ToolContext, p: Record<string, unknown>) => {
-        return stopEditor(ctx.project.projectDir ?? undefined, {
-          connected: connectedEditorOf(ctx.bridge),
-          discardTransient: p.discardTransient === true,
-        });
+        return withEditorConsent(ctx.sessions?.disruptions, "stop", "editor.stop_editor", () =>
+          stopEditor(ctx.project.projectDir ?? undefined, {
+            connected: connectedEditorOf(ctx.bridge),
+            discardTransient: p.discardTransient === true,
+          }), consentOptions(p));
       },
     },
     restart_editor: {
@@ -251,7 +254,7 @@ export const editorTool: ToolDef = categoryTool(
       effect: "mutate",
       offline: "Stops whatever holds this project open and starts it again.",
       params: {
-        optional: ["window", "ide", "extraArgs"],
+        optional: ["window", "ide", "extraArgs", "subagents"],
         notes: {
           window: "normal or offscreen; defaults to editor.window from ue-mcp.yml, then normal, not to the mode of the editor being stopped",
           ide: "allow or none; none passes the NullSourceCodeAccessor ini override so the editor opens no IDE; defaults to editor.ide from ue-mcp.yml, then none for an offscreen editor and allow otherwise",
@@ -263,7 +266,8 @@ export const editorTool: ToolDef = categoryTool(
         const window = p?.window === "normal" || p?.window === "offscreen" ? p.window : undefined;
         const ide = p?.ide === "allow" || p?.ide === "none" ? p.ide : undefined;
         const extraArgs = typeof p?.extraArgs === "string" && p.extraArgs.trim() !== "" ? p.extraArgs.trim() : undefined;
-        return restartEditor(ctx.project, ctx.bridge, startProgress, { window, ide, extraArgs });
+        return withEditorConsent(ctx.sessions?.disruptions, "restart", "editor.restart_editor", () =>
+          restartEditor(ctx.project, ctx.bridge, startProgress, { window, ide, extraArgs }), consentOptions(p));
       },
     },
     build_project: buildProjectAction,
@@ -628,7 +632,7 @@ export const editorTool: ToolDef = categoryTool(
       editorBound: "Asks the running editor to shut itself down over the bridge.",
       rawBridgeMethods: { request_editor_shutdown: "mutate" },
       params: {
-        optional: ["requireClean", "dirtyPackages", "packages", "allowContent", "endPIE"],
+        optional: ["requireClean", "dirtyPackages", "packages", "allowContent", "endPIE", "subagents"],
         notes: {
           requireClean: "default true",
           dirtyPackages: "default refuse",
@@ -659,19 +663,21 @@ export const editorTool: ToolDef = categoryTool(
             error: ownership.message,
           };
         }
-        const result = await ctx.bridge.call("request_editor_shutdown", {
-          requireClean: p.requireClean,
-          dirtyPackages: p.dirtyPackages,
-          allowContent: p.allowContent,
-          packages: p.packages,
-          endPIE: p.endPIE,
-        });
+        const result = await withEditorConsent(ctx.sessions?.disruptions, "stop", "editor.request_editor_shutdown", () =>
+          ctx.bridge.call("request_editor_shutdown", {
+            requireClean: p.requireClean,
+            dirtyPackages: p.dirtyPackages,
+            allowContent: p.allowContent,
+            packages: p.packages,
+            endPIE: p.endPIE,
+          }), consentOptions(p));
         return ownership.healed && result && typeof result === "object"
           ? { ...(result as Record<string, unknown>), lockfileNote: ownership.healed }
           : result;
       },
     },
     batch: batchAction,
+    ...disruptionActions,
     ...checkpointActions,
     ...journalActions,
     ...epicActions,
@@ -683,6 +689,7 @@ export const editorTool: ToolDef = categoryTool(
     // actions, and holds the same type as the generated one.
     ...specSchema,
     ...batchSchema,
+    ...disruptionSchema,
     code: z.string().optional(),
     captureLog: z.boolean().optional().describe("execute_python/run_python_file: false drops everything the script logged except its error entries, which are always kept. logChars and logEntryCount still report what was there (#995)"),
     maxLogChars: z.number().optional().describe("execute_python/run_python_file: keep only the last N characters of logged output, dropping whole entries from the front. Reported as logTruncated (#995)"),
