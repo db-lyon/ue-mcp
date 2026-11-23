@@ -6,7 +6,9 @@ import * as path from "node:path";
 import {
   ENGINES,
   REQUIRED_ENGINES,
+  manifestBuildIds,
   manifestEngines,
+  modulesBuildId,
   missingBinaries,
   missingMessage,
   requiredBinaries,
@@ -86,5 +88,18 @@ describe("release binaries gate", () => {
     expect(bad.stderr).toContain("UE_MCP_Bridge-1.5.0-UE5.9-Win64.zip");
     const good = run("1.5.0", [...today, "UE_MCP_Bridge-1.5.0-UE5.9-Win64.zip"], ["--manifest", built]);
     expect(good.status).toBe(0);
+  });
+
+  it("reads each asset's engine BuildId, and passes a manifest from before it with a warning", () => {
+    const modules = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "rb-")), "UnrealEditor.modules");
+    fs.writeFileSync(modules, "﻿" + JSON.stringify({ BuildId: "60738873", Modules: {} }));
+    expect(modulesBuildId(modules)).toBe("60738873");
+    expect(modulesBuildId(`${modules}.missing`)).toBeNull();
+    expect(manifestBuildIds({ version: "1", assets: [{ file: "a.zip", buildId: "7" }, { file: "b.zip" }] })).toEqual({ "a.zip": "7", "b.zip": null });
+
+    const today = requiredBinaries("1.5.0");
+    const old = run("1.5.0", today, ["--manifest", manifestFile("1.5.0", ["5.7", "5.8"])]);
+    expect(old.status).toBe(0);
+    expect(old.stderr).toMatch(/record no engine BuildId/);
   });
 });
