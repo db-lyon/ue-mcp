@@ -28,6 +28,7 @@ import type { Runtime } from "./runtime.js";
 import type { SessionAccess } from "../flow/session-access.js";
 import { announceResourceChange, registerEditorResources } from "./editor-resources.js";
 import { registerSkillPrompts, skillResources } from "./skill-prompts.js";
+import { SESSION_ID } from "../dispatch/lock-owner.js";
 
 export interface RuntimeServer {
   server: McpServer;
@@ -75,6 +76,8 @@ export interface McpServerOptions {
    * connection's session id; a stdio server is one session, this process.
    */
   sessionId?: string;
+  /** The session that started this one (a subagent's primary), when its client says so. */
+  parent?: string;
 }
 
 export function createMcpServer(rt: Runtime, opts: McpServerOptions = {}): RuntimeServer {
@@ -112,16 +115,31 @@ export function createMcpServer(rt: Runtime, opts: McpServerOptions = {}): Runti
     flow: { tool: rt.flowTool, ctx: rt.baseCtx },
     ...(opts.access ? { access: () => opts.access!.mode } : {}),
     ...(opts.sessionId
-      ? { leaseHolder: () => ({ id: opts.sessionId!, label: server.server.getClientVersion()?.name ?? "unknown client" }) }
+      ? {
+          leaseHolder: () => ({
+            id: opts.sessionId!,
+            label: server.server.getClientVersion()?.name ?? "unknown client",
+            ...(opts.parent ? { parent: opts.parent } : {}),
+          }),
+        }
       : {}),
   };
 
   // The upgrade notice leads this client's first tool response.
   const takeNotice = upgradeNoticeForClient();
+  // Another session's request to stop, restart or rebuild the editor is
+  // appended to this client's next tool response, once (#2075).
+  const noticeSession = opts.sessionId ?? SESSION_ID;
   const withNotice = async (pending: Promise<ToolResult>): Promise<ToolResult> => {
     const result = await pending;
     const notice = takeNotice();
-    return notice ? { ...result, content: [{ type: "text", text: notice }, ...result.content] } : result;
+    const disruptions = sessions.disruptions?.noticesFor(noticeSession) ?? [];
+    const content = [
+      ...(notice ? [{ type: "text" as const, text: notice }] : []),
+      ...result.content,
+      ...disruptions.map((text) => ({ type: "text" as const, text })),
+    ];
+    return notice || disruptions.length ? { ...result, content } : result;
   };
 
   const registeredTools = new Map<string, ReturnType<typeof server.tool>>();

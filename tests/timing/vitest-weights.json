@@ -15,6 +15,7 @@
     "tests/integration/daemon-cancel.test.ts": 6.5,
     "tests/integration/daemon-cli.test.ts": 42.4,
     "tests/integration/daemon-composer.test.ts": 12,
+    "tests/integration/daemon-disruption.test.ts": 36,
     "tests/integration/daemon-http.test.ts": 10.5,
     "tests/integration/daemon-leases.test.ts": 14,
     "tests/integration/daemon-pie-events.test.ts": 14.7,

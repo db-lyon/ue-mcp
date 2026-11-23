@@ -3,6 +3,7 @@ import { buildProject } from "../../editor/editor-build.js";
 import { inspectInstall } from "../../editor/install-check.js";
 import { sourceForMismatchedBinary } from "../../editor/bridge-update.js";
 import { clearPendingBuild } from "../../editor/pending-build.js";
+import { consentOptions, projectEditorRunning, withEditorConsent } from "../../dispatch/disruption-gate.js";
 import { specBp } from "../specs/project.generated.js";
 import type { ToolContext, ActionSpec, HandlerActionSpec } from "../../surface/tool-types.js";
 
@@ -16,7 +17,7 @@ export const buildProjectAction: HandlerActionSpec = {
   // #958
   offline: "Runs UnrealBuildTool out of process, which requires the editor to be STOPPED because it cannot link while an editor holds the module DLLs.",
   params: {
-    optional: ["configuration", "platform", "clean"],
+    optional: ["configuration", "platform", "clean", "subagents"],
     notes: {
       configuration: "default Development",
       platform: "default the host platform",
@@ -27,17 +28,22 @@ export const buildProjectAction: HandlerActionSpec = {
   handler: async (ctx, p) => {
     ctx.project.ensureLoaded();
     const uproject = ctx.project.projectPath!;
-    // A binary bridge built for another engine build cannot be rebuilt as it is; source takes its place (#2072).
-    const bridgeSource = sourceForMismatchedBinary(uproject);
     const lines: string[] = [];
-    const result = await buildProject(uproject, {
-      onOutput: (text) => lines.push(text),
-      configuration: p.configuration as string | undefined,
-      platform: p.platform as string | undefined,
-      clean: p.clean as boolean | undefined,
-    });
-    if (bridgeSource.switched && result.success) clearPendingBuild(uproject);
-    return { ...result, output: lines.join(""), ...(bridgeSource.reasons ? { bridgeSource } : {}) };
+    const build = async () => {
+      // A binary bridge built for another engine build cannot be rebuilt as it is; source takes its place (#2072).
+      const bridgeSource = sourceForMismatchedBinary(uproject);
+      const result = await buildProject(uproject, {
+        onOutput: (text) => lines.push(text),
+        configuration: p.configuration as string | undefined,
+        platform: p.platform as string | undefined,
+        clean: p.clean as boolean | undefined,
+      });
+      if (bridgeSource.switched && result.success) clearPendingBuild(uproject);
+      return { ...result, output: lines.join(""), ...(bridgeSource.reasons ? { bridgeSource } : {}) };
+    };
+    // Building under a running editor is a disruption the other sessions agree to (#2075).
+    if (!projectEditorRunning(ctx.project.projectDir, ctx.bridge)) return build();
+    return withEditorConsent(ctx.sessions?.disruptions, "build", "project.build", build, consentOptions(p));
   },
 };
 

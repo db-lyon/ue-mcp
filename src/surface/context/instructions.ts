@@ -168,6 +168,7 @@ ${BUILT_IN_TOOLS}
 • Animation tools need a skeleton path - use animation(action="list_skeletal_meshes") to find it.
 • Editor lifecycle: editor(action="stop_editor") / editor(action="start_editor") / editor(action="restart_editor") manage the UE process. editor(action="build_project") builds the project C++ code (stop the editor first).
 • editor(action="hot_reload") triggers Live Coding compilation without restarting the editor.
+• Stopping, restarting, rebuilding or Live Coding patching asks the other sessions using the editor first. EDITOR_IN_USE lists their answers: tell your user, and run the action again later. A notice naming another session's request is answered with editor(action="disruption_vote").
 • editor(action="focus_on_actor", actorLabel="MyActor") snaps the viewport to any actor.
 • Log output: editor(action="get_log", category="LogMCPBridge") to see bridge-specific logs.
 • project(action="describe_action", args={name: "level.nudge_component"}) returns that action's parameters with descriptions, including nested fields.

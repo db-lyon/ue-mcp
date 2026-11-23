@@ -37,6 +37,7 @@ import {
   EXTENSION_API_VERSION,
   EXTENSION_FEATURES,
   routePath,
+  describeRoute,
   REGISTRY_ACCOUNT_PERMISSION_REQUIRED_FROM,
   type CallActionOptions,
   type DaemonDiscovery,
@@ -75,7 +76,17 @@ import { randomUUID } from "node:crypto";
 import { SessionAccess, parseSessionAccessMode, SESSION_ACCESS_MODES } from "../flow/session-access.js";
 import { ensureGuard, existingGuard, nativeAsBlocking, onDialogEvent } from "../editor/dialog-guard.js";
 import { nativeDialogInfo, nativeDialogsForProject } from "../editor/native-dialogs.js";
-import { createRouter, HANDLED, ok, resolveEditorSession, type RouteHandlers, type RouteRequest } from "./router.js";
+import { createRouter, HANDLED, objectBody, ok, resolveEditorSession, type RouteHandlers, type RouteRequest, type RouteResult } from "./router.js";
+import {
+  DISRUPTION_VOTES,
+  DISRUPTIVE_OPS,
+  DisruptionError,
+  type DisruptionCaller,
+  type DisruptionVote,
+  type DisruptiveOp,
+  type SubagentAttestation,
+} from "../dispatch/disruption.js";
+import { askConsent, currentDisruptionCaller, processCaller, withDisruptionGrant } from "../dispatch/disruption-gate.js";
 import { extensionsDir, loadExtensions, matchRoute, normalizeResponse, type LoadedExtension } from "./extensions.js";
 import { installedCopies, recordedVersion, versionsOf } from "./extension-versions.js";
 import { UiBundleStore, contentType, type UiBundleOwner } from "./ui-bundles.js";
@@ -142,6 +153,20 @@ export interface DaemonOptions {
   watch?: WatchFn;
 }
 
+/** Who asks for an editor operation, and on what terms (#2075). */
+interface EditorOpConsent {
+  /** Absent: the caller in scope (a flow's session), else the daemon. */
+  caller?: DisruptionCaller;
+  /** A person asked, so no subagent attestation is owed. */
+  person?: boolean;
+  subagents?: SubagentAttestation;
+  reason?: string;
+  /** What asked, for the request. */
+  action?: string;
+  /** A person overrides at once; the value is who. */
+  force?: string;
+}
+
 /** How often the daemon checks that it can still answer, and how long a hold is worth a warning. */
 const STALL_BEAT_MS = 1000;
 const STALL_REPORT_MS = 3000;
@@ -154,6 +179,7 @@ function callOptions(o: CallActionOptions | undefined): InProcessCallOptions {
     ...(o?.elicit ? { elicit: o.elicit } : {}),
     ...(o?.access ? { access: o.access } : {}),
     ...(o?.signal ? { signal: o.signal } : {}),
+    ...(o?.session && typeof o.session.id === "string" && o.session.id !== "" ? { session: o.session } : {}),
   };
 }
 
@@ -276,7 +302,10 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
     // Play sessions the editor pushes, however they were started, as pie.<state>.
     session.bridge.onNotification((n) => {
       const data = pieEventFromNotification(session.name, n);
-      if (data) events.publish(`pie.${data.state}`, data as unknown as Record<string, unknown>);
+      if (!data) return;
+      // An ended Play session is nobody's any more, however it was stopped.
+      if (data.state === "ended") rt.sessions.disruptions.pieEnded();
+      events.publish(`pie.${data.state}`, data as unknown as Record<string, unknown>);
     });
     // Attached before this subscribed: read the state now rather than wait for a reconnect.
     if (session.bridge.isConnected) void resyncPie(session);
@@ -401,10 +430,14 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
     const sessionId = sessionIds.get(req) ?? randomUUID();
     // A client can open its session read-only, so no call slips through before it sets the mode.
     const access = new SessionAccess(parseSessionAccessMode(req.headers[DAEMON_HEADERS.access]));
-    const { server, dispose } = createMcpServer(rt, { access, sessionId });
+    const parentHeader = req.headers[DAEMON_HEADERS.parent];
+    const parent = typeof parentHeader === "string" && parentHeader.trim() !== "" ? parentHeader.trim() : undefined;
+    const { server, dispose } = createMcpServer(rt, { access, sessionId, ...(parent ? { parent } : {}) });
     // The MCP client's own name once it has introduced itself, else what the shim said.
     const client = (): string => server.server.getClientVersion()?.name ?? header;
     mcpSessions.set(sessionId, { client, connectedAt: new Date().toISOString(), access });
+    // A participant in requests to stop the editor from the moment it connects (#2075).
+    rt.sessions.disruptions.opened({ id: sessionId, label: header, ...(parent ? { parent } : {}) });
 
     // Every call, attributed by client, for the activity feed.
     const started = new Map<string | number, { at: number; label: CallLabel }>();
@@ -437,6 +470,8 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
       // A session that ends gives up its asset leases, so nobody waits out a holder that is gone.
       const released = rt.sessions.leases.releaseHolder(sessionId);
       if (released > 0) events.publish("leases.released", { session: sessionId, count: released });
+      // And its hold and votes, so nobody waits on a session that is gone.
+      rt.sessions.disruptions.closed(sessionId);
       dispose();
       void server.close().catch(() => {});
       events.publish("client.disconnected", { client: client(), clients, session: sessionId });
@@ -512,7 +547,37 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
   // ── Editor operations ───────────────────────────────────────────
   // The daemon owns these, so it can say beforehand why the editor is about to
   // go away and the disconnect is classified as that rather than guessed.
-  const editorOp = async (op: string): Promise<Record<string, unknown>> => {
+  // A stop, restart or rebuild is one consent request for the whole operation,
+  // and its steps run under that grant (#2075). Start takes nothing away.
+  const editorOp = async (op: string, consent: EditorOpConsent = {}): Promise<Record<string, unknown>> => {
+    if (op === "start" || !rt.sessions.disruptions.enforcing) return runEditorOp(op);
+    const registry = rt.sessions.disruptions;
+    const disruptive = op as "stop" | "restart" | "rebuild";
+    const caller = consent.caller ?? currentDisruptionCaller(processCaller("ue-mcp daemon"));
+    const action = consent.action ?? `editor operation ${op}`;
+    if (consent.force) {
+      const opened = registry.request(caller, disruptive, action, { person: true, ...(consent.reason ? { reason: consent.reason } : {}) });
+      if (opened.state !== "approved") registry.override(opened.id, "approve", consent.force);
+    }
+    const decision = askConsent(registry, disruptive, action, {
+      caller,
+      ...(consent.person ? { person: true } : {}),
+      ...(consent.subagents ? { subagents: consent.subagents } : {}),
+      ...(consent.reason ? { reason: consent.reason } : {}),
+    });
+    if (!decision.proceed) {
+      events.publish("editor.operation", { op, step: "consent", phase: "failed", reason: decision.message, request: decision.request.id });
+      return { op, steps: [{ step: "consent", ok: false, result: decision.message, reason: decision.message }], request: decision.request };
+    }
+    const request = decision.request;
+    if (!request) return runEditorOp(op);
+    try {
+      return { ...(await withDisruptionGrant(request.id, () => runEditorOp(op))), request: registry.get(request.id) ?? request };
+    } finally {
+      registry.complete(request.id);
+    }
+  };
+  const runEditorOp = async (op: string): Promise<Record<string, unknown>> => {
     const step = async (category: string, action: string) => {
       const name = `${category}.${action}`;
       events.publish("editor.operation", { op, step: name, phase: "started" });
@@ -552,8 +617,15 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
     else expected.clear();
     return { op, steps };
   };
-  // Flow tasks editor.restart and editor.rebuild go through the same announced operations.
+  // Flow tasks editor.restart and editor.rebuild go through the same announced
+  // operations, asked as the session whose flow runs them.
   rt.sessions.editorOperation = async (op) => (await editorOp(op)) as { steps: Array<{ step: string; ok: boolean; result: string }> };
+
+  // Requests and holds on the event stream, for a UI or an external runtime to follow.
+  const unsubscribeDisruptions = rt.sessions.disruptions.onChange((change) => {
+    if (change.type === "hold") events.publish("disruption.hold", { ...change.session });
+    else events.publish(`disruption.${change.type}`, { ...change.request } as unknown as Record<string, unknown>);
+  });
 
   // ── Native dialogs ──────────────────────────────────────────────
   // Win32 boxes the editor process shows, read from outside it by the window
@@ -655,7 +727,15 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
         },
       },
       editors: () => editors(),
-      editorOperation: (op) => editorOp(op),
+      editorOperation: (op, o) => editorOp(op, {
+        caller: o?.session && typeof o.session.id === "string" && o.session.id !== ""
+          ? { id: o.session.id, label: o.session.label ?? o.session.id, ...(o.session.parent ? { parent: o.session.parent } : {}) }
+          : { id: `ext:${name}`, label: name },
+        ...(o?.person ? { person: true } : {}),
+        ...(o?.subagents === "none" || o?.subagents === "paused" ? { subagents: o.subagents } : {}),
+        ...(o?.reason ? { reason: o.reason } : {}),
+        action: `${name} editorOperation ${op}`,
+      }),
       setBusy,
       ui: {
         trustKey: (pem) => ui.trustKey(pem, name),
@@ -732,12 +812,138 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
     }
     return { status: 200, headers: { "content-type": contentType(file), "cache-control": "no-cache", "x-content-type-options": "nosniff" }, file };
   };
-  const editorRoute = (op: "start" | "stop" | "restart" | "rebuild"): RouteHandlers["editor.start"] => async () => {
+  // A request on these routes is a person's (a button in Studio or the
+  // Launcher), so it owes no subagent attestation; it still waits for the
+  // sessions using the editor, unless it names an approved request or forces.
+  const httpCaller = (requester: unknown): DisruptionCaller => {
+    const label = typeof requester === "string" && requester.trim() !== "" ? requester.trim().slice(0, 80) : "a person";
+    return { id: `http:${label}`, label };
+  };
+  const editorRoute = (op: "start" | "stop" | "restart" | "rebuild"): RouteHandlers["editor.start"] => async (r) => {
     try {
-      return ok(await editorOp(op));
+      const b = objectBody(await r.body().catch(() => undefined));
+      const named = typeof b.requestId === "string" ? rt.sessions.disruptions.get(b.requestId) : null;
+      if (typeof b.requestId === "string" && !named) return { status: 404, body: { error: `No disruption request '${b.requestId}'. ${describeRoute("disruptions.list")} lists them.` } };
+      const caller = named ? named.requester : httpCaller(b.requester);
+      const out = await editorOp(op, {
+        caller,
+        person: true,
+        action: `POST ${routePath(`editor.${op}`)}`,
+        ...(typeof b.reason === "string" ? { reason: b.reason } : {}),
+        ...(b.force === true ? { force: caller.label } : {}),
+      });
+      const steps = out.steps as Array<{ step: string }> | undefined;
+      if (steps?.[0]?.step === "consent") {
+        const request = out.request as { id: string };
+        return {
+          status: 409,
+          body: {
+            ...out,
+            error: `${String((out.steps as Array<{ reason: string }>)[0].reason)}\nA person can run it anyway with { "force": true }, or approve it with ${describeRoute("disruptions.approve").replace("<id>", request.id)} and send { "requestId": "${request.id}" }.`,
+          },
+        };
+      }
+      return ok(out);
     } catch (e) {
       return { status: 500, body: errorBody(e) };
     }
+  };
+  const disruptionError = (e: unknown): RouteResult => {
+    if (e instanceof DisruptionError) return { status: e.kind === "not_found" ? 404 : 409, body: { error: e.message } };
+    throw e;
+  };
+  const participantOf = (raw: unknown): DisruptionCaller | null => {
+    if (typeof raw !== "string" || raw === "") return null;
+    const known = rt.sessions.disruptions.activities().find((a) => a.id === raw);
+    return { id: raw, label: known?.label ?? raw, ...(known?.parent ? { parent: known.parent } : {}) };
+  };
+  const disruptionRoutes: Pick<RouteHandlers,
+    "disruptions.list" | "disruptions.request" | "disruptions.participant" | "disruptions.hold" | "disruptions.release"
+    | "disruptions.vote" | "disruptions.confirm" | "disruptions.approve" | "disruptions.deny"> = {
+    "disruptions.list": () => {
+      const registry = rt.sessions.disruptions;
+      return ok({ enforcing: registry.enforcing, config: registry.config, requests: registry.list(), sessions: registry.activities() });
+    },
+    "disruptions.request": async (r) => {
+      const b = objectBody(await body400(r));
+      if (typeof b.op !== "string" || !DISRUPTIVE_OPS.includes(b.op as DisruptiveOp)) {
+        return { status: 400, body: { error: `op is one of ${DISRUPTIVE_OPS.join(", ")}` } };
+      }
+      const participant = participantOf(b.participant);
+      const subagents = b.subagents === "none" || b.subagents === "paused" ? b.subagents : undefined;
+      const view = rt.sessions.disruptions.request(participant ?? httpCaller(b.requester), b.op as DisruptiveOp, `POST ${routePath("disruptions.request")}`, {
+        ...(typeof b.reason === "string" ? { reason: b.reason } : {}),
+        ...(subagents ? { subagents } : {}),
+        person: participant === null,
+      });
+      return ok(view);
+    },
+    "disruptions.participant": async (r) => {
+      const id = r.params.id;
+      const registry = rt.sessions.disruptions;
+      if (r.method === "DELETE") {
+        const known = registry.has(id);
+        registry.closed(id);
+        return known ? ok({ id, removed: true }) : { status: 404, body: { error: `No participant '${id}'.` } };
+      }
+      if (r.method !== "PUT" && r.method !== "POST") return { status: 405, body: { error: "PUT registers or reports; DELETE removes" } };
+      const b = objectBody(await body400(r));
+      if (b.busy !== undefined && !(Array.isArray(b.busy) && b.busy.every((x) => typeof x === "string"))) {
+        return { status: 400, body: { error: "busy is a list of what the participant is doing, such as [\"blueprint.add_variable\"]; [] is idle" } };
+      }
+      const label = typeof b.label === "string" && b.label !== "" ? b.label : participantOf(id)!.label;
+      registry.report({ id, label, ...(typeof b.parent === "string" && b.parent !== "" ? { parent: b.parent } : {}) }, {
+        ...(Array.isArray(b.busy) ? { busy: b.busy as string[] } : {}),
+        ...(typeof b.pie === "boolean" ? { pie: b.pie } : {}),
+        ...(typeof b.transactions === "number" ? { transactions: b.transactions } : {}),
+      });
+      return ok(registry.activities().find((a) => a.id === id));
+    },
+    "disruptions.hold": async (r) => {
+      const b = objectBody(await body400(r));
+      if (typeof b.reason !== "string" || b.reason.trim() === "") return { status: 400, body: { error: "reason says why the editor must stay up" } };
+      const hold = rt.sessions.disruptions.hold(participantOf(r.params.id)!, b.reason.trim(), typeof b.ttlSeconds === "number" ? b.ttlSeconds : undefined);
+      return ok({ id: r.params.id, reason: hold.reason, expiresAt: new Date(hold.expiresAt).toISOString() });
+    },
+    "disruptions.release": (r) => ok({ id: r.params.id, ...rt.sessions.disruptions.release(participantOf(r.params.id)!) }),
+    "disruptions.vote": async (r) => {
+      const b = objectBody(await body400(r));
+      const participant = participantOf(b.participant);
+      if (!participant) return { status: 400, body: { error: "participant is the id of the session answering" } };
+      if (!DISRUPTION_VOTES.includes(b.vote as DisruptionVote)) return { status: 400, body: { error: `vote is one of ${DISRUPTION_VOTES.join(", ")}` } };
+      try {
+        return ok(rt.sessions.disruptions.vote(participant, r.params.id, b.vote as DisruptionVote, typeof b.reason === "string" ? b.reason : ""));
+      } catch (e) {
+        return disruptionError(e);
+      }
+    },
+    "disruptions.confirm": async (r) => {
+      const b = objectBody(await body400(r));
+      const participant = participantOf(b.participant);
+      if (!participant) return { status: 400, body: { error: "participant is the id of the session that asked" } };
+      if (b.subagents !== "none" && b.subagents !== "paused") return { status: 400, body: { error: "subagents is none or paused" } };
+      try {
+        return ok(rt.sessions.disruptions.attest(participant, r.params.id, b.subagents));
+      } catch (e) {
+        return disruptionError(e);
+      }
+    },
+    "disruptions.approve": async (r) => {
+      const b = objectBody(await r.body().catch(() => undefined));
+      try {
+        return ok(rt.sessions.disruptions.override(r.params.id, "approve", typeof b.by === "string" && b.by !== "" ? b.by : "a person"));
+      } catch (e) {
+        return disruptionError(e);
+      }
+    },
+    "disruptions.deny": async (r) => {
+      const b = objectBody(await r.body().catch(() => undefined));
+      try {
+        return ok(rt.sessions.disruptions.override(r.params.id, "deny", typeof b.by === "string" && b.by !== "" ? b.by : "a person"));
+      } catch (e) {
+        return disruptionError(e);
+      }
+    },
   };
   const sessionAccess: RouteHandlers["sessions.access"] = async (r) => {
     const id = r.params.id;
@@ -866,6 +1072,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
     "editor.stop": editorRoute("stop"),
     "editor.restart": editorRoute("restart"),
     "editor.rebuild": editorRoute("rebuild"),
+    ...disruptionRoutes,
     ...checkpointRoutes(rt.sessions),
     ...journalRoutes(rt.sessions),
     ...toolsRoutes(rt),
@@ -983,6 +1190,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
       unsubscribeFlows();
       unsubscribeScripts();
       unsubscribeCheckpoints();
+      unsubscribeDisruptions();
       stopAllScriptWatches();
       unsubscribeDialogs();
       for (const x of extensions) {

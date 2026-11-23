@@ -27,6 +27,9 @@ export enum ErrorCode {
   /** Another MCP session holds a lease on an asset this call would change.
    *  The message names the holder and when the lease runs out. */
   ASSET_LEASED = "ASSET_LEASED",
+  /** Other sessions are using the editor this call would stop, restart, rebuild or
+   *  patch, and have not all agreed. The message lists each one's answer (#2075). */
+  EDITOR_IN_USE = "EDITOR_IN_USE",
   /** The action ran and failed for its own reasons; the message is the reason it gave. */
   TASK_FAILED = "TASK_FAILED",
   /** A failure that carried no code of its own. */

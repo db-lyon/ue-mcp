@@ -33,4 +33,10 @@ export interface InProcessCallOptions {
    * runs, it answers CANCELLED at once and sends nothing more to the editor.
    */
   signal?: AbortSignal;
+  /**
+   * The agent session this call belongs to, so its activity and asset leases
+   * are its own rather than this process's, and another session's request to
+   * stop the editor waits on it (#2075). Absent is this process.
+   */
+  session?: { id: string; label?: string; parent?: string };
 }

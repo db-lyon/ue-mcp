@@ -62,6 +62,7 @@ async function raiseModal(): Promise<void> {
   resultJson<any>(await server.call("editor", {
     action: "request_editor_shutdown",
     requireClean: false,
+    subagents: "none",
   }));
   await waitForDialogs("some");
 }
@@ -159,6 +160,7 @@ describe("the mode governs an ordinary call, not just the lifecycle actions", ()
       resultJson<any>(await deferred.call("editor", {
         action: "request_editor_shutdown",
         requireClean: false,
+        subagents: "none",
       }));
       await waitForDialogs("some");
 

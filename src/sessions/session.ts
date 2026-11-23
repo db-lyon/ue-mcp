@@ -30,6 +30,7 @@ import { normalizeProjectRoot } from "../bridge/wire-contract.js";
 import { McpError, ErrorCode } from "../core/errors.js";
 import { warn } from "../core/log.js";
 import { LeaseRegistry } from "../dispatch/leases.js";
+import { DisruptionRegistry } from "../dispatch/disruption.js";
 import type { CategoryControl } from "../surface/category-state.js";
 import { newLockOwnerId } from "../dispatch/lock-owner.js";
 import { withoutDialogActuation } from "../editor/dialog-guard.js";
@@ -87,6 +88,11 @@ export class EditorSession {
    * and outside the server, where the pristine declaration answers.
    */
   toolGraph?: readonly ToolDef[];
+  /**
+   * The registry's consent requests, which the guarded bridge asks before a
+   * method that patches or quits this editor. Set when the session is registered.
+   */
+  disruptions?: DisruptionRegistry;
 
   constructor(
     public name: string,
@@ -177,6 +183,8 @@ export class SessionRegistry {
   categories?: CategoryControl<EditorSession>;
   /** Asset leases, shared by every MCP session dispatching through this registry. */
   readonly leases = new LeaseRegistry();
+  /** Requests to stop, restart, rebuild or patch the editor, and what every session is doing (#2075). */
+  readonly disruptions = new DisruptionRegistry();
   /** Held while a compound edit is mid-flight, so observers see one change. */
   private suppressNotify = false;
 
@@ -234,6 +242,7 @@ export class SessionRegistry {
 
     const name = this.uniqueName(input.name ?? project.projectName ?? DEFAULT_SESSION_NAME);
     const session = new EditorSession(name, key, project, this.guardsForNewSession());
+    session.disruptions = this.disruptions;
     this.byKey.set(key, session);
     if (input.makeActive || this.activeKey === null) this.activeKey = key;
     this.noteSharedPorts(session);

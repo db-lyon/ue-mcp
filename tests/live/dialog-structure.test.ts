@@ -51,7 +51,7 @@ describe("the Save Content prompt as structure (#1891)", () => {
       label: `DialogStructureProbe_${Date.now()}`,
       staticMesh: "/Engine/BasicShapes/Cube.Cube",
     }));
-    resultJson<any>(await server.call("editor", { action: "request_editor_shutdown", requireClean: false }));
+    resultJson<any>(await server.call("editor", { action: "request_editor_shutdown", requireClean: false, subagents: "none" }));
     try {
       let [dialog] = await waitForDialogs("some");
       // The package list generates its rows when Slate first paints the

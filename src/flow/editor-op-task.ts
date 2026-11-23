@@ -10,6 +10,7 @@
  */
 import { BaseTask, type TaskConstructor, type TaskResult } from "@db-lyon/flowkit";
 import type { FlowContext } from "./context.js";
+import { askConsent, consentError, withDisruptionGrant } from "../dispatch/disruption-gate.js";
 
 export type EditorOperation = "restart" | "rebuild";
 
@@ -38,15 +39,27 @@ export function editorOperationTask(op: EditorOperation): TaskConstructor {
           ? { success: false, error: new Error(`${failed.step} failed: ${failed.result}`), data: r }
           : { success: true, data: r };
       }
-      const steps: Array<{ step: string; ok: boolean }> = [];
-      for (const step of STEPS[op]) {
-        const r = await this.call(step);
-        steps.push({ step, ok: r.success });
-        if (!r.success) {
-          return { success: false, error: r.error ?? new Error(`${step} failed`), data: { op, steps } };
+      // One consent request for the whole operation, so its steps do not each ask (#2075).
+      const decision = askConsent(this.ctx.sessions?.disruptions, op, `flow task editor.${op}`);
+      if (!decision.proceed) return { success: false, error: consentError(decision), data: { op, steps: [], request: decision.request } };
+      const run = async (): Promise<TaskResult> => {
+        const steps: Array<{ step: string; ok: boolean }> = [];
+        for (const step of STEPS[op]) {
+          const r = await this.call(step);
+          steps.push({ step, ok: r.success });
+          if (!r.success) {
+            return { success: false, error: r.error ?? new Error(`${step} failed`), data: { op, steps } };
+          }
         }
+        return { success: true, data: { op, steps } };
+      };
+      const request = decision.request;
+      if (!request) return run();
+      try {
+        return await withDisruptionGrant(request.id, run);
+      } finally {
+        this.ctx.sessions?.disruptions.complete(request.id);
       }
-      return { success: true, data: { op, steps } };
     }
   } as unknown as TaskConstructor;
 }

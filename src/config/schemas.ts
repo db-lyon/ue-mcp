@@ -90,6 +90,18 @@ export const UeMcpConfigSchema = z
         ttlSeconds: z.number().int().min(1).optional(),
       })
       .optional(),
+    // Consent before a session stops, restarts, rebuilds or patches the editor
+    // others are using. `auto` (default) asks every other active session; `off`
+    // asks nobody. `idleSeconds` (default 180) is how long without a call makes
+    // a session answer go by itself; `requestTtlSeconds` (default 900) is how
+    // long a request stays open. See dispatch/disruption.ts.
+    disruption: z
+      .object({
+        mode: z.enum(["auto", "off"]).optional(),
+        idleSeconds: z.number().int().min(1).optional(),
+        requestTtlSeconds: z.number().int().min(1).optional(),
+      })
+      .optional(),
     http: z
       .object({
         enabled: z.boolean().optional(),
