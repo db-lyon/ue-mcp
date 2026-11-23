@@ -249,7 +249,7 @@ const editorSteps = [
 const editor = (async () => {
   if (!(await built)) return false;
   if (editorSteps.length === 0) return true;
-  if (!(await run("up", npm, ["run", "up"], { UE_MCP_PARAM_ECHO: "1" }))) {
+  if (!(await run("up", npm, ["run", "up"], { UE_MCP_PARAM_ECHO: "1", UE_MCP_UP_WINDOW: "offscreen" }))) {
     await run("down", node, ["scripts/stop-editor.mjs"]);
     return false;
   }
