@@ -2,7 +2,9 @@ ue-mcp:
   version: 1
   # Test editors open no IDE, whatever a case or a dialog answer asks for. start_editor
   # and restart_editor pass these; the lifecycle cases and the rebuild flow go through them.
+  # They also put no window on screen, so a test run never takes focus from the desktop.
   editor:
+    window: offscreen
     launchArgs:
       - "-ini:EditorSettings:[/Script/SourceCodeAccess.SourceCodeAccessSettings]:PreferredAccessor=NullSourceCodeAccessor"
       - "-ini:EditorSettings:[/Script/UnrealEd.EditorPerformanceSettings]:bThrottleCPUWhenNotForeground=False"

@@ -85,8 +85,14 @@ async function main() {
   // terminal holds its stdout open for its whole session, so `npm run up`
   // never returns when piped, and the editor's own logging would scribble
   // over the progress bar below. The editor writes Saved/Logs either way.
+  //
+  // UE_MCP_UP_WINDOW=offscreen passes -RenderOffScreen, so no editor window
+  // appears: the release runner sets it, because a run must never take focus
+  // from whatever the developer is doing.
+  const offscreen = process.env.UE_MCP_UP_WINDOW === 'offscreen';
+  if (offscreen) log('Window: offscreen (UE_MCP_UP_WINDOW)');
   const launchedAtMs = Date.now();
-  const proc = spawn(editorExe, [projectFile, ...TEST_EDITOR_ARGS], {
+  const proc = spawn(editorExe, [projectFile, ...TEST_EDITOR_ARGS, ...(offscreen ? ['-RenderOffScreen'] : [])], {
     stdio: 'ignore',
     detached: true,
   });
