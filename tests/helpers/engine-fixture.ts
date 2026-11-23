@@ -10,9 +10,13 @@ export function fakeEngine(root: string, version: string, buildId: string, platf
   const [major, minor] = version.split(".").map(Number);
   fs.mkdirSync(path.join(root, "Engine", "Build"), { recursive: true });
   fs.writeFileSync(path.join(root, "Engine", "Build", "Build.version"), JSON.stringify({ MajorVersion: major, MinorVersion: minor, PatchVersion: 0 }));
+  // Engine selection looks for the editor of the host OS, whatever platform the manifest is written for.
+  for (const [dir, exe] of [["Win64", "UnrealEditor.exe"], ["Linux", "UnrealEditor"], ["Mac", "UnrealEditor"]]) {
+    fs.mkdirSync(path.join(root, "Engine", "Binaries", dir), { recursive: true });
+    fs.writeFileSync(path.join(root, "Engine", "Binaries", dir, exe), "");
+  }
   const bin = path.join(root, "Engine", "Binaries", platform);
   fs.mkdirSync(bin, { recursive: true });
-  for (const exe of ["UnrealEditor.exe", "UnrealEditor"]) fs.writeFileSync(path.join(bin, exe), "");
   fs.writeFileSync(path.join(bin, "UnrealEditor.modules"), JSON.stringify({ BuildId: buildId, Modules: {} }));
   return root;
 }

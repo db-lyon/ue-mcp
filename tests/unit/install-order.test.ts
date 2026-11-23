@@ -123,7 +123,7 @@ describe("install order matrix", () => {
   });
 
   it("binaries for another engine build: init deploys source with its build owed, or fails naming both builds", async () => {
-    process.env.UE_MCP_TEST_ENGINE_ROOT = fakeEngine(path.join(fixture.root, "UE_5.6"), "5.6", "2");
+    process.env.UE_MCP_TEST_ENGINE_ROOT = fakeEngine(path.join(fixture.root, "UE_5.6"), "5.6", "2", unrealPlatform());
     const uproject = fixture.makeProject("OtherBuild");
 
     const refused = await apply(plan(choices(uproject, { install: "binary" }), NO_TOOLCHAIN));
