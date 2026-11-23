@@ -174,6 +174,7 @@
     "tests/unit/editor-target-single.test.ts": 0,
     "tests/unit/editor-target.test.ts": 0,
     "tests/unit/engine-analysis.test.ts": 0,
+    "tests/unit/engine-build-id.test.ts": 4.5,
     "tests/unit/engine-index.test.ts": 0,
     "tests/unit/engine-observer.test.ts": 0,
     "tests/unit/engine-root.test.ts": 0,

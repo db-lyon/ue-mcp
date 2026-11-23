@@ -21,6 +21,7 @@ import {
 import { binaryArchiveName, binaryManifestName } from "../../src/editor/bridge-binaries.js";
 import { readInstallMarker, unrealPlatform, writeInstallMarker } from "../../src/editor/install-marker.js";
 import { ProjectFixture } from "../helpers/project-fixture.js";
+import { fakeEngine } from "../helpers/engine-fixture.js";
 
 const tar = process.platform === "win32"
   ? path.join(process.env.SystemRoot ?? process.env.SYSTEMROOT ?? "C:\\Windows", "System32", "tar.exe")
@@ -34,6 +35,8 @@ beforeEach(() => {
   for (const k of ["HOME", "USERPROFILE"]) process.env[k] = fixture.root;
   process.env.APPDATA = path.join(fixture.root, "AppData");
   delete process.env.UE_MCP_BINARIES;
+  // The engine the fixture releases were built for, so no engine installed on this machine is read.
+  process.env.UE_MCP_TEST_ENGINE_ROOT = fakeEngine(path.join(fixture.root, "UE_5.7"), "5.7", "1");
 });
 
 afterEach(() => {

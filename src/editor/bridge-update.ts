@@ -21,13 +21,14 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { ProjectContext } from "../config/project.js";
 import { distTagForVersion, isNewer, npmPackageUrl, resolveUpdateTarget } from "../core/version-check.js";
-import { packageVersion } from "../core/package-root.js";
+import { packageRoot, packageVersion } from "../core/package-root.js";
 import {
   BRIDGE_PLUGIN_NAME,
   installKindOf,
   readInstallMarker,
   resolvePluginDir,
   unrealPlatform,
+  writeInstallMarker,
   type InstallKind,
 } from "./install-marker.js";
 import {
@@ -36,13 +37,18 @@ import {
   binaryManifestName,
   resolveBinarySource,
   stageBinaryPlugin,
+  stagingDir,
   swapIn,
+  swapInStaged,
   sweepUpdateWork,
+  writeMarkerFromTree,
   type BinaryManifest,
   type BinaryTarget,
 } from "./bridge-binaries.js";
-import { deploy } from "./deployer.js";
+import { deploy, deployPluginTree } from "./deployer.js";
 import { projectEngineVersion } from "./engine-root.js";
+import { EngineBuildMismatchError, buildIdsDiffer, pluginBuildId, projectEngineBuildId } from "./engine-build-id.js";
+import { detectToolchain } from "./install-check.js";
 import { detectMcpClients, liftsAgeGate, readUeMcpEntry, writeMcpConfig } from "../integrations/mcp-clients/mcp-client-config.js";
 import { readEnv } from "../core/env.js";
 import { ASIDE_FILE, UPDATER_FILES, treeFiles, verifyBridgeTree } from "./bridge-tree.js";
@@ -335,6 +341,46 @@ export interface ApplyOptions {
   verifyTree?: typeof verifyBridgeTree;
   /** Builds a source install; buildProject unless a test supplies another. */
   build?: BridgeBuild;
+  /** The project engine's BuildId. Unset reads it from the engine the project resolves to; null skips the check. */
+  engineBuildId?: string | null;
+  /** Whether a C++ toolchain is present, for the source fallback; detectToolchain unless a test supplies another. */
+  hasToolchain?: () => boolean;
+}
+
+/**
+ * Replace the plugin folder with this package's bridge source and record the
+ * build as owed (pending-build.ts), so the next start through ue-mcp compiles
+ * it for this engine. Used when the prebuilt binaries are for another engine
+ * build. The source is assembled beside the project and swapped in whole, so a
+ * folder a running editor holds is left as it was and the error says so.
+ */
+export function installSourceInstead(uprojectPath: string, pluginDir: string, reason: string): void {
+  const staging = stagingDir(pluginDir);
+  try {
+    deployPluginTree(path.join(packageRoot(), "plugin", "ue_mcp_bridge"), staging);
+    if (!fs.existsSync(path.join(staging, `${BRIDGE_PLUGIN_NAME}.uplugin`))) {
+      throw new Error("this ue-mcp package carries no bridge source to build");
+    }
+  } catch (e) {
+    fs.rmSync(staging, { recursive: true, force: true });
+    throw e;
+  }
+  swapIn(staging, pluginDir);
+  let engine: string | null = null;
+  try {
+    const project = new ProjectContext();
+    project.setProject(uprojectPath);
+    engine = projectEngineVersion(project);
+  } catch {
+    engine = null;
+  }
+  writeInstallMarker(pluginDir, { kind: "source", engine, platform: unrealPlatform(), version: packageVersion() });
+  recordPendingBuild(uprojectPath, packageVersion(), reason);
+}
+
+/** Why the source fallback ran, for the pending build and the result. */
+export function mismatchReason(e: EngineBuildMismatchError): string {
+  return `prebuilt binaries are for engine build ${e.binaryBuildId}, this engine is build ${e.engineBuildId}`;
 }
 
 export interface ApplyResult {
@@ -350,6 +396,11 @@ export interface ApplyResult {
   build?: Pick<BuildResult, "success" | "message" | "errors" | "resultLine">;
   /** Client configs whose pin moved to the new version. */
   repinned: string[];
+  /**
+   * Set when the prebuilt binaries were for another engine build and the
+   * bridge was installed from source instead, with its build owed to the next start.
+   */
+  sourceFallback?: { engineBuildId: string; binaryBuildId: string };
   error?: string;
 }
 
@@ -472,23 +523,44 @@ async function applyUpdateNow(uprojectPath: string, options: ApplyOptions): Prom
       const current = marker?.version ?? readDescriptorVersion(pluginDir);
       const pending = readPendingUpdate(pluginDir);
       const settled = !pending || (pending.state === "swapped" && pending.version === version);
+      const platform = marker?.platform ?? unrealPlatform();
+      const engineId = options.engineBuildId !== undefined ? options.engineBuildId : projectEngineBuildId(uprojectPath, platform);
       // Already at this version still reinstalls when the tree would not load, which is how a broken install is repaired.
+      // Modules built for another engine build would not load either (#2072).
       const loads = () => verify(pluginDir, {
-        version, platform: marker?.platform ?? unrealPlatform(), asideFiles: pending?.oldFiles ?? [], checkMarker: !!marker,
-      }).length === 0;
+        version, platform, asideFiles: pending?.oldFiles ?? [], checkMarker: !!marker,
+      }).length === 0 && !buildIdsDiffer(engineId, pluginBuildId(pluginDir, platform));
       if (current === version && settled && loads()) {
         result.state = "unchanged";
       } else {
         // The project's engine first: a project moved to a new engine needs binaries for that one, not the marker's.
         const engine = projectEngine(uprojectPath) ?? marker?.engine ?? null;
         if (!engine) throw new Error("cannot tell which engine the binaries are for");
-        const t: BinaryTarget = { version, engine, platform: marker?.platform ?? unrealPlatform() };
-        const staged = await stageBinaryPlugin(pluginDir, t, resolveBinarySource(t, options.binaries));
+        const t: BinaryTarget = { version, engine, platform, engineBuildId: engineId };
+        let staged: Awaited<ReturnType<typeof stageBinaryPlugin>>;
+        try {
+          staged = await stageBinaryPlugin(pluginDir, t, resolveBinarySource(t, options.binaries));
+        } catch (e) {
+          if (!(e instanceof EngineBuildMismatchError)) throw e;
+          // A source build compiles the bridge for this engine. Without a toolchain the error says what to do.
+          const toolchain = (options.hasToolchain ?? (() => detectToolchain().present))();
+          if (!toolchain || version !== packageVersion()) throw e;
+          installSourceInstead(uprojectPath, pluginDir, mismatchReason(e));
+          result.kind = "source";
+          result.state = "rebuild";
+          result.sourceFallback = { engineBuildId: e.engineBuildId, binaryBuildId: e.binaryBuildId };
+          result.repinned = repinClientConfigs(uprojectPath, version);
+          emit("update.applied", { version, kind: "source", state: result.state, repinned: result.repinned, sourceFallback: result.sourceFallback });
+          result.ok = true;
+          return result;
+        }
         const expect = (asideFiles: string[]) => verify(pluginDir, { version, platform: t.platform, files: staged.files, asideFiles });
         if (!options.editorRunning) {
-          swapIn(staged.staging, pluginDir, { verify: () => expect([]) });
+          swapInStaged(staged, pluginDir, t, (files) => verify(pluginDir, { version, platform: t.platform, files, asideFiles: [], checkMarker: false }));
           result.state = "applied";
         } else if ((options.platform ?? process.platform) === "win32") {
+          // Files move one by one here, so the marker travels in the tree, written from the staged descriptor.
+          writeMarkerFromTree(staged.staging, t);
           // Aside files an earlier swap left, still mapped by the running editor, stay tracked for cleanup.
           const earlier = (pending?.state === "swapped" ? pending.oldFiles : []).filter((f) => fs.existsSync(f));
           // Files the new release dropped, the retired Python bridge's among them (#1273), go aside with the rest.
@@ -496,6 +568,7 @@ async function applyUpdateNow(uprojectPath: string, options: ApplyOptions): Prom
           writePendingUpdate(pluginDir, { version, state: "swapped", oldFiles: [...earlier, ...oldFiles], at: new Date().toISOString() });
           result.state = "applied";
         } else {
+          writeMarkerFromTree(staged.staging, t);
           if (pending?.state === "staged" && pending.staging) fs.rmSync(pending.staging, { recursive: true, force: true });
           writePendingUpdate(pluginDir, { version, state: "staged", staging: staged.staging, oldFiles: [], at: new Date().toISOString() });
           result.state = "staged";
@@ -542,7 +615,7 @@ export interface LaunchPreparation {
  */
 export async function prepareBridgeForLaunch(
   uprojectPath: string,
-  options: Pick<ApplyOptions, "binaries" | "verifyTree" | "build"> = {},
+  options: Pick<ApplyOptions, "binaries" | "verifyTree" | "build" | "engineBuildId" | "hasToolchain"> = {},
 ): Promise<LaunchPreparation> {
   const projectDir = path.dirname(path.resolve(uprojectPath));
   const located = resolvePluginDir(projectDir);
@@ -577,15 +650,29 @@ export async function prepareBridgeForLaunch(
   const verify = options.verifyTree ?? verifyBridgeTree;
   const marker = readInstallMarker(pluginDir);
   const version = marker?.version ?? readDescriptorVersion(pluginDir);
+  const platform = marker?.platform ?? unrealPlatform();
   const problems = verify(pluginDir, {
     version: version ?? "",
-    platform: marker?.platform ?? unrealPlatform(),
+    platform,
     asideFiles: readPendingUpdate(pluginDir)?.oldFiles ?? [],
     checkMarker: !!marker,
   });
+  const engineId = options.engineBuildId !== undefined ? options.engineBuildId : projectEngineBuildId(uprojectPath, platform);
+  const builtFor = pluginBuildId(pluginDir, platform);
+  if (buildIdsDiffer(engineId, builtFor)) {
+    problems.push(`its modules were built for engine build ${builtFor} and this engine is build ${engineId}`);
+  }
   if (problems.length === 0) return { ok: true };
   if (!version) return { ok: false, message: `the bridge in ${pluginDir} would not load (${problems.join("; ")}) and names no version to reinstall` };
-  const repaired = await applyUpdate(uprojectPath, { version, editorRunning: false, binaries: options.binaries, verifyTree: options.verifyTree });
+  const repaired = await applyUpdate(uprojectPath, {
+    version, editorRunning: false, binaries: options.binaries, verifyTree: options.verifyTree,
+    engineBuildId: engineId, hasToolchain: options.hasToolchain,
+  });
+  if (repaired.ok && repaired.sourceFallback) {
+    // Reinstalled as source with its build owed; build it now, before the editor opens.
+    const built = await prepareBridgeForLaunch(uprojectPath, options);
+    return { ...built, repaired: problems };
+  }
   if (!repaired.ok) {
     return {
       ok: false,

@@ -15,6 +15,8 @@ import type { ContextStrategy } from "../config/context-strategy.js";
 import { deploy } from "../editor/deployer.js";
 import { projectEngineVersion } from "../editor/engine-root.js";
 import { installBinaryPlugin, resolveBinarySource, describeBinarySource } from "../editor/bridge-binaries.js";
+import { installSourceInstead, mismatchReason } from "../editor/bridge-update.js";
+import { EngineBuildMismatchError, projectEngineBuildId } from "../editor/engine-build-id.js";
 import {
   defaultPluginDir,
   installKindOf,
@@ -648,15 +650,30 @@ export async function apply(p: InitPlan): Promise<InitResult> {
 
   try {
     // 1. The plugin tree.
+    let fellBack = false;
     if (p.install.kind === "binary" && p.install.writes) {
       const engine = p.project.engine!;
-      const target = { version: p.version, engine, platform: unrealPlatform() };
-      const installed = await installBinaryPlugin(p.install.pluginDir, target, resolveBinarySource(target, p.install.binarySource));
-      steps.push({ id: "plugin", status: "changed", target: installed.pluginDir, detail: `installed prebuilt binaries from ${installed.from}` });
+      const platform = unrealPlatform();
+      const target = { version: p.version, engine, platform, engineBuildId: projectEngineBuildId(uproject, platform) };
+      try {
+        const installed = await installBinaryPlugin(p.install.pluginDir, target, resolveBinarySource(target, p.install.binarySource));
+        steps.push({ id: "plugin", status: "changed", target: installed.pluginDir, detail: `installed prebuilt binaries from ${installed.from}` });
+      } catch (e) {
+        // Binaries for another build of this engine would never load; build from source when this machine can (#2072).
+        if (!(e instanceof EngineBuildMismatchError) || !p.install.toolchain.present) throw e;
+        installSourceInstead(uproject, p.install.pluginDir, mismatchReason(e));
+        fellBack = true;
+        steps.push({
+          id: "plugin",
+          status: "changed",
+          target: p.install.pluginDir,
+          detail: `deployed bridge plugin source, because the prebuilt binaries are for engine build ${e.binaryBuildId} and this engine is build ${e.engineBuildId}; the next editor start through ue-mcp builds it`,
+        });
+      }
     }
     const deployed = deploy(project);
     if (deployed.error) throw new Error(`plugin deployment failed: ${deployed.error}`);
-    if (p.install.kind === "source") {
+    if (p.install.kind === "source" && !fellBack) {
       steps.push({
         id: "plugin",
         status: deployed.cppPluginDeployed ? "changed" : "unchanged",
