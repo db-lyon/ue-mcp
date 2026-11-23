@@ -4,7 +4,8 @@
  * built on one preview or hotfix asks to rebuild on every launch of another.
  * The install refuses it, falls back to a source build where a toolchain
  * exists, swaps whole folders so a failure leaves the old tree, writes the
- * marker last from the tree on disk.
+ * marker last from the tree on disk, and the install check reports a tree that
+ * would not load as bridge_engine_mismatch with a rebuild action.
  */
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import * as fs from "node:fs";
@@ -14,13 +15,15 @@ import {
   EngineBuildMismatchError,
   buildIdsDiffer,
   engineBuildId,
+  inspectEngineMatch,
   pluginBuildId,
   projectEngineBuildId,
   readBuildId,
 } from "../../src/editor/engine-build-id.js";
 import { installBinaryPlugin, stageBinaryPlugin, swapInStaged, writeMarkerFromTree } from "../../src/editor/bridge-binaries.js";
-import { applyUpdate, prepareBridgeForLaunch } from "../../src/editor/bridge-update.js";
-import { readInstallMarker } from "../../src/editor/install-marker.js";
+import { applyUpdate, prepareBridgeForLaunch, sourceForMismatchedBinary } from "../../src/editor/bridge-update.js";
+import { readInstallMarker, writeInstallMarker } from "../../src/editor/install-marker.js";
+import { inspectInstall } from "../../src/editor/install-check.js";
 import { readPendingBuild } from "../../src/editor/pending-build.js";
 import { packageVersion } from "../../src/core/package-root.js";
 import { ProjectFixture } from "../helpers/project-fixture.js";
@@ -166,6 +169,17 @@ describe("a binary install for another engine build", () => {
     expect(readInstallMarker(pluginDir)?.kind).toBe("source");
     expect(readPendingBuild(uproject)).toBeNull();
   });
+
+  it("is replaced by source ahead of a project build, the rebuild the problem offers", async () => {
+    const { uproject, pluginDir } = await binaryProject("1.0.0", OTHER_BUILD);
+    expect(sourceForMismatchedBinary(uproject, { hasToolchain: () => false })).toMatchObject({ switched: false, error: /toolchain/ });
+    expect(readInstallMarker(pluginDir)?.kind).toBe("binary");
+
+    const switched = sourceForMismatchedBinary(uproject, { hasToolchain: () => true });
+    expect(switched.switched).toBe(true);
+    expect(readInstallMarker(pluginDir)?.kind).toBe("source");
+    expect(sourceForMismatchedBinary(uproject, { hasToolchain: () => true }).switched).toBe(false);
+  });
 });
 
 describe("atomic install", () => {
@@ -229,3 +243,49 @@ describe("atomic install", () => {
   }, 60_000);
 });
 
+describe("bridge_engine_mismatch", () => {
+  const studioManifest = (projectDir: string, buildId: string): void => {
+    const studio = path.join(projectDir, "Plugins", "UE_MCP_Studio");
+    fs.mkdirSync(path.join(studio, "Binaries", "Win64"), { recursive: true });
+    fs.writeFileSync(path.join(studio, "UE_MCP_Studio.uplugin"), JSON.stringify({ VersionName: "1" }));
+    fs.writeFileSync(path.join(studio, "Binaries", "Win64", "UnrealEditor.modules"), JSON.stringify({ BuildId: buildId, Modules: {} }));
+  };
+
+  it("names nothing for a sound tree", async () => {
+    const { pluginDir } = await binaryProject("1.0.0", ENGINE_BUILD);
+    expect(inspectEngineMatch({ engineBuildId: ENGINE_BUILD, bridgeDir: pluginDir, platform: "Win64", markerVersion: "1.0.0", descriptorVersion: "1.0.0" })).toBeNull();
+  });
+
+  it("reports the bridge, Studio, manifests that disagree and a marker for another release", async () => {
+    const { uproject, pluginDir } = await binaryProject("1.0.0", OTHER_BUILD);
+    const projectDir = path.dirname(uproject);
+    studioManifest(projectDir, "999");
+    const m = inspectEngineMatch({
+      engineBuildId: ENGINE_BUILD,
+      bridgeDir: pluginDir,
+      studioDir: path.join(projectDir, "Plugins", "UE_MCP_Studio"),
+      platform: "Win64",
+      markerVersion: "1.4.16-beta.1",
+      descriptorVersion: "1.4.14",
+    });
+    expect(m).toMatchObject({ engineBuildId: ENGINE_BUILD, bridgeBuildId: OTHER_BUILD, studioBuildId: "999", manifestBuildIds: [OTHER_BUILD, "999"].sort() });
+    expect(m?.reasons).toHaveLength(4);
+    expect(m?.reasons.join(" ")).toMatch(/install marker says 1\.4\.16-beta\.1 and its descriptor is 1\.4\.14/);
+  });
+
+  it("is reported by the install check with both BuildIds and a rebuild action", async () => {
+    const { uproject } = await binaryProject("1.0.0", OTHER_BUILD);
+    const report = inspectInstall(uproject, { skipToolchain: true });
+    const problem = report.problems.find((p) => p.code === "bridge_engine_mismatch");
+    expect(problem).toMatchObject({ action: "rebuild", engineMismatch: { engineBuildId: ENGINE_BUILD, bridgeBuildId: OTHER_BUILD } });
+    expect(problem?.what).toMatch(new RegExp(`${OTHER_BUILD}.*${ENGINE_BUILD}`));
+    expect(problem?.fix).toMatch(/project\(action='build'\)/);
+  });
+
+  it("is reported for a marker that names another release than the tree holds", async () => {
+    const { uproject, pluginDir } = await binaryProject("1.0.0", ENGINE_BUILD);
+    writeInstallMarker(pluginDir, { kind: "binary", engine: "5.9", platform: "Win64", version: "1.4.16-beta.1" });
+    const problem = inspectInstall(uproject, { skipToolchain: true }).problems.find((p) => p.code === "bridge_engine_mismatch");
+    expect(problem?.engineMismatch).toMatchObject({ markerVersion: "1.4.16-beta.1", descriptorVersion: "1.0.0" });
+  });
+});

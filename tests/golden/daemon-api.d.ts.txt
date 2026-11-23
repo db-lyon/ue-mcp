@@ -12,7 +12,7 @@ export declare function apiVersionsOverlap(a: ApiVersionRange, b: ApiVersionRang
 export declare const DAEMON_API_RANGE: ApiVersionRange;
 export declare const EXTENSION_API_RANGE: ApiVersionRange;
 export declare function extensionApiSupported(min: number, max: number): boolean;
-export declare const DAEMON_FEATURES: readonly ["checkpoints", "checkpoints.assetDiff", "skills", "context.projection", "actions.effects", "install.pendingBuild", "editor.rebuild", "ui.scopedKeys", "ui.extensions", "flows.stepApproval", "sessions.access", "journal", "tools.categories", "leases", "dialogs.native", "events.pie"];
+export declare const DAEMON_FEATURES: readonly ["checkpoints", "checkpoints.assetDiff", "skills", "context.projection", "actions.effects", "install.pendingBuild", "editor.rebuild", "ui.scopedKeys", "ui.extensions", "flows.stepApproval", "sessions.access", "journal", "tools.categories", "leases", "dialogs.native", "events.pie", "install.engineMismatch"];
 export type DaemonFeature = (typeof DAEMON_FEATURES)[number];
 export declare const DAEMON_FEATURES_BEYOND_ROUTES: {
     readonly [F in DaemonFeature]?: string;
@@ -642,9 +642,20 @@ export interface EngineStatus {
     buildTool: string | null;
 }
 export interface InstallProblem {
-    code: "no_engine" | "no_toolchain" | "bridge_not_deployed" | "bridge_not_enabled" | "bridge_never_compiled" | "bridge_build_stale" | "bridge_version_mismatch";
+    code: "no_engine" | "no_toolchain" | "bridge_not_deployed" | "bridge_not_enabled" | "bridge_never_compiled" | "bridge_build_stale" | "bridge_version_mismatch" | "bridge_engine_mismatch";
     what: string;
     fix: string;
+    action?: "rebuild";
+    engineMismatch?: EngineMismatch;
+}
+export interface EngineMismatch {
+    engineBuildId: string | null;
+    bridgeBuildId: string | null;
+    studioBuildId: string | null;
+    manifestBuildIds: string[];
+    markerVersion: string | null;
+    descriptorVersion: string | null;
+    reasons: string[];
 }
 export interface ClientStatus {
     id: string;

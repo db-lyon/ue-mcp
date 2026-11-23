@@ -47,7 +47,7 @@ import {
 } from "./bridge-binaries.js";
 import { deploy, deployPluginTree } from "./deployer.js";
 import { projectEngineVersion } from "./engine-root.js";
-import { EngineBuildMismatchError, buildIdsDiffer, pluginBuildId, projectEngineBuildId } from "./engine-build-id.js";
+import { EngineBuildMismatchError, buildIdsDiffer, inspectEngineMatch, pluginBuildId, projectEngineBuildId } from "./engine-build-id.js";
 import { detectToolchain } from "./install-check.js";
 import { detectMcpClients, liftsAgeGate, readUeMcpEntry, writeMcpConfig } from "../integrations/mcp-clients/mcp-client-config.js";
 import { readEnv } from "../core/env.js";
@@ -376,6 +376,50 @@ export function installSourceInstead(uprojectPath: string, pluginDir: string, re
   }
   writeInstallMarker(pluginDir, { kind: "source", engine, platform: unrealPlatform(), version: packageVersion() });
   recordPendingBuild(uprojectPath, packageVersion(), reason);
+}
+
+export interface SourceSwitch {
+  /** True when the binary bridge was replaced by source for the build to compile. */
+  switched: boolean;
+  /** What was wrong with the binary bridge, when anything was. */
+  reasons?: string[];
+  /** Why it was not switched although something was wrong. */
+  error?: string;
+}
+
+/**
+ * Before a project build: a binary bridge that would not load in this engine
+ * (modules for another engine build, manifests that disagree, a marker naming
+ * another release) is replaced by this package's source, so the build that
+ * follows compiles the bridge for this engine. This is what the rebuild a
+ * bridge_engine_mismatch problem offers does for a binary install. Needs a
+ * C++ toolchain and the editor stopped. Never throws.
+ */
+export function sourceForMismatchedBinary(
+  uprojectPath: string,
+  opts: Pick<ApplyOptions, "engineBuildId" | "hasToolchain"> = {},
+): SourceSwitch {
+  try {
+    const located = resolvePluginDir(path.dirname(path.resolve(uprojectPath)));
+    if (!located || installKindOf(located.dir) !== "binary") return { switched: false };
+    const marker = readInstallMarker(located.dir);
+    const platform = marker?.platform ?? unrealPlatform();
+    const mismatch = inspectEngineMatch({
+      engineBuildId: opts.engineBuildId !== undefined ? opts.engineBuildId : projectEngineBuildId(uprojectPath, platform),
+      bridgeDir: located.dir,
+      platform,
+      markerVersion: marker?.version ?? null,
+      descriptorVersion: readDescriptorVersion(located.dir),
+    });
+    if (!mismatch) return { switched: false };
+    if (!(opts.hasToolchain ?? (() => detectToolchain().present))()) {
+      return { switched: false, reasons: mismatch.reasons, error: "no C++ toolchain on this machine, so the bridge cannot be built from source here" };
+    }
+    installSourceInstead(uprojectPath, located.dir, mismatch.reasons.join(" "));
+    return { switched: true, reasons: mismatch.reasons };
+  } catch (e) {
+    return { switched: false, error: e instanceof Error ? e.message : String(e) };
+  }
 }
 
 /** Why the source fallback ran, for the pending build and the result. */

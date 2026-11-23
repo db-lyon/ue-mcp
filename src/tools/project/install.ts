@@ -1,6 +1,8 @@
 // @session per-session: Every category tool is cloned per session and dispatches against the addressed editor.
 import { buildProject } from "../../editor/editor-build.js";
 import { inspectInstall } from "../../editor/install-check.js";
+import { sourceForMismatchedBinary } from "../../editor/bridge-update.js";
+import { clearPendingBuild } from "../../editor/pending-build.js";
 import { specBp } from "../specs/project.generated.js";
 import type { ToolContext, ActionSpec, HandlerActionSpec } from "../../surface/tool-types.js";
 
@@ -21,17 +23,21 @@ export const buildProjectAction: HandlerActionSpec = {
     },
   },
   description:
-    "Build the project's C++ out of process with UnrealBuildTool. Works with the editor STOPPED, which a full rebuild requires (UBT cannot link while an editor holds the module DLLs). Blocks until the build finishes and returns the compiler output. A link that fails because another process holds an output open names the file and the holder under lockedOutputs, with the remedy in the message. (#958)",
+    "Build the project's C++ out of process with UnrealBuildTool. Works with the editor STOPPED, which a full rebuild requires (UBT cannot link while an editor holds the module DLLs). Blocks until the build finishes and returns the compiler output. A link that fails because another process holds an output open names the file and the holder under lockedOutputs, with the remedy in the message. (#958) A prebuilt bridge built for another engine build, or a bridge folder mixing releases, is first replaced by source so the build compiles it for this engine, reported under bridgeSource; that needs a C++ toolchain. (#2072)",
   handler: async (ctx, p) => {
     ctx.project.ensureLoaded();
+    const uproject = ctx.project.projectPath!;
+    // A binary bridge built for another engine build cannot be rebuilt as it is; source takes its place (#2072).
+    const bridgeSource = sourceForMismatchedBinary(uproject);
     const lines: string[] = [];
-    const result = await buildProject(ctx.project.projectPath!, {
+    const result = await buildProject(uproject, {
       onOutput: (text) => lines.push(text),
       configuration: p.configuration as string | undefined,
       platform: p.platform as string | undefined,
       clean: p.clean as boolean | undefined,
     });
-    return { ...result, output: lines.join("") };
+    if (bridgeSource.switched && result.success) clearPendingBuild(uproject);
+    return { ...result, output: lines.join(""), ...(bridgeSource.reasons ? { bridgeSource } : {}) };
   },
 };
 

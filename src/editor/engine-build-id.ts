@@ -76,6 +76,71 @@ export function buildIdsDiffer(engine: string | null | undefined, plugin: string
   return !!engine && !!plugin && engine !== plugin;
 }
 
+/** What the `bridge_engine_mismatch` problem reports, so a caller can show the builds without parsing prose. */
+export interface EngineMismatch {
+  /** The engine's BuildId, or null when it could not be read. */
+  engineBuildId: string | null;
+  /** The BuildId in the bridge's Binaries/<Platform>/UnrealEditor.modules. */
+  bridgeBuildId: string | null;
+  /** The same for the project's UE_MCP_Studio plugin, or null when it has none. */
+  studioBuildId: string | null;
+  /** Every distinct BuildId the bridge and Studio module manifests name, sorted. */
+  manifestBuildIds: string[];
+  /** The version the bridge's install marker claims, and the VersionName its descriptor has. */
+  markerVersion: string | null;
+  descriptorVersion: string | null;
+  /** One sentence per thing found wrong. */
+  reasons: string[];
+}
+
+export interface EngineMatchInput {
+  engineBuildId: string | null;
+  bridgeDir: string;
+  /** The project's UE_MCP_Studio plugin directory, when it has one. Only its manifests are read. */
+  studioDir?: string | null;
+  platform: string;
+  markerVersion: string | null;
+  descriptorVersion: string | null;
+}
+
+/**
+ * Whether the bridge (and the project's Studio plugin, when present) is built
+ * for the engine it will load in, as one tree from one release. Null when
+ * nothing is wrong. Reads files only and never throws.
+ */
+export function inspectEngineMatch(input: EngineMatchInput): EngineMismatch | null {
+  const { engineBuildId: engine, platform } = input;
+  const bridgeManifests = pluginManifestBuildIds(input.bridgeDir, platform);
+  const studioManifests = input.studioDir ? pluginManifestBuildIds(input.studioDir, platform) : [];
+  const bridge = pluginBuildId(input.bridgeDir, platform);
+  const studio = input.studioDir ? pluginBuildId(input.studioDir, platform) : null;
+  const manifestBuildIds = [...new Set([...bridgeManifests, ...studioManifests].map((m) => m.buildId).filter((b): b is string => !!b))].sort();
+
+  const reasons: string[] = [];
+  if (buildIdsDiffer(engine, bridge)) {
+    reasons.push(`The bridge's modules are built for engine build ${bridge} and the engine is build ${engine}, so Unreal skips them and asks to rebuild.`);
+  }
+  if (buildIdsDiffer(engine, studio)) {
+    reasons.push(`UE_MCP_Studio's modules are built for engine build ${studio} and the engine is build ${engine}.`);
+  }
+  if (manifestBuildIds.length > 1) {
+    reasons.push(`The plugin module manifests disagree on BuildId (${manifestBuildIds.join(", ")}), so the plugin folders hold modules from more than one build.`);
+  }
+  if (input.markerVersion && input.descriptorVersion && input.markerVersion !== input.descriptorVersion) {
+    reasons.push(`The bridge's install marker says ${input.markerVersion} and its descriptor is ${input.descriptorVersion}, so the folder holds files from another release.`);
+  }
+  if (reasons.length === 0) return null;
+  return {
+    engineBuildId: engine,
+    bridgeBuildId: bridge,
+    studioBuildId: studio,
+    manifestBuildIds,
+    markerVersion: input.markerVersion,
+    descriptorVersion: input.descriptorVersion,
+    reasons,
+  };
+}
+
 /**
  * Prebuilt binaries built for another build of the same engine version. Carries
  * both BuildIds so a caller can fall back to a source build or say which engine
