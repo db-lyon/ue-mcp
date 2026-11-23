@@ -348,7 +348,7 @@ export function sweepUpdateWork(pluginDir: string, keep: string[] = []): void {
     const full = path.join(updateDir, name);
     if (kept.has(full.toLowerCase())) continue;
     // Another process staging right now is left alone; a tree retired by anyone goes.
-    const staging = /^staging-(d+)-/.exec(name);
+    const staging = /^staging-(\d+)-/.exec(name);
     if (staging && Number(staging[1]) !== process.pid && isPidAlive(Number(staging[1]))) continue;
     removeQuietly(full);
   }
