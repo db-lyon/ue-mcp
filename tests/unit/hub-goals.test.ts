@@ -76,7 +76,7 @@ describe("the goal store on this computer", () => {
     const g = goals();
     expect(g.list().map((x) => x.id)).toEqual(["ok"]);
     expect(g.warnings().join("\n")).toMatch(/goals\/bad\.json was not read/);
-    expect(g.warnings().join("\n")).toMatch(/newer Studio/);
+    expect(g.warnings().join("\n")).toMatch(/newer ue-mcp/);
   });
 });
 
@@ -295,7 +295,7 @@ describe("export and import", () => {
     const other = goals(path.join(root, "other"));
     expect(() => other.importAll(broken)).toThrow(/nothing was imported: goal two/);
     expect(other.list()).toEqual([]);
-    expect(() => other.importAll({ format: "x" })).toThrow(/not a goals file/);
-    expect(() => other.importAll({ ...file, schema: 2 })).toThrow(/newer Studio/);
+    expect(() => other.importAll({ format: "x" })).toThrow(/not an exported goals file/);
+    expect(() => other.importAll({ ...file, schema: 2 })).toThrow(/newer ue-mcp/);
   });
 });

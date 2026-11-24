@@ -37,7 +37,7 @@ const fileName = (id: string): string => `${encodeURIComponent(id)}.json`;
 function envelopeOf(v: unknown, type: HubRecordType, id: string): AnyHubRecord | string {
   if (!v || typeof v !== "object" || Array.isArray(v)) return "it is not a JSON object";
   const r = v as Partial<HubRecord>;
-  if (typeof r.schema === "number" && r.schema > HUB_SCHEMA) return `it was written by a newer Studio (schema ${r.schema})`;
+  if (typeof r.schema === "number" && r.schema > HUB_SCHEMA) return `it was written by a newer ue-mcp (schema ${r.schema})`;
   if (r.schema !== HUB_SCHEMA || r.type !== type || r.id !== id) return "it is not this folder's record";
   if (!Number.isInteger(r.rev) || (r.rev as number) < 1 || typeof r.at !== "string" || typeof r.origin !== "string") return "it has no version";
   if (r.deleted !== true && (!r.data || typeof r.data !== "object")) return "it has no data";

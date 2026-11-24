@@ -317,7 +317,7 @@ describe("PlanQueue", () => {
     stored.queued = [];
     fs.writeFileSync(file, JSON.stringify(stored));
     const q3 = make();
-    expect(q3.state().current!.items[0]).toMatchObject({ state: "queued", runId: null, reason: "queued again after Studio restarted" });
+    expect(q3.state().current!.items[0]).toMatchObject({ state: "queued", runId: null, reason: "queued again after the hub restarted" });
   });
 
   it("reads a plan an earlier Studio saved, with its schedules and manualSteps, as a person's plan", () => {

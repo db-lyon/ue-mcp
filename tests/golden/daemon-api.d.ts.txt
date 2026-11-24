@@ -2050,7 +2050,7 @@ export interface HubRecord<T extends HubRecordType = HubRecordType> {
 export type AnyHubRecord = {
     [T in HubRecordType]: HubRecord<T>;
 }[HubRecordType];
-export declare const HUB_EXPORT_FORMAT = "ue-mcp-studio.goals";
+export declare const HUB_EXPORT_FORMAT = "ue-mcp.goals";
 export interface HubExport {
     format: typeof HUB_EXPORT_FORMAT;
     schema: typeof HUB_SCHEMA;

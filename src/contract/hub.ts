@@ -959,7 +959,8 @@ export interface HubRecord<T extends HubRecordType = HubRecordType> {
 /** Any record, its data typed by its type. */
 export type AnyHubRecord = { [T in HubRecordType]: HubRecord<T> }[HubRecordType];
 
-export const HUB_EXPORT_FORMAT = "ue-mcp-studio.goals";
+/** The format a goals file names, so an import knows it for one. */
+export const HUB_EXPORT_FORMAT = "ue-mcp.goals";
 
 /**
  * GET /hub/store: the whole goal store as one file, to move it to another

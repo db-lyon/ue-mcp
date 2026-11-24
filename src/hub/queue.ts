@@ -152,7 +152,7 @@ export class PlanQueue {
         if (!live(item)) return;
         const run = item.runId ? this.o.runner.run(item.runId) : undefined;
         if (!run) {
-          Object.assign(item, { state: "queued", runId: null, startedAt: null, reason: "queued again after Studio restarted" });
+          Object.assign(item, { state: "queued", runId: null, startedAt: null, reason: "queued again after the hub restarted" });
           return;
         }
         this.lease.take({ purpose: purposeOf(cur, item), planRunId: cur.id, item: at, work: workOf(cur), runId: item.runId, sessionId: item.sessionId ?? null, pie: run.pieStarted === true, ...(item.startedAt ? { since: item.startedAt } : {}) });

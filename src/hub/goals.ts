@@ -110,7 +110,7 @@ export interface ReadGoal {
  */
 export function readGoal(raw: unknown, id: string): ReadGoal | { problem: string } {
   if (!isObject(raw)) return { problem: "it is not a JSON object" };
-  if (typeof raw.schema === "number" && raw.schema > HUB_SCHEMA) return { problem: `it was written by a newer Studio (schema ${raw.schema})` };
+  if (typeof raw.schema === "number" && raw.schema > HUB_SCHEMA) return { problem: `it was written by a newer ue-mcp (schema ${raw.schema})` };
   if (raw.id !== undefined && raw.id !== id) return { problem: `its id "${String(raw.id)}" is not ${id}` };
   const title = str(raw.title, MAX_TITLE);
   if (!title) return { problem: "it has no title" };
@@ -219,7 +219,7 @@ function recordDataOf(r: AnyHubRecord): AnyHubRecord | string {
 function importedRecordOf(v: unknown): AnyHubRecord | string {
   if (!isObject(v)) return "it is not a JSON object";
   if (!EXPORTED.includes(v.type as HubRecordType)) return `its type is one of ${EXPORTED.join(", ")}`;
-  if (v.schema !== HUB_SCHEMA) return typeof v.schema === "number" && v.schema > HUB_SCHEMA ? "it was written by a newer Studio" : `its schema is ${HUB_SCHEMA}`;
+  if (v.schema !== HUB_SCHEMA) return typeof v.schema === "number" && v.schema > HUB_SCHEMA ? "it was written by a newer ue-mcp" : `its schema is ${HUB_SCHEMA}`;
   if (typeof v.id !== "string" || !v.id) return "it has no id";
   if (!Number.isInteger(v.rev) || (v.rev as number) < 1 || typeof v.at !== "string" || typeof v.origin !== "string" || !v.origin) return "it has no rev, at and origin";
   if (v.deleted !== undefined) return "an export holds no removed records";
@@ -640,8 +640,8 @@ export class Goals {
    * is reported. A file with any record that does not read changes nothing.
    */
   importAll(body: unknown): HubImportReport {
-    if (!isObject(body) || body.format !== HUB_EXPORT_FORMAT) throw bad(`this is not a goals file exported from Studio (format ${HUB_EXPORT_FORMAT})`);
-    if (body.schema !== HUB_SCHEMA) throw bad(typeof body.schema === "number" && body.schema > HUB_SCHEMA ? "the file was exported by a newer Studio" : `the file's schema is not ${HUB_SCHEMA}`);
+    if (!isObject(body) || body.format !== HUB_EXPORT_FORMAT) throw bad(`this is not an exported goals file (format ${HUB_EXPORT_FORMAT})`);
+    if (body.schema !== HUB_SCHEMA) throw bad(typeof body.schema === "number" && body.schema > HUB_SCHEMA ? "the file was exported by a newer ue-mcp" : `the file's schema is not ${HUB_SCHEMA}`);
     if (!Array.isArray(body.records)) throw bad("the file has no records list");
     const records: AnyHubRecord[] = [];
     const problems: string[] = [];
