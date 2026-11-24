@@ -284,6 +284,62 @@ describe("PlanQueue", () => {
     await expect(q.cancel("nope")).rejects.toMatchObject({ status: 404 });
   });
 
+  describe("a person's Run", () => {
+    it("starts at once on an idle queue", () => {
+      const q = make();
+      const p = plan(["/Game/A"]);
+      expect(q.add(p, { person: true })).toEqual({ state: "started", position: 0, ahead: 0 });
+      expect(starts).toEqual(["/Game/A"]);
+    });
+
+    it("resumes a paused queue and starts ahead of what waited behind the pause", async () => {
+      const q = make();
+      q.setPaused(true);
+      const old = q.enqueue(plan(["/Game/Old"]));
+      const mine = plan(["/Game/Mine"]);
+      expect(q.add(mine, { person: true })).toEqual({ state: "started", position: 0, ahead: 0, resumed: true });
+      expect(q.state()).toMatchObject({ paused: false, pausedBy: null });
+      expect(q.state().current!.id).toBe(mine.id);
+      expect(q.state().queued.map((x) => x.id)).toEqual([old.id]);
+      expect(starts).toEqual(["/Game/Mine"]);
+    });
+
+    it("resumes a queue Release the editor paused, the plan it left half done waiting behind", async () => {
+      const q = make();
+      const half = q.enqueue(plan(["/Game/A", "/Game/B"]));
+      await settle();
+      await q.release();
+      const mine = plan(["/Game/Mine"]);
+      expect(q.add(mine, { person: true })).toMatchObject({ state: "started", resumed: true });
+      expect(q.state().queued.map((x) => x.id)).toEqual([half.id]);
+      expect(q.state().queued[0].state).toBe("queued");
+    });
+
+    it("queues behind a running plan and says where", async () => {
+      const q = make();
+      q.enqueue(plan(["/Game/A"]));
+      q.enqueue(plan(["/Game/B"]));
+      await settle();
+      expect(q.add(plan(["/Game/C"]), { person: true })).toEqual({ state: "queued", position: 2, ahead: 2 });
+      expect(q.add(plan(["/Game/D"]), { person: true, next: true })).toEqual({ state: "queued", position: 1, ahead: 1 });
+    });
+
+    it("says why it waits when the editor is not free", () => {
+      busy = "Another MCP client is using the editor";
+      const q = make();
+      expect(q.add(plan(["/Game/A"]), { person: true })).toEqual({ state: "waiting", position: 1, ahead: 0, reason: "Another MCP client is using the editor" });
+      expect(starts).toEqual([]);
+    });
+
+    it("an agent's plan respects the pause", () => {
+      const q = make();
+      q.setPaused(true);
+      expect(q.add({ ...plan(["/Game/A"]), trigger: "agent" })).toEqual({ state: "queued", position: 1, ahead: 0, reason: "the queue is paused" });
+      expect(q.state().paused).toBe(true);
+      expect(starts).toEqual([]);
+    });
+  });
+
   it("an editor that goes away mid-run queues the item again", async () => {
     const q = make();
     q.enqueue(plan(["/Game/A"]));

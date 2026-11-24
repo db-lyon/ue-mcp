@@ -1074,6 +1074,33 @@ export interface PlanRequest {
   title?: string;
   scope: PlanScope;
   options?: Partial<PlanOptions>;
+  /** Run next: ahead of every other queued plan, behind only the one on the editor. */
+  next?: boolean;
+}
+
+/**
+ * Where a person's Run put its plan (POST /hub/plans, POST
+ * /hub/checks/:checkId/run), so the client can say so where they clicked.
+ *
+ * A person's Run is a person resuming: when the queue was paused (by a
+ * person, Release the editor, or a reconnect) it resumes, and with nothing
+ * on the editor the plan starts ahead of whatever waited behind the pause.
+ * An agent's plan never resumes a paused queue.
+ *
+ * - started: its first item is on the editor (or starting).
+ * - waiting: it is next, but the editor is not free (`reason`).
+ * - queued: other work is ahead of it (`ahead`, `position`), or the queue is paused (`reason`).
+ */
+export interface PlanPlacement {
+  state: "started" | "waiting" | "queued";
+  /** Its place among the queued plans, 1 for next; 0 once started. */
+  position: number;
+  /** Plans ahead of it, the one on the editor included. */
+  ahead: number;
+  /** Why it does not start now. */
+  reason?: string | null;
+  /** The queue was paused and this Run resumed it. */
+  resumed?: boolean;
 }
 
 /** POST /hub/fix: a fix plan for every failing check of a goal (or of the project), or for one check. */
@@ -1254,13 +1281,13 @@ export const HUB_ROUTES = {
   addRunLink: "POST /hub/runs/:runId/links { link: TrackerLink } -> { record: RunRecord }",
   removeRunLink: "DELETE /hub/runs/:runId/links?url= -> { record: RunRecord }",
   queue: "GET /hub/queue -> QueueState",
-  plan: "POST /hub/plans PlanRequest -> { plan: PlanRun }",
+  plan: "POST /hub/plans PlanRequest -> { plan: PlanRun, placement: PlanPlacement } (a person's Run resumes a paused queue)",
   cancelPlan: "POST /hub/plans/:id/cancel -> { plan }",
   pause: "PUT /hub/queue/paused { paused: boolean } -> QueueState",
   lease: "GET /hub/lease -> HubLeaseEvent",
   release: "POST /hub/release -> QueueState (stops what the hub holds on the editor and pauses the queue)",
-  fix: "POST /hub/fix FixRequest -> { queued: number, plan: PlanRun | null } (a fix plan: one chat session per check)",
-  runCheck: "POST /hub/checks/:checkId/run { replay? } -> { plan: PlanRun }",
+  fix: "POST /hub/fix FixRequest -> { queued: number, plan: PlanRun | null, placement?: PlanPlacement } (a fix plan: one chat session per check)",
+  runCheck: "POST /hub/checks/:checkId/run { replay?, next? } -> { plan: PlanRun, placement: PlanPlacement }",
 } as const;
 
 // ---------- What else holds the editor ----------

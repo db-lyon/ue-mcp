@@ -29,7 +29,11 @@ Goals refer to playtests by asset path. A script missing on the current checkout
 
 ## The editor lease
 
-The editor is the developer's workspace first. The hub starts a plan item only while nothing else holds it: no Play In Editor session it did not start, open dialog, editor operation, run from another client, or call from another MCP client. While an item runs the hub holds a lease, tells the editor, and acts only on the run and the Play In Editor session that item started. `POST /v1/hub/release` stops what the hub holds and pauses the queue; after the editor reconnects, queued work waits for a person to resume it. A manual step holds its run, with PIE paused, until a verdict is given or the wait runs out, which leaves the run unjudged rather than failed.
+The editor is the developer's workspace first. The hub starts a plan item only while nothing else holds it: no Play In Editor session it did not start, open dialog, editor operation, run from another client, or call from another MCP client. While an item runs the hub holds a lease, tells the editor, and acts only on the run and the Play In Editor session that item started. `POST /v1/hub/release` stops what the hub holds and pauses the queue; after the editor reconnects, queued work waits for a person to resume it.
+
+A person's Run (`POST /v1/hub/plans` and the playtest run route) counts as that person resuming. It resumes a paused queue and, with nothing on the editor, starts ahead of whatever waited behind the pause. Behind running work it queues, or goes first with `next: true`. The answer carries a `placement`: `started`, `waiting` with the reason the editor is not free, or `queued` with its position. An agent's plan never resumes a paused queue.
+
+A manual step holds its run, with PIE paused, until a verdict is given or the wait runs out, which leaves the run unjudged rather than failed.
 
 ## Routes
 
@@ -43,13 +47,13 @@ All under `/v1/hub`, with the daemon's bearer token. A bad body answers 400, an 
 | `POST`, `DELETE /v1/hub/goals/<id>/sign-off` | Sign a goal off, or clear it |
 | `POST /v1/hub/goals/<id>/write-playtests` | Ask a client that can write playtests to do it (409 when none can) |
 | `GET`, `PUT /v1/hub/checks/<check id>` | A playtest's health and runs; its title and links |
-| `POST /v1/hub/checks/<check id>/run` | Queue a plan for one playtest |
+| `POST /v1/hub/checks/<check id>/run` | Run one playtest |
 | `PUT /v1/hub/rules` | The flaky and stale rule |
 | `GET`, `POST /v1/hub/store` | Export and import every record |
 | `GET /v1/hub/runs`, `/runs/<id>`, `/runs/<id>/results` | History, one run with its steps and series, its `results.json` |
 | `POST`, `DELETE /v1/hub/runs/<id>/links` | Link a run to a tracker item |
 | `GET /v1/hub/queue`, `PUT /v1/hub/queue/paused` | The plan queue; pause or resume it |
-| `POST /v1/hub/plans`, `POST /v1/hub/plans/<id>/cancel` | Queue a plan, cancel one |
+| `POST /v1/hub/plans`, `POST /v1/hub/plans/<id>/cancel` | Run a plan, cancel one |
 | `GET /v1/hub/lease`, `POST /v1/hub/release` | The hub's hold on the editor; release it |
 | `POST /v1/hub/fix` | Queue fix loops for failing playtests (409 when no client can run one) |
 

@@ -53,6 +53,7 @@ import {
   type HubChangedWhat,
   type HubOverview,
   type PlanItem,
+  type PlanPlacement,
   type PlanRun,
   type PlanScope,
   type PlanTrigger,
@@ -950,7 +951,16 @@ export class Hub {
 
   /** A plan run queued: its scope expanded to items now, so what it runs does not change under it. */
   async plan(body: unknown, trigger: PlanTrigger = "person"): Promise<PlanRun> {
-    if (!isObject(body)) throw bad("body must be { title?, scope, options? }");
+    return (await this.queuePlan(body, trigger)).plan;
+  }
+
+  /**
+   * A plan queued, and where it went. A person's plan resumes a paused queue
+   * and starts at once when nothing is on the editor (PlanQueue.enqueue).
+   */
+  async queuePlan(body: unknown, trigger: PlanTrigger = "person"): Promise<{ plan: PlanRun; placement: PlanPlacement }> {
+    if (!isObject(body)) throw bad("body must be { title?, scope, options?, next? }");
+    if (body.next !== undefined && typeof body.next !== "boolean") throw bad("next must be a boolean");
     if (body.title !== undefined && (typeof body.title !== "string" || !body.title.trim())) throw bad("title must be a non-empty string");
     // A person's plan is the user's run; an agent's only under Automatic.
     if (trigger === "agent" && (this.o.playtestRuns?.() ?? "automatic") === "manual") throw conflict("Playtest runs are set to Manual: an agent cannot start a plan");
@@ -970,16 +980,19 @@ export class Hub {
       trigger,
       createdAt: new Date(this.now()).toISOString(),
     };
-    return this.queue.enqueue(plan);
+    const placement = this.queue.add(plan, { person: trigger === "person", next: body.next === true });
+    return { plan, placement };
   }
 
-  async runCheck(id: string, body: unknown): Promise<PlanRun> {
+  /** A person's Run on one playtest: a plan of that one check. */
+  async runCheck(id: string, body: unknown): Promise<{ plan: PlanRun; placement: PlanPlacement }> {
     const ref = checkOfId(id);
     if (!ref) throw bad("a check id is <kind>:<target>");
-    if (body !== undefined && body !== null && !isObject(body)) throw bad("body must be { replay? }");
+    if (body !== undefined && body !== null && !isObject(body)) throw bad("body must be { replay?, next? }");
     const replay = isObject(body) ? body.replay : undefined;
+    const next = isObject(body) ? body.next : undefined;
     if (replay !== undefined && typeof replay !== "boolean") throw bad("replay must be a boolean");
-    return this.plan({ scope: { kind: "checks", checks: [ref] }, options: { replay: replay === true } });
+    return this.queuePlan({ scope: { kind: "checks", checks: [ref] }, options: { replay: replay === true }, ...(next !== undefined ? { next } : {}) });
   }
 
   async cancelPlan(id: string): Promise<PlanRun> {
@@ -1037,7 +1050,7 @@ export class Hub {
    * runs, is left out. Returns how many were queued. Without a fixer there
    * is no agent to run a loop: 409.
    */
-  async fix(body: unknown): Promise<{ queued: number; plan: PlanRun | null }> {
+  async fix(body: unknown): Promise<{ queued: number; plan: PlanRun | null; placement?: PlanPlacement }> {
     if (body !== undefined && body !== null && !isObject(body)) throw bad("body must be { goalId?, checkId? }");
     const goalId = isObject(body) ? body.goalId : undefined;
     const one = isObject(body) ? body.checkId : undefined;
@@ -1065,7 +1078,9 @@ export class Hub {
       createdAt: new Date(this.now()).toISOString(),
     };
     this.changed(["attention"]);
-    return { queued: fresh.length, plan: this.queue.enqueue(plan) };
+    // A person asked for it: it resumes a paused queue like their Run.
+    const placement = this.queue.add(plan, { person: true });
+    return { queued: fresh.length, plan, placement };
   }
 
   /**

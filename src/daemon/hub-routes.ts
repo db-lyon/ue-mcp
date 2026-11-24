@@ -45,7 +45,7 @@ export function hubRoutes(hub: () => Hub, projectDir: string): Pick<RouteHandler
     "hub.goal.writePlaytests": async (r) => ({ status: 202, body: hub().writePlaytests(param(r.params, "id"), await r.body()) }),
     "hub.check": async ({ params, query }) => ok(await hub().check(param(params, "checkId"), q(query))),
     "hub.check.update": async (r) => ok({ meta: hub().updateCheckMeta(param(r.params, "checkId"), await r.body()) }),
-    "hub.check.run": async (r) => ok({ plan: await hub().runCheck(param(r.params, "checkId"), await r.body()) }),
+    "hub.check.run": async (r) => ok(await hub().runCheck(param(r.params, "checkId"), await r.body())),
     "hub.rules": async (r) => ok({ rules: hub().goals.setRules(await r.body()) }),
     "hub.store.export": () => ok(hub().goals.exportAll()),
     "hub.store.import": async (r) => ok(hub().goals.importAll(await r.body())),
@@ -63,7 +63,7 @@ export function hubRoutes(hub: () => Hub, projectDir: string): Pick<RouteHandler
     "hub.queue.pause": async (r) => ok(hub().setPaused(await r.body())),
     "hub.lease": () => ok(hub().leaseView()),
     "hub.release": async () => ok(await hub().release()),
-    "hub.plan": async (r) => ok({ plan: await hub().plan(await r.body(), "person") }),
+    "hub.plan": async (r) => ok(await hub().queuePlan(await r.body(), "person")),
     "hub.plan.cancel": async ({ params }) => ok({ plan: await hub().cancelPlan(param(params, "id")) }),
     "hub.fix": async (r) => ok(await hub().fix(await r.body())),
   };

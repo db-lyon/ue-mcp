@@ -43,6 +43,7 @@ import {
   type PlanItem,
   type PlanItemState,
   type PlanOptions,
+  type PlanPlacement,
   type PlanRun,
   type QaRun,
   type QueuePause,
@@ -210,11 +211,52 @@ export class PlanQueue {
     return [this.s.current, ...this.s.queued, ...this.s.recent].find((p): p is PlanRun => p?.id === id);
   }
 
+  /** Queue a plan behind the others, respecting a pause. */
   enqueue(plan: PlanRun): PlanRun {
-    this.s.queued.push(plan);
-    this.save(plan.id);
-    void this.pump();
+    this.add(plan);
     return plan;
+  }
+
+  /**
+   * Queue a plan, and say where it went (PlanPlacement). `person`: a person
+   * clicked Run, which resumes a paused queue; with nothing on the editor
+   * their plan goes first, and a plan the pause left half done waits behind
+   * it. Anything else queued respects the pause. `next`: ahead of every
+   * other queued plan.
+   */
+  add(plan: PlanRun, o: { person?: boolean; next?: boolean } = {}): PlanPlacement {
+    const onEditor = !!this.s.current?.items.some(live) || !!this.lease.get();
+    let resumed = false;
+    if (o.person && this.s.paused) {
+      const cur = this.s.current;
+      if (cur && !onEditor) {
+        cur.state = "queued";
+        this.s.queued.unshift(cur);
+        this.s.current = null;
+      }
+      this.s.paused = false;
+      this.s.pausedBy = null;
+      resumed = true;
+    }
+    if (o.next || (resumed && !onEditor)) this.s.queued.unshift(plan);
+    else this.s.queued.push(plan);
+    this.save(plan.id);
+    // Synchronous up to the first item's start: a plan that can start is current when this returns.
+    void this.pump();
+    return { ...this.placementOf(plan.id), ...(resumed ? { resumed } : {}) };
+  }
+
+  /** Where a plan stands in the queue now. */
+  placementOf(id: string): PlanPlacement {
+    if (this.s.current?.id === id) return { state: "started", position: 0, ahead: 0 };
+    const at = this.s.queued.findIndex((p) => p.id === id);
+    const ahead = at + (this.s.current ? 1 : 0);
+    if (this.s.paused) return { state: "queued", position: at + 1, ahead, reason: "the queue is paused" };
+    if (ahead === 0) {
+      const reason = this.o.enabled?.() === false ? "the Playtest Hub is off" : !this.o.runner.connected() ? "the editor is not connected" : this.waiting;
+      return { state: "waiting", position: 1, ahead: 0, reason };
+    }
+    return { state: "queued", position: at + 1, ahead };
   }
 
   /** Pause or resume. Resuming clears whatever paused it: a person, a release or a reconnect. */
