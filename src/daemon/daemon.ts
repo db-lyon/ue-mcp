@@ -104,6 +104,9 @@ import { pluginRoutes } from "./plugin-routes.js";
 import { releaseStartLock, waitForStartTurn } from "./start-lock.js";
 import { checkpointRoutes } from "./checkpoint-routes.js";
 import { journalRoutes } from "./journal-routes.js";
+import { hubRoutes } from "./hub-routes.js";
+import { HubHolder, registerHub } from "../hub/hub-client.js";
+import { createDaemonHub } from "../hub/daemon-hub.js";
 import { toolsRoutes } from "./tools-routes.js";
 import { checkpointsFor, subscribeCheckpointEvents } from "../checkpoints/service.js";
 import { listDaemonSkills } from "../extensions/skills-list.js";
@@ -657,6 +660,28 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
   const projector = new ContextProjector(rt);
   const actionEffects = (categories?: string[]) => actionEffectInfo(enabledGraph(rt), rt.loads.dispatchUnion.tools, categories);
 
+  // ── The Playtest Hub ────────────────────────────────────────────
+  // One per project, under its data folder. Extensions bring a client's own
+  // pieces through api.hub.configure; the hub is built once they have.
+  const hubHolder = new HubHolder((client) => createDaemonHub({
+    projectDir,
+    dataDir: path.join(userDir(), "data", projectKey(projectDir)),
+    events,
+    callAction: async (category, action, args) => {
+      const r = await rt.callAction(category, action, args);
+      return { isError: !!r.isError, content: r.content };
+    },
+    editors: () => rt.sessions.list().map((s) => ({ connected: s.bridge.isConnected })),
+    dialogs: () => rt.sessions.list().filter((s) => existingGuard(s)?.current).length,
+    log: { warn: (message, detail) => warn("hub", message, detail) },
+    signer: async () => (await readRegistryAuth())?.login ?? null,
+    engine: () => {
+      const assoc = rt.project.engineAssociation;
+      return assoc && /^\d+\.\d+/.test(assoc) ? assoc.match(/^\d+\.\d+/)![0] : null;
+    },
+  }, client));
+  const unregisterHub = registerHub(projectDir, hubHolder);
+
   // ── UI bundles and extensions ───────────────────────────────────
   const ui = new UiBundleStore(DAEMON_API_VERSION, opts.uiDir);
   const refusedExtensions: RefusedExtension[] = [];
@@ -686,6 +711,9 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
       },
       route: (method, routePath, handler) => {
         routes.push({ method, path: routePath, handler });
+      },
+      hub: {
+        configure: (options) => hubHolder.configure(options),
       },
       callAction: async (category, action, args, callOpts) => {
         const r = await rt.callAction(category, action, args, callOptions(callOpts));
@@ -793,6 +821,8 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
   // One that failed to activate no longer holds its bundles back.
   ui.setOwners(extensions.map(uiOwner));
   for (const o of uiOwners) if (!extensions.some((x) => x.name === o.name)) services.revokeOwner(o.name);
+  // Built now, so its queue and timers run whether or not anyone has asked it anything.
+  hubHolder.get();
 
   // ── Routes ──────────────────────────────────────────────────────
   const errorBody = (e: unknown) => ({ error: e instanceof Error ? e.message : String(e) });
@@ -1075,6 +1105,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
     ...disruptionRoutes,
     ...checkpointRoutes(rt.sessions),
     ...journalRoutes(rt.sessions),
+    ...hubRoutes(() => hubHolder.get(), projectDir),
     ...toolsRoutes(rt),
     // The project's ue-mcp plugins: list, registry catalog, install, update, uninstall.
     ...pluginRoutes({ projectDir, onChanged: () => events.publish("plugins.changed", {}) }),
@@ -1192,6 +1223,8 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
       unsubscribeCheckpoints();
       unsubscribeDisruptions();
       stopAllScriptWatches();
+      unregisterHub();
+      hubHolder.dispose();
       unsubscribeDialogs();
       for (const x of extensions) {
         await Promise.resolve(x.dispose?.()).catch((e) => warn("extension", `${x.name} dispose failed`, e));

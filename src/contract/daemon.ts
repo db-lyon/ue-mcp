@@ -81,6 +81,7 @@ export const DAEMON_FEATURES = [
   "events.pie",
   "install.engineMismatch",
   "editor.consent",
+  "hub",
 ] as const;
 
 export type DaemonFeature = (typeof DAEMON_FEATURES)[number];
@@ -125,6 +126,7 @@ export const EXTENSION_FEATURES = [
   "events.pie",
   "callAction.session",
   "editor.consent",
+  "hub",
 ] as const;
 
 export type ExtensionFeature = (typeof EXTENSION_FEATURES)[number];
@@ -155,6 +157,7 @@ export const EXTENSION_FEATURE_MEMBERS: { readonly [F in ExtensionFeature]: keyo
   "events.pie": "events",
   "callAction.session": "callAction",
   "editor.consent": "editorOperation",
+  hub: "hub",
 };
 
 // ── Routes ────────────────────────────────────────────────────────
@@ -225,6 +228,39 @@ export const DAEMON_ROUTES = routeTable({
   "journal.setGroup": { method: "PUT", path: "/v1/journal/group", feature: "journal", summary: "{ editor?, group: string | null }" },
   "journal.revert": { method: "POST", path: "/v1/journal/revert", feature: "journal", summary: "{ editor?, group }: revert one group" },
   "journal.revertAfter": { method: "POST", path: "/v1/journal/revert-after", feature: "journal", summary: "{ editor?, group }: revert every later group" },
+  "hub.overview": { method: "GET", path: "/v1/hub", feature: "hub", summary: "the Playtest Hub: goals with their status, checks, attention, queue, recent runs (HubOverview)" },
+  "hub.goal": { method: "GET", path: "/v1/hub/goals/:id", feature: "hub", summary: "one goal with its status and checks (GoalState)" },
+  "hub.goal.create": { method: "POST", path: "/v1/hub/goals", feature: "hub", summary: "GoalDraft: create a goal or milestone ({ goal })" },
+  "hub.goal.update": { method: "PUT", path: "/v1/hub/goals/:id", feature: "hub", summary: "GoalUpdate: change fields ({ goal })" },
+  "hub.goal.delete": { method: "DELETE", path: "/v1/hub/goals/:id", feature: "hub", summary: "delete a goal (204)" },
+  "hub.goal.addChecks": { method: "POST", path: "/v1/hub/goals/:id/checks", feature: "hub", summary: "{ checks: CheckRef[] }: add playtests to a goal ({ goal })" },
+  "hub.goal.orderChecks": { method: "PUT", path: "/v1/hub/goals/:id/checks/order", feature: "hub", summary: "{ order: checkIds }: reorder a goal's playtests ({ goal })" },
+  "hub.goal.removeCheck": { method: "DELETE", path: "/v1/hub/goals/:id/checks/:checkId", feature: "hub", summary: "remove a playtest from a goal ({ goal })" },
+  "hub.goal.updateCheck": { method: "PUT", path: "/v1/hub/goals/:id/checks/:checkId", feature: "hub", summary: "GoalCheckUpdate: whether the playtest is required ({ goal })" },
+  "hub.goal.addRequire": { method: "POST", path: "/v1/hub/goals/:id/requires", feature: "hub", summary: "{ goal, required? }: make a goal require another ({ goal })" },
+  "hub.goal.orderRequires": { method: "PUT", path: "/v1/hub/goals/:id/requires", feature: "hub", summary: "{ order: goalIds }: reorder the goals a goal requires ({ goal })" },
+  "hub.goal.removeRequire": { method: "DELETE", path: "/v1/hub/goals/:id/requires/:goalId", feature: "hub", summary: "stop a goal requiring another ({ goal })" },
+  "hub.goal.signOff": { method: "POST", path: "/v1/hub/goals/:id/sign-off", feature: "hub", summary: "{ note? }: sign a goal off as the signed-in account ({ signOff }; 409 without one)" },
+  "hub.goal.clearSignOff": { method: "DELETE", path: "/v1/hub/goals/:id/sign-off", feature: "hub", summary: "clear a goal's sign-off (204)" },
+  "hub.goal.writePlaytests": { method: "POST", path: "/v1/hub/goals/:id/write-playtests", feature: "hub", summary: "{ text? }: ask a client that can write playtests to write them for the goal (202 { sessionId }; 409 when none can)" },
+  "hub.check": { method: "GET", path: "/v1/hub/checks/:checkId", feature: "hub", summary: "?limit&before: one playtest with its health and runs (CheckDetail)" },
+  "hub.check.update": { method: "PUT", path: "/v1/hub/checks/:checkId", feature: "hub", summary: "CheckMetaUpdate: what a playtest says about itself ({ meta })" },
+  "hub.check.run": { method: "POST", path: "/v1/hub/checks/:checkId/run", feature: "hub", summary: "{ replay? }: queue a plan that runs one playtest ({ plan })" },
+  "hub.rules": { method: "PUT", path: "/v1/hub/rules", feature: "hub", summary: "Partial<HealthRule>: the project's flaky and stale rule ({ rules })" },
+  "hub.store.export": { method: "GET", path: "/v1/hub/store", feature: "hub", summary: "every goal, check record, sign-off and rule (HubExport)" },
+  "hub.store.import": { method: "POST", path: "/v1/hub/store", feature: "hub", summary: "HubExport: merge by id (HubImportReport; 400 naming every record that does not read)" },
+  "hub.runs": { method: "GET", path: "/v1/hub/runs", feature: "hub", summary: "?check&limit&before: run history, newest first ({ runs, more })" },
+  "hub.run": { method: "GET", path: "/v1/hub/runs/:runId", feature: "hub", summary: "one run with its steps, series and the last pass (RunDetail)" },
+  "hub.run.results": { method: "GET", path: "/v1/hub/runs/:runId/results", feature: "hub", summary: "the run's results.json as ue-mcp wrote it" },
+  "hub.run.addLink": { method: "POST", path: "/v1/hub/runs/:runId/links", feature: "hub", summary: "{ link }: link a run to a tracker item ({ record })" },
+  "hub.run.removeLink": { method: "DELETE", path: "/v1/hub/runs/:runId/links", feature: "hub", summary: "?url: remove a run's link ({ record })" },
+  "hub.queue": { method: "GET", path: "/v1/hub/queue", feature: "hub", summary: "the plan queue (QueueState)" },
+  "hub.queue.pause": { method: "PUT", path: "/v1/hub/queue/paused", feature: "hub", summary: "{ paused: boolean } (QueueState)" },
+  "hub.lease": { method: "GET", path: "/v1/hub/lease", feature: "hub", summary: "the hub's hold on the editor ({ lease })" },
+  "hub.release": { method: "POST", path: "/v1/hub/release", feature: "hub", summary: "Release the editor: stop what the hub holds on it and pause the queue (QueueState)" },
+  "hub.plan": { method: "POST", path: "/v1/hub/plans", feature: "hub", summary: "PlanRequest: queue a plan ({ plan })" },
+  "hub.plan.cancel": { method: "POST", path: "/v1/hub/plans/:id/cancel", feature: "hub", summary: "cancel a plan ({ plan })" },
+  "hub.fix": { method: "POST", path: "/v1/hub/fix", feature: "hub", summary: "FixRequest: queue fix loops for failing playtests ({ queued, plan }; 409 when no client can run a fix loop)" },
   "tools.list": { method: "GET", path: "/v1/tools", feature: "tools.categories", summary: "project(list_categories)" },
   "tools.categories": { method: "POST", path: "/v1/tools/categories", feature: "tools.categories", summary: "{ category, enabled, scope?, editor? }: project(set_category_enabled)" },
   "tools.toolsets": { method: "POST", path: "/v1/tools/toolsets", feature: "tools.categories", summary: "{ toolsets, enabled, editor? }: project(set_toolset_enabled)" },
@@ -340,6 +376,9 @@ export const DAEMON_EVENT_TYPES = [
   "disruption.requested",
   "disruption.updated",
   "disruption.hold",
+  "hub.changed",
+  "hub.lease",
+  "hub.held",
 ] as const;
 
 /** The Play session states the editor pushes, each published as `pie.<state>`. */
@@ -1709,6 +1748,19 @@ export interface DaemonExtensionApi {
 
   /** Report whether this extension has work in progress; the daemon does not idle-exit while it does. */
   setBusy(busy: () => boolean): void;
+
+  /**
+   * The Playtest Hub's injection point (feature "hub"). The hub itself runs in
+   * the daemon; a client with concepts ue-mcp has none of, such as chat
+   * sessions and run cards, supplies them here: its own way of starting and
+   * following runs, a fix loop, a flow that writes playtests, the experiment
+   * and Manual/Automatic settings, and the account a sign-off is from. Every
+   * member is optional and has a default. Returns the function that takes the
+   * client's options back out, which activate's dispose should call.
+   */
+  hub?: {
+    configure(options: import("./hub-ports.js").HubClientOptions): () => void;
+  };
 
   ui: {
     /**

@@ -12,12 +12,12 @@ export declare function apiVersionsOverlap(a: ApiVersionRange, b: ApiVersionRang
 export declare const DAEMON_API_RANGE: ApiVersionRange;
 export declare const EXTENSION_API_RANGE: ApiVersionRange;
 export declare function extensionApiSupported(min: number, max: number): boolean;
-export declare const DAEMON_FEATURES: readonly ["checkpoints", "checkpoints.assetDiff", "skills", "context.projection", "actions.effects", "install.pendingBuild", "editor.rebuild", "ui.scopedKeys", "ui.extensions", "flows.stepApproval", "sessions.access", "journal", "tools.categories", "leases", "dialogs.native", "events.pie", "install.engineMismatch", "editor.consent"];
+export declare const DAEMON_FEATURES: readonly ["checkpoints", "checkpoints.assetDiff", "skills", "context.projection", "actions.effects", "install.pendingBuild", "editor.rebuild", "ui.scopedKeys", "ui.extensions", "flows.stepApproval", "sessions.access", "journal", "tools.categories", "leases", "dialogs.native", "events.pie", "install.engineMismatch", "editor.consent", "hub"];
 export type DaemonFeature = (typeof DAEMON_FEATURES)[number];
 export declare const DAEMON_FEATURES_BEYOND_ROUTES: {
     readonly [F in DaemonFeature]?: string;
 };
-export declare const EXTENSION_FEATURES: readonly ["callAction.dialogPrompt", "callAction.elicit", "callAction.access", "callAction.signal", "checkpoints", "checkpoints.assetDiff", "events.dialog", "events.script", "models.provider", "modes", "modes.playtest", "skills", "context.projection", "actions.effects", "extension.versions", "ui.scopedKeys", "ui.extensions", "extension.services", "flows.stepApproval", "dialogs.native", "permissions", "events.pie", "callAction.session", "editor.consent"];
+export declare const EXTENSION_FEATURES: readonly ["callAction.dialogPrompt", "callAction.elicit", "callAction.access", "callAction.signal", "checkpoints", "checkpoints.assetDiff", "events.dialog", "events.script", "models.provider", "modes", "modes.playtest", "skills", "context.projection", "actions.effects", "extension.versions", "ui.scopedKeys", "ui.extensions", "extension.services", "flows.stepApproval", "dialogs.native", "permissions", "events.pie", "callAction.session", "editor.consent", "hub"];
 export type ExtensionFeature = (typeof EXTENSION_FEATURES)[number];
 export declare const EXTENSION_FEATURE_MEMBERS: {
     readonly [F in ExtensionFeature]: keyof DaemonExtensionApi;
@@ -276,6 +276,204 @@ export declare const DAEMON_ROUTES: {
         readonly feature?: DaemonFeature;
         readonly summary: string;
     };
+    readonly "hub.overview": {
+        readonly method: "GET";
+        readonly path: "/v1/hub";
+        readonly feature?: DaemonFeature;
+        readonly summary: string;
+    };
+    readonly "hub.goal": {
+        readonly method: "GET";
+        readonly path: "/v1/hub/goals/:id";
+        readonly feature?: DaemonFeature;
+        readonly summary: string;
+    };
+    readonly "hub.goal.create": {
+        readonly method: "POST";
+        readonly path: "/v1/hub/goals";
+        readonly feature?: DaemonFeature;
+        readonly summary: string;
+    };
+    readonly "hub.goal.update": {
+        readonly method: "PUT";
+        readonly path: "/v1/hub/goals/:id";
+        readonly feature?: DaemonFeature;
+        readonly summary: string;
+    };
+    readonly "hub.goal.delete": {
+        readonly method: "DELETE";
+        readonly path: "/v1/hub/goals/:id";
+        readonly feature?: DaemonFeature;
+        readonly summary: string;
+    };
+    readonly "hub.goal.addChecks": {
+        readonly method: "POST";
+        readonly path: "/v1/hub/goals/:id/checks";
+        readonly feature?: DaemonFeature;
+        readonly summary: string;
+    };
+    readonly "hub.goal.orderChecks": {
+        readonly method: "PUT";
+        readonly path: "/v1/hub/goals/:id/checks/order";
+        readonly feature?: DaemonFeature;
+        readonly summary: string;
+    };
+    readonly "hub.goal.removeCheck": {
+        readonly method: "DELETE";
+        readonly path: "/v1/hub/goals/:id/checks/:checkId";
+        readonly feature?: DaemonFeature;
+        readonly summary: string;
+    };
+    readonly "hub.goal.updateCheck": {
+        readonly method: "PUT";
+        readonly path: "/v1/hub/goals/:id/checks/:checkId";
+        readonly feature?: DaemonFeature;
+        readonly summary: string;
+    };
+    readonly "hub.goal.addRequire": {
+        readonly method: "POST";
+        readonly path: "/v1/hub/goals/:id/requires";
+        readonly feature?: DaemonFeature;
+        readonly summary: string;
+    };
+    readonly "hub.goal.orderRequires": {
+        readonly method: "PUT";
+        readonly path: "/v1/hub/goals/:id/requires";
+        readonly feature?: DaemonFeature;
+        readonly summary: string;
+    };
+    readonly "hub.goal.removeRequire": {
+        readonly method: "DELETE";
+        readonly path: "/v1/hub/goals/:id/requires/:goalId";
+        readonly feature?: DaemonFeature;
+        readonly summary: string;
+    };
+    readonly "hub.goal.signOff": {
+        readonly method: "POST";
+        readonly path: "/v1/hub/goals/:id/sign-off";
+        readonly feature?: DaemonFeature;
+        readonly summary: string;
+    };
+    readonly "hub.goal.clearSignOff": {
+        readonly method: "DELETE";
+        readonly path: "/v1/hub/goals/:id/sign-off";
+        readonly feature?: DaemonFeature;
+        readonly summary: string;
+    };
+    readonly "hub.goal.writePlaytests": {
+        readonly method: "POST";
+        readonly path: "/v1/hub/goals/:id/write-playtests";
+        readonly feature?: DaemonFeature;
+        readonly summary: string;
+    };
+    readonly "hub.check": {
+        readonly method: "GET";
+        readonly path: "/v1/hub/checks/:checkId";
+        readonly feature?: DaemonFeature;
+        readonly summary: string;
+    };
+    readonly "hub.check.update": {
+        readonly method: "PUT";
+        readonly path: "/v1/hub/checks/:checkId";
+        readonly feature?: DaemonFeature;
+        readonly summary: string;
+    };
+    readonly "hub.check.run": {
+        readonly method: "POST";
+        readonly path: "/v1/hub/checks/:checkId/run";
+        readonly feature?: DaemonFeature;
+        readonly summary: string;
+    };
+    readonly "hub.rules": {
+        readonly method: "PUT";
+        readonly path: "/v1/hub/rules";
+        readonly feature?: DaemonFeature;
+        readonly summary: string;
+    };
+    readonly "hub.store.export": {
+        readonly method: "GET";
+        readonly path: "/v1/hub/store";
+        readonly feature?: DaemonFeature;
+        readonly summary: string;
+    };
+    readonly "hub.store.import": {
+        readonly method: "POST";
+        readonly path: "/v1/hub/store";
+        readonly feature?: DaemonFeature;
+        readonly summary: string;
+    };
+    readonly "hub.runs": {
+        readonly method: "GET";
+        readonly path: "/v1/hub/runs";
+        readonly feature?: DaemonFeature;
+        readonly summary: string;
+    };
+    readonly "hub.run": {
+        readonly method: "GET";
+        readonly path: "/v1/hub/runs/:runId";
+        readonly feature?: DaemonFeature;
+        readonly summary: string;
+    };
+    readonly "hub.run.results": {
+        readonly method: "GET";
+        readonly path: "/v1/hub/runs/:runId/results";
+        readonly feature?: DaemonFeature;
+        readonly summary: string;
+    };
+    readonly "hub.run.addLink": {
+        readonly method: "POST";
+        readonly path: "/v1/hub/runs/:runId/links";
+        readonly feature?: DaemonFeature;
+        readonly summary: string;
+    };
+    readonly "hub.run.removeLink": {
+        readonly method: "DELETE";
+        readonly path: "/v1/hub/runs/:runId/links";
+        readonly feature?: DaemonFeature;
+        readonly summary: string;
+    };
+    readonly "hub.queue": {
+        readonly method: "GET";
+        readonly path: "/v1/hub/queue";
+        readonly feature?: DaemonFeature;
+        readonly summary: string;
+    };
+    readonly "hub.queue.pause": {
+        readonly method: "PUT";
+        readonly path: "/v1/hub/queue/paused";
+        readonly feature?: DaemonFeature;
+        readonly summary: string;
+    };
+    readonly "hub.lease": {
+        readonly method: "GET";
+        readonly path: "/v1/hub/lease";
+        readonly feature?: DaemonFeature;
+        readonly summary: string;
+    };
+    readonly "hub.release": {
+        readonly method: "POST";
+        readonly path: "/v1/hub/release";
+        readonly feature?: DaemonFeature;
+        readonly summary: string;
+    };
+    readonly "hub.plan": {
+        readonly method: "POST";
+        readonly path: "/v1/hub/plans";
+        readonly feature?: DaemonFeature;
+        readonly summary: string;
+    };
+    readonly "hub.plan.cancel": {
+        readonly method: "POST";
+        readonly path: "/v1/hub/plans/:id/cancel";
+        readonly feature?: DaemonFeature;
+        readonly summary: string;
+    };
+    readonly "hub.fix": {
+        readonly method: "POST";
+        readonly path: "/v1/hub/fix";
+        readonly feature?: DaemonFeature;
+        readonly summary: string;
+    };
     readonly "tools.list": {
         readonly method: "GET";
         readonly path: "/v1/tools";
@@ -383,7 +581,7 @@ export declare const DAEMON_HEADERS: {
     readonly flowToken: "x-ue-mcp-token";
     readonly parent: "x-ue-mcp-parent";
 };
-export declare const DAEMON_EVENT_TYPES: readonly ["daemon.started", "daemon.stopping", "editor.connected", "editor.disconnected", "editor.operation", "client.connected", "client.disconnected", "call.started", "call.finished", "session.access", "leases.released", "plugins.changed", "update.available", "update.staged", "update.building", "update.applied", "update.failed", "dialog.opened", "dialog.updated", "dialog.answered", "dialog.delegated", "dialog.closed", "flow.run_started", "flow.step_started", "flow.step_completed", "flow.step_failed", "flow.run_completed", "script.run_started", "script.step_started", "script.step_acted", "script.step_passed", "script.step_failed", "script.verdict_requested", "script.verdict", "script.run_finished", "checkpoint.created", "checkpoint.restored", "checkpoints.toggled", "checkpoints.cleared", "pie.started", "pie.ended", "pie.paused", "pie.resumed", "disruption.requested", "disruption.updated", "disruption.hold"];
+export declare const DAEMON_EVENT_TYPES: readonly ["daemon.started", "daemon.stopping", "editor.connected", "editor.disconnected", "editor.operation", "client.connected", "client.disconnected", "call.started", "call.finished", "session.access", "leases.released", "plugins.changed", "update.available", "update.staged", "update.building", "update.applied", "update.failed", "dialog.opened", "dialog.updated", "dialog.answered", "dialog.delegated", "dialog.closed", "flow.run_started", "flow.step_started", "flow.step_completed", "flow.step_failed", "flow.run_completed", "script.run_started", "script.step_started", "script.step_acted", "script.step_passed", "script.step_failed", "script.verdict_requested", "script.verdict", "script.run_finished", "checkpoint.created", "checkpoint.restored", "checkpoints.toggled", "checkpoints.cleared", "pie.started", "pie.ended", "pie.paused", "pie.resumed", "disruption.requested", "disruption.updated", "disruption.hold", "hub.changed", "hub.lease", "hub.held"];
 export declare const PIE_STATES: readonly ["started", "ended", "paused", "resumed"];
 export type PieState = (typeof PIE_STATES)[number];
 export interface PieEventData {
@@ -1307,6 +1505,9 @@ export interface DaemonExtensionApi {
     editors(): EditorStatus[];
     editorOperation(op: "start" | "stop" | "restart" | "rebuild", opts?: EditorOperationOptions): Promise<Record<string, unknown>>;
     setBusy(busy: () => boolean): void;
+    hub?: {
+        configure(options: import("./hub-ports.js").HubClientOptions): () => void;
+    };
     ui: {
         trustKey(pem: string): void;
         install(dir: string): UiManifest;
@@ -1350,6 +1551,841 @@ export interface DaemonExtension {
     }>;
 }
 export {};
+
+// ── contract/hub-qa.ts ──
+export type QaStepStatus = "pending" | "running" | "passed" | "failed" | "awaiting_verdict" | "skipped";
+export type QaRunState = "draft" | "armed" | "running" | "awaiting_verdict" | "finished" | "stopped" | "idle";
+export type QaVerdict = "pass" | "fail" | "skip";
+export type QaVerdictSource = "auto" | "action" | "elicitation" | "agent" | "source_run";
+export interface QaExpect {
+    value: string;
+    op: string;
+    target?: number | boolean;
+    within_ms?: number;
+}
+export interface QaEvidence {
+    value?: string;
+    at_start?: number | null;
+    at_end?: number | null;
+    samples?: number;
+    observed?: boolean;
+    verdict_frame?: number;
+    verdict_at_ms?: number;
+    reason?: string;
+    note?: string;
+    captures?: string[];
+}
+export interface QaStep {
+    index: number;
+    instruction: string;
+    judge: "auto" | "manual";
+    expect?: QaExpect;
+    status: QaStepStatus;
+    withinMs?: number;
+    startedAtMs?: number;
+    endedAtMs?: number;
+    evidence?: QaEvidence;
+    note?: string;
+    verdictSource?: QaVerdictSource;
+    agentJudgeable?: boolean;
+    player?: string;
+    sourceStatus?: QaStepStatus;
+    regression?: boolean;
+    arrange?: unknown;
+    act?: unknown;
+    actResult?: QaActResult;
+}
+export interface QaActResult {
+    status: "running" | "done" | "failed" | "skipped";
+    reason?: string;
+    actions?: Array<{
+        index: number;
+        action: string;
+        ok: boolean;
+        error?: string;
+        at_ms?: number;
+    }>;
+    duration_ms?: number;
+}
+export interface QaSummary {
+    total: number;
+    passed: number;
+    failed: number;
+    skipped: number;
+    pending: number;
+    awaiting: number;
+    regressions?: number;
+}
+export interface QaRun {
+    runId: string;
+    script: string;
+    scriptName: string;
+    map?: string;
+    state: QaRunState;
+    steps: QaStep[];
+    awaiting: number[];
+    lastSeq: number;
+    summary: QaSummary;
+    resultsPath: string | null;
+    replayOf?: string;
+    sessionId: string | null;
+    toolUseId: string | null;
+    subagent?: string;
+    seenAt: string;
+    recordingId?: string;
+    assignment?: QaAssignment;
+    deleted?: boolean;
+    manual?: boolean;
+    stopReason?: string;
+    pieStarted?: boolean;
+    pieSetup?: {
+        players: number;
+        netMode: "standalone" | "listen";
+    };
+}
+export declare const QA_VERDICT_WAIT_MINUTES = 10;
+export declare const QA_VERDICT_WAIT_CHOICES: readonly number[];
+export declare const qaVerdictWaitValid: (v: unknown) => v is number;
+export declare const QA_NO_VERDICT = "no verdict";
+export interface QaHeld {
+    runId: string;
+    scriptName: string;
+    sessionId: string | null;
+    step: number;
+    instruction: string;
+    since: string;
+    dueAt: string;
+    paused: boolean;
+}
+export interface QaAssignment {
+    callId: string;
+    sessionId: string;
+    state: "running" | "done" | "failed" | "stopped";
+    at: string;
+    loop?: QaLoop;
+}
+export type QaBlockerKind = "verdict" | "no_progress" | "contradiction" | "refused" | "outside_project" | "needs_person" | "crashes" | "builds" | "attempts";
+export interface QaBlocker {
+    kind: QaBlockerKind;
+    reason: string;
+    evidence: string[];
+    step?: number;
+}
+export interface QaLoopChange {
+    path: string;
+    status: "added" | "modified" | "deleted";
+}
+export interface QaLoopAttempt {
+    n: number;
+    callId: string;
+    runId?: string;
+    before: string;
+    after?: string;
+    changes: QaLoopChange[];
+    failing: string[];
+    startedAt: string;
+    endedAt?: string;
+    reverted?: boolean;
+}
+export interface QaLoop {
+    id: string;
+    state: "running" | "passed" | "needs_you" | "stopped" | "failed";
+    attempts: QaLoopAttempt[];
+    baseline: string;
+    blocker?: QaBlocker;
+    error?: string;
+    startedAt: string;
+    endedAt?: string;
+    reverted?: boolean;
+}
+export declare const qaActs: (s: QaStep) => boolean;
+export declare const QA_VERDICTS: readonly QaVerdict[];
+export declare const qaEnded: (state: QaRunState) => boolean;
+export declare const qaSettled: (status: QaStepStatus) => boolean;
+export declare function qaSummaryOf(steps: QaStep[]): QaSummary;
+export declare function qaRunFromAnswer(answer: unknown, where?: {
+    sessionId?: string | null;
+    toolUseId?: string | null;
+    subagent?: string;
+    seenAt?: string;
+}): QaRun | null;
+export declare function qaMergeAnswer(run: QaRun, answer: unknown): QaRun;
+export declare function qaApplyEditorEvent(run: QaRun, event: unknown): QaRun;
+export declare function qaApplyStreamEvent(run: QaRun, type: string, data: unknown): QaRun;
+export declare function qaApplyVerdictAnswer(run: QaRun, answer: unknown): QaRun;
+export declare function qaVerdictForm(form: {
+    message: string;
+    fields: Record<string, unknown>;
+}): {
+    runId: string | null;
+    steps: number[];
+} | null;
+export declare const qaAgentVerdict: (s: QaStep) => boolean;
+export declare const qaAgentMayJudge: (s: QaStep) => boolean;
+export declare function qaWaitingForPerson(run: QaRun): QaStep | null;
+export declare function qaAssignable(run: QaRun): boolean;
+export declare const qaDraftId: (scriptPath: string) => string;
+export declare const qaIsDraft: (run: QaRun) => boolean;
+export declare function qaScriptKey(path: string): string;
+export interface QaScriptStep {
+    instruction: string;
+    judge: "auto" | "manual";
+    expect?: QaExpect;
+    agent_judgeable?: boolean;
+    player?: string;
+    arrange?: unknown;
+    act?: unknown;
+}
+export declare function qaDraftFromScript(answer: unknown, where?: {
+    sessionId?: string | null;
+    players?: Record<number, string>;
+    seenAt?: string;
+}): QaRun | null;
+export declare function qaScriptSteps(run: QaRun): QaScriptStep[];
+export declare function qaPieInstance(player: string | undefined): number | undefined;
+
+// ── contract/hub.ts ──
+import { type QaRun, type QaStep, type QaStepStatus, type QaSummary } from "./hub-qa.js";
+export declare const HUB_SCHEMA: 1;
+export type CheckKind = "script";
+export interface TrackerLink {
+    url: string;
+    title?: string;
+    rel?: string;
+}
+export declare const TRACKER_LINK_RELS: readonly ["counterpart", "related", "filed-from-run", "blocks"];
+export declare const TRACKER_LINKS_MAX = 20;
+export declare const TRACKER_URL_MAX = 2048;
+export declare const TRACKER_TITLE_MAX = 200;
+export declare const TRACKER_REL_MAX = 40;
+export declare const TRACKER_BLOCKED_SCHEMES: readonly string[];
+export declare function trackerUrlProblem(url: unknown): string | null;
+export declare function trackerLinkOf(v: unknown): {
+    link: TrackerLink;
+} | {
+    problem: string;
+};
+export declare function uniqueLinks(links: readonly TrackerLink[]): TrackerLink[];
+export declare function linkHost(url: string): string;
+export interface CheckRef {
+    kind: CheckKind;
+    target: string;
+    required?: boolean;
+}
+export interface GoalCheckUpdate {
+    required?: boolean;
+}
+export interface UnsupportedCheck {
+    kind: string;
+    target: string;
+    required?: boolean;
+}
+export interface CheckMeta {
+    title?: string;
+    links?: TrackerLink[];
+}
+export interface CheckMetaUpdate {
+    title?: string | null;
+    links?: TrackerLink[];
+}
+export interface CheckMetaRecord extends CheckMeta {
+    check: Pick<CheckRef, "kind" | "target">;
+}
+export declare const checkId: (c: Pick<CheckRef, "kind" | "target">) => string;
+export declare function parseCheckId(id: string): Pick<CheckRef, "kind" | "target"> | null;
+export interface AcceptanceRule {
+    stableRuns: number;
+    signOff: boolean;
+}
+export declare const DEFAULT_ACCEPTANCE: AcceptanceRule;
+export interface HealthRule {
+    staleAfterDays: number | null;
+    flakyWindow: number;
+}
+export declare const DEFAULT_HEALTH_RULE: HealthRule;
+export declare const FLAKY_WINDOW_MIN = 2;
+export declare const FLAKY_WINDOW_MAX = 20;
+export declare const STALE_DAYS_MAX = 365;
+export declare function healthRuleProblem(v: unknown): string | null;
+export type GoalKind = "milestone" | "goal";
+export type GoalPriority = "p0" | "p1" | "p2" | "p3";
+export declare const GOAL_PRIORITIES: readonly GoalPriority[];
+export declare const GOAL_DUE: RegExp;
+export interface SignOff {
+    goalId: string;
+    by: string;
+    via?: string;
+    at: string;
+    note?: string;
+    revision: string | null;
+    runIds: string[];
+    requirements: string;
+}
+export type SignOffLapse = "failed" | "requirements" | "revision";
+export interface SignOffState {
+    record: SignOff;
+    lapsed: SignOffLapse | null;
+}
+export interface GoalRequirement {
+    goal: string;
+    required?: boolean;
+}
+export interface Goal {
+    schema: typeof HUB_SCHEMA;
+    id: string;
+    kind: GoalKind;
+    title: string;
+    description?: string;
+    owner?: string | null;
+    priority?: GoalPriority;
+    due?: string | null;
+    links?: TrackerLink[];
+    acceptance: AcceptanceRule;
+    requires?: GoalRequirement[];
+    checks: CheckRef[];
+    unsupported?: UnsupportedCheck[];
+    archived?: boolean;
+}
+export interface GoalParents {
+    parents?: string[];
+}
+export type GoalDraft = Pick<Goal, "title"> & Partial<Omit<Goal, "schema">> & GoalParents;
+export type GoalUpdate = Partial<Omit<Goal, "schema" | "id" | "priority">> & {
+    priority?: GoalPriority | null;
+} & GoalParents;
+export declare function goalSlug(title: string, max?: number): string;
+export declare const GOAL_ID: RegExp;
+export type RunOutcome = "passed" | "failed" | "needs_you" | "running" | "incomplete" | "unjudged" | "stopped" | "error";
+export type RunSource = "person" | "agent" | "plan" | "outside";
+export type RunTrigger = "run" | "replay" | "loop";
+export type RunVcs = "git" | "perforce" | "plastic" | "svn" | "none";
+export interface RunProvenance {
+    vcs: RunVcs | null;
+    revision: string | null;
+    dirty: number | null;
+    scriptHash: string | null;
+    engine: string | null;
+    players: {
+        count: number;
+        netMode: "standalone" | "listen" | "client";
+    } | null;
+    dependencies?: Record<string, string>;
+}
+export interface CurrentProvenance {
+    vcs: RunVcs | null;
+    revision: string | null;
+    dirty: number | null;
+    dependencies?: Record<string, string>;
+}
+export interface RunRecord {
+    runId: string;
+    kind: CheckKind;
+    target: string;
+    name: string;
+    outcome: RunOutcome;
+    startedAt: string;
+    endedAt?: string | null;
+    durationMs?: number | null;
+    summary?: QaSummary | null;
+    failedSteps?: number[];
+    source: RunSource;
+    trigger?: RunTrigger;
+    sessionId?: string | null;
+    planRunId?: string | null;
+    replayOf?: string | null;
+    recordingId?: string | null;
+    map?: string | null;
+    provenance?: RunProvenance;
+    tainted?: boolean;
+    links?: TrackerLink[];
+}
+export declare const triggerOf: (r: Pick<RunRecord, "trigger" | "replayOf">) => RunTrigger;
+export declare function outcomeOf(run: Pick<QaRun, "state" | "steps" | "summary">): RunOutcome;
+export interface RunStepSpan {
+    index: number;
+    instruction: string;
+    status: QaStepStatus;
+    judge: "auto" | "manual";
+    startMs: number | null;
+    endMs: number | null;
+}
+export interface RunDetail {
+    record: RunRecord;
+    run: QaRun | null;
+    steps: RunStepSpan[];
+    series?: Record<string, Array<[number, number]>>;
+    log?: Array<{
+        atMs: number;
+        level: "warning" | "error";
+        text: string;
+    }>;
+    lastPass?: RunRecord | null;
+    changedSteps?: number[];
+    resultsUrl?: string | null;
+}
+export type CheckHealth = "failing" | "running" | "flaky" | "stale" | "passing" | "never_run" | "missing";
+export type GoalStatus = "failing" | "ready_to_sign_off" | "at_risk" | "running" | "in_progress" | "not_started" | "met";
+export declare const CHECK_HEALTH_ORDER: readonly CheckHealth[];
+export declare const GOAL_STATUS_ORDER: readonly GoalStatus[];
+export interface CheckState {
+    id: string;
+    check: CheckRef;
+    name: string;
+    links?: TrackerLink[];
+    goalIds: string[];
+    health: CheckHealth;
+    last: RunRecord | null;
+    recent: RunOutcome[];
+    passRate: number | null;
+    map?: string | null;
+    steps?: number | null;
+    missing?: boolean;
+    renamedFrom?: string;
+    unused?: boolean;
+    change?: CheckChange;
+}
+export interface CheckChange {
+    kind: "fixed" | "regressed";
+    runId: string;
+    at: string;
+}
+export interface RequiredGoalState {
+    goal: string;
+    required: boolean;
+    status: GoalStatus | null;
+}
+export interface GoalState {
+    goal: Goal;
+    status: GoalStatus;
+    checks: CheckState[];
+    progress: {
+        met: number;
+        total: number;
+    };
+    parents: string[];
+    requires: RequiredGoalState[];
+    unused?: boolean;
+    signOff?: SignOffState;
+}
+export declare const RESULT_OUTCOMES: readonly RunOutcome[];
+export declare const isResult: (r: RunRecord) => boolean;
+export declare const ranDirty: (r: Pick<RunRecord, "provenance">) => boolean;
+export declare function onRevision(p: RunProvenance | undefined, current: Pick<CurrentProvenance, "vcs" | "revision">): boolean;
+export declare function sameProvenance(a: Pick<RunRecord, "provenance">, b: Pick<RunRecord, "provenance">): boolean;
+export interface HealthInput {
+    check: CheckRef;
+    runs: RunRecord[];
+    missing?: boolean;
+    rule?: HealthRule;
+    current?: CurrentProvenance;
+    now?: number;
+}
+export declare function checkHealth(input: HealthInput): CheckHealth;
+export declare function checkSatisfied(runs: RunRecord[], acceptance: AcceptanceRule, current?: CurrentProvenance): boolean;
+export declare function checkChange(runs: RunRecord[]): CheckChange | undefined;
+export declare function checkStateOf(input: HealthInput & {
+    goalIds: string[];
+    meta?: CheckMeta;
+    name?: string;
+    map?: string | null;
+    steps?: number | null;
+    renamedFrom?: string;
+}): CheckState;
+export declare const needsSignOff: (goal: Pick<Goal, "acceptance">) => boolean;
+export declare function goalStatus(goal: Goal, checks: Array<{
+    state: CheckState;
+    runs: RunRecord[];
+}>, childStatuses?: GoalStatus[], optionalStatuses?: GoalStatus[], current?: CurrentProvenance, signedOff?: boolean): {
+    status: GoalStatus;
+    progress: {
+        met: number;
+        total: number;
+    };
+};
+export declare function requirementsKey(goal: Pick<Goal, "acceptance" | "checks" | "requires">): string;
+export declare function signOffLapse(s: SignOff, goal: Goal, checks: Array<{
+    state: CheckState;
+    runs: RunRecord[];
+}>, current?: CurrentProvenance): SignOffLapse | null;
+type GraphGoal = Pick<Goal, "id" | "requires">;
+export declare const requiresOf: (g: Pick<Goal, "requires">) => GoalRequirement[];
+export declare function goalParents(goals: readonly Pick<Goal, "id" | "requires" | "archived">[]): Map<string, string[]>;
+export declare function goalLoops(goals: readonly GraphGoal[]): {
+    cycles: string[][];
+    edges: Set<string>;
+};
+export declare function requirePath(goals: readonly GraphGoal[], from: string, to: string): string[] | null;
+export declare function loopIfRequired(goals: readonly GraphGoal[], parent: string, child: string): string[] | null;
+export declare function goalTree(goals: readonly Pick<Goal, "id" | "requires" | "archived">[], id: string): string[];
+export declare function goalChecksDeep(goals: readonly Pick<Goal, "id" | "requires" | "archived" | "checks">[], id: string): CheckRef[];
+export declare function rollUpGoals(goals: readonly Goal[], checksOf: (g: Goal) => Array<{
+    state: CheckState;
+    runs: RunRecord[];
+}>, current?: CurrentProvenance, signOffs?: ReadonlyMap<string, SignOff>): GoalState[];
+export declare const leafName: (path: string) => string;
+export type HubRecordType = "goal" | "check" | "signoff" | "rules" | "import";
+export interface GoalImport {
+    from: string;
+    at: string;
+    goals: string[];
+    problems: string[];
+}
+export interface HubRecordData {
+    goal: Goal;
+    check: CheckMetaRecord;
+    signoff: SignOff;
+    rules: HealthRule;
+    import: GoalImport;
+}
+export interface HubRecord<T extends HubRecordType = HubRecordType> {
+    schema: typeof HUB_SCHEMA;
+    type: T;
+    id: string;
+    rev: number;
+    at: string;
+    origin: string;
+    deleted?: true;
+    data?: HubRecordData[T];
+}
+export type AnyHubRecord = {
+    [T in HubRecordType]: HubRecord<T>;
+}[HubRecordType];
+export declare const HUB_EXPORT_FORMAT = "ue-mcp-studio.goals";
+export interface HubExport {
+    format: typeof HUB_EXPORT_FORMAT;
+    schema: typeof HUB_SCHEMA;
+    exportedAt: string;
+    origin: string;
+    records: AnyHubRecord[];
+}
+export interface HubImportReport {
+    added: number;
+    unchanged: number;
+    conflicts: Array<{
+        type: HubRecordType;
+        id: string;
+        title: string;
+    }>;
+}
+export type PlanScope = {
+    kind: "goal";
+    goalId: string;
+} | {
+    kind: "checks";
+    checks: CheckRef[];
+} | {
+    kind: "failing";
+    goalId?: string;
+} | {
+    kind: "stale";
+    goalId?: string;
+} | {
+    kind: "all";
+};
+export interface PlanOptions {
+    attended: boolean;
+    verdictWaitMinutes?: number;
+    stopOnFailure: boolean;
+    replay: boolean;
+}
+export declare const DEFAULT_PLAN_OPTIONS: PlanOptions;
+export declare const NEEDS_PERSON = "needs a person";
+export declare const needsPerson: (steps: readonly Pick<QaStep, "judge">[]) => boolean;
+export type PlanItemState = "queued" | "running" | "passed" | "failed" | "needs_you" | "unjudged" | "skipped" | "error" | "crashed" | "cancelled";
+export interface PlanItem {
+    check: CheckRef;
+    name: string;
+    state: PlanItemState;
+    runId?: string | null;
+    sessionId?: string | null;
+    reason?: string | null;
+    startedAt?: string | null;
+    endedAt?: string | null;
+}
+export declare const FAILING_ITEM_STATES: readonly PlanItemState[];
+export declare function itemStateOf(outcome: RunOutcome): PlanItemState;
+export type PlanState = "queued" | "running" | "paused" | "done" | "cancelled" | "failed";
+export type PlanTrigger = "person" | "agent";
+export interface PlanRun {
+    id: string;
+    title: string;
+    work?: "run" | "fix";
+    scope: PlanScope;
+    options: PlanOptions;
+    state: PlanState;
+    items: PlanItem[];
+    trigger: PlanTrigger;
+    createdAt: string;
+    startedAt?: string | null;
+    endedAt?: string | null;
+}
+export interface PlanRequest {
+    title?: string;
+    scope: PlanScope;
+    options?: Partial<PlanOptions>;
+}
+export interface FixRequest {
+    goalId?: string;
+    checkId?: string;
+}
+export interface QueueState {
+    paused: boolean;
+    pausedBy?: QueuePause | null;
+    current: PlanRun | null;
+    queued: PlanRun[];
+    recent: PlanRun[];
+    editor: {
+        connected: boolean;
+    };
+    lease?: EditorLease | null;
+    waiting?: string | null;
+}
+export type QueuePause = "person" | "release" | "reconnect";
+export type OccupancyKind = "disconnected" | "operation" | "dialog" | "pie" | "run" | "agent" | "client" | "input";
+export interface OccupancyReason {
+    kind: OccupancyKind;
+    text: string;
+}
+export interface EditorLease {
+    editor: string;
+    purpose: string;
+    planRunId: string;
+    item: number;
+    work: "run" | "fix";
+    runId?: string | null;
+    sessionId?: string | null;
+    pie?: boolean;
+    since: string;
+}
+export interface HubLeaseEvent {
+    lease: EditorLease | null;
+}
+export declare const HUB_LEASE = "hub.lease";
+export type AttentionKind = "loop_blocked" | "regression" | "sign_off" | "plan_failed";
+export interface AttentionItem {
+    id: string;
+    kind: AttentionKind;
+    at: string;
+    title: string;
+    detail?: string;
+    goalIds: string[];
+    runId?: string;
+    step?: number;
+    checkId?: string;
+    planRunId?: string;
+    sessionId?: string;
+}
+export declare const ATTENTION_ORDER: readonly AttentionKind[];
+export interface EvidenceScope {
+    store: "local";
+    current: CurrentProvenance;
+}
+export interface HubOverview {
+    goals: GoalState[];
+    checks: CheckState[];
+    attention: AttentionItem[];
+    queue: QueueState;
+    recent: RunRecord[];
+    evidence: EvidenceScope;
+    rules: HealthRule;
+    imported: GoalImport | null;
+    editor: {
+        connected: boolean;
+    };
+    warnings: string[];
+}
+export interface CheckDetail {
+    state: CheckState;
+    runs: RunRecord[];
+    more: boolean;
+    script?: QaRun | null;
+}
+export type HubChangedWhat = "goals" | "runs" | "queue" | "attention" | "checks";
+export interface HubChanged {
+    what: HubChangedWhat[];
+    goalId?: string;
+    runId?: string;
+    planRunId?: string;
+}
+export declare const HUB_CHANGED = "hub.changed";
+export declare const HUB_ROUTES: {
+    readonly overview: "GET /hub";
+    readonly goal: "GET /hub/goals/:id -> GoalState";
+    readonly createGoal: "POST /hub/goals GoalDraft -> { goal: Goal }";
+    readonly updateGoal: "PUT /hub/goals/:id GoalUpdate -> { goal: Goal }";
+    readonly deleteGoal: "DELETE /hub/goals/:id -> 204";
+    readonly addChecks: "POST /hub/goals/:id/checks { checks: CheckRef[] } -> { goal }";
+    readonly removeCheck: "DELETE /hub/goals/:id/checks/:checkId -> { goal }";
+    readonly updateGoalCheck: "PUT /hub/goals/:id/checks/:checkId GoalCheckUpdate -> { goal }";
+    readonly orderChecks: "PUT /hub/goals/:id/checks/order { order: checkIds } -> { goal }";
+    readonly addRequire: "POST /hub/goals/:id/requires { goal, required? } -> { goal } (an existing entry takes the new required)";
+    readonly removeRequire: "DELETE /hub/goals/:id/requires/:goalId -> { goal }";
+    readonly orderRequires: "PUT /hub/goals/:id/requires { order: goalIds } -> { goal }";
+    readonly signOff: "POST /hub/goals/:id/sign-off { note? } -> { signOff: SignOff } (409 without a signed-in account)";
+    readonly clearSignOff: "DELETE /hub/goals/:id/sign-off -> 204";
+    readonly writePlaytests: "POST /hub/goals/:id/write-playtests { text? } -> 202 { sessionId }";
+    readonly check: "GET /hub/checks/:checkId?limit=&before= -> CheckDetail";
+    readonly updateCheck: "PUT /hub/checks/:checkId CheckMetaUpdate -> { meta: CheckMeta }";
+    readonly rules: "PUT /hub/rules Partial<HealthRule> -> { rules: HealthRule }";
+    readonly exportStore: "GET /hub/store -> HubExport";
+    readonly importStore: "POST /hub/store HubExport -> HubImportReport (merge by id; 400 naming every record that does not read)";
+    readonly runs: "GET /hub/runs?check=&limit=&before= -> { runs: RunRecord[], more: boolean }";
+    readonly run: "GET /hub/runs/:runId -> RunDetail";
+    readonly addRunLink: "POST /hub/runs/:runId/links { link: TrackerLink } -> { record: RunRecord }";
+    readonly removeRunLink: "DELETE /hub/runs/:runId/links?url= -> { record: RunRecord }";
+    readonly queue: "GET /hub/queue -> QueueState";
+    readonly plan: "POST /hub/plans PlanRequest -> { plan: PlanRun }";
+    readonly cancelPlan: "POST /hub/plans/:id/cancel -> { plan }";
+    readonly pause: "PUT /hub/queue/paused { paused: boolean } -> QueueState";
+    readonly lease: "GET /hub/lease -> HubLeaseEvent";
+    readonly release: "POST /hub/release -> QueueState (stops what the hub holds on the editor and pauses the queue)";
+    readonly fix: "POST /hub/fix FixRequest -> { queued: number, plan: PlanRun | null } (a fix plan: one chat session per check)";
+    readonly runCheck: "POST /hub/checks/:checkId/run { replay? } -> { plan: PlanRun }";
+};
+export type PlaytestRunsMode = "manual" | "automatic";
+export interface BusyCall {
+    id: number;
+    category: string;
+    action: string;
+    startedAt: number;
+    source: "studio" | "client";
+    sessionId?: string;
+    client?: string;
+    stopped: boolean;
+}
+export interface EditorOperation {
+    op: "start" | "stop" | "restart" | "rebuild";
+    step: string;
+    startedAt: number;
+    stepStartedAt: number;
+}
+export interface EditorOperationFailure {
+    op: EditorOperation["op"];
+    step: string;
+    reason: string;
+    at: number;
+}
+export interface BusyState {
+    now: number;
+    calls: BusyCall[];
+    operation?: EditorOperation;
+    failure?: EditorOperationFailure;
+}
+export {};
+
+// ── contract/hub-attention.ts ──
+import { type AttentionItem, type CheckState, type GoalState, type PlanRun } from "./hub.js";
+import { type QaRun } from "./hub-qa.js";
+export declare const PLAN_FAILED_DAYS = 3;
+export interface AttentionInput {
+    runs: QaRun[];
+    goals: GoalState[];
+    checks: CheckState[];
+    plans: PlanRun[];
+    now: number;
+}
+export declare function buildAttention(i: AttentionInput): AttentionItem[];
+
+// ── contract/hub-ports.ts ──
+import type { ActionResult } from "./daemon.js";
+import type { PlanItem, PlanRun, PlaytestRunsMode } from "./hub.js";
+import type { QaRun } from "./hub-qa.js";
+export interface HubHost {
+    projectDir: string;
+    dataDir: string;
+    callAction(category: string, action: string, args?: Record<string, unknown>): Promise<ActionResult>;
+    editors(): Array<{
+        connected: boolean;
+    }>;
+    events: {
+        publish(type: string, data?: Record<string, unknown>): unknown;
+        subscribe(listener: (e: {
+            type: string;
+            data: Record<string, unknown>;
+        }) => void): () => void;
+    };
+    log: {
+        warn(message: string, detail?: unknown): void;
+    };
+}
+export interface ListedScript {
+    path: string;
+    name: string;
+    map?: string;
+}
+export interface RunTimes {
+    startedAt?: string;
+    endedAt?: string;
+}
+export interface HubScriptIndex {
+    listScripts(fresh?: boolean): Promise<ListedScript[]>;
+    recorded(limit: number): Promise<Array<{
+        run: QaRun;
+        times: RunTimes;
+    }>>;
+}
+export interface HubBroker {
+    all(): QaRun[];
+    get(runId: string): QaRun | undefined;
+    onSaved(listener: (run: QaRun, replaces?: string) => void): () => void;
+    status(runId: string): Promise<{
+        answer: Record<string, unknown>;
+        run: QaRun | null;
+    } | {
+        error: string;
+    }>;
+    readScriptAt(script: string): Promise<{
+        run: QaRun;
+    } | {
+        error: string;
+        status?: number;
+    }>;
+    startScript(script: string, start: {
+        planRunId: string;
+        title: string;
+    }): Promise<{
+        run: QaRun;
+    } | {
+        error: string;
+    }>;
+    stopRun(runId: string, reason: string): Promise<{
+        run: QaRun;
+    } | {
+        error: string;
+        status?: number;
+    }>;
+    setPlanWait?(wait: (run: QaRun) => number | undefined): void;
+}
+export interface HubFixer {
+    start(item: PlanItem, plan: PlanRun): Promise<{
+        runId: string;
+        sessionId?: string;
+    } | {
+        error: string;
+    }>;
+    stop(item: PlanItem): string | null;
+    running(): Set<string>;
+    holds?(run: QaRun): boolean;
+}
+export type HubWritePlaytests = (request: {
+    title: string;
+    text: string;
+}) => {
+    sessionId: string;
+    done: Promise<void>;
+};
+export interface HubPolicy {
+    signer?: () => string | null | Promise<string | null>;
+    playtestRuns?: () => PlaytestRunsMode;
+    enabled?: () => boolean;
+}
+export interface HubClientOptions extends HubPolicy {
+    broker?: HubBroker;
+    fixer?: HubFixer;
+    writePlaytests?: HubWritePlaytests;
+    replay?: (script: string, args: Record<string, unknown>) => Promise<ActionResult>;
+    inputAgeMs?: () => number | null;
+}
 
 // ── helpers exported beside it ──
 export declare const discoveryPath: (projectDir: string) => string;
