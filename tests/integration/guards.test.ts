@@ -10,7 +10,7 @@ import { pathToFileURL } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { covers } from "../helpers/covers.js";
 import { FakeBridge } from "../fake-bridge.js";
-import { json, McpServer, REPO_ROOT, runCli, Sandbox, stopSandboxDaemons } from "./harness.js";
+import { json, McpServer, REPO_ROOT, runCli, Sandbox, stopSandboxDaemons, waitFor } from "./harness.js";
 import { call as daemonCall, daemonEnv, readDiscovery } from "./daemon-fakes.js";
 
 const guarded = (scope: string) => `ue-mcp:
@@ -162,7 +162,8 @@ export default class BlockMutations extends UeMcpGuard {
 
       const server = await McpServer.start(sb, { projects: [project], mode: "daemon", port: null, cwd: elsewhere });
       try {
-        expect((await daemonCall(d, "GET", "/v1/health")).body.clients).toBe(1);
+        // The server registers with the daemon after it starts answering, so the count is read until it lands.
+        await waitFor(async () => (await daemonCall(d, "GET", "/v1/health")).body.clients === 1, 15_000, "the server to register with the daemon");
         const spawn = await call(server, "level", "place_actor", { actorClass: "PointLight" });
         expect(spawn.isError).toBe(true);
         expect(spawn.text).toContain("frozen by guards/BlockMutations: place_actor");
