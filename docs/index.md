@@ -4,7 +4,7 @@ description: "What ue-mcp is, what its category tools cover, and where to start 
 
 # UE-MCP
 
-**Unreal Engine Model Context Protocol Server.** It lets AI assistants drive the Unreal Editor through <!-- count:tools -->31<!-- /count --> category tools covering <!-- count:actions -->3729+<!-- /count --> actions.
+**Unreal Engine Model Context Protocol Server.** It lets AI assistants drive the Unreal Editor through <!-- count:tools -->32<!-- /count --> category tools covering <!-- count:actions -->3740+<!-- /count --> actions.
 
 An MCP client (Claude Code, Claude Desktop, Cursor and others) launches `ue-mcp` for your project. By default that process relays to the project's daemon, a background Node.js process that holds the WebSocket connection to the C++ bridge plugin inside the editor. The daemon outlives editor restarts, serves every MCP client of the project, and serves UE-MCP Studio, the in-editor agent.
 
@@ -80,7 +80,7 @@ The **[Tool Reference](tool-reference.md)** lists every tool and action with its
 - **[Remote control](remote-control.md)**: Studio from a phone or another computer
 - **[Security](security.md)**: what runs on your computer, what leaves it, and when the agent asks first
 - **[Architecture](architecture.md)**: the daemon, the server, the bridge plugin and how they connect
-- **[Tool Reference](tool-reference.md)**: all <!-- count:tools -->31<!-- /count --> tools with every action and its parameters
+- **[Tool Reference](tool-reference.md)**: all <!-- count:tools -->32<!-- /count --> tools with every action and its parameters
 - **[Control Rig Animation](control-rig-animation.md)**: rig discovery, solving, keys, baking and verification
 - **[Spatial Instructions](spatial-instructions.md)**: how spatial edits are resolved and verified
 - **[Collection and Input Editing](collection-and-input-editing.md)**: nested collection fields and input mappings
@@ -93,6 +93,7 @@ The **[Tool Reference](tool-reference.md)** lists every tool and action with its
 - **[Flows](flows.md)**: YAML workflows, custom tasks, hooks, rollback
 - **[Checkpoints](checkpoints.md)**: keep or revert changes per checkpoint
 - **[Mutation journal](journal.md)**: revert a group of calls, or every group after one
+- **[Playtest Hub](hub.md)**: goals, playtest evidence and plans run under the editor lease
 - **[Plugins](plugins.md)**: npm packages that add actions to existing categories
 - **[Configuration](configuration.md)**: MCP client setup, the daemon and settings
 - **[ue-mcp.yml Reference](config-file.md)**: every key in the project config file
