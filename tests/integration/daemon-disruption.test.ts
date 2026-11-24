@@ -170,7 +170,8 @@ describe("an external runtime and people over HTTP", () => {
     // The participant holds, then goes idle and answers go.
     expect((await call(d, "POST", `/v1/disruptions/participants/${studio}/hold`, { reason: "saving" })).status).toBe(200);
     await call(d, "PUT", `/v1/disruptions/participants/${studio}`, { busy: [] });
-    expect((await call(d, "GET", "/v1/disruptions")).body.requests.find((r: { id: string }) => r.id === id).answers[0].reason).toContain("saving");
+    // The daemon's own hub calls make "this server" a session too, so the answer is found by who gave it.
+    expect((await call(d, "GET", "/v1/disruptions")).body.requests.find((r: { id: string }) => r.id === id).answers.find((a: { session: string }) => a.session === studio).reason).toContain("saving");
     await call(d, "POST", `/v1/disruptions/participants/${studio}/release`);
     const voted = await call(d, "POST", `/v1/disruptions/${id}/vote`, { participant: studio, vote: "go" });
     expect(voted.status).toBe(200);
