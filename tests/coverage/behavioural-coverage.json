@@ -6175,11 +6175,6 @@
         {
           "suite": "live",
           "file": "tests/live/level-save-as.test.ts",
-          "test": "level(save) refuses it by name and points at save_as"
-        },
-        {
-          "suite": "live",
-          "file": "tests/live/level-save-as.test.ts",
           "test": "saves a copy with its actor packages and opens the copy"
         },
         {
@@ -6201,16 +6196,6 @@
           "suite": "live",
           "file": "tests/live/unsaved-map-switch.test.ts",
           "test": "refuses without a flag, names the map, and creates nothing"
-        },
-        {
-          "suite": "live",
-          "file": "tests/live/unsaved-map-switch.test.ts",
-          "test": "refuses without discardUnsaved, names the map, and leaves the editor on it"
-        },
-        {
-          "suite": "live",
-          "file": "tests/live/unsaved-map-switch.test.ts",
-          "test": "refuses without the flag and names the never-saved map"
         }
       ]
     },
@@ -7049,11 +7034,6 @@
         },
         {
           "suite": "live",
-          "file": "tests/live/level-save-as.test.ts",
-          "test": "level(save) refuses it by name and points at save_as"
-        },
-        {
-          "suite": "live",
           "file": "tests/live/material-function-refs.test.ts",
           "test": "connects nodes by the names they were given"
         },
@@ -7071,16 +7051,6 @@
           "suite": "live",
           "file": "tests/live/unsaved-map-switch.test.ts",
           "test": "refuses without a flag, names the map, and creates nothing"
-        },
-        {
-          "suite": "live",
-          "file": "tests/live/unsaved-map-switch.test.ts",
-          "test": "refuses without discardUnsaved, names the map, and leaves the editor on it"
-        },
-        {
-          "suite": "live",
-          "file": "tests/live/unsaved-map-switch.test.ts",
-          "test": "refuses without the flag and names the never-saved map"
         }
       ]
     },
@@ -8478,6 +8448,11 @@
         },
         {
           "suite": "live",
+          "file": "tests/live/level-save-as.test.ts",
+          "test": "level(save) refuses it by name and points at save_as"
+        },
+        {
+          "suite": "live",
           "file": "tests/live/pie-notify.test.ts",
           "test": "pushes started and ended for a session begun and ended outside the bridge's pie actions"
         },
@@ -8485,6 +8460,21 @@
           "suite": "live",
           "file": "tests/live/spatial-communication.test.ts",
           "test": "rejects reversed or overflowing focus framing before capture"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/unsaved-map-switch.test.ts",
+          "test": "refuses without a flag, names the map, and creates nothing"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/unsaved-map-switch.test.ts",
+          "test": "refuses without discardUnsaved, names the map, and leaves the editor on it"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/unsaved-map-switch.test.ts",
+          "test": "refuses without the flag and names the never-saved map"
         }
       ]
     },
@@ -15737,16 +15727,6 @@
           "suite": "live",
           "file": "tests/live/unsaved-map-switch.test.ts",
           "test": "discards the map itself and opens the target"
-        },
-        {
-          "suite": "live",
-          "file": "tests/live/unsaved-map-switch.test.ts",
-          "test": "refuses without a flag, names the map, and creates nothing"
-        },
-        {
-          "suite": "live",
-          "file": "tests/live/unsaved-map-switch.test.ts",
-          "test": "refuses without discardUnsaved, names the map, and leaves the editor on it"
         },
         {
           "suite": "live",
