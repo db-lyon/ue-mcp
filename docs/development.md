@@ -95,7 +95,7 @@ src/
 ├── terminal/             # Terminal rendering: colours, progress, selection
 ├── cli/                  # CLI commands, --editor parsing
 ├── flow/                 # Flow engine (registry, loader, task factory, HTTP)
-└── tools/                # <!-- count:tools -->31<!-- /count --> category tools, one file each
+└── tools/                # <!-- count:tools -->32<!-- /count --> category tools, one file each
     ├── project/          # project category, split by action group
     ├── epic/             # Generated epic_* actions (npm run generate)
     └── specs/            # Generated parameter specs (npm run generate)

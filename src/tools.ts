@@ -39,6 +39,7 @@ import { conversationTool } from "./tools/conversation.js";
 import { sourceControlTool } from "./tools/source_control.js";
 import { pieTool } from "./tools/pie.js";
 import { canvasTool } from "./tools/canvas.js";
+import { hubTool } from "./tools/hub.js";
 
 export const ALL_TOOLS: ToolDef[] = [
   projectTool,
@@ -72,6 +73,7 @@ export const ALL_TOOLS: ToolDef[] = [
   conversationTool,
   sourceControlTool,
   canvasTool,
+  hubTool,
 ];
 
 /** Flatten to (toolName, actionName, bridgeMethod) triples for every action
