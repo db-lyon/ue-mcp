@@ -280,6 +280,16 @@ export class PlanQueue {
     return true;
   }
 
+  /** Move a queued plan to position `to` among the queued ones, 0 for next. */
+  move(id: string, to: number): void {
+    const at = this.s.queued.findIndex((p) => p.id === id);
+    if (at < 0) throw this.find(id) ? conflict("only a queued plan can be moved") : notFound(`no plan ${id}`);
+    const [plan] = this.s.queued.splice(at, 1);
+    this.s.queued.splice(Math.max(0, Math.min(this.s.queued.length, Math.floor(to))), 0, plan);
+    this.save(id);
+    void this.pump();
+  }
+
   /** Cancel a plan: a queued one leaves the queue, the running one stops what its item runs. */
   async cancel(id: string): Promise<PlanRun> {
     const at = this.s.queued.findIndex((p) => p.id === id);

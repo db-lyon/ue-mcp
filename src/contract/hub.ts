@@ -1283,6 +1283,7 @@ export const HUB_ROUTES = {
   queue: "GET /hub/queue -> QueueState",
   plan: "POST /hub/plans PlanRequest -> { plan: PlanRun, placement: PlanPlacement } (a person's Run resumes a paused queue)",
   cancelPlan: "POST /hub/plans/:id/cancel -> { plan }",
+  movePlan: "POST /hub/plans/:id/move { to: number } -> QueueState (0 is next)",
   pause: "PUT /hub/queue/paused { paused: boolean } -> QueueState",
   lease: "GET /hub/lease -> HubLeaseEvent",
   release: "POST /hub/release -> QueueState (stops what the hub holds on the editor and pauses the queue)",

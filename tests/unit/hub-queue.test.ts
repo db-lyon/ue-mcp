@@ -284,6 +284,17 @@ describe("PlanQueue", () => {
     await expect(q.cancel("nope")).rejects.toMatchObject({ status: 404 });
   });
 
+  it("moves a queued plan", async () => {
+    const q = make();
+    q.setPaused(true);
+    const [a, b, c] = [q.enqueue(plan(["/Game/A"])), q.enqueue(plan(["/Game/B"])), q.enqueue(plan(["/Game/C"]))];
+    q.move(c.id, 0);
+    expect(q.state().queued.map((p) => p.id)).toEqual([c.id, a.id, b.id]);
+    q.move(c.id, 99);
+    expect(q.state().queued.map((p) => p.id)).toEqual([a.id, b.id, c.id]);
+    expect(() => q.move("nope", 0)).toThrow(expect.objectContaining({ status: 404 }));
+  });
+
   describe("a person's Run", () => {
     it("starts at once on an idle queue", () => {
       const q = make();

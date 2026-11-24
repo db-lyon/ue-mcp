@@ -999,6 +999,14 @@ export class Hub {
     return this.queue.cancel(id);
   }
 
+  /** Reorder the queue: a queued plan to { to }, 0 for next. */
+  movePlan(id: string, body: unknown): QueueState {
+    const to = isObject(body) ? body.to : undefined;
+    if (!Number.isInteger(to) || (to as number) < 0) throw bad("body must be { to: a position from 0 }");
+    this.queue.move(id, to as number);
+    return this.queueView();
+  }
+
   setPaused(body: unknown): QueueState {
     const paused = isObject(body) ? body.paused : undefined;
     if (typeof paused !== "boolean") throw bad("body must be { paused: boolean }");

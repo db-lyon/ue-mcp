@@ -54,6 +54,7 @@ All under `/v1/hub`, with the daemon's bearer token. A bad body answers 400, an 
 | `POST`, `DELETE /v1/hub/runs/<id>/links` | Link a run to a tracker item |
 | `GET /v1/hub/queue`, `PUT /v1/hub/queue/paused` | The plan queue; pause or resume it |
 | `POST /v1/hub/plans`, `POST /v1/hub/plans/<id>/cancel` | Run a plan, cancel one |
+| `POST /v1/hub/plans/<id>/move` | Move a queued plan to `{ to }`, 0 for next |
 | `GET /v1/hub/lease`, `POST /v1/hub/release` | The hub's hold on the editor; release it |
 | `POST /v1/hub/fix` | Queue fix loops for failing playtests (409 when no client can run one) |
 

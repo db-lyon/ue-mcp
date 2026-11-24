@@ -65,6 +65,7 @@ export function hubRoutes(hub: () => Hub, projectDir: string): Pick<RouteHandler
     "hub.release": async () => ok(await hub().release()),
     "hub.plan": async (r) => ok(await hub().queuePlan(await r.body(), "person")),
     "hub.plan.cancel": async ({ params }) => ok({ plan: await hub().cancelPlan(param(params, "id")) }),
+    "hub.plan.move": async (r) => ok(hub().movePlan(param(r.params, "id"), await r.body())),
     "hub.fix": async (r) => ok(await hub().fix(await r.body())),
   };
 }

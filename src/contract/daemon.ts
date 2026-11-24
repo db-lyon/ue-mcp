@@ -263,6 +263,7 @@ export const DAEMON_ROUTES = routeTable({
   "hub.release": { method: "POST", path: "/v1/hub/release", feature: "hub", summary: "Release the editor: stop what the hub holds on it and pause the queue (QueueState)" },
   "hub.plan": { method: "POST", path: "/v1/hub/plans", feature: "hub", summary: "PlanRequest: a person's Run; resumes a paused queue and starts at once when the editor is free ({ plan, placement })" },
   "hub.plan.cancel": { method: "POST", path: "/v1/hub/plans/:id/cancel", feature: "hub", summary: "cancel a plan ({ plan })" },
+  "hub.plan.move": { method: "POST", path: "/v1/hub/plans/:id/move", feature: "hub", summary: "{ to }: move a queued plan, 0 for next (QueueState)" },
   "hub.fix": { method: "POST", path: "/v1/hub/fix", feature: "hub", summary: "FixRequest: queue fix loops for failing playtests ({ queued, plan, placement? }; 409 when no client can run a fix loop)" },
   "tools.list": { method: "GET", path: "/v1/tools", feature: "tools.categories", summary: "project(list_categories)" },
   "tools.categories": { method: "POST", path: "/v1/tools/categories", feature: "tools.categories", summary: "{ category, enabled, scope?, editor? }: project(set_category_enabled)" },
