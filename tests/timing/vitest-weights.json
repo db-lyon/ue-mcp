@@ -1,5 +1,5 @@
 {
-  "recordedAt": "2026-11-22",
+  "recordedAt": "2026-11-24",
   "source": "seconds per test file, from vitest JSON reports. Refresh with scripts/vitest-weights.mjs.",
   "files": {
     "tests/integration/agent-guides.test.ts": 20.4,
@@ -36,6 +36,7 @@
     "tests/integration/gateway.test.ts": 5,
     "tests/integration/graph-diagram.test.ts": 11.7,
     "tests/integration/guards.test.ts": 0.2,
+    "tests/integration/hub-goal-delete.test.ts": 0.1,
     "tests/integration/init-interactive.test.ts": 27.5,
     "tests/integration/inline-image.test.ts": 5.8,
     "tests/integration/journal.test.ts": 29.7,
