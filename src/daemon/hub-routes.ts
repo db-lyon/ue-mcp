@@ -27,7 +27,7 @@ export function hubRoutes(hub: () => Hub, projectDir: string): Pick<RouteHandler
     "hub.goal.create": async (r) => ok({ goal: hub().goals.create(await r.body()) }),
     "hub.goal.update": async (r) => ok({ goal: hub().goals.update(param(r.params, "id"), await r.body()) }),
     "hub.goal.delete": ({ params }) => {
-      hub().goals.delete(param(params, "id"));
+      hub().deleteGoal(param(params, "id"));
       return noContent;
     },
     "hub.goal.addChecks": async (r) => ok({ goal: hub().goals.addChecks(param(r.params, "id"), (await r.body() as { checks?: unknown } | undefined)?.checks) }),

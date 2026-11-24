@@ -254,6 +254,56 @@ describe("routes", () => {
     expect((await call("DELETE", `/hub/goals/${alpha}/requires/${jump}`)).status).toBe(404);
   });
 
+  it("deleting a goal unlinks it from the goals that required it, leaves its playtests, their records and runs, and is 409 while a plan for it is queued or running", async () => {
+    setup();
+    const mk = async (title: string, extra: Record<string, unknown> = {}) => (await call("POST", "/hub/goals", { title, ...extra })).body.goal.id as string;
+    const doors = await mk("Doors", { checks: [{ kind: "script", target: DOOR }] });
+    const jump = await mk("Jump", { checks: [{ kind: "script", target: DOOR }, { kind: "script", target: JUMP }] });
+    const alpha = await mk("Alpha", { kind: "milestone", requires: [{ goal: doors }, { goal: jump }] });
+    await call("PUT", `/hub/checks/${enc(`script:${DOOR}`)}`, { title: "Door opens", links: [{ url: "https://tracker.example/1" }] });
+
+    // A plan made for the goal is running: refused, naming the plan and how to go on.
+    const planId = (await call("POST", "/hub/plans", { scope: { kind: "goal", goalId: doors } })).body.plan.id as string;
+    await settle();
+    await settle();
+    const refused = await call("DELETE", `/hub/goals/${doors}`);
+    expect(refused.status).toBe(409);
+    expect(refused.body.error).toBe(`"Doors" can't be deleted while a plan made for it is in the queue: "Run Doors". Cancel that plan or let it finish, then delete it.`);
+    expect((await call("GET", `/hub/goals/${doors}`)).status).toBe(200);
+
+    // The plan's run finishes; the goal deletes.
+    const run0 = ((await call("GET", "/hub/queue")).body as QueueState).current!.items[0].runId!;
+    status.set(run0, { ...status.get(run0)!, state: "finished", steps: steps(["passed", "passed"]), awaiting: [] });
+    await hub.tick();
+    await settle();
+    expect(((await call("GET", "/hub/queue")).body as QueueState).recent[0]).toMatchObject({ id: planId, state: "done" });
+    expect((await call("DELETE", `/hub/goals/${doors}`)).status).toBe(204);
+
+    const o = (await call("GET", "/hub")).body as HubOverview;
+    expect(o.goals.map((g) => g.goal.id).sort()).toEqual([alpha, jump].sort());
+    expect(o.goals.find((g) => g.goal.id === alpha)!.goal.requires).toEqual([{ goal: jump }]);
+    expect(o.goals.find((g) => g.goal.id === jump)!.goal.checks.map((c) => c.target)).toEqual([DOOR, JUMP]);
+    expect(o.warnings.some((w) => w.includes(doors))).toBe(false);
+    // The playtest keeps its own record and its run, which stays readable.
+    const door = (await call("GET", `/hub/checks/${enc(`script:${DOOR}`)}`)).body;
+    expect(door.state).toMatchObject({ goalIds: [jump], name: "Door opens", links: [{ url: "https://tracker.example/1" }] });
+    expect(door.runs.map((r: { runId: string }) => r.runId)).toEqual([run0]);
+    expect((await call("GET", `/hub/runs/${run0}`)).status).toBe(200);
+
+    // A milestone deletes the same way, and the goals it required stay.
+    expect((await call("DELETE", `/hub/goals/${alpha}`)).status).toBe(204);
+    expect(((await call("GET", "/hub")).body as HubOverview).goals.map((g) => g.goal.id)).toEqual([jump]);
+
+    // A queued plan refuses it too, until it is cancelled.
+    await call("PUT", "/hub/queue/paused", { paused: true });
+    const queued = (await call("POST", "/hub/plans", { scope: { kind: "goal", goalId: jump } })).body.plan.id as string;
+    expect((await call("DELETE", `/hub/goals/${jump}`)).status).toBe(409);
+    expect((await call("POST", `/hub/plans/${queued}/cancel`)).status).toBe(200);
+    expect((await call("DELETE", `/hub/goals/${jump}`)).status).toBe(204);
+    expect(((await call("GET", "/hub")).body as HubOverview).goals).toEqual([]);
+    expect(((await call("GET", "/hub")).body as HubOverview).checks.map((c) => c.id).sort()).toEqual([`script:${DOOR}`, `script:${JUMP}`].sort());
+  });
+
   it("bad plan, rule and query bodies are 400; unknown ids 404", async () => {
     setup();
     expect((await call("POST", "/hub/plans", { scope: { kind: "nope" } })).status).toBe(400);
