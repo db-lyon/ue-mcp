@@ -843,6 +843,26 @@ export class Hub {
   }
 
   /**
+   * Delete a goal or milestone, with its sign-off. Goals that required it stop
+   * requiring it. Its playtests stay as they are: their own records, the other
+   * goals that name them, and every past run. While a plan made for it is
+   * queued or running, the delete is refused (409) and names the plan, since
+   * that plan was started from the goal.
+   */
+  deleteGoal(id: string): void {
+    const goal = this.goals.get(id);
+    if (!goal) throw notFound(`no goal ${id}`);
+    const q = this.queue.state();
+    const plans = [q.current, ...q.queued].filter((p): p is PlanRun => !!p && "goalId" in p.scope && p.scope.goalId === id);
+    if (plans.length) {
+      const names = plans.map((p) => `"${p.title}"`).join(", ");
+      // A person reads plans as runs: Studio's queue lists them under Runs.
+      throw conflict(`"${goal.title}" can't be deleted while ${plans.length === 1 ? "a run made for it is" : "runs made for it are"} queued or running: ${names}. Cancel ${plans.length === 1 ? "that run" : "those runs"} or let ${plans.length === 1 ? "it" : "them"} finish, then try again.`);
+    }
+    this.goals.delete(id);
+  }
+
+  /**
    * Write playtests for this goal: a session of its own runs the /playtest
    * flow, seeded with the goal's words and the checks it has, and each script
    * drafted in that session joins the goal.

@@ -82,6 +82,7 @@ export const DAEMON_FEATURES = [
   "install.engineMismatch",
   "editor.consent",
   "hub",
+  "hub.goalDelete",
 ] as const;
 
 export type DaemonFeature = (typeof DAEMON_FEATURES)[number];
@@ -98,6 +99,8 @@ export const DAEMON_FEATURES_BEYOND_ROUTES: { readonly [F in DaemonFeature]?: st
     "GET /v1/install reports the problem bridge_engine_mismatch, with action `rebuild` and engineMismatch naming the BuildIds, when the bridge or the project's UE_MCP_Studio plugin is built for another engine build, their module manifests disagree, or the install marker names another release than the descriptor",
   "editor.consent":
     "POST /v1/editor/{stop,restart,rebuild} answers 409 { error, request: EditorDisruptionRequest } while other sessions using the editor have not agreed, and takes { requestId?, force?, requester?, reason? }; GET /v1/events carries disruption.requested, disruption.updated and disruption.hold",
+  "hub.goalDelete":
+    "DELETE /v1/hub/goals/:id removes the goal or milestone and its sign-off and drops its id from every other goal's requires; playtests, their records and past runs are left as they are; it answers 409 { error } naming the plan while a plan whose scope is that goal is queued or running",
 };
 
 /** What the extension API offers beyond EXTENSION_API_VERSION, in the order `api.features` lists them. */
@@ -232,7 +235,7 @@ export const DAEMON_ROUTES = routeTable({
   "hub.goal": { method: "GET", path: "/v1/hub/goals/:id", feature: "hub", summary: "one goal with its status and checks (GoalState)" },
   "hub.goal.create": { method: "POST", path: "/v1/hub/goals", feature: "hub", summary: "GoalDraft: create a goal or milestone ({ goal })" },
   "hub.goal.update": { method: "PUT", path: "/v1/hub/goals/:id", feature: "hub", summary: "GoalUpdate: change fields ({ goal })" },
-  "hub.goal.delete": { method: "DELETE", path: "/v1/hub/goals/:id", feature: "hub", summary: "delete a goal (204)" },
+  "hub.goal.delete": { method: "DELETE", path: "/v1/hub/goals/:id", feature: "hub", summary: "delete a goal or milestone; goals that required it stop requiring it, its playtests stay (204; 409 while a plan for it is queued or running)" },
   "hub.goal.addChecks": { method: "POST", path: "/v1/hub/goals/:id/checks", feature: "hub", summary: "{ checks: CheckRef[] }: add playtests to a goal ({ goal })" },
   "hub.goal.orderChecks": { method: "PUT", path: "/v1/hub/goals/:id/checks/order", feature: "hub", summary: "{ order: checkIds }: reorder a goal's playtests ({ goal })" },
   "hub.goal.removeCheck": { method: "DELETE", path: "/v1/hub/goals/:id/checks/:checkId", feature: "hub", summary: "remove a playtest from a goal ({ goal })" },
