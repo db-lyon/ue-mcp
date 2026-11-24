@@ -1204,17 +1204,26 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
     info("daemon", "handoff requested; exiting once no call is in flight");
     // Bounded: a call that never returns would leave this daemon running beside its successor.
     if (!(await drainInflight(inflight, HANDOFF_DRAIN_MS))) warn("daemon", `${inflight()} call(s) still in flight after ${HANDOFF_DRAIN_MS / 1000}s; handing off anyway`);
-    await shutdown("handed off to a newer daemon");
+    await shutdown("handed off to a newer daemon", { handoff: true });
   }
 
   /** The opt-in flow HTTP surface (ue-mcp.http), served by whichever process serves the project. */
   let flowHttp: { close(cb: () => void): void } | null = null;
 
-  function shutdown(reason: string): Promise<void> {
+  function shutdown(reason: string, o: { handoff?: boolean } = {}): Promise<void> {
     if (closing) return closing;
     closing = (async () => {
       info("daemon", `stopping: ${reason}`);
       events.publish("daemon.stopping", { reason });
+      // The hub's playtest stops and the PIE it started ends, while the editor is still reachable. A successor daemon follows a
+      // running playtest again, so a handoff leaves it. Bounded: an editor that does not answer must not hold the daemon open.
+      if (!o.handoff) {
+        const stopped = await Promise.race([
+          hubHolder.shutdown().then(() => true, (e: unknown) => (warn("hub", "the playtest could not be stopped on shutdown", e), true)),
+          new Promise<false>((r) => setTimeout(() => r(false), HUB_SHUTDOWN_MS).unref()),
+        ]);
+        if (!stopped) warn("hub", `the playtest was still stopping after ${HUB_SHUTDOWN_MS / 1000}s; stopping the daemon anyway`);
+      }
       clearInterval(idleTimer);
       clearInterval(stallTimer);
       for (const t of updateTimers) clearTimeout(t);
@@ -1357,6 +1366,8 @@ export async function runDaemon(projects: string[]): Promise<number> {
 
 /** How long a daemon asked to hand off waits for its calls; under the 120 s its successor waits for it. */
 const HANDOFF_DRAIN_MS = 90_000;
+/** How long a shutdown waits for the hub to stop its playtest and the PIE that playtest started. */
+const HUB_SHUTDOWN_MS = 10_000;
 
 /** A live same-or-newer daemon published by another process, other than `ignorePid`. */
 function rivalDaemon(projectDir: string, version: string, ignorePid?: number): DaemonDiscovery | null {

@@ -52,6 +52,11 @@ export class HubHolder {
     this.get();
   }
 
+  /** The daemon is stopping: the hub's run on the editor stops and PIE it started ends (Hub.shutdown). Never builds a hub. */
+  async shutdown(): Promise<void> {
+    await this.current?.hub.shutdown();
+  }
+
   dispose(): void {
     this.current?.dispose();
     this.current = null;
