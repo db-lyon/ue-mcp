@@ -897,6 +897,7 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("rowName"), EType::String, TEXT("Single row to remove")),
 		MCPParam::Optional(TEXT("rowNames"), EType::Array, TEXT("Rows to remove in one transaction, including clone rollback")).Items(EType::String),
 		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save after removing rows (default true)")).Default(true),
+		MCPSharedParam::DryRun().Describe(TEXT("Return wouldRemove, missingRowNames and rowCountAfter without changing the table (default false)")),
 	}, MCPSpec::ExactlyOne({ { TEXT("rowName") }, { TEXT("rowNames") } }));
 	// #1999: bulk removal that checks every other row survived unchanged and
 	// restores the whole table when one did not.
