@@ -86,6 +86,7 @@ nav:
     - pie.md
     - Level traces: level-traces.md
     - Test scripts: pie-scripts.md
+    - Playtest Hub: hub.md
   - Flows:
     - flows.md
   - Checkpoints: checkpoints.md

@@ -21,6 +21,13 @@
  * below take and return only its types.
  */
 export * from "./contract/daemon.js";
+export * from "./contract/hub-qa.js";
+export * from "./contract/hub.js";
+export * from "./contract/hub-attention.js";
+export * from "./contract/hub-ports.js";
 export { readDiscovery, readLiveDiscovery, discoveryPath } from "./daemon/discovery.js";
 export { parseContextMeasurement, scopeBucket } from "./surface/context/context-measurement.js";
 export { signBundle, verifyBundle } from "./daemon/ui-bundles.js";
+// For a client that brings its own HubBroker or HubFixer: the hold at a manual step and a fix loop's write lease.
+export { VerdictHold } from "./hub/verdict-hold.js";
+export { WriteLease, packageOf } from "./hub/write-lease.js";

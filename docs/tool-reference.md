@@ -6,7 +6,7 @@ description: "Every ue-mcp category tool and action, with its parameter signatur
 
 This page lists ue-mcp's own category tools and actions. For the official Unreal tools (UE 5.8+) that ue-mcp wraps (surfaced inside these same categories), see [Native Tools](native-tools.md).
 
-UE-MCP exposes **<!-- count:tools -->31<!-- /count --> category tools** covering **<!-- count:actions -->3729+<!-- /count --> actions**, plus a `flow` tool for running multi-step YAML workflows. Every category tool takes an `action` parameter that selects the operation and an `args` object holding that action's parameters: `level(action="place_actor", args={actorClass: "PointLight"})`. Under the default `micro` [context strategy](configuration.md#context-strategy-full-lean-micro) the same call goes through the gateway: `tools(action="call", category="level", method="place_actor", args={...})`.
+UE-MCP exposes **<!-- count:tools -->32<!-- /count --> category tools** covering **<!-- count:actions -->3740+<!-- /count --> actions**, plus a `flow` tool for running multi-step YAML workflows. Every category tool takes an `action` parameter that selects the operation and an `args` object holding that action's parameters: `level(action="place_actor", args={actorClass: "PointLight"})`. Under the default `micro` [context strategy](configuration.md#context-strategy-full-lean-micro) the same call goes through the gateway: `tools(action="call", category="level", method="place_actor", args={...})`.
 
 !!! tip "First call in any session"
     Start with `project(action="get_status")` to check the connection, then `level(action="get_outliner")` or `asset(action="list")` to explore.
@@ -4152,3 +4152,23 @@ The press actions (`respond_to_dialog`, `press_window_button`, `close_window`) a
 | `remove_cutout(cutoutId)` | Delete a cutout actor by its cutout_id |
 | `add_cutout_variant(cutoutId, label?, one(pngPath; pngBase64))` | Add an image variant to a cutout actor. Returns variant_index |
 | `set_cutout_variant(cutoutId, variantIndex:i)` | Show another of a cutout actor's variants, by 0-based index |
+
+---
+
+## hub
+
+*The Playtest Hub: goals and milestones the game must meet, the playtests (PIE test scripts) that prove them, their runs as evidence, and plans that run playtests under the editor lease. Goals are kept in one store per project outside the game repo, and reference playtests by asset path. Status (failing, ready_to_sign_off, at_risk, running, in_progress, not_started, met) and a playtest's health are worked out on every read from the runs recorded on this computer, never stored. Needs the project's daemon.*
+
+| Action | Description |
+|--------|-------------|
+| `list_goals(include_archived?:b)` | List the hub's goals and milestones with their status, progress, owner, priority, due date, the goals each requires and is part of, and links. unused: no milestone or goal requires it. Archived goals are left out unless include_archived is true |
+| `read_goal(id)` | Read one goal: its fields, its status, and each playtest with its health, latest run and links. A playtest missing on this checkout shows health missing; that is no failure of the goal |
+| `read_check(check_id, limit?:i)` | Read one playtest: its health, the goals that list it, its links, and its latest runs with their ids and links |
+| `create_goal(title, acceptance?:o, archived?:b, checks?:[o], description?, due?, id?, kind?, links?:[o], owner?, priority?, requires?:s/[o])` | Create a goal in the project's goal store. Its id is made from the title and a short random ending unless id is given. Only title is required |
+| `update_goal(id, acceptance?:o, archived?:b, checks?:[o], description?, due?, kind?, links?:[o], owner?, priority?, requires?:s/[o], title?)` | Change a goal's fields. Only the fields given change; checks, requires and links, when given, replace the lists. To add or remove one link, use add_link or remove_link |
+| `add_link(url, one(goal_id; check_id; run_id), rel?, title?)` | Link a goal, a playtest or a run to an item in a tracker or anywhere else: an issue, a ticket, a card, a document. Give exactly one of goal_id, check_id and run_id. Any URL with a scheme works except javascript:, data: and file:; the hub stores it and never contacts it. A link to a URL already there is replaced. rel says how the item relates, free text, usually one of counterpart, related, filed-from-run, blocks |
+| `remove_link(url, one(goal_id; check_id; run_id))` | Remove a link, by its URL, from a goal, a playtest or a run. Give exactly one of goal_id, check_id and run_id |
+| `require_goal(goal_id, requires:s/[o], required?:b)` | Make one goal require another: goal_id (often a milestone) is met only when requires is. Added at the end of goal_id's list; a goal it requires already keeps its place and takes the required given. A goal can be required by any number of goals, so the same goal can sit under several milestones. A loop is refused |
+| `unrequire_goal(goal_id, requires:s/[o])` | Stop one goal requiring another. Only goal_id changes; the other goal stays |
+| `run_plan(attended?:b, one(goal_id; playtests:[s]), replay?:b)` | Queue a plan that runs a goal's playtests (and those of the goals it requires), or the playtests named, one at a time. The plan runs on the editor under the hub's lease: it starts only while nothing else holds the editor (Play In Editor in use, a dialog, another client's calls, a build), starts and ends only the Play In Editor session its own run started, and a manual step holds the run for a person's verdict. Returns the queued plan at once; follow it with read_queue. Refused when a client has set agent plans to Manual |
+| `read_queue()` | The plan queue: whether it is paused, why the next item waits (waiting), the plan running now, those queued, and the last few finished, each with its items' state and run id |

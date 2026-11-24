@@ -32,6 +32,9 @@ import { findRoute, matchRoutePath } from "../../src/daemon/router.js";
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repo = path.join(here, "..", "..");
 const contractFile = path.join(repo, "src", "contract", "daemon.ts");
+/** The Playtest Hub's contract files, beside daemon.ts: each imports only its siblings. */
+const hubContractFiles = ["hub-qa.ts", "hub.ts", "hub-attention.ts", "hub-ports.ts"].map((f) => path.join(repo, "src", "contract", f));
+const contractFiles = [contractFile, ...hubContractFiles];
 const entryFile = path.join(repo, "src", "daemon-api.ts");
 const recordingFile = path.join(repo, "tests", "golden", "daemon-api.d.ts.txt");
 const RECORDING = process.env.UE_MCP_RECORD_GOLDEN === "1";
@@ -51,13 +54,18 @@ function publicDeclarations(): string {
     removeComments: true,
     newLine: ts.NewLineKind.LineFeed,
   });
-  const contract = program.getSourceFile(contractFile);
-  if (!contract) throw new Error("src/contract/daemon.ts is not part of the ue-mcp/daemon program");
-  let dts = "";
-  const emitted = program.emit(contract, (name, text) => {
-    if (name.endsWith(".d.ts")) dts = text;
-  }, undefined, true);
-  if (emitted.emitSkipped || !dts) throw new Error("the contract's declarations did not emit");
+  const emit = (file: string): string => {
+    const source = program.getSourceFile(file);
+    if (!source) throw new Error(`${path.relative(repo, file)} is not part of the ue-mcp/daemon program`);
+    let out = "";
+    const emitted = program.emit(source, (name, text) => {
+      if (name.endsWith(".d.ts")) out = text;
+    }, undefined, true);
+    if (emitted.emitSkipped || !out) throw new Error(`${path.relative(repo, file)}'s declarations did not emit`);
+    return out.trim();
+  };
+  const dts = emit(contractFile);
+  const hubDts = hubContractFiles.map((f) => `// ── contract/${path.basename(f)} ──\n${emit(f)}`);
 
   const checker = program.getTypeChecker();
   const entry = program.getSourceFile(entryFile)!;
@@ -65,7 +73,7 @@ function publicDeclarations(): string {
   for (const exp of checker.getExportsOfModule(checker.getSymbolAtLocation(entry)!)) {
     const target = exp.flags & ts.SymbolFlags.Alias ? checker.getAliasedSymbol(exp) : exp;
     const decl = target.declarations?.[0];
-    if (!decl || same(decl.getSourceFile().fileName, contractFile)) continue;
+    if (!decl || contractFiles.some((f) => same(decl.getSourceFile().fileName, f))) continue;
     const type = checker.typeToString(checker.getTypeOfSymbolAtLocation(target, decl), undefined, ts.TypeFormatFlags.NoTruncation);
     helpers.push(`export declare const ${exp.name}: ${type};`);
   }
@@ -73,8 +81,9 @@ function publicDeclarations(): string {
     "// Recorded by tests/unit/daemon-contract.test.ts (npm run golden:record). Do not edit by hand.",
     "",
     "// ── contract/daemon.ts ──",
-    dts.trim(),
+    dts,
     "",
+    ...hubDts.flatMap((d) => [d, ""]),
     "// ── helpers exported beside it ──",
     ...helpers.sort(),
     "",
@@ -86,6 +95,23 @@ describe("the daemon contract", () => {
     const sf = ts.createSourceFile(contractFile, fs.readFileSync(contractFile, "utf8"), ts.ScriptTarget.Latest);
     const imports = sf.statements.filter((s) => ts.isImportDeclaration(s) || ts.isImportEqualsDeclaration(s) || (ts.isExportDeclaration(s) && s.moduleSpecifier));
     expect(imports.map((s) => s.getText(sf))).toEqual([]);
+  });
+
+  it("keeps the hub's contract files self-contained: each imports only its siblings", () => {
+    for (const file of hubContractFiles) {
+      const sf = ts.createSourceFile(file, fs.readFileSync(file, "utf8"), ts.ScriptTarget.Latest);
+      const from = sf.statements.flatMap((s) => (ts.isImportDeclaration(s) || (ts.isExportDeclaration(s) && s.moduleSpecifier) ? [(s.moduleSpecifier as ts.StringLiteral).text] : []));
+      expect(from.filter((m) => !/^\.\/(daemon|hub|hub-qa|hub-attention|hub-ports)\.js$/.test(m)), path.basename(file)).toEqual([]);
+    }
+  });
+
+  it("keeps ue-mcp/hub to the hub's contract files, so a browser or phone bundle can take it", () => {
+    const entry = path.join(repo, "src", "hub-api.ts");
+    const sf = ts.createSourceFile(entry, fs.readFileSync(entry, "utf8"), ts.ScriptTarget.Latest);
+    const from = sf.statements.flatMap((s) => (ts.isImportDeclaration(s) || (ts.isExportDeclaration(s) && s.moduleSpecifier) ? [(s.moduleSpecifier as ts.StringLiteral).text] : []));
+    expect(from.filter((m) => !/^\.\/contract\/(hub|hub-qa|hub-attention|hub-ports)\.js$/.test(m))).toEqual([]);
+    const pkg = JSON.parse(fs.readFileSync(path.join(repo, "package.json"), "utf8")) as { exports: Record<string, unknown> };
+    expect(pkg.exports["./hub"]).toEqual({ types: "./dist/hub-api.d.ts", default: "./dist/hub-api.js" });
   });
 
   it("names a route or a described change for every daemon feature", () => {

@@ -31,6 +31,7 @@ const srcDir = path.join(here, "..", "..", "src");
 const LAYERS: readonly (readonly string[])[] = [
   ["contract"],
   ["core"],
+  ["hub"],
   ["terminal"],
   ["bridge"],
   ["config"],
@@ -56,7 +57,7 @@ const LAYERS: readonly (readonly string[])[] = [
   ["daemon"],
   ["machine"],
   ["cli"],
-  ["(root)/index", "(root)/daemon-api", "(root)/init", "(root)/update", "(root)/deploy-cli"],
+  ["(root)/index", "(root)/daemon-api", "(root)/hub-api", "(root)/init", "(root)/update", "(root)/deploy-cli"],
 ];
 
 /** `from -> to`, src-relative, with the reason it still points up. */
