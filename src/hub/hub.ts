@@ -19,8 +19,8 @@
  *
  * Runs go through a HubBroker (ports.ts), so a client's cards, players and
  * verdict routing keep working: a plan item runs with broker.startScript
- * (ue-mcp's own ScriptRunBroker by default; Studio runs it on the script's
- * card in a chat session).
+ * (ue-mcp's own ScriptRunBroker by default; a client's broker may run it on
+ * the script's card in a chat session).
  */
 import * as path from "node:path";
 import type { ActionResult } from "../contract/daemon.js";
@@ -79,7 +79,7 @@ import { provenanceAtStart, scriptHashOf, ueMcpProvenance, withUeMcp, workspaceN
 import { planOptionsOf, scopeOf } from "./scope.js";
 import { answerOf, bad, checkOfId, conflict, failureOf, isObject, linkOf, notFound } from "./util.js";
 
-/** How often the queue and the runs Studio may have missed are looked at. */
+/** How often the queue and the runs the hub may have missed are looked at. */
 export const TICK_MS = 30_000;
 /** How long hub.changed waits to gather the changes that come together, such as a run's steps. */
 const PUBLISH_MS = 200;
@@ -114,12 +114,12 @@ export interface HubOptions extends HubPolicy {
   index: HubScriptIndex;
   /**
    * Fix with an agent. Injection point: ue-mcp has no agent loop, so without
-   * a fixer a fix request answers 409. Studio supplies its Assign loop.
+   * a fixer a fix request answers 409. A client with an agent loop supplies one.
    */
   fixer?: HubFixer;
   /** A replay that gives the run a client's card: pie(script_replay) with these args. Default: the call, directly. */
   replay?: (script: string, args: Record<string, unknown>) => Promise<ActionResult>;
-  /** Write playtests for a goal. Injection point: Studio runs its /playtest flow in a chat session. Without it, write-playtests answers 409. */
+  /** Write playtests for a goal. Injection point: a client supplies it, such as a flow in a chat session. Without it, write-playtests answers 409. */
   writePlaytests?: HubWritePlaytests;
   /** The project's engine version, major.minor, for what a run tested. */
   engine?: () => string | null;
@@ -291,7 +291,7 @@ export class Hub {
   }
 
   /**
-   * Read again every run Studio thinks is on the editor and the hub did not
+   * Read again every run the broker thinks is on the editor and the hub did not
    * start, so a run whose end was missed does not hold the queue for ever:
    * one the editor answers idle for is gone.
    */
@@ -304,13 +304,13 @@ export class Hub {
     }
   }
 
-  /** The lease changed: clients hear of it, and the editor is told once per plan that Studio holds it. */
+  /** The lease changed: clients hear of it, and the editor is told once per plan that the hub holds it. */
   private leaseChanged(lease: EditorLeaseView | null): void {
     this.o.host.events.publish(HUB_LEASE, { lease } as unknown as Record<string, unknown>);
     this.changed(["queue"], lease ? { planRunId: lease.planRunId } : {});
     if (!lease || lease.planRunId === this.toldPlan) return;
     this.toldPlan = lease.planRunId;
-    // Best effort: the bar in Studio is the signal; a bridge without show_notification changes nothing.
+    // Best effort: the hub.lease event clients hear is the signal; a bridge without show_notification changes nothing.
     void Promise.resolve()
       .then(() => this.o.host.callAction("editor", "show_notification", { text: LEASE_NOTICE, subText: lease.purpose, severity: "info" }))
       .catch(() => undefined);
@@ -411,7 +411,7 @@ export class Hub {
     if (this.watch.runEnded(run.runId)) this.runs.setTainted(run.runId);
   }
 
-  /** The periodic look: the queue, runs Studio may have missed the end of, backfill. */
+  /** The periodic look: the queue, runs the hub may have missed the end of, backfill. */
   async tick(): Promise<void> {
     try {
       // Off: no plan starts and the editor is not asked.
@@ -440,9 +440,9 @@ export class Hub {
   }
 
   /**
-   * What a run tests, read as Studio first sees it running: the workspace,
+   * What a run tests, read as the hub first sees it running: the workspace,
    * the script's version as pie(script_read) gives it, the engine and the
-   * players Studio set. A run first seen after it ended gets none, since
+   * players the client set. A run first seen after it ended gets none, since
    * nothing here knows what it tested.
    */
   private captureStart(run: QaRun): void {
@@ -460,7 +460,7 @@ export class Hub {
     this.capturing.set(run.runId, job);
   }
 
-  /** A run that ended: the fields ue-mcp records itself in its results.json, where present, laid over Studio's. */
+  /** A run that ended: the fields ue-mcp records itself in its results.json, where present, laid over the hub's. */
   private captureEnd(runId: string): void {
     void (this.capturing.get(runId) ?? Promise.resolve()).then(() => {
       const provenance = withUeMcp(this.runs.get(runId)?.provenance, ueMcpProvenance(readResultsFile(this.o.host.projectDir, runId), readProvenanceFile(this.o.host.projectDir, runId)));
@@ -477,7 +477,7 @@ export class Hub {
       try {
         const recorded = await this.o.index.recorded(limit);
         for (const { run, times } of recorded) {
-          // A run Studio holds is recorded as the broker saves it.
+          // A run the broker holds is recorded when the broker saves it.
           if (this.o.broker.get(run.runId)) continue;
           this.runs.backfill(run, times);
         }

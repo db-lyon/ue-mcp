@@ -19,9 +19,9 @@ export interface RunTag {
 export interface EvidenceStore {
   /** Whose runs these are, for the label every status carries. */
   readonly scope: EvidenceScope["store"];
-  /** A run as Studio has it now; null for what is no run of a check (a draft, inline steps, a manual run). */
+  /** A run as the hub has it now; null for what is no run of a check (a draft, inline steps, a manual run). */
   record(run: QaRun, times?: RunTimes): RunRecord | null;
-  /** A run ue-mcp recorded that Studio does not hold, kept unless Studio already has a finished record of it. */
+  /** A run ue-mcp recorded that the hub does not hold, kept unless the hub already has a finished record of it. */
   backfill(run: QaRun, times: RunTimes): void;
   /** Mark a run the hub started as a plan's, now or when its record is first made. */
   tag(runId: string, tag: RunTag): void;

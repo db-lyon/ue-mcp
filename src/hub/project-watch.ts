@@ -7,7 +7,7 @@
  * The watch covers what a run tests: Content, Config, Source, Plugins and the
  * .uproject. Saved, Intermediate, Binaries and DerivedDataCache are left
  * out: a run, a build and the editor write there on their own. Each change
- * moves a counter on; a run notes the counter when Studio sees it start and
+ * moves a counter on; a run notes the counter when the hub sees it start and
  * compares when it ends.
  */
 import * as fs from "node:fs";
@@ -64,7 +64,7 @@ export class ProjectWatch {
     this.seq++;
   }
 
-  /** A run Studio saw start. */
+  /** A run the hub saw start. */
   runStarted(runId: string): void {
     if (!this.started.has(runId)) this.started.set(runId, this.seq);
   }

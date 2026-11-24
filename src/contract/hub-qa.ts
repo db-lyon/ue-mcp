@@ -8,7 +8,7 @@
  */
 
 export type QaStepStatus = "pending" | "running" | "passed" | "failed" | "awaiting_verdict" | "skipped";
-/** draft: a script the agent created that nobody has run yet; Studio's own state, never ue-mcp's. */
+/** draft: a script the agent created that nobody has run yet; a client's own state, never one pie(script_status) reports. */
 export type QaRunState = "draft" | "armed" | "running" | "awaiting_verdict" | "finished" | "stopped" | "idle";
 export type QaVerdict = "pass" | "fail" | "skip";
 /** Who decided a step: the observer, a person (action, elicitation), an agent, or the source run of a replay. */
@@ -50,7 +50,7 @@ export interface QaStep {
   verdictSource?: QaVerdictSource;
   /** Manual steps: false keeps the verdict with a person; an agent never gives it. */
   agentJudgeable?: boolean;
-  /** Which player the step is for in a multiplayer playtest: "host" or "client <n>". Studio keeps it; ue-mcp's steps have no player. */
+  /** Which player the step is for in a multiplayer playtest: "host" or "client <n>". The client keeps it; a script's steps have no player. */
   player?: string;
   /** Replay runs: the step's status in the source run, and whether it passed there and failed here. */
   sourceStatus?: QaStepStatus;
@@ -106,7 +106,7 @@ export interface QaRun {
   toolUseId: string | null;
   /** The subagent that started it, by its task name. */
   subagent?: string;
-  /** When Studio first saw it, ISO 8601. */
+  /** When the hub first saw it, ISO 8601. */
   seenAt: string;
   /** The run's input recording, which a later run of the script can replay to drive the pawn. */
   recordingId?: string;
@@ -124,11 +124,11 @@ export interface QaRun {
   stopReason?: string;
   /**
    * The run started Play In Editor itself (ue-mcp's pie_started). Only then is
-   * that session the run's: Studio pauses and stops PIE for a run only when
+   * that session the run's: the hub pauses and stops PIE for a run only when
    * this is true, never a session the run merely joined.
    */
   pieStarted?: boolean;
-  /** The players Studio set PIE to before starting the run; absent when Studio left PIE as it was. */
+  /** The players the client set PIE to before starting the run; absent when it left PIE as it was. */
   pieSetup?: { players: number; netMode: "standalone" | "listen" };
 }
 
@@ -320,7 +320,7 @@ function indices(v: unknown): number[] | undefined {
 
 /**
  * Set one step's fields, adding the step when it is new. A settled step never
- * goes back to pending or running: an event older than what Studio already
+ * goes back to pending or running: an event older than what the hub already
  * read cannot undo it. Only a verdict replaces a settled status.
  */
 function patchStep(steps: QaStep[], patch: Partial<QaStep>, verdict = false): QaStep[] {
@@ -589,7 +589,7 @@ export function qaScriptKey(path: string): string {
   return dot > path.lastIndexOf("/") ? path.slice(0, dot) : path;
 }
 
-/** The step fields a script holds, as pie(script_create) and script_update take them, with Studio's player. */
+/** The step fields a script holds, as pie(script_create) and script_update take them, with the client's player. */
 export interface QaScriptStep {
   instruction: string;
   judge: "auto" | "manual";

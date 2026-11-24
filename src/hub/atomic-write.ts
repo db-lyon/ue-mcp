@@ -9,7 +9,7 @@
  * is tried again a few times with a growing pause before it counts as failed.
  *
  * A store written from an event handler (the session store above all) must
- * never throw out of it: Studio runs inside the ue-mcp daemon, and an
+ * never throw out of it: the hub runs inside the ue-mcp daemon, and an
  * exception there ends every session and the editor bridge with it.
  * PendingWrites keeps what could not be written in memory and writes it on the
  * next change, or a little later on its own.

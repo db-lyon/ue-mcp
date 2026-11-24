@@ -18,9 +18,9 @@
  * Moved scripts (aliases) are kept beside the segments, in aliases.json,
  * written whole and atomically: { "<from check id>": "<to check id>" }.
  *
- * Studio's own runs are recorded as the QaBroker saves them. Runs ue-mcp has a
- * record of (pie(script_runs), or results.json without it) are backfilled, so
- * runs started outside Studio, or before this daemon, are history too; they
+ * The broker's own runs are recorded as the QaBroker saves them. Runs ue-mcp
+ * has a record of (pie(script_runs), or results.json without it) are
+ * backfilled, so runs started outside the broker, or before this daemon, are history too; they
  * carry no provenance, since nobody read the workspace when they started.
  */
 import * as fs from "node:fs";
@@ -55,7 +55,7 @@ const TRIGGERS: readonly RunTrigger[] = ["run", "replay", "loop"];
 const SEGMENT = /^runs-(\d{6})\.jsonl$/;
 const segmentName = (seq: number): string => `runs-${String(seq).padStart(6, "0")}.jsonl`;
 
-/** What started a run, as far as its QaRun tells: no session is outside Studio; a subagent or tool call is an agent; a card's button is a person. */
+/** What started a run, as far as its QaRun tells: no session is outside any client; a subagent or tool call is an agent; a card's button is a person. */
 export function sourceOf(run: QaRun): RunSource {
   if (!run.sessionId) return "outside";
   if (run.subagent || run.assignment || run.toolUseId) return "agent";
@@ -347,7 +347,7 @@ export class RunIndex implements EvidenceStore {
     if (had && (had.source !== tag.source || had.planRunId !== tag.planRunId)) this.put({ ...had, source: tag.source, planRunId: tag.planRunId });
   }
 
-  /** A run as Studio has it now. */
+  /** A run as the hub has it now. */
   record(run: QaRun, times?: { startedAt?: string; endedAt?: string }): RunRecord | null {
     const r = recordOf(run, { prev: this.runs.get(run.runId), times, tag: this.tags.get(run.runId), now: this.now() });
     if (!r) return null;
@@ -357,11 +357,11 @@ export class RunIndex implements EvidenceStore {
     return this.runs.get(r.runId) ?? r;
   }
 
-  /** A run ue-mcp recorded, kept unless Studio already holds a finished record of it. */
+  /** A run ue-mcp recorded, kept unless the hub already holds a finished record of it. */
   backfill(run: QaRun, times: { startedAt?: string; endedAt?: string }): void {
     const had = this.runs.get(run.runId);
     if (had && had.outcome !== "running" && had.outcome !== "needs_you") return;
-    // A record from results.json that says nothing new about an open run is left as Studio has it.
+    // A record from results.json that says nothing new about an open run is left as the hub has it.
     if (had && !qaEnded(run.state)) return;
     this.record(run, times);
   }

@@ -4,13 +4,13 @@
  * hub starts work on it only when nothing else holds it, and holds it
  * explicitly while it works:
  *
- * - occupancyOf: one answer from every signal Studio already has. The editor
+ * - occupancyOf: one answer from every signal the daemon already has. The editor
  *   not connected; an editor operation (restart, rebuild); an open modal
  *   dialog; Play In Editor the hub did not start (always the developer's);
- *   a playtest the hub did not start, Studio's or another client's; a chat or
+ *   a playtest the hub did not start, whichever client started it; a chat or
  *   fix loop with editor calls in flight; another MCP client's calls; and,
  *   for unattended work only, someone using this computer lately (the
- *   desktop's input age, which Studio's window reports for notifications).
+ *   desktop's input age, which a client's window may report).
  *   Empty means free.
  * - EditorLease: the hub's hold on one editor, taken before a plan item or a
  *   fix loop starts and released when it ends or a person releases the
@@ -32,7 +32,7 @@ export const WORKSPACE = "workspace";
 /** Unattended work waits until nobody has used this computer for this long. */
 export const INPUT_QUIET_MS = 5 * 60_000;
 
-/** What Studio already knows about the editor, read when the hub asks. */
+/** What the daemon already knows about the editor, read when the hub asks. */
 export interface OccupancySignals {
   connected(): boolean;
   /** Play In Editor is running, whoever started it (PieWatch). */
@@ -41,7 +41,7 @@ export interface OccupancySignals {
   dialogs(): number;
   /** Editor calls in flight and the editor operation running (BusyTracker). */
   busy(): BusyState;
-  /** Every run Studio knows (QaBroker). */
+  /** Every run the broker knows (QaBroker). */
   runs(): QaRun[];
   /** How long since someone last used this computer, or null when no window reports it. */
   inputAgeMs(): number | null;

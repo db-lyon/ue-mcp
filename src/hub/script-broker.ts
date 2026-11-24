@@ -7,8 +7,8 @@
  *
  * It starts runs in a PIE session of its own (start_pie), which the run then
  * owns (QaRun.pieStarted): the hub ends that session with the run and never
- * any other. A client with a richer idea of a run, such as Studio's cards in
- * chat sessions, supplies its own HubBroker instead.
+ * any other. A client with a richer idea of a run, such as cards in chat
+ * sessions, supplies its own HubBroker instead.
  */
 import {
   qaDraftFromScript,

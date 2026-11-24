@@ -15,7 +15,7 @@
  * - release() is Release the editor: it pauses the queue, stops the item's
  *   run or fix loop (a loop stops at its next checkpoint), ends PIE the item
  *   started, and puts the item back at the front for when a person resumes.
- * - After the editor reconnects, or Studio restarts, with work waiting, the
+ * - After the editor reconnects, or the daemon restarts, with work waiting, the
  *   queue is paused (pausedBy "reconnect") and waits for a person to resume
  *   it, so an editor someone just restarted is never taken straight back. A
  *   run that was still live is followed again meanwhile.
@@ -69,7 +69,7 @@ export interface QueueRunner {
   /** Why the editor is not free for this plan's next item, or null when it is (occupancyOf). */
   occupied(plan: PlanRun): string | null;
   start(item: PlanItem, plan: PlanRun): Promise<ItemStart>;
-  /** The run as Studio has it now. */
+  /** The run as the broker has it now. */
   run(runId: string): QaRun | undefined;
   /** End a run the hub started (QaBroker.stopRun, which releases a verdict hold too). */
   stop(runId: string, reason: string): Promise<void>;
@@ -147,7 +147,7 @@ export class PlanQueue {
     for (const p of [this.s.current, ...this.s.queued]) if (p) p.options = storedOptions(p.options);
     const cur = this.s.current;
     if (cur) {
-      // The item that was live when Studio stopped: followed again, under the lease, while Studio has its run; else queued again.
+      // The item that was live when the daemon stopped: followed again, under the lease, while the broker has its run; else queued again.
       cur.items.forEach((item, at) => {
         if (!live(item)) return;
         const run = item.runId ? this.o.runner.run(item.runId) : undefined;
@@ -158,7 +158,7 @@ export class PlanQueue {
         this.lease.take({ purpose: purposeOf(cur, item), planRunId: cur.id, item: at, work: workOf(cur), runId: item.runId, sessionId: item.sessionId ?? null, pie: run.pieStarted === true, ...(item.startedAt ? { since: item.startedAt } : {}) });
       });
     }
-    // Studio restarted with work waiting: it waits for a person, as after an editor reconnect.
+    // The daemon restarted with work waiting: it waits for a person, as after an editor reconnect.
     this.reconnected(false);
   }
 
@@ -222,7 +222,7 @@ export class PlanQueue {
   }
 
   /**
-   * The editor connected again (or Studio started) with work waiting: the
+   * The editor connected again (or the daemon started) with work waiting: the
    * queue pauses for a person to resume it. Returns whether it paused.
    */
   reconnected(save = true): boolean {
@@ -507,7 +507,7 @@ export class PlanQueue {
   }
 }
 
-/** A saved plan's options: the ones this Studio knows, each valid, over the defaults. */
+/** A saved plan's options: the ones this ue-mcp knows, each valid, over the defaults. */
 function storedOptions(v: unknown): PlanOptions {
   try {
     return planOptionsOf(v ?? undefined, DEFAULT_PLAN_OPTIONS);

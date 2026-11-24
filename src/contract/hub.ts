@@ -38,7 +38,7 @@ export type CheckKind = "script";
 
 /**
  * A link from a goal, a check or a run to an item elsewhere: an issue, a
- * ticket, a card, a document. Any tracker: Studio keeps the URL and never
+ * ticket, a card, a document. Any tracker: the hub keeps the URL and never
  * contacts it, so there is no provider list.
  */
 export interface TrackerLink {
@@ -135,7 +135,7 @@ export interface GoalCheckUpdate {
 }
 
 /**
- * A check a goal was imported with whose kind this Studio cannot run (a UAT
+ * A check a goal was imported with whose kind this ue-mcp cannot run (a UAT
  * scenario, an automation filter, a manual checklist item). Kept as it came,
  * shown as unsupported, and never counted toward the goal.
  */
@@ -227,7 +227,7 @@ export interface SignOff {
   via?: string;
   at: string;
   note?: string;
-  /** The revision the workspace was at (RunProvenance.revision's kind of value); null when the project has no source control Studio can read. */
+  /** The revision the workspace was at (RunProvenance.revision's kind of value); null when the project has no source control the hub can read. */
   revision: string | null;
   /** The runs it was given against: each required check's results the acceptance rule looked at. */
   runIds: string[];
@@ -276,7 +276,7 @@ export interface Goal {
   /** The goals this one requires, in its own order. A goal is met only when its required goals are. */
   requires?: GoalRequirement[];
   checks: CheckRef[];
-  /** Checks it was imported with that this Studio cannot run. */
+  /** Checks it was imported with that this ue-mcp cannot run. */
   unsupported?: UnsupportedCheck[];
   archived?: boolean;
 }
@@ -322,11 +322,11 @@ export type RunSource = "person" | "agent" | "plan" | "outside";
  */
 export type RunTrigger = "run" | "replay" | "loop";
 
-/** The source control a project is under; "none" when Studio sees none. */
+/** The source control a project is under; "none" when the hub sees none. */
 export type RunVcs = "git" | "perforce" | "plastic" | "svn" | "none";
 
 /**
- * What a run tested, read when Studio first saw it running, with the fields
+ * What a run tested, read when the hub first saw it running, with the fields
  * ue-mcp records itself taken from results.json once it ends, where present.
  * Null is always "not known", never a value: unknown matches nothing.
  */
@@ -341,7 +341,7 @@ export interface RunProvenance {
   scriptHash: string | null;
   /** The engine version: major.minor from the project file, or ue-mcp's full version when results.json has it. */
   engine: string | null;
-  /** The players Studio set PIE to before the run, or ue-mcp's record of them. Null: PIE ran as it was left. */
+  /** The players the client set PIE to before the run, or ue-mcp's record of them. Null: PIE ran as it was left. */
   players: { count: number; netMode: "standalone" | "listen" | "client" } | null;
   /** Fingerprints of the assets the script reaches, by package path, when results.json has them. */
   dependencies?: Record<string, string>;
@@ -377,7 +377,7 @@ export interface RunRecord {
   replayOf?: string | null;
   recordingId?: string | null;
   map?: string | null;
-  /** Absent for a run Studio did not see start (backfilled, or kept before provenance was): it tested an unknown revision. */
+  /** Absent for a run the hub did not see start (backfilled, or kept before provenance was): it tested an unknown revision. */
   provenance?: RunProvenance;
   /** Project files changed while the run played (anyone's saves): it tested a project that changed under it. */
   tainted?: boolean;
@@ -423,7 +423,7 @@ export interface RunStepSpan {
 /** GET /hub/runs/:runId. Everything the run screen draws. */
 export interface RunDetail {
   record: RunRecord;
-  /** The live or last-known QaRun, when Studio has it. */
+  /** The live or last-known QaRun, when the hub has it. */
   run: QaRun | null;
   steps: RunStepSpan[];
   /** Values the observer tracked, sampled for charts: series name to [ms, value] points. */
@@ -1102,7 +1102,7 @@ export type QueuePause = "person" | "release" | "reconnect";
 // ---------- The editor lease (per machine) ----------
 
 /**
- * What else holds the editor, one signal each, from what Studio already
+ * What else holds the editor, one signal each, from what the daemon already
  * knows: the editor not connected, an editor operation (restart, rebuild),
  * an open modal dialog, Play In Editor the hub did not start, a playtest the
  * hub did not start, a chat or fix loop with editor calls in flight, another

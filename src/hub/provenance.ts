@@ -30,7 +30,7 @@ export async function workspaceNow(projectDir: string, r: Run = runTool): Promis
   return { vcs: vcs.kind as RunVcs, revision, dirty: vcs.changes };
 }
 
-/** What Studio knows of a run as it starts: the workspace, the script's version, the engine and the players Studio set. */
+/** What the hub knows of a run as it starts: the workspace, the script's version, the engine and the players the client set. */
 export function provenanceAtStart(o: { workspace: CurrentProvenance; scriptHash: string | null; engine: string | null; run: Pick<QaRun, "pieSetup"> }): RunProvenance {
   return {
     vcs: o.workspace.vcs,
@@ -71,7 +71,7 @@ export function ueMcpProvenance(results: Record<string, unknown> | null, sidecar
   return out;
 }
 
-/** Provenance with ue-mcp's own fields laid over Studio's; a run Studio did not see start knows nothing else. */
+/** Provenance with ue-mcp's own fields laid over the hub's; a run the hub did not see start knows nothing else. */
 export function withUeMcp(had: RunProvenance | undefined, ue: Partial<RunProvenance>): RunProvenance | undefined {
   if (Object.keys(ue).length === 0) return had;
   const base: RunProvenance = had ?? { vcs: null, revision: null, dirty: null, scriptHash: null, engine: null, players: null };
