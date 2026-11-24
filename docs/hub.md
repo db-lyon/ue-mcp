@@ -55,7 +55,7 @@ All under `/v1/hub`, with the daemon's bearer token. A bad body answers 400, an 
 
 `DAEMON_ROUTES` in `ue-mcp/daemon` names each as `hub.<name>`, under the `hub` feature in `/v1/health`.
 
-Deleting a goal or milestone removes it and its sign-off, and every goal that required it stops requiring it. Its playtests are not touched: they stay in the library, on any other goal that lists them, with their titles, links and past runs. While a plan made for the goal is queued or running, the delete answers 409 naming the plan; cancel it or let it finish, then delete again. A daemon that behaves this way lists `hub.goalDelete` in `/v1/health`.
+Deleting a goal or milestone removes it and its sign-off, and every goal or milestone that required it stops requiring it. Deleting a milestone does not delete the goals it requires. Playtests are not touched: they stay in the library, on any other goal that lists them, with their titles, links and past runs. While a plan made for the goal is queued or running, the delete answers 409 naming the plan; cancel it or let it finish, then retry the delete. A daemon that behaves this way lists `hub.goalDelete` in `/v1/health`.
 
 The hub's types and rules (`checkHealth`, `goalStatus`, `rollUpGoals`, `buildAttention` and the rest) are exported from `ue-mcp/daemon` too.
 

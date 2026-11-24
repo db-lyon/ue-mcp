@@ -50,7 +50,7 @@ describe("deleting a hub goal", () => {
     const refused = await call(d, "DELETE", `/v1/hub/goals/${doors}`);
     expect(refused.status).toBe(409);
     expect(refused.body.error).toContain(`"Run Doors"`);
-    expect(refused.body.error).toContain("Cancel that plan");
+    expect(refused.body.error).toContain("Cancel that run");
     expect((await call(d, "POST", `/v1/hub/plans/${planned.body.plan.id}/cancel`)).status).toBe(200);
 
     const deleted = await call(d, "DELETE", `/v1/hub/goals/${doors}`);

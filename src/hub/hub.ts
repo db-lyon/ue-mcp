@@ -795,7 +795,8 @@ export class Hub {
     const plans = [q.current, ...q.queued].filter((p): p is PlanRun => !!p && "goalId" in p.scope && p.scope.goalId === id);
     if (plans.length) {
       const names = plans.map((p) => `"${p.title}"`).join(", ");
-      throw conflict(`"${goal.title}" can't be deleted while ${plans.length === 1 ? "a plan made for it is" : "plans made for it are"} in the queue: ${names}. Cancel ${plans.length === 1 ? "that plan" : "those plans"} or let ${plans.length === 1 ? "it" : "them"} finish, then delete it.`);
+      // A person reads plans as runs: Studio's queue lists them under Runs.
+      throw conflict(`"${goal.title}" can't be deleted while ${plans.length === 1 ? "a run made for it is" : "runs made for it are"} queued or running: ${names}. Cancel ${plans.length === 1 ? "that run" : "those runs"} or let ${plans.length === 1 ? "it" : "them"} finish, then try again.`);
     }
     this.goals.delete(id);
   }

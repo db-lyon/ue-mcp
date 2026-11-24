@@ -268,7 +268,7 @@ describe("routes", () => {
     await settle();
     const refused = await call("DELETE", `/hub/goals/${doors}`);
     expect(refused.status).toBe(409);
-    expect(refused.body.error).toBe(`"Doors" can't be deleted while a plan made for it is in the queue: "Run Doors". Cancel that plan or let it finish, then delete it.`);
+    expect(refused.body.error).toBe(`"Doors" can't be deleted while a run made for it is queued or running: "Run Doors". Cancel that run or let it finish, then try again.`);
     expect((await call("GET", `/hub/goals/${doors}`)).status).toBe(200);
 
     // The plan's run finishes; the goal deletes.
