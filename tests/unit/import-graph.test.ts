@@ -31,6 +31,7 @@ const srcDir = path.join(here, "..", "..", "src");
 const LAYERS: readonly (readonly string[])[] = [
   ["contract"],
   ["core"],
+  ["hub"],
   ["terminal"],
   ["bridge"],
   ["config"],
