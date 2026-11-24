@@ -218,6 +218,8 @@ private:
 	class ULocalPlayer* ResolveOwnLocalPlayer(FString& OutError) const;
 	void Report(const FString& Id, bool bOk, bool bFinished, const FString& Error);
 	void HandleTapeFinished(const FString& Id);
+	// Client side: tells the server this player is ready, a tick after BeginPlay.
+	void AnnounceReady();
 	// Client side: reads every watch once per frame while any runs.
 	void PollWatches();
 	void UnbindWatchFrame();
