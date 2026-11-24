@@ -66,6 +66,12 @@ export function hubRoutes(hub: () => Hub, projectDir: string): Pick<RouteHandler
     "hub.plan": async (r) => ok(await hub().queuePlan(await r.body(), "person")),
     "hub.plan.cancel": async ({ params }) => ok({ plan: await hub().cancelPlan(param(params, "id")) }),
     "hub.plan.move": async (r) => ok(hub().movePlan(param(r.params, "id"), await r.body())),
+    "hub.schedule.create": async (r) => ok({ schedule: hub().createSchedule(await r.body()) }),
+    "hub.schedule.update": async (r) => ok({ schedule: hub().updateSchedule(param(r.params, "id"), await r.body()) }),
+    "hub.schedule.delete": ({ params }) => {
+      hub().deleteSchedule(param(params, "id"));
+      return noContent;
+    },
     "hub.fix": async (r) => ok(await hub().fix(await r.body())),
   };
 }

@@ -284,6 +284,14 @@ describe("PlanQueue", () => {
     await expect(q.cancel("nope")).rejects.toMatchObject({ status: 404 });
   });
 
+  it("keeps schedules with the queue", () => {
+    const q = make();
+    q.putSchedule({ id: "s1", title: "Nightly", scope: { kind: "all" }, options: DEFAULT_PLAN_OPTIONS, at: "02:00", days: [1], enabled: true });
+    expect(make().schedules().map((s) => s.id)).toEqual(["s1"]);
+    expect(q.deleteSchedule("s1")).toBe(true);
+    expect(q.deleteSchedule("s1")).toBe(false);
+  });
+
   it("moves a queued plan", async () => {
     const q = make();
     q.setPaused(true);
