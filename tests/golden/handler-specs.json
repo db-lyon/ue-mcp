@@ -31133,7 +31133,7 @@
           "name": "auto_stop_pie",
           "type": "boolean",
           "required": false,
-          "description": "End PIE when the replay finishes (default true)"
+          "description": "End PIE when the replay ends, finished or stopped (default true)"
         },
         {
           "name": "pie_instance",
@@ -31226,7 +31226,13 @@
           "name": "start_pie",
           "type": "boolean",
           "required": false,
-          "description": "Start PIE when it is not running (default false)"
+          "description": "Start PIE when it is not running (default false). The run ends PIE it started when it ends, however it ends; PIE already playing is left running"
+        },
+        {
+          "name": "keep_pie",
+          "type": "boolean",
+          "required": false,
+          "description": "Leave PIE the run started running when the run ends, to inspect its end state (default false)"
         },
         {
           "name": "block_on_manual",

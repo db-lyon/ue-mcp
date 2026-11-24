@@ -1111,7 +1111,7 @@ export class Hub {
       const body = answerOf(r);
       if (!body || typeof body.run_id !== "string") return { error: `the replay did not start: ${failureOf(r) ?? "ue-mcp started no run"}` };
       this.runs.tag(body.run_id, tag);
-      // pie(script_replay) always starts PIE, and ends it itself only when the replay finishes: a stopped one is the hub's to end.
+      // pie(script_replay) always starts PIE. A current bridge ends it however the replay ends; an older one only when it finishes, so the hub still ends it after a stop.
       return { runId: body.run_id, pieStarted: body.pie_started === true };
     }
     const r = await this.o.broker.startScript(script, { planRunId: plan.id, title: plan.title });

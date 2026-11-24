@@ -39,6 +39,15 @@ async function stopPie(): Promise<void> {
   }
 }
 
+/** Whether PIE ends by itself within the wait, with nobody asking it to. */
+async function pieEnds(): Promise<boolean> {
+  for (let i = 0; i < 60; i++) {
+    if (!(await pieRunning())) return true;
+    await sleep(500);
+  }
+  return false;
+}
+
 /** Polls a run until a step reaches a status or the run reaches a state. */
 async function until(runId: string, done: (s: Json) => boolean, tries = 120): Promise<Json> {
   let status: Json = {};
@@ -111,6 +120,9 @@ describe("a script run with auto and manual steps", () => {
     expect(rows(finished.steps).map((s) => s.status)).toEqual(["passed", "passed", "passed", "passed", "passed"]);
     expect((stepOf(finished, 3).evidence as Json).at_start).toBe(1);
     expect((stepOf(finished, 3).evidence as Json).at_end).toBe(0.5);
+    // The run started PIE, so it ends it once every step has settled.
+    expect(started.pie_started).toBe(true);
+    expect(await pieEnds()).toBe(true);
   }, 120_000);
 
   it("script_status returns the run's events after since_seq, in order", async (ctx) => {
@@ -186,6 +198,33 @@ describe("stopping a run", () => {
     expect(rows(results.steps).map((s) => s.status)).not.toContain("passed");
     const again = await callBridge(bridge, "pie_script_stop", {});
     expect(body(again).alreadyStopped).toBe(true);
+    // A stopped run ends the PIE it started, and a second stop after it is harmless.
+    expect(await pieEnds()).toBe(true);
+    const late = await callBridge(bridge, "pie_control", { pieAction: "stop" });
+    expect(body(late).alreadyStopped).toBe(true);
+  }, 120_000);
+
+  it("keep_pie leaves the PIE the run started running, and PIE already playing outlives a run", async () => {
+    const kept = await call("pie_script_run", {
+      name: "bcov_keep", start_pie: true, keep_pie: true, record: false,
+      steps: [{ instruction: "Wait for a person", judge: "manual" }],
+    });
+    expect(kept.pie_started).toBe(true);
+    await until(String(kept.run_id), (s) => s.state === "awaiting_verdict");
+    await call("pie_script_stop", { run_id: kept.run_id, reason: "bcov" });
+    await sleep(2000);
+    expect(await pieRunning()).toBe(true);
+
+    // PIE is still up from that run: a run started in it now did not start it, and leaves it.
+    const borrowed = await call("pie_script_run", {
+      name: "bcov_borrowed", start_pie: true, record: false,
+      steps: [{ instruction: "Wait for a person", judge: "manual" }],
+    });
+    expect(borrowed.pie_started).toBe(false);
+    await until(String(borrowed.run_id), (s) => s.state === "awaiting_verdict");
+    await call("pie_script_stop", { run_id: borrowed.run_id, reason: "bcov" });
+    await sleep(2000);
+    expect(await pieRunning()).toBe(true);
     await stopPie();
   }, 120_000);
 });

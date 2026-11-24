@@ -1277,6 +1277,11 @@ namespace MCPPIE
 		return true;
 	}
 
+	bool ShouldScriptRunEndPIE(const FScriptRun& Run)
+	{
+		return Run.bStartedPIE && !Run.bKeepPIE && !Run.bManualMode;
+	}
+
 	void SettleUnfinishedScriptSteps(FScriptRun& Run, const FString& Reason)
 	{
 		for (int32 I = 0; I < Run.Steps.Num(); ++I)
@@ -2149,6 +2154,7 @@ namespace MCPPIE
 			NewRun.RecordingDir = DefaultRecordingsRoot() / NewRun.RunId;
 		}
 
+		NewRun.bKeepPIE = Cfg.bKeepPIE;
 		NewRun.State = EScriptRunState::Armed;
 		// An act entry with no client, and a triggered step on client 0, use the player the run observes.
 		StepDriver = MakeShared<FEditorScriptStepDriver>(NewRun.OutputDir, Cfg.PIEInstance, Cfg.ClientId);
@@ -2164,7 +2170,8 @@ namespace MCPPIE
 		if (!Run.RecordingId.IsEmpty()) D->SetStringField(TEXT("recording_id"), Run.RecordingId);
 		AddScriptEvent(Run, TEXT("run_started"), -1, D);
 
-		if (Cfg.bStartPIE && GEditor && !GEditor->PlayWorld)
+		// A session already playing, or one someone else has queued, is not the run's to end.
+		if (Cfg.bStartPIE && GEditor && !GEditor->PlayWorld && !GEditor->IsPlaySessionInProgress())
 		{
 			MCPPlaySession::Request(/*bNeedsEditorWorld=*/true);
 			Run.bStartedPIE = true;
@@ -2287,7 +2294,7 @@ namespace MCPPIE
 			return false;
 		}
 		NewRun.bOwnsReplayer = true;
-		NewRun.bEndPIEWhenSettled = Cfg.bAutoStopPIE;
+		NewRun.bKeepPIE = !Cfg.bAutoStopPIE;
 		NewRun.State = EScriptRunState::Armed;
 		TriggerSource = MakeShared<FEditorScriptTriggerSource>(Cfg.PIEInstance, Cfg.ClientId);
 		Run = MoveTemp(NewRun);
@@ -2399,7 +2406,25 @@ namespace MCPPIE
 		// A manual run does not watch PIE, so PIE ending does not end it.
 		if (IsActive() && !Run.bManualMode)
 		{
+			// The session is already ending, so the run has none of its own left to end.
+			Run.bStartedPIE = false;
 			Finish(EScriptRunState::Finished, TEXT("PIE ended"));
+		}
+	}
+
+	void FPIEScriptRunner::EndStartedPIE()
+	{
+		if (!ShouldScriptRunEndPIE(Run) || !GEditor) return;
+		// Safe to repeat, and safe after the hub or a client ended PIE first: with no session up
+		// and none queued there is nothing to end.
+		if (GEditor->PlayWorld)
+		{
+			GEditor->RequestEndPlayMap();
+		}
+		else if (GEditor->IsPlaySessionRequestQueued())
+		{
+			// The run ended before the session it asked for came up; that session would outlive it.
+			GEditor->CancelRequestPlaySession();
 		}
 	}
 
@@ -2462,10 +2487,7 @@ namespace MCPPIE
 
 		WriteResults();
 		UnbindEndFrame();
-		if (Run.bEndPIEWhenSettled && FinalState == EScriptRunState::Finished && GEditor && GEditor->PlayWorld)
-		{
-			GEditor->RequestEndPlayMap();
-		}
+		EndStartedPIE();
 		UE_LOG(LogMCPPIE, Log, TEXT("[PIE-SCRIPT] Run %s %s: %s -> %s"),
 			*Run.RunId, *ScriptRunStateToString(FinalState), *Reason, *Run.ResultsPath);
 	}
