@@ -36244,9 +36244,15 @@
         {
           "name": "rowNames",
           "type": "array",
-          "required": true,
+          "required": false,
           "description": "1-500 rows to remove; names the table lacks are listed in missingRowNames",
           "items": "string"
+        },
+        {
+          "name": "rowName",
+          "type": "string",
+          "required": false,
+          "description": "One row to remove, in place of rowNames"
         },
         {
           "name": "save",
@@ -36261,6 +36267,19 @@
           "required": false,
           "description": "Return wouldRemove, missingRowNames and rowCountAfter without changing the table (default false)",
           "default": false
+        }
+      ],
+      "choices": [
+        {
+          "mode": "exactlyOne",
+          "branches": [
+            [
+              "rowName"
+            ],
+            [
+              "rowNames"
+            ]
+          ]
         }
       ]
     },

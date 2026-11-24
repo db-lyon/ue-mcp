@@ -5532,9 +5532,15 @@ export const handlerSpecs: HandlerSpecs = {
       {
         "name": "rowNames",
         "type": "array",
-        "required": true,
+        "required": false,
         "description": "1-500 rows to remove; names the table lacks are listed in missingRowNames",
         "items": "string"
+      },
+      {
+        "name": "rowName",
+        "type": "string",
+        "required": false,
+        "description": "One row to remove, in place of rowNames"
       },
       {
         "name": "save",
@@ -5549,6 +5555,19 @@ export const handlerSpecs: HandlerSpecs = {
         "required": false,
         "description": "Return wouldRemove, missingRowNames and rowCountAfter without changing the table (default false)",
         "default": false
+      }
+    ],
+    "choices": [
+      {
+        "mode": "exactlyOne",
+        "branches": [
+          [
+            "rowName"
+          ],
+          [
+            "rowNames"
+          ]
+        ]
       }
     ]
   },
@@ -7512,7 +7531,7 @@ export const schema: Record<string, z.ZodType> = {
   rotation: z.object({ pitch: z.number(), yaw: z.number(), roll: z.number() }).optional().describe("Rotation about the bone's origin, in space's axes (degrees)"),
   row: z.record(z.string(), z.unknown()).optional().describe("Row-struct fields to write; fields not named keep their values"),
   rowFilter: z.string().optional().describe("Case-insensitive substring filter on row names"),
-  rowName: z.string().optional().describe("Row to key (add_curvetable_key). Row to add (add_curvetable_row). Row to append or overwrite (add_datatable_row, set_datatable_row, update_datatable_row). Row to read (get_curvetable_keys, get_datatable_row). Row to remove (remove_curvetable_row). Single row to remove (remove_datatable_row). Alias for oldName (rename_curvetable_row, rename_datatable_row). Row whose keys to replace (set_curvetable_keys). Existing row to edit (set_datatable_cell)"),
+  rowName: z.string().optional().describe("Row to key (add_curvetable_key). Row to add (add_curvetable_row). Row to append or overwrite (add_datatable_row, set_datatable_row, update_datatable_row). Row to read (get_curvetable_keys, get_datatable_row). Row to remove (remove_curvetable_row). Single row to remove (remove_datatable_row). One row to remove, in place of rowNames (remove_datatable_rows). Alias for oldName (rename_curvetable_row, rename_datatable_row). Row whose keys to replace (set_curvetable_keys). Existing row to edit (set_datatable_cell)"),
   rowNames: z.array(z.string()).optional().describe("Exact row names to return, in this order; names the table lacks are listed in missingRowNames (read_datatable). Rows to remove in one transaction, including clone rollback (remove_datatable_row). 1-500 rows to remove; names the table lacks are listed in missingRowNames (remove_datatable_rows)"),
   rows: z.record(z.string(), z.unknown()).optional().describe("Rows to upsert: {rowName: {field: value}}"),
   rowStruct: z.string().optional().describe("Row struct, e.g. /Script/Module.MyRow or a UserDefinedStruct path (create_datatable). For a .csv: the DataTable row struct the DataTable Options dialog would ask for (default: the row struct of a DataTable already at the destination). An unattended .csv import with neither is refused (import_file)"),
