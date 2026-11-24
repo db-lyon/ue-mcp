@@ -88,7 +88,7 @@ describe("Epic's Fab tools with the Fab UE Plugin installed", () => {
   }
 
   // The suite fails on a skipped test, so an engine without the plugin asserts the other branch instead.
-  it("lists FabToolset.FabToolset with its five tools, each with its schema and its fab action", async () => {
+  it("lists FabToolset.FabToolset with its tools, each with its schema and its fab action", async () => {
     const out = (await listEpicFabTools.handler({ bridge } as unknown as ToolContext, { includeSchemas: true })) as Json;
     if (!(await fabPluginPresent())) {
       expect(out.toolsets).toEqual([]);
@@ -98,8 +98,9 @@ describe("Epic's Fab tools with the Fab UE Plugin installed", () => {
     const toolsets = out.toolsets as Array<{ name: string; tools: Array<Json & { name: string; call: string; action?: string }> }>;
     expect(toolsets.map((t) => t.name)).toEqual([FAB_TOOLSET]);
     const tools = toolsets[0].tools;
-    // The registry promises the set of tools, not their order.
-    expect(tools.map((t) => t.name).sort()).toEqual(FAB_TOOLS);
+    // The registry promises the set of tools, not their order, and Epic adds tools to the Fab plugin
+    // between engine builds (SearchFabSellers came after these five), so the five must be there and more may be.
+    expect(tools.map((t) => t.name)).toEqual(expect.arrayContaining(FAB_TOOLS));
     for (const tool of tools) {
       expect(tool.call).toContain(`toolset: "${FAB_TOOLSET}", tool: "${tool.name}"`);
       expect(tool.action, tool.name).toMatch(/^fab\(action="epic_[a-z_]+", args=\{\.\.\.\}\)$/);
