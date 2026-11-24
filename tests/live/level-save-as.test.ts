@@ -54,11 +54,8 @@ async function hasActor(label: string): Promise<boolean> {
 
 /** Put the editor on a never-saved /Temp map holding one placed cube, and return its package name. */
 async function onUntitledMapWithCube(): Promise<string> {
-  await callBridge(bridge, "delete_asset", { assetPath: SCRATCH, force: true });
-  await call("create_new_level", { levelPath: SCRATCH, discardUnsaved: true });
-  expect(await currentMap()).toBe(SCRATCH);
-  // Deleting the open map swaps the editor to a blank world first.
-  await call("delete_asset", { assetPath: SCRATCH, force: true });
+  // File > New Level: a blank /Temp world. delete_asset no longer does this, since it refuses the open map.
+  await call("execute_python", { code: "import unreal\nunreal.EditorLoadingAndSavingUtils.new_blank_map(False)" });
   const untitled = await currentMap();
   expect(untitled.startsWith("/Temp/"), `expected a never-saved map, got ${untitled}`).toBe(true);
   await placeCube(LABEL);

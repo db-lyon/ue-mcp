@@ -56,7 +56,7 @@ const externalObjects = (rel: string) => path.join(contentDir, "__ExternalObject
 /** A saved World Partition map with actors placed in it, and the editor back on the home level. */
 async function makeMap(levelPath: string, labels: string[]): Promise<void> {
   await callBridge(bridge, "delete_asset", { assetPath: levelPath, force: true });
-  const created = await call("create_new_level", { levelPath, worldPartition: true });
+  const created = await call("create_new_level", { levelPath, worldPartition: true, discardUnsaved: true });
   expect(created.externalActors).toBe(true);
   for (const [i, label] of labels.entries()) {
     await call("place_actor", { actorClass: "/Script/Engine.StaticMeshActor", label, staticMesh: CUBE, location: { x: i * 300, y: 0, z: 100 } });

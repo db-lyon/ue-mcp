@@ -5,8 +5,8 @@
  * demo_go_home used to answer success while the editor stayed on a dirty /Temp/Untitled map, because the
  * engine's LoadLevel refused and its answer was ignored; every later test that anchored on the home level then
  * ran on the wrong map. load_level(discardUnsaved=true) failed on the same map, because the discard was left to
- * an engine call that still refused. Each case here starts on such a map: a saved scratch map is opened and then
- * deleted, which puts the editor on a blank /Temp world, and an actor placed there makes it dirty.
+ * an engine call that still refused. Each case here starts on such a map: File > New Level puts the editor on a
+ * blank /Temp world, and an actor placed there makes it dirty.
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { callBridge, disconnectBridge, getBridge, TEST_PREFIX, type TestResult } from "../setup.js";
@@ -38,12 +38,8 @@ async function currentMap(): Promise<string> {
 
 /** Put the editor on a never-saved /Temp map with an unsaved change, and return that map's package name. */
 async function onDirtyUntitledMap(): Promise<string> {
-  await callBridge(bridge, "delete_asset", { assetPath: SCRATCH, force: true });
-  await call("create_new_level", { levelPath: SCRATCH, discardUnsaved: true });
-  if ((await currentMap()) !== SCRATCH) await call("load_level", { levelPath: SCRATCH, discardUnsaved: true });
-  expect(await currentMap()).toBe(SCRATCH);
-  // Deleting the open map swaps the editor to a blank world first.
-  await call("delete_asset", { assetPath: SCRATCH, force: true });
+  // File > New Level: a blank /Temp world. delete_asset no longer does this, since it refuses the open map.
+  await call("execute_python", { code: "import unreal\nunreal.EditorLoadingAndSavingUtils.new_blank_map(False)" });
   const untitled = await currentMap();
   expect(untitled.startsWith("/Temp/"), `expected a never-saved map, got ${untitled}`).toBe(true);
   await call("place_actor", { actorClass: "/Script/Engine.StaticMeshActor", label: LABEL, staticMesh: CUBE, location: { x: 0, y: 0, z: 100 } });
