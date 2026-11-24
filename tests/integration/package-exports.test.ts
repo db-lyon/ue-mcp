@@ -177,6 +177,22 @@ console.log(JSON.stringify({ exports: Object.keys(daemon).sort(), api: daemon.EX
     expect(out.good).toBe("probe");
     expect(out.tampered).toMatch(/does not match its hash/);
   });
+
+  it("resolves ue-mcp/hub for browser clients: the hub's rules, loading no Node module", () => {
+    covers("exports.hub");
+    const consumer = sb.path("global", "hub-consumer.mjs");
+    fs.writeFileSync(
+      consumer,
+      `import { register } from "node:module";
+register("data:text/javascript," + encodeURIComponent(\`export async function resolve(s, c, next) { const r = await next(s, c); if (r.url.startsWith("node:")) throw new Error("ue-mcp/hub loaded " + r.url); return r; }\`));
+const hub = await import("ue-mcp/hub");
+console.log(JSON.stringify({ slug: hub.goalSlug("Open the Door!"), ended: hub.qaEnded("finished") }));
+`,
+    );
+    const r = spawnSync(process.execPath, [consumer], { cwd: sb.path("global"), encoding: "utf8", windowsHide: true });
+    expect(r.status, r.stderr).toBe(0);
+    expect(JSON.parse(r.stdout.trim())).toEqual({ slug: "open-the-door", ended: true });
+  });
 });
 
 describe("the context measurement format", () => {

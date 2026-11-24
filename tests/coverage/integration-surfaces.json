@@ -832,6 +832,11 @@
       "summary": "the ue-mcp/daemon export resolves for daemon extensions"
     },
     {
+      "id": "exports.hub",
+      "group": "daemon",
+      "summary": "the ue-mcp/hub export resolves the Playtest Hub's contract without loading a Node module"
+    },
+    {
       "id": "exports.context-measurement",
       "group": "daemon",
       "summary": "the built package exports parseContextMeasurement and scopeBucket from ue-mcp/daemon and ships schemas/context-measurement.schema.json"

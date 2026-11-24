@@ -18,6 +18,10 @@
       "types": "./dist/daemon-api.d.ts",
       "default": "./dist/daemon-api.js"
     },
+    "./hub": {
+      "types": "./dist/hub-api.d.ts",
+      "default": "./dist/hub-api.js"
+    },
     "./schemas/context-measurement.schema.json": "./schemas/context-measurement.schema.json",
     "./package.json": "./package.json"
   },

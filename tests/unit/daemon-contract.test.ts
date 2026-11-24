@@ -105,6 +105,15 @@ describe("the daemon contract", () => {
     }
   });
 
+  it("keeps ue-mcp/hub to the hub's contract files, so a browser or phone bundle can take it", () => {
+    const entry = path.join(repo, "src", "hub-api.ts");
+    const sf = ts.createSourceFile(entry, fs.readFileSync(entry, "utf8"), ts.ScriptTarget.Latest);
+    const from = sf.statements.flatMap((s) => (ts.isImportDeclaration(s) || (ts.isExportDeclaration(s) && s.moduleSpecifier) ? [(s.moduleSpecifier as ts.StringLiteral).text] : []));
+    expect(from.filter((m) => !/^\.\/contract\/(hub|hub-qa|hub-attention|hub-ports)\.js$/.test(m))).toEqual([]);
+    const pkg = JSON.parse(fs.readFileSync(path.join(repo, "package.json"), "utf8")) as { exports: Record<string, unknown> };
+    expect(pkg.exports["./hub"]).toEqual({ types: "./dist/hub-api.d.ts", default: "./dist/hub-api.js" });
+  });
+
   it("names a route or a described change for every daemon feature", () => {
     const routed = new Set(Object.values(DAEMON_ROUTES as Record<string, DaemonRoute>).map((r) => r.feature).filter(Boolean));
     const unexplained = DAEMON_FEATURES.filter((f) => !routed.has(f) && !DAEMON_FEATURES_BEYOND_ROUTES[f]);

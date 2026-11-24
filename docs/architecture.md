@@ -97,6 +97,8 @@ A UI bundle (`src/daemon/ui-bundles.ts`) lives under `~/.ue-mcp/ui/`. It is serv
 
 The `ue-mcp/daemon` package export (`src/daemon-api.ts`) carries the types and helpers for building on the daemon: discovery, the extension contract, events, and bundle signing. Its types are declared in `src/contract/daemon.ts`, which imports nothing, so an internal refactor cannot change them by accident; `tests/golden/daemon-api.d.ts.txt` records the declarations, and a change to them fails the unit tests until it is re-recorded (`npm run golden:record`) and reviewed as additive or a version bump.
 
+The `ue-mcp/hub` package export (`src/hub-api.ts`) carries the Playtest Hub's contract alone: its types, rules and run model from `src/contract/hub*.ts`, which import nothing but each other. `ue-mcp/daemon` re-exports the same declarations; a client that runs in a browser or on a phone imports `ue-mcp/hub`, because it loads no Node module.
+
 ### Where Studio attaches
 
 [UE-MCP Studio](studio.md) is a daemon extension plus the `UE_MCP_Studio` editor plugin. The editor plugin starts the project's daemon. The daemon loads the Studio extension and serves its UI, which the Studio window shows. Studio reaches ue-mcp only through the daemon's HTTP API and the extension API.
@@ -115,6 +117,7 @@ The server registers the <!-- count:tools -->32<!-- /count --> category tools an
 | `daemon/` | Daemon, stdio shim, discovery, extensions, UI bundles, HTTP routes |
 | `contract/daemon.ts` | The daemon contract: API versions, features, routes, events, header names and public types |
 | `daemon-api.ts` | The public `ue-mcp/daemon` export |
+| `hub-api.ts` | The public `ue-mcp/hub` export: the hub contract, with no Node imports |
 | `server/runtime.ts` | Sessions, bridges, flow tool and dispatch, shared by every client |
 | `server/mcp-server.ts` | One `McpServer` over a runtime: instructions, tools, flow |
 | `tools.ts` | The `ALL_TOOLS` registry |

@@ -57,7 +57,7 @@ const LAYERS: readonly (readonly string[])[] = [
   ["daemon"],
   ["machine"],
   ["cli"],
-  ["(root)/index", "(root)/daemon-api", "(root)/init", "(root)/update", "(root)/deploy-cli"],
+  ["(root)/index", "(root)/daemon-api", "(root)/hub-api", "(root)/init", "(root)/update", "(root)/deploy-cli"],
 ];
 
 /** `from -> to`, src-relative, with the reason it still points up. */
