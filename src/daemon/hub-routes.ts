@@ -7,6 +7,7 @@
  * hub.changed (src/hub/hub.ts).
  */
 import * as fs from "node:fs";
+import { DAEMON_HEADERS } from "../contract/daemon.js";
 import type { Hub } from "../hub/hub.js";
 import { runDir } from "../hub/evidence.js";
 import { StatusError } from "../core/status-error.js";
@@ -36,7 +37,7 @@ export function hubRoutes(hub: () => Hub, projectDir: string): Pick<RouteHandler
     "hub.goal.addRequire": async (r) => ok({ goal: hub().goals.addRequire(param(r.params, "id"), await r.body()) }),
     "hub.goal.orderRequires": async (r) => ok({ goal: hub().goals.orderRequires(param(r.params, "id"), await r.body()) }),
     "hub.goal.removeRequire": ({ params }) => ok({ goal: hub().goals.removeRequire(param(params, "id"), param(params, "goalId")) }),
-    "hub.goal.signOff": async (r) => ok({ signOff: await hub().signOff(param(r.params, "id"), await r.body(), signedVia(r.req.headers["x-ue-mcp-signed-via"])) }),
+    "hub.goal.signOff": async (r) => ok({ signOff: await hub().signOff(param(r.params, "id"), await r.body(), signedVia(r.req.headers[DAEMON_HEADERS.via])) }),
     "hub.goal.clearSignOff": ({ params }) => {
       hub().clearSignOff(param(params, "id"));
       return noContent;

@@ -320,6 +320,13 @@ export const DAEMON_HEADERS = {
    * sends UE_MCP_PARENT_SESSION here.
    */
   parent: "x-ue-mcp-parent",
+  /**
+   * Set by a client that relays another device's requests to the daemon: that
+   * device's name, URI-encoded. The relaying client sets it itself and never
+   * passes on a value the device sent. A hub sign-off records it as the
+   * device it came through; absent, the request came from this computer.
+   */
+  via: "x-ue-mcp-via",
 } as const;
 
 // ── Events ────────────────────────────────────────────────────────

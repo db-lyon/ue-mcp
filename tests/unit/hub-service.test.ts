@@ -12,7 +12,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import type { ActionResult } from "../../src/contract/daemon.js";
-import { DAEMON_ROUTES } from "../../src/contract/daemon.js";
+import { DAEMON_HEADERS, DAEMON_ROUTES } from "../../src/contract/daemon.js";
 import { HUB_ROUTES, qaDraftFromScript, qaRunFromAnswer, type CurrentProvenance, type HubOverview, type PlanRun, type QueueState } from "../../src/hub/contract.js";
 import { StatusError } from "../../src/core/status-error.js";
 import { hubRoutes } from "../../src/daemon/hub-routes.js";
@@ -359,7 +359,7 @@ describe("sign-off", () => {
     const id = (await call("POST", "/hub/goals", { title: "Door", acceptance: { signOff: true }, checks: [{ kind: "script", target: DOOR }] })).body.goal.id;
     doorRun("r1", ago(30), true, { revision: "abc1234def", scriptHash: "sha256:1" });
     expect((await goalState(id)).status).toBe("ready_to_sign_off");
-    const r = await call("POST", `/hub/goals/${id}/sign-off`, { note: "Played it" }, { "x-ue-mcp-signed-via": encodeURIComponent("Ama's phone") });
+    const r = await call("POST", `/hub/goals/${id}/sign-off`, { note: "Played it" }, { [DAEMON_HEADERS.via]: encodeURIComponent("Ama's phone") });
     expect(r.body.signOff).toMatchObject({ goalId: id, by: "octocat", via: "Ama's phone", note: "Played it", revision: "abc1234def", runIds: ["r1"] });
     expect(fs.readdirSync(path.join(root, "data", "hub", "signoffs"))).toHaveLength(1);
     expect(fs.existsSync(path.join(root, "project", "QA"))).toBe(false);

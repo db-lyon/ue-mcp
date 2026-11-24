@@ -580,6 +580,7 @@ export declare const DAEMON_HEADERS: {
     readonly access: "x-ue-mcp-access";
     readonly flowToken: "x-ue-mcp-token";
     readonly parent: "x-ue-mcp-parent";
+    readonly via: "x-ue-mcp-via";
 };
 export declare const DAEMON_EVENT_TYPES: readonly ["daemon.started", "daemon.stopping", "editor.connected", "editor.disconnected", "editor.operation", "client.connected", "client.disconnected", "call.started", "call.finished", "session.access", "leases.released", "plugins.changed", "update.available", "update.staged", "update.building", "update.applied", "update.failed", "dialog.opened", "dialog.updated", "dialog.answered", "dialog.delegated", "dialog.closed", "flow.run_started", "flow.step_started", "flow.step_completed", "flow.step_failed", "flow.run_completed", "script.run_started", "script.step_started", "script.step_acted", "script.step_passed", "script.step_failed", "script.verdict_requested", "script.verdict", "script.run_finished", "checkpoint.created", "checkpoint.restored", "checkpoints.toggled", "checkpoints.cleared", "pie.started", "pie.ended", "pie.paused", "pie.resumed", "disruption.requested", "disruption.updated", "disruption.hold", "hub.changed", "hub.lease", "hub.held"];
 export declare const PIE_STATES: readonly ["started", "ended", "paused", "resumed"];
