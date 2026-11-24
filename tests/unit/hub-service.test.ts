@@ -20,6 +20,7 @@ import { findRoute, type RouteHandler, type RouteRequest } from "../../src/daemo
 import { Hub } from "../../src/hub/hub.js";
 import { sample, seriesOf } from "../../src/hub/evidence.js";
 import type { HubFixer, HubWritePlaytests } from "../../src/hub/ports.js";
+import type { BusyCall } from "../../src/contract/hub.js";
 import { ScriptIndex } from "../../src/hub/script-index.js";
 import { ScriptRunBroker } from "../../src/hub/script-broker.js";
 import { VerdictHold } from "../../src/hub/verdict-hold.js";
@@ -51,6 +52,10 @@ let workspace: CurrentProvenance;
 let pie: boolean;
 /** Modal dialogs open in the fake editor. */
 let dialogs: number;
+/** script_run's PIE start is still queued when it answers: PIE comes up only when a test says so. */
+let pieLate: boolean;
+/** script_run waits for this before it answers. */
+let gate: Promise<void> | null;
 
 const steps = (statuses: string[]) => statuses.map((s, index) => ({ index, instruction: STEPS[index].instruction, judge: STEPS[index].judge, status: s }));
 
@@ -65,14 +70,22 @@ const host = () => ({
       case "script_read":
         return listed.includes(String(args.path)) ? ok({ path: args.path, name: String(args.path).split("/").pop(), steps: STEPS }) : fail(`no script at ${String(args.path)}`);
       case "script_run": {
+        if (gate) await gate;
         const runId = `script_${String(args.script).split("/").pop()}_${k++}`;
-        // As ue-mcp does: start_pie starts PIE only when none runs, and says whether it did.
+        // As ue-mcp does: start_pie starts PIE only when none runs, and says whether it did. A late PIE is still queued.
         const started = args.start_pie === true && !pie;
-        if (started) pie = true;
+        if (started && !pieLate) pie = true;
         const s = { run_id: runId, script: args.script, script_name: String(args.script).split("/").pop(), state: "armed", mode: "full", steps: steps(["pending", "pending"]), awaiting: [], last_seq: 1, pie_started: started };
         status.set(runId, s);
         held = runId;
         return ok(s);
+      }
+      case "script_replay": {
+        // As ue-mcp does: a replay always starts PIE.
+        const runId = `replay_${k++}`;
+        pie = true;
+        status.set(runId, { run_id: runId, script: DOOR, script_name: "DoorOpens", state: "armed", steps: steps(["pending", "pending"]), awaiting: [], last_seq: 1 });
+        return ok({ run_id: runId, replay_of: args.run_id, pie_started: true, auto_stop_pie: true });
       }
       case "play_in_editor":
         if (args.pieAction === "stop") pie = false;
@@ -142,7 +155,7 @@ async function call(method: string, url: string, body?: unknown, headers: Record
 const settle = () => new Promise((r) => setTimeout(r, 0));
 const enc = encodeURIComponent;
 
-function setup(o: { writePlaytests?: HubWritePlaytests; fixer?: HubFixer; enabled?: boolean | (() => boolean); signer?: () => string | null } = {}) {
+function setup(o: { writePlaytests?: HubWritePlaytests; fixer?: HubFixer; enabled?: boolean | (() => boolean); signer?: () => string | null; busy?: () => BusyCall[] } = {}) {
   const h = host();
   broker = new ScriptRunBroker(h);
   // As the daemon wires it (src/hub/daemon-hub.ts): a hold on the runs the broker started.
@@ -167,7 +180,8 @@ function setup(o: { writePlaytests?: HubWritePlaytests; fixer?: HubFixer; enable
     timers: false,
     engine: () => "5.5",
     workspace: async () => workspace,
-    editor: { pie: () => pie, dialogs: () => dialogs, busy: () => ({ now: Date.now(), calls: [] }), inputAgeMs: () => null },
+    editor: { pie: () => pie, dialogs: () => dialogs, busy: () => ({ now: Date.now(), calls: o.busy?.() ?? [] }), inputAgeMs: () => null },
+    pieWaits: { startMs: 200, inUseMs: 200 },
   });
   return h;
 }
@@ -186,6 +200,8 @@ beforeEach(() => {
   workspace = { vcs: "git", revision: "abc1234def", dirty: 0 };
   pie = false;
   dialogs = 0;
+  pieLate = false;
+  gate = null;
 });
 afterEach(() => {
   hub?.dispose();
@@ -732,6 +748,151 @@ describe("the editor lease", () => {
   it("answers a fix request 409 when no client can run a fix loop", async () => {
     setup();
     expect((await call("POST", "/hub/fix", {})).status).toBe(409);
+  });
+});
+
+describe("ending the PIE a playtest started", () => {
+  const queue = async () => (await call("GET", "/hub/queue")).body as QueueState;
+  const stops = () => calls.filter((c) => c.action === "play_in_editor" && c.args.pieAction === "stop").length;
+  const until = async (cond: () => boolean | Promise<boolean>, ms = 2000) => {
+    const end = Date.now() + ms;
+    while (!(await cond()) && Date.now() < end) await new Promise((r) => setTimeout(r, 10));
+  };
+  const leaseGone = async () => (await queue()).lease === null;
+  const runDoor = async () => {
+    const plan = (await call("POST", "/hub/plans", { scope: { kind: "checks", checks: [{ kind: "script", target: DOOR }] } })).body.plan as PlanRun;
+    for (let i = 0; i < 3; i++) await settle();
+    return plan;
+  };
+  const run0 = "script_DoorOpens_0";
+
+  it.each([
+    ["passed", { state: "finished", steps: steps(["passed", "passed"]) }],
+    ["failed", { state: "finished", steps: steps(["failed", "skipped"]) }],
+    ["error", { state: "finished", steps: steps(["pending", "pending"]), stop_reason: "observation ended" }],
+    ["unjudged", { state: "stopped", steps: steps(["passed", "awaiting_verdict"]), stop_reason: "no verdict" }],
+    ["cancelled", { state: "stopped", steps: steps(["passed", "pending"]), stop_reason: "aborted" }],
+  ])("ends it when the run ends %s", async (outcome, end) => {
+    setup();
+    await runDoor();
+    expect(pie).toBe(true);
+    status.set(run0, { ...status.get(run0)!, ...end });
+    await hub.tick();
+    await until(leaseGone);
+    expect((await queue()).recent[0].items[0].state).toBe(outcome);
+    expect(stops()).toBe(1);
+    expect(pie).toBe(false);
+  });
+
+  it("ends it when the plan is stopped mid-run", async () => {
+    setup();
+    const plan = await runDoor();
+    await hub.cancelPlan(plan.id);
+    expect(calls.filter((c) => c.action === "script_stop").map((c) => c.args.run_id)).toEqual([run0]);
+    expect(stops()).toBe(1);
+    expect(pie).toBe(false);
+    expect(await queue()).toMatchObject({ lease: null, current: null });
+  });
+
+  it("ends it when the plan is stopped while its run is still starting", async () => {
+    setup();
+    let open!: () => void;
+    gate = new Promise((r) => (open = r));
+    const plan = (await call("POST", "/hub/plans", { scope: { kind: "checks", checks: [{ kind: "script", target: DOOR }] } })).body.plan as PlanRun;
+    await settle();
+    await hub.cancelPlan(plan.id);
+    open();
+    await until(async () => stops() === 1 && (await leaseGone()));
+    expect(calls.filter((c) => c.action === "script_stop").map((c) => c.args.run_id)).toEqual([run0]);
+    expect(stops()).toBe(1);
+    expect(pie).toBe(false);
+  });
+
+  it("ends PIE the run asked for that comes up only after the run ended, and holds the lease until then", async () => {
+    setup();
+    pieLate = true;
+    const plan = await runDoor();
+    expect(pie).toBe(false);
+    setTimeout(() => (pie = true), 50);
+    await hub.cancelPlan(plan.id);
+    expect(stops()).toBe(1);
+    expect(pie).toBe(false);
+    expect((await queue()).lease).toBeNull();
+  });
+
+  it("stops nothing when the PIE the run asked for never comes up", async () => {
+    setup();
+    pieLate = true;
+    const plan = await runDoor();
+    await hub.cancelPlan(plan.id);
+    expect(stops()).toBe(0);
+    expect((await queue()).lease).toBeNull();
+  });
+
+  it("stops nothing when the PIE the run started has already ended", async () => {
+    setup();
+    await runDoor();
+    // The run is followed while PIE plays, then PIE ends by itself and the run with it.
+    status.set(run0, { ...status.get(run0)!, state: "running" });
+    await hub.tick();
+    pie = false;
+    status.set(run0, { ...status.get(run0)!, state: "finished", steps: steps(["passed", "passed"]), stop_reason: "PIE ended" });
+    await hub.tick();
+    await until(leaseGone);
+    expect(stops()).toBe(0);
+  });
+
+  it("lets another session's PIE call finish before ending it, and leaves PIE that call outlasts the wait for", async () => {
+    let busy: BusyCall[] = [];
+    setup({ busy: () => busy });
+    await runDoor();
+    // Another client drives the hub's PIE as the run ends.
+    busy = [{ id: 1, category: "pie", action: "inject_input", startedAt: Date.now(), source: "client", client: "other", stopped: false }];
+    status.set(run0, { ...status.get(run0)!, state: "finished", steps: steps(["passed", "passed"]) });
+    setTimeout(() => (busy = []), 50);
+    await hub.tick();
+    await until(leaseGone);
+    expect(stops()).toBe(1);
+
+    // A second run, and a call that does not finish within the wait: PIE is left to that session.
+    await runDoor();
+    busy = [{ id: 2, category: "editor", action: "play_in_editor", startedAt: Date.now(), source: "agent", sessionId: "other-chat", stopped: false }];
+    const run1 = "script_DoorOpens_1";
+    status.set(run1, { ...status.get(run1)!, state: "finished", steps: steps(["passed", "passed"]) });
+    await hub.tick();
+    await until(leaseGone);
+    expect(stops()).toBe(1);
+    expect(pie).toBe(true);
+  });
+
+  it("ends the PIE a replay started when the plan is stopped before the replay finishes", async () => {
+    setup();
+    hub.runs.record(qaRunFromAnswer({ run_id: "r-old", script: DOOR, script_name: "DoorOpens", state: "finished", recording_id: "rec-old", steps: steps(["passed", "passed"]) }, { seenAt: "2026-11-23T00:00:00.000Z" })!);
+    const plan = (await call("POST", `/hub/checks/${enc(`script:${DOOR}`)}/run`, { replay: true })).body.plan as PlanRun;
+    for (let i = 0; i < 3; i++) await settle();
+    expect(calls.some((c) => c.action === "script_replay")).toBe(true);
+    expect((await queue()).lease).toMatchObject({ pie: true });
+    await hub.cancelPlan(plan.id);
+    expect(stops()).toBe(1);
+    expect(pie).toBe(false);
+  });
+
+  it("the daemon stopping mid-run stops the run, ends its PIE, and puts the item back for a person to resume", async () => {
+    setup();
+    await runDoor();
+    await hub.shutdown();
+    expect(calls.filter((c) => c.action === "script_stop").map((c) => c.args)).toEqual([{ run_id: run0, reason: "The daemon stopped during this run" }]);
+    expect(stops()).toBe(1);
+    expect(pie).toBe(false);
+    const q = await queue();
+    expect(q).toMatchObject({ paused: true, pausedBy: "reconnect", lease: null });
+    expect(q.current!.items[0]).toMatchObject({ state: "queued", reason: "The daemon stopped during this run" });
+  });
+
+  it("the daemon stopping with nothing on the editor asks the editor for nothing", async () => {
+    setup();
+    await hub.shutdown();
+    expect(calls.filter((c) => c.action === "script_stop" || c.action === "play_in_editor")).toEqual([]);
   });
 });
 

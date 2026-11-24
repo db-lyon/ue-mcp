@@ -92,6 +92,12 @@ const BACKFILL_MS = 60_000;
 const MAX_PAGE = 200;
 /** How long a reading of the workspace stands for the overview; a run's start always reads it afresh. */
 const WORKSPACE_MS = 10_000;
+/** How long the hub waits for PIE its run asked for to come up, so it can end it. */
+const PIE_START_WAIT_MS = 20_000;
+/** How long the hub lets another session's PIE call finish before it ends PIE its run started. */
+const PIE_IN_USE_WAIT_MS = 60_000;
+/** How often those waits look again. */
+const PIE_POLL_MS = 250;
 
 export type { HubHost } from "./ports.js";
 
@@ -130,6 +136,8 @@ export interface HubOptions extends HubPolicy {
   now?: () => number;
   /** Start the timers; tests drive tick() themselves. */
   timers?: boolean;
+  /** How long ending the run's PIE waits for it to come up, and for another session's PIE call; tests shorten them. */
+  pieWaits?: { startMs?: number; inUseMs?: number };
 }
 
 interface Catalog {
@@ -177,6 +185,8 @@ export class Hub {
   private readonly notes: string[] = [];
   /** The last reading of the workspace, for the overview. */
   private workspaceRead: { at: number; value: Promise<CurrentProvenance> } | null = null;
+  /** PIE was seen running while the lease is held, so PIE not running now means it ended rather than that it has not come up yet. */
+  private pieUp = false;
   /** Runs whose start provenance is being read; the read at their end waits for it. */
   private readonly capturing = new Map<string, Promise<void>>();
   /** Paths asked about for a redirector, and when, so a missing script is not asked about on every read. */
@@ -233,6 +243,7 @@ export class Hub {
       }
     }));
     const offPie = o.editor?.onPie?.((running) => {
+      if (running && this.lease.get()) this.pieUp = true;
       // The hub's PIE ended: a session started from now on is the developer's.
       if (!running) this.lease.update({ pie: false });
       if (this.enabled()) void this.queue.pump();
@@ -306,6 +317,7 @@ export class Hub {
 
   /** The lease changed: clients hear of it, and the editor is told once per plan that the hub holds it. */
   private leaseChanged(lease: EditorLeaseView | null): void {
+    if (!lease) this.pieUp = false;
     this.o.host.events.publish(HUB_LEASE, { lease } as unknown as Record<string, unknown>);
     this.changed(["queue"], lease ? { planRunId: lease.planRunId } : {});
     if (!lease || lease.planRunId === this.toldPlan) return;
@@ -331,13 +343,61 @@ export class Hub {
     return this.queueView();
   }
 
-  /** End Play In Editor, only while the hub's run started the session running now. */
+  /**
+   * The daemon is stopping: the run the hub has on the editor stops and the
+   * PIE it started ends, so neither outlives the daemon. A rebuild of the hub
+   * (a client configuring it) is dispose(), which leaves both running.
+   */
+  async shutdown(): Promise<void> {
+    await this.queue.shutdown();
+  }
+
+  /**
+   * End Play In Editor, only while the hub's run started the session. PIE the
+   * run asked for that has not come up yet is waited for, since a queued
+   * start lands after the run that asked for it may have ended. Another
+   * session's PIE call still in flight is let finish first; one that outlasts
+   * the wait keeps PIE, which is then that session's.
+   */
   private async endPie(): Promise<void> {
-    if (!this.lease.held().pie || !(this.o.editor?.pie() ?? true)) return;
+    if (!this.lease.held().pie) return;
+    const e = this.o.editor;
+    if (e && !e.pie()) {
+      // PIE was up under the lease and is not now: it has ended already, and the hub has nothing to stop.
+      if (this.pieUp || !(await this.until(() => e.pie() || !this.lease.held().pie, this.o.pieWaits?.startMs ?? PIE_START_WAIT_MS))) {
+        this.lease.update({ pie: false });
+        return;
+      }
+    }
+    // PIE ended meanwhile, by itself or by someone else: nothing is left to end.
+    if (!this.lease.held().pie) return;
+    if (!(await this.until(() => !this.pieInUse(), this.o.pieWaits?.inUseMs ?? PIE_IN_USE_WAIT_MS))) {
+      this.note("Play In Editor the hub's run started was left running: another session's call is still using it");
+      this.lease.update({ pie: false });
+      return;
+    }
     const r = await this.o.host.callAction("editor", "play_in_editor", { pieAction: "stop" });
     const error = failureOf(r);
     if (error && !/already/i.test(error)) throw new Error(error);
     this.lease.update({ pie: false });
+  }
+
+  /** A call another session has in flight on PIE: a pie action, or play_in_editor. The hub's own calls are not in busy(). */
+  private pieInUse(): boolean {
+    const mine = this.lease.held().sessionId;
+    const calls = this.o.editor?.busy().calls ?? [];
+    return calls.some((c) => (c.category === "pie" || (c.category === "editor" && c.action.startsWith("play_in_editor"))) && !(c.source === "agent" && !!mine && c.sessionId === mine));
+  }
+
+  /** Wait until a condition holds, looking every PIE_POLL_MS, at most `ms`. Returns whether it held. */
+  private async until(cond: () => boolean, ms: number): Promise<boolean> {
+    // The wall clock, not this.now(): a test's fixed clock would never pass the end.
+    const end = Date.now() + ms;
+    while (!cond()) {
+      if (Date.now() >= end) return false;
+      await new Promise((r) => setTimeout(r, Math.min(PIE_POLL_MS, Math.max(1, ms))));
+    }
+    return true;
   }
 
   private note(text: string): void {
@@ -378,6 +438,7 @@ export class Hub {
 
   /** A run the broker saved: its history and what it tested, the queue's item, the fix-loop line, and links to a goal. */
   private saw(run: QaRun): void {
+    if (this.lease.get() && this.o.editor?.pie()) this.pieUp = true;
     const had = this.runs.get(run.runId);
     const rec = this.runs.record(run);
     if (rec && !had && !qaEnded(run.state)) this.captureStart(run);
@@ -951,12 +1012,13 @@ export class Hub {
       const body = answerOf(r);
       if (!body || typeof body.run_id !== "string") return { error: `the replay did not start: ${failureOf(r) ?? "ue-mcp started no run"}` };
       this.runs.tag(body.run_id, tag);
-      return { runId: body.run_id };
+      // pie(script_replay) always starts PIE, and ends it itself only when the replay finishes: a stopped one is the hub's to end.
+      return { runId: body.run_id, pieStarted: body.pie_started === true };
     }
     const r = await this.o.broker.startScript(script, { planRunId: plan.id, title: plan.title });
     if ("error" in r) return { error: r.error };
     this.runs.tag(r.run.runId, tag);
-    return { runId: r.run.runId };
+    return { runId: r.run.runId, pieStarted: r.run.pieStarted === true };
   }
 
   /** Stop a run the hub started through the broker, so a verdict hold is released with it (and PIE, when the run started it). */

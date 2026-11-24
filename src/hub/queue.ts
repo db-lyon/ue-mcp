@@ -59,9 +59,14 @@ const MAX_RECENT = 20;
 /** Why an item went back in the queue, or ended, for the reasons the queue gives. */
 export const RELEASED = "The editor was released";
 export const CRASHED = "The editor crashed during this run";
+export const DAEMON_STOPPED = "The daemon stopped during this run";
 
-/** What starting one item came to: its run (and, for a fix item, its chat session), or why it did not start. */
-export type ItemStart = { runId: string; sessionId?: string } | { skipped: string } | { error: string };
+/**
+ * What starting one item came to: its run (and, for a fix item, its chat
+ * session), or why it did not start. pieStarted says the run started Play In
+ * Editor itself, for a run the broker may not hold yet (a replay).
+ */
+export type ItemStart = { runId: string; sessionId?: string; pieStarted?: boolean } | { skipped: string } | { error: string };
 
 export interface QueueRunner {
   /** Whether the editor is connected. */
@@ -262,14 +267,30 @@ export class PlanQueue {
    * lease is released.
    */
   async release(): Promise<void> {
+    await this.putBack("release", RELEASED);
+  }
+
+  /**
+   * The daemon is stopping: the item on the editor stops as on a release, and
+   * Play In Editor its run started ends with it, so nothing the hub started
+   * keeps running without a daemon to end it. The queue waits for a person
+   * when the daemon is back, as after a reconnect.
+   */
+  async shutdown(): Promise<void> {
+    if (!this.s.current?.items.some(live) && !this.lease.get()) return;
+    await this.putBack("reconnect", DAEMON_STOPPED);
+  }
+
+  /** Pause, stop the item on the editor and put it back at the front, end the PIE its run started, and release the lease. */
+  private async putBack(by: QueuePause, reason: string): Promise<void> {
     this.s.paused = true;
-    this.s.pausedBy = "release";
+    this.s.pausedBy = by;
     const cur = this.s.current;
     const item = cur?.items.find(live);
     const held = item ? { ...item } : null;
-    if (item) Object.assign(item, { state: "queued", runId: null, startedAt: null, reason: RELEASED });
+    if (item) Object.assign(item, { state: "queued", runId: null, startedAt: null, reason });
     this.save(cur?.id);
-    if (cur && held) await this.stopItem(cur, held, RELEASED);
+    if (cur && held) await this.stopItem(cur, held, reason);
     await this.free();
   }
 
@@ -284,6 +305,11 @@ export class PlanQueue {
     } catch (e) {
       this.o.log?.warn(`hub: ${item.name} could not be stopped`, e);
     }
+  }
+
+  /** Whether an item's run started Play In Editor: as its start said, or as the broker holds the run. */
+  private startedPie(r: { runId: string; pieStarted?: boolean }): boolean {
+    return r.pieStarted === true || this.o.runner.run(r.runId)?.pieStarted === true;
   }
 
   /** The item settled or stopped: PIE its run started ends, and the lease is released. */
@@ -475,9 +501,15 @@ export class PlanQueue {
         } catch (e) {
           r = { error: e instanceof Error ? e.message : String(e) };
         }
-        // Cancelled or released while it started: what it started is stopped.
+        // Cancelled, released or shut down while it started: what it started is stopped, PIE its run started included.
         if (this.s.current !== cur || item.state !== "running") {
-          if ("runId" in r) await this.stopItem(cur, { ...item, runId: r.runId, sessionId: r.sessionId ?? item.sessionId ?? null }, item.reason === RELEASED ? RELEASED : "The plan was cancelled");
+          if ("runId" in r) {
+            // The cancel let the lease go before the run was known: it is held again until that run's PIE has ended.
+            if (!this.lease.get()) this.lease.take({ purpose: purposeOf(cur, item), planRunId: cur.id, item: at, work: workOf(cur), sessionId: r.sessionId ?? item.sessionId ?? null });
+            this.lease.update({ runId: r.runId, pie: this.startedPie(r) });
+            const why = item.reason === RELEASED || item.reason === DAEMON_STOPPED ? item.reason : "The plan was cancelled";
+            await this.stopItem(cur, { ...item, runId: r.runId, sessionId: r.sessionId ?? item.sessionId ?? null }, why);
+          }
           await this.free();
           continue;
         }
@@ -491,7 +523,7 @@ export class PlanQueue {
           item.runId = r.runId;
           if (r.sessionId) item.sessionId = r.sessionId;
           const run = this.o.runner.run(r.runId);
-          this.lease.update({ runId: r.runId, sessionId: item.sessionId ?? null, pie: run?.pieStarted === true });
+          this.lease.update({ runId: r.runId, sessionId: item.sessionId ?? null, pie: this.startedPie(r) });
           this.save(cur.id);
           // A run that ended at once moves the plan on here; one still going does so from its events.
           if (run && (workOf(cur) === "run" || run.assignment) && this.evaluate(cur, item, run)) await this.free();
