@@ -2249,7 +2249,7 @@ export interface BusyCall {
     category: string;
     action: string;
     startedAt: number;
-    source: "studio" | "client";
+    source: "agent" | "client";
     sessionId?: string;
     client?: string;
     stopped: boolean;
@@ -2289,7 +2289,7 @@ export declare function buildAttention(i: AttentionInput): AttentionItem[];
 
 // ── contract/hub-ports.ts ──
 import type { ActionResult } from "./daemon.js";
-import type { PlanItem, PlanRun, PlaytestRunsMode } from "./hub.js";
+import type { BusyCall, PlanItem, PlanRun, PlaytestRunsMode } from "./hub.js";
 import type { QaRun } from "./hub-qa.js";
 export interface HubHost {
     projectDir: string;
@@ -2386,6 +2386,7 @@ export interface HubClientOptions extends HubPolicy {
     writePlaytests?: HubWritePlaytests;
     replay?: (script: string, args: Record<string, unknown>) => Promise<ActionResult>;
     inputAgeMs?: () => number | null;
+    agentCalls?: () => BusyCall[];
 }
 
 // ── helpers exported beside it ──

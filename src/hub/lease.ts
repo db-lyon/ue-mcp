@@ -70,7 +70,7 @@ export function occupancyOf(s: OccupancySignals, held: Held = {}, o: { unattende
   const other = runs.find((r) => r.runId !== held.runId && ON_EDITOR.has(r.state) && !r.manual && !r.deleted);
   if (other) out.push({ kind: "run", text: other.sessionId ? "Another playtest is running" : "Another client is running a playtest" });
   const loop = runs.some((r) => r.assignment?.state === "running" && r.assignment.sessionId !== held.sessionId);
-  const chat = busy.calls.some((c) => c.source === "studio" && c.sessionId !== held.sessionId);
+  const chat = busy.calls.some((c) => c.source === "agent" && c.sessionId !== held.sessionId);
   if (loop) out.push({ kind: "agent", text: "A fix loop is running" });
   else if (chat) out.push({ kind: "agent", text: "A chat is using the editor" });
   if (busy.calls.some((c) => c.source === "client")) out.push({ kind: "client", text: "Another MCP client is using the editor" });

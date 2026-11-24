@@ -1275,8 +1275,8 @@ export interface BusyCall {
   action: string;
   /** Daemon clock, epoch ms. */
   startedAt: number;
-  /** studio: a client's own chat agent made it, named by sessionId; client: another MCP client did. */
-  source: "studio" | "client";
+  /** agent: a client's own agent made it, named by sessionId (HubClientOptions.agentCalls); client: an MCP client did. */
+  source: "agent" | "client";
   sessionId?: string;
   client?: string;
   /** The turn waiting on it was stopped; the editor finishes the call regardless. */

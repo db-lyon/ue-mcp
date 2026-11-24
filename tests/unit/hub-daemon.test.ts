@@ -108,6 +108,20 @@ describe("the daemon's hub", () => {
       holder.dispose();
     }
   });
+
+  it("counts a client's own agents' editor calls, which publish no call events, as holding the editor", () => {
+    fs.mkdirSync(path.join(root, "project"), { recursive: true });
+    const d = deps();
+    d.deps.editors = () => [{ connected: true }];
+    const holder = new HubHolder((client) => createDaemonHub(d.deps as never, client));
+    try {
+      expect(holder.get().occupancy()).toEqual([]);
+      holder.configure({ agentCalls: () => [{ id: 1, category: "asset", action: "list", startedAt: 0, source: "agent", sessionId: "chat", stopped: false }] });
+      expect(holder.get().occupancy()).toEqual([{ kind: "agent", text: "A chat is using the editor" }]);
+    } finally {
+      holder.dispose();
+    }
+  });
 });
 
 describe("ue-mcp's own broker", () => {

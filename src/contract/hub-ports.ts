@@ -8,7 +8,7 @@
  * (HubClientOptions).
  */
 import type { ActionResult } from "./daemon.js";
-import type { PlanItem, PlanRun, PlaytestRunsMode } from "./hub.js";
+import type { BusyCall, PlanItem, PlanRun, PlaytestRunsMode } from "./hub.js";
 import type { QaRun } from "./hub-qa.js";
 
 /** What the hub needs of the daemon: the project, its data folder, calls into ue-mcp's own actions, editors and events. */
@@ -110,4 +110,11 @@ export interface HubClientOptions extends HubPolicy {
   replay?: (script: string, args: Record<string, unknown>) => Promise<ActionResult>;
   /** How long since someone used this computer, when a window reports it; null when none does. */
   inputAgeMs?: () => number | null;
+  /**
+   * The editor calls the client's own agents have in flight, each with
+   * source "agent" and its sessionId. They reach the editor through
+   * api.callAction, which publishes no call events, so without them the hub
+   * sees only MCP clients' calls. Default: none.
+   */
+  agentCalls?: () => BusyCall[];
 }

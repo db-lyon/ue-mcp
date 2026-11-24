@@ -157,7 +157,10 @@ export function createDaemonHub(deps: DaemonHubDeps, client: () => HubClientOpti
     editor: {
       pie: () => signals.pie(),
       dialogs: () => deps.dialogs(),
-      busy: () => signals.busy(),
+      busy: () => {
+        const busy = signals.busy();
+        return c.agentCalls ? { ...busy, calls: [...c.agentCalls(), ...busy.calls] } : busy;
+      },
       inputAgeMs: () => c.inputAgeMs?.() ?? null,
       onPie: (l) => signals.onPie(l),
     },

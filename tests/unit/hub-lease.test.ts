@@ -40,7 +40,7 @@ describe("occupancyOf", () => {
   });
 
   it("names every signal that holds it, most decisive first", () => {
-    s.busy = { now: 0, calls: [{ id: 1, category: "asset", action: "save", startedAt: 0, source: "client", client: "cli", stopped: false }, { id: 2, category: "asset", action: "list", startedAt: 0, source: "studio", sessionId: "chat", stopped: false }], operation: { op: "rebuild", step: "build", startedAt: 0, stepStartedAt: 0 } };
+    s.busy = { now: 0, calls: [{ id: 1, category: "asset", action: "save", startedAt: 0, source: "client", client: "cli", stopped: false }, { id: 2, category: "asset", action: "list", startedAt: 0, source: "agent", sessionId: "chat", stopped: false }], operation: { op: "rebuild", step: "build", startedAt: 0, stepStartedAt: 0 } };
     s.dialogs = 1;
     s.pie = true;
     s.runs = [run("other", "running", { sessionId: null })];
@@ -63,7 +63,7 @@ describe("occupancyOf", () => {
   it("what the hub holds never counts: its run, the PIE its run started, its fix loop's session", () => {
     s.pie = true;
     s.runs = [run("mine", "running"), run("loop", "finished", { assignment: { callId: "c", sessionId: "fix", state: "running", at: "" } })];
-    s.busy = { now: 0, calls: [{ id: 1, category: "asset", action: "save", startedAt: 0, source: "studio", sessionId: "fix", stopped: false }] };
+    s.busy = { now: 0, calls: [{ id: 1, category: "asset", action: "save", startedAt: 0, source: "agent", sessionId: "fix", stopped: false }] };
     expect(kinds()).toEqual(["pie", "run", "agent"]);
     expect(kinds({ runId: "mine", pie: true, sessionId: "fix" })).toEqual([]);
   });
