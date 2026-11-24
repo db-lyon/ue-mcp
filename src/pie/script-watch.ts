@@ -11,6 +11,7 @@ import type { ElicitParams, ElicitPrimitiveSchema } from "../core/elicit.js";
 import type { ToolContext } from "../surface/tool-types.js";
 import { clientAdvertisesElicitation } from "../editor/dialog-mode.js";
 import { minHumanAnswerMs } from "../editor/dialog-guard.js";
+import { recordRunProvenance } from "./script-provenance.js";
 import {
   emitScriptEvent,
   type ScriptEvent,
@@ -567,8 +568,11 @@ export async function scriptRunFollowUp(
     ...(clock ? { clock } : {}),
   };
   startScriptWatch(ctx, runId, watch);
+  // What the run tests, recorded beside its results for the hub and any other client that lists runs.
+  const recorded = recordRunProvenance(ctx, runId, watch.script);
   if (params.wait !== true) return answered;
   const { status, wait } = await waitForScriptRun(ctx, runId, { timeoutSeconds: timeoutOf(params), clock, watch });
+  await recorded;
   const final = (await freshStatus(ctx, runId, undefined)) ?? status;
   return merge(body, final, wait, false);
 }
