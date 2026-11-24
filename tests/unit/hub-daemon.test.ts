@@ -122,6 +122,21 @@ describe("the daemon's hub", () => {
       holder.dispose();
     }
   });
+
+  it("defers to the consent ledger: another session's hold keeps the editor", () => {
+    fs.mkdirSync(path.join(root, "project"), { recursive: true });
+    const d = deps();
+    d.deps.editors = () => [{ connected: true }];
+    let hold: string | null = null;
+    const holder = new HubHolder((client) => createDaemonHub({ ...(d.deps as never as Parameters<typeof createDaemonHub>[0]), consent: { sessions: () => [{ label: "Claude Code", hold }] } }, client));
+    try {
+      expect(holder.get().occupancy()).toEqual([]);
+      hold = "rebuilding lighting";
+      expect(holder.get().occupancy()).toEqual([{ kind: "session", text: "Claude Code holds the editor: rebuilding lighting" }]);
+    } finally {
+      holder.dispose();
+    }
+  });
 });
 
 describe("ue-mcp's own broker", () => {

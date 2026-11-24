@@ -812,6 +812,11 @@
       "summary": "stopping, restarting, rebuilding or patching a shared editor waits for consent: a lone session attests to its own subagents, other sessions are told in their next response and answer go, wait or block, holds and releases, external participants over /v1/disruptions, POST /v1/editor/* answering 409 until agreed, and people approving or denying"
     },
     {
+      "id": "daemon.hub.goal-delete",
+      "group": "daemon",
+      "summary": "DELETE /v1/hub/goals/:id, advertised as hub.goalDelete, removes a goal or milestone and drops it from every goal's requires, leaves its playtests and their records alone, and answers 409 naming a queued plan made for it until that plan is cancelled"
+    },
+    {
       "id": "package.dist-server",
       "group": "daemon",
       "summary": "the compiled package, laid out as npm installs it, starts from dist/index.js and serves what the source does"

@@ -18,6 +18,7 @@ import * as path from "node:path";
 import type { DaemonEvent, DaemonEventType, ActionResult } from "../contract/daemon.js";
 import type { BusyCall, BusyState, EditorOperation } from "./contract.js";
 import { Hub } from "./hub.js";
+import type { OccupancySignals } from "./lease.js";
 import type { HubClientOptions, HubPolicy } from "./ports.js";
 import { ScriptIndex } from "./script-index.js";
 import { ScriptRunBroker } from "./script-broker.js";
@@ -43,6 +44,8 @@ export interface DaemonHubDeps {
   engine?: () => string | null;
   /** Start the hub's timers; tests drive tick() themselves. */
   timers?: boolean;
+  /** The consent ledger's view (src/dispatch/disruption.ts): other sessions' holds and work, and open requests to stop, restart or rebuild the editor. */
+  consent?: Pick<OccupancySignals, "sessions" | "disruptions">;
 }
 
 export interface DaemonHub {
@@ -162,6 +165,8 @@ export function createDaemonHub(deps: DaemonHubDeps, client: () => HubClientOpti
         return c.agentCalls ? { ...busy, calls: [...c.agentCalls(), ...busy.calls] } : busy;
       },
       inputAgeMs: () => c.inputAgeMs?.() ?? null,
+      sessions: () => deps.consent?.sessions?.() ?? [],
+      disruptions: () => deps.consent?.disruptions?.() ?? [],
       onPie: (l) => signals.onPie(l),
     },
     signer: c.signer ?? deps.signer,

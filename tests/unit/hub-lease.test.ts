@@ -55,6 +55,27 @@ describe("occupancyOf", () => {
     ]);
   });
 
+  describe("the consent ledger", () => {
+    const withConsent = (sessions: ReturnType<NonNullable<OccupancySignals["sessions"]>>, disruptions: Array<{ label: string; op: string }> = []): OccupancySignals => ({ ...signals(), sessions: () => sessions, disruptions: () => disruptions });
+
+    it("a hold, an open transaction or an open restart request keeps every plan off the editor", () => {
+      expect(occupancyOf(withConsent([{ label: "Claude Code", hold: "refactoring the door blueprint" }])).map((r) => r.text)).toEqual(["Claude Code holds the editor: refactoring the door blueprint"]);
+      expect(occupancyOf(withConsent([{ label: "Cursor", transactions: 2 }])).map((r) => r.kind)).toEqual(["session"]);
+      expect(occupancyOf(withConsent([], [{ label: "Claude Code", op: "restart the editor" }])).map((r) => r.text)).toEqual(["Claude Code asked to restart the editor"]);
+    });
+
+    it("a session working or active lately keeps a scheduled plan off it, not a person's", () => {
+      const ledger = withConsent([{ label: "Claude Code", busy: 1 }, { label: "Cursor", idleMs: 60_000 }, { label: "Old", idleMs: 3_600_000 }]);
+      expect(occupancyOf(ledger)).toEqual([]);
+      expect(occupancyOf(ledger, {}, { scheduled: true }).map((r) => r.text)).toEqual(["Claude Code is using the editor", "Cursor used the editor in the last 3 minutes"]);
+    });
+
+    it("someone at the computer keeps a scheduled plan off it", () => {
+      s.inputAgeMs = 1_000;
+      expect(kinds({}, { scheduled: true })).toEqual(["input"]);
+    });
+  });
+
   it("the editor not connected says only that", () => {
     s.connected = false;
     s.pie = true;

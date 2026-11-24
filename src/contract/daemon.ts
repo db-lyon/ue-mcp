@@ -82,6 +82,7 @@ export const DAEMON_FEATURES = [
   "install.engineMismatch",
   "editor.consent",
   "hub",
+  "hub.goalDelete",
 ] as const;
 
 export type DaemonFeature = (typeof DAEMON_FEATURES)[number];
@@ -98,6 +99,8 @@ export const DAEMON_FEATURES_BEYOND_ROUTES: { readonly [F in DaemonFeature]?: st
     "GET /v1/install reports the problem bridge_engine_mismatch, with action `rebuild` and engineMismatch naming the BuildIds, when the bridge or the project's UE_MCP_Studio plugin is built for another engine build, their module manifests disagree, or the install marker names another release than the descriptor",
   "editor.consent":
     "POST /v1/editor/{stop,restart,rebuild} answers 409 { error, request: EditorDisruptionRequest } while other sessions using the editor have not agreed, and takes { requestId?, force?, requester?, reason? }; GET /v1/events carries disruption.requested, disruption.updated and disruption.hold",
+  "hub.goalDelete":
+    "DELETE /v1/hub/goals/:id removes the goal or milestone and its sign-off and drops its id from every other goal's requires; playtests, their records and past runs are left as they are; it answers 409 { error } naming the plan while a plan whose scope is that goal is queued or running",
 };
 
 /** What the extension API offers beyond EXTENSION_API_VERSION, in the order `api.features` lists them. */
@@ -232,7 +235,7 @@ export const DAEMON_ROUTES = routeTable({
   "hub.goal": { method: "GET", path: "/v1/hub/goals/:id", feature: "hub", summary: "one goal with its status and checks (GoalState)" },
   "hub.goal.create": { method: "POST", path: "/v1/hub/goals", feature: "hub", summary: "GoalDraft: create a goal or milestone ({ goal })" },
   "hub.goal.update": { method: "PUT", path: "/v1/hub/goals/:id", feature: "hub", summary: "GoalUpdate: change fields ({ goal })" },
-  "hub.goal.delete": { method: "DELETE", path: "/v1/hub/goals/:id", feature: "hub", summary: "delete a goal (204)" },
+  "hub.goal.delete": { method: "DELETE", path: "/v1/hub/goals/:id", feature: "hub", summary: "delete a goal or milestone; goals that required it stop requiring it, its playtests stay (204; 409 while a plan for it is queued or running)" },
   "hub.goal.addChecks": { method: "POST", path: "/v1/hub/goals/:id/checks", feature: "hub", summary: "{ checks: CheckRef[] }: add playtests to a goal ({ goal })" },
   "hub.goal.orderChecks": { method: "PUT", path: "/v1/hub/goals/:id/checks/order", feature: "hub", summary: "{ order: checkIds }: reorder a goal's playtests ({ goal })" },
   "hub.goal.removeCheck": { method: "DELETE", path: "/v1/hub/goals/:id/checks/:checkId", feature: "hub", summary: "remove a playtest from a goal ({ goal })" },
@@ -245,7 +248,7 @@ export const DAEMON_ROUTES = routeTable({
   "hub.goal.writePlaytests": { method: "POST", path: "/v1/hub/goals/:id/write-playtests", feature: "hub", summary: "{ text? }: ask a client that can write playtests to write them for the goal (202 { sessionId }; 409 when none can)" },
   "hub.check": { method: "GET", path: "/v1/hub/checks/:checkId", feature: "hub", summary: "?limit&before: one playtest with its health and runs (CheckDetail)" },
   "hub.check.update": { method: "PUT", path: "/v1/hub/checks/:checkId", feature: "hub", summary: "CheckMetaUpdate: what a playtest says about itself ({ meta })" },
-  "hub.check.run": { method: "POST", path: "/v1/hub/checks/:checkId/run", feature: "hub", summary: "{ replay? }: queue a plan that runs one playtest ({ plan })" },
+  "hub.check.run": { method: "POST", path: "/v1/hub/checks/:checkId/run", feature: "hub", summary: "{ replay?, next? }: a person's Run of one playtest; resumes a paused queue ({ plan, placement })" },
   "hub.rules": { method: "PUT", path: "/v1/hub/rules", feature: "hub", summary: "Partial<HealthRule>: the project's flaky and stale rule ({ rules })" },
   "hub.store.export": { method: "GET", path: "/v1/hub/store", feature: "hub", summary: "every goal, check record, sign-off and rule (HubExport)" },
   "hub.store.import": { method: "POST", path: "/v1/hub/store", feature: "hub", summary: "HubExport: merge by id (HubImportReport; 400 naming every record that does not read)" },
@@ -258,9 +261,13 @@ export const DAEMON_ROUTES = routeTable({
   "hub.queue.pause": { method: "PUT", path: "/v1/hub/queue/paused", feature: "hub", summary: "{ paused: boolean } (QueueState)" },
   "hub.lease": { method: "GET", path: "/v1/hub/lease", feature: "hub", summary: "the hub's hold on the editor ({ lease })" },
   "hub.release": { method: "POST", path: "/v1/hub/release", feature: "hub", summary: "Release the editor: stop what the hub holds on it and pause the queue (QueueState)" },
-  "hub.plan": { method: "POST", path: "/v1/hub/plans", feature: "hub", summary: "PlanRequest: queue a plan ({ plan })" },
+  "hub.plan": { method: "POST", path: "/v1/hub/plans", feature: "hub", summary: "PlanRequest: a person's Run; resumes a paused queue and starts at once when the editor is free ({ plan, placement })" },
   "hub.plan.cancel": { method: "POST", path: "/v1/hub/plans/:id/cancel", feature: "hub", summary: "cancel a plan ({ plan })" },
-  "hub.fix": { method: "POST", path: "/v1/hub/fix", feature: "hub", summary: "FixRequest: queue fix loops for failing playtests ({ queued, plan }; 409 when no client can run a fix loop)" },
+  "hub.plan.move": { method: "POST", path: "/v1/hub/plans/:id/move", feature: "hub", summary: "{ to }: move a queued plan, 0 for next (QueueState)" },
+  "hub.schedule.create": { method: "POST", path: "/v1/hub/schedules", feature: "hub", summary: "ScheduleDraft: run a plan on chosen days at a local time ({ schedule })" },
+  "hub.schedule.update": { method: "PUT", path: "/v1/hub/schedules/:id", feature: "hub", summary: "Partial<ScheduleDraft>: change a schedule ({ schedule })" },
+  "hub.schedule.delete": { method: "DELETE", path: "/v1/hub/schedules/:id", feature: "hub", summary: "delete a schedule (204)" },
+  "hub.fix": { method: "POST", path: "/v1/hub/fix", feature: "hub", summary: "FixRequest: queue fix loops for failing playtests ({ queued, plan, placement? }; 409 when no client can run a fix loop)" },
   "tools.list": { method: "GET", path: "/v1/tools", feature: "tools.categories", summary: "project(list_categories)" },
   "tools.categories": { method: "POST", path: "/v1/tools/categories", feature: "tools.categories", summary: "{ category, enabled, scope?, editor? }: project(set_category_enabled)" },
   "tools.toolsets": { method: "POST", path: "/v1/tools/toolsets", feature: "tools.categories", summary: "{ toolsets, enabled, editor? }: project(set_toolset_enabled)" },

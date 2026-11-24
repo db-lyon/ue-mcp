@@ -22,6 +22,7 @@ import { sample, seriesOf } from "../../src/hub/evidence.js";
 import type { HubFixer, HubWritePlaytests } from "../../src/hub/ports.js";
 import type { BusyCall } from "../../src/contract/hub.js";
 import { ScriptIndex } from "../../src/hub/script-index.js";
+import { nextRunAt } from "../../src/hub/schedules.js";
 import { ScriptRunBroker } from "../../src/hub/script-broker.js";
 import { VerdictHold } from "../../src/hub/verdict-hold.js";
 
@@ -270,6 +271,56 @@ describe("routes", () => {
     expect((await call("DELETE", `/hub/goals/${alpha}/requires/${jump}`)).status).toBe(404);
   });
 
+  it("deleting a goal unlinks it from the goals that required it, leaves its playtests, their records and runs, and is 409 while a plan for it is queued or running", async () => {
+    setup();
+    const mk = async (title: string, extra: Record<string, unknown> = {}) => (await call("POST", "/hub/goals", { title, ...extra })).body.goal.id as string;
+    const doors = await mk("Doors", { checks: [{ kind: "script", target: DOOR }] });
+    const jump = await mk("Jump", { checks: [{ kind: "script", target: DOOR }, { kind: "script", target: JUMP }] });
+    const alpha = await mk("Alpha", { kind: "milestone", requires: [{ goal: doors }, { goal: jump }] });
+    await call("PUT", `/hub/checks/${enc(`script:${DOOR}`)}`, { title: "Door opens", links: [{ url: "https://tracker.example/1" }] });
+
+    // A plan made for the goal is running: refused, naming the plan and how to go on.
+    const planId = (await call("POST", "/hub/plans", { scope: { kind: "goal", goalId: doors } })).body.plan.id as string;
+    await settle();
+    await settle();
+    const refused = await call("DELETE", `/hub/goals/${doors}`);
+    expect(refused.status).toBe(409);
+    expect(refused.body.error).toBe(`"Doors" can't be deleted while a run made for it is queued or running: "Run Doors". Cancel that run or let it finish, then try again.`);
+    expect((await call("GET", `/hub/goals/${doors}`)).status).toBe(200);
+
+    // The plan's run finishes; the goal deletes.
+    const run0 = ((await call("GET", "/hub/queue")).body as QueueState).current!.items[0].runId!;
+    status.set(run0, { ...status.get(run0)!, state: "finished", steps: steps(["passed", "passed"]), awaiting: [] });
+    await hub.tick();
+    await settle();
+    expect(((await call("GET", "/hub/queue")).body as QueueState).recent[0]).toMatchObject({ id: planId, state: "done" });
+    expect((await call("DELETE", `/hub/goals/${doors}`)).status).toBe(204);
+
+    const o = (await call("GET", "/hub")).body as HubOverview;
+    expect(o.goals.map((g) => g.goal.id).sort()).toEqual([alpha, jump].sort());
+    expect(o.goals.find((g) => g.goal.id === alpha)!.goal.requires).toEqual([{ goal: jump }]);
+    expect(o.goals.find((g) => g.goal.id === jump)!.goal.checks.map((c) => c.target)).toEqual([DOOR, JUMP]);
+    expect(o.warnings.some((w) => w.includes(doors))).toBe(false);
+    // The playtest keeps its own record and its run, which stays readable.
+    const door = (await call("GET", `/hub/checks/${enc(`script:${DOOR}`)}`)).body;
+    expect(door.state).toMatchObject({ goalIds: [jump], name: "Door opens", links: [{ url: "https://tracker.example/1" }] });
+    expect(door.runs.map((r: { runId: string }) => r.runId)).toEqual([run0]);
+    expect((await call("GET", `/hub/runs/${run0}`)).status).toBe(200);
+
+    // A milestone deletes the same way, and the goals it required stay.
+    expect((await call("DELETE", `/hub/goals/${alpha}`)).status).toBe(204);
+    expect(((await call("GET", "/hub")).body as HubOverview).goals.map((g) => g.goal.id)).toEqual([jump]);
+
+    // A queued plan refuses it too, until it is cancelled.
+    await call("PUT", "/hub/queue/paused", { paused: true });
+    const queued = (await call("POST", "/hub/plans", { scope: { kind: "goal", goalId: jump } })).body.plan.id as string;
+    expect((await call("DELETE", `/hub/goals/${jump}`)).status).toBe(409);
+    expect((await call("POST", `/hub/plans/${queued}/cancel`)).status).toBe(200);
+    expect((await call("DELETE", `/hub/goals/${jump}`)).status).toBe(204);
+    expect(((await call("GET", "/hub")).body as HubOverview).goals).toEqual([]);
+    expect(((await call("GET", "/hub")).body as HubOverview).checks.map((c) => c.id).sort()).toEqual([`script:${DOOR}`, `script:${JUMP}`].sort());
+  });
+
   it("bad plan, rule and query bodies are 400; unknown ids 404", async () => {
     setup();
     expect((await call("POST", "/hub/plans", { scope: { kind: "nope" } })).status).toBe(400);
@@ -280,6 +331,13 @@ describe("routes", () => {
     expect((await call("POST", "/hub/fix", { checkId: "nope" })).status).toBe(400);
     expect((await call("PUT", "/hub/queue/paused", { paused: "yes" })).status).toBe(400);
     expect((await call("POST", "/hub/plans/nope/cancel")).status).toBe(404);
+    expect((await call("POST", "/hub/plans/nope/move", { to: 0 })).status).toBe(404);
+    expect((await call("POST", "/hub/plans/nope/move", { to: -1 })).status).toBe(400);
+    expect((await call("POST", "/hub/plans", { scope: { kind: "all" }, next: "yes" })).status).toBe(400);
+    expect((await call("POST", "/hub/schedules", { title: "N", scope: { kind: "all" }, at: "25:00", days: [1] })).status).toBe(400);
+    expect((await call("POST", "/hub/schedules", { title: "N", scope: { kind: "all" }, at: "02:00", days: [] })).status).toBe(400);
+    expect((await call("PUT", "/hub/schedules/nope", { enabled: false })).status).toBe(404);
+    expect((await call("DELETE", "/hub/schedules/nope")).status).toBe(404);
     expect((await call("GET", "/hub/runs/nope")).status).toBe(404);
     expect((await call("GET", "/hub/runs?check=bad")).status).toBe(400);
     expect((await call("GET", `/hub/checks/${enc("script:/Game/Nothing")}`)).status).toBe(404);
@@ -626,6 +684,32 @@ describe("the editor lease", () => {
     expect((await call("GET", "/hub/lease")).body.lease).toBeNull();
   });
 
+  it("after Release the editor, a person's Run starts at once and says so", async () => {
+    setup();
+    await call("POST", "/hub/release");
+    expect(await queue()).toMatchObject({ paused: true, pausedBy: "release" });
+    const r = await call("POST", `/hub/checks/${enc(`script:${DOOR}`)}/run`, {});
+    expect(r.body.placement).toEqual({ state: "started", position: 0, ahead: 0, resumed: true });
+    await settle();
+    expect(calls.filter((c) => c.action === "script_run")).toHaveLength(1);
+    expect(await queue()).toMatchObject({ paused: false });
+  });
+
+  it("a person's Run while another plan runs queues behind it and says where", async () => {
+    setup();
+    await call("POST", `/hub/checks/${enc(`script:${DOOR}`)}/run`, {});
+    await settle();
+    const r = await call("POST", `/hub/checks/${enc(`script:${JUMP}`)}/run`, {});
+    expect(r.body.placement).toEqual({ state: "queued", position: 1, ahead: 1 });
+  });
+
+  it("a person's Run on a busy editor waits and names what holds it", async () => {
+    setup();
+    pie = true;
+    const r = await call("POST", `/hub/checks/${enc(`script:${DOOR}`)}/run`, {});
+    expect(r.body.placement).toEqual({ state: "waiting", position: 1, ahead: 0, reason: "Play In Editor is in use" });
+  });
+
   it("after the editor reconnects, queued work waits for a person", async () => {
     setup();
     pie = true;
@@ -957,6 +1041,109 @@ describe("run screen", () => {
     expect(s[0]).toEqual([0, 0]);
     expect(s[299]).toEqual([1000, 1000]);
     expect(seriesOf("frame,time\n1,0")).toEqual({});
+  });
+});
+
+describe("schedules", () => {
+  /** Another session in the consent ledger, as the daemon reports it. */
+  let others: Array<{ label: string; hold?: string | null; busy?: number; idleMs?: number | null }>;
+  let now: number;
+  const queue = async () => (await call("GET", "/hub/queue")).body as QueueState;
+  const make = () => {
+    const h = host();
+    broker = new ScriptRunBroker(h);
+    hub = new Hub({
+      host: { ...h },
+      broker,
+      index: new ScriptIndex(h),
+      signer: () => "octocat",
+      playtestRuns: () => "manual",
+      enabled: () => true,
+      timers: false,
+      now: () => now,
+      workspace: async () => workspace,
+      editor: { pie: () => pie, dialogs: () => dialogs, busy: () => ({ now, calls: [] }), inputAgeMs: () => null, sessions: () => others },
+    });
+  };
+  beforeEach(() => {
+    others = [];
+    now = new Date(2026, 10, 23, 1, 0).getTime();
+  });
+
+  it("the next run is the next allowed day at that local time", () => {
+    const mon = new Date(2026, 10, 23, 1, 0); // a Monday, 01:00 local
+    expect(nextRunAt({ at: "02:00", days: [1] }, mon)?.getTime()).toBe(new Date(2026, 10, 23, 2, 0).getTime());
+    expect(nextRunAt({ at: "00:30", days: [1] }, mon)?.getTime()).toBe(new Date(2026, 10, 30, 0, 30).getTime());
+    expect(nextRunAt({ at: "02:00", days: [3] }, mon)?.getTime()).toBe(new Date(2026, 10, 25, 2, 0).getTime());
+  });
+
+  it("create, edit and delete; a schedule is kept with the queue across a restart", async () => {
+    make();
+    const s = (await call("POST", "/hub/schedules", { title: "Nightly", scope: { kind: "all" }, at: "02:00", days: [0, 1, 2, 3, 4, 5, 6] })).body.schedule;
+    expect(s).toMatchObject({ title: "Nightly", enabled: true, options: { attended: false }, nextRunAt: new Date(2026, 10, 23, 2, 0).toISOString() });
+    const edited = (await call("PUT", `/hub/schedules/${s.id}`, { at: "03:30", enabled: false })).body.schedule;
+    expect(edited).toMatchObject({ at: "03:30", enabled: false, nextRunAt: null });
+    hub.dispose();
+    make();
+    expect((await queue()).schedules.map((x: { id: string }) => x.id)).toEqual([s.id]);
+    expect((await call("DELETE", `/hub/schedules/${s.id}`)).status).toBe(204);
+    expect((await queue()).schedules).toEqual([]);
+  });
+
+  it("a due schedule waits while another session holds the editor, then runs once it lets go", async () => {
+    make();
+    const s = (await call("POST", "/hub/schedules", { title: "Nightly", scope: { kind: "all" }, at: "02:00", days: [0, 1, 2, 3, 4, 5, 6] })).body.schedule;
+    others = [{ label: "Claude Code", hold: "refactoring the door blueprint" }];
+    now = new Date(2026, 10, 23, 2, 1).getTime();
+    await hub.tick();
+    let got = (await queue()).schedules[0];
+    expect(got).toMatchObject({ waiting: "Claude Code holds the editor: refactoring the door blueprint", lastRunAt: null });
+    expect(calls.some((c) => c.action === "script_run")).toBe(false);
+    // Let go, but used the editor a minute ago: a schedule still does not barge in.
+    others = [{ label: "Claude Code", idleMs: 60_000 }];
+    await hub.tick();
+    expect((await queue()).schedules[0].waiting).toBe("Claude Code used the editor in the last 3 minutes");
+    others = [{ label: "Claude Code", idleMs: 600_000 }];
+    now = new Date(2026, 10, 23, 2, 10).getTime();
+    await hub.tick();
+    await settle();
+    const q = await queue();
+    got = q.schedules[0];
+    expect(got).toMatchObject({ waiting: null, lastSkipped: null, lastRunAt: new Date(now).toISOString(), nextRunAt: new Date(2026, 10, 24, 2, 0).toISOString() });
+    expect(q.current ?? q.queued[0] ?? q.recent[0]).toMatchObject({ trigger: "schedule", scheduleId: s.id, title: "Nightly" });
+  });
+
+  it("gives up after an hour of waiting, saying why, and is due again the next day", async () => {
+    make();
+    await call("POST", "/hub/schedules", { title: "Nightly", scope: { kind: "all" }, at: "02:00", days: [0, 1, 2, 3, 4, 5, 6] });
+    connected = false;
+    now = new Date(2026, 10, 23, 2, 1).getTime();
+    await hub.tick();
+    expect((await queue()).schedules[0].waiting).toBe("The editor is not connected");
+    now = new Date(2026, 10, 23, 3, 2).getTime();
+    await hub.tick();
+    expect((await queue()).schedules[0]).toMatchObject({ waiting: null, lastSkipped: "waited an hour while the editor is not connected", nextRunAt: new Date(2026, 10, 24, 2, 0).toISOString() });
+  });
+
+  it("respects a paused queue: it waits, and never resumes it", async () => {
+    make();
+    await call("POST", "/hub/schedules", { title: "Nightly", scope: { kind: "all" }, at: "02:00", days: [0, 1, 2, 3, 4, 5, 6] });
+    await call("PUT", "/hub/queue/paused", { paused: true });
+    now = new Date(2026, 10, 23, 2, 1).getTime();
+    await hub.tick();
+    const q = await queue();
+    expect(q).toMatchObject({ paused: true, queued: [], current: null });
+    expect(q.schedules[0].waiting).toBe("the queue is paused");
+  });
+
+  it("an unattended schedule's plan skips a playtest that needs a person", async () => {
+    make();
+    const p = await hub.plan({ scope: { kind: "checks", checks: [{ kind: "script", target: DOOR }] } }, "schedule");
+    expect(p.options.attended).toBe(false);
+    await settle();
+    await settle();
+    expect((await queue()).recent[0].items[0]).toMatchObject({ state: "skipped", reason: "needs a person" });
+    expect(calls.some((c) => c.action === "script_run")).toBe(false);
   });
 });
 

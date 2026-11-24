@@ -26,6 +26,7 @@ import * as path from "node:path";
 import type { ActionResult } from "../contract/daemon.js";
 import {
   DEFAULT_PLAN_OPTIONS,
+  planOptionsFor,
   HUB_CHANGED,
   HUB_LEASE,
   NEEDS_PERSON,
@@ -53,11 +54,13 @@ import {
   type HubChangedWhat,
   type HubOverview,
   type PlanItem,
+  type PlanPlacement,
   type PlanRun,
   type PlanScope,
   type PlanTrigger,
   type QaRun,
   type QueueState,
+  type Schedule,
   type EditorLease as EditorLeaseView,
   type OccupancyReason,
   type RunDetail,
@@ -77,6 +80,7 @@ import { ProjectWatch } from "./project-watch.js";
 import { readProvenanceFile, readResults, readResultsFile, readSeries } from "./evidence.js";
 import { provenanceAtStart, scriptHashOf, ueMcpProvenance, withUeMcp, workspaceNow } from "./provenance.js";
 import { planOptionsOf, scopeOf } from "./scope.js";
+import { scheduleDraftOf, scheduleTurn, scheduleUpdated, withNext } from "./schedules.js";
 import { answerOf, bad, checkOfId, conflict, failureOf, isObject, linkOf, notFound } from "./util.js";
 
 /** How often the queue and the runs the hub may have missed are looked at. */
@@ -249,6 +253,7 @@ export class Hub {
       if (this.enabled()) void this.queue.pump();
     });
     if (offPie) this.unsubscribe.push(offPie);
+    this.refreshSchedules();
     if (o.timers !== false) {
       this.timer = setInterval(() => void this.tick(), TICK_MS);
       this.timer.unref?.();
@@ -288,7 +293,7 @@ export class Hub {
    * occupancyOf); empty when it is. What the lease holds never counts. Runs
    * the editor said it no longer knows hold nothing.
    */
-  occupancy(unattended = false): OccupancyReason[] {
+  occupancy(unattended = false, scheduled = false): OccupancyReason[] {
     const e = this.o.editor;
     const signals: OccupancySignals = {
       connected: () => this.connected(),
@@ -297,8 +302,10 @@ export class Hub {
       busy: () => e?.busy() ?? { now: this.now(), calls: [] },
       runs: () => this.o.broker.all().filter((r) => !this.gone.has(r.runId)),
       inputAgeMs: () => e?.inputAgeMs() ?? null,
+      sessions: () => e?.sessions?.() ?? [],
+      disruptions: () => e?.disruptions?.() ?? [],
     };
-    return occupancyOf(signals, this.lease.held(), { unattended });
+    return occupancyOf(signals, this.lease.held(), { unattended, scheduled });
   }
 
   /**
@@ -475,14 +482,15 @@ export class Hub {
   /** The periodic look: the queue, runs the hub may have missed the end of, backfill. */
   async tick(): Promise<void> {
     try {
-      // Off: no plan starts and the editor is not asked.
+      // Off: no plan starts and the editor is not asked; a due schedule waits, then gives up.
       if (!this.enabled()) {
         this.watch.stop();
-        return;
+        return await this.runSchedules();
       }
       this.watch.start();
       if (this.connected()) await this.refreshOthers();
       await this.queue.tick();
+      await this.runSchedules();
       if (this.now() - this.backfilled > 5 * BACKFILL_MS) void this.backfill();
     } catch (e) {
       this.o.host.log.warn("hub: a tick failed", e);
@@ -843,6 +851,26 @@ export class Hub {
   }
 
   /**
+   * Delete a goal or milestone, with its sign-off. Goals that required it stop
+   * requiring it. Its playtests stay as they are: their own records, the other
+   * goals that name them, and every past run. While a plan made for it is
+   * queued or running, the delete is refused (409) and names the plan, since
+   * that plan was started from the goal.
+   */
+  deleteGoal(id: string): void {
+    const goal = this.goals.get(id);
+    if (!goal) throw notFound(`no goal ${id}`);
+    const q = this.queue.state();
+    const plans = [q.current, ...q.queued].filter((p): p is PlanRun => !!p && "goalId" in p.scope && p.scope.goalId === id);
+    if (plans.length) {
+      const names = plans.map((p) => `"${p.title}"`).join(", ");
+      // A person reads plans as runs: Studio's queue lists them under Runs.
+      throw conflict(`"${goal.title}" can't be deleted while ${plans.length === 1 ? "a run made for it is" : "runs made for it are"} queued or running: ${names}. Cancel ${plans.length === 1 ? "that run" : "those runs"} or let ${plans.length === 1 ? "it" : "them"} finish, then try again.`);
+    }
+    this.goals.delete(id);
+  }
+
+  /**
    * Write playtests for this goal: a session of its own runs the /playtest
    * flow, seeded with the goal's words and the checks it has, and each script
    * drafted in that session joins the goal.
@@ -930,12 +958,21 @@ export class Hub {
 
   /** A plan run queued: its scope expanded to items now, so what it runs does not change under it. */
   async plan(body: unknown, trigger: PlanTrigger = "person"): Promise<PlanRun> {
-    if (!isObject(body)) throw bad("body must be { title?, scope, options? }");
+    return (await this.queuePlan(body, trigger)).plan;
+  }
+
+  /**
+   * A plan queued, and where it went. A person's plan resumes a paused queue
+   * and starts at once when nothing is on the editor (PlanQueue.enqueue).
+   */
+  async queuePlan(body: unknown, trigger: PlanTrigger = "person", scheduleId?: string): Promise<{ plan: PlanRun; placement: PlanPlacement }> {
+    if (!isObject(body)) throw bad("body must be { title?, scope, options?, next? }");
+    if (body.next !== undefined && typeof body.next !== "boolean") throw bad("next must be a boolean");
     if (body.title !== undefined && (typeof body.title !== "string" || !body.title.trim())) throw bad("title must be a non-empty string");
     // A person's plan is the user's run; an agent's only under Automatic.
     if (trigger === "agent" && (this.o.playtestRuns?.() ?? "automatic") === "manual") throw conflict("Playtest runs are set to Manual: an agent cannot start a plan");
     const scope = scopeOf(body.scope);
-    const options = planOptionsOf(body.options, DEFAULT_PLAN_OPTIONS);
+    const options = planOptionsOf(body.options, planOptionsFor(trigger));
     const refs = await this.expand(scope);
     if (refs.length === 0) throw conflict("nothing to run: the plan's scope has no playtests");
     const cat = await this.catalog();
@@ -948,22 +985,104 @@ export class Hub {
       state: "queued",
       items,
       trigger,
+      ...(scheduleId ? { scheduleId } : {}),
       createdAt: new Date(this.now()).toISOString(),
     };
-    return this.queue.enqueue(plan);
+    const placement = this.queue.add(plan, { person: trigger === "person", next: body.next === true });
+    return { plan, placement };
   }
 
-  async runCheck(id: string, body: unknown): Promise<PlanRun> {
+  /** A person's Run on one playtest: a plan of that one check. */
+  async runCheck(id: string, body: unknown): Promise<{ plan: PlanRun; placement: PlanPlacement }> {
     const ref = checkOfId(id);
     if (!ref) throw bad("a check id is <kind>:<target>");
-    if (body !== undefined && body !== null && !isObject(body)) throw bad("body must be { replay? }");
+    if (body !== undefined && body !== null && !isObject(body)) throw bad("body must be { replay?, next? }");
     const replay = isObject(body) ? body.replay : undefined;
+    const next = isObject(body) ? body.next : undefined;
     if (replay !== undefined && typeof replay !== "boolean") throw bad("replay must be a boolean");
-    return this.plan({ scope: { kind: "checks", checks: [ref] }, options: { replay: replay === true } });
+    return this.queuePlan({ scope: { kind: "checks", checks: [ref] }, options: { replay: replay === true }, ...(next !== undefined ? { next } : {}) });
   }
 
   async cancelPlan(id: string): Promise<PlanRun> {
     return this.queue.cancel(id);
+  }
+
+  // ── Schedules ─────────────────────────────────────────────────────
+
+  /** Each schedule's next run worked out again, except one due now, which keeps waiting. */
+  private refreshSchedules(): void {
+    const now = new Date(this.now());
+    for (const s of this.queue.schedules()) {
+      if (s.nextRunAt && Date.parse(s.nextRunAt) <= now.getTime()) continue;
+      const next = withNext(s, now);
+      if (next.nextRunAt !== s.nextRunAt) this.queue.putSchedule(next);
+    }
+  }
+
+  createSchedule(body: unknown): Schedule {
+    const d = scheduleDraftOf(body);
+    if (d.scope.kind === "goal" && !this.goals.get(d.scope.goalId)) throw bad(`no goal ${d.scope.goalId}`);
+    const s = withNext({ id: newId("schedule"), ...d, lastRunAt: null, lastSkipped: null, waiting: null, nextRunAt: null }, new Date(this.now()));
+    this.queue.putSchedule(s);
+    return s;
+  }
+
+  updateSchedule(id: string, body: unknown): Schedule {
+    const had = this.queue.schedules().find((s) => s.id === id);
+    if (!had) throw notFound(`no schedule ${id}`);
+    const s = withNext(scheduleUpdated(had, body), new Date(this.now()));
+    this.queue.putSchedule(s);
+    return s;
+  }
+
+  deleteSchedule(id: string): void {
+    if (!this.queue.deleteSchedule(id)) throw notFound(`no schedule ${id}`);
+  }
+
+  /**
+   * Why a due schedule's plan cannot start now, or null when it can. It takes
+   * nothing from anyone: the queue idle and running, the editor free by the
+   * occupancy answer (the consent ledger included), and every other session
+   * and the desktop quiet.
+   */
+  private scheduleBlocked(s: Schedule): string | null {
+    if (!this.enabled()) return "the Playtest Hub is off";
+    if (this.queue.paused()) return "the queue is paused";
+    if (!this.queue.idle()) return "other runs are queued";
+    return this.occupancy(!s.options.attended, true)[0]?.text ?? null;
+  }
+
+  /** Each due schedule runs its plan when nothing else needs the editor; otherwise it waits, then gives up, saying why. */
+  async runSchedules(): Promise<void> {
+    const now = new Date(this.now());
+    for (const s of [...this.queue.schedules()]) {
+      const turn = scheduleTurn(s, now, () => this.scheduleBlocked(s));
+      if (!turn) continue;
+      if ("wait" in turn) {
+        if (s.waiting !== turn.wait) this.queue.putSchedule({ ...s, waiting: turn.wait });
+        continue;
+      }
+      let next: Schedule = { ...s };
+      if ("skip" in turn) {
+        next.lastSkipped = turn.skip;
+      } else {
+        try {
+          await this.queuePlan({ title: s.title, scope: s.scope, options: s.options }, "schedule", s.id);
+          next = { ...next, lastRunAt: now.toISOString(), lastSkipped: null };
+        } catch (e) {
+          next.lastSkipped = e instanceof Error ? e.message : String(e);
+        }
+      }
+      this.queue.putSchedule(withNext(next, now));
+    }
+  }
+
+  /** Reorder the queue: a queued plan to { to }, 0 for next. */
+  movePlan(id: string, body: unknown): QueueState {
+    const to = isObject(body) ? body.to : undefined;
+    if (!Number.isInteger(to) || (to as number) < 0) throw bad("body must be { to: a position from 0 }");
+    this.queue.move(id, to as number);
+    return this.queueView();
   }
 
   setPaused(body: unknown): QueueState {
@@ -1017,7 +1136,7 @@ export class Hub {
    * runs, is left out. Returns how many were queued. Without a fixer there
    * is no agent to run a loop: 409.
    */
-  async fix(body: unknown): Promise<{ queued: number; plan: PlanRun | null }> {
+  async fix(body: unknown): Promise<{ queued: number; plan: PlanRun | null; placement?: PlanPlacement }> {
     if (body !== undefined && body !== null && !isObject(body)) throw bad("body must be { goalId?, checkId? }");
     const goalId = isObject(body) ? body.goalId : undefined;
     const one = isObject(body) ? body.checkId : undefined;
@@ -1045,7 +1164,9 @@ export class Hub {
       createdAt: new Date(this.now()).toISOString(),
     };
     this.changed(["attention"]);
-    return { queued: fresh.length, plan: this.queue.enqueue(plan) };
+    // A person asked for it: it resumes a paused queue like their Run.
+    const placement = this.queue.add(plan, { person: true });
+    return { queued: fresh.length, plan, placement };
   }
 
   /**

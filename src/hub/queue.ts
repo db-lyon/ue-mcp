@@ -3,7 +3,7 @@
  * The plan queue: plans waiting for the editor, run one item at a time
  * (ue-mcp runs one script at a time per editor). A plan's items either run
  * their checks, or (a fix plan) hand each check to a fix loop in a chat
- * session of its own. Kept in <dataDir>/hub/queue.json.
+ * session of its own. Kept in <dataDir>/hub/queue.json with the schedules.
  *
  * The editor is the developer's workspace, so the queue acts only on what it
  * started, under an explicit lease (lease.ts):
@@ -43,10 +43,12 @@ import {
   type PlanItem,
   type PlanItemState,
   type PlanOptions,
+  type PlanPlacement,
   type PlanRun,
   type QaRun,
   type QueuePause,
   type QueueState,
+  type Schedule,
 } from "./contract.js";
 import { writeFileAtomic } from "./atomic-write.js";
 import { EditorLease } from "./lease.js";
@@ -93,6 +95,7 @@ interface Stored {
   current: PlanRun | null;
   queued: PlanRun[];
   recent: PlanRun[];
+  schedules: Schedule[];
 }
 
 export interface QueueOptions {
@@ -118,7 +121,7 @@ const settled = (i: PlanItem): boolean => i.state !== "queued" && !live(i);
 const workOf = (p: PlanRun): "run" | "fix" => p.work ?? "run";
 
 export class PlanQueue {
-  private s: Stored = { schema: 1, paused: false, pausedBy: null, current: null, queued: [], recent: [] };
+  private s: Stored = { schema: 1, paused: false, pausedBy: null, current: null, queued: [], recent: [], schedules: [] };
   private readonly file: string;
   private readonly now: () => string;
   /** The editor's lease, held while an item runs and until its PIE has ended. */
@@ -144,6 +147,7 @@ export class PlanQueue {
         current: raw.current && typeof raw.current === "object" ? raw.current : null,
         queued: Array.isArray(raw.queued) ? raw.queued : [],
         recent: Array.isArray(raw.recent) ? raw.recent.slice(0, MAX_RECENT) : [],
+        schedules: Array.isArray(raw.schedules) ? raw.schedules.filter(storedSchedule) : [],
       };
     } catch {
       // None yet, or unreadable: an empty queue.
@@ -185,6 +189,7 @@ export class PlanQueue {
       current: copy(this.s.current),
       queued: copy(this.s.queued),
       recent: copy(this.s.recent),
+      schedules: copy(this.s.schedules),
       editor: { connected: this.o.runner.connected() },
       lease: this.lease.get(),
       waiting: this.s.paused ? null : this.waiting,
@@ -210,11 +215,52 @@ export class PlanQueue {
     return [this.s.current, ...this.s.queued, ...this.s.recent].find((p): p is PlanRun => p?.id === id);
   }
 
+  /** Queue a plan behind the others, respecting a pause. */
   enqueue(plan: PlanRun): PlanRun {
-    this.s.queued.push(plan);
-    this.save(plan.id);
-    void this.pump();
+    this.add(plan);
     return plan;
+  }
+
+  /**
+   * Queue a plan, and say where it went (PlanPlacement). `person`: a person
+   * clicked Run, which resumes a paused queue; with nothing on the editor
+   * their plan goes first, and a plan the pause left half done waits behind
+   * it. Anything else queued respects the pause. `next`: ahead of every
+   * other queued plan.
+   */
+  add(plan: PlanRun, o: { person?: boolean; next?: boolean } = {}): PlanPlacement {
+    const onEditor = !!this.s.current?.items.some(live) || !!this.lease.get();
+    let resumed = false;
+    if (o.person && this.s.paused) {
+      const cur = this.s.current;
+      if (cur && !onEditor) {
+        cur.state = "queued";
+        this.s.queued.unshift(cur);
+        this.s.current = null;
+      }
+      this.s.paused = false;
+      this.s.pausedBy = null;
+      resumed = true;
+    }
+    if (o.next || (resumed && !onEditor)) this.s.queued.unshift(plan);
+    else this.s.queued.push(plan);
+    this.save(plan.id);
+    // Synchronous up to the first item's start: a plan that can start is current when this returns.
+    void this.pump();
+    return { ...this.placementOf(plan.id), ...(resumed ? { resumed } : {}) };
+  }
+
+  /** Where a plan stands in the queue now. */
+  placementOf(id: string): PlanPlacement {
+    if (this.s.current?.id === id) return { state: "started", position: 0, ahead: 0 };
+    const at = this.s.queued.findIndex((p) => p.id === id);
+    const ahead = at + (this.s.current ? 1 : 0);
+    if (this.s.paused) return { state: "queued", position: at + 1, ahead, reason: "the queue is paused" };
+    if (ahead === 0) {
+      const reason = this.o.enabled?.() === false ? "the Playtest Hub is off" : !this.o.runner.connected() ? "the editor is not connected" : this.waiting;
+      return { state: "waiting", position: 1, ahead: 0, reason };
+    }
+    return { state: "queued", position: at + 1, ahead };
   }
 
   /** Pause or resume. Resuming clears whatever paused it: a person, a release or a reconnect. */
@@ -236,6 +282,16 @@ export class PlanQueue {
     this.s.pausedBy = "reconnect";
     if (save) this.save();
     return true;
+  }
+
+  /** Move a queued plan to position `to` among the queued ones, 0 for next. */
+  move(id: string, to: number): void {
+    const at = this.s.queued.findIndex((p) => p.id === id);
+    if (at < 0) throw this.find(id) ? conflict("only a queued plan can be moved") : notFound(`no plan ${id}`);
+    const [plan] = this.s.queued.splice(at, 1);
+    this.s.queued.splice(Math.max(0, Math.min(this.s.queued.length, Math.floor(to))), 0, plan);
+    this.save(id);
+    void this.pump();
   }
 
   /** Cancel a plan: a queued one leaves the queue, the running one stops what its item runs. */
@@ -332,6 +388,32 @@ export class PlanQueue {
     this.s.recent.unshift(plan);
     this.s.recent.length = Math.min(this.s.recent.length, MAX_RECENT);
     this.o.finished?.(plan);
+  }
+
+  // ── Schedules (kept here, worked by schedules.ts) ─────────────────
+
+  schedules(): Schedule[] {
+    return this.s.schedules;
+  }
+
+  /** Whether nothing is running or waiting, so a schedule may queue its plan. */
+  idle(): boolean {
+    return !this.s.current && this.s.queued.length === 0 && !this.lease.get();
+  }
+
+  putSchedule(s: Schedule): void {
+    const at = this.s.schedules.findIndex((x) => x.id === s.id);
+    if (at >= 0) this.s.schedules[at] = s;
+    else this.s.schedules.push(s);
+    this.save();
+  }
+
+  deleteSchedule(id: string): boolean {
+    const before = this.s.schedules.length;
+    this.s.schedules = this.s.schedules.filter((s) => s.id !== id);
+    if (this.s.schedules.length === before) return false;
+    this.save();
+    return true;
   }
 
   // ── Running ───────────────────────────────────────────────────────
@@ -546,6 +628,16 @@ function storedOptions(v: unknown): PlanOptions {
   } catch {
     return { ...DEFAULT_PLAN_OPTIONS };
   }
+}
+
+/** A saved schedule with the fields one needs; an unreadable one is dropped. */
+function storedSchedule(v: unknown): v is Schedule {
+  if (!v || typeof v !== "object") return false;
+  const s = v as Partial<Schedule>;
+  if (typeof s.id !== "string" || typeof s.title !== "string" || typeof s.at !== "string" || !Array.isArray(s.days) || !s.scope) return false;
+  s.options = storedOptions(s.options);
+  s.enabled = s.enabled !== false;
+  return true;
 }
 
 /** What the lease says the hub is doing: "Run Tutorial: Door opens". */
