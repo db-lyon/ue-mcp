@@ -1,5 +1,5 @@
 /**
- * Who holds the editor: the occupancy answer from each signal Studio has,
+ * Who holds the editor: the occupancy answer from each signal the hub has,
  * what the hub's own lease holds never counting against it, the lease
  * itself, the fix loop's per-package write lease, and the project watch that
  * marks a run tainted.
@@ -11,7 +11,8 @@ import * as path from "node:path";
 import type { ActionResult } from "../../src/contract/daemon.js";
 import { qaRunFromAnswer, type BusyState, type QaRun } from "../../src/hub/contract.js";
 import { EditorLease, INPUT_QUIET_MS, occupancyOf, type OccupancySignals } from "../../src/hub/lease.js";
-import { WriteLease, packageOf, type CallingHost } from "../../src/hub/write-lease.js";
+import type { CallingHost } from "../../src/hub/ports.js";
+import { WriteLease, packageOf } from "../../src/hub/write-lease.js";
 import { ProjectWatch } from "../../src/hub/project-watch.js";
 
 const run = (runId: string, state: string, extra: Partial<QaRun> = {}): QaRun => ({

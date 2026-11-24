@@ -10,8 +10,8 @@
  *   in game time, so no auto step's window passes meanwhile.
  *   Interim: this pause lands a round trip after the step began waiting, so
  *   its act has already played and some frames have passed. The fix is the
- *   bridge pausing on that frame itself (ue-mcp-asks.md, pause_on_manual);
- *   once ue-mcp ships it, this pause is only the fallback for an older one.
+ *   bridge pausing on that frame itself (pause_on_manual); once the bridge
+ *   does, this pause is only the fallback for an older one.
  * - Resume and watch (resume()) unpauses, for a step that must be seen in
  *   motion. Only the person does that; nothing unpauses on its own.
  * - Once the step has its verdict, from the card, the app's bar, the phone
@@ -20,49 +20,33 @@
  *   when the step begins to wait and counted from then; Resume and watch does
  *   not extend it, so the deadline the clients count down to never moves.
  *   When it passes, the run is stopped with QA_NO_VERDICT and PIE with it
- *   (QaBroker.stopRun). The run is "unjudged": no result, since nobody
+ *   (the broker's stopRun). The run is "unjudged": no result, since nobody
  *   being there says nothing about the game.
  *
- * Every run Studio started behaves the same: a chat card, a hub plan or an
- * agent. Studio acts only on what it started:
+ * A hold acts only on the runs its owner started (owns):
  *
- * - A run another MCP client started (no session) is never held: that client
- *   asks its own person, and its run, its PIE and its timing are its own.
+ * - A run another MCP client started is never held: that client asks its own
+ *   person, and its run, its PIE and its timing are its own.
  * - PIE is paused, resumed and stopped for a run only when that run started
  *   the session (QaRun.pieStarted). A run that joined PIE already running,
  *   the developer's own, holds for its verdict without touching their game.
  *   The editor's Pause covers every PIE world, so this is the narrowest
- *   control ue-mcp offers today; ue-mcp-asks.md asks for run-scoped PIE
- *   control and pie.paused/pie.resumed events.
+ *   control the bridge offers today; run-scoped PIE control would narrow it.
+ *
+ * The daemon's hub holds the runs of ue-mcp's own broker. A client with a
+ * broker of its own (a HubBroker) makes one through ue-mcp/daemon for its
+ * runs, and its broker's stopRun asks stopping() whether PIE ends too.
  *
  * Holds are kept in memory: after a daemon restart a run still waiting is
  * held again from the moment it is read.
  */
-import type { ActionResult } from "../contract/daemon.js";
 import { QA_NO_VERDICT, qaWaitingForPerson, type QaHeld, type QaRun } from "./contract.js";
+import type { VerdictHoldOptions } from "./ports.js";
 import { failureOf } from "./util.js";
-
-export interface VerdictHoldOptions {
-  /**
-   * Whether the run is one this hold may act on: one the client started.
-   * Injected: a client decides what "started by us" means (Studio: the run
-   * has a chat session). A run another MCP client started is never held.
-   * Defaults to a run that carries a sessionId.
-   */
-  owns?(run: QaRun): boolean;
-  callAction(category: string, action: string, args?: Record<string, unknown>): Promise<ActionResult>;
-  publish(type: string, data?: Record<string, unknown>): unknown;
-  log: { warn(message: string, detail?: unknown): void };
-  /** End a held run and PIE with it. */
-  stop(runId: string, reason: string): Promise<unknown>;
-  /** How many minutes a run waits for a verdict: the plan's own, else the setting. */
-  waitMinutes(run: QaRun): number;
-  now?: () => number;
-}
 
 interface Hold extends QaHeld {
   timer: ReturnType<typeof setTimeout>;
-  /** The run started the PIE session it plays in: pausing and stopping it is Studio's to do. */
+  /** The run started the PIE session it plays in: pausing and stopping it is the hold's to do. */
   ownsPie: boolean;
 }
 
@@ -91,7 +75,7 @@ export class VerdictHold {
 
   /** A run changed: hold it at a step that now waits for a person, or let it go once it no longer does. */
   observe(run: QaRun): void {
-    // Only a run the client started is the client's to hold.
+    // Only a run its owner started is the hold's to act on.
     const step = (this.o.owns ?? ((r: QaRun) => !!r.sessionId))(run) ? qaWaitingForPerson(run) : null;
     const had = this.holds.get(run.runId);
     if (had && step?.index === had.step) return;

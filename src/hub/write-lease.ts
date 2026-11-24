@@ -15,17 +15,15 @@
  *
  * A refusal answers { blocked: true, reason }, which the loop reads as a call
  * refused by a guard, so it stops for the person rather than working around
- * it. Interim: ue-mcp knows who dirtied a package and Studio does not, so a
- * package the loop itself left unsaved in an earlier attempt counts as the
- * person's. Package write ownership in ue-mcp would end that.
+ * it. Exported from ue-mcp/daemon for a client that runs fix loops (a
+ * HubFixer). Interim: the lease reads which packages are dirty, not who
+ * dirtied them, so a package the loop itself left unsaved in an earlier
+ * attempt counts as the person's. Package write ownership in ue-mcp would end
+ * that.
  */
 import type { ActionResult } from "../contract/daemon.js";
+import type { CallingHost } from "./ports.js";
 import { answerOf } from "./util.js";
-
-/** What the lease wraps: a client's host for one fix loop's calls (Studio's AgentHost is one). Other members pass through. */
-export interface CallingHost<O = unknown> {
-  callAction(category: string, action: string, args?: Record<string, unknown>, opts?: O): Promise<ActionResult>;
-}
 
 type Call = (category: string, action: string, args?: Record<string, unknown>) => Promise<ActionResult>;
 

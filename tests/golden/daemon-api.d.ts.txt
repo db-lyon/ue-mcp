@@ -2368,6 +2368,20 @@ export interface HubFixer {
     running(): Set<string>;
     holds?(run: QaRun): boolean;
 }
+export interface VerdictHoldOptions {
+    owns?(run: QaRun): boolean;
+    callAction(category: string, action: string, args?: Record<string, unknown>): Promise<ActionResult>;
+    publish(type: string, data?: Record<string, unknown>): unknown;
+    log: {
+        warn(message: string, detail?: unknown): void;
+    };
+    stop(runId: string, reason: string): Promise<unknown>;
+    waitMinutes(run: QaRun): number;
+    now?: () => number;
+}
+export interface CallingHost<O = unknown> {
+    callAction(category: string, action: string, args?: Record<string, unknown>, opts?: O): Promise<ActionResult>;
+}
 export type HubWritePlaytests = (request: {
     title: string;
     text: string;
@@ -2390,7 +2404,10 @@ export interface HubClientOptions extends HubPolicy {
 }
 
 // ── helpers exported beside it ──
+export declare const VerdictHold: typeof VerdictHold;
+export declare const WriteLease: typeof WriteLease;
 export declare const discoveryPath: (projectDir: string) => string;
+export declare const packageOf: (p: string) => string;
 export declare const parseContextMeasurement: (value: unknown) => ContextMeasurementParse;
 export declare const readDiscovery: (projectDir: string) => DaemonDiscovery | null;
 export declare const readLiveDiscovery: (projectDir: string, isAlive?: (pid: number) => boolean) => DaemonDiscovery | null;

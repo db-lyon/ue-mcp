@@ -87,6 +87,31 @@ export interface HubFixer {
   holds?(run: QaRun): boolean;
 }
 
+/** What a VerdictHold is handed: who owns which runs, how to pause and stop them, and how long a run waits. */
+export interface VerdictHoldOptions {
+  /**
+   * Whether the run is one this hold may act on: one its owner started.
+   * The owner decides what that means (ue-mcp's broker: a run it started; a
+   * client: a run one of its sessions started). A run another MCP client
+   * started is never held. Defaults to a run that carries a sessionId.
+   */
+  owns?(run: QaRun): boolean;
+  callAction(category: string, action: string, args?: Record<string, unknown>): Promise<ActionResult>;
+  /** Publishes "qa.held" with { held: QaHeld[] } whenever the holds change. */
+  publish(type: string, data?: Record<string, unknown>): unknown;
+  log: { warn(message: string, detail?: unknown): void };
+  /** End a held run and PIE with it. */
+  stop(runId: string, reason: string): Promise<unknown>;
+  /** How many minutes a run waits for a verdict: the plan's own, else the setting. */
+  waitMinutes(run: QaRun): number;
+  now?: () => number;
+}
+
+/** What a fix loop's write lease wraps (WriteLease.wrap): the host one session's calls run on. Its other members pass through. */
+export interface CallingHost<O = unknown> {
+  callAction(category: string, action: string, args?: Record<string, unknown>, opts?: O): Promise<ActionResult>;
+}
+
 /** Write playtests for a goal: a client runs its own flow (Studio: the /playtest flow in a chat session). */
 export type HubWritePlaytests = (request: { title: string; text: string }) => { sessionId: string; done: Promise<void> };
 
