@@ -1013,6 +1013,8 @@ export interface PlanOptions {
 }
 /** The options a plan starts from when its request gives none: someone is there to judge. */
 export const DEFAULT_PLAN_OPTIONS: PlanOptions = { attended: true, stopOnFailure: false, replay: false };
+/** The options a plan starts from by what queued it: a schedule's runs are unattended. */
+export const planOptionsFor = (trigger: PlanTrigger): PlanOptions => ({ ...DEFAULT_PLAN_OPTIONS, attended: trigger !== "schedule" });
 
 /** Why an unattended plan skips a check. */
 export const NEEDS_PERSON = "needs a person";
@@ -1052,7 +1054,7 @@ export function itemStateOf(outcome: RunOutcome): PlanItemState {
 }
 
 export type PlanState = "queued" | "running" | "paused" | "done" | "cancelled" | "failed";
-export type PlanTrigger = "person" | "agent";
+export type PlanTrigger = "person" | "schedule" | "agent";
 
 export interface PlanRun {
   id: string;
@@ -1064,6 +1066,8 @@ export interface PlanRun {
   state: PlanState;
   items: PlanItem[];
   trigger: PlanTrigger;
+  /** The schedule that queued it. */
+  scheduleId?: string | null;
   createdAt: string;
   startedAt?: string | null;
   endedAt?: string | null;
@@ -1074,7 +1078,62 @@ export interface PlanRequest {
   title?: string;
   scope: PlanScope;
   options?: Partial<PlanOptions>;
+  /** Run next: ahead of every other queued plan, behind only the one on the editor. */
+  next?: boolean;
 }
+
+/**
+ * Where a person's Run put its plan (POST /hub/plans, POST
+ * /hub/checks/:checkId/run), so the client can say so where they clicked.
+ *
+ * A person's Run is a person resuming: when the queue was paused (by a
+ * person, Release the editor, or a reconnect) it resumes, and with nothing
+ * on the editor the plan starts ahead of whatever waited behind the pause.
+ * An agent's plan never resumes a paused queue.
+ *
+ * - started: its first item is on the editor (or starting).
+ * - waiting: it is next, but the editor is not free (`reason`).
+ * - queued: other work is ahead of it (`ahead`, `position`), or the queue is paused (`reason`).
+ */
+export interface PlanPlacement {
+  state: "started" | "waiting" | "queued";
+  /** Its place among the queued plans, 1 for next; 0 once started. */
+  position: number;
+  /** Plans ahead of it, the one on the editor included. */
+  ahead: number;
+  /** Why it does not start now. */
+  reason?: string | null;
+  /** The queue was paused and this Run resumed it. */
+  resumed?: boolean;
+}
+
+/**
+ * A plan run at a local time on chosen days of the week, such as "nightly
+ * at 02:00". A schedule is a person's standing instruction, so it runs under
+ * the Manual playtest-runs setting too, but it never takes the editor from
+ * anyone: when it is due it waits while the queue is paused or busy, or the
+ * editor is held (the occupancy answer, the consent ledger included, and
+ * every other session quiet), and gives up with the reason in `lastSkipped`
+ * once it has waited an hour. Kept with the queue.
+ */
+export interface Schedule {
+  id: string;
+  title: string;
+  scope: PlanScope;
+  options: PlanOptions;
+  /** Local time HH:MM. */
+  at: string;
+  /** Days of the week it runs, 0 Sunday to 6 Saturday. */
+  days: number[];
+  enabled: boolean;
+  lastRunAt?: string | null;
+  /** Why the last due run did not start. */
+  lastSkipped?: string | null;
+  /** Due now, and why it has not started yet. */
+  waiting?: string | null;
+  nextRunAt?: string | null;
+}
+export type ScheduleDraft = Omit<Schedule, "id" | "lastRunAt" | "lastSkipped" | "waiting" | "nextRunAt">;
 
 /** POST /hub/fix: a fix plan for every failing check of a goal (or of the project), or for one check. */
 export interface FixRequest {
@@ -1090,6 +1149,7 @@ export interface QueueState {
   queued: PlanRun[];
   /** Finished plans, newest first, at most 20. */
   recent: PlanRun[];
+  schedules: Schedule[];
   editor: { connected: boolean };
   /** The hub's hold on the editor while it starts or runs an item. */
   lease?: EditorLease | null;
@@ -1106,9 +1166,12 @@ export type QueuePause = "person" | "release" | "reconnect";
  * knows: the editor not connected, an editor operation (restart, rebuild),
  * an open modal dialog, Play In Editor the hub did not start, a playtest the
  * hub did not start, a chat or fix loop with editor calls in flight, another
- * MCP client's calls, and someone using this computer.
+ * MCP client's calls, and someone using this computer. From the consent
+ * ledger (editor(hold), disruption requests): another session holding the
+ * editor or with an editor transaction open ("session"), and a request to
+ * stop, restart or rebuild the editor still open ("consent").
  */
-export type OccupancyKind = "disconnected" | "operation" | "dialog" | "pie" | "run" | "agent" | "client" | "input";
+export type OccupancyKind = "disconnected" | "operation" | "dialog" | "pie" | "run" | "agent" | "client" | "input" | "session" | "consent";
 export interface OccupancyReason {
   kind: OccupancyKind;
   text: string;
@@ -1254,13 +1317,17 @@ export const HUB_ROUTES = {
   addRunLink: "POST /hub/runs/:runId/links { link: TrackerLink } -> { record: RunRecord }",
   removeRunLink: "DELETE /hub/runs/:runId/links?url= -> { record: RunRecord }",
   queue: "GET /hub/queue -> QueueState",
-  plan: "POST /hub/plans PlanRequest -> { plan: PlanRun }",
+  plan: "POST /hub/plans PlanRequest -> { plan: PlanRun, placement: PlanPlacement } (a person's Run resumes a paused queue)",
   cancelPlan: "POST /hub/plans/:id/cancel -> { plan }",
+  movePlan: "POST /hub/plans/:id/move { to: number } -> QueueState (0 is next)",
+  createSchedule: "POST /hub/schedules ScheduleDraft -> { schedule }",
+  updateSchedule: "PUT /hub/schedules/:id Partial<ScheduleDraft> -> { schedule }",
+  deleteSchedule: "DELETE /hub/schedules/:id -> 204",
   pause: "PUT /hub/queue/paused { paused: boolean } -> QueueState",
   lease: "GET /hub/lease -> HubLeaseEvent",
   release: "POST /hub/release -> QueueState (stops what the hub holds on the editor and pauses the queue)",
-  fix: "POST /hub/fix FixRequest -> { queued: number, plan: PlanRun | null } (a fix plan: one chat session per check)",
-  runCheck: "POST /hub/checks/:checkId/run { replay? } -> { plan: PlanRun }",
+  fix: "POST /hub/fix FixRequest -> { queued: number, plan: PlanRun | null, placement?: PlanPlacement } (a fix plan: one chat session per check)",
+  runCheck: "POST /hub/checks/:checkId/run { replay?, next? } -> { plan: PlanRun, placement: PlanPlacement }",
 } as const;
 
 // ---------- What else holds the editor ----------

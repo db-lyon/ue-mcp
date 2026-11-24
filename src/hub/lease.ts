@@ -10,7 +10,12 @@
  *   a playtest the hub did not start, whichever client started it; a chat or
  *   fix loop with editor calls in flight; another MCP client's calls; and,
  *   for unattended work only, someone using this computer lately (the
- *   desktop's input age, which a client's window may report).
+ *   desktop's input age, which a client's window may report). From the
+ *   consent ledger (src/dispatch/disruption.ts): a session holding the
+ *   editor (editor(hold)), one with an editor transaction open, and an open
+ *   request to stop, restart or rebuild it. A scheduled plan, which nobody
+ *   asked for just now, also waits for every other session to go quiet for
+ *   consent's idle window, and for the desktop to go quiet.
  *   Empty means free.
  * - EditorLease: the hub's hold on one editor, taken before a plan item or a
  *   fix loop starts and released when it ends or a person releases the
@@ -45,7 +50,27 @@ export interface OccupancySignals {
   runs(): QaRun[];
   /** How long since someone last used this computer, or null when no window reports it. */
   inputAgeMs(): number | null;
+  /** Every other session the consent ledger knows (src/dispatch/disruption.ts), the daemon's own calls left out. */
+  sessions?(): SessionUse[];
+  /** Requests to stop, restart or rebuild the editor still being decided or about to run. */
+  disruptions?(): Array<{ label: string; op: string }>;
 }
+
+/** One other session's use of the editor, as the consent ledger has it. */
+export interface SessionUse {
+  label: string;
+  /** Its editor(hold) reason, while it holds the editor. */
+  hold?: string | null;
+  /** Editor transactions it began and has not ended. */
+  transactions?: number;
+  /** Calls it has in flight, and work its runtime reports. */
+  busy?: number;
+  /** How long since its last call, or since it connected; null when never. */
+  idleMs?: number | null;
+}
+
+/** A session that called within this long is still using the editor, for a run nobody asked for now (consent's idleSeconds default). */
+export const SESSION_IDLE_MS = 180_000;
 
 /** What the hub itself holds, which never counts against it. */
 export interface Held {
@@ -59,11 +84,20 @@ export interface Held {
 const OPERATION: Record<string, string> = { start: "starting", stop: "stopping", restart: "restarting", rebuild: "rebuilding" };
 
 /** Why the editor is not free for the hub now, most decisive first; empty when it is free. */
-export function occupancyOf(s: OccupancySignals, held: Held = {}, o: { unattended?: boolean; now?: number } = {}): OccupancyReason[] {
+export function occupancyOf(s: OccupancySignals, held: Held = {}, o: { unattended?: boolean; scheduled?: boolean; now?: number } = {}): OccupancyReason[] {
   if (!s.connected()) return [{ kind: "disconnected", text: "The editor is not connected" }];
   const out: OccupancyReason[] = [];
   const busy = s.busy();
   if (busy.operation) out.push({ kind: "operation", text: `The editor is ${OPERATION[busy.operation.op] ?? "busy"}` });
+  const asked = s.disruptions?.()[0];
+  if (asked) out.push({ kind: "consent", text: `${asked.label} asked to ${asked.op}` });
+  for (const u of s.sessions?.() ?? []) {
+    if (u.hold) out.push({ kind: "session", text: `${u.label} holds the editor: ${u.hold}` });
+    else if ((u.transactions ?? 0) > 0) out.push({ kind: "session", text: `${u.label} has an editor transaction open` });
+    // A schedule asks nobody, so a session that is working, or worked in the last few minutes, keeps the editor.
+    else if (o.scheduled && (u.busy ?? 0) > 0) out.push({ kind: "session", text: `${u.label} is using the editor` });
+    else if (o.scheduled && u.idleMs != null && u.idleMs < SESSION_IDLE_MS) out.push({ kind: "session", text: `${u.label} used the editor in the last ${Math.round(SESSION_IDLE_MS / 60_000)} minutes` });
+  }
   if (s.dialogs() > 0) out.push({ kind: "dialog", text: "A dialog is open in the editor" });
   if (s.pie() && !held.pie) out.push({ kind: "pie", text: "Play In Editor is in use" });
   const runs = s.runs();
@@ -75,7 +109,7 @@ export function occupancyOf(s: OccupancySignals, held: Held = {}, o: { unattende
   else if (chat) out.push({ kind: "agent", text: "A chat is using the editor" });
   if (busy.calls.some((c) => c.source === "client")) out.push({ kind: "client", text: "Another MCP client is using the editor" });
   const age = s.inputAgeMs();
-  if (o.unattended && age !== null && age < INPUT_QUIET_MS) out.push({ kind: "input", text: "Someone is using this computer" });
+  if ((o.unattended || o.scheduled) && age !== null && age < INPUT_QUIET_MS) out.push({ kind: "input", text: "Someone is using this computer" });
   return out;
 }
 

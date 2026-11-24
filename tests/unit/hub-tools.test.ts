@@ -57,7 +57,7 @@ beforeEach(() => {
       const targets = scope.kind === "goal" ? [DOOR] : scope.checks!.map((c) => c.target);
       return { id: "plan_1", title: "Run", scope, options: {}, state: "queued", trigger, createdAt: "2026-11-23T00:00:00.000Z", items: targets.map((t) => ({ check: { kind: "script", target: t }, name: t.split("/").pop()!, state: "queued" })) } as unknown as PlanRun;
     },
-    queueView: () => ({ paused: false, current: null, queued: [], recent: [], editor: { connected: true }, waiting: "Play In Editor is in use" }) as QueueState,
+    queueView: () => ({ paused: false, current: null, queued: [], recent: [], schedules: [], editor: { connected: true }, waiting: "Play In Editor is in use" }) as QueueState,
   } as unknown as HubToolTarget;
 });
 afterEach(() => fs.rmSync(root, { recursive: true, force: true }));
