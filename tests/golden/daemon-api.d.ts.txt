@@ -468,6 +468,30 @@ export declare const DAEMON_ROUTES: {
         readonly feature?: DaemonFeature;
         readonly summary: string;
     };
+    readonly "hub.plan.move": {
+        readonly method: "POST";
+        readonly path: "/v1/hub/plans/:id/move";
+        readonly feature?: DaemonFeature;
+        readonly summary: string;
+    };
+    readonly "hub.schedule.create": {
+        readonly method: "POST";
+        readonly path: "/v1/hub/schedules";
+        readonly feature?: DaemonFeature;
+        readonly summary: string;
+    };
+    readonly "hub.schedule.update": {
+        readonly method: "PUT";
+        readonly path: "/v1/hub/schedules/:id";
+        readonly feature?: DaemonFeature;
+        readonly summary: string;
+    };
+    readonly "hub.schedule.delete": {
+        readonly method: "DELETE";
+        readonly path: "/v1/hub/schedules/:id";
+        readonly feature?: DaemonFeature;
+        readonly summary: string;
+    };
     readonly "hub.fix": {
         readonly method: "POST";
         readonly path: "/v1/hub/fix";
@@ -2090,6 +2114,7 @@ export interface PlanOptions {
     replay: boolean;
 }
 export declare const DEFAULT_PLAN_OPTIONS: PlanOptions;
+export declare const planOptionsFor: (trigger: PlanTrigger) => PlanOptions;
 export declare const NEEDS_PERSON = "needs a person";
 export declare const needsPerson: (steps: readonly Pick<QaStep, "judge">[]) => boolean;
 export type PlanItemState = "queued" | "running" | "passed" | "failed" | "needs_you" | "unjudged" | "skipped" | "error" | "crashed" | "cancelled";
@@ -2106,7 +2131,7 @@ export interface PlanItem {
 export declare const FAILING_ITEM_STATES: readonly PlanItemState[];
 export declare function itemStateOf(outcome: RunOutcome): PlanItemState;
 export type PlanState = "queued" | "running" | "paused" | "done" | "cancelled" | "failed";
-export type PlanTrigger = "person" | "agent";
+export type PlanTrigger = "person" | "schedule" | "agent";
 export interface PlanRun {
     id: string;
     title: string;
@@ -2116,6 +2141,7 @@ export interface PlanRun {
     state: PlanState;
     items: PlanItem[];
     trigger: PlanTrigger;
+    scheduleId?: string | null;
     createdAt: string;
     startedAt?: string | null;
     endedAt?: string | null;
@@ -2124,7 +2150,29 @@ export interface PlanRequest {
     title?: string;
     scope: PlanScope;
     options?: Partial<PlanOptions>;
+    next?: boolean;
 }
+export interface PlanPlacement {
+    state: "started" | "waiting" | "queued";
+    position: number;
+    ahead: number;
+    reason?: string | null;
+    resumed?: boolean;
+}
+export interface Schedule {
+    id: string;
+    title: string;
+    scope: PlanScope;
+    options: PlanOptions;
+    at: string;
+    days: number[];
+    enabled: boolean;
+    lastRunAt?: string | null;
+    lastSkipped?: string | null;
+    waiting?: string | null;
+    nextRunAt?: string | null;
+}
+export type ScheduleDraft = Omit<Schedule, "id" | "lastRunAt" | "lastSkipped" | "waiting" | "nextRunAt">;
 export interface FixRequest {
     goalId?: string;
     checkId?: string;
@@ -2135,6 +2183,7 @@ export interface QueueState {
     current: PlanRun | null;
     queued: PlanRun[];
     recent: PlanRun[];
+    schedules: Schedule[];
     editor: {
         connected: boolean;
     };
@@ -2142,7 +2191,7 @@ export interface QueueState {
     waiting?: string | null;
 }
 export type QueuePause = "person" | "release" | "reconnect";
-export type OccupancyKind = "disconnected" | "operation" | "dialog" | "pie" | "run" | "agent" | "client" | "input";
+export type OccupancyKind = "disconnected" | "operation" | "dialog" | "pie" | "run" | "agent" | "client" | "input" | "session" | "consent";
 export interface OccupancyReason {
     kind: OccupancyKind;
     text: string;
@@ -2235,13 +2284,17 @@ export declare const HUB_ROUTES: {
     readonly addRunLink: "POST /hub/runs/:runId/links { link: TrackerLink } -> { record: RunRecord }";
     readonly removeRunLink: "DELETE /hub/runs/:runId/links?url= -> { record: RunRecord }";
     readonly queue: "GET /hub/queue -> QueueState";
-    readonly plan: "POST /hub/plans PlanRequest -> { plan: PlanRun }";
+    readonly plan: "POST /hub/plans PlanRequest -> { plan: PlanRun, placement: PlanPlacement } (a person's Run resumes a paused queue)";
     readonly cancelPlan: "POST /hub/plans/:id/cancel -> { plan }";
+    readonly movePlan: "POST /hub/plans/:id/move { to: number } -> QueueState (0 is next)";
+    readonly createSchedule: "POST /hub/schedules ScheduleDraft -> { schedule }";
+    readonly updateSchedule: "PUT /hub/schedules/:id Partial<ScheduleDraft> -> { schedule }";
+    readonly deleteSchedule: "DELETE /hub/schedules/:id -> 204";
     readonly pause: "PUT /hub/queue/paused { paused: boolean } -> QueueState";
     readonly lease: "GET /hub/lease -> HubLeaseEvent";
     readonly release: "POST /hub/release -> QueueState (stops what the hub holds on the editor and pauses the queue)";
-    readonly fix: "POST /hub/fix FixRequest -> { queued: number, plan: PlanRun | null } (a fix plan: one chat session per check)";
-    readonly runCheck: "POST /hub/checks/:checkId/run { replay? } -> { plan: PlanRun }";
+    readonly fix: "POST /hub/fix FixRequest -> { queued: number, plan: PlanRun | null, placement?: PlanPlacement } (a fix plan: one chat session per check)";
+    readonly runCheck: "POST /hub/checks/:checkId/run { replay?, next? } -> { plan: PlanRun, placement: PlanPlacement }";
 };
 export type PlaytestRunsMode = "manual" | "automatic";
 export interface BusyCall {
