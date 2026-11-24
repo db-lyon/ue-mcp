@@ -36206,6 +36206,13 @@
           "required": false,
           "description": "Save after removing rows (default true)",
           "default": true
+        },
+        {
+          "name": "dryRun",
+          "type": "boolean",
+          "required": false,
+          "description": "Return wouldRemove, missingRowNames and rowCountAfter without changing the table (default false)",
+          "default": false
         }
       ],
       "choices": [
