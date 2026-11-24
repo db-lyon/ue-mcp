@@ -289,7 +289,7 @@ export class Hub {
    * occupancyOf); empty when it is. What the lease holds never counts. Runs
    * the editor said it no longer knows hold nothing.
    */
-  occupancy(unattended = false): OccupancyReason[] {
+  occupancy(unattended = false, scheduled = false): OccupancyReason[] {
     const e = this.o.editor;
     const signals: OccupancySignals = {
       connected: () => this.connected(),
@@ -298,8 +298,10 @@ export class Hub {
       busy: () => e?.busy() ?? { now: this.now(), calls: [] },
       runs: () => this.o.broker.all().filter((r) => !this.gone.has(r.runId)),
       inputAgeMs: () => e?.inputAgeMs() ?? null,
+      sessions: () => e?.sessions?.() ?? [],
+      disruptions: () => e?.disruptions?.() ?? [],
     };
-    return occupancyOf(signals, this.lease.held(), { unattended });
+    return occupancyOf(signals, this.lease.held(), { unattended, scheduled });
   }
 
   /**

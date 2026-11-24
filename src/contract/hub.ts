@@ -1133,9 +1133,12 @@ export type QueuePause = "person" | "release" | "reconnect";
  * knows: the editor not connected, an editor operation (restart, rebuild),
  * an open modal dialog, Play In Editor the hub did not start, a playtest the
  * hub did not start, a chat or fix loop with editor calls in flight, another
- * MCP client's calls, and someone using this computer.
+ * MCP client's calls, and someone using this computer. From the consent
+ * ledger (editor(hold), disruption requests): another session holding the
+ * editor or with an editor transaction open ("session"), and a request to
+ * stop, restart or rebuild the editor still open ("consent").
  */
-export type OccupancyKind = "disconnected" | "operation" | "dialog" | "pie" | "run" | "agent" | "client" | "input";
+export type OccupancyKind = "disconnected" | "operation" | "dialog" | "pie" | "run" | "agent" | "client" | "input" | "session" | "consent";
 export interface OccupancyReason {
   kind: OccupancyKind;
   text: string;

@@ -81,6 +81,7 @@ import {
   DISRUPTION_VOTES,
   DISRUPTIVE_OPS,
   DisruptionError,
+  describeOp,
   type DisruptionCaller,
   type DisruptionVote,
   type DisruptiveOp,
@@ -678,6 +679,23 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
     engine: () => {
       const assoc = rt.project.engineAssociation;
       return assoc && /^\d+\.\d+/.test(assoc) ? assoc.match(/^\d+\.\d+/)![0] : null;
+    },
+    // The consent ledger: the hub defers to other sessions' holds and transactions, and to an open request to stop, restart or rebuild.
+    consent: {
+      sessions: () => {
+        const registry = rt.sessions.disruptions;
+        const now = Date.now();
+        return registry.activities().filter((a) => a.id !== registry.processId).map((a) => ({
+          label: a.label,
+          hold: a.hold?.reason ?? null,
+          transactions: a.transactions,
+          busy: a.inflight.length,
+          idleMs: a.lastCallAt ? now - Date.parse(a.lastCallAt) : null,
+        }));
+      },
+      disruptions: () => rt.sessions.disruptions.list()
+        .filter((r) => r.state === "pending" || r.state === "confirm" || r.state === "approved")
+        .map((r) => ({ label: r.requester.label, op: describeOp(r.op) })),
     },
   }, client));
   const unregisterHub = registerHub(projectDir, hubHolder);
