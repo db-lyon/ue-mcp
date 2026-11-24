@@ -9003,7 +9003,7 @@
         {
           "suite": "live",
           "file": "tests/live/fab-epic-tools.test.ts",
-          "test": "lists FabToolset.FabToolset with its five tools, each with its schema and its fab action"
+          "test": "lists FabToolset.FabToolset with its tools, each with its schema and its fab action"
         },
         {
           "suite": "live",
