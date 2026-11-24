@@ -93,5 +93,10 @@ export function scheduleTurn(s: Schedule, now: Date, why: () => string | null): 
   if (late && !s.waiting) return { skip: "the daemon was not running at the time" };
   const blocked = why();
   if (!blocked) return { run: true };
-  return late ? { skip: `waited an hour: ${blocked}` } : { wait: blocked };
+  return late ? { skip: `waited an hour while ${sentenceTail(blocked)}` } : { wait: blocked };
+}
+
+/** A reason read mid-sentence: "The editor is not connected" becomes "the editor is not connected"; a name keeps its capital. */
+function sentenceTail(reason: string): string {
+  return /^(The|A|An|Another|Someone|Other)\b/.test(reason) ? reason[0].toLowerCase() + reason.slice(1) : reason;
 }

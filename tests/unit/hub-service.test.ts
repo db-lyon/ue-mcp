@@ -1122,7 +1122,7 @@ describe("schedules", () => {
     expect((await queue()).schedules[0].waiting).toBe("The editor is not connected");
     now = new Date(2026, 10, 23, 3, 2).getTime();
     await hub.tick();
-    expect((await queue()).schedules[0]).toMatchObject({ waiting: null, lastSkipped: "waited an hour: The editor is not connected", nextRunAt: new Date(2026, 10, 24, 2, 0).toISOString() });
+    expect((await queue()).schedules[0]).toMatchObject({ waiting: null, lastSkipped: "waited an hour while the editor is not connected", nextRunAt: new Date(2026, 10, 24, 2, 0).toISOString() });
   });
 
   it("respects a paused queue: it waits, and never resumes it", async () => {
