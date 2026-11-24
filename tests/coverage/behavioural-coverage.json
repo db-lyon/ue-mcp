@@ -16991,12 +16991,22 @@
         {
           "suite": "live",
           "file": "tests/live/bcov-pie-scripts.test.ts",
+          "test": "keep_pie leaves the PIE the run started running, and PIE already playing outlives a run"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/bcov-pie-scripts.test.ts",
           "test": "script_replay re-evaluates the auto steps on the run's recording and reports what regressed"
         },
         {
           "suite": "live",
           "file": "tests/live/bcov-pie-scripts.test.ts",
           "test": "script_results reads results.json with every step's status, evidence and verdict"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/bcov-pie-scripts.test.ts",
+          "test": "script_run evaluates auto steps live, holds at the manual step, and takes its verdict"
         },
         {
           "suite": "live",
@@ -18248,6 +18258,11 @@
       "tests": [
         {
           "suite": "automation",
+          "file": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Tests/PIEScriptEndsPIETests.cpp",
+          "test": "UE.MCP.PIE.Script.EndsStartedPIE"
+        },
+        {
+          "suite": "automation",
           "file": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Tests/PIEScriptMapTests.cpp",
           "test": "UE.MCP.PIE.Script.MapOpensBeforeRun"
         },
@@ -18275,6 +18290,11 @@
           "suite": "live",
           "file": "tests/live/bcov-pie-script-triggered.test.ts",
           "test": "passes on a press from outside the script after act, not on act's own press, and records when and what"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/bcov-pie-scripts.test.ts",
+          "test": "keep_pie leaves the PIE the run started running, and PIE already playing outlives a run"
         },
         {
           "suite": "live",
@@ -18395,6 +18415,11 @@
         {
           "suite": "live",
           "file": "tests/live/bcov-pie-scripts.test.ts",
+          "test": "keep_pie leaves the PIE the run started running, and PIE already playing outlives a run"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/bcov-pie-scripts.test.ts",
           "test": "script_replay re-evaluates the auto steps on the run's recording and reports what regressed"
         },
         {
@@ -18472,6 +18497,11 @@
       "tests": [
         {
           "suite": "automation",
+          "file": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Tests/PIEScriptEndsPIETests.cpp",
+          "test": "UE.MCP.PIE.Script.EndsStartedPIE"
+        },
+        {
+          "suite": "automation",
           "file": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Tests/PIEScriptMapTests.cpp",
           "test": "UE.MCP.PIE.Script.MapOpensBeforeRun"
         },
@@ -18489,6 +18519,11 @@
           "suite": "live",
           "file": "tests/live/bcov-pie-script-act.test.ts",
           "test": "skips arrange and act, since nothing is in PIE, and says so on the step"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/bcov-pie-scripts.test.ts",
+          "test": "keep_pie leaves the PIE the run started running, and PIE already playing outlives a run"
         },
         {
           "suite": "live",

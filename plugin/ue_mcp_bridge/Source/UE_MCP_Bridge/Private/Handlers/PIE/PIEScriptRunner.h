@@ -308,10 +308,15 @@ namespace MCPPIE
 		// Runtime ownership, not serialised.
 		bool bOwnsRecorder = false;
 		bool bOwnsReplayer = false;
-		/** Replay runs: end PIE once every step has settled. */
-		bool bEndPIEWhenSettled = false;
+		/** The run asked for the PIE session it plays in, so ending the run ends that session. */
 		bool bStartedPIE = false;
+		/** Leave PIE the run started running when it ends: keep_pie, or a replay with auto_stop_pie false. */
+		bool bKeepPIE = false;
 	};
+
+	// Whether the run ends PIE when it ends: only PIE it started itself, unless it was told to keep it.
+	// Every terminal state counts, finished or stopped, whatever the verdicts.
+	bool ShouldScriptRunEndPIE(const FScriptRun& Run);
 
 	// Reads the live value an expectation names; false while unreadable. Boolean ops yield 1 or 0.
 	using FScriptValueReader = TFunctionRef<bool(const FScriptExpect&, double&)>;
@@ -376,6 +381,7 @@ namespace MCPPIE
 		FScriptDef Script;
 		bool bRecord = true;
 		bool bStartPIE = false;
+		bool bKeepPIE = false;
 		bool bBlockOnManual = true;
 		int32 ClientId = 0;
 		int32 PIEInstance = INDEX_NONE;
@@ -418,6 +424,7 @@ namespace MCPPIE
 		void BindEndFrame();
 		void UnbindEndFrame();
 		void Finish(EScriptRunState FinalState, const FString& Reason);
+		void EndStartedPIE();
 		bool WriteResults();
 		bool ReadLive(const FScriptExpect& Expect, double& OutValue) const;
 		void AdvanceNow();

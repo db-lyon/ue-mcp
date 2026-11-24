@@ -183,6 +183,7 @@ pie(action="script_run", script="/Game/PIEStudio/Scripts/DoorOpens", start_pie=t
 | `map` | the script's | The level to play in. When another level is open, the run opens this one before it arms anything, and is refused when the open level has unsaved changes or PIE is running in another level. With no map the run plays whatever level is open. `mode=manual` leaves the open level as it is. |
 | `record` | `true` | Arm the recorder too, so the run can be replayed. With `record=false` the run has no recording and cannot be replayed. |
 | `start_pie` | `false` | Start PIE when it is not running. Otherwise the run waits for the next PIE session. A session already running is used as it is. |
+| `keep_pie` | `false` | Leave the PIE session the run started running after the run ends, to inspect its end state. See [How a run ends](#how-a-run-ends). |
 | `block_on_manual` | `true` | Hold the run at a manual step until it has a verdict. Consecutive manual steps are put up together and the run holds until each has one. `false` starts each manual step and moves on. |
 | `mode` | `full` | `manual` judges the script by its manual steps with no PIE. See [Manual runs](#manual-runs). |
 | `default_within_ms` | the script's, or `5000` | The window for an auto step that names none. |
@@ -241,6 +242,8 @@ The editor holds one run in memory: the active one, or the last one to end. An o
 ### How a run ends
 
 A run finishes with `stop_reason` `all steps settled` once every step has passed, failed or been skipped. It also finishes when PIE ends (`PIE ended`) or the observation ends (`observation ended`). An observation that cannot resolve the player within 10 seconds, or attach to its pawn within 30 seconds of resolving it, ends the run with the reason as `stop_reason`, such as `No pawn to observe after 30 s in UEDPIE_0_Map: player controller PC_0 possesses no pawn`. A pawn without an input component is attached anyway after 2 seconds of game time, so a session left running by an earlier run can be observed. An auto step still running then fails with `run ended before the step settled (<reason>)`. Pending steps stay `pending` and manual steps without a verdict stay `awaiting_verdict`.
+
+A run that started PIE itself (`start_pie=true` with no session playing, so the answer has `pie_started: true`) ends that session when it finishes or is stopped, whatever the verdicts. A session that was already playing, or that someone else had already asked for, is left running. Pass `keep_pie=true` to keep the run's own session. Ending PIE after the run has already ended it is harmless.
 
 `script_stop` (`run_id?`, `reason?`) ends the active run the same way with state `stopped` and `stop_reason` set to `reason` (default `stopped`), writes `results.json`, and answers with the run's fields, `stopped: true` and `changed: true`. A `run_id` that is not the active run is refused. With no active run the answer has `success: false`, `alreadyStopped: true`, and the last run's `run_id`, `state` and `results_path`.
 
@@ -397,7 +400,7 @@ The editor keeps each parsed `results.json` until the file's timestamp or size c
 
 ## Replay regression
 
-`script_replay` (`run_id?` or `results_path?`, `time_scale?` (default 1), `auto_stop_pie?` (default `true`), `pie_instance?`, `client_id?`, `wait?`, `timeout_seconds?`) replays the source run's recording with the same observation profile, in the level the source run played in when it had a `map`, and checks every auto step again in its recorded window. Without `run_id` or `results_path` it replays the last run. It needs PIE stopped, starts PIE itself, and with `auto_stop_pie` ends PIE once the replay finishes. A run made with `record=false` has no recording and is refused.
+`script_replay` (`run_id?` or `results_path?`, `time_scale?` (default 1), `auto_stop_pie?` (default `true`), `pie_instance?`, `client_id?`, `wait?`, `timeout_seconds?`) replays the source run's recording with the same observation profile, in the level the source run played in when it had a `map`, and checks every auto step again in its recorded window. Without `run_id` or `results_path` it replays the last run. It needs PIE stopped, starts PIE itself, and with `auto_stop_pie` ends PIE once the replay finishes or is stopped. A run made with `record=false` has no recording and is refused.
 
 ```text
 pie(action="script_replay", run_id="script_DoorOpens_20261023_100000", wait=true)

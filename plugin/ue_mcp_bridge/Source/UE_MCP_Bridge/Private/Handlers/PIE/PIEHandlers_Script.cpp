@@ -391,7 +391,8 @@ void FPIEHandlers::RegisterScriptHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("profile"), EType::String, TEXT("Observation profile asset path; overrides the script's")),
 		MCPParam::Optional(TEXT("map"), EType::String, TEXT("Level to open before PIE; overrides the script's. Mode manual leaves the open level as it is")),
 		MCPParam::Optional(TEXT("record"), EType::Boolean, TEXT("Record input so pie_script_replay can rerun it (default true)")),
-		MCPParam::Optional(TEXT("start_pie"), EType::Boolean, TEXT("Start PIE when it is not running (default false)")),
+		MCPParam::Optional(TEXT("start_pie"), EType::Boolean, TEXT("Start PIE when it is not running (default false). The run ends PIE it started when it ends, however it ends; PIE already playing is left running")),
+		MCPParam::Optional(TEXT("keep_pie"), EType::Boolean, TEXT("Leave PIE the run started running when the run ends, to inspect its end state (default false)")),
 		MCPParam::Optional(TEXT("block_on_manual"), EType::Boolean, TEXT("Hold the run at each manual block until every step in it has a verdict (default true)")),
 		MCPParam::Optional(TEXT("mode"), EType::String, TEXT("full (default) plays the script in PIE; manual starts no PIE, observer or recording, leaves auto steps unchecked and puts every manual step up for its verdict at once")).Enum({
 			TEXT("full"), TEXT("manual") }),
@@ -437,7 +438,7 @@ void FPIEHandlers::RegisterScriptHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("run_id"), EType::String, TEXT("Finished run to replay (default the last run)")),
 		MCPParam::Optional(TEXT("results_path"), EType::String, TEXT("results.json of the run to replay, instead of a run id")),
 		MCPParam::Optional(TEXT("time_scale"), EType::Number, TEXT("Global time dilation during the replay (default 1)")).Min(0),
-		MCPParam::Optional(TEXT("auto_stop_pie"), EType::Boolean, TEXT("End PIE when the replay finishes (default true)")),
+		MCPParam::Optional(TEXT("auto_stop_pie"), EType::Boolean, TEXT("End PIE when the replay ends, finished or stopped (default true)")),
 		MCPParam::Optional(TEXT("pie_instance"), EType::Integer, PieInstanceDoc).Min(0),
 		MCPParam::Optional(TEXT("client_id"), EType::Integer, ClientIdDoc).Min(0),
 		MCPParam::Optional(TEXT("wait"), EType::Boolean, WaitDoc),
@@ -774,6 +775,7 @@ TSharedPtr<FJsonValue> FPIEHandlers::PieScriptRun(const TSharedPtr<FJsonObject>&
 	Map.TrimStartAndEndInline();
 	const bool bRecord = OptionalBool(Params, TEXT("record"), true);
 	const bool bStartPIE = OptionalBool(Params, TEXT("start_pie"), false);
+	const bool bKeepPIE = OptionalBool(Params, TEXT("keep_pie"), false);
 	const bool bBlockOnManual = OptionalBool(Params, TEXT("block_on_manual"), true);
 	int32 DefaultWithinMs = 0;
 	const bool bHasWithin = TryGetNumberParam(Params, TEXT("default_within_ms"), DefaultWithinMs);
@@ -811,6 +813,7 @@ TSharedPtr<FJsonValue> FPIEHandlers::PieScriptRun(const TSharedPtr<FJsonObject>&
 	Cfg.bManualMode = bManual;
 	Cfg.bRecord = bRecord && !bManual;
 	Cfg.bStartPIE = bStartPIE && !bManual;
+	Cfg.bKeepPIE = bKeepPIE;
 	Cfg.bBlockOnManual = bBlockOnManual;
 	Cfg.ClientId = ClientId;
 	Cfg.PIEInstance = PIEInstance;
