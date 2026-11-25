@@ -1095,12 +1095,18 @@ export class Hub {
     return { plan, placement };
   }
 
-  /** POST /hub/run: a track, scene, slot or the arrangement as one run. */
-  async runSet(body: unknown, trigger: PlanTrigger = "person"): Promise<{ plan: PlanRun; placement: PlanPlacement }> {
+  /**
+   * POST /hub/run: a track, scene, slot or the arrangement as one run. When
+   * it starts at once, the answer waits for the start and carries the run's
+   * id; queued or waiting, `runId` is null and the queue says when it starts.
+   */
+  async runSet(body: unknown, trigger: PlanTrigger = "person"): Promise<{ plan: PlanRun; placement: PlanPlacement; runId: string | null }> {
     if (!isObject(body)) throw bad("body must be { scope, next? }");
     const scope = scopeOf(body.scope);
     if (!setItemOf(scope, this.goals) || scope.kind === "goal") throw bad("scope must be { kind: track | scene, goalId } | { kind: slot, sceneId, trackId } | { kind: arrangement }");
-    return this.queuePlan({ scope, ...(body.next !== undefined ? { next: body.next } : {}), ...(body.options !== undefined ? { options: body.options } : {}) }, trigger);
+    const queued = await this.queuePlan({ scope, ...(body.next !== undefined ? { next: body.next } : {}), ...(body.options !== undefined ? { options: body.options } : {}) }, trigger);
+    const runId = queued.placement.state === "started" ? await this.queue.startedRun(queued.plan.id) : null;
+    return { ...queued, runId };
   }
 
   /** POST /hub/runs/:id/verdict: a manual check's verdict in a set run. */

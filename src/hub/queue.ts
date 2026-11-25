@@ -127,6 +127,8 @@ export class PlanQueue {
   /** The editor's lease, held while an item runs and until its PIE has ended. */
   readonly lease: EditorLease;
   private pumping = false;
+  /** The pump under way, or the last one. */
+  private pumped: Promise<void> = Promise.resolve();
   /** Why the next item waits although nothing is paused. */
   private waiting: string | null = null;
 
@@ -550,9 +552,25 @@ export class PlanQueue {
   }
 
   /** Start what is next, while the queue runs and the editor is free. */
-  async pump(): Promise<void> {
-    if (this.pumping) return;
+  pump(): Promise<void> {
+    if (this.pumping) return Promise.resolve();
     this.pumping = true;
+    this.pumped = this.pumpLoop();
+    return this.pumped;
+  }
+
+  /**
+   * The run id of a plan's first started item, once the start under way has
+   * settled: null when the plan is not on the editor, or its item did not
+   * start a run (skipped, refused).
+   */
+  async startedRun(planId: string): Promise<string | null> {
+    await this.pumped;
+    const plan = this.s.current?.id === planId ? this.s.current : this.s.recent.find((p) => p.id === planId);
+    return plan?.items.find((i) => i.runId)?.runId ?? null;
+  }
+
+  private async pumpLoop(): Promise<void> {
     try {
       for (;;) {
         this.closeIfDone();

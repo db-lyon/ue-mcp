@@ -282,8 +282,9 @@ export async function runHubAction(hub: HubToolTarget, action: string, input: Re
       if (!hub.runSet || !hub.set) throw new HubError(409, "this hub cannot run plans");
       const view = await hub.set.view();
       const scope = setScopeOf(String(input.scope), view);
-      const { plan } = await hub.runSet({ scope, ...(input.attended !== undefined ? { options: { attended: input.attended } } : {}) }, "agent");
-      return planAnswer(plan, hub.queueView?.());
+      const { plan, runId } = await hub.runSet({ scope, ...(input.attended !== undefined ? { options: { attended: input.attended } } : {}) }, "agent");
+      // The run id, once it started, is what read_run takes.
+      return { ...planAnswer(plan, hub.queueView?.()), ...(runId ? { runId } : {}) };
     }
     case "read_run": {
       if (!hub.run) throw new HubError(409, "this hub has no runs");

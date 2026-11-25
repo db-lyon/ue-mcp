@@ -1367,7 +1367,7 @@ export const HUB_ROUTES = {
   set: "GET /hub/set -> SetView",
   editSet: "POST /hub/set/edit { ops } -> SetView & { changed } (400 { error, finding })",
   clips: "GET /hub/clips?q=&kind= -> { clips: ClipEntry[] }",
-  runSet: "POST /hub/run { scope: track | scene | slot | arrangement, next? } -> { plan: PlanRun, placement: PlanPlacement }",
+  runSet: "POST /hub/run { scope: track | scene | slot | arrangement, next? } -> { plan: PlanRun, placement: PlanPlacement, runId: string | null } (runId once a plan that started at once has its run)",
   runVerdict: "POST /hub/runs/:runId/verdict { check, verdict, note? } -> { ok: true } (a manual check in a track or scene run)",
 } as const;
 
