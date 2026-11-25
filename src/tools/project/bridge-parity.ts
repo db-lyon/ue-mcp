@@ -26,6 +26,17 @@ import { PLUGIN_UPGRADE_POINTER, type BridgeCapabilities } from "../../bridge/br
 import type { ToolDef } from "../../surface/tool-types.js";
 import { compareHandlerSpecs, type HandlerSpecs } from "../../surface/handler-spec.js";
 import { RECORDED_HANDLER_SPECS } from "../specs/index.js";
+import { ACTION_FACTS } from "../../bridge/action-facts.generated.js";
+
+/**
+ * The live specs this server advertises from. A server-internal method (locks,
+ * checkpoints, the batch carrier) is called by the server instead of a tool, so
+ * its spec is never generated into a category and is not compared.
+ */
+function advertisedLiveSpecs(live: unknown): unknown {
+  if (!live || typeof live !== "object" || Array.isArray(live)) return live;
+  return Object.fromEntries(Object.entries(live).filter(([m]) => !ACTION_FACTS[m]?.serverInternal));
+}
 
 export interface BridgeParity {
   /** False when the plugin published no action list, so nothing was compared. */
@@ -132,7 +143,7 @@ export function deployedPlugin(
   // #1057: the spec'd actions' parameters were generated from a recording of
   // the plugin's own specs. A running plugin whose specs differ is one whose
   // handlers read something other than what this server advertises.
-  const specs = compareHandlerSpecs(recordedSpecs, capabilities.handlerSpecs);
+  const specs = compareHandlerSpecs(recordedSpecs, advertisedLiveSpecs(capabilities.handlerSpecs));
   // #1282: a plugin's recorded contracts against the ones its module registered.
   // Only methods a loaded plugin recorded are compared; other plugins' handlers are not this server's surface.
   const livePlugin = capabilities.pluginHandlerSpecs ?? {};

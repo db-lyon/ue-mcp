@@ -586,4 +586,12 @@ describe("drift against a connected editor", () => {
     expect(drifted?.handlerSpecDrift).toEqual(["one"]);
     expect(drifted?.handlerSpecWarning).toContain("specs:record");
   });
+
+  it("does not count a server-internal method, which no category advertises", () => {
+    const caps = (handlerSpecs: unknown): BridgeCapabilities =>
+      ({ actions: ["one", "acquire_lock"], actionCount: 2, handlerSpecs } as unknown as BridgeCapabilities);
+    const live = { ...recorded, acquire_lock: { category: "lock", params: [] } };
+    const parity = checkBridgeParity([], caps(live));
+    expect(deployedPlugin(caps(live), parity, recorded)).toBeUndefined();
+  });
 });
