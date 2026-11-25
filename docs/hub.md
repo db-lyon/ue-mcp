@@ -150,6 +150,8 @@ Ops, one per line; a track or scene is named by its id or its exact name, and an
 
 Colors are `red`, `orange`, `yellow`, `lime`, `green`, `teal`, `cyan`, `blue`, `indigo`, `violet`, `pink` and `gray`. The set model also carries Session view slots (`slot ...` ops and `slot` runs) for the grid that comes later; no view shows them yet.
 
+`track delete` and `scene delete` remove the record as `DELETE /v1/hub/goals/<id>` does, its sign-off included, and are refused the same way while a run made for it is queued or running. A track's slots go with it; its clips stay.
+
 The `hub` MCP category has the same through `read_set`, `edit_set` (`ops`), `run` (`scope`: `track <t>`, `scene <s>` or `arrangement`) and `read_run`.
 
 ## Clients
