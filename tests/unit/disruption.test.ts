@@ -167,6 +167,18 @@ describe("requests", () => {
     expect(r.get(asked.id)!.state).toBe("approved");
   });
 
+  it("closes a session's open requests when it disconnects, so no one is told about them", () => {
+    const r = registry();
+    r.opened(A);
+    r.opened(B);
+    r.callStarted(B, "x.y");
+    const asked = r.request(A, "stop", "editor.stop_editor");
+    expect(asked.state).not.toBe("approved");
+    r.closed(A.id);
+    expect(r.get(asked.id)!.state).toBe("expired");
+    expect(r.noticesFor(C.id)).toEqual([]);
+  });
+
   it("expires a request after its lifetime, and a new ask opens a new one", () => {
     const c = clock();
     const r = registry(c);
