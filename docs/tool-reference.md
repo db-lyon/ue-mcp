@@ -6,7 +6,7 @@ description: "Every ue-mcp category tool and action, with its parameter signatur
 
 This page lists ue-mcp's own category tools and actions. For the official Unreal tools (UE 5.8+) that ue-mcp wraps (surfaced inside these same categories), see [Native Tools](native-tools.md).
 
-UE-MCP exposes **<!-- count:tools -->32<!-- /count --> category tools** covering **<!-- count:actions -->3747+<!-- /count --> actions**, plus a `flow` tool for running multi-step YAML workflows. Every category tool takes an `action` parameter that selects the operation and an `args` object holding that action's parameters: `level(action="place_actor", args={actorClass: "PointLight"})`. Under the default `micro` [context strategy](configuration.md#context-strategy-full-lean-micro) the same call goes through the gateway: `tools(action="call", category="level", method="place_actor", args={...})`.
+UE-MCP exposes **<!-- count:tools -->32<!-- /count --> category tools** covering **<!-- count:actions -->3753+<!-- /count --> actions**, plus a `flow` tool for running multi-step YAML workflows. Every category tool takes an `action` parameter that selects the operation and an `args` object holding that action's parameters: `level(action="place_actor", args={actorClass: "PointLight"})`. Under the default `micro` [context strategy](configuration.md#context-strategy-full-lean-micro) the same call goes through the gateway: `tools(action="call", category="level", method="place_actor", args={...})`.
 
 !!! tip "First call in any session"
     Start with `project(action="get_status")` to check the connection, then `level(action="get_outliner")` or `asset(action="list")` to explore.
@@ -3305,6 +3305,12 @@ The press actions (`respond_to_dialog`, `press_window_button`, `close_window`) a
 | `clip_validate(one(path; clip:o; text))` | Check a clip without saving: every structural problem and every action, value, actor or class it names that does not resolve, each with candidates |
 | `clip_list(directory?)` | List playtest clips with their maps |
 | `clip_delete(path, confirm?:b)` | Delete a playtest clip (confirm=true) |
+| `clip_run(one(path; clip:o; text), name?, region?, start_pie?:b, keep_pie?:b, fixed_timestep?:b, lock_input?:b, pie_instance?:i(0..), client_id?:i(0..), wait?:b, timeout_seconds?:n(0..))` | Play a playtest clip in PIE on game time, at a fixed 1/rate timestep by default: feeds each input track's raw value to its Input Action before the actors tick, fires events, judges check notes (a hold check stops the timeline until true or its timeout; a manual check pauses PIE for clip_verdict) and reports per check and per region, with pawn drift against the clip's reference take. region judges one region, still playing from frame 0. wait=true answers once it finishes or awaits a verdict |
+| `clip_record(path, region?, from_check?, armed?:[s], pie_instance?:i(0..), client_id?:i(0..))` | Record a person's input into a playtest clip: starts PIE, plays the clip up to the punch-in (a region's start, or a hold check) with their input locked out, then records the armed tracks from what they play until the region ends or clip_record_stop. The take replaces those tracks over the range and keeps what they held as history |
+| `clip_record_stop()` | End the recording in flight at the current frame and save the take into the clip |
+| `clip_status(run_id?, wait?:b, timeout_seconds?:n(0..))` | A clip run's state, position, checks, regions with drift, events fired and, for a recording, the take. wait=true blocks until it finishes or awaits a verdict |
+| `clip_stop(reason?)` | End the clip run in flight; unsettled checks fail and clip_results.json is written |
+| `clip_verdict(check, verdict:{pass,fail,skip}, note?, source?:{human,agent}, evidence?:o)` | Answer a manual check a clip run is paused on: pass, fail or skip, with a note. source=agent needs evidence {note, captures?} |
 
 ---
 

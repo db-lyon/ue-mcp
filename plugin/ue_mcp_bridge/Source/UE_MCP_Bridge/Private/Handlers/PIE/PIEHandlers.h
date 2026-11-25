@@ -136,4 +136,10 @@ public:
 	static TSharedPtr<FJsonValue> PieClipValidate(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> PieClipList(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> PieClipDelete(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> PieClipRun(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> PieClipRecord(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> PieClipRecordStop(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> PieClipStatus(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> PieClipStop(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> PieClipVerdict(const TSharedPtr<FJsonObject>& Params);
 };
