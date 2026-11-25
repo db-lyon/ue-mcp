@@ -260,7 +260,7 @@ export function validateArrangement(a: Arrangement, o: ArrangementValidateOption
     if (i.start < 0) out.push({ id: i.id, field: "start", message: `${i.id} starts before frame 0`, candidates: ["0"], blocks: true });
     const f = o.factsOf(i.target, i.kind);
     if (i.kind === "script") {
-      if (i.in !== undefined || i.out !== undefined) out.push({ id: i.id, field: "in", message: `${i.id} is a step-list playtest, which settles by condition and cannot be trimmed; change its length instead`, blocks: true });
+      if (i.in !== undefined || i.out !== undefined) out.push({ id: i.id, field: "in", message: `${i.id} is a step-list clip, which settles by condition and cannot be trimmed; change its length instead`, blocks: true });
       if (i.length !== undefined && i.length <= 0) out.push({ id: i.id, field: "length", message: `${i.id}.length must be more than 0`, blocks: true });
     } else {
       if (i.length !== undefined) out.push({ id: i.id, field: "length", message: `${i.id} is a timeline clip, whose length is its clip's; trim it with in and out`, blocks: true });
@@ -272,7 +272,7 @@ export function validateArrangement(a: Arrangement, o: ArrangementValidateOption
     }
     if (!f) {
       const pool = o.library?.(i.kind);
-      if (pool) out.push({ id: i.id, field: "target", message: `no ${i.kind === "clip" ? "timeline clip" : "step-list playtest"} at ${i.target} on this checkout`, candidates: rankClipCandidates(i.target, pool), blocks: false });
+      if (pool) out.push({ id: i.id, field: "target", message: `no ${i.kind === "clip" ? "timeline clip" : "step-list clip"} at ${i.target} on this checkout`, candidates: rankClipCandidates(i.target, pool), blocks: false });
     }
   }
   // Overlaps, in start order.
@@ -501,7 +501,7 @@ export function applyArrangementOps(a: Arrangement, ops: readonly ArrangementOp[
         const target = targetKey(op.target);
         if (!o.factsOf(target, op.kind)) {
           const pool = o.library?.(op.kind);
-          if (pool) return fail(n, target, "target", `no ${op.kind === "clip" ? "timeline clip" : "step-list playtest"} at ${target}`, rankClipCandidates(target, pool));
+          if (pool) return fail(n, target, "target", `no ${op.kind === "clip" ? "timeline clip" : "step-list clip"} at ${target}`, rankClipCandidates(target, pool));
         }
         const id = `i${nextIdNumber(work)}`;
         work.next = nextIdNumber(work) + 1;

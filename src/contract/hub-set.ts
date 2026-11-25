@@ -489,7 +489,7 @@ export function applySetOps(m: SetModel, ops: readonly SetOp[], o: SetEditOption
           const target = targetKey(op.target);
           if (!o.factsOf(target, op.kind) && !o.made?.has(target)) {
             const pool = o.library?.(op.kind);
-            if (pool) return fail(target, "target", `no ${op.kind === "clip" ? "timeline clip" : "step-list playtest"} at ${target}`, rankClipCandidates(target, pool));
+            if (pool) return fail(target, "target", `no ${op.kind === "clip" ? "timeline clip" : "step-list clip"} at ${target}`, rankClipCandidates(target, pool));
           }
           const slot: Slot = { track: t.id, kind: op.kind, target };
           if (at >= 0) s.slots[at] = slot;
@@ -575,7 +575,7 @@ export function applySetOps(m: SetModel, ops: readonly SetOp[], o: SetEditOption
           const target = targetKey(op.target);
           if (!o.factsOf(target, kind) && !o.made?.has(target)) {
             const pool = o.library?.(kind);
-            if (pool) return fail(target, "target", `no ${kind === "clip" ? "timeline clip" : "step-list playtest"} at ${target}`, rankClipCandidates(target, pool));
+            if (pool) return fail(target, "target", `no ${kind === "clip" ? "timeline clip" : "step-list clip"} at ${target}`, rankClipCandidates(target, pool));
           }
           inst.target = target;
           if (kind !== inst.kind) {

@@ -9,7 +9,7 @@ export function scopeOf(v: unknown): PlanScope {
   if (!isObject(v)) throw bad(SCOPE_HELP);
   const goalId = (required: boolean): string | undefined => {
     if (v.goalId === undefined && !required) return undefined;
-    if (typeof v.goalId !== "string" || !GOAL_ID.test(v.goalId)) throw bad("goalId must be a goal's id");
+    if (typeof v.goalId !== "string" || !GOAL_ID.test(v.goalId)) throw bad("goalId must be a track's id");
     return v.goalId;
   };
   const from = (): { from?: number } => {
