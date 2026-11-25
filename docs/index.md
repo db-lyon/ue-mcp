@@ -93,7 +93,7 @@ The **[Tool Reference](tool-reference.md)** lists every tool and action with its
 - **[Flows](flows.md)**: YAML workflows, custom tasks, hooks, rollback
 - **[Checkpoints](checkpoints.md)**: keep or revert changes per checkpoint
 - **[Mutation journal](journal.md)**: revert a group of calls, or every group after one
-- **[Playtest Hub](hub.md)**: goals, playtest evidence and plans run under the editor lease
+- **[Playtest Hub](hub.md)**: tracks, scenes, clip evidence and plans run under the editor lease
 - **[Plugins](plugins.md)**: npm packages that add actions to existing categories
 - **[Configuration](configuration.md)**: MCP client setup, the daemon and settings
 - **[ue-mcp.yml Reference](config-file.md)**: every key in the project config file

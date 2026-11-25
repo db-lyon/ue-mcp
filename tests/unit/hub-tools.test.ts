@@ -93,7 +93,7 @@ describe("hub actions", () => {
     expect(fs.existsSync(path.join(root, "QA"))).toBe(false);
     await run("update_goal", { id, owner: "Ama" });
     expect(goals.get(id)).toMatchObject({ owner: "Ama", priority: "p1", due: "2026-12-01" });
-    await expect(run("update_goal", { id: "nope", owner: "x" })).rejects.toThrow("no goal nope");
+    await expect(run("update_goal", { id: "nope", owner: "x" })).rejects.toThrow("no track nope");
     const list = await run("list_goals", {});
     expect(list.goals[0]).toMatchObject({ id, status: "not_started", progress: "0/1", owner: "Ama", priority: "p1", links: [{ url: ISSUE, rel: "counterpart" }] });
     const read = await run("read_goal", { id });
@@ -149,7 +149,7 @@ describe("hub actions", () => {
     expect(await run("read_queue", {})).toMatchObject({ paused: false, waiting: "Play In Editor is in use", queued: [] });
     await expect(run("run_plan", {})).rejects.toThrow("exactly one of goal_id and playtests");
     await expect(run("run_plan", { goal_id: "a", playtests: [DOOR] })).rejects.toThrow("exactly one");
-    await expect(run("run_plan", { playtests: ["Game/NoSlash"] })).rejects.toThrow("not a playtest asset path");
+    await expect(run("run_plan", { playtests: ["Game/NoSlash"] })).rejects.toThrow("not a clip asset path");
     expect(planned).toHaveLength(2);
   });
 
