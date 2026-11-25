@@ -16,4 +16,7 @@
 export * from "./contract/hub-qa.js";
 export * from "./contract/hub.js";
 export * from "./contract/hub-attention.js";
+export * from "./contract/hub-arrangement.js";
+export * from "./contract/hub-compose.js";
+export * from "./contract/hub-set.js";
 export type * from "./contract/hub-ports.js";
