@@ -371,7 +371,10 @@ export interface ArrangementRun {
   /** The track or scene; "arrangement" for an arrangement run; "<scene>/<track>" for a slot. */
   goalId: string;
   rate: number;
+  /** Where the run ends on the timeline, in frames. */
   length: number;
+  /** A run played from the playhead: the frame it started at. Instance and segment frames are on the timeline, so they count from 0, not from here. */
+  from?: number;
   /** A hash of what played: editing a clip or the timeline changes it, so runs compare only on the same version. */
   version?: string;
   instances: InstanceResult[];

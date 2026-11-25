@@ -6,7 +6,9 @@
  * composes what a track, scene, slot or arrangement run plays.
  */
 import {
+  ARRANGEMENT_RATE,
   applyArrangementOps,
+  arrangementFrom,
   applySetOps,
   arrangementEnd,
   arrangementFromText,
@@ -54,6 +56,8 @@ export interface SetRunPlan {
   title: string;
   composition: ArrangementComposition;
   tracks: Array<{ goalId: string; title: string; player: number }>;
+  /** The frame the timelines play from (at 60 per second); the composition counts from there. */
+  from?: number;
 }
 
 export class SetService {
@@ -236,9 +240,11 @@ export class SetService {
   // ── Runs ─────────────────────────────────────────────────────────
 
   /** What a scope plays, from the set as it is now. Throws 404 for a track or scene that is gone. */
-  compose(kind: ArrangementRunKind, goalId: string, m: SetModel = this.o.goals.setModel()): SetRunPlan {
+  compose(kind: ArrangementRunKind, goalId: string, m: SetModel = this.o.goals.setModel(), from = 0): SetRunPlan {
     const o = this.opts();
-    const asTrack = (t: SetModel["tracks"][number], arrangement: Arrangement): ComposeTrack => ({ goalId: t.id, title: t.title, arrangement, player: t.player });
+    // Timelines play from `from`; a slot always plays its clip from the start.
+    const start = kind === "slot" ? 0 : from;
+    const asTrack = (t: SetModel["tracks"][number], arrangement: Arrangement): ComposeTrack => ({ goalId: t.id, title: t.title, arrangement: arrangementFrom(arrangement, start, o.factsOf), player: t.player });
     let tracks: ComposeTrack[];
     let title: string;
     if (kind === "track") {
@@ -270,14 +276,15 @@ export class SetService {
     }
     const composition = composeArrangement(tracks, { clip: (t) => this.o.library.clip(t), facts: o.factsOf, scene: tracks.length > 1 || kind !== "track" });
     if (tracks.length === 0) composition.findings.push({ id: goalId, field: "tracks", message: kind === "arrangement" ? "no track plays: every track is muted, or none is soloed that has clips" : "nothing in it plays", blocks: true });
-    return { kind, goalId, title, composition, tracks: tracks.map((t) => ({ goalId: t.goalId, title: t.title ?? t.goalId, player: t.player })) };
+    else if (start > 0 && composition.segments.length === 0) composition.findings.push({ id: goalId, field: "from", message: `nothing plays from ${(start / ARRANGEMENT_RATE).toFixed(2).replace(/\.?0+$/, "")} s: every clip ends before it`, blocks: true });
+    return { kind, goalId, title, composition, tracks: tracks.map((t) => ({ goalId: t.goalId, title: t.title ?? t.goalId, player: t.player })), ...(start > 0 ? { from: start } : {}) };
   }
 
   /** Compose a plan item's run with the clips it uses read fresh. */
-  async plan(kind: ArrangementRunKind, goalId: string): Promise<SetRunPlan> {
+  async plan(kind: ArrangementRunKind, goalId: string, from = 0): Promise<SetRunPlan> {
     const m = this.o.goals.setModel();
     await this.o.library.load(this.refsOf(m), true);
-    return this.compose(kind, goalId, m);
+    return this.compose(kind, goalId, m, from);
   }
 }
 

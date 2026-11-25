@@ -119,16 +119,21 @@ function setAnswer(v: SetView): Record<string, unknown> {
 }
 
 /** A run scope from text: "track <track>", "scene <scene>", "arrangement" or "slot <scene> <track>", by id or exact name. */
-function setScopeOf(text: string, v: SetView): PlanScope {
+function setScopeOf(input: string, v: SetView): PlanScope {
+  // "... from 10s" or "... from 600": the timelines play from that point.
+  const tail = /\s+from\s+(\d+(?:\.\d+)?)(s?)\s*$/i.exec(input);
+  const text = tail ? input.slice(0, tail.index) : input;
+  const from = tail ? (tail[2] ? Number(tail[1]) * 60 : Number(tail[1])) : 0;
+  const at = from > 0 ? { from: Math.round(from * 1000) / 1000 } : {};
   const [kind, ...rest] = text.trim().split(/\s+/);
   const name = rest.join(" ").replace(/^"|"$/g, "");
   const find = (list: Array<{ id: string; title: string }>, n: string) => list.find((x) => x.id === n) ?? list.find((x) => x.title.toLowerCase() === n.toLowerCase());
-  if (kind === "arrangement") return { kind: "arrangement" };
+  if (kind === "arrangement") return { kind: "arrangement", ...at };
   if (kind === "track" || kind === "scene") {
     const list = kind === "track" ? v.tracks : v.scenes;
     const x = find(list, name);
     if (!x) throw bad(`no ${kind} ${name} (${kind}s: ${list.map((y) => `${y.id} "${y.title}"`).join(", ") || "none"})`);
-    return { kind, goalId: x.id };
+    return { kind, goalId: x.id, ...at };
   }
   if (kind === "slot") {
     const s = find(v.scenes, rest[0] ?? "");

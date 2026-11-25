@@ -1022,10 +1022,11 @@ export interface HubImportReport {
 
 export type PlanScope =
   | { kind: "goal"; goalId: string }
-  | { kind: "track"; goalId: string }
-  | { kind: "scene"; goalId: string }
+  /** `from`: play the timelines from this frame (at 60 per second) instead of their start, as from the Arrangement's playhead. */
+  | { kind: "track"; goalId: string; from?: number }
+  | { kind: "scene"; goalId: string; from?: number }
   | { kind: "slot"; sceneId: string; trackId: string }
-  | { kind: "arrangement" }
+  | { kind: "arrangement"; from?: number }
   | { kind: "checks"; checks: CheckRef[] }
   | { kind: "failing"; goalId?: string }
   | { kind: "stale"; goalId?: string }

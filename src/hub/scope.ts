@@ -3,7 +3,7 @@
 import { GOAL_ID, QA_VERDICT_WAIT_CHOICES, qaVerdictWaitValid, type PlanOptions, type PlanScope } from "./contract.js";
 import { bad, checkRefOf, isObject } from "./util.js";
 
-const SCOPE_HELP = "scope must be { kind: goal | track | scene, goalId } | { kind: slot, sceneId, trackId } | { kind: arrangement } | { kind: checks, checks } | { kind: failing | stale, goalId? } | { kind: all }";
+const SCOPE_HELP = "scope must be { kind: goal | track | scene, goalId, from? } | { kind: slot, sceneId, trackId } | { kind: arrangement, from? } | { kind: checks, checks } | { kind: failing | stale, goalId? } | { kind: all }";
 
 export function scopeOf(v: unknown): PlanScope {
   if (!isObject(v)) throw bad(SCOPE_HELP);
@@ -12,17 +12,22 @@ export function scopeOf(v: unknown): PlanScope {
     if (typeof v.goalId !== "string" || !GOAL_ID.test(v.goalId)) throw bad("goalId must be a goal's id");
     return v.goalId;
   };
+  const from = (): { from?: number } => {
+    if (v.from === undefined || v.from === 0) return {};
+    if (typeof v.from !== "number" || !Number.isFinite(v.from) || v.from < 0) throw bad("from must be a frame on the timeline, 0 or more");
+    return { from: Math.round(v.from * 1000) / 1000 };
+  };
   switch (v.kind) {
     case "goal":
       return { kind: "goal", goalId: goalId(true)! };
     case "track":
     case "scene":
-      return { kind: v.kind, goalId: goalId(true)! };
+      return { kind: v.kind, goalId: goalId(true)!, ...from() };
     case "slot":
       if (typeof v.sceneId !== "string" || !GOAL_ID.test(v.sceneId) || typeof v.trackId !== "string" || !GOAL_ID.test(v.trackId)) throw bad("a slot scope is { kind: slot, sceneId, trackId }");
       return { kind: "slot", sceneId: v.sceneId, trackId: v.trackId };
     case "arrangement":
-      return { kind: "arrangement" };
+      return { kind: "arrangement", ...from() };
     case "failing":
     case "stale": {
       const g = goalId(false);
@@ -43,6 +48,9 @@ export function scopeOf(v: unknown): PlanScope {
       throw bad(SCOPE_HELP);
   }
 }
+
+/** The frame a scope plays its timelines from: 0 unless a track, scene or arrangement scope names one. */
+export const fromOf = (scope: PlanScope): number => ("from" in scope && typeof scope.from === "number" ? scope.from : 0);
 
 export function planOptionsOf(v: unknown, base: PlanOptions): PlanOptions {
   if (v === undefined) return { ...base };

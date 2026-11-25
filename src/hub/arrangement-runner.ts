@@ -39,6 +39,8 @@ export interface ArrangementStart {
   composition: ArrangementComposition;
   /** A scene's tracks, for their titles and players in the results. */
   tracks?: Array<{ goalId: string; title: string; player: number }>;
+  /** The frame the timelines played from (at 60 per second); the composition counts from there. */
+  from?: number;
 }
 
 interface Live {
@@ -256,18 +258,21 @@ export class ArrangementRunner {
 
   private arrangementOf(l: Live): ArrangementRun {
     const c = l.start.composition;
-    const instances = instanceResults(c, l.segs);
+    // A run from a frame reports at the places on the timelines, so a client draws it where the clips are.
+    const shift = l.start.from ? (l.start.from * c.rate) / 60 : 0;
+    const instances = instanceResults(c, l.segs).map((i) => (shift ? { ...i, start: i.start + shift, end: i.end + shift } : i));
     return {
       kind: l.start.kind,
       goalId: l.start.goalId,
       rate: c.rate,
-      length: c.length,
+      length: c.length + shift,
+      ...(shift ? { from: shift } : {}),
       version: l.version,
       instances,
       ...(l.start.tracks?.length
         ? { tracks: (l.start.tracks ?? []).map((t) => ({ ...t, status: rollUpInstances(instances.filter((i) => i.goalId === t.goalId)) })) }
         : {}),
-      segments: c.segments.map((s, index) => ({ index, kind: s.kind, runId: l.segs[index].runId, offset: s.offset, length: s.length, state: l.segs[index].state })),
+      segments: c.segments.map((s, index) => ({ index, kind: s.kind, runId: l.segs[index].runId, offset: s.offset + shift, length: s.length, state: l.segs[index].state })),
     };
   }
 

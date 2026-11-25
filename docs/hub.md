@@ -122,7 +122,7 @@ Each goal that existed before became a track once, its playtests laid end to end
 | `POST /v1/hub/set/edit` | `{ ops }`, as op objects or text lines, all or none. A name or clip that matches nothing answers 400 with `finding.candidates` |
 | `GET`, `PUT /v1/hub/goals/<id>/arrangement`, `POST .../arrangement/edit` | One track's timeline, replaced or edited with instance ops |
 | `GET /v1/hub/clips?q=&kind=` | Timeline clips and step-list playtests, for a browser |
-| `POST /v1/hub/run` | `{ scope: { kind: "track" \| "scene", goalId } \| { kind: "arrangement" }, next? }`: queue one run |
+| `POST /v1/hub/run` | `{ scope: { kind: "track" \| "scene", goalId, from? } \| { kind: "arrangement", from? }, next? }`: queue one run. `from` plays the timelines from that frame (at 60 per second), as from a playhead: clips that end before it are left out, a clip it falls inside plays from that point, and a step-list playtest it falls inside plays whole. The run's results stay at their places on the timelines, with `from` beside them |
 | `POST /v1/hub/runs/<id>/verdict` | `{ check, verdict, note? }`: a manual check's verdict in a running track, scene or arrangement |
 
 A daemon that has these lists `hub.arrangement` in `/v1/health`.
@@ -152,7 +152,7 @@ Colors are `red`, `orange`, `yellow`, `lime`, `green`, `teal`, `cyan`, `blue`, `
 
 `track delete` and `scene delete` remove the record as `DELETE /v1/hub/goals/<id>` does, its sign-off included, and are refused the same way while a run made for it is queued or running. A track's slots go with it; its clips stay.
 
-The `hub` MCP category has the same through `read_set`, `edit_set` (`ops`), `run` (`scope`: `track <t>`, `scene <s>` or `arrangement`) and `read_run`.
+The `hub` MCP category has the same through `read_set`, `edit_set` (`ops`), `run` (`scope`: `track <t>`, `scene <s>` or `arrangement`, each optionally followed by `from <seconds>s` or `from <frame>`) and `read_run`.
 
 ## Clients
 

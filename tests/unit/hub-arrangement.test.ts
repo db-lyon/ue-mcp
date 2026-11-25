@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   applyArrangementOps as applyOps,
+  arrangementFrom,
   arrangementFromChecks,
   arrangementFromText,
   arrangementOf,
@@ -77,6 +78,18 @@ clip - /Game/Clips/CL_Jump 390 name="Big jump"`);
   it("lays instances out against their clips, scaling another clip rate", () => {
     const l = layoutOf(track("clip i1 /Game/Clips/CL_Walk 0 in=20\nclip i2 /Game/Clips/CL_Jump 100\nscript i3 /Game/Tests/PT_Door 200"), facts);
     expect(l.map((x) => [x.id, x.start, x.end])).toEqual([["i1", 0, 100], ["i2", 100, 160], ["i3", 200, 500]]);
+  });
+
+  it("plays from a frame: ended clips left out, a clip cut part-way, a step list whole", () => {
+    const a = track("clip i1 /Game/Clips/CL_Walk 0 in=20\nclip i2 /Game/Clips/CL_Jump 100\nscript i3 /Game/Tests/PT_Door 200");
+    expect(arrangementFrom(a, 0, facts)).toBe(a);
+    // CL_Jump is at 30 frames a second, so 20 track frames are 10 of its own.
+    expect(arrangementFrom(a, 120, facts).instances).toEqual([
+      { id: "i2", kind: "clip", target: "/Game/Clips/CL_Jump", start: 0, in: 10 },
+      { id: "i3", kind: "script", target: "/Game/Tests/PT_Door", start: 80 },
+    ]);
+    expect(arrangementFrom(a, 300, facts).instances).toEqual([{ id: "i3", kind: "script", target: "/Game/Tests/PT_Door", start: 0, length: 200 }]);
+    expect(arrangementFrom(a, 500, facts).instances).toEqual([]);
   });
 
   it("finds overlaps, bad trims and unknown clips with candidates", () => {

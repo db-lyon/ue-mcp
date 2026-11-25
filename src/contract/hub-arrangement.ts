@@ -118,6 +118,32 @@ export function arrangementLayout(a: Arrangement, factsOf: (target: string, kind
   });
 }
 
+/**
+ * The arrangement as it plays from frame `from` (at ARRANGEMENT_RATE), shifted
+ * so `from` is its frame 0. Instances that end by then are left out. A clip
+ * instance the frame falls inside plays from that point (its `in` moves on);
+ * a step-list instance cannot start part-way, so it plays whole at frame 0,
+ * keeping the space it had left.
+ */
+export function arrangementFrom(a: Arrangement, from: number, factsOf: (target: string, kind: InstanceKind) => ClipFacts | undefined): Arrangement {
+  if (!(from > 0)) return a;
+  const at = (from * a.rate) / ARRANGEMENT_RATE;
+  const instances: Instance[] = [];
+  for (const i of a.instances) {
+    const f = factsOf(i.target, i.kind);
+    const end = i.start + instanceLength(i, f, a.rate);
+    if (end <= at + 1e-6) continue;
+    if (i.start >= at) {
+      instances.push({ ...i, start: round(i.start - at) });
+      continue;
+    }
+    const cut = at - i.start;
+    if (i.kind === "clip") instances.push({ ...i, start: 0, in: round((i.in ?? 0) + cut * ((f?.rate || a.rate) / a.rate)) });
+    else instances.push({ ...i, start: 0, length: round(end - at) });
+  }
+  return { ...a, instances };
+}
+
 /** The end of the track: the latest instance end. */
 export const arrangementEnd = (layout: readonly InstanceLayout[]): number => layout.reduce((m, l) => Math.max(m, l.end), 0);
 
