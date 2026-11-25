@@ -77,6 +77,9 @@ clip - /Game/Clips/CL_Jump 390 name="Big jump"`);
   it("lays instances out against their clips, scaling another clip rate", () => {
     const l = layoutOf(track("clip i1 /Game/Clips/CL_Walk 0 in=20\nclip i2 /Game/Clips/CL_Jump 100\nscript i3 /Game/Tests/PT_Door 200"), facts);
     expect(l.map((x) => [x.id, x.start, x.end])).toEqual([["i1", 0, 100], ["i2", 100, 160], ["i3", 200, 500]]);
+    // A client trims in the clip's own frames, so each clip says its rate and length.
+    expect(l.map((x) => [x.clipRate, x.clipLength])).toEqual([[60, 120], [30, 30], [undefined, undefined]]);
+    expect(layoutOf(track("clip i1 /Game/Clips/CL_Gone 0"), facts)[0]).not.toHaveProperty("clipRate");
   });
 
   it("finds overlaps, bad trims and unknown clips with candidates", () => {

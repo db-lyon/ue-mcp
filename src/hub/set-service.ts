@@ -65,6 +65,8 @@ export class SetService {
       /** Every goal's status, by id. */
       statuses: () => Promise<Map<string, GoalStatus>>;
       lastRun: (kind: InstanceKind, target: string) => ClipEntry["lastRun"];
+      /** Why a track or scene cannot be deleted now (a run made for it is queued or running), or null. */
+      deleteBlocked?: (id: string) => string | null;
     },
   ) {}
 
@@ -118,6 +120,12 @@ export class SetService {
     if (copies.length) await this.o.library.load(copies);
     const r = applySetOps(m, ops, { ...this.opts(), made: new Set(copies.map((c) => targetKey(c.target))) });
     if (!r.ok) throw new FindingError(r.finding);
+    // Deleting through an op is held to what DELETE /hub/goals/:id refuses.
+    const kept = new Set([...r.set.tracks, ...r.set.scenes].map((x) => x.id));
+    for (const x of [...m.tracks, ...m.scenes]) {
+      const why = kept.has(x.id) ? null : this.o.deleteBlocked?.(x.id);
+      if (why) throw new FindingError({ id: x.id, field: "delete", message: why, blocks: true });
+    }
     this.o.goals.applySet(r.set);
     return { ...this.viewOf(this.o.goals.setModel(), await this.o.statuses()), changed: r.changed };
   }
