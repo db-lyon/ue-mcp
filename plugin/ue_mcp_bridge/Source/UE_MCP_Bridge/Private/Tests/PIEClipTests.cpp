@@ -143,6 +143,49 @@ bool FPIEClipStructureTest::RunTest(const FString& /*Parameters*/)
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FPIEClipPlayerLanesTest, "UE.MCP.PIE.Clip.PlayerLanes", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FPIEClipPlayerLanesTest::RunTest(const FString& /*Parameters*/)
+{
+	using namespace MCPPIEClipTests;
+	// A scene drives one Input Action for two players: a lane per action and player (#2113).
+	FClip Clip;
+	TArray<FClipIssue> Issues;
+	TestTrue(TEXT("lanes with a client parse"), ClipFromText(TEXT(
+		"clip rate=60\n"
+		"track /Game/Input/IA_Jump.IA_Jump bool\n"
+		"  note n1 0 10\n"
+		"track /Game/Input/IA_Jump.IA_Jump bool client=1\n"
+		"  note n2 0 10\n"), Clip, Issues));
+	TestEqual(TEXT("two lanes"), Clip.Tracks.Num(), 2);
+	TestEqual(TEXT("the second lane drives client 1"), Clip.Tracks.Num() == 2 ? Clip.Tracks[1].Client : -1, 1);
+	Issues.Reset();
+	ValidateClipStructure(Clip, Issues);
+	TestFalse(TEXT("one action on two players saves"), ClipIssuesBlockSave(Issues));
+	TestTrue(TEXT("the text form keeps the client"), ClipToText(Clip).Contains(TEXT("bool client=1")));
+
+	FClip RoundTrip;
+	TArray<FClipIssue> JsonIssues;
+	TestTrue(TEXT("the JSON form reads back"), ClipFromJson(ClipToJson(Clip), RoundTrip, JsonIssues));
+	TestEqual(TEXT("the JSON form keeps the client"), RoundTrip.Tracks.Num() == 2 ? RoundTrip.Tracks[1].Client : -1, 1);
+	TestFalse(TEXT("client 0 is left out of the JSON"), ClipToJson(Clip)->GetArrayField(TEXT("tracks"))[0]->AsObject()->HasField(TEXT("client")));
+
+	FClip Twice;
+	TArray<FClipIssue> TwiceIssues;
+	ClipFromText(TEXT(
+		"clip rate=60\n"
+		"track /Game/Input/IA_Jump.IA_Jump bool client=2\n"
+		"track /Game/Input/IA_Jump.IA_Jump bool client=2\n"), Twice, TwiceIssues);
+	TwiceIssues.Reset();
+	ValidateClipStructure(Twice, TwiceIssues);
+	TestTrue(TEXT("two lanes for one action and player are refused"), TwiceIssues.ContainsByPredicate([](const FClipIssue& I) { return I.bBlocksSave && I.Message.Contains(TEXT("client 2")); }));
+
+	FClip Bad;
+	TArray<FClipIssue> BadIssues;
+	TestFalse(TEXT("a negative client is refused"), ClipFromJson(ParseObject(TEXT("{\"tracks\":[{\"action\":\"/Game/Input/IA_Jump\",\"type\":\"bool\",\"client\":-1}]}")), Bad, BadIssues));
+	return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FPIEClipEditTest, "UE.MCP.PIE.Clip.Edit", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
 bool FPIEClipEditTest::RunTest(const FString& /*Parameters*/)

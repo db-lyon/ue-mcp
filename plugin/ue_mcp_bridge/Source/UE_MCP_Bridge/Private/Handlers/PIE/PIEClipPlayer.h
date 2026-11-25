@@ -144,6 +144,8 @@ namespace MCPPIE
 		void StartClock(UWorld* World);
 		void FireEvents(UWorld* World, double UpTo);
 		void FeedInput(UWorld* World);
+		void FeedRemoteLane(const FClipTrack& Track, bool bActive, const FVector& Value);
+		void StopRemoteLanes();
 		void JudgeChecks(UWorld* World);
 		bool ReadCheckValue(int32 Index, double& OutValue);
 		void SamplePawnAndDrift(UWorld* World);
@@ -167,6 +169,10 @@ namespace MCPPIE
 		struct FTriggerWatch { TWeakObjectPtr<const UInputAction> Action; bool bReleased = false; };
 		TMap<int32, FTriggerWatch> TriggerWatches;
 		FPIERawInputTaps Taps;
+		// Remote clients' lanes, as holds on those clients, by "<client>|<action>".
+		struct FRemoteLaneHold { FString Id; FVector Value; };
+		TMap<FString, FRemoteLaneHold> RemoteHolds;
+		TSet<FString> RemoteLaneErrors;
 		TSharedPtr<FStepActionRunner> Runner;
 
 		FPIEMaxFPSPin FPSPin;
