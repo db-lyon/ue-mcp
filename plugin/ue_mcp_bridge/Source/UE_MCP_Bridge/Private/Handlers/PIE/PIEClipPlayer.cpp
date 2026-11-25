@@ -456,7 +456,9 @@ namespace MCPPIE
 		if (Run.bRecording && !Run.bPunchedIn && Run.Position >= Run.PunchIn - 1e-6) PunchIn(World);
 		if (Run.bRecording && Run.bPunchedIn && Run.PunchedOutAt < 0.0 && Run.PunchOut >= 0.0 && Run.Position >= Run.PunchOut - 1e-6)
 		{
-			Run.PunchedOutAt = Run.Position;
+			// A recording runs on variable delta time, so the frame that crosses the punch-out lands a little past it.
+			// The take ends at the region's end, so it neither runs past the region nor lengthens the clip.
+			Run.PunchedOutAt = FMath::Min(Run.Position, Run.PunchOut);
 			FinishTake();
 		}
 
