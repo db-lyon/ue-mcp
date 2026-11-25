@@ -118,7 +118,7 @@ Each goal that existed before became a track once, its playtests laid end to end
 
 | Route | Purpose |
 |---|---|
-| `GET /v1/hub/set` | Every track (fields, timeline, `layout` with each instance's resolved length, status) and scene (tracks, status), the text form, and findings |
+| `GET /v1/hub/set` | Every track (fields, timeline, `layout` with each instance's resolved length and, for a timeline clip, its own `clipRate` and `clipLength`, status) and scene (tracks, status), the text form, and findings |
 | `POST /v1/hub/set/edit` | `{ ops }`, as op objects or text lines, all or none. A name or clip that matches nothing answers 400 with `finding.candidates` |
 | `GET`, `PUT /v1/hub/goals/<id>/arrangement`, `POST .../arrangement/edit` | One track's timeline, replaced or edited with instance ops |
 | `GET /v1/hub/clips?q=&kind=` | Timeline clips and step-list playtests, for a browser |
