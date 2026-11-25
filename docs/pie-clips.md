@@ -215,10 +215,13 @@ While a run started through `clip_run` or `clip_record` plays, the server polls 
 | `clip.check` | A check's status changed. | `check`, its entry in `checks[]` |
 | `clip.region` | A region's status or drift changed. | `region`, its entry in `regions[]` |
 | `clip.event_fired` | The run fired an event. | `event`, its entry in `events[]` |
+| `clip.take_progress` | A recording read new frames since the punch-in. | `takeId`, `punchIn`, `samples`, `frame`, `tracks` |
 | `clip.verdict_requested` | Manual checks wait for `clip_verdict`. | `awaiting`, their ids |
 | `clip.run_finished` | The run finished or stopped, or the editor stopped answering (`state: "unreachable"`). | `state`, `stopReason?`, `passed?`, `summary?`, `drift?`, `resultsPath?` |
 
 Every payload carries `runId`, `clip` (the asset path, or `inline`), `at` (when the server saw the change) and `seq` (increasing within a run).
+
+`clip.take_progress` shows a take while the person plays it. Each entry of `tracks` is one armed track: `notes` are a Boolean track's notes so far, the last one marked `open` while the key is still down, and replace what the client drew for that track; `keys` are the axis keys added since the previous event, to append at index `keysFrom`. Keys are placed wherever the value changes, and saving the take reduces them further, so the saved clip is what replays. A daemon that sends it lists `events.clip.take` in `/v1/health`, and `clip_status` of that run carries the take so far as `take.live_take` (`samples`, `frame`, `tracks` with all their notes and keys) for a client that opens mid-take.
 
 ## Recording into a clip
 

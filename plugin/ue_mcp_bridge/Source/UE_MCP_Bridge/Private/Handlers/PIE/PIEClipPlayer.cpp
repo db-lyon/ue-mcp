@@ -993,6 +993,47 @@ namespace MCPPIE
 			for (const FString& A : Run.Armed) Armed.Add(MakeShared<FJsonValueString>(A));
 			R->SetArrayField(TEXT("armed"), Armed);
 			R->SetNumberField(TEXT("samples"), Run.Samples.Num());
+			if (bLive && Run.bPunchedIn && !Run.bTakeSaved)
+			{
+				// The newest samples of the take in flight, so a client can draw notes and keys while the person plays.
+				// Sample indices are absolute: a poller that keeps `from + frames.Num()` knows what it has already seen.
+				constexpr int32 LiveWindow = 240;
+				const int32 Total = Run.Samples.Num();
+				const int32 From = FMath::Max(0, Total - LiveWindow);
+				TSharedRef<FJsonObject> Live = MakeShared<FJsonObject>();
+				Live->SetNumberField(TEXT("from"), From);
+				TArray<TSharedPtr<FJsonValue>> Frames;
+				for (int32 i = From; i < Total; ++i) Frames.Add(MakeShared<FJsonValueNumber>(Run.Samples[i].Frame));
+				Live->SetArrayField(TEXT("frames"), Frames);
+				TArray<TSharedPtr<FJsonValue>> Tracks;
+				for (const FString& Path : Run.Armed)
+				{
+					const EClipValueType* Type = Run.ArmedTypes.Find(Path);
+					if (!Type) continue;
+					const int32 Dims = ClipValueDims(*Type);
+					TSharedRef<FJsonObject> T = MakeShared<FJsonObject>();
+					T->SetStringField(TEXT("action"), Path);
+					T->SetStringField(TEXT("type"), ClipValueTypeToString(*Type));
+					TArray<TSharedPtr<FJsonValue>> Values;
+					for (int32 i = From; i < Total; ++i)
+					{
+						const FVector* V = Run.Samples[i].Values.Find(Path);
+						const FVector Value = V ? *V : FVector::ZeroVector;
+						if (Dims <= 1)
+						{
+							Values.Add(MakeShared<FJsonValueNumber>(Value.X));
+							continue;
+						}
+						TArray<TSharedPtr<FJsonValue>> Vec;
+						for (int32 d = 0; d < Dims; ++d) Vec.Add(MakeShared<FJsonValueNumber>(Value[d]));
+						Values.Add(MakeShared<FJsonValueArray>(Vec));
+					}
+					T->SetArrayField(TEXT("values"), Values);
+					Tracks.Add(MakeShared<FJsonValueObject>(T));
+				}
+				Live->SetArrayField(TEXT("tracks"), Tracks);
+				R->SetObjectField(TEXT("live"), Live);
+			}
 			R->SetBoolField(TEXT("saved"), Run.bTakeSaved && Run.TakeError.IsEmpty());
 			if (!Run.TakeError.IsEmpty()) R->SetStringField(TEXT("error"), Run.TakeError);
 			O->SetObjectField(TEXT("take"), R);

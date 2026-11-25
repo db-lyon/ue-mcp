@@ -84,6 +84,7 @@ export const DAEMON_FEATURES = [
   "hub",
   "hub.goalDelete",
   "events.clip",
+  "events.clip.take",
 ] as const;
 
 export type DaemonFeature = (typeof DAEMON_FEATURES)[number];
@@ -104,6 +105,8 @@ export const DAEMON_FEATURES_BEYOND_ROUTES: { readonly [F in DaemonFeature]?: st
     "DELETE /v1/hub/goals/:id removes the goal or milestone and its sign-off and drops its id from every other goal's requires; playtests, their records and past runs are left as they are; it answers 409 { error } naming the plan while a plan whose scope is that goal is queued or running",
   "events.clip":
     "GET /v1/events carries clip.run_started, clip.position, clip.check, clip.region, clip.event_fired, clip.verdict_requested and clip.run_finished (ClipEventData) while a playtest clip run started through pie(clip_run) or pie(clip_record) plays, and after pie(clip_status) of a run that is still playing",
+  "events.clip.take":
+    "GET /v1/events carries clip.take_progress while a recording's take is in flight: each armed track's notes so far (the last one open while held) and the axis keys added since the previous event; pie(clip_status) of that run carries the take so far as take.live_take",
 };
 
 /** What the extension API offers beyond EXTENSION_API_VERSION, in the order `api.features` lists them. */
@@ -387,6 +390,7 @@ export const DAEMON_EVENT_TYPES = [
   "clip.check",
   "clip.region",
   "clip.event_fired",
+  "clip.take_progress",
   "clip.verdict_requested",
   "clip.run_finished",
   "checkpoint.created",
@@ -452,6 +456,22 @@ export interface ClipEventData {
   clipName?: string;
   check?: Record<string, unknown>;
   event?: Record<string, unknown>;
+  /**
+   * take_progress (feature events.clip.take): the take in flight. `tracks[].notes` replace what the client drew for
+   * that track; `tracks[].keys` append at index `keysFrom`. `samples` counts the frames read since the punch-in,
+   * `frame` is the newest one's.
+   */
+  takeId?: string;
+  punchIn?: number;
+  samples?: number;
+  frame?: number;
+  tracks?: Array<{
+    action: string;
+    type: string;
+    notes: Array<{ start: number; length: number; open?: boolean }>;
+    keys: Array<{ t: number; v: number | number[] }>;
+    keysFrom: number;
+  }>;
   /** verdict_requested: the manual checks waiting for pie(clip_verdict). */
   awaiting?: string[];
   /** run_finished. */
