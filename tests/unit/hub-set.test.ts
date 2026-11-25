@@ -93,6 +93,20 @@ scene duplicate S`);
     expect(m.tracks[0].title).toBe("Walk");
   });
 
+  it("points an instance at another clip in place, keeping its trim unless the kind changes", () => {
+    ids = 0;
+    let m = ok(empty(), `track add A\nadd A clip /Game/Clips/CL_Walk at 30\ntrim a-1/i1 in=10 out=100\nrename a-1/i1 "Run"\ncolor a-1/i1 red`);
+    m = ok(m, "retarget a-1/i1 /Game/Clips/CL_Jump.CL_Jump");
+    expect(m.tracks[0].arrangement.instances).toEqual([{ id: "i1", kind: "clip", target: "/Game/Clips/CL_Jump", start: 30, in: 10, out: 100, name: "Run", color: "red" }]);
+    m = ok(m, "retarget a-1/i1 script /Game/Tests/PT_Door");
+    expect(m.tracks[0].arrangement.instances).toEqual([{ id: "i1", kind: "script", target: "/Game/Tests/PT_Door", start: 30, name: "Run", color: "red" }]);
+    const missing = run(m, "retarget a-1/i1 clip /Game/Clips/CL_Jmp");
+    expect(!missing.ok && missing.finding.candidates?.[0]).toBe("/Game/Clips/CL_Jump");
+    const made = applySetOps(m, [{ op: "instance.retarget", track: "a-1", id: "i1", kind: "clip", target: "/Game/Clips/CL_Walk_2" }], { ...opts, made: new Set(["/Game/Clips/CL_Walk_2"]) });
+    expect(made.ok && made.set.tracks[0].arrangement.instances[0].target).toBe("/Game/Clips/CL_Walk_2");
+    expect(setOpsFromText("retarget a-1/i1").findings[0].message).toContain("retarget <track>/<instance> [clip|script] <path>");
+  });
+
   it("names a line it cannot read", () => {
     const r = setOpsFromText("tack add A\nslot set S A clp /x");
     expect(r.findings.map((f) => f.candidates?.[0])).toEqual(["track", undefined]);

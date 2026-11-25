@@ -179,6 +179,18 @@ scene track "Boss fight" add Guard` });
     expect(r.body.tracks[0].arrangement.instances[0].target).toBe(`${WALK}_2`);
   });
 
+  it("points an instance at another clip, and an agent does the same through edit_set", async () => {
+    hub = setup();
+    await call("POST", "/hub/set/edit", { ops: `track add A\nadd A clip ${WALK} at 30\nrename A/i1 Run` });
+    const r = await call("POST", "/hub/set/edit", { ops: `retarget A/i1 ${JUMP}` });
+    expect(r.status).toBe(200);
+    expect(r.body.tracks[0].layout[0]).toMatchObject({ id: "i1", target: JUMP, name: "Run", start: 30, end: 90 });
+    const bad = await call("POST", "/hub/set/edit", { ops: "retarget A/i1 /Game/Clips/CL_Jmp" });
+    expect(bad.body.finding.candidates[0]).toBe(JUMP);
+    const agent = (await runHubAction(hub, "edit_set", { ops: `retarget A/i1 script ${DOOR}` })) as { text: string };
+    expect(agent.text).toContain(`script i1 ${DOOR} 30 name=Run`);
+  });
+
   it("runs a scene as one composed run, each track on its player, and judges it", async () => {
     hub = setup();
     const e = await call("POST", "/hub/set/edit", { ops: `track add A\ntrack add B player=1\ntrack add C\nadd A clip ${WALK}\nadd B clip ${JUMP} at 30\nadd C clip ${JUMP}\ntrack mute C\nscene add S\nscene track S add A\nscene track S add B\nscene track S add C` });
