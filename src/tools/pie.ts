@@ -90,7 +90,7 @@ export const pieTool: ToolDef = categoryTool(
     script_results:       specBp("read", "Read a finished run's results.json.", "pie_script_results"),
     script_runs:          specBp("read", "List script runs newest first, the active one included: run_id, script, started_at, ended_at, state, summary, per-step results and results_path. script narrows to one script's runs.", "pie_script_runs"),
     script_replay: {
-      ...specBp("mutate", "Replay a finished run's recording in the level it ran in and re-evaluate its auto steps at their recorded offsets; manual steps keep their verdicts. Reports regressions.", "pie_script_replay"),
+      ...specBp("mutate", "Replay a finished run's recording in the level it ran in and re-evaluate its auto steps at their recorded offsets; a triggered step re-anchors the windows after it to the replayed trigger. Manual steps keep their verdicts. Reports regressions.", "pie_script_replay"),
       followUp: scriptRunFollowUp,
     },
   },

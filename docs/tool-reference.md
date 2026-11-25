@@ -3297,7 +3297,7 @@ The press actions (`respond_to_dialog`, `press_window_button`, `close_window`) a
 | `verdict(step:i(0..), verdict:{pass,fail,skip}, note?, run_id?, source?:{human,agent,elicitation,action}, evidence?:o)` | Record a manual step's verdict: pass, fail or skip, with a note. source=agent marks the calling agent's own judgement and needs evidence {note, captures?}; a step with agent_judgeable=false takes only a person's verdict |
 | `script_results(run_id?, results_path?)` | Read a finished run's results.json |
 | `script_runs(script?, limit?:i(1..), include_steps?:b)` | List script runs newest first, the active one included: run_id, script, started_at, ended_at, state, summary, per-step results and results_path. script narrows to one script's runs |
-| `script_replay(run_id?, results_path?, time_scale?:n(0..), auto_stop_pie?:b, pie_instance?:i(0..), client_id?:i(0..), wait?:b, timeout_seconds?:n(0..))` | Replay a finished run's recording in the level it ran in and re-evaluate its auto steps at their recorded offsets; manual steps keep their verdicts. Reports regressions |
+| `script_replay(run_id?, results_path?, time_scale?:n(0..), auto_stop_pie?:b, pie_instance?:i(0..), client_id?:i(0..), wait?:b, timeout_seconds?:n(0..))` | Replay a finished run's recording in the level it ran in and re-evaluate its auto steps at their recorded offsets; a triggered step re-anchors the windows after it to the replayed trigger. Manual steps keep their verdicts. Reports regressions |
 
 ---
 

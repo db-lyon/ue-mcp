@@ -236,6 +236,11 @@ namespace MCPPIE
 		bool bRegression = false;
 		double WindowStartMs = -1.0;
 		double WindowEndMs = -1.0;
+		// Replay only: when the source step settled, on the source clock (-1 when it never did). A triggered step
+		// re-anchors every later window by how far its replayed trigger moved from this, plus the offset.
+		double SourceEndedAtMs = -1.0;
+		// Replay only: how far this step's window was moved by the triggered steps before it.
+		double WindowShiftMs = 0.0;
 		FScriptActReport Act;
 
 		// Where within_ms counts from: the end of act, else the step's start.

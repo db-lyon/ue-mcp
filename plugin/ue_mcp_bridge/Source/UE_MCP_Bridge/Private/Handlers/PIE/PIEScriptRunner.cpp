@@ -1157,15 +1157,18 @@ namespace MCPPIE
 		Run.NowMs = NowMs;
 		Run.Frame = Frame;
 		int32 FirstUnsettled = Run.Steps.Num();
+		// Nothing after a triggered step that has not fired yet starts: its window is timed from the trigger.
+		bool bHeldByTrigger = false;
 		for (int32 I = 0; I < Run.Steps.Num(); ++I)
 		{
 			FScriptStepRun& St = Run.Steps[I];
 			if (St.Def.Judge == EScriptJudge::Manual || IsScriptStepSettled(St.Status)) continue;
 			if (St.Status == EScriptStepStatus::Pending)
 			{
-				if (St.WindowStartMs < 0.0 || NowMs < St.WindowStartMs)
+				if (bHeldByTrigger || St.WindowStartMs < 0.0 || NowMs < St.WindowStartMs)
 				{
 					FirstUnsettled = FMath::Min(FirstUnsettled, I);
+					if (IsScriptTriggerOp(St.Def.Expect.Op)) bHeldByTrigger = true;
 					continue;
 				}
 				ScriptStartStep(Run, I);
@@ -1173,8 +1176,29 @@ namespace MCPPIE
 			if (Run.Steps[I].Status == EScriptStepStatus::Running)
 			{
 				ScriptEvaluateRunningStep(Run, I, Reader, Triggers);
+				// A triggered step waits for the player, so what comes after it is timed from the trigger. Every later
+				// window moves by how far the replayed trigger landed from the source's, rather than staying on the
+				// source run's clock (#2097).
+				const FScriptStepRun& Done = Run.Steps[I];
+				if (IsScriptTriggerOp(Done.Def.Expect.Op) && Done.Status == EScriptStepStatus::Passed
+					&& Done.SourceEndedAtMs >= 0.0 && Done.EndedAtMs >= 0.0)
+				{
+					const double Shift = Done.EndedAtMs - (Done.SourceEndedAtMs + Done.WindowShiftMs + Run.ReplayOffsetMs);
+					for (int32 J = I + 1; J < Run.Steps.Num(); ++J)
+					{
+						FScriptStepRun& Later = Run.Steps[J];
+						if (Later.Status != EScriptStepStatus::Pending || Later.WindowStartMs < 0.0) continue;
+						Later.WindowStartMs += Shift;
+						if (Later.WindowEndMs >= 0.0) Later.WindowEndMs += Shift;
+						Later.WindowShiftMs += Shift;
+					}
+				}
 			}
-			if (!IsScriptStepSettled(Run.Steps[I].Status)) FirstUnsettled = FMath::Min(FirstUnsettled, I);
+			if (!IsScriptStepSettled(Run.Steps[I].Status))
+			{
+				FirstUnsettled = FMath::Min(FirstUnsettled, I);
+				if (IsScriptTriggerOp(Run.Steps[I].Def.Expect.Op)) bHeldByTrigger = true;
+			}
 		}
 		Run.CurrentStep = FirstUnsettled;
 	}
@@ -1401,6 +1425,7 @@ namespace MCPPIE
 		{
 			O->SetNumberField(TEXT("window_start_ms"), St.WindowStartMs);
 			if (St.WindowEndMs >= 0.0) O->SetNumberField(TEXT("window_end_ms"), St.WindowEndMs);
+			if (St.WindowShiftMs != 0.0) O->SetNumberField(TEXT("window_shift_ms"), St.WindowShiftMs);
 		}
 		if (St.Act.State != EScriptActState::None) O->SetObjectField(TEXT("act_result"), ScriptActReportToJson(St.Act));
 		return O;
@@ -1553,6 +1578,7 @@ namespace MCPPIE
 			S->TryGetBoolField(TEXT("regression"), St.bRegression);
 			S->TryGetNumberField(TEXT("window_start_ms"), St.WindowStartMs);
 			S->TryGetNumberField(TEXT("window_end_ms"), St.WindowEndMs);
+			S->TryGetNumberField(TEXT("window_shift_ms"), St.WindowShiftMs);
 			const TSharedPtr<FJsonObject>* ActResult = nullptr;
 			if (S->TryGetObjectField(TEXT("act_result"), ActResult) && ActResult)
 			{
@@ -1624,6 +1650,7 @@ namespace MCPPIE
 				St.Evidence.Reason = TEXT("not reached in the source run");
 				continue;
 			}
+			St.SourceEndedAtMs = Src.EndedAtMs;
 			// The window opened when the source step's act ended.
 			St.WindowStartMs = Src.ExpectFromMs() + OffsetMs;
 			// A triggered step with no timeout has an open window.
