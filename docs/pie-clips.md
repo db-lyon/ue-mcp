@@ -22,6 +22,7 @@ A track belongs to one Input Action and drives it for client 0, the editor's own
 - An axis action (`axis1d`, `axis2d`, `axis3d`) is a curve of keys, each a time `t`, a value `v` and an `interp` of `linear` (default), `constant` or `cubic`. Before its first key the curve feeds nothing; after its last it holds the last value. Wherever the curve is zero nothing is fed, the same as no key being down.
 - An axis track can also carry notes, each with a `value` held over its span. A note wins over the curve where they overlap.
 - Notes on one track may not overlap.
+- `client` (default 0) makes the track drive remote client N instead, through that client's remote control: the track's value is held on the client while it is not zero, so it keeps feeding through a `hold` check. One Input Action may then have one track per player. In the text form it is `client=N` at the end of the `track` line. The Playtest Hub's scenes use it to play several tracks for several players in one run.
 
 ### Events
 
