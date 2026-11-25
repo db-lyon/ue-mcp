@@ -83,6 +83,7 @@ export const DAEMON_FEATURES = [
   "editor.consent",
   "hub",
   "hub.goalDelete",
+  "events.clip",
 ] as const;
 
 export type DaemonFeature = (typeof DAEMON_FEATURES)[number];
@@ -101,6 +102,8 @@ export const DAEMON_FEATURES_BEYOND_ROUTES: { readonly [F in DaemonFeature]?: st
     "POST /v1/editor/{stop,restart,rebuild} answers 409 { error, request: EditorDisruptionRequest } while other sessions using the editor have not agreed, and takes { requestId?, force?, requester?, reason? }; GET /v1/events carries disruption.requested, disruption.updated and disruption.hold",
   "hub.goalDelete":
     "DELETE /v1/hub/goals/:id removes the goal or milestone and its sign-off and drops its id from every other goal's requires; playtests, their records and past runs are left as they are; it answers 409 { error } naming the plan while a plan whose scope is that goal is queued or running",
+  "events.clip":
+    "GET /v1/events carries clip.run_started, clip.position, clip.check, clip.region, clip.event_fired, clip.verdict_requested and clip.run_finished (ClipEventData) while a playtest clip run started through pie(clip_run) or pie(clip_record) plays, and after pie(clip_status) of a run that is still playing",
 };
 
 /** What the extension API offers beyond EXTENSION_API_VERSION, in the order `api.features` lists them. */
@@ -379,6 +382,13 @@ export const DAEMON_EVENT_TYPES = [
   "script.verdict_requested",
   "script.verdict",
   "script.run_finished",
+  "clip.run_started",
+  "clip.position",
+  "clip.check",
+  "clip.region",
+  "clip.event_fired",
+  "clip.verdict_requested",
+  "clip.run_finished",
   "checkpoint.created",
   "checkpoint.restored",
   "checkpoints.toggled",
@@ -412,6 +422,44 @@ export interface PieEventData {
   at: string;
   resync?: boolean;
   paused?: boolean;
+}
+
+/**
+ * The data of a `clip.*` event (feature `events.clip`), what changed between two answers of pie(clip_status) while
+ * a playtest clip run plays. Frames are at the clip's rate. `check`, `region` and `event` are the entries of
+ * clip_status as the editor reports them (docs/pie-clips.md, Results).
+ */
+export interface ClipEventData {
+  runId: string;
+  /** The clip's asset path, or "inline". */
+  clip: string;
+  at: string;
+  /** Increasing within a run. */
+  seq: number;
+  /** run_started and position: where playback stands. run_finished: finished, stopped or unreachable. */
+  state?: string;
+  position?: number;
+  length?: number;
+  gameMs?: number;
+  heldMs?: number;
+  frames?: number;
+  /** The hold check playback stands at. */
+  holding?: string;
+  /** run_started: play or record, the region judged alone, the clip's rate and name. */
+  mode?: string;
+  region?: string | Record<string, unknown>;
+  rate?: number;
+  clipName?: string;
+  check?: Record<string, unknown>;
+  event?: Record<string, unknown>;
+  /** verdict_requested: the manual checks waiting for pie(clip_verdict). */
+  awaiting?: string[];
+  /** run_finished. */
+  stopReason?: string;
+  passed?: boolean;
+  summary?: Record<string, unknown>;
+  drift?: Record<string, unknown>;
+  resultsPath?: string;
 }
 
 export type DaemonEventType = (typeof DAEMON_EVENT_TYPES)[number];
