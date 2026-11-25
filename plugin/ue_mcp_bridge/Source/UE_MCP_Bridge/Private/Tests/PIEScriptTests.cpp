@@ -1085,6 +1085,67 @@ bool FPIEScriptTriggeredRunTest::RunTest(const FString& /*Parameters*/)
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FPIEScriptReplayReanchorTest,
+	"UE.MCP.PIE.Script.Triggered.ReplayReanchor",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FPIEScriptReplayReanchorTest::RunTest(const FString& /*Parameters*/)
+{
+	using namespace MCPPIEScriptTests;
+
+	// Source: the player fired at 3000 ms, and the step after it passed in a window from 3000 to 4000 ms.
+	FScriptRun Source;
+	Source.RunId = TEXT("script_reanchor_src");
+	Source.DefaultWithinMs = 1000;
+	InitScriptRun(Source, {
+		TriggeredStep(),
+		AutoStep(MakeExpect(EScriptExpectOp::Gt, TEXT("Score"), true, 10.0)),
+		AutoStep(MakeExpect(EScriptExpectOp::Gt, TEXT("Score"), true, 20.0)),
+	});
+	Source.Steps[0].Status = EScriptStepStatus::Passed;
+	Source.Steps[0].StartedAtMs = 0.0;
+	Source.Steps[0].EndedAtMs = 3000.0;
+	Source.Steps[1].Status = EScriptStepStatus::Passed;
+	Source.Steps[1].StartedAtMs = 3000.0;
+	Source.Steps[1].EndedAtMs = 3200.0;
+	Source.Steps[2].Status = EScriptStepStatus::Passed;
+	Source.Steps[2].StartedAtMs = 3200.0;
+	Source.Steps[2].EndedAtMs = 3500.0;
+
+	FScriptRun Replay;
+	PrepareScriptReplayRun(Source, 500.0, Replay);
+	TestEqual(TEXT("before any trigger the window is on the source clock"), Replay.Steps[1].WindowStartMs, 3500.0);
+	Replay.State = EScriptRunState::Running;
+
+	double Score = 0.0;
+	auto Reader = [&Score](const FScriptExpect&, double& Out) { Out = Score; return true; };
+	FFakeTriggerSource Triggers;
+	AdvanceScriptReplay(Replay, 600.0, 1, Reader, &Triggers);
+	TestTrue(TEXT("the triggered step waits"), Replay.Steps[0].Status == EScriptStepStatus::Running);
+
+	// The replayed trigger lands 1200 ms later than the source's (3000 + 500 offset = 3500 expected, fired at 4700).
+	AdvanceScriptReplay(Replay, 4000.0, 2, Reader, &Triggers);
+	TestTrue(TEXT("step 1 does not start on the source clock while the trigger is outstanding"),
+		Replay.Steps[1].Status == EScriptStepStatus::Pending);
+	Triggers.Fire(0, 4690.0, FVector(1, 0, 0), TEXT("bool"));
+	AdvanceScriptReplay(Replay, 4700.0, 3, Reader, &Triggers);
+	TestTrue(TEXT("the trigger passes"), Replay.Steps[0].Status == EScriptStepStatus::Passed);
+	TestEqual(TEXT("step 2's window moved by how late the trigger was"), Replay.Steps[2].WindowShiftMs, 1200.0);
+	TestEqual(TEXT("step 2's window now opens from the replayed trigger"), Replay.Steps[2].WindowStartMs, 3200.0 + 500.0 + 1200.0);
+
+	// On the source clock step 2's window (3700..4700) would have closed already; re-anchored it passes.
+	TestTrue(TEXT("step 1 starts from the replayed trigger"), Replay.Steps[1].Status == EScriptStepStatus::Running);
+	TestEqual(TEXT("step 1's window moved too"), Replay.Steps[1].WindowStartMs, 3000.0 + 500.0 + 1200.0);
+	Score = 25.0;
+	AdvanceScriptReplay(Replay, 5000.0, 4, Reader, &Triggers);
+	TestTrue(TEXT("step 1 passes"), Replay.Steps[1].Status == EScriptStepStatus::Passed);
+	TestTrue(TEXT("step 2 passes in its re-anchored window"), Replay.Steps[2].Status == EScriptStepStatus::Passed);
+	const TSharedRef<FJsonObject> Json = ScriptStepRunToJson(Replay.Steps[2], 2);
+	TestEqual(TEXT("results report the shift"), Json->GetNumberField(TEXT("window_shift_ms")), 1200.0);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 	FPIEScriptTriggerGateTest,
 	"UE.MCP.PIE.Script.Triggered.Gate",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)

@@ -410,6 +410,7 @@ The answer is the replay run's status, as for `script_run`, plus `pie_started`, 
 
 - `arrange` and `act` do not run again: the recording carries the input the act drove. Each step that has them says so in `act_result` (`status: "skipped"`). What arrange set and what `place` and `console` did is not input, so a step that depends on them can fail in a replay.
 - Each auto step that started in the source run gets a window from `window_start_ms` (its source `started_at_ms`, or the end of its source act, plus `replay_offset_ms`, the recording's settle time) to `window_end_ms` (`window_start_ms` plus `within_ms`). It starts on the first frame at or after `window_start_ms` and is judged as in a live run. Steps are judged in their own windows, not one after another.
+- A `triggered` step is timed from the replayed trigger, not the source run's clock. No later step starts until it fires, and when it fires every later window moves by how far the trigger landed from where it fired in the source run. The move is on each step as `window_shift_ms`. A triggered step that never fires moves nothing.
 - An auto step that never started in the source run is `skipped` with reason `not reached in the source run`.
 - A manual step keeps the source run's verdict, note and evidence, with `verdict_source: "source_run"`. One without a verdict there is `skipped` with reason `no verdict in the source run`.
 - Every step carries `source_status` (its status in the source run) and `regression`, which is `true` when it passed in the source run and failed in the replay.
