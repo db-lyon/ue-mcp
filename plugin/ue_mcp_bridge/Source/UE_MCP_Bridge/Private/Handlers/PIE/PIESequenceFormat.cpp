@@ -167,6 +167,10 @@ namespace MCPPIE
 			O->SetNumberField(TEXT("pie_instance"), M.PIEInstance);
 		}
 		O->SetNumberField(TEXT("axis_threshold"), M.AxisThreshold);
+		if (!M.InputValues.IsEmpty())
+		{
+			O->SetStringField(TEXT("input_values"), M.InputValues);
+		}
 
 		TArray<TSharedPtr<FJsonValue>> ActionsArr;
 		for (const FActionSpec& A : M.Actions)
@@ -280,6 +284,7 @@ namespace MCPPIE
 		double Threshold = 0.15;
 		Obj->TryGetNumberField(TEXT("axis_threshold"), Threshold);
 		Out.AxisThreshold = static_cast<float>(Threshold);
+		Obj->TryGetStringField(TEXT("input_values"), Out.InputValues);
 
 		const TArray<TSharedPtr<FJsonValue>>* Actions = nullptr;
 		if (Obj->TryGetArrayField(TEXT("actions"), Actions) && Actions)

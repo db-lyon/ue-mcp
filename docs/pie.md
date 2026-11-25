@@ -25,7 +25,7 @@ Stock Unreal is not deterministic. Chaos physics does not reproduce across runs,
 - Input replay (`replay_arm`, `replay_run`) re-injects the recorded input and measures how far the world drifted. It reproduces bugs that are a function of input and a seed. Heavy drift usually means the bug depends on state the recording did not capture.
 - `replay_state` replays recorded transforms with nothing simulated, so it is exact.
 - The durable reproduction unit is a reproduction test (`test_scaffold`, `test_run`), not a recording.
-- `fixed_timestep=true` on replay uses a fixed `1/pin_fps` delta. Runs become more reproducible, not fully deterministic.
+- `fixed_timestep=true` on replay steps each frame to the game time of the recording's next row, so every replayed frame lands where a recorded one did; without a recording to follow it uses a fixed `1/pin_fps` delta. Runs become more reproducible, not fully deterministic.
 
 What replay holds constant: the same Enhanced Input values at the same times, the same `t.MaxFPS` pin (restored when the session ends), the same `FMath::RandInit(seed)`, and CPU throttling suppressed for the session. What it does not: particles, Niagara, behavior trees, physics, and anything with its own `FRandomStream` or wall-clock time. `drift.json` reports how far a run diverged as numbers.
 
@@ -113,6 +113,8 @@ The response contains `viewLocation`, `viewRotation`, `viewDirection`, `playerIn
 
 Recording starts on BeginPIE and finalizes on EndPIE. It discovers Enhanced Input actions from event bindings and active mapping contexts, including actions added after the pawn attaches. Per frame it writes pawn location, rotation, velocity and `speed2d`, the active montage and section, every input action value with `_pressed` and `_released` edges, labelled markers, and per-frame performance (game, render and GPU ms, memory). Velocity comes from `UCharacterMovementComponent` when present, then `GetVelocity()`, physics velocity, and position delta as fallbacks, so any `APawn` works.
 
+`recording.csv` holds each action's final value, after its modifiers and triggers. `sequence.json` holds the raw value that reached the action instead: the keys mapped to it combined, after each mapping's own modifiers (such as Negate on S for a move), before the action's modifiers and triggers. A replay feeds that value back, so the action's modifiers and triggers run once, as they did for the player. The manifest says so with `input_values: "raw"`; a recording without it holds final values in its sequence, and replaying it runs an action's modifiers and triggers a second time.
+
 `record_arm` can also track reflection paths and subsystem values (`track_values`: a path on the pawn, `<Actor>.<path>` for a level actor named by label, name or class, `sub:<Class>.<path>` for a subsystem), actor positions (`track_actors`), and skeletal bone or socket channels: `bone:<BoneOrSocket>.<channel>` in world space or `bonecs:<BoneOrSocket>.<channel>` in component space, with channels `x|y|z`, `pitch|yaw|roll` and `scalex|scaley|scalez`. Component space does not move when the actor does, which is what an animation assertion usually wants. A bone that the mesh does not have is absent from the row rather than sampled as zero.
 
 Every `track_values` path is checked when the pawn attaches. A path that does not end at a number (a struct such as `Velocity` or `RelativeRotation`, or a name that does not resolve) is still written as a column, but the manifest lists its type as `unresolved` and a warning names the failing segment: name a numeric field instead, such as `Velocity.X`. The same goes for an `actions` entry the player has no binding or mapping for. `record_status`, `record_stop` and the manifest carry these as `warnings`.
@@ -146,7 +148,7 @@ Every `track_values` path is checked when the pawn attaches. A path that does no
 | `replay_stop` | Stop and finalize the drift report |
 | `replay_status` | State, step progress, elapsed time, drift maxima, `last_result` |
 
-Replay drives the sequence through `UEnhancedInputLocalPlayerSubsystem::InjectInputForAction` and teleports the pawn to its frame 0 position first. When the replayed player is a net client, the teleport moves the server's pawn for that player as well, so both start from the recorded position; `replay_status.start_alignment` says where it landed (`authority`, `server and client (<pawn>)`, or `not moved` with the reason, when the server runs outside the editor process). Re-arming in the same session stops the running replay, teleports again and restarts. The source is one of `recording_id`, `sequence_path` or inline `steps`.
+Replay drives the sequence through `UEnhancedInputLocalPlayerSubsystem::InjectInputForAction` and teleports the pawn to its frame 0 position first. Input steps are fed before the actors tick, with the value due at that frame's game time, so each value is processed on the frame the recording read it rather than one frame later. The replay's clock starts on the frame after the pawn attaches, the frame the recording's first row was taken on, so a long first frame when PIE starts does not shift the steps. When the replayed player is a net client, the teleport moves the server's pawn for that player as well, so both start from the recorded position; `replay_status.start_alignment` says where it landed (`authority`, `server and client (<pawn>)`, or `not moved` with the reason, when the server runs outside the editor process). Re-arming in the same session stops the running replay, teleports again and restarts. The source is one of `recording_id`, `sequence_path` or inline `steps`.
 
 | Param | Default | Notes |
 |-------|---------|-------|
@@ -155,7 +157,7 @@ Replay drives the sequence through `UEnhancedInputLocalPlayerSubsystem::InjectIn
 | `time_scale` | `1.0` | Global time dilation; `0.01` is 1% speed |
 | `settle_ms` | sequence (500) | Delay after pawn attach before the first step |
 | `pin_fps` | sequence `sample_hz` | `t.MaxFPS` pin; `0` skips it |
-| `fixed_timestep` | `false` | Fixed `1/pin_fps` delta |
+| `fixed_timestep` | `false` | Fixed deltas: each frame steps to the recording's next row, or `1/pin_fps` with no recording to follow |
 | `apply_rng_seed` | `true` | Reapply the sequence's seed |
 | `record_drift` | `true` | Write `drift.json` when replaying a known recording |
 | `auto_stop_pie` | `false` (`true` for `replay_run`) | Stop PIE when the sequence completes |
@@ -166,7 +168,7 @@ Replay drives the sequence through `UEnhancedInputLocalPlayerSubsystem::InjectIn
 | `drift_thresholds` | `{ position_cm: 5, rotation_deg: 2, velocity_cms: 25 }` | Cutoffs for `frames_over_threshold`; also `tracked_default` and a per-path `tracked` map |
 | `start_when` | none | Hold the steps until the player can act; see below. Replaces `settle_ms` |
 
-Drift is compared by time. Steps fire `settle_ms` after the pawn attaches, so the replayer takes the settle delay off its clock and compares each frame with the source row at the same offset from the start of the recording. `drift.json` records `alignment`, `replay_offset_ms`, and `input_onset` (when the first input step fired on each timeline, and the `offset_ms` between them), so a timing offset is reported apart from drift. Each entry in `frames_over_threshold` has the replay `frame`, the `source_frame` it was compared with, its `time`, and signed `position_delta` and `velocity_delta` (replay minus source). The replay trajectory is written to `replay.csv` beside `drift.json`, on the source's timeline with the same columns as `recording.csv`; `replay_status.last_result.replay_csv_path` names it.
+Drift is compared by time. Steps fire `settle_ms` after the pawn attaches, so the replayer takes the settle delay off its clock and compares each frame with the source at the same offset from the start of the recording, its pawn state interpolated between the two rows either side. `drift.json` records `alignment`, `replay_offset_ms`, and `input_onset` (when the first input step fired on each timeline, and the `offset_ms` between them), so a timing offset is reported apart from drift. Each entry in `frames_over_threshold` has the replay `frame`, the `source_frame` it was compared with, its `time`, and signed `position_delta` and `velocity_delta` (replay minus source). The replay trajectory is written to `replay.csv` beside `drift.json`, on the source's timeline with the same columns as `recording.csv`; `replay_status.last_result.replay_csv_path` names it.
 
 A spawn intro whose length varies between runs (the pawn falls, lands, and ignores input until a cinematic ends) shifts every step that is timed from attach. `start_when` waits for the player instead:
 

@@ -301,6 +301,7 @@ namespace MCPPIE
 		Warnings.Reset();
 		TrackedActorRefs.Reset();
 		PrevPawnLocation = FVector::ZeroVector;
+		RawTaps.Remove();
 		// Re-seed from the current config so AttachToPIE can run again.
 		SeedTrackedValues();
 	}
@@ -672,6 +673,13 @@ namespace MCPPIE
 					Row.EdgeEvents.Add(T.Name + TEXT("_released"));
 				}
 				T.bWasActive = bNowActive;
+
+				if (Config.bCaptureRawInput)
+				{
+					// Read this frame's value before making sure the tap stays in place for the next.
+					Row.RawActionValues.Add(T.Name, RawTaps.Read(T.Action.Get()));
+					RawTaps.Ensure(PlayerInput, T.Action.Get());
+				}
 			}
 		}
 

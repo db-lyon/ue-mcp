@@ -252,6 +252,8 @@ namespace MCPPIE
 		FString TargetResolveError;
 
 		double AttachTime = 0.0;
+		// AttachTime moved to the first replaying frame, the one the recording's first row matches.
+		bool bClockAnchored = false;
 		// Time alignment for drift (#1690). Replay steps fire SettleMs after
 		// attach, so replay time minus the settle is compared with the source
 		// row at the same offset from the source's first row.
@@ -290,6 +292,20 @@ namespace MCPPIE
 		struct FHoldHandle { int32 StepIndex; double StopAtMs; FString InjectionId; };
 		TArray<FHoldHandle> ActiveHolds;
 		TArray<FString> ActiveTapes;
+
+		// Input steps are fed to the player before the actors tick, with the value due at that frame's time, so the
+		// value is processed in the same frame the recording read it (#2097). Without this a value set at the end
+		// of one frame is processed in the next, one frame late.
+		void OnPreActorTick(UWorld* World, ELevelTick TickType, float DeltaSeconds);
+		struct FInputFeed
+		{
+			int32 StepIndex = 0;
+			TWeakObjectPtr<class UInputAction> Action;
+			double StartMs = 0.0;
+		};
+		TArray<FInputFeed> ActiveFeeds;
+		int32 NextFeedStep = 0;
+		FDelegateHandle PreActorTickHandle;
 
 		// Drift accumulators
 		TArray<FDriftFrameEntry> DriftFrames;
