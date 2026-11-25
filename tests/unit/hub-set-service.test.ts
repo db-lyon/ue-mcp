@@ -283,4 +283,23 @@ scene track "Boss fight" add Guard` });
     expect(queued.plan.items[0].playtest).toMatch(/^track:walk-/);
     await expect(runHubAction(hub, "edit_set", { ops: "track solo Wlk" })).rejects.toThrow(/did you mean: Walk/);
   });
+
+  it("plays the arrangement from a frame, reporting at the places on the timelines", async () => {
+    hub = setup();
+    await call("POST", "/hub/set/edit", { ops: `track add A\nadd A clip ${JUMP}\nadd A clip ${WALK} at 60\ntrack add B\nadd B clip ${JUMP} at 300` });
+    expect((await call("POST", "/hub/run", { scope: { kind: "arrangement", from: -1 } })).status).toBe(400);
+    expect((await call("POST", "/hub/run", { scope: { kind: "arrangement", from: 900 } })).body.error).toContain("nothing plays from 15 s");
+    const r = await call("POST", "/hub/run", { scope: { kind: "arrangement", from: 90 } });
+    expect(r.body.plan).toMatchObject({ title: "Run the arrangement from 1.5 s", scope: { kind: "arrangement", from: 90 } });
+    await settle();
+    // A's first clip ended at 60; its walk plays from 30 frames in; B's jump comes 210 frames later.
+    const clip = calls.find((c) => c.action === "clip_run")!.args.clip as { checks: Array<{ id: string; start: number }> };
+    expect(clip.checks.map((c) => [c.id, c.start])).toEqual([["2-i1.c1", 210]]);
+    const detail = (await call("GET", `/hub/runs/${hub.queue.state().current!.items[0].runId}`)).body.arrangement;
+    expect(detail.from).toBe(90);
+    expect(detail.instances.map((i: { key: string; start: number; end: number }) => [i.key, i.start, i.end])).toEqual([["1-i2", 90, 180], ["2-i1", 300, 360]]);
+    expect(detail.segments[0].offset).toBe(90);
+    const agent = (await runHubAction(hub, "run", { scope: "track A from 1.5s" })) as { plan: { title: string } };
+    expect(agent.plan.title).toBe("Run A from 1.5 s");
+  });
 });

@@ -2203,15 +2203,18 @@ export type PlanScope = {
 } | {
     kind: "track";
     goalId: string;
+    from?: number;
 } | {
     kind: "scene";
     goalId: string;
+    from?: number;
 } | {
     kind: "slot";
     sceneId: string;
     trackId: string;
 } | {
     kind: "arrangement";
+    from?: number;
 } | {
     kind: "checks";
     checks: CheckRef[];
@@ -2667,6 +2670,7 @@ export declare const WriteLease: typeof WriteLease;
 export declare const applyArrangementOps: (a: Arrangement, ops: readonly ArrangementOp[], o: ArrangementValidateOptions) => ArrangementEditResult;
 export declare const applySetOps: (m: SetModel, ops: readonly SetOp[], o: SetEditOptions) => SetEditResult;
 export declare const arrangementEnd: (layout: readonly InstanceLayout[]) => number;
+export declare const arrangementFrom: (a: Arrangement, from: number, factsOf: (target: string, kind: InstanceKind) => ClipFacts | undefined) => Arrangement;
 export declare const arrangementFromChecks: (targets: readonly string[], durationMs: (target: string) => number | null | undefined, rate?: number) => Arrangement;
 export declare const arrangementFromText: (text: string) => { arrangement: Arrangement; findings: ArrangementFinding[]; };
 export declare const arrangementLayout: (a: Arrangement, factsOf: (target: string, kind: InstanceKind) => ClipFacts | undefined) => InstanceLayout[];

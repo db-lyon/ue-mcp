@@ -81,7 +81,7 @@ import { EditorLease, ON_EDITOR, occupancyOf, type OccupancySignals } from "./le
 import { ProjectWatch } from "./project-watch.js";
 import { readProvenanceFile, readResults, readResultsFile, readSeries } from "./evidence.js";
 import { provenanceAtStart, scriptHashOf, ueMcpProvenance, withUeMcp, workspaceNow } from "./provenance.js";
-import { planOptionsOf, scopeOf } from "./scope.js";
+import { fromOf, planOptionsOf, scopeOf } from "./scope.js";
 import { scheduleDraftOf, scheduleTurn, scheduleUpdated, withNext } from "./schedules.js";
 import { answerOf, bad, checkOfId, conflict, failureOf, isObject, linkOf, notFound } from "./util.js";
 import { ArrangementRunner } from "./arrangement-runner.js";
@@ -1038,15 +1038,16 @@ export class Hub {
 
   private titleOf(scope: PlanScope, refs: CheckRef[], cat: Catalog): string {
     const goal = "goalId" in scope && scope.goalId ? this.goals.get(scope.goalId)?.title : undefined;
+    const from = fromOf(scope) ? ` from ${(fromOf(scope) / 60).toFixed(2).replace(/\.?0+$/, "")} s` : "";
     switch (scope.kind) {
       case "goal":
       case "track":
       case "scene":
-        return `Run ${goal ?? scope.goalId}`;
+        return `Run ${goal ?? scope.goalId}${from}`;
       case "slot":
         return `Run ${refs[0] ? this.nameOf(refs[0], cat) : "a slot"}`;
       case "arrangement":
-        return "Run the arrangement";
+        return `Run the arrangement${from}`;
       case "failing":
         return goal ? `Run what is failing in ${goal}` : "Run what is failing";
       case "stale":
@@ -1078,7 +1079,7 @@ export class Hub {
     // A track, scene, slot or the arrangement is one item: one run in one PIE session (#2113).
     const whole = setItemOf(scope, this.goals);
     if (whole) {
-      const plan = await this.set.plan(whole.kind, whole.target);
+      const plan = await this.set.plan(whole.kind, whole.target, fromOf(scope));
       // A clip this daemon could not read now (the editor away) is the run's to settle.
       const stop = plan.composition.findings.find((f) => f.blocks && f.field !== "target");
       if (stop) throw conflict(`${plan.title} cannot run: ${stop.message}`);
@@ -1232,14 +1233,14 @@ export class Hub {
     const kind = item.check.kind as "track" | "scene" | "slot" | "arrangement";
     let p;
     try {
-      p = await this.set.plan(kind, item.check.target);
+      p = await this.set.plan(kind, item.check.target, fromOf(plan.scope));
     } catch (e) {
       return { skipped: e instanceof Error ? e.message : String(e) };
     }
     const stop = p.composition.findings.find((f) => f.blocks);
     if (stop) return { error: stop.message };
     if (!plan.options.attended && p.composition.manual) return { skipped: NEEDS_PERSON };
-    const r = await this.arrangements.start({ kind, goalId: item.check.target, title: p.title, composition: p.composition, tracks: p.tracks });
+    const r = await this.arrangements.start({ kind, goalId: item.check.target, title: p.title, composition: p.composition, tracks: p.tracks, ...(p.from ? { from: p.from } : {}) });
     if ("error" in r) return { error: r.error };
     this.runs.tag(r.run.runId, { source: "plan", planRunId: plan.id });
     this.saw(r.run);
