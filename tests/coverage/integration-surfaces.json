@@ -687,6 +687,11 @@
       "summary": "the daemon streams PIE test script step events on /v1/events"
     },
     {
+      "id": "daemon.clip-events",
+      "group": "daemon",
+      "summary": "the daemon streams a playtest clip run's position, checks, regions, events fired and end on /v1/events as clip.*"
+    },
+    {
       "id": "daemon.pie-events",
       "group": "daemon",
       "summary": "the daemon republishes the editor's Play session notifications as pie.* on /v1/events and publishes the current state each time an editor attaches"

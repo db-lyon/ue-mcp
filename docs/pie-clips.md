@@ -204,6 +204,22 @@ How a run plays:
 | `events[]` | Each event fired: `id`, `frame`, `game_ms`, `ok`, `error`. |
 | `take` | On a recording: see below. |
 
+### Daemon events
+
+While a run started through `clip_run` or `clip_record` plays, the server polls the editor every 250 ms and the daemon publishes what changed on its event stream (`GET /v1/events`), so a client can move a timeline cursor and color check notes without polling. A `clip_status` call for a run that is still playing starts the same stream, after a server restart for example. A daemon that does this lists `events.clip` in `/v1/health`.
+
+| Event | When | Payload beyond the common fields |
+|---|---|---|
+| `clip.run_started` | The server first saw the run. | `mode`, `clipName?`, `region?`, `rate?`, `resultsPath?`, and the position fields |
+| `clip.position` | Playback moved, reached or left a hold, or changed state. | `state`, `position`, `length`, `gameMs`, `heldMs`, `frames`, `holding?` |
+| `clip.check` | A check's status changed. | `check`, its entry in `checks[]` |
+| `clip.region` | A region's status or drift changed. | `region`, its entry in `regions[]` |
+| `clip.event_fired` | The run fired an event. | `event`, its entry in `events[]` |
+| `clip.verdict_requested` | Manual checks wait for `clip_verdict`. | `awaiting`, their ids |
+| `clip.run_finished` | The run finished or stopped, or the editor stopped answering (`state: "unreachable"`). | `state`, `stopReason?`, `passed?`, `summary?`, `drift?`, `resultsPath?` |
+
+Every payload carries `runId`, `clip` (the asset path, or `inline`), `at` (when the server saw the change) and `seq` (increasing within a run).
+
 ## Recording into a clip
 
 ```text
