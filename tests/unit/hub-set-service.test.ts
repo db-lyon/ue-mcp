@@ -9,6 +9,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import type { ActionResult } from "../../src/contract/daemon.js";
+import type { SetView } from "../../src/contract/hub.js";
 import { StatusError } from "../../src/core/status-error.js";
 import { hubRoutes } from "../../src/daemon/hub-routes.js";
 import { findRoute, type RouteHandler, type RouteRequest } from "../../src/daemon/router.js";
@@ -139,6 +140,10 @@ describe("the hub's set", () => {
     expect(door.checks).toEqual([{ kind: "script", target: DOOR }]);
     const set = (await call("GET", "/hub/set")).body;
     expect(set.scenes[0]).toMatchObject({ id: "ms-bbbb", tracks: ["door-aaaa"] });
+    // SetView declares a scene's tracks, so a typed client reads them without a cast.
+    const typed: SetView = await hub.set.view();
+    const tracks: string[] = typed.scenes[0].tracks;
+    expect(tracks).toEqual(["door-aaaa"]);
     expect(set.text).toContain("scene ms-bbbb Alpha tracks=door-aaaa");
     // Once: an emptied track stays empty.
     hub.goals.setArrangement("door-aaaa", { rate: 60, instances: [] });

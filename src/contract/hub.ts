@@ -1383,7 +1383,8 @@ export interface ArrangementView {
 /** The set as both views draw it (GET /hub/set): tracks and scenes in order, with their status. */
 export interface SetView {
   tracks: Array<{ id: string; title: string; order: number; color?: SetColor; player: number; mute: boolean; solo: boolean; arrangement: Arrangement; layout: InstanceLayout[]; status: GoalStatus }>;
-  scenes: Array<{ id: string; title: string; order: number; color?: SetColor; slots: Array<Slot & { length: number | null }>; status: GoalStatus }>;
+  /** `tracks`: the tracks a scene plays, by id, in order. */
+  scenes: Array<{ id: string; title: string; order: number; color?: SetColor; tracks: string[]; slots: Array<Slot & { length: number | null }>; status: GoalStatus }>;
   /** The compact text form agents read. */
   text: string;
   findings: ArrangementFinding[];

@@ -2445,6 +2445,7 @@ export interface SetView {
         title: string;
         order: number;
         color?: SetColor;
+        tracks: string[];
         slots: Array<Slot & {
             length: number | null;
         }>;
