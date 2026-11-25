@@ -45,6 +45,7 @@ import {
   qaScriptKey,
   requirementsKey,
   rollUpGoals,
+  scriptReserveMs,
   type CheckDetail,
   type CheckMeta,
   type CheckRef,
@@ -224,8 +225,8 @@ export class Hub {
       deleteBlocked: (id) => this.deleteBlocked(id),
     });
     this.arrangements = new ArrangementRunner(o.host, { now: iso });
-    // Goals become tracks once, each playtest reserving its newest run's length (#2113).
-    this.goals.migrateArrangements((t) => this.runs.byCheck(checkId({ kind: "script", target: t })).find((r) => r.durationMs && r.durationMs > 0)?.durationMs ?? null);
+    // Goals become tracks once, each playtest reserving its newest run's length (#2113); tracks an older migration over-reserved are laid out again (#2127).
+    this.goals.migrateArrangements((t) => scriptReserveMs(this.runs.byCheck(checkId({ kind: "script", target: t }))));
     this.watch = o.watch ?? new ProjectWatch(o.host.projectDir, o.host.log);
     this.lease = new EditorLease(undefined, (lease) => this.leaseChanged(lease));
     this.queue = new PlanQueue({
