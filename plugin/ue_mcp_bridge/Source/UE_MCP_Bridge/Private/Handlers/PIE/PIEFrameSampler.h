@@ -4,6 +4,7 @@
 #include "InputActionValue.h"
 #include "UObject/WeakObjectPtrTemplates.h"
 #include "Handlers/PIE/PIESequenceFormat.h"
+#include "Handlers/PIE/PIERawInputTap.h"
 
 class UInputAction;
 class UEnhancedPlayerInput;
@@ -48,6 +49,9 @@ namespace MCPPIE
 			// Local player index inside selected PIEInstance. 0 is the first
 			// local player; 1+ selects subsequent local players.
 			int32 ClientIndex = 0;
+			// Also read each action's raw value, before its own modifiers and
+			// triggers, into FCSVRow::RawActionValues (#2097).
+			bool bCaptureRawInput = false;
 		};
 
 		FPIEFrameSampler();
@@ -132,5 +136,6 @@ namespace MCPPIE
 		};
 		TMap<FString, FTrackedActorRef> TrackedActorRefs;
 		FVector PrevPawnLocation = FVector::ZeroVector;
+		FPIERawInputTaps RawTaps;
 	};
 }

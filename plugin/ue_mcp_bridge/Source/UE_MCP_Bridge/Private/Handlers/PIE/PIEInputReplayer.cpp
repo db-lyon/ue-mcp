@@ -26,6 +26,7 @@
 #include "Misc/Paths.h"
 #include "Math/UnrealMathUtility.h"
 #include "InputAction.h"
+#include "EnhancedInputSubsystems.h"
 #include "UnrealClient.h"
 #include "UObject/UObjectGlobals.h"
 #include "GameFramework/Pawn.h"
@@ -168,6 +169,12 @@ namespace MCPPIE
 		}
 		ActiveHolds.Reset();
 		ActiveTapes.Reset();
+		ActiveFeeds.Reset();
+		if (PreActorTickHandle.IsValid())
+		{
+			FWorldDelegates::OnWorldPreActorTick.Remove(PreActorTickHandle);
+			PreActorTickHandle.Reset();
+		}
 		UIPlayer.ReleaseAll(nullptr);
 		UIPlayer.Reset();
 		ReplayInputLock::Stop();
@@ -395,6 +402,8 @@ namespace MCPPIE
 		}
 		ActiveHolds.Reset();
 		ActiveTapes.Reset();
+		ActiveFeeds.Reset();
+		NextFeedStep = 0;
 		bEndPIERequested = false;
 
 		FString Err;
@@ -699,6 +708,7 @@ namespace MCPPIE
 
 		State = EReplayerState::WaitingForPawn;
 		AttachTime = 0.0;
+		bClockAnchored = false;
 		StartedAt = ISOTimestampNow();
 		bStepClockStarted = false;
 		StepOffsetMs = 0.0;
@@ -716,6 +726,10 @@ namespace MCPPIE
 				this->OnEndFrame();
 			});
 			bEndFrameBound = true;
+		}
+		if (!PreActorTickHandle.IsValid())
+		{
+			PreActorTickHandle = FWorldDelegates::OnWorldPreActorTick.AddRaw(this, &FPIEInputReplayer::OnPreActorTick);
 		}
 
 		if (Pending.CaptureFrameEvery > 0 && !ViewportCapture.IsValid())
@@ -741,63 +755,13 @@ namespace MCPPIE
 			}
 			if (S.DelayMs > ElapsedMs) break;
 
-			const bool bInputStep = S.Type == EStepType::Input || S.Type == EStepType::Hold || S.Type == EStepType::InputTape;
-			if (bInputStep && ReplayInputOnsetMs < 0.0)
-			{
-				SourceInputOnsetMs = S.DelayMs;
-				ReplayInputOnsetMs = ElapsedMs;
-			}
-
 			switch (S.Type)
 			{
 			case EStepType::Input:
-			{
-				UInputAction* Act = LoadAction(S.Action);
-				if (Act)
-				{
-					FString Err;
-					FPIEInputInjector::InjectOnce(Act,
-						VectorToActionValue(Act->ValueType, FVector(S.ValueX, S.ValueY, S.ValueZ)),
-						Err, Pending.ClientId, ResolvedPIEInstance, TargetLocalPlayer.Get());
-				}
-				break;
-			}
 			case EStepType::Hold:
-			{
-				UInputAction* Act = LoadAction(S.Action);
-				if (Act)
-				{
-					FString Err;
-					const FString Id = FPIEInputInjector::StartHold(Act,
-						VectorToActionValue(Act->ValueType, FVector(S.ValueX, S.ValueY, S.ValueZ)),
-						FString(), Err, Pending.ClientId, ResolvedPIEInstance, TargetLocalPlayer.Get());
-					if (!Id.IsEmpty())
-					{
-						FHoldHandle H;
-						H.StepIndex = NextStepIndex;
-						H.StopAtMs = ElapsedMs + S.DurationMs;
-						H.InjectionId = Id;
-						ActiveHolds.Add(H);
-					}
-				}
-				break;
-			}
 			case EStepType::InputTape:
-			{
-				UInputAction* Act = LoadAction(S.Action);
-				if (Act)
-				{
-					FString Err;
-					const FString Id = FPIEInputInjector::StartTape(Act, S.TapeValues,
-						ActiveSequence.SampleHz, FString(), Err, Pending.ClientId,
-						ResolvedPIEInstance, TargetLocalPlayer.Get());
-					if (!Id.IsEmpty())
-					{
-						ActiveTapes.Add(Id);
-					}
-				}
+				// Fed by OnPreActorTick.
 				break;
-			}
 			case EStepType::Mark:
 				Sampler.QueueMarker(S.Label);
 				break;
@@ -852,6 +816,103 @@ namespace MCPPIE
 			{
 				FPIEInputInjector::StopAny(ActiveHolds[i].InjectionId);
 				ActiveHolds.RemoveAt(i);
+			}
+		}
+	}
+
+	void FPIEInputReplayer::OnPreActorTick(UWorld* World, ELevelTick /*TickType*/, float /*DeltaSeconds*/)
+	{
+		if (State != EReplayerState::Replaying || Pending.bMonitor || !bStepClockStarted || !World || World != TargetWorld.Get())
+		{
+			return;
+		}
+		ULocalPlayer* LocalPlayer = TargetLocalPlayer.Get();
+		UEnhancedInputLocalPlayerSubsystem* Sub = LocalPlayer ? LocalPlayer->GetSubsystem<UEnhancedInputLocalPlayerSubsystem>() : nullptr;
+		if (!Sub)
+		{
+			return;
+		}
+		// World time is already this frame's here, the time the recorder stamped the row it read the value on. Half a
+		// millisecond of slack covers the delays the sequence rounded to whole milliseconds.
+		const double T = (World->GetTimeSeconds() - AttachTime) * 1000.0 - StepOffsetMs + 0.5;
+
+		while (NextFeedStep < ActiveSequence.Steps.Num())
+		{
+			const FStep& S = ActiveSequence.Steps[NextFeedStep];
+			const bool bInputStep = S.Type == EStepType::Input || S.Type == EStepType::Hold || S.Type == EStepType::InputTape;
+			if (!bInputStep)
+			{
+				++NextFeedStep;
+				continue;
+			}
+			if (S.DelayMs > T) break;
+			if (ReplayInputOnsetMs < 0.0)
+			{
+				SourceInputOnsetMs = S.DelayMs;
+				ReplayInputOnsetMs = T;
+			}
+			FInputFeed Feed;
+			Feed.StepIndex = NextFeedStep;
+			Feed.Action = LoadAction(S.Action);
+			Feed.StartMs = S.DelayMs;
+			if (Feed.Action.IsValid())
+			{
+				ActiveFeeds.Add(Feed);
+			}
+			++NextFeedStep;
+		}
+
+		const double Hz = FMath::Max(1, ActiveSequence.SampleHz);
+		for (int32 i = 0; i < ActiveFeeds.Num(); ++i)
+		{
+			const FInputFeed& Feed = ActiveFeeds[i];
+			const FStep& S = ActiveSequence.Steps[Feed.StepIndex];
+			UInputAction* Act = Feed.Action.Get();
+			bool bDone = !Act;
+			FVector Value = FVector::ZeroVector;
+			if (Act)
+			{
+				switch (S.Type)
+				{
+				case EStepType::Input:
+					Value = FVector(S.ValueX, S.ValueY, S.ValueZ);
+					bDone = true;
+					break;
+				case EStepType::Hold:
+					Value = FVector(S.ValueX, S.ValueY, S.ValueZ);
+					bDone = T >= Feed.StartMs + FMath::Max(S.DurationMs, 1);
+					break;
+				case EStepType::InputTape:
+				{
+					// Entry k was taken from the row nearest k/Hz into the run, so the frame takes the entry nearest its
+					// own time. Rounding down put a frame that landed a few ms short of the grid one entry behind.
+					const int32 Idx = FMath::RoundToInt((T - 0.5 - Feed.StartMs) * Hz / 1000.0);
+					if (Idx >= S.TapeValues.Num())
+					{
+						bDone = true;
+					}
+					else
+					{
+						Value = S.TapeValues[FMath::Max(0, Idx)];
+					}
+					break;
+				}
+				default:
+					bDone = true;
+					break;
+				}
+			}
+			const bool bInjectThisFrame = Act && (S.Type == EStepType::Input || !bDone);
+			// A zero is not fed: the engine evaluates an action only while a key is down or input is injected, and
+			// the recording read zero on the frames it did not.
+			if (bInjectThisFrame && !Value.IsZero())
+			{
+				Sub->InjectInputForAction(Act, VectorToActionValue(Act->ValueType, Value), {}, {});
+			}
+			if (bDone)
+			{
+				ActiveFeeds.RemoveAt(i);
+				--i;
 			}
 		}
 	}
@@ -971,6 +1032,16 @@ namespace MCPPIE
 		if (State == EReplayerState::Replaying)
 		{
 			const double Now = PIEWorld->GetTimeSeconds();
+			if (!bClockAnchored)
+			{
+				// The recorder's first row is the frame after it attached, and every step delay counts from that row,
+				// so the replay's clock starts on the frame after its own attach too. Counting from the attach frame
+				// put the first frame's delta (a 0.4 s hitch when PIE starts) on the replay's clock and not the
+				// recording's, and every step landed that much early (#2097).
+				bClockAnchored = true;
+				AttachTime = Now;
+				AttachRealTime = PIEWorld->GetRealTimeSeconds();
+			}
 			// The step clock starts after the settle delay, or with
 			// start_when once the gate opens, at the source time it maps to.
 			const int32 Settle = (Pending.SettleMs >= 0) ? Pending.SettleMs : ActiveSequence.SettleMs;
@@ -1081,7 +1152,25 @@ namespace MCPPIE
 				else
 				{
 					FCSVRow Row = Sampler.SampleFrame(PIEWorld, ReplayFrame, SrcBase + ReplayT, PIEWorld->GetDeltaSeconds());
-					const FSourceFrame& Src = SourceFrames[SourceCursor];
+					// The source's rows fall wherever its variable frames did, rarely on the replay's frame times, so the
+					// pawn state is interpolated between the two rows either side of the replay time. Taking the nearest
+					// row read up to half a frame of motion as drift: 5 cm at a walk of 600 cm/s (#2097).
+					FSourceFrame Src = SourceFrames[SourceCursor];
+					{
+						const double CurT = SourceFrames[SourceCursor].Time - SrcBase;
+						const int32 Other = CurT <= ReplayT ? SourceCursor + 1 : SourceCursor - 1;
+						if (SourceFrames.IsValidIndex(Other))
+						{
+							const FSourceFrame& O = SourceFrames[Other];
+							const double OtherT = O.Time - SrcBase;
+							const double Span = OtherT - CurT;
+							const double Alpha = FMath::Abs(Span) > 1e-6 ? FMath::Clamp((ReplayT - CurT) / Span, 0.0, 1.0) : 0.0;
+							Src.PawnLocation = FMath::Lerp(Src.PawnLocation, O.PawnLocation, Alpha);
+							Src.PawnVelocity = FMath::Lerp(Src.PawnVelocity, O.PawnVelocity, Alpha);
+							Src.PawnRotation = FMath::Lerp(Src.PawnRotation, O.PawnRotation, static_cast<float>(Alpha));
+							// Tracked values stay the nearest row's: a counter halfway between two rows is no value it had.
+						}
+					}
 					FDriftFrameEntry E;
 					E.Frame = ReplayFrame;
 					E.SourceFrame = Src.Frame;
@@ -1227,6 +1316,24 @@ namespace MCPPIE
 				}
 			}
 
+			// A fixed-timestep replay of a recording takes each frame's delta from the recording, so every replayed
+			// frame lands on the game time of the row it replays and the input on it is fed on the same frame. A flat
+			// 1/pin_fps put the input up to a frame off wherever the recording's frames were not on that grid, which
+			// a walking character turns into centimetres (#2097).
+			if (bFixedTimestepApplied && !Pending.StartGate.bEnabled && SourceFrames.Num() > 0)
+			{
+				const int32 Next = static_cast<int32>(ReplayFrame) + 1;
+				if (Next < SourceFrames.Num())
+				{
+					const double Delta = SourceFrames[Next].Time - SourceFrames[Next - 1].Time;
+					FApp::SetFixedDeltaTime(FMath::Clamp(Delta, 0.001, 0.25));
+				}
+				else
+				{
+					FApp::SetFixedDeltaTime(1.0 / FMath::Max(1, ActiveSequence.SampleHz));
+				}
+			}
+
 			for (int32 i = ActiveTapes.Num() - 1; i >= 0; --i)
 			{
 				if (!FPIEInputInjector::IsActive(ActiveTapes[i]))
@@ -1239,6 +1346,7 @@ namespace MCPPIE
 			// monitor mode the steps were never executed so we drive completion
 			// purely off frame count against the source recording.
 			const bool bStepsDone = Pending.bMonitor ? true : (NextStepIndex >= ActiveSequence.Steps.Num() && NextUIStepIndex >= ActiveSequence.Steps.Num()
+				&& NextFeedStep >= ActiveSequence.Steps.Num() && ActiveFeeds.Num() == 0
 				&& ActiveHolds.Num() == 0 && ActiveTapes.Num() == 0);
 			if (bStepsDone)
 			{
@@ -1294,6 +1402,12 @@ namespace MCPPIE
 			FPIEInputInjector::StopAny(Id);
 		}
 		ActiveTapes.Reset();
+		ActiveFeeds.Reset();
+		if (PreActorTickHandle.IsValid())
+		{
+			FWorldDelegates::OnWorldPreActorTick.Remove(PreActorTickHandle);
+			PreActorTickHandle.Reset();
+		}
 		// A replay stopped mid-drag must not leave a mouse button down.
 		UIPlayer.ReleaseAll(TargetWorld.Get());
 

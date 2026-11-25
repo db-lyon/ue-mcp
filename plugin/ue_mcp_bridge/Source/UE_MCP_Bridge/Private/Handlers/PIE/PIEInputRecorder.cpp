@@ -169,6 +169,8 @@ namespace MCPPIE
 		SC.bCapturePawnState = Pending.bCapturePawnState;
 		SC.bCaptureMontage   = Pending.bCaptureMontage;
 		SC.ClientIndex       = Pending.ClientId;
+		// sequence.json replays the value that reached each action, so its modifiers and triggers run once (#2097).
+		SC.bCaptureRawInput  = true;
 		Sampler.Reset();
 		Sampler.SetConfig(SC);
 
@@ -347,9 +349,18 @@ namespace MCPPIE
 		const double BaseTime = Rows[0].Time;
 		const int32 GapTol = FMath::Max(0, Pending.RunGapFrames);
 
+		// The raw value (before the action's own modifiers and triggers) when the sampler read it, so a replay that
+		// feeds it back runs them once. Older code paths without it fall back to the action's final value.
+		auto ValueAt = [this](int32 RowIdx, const FString& ActionName) -> FVector
+		{
+			const FCSVRow& R = Rows[RowIdx];
+			const FVector* V = R.RawActionValues.Num() > 0 ? R.RawActionValues.Find(ActionName) : R.ActionValues.Find(ActionName);
+			return V ? *V : FVector::ZeroVector;
+		};
+
 		// A tape plays one entry per 1/SampleHz of world time, so the run is
 		// resampled at that rate rather than taken one entry per frame (#1657).
-		auto ResampleRun = [this](const FString& ActionName, int32 First, int32 Last, TArray<FVector>& OutValues)
+		auto ResampleRun = [this, &ValueAt](const FString& ActionName, int32 First, int32 Last, TArray<FVector>& OutValues)
 		{
 			const int32 Hz = FMath::Max(1, Pending.SampleHz);
 			const double T0 = Rows[First].Time;
@@ -362,8 +373,7 @@ namespace MCPPIE
 				{
 					++Cursor;
 				}
-				const FVector* V = Rows[Cursor].ActionValues.Find(ActionName);
-				OutValues.Add(V ? *V : FVector::ZeroVector);
+				OutValues.Add(ValueAt(Cursor, ActionName));
 			}
 		};
 
@@ -372,16 +382,15 @@ namespace MCPPIE
 		{
 			if (A.ValueType == EActionValueType::Boolean)
 			{
-				// Press / release pairs from edge events.
-				const FString PressEvt = A.Name + TEXT("_pressed");
-				const FString ReleaseEvt = A.Name + TEXT("_released");
+				// Press / release pairs from the value's edges.
+				auto Down = [&ValueAt, &A](int32 RowIdx) { return ValueAt(RowIdx, A.Name).X != 0.0; };
 				for (int32 i = 0; i < Rows.Num(); ++i)
 				{
-					if (!Rows[i].EdgeEvents.Contains(PressEvt)) continue;
+					if (!Down(i) || (i > 0 && Down(i - 1))) continue;
 					int32 ReleaseIdx = -1;
 					for (int32 j = i + 1; j < Rows.Num(); ++j)
 					{
-						if (Rows[j].EdgeEvents.Contains(ReleaseEvt)) { ReleaseIdx = j; break; }
+						if (!Down(j)) { ReleaseIdx = j; break; }
 					}
 					double DurMs;
 					if (ReleaseIdx >= 0)
@@ -410,8 +419,7 @@ namespace MCPPIE
 				TArray<int32> ActiveIdx;
 				for (int32 i = 0; i < Rows.Num(); ++i)
 				{
-					const FVector* V = Rows[i].ActionValues.Find(A.Name);
-					if (V && V->Size() > Pending.AxisThreshold) ActiveIdx.Add(i);
+					if (ValueAt(i, A.Name).Size() > Pending.AxisThreshold) ActiveIdx.Add(i);
 				}
 				if (ActiveIdx.Num() == 0) continue;
 
@@ -573,6 +581,7 @@ namespace MCPPIE
 		M.PIEInstance = ResolvedPIEInstance;
 		M.ClientId = Pending.ClientId;
 		M.AxisThreshold = Pending.AxisThreshold;
+		M.InputValues = TEXT("raw");
 		M.TrackedActorIds = Pending.TrackedActorIds;
 		M.Actions = Sampler.GetActions();
 		M.TrackedValues = Sampler.GetTrackedValues();
