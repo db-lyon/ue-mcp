@@ -24,6 +24,8 @@ export * from "./contract/daemon.js";
 export * from "./contract/hub-qa.js";
 export * from "./contract/hub.js";
 export * from "./contract/hub-attention.js";
+export * from "./contract/hub-arrangement.js";
+export * from "./contract/hub-compose.js";
 export * from "./contract/hub-ports.js";
 export { readDiscovery, readLiveDiscovery, discoveryPath } from "./daemon/discovery.js";
 export { parseContextMeasurement, scopeBucket } from "./surface/context/context-measurement.js";
