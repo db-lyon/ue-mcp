@@ -122,7 +122,7 @@ A value is comma-separated with no spaces. A string with spaces is quoted, with 
 | `clip_read` | `path`. Returns `clip`, `text` and `counts` (`tracks`, `notes`, `keys`, `events`, `checks`, `regions`, `takes`, `length`). |
 | `clip_update` | `path`, `clip` or `text`. Replaces the clip; its `takes` are kept when the new clip carries none. |
 | `clip_validate` | One of `path`, `clip` or `text`. Every finding in `errors`, `valid` when there are none and `saveable` when none of them stops a save. |
-| `clip_list` | `directory?` (default `/Game`). Returns `clips` (`path`, `object_path`, `name`, `map`) and `count`. |
+| `clip_list` | `directory?` (default `/Game`). Returns `clips` (`path`, `object_path`, `name`, `map`, and `last_run` when the clip has been run) and `count`. |
 | `clip_delete` | `path`, `confirm=true`. |
 
 A clip is checked whenever it is saved, against the level open in the editor and the clip's profile:
@@ -185,6 +185,8 @@ How a run plays:
 - **The run finishes** once the position reaches the clip's length (or the region's end) with no check still waiting. It also ends when PIE ends, or with `clip_stop` (`reason?`), and any check still open then fails.
 
 `clip_status` (`run_id?`, `wait?`, `timeout_seconds?`) answers with the run; a finished run the editor no longer holds answers from its `clip_results.json`, under `<Project>/Saved/MCPObservations/<run_id>/`. `clip_verdict` (`check`, `verdict` of `pass`, `fail` or `skip`, `note?`, `source?` of `human` or `agent`, `evidence?` of `{note, captures?}`) answers the manual check a run is paused on. An agent verdict needs an evidence note.
+
+`clip_runs` (`path?`, `limit?` default 50) is the run history, newest first, read from those `clip_results.json` files, so it answers with no editor attached. `path` keeps one clip's runs. Each run has `run_id`, `clip`, `clip_name`, `mode`, `state`, `passed`, `stop_reason`, `region`, `started_at`, `ended_at`, `summary`, `drift`, each check's `id`, `mode`, `status`, `started_frame` and `ended_frame`, and each region's `id`, `name`, `status` and `drift`. `total` counts every run that matched before `limit`. `clip_list` carries each clip's newest run as `last_run`.
 
 ### Results
 

@@ -5,6 +5,7 @@ import { specBp, schema as specSchema } from "./specs/pie.generated.js";
 import { scriptRunFollowUp, scriptStatusFollowUp } from "../pie/script-watch.js";
 import { driveFollowUp } from "../pie/drive-wait.js";
 import { clipRunFollowUp } from "../pie/clip-watch.js";
+import { clipListFollowUp, clipRuns } from "../pie/clip-runs.js";
 import { boundedRequestIds } from "../pie/remote-ids.js";
 
 export const pieTool: ToolDef = categoryTool(
@@ -99,7 +100,18 @@ export const pieTool: ToolDef = categoryTool(
     clip_update:          specBp("mutate", "Replace a playtest clip with the clip or text given; its takes history is kept.", "pie_clip_update"),
     clip_edit:            specBp("mutate", "Edit a playtest clip note by note, all or none: add, move, trim, set, delete and quantize notes, keys, checks, events, regions and tracks, by id. Times snap to the clip's grid. Returns the ids changed, the clip and warnings; a refused edit says why with candidates and changes nothing.", "pie_clip_edit"),
     clip_validate:        specBp("read", "Check a clip without saving: every structural problem and every action, value, actor or class it names that does not resolve, each with candidates.", "pie_clip_validate"),
-    clip_list:            specBp("read", "List playtest clips with their maps.", "pie_clip_list"),
+    clip_list: {
+      ...specBp("read", "List playtest clips with their maps, and each clip's newest run as last_run (run_id, state, passed, summary, started_at, ended_at).", "pie_clip_list"),
+      followUp: clipListFollowUp,
+    },
+    clip_runs: {
+      kind: "handler",
+      effect: "read",
+      offline: "Reads the clip_results.json files runs left in the project's Saved/MCPObservations.",
+      params: { optional: ["path", "limit"], notes: { path: "only this clip's runs", limit: "most runs, newest first (default 50)" } },
+      description: "Run history of playtest clips, newest first, from the clip_results.json each run writes: run_id, clip, mode (play or record), state, passed, stop_reason, region, started_at, ended_at, summary, drift, each check's status and frames, and each region's status and drift.",
+      handler: async (ctx, p) => clipRuns(ctx, p),
+    },
     clip_delete:          { ...specBp("mutate", "Delete a playtest clip (confirm=true).", "pie_clip_delete"), destructive: true },
     clip_run: {
       ...specBp("mutate", "Play a playtest clip in PIE on game time, at a fixed 1/rate timestep by default: feeds each input track's raw value to its Input Action before the actors tick, fires events, judges check notes (a hold check stops the timeline until true or its timeout; a manual check pauses PIE for clip_verdict) and reports per check and per region, with pawn drift against the clip's reference take. region judges one region, still playing from frame 0. wait=true answers once it finishes or awaits a verdict.", "pie_clip_run"),
