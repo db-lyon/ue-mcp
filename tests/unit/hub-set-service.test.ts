@@ -223,7 +223,14 @@ scene track "Boss fight" add Guard` });
     // C is muted; B's lanes drive remote client 1.
     expect(clip.tracks.map((t) => [t.action.split(".").pop(), t.client ?? 0])).toEqual([["IA_Move", 0], ["IA_Jump", 1]]);
     expect(clip.checks.map((c) => [c.id, c.start])).toEqual([["1-i1.c1", 0], ["2-i1.c1", 30]]);
-    const runId = hub.queue.state().current!.items[0].runId!;
+    // It started at once, so the answer names its run.
+    expect(queued.body.placement.state).toBe("started");
+    const runId = queued.body.runId as string;
+    expect(runId).toBe(hub.queue.state().current!.items[0].runId);
+    // Behind it, a run is queued and has no id yet.
+    const behind = await call("POST", "/hub/run", { scope: { kind: "arrangement" } });
+    expect(behind.body).toMatchObject({ placement: { state: "queued" }, runId: null });
+    await call("POST", `/hub/plans/${behind.body.plan.id}/cancel`);
     clipRuns.set("clip_0", { run_id: "clip_0", state: "finished", position: 120, checks: [{ id: "1-i1.c1", status: "passed" }, { id: "2-i1.c1", status: "passed" }] });
     await hub.arrangements.refresh(runId);
     await settle();
