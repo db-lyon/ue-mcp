@@ -1,3 +1,4 @@
+// @session independent: Pure composition of timelines into the segments a run plays, and its results. No state.
 /**
  * Composing a track or a scene into what one run plays (#2113).
  *
@@ -371,6 +372,8 @@ export interface ArrangementRun {
   goalId: string;
   rate: number;
   length: number;
+  /** A hash of what played: editing a clip or the timeline changes it, so runs compare only on the same version. */
+  version?: string;
   instances: InstanceResult[];
   /** A scene: each track's status, passed when every instance on it passed. */
   tracks?: Array<{ goalId: string; title: string; player: number; status: InstanceStatus }>;

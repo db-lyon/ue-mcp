@@ -1,3 +1,4 @@
+// @session independent: The set model, its text form and ops: pure functions over their arguments. No state.
 /**
  * The Playtest Hub's set (#2113): its tracks and scenes as Ableton Live's
  * Session and Arrangement views show them. Tracks are the grid's columns and
@@ -51,6 +52,9 @@ export interface SetScene {
   title: string;
   order: number;
   color?: SetColor;
+  /** The tracks the scene plays, in order: a composition of tracks (phase 1). */
+  tracks: string[];
+  /** Phase 2, the Session grid: its clip slots, at most one per track. */
   slots: Slot[];
 }
 
@@ -108,7 +112,7 @@ export function setToText(m: SetModel, rate = ARRANGEMENT_RATE): string {
     }
   }
   for (const s of [...m.scenes].sort((a, b) => a.order - b.order)) {
-    lines.push(`scene ${s.id} ${quote(s.title)}${s.color ? ` color=${s.color}` : ""}`);
+    lines.push(`scene ${s.id} ${quote(s.title)}${s.color ? ` color=${s.color}` : ""}${s.tracks.length ? ` tracks=${s.tracks.join(",")}` : ""}`);
     for (const sl of s.slots) lines.push(`  slot ${sl.track} ${sl.kind} ${sl.target}${sl.name ? ` name=${quote(sl.name)}` : ""}${sl.color ? ` color=${sl.color}` : ""}`);
   }
   return lines.join("\n");
@@ -152,8 +156,10 @@ export type SetOp =
   | { op: "track.player"; track: string; player: number }
   | { op: "scene.add"; title: string; color?: string; at?: number }
   | { op: "scene.capture"; scene: string; at?: number }
+  | { op: "scene.track"; scene: string; track: string; remove?: boolean; at?: number }
   | { op: "slot.set"; scene: string; track: string; kind: InstanceKind; target: string }
-  | { op: "slot.clear" | "slot.unique"; scene: string; track: string }
+  | { op: "slot.clear"; scene: string; track: string }
+  | { op: "slot.unique"; scene: string; track: string }
   | { op: "slot.move" | "slot.copy"; scene: string; track: string; toScene: string; toTrack: string }
   | { op: "slot.rename"; scene: string; track: string; name: string | null }
   | { op: "slot.color"; scene: string; track: string; color: string | null }
@@ -234,8 +240,10 @@ export function setOpsFromText(text: string): { ops: SetOp[]; findings: Arrangem
           return s && num(after("to")) !== undefined ? void ops.push({ op: "scene.move", scene: s, to: num(after("to"))! }) : bad("scene move <scene> to <position>");
         case "capture":
           return s ? void ops.push({ op: "scene.capture", scene: s, ...(num(after("at")) !== undefined ? { at: num(after("at")) } : {}) }) : bad("scene capture <scene> [at <frame>]");
+        case "track":
+          return s && (w[3] === "add" || w[3] === "remove") && w[4] ? void ops.push({ op: "scene.track", scene: s, track: w[4], ...(w[3] === "remove" ? { remove: true } : {}), ...(num(after("at", 4)) !== undefined ? { at: num(after("at", 4)) } : {}) }) : bad("scene track <scene> add|remove <track> [at <position>]");
         default:
-          return bad("scene add|insert|delete|rename|color|duplicate|move|capture ...", rankClipCandidates(v ?? "", ["add", "insert", "delete", "rename", "color", "duplicate", "move", "capture"]));
+          return bad("scene add|insert|delete|rename|color|duplicate|move|track|capture ...", rankClipCandidates(v ?? "", ["add", "insert", "delete", "rename", "color", "duplicate", "move", "track", "capture"]));
       }
     }
     if (head === "slot") {
@@ -324,7 +332,7 @@ export type SetEditResult =
 export function applySetOps(m: SetModel, ops: readonly SetOp[], o: SetEditOptions): SetEditResult {
   const set: SetModel = {
     tracks: m.tracks.map((t) => ({ ...t, arrangement: { rate: t.arrangement.rate, instances: t.arrangement.instances.map((i) => ({ ...i })) } })),
-    scenes: m.scenes.map((s) => ({ ...s, slots: s.slots.map((x) => ({ ...x })) })),
+    scenes: m.scenes.map((s) => ({ ...s, tracks: [...s.tracks], slots: s.slots.map((x) => ({ ...x })) })),
   };
   const changed: string[] = [];
   const warnings: ArrangementFinding[] = [];
@@ -351,7 +359,7 @@ export function applySetOps(m: SetModel, ops: readonly SetOp[], o: SetEditOption
           const player = typeof op.player === "number" ? op.player : 0;
           if (!validPlayer(player)) return fail(id, "player", `player must be 0 or a remote client from 1 to ${SET_PLAYER_MAX}`);
           insertAt(set.tracks, at, { id, title, order: 0, ...(c ? { color: c } : {}), player, mute: false, solo: false, arrangement: { rate: ARRANGEMENT_RATE, instances: [] } });
-        } else insertAt(set.scenes, at, { id, title, order: 0, ...(c ? { color: c } : {}), slots: [] });
+        } else insertAt(set.scenes, at, { id, title, order: 0, ...(c ? { color: c } : {}), tracks: [], slots: [] });
         changed.push(id);
         break;
       }
@@ -359,7 +367,10 @@ export function applySetOps(m: SetModel, ops: readonly SetOp[], o: SetEditOption
         const t = findT(op.track);
         if (!t) return noT(op.track);
         set.tracks = set.tracks.filter((x) => x !== t);
-        for (const s of set.scenes) s.slots = s.slots.filter((x) => x.track !== t.id);
+        for (const s of set.scenes) {
+          s.slots = s.slots.filter((x) => x.track !== t.id);
+          s.tracks = s.tracks.filter((x) => x !== t.id);
+        }
         changed.push(t.id);
         break;
       }
@@ -374,7 +385,7 @@ export function applySetOps(m: SetModel, ops: readonly SetOp[], o: SetEditOption
         const s = findS(op.scene);
         if (!s) return noS(op.scene);
         const id = o.newId(s.title);
-        insertAt(set.scenes, sorted(set.scenes).indexOf(s) + 1, { ...s, id, order: 0, slots: s.slots.map((x) => ({ ...x })) });
+        insertAt(set.scenes, sorted(set.scenes).indexOf(s) + 1, { ...s, id, order: 0, tracks: [...s.tracks], slots: s.slots.map((x) => ({ ...x })) });
         changed.push(id);
         break;
       }
@@ -426,6 +437,16 @@ export function applySetOps(m: SetModel, ops: readonly SetOp[], o: SetEditOption
         if (!validPlayer(op.player)) return fail(t.id, "player", `player must be 0 (the editor's own player) or a remote client from 1 to ${SET_PLAYER_MAX}`);
         t.player = op.player as number;
         changed.push(t.id);
+        break;
+      }
+      case "scene.track": {
+        const s = findS(op.scene);
+        if (!s) return noS(op.scene);
+        const t = findT(op.track);
+        if (!t) return noT(op.track);
+        s.tracks = s.tracks.filter((x) => x !== t.id);
+        if (!op.remove) s.tracks.splice(typeof op.at === "number" ? Math.max(0, Math.min(s.tracks.length, Math.floor(op.at))) : s.tracks.length, 0, t.id);
+        changed.push(s.id);
         break;
       }
       case "scene.capture": {

@@ -1,3 +1,4 @@
+// @session independent: The arrangement model: types and pure functions over their arguments. No state.
 /**
  * Tracks and scenes as arrangements of clips (#2113).
  *
