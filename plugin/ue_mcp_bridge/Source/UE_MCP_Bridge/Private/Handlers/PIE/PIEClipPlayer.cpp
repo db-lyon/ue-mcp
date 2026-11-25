@@ -176,9 +176,8 @@ namespace MCPPIE
 			CR.Def = C;
 			if (!Run.RegionId.IsEmpty())
 			{
-				const FClipRegion* R = Run.Clip.Regions.FindByPredicate([this](const FClipRegion& X) { return X.Id == Run.RegionId; });
-				const bool bIn = R && C.Start >= R->Start - 1e-6 && C.Start <= R->End + 1e-6;
-				if (!bIn)
+				const int32 R = Run.Clip.Regions.IndexOfByPredicate([this](const FClipRegion& X) { return X.Id == Run.RegionId; });
+				if (!ClipCheckStartsInRegion(Run.Clip, R, C.Start))
 				{
 					CR.Status = EClipCheckStatus::Skipped;
 					CR.Reason = FString::Printf(TEXT("outside region %s, the one played"), *Run.RegionId);
