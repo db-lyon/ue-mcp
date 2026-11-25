@@ -261,7 +261,7 @@ export const DAEMON_ROUTES = routeTable({
   "hub.arrangement": { method: "GET", path: "/v1/hub/goals/:id/arrangement", feature: "hub.arrangement", summary: "one track's timeline (ArrangementView)" },
   "hub.arrangement.put": { method: "PUT", path: "/v1/hub/goals/:id/arrangement", feature: "hub.arrangement", summary: "{ arrangement } or { text }: replace a track's timeline (ArrangementView; 400 { error, finding, findings })" },
   "hub.arrangement.edit": { method: "POST", path: "/v1/hub/goals/:id/arrangement/edit", feature: "hub.arrangement", summary: "{ ops }: instance ops on one track, all or none (ArrangementView and changed)" },
-  "hub.clips": { method: "GET", path: "/v1/hub/clips", feature: "hub.arrangement", summary: "?q&kind: timeline clips and step-list playtests for the browser ({ clips: ClipEntry[] })" },
+  "hub.clips": { method: "GET", path: "/v1/hub/clips", feature: "hub.arrangement", summary: "?q&kind: timeline clips and step-list clips for the browser ({ clips: ClipEntry[] })" },
   "hub.set.run": { method: "POST", path: "/v1/hub/run", feature: "hub.arrangement", summary: "{ scope: track | scene | slot | arrangement, next? }: queue one run of it ({ plan, placement })" },
   "hub.run.verdict": { method: "POST", path: "/v1/hub/runs/:runId/verdict", feature: "hub.arrangement", summary: "{ check, verdict, note? }: a manual check's verdict in a set run ({ ok })" },
   "hub.rules": { method: "PUT", path: "/v1/hub/rules", feature: "hub", summary: "Partial<HealthRule>: the project's flaky and stale rule ({ rules })" },

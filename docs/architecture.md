@@ -74,7 +74,7 @@ Every route is on `127.0.0.1` and needs `Authorization: Bearer <token>`. The ser
 | `/v1/disruptions` | Requests to stop, restart, rebuild or patch the editor: participants, holds, answers, and a person's approve or deny |
 | `/v1/checkpoints` | Checkpoints per editor session (see [Checkpoints](checkpoints.md)) |
 | `/v1/journal` | The mutation journal per editor session: its groups, and reverting them |
-| `/v1/hub` | The Playtest Hub: goals, playtest evidence, the plan queue and the editor lease (see [Playtest Hub](hub.md)) |
+| `/v1/hub` | The Playtest Hub: tracks and scenes, clip evidence, the plan queue and the editor lease (see [Playtest Hub](hub.md)) |
 | `/v1/tools`, `/v1/leases` | Turn categories and Unreal toolsets on and off, and list asset leases |
 | `GET /v1/dialogs/native`, `POST /v1/dialogs/native/press` | Native Win32 dialogs an editor of the project shows, and pressing one |
 | `/v1/plugins` | List, browse, install, update and uninstall ue-mcp plugins |

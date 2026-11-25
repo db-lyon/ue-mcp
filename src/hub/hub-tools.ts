@@ -68,7 +68,7 @@ export function validateHub(action: string, i: Record<string, unknown>): string 
       const tests = i.playtests !== undefined;
       if (goal === tests) return "say what to run: exactly one of goal_id and playtests";
       if (goal && !str(i.goal_id)) return "goal_id must be text";
-      if (tests && (!Array.isArray(i.playtests) || i.playtests.length === 0 || !i.playtests.every(str))) return "playtests is a list of playtest asset paths, such as /Game/Tests/DoorOpens";
+      if (tests && (!Array.isArray(i.playtests) || i.playtests.length === 0 || !i.playtests.every(str))) return "playtests is a list of clip asset paths, such as /Game/Tests/DoorOpens";
       for (const k of ["attended", "replay"]) if (i[k] !== undefined && typeof i[k] !== "boolean") return `${k} must be a boolean`;
       return null;
     }
@@ -103,7 +103,7 @@ function scopeOfInput(i: Record<string, unknown>): PlanScope {
   if (str(i.goal_id)) return { kind: "goal", goalId: i.goal_id };
   const checks = (i.playtests as string[]).map((p) => {
     const ref = checkRefOf({ kind: "script", target: p });
-    if (!ref) throw bad(`${p} is not a playtest asset path: it starts with /, such as /Game/Tests/DoorOpens`);
+    if (!ref) throw bad(`${p} is not a clip asset path: it starts with /, such as /Game/Tests/DoorOpens`);
     return ref;
   });
   return { kind: "checks", checks };
@@ -208,7 +208,7 @@ export async function runHubAction(hub: HubToolTarget, action: string, input: Re
         })),
         ...(s.requires.length ? { requires: s.requires } : {}),
         ...(s.parents.length ? { partOf: s.parents } : {}),
-        ...(s.unused ? { unused: "no milestone or goal requires it" } : {}),
+        ...(s.unused ? { unused: "no scene or track requires it" } : {}),
       };
     }
     case "read_check": {
@@ -238,7 +238,7 @@ export async function runHubAction(hub: HubToolTarget, action: string, input: Re
       }
       const goalId = String(input.goal_id);
       const goal = g.get(goalId);
-      if (!goal) throw notFound(`no goal ${goalId}`);
+      if (!goal) throw notFound(`no track ${goalId}`);
       const saved = g.update(goalId, { links: changedLinks(goal.links, action, input) });
       return { goalId, links: saved.links ?? [] };
     }

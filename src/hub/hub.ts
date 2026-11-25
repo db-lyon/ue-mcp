@@ -485,7 +485,7 @@ export class Hub {
         try {
           this.goals.addChecks(goalId, [{ kind: "script", target: qaScriptKey(run.script) }]);
         } catch (e) {
-          this.note(`the playtest written for ${goalId} could not be added to it: ${e instanceof Error ? e.message : String(e)}`);
+          this.note(`the clip written for ${goalId} could not be added to it: ${e instanceof Error ? e.message : String(e)}`);
         }
       }
     }
@@ -774,7 +774,7 @@ export class Hub {
   }
 
   async goal(id: string): Promise<GoalState> {
-    if (!this.goals.get(id)) throw notFound(`no goal ${id}`);
+    if (!this.goals.get(id)) throw notFound(`no track ${id}`);
     const cat = await this.catalog();
     return this.goalStates(cat).find((g) => g.goal.id === id)!;
   }
@@ -897,12 +897,12 @@ export class Hub {
    */
   async signOff(id: string, body: unknown, via?: string): Promise<SignOff> {
     const goal = this.goals.get(id);
-    if (!goal) throw notFound(`no goal ${id}`);
+    if (!goal) throw notFound(`no track ${id}`);
     if (body !== undefined && body !== null && !isObject(body)) throw bad("body must be { note? }");
     const note = isObject(body) ? body.note : undefined;
     if (note !== undefined && typeof note !== "string") throw bad("note must be a string");
     const by = (await this.o.signer?.()) ?? null;
-    if (!by) throw conflict("Sign in to your ue-mcp account to sign off a goal: a sign-off records who gave it.");
+    if (!by) throw conflict("Sign in to your ue-mcp account to sign off a track: a sign-off records who gave it.");
     const current = await this.workspace(true);
     const need = Math.max(1, goal.acceptance.stableRuns);
     const cat = await this.catalog();
@@ -924,7 +924,7 @@ export class Hub {
   }
 
   clearSignOff(id: string): void {
-    if (!this.goals.get(id)) throw notFound(`no goal ${id}`);
+    if (!this.goals.get(id)) throw notFound(`no track ${id}`);
     this.goals.clearSignOff(id);
   }
 
@@ -936,7 +936,7 @@ export class Hub {
    * that plan was started from the goal.
    */
   deleteGoal(id: string): void {
-    if (!this.goals.get(id)) throw notFound(`no goal ${id}`);
+    if (!this.goals.get(id)) throw notFound(`no track ${id}`);
     const why = this.deleteBlocked(id);
     if (why) throw conflict(why);
     this.goals.delete(id);
@@ -961,16 +961,16 @@ export class Hub {
    */
   writePlaytests(id: string, body: unknown): { sessionId: string } {
     const goal = this.goals.get(id);
-    if (!goal) throw notFound(`no goal ${id}`);
+    if (!goal) throw notFound(`no track ${id}`);
     if (body !== undefined && body !== null && !isObject(body)) throw bad("body must be { text? }");
     const asked = isObject(body) ? body.text : undefined;
     if (asked !== undefined && typeof asked !== "string") throw bad("text must be a string");
     const write = this.o.writePlaytests;
-    if (!write) throw conflict("no client is connected that can write playtests: it needs a playtest flow of its own");
+    if (!write) throw conflict("no client is connected that can write clips: it needs a playtest flow of its own");
     const text = (asked as string | undefined)?.trim() || playtestBrief(goal, this.goals.metas());
-    const started = write({ title: `Playtests for ${goal.title}`.slice(0, 80), text });
+    const started = write({ title: `Clips for ${goal.title}`.slice(0, 80), text });
     this.linking.set(started.sessionId, goal.id);
-    void started.done.catch((e: unknown) => this.note(`writing playtests for ${goal.id} failed: ${e instanceof Error ? e.message : String(e)}`));
+    void started.done.catch((e: unknown) => this.note(`writing clips for ${goal.id} failed: ${e instanceof Error ? e.message : String(e)}`));
     return { sessionId: started.sessionId };
   }
 
@@ -985,7 +985,7 @@ export class Hub {
     const cat = await this.catalog();
     // A goal stands for its required goals' checks, at any depth, then its own.
     const goalChecks = (goalId: string): CheckRef[] => {
-      if (!this.goals.get(goalId)) throw notFound(`no goal ${goalId}`);
+      if (!this.goals.get(goalId)) throw notFound(`no track ${goalId}`);
       return goalChecksDeep(this.goals.list(), goalId);
     };
     let refs: CheckRef[];
@@ -1052,9 +1052,9 @@ export class Hub {
       case "stale":
         return goal ? `Run what is stale in ${goal}` : "Run what is stale";
       case "all":
-        return "Run all playtests";
+        return "Run all clips";
       case "checks":
-        return refs.length === 1 ? `Run ${this.nameOf(refs[0], cat)}` : `Run ${refs.length} playtests`;
+        return refs.length === 1 ? `Run ${this.nameOf(refs[0], cat)}` : `Run ${refs.length} clips`;
     }
   }
 
@@ -1084,7 +1084,7 @@ export class Hub {
       if (stop) throw conflict(`${plan.title} cannot run: ${stop.message}`);
     }
     const refs = whole ? [{ kind: whole.kind, target: whole.target }] : await this.expand(scope);
-    if (refs.length === 0) throw conflict("nothing to run: the plan's scope has no playtests");
+    if (refs.length === 0) throw conflict("nothing to run: the plan's scope has no clips");
     const cat = await this.catalog();
     const items: PlanItem[] = refs.map((ref) => ({ check: ref, name: this.nameOf(ref, cat), state: "queued" as const }));
     const plan: PlanRun = {
@@ -1155,7 +1155,7 @@ export class Hub {
 
   createSchedule(body: unknown): Schedule {
     const d = scheduleDraftOf(body);
-    if (d.scope.kind === "goal" && !this.goals.get(d.scope.goalId)) throw bad(`no goal ${d.scope.goalId}`);
+    if (d.scope.kind === "goal" && !this.goals.get(d.scope.goalId)) throw bad(`no track ${d.scope.goalId}`);
     const s = withNext({ id: newId("schedule"), ...d, lastRunAt: null, lastSkipped: null, waiting: null, nextRunAt: null }, new Date(this.now()));
     this.queue.putSchedule(s);
     return s;
@@ -1250,7 +1250,7 @@ export class Hub {
     if (item.check.kind !== "script") return this.startSetItem(item, plan);
     const script = item.check.target;
     const listed = this.connected() ? await this.o.index.listScripts().catch(() => null) : null;
-    if (listed && !listed.some((s) => s.path === script)) return { skipped: "the playtest is not on this checkout" };
+    if (listed && !listed.some((s) => s.path === script)) return { skipped: "the clip is not on this checkout" };
     // A manual step needs someone watching it play. A replay is no way around that: it would copy an old run's verdict.
     if (!plan.options.attended) {
       const read = await this.o.broker.readScriptAt(script);
@@ -1294,10 +1294,10 @@ export class Hub {
     if (body !== undefined && body !== null && !isObject(body)) throw bad("body must be { goalId?, checkId? }");
     const goalId = isObject(body) ? body.goalId : undefined;
     const one = isObject(body) ? body.checkId : undefined;
-    if (goalId !== undefined && typeof goalId !== "string") throw bad("goalId must be a goal's id");
-    if (one !== undefined && (typeof one !== "string" || !checkOfId(one))) throw bad("checkId must be a playtest's id, script:<asset path>");
+    if (goalId !== undefined && typeof goalId !== "string") throw bad("goalId must be a track's id");
+    if (one !== undefined && (typeof one !== "string" || !checkOfId(one))) throw bad("checkId must be a clip's id, script:<asset path>");
     if (goalId !== undefined && one !== undefined) throw bad("give goalId or checkId, not both");
-    if (!this.o.fixer) throw conflict("no client is connected that can fix playtests: a fix loop needs an agent of its own");
+    if (!this.o.fixer) throw conflict("no client is connected that can fix clips: a fix loop needs an agent of its own");
     const refs = typeof one === "string" ? [checkOfId(one)!] : await this.expand(goalId ? { kind: "failing", goalId } : { kind: "failing" });
     const q = this.queue.state();
     const queued = new Set([q.current, ...q.queued].filter((p): p is PlanRun => p?.work === "fix").flatMap((p) => p.items.filter((i) => i.state === "queued" || i.state === "running").map((i) => i.check.target)));
@@ -1328,7 +1328,7 @@ export class Hub {
    * The item follows the loop until it passes, stops for the person, or ends.
    */
   private async startFix(item: PlanItem, plan: PlanRun): Promise<ItemStart> {
-    if (!this.o.fixer) return { error: "no client is connected that can fix playtests" };
+    if (!this.o.fixer) return { error: "no client is connected that can fix clips" };
     return this.o.fixer.start(item, plan);
   }
 
@@ -1349,8 +1349,8 @@ function limitOf(v: unknown, fallback: number): number {
 export function playtestBrief(goal: Goal, metas: ReadonlyMap<string, CheckMeta> = new Map()): string {
   const have = goal.checks.map((c) => metas.get(checkId(c))?.title ?? leafName(c.target));
   return [
-    `Write a playtest for the goal "${goal.title}".`,
-    goal.description ? `What the goal means: ${goal.description}` : "",
-    have.length ? `It already has these playtests: ${have.join(", ")}. Check something they do not.` : "",
+    `Write a clip (a PIE test script) for the track "${goal.title}".`,
+    goal.description ? `What the track means: ${goal.description}` : "",
+    have.length ? `It already has these clips: ${have.join(", ")}. Check something they do not.` : "",
   ].filter(Boolean).join("\n\n");
 }

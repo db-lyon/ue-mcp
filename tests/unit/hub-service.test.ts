@@ -424,7 +424,7 @@ describe("sign-off", () => {
     const id = (await call("POST", "/hub/goals", { title: "Door", acceptance: { signOff: true }, checks: [{ kind: "script", target: DOOR }] })).body.goal.id;
     const r = await call("POST", `/hub/goals/${id}/sign-off`, {});
     expect(r.status).toBe(409);
-    expect(r.body.error).toBe("Sign in to your ue-mcp account to sign off a goal: a sign-off records who gave it.");
+    expect(r.body.error).toBe("Sign in to your ue-mcp account to sign off a track: a sign-off records who gave it.");
     expect((await goalState(id)).signOff).toBeUndefined();
   });
 
@@ -952,7 +952,7 @@ describe("write playtests", () => {
     expect(r.status).toBe(202);
     await settle();
     expect(r.body.sessionId).toBe("session-write");
-    expect(title).toBe("Playtests for Doors");
+    expect(title).toBe("Clips for Doors");
     expect(seeded).toContain('"Doors"');
     expect(seeded).toContain("Every door opens");
     expect(seeded).toContain("DoorOpens");
