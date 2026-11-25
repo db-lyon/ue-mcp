@@ -199,7 +199,7 @@ How a run plays:
 | `holding`, `awaiting` | The check playback stands at, and the manual checks waiting for a verdict. |
 | `summary` | `total`, `passed`, `failed`, `skipped`, `pending`, `awaiting`. |
 | `checks[]` | `id`, `mode`, `status` (`pending`, `running`, `passed`, `failed`, `awaiting_verdict`, `skipped`), `start`, `length`, `started_frame`, `ended_frame`, `started_ms`, `ended_ms`, `evidence` (`at_start`, `last`, `samples`, `reason`, and a verdict's `note` and `captures`), and on a hold `hold` (`held_ms`, `resolved_frame`, `resolved_ms`, `value`, and when the clip was recorded `recorded_ms` and `drift_ms`). |
-| `regions[]` | `id`, `name`, `start`, `end`, `status` (`passed`, `failed`, `pending` or `empty`), the `checks` that start in it, and with a reference `drift` (`max_position_cm`, `max_velocity_cms`, `frames_compared`, `first_over_frame`). |
+| `regions[]` | `id`, `name`, `start`, `end`, `status` (`passed`, `failed`, `pending`, `skipped` when every check in it was skipped, as outside the region a run played, or `empty`), the `checks` that start in it, from its start up to the next region's start (the last region includes its end), and with a reference `drift` (`max_position_cm`, `max_velocity_cms`, `frames_compared`, `first_over_frame`). |
 | `drift` | Against the clip's `reference` over the whole run: `compared`, `frames_compared`, `max_position_cm`, `max_velocity_cms`, `first_over_frame` (5 cm or 25 cm/s), or `error`. Frames spent standing at a hold are not compared. |
 | `events[]` | Each event fired: `id`, `frame`, `game_ms`, `ok`, `error`. |
 | `take` | On a recording: see below. |

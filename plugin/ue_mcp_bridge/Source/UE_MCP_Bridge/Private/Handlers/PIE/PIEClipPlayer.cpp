@@ -176,9 +176,8 @@ namespace MCPPIE
 			CR.Def = C;
 			if (!Run.RegionId.IsEmpty())
 			{
-				const FClipRegion* R = Run.Clip.Regions.FindByPredicate([this](const FClipRegion& X) { return X.Id == Run.RegionId; });
-				const bool bIn = R && C.Start >= R->Start - 1e-6 && C.Start <= R->End + 1e-6;
-				if (!bIn)
+				const int32 R = Run.Clip.Regions.IndexOfByPredicate([this](const FClipRegion& X) { return X.Id == Run.RegionId; });
+				if (!ClipCheckStartsInRegion(Run.Clip, R, C.Start))
 				{
 					CR.Status = EClipCheckStatus::Skipped;
 					CR.Reason = FString::Printf(TEXT("outside region %s, the one played"), *Run.RegionId);
@@ -590,8 +589,9 @@ namespace MCPPIE
 		{
 			if (const UCharacterMovementComponent* Move = Ch->GetCharacterMovement()) S.Velocity = Move->Velocity;
 		}
-		// While holding, the clip stands still and the world does not: those frames are not compared.
-		if (Run.HoldingCheck == INDEX_NONE || Run.PawnTrack.Num() == 0 || !FMath::IsNearlyEqual(Run.PawnTrack.Last().Frame, S.Frame, 1e-6))
+		// One sample per clip frame. While holding, the clip stands still and the world does not, so those frames are
+		// not compared; when the world does not advance either, as in a long first frame, there is nothing new to keep.
+		if (Run.PawnTrack.Num() == 0 || !FMath::IsNearlyEqual(Run.PawnTrack.Last().Frame, S.Frame, 1e-6))
 		{
 			Run.PawnTrack.Add(S);
 			if (Run.bHasReference && Run.HoldingCheck == INDEX_NONE)

@@ -322,6 +322,18 @@ bool FPIEClipChecksTest::RunTest(const FString& /*Parameters*/)
 	TestEqual(TEXT("region 2 failed"), Regions[1].Status, FString(TEXT("failed")));
 	TestEqual(TEXT("region 2 drift"), Regions[1].MaxPositionCm, 12.f);
 	TestEqual(TEXT("first frame over threshold"), Regions[1].FirstOverFrame, 320.0);
+
+	// A check on the boundary belongs to the region that starts there; the last region keeps its own end.
+	TestFalse(TEXT("a check at a region's end is not in it"), ClipCheckStartsInRegion(Clip, 0, 300.0));
+	TestTrue(TEXT("a check at a region's end is in the next"), ClipCheckStartsInRegion(Clip, 1, 300.0));
+	TestTrue(TEXT("the last region keeps its end"), ClipCheckStartsInRegion(Clip, 1, 600.0));
+	TestFalse(TEXT("an unknown region holds nothing"), ClipCheckStartsInRegion(Clip, 5, 10.0));
+
+	// A region whose checks were all skipped, outside the region a run played, did not pass.
+	TArray<FClipCheckRun> Skipped = Runs;
+	for (FClipCheckRun& C : Skipped) if (C.Def.Start < 300.0) C.Status = EClipCheckStatus::Skipped;
+	const TArray<FClipRegionResult> OneRegion = SummarizeClipRegions(Clip, Skipped, {}, 5.f, 25.f);
+	TestEqual(TEXT("a region of skipped checks is skipped"), OneRegion[0].Status, FString(TEXT("skipped")));
 	return true;
 }
 

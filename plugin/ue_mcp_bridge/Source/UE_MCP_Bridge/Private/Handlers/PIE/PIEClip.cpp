@@ -2051,6 +2051,14 @@ namespace MCPPIE
 		return O;
 	}
 
+	bool ClipCheckStartsInRegion(const FClip& Clip, int32 RegionIndex, double Start)
+	{
+		if (!Clip.Regions.IsValidIndex(RegionIndex)) return false;
+		const FClipRegion& R = Clip.Regions[RegionIndex];
+		const bool bLast = RegionIndex == Clip.Regions.Num() - 1;
+		return Start >= R.Start - 1e-6 && (Start < R.End - 1e-6 || (bLast && Start <= R.End + 1e-6));
+	}
+
 	TArray<FClipRegionResult> SummarizeClipRegions(const FClip& Clip, const TArray<FClipCheckRun>& Checks,
 		const TArray<FClipDriftSample>& Drift, float ThrPosCm, float ThrVelCms)
 	{
@@ -2061,16 +2069,18 @@ namespace MCPPIE
 			const bool bLast = r == Clip.Regions.Num() - 1;
 			FClipRegionResult Res;
 			Res.Def = R;
-			bool bAnyFailed = false, bAnyOpen = false;
+			bool bAnyFailed = false, bAnyOpen = false, bAnyPassed = false;
 			for (const FClipCheckRun& C : Checks)
 			{
-				const bool bIn = C.Def.Start >= R.Start - 1e-6 && (C.Def.Start < R.End - 1e-6 || (bLast && C.Def.Start <= R.End + 1e-6));
-				if (!bIn) continue;
+				if (!ClipCheckStartsInRegion(Clip, r, C.Def.Start)) continue;
 				Res.CheckIds.Add(C.Def.Id);
 				if (C.Status == EClipCheckStatus::Failed) bAnyFailed = true;
-				else if (C.Status != EClipCheckStatus::Passed && C.Status != EClipCheckStatus::Skipped) bAnyOpen = true;
+				else if (C.Status == EClipCheckStatus::Passed) bAnyPassed = true;
+				else if (C.Status != EClipCheckStatus::Skipped) bAnyOpen = true;
 			}
-			Res.Status = bAnyFailed ? TEXT("failed") : bAnyOpen ? TEXT("pending") : Res.CheckIds.Num() > 0 ? TEXT("passed") : TEXT("empty");
+			// A region whose checks were all skipped, such as one outside the region a run played, did not pass.
+			Res.Status = bAnyFailed ? TEXT("failed") : bAnyOpen ? TEXT("pending") : bAnyPassed ? TEXT("passed")
+				: Res.CheckIds.Num() > 0 ? TEXT("skipped") : TEXT("empty");
 			for (const FClipDriftSample& D : Drift)
 			{
 				if (D.Frame < R.Start - 1e-6 || D.Frame >= R.End + (bLast ? 1.0 : 0.0) - 1e-6) continue;

@@ -355,4 +355,8 @@ namespace MCPPIE
 	};
 	TArray<FClipRegionResult> SummarizeClipRegions(const FClip& Clip, const TArray<FClipCheckRun>& Checks,
 		const TArray<FClipDriftSample>& Drift, float ThrPosCm, float ThrVelCms);
+	// Whether a check starting at Start belongs to the region at RegionIndex: from its start up to its end, where the
+	// next region begins, and up to and including the end of the last region. A run of one region and the region
+	// results both decide membership here, so a check is never judged in one region and reported in another.
+	bool ClipCheckStartsInRegion(const FClip& Clip, int32 RegionIndex, double Start);
 }
