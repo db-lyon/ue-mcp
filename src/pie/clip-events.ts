@@ -7,12 +7,15 @@
  * run, and `seq` numbers a run's events in the order they were emitted.
  */
 
+import type { LiveTakeDelta } from "./clip-take-live.js";
+
 export type ClipEventType =
   | "run_started"
   | "position"
   | "check"
   | "region"
   | "event_fired"
+  | "take_progress"
   | "verdict_requested"
   | "run_finished";
 
@@ -54,6 +57,11 @@ export type ClipEvent =
   | (ClipEventBase & { type: "region"; region: Record<string, unknown> })
   /** An event the run fired: {id, frame, game_ms, ok, error?}. */
   | (ClipEventBase & { type: "event_fired"; event: Record<string, unknown> })
+  /**
+   * A recording's take in flight (clip-take-live.ts): each armed track's notes as they now stand, the last one open
+   * while held, and the axis keys appended since the previous take_progress, starting at index keysFrom.
+   */
+  | (ClipEventBase & { type: "take_progress"; takeId?: string; punchIn?: number } & LiveTakeDelta)
   /** The manual checks the run is paused on, for clip_verdict. */
   | (ClipEventBase & { type: "verdict_requested"; awaiting: string[] })
   | (ClipEventBase & {

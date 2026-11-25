@@ -10,6 +10,7 @@
 import type { ToolContext } from "../surface/tool-types.js";
 import { emitClipEvent, type ClipEvent, type ClipPosition } from "./clip-events.js";
 import { clipWaitFollowUp, type ClipWaitClock } from "./clip-wait.js";
+import { LiveTake } from "./clip-take-live.js";
 
 type Body = Record<string, unknown>;
 
@@ -149,12 +150,30 @@ export class ClipWatcher {
   apply(status: Body): void {
     if (this.ended || (str(status.run_id) && status.run_id !== this.runId)) return;
     if (str(status.clip)) this.clip = str(status.clip)!;
-    for (const change of diffClipStatus(this.last, status)) {
+    const changes = diffClipStatus(this.last, status);
+    const take = status.take && typeof status.take === "object" ? (status.take as Body) : null;
+    const live = take?.live && typeof take.live === "object" ? (take.live as Body) : null;
+    const delta = live ? this.liveTake.apply(live) : null;
+    if (delta) {
+      // Before run_finished, so a take's last notes land before the run ends.
+      const at = changes.findIndex((c) => c.type === "run_finished");
+      const progress: ClipChange = {
+        type: "take_progress",
+        ...(str(take?.take_id) ? { takeId: str(take?.take_id) } : {}),
+        ...(typeof take?.punch_in === "number" ? { punchIn: take.punch_in } : {}),
+        ...delta,
+      };
+      changes.splice(at < 0 ? changes.length : at, 0, progress);
+    }
+    for (const change of changes) {
       this.emit(change);
       if (change.type === "run_finished") this.ended = true;
     }
     this.last = status;
   }
+
+  /** The take in flight while the run records, for a client that joins mid-take. */
+  readonly liveTake = new LiveTake();
 
   stop(): void {
     this.ended = true;
@@ -228,5 +247,19 @@ export async function clipRunFollowUp(
       startClipWatch(ctx, body.run_id as string, body, clock ? { clock } : {});
     }
   }
-  return clipWaitFollowUp(ctx, params, answered, clock);
+  return withLiveTake(await clipWaitFollowUp(ctx, params, answered, clock));
+}
+
+/**
+ * Replaces the raw sample window of a take in flight with the take so far as notes and keys (`take.live_take`),
+ * from the watcher that has been folding the windows in since the punch-in.
+ */
+export function withLiveTake(answered: unknown): unknown {
+  if (!answered || typeof answered !== "object") return answered;
+  const body = answered as Body;
+  const take = body.take && typeof body.take === "object" ? (body.take as Body) : null;
+  if (!take || !("live" in take)) return answered;
+  const { live: _live, ...rest } = take;
+  const w = str(body.run_id) ? watchers.get(body.run_id as string) : undefined;
+  return { ...body, take: w && w.liveTake.next > 0 ? { ...rest, live_take: w.liveTake.snapshot() } : rest };
 }
