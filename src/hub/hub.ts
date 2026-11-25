@@ -221,6 +221,7 @@ export class Hub {
         const r = kind === "script" ? this.runs.byCheck(checkId({ kind: "script", target }))[0] : undefined;
         return r ? { runId: r.runId, outcome: r.outcome, at: r.startedAt } : null;
       },
+      deleteBlocked: (id) => this.deleteBlocked(id),
     });
     this.arrangements = new ArrangementRunner(o.host, { now: iso });
     // Goals become tracks once, each playtest reserving its newest run's length (#2113).
@@ -935,16 +936,22 @@ export class Hub {
    * that plan was started from the goal.
    */
   deleteGoal(id: string): void {
+    if (!this.goals.get(id)) throw notFound(`no goal ${id}`);
+    const why = this.deleteBlocked(id);
+    if (why) throw conflict(why);
+    this.goals.delete(id);
+  }
+
+  /** Why a goal cannot be deleted now: a plan made for it is queued or running. Null when it can. */
+  private deleteBlocked(id: string): string | null {
     const goal = this.goals.get(id);
-    if (!goal) throw notFound(`no goal ${id}`);
+    if (!goal) return null;
     const q = this.queue.state();
     const plans = [q.current, ...q.queued].filter((p): p is PlanRun => !!p && (("goalId" in p.scope && p.scope.goalId === id) || (p.scope.kind === "slot" && (p.scope.sceneId === id || p.scope.trackId === id))));
-    if (plans.length) {
-      const names = plans.map((p) => `"${p.title}"`).join(", ");
-      // A person reads plans as runs: Studio's queue lists them under Runs.
-      throw conflict(`"${goal.title}" can't be deleted while ${plans.length === 1 ? "a run made for it is" : "runs made for it are"} queued or running: ${names}. Cancel ${plans.length === 1 ? "that run" : "those runs"} or let ${plans.length === 1 ? "it" : "them"} finish, then try again.`);
-    }
-    this.goals.delete(id);
+    if (!plans.length) return null;
+    const names = plans.map((p) => `"${p.title}"`).join(", ");
+    // A person reads plans as runs: Studio's queue lists them under Runs.
+    return `"${goal.title}" can't be deleted while ${plans.length === 1 ? "a run made for it is" : "runs made for it are"} queued or running: ${names}. Cancel ${plans.length === 1 ? "that run" : "those runs"} or let ${plans.length === 1 ? "it" : "them"} finish, then try again.`;
   }
 
   /**

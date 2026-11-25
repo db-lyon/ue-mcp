@@ -144,9 +144,13 @@ Ops, one per line; a track or scene is named by its id or its exact name, and an
 |---|---|
 | Tracks | `track add "Name" [color=C] [player=N] [at=N]`, `track delete`, `rename`, `color`, `move <t> to <N>`, `mute <t> on\|off`, `solo <t> on\|off`, `player <t> <N>` |
 | Scenes | `scene add "Name"`, `scene insert "Name" at <N>`, `scene delete`, `rename`, `color`, `duplicate`, `move <s> to <N>`, `scene track <s> add\|remove <t>` |
-| Instances | `add <t> <clip\|script> <path> [at <frame>]`, `duplicate <t>/<i> [at <frame>]`, `copy <t>/<i> to <t2> [at <frame>]`, `move <t>/<i> to <frame>`, `by <frames>` or `to <t2> [at <frame>]`, `trim <t>/<i> in=N out=N` or `length=N`, `rename <t>/<i> "Name"`, `color <t>/<i> <C>`, `delete <t>/<i>`, `unique <t>/<i>` |
+| Instances | `add <t> <clip\|script> <path> [at <frame>]`, `duplicate <t>/<i> [at <frame>]`, `copy <t>/<i> to <t2> [at <frame>]`, `move <t>/<i> to <frame>`, `by <frames>` or `to <t2> [at <frame>]`, `trim <t>/<i> in=N out=N` or `length=N`, `rename <t>/<i> "Name"`, `color <t>/<i> <C>`, `delete <t>/<i>`, `unique <t>/<i>`, `retarget <t>/<i> [clip\|script] <path>` |
+
+`retarget` points an instance at another clip and keeps its place, name, color and trim; naming the other kind (a step-list playtest in place of a timeline clip, or the reverse) drops the trim. A path that names no clip fails with the closest ones as candidates.
 
 Colors are `red`, `orange`, `yellow`, `lime`, `green`, `teal`, `cyan`, `blue`, `indigo`, `violet`, `pink` and `gray`. The set model also carries Session view slots (`slot ...` ops and `slot` runs) for the grid that comes later; no view shows them yet.
+
+`track delete` and `scene delete` remove the record as `DELETE /v1/hub/goals/<id>` does, its sign-off included, and are refused the same way while a run made for it is queued or running. A track's slots go with it; its clips stay.
 
 The `hub` MCP category has the same through `read_set`, `edit_set` (`ops`), `run` (`scope`: `track <t>`, `scene <s>` or `arrangement`) and `read_run`.
 
