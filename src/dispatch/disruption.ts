@@ -330,11 +330,18 @@ export class DisruptionRegistry {
     return this.sessions.has(id);
   }
 
-  /** A connection closed: the session, its hold and its votes go with it. */
+  /**
+   * A connection closed: the session, its hold and its votes go with it, and so
+   * do its open requests. Nobody is left to run them, so other sessions are not
+   * asked about them, and are not told about them in every later response.
+   */
   closed(id: string): void {
     const had = this.sessions.delete(id);
     for (const r of this.requests.values()) {
-      if (r.votes.delete(id)) this.emit({ type: "updated", request: this.view(r) });
+      if (!r.closed && r.requester.id === id) {
+        r.closed = { state: "expired", at: this.now() };
+        this.emit({ type: "updated", request: this.view(r) });
+      } else if (r.votes.delete(id)) this.emit({ type: "updated", request: this.view(r) });
     }
     if (had) this.reevaluate();
   }
