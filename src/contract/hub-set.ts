@@ -166,10 +166,11 @@ export type SetOp =
   | { op: "instance"; track: string; edit: ArrangementOp }
   | { op: "instance.copy"; track: string; id: string; toTrack: string; at?: number; remove?: boolean }
   | { op: "instance.color"; track: string; id: string; color: string | null }
-  | { op: "instance.retarget"; track: string; id: string; target: string }
+  /** Point an instance at another clip, keeping its place, name and color. A new `kind` drops the trim, which the old kind's frames gave. */
+  | { op: "instance.retarget"; track: string; id: string; target: string; kind?: InstanceKind }
   | { op: "instance.unique"; track: string; id: string };
 
-const OP_WORDS = ["track", "scene", "slot", "add", "duplicate", "copy", "move", "trim", "rename", "color", "delete", "unique"];
+const OP_WORDS = ["track", "scene", "slot", "add", "duplicate", "copy", "move", "trim", "rename", "color", "delete", "unique", "retarget"];
 
 /** Ops from their text form, one per line (or separated by ";"), as the issue's op table gives them. */
 export function setOpsFromText(text: string): { ops: SetOp[]; findings: ArrangementFinding[] } {
@@ -297,6 +298,11 @@ export function setOpsFromText(text: string): { ops: SetOp[]; findings: Arrangem
         return void ops.push({ op: "instance", track: r.track, edit: { op: "delete", id: r.id } });
       case "unique":
         return void ops.push({ op: "instance.unique", track: r.track, id: r.id });
+      case "retarget": {
+        const kind = w[2] === "clip" || w[2] === "script" ? w[2] : undefined;
+        const target = kind ? w[3] : w[2];
+        return target ? void ops.push({ op: "instance.retarget", track: r.track, id: r.id, target, ...(kind ? { kind } : {}) }) : bad("retarget <track>/<instance> [clip|script] <path>");
+      }
       default:
         return bad("an op from the op table", rankClipCandidates(head, OP_WORDS));
     }
@@ -316,6 +322,8 @@ export function setOpsOf(v: unknown): { ops: SetOp[]; findings: ArrangementFindi
 export interface SetEditOptions extends ArrangementValidateOptions {
   /** A fresh id for a new track or scene from its title. */
   newId: (title: string) => string;
+  /** Asset paths the caller has just made (make unique's copies), taken as clips without being read. */
+  made?: ReadonlySet<string>;
 }
 
 export type SetEditResult =
@@ -327,7 +335,9 @@ export type SetEditResult =
  * its exact title (case-insensitive); a name that matches nothing fails with
  * the closest ones as candidates. `slot.unique` and `instance.unique` need a
  * copy of the clip asset, which the caller makes first and turns into
- * `slot.set` and `instance.retarget`; here they fail.
+ * `slot.set` and `instance.retarget`; here they fail. A clip a slot or
+ * instance is pointed at must be one `factsOf` knows, or, when the library
+ * cannot be listed, is taken on trust.
  */
 export function applySetOps(m: SetModel, ops: readonly SetOp[], o: SetEditOptions): SetEditResult {
   const set: SetModel = {
@@ -477,7 +487,7 @@ export function applySetOps(m: SetModel, ops: readonly SetOp[], o: SetEditOption
         if (op.op === "slot.set") {
           if ((op.kind !== "clip" && op.kind !== "script") || typeof op.target !== "string" || !op.target.startsWith("/")) return fail(`${s.id}/${t.id}`, "target", "slot set needs kind clip or script and an asset path");
           const target = targetKey(op.target);
-          if (!o.factsOf(target, op.kind)) {
+          if (!o.factsOf(target, op.kind) && !o.made?.has(target)) {
             const pool = o.library?.(op.kind);
             if (pool) return fail(target, "target", `no ${op.kind === "clip" ? "timeline clip" : "step-list playtest"} at ${target}`, rankClipCandidates(target, pool));
           }
@@ -558,7 +568,23 @@ export function applySetOps(m: SetModel, ops: readonly SetOp[], o: SetEditOption
           if (c === false) return badColor(op.color);
           if (c) inst.color = c;
           else delete inst.color;
-        } else inst.target = targetKey(String(op.target));
+        } else {
+          if (op.kind !== undefined && op.kind !== "clip" && op.kind !== "script") return fail(`${t.id}/${inst.id}`, "kind", "kind must be clip or script");
+          if (typeof op.target !== "string" || !op.target.startsWith("/")) return fail(`${t.id}/${inst.id}`, "target", "retarget needs an asset path");
+          const kind: InstanceKind = op.kind ?? inst.kind;
+          const target = targetKey(op.target);
+          if (!o.factsOf(target, kind) && !o.made?.has(target)) {
+            const pool = o.library?.(kind);
+            if (pool) return fail(target, "target", `no ${kind === "clip" ? "timeline clip" : "step-list playtest"} at ${target}`, rankClipCandidates(target, pool));
+          }
+          inst.target = target;
+          if (kind !== inst.kind) {
+            inst.kind = kind;
+            delete inst.in;
+            delete inst.out;
+            delete inst.length;
+          }
+        }
         changed.push(`${t.id}/${inst.id}`);
         break;
       }

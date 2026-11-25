@@ -105,15 +105,20 @@ export class SetService {
     const parsed = setOpsOf(body.ops);
     if (parsed.findings.length) throw new FindingError(parsed.findings[0], parsed.findings);
     const m = this.o.goals.setModel();
-    const targets = parsed.ops.flatMap((op): Array<{ kind: InstanceKind; target: string }> => {
-      const x = op as SetOp & { edit?: { kind?: unknown; target?: unknown }; kind?: unknown; target?: unknown };
-      const k = x.edit?.kind ?? x.kind;
+    const targetsOf = (list: readonly SetOp[]) => list.flatMap((op): Array<{ kind: InstanceKind; target: string }> => {
+      const x = op as SetOp & { edit?: { kind?: unknown; target?: unknown }; kind?: unknown; target?: unknown; track?: unknown; id?: unknown };
+      // A retarget keeps its instance's kind unless it names one.
+      const own = op.op === "instance.retarget" ? m.tracks.find((t) => t.id === x.track || t.title.toLowerCase() === String(x.track).toLowerCase())?.arrangement.instances.find((i) => i.id === x.id)?.kind : undefined;
+      const k = x.edit?.kind ?? x.kind ?? own;
       const t = x.edit?.target ?? x.target;
       return (k === "clip" || k === "script") && typeof t === "string" ? [{ kind: k, target: t }] : [];
     });
-    await this.o.library.load([...this.refsOf(m), ...targets]);
+    await this.o.library.load([...this.refsOf(m), ...targetsOf(parsed.ops)]);
     const ops = await this.uniques(parsed.ops, m);
-    const r = applySetOps(m, ops, this.opts());
+    // The copies make unique just made are read like any clip an op names, and taken as clips even before the editor lists them.
+    const copies = targetsOf(ops.filter((op) => !parsed.ops.includes(op)));
+    if (copies.length) await this.o.library.load(copies);
+    const r = applySetOps(m, ops, { ...this.opts(), made: new Set(copies.map((c) => targetKey(c.target))) });
     if (!r.ok) throw new FindingError(r.finding);
     // Deleting through an op is held to what DELETE /hub/goals/:id refuses.
     const kept = new Set([...r.set.tracks, ...r.set.scenes].map((x) => x.id));
