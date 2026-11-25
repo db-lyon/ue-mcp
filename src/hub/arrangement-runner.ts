@@ -188,7 +188,8 @@ export class ArrangementRunner {
       const outcome = run ? outcomeOf(run) : "running";
       ended = !!run && qaEnded(run.state);
       stopReason = run?.stopReason;
-      l.segs[n] = { ...st, outcome, state: ended ? (run!.state === "stopped" ? "stopped" : "finished") : "running", ...(stopReason ? { reason: stopReason } : {}) };
+      const awaiting = (run?.steps ?? []).filter((s) => s.status === "awaiting_verdict").map((s) => ({ check: String(s.index), instruction: s.instruction }));
+      l.segs[n] = { ...st, outcome, awaiting, state: ended ? (run!.state === "stopped" ? "stopped" : "finished") : "running", ...(stopReason ? { reason: stopReason } : {}) };
       l.state = outcome === "needs_you" ? "awaiting_verdict" : "running";
     }
     if (ended) {

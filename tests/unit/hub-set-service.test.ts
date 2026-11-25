@@ -9,6 +9,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import type { ActionResult } from "../../src/contract/daemon.js";
+import type { SetView } from "../../src/contract/hub.js";
 import { StatusError } from "../../src/core/status-error.js";
 import { hubRoutes } from "../../src/daemon/hub-routes.js";
 import { findRoute, type RouteHandler, type RouteRequest } from "../../src/daemon/router.js";
@@ -139,6 +140,10 @@ describe("the hub's set", () => {
     expect(door.checks).toEqual([{ kind: "script", target: DOOR }]);
     const set = (await call("GET", "/hub/set")).body;
     expect(set.scenes[0]).toMatchObject({ id: "ms-bbbb", tracks: ["door-aaaa"] });
+    // SetView declares a scene's tracks, so a typed client reads them without a cast.
+    const typed: SetView = await hub.set.view();
+    const tracks: string[] = typed.scenes[0].tracks;
+    expect(tracks).toEqual(["door-aaaa"]);
     expect(set.text).toContain("scene ms-bbbb Alpha tracks=door-aaaa");
     // Once: an emptied track stays empty.
     hub.goals.setArrangement("door-aaaa", { rate: 60, instances: [] });
@@ -223,7 +228,14 @@ scene track "Boss fight" add Guard` });
     // C is muted; B's lanes drive remote client 1.
     expect(clip.tracks.map((t) => [t.action.split(".").pop(), t.client ?? 0])).toEqual([["IA_Move", 0], ["IA_Jump", 1]]);
     expect(clip.checks.map((c) => [c.id, c.start])).toEqual([["1-i1.c1", 0], ["2-i1.c1", 30]]);
-    const runId = hub.queue.state().current!.items[0].runId!;
+    // It started at once, so the answer names its run.
+    expect(queued.body.placement.state).toBe("started");
+    const runId = queued.body.runId as string;
+    expect(runId).toBe(hub.queue.state().current!.items[0].runId);
+    // Behind it, a run is queued and has no id yet.
+    const behind = await call("POST", "/hub/run", { scope: { kind: "arrangement" } });
+    expect(behind.body).toMatchObject({ placement: { state: "queued" }, runId: null });
+    await call("POST", `/hub/plans/${behind.body.plan.id}/cancel`);
     clipRuns.set("clip_0", { run_id: "clip_0", state: "finished", position: 120, checks: [{ id: "1-i1.c1", status: "passed" }, { id: "2-i1.c1", status: "passed" }] });
     await hub.arrangements.refresh(runId);
     await settle();
@@ -246,6 +258,11 @@ scene track "Boss fight" add Guard` });
     await hub.arrangements.refresh(runId);
     const script = calls.find((c) => c.action === "script_run")!;
     expect(script.args).toMatchObject({ script: DOOR, start_pie: true, keep_pie: true });
+    // A step waiting for a verdict is named on its instance, with the check id the verdict route takes.
+    scriptRuns.set("script_1", { run_id: "script_1", script: DOOR, script_name: "DoorOpens", state: "awaiting_verdict", steps: [{ index: 0, instruction: "Open it", judge: "manual", status: "awaiting_verdict" }], awaiting: [0] });
+    await hub.arrangements.refresh(runId);
+    const waiting = (await call("GET", `/hub/runs/${runId}`)).body.arrangement.instances[1];
+    expect(waiting).toMatchObject({ id: "i2", status: "awaiting_verdict", awaiting: [{ check: "0", instruction: "Open it" }] });
     scriptRuns.set("script_1", { run_id: "script_1", script: DOOR, script_name: "DoorOpens", state: "finished", steps: [{ index: 0, instruction: "Open it", judge: "auto", status: "failed" }], awaiting: [] });
     await hub.arrangements.refresh(runId);
     const second = calls.filter((c) => c.action === "clip_run")[1];

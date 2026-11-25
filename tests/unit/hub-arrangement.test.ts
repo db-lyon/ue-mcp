@@ -78,6 +78,9 @@ clip - /Game/Clips/CL_Jump 390 name="Big jump"`);
   it("lays instances out against their clips, scaling another clip rate", () => {
     const l = layoutOf(track("clip i1 /Game/Clips/CL_Walk 0 in=20\nclip i2 /Game/Clips/CL_Jump 100\nscript i3 /Game/Tests/PT_Door 200"), facts);
     expect(l.map((x) => [x.id, x.start, x.end])).toEqual([["i1", 0, 100], ["i2", 100, 160], ["i3", 200, 500]]);
+    // A client trims in the clip's own frames, so each clip says its rate and length.
+    expect(l.map((x) => [x.clipRate, x.clipLength])).toEqual([[60, 120], [30, 30], [undefined, undefined]]);
+    expect(layoutOf(track("clip i1 /Game/Clips/CL_Gone 0"), facts)[0]).not.toHaveProperty("clipRate");
   });
 
   it("plays from a frame: ended clips left out, a clip cut part-way, a step list whole", () => {
@@ -225,5 +228,23 @@ describe("composition", () => {
       ["i2", "failed", 100, 400, "script_1"],
       ["i3", "running", 450, 510, "clip_2"],
     ]);
+    expect(r.map((x) => x.awaiting)).toEqual([[], [], []]);
+  });
+
+  it("names the manual checks waiting for a verdict on each instance, with what each asks", () => {
+    const ask = (id: string, extra: Record<string, unknown>) => ({ id, start: 0, length: 0, mode: "hold", manual: true, ...extra });
+    const manual = (t: string): ClipJson | undefined => (t === "/Game/Clips/CL_Look" ? { ...JUMP, checks: [ask("c1", { instruction: "Does the door glow?" }), ask("c2", { name: "Second look" })] } : clip(t));
+    const lfacts = (t: string, k: "clip" | "script") => (t === "/Game/Clips/CL_Look" ? clipFacts(t, "CL_Look", manual(t)!) : facts(t, k));
+    const c = compose([{ goalId: "g", arrangement: track("clip i1 /Game/Clips/CL_Look 0\nscript i2 /Game/Tests/PT_Door 100"), player: 0 }], { clip: manual, facts: lfacts });
+    const r = instanceResults(c, [
+      { runId: "clip_1", state: "running", position: 0, checks: { "i1.c1": "awaiting_verdict", "i1.c2": "awaiting_verdict" } },
+      { runId: null, state: "pending" },
+    ]);
+    expect(r[0]).toMatchObject({ status: "awaiting_verdict", awaiting: [{ check: "i1.c1", instruction: "Does the door glow?" }, { check: "i1.c2", instruction: "Second look" }] });
+    const s = instanceResults(c, [
+      { runId: "clip_1", state: "finished", position: 30, checks: { "i1.c1": "passed", "i1.c2": "passed" } },
+      { runId: "script_1", state: "running", outcome: "needs_you", awaiting: [{ check: "2", instruction: "Is the door open?" }] },
+    ]);
+    expect(s.map((x) => [x.status, x.awaiting])).toEqual([["passed", []], ["awaiting_verdict", [{ check: "2", instruction: "Is the door open?" }]]]);
   });
 });
