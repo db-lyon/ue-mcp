@@ -337,7 +337,15 @@ export interface SegmentState {
   checks?: Record<string, string>;
   /** Script segments: the run's outcome once it has one ("passed", "failed", "needs_you", ...). */
   outcome?: string;
+  /** Script segments: the steps waiting for a verdict, by index, with what each asks. */
+  awaiting?: InstanceAwaiting[];
   reason?: string | null;
+}
+
+/** A manual check waiting for a verdict: `check` is what POST /hub/runs/:id/verdict takes, `instruction` what to judge. */
+export interface InstanceAwaiting {
+  check: string;
+  instruction: string;
 }
 
 /** One instance's result in a track or scene run, at its place on the timeline. */
@@ -353,6 +361,8 @@ export interface InstanceResult {
   end: number;
   status: InstanceStatus;
   checks: { total: number; passed: number; failed: number; pending: number; awaiting: number };
+  /** The manual checks waiting for a verdict now: a clip's checks by their composed id, a step list's steps by index. Empty when none waits. */
+  awaiting: InstanceAwaiting[];
   /** The clip or script run that played it. */
   segmentRunId: string | null;
   reason?: string | null;
@@ -398,16 +408,22 @@ export function instanceResults(c: ArrangementComposition, segs: readonly Segmen
     const counts = { total: inst.checks.length, passed: 0, failed: 0, pending: 0, awaiting: 0 };
     let status: InstanceStatus = "pending";
     let reason: string | null | undefined = st.reason;
+    let awaiting: InstanceAwaiting[] = [];
     if (seg?.kind === "script") {
       const o = st.outcome;
       status = o === "passed" ? "passed" : o === "failed" ? "failed" : o === "needs_you" ? "awaiting_verdict" : st.state === "running" ? "running" : st.state === "error" ? "failed" : "pending";
+      if (st.state === "running") awaiting = st.awaiting ?? [];
     } else if (seg) {
+      const said = new Map(((seg.clip.checks ?? []) as ClipCheck[]).map((c) => [c.id, c]));
       for (const id of inst.checks) {
         const s = st.checks?.[id] ?? "pending";
         if (s === "passed") counts.passed++;
         else if (s === "failed") counts.failed++;
-        else if (s === "awaiting_verdict") counts.awaiting++;
-        else if (s !== "skipped") counts.pending++;
+        else if (s === "awaiting_verdict") {
+          counts.awaiting++;
+          const c = said.get(id);
+          awaiting.push({ check: id, instruction: typeof c?.instruction === "string" && c.instruction ? c.instruction : typeof c?.name === "string" && c.name ? c.name : id });
+        } else if (s !== "skipped") counts.pending++;
       }
       const pos = (st.position ?? 0) + seg.offset;
       const reached = st.state === "finished" || pos >= inst.end - EPS;
@@ -420,7 +436,7 @@ export function instanceResults(c: ArrangementComposition, segs: readonly Segmen
       else if (st.state === "running" && pos >= inst.start - EPS) status = "running";
       if (status === "pending" && (st.state === "stopped" || st.state === "finished")) reason ??= "the run ended before this instance played through";
     }
-    return { key: inst.key, goalId: inst.goalId, id: inst.id, kind: inst.kind, target: inst.target, name: inst.name, player: inst.player, start: inst.start, end: inst.end, status, checks: counts, segmentRunId: st.runId, ...(reason ? { reason } : {}) };
+    return { key: inst.key, goalId: inst.goalId, id: inst.id, kind: inst.kind, target: inst.target, name: inst.name, player: inst.player, start: inst.start, end: inst.end, status, checks: counts, awaiting, segmentRunId: st.runId, ...(reason ? { reason } : {}) };
   });
 }
 
