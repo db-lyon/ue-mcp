@@ -79,6 +79,9 @@ namespace MCPPIE
 		int32 ClientId = 0;
 		int32 PIEInstance = INDEX_NONE;
 		float AxisThreshold = 0.15f;
+		// "raw": sequence.json holds the value that reached each action before its own modifiers and triggers
+		// (#2097). Empty in older recordings, whose sequence holds the action's final value.
+		FString InputValues;
 		TArray<FActionSpec> Actions;
 		TArray<FTrackedValueSpec> TrackedValues;
 		TArray<FString> TrackedActorIds;
@@ -264,6 +267,9 @@ namespace MCPPIE
 		float Speed2D = 0.f;
 		FString MontageSection;
 		TMap<FString, FVector> ActionValues;
+		// The value that reached each action before its own modifiers and triggers (#2097), when the sampler
+		// captures it. Zero on a frame the engine did not evaluate the action. Not written to recording.csv.
+		TMap<FString, FVector> RawActionValues;
 		TMap<FString, double> TrackedValues;
 		TArray<FString> EdgeEvents;
 		// Per-frame performance (item 4a). Written to recording.csv as

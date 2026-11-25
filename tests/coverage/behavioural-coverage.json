@@ -13244,6 +13244,11 @@
           "suite": "live",
           "file": "tests/live/bcov-editor-world.test.ts",
           "test": "read_bone_transforms samples the bones in world space at the actor's location"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/pie-raw-input-replay.test.ts",
+          "test": "records the raw value, and a fixed-timestep replay runs each action's trigger and modifier once, within the drift thresholds"
         }
       ]
     },
@@ -17240,6 +17245,11 @@
         },
         {
           "suite": "live",
+          "file": "tests/live/pie-raw-input-replay.test.ts",
+          "test": "records the raw value, and a fixed-timestep replay runs each action's trigger and modifier once, within the drift thresholds"
+        },
+        {
+          "suite": "live",
           "file": "tests/live/pie-script-place-delete.test.ts",
           "test": "a place act puts the pawn at a location written as {x, y, z} or as [x, y, z]"
         },
@@ -17643,6 +17653,11 @@
           "suite": "live",
           "file": "tests/live/bcov-pie-session.test.ts",
           "test": "record_arm and record_disarm move the recorder between armed and idle"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/pie-raw-input-replay.test.ts",
+          "test": "records the raw value, and a fixed-timestep replay runs each action's trigger and modifier once, within the drift thresholds"
         }
       ]
     },
@@ -17656,6 +17671,11 @@
           "suite": "live",
           "file": "tests/live/bcov-pie-session.test.ts",
           "test": "record_delete removes the recording folder and reports a second delete as already done"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/pie-raw-input-replay.test.ts",
+          "test": "records the raw value, and a fixed-timestep replay runs each action's trigger and modifier once, within the drift thresholds"
         }
       ]
     },
@@ -17728,6 +17748,11 @@
           "suite": "live",
           "file": "tests/live/bcov-pie-session.test.ts",
           "test": "record_list and record_read return its manifest, sequence and csv"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/pie-raw-input-replay.test.ts",
+          "test": "records the raw value, and a fixed-timestep replay runs each action's trigger and modifier once, within the drift thresholds"
         }
       ]
     },
@@ -17761,6 +17786,11 @@
           "suite": "live",
           "file": "tests/live/bcov-pie-session.test.ts",
           "test": "replay_state with apply teleports the live pawn to a recorded pose"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/pie-raw-input-replay.test.ts",
+          "test": "records the raw value, and a fixed-timestep replay runs each action's trigger and modifier once, within the drift thresholds"
         }
       ]
     },
@@ -17874,6 +17904,11 @@
           "suite": "live",
           "file": "tests/live/pie-multiplayer-scripts.test.ts",
           "test": "a replay's start_when opens on a client of the dedicated server, which starts from the recorded spot (#2011, #2010)"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/pie-raw-input-replay.test.ts",
+          "test": "records the raw value, and a fixed-timestep replay runs each action's trigger and modifier once, within the drift thresholds"
         }
       ]
     },
@@ -17930,6 +17965,11 @@
           "suite": "live",
           "file": "tests/live/pie-multiplayer-scripts.test.ts",
           "test": "a replay's start_when opens on a client of the dedicated server, which starts from the recorded spot (#2011, #2010)"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/pie-raw-input-replay.test.ts",
+          "test": "records the raw value, and a fixed-timestep replay runs each action's trigger and modifier once, within the drift thresholds"
         }
       ]
     },
