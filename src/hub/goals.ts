@@ -142,7 +142,7 @@ export function readGoal(raw: unknown, id: string): ReadGoal | { problem: string
     } else if (isObject(c) && typeof c.kind === "string" && c.kind !== "script" && typeof c.target === "string" && c.target.trim()) {
       unsupported.push({ kind: c.kind, target: c.target.trim(), ...(c.required === false ? { required: false } : {}) });
     } else {
-      problems.push(`check ${i + 1} is not a playtest: { kind: "script", target: "/Game/..." }`);
+      problems.push(`check ${i + 1} is not a clip: { kind: "script", target: "/Game/..." }`);
     }
   }
   for (const u of Array.isArray(raw.unsupported) ? raw.unsupported : []) {
@@ -155,7 +155,7 @@ export function readGoal(raw: unknown, id: string): ReadGoal | { problem: string
   for (const [i, r] of (Array.isArray(raw.requires) ? raw.requires : []).entries()) {
     const rid = isObject(r) ? r.goal : undefined;
     if (typeof rid !== "string" || !GOAL_ID.test(rid) || rid === id) {
-      problems.push(`required goal ${i + 1} is not another goal's { goal: id }`);
+      problems.push(`required track ${i + 1} is not another track's { goal: id }`);
       continue;
     }
     if (!requires.some((x) => x.goal === rid)) requires.push({ goal: rid, ...((r as Record<string, unknown>).required === false ? { required: false } : {}) });
@@ -232,7 +232,7 @@ function checksFromArrangement(a: Arrangement, had: readonly CheckRef[]): CheckR
 function checkMetaOf(raw: unknown, id: string): CheckMetaRecord | string {
   if (!isObject(raw)) return "it is not a JSON object";
   const ref = checkRefOf(raw.check);
-  if (!ref || checkId(ref) !== id) return `it does not name the playtest ${id}`;
+  if (!ref || checkId(ref) !== id) return `it does not name the clip ${id}`;
   const links = readLinks(raw.links);
   if (links.problems.length) return links.problems.join("; ");
   if (raw.title !== undefined && typeof raw.title !== "string") return "its title is not text";
@@ -339,7 +339,7 @@ export class Goals {
 
   private must(id: string): Goal {
     const g = this.get(id);
-    if (!g) throw notFound(`no goal ${id}`);
+    if (!g) throw notFound(`no track ${id}`);
     return g;
   }
 
@@ -348,9 +348,9 @@ export class Goals {
     const goals = this.list();
     const out = [...this.store.warnings(), ...this.unreadable];
     const ids = new Set(goals.map((g) => g.id));
-    for (const g of goals) for (const r of requiresOf(g)) if (!ids.has(r.goal)) out.push(`${g.title} requires the goal ${r.goal}, which is not here`);
+    for (const g of goals) for (const r of requiresOf(g)) if (!ids.has(r.goal)) out.push(`${g.title} requires the track ${r.goal}, which is not here`);
     // A loop counts once around for status and is reported here.
-    for (const cycle of goalLoops(goals).cycles) out.push(`Goals require each other in a loop (${loopText(cycle)}), so the last step is left out of their status`);
+    for (const cycle of goalLoops(goals).cycles) out.push(`Tracks require each other in a loop (${loopText(cycle)}), so the last step is left out of their status`);
     return out;
   }
 
@@ -371,7 +371,7 @@ export class Goals {
     const taken = (id: string): boolean => this.store.held("goal", id);
     if (typeof asked === "string" && asked) {
       if (!GOAL_ID.test(asked)) throw bad("id must be lowercase letters, digits and dashes, at most 64 characters");
-      if (taken(asked)) throw bad(`a goal ${asked} exists, or did`);
+      if (taken(asked)) throw bad(`a track ${asked} exists, or did`);
       return asked;
     }
     const base = goalSlug(title, 64 - SUFFIX - 1);
@@ -409,7 +409,7 @@ export class Goals {
       if (!isObject(u.acceptance)) throw bad("acceptance must be an object");
       const a = u.acceptance;
       if (a.stableRuns !== undefined && !(Number.isInteger(a.stableRuns) && (a.stableRuns as number) >= 1 && (a.stableRuns as number) <= 10)) throw bad("acceptance.stableRuns must be a whole number from 1 to 10");
-      if (a.staleAfterDays !== undefined) throw bad("staleness is the project's health rule, not a goal's: PUT /hub/rules");
+      if (a.staleAfterDays !== undefined) throw bad("staleness is the project's health rule, not a track's: PUT /hub/rules");
       if (a.signOff !== undefined && typeof a.signOff !== "boolean") throw bad("acceptance.signOff must be a boolean");
       out.acceptance = acceptanceOf(a, id ? this.get(id)?.acceptance : DEFAULT_ACCEPTANCE);
     }
@@ -420,7 +420,7 @@ export class Goals {
       out.archived = u.archived;
     }
     if (u.unsupported !== undefined) throw bad("unsupported checks come only from an import");
-    if (u.signOff !== undefined) throw bad("a sign-off is not part of the goal: give it with /sign-off");
+    if (u.signOff !== undefined) throw bad("a sign-off is not part of the track: give it with /sign-off");
     if (u.requires !== undefined) out.requires = this.requiresList(u.requires, id);
     return out;
   }
@@ -431,8 +431,8 @@ export class Goals {
     if (!Array.isArray(v)) throw bad("requires must be a list of { goal, required? }");
     const out: GoalRequirement[] = [];
     for (const [i, r] of v.entries()) {
-      const one = this.requirementOf(r, `required goal ${i + 1}`);
-      if (one.goal === self) throw bad("a goal cannot require itself");
+      const one = this.requirementOf(r, `required track ${i + 1}`);
+      if (one.goal === self) throw bad("a track cannot require itself");
       if (!out.some((x) => x.goal === one.goal)) out.push(one);
     }
     return out;
@@ -443,17 +443,17 @@ export class Goals {
     const o = typeof r === "string" ? { goal: r } : r;
     if (!isObject(o) || typeof o.goal !== "string" || !o.goal) throw bad(`${what} must be { goal, required? }`);
     if (o.required !== undefined && typeof o.required !== "boolean") throw bad(`${what}: required must be a boolean`);
-    if (!this.get(o.goal)) throw bad(`no goal ${o.goal}`);
+    if (!this.get(o.goal)) throw bad(`no track ${o.goal}`);
     return { goal: o.goal, ...(o.required === false ? { required: false } : {}) };
   }
 
   /** The parents a body gives: goal ids here, each once, never the goal itself. */
   private parentsOf(v: unknown, self: string | null): string[] {
-    if (!Array.isArray(v) || v.some((p) => typeof p !== "string")) throw bad("parents must be a list of goal ids");
+    if (!Array.isArray(v) || v.some((p) => typeof p !== "string")) throw bad("parents must be a list of track ids");
     const out = [...new Set(v as string[])];
     for (const p of out) {
-      if (p === self) throw bad("a goal cannot require itself");
-      if (!this.get(p)) throw bad(`no goal ${p}`);
+      if (p === self) throw bad("a track cannot require itself");
+      if (!this.get(p)) throw bad(`no track ${p}`);
     }
     return out;
   }
@@ -469,7 +469,7 @@ export class Goals {
       for (const r of requiresOf(g)) {
         if (had.has(r.goal)) continue;
         const loop = loopIfRequired(all, g.id, r.goal);
-        if (loop) throw bad(`that would make goals require each other in a loop: ${loopText(loop)}`);
+        if (loop) throw bad(`that would make tracks require each other in a loop: ${loopText(loop)}`);
       }
     }
   }
@@ -488,13 +488,13 @@ export class Goals {
 
   /** Create a goal; `parents` in the draft each gain it at the end of their requires. */
   create(draft: unknown): Goal {
-    if (!isObject(draft)) throw bad("body must be a goal: { title, ... }");
+    if (!isObject(draft)) throw bad("body must be a track: { title, ... }");
     const d = draft as Partial<GoalDraft> & Record<string, unknown>;
     if (!str(d.title, MAX_TITLE)) throw bad("title must be a non-empty string");
     if (d.kind !== undefined && d.kind !== "goal" && d.kind !== "milestone") throw bad("kind must be goal or milestone");
     const f = this.fields(d, null);
     const id = this.freshId(d.id, f.title!);
-    if (f.requires?.some((r) => r.goal === id)) throw bad("a goal cannot require itself");
+    if (f.requires?.some((r) => r.goal === id)) throw bad("a track cannot require itself");
     const goal: Goal = { ...f, schema: HUB_SCHEMA, id, kind: d.kind ?? "goal", title: f.title!, acceptance: f.acceptance ?? { ...DEFAULT_ACCEPTANCE }, checks: f.checks ?? [] };
     const parents = d.parents !== undefined ? this.parentsOf(d.parents, null) : [];
     const changes = this.parentChanges(id, parents);
@@ -509,7 +509,7 @@ export class Goals {
     if (!isObject(u)) throw bad("body must be the fields to change");
     const upd = u as GoalUpdate & Record<string, unknown>;
     if (upd.kind !== undefined && upd.kind !== "goal" && upd.kind !== "milestone") throw bad("kind must be goal or milestone");
-    if (upd.id !== undefined && upd.id !== id) throw bad("a goal's id does not change");
+    if (upd.id !== undefined && upd.id !== id) throw bad("a track's id does not change");
     const next: Goal = { ...had, ...this.fields(upd, id), kind: upd.kind ?? had.kind, schema: HUB_SCHEMA, id };
     const changes = upd.parents !== undefined ? this.parentChanges(id, this.parentsOf(upd.parents, id)) : [];
     this.refuseLoops([next, ...changes]);
@@ -530,7 +530,7 @@ export class Goals {
   addRequire(id: string, body: unknown): Goal {
     const had = this.must(id);
     const r = this.requirementOf(body);
-    if (r.goal === id) throw bad("a goal cannot require itself");
+    if (r.goal === id) throw bad("a track cannot require itself");
     const reqs = requiresOf(had);
     const at = reqs.findIndex((x) => x.goal === r.goal);
     const asked = isObject(body) ? body.required : undefined;
@@ -548,7 +548,7 @@ export class Goals {
   removeRequire(id: string, goal: string): Goal {
     const had = this.must(id);
     const reqs = requiresOf(had);
-    if (!reqs.some((r) => r.goal === goal)) throw notFound(`goal ${id} does not require ${goal}`);
+    if (!reqs.some((r) => r.goal === goal)) throw notFound(`track ${id} does not require ${goal}`);
     this.save([{ ...had, requires: reqs.filter((r) => r.goal !== goal) }]);
     return this.must(id);
   }
@@ -557,7 +557,7 @@ export class Goals {
   orderRequires(id: string, body: unknown): Goal {
     const had = this.must(id);
     const reqs = requiresOf(had);
-    const order = orderOf(body, reqs.map((r) => r.goal), "required goal");
+    const order = orderOf(body, reqs.map((r) => r.goal), "required track");
     this.save([{ ...had, requires: order.map((g) => reqs.find((r) => r.goal === g)!) }]);
     return this.must(id);
   }
@@ -586,7 +586,7 @@ export class Goals {
   removeCheck(id: string, check: string): Goal {
     const had = this.must(id);
     const checks = had.checks.filter((c) => checkId(c) !== check);
-    if (checks.length === had.checks.length) throw notFound(`goal ${id} has no check ${check}`);
+    if (checks.length === had.checks.length) throw notFound(`track ${id} has no clip ${check}`);
     const gone = had.checks.find((c) => checkId(c) === check)!;
     const arrangement = had.arrangement ? { ...had.arrangement, instances: had.arrangement.instances.filter((i) => !(i.kind === "script" && i.target === gone.target)) } : undefined;
     this.save([{ ...had, checks, ...(arrangement ? { arrangement } : {}) }]);
@@ -677,7 +677,7 @@ export class Goals {
   updateGoalCheck(id: string, check: string, u: unknown): Goal {
     const had = this.must(id);
     const at = had.checks.findIndex((c) => checkId(c) === check);
-    if (at < 0) throw notFound(`goal ${id} has no check ${check}`);
+    if (at < 0) throw notFound(`track ${id} has no clip ${check}`);
     if (!isObject(u) || typeof u.required !== "boolean") throw bad("body must be { required: boolean }");
     const checks = had.checks.slice();
     const { required: _r, ...ref } = checks[at];
@@ -782,7 +782,7 @@ export class Goals {
    * is reported. A file with any record that does not read changes nothing.
    */
   importAll(body: unknown): HubImportReport {
-    if (!isObject(body) || body.format !== HUB_EXPORT_FORMAT) throw bad(`this is not an exported goals file (format ${HUB_EXPORT_FORMAT})`);
+    if (!isObject(body) || body.format !== HUB_EXPORT_FORMAT) throw bad(`this is not an exported hub file (format ${HUB_EXPORT_FORMAT})`);
     if (body.schema !== HUB_SCHEMA) throw bad(typeof body.schema === "number" && body.schema > HUB_SCHEMA ? "the file was exported by a newer ue-mcp" : `the file's schema is not ${HUB_SCHEMA}`);
     if (!Array.isArray(body.records)) throw bad("the file has no records list");
     const records: AnyHubRecord[] = [];
@@ -916,7 +916,7 @@ export class Goals {
     const taken: SignOff[] = [];
     for (const s of Array.isArray(saved) ? saved : []) {
       if (!isSignOff(s)) problems.push("an entry is not a sign-off");
-      else if (!this.get(s.goalId)) problems.push(`the sign-off of ${s.goalId} names no goal here`);
+      else if (!this.get(s.goalId)) problems.push(`the sign-off of ${s.goalId} names no track here`);
       else if (!taken.some((t) => t.goalId === s.goalId)) taken.push(s);
     }
     const marker: GoalImport = { from: path.basename(file), at: this.now(), goals: taken.map((s) => s.goalId), problems };

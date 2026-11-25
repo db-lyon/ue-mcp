@@ -49,7 +49,7 @@ describe("occupancyOf", () => {
       "The editor is rebuilding",
       "A dialog is open in the editor",
       "Play In Editor is in use",
-      "Another client is running a playtest",
+      "Another client is running a clip",
       "A chat is using the editor",
       "Another MCP client is using the editor",
     ]);

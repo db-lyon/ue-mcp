@@ -132,7 +132,7 @@ describe("goals", () => {
     g.updateGoalCheck("a", "script:/Game/T/One", { required: false });
     expect(g.get("a")?.checks).toEqual([{ kind: "script", target: "/Game/T/Two" }, { kind: "script", target: "/Game/T/One", required: false }]);
     g.removeCheck("a", "script:/Game/T/Two");
-    expect(() => g.removeCheck("a", "script:/Game/T/Two")).toThrow(/no check/);
+    expect(() => g.removeCheck("a", "script:/Game/T/Two")).toThrow(/no clip/);
   });
 });
 
@@ -295,7 +295,7 @@ describe("export and import", () => {
     const other = goals(path.join(root, "other"));
     expect(() => other.importAll(broken)).toThrow(/nothing was imported: goal two/);
     expect(other.list()).toEqual([]);
-    expect(() => other.importAll({ format: "x" })).toThrow(/not an exported goals file/);
+    expect(() => other.importAll({ format: "x" })).toThrow(/not an exported hub file/);
     expect(() => other.importAll({ ...file, schema: 2 })).toThrow(/newer ue-mcp/);
   });
 });

@@ -65,7 +65,7 @@ export function buildAttention(i: AttentionInput): AttentionItem[] {
     if (goal.archived || !needsSignOff(goal) || g.status !== "ready_to_sign_off") continue;
     // Waiting since its newest result came in.
     const at = g.checks.map((c) => c.last?.endedAt ?? c.last?.startedAt ?? "").sort().pop() || g.signOff?.record.at || new Date(i.now).toISOString();
-    const detail = g.signOff ? "Signed off on an earlier revision. Every playtest passes, so it can be signed off again." : "Every playtest passes. The goal waits for its sign-off.";
+    const detail = g.signOff ? "Signed off on an earlier revision. Every clip passes, so it can be signed off again." : "Every clip passes. The track waits for its sign-off.";
     out.push({ id: `sign_off:${goal.id}`, kind: "sign_off", at, title: goal.title, detail, goalIds: [goal.id] });
   }
 
@@ -93,7 +93,7 @@ export function buildAttention(i: AttentionInput): AttentionItem[] {
       kind: "plan_failed",
       at: p.endedAt,
       title: p.title,
-      detail: bad ? `${bad.name}: ${bad.reason ?? bad.state}` : "Every playtest in it failed",
+      detail: bad ? `${bad.name}: ${bad.reason ?? bad.state}` : "Every clip in it failed",
       goalIds: p.scope.kind === "goal" ? [p.scope.goalId] : "goalId" in p.scope && p.scope.goalId ? [p.scope.goalId] : [],
       planRunId: p.id,
       ...(bad?.runId ? { runId: bad.runId } : {}),
