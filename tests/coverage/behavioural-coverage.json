@@ -17349,6 +17349,11 @@
         },
         {
           "suite": "live",
+          "file": "tests/live/hub-arrangement.test.ts",
+          "test": "places, duplicates and trims instances, builds a scene, and runs it to a pass"
+        },
+        {
+          "suite": "live",
           "file": "tests/live/map-switch-play-session.test.ts",
           "test": "create_new_level refuses, creates nothing, and leaves the session running"
         },

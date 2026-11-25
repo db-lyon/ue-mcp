@@ -91,10 +91,13 @@ export function recordOf(run: QaRun, o: { prev?: RunRecord; times?: { startedAt?
   // A plan's run stays the plan's; otherwise the better-informed QaRun says.
   const source = o.tag?.source ?? (prev?.source === "plan" ? prev.source : sourceOf(run));
   const failedSteps = run.steps.filter((s) => s.status === "failed").map((s) => s.index);
+  // A track or scene run names its goal: "track:<goal id>".
+  const whole = /^(track|scene|slot|arrangement):(.+)$/.exec(run.script);
   return {
     runId: run.runId,
-    kind: "script",
-    target: qaScriptKey(run.script),
+    kind: whole ? (whole[1] as "track" | "scene" | "slot" | "arrangement") : "script",
+    target: whole ? whole[2] : qaScriptKey(run.script),
+    ...(run.arrangement ? { arrangement: run.arrangement } : {}),
     name: run.scriptName,
     outcome,
     startedAt,
@@ -123,7 +126,7 @@ function recordFrom(v: unknown): RunRecord | null {
   if (typeof r.runId !== "string" || !r.runId || typeof r.target !== "string" || typeof r.name !== "string" || typeof r.startedAt !== "string") return null;
   // Schedules are gone: a schedule's run was a plan's.
   const source = (r.source as string) === "schedule" ? "plan" : r.source;
-  if (r.kind !== "script" || !OUTCOMES.includes(r.outcome as RunOutcome) || !SOURCES.includes(source as RunSource)) return null;
+  if (!["script", "track", "scene", "slot", "arrangement"].includes(r.kind as string) || !OUTCOMES.includes(r.outcome as RunOutcome) || !SOURCES.includes(source as RunSource)) return null;
   const { links: rawLinks, trigger, provenance, ...rest } = r as RunRecord;
   const links = rawLinks === undefined ? [] : readLinks(rawLinks).links;
   return {

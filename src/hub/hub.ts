@@ -36,6 +36,8 @@ import {
   checkId,
   checkStateOf,
   goalChecksDeep,
+  goalParents,
+  requiresOf,
   isResult,
   leafName,
   qaEnded,
@@ -82,6 +84,9 @@ import { provenanceAtStart, scriptHashOf, ueMcpProvenance, withUeMcp, workspaceN
 import { planOptionsOf, scopeOf } from "./scope.js";
 import { scheduleDraftOf, scheduleTurn, scheduleUpdated, withNext } from "./schedules.js";
 import { answerOf, bad, checkOfId, conflict, failureOf, isObject, linkOf, notFound } from "./util.js";
+import { ArrangementRunner } from "./arrangement-runner.js";
+import { ClipLibrary } from "./clip-library.js";
+import { SetService, setItemOf } from "./set-service.js";
 
 /** How often the queue and the runs the hub may have missed are looked at. */
 export const TICK_MS = 30_000;
@@ -167,6 +172,11 @@ export class Hub {
   /** The runs behind every status: this computer's own (RunIndex), the one store built so far. */
   readonly runs: EvidenceStore;
   readonly queue: PlanQueue;
+  /** The set the Session and Arrangement views edit (#2113). */
+  readonly set: SetService;
+  /** Plays track, scene, slot and arrangement runs. */
+  readonly arrangements: ArrangementRunner;
+  private readonly library: ClipLibrary;
   private readonly now: () => number;
   private readonly unsubscribe: Array<() => void> = [];
   private timer: NodeJS.Timeout | null = null;
@@ -199,8 +209,22 @@ export class Hub {
   constructor(private readonly o: HubOptions) {
     this.now = o.now ?? Date.now;
     const iso = () => new Date(this.now()).toISOString();
-    this.goals = new Goals({ store: o.goalStore ?? new GoalFiles(o.host.dataDir, iso), projectDir: o.host.projectDir, legacySignOffs: path.join(o.host.dataDir, "hub", "sign-offs.json"), now: iso, changed: (goalId) => this.changed(["goals", "checks", "attention"], { goalId }) });
+    this.goals = new Goals({ store: o.goalStore ?? new GoalFiles(o.host.dataDir, iso), projectDir: o.host.projectDir, legacySignOffs: path.join(o.host.dataDir, "hub", "sign-offs.json"), now: iso, changed: (goalId) => this.changed(["goals", "checks", "attention"], { goalId }), arrangementEnd: (a) => this.set.end(a) });
     this.runs = new RunIndex({ dataDir: o.host.dataDir, now: iso, changed: (runId) => this.changed(["runs", "checks", "goals", "attention"], { runId }), log: o.host.log });
+    this.library = new ClipLibrary({ host: o.host, index: o.index, runsOf: (t) => this.runs.byCheck(checkId({ kind: "script", target: t })), connected: () => this.connected(), now: () => this.now() });
+    this.set = new SetService({
+      goals: this.goals,
+      library: this.library,
+      host: o.host,
+      statuses: async () => new Map(this.goalStates(await this.catalog()).map((s) => [s.goal.id, s.status])),
+      lastRun: (kind, target) => {
+        const r = kind === "script" ? this.runs.byCheck(checkId({ kind: "script", target }))[0] : undefined;
+        return r ? { runId: r.runId, outcome: r.outcome, at: r.startedAt } : null;
+      },
+    });
+    this.arrangements = new ArrangementRunner(o.host, { now: iso });
+    // Goals become tracks once, each playtest reserving its newest run's length (#2113).
+    this.goals.migrateArrangements((t) => this.runs.byCheck(checkId({ kind: "script", target: t })).find((r) => r.durationMs && r.durationMs > 0)?.durationMs ?? null);
     this.watch = o.watch ?? new ProjectWatch(o.host.projectDir, o.host.log);
     this.lease = new EditorLease(undefined, (lease) => this.leaseChanged(lease));
     this.queue = new PlanQueue({
@@ -211,9 +235,9 @@ export class Hub {
         connected: () => this.connected(),
         occupied: (plan) => this.occupancy(!plan.options.attended)[0]?.text ?? null,
         start: (item, plan) => (plan.work === "fix" ? this.startFix(item, plan) : this.startItem(item, plan)),
-        run: (runId) => o.broker.get(runId),
+        run: (runId) => this.arrangements.get(runId) ?? o.broker.get(runId),
         stop: (runId, reason) => this.stopRun(runId, reason),
-        refresh: async (runId) => void (await o.broker.status(runId)),
+        refresh: async (runId) => void (this.arrangements.owns(runId) ? await this.arrangements.refresh(runId) : await o.broker.status(runId)),
         stopFix: async (item) => this.stopFix(item),
         endPie: () => this.endPie(),
       },
@@ -229,6 +253,7 @@ export class Hub {
     // Every run the broker holds now, so history starts with what a client shows.
     for (const run of o.broker.all()) this.runs.record(run);
     this.unsubscribe.push(o.broker.onSaved((run) => this.saw(run)));
+    this.unsubscribe.push(this.arrangements.onSaved((run) => this.saw(run)));
     this.unsubscribe.push(o.host.events.subscribe((e) => {
       // With the experiment off the hub asks the editor for nothing.
       if (!this.enabled()) return;
@@ -268,6 +293,7 @@ export class Hub {
   dispose(): void {
     for (const u of this.unsubscribe) u();
     this.unsubscribe.length = 0;
+    this.arrangements.dispose();
     if (this.timer) clearInterval(this.timer);
     if (this.publishTimer) clearTimeout(this.publishTimer);
     this.timer = null;
@@ -518,10 +544,11 @@ export class Hub {
     const job = (async () => {
       const [workspace, read] = await Promise.all([
         this.workspace(true),
-        this.o.host.callAction("pie", "script_read", { path: qaScriptKey(run.script) }).catch(() => null),
+        // A track, scene, slot or arrangement run has no one script to read.
+        this.arrangements.owns(run.runId) ? Promise.resolve(null) : this.o.host.callAction("pie", "script_read", { path: qaScriptKey(run.script) }).catch(() => null),
       ]);
       // The run as it is now: the call that started it may have landed after its first events, with the PIE setup.
-      const provenance = provenanceAtStart({ workspace, scriptHash: scriptHashOf(read ? answerOf(read) : null), engine: this.o.engine?.() ?? null, run: this.o.broker.get(run.runId) ?? run });
+      const provenance = provenanceAtStart({ workspace, scriptHash: run.arrangement?.version ?? scriptHashOf(read ? answerOf(read) : null), engine: this.o.engine?.() ?? null, run: this.o.broker.get(run.runId) ?? run });
       this.runs.setProvenance(run.runId, provenance);
     })()
       .catch((e: unknown) => this.o.host.log.warn("hub: what a run tested could not be read", e))
@@ -613,7 +640,7 @@ export class Hub {
    * aliases say it moved, when that is listed. Otherwise its own path, missing.
    */
   private resolve(ref: CheckRef, listed: Map<string, ListedScript> | null): CheckRef {
-    if (!listed || listed.has(ref.target)) return ref;
+    if (!listed || listed.has(ref.target) || ref.kind !== "script") return ref;
     const aliases = this.runs.aliases();
     let id = checkId(ref);
     for (let hop = 0; hop < REDIRECT_HOPS; hop++) {
@@ -650,7 +677,7 @@ export class Hub {
 
   /** The script is not on this checkout: only said while the editor is connected and has listed its scripts. */
   private missing(ref: CheckRef, cat: Catalog): boolean {
-    return cat.connected && cat.listed !== null && !cat.listed.has(ref.target);
+    return ref.kind === "script" && cat.connected && cat.listed !== null && !cat.listed.has(ref.target);
   }
 
   /** A check's state from the ref a goal (or the catalog) names: health follows the script to where it is now, under the project's one rule. */
@@ -680,7 +707,50 @@ export class Hub {
 
   /** Every goal's state, rolled up through the goals each requires (shared rollUpGoals), with the store's sign-offs. */
   private goalStates(cat: Catalog): GoalState[] {
-    return rollUpGoals(this.goals.list(), (goal) => goal.checks.map((ref) => this.stateOf(ref, cat)), cat.current, this.goals.signOffs());
+    const list = this.goals.list();
+    // A track with track or arrangement runs, or a scene with scene runs, is judged by them (#2113): the
+    // roll-up sees it as one check whose runs are those. Before its first such run it rolls up as before.
+    const views = list.map((g): Goal => {
+      const ref: CheckRef = { kind: g.kind === "milestone" ? "scene" : "track", target: g.id };
+      if (this.setRuns(g).length === 0) return g;
+      return { ...g, checks: [ref], ...(g.kind === "milestone" ? { requires: requiresOf(g).filter((r) => this.goals.get(r.goal)?.kind === "milestone") } : {}) };
+    });
+    const states = rollUpGoals(views, (goal) => goal.checks.map((ref) => (ref.kind === "script" ? this.stateOf(ref, cat) : this.setStateOf(goal, ref, cat))), cat.current, this.goals.signOffs());
+    const byId = new Map(states.map((s) => [s.goal.id, s]));
+    const parents = goalParents(list);
+    return states.map((s, n) => {
+      const g = list[n];
+      if (views[n] === g) return s;
+      const ps = parents.get(g.id) ?? [];
+      return {
+        ...s,
+        goal: g,
+        parents: ps,
+        requires: requiresOf(g).map((r) => ({ goal: r.goal, required: r.required !== false, status: byId.get(r.goal) && !byId.get(r.goal)!.goal.archived ? byId.get(r.goal)!.status : null })),
+      };
+    });
+  }
+
+  /** The runs that judge a track or a scene: its own, and for a track every arrangement run it played in. */
+  private setRuns(g: Goal): RunRecord[] {
+    if (g.kind === "milestone") return this.runs.byCheck(checkId({ kind: "scene", target: g.id }));
+    const own = this.runs.byCheck(checkId({ kind: "track", target: g.id }));
+    const all = this.runs.byCheck(checkId({ kind: "arrangement", target: "arrangement" })).filter((r) => r.arrangement?.instances.some((i) => i.goalId === g.id));
+    if (all.length === 0) return own;
+    // An arrangement run speaks for the track by its own instances in it.
+    const mine = all.map((r): RunRecord => {
+      const inst = r.arrangement!.instances.filter((i) => i.goalId === g.id);
+      const failed = inst.some((i) => i.status === "failed");
+      const open = inst.some((i) => i.status !== "passed" && i.status !== "skipped");
+      return { ...r, outcome: r.outcome === "passed" || r.outcome === "failed" ? (failed ? "failed" : open ? r.outcome : "passed") : r.outcome };
+    });
+    return [...own, ...mine].sort((a, b) => (a.startedAt < b.startedAt ? 1 : -1));
+  }
+
+  private setStateOf(goal: Goal, ref: CheckRef, cat: Catalog): { state: CheckState; runs: RunRecord[] } {
+    const runs = this.setRuns(goal);
+    const state = checkStateOf({ check: ref, runs, missing: false, rule: this.goals.rules(), current: cat.current, now: this.now(), goalIds: [goal.id], name: goal.title, map: null, steps: runs[0]?.summary?.total ?? null });
+    return { state, runs };
   }
 
   async overview(): Promise<HubOverview> {
@@ -753,6 +823,13 @@ export class Hub {
   }
 
   run(runId: string): RunDetail {
+    const whole = this.arrangements.get(runId);
+    const rec = this.runs.get(runId);
+    if (whole || rec?.arrangement) {
+      const record = rec ?? this.runs.record(whole!)!;
+      const steps: RunStepSpan[] = (whole?.steps ?? []).map((s) => ({ index: s.index, instruction: s.instruction, status: s.status, judge: s.judge, startMs: null, endMs: null }));
+      return { record, run: whole ?? null, steps, arrangement: this.arrangements.detail(runId) ?? record.arrangement, resultsUrl: null };
+    }
     const live = this.o.broker.get(runId);
     const run = live && !qaIsDraft(live) ? live : readResults(this.o.host.projectDir, runId);
     const record = this.runs.get(runId) ?? (run ? this.runs.record(run) : null);
@@ -861,7 +938,7 @@ export class Hub {
     const goal = this.goals.get(id);
     if (!goal) throw notFound(`no goal ${id}`);
     const q = this.queue.state();
-    const plans = [q.current, ...q.queued].filter((p): p is PlanRun => !!p && "goalId" in p.scope && p.scope.goalId === id);
+    const plans = [q.current, ...q.queued].filter((p): p is PlanRun => !!p && (("goalId" in p.scope && p.scope.goalId === id) || (p.scope.kind === "slot" && (p.scope.sceneId === id || p.scope.trackId === id))));
     if (plans.length) {
       const names = plans.map((p) => `"${p.title}"`).join(", ");
       // A person reads plans as runs: Studio's queue lists them under Runs.
@@ -912,6 +989,12 @@ export class Hub {
       case "checks":
         refs = scope.checks;
         break;
+      case "track":
+      case "scene":
+      case "slot":
+      case "arrangement":
+        refs = [];
+        break;
       case "all":
         refs = [...cat.checks.values()].map((c) => c.ref).filter((r) => !this.missing(r, cat));
         break;
@@ -936,6 +1019,12 @@ export class Hub {
 
   /** A playtest's name as people read it: its own title, the script's name, or the asset's. */
   private nameOf(ref: CheckRef, cat: Catalog): string {
+    if (ref.kind === "arrangement") return "Arrangement";
+    if (ref.kind === "slot") {
+      const [s, t] = ref.target.split("/");
+      return `${this.goals.get(s)?.title ?? s}: ${this.goals.get(t)?.title ?? t}`;
+    }
+    if (ref.kind !== "script") return this.goals.get(ref.target)?.title ?? ref.target;
     const id = checkId(ref);
     return cat.metas.get(id)?.title ?? cat.checks.get(id)?.name ?? leafName(ref.target);
   }
@@ -944,7 +1033,13 @@ export class Hub {
     const goal = "goalId" in scope && scope.goalId ? this.goals.get(scope.goalId)?.title : undefined;
     switch (scope.kind) {
       case "goal":
+      case "track":
+      case "scene":
         return `Run ${goal ?? scope.goalId}`;
+      case "slot":
+        return `Run ${refs[0] ? this.nameOf(refs[0], cat) : "a slot"}`;
+      case "arrangement":
+        return "Run the arrangement";
       case "failing":
         return goal ? `Run what is failing in ${goal}` : "Run what is failing";
       case "stale":
@@ -973,7 +1068,15 @@ export class Hub {
     if (trigger === "agent" && (this.o.playtestRuns?.() ?? "automatic") === "manual") throw conflict("Playtest runs are set to Manual: an agent cannot start a plan");
     const scope = scopeOf(body.scope);
     const options = planOptionsOf(body.options, planOptionsFor(trigger));
-    const refs = await this.expand(scope);
+    // A track, scene, slot or the arrangement is one item: one run in one PIE session (#2113).
+    const whole = setItemOf(scope, this.goals);
+    if (whole) {
+      const plan = await this.set.plan(whole.kind, whole.target);
+      // A clip this daemon could not read now (the editor away) is the run's to settle.
+      const stop = plan.composition.findings.find((f) => f.blocks && f.field !== "target");
+      if (stop) throw conflict(`${plan.title} cannot run: ${stop.message}`);
+    }
+    const refs = whole ? [{ kind: whole.kind, target: whole.target }] : await this.expand(scope);
     if (refs.length === 0) throw conflict("nothing to run: the plan's scope has no playtests");
     const cat = await this.catalog();
     const items: PlanItem[] = refs.map((ref) => ({ check: ref, name: this.nameOf(ref, cat), state: "queued" as const }));
@@ -990,6 +1093,24 @@ export class Hub {
     };
     const placement = this.queue.add(plan, { person: trigger === "person", next: body.next === true });
     return { plan, placement };
+  }
+
+  /** POST /hub/run: a track, scene, slot or the arrangement as one run. */
+  async runSet(body: unknown, trigger: PlanTrigger = "person"): Promise<{ plan: PlanRun; placement: PlanPlacement }> {
+    if (!isObject(body)) throw bad("body must be { scope, next? }");
+    const scope = scopeOf(body.scope);
+    if (!setItemOf(scope, this.goals) || scope.kind === "goal") throw bad("scope must be { kind: track | scene, goalId } | { kind: slot, sceneId, trackId } | { kind: arrangement }");
+    return this.queuePlan({ scope, ...(body.next !== undefined ? { next: body.next } : {}), ...(body.options !== undefined ? { options: body.options } : {}) }, trigger);
+  }
+
+  /** POST /hub/runs/:id/verdict: a manual check's verdict in a set run. */
+  async runVerdict(runId: string, body: unknown): Promise<{ ok: true }> {
+    if (!isObject(body) || typeof body.check !== "string" || !["pass", "fail", "skip"].includes(String(body.verdict))) throw bad("body must be { check, verdict: pass | fail | skip, note? }");
+    if (body.note !== undefined && typeof body.note !== "string") throw bad("note must be text");
+    if (!this.arrangements.owns(runId)) throw notFound(`no track, scene or arrangement run ${runId} is going`);
+    const r = await this.arrangements.verdict(runId, body.check, String(body.verdict), body.note as string | undefined);
+    if ("error" in r) throw conflict(r.error);
+    return r;
   }
 
   /** A person's Run on one playtest: a plan of that one check. */
@@ -1093,7 +1214,27 @@ export class Hub {
   }
 
   /** Start one plan item on the editor: its script's card run, or a replay of its last recording. */
+  /** Start a track, scene, slot or arrangement item: compose it from the set as it is now and play it. */
+  private async startSetItem(item: PlanItem, plan: PlanRun): Promise<ItemStart> {
+    const kind = item.check.kind as "track" | "scene" | "slot" | "arrangement";
+    let p;
+    try {
+      p = await this.set.plan(kind, item.check.target);
+    } catch (e) {
+      return { skipped: e instanceof Error ? e.message : String(e) };
+    }
+    const stop = p.composition.findings.find((f) => f.blocks);
+    if (stop) return { error: stop.message };
+    if (!plan.options.attended && p.composition.manual) return { skipped: NEEDS_PERSON };
+    const r = await this.arrangements.start({ kind, goalId: item.check.target, title: p.title, composition: p.composition, tracks: p.tracks });
+    if ("error" in r) return { error: r.error };
+    this.runs.tag(r.run.runId, { source: "plan", planRunId: plan.id });
+    this.saw(r.run);
+    return { runId: r.run.runId, pieStarted: r.run.pieStarted === true };
+  }
+
   private async startItem(item: PlanItem, plan: PlanRun): Promise<ItemStart> {
+    if (item.check.kind !== "script") return this.startSetItem(item, plan);
     const script = item.check.target;
     const listed = this.connected() ? await this.o.index.listScripts().catch(() => null) : null;
     if (listed && !listed.some((s) => s.path === script)) return { skipped: "the playtest is not on this checkout" };
@@ -1122,7 +1263,7 @@ export class Hub {
 
   /** Stop a run the hub started through the broker, so a verdict hold is released with it (and PIE, when the run started it). */
   private async stopRun(runId: string, reason: string): Promise<void> {
-    const r = await this.o.broker.stopRun(runId, reason);
+    const r = this.arrangements.owns(runId) ? await this.arrangements.stop(runId, reason) : await this.o.broker.stopRun(runId, reason);
     if ("error" in r && !/already|only a run that is going/i.test(r.error)) throw new Error(r.error);
   }
 

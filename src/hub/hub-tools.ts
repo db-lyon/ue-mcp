@@ -10,7 +10,8 @@
  * Error) with the reason when it cannot, so a category handler lets the
  * dispatcher turn it into an error result.
  */
-import { checkId, type PlanRun, type PlanScope, type QueueState, type TrackerLink, TRACKER_LINKS_MAX } from "./contract.js";
+import { checkId, type PlanRun, type PlanScope, type QueueState, type SetView, type TrackerLink, TRACKER_LINKS_MAX } from "./contract.js";
+import { FindingError } from "./set-service.js";
 import type { Hub } from "./hub.js";
 import { HubError, bad, checkRefOf, linkOf, notFound } from "./util.js";
 
@@ -26,11 +27,15 @@ export const HUB_ACTIONS = [
   "unrequire_goal",
   "run_plan",
   "read_queue",
+  "read_set",
+  "edit_set",
+  "run",
+  "read_run",
 ] as const;
 export type HubAction = (typeof HUB_ACTIONS)[number];
 
 /** What the actions need of the hub. */
-export type HubToolTarget = Pick<Hub, "goals" | "overview" | "goal" | "check" | "addRunLink" | "removeRunLink" | "updateCheckMeta"> & Partial<Pick<Hub, "plan" | "queueView">>;
+export type HubToolTarget = Pick<Hub, "goals" | "overview" | "goal" | "check" | "addRunLink" | "removeRunLink" | "updateCheckMeta"> & Partial<Pick<Hub, "plan" | "queueView" | "set" | "runSet" | "run">>;
 
 const str = (v: unknown): v is string => typeof v === "string" && v.trim() !== "";
 
@@ -68,7 +73,14 @@ export function validateHub(action: string, i: Record<string, unknown>): string 
       return null;
     }
     case "read_queue":
+    case "read_set":
       return null;
+    case "edit_set":
+      return str(i.ops) || (Array.isArray(i.ops) && i.ops.length > 0) ? null : "edit_set needs ops: op lines as text (one per line), or a list of op objects";
+    case "run":
+      return str(i.scope) ? null : "run needs scope: track <track>, scene <scene>, or arrangement";
+    case "read_run":
+      return str(i.run_id) ? null : "read_run needs run_id";
   }
   return `unknown action ${action}`;
 }
@@ -95,6 +107,36 @@ function scopeOfInput(i: Record<string, unknown>): PlanScope {
     return ref;
   });
   return { kind: "checks", checks };
+}
+
+/** The set as an agent reads it: the text form, findings and each track's and scene's status. */
+function setAnswer(v: SetView): Record<string, unknown> {
+  return {
+    text: v.text,
+    status: Object.fromEntries([...v.tracks, ...v.scenes].map((x) => [x.id, x.status])),
+    ...(v.findings.length ? { findings: v.findings.map((f) => `${f.blocks ? "error" : "warning"} ${f.id}: ${f.message}${f.candidates?.length ? ` (candidates: ${f.candidates.join(", ")})` : ""}`) } : {}),
+  };
+}
+
+/** A run scope from text: "track <track>", "scene <scene>", "arrangement" or "slot <scene> <track>", by id or exact name. */
+function setScopeOf(text: string, v: SetView): PlanScope {
+  const [kind, ...rest] = text.trim().split(/\s+/);
+  const name = rest.join(" ").replace(/^"|"$/g, "");
+  const find = (list: Array<{ id: string; title: string }>, n: string) => list.find((x) => x.id === n) ?? list.find((x) => x.title.toLowerCase() === n.toLowerCase());
+  if (kind === "arrangement") return { kind: "arrangement" };
+  if (kind === "track" || kind === "scene") {
+    const list = kind === "track" ? v.tracks : v.scenes;
+    const x = find(list, name);
+    if (!x) throw bad(`no ${kind} ${name} (${kind}s: ${list.map((y) => `${y.id} "${y.title}"`).join(", ") || "none"})`);
+    return { kind, goalId: x.id };
+  }
+  if (kind === "slot") {
+    const s = find(v.scenes, rest[0] ?? "");
+    const t = find(v.tracks, rest[1] ?? "");
+    if (!s || !t) throw bad("slot needs a scene and a track: slot <scene> <track>");
+    return { kind: "slot", sceneId: s.id, trackId: t.id };
+  }
+  throw bad("scope is track <track>, scene <scene> or arrangement");
 }
 
 /** What a queued plan answers: its id and items, and the queue it joined. */
@@ -221,6 +263,42 @@ export async function runHubAction(hub: HubToolTarget, action: string, input: Re
     case "read_queue":
       if (!hub.queueView) throw new HubError(409, "this hub cannot run plans");
       return queueAnswer(hub.queueView());
+    case "read_set": {
+      if (!hub.set) throw new HubError(409, "this hub has no set");
+      const v = await hub.set.view();
+      return setAnswer(v);
+    }
+    case "edit_set": {
+      if (!hub.set) throw new HubError(409, "this hub has no set");
+      try {
+        const v = await hub.set.edit({ ops: input.ops });
+        return { changed: v.changed, ...setAnswer(v) };
+      } catch (e) {
+        if (e instanceof FindingError) throw new HubError(400, `${e.finding.message}${e.finding.candidates?.length ? ` (did you mean: ${e.finding.candidates.join(", ")})` : ""}`);
+        throw e;
+      }
+    }
+    case "run": {
+      if (!hub.runSet || !hub.set) throw new HubError(409, "this hub cannot run plans");
+      const view = await hub.set.view();
+      const scope = setScopeOf(String(input.scope), view);
+      const { plan } = await hub.runSet({ scope, ...(input.attended !== undefined ? { options: { attended: input.attended } } : {}) }, "agent");
+      return planAnswer(plan, hub.queueView?.());
+    }
+    case "read_run": {
+      if (!hub.run) throw new HubError(409, "this hub has no runs");
+      const d = hub.run(String(input.run_id));
+      const a = d.arrangement;
+      if (!a) return { runId: d.record.runId, outcome: d.record.outcome, steps: d.steps.map((s) => `${s.index + 1} ${s.status} ${s.instruction}`) };
+      const sec = (f: number) => `${(f / a.rate).toFixed(1)}s`;
+      return {
+        runId: d.record.runId,
+        outcome: d.record.outcome,
+        ...(d.run?.stopReason ? { stopReason: d.run.stopReason } : {}),
+        tracks: a.tracks?.map((t) => `${t.goalId} ${t.status} player=${t.player}`),
+        instances: a.instances.map((i) => `${i.goalId}/${i.id} ${i.status} ${sec(i.start)}-${sec(i.end)} ${i.name} checks ${i.checks.passed}/${i.checks.total} passed${i.checks.failed ? `, ${i.checks.failed} failed` : ""}${i.reason ? ` (${i.reason})` : ""}`),
+      };
+    }
   }
   throw bad(`unknown action ${action}`);
 }

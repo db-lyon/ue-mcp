@@ -12,7 +12,7 @@ export declare function apiVersionsOverlap(a: ApiVersionRange, b: ApiVersionRang
 export declare const DAEMON_API_RANGE: ApiVersionRange;
 export declare const EXTENSION_API_RANGE: ApiVersionRange;
 export declare function extensionApiSupported(min: number, max: number): boolean;
-export declare const DAEMON_FEATURES: readonly ["checkpoints", "checkpoints.assetDiff", "skills", "context.projection", "actions.effects", "install.pendingBuild", "editor.rebuild", "ui.scopedKeys", "ui.extensions", "flows.stepApproval", "sessions.access", "journal", "tools.categories", "leases", "dialogs.native", "events.pie", "install.engineMismatch", "editor.consent", "hub", "hub.goalDelete", "events.clip", "events.clip.take"];
+export declare const DAEMON_FEATURES: readonly ["checkpoints", "checkpoints.assetDiff", "skills", "context.projection", "actions.effects", "install.pendingBuild", "editor.rebuild", "ui.scopedKeys", "ui.extensions", "flows.stepApproval", "sessions.access", "journal", "tools.categories", "leases", "dialogs.native", "events.pie", "install.engineMismatch", "editor.consent", "hub", "hub.goalDelete", "hub.arrangement", "events.clip", "events.clip.take"];
 export type DaemonFeature = (typeof DAEMON_FEATURES)[number];
 export declare const DAEMON_FEATURES_BEYOND_ROUTES: {
     readonly [F in DaemonFeature]?: string;
@@ -381,6 +381,54 @@ export declare const DAEMON_ROUTES: {
     readonly "hub.check.run": {
         readonly method: "POST";
         readonly path: "/v1/hub/checks/:checkId/run";
+        readonly feature?: DaemonFeature;
+        readonly summary: string;
+    };
+    readonly "hub.set": {
+        readonly method: "GET";
+        readonly path: "/v1/hub/set";
+        readonly feature?: DaemonFeature;
+        readonly summary: string;
+    };
+    readonly "hub.set.edit": {
+        readonly method: "POST";
+        readonly path: "/v1/hub/set/edit";
+        readonly feature?: DaemonFeature;
+        readonly summary: string;
+    };
+    readonly "hub.arrangement": {
+        readonly method: "GET";
+        readonly path: "/v1/hub/goals/:id/arrangement";
+        readonly feature?: DaemonFeature;
+        readonly summary: string;
+    };
+    readonly "hub.arrangement.put": {
+        readonly method: "PUT";
+        readonly path: "/v1/hub/goals/:id/arrangement";
+        readonly feature?: DaemonFeature;
+        readonly summary: string;
+    };
+    readonly "hub.arrangement.edit": {
+        readonly method: "POST";
+        readonly path: "/v1/hub/goals/:id/arrangement/edit";
+        readonly feature?: DaemonFeature;
+        readonly summary: string;
+    };
+    readonly "hub.clips": {
+        readonly method: "GET";
+        readonly path: "/v1/hub/clips";
+        readonly feature?: DaemonFeature;
+        readonly summary: string;
+    };
+    readonly "hub.set.run": {
+        readonly method: "POST";
+        readonly path: "/v1/hub/run";
+        readonly feature?: DaemonFeature;
+        readonly summary: string;
+    };
+    readonly "hub.run.verdict": {
+        readonly method: "POST";
+        readonly path: "/v1/hub/runs/:runId/verdict";
         readonly feature?: DaemonFeature;
         readonly summary: string;
     };
@@ -1621,6 +1669,7 @@ export interface DaemonExtension {
 export {};
 
 // ── contract/hub-qa.ts ──
+import type { ArrangementRun } from "./hub-compose.js";
 export type QaStepStatus = "pending" | "running" | "passed" | "failed" | "awaiting_verdict" | "skipped";
 export type QaRunState = "draft" | "armed" | "running" | "awaiting_verdict" | "finished" | "stopped" | "idle";
 export type QaVerdict = "pass" | "fail" | "skip";
@@ -1710,6 +1759,7 @@ export interface QaRun {
         players: number;
         netMode: "standalone" | "listen";
     };
+    arrangement?: ArrangementRun;
 }
 export declare const QA_VERDICT_WAIT_MINUTES = 10;
 export declare const QA_VERDICT_WAIT_CHOICES: readonly number[];
@@ -1814,8 +1864,11 @@ export declare function qaPieInstance(player: string | undefined): number | unde
 
 // ── contract/hub.ts ──
 import { type QaRun, type QaStep, type QaStepStatus, type QaSummary } from "./hub-qa.js";
+import type { Arrangement, ArrangementFinding, InstanceLayout } from "./hub-arrangement.js";
+import type { ArrangementRun } from "./hub-compose.js";
+import type { SetColor, Slot } from "./hub-set.js";
 export declare const HUB_SCHEMA: 1;
-export type CheckKind = "script";
+export type CheckKind = "script" | "track" | "scene" | "slot" | "arrangement";
 export interface TrackerLink {
     url: string;
     title?: string;
@@ -1913,6 +1966,13 @@ export interface Goal {
     checks: CheckRef[];
     unsupported?: UnsupportedCheck[];
     archived?: boolean;
+    arrangement?: Arrangement;
+    order?: number;
+    color?: SetColor;
+    player?: number;
+    mute?: boolean;
+    solo?: boolean;
+    slots?: Slot[];
 }
 export interface GoalParents {
     parents?: string[];
@@ -1966,6 +2026,7 @@ export interface RunRecord {
     provenance?: RunProvenance;
     tainted?: boolean;
     links?: TrackerLink[];
+    arrangement?: ArrangementRun;
 }
 export declare const triggerOf: (r: Pick<RunRecord, "trigger" | "replayOf">) => RunTrigger;
 export declare function outcomeOf(run: Pick<QaRun, "state" | "steps" | "summary">): RunOutcome;
@@ -1990,6 +2051,7 @@ export interface RunDetail {
     lastPass?: RunRecord | null;
     changedSteps?: number[];
     resultsUrl?: string | null;
+    arrangement?: ArrangementRun;
 }
 export type CheckHealth = "failing" | "running" | "flaky" | "stale" | "passing" | "never_run" | "missing";
 export type GoalStatus = "failing" | "ready_to_sign_off" | "at_risk" | "running" | "in_progress" | "not_started" | "met";
@@ -2138,6 +2200,18 @@ export interface HubImportReport {
 export type PlanScope = {
     kind: "goal";
     goalId: string;
+} | {
+    kind: "track";
+    goalId: string;
+} | {
+    kind: "scene";
+    goalId: string;
+} | {
+    kind: "slot";
+    sceneId: string;
+    trackId: string;
+} | {
+    kind: "arrangement";
 } | {
     kind: "checks";
     checks: CheckRef[];
@@ -2338,7 +2412,60 @@ export declare const HUB_ROUTES: {
     readonly release: "POST /hub/release -> QueueState (stops what the hub holds on the editor and pauses the queue)";
     readonly fix: "POST /hub/fix FixRequest -> { queued: number, plan: PlanRun | null, placement?: PlanPlacement } (a fix plan: one chat session per check)";
     readonly runCheck: "POST /hub/checks/:checkId/run { replay?, next? } -> { plan: PlanRun, placement: PlanPlacement }";
+    readonly arrangement: "GET /hub/goals/:id/arrangement -> ArrangementView";
+    readonly putArrangement: "PUT /hub/goals/:id/arrangement { arrangement } | { text } -> ArrangementView (400 { error, findings })";
+    readonly editArrangement: "POST /hub/goals/:id/arrangement/edit { ops } -> ArrangementView & { changed } (400 { error, finding, findings })";
+    readonly set: "GET /hub/set -> SetView";
+    readonly editSet: "POST /hub/set/edit { ops } -> SetView & { changed } (400 { error, finding })";
+    readonly clips: "GET /hub/clips?q=&kind= -> { clips: ClipEntry[] }";
+    readonly runSet: "POST /hub/run { scope: track | scene | slot | arrangement, next? } -> { plan: PlanRun, placement: PlanPlacement }";
+    readonly runVerdict: "POST /hub/runs/:runId/verdict { check, verdict, note? } -> { ok: true } (a manual check in a track or scene run)";
 };
+export interface ArrangementView {
+    arrangement: Arrangement;
+    text: string;
+    layout: InstanceLayout[];
+    findings: ArrangementFinding[];
+}
+export interface SetView {
+    tracks: Array<{
+        id: string;
+        title: string;
+        order: number;
+        color?: SetColor;
+        player: number;
+        mute: boolean;
+        solo: boolean;
+        arrangement: Arrangement;
+        layout: InstanceLayout[];
+        status: GoalStatus;
+    }>;
+    scenes: Array<{
+        id: string;
+        title: string;
+        order: number;
+        color?: SetColor;
+        slots: Array<Slot & {
+            length: number | null;
+        }>;
+        status: GoalStatus;
+    }>;
+    text: string;
+    findings: ArrangementFinding[];
+}
+export interface ClipEntry {
+    kind: "clip" | "script";
+    target: string;
+    name: string;
+    map: string | null;
+    length: number | null;
+    rate: number;
+    lastRun: {
+        runId: string;
+        outcome: string;
+        at: string;
+    } | null;
+}
 export type PlaytestRunsMode = "manual" | "automatic";
 export interface BusyCall {
     id: number;

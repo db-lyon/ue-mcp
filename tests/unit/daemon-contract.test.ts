@@ -101,7 +101,7 @@ describe("the daemon contract", () => {
     for (const file of hubContractFiles) {
       const sf = ts.createSourceFile(file, fs.readFileSync(file, "utf8"), ts.ScriptTarget.Latest);
       const from = sf.statements.flatMap((s) => (ts.isImportDeclaration(s) || (ts.isExportDeclaration(s) && s.moduleSpecifier) ? [(s.moduleSpecifier as ts.StringLiteral).text] : []));
-      expect(from.filter((m) => !/^\.\/(daemon|hub|hub-qa|hub-attention|hub-ports)\.js$/.test(m)), path.basename(file)).toEqual([]);
+      expect(from.filter((m) => !/^\.\/(daemon|hub|hub-qa|hub-attention|hub-arrangement|hub-compose|hub-set|hub-ports)\.js$/.test(m)), path.basename(file)).toEqual([]);
     }
   });
 

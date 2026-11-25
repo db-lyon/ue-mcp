@@ -822,6 +822,11 @@
       "summary": "DELETE /v1/hub/goals/:id, advertised as hub.goalDelete, removes a goal or milestone and drops it from every goal's requires, leaves its playtests and their records alone, and answers 409 naming a queued plan made for it until that plan is cancelled"
     },
     {
+      "id": "daemon.hub.arrangement",
+      "group": "daemon",
+      "summary": "The /v1/hub set routes, advertised as hub.arrangement: set ops build tracks, clip instances and scenes all or none with candidates for a bad name, goals are tracks, a scene queues as one run, and a deleted track leaves its scenes"
+    },
+    {
       "id": "package.dist-server",
       "group": "daemon",
       "summary": "the compiled package, laid out as npm installs it, starts from dist/index.js and serves what the source does"

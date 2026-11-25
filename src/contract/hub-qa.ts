@@ -1,4 +1,6 @@
-// @session independent: The hub contract's shared run model: types and pure functions over their arguments. No state, no imports.
+// @session independent: The hub contract's shared run model: types and pure functions over their arguments. No state, no runtime imports.
+import type { ArrangementRun } from "./hub-compose.js";
+
 /**
  * A PIE test script run as a client's checklist card shows it. Built from
  * ue-mcp's pie(script_run) and pie(script_status) answers (snake_case) and
@@ -130,6 +132,8 @@ export interface QaRun {
   pieStarted?: boolean;
   /** The players the client set PIE to before starting the run; absent when it left PIE as it was. */
   pieSetup?: { players: number; netMode: "standalone" | "listen" };
+  /** A track or scene run (#2113): its steps are its instances, and this is each one's result at its place. */
+  arrangement?: ArrangementRun;
 }
 
 /** How long a run holds at a step waiting for a person's verdict before it is stopped, unless the "Wait for a verdict" setting says otherwise. */
