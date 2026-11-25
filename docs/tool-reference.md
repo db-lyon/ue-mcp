@@ -6,7 +6,7 @@ description: "Every ue-mcp category tool and action, with its parameter signatur
 
 This page lists ue-mcp's own category tools and actions. For the official Unreal tools (UE 5.8+) that ue-mcp wraps (surfaced inside these same categories), see [Native Tools](native-tools.md).
 
-UE-MCP exposes **<!-- count:tools -->32<!-- /count --> category tools** covering **<!-- count:actions -->3740+<!-- /count --> actions**, plus a `flow` tool for running multi-step YAML workflows. Every category tool takes an `action` parameter that selects the operation and an `args` object holding that action's parameters: `level(action="place_actor", args={actorClass: "PointLight"})`. Under the default `micro` [context strategy](configuration.md#context-strategy-full-lean-micro) the same call goes through the gateway: `tools(action="call", category="level", method="place_actor", args={...})`.
+UE-MCP exposes **<!-- count:tools -->32<!-- /count --> category tools** covering **<!-- count:actions -->3747+<!-- /count --> actions**, plus a `flow` tool for running multi-step YAML workflows. Every category tool takes an `action` parameter that selects the operation and an `args` object holding that action's parameters: `level(action="place_actor", args={actorClass: "PointLight"})`. Under the default `micro` [context strategy](configuration.md#context-strategy-full-lean-micro) the same call goes through the gateway: `tools(action="call", category="level", method="place_actor", args={...})`.
 
 !!! tip "First call in any session"
     Start with `project(action="get_status")` to check the connection, then `level(action="get_outliner")` or `asset(action="list")` to explore.
@@ -3298,6 +3298,13 @@ The press actions (`respond_to_dialog`, `press_window_button`, `close_window`) a
 | `script_results(run_id?, results_path?)` | Read a finished run's results.json |
 | `script_runs(script?, limit?:i(1..), include_steps?:b)` | List script runs newest first, the active one included: run_id, script, started_at, ended_at, state, summary, per-step results and results_path. script narrows to one script's runs |
 | `script_replay(run_id?, results_path?, time_scale?:n(0..), auto_stop_pie?:b, pie_instance?:i(0..), client_id?:i(0..), wait?:b, timeout_seconds?:n(0..))` | Replay a finished run's recording in the level it ran in and re-evaluate its auto steps at their recorded offsets; a triggered step re-anchors the windows after it to the replayed trigger. Manual steps keep their verdicts. Reports regressions |
+| `clip_create(name, package_path?, one(clip:o; text), onConflict?:{skip,replace,error})` | Create a playtest clip: a timeline on game time of input tracks (one per Input Action: notes for a bool action, curve keys for an axis, holding the raw value before the action's own modifiers and triggers), events (act or arrange entries at a frame), check notes (by_end, throughout or hold, or manual with PIE paused) and regions. Give it as clip (JSON) or text (the compact form clip_read returns). Times are frames at the clip's rate. Refused (INVALID_CLIP) only when it cannot be saved; every other finding comes back as warnings [{id, field, message, candidates}] |
+| `clip_read(path)` | Read a playtest clip as JSON and in its compact text form, with counts |
+| `clip_update(path, one(clip:o; text))` | Replace a playtest clip with the clip or text given; its takes history is kept |
+| `clip_edit(path, ops:[o])` | Edit a playtest clip note by note, all or none: add, move, trim, set, delete and quantize notes, keys, checks, events, regions and tracks, by id. Times snap to the clip's grid. Returns the ids changed, the clip and warnings; a refused edit says why with candidates and changes nothing |
+| `clip_validate(one(path; clip:o; text))` | Check a clip without saving: every structural problem and every action, value, actor or class it names that does not resolve, each with candidates |
+| `clip_list(directory?)` | List playtest clips with their maps |
+| `clip_delete(path, confirm?:b)` | Delete a playtest clip (confirm=true) |
 
 ---
 
