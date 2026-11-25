@@ -124,7 +124,7 @@ Each track that existed before was laid out once as a timeline, its clips end to
 | `POST /v1/hub/set/edit` | `{ ops }`, as op objects or text lines, all or none. A name or clip that matches nothing answers 400 with `finding.candidates` |
 | `GET`, `PUT /v1/hub/goals/<id>/arrangement`, `POST .../arrangement/edit` | One track's timeline, replaced or edited with instance ops |
 | `GET /v1/hub/clips?q=&kind=` | Timeline clips and step-list clips, for a browser |
-| `POST /v1/hub/run` | `{ scope: { kind: "track" \| "scene", goalId } \| { kind: "arrangement" }, next? }`: queue one run |
+| `POST /v1/hub/run` | `{ scope: { kind: "track" \| "scene", goalId } \| { kind: "arrangement" }, next? }`: queue one run. The answer is `{ plan, placement, runId }`; when the run starts at once, the answer comes once it has started and `runId` names it, and otherwise `runId` is null |
 | `POST /v1/hub/runs/<id>/verdict` | `{ check, verdict, note? }`: a manual check's verdict in a running track, scene or arrangement |
 
 A daemon that has these lists `hub.arrangement` in `/v1/health`.
