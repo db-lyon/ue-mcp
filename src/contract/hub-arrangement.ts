@@ -84,6 +84,10 @@ export interface InstanceLayout {
   length: number;
   /** False when the clip could not be read, so its length is a guess. */
   known: boolean;
+  /** Timeline clips that could be read: the clip's own frame rate, which its `in` and `out` are counted in. */
+  clipRate?: number;
+  /** Timeline clips that could be read: the clip's whole length in its own frames, the most `out` may be. */
+  clipLength?: number;
 }
 
 export const emptyArrangement = (): Arrangement => ({ rate: ARRANGEMENT_RATE, instances: [] });
@@ -114,7 +118,9 @@ export function arrangementLayout(a: Arrangement, factsOf: (target: string, kind
   return a.instances.map((i) => {
     const f = factsOf(i.target, i.kind);
     const length = instanceLength(i, f, a.rate);
-    return { id: i.id, kind: i.kind, target: i.target, name: i.name ?? f?.name ?? leaf(i.target), start: i.start, end: round(i.start + length), length, known: !!f && (i.kind === "script" || f.length !== null) };
+    const known = !!f && (i.kind === "script" || f.length !== null);
+    const clip = i.kind === "clip" && known ? { clipRate: f!.rate, clipLength: f!.length! } : {};
+    return { id: i.id, kind: i.kind, target: i.target, name: i.name ?? f?.name ?? leaf(i.target), start: i.start, end: round(i.start + length), length, known, ...clip };
   });
 }
 

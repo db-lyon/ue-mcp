@@ -110,7 +110,7 @@ A run plays in one PIE session. The daemon reads each clip and composes the time
 | Scene | The scene's tracks together | `kind: "scene"`, target the scene |
 | Arrangement | Every track together | `kind: "arrangement"`, target `arrangement` |
 
-Each run is one record whose `arrangement` gives every instance's result at its place (`instances[]`: track, id, start and end frames, status, checks passed), each track's status (`tracks[]`), and the segments it played as (`segments[]`), so a client can draw the playhead at a segment's `offset` plus the `position` of its clip run's `clip.position` events. A run passes when every instance passes. A track's status comes from its track and arrangement runs, and a scene's from its scene runs; before the first one, each rolls up from its playtests and tracks as before.
+Each run is one record whose `arrangement` gives every instance's result at its place (`instances[]`: track, id, start and end frames, status, checks passed, and `awaiting`: each manual check waiting for a verdict as `{ check, instruction }`, where `check` is what the verdict route takes), each track's status (`tracks[]`), and the segments it played as (`segments[]`), so a client can draw the playhead at a segment's `offset` plus the `position` of its clip run's `clip.position` events. A run passes when every instance passes. A track's status comes from its track and arrangement runs, and a scene's from its scene runs; before the first one, each rolls up from its playtests and tracks as before.
 
 Each goal that existed before became a track once, its playtests laid end to end, each reserving its newest run's duration. Each milestone became a scene that plays the goals it required. Nothing else changed, so an older client reads the same records.
 
@@ -118,7 +118,7 @@ Each goal that existed before became a track once, its playtests laid end to end
 
 | Route | Purpose |
 |---|---|
-| `GET /v1/hub/set` | Every track (fields, timeline, `layout` with each instance's resolved length, status) and scene (tracks, status), the text form, and findings |
+| `GET /v1/hub/set` | Every track (fields, timeline, `layout` with each instance's resolved length and, for a timeline clip, its own `clipRate` and `clipLength`, status) and scene (tracks, status), the text form, and findings |
 | `POST /v1/hub/set/edit` | `{ ops }`, as op objects or text lines, all or none. A name or clip that matches nothing answers 400 with `finding.candidates` |
 | `GET`, `PUT /v1/hub/goals/<id>/arrangement`, `POST .../arrangement/edit` | One track's timeline, replaced or edited with instance ops |
 | `GET /v1/hub/clips?q=&kind=` | Timeline clips and step-list playtests, for a browser |
@@ -149,6 +149,8 @@ Ops, one per line; a track or scene is named by its id or its exact name, and an
 `retarget` points an instance at another clip and keeps its place, name, color and trim; naming the other kind (a step-list playtest in place of a timeline clip, or the reverse) drops the trim. A path that names no clip fails with the closest ones as candidates.
 
 Colors are `red`, `orange`, `yellow`, `lime`, `green`, `teal`, `cyan`, `blue`, `indigo`, `violet`, `pink` and `gray`. The set model also carries Session view slots (`slot ...` ops and `slot` runs) for the grid that comes later; no view shows them yet.
+
+`track delete` and `scene delete` remove the record as `DELETE /v1/hub/goals/<id>` does, its sign-off included, and are refused the same way while a run made for it is queued or running. A track's slots go with it; its clips stay.
 
 The `hub` MCP category has the same through `read_set`, `edit_set` (`ops`), `run` (`scope`: `track <t>`, `scene <s>` or `arrangement`) and `read_run`.
 

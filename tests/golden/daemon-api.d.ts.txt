@@ -2644,6 +2644,7 @@ export declare const ComposeOptions: any;
 export declare const ComposeTrack: any;
 export declare const ComposedInstance: any;
 export declare const Instance: any;
+export declare const InstanceAwaiting: any;
 export declare const InstanceKind: any;
 export declare const InstanceLayout: any;
 export declare const InstanceResult: any;

@@ -170,6 +170,26 @@ scene track "Boss fight" add Guard` });
     expect(unknown.body.finding.candidates[0]).toBe(JUMP);
   });
 
+  it("deletes tracks and scenes through ops, refusing one a queued or running run was made for", async () => {
+    hub = setup();
+    const e = await call("POST", "/hub/set/edit", { ops: `track add A\ntrack add B\nadd A clip ${WALK}\nscene add S\nscene track S add A\nscene add T` });
+    const [a, b] = e.body.tracks.map((t: { id: string }) => t.id);
+    expect((await call("POST", "/hub/run", { scope: { kind: "track", goalId: a } })).status).toBe(200);
+    await settle();
+    const refused = await call("POST", "/hub/set/edit", { ops: "track delete A" });
+    expect(refused.status).toBe(400);
+    expect(refused.body.finding).toMatchObject({ id: a, field: "delete", blocks: true });
+    expect(refused.body.finding.message).toContain(`"A" can't be deleted while a run made for it is queued or running`);
+    expect(hub.goals.get(a)).toBeTruthy();
+    const r = await call("POST", "/hub/set/edit", { ops: "track delete B\nscene delete S" });
+    expect(r.status).toBe(200);
+    expect(r.body.tracks.map((t: { id: string }) => t.id)).toEqual([a]);
+    expect(r.body.scenes.map((s: { title: string }) => s.title)).toEqual(["T"]);
+    expect(hub.goals.get(b)).toBeUndefined();
+    const agent = (await runHubAction(hub, "edit_set", { ops: "scene delete T" })) as { text: string };
+    expect(agent.text).not.toContain("scene ");
+  });
+
   it("makes an instance unique by copying its clip", async () => {
     hub = setup();
     await call("POST", "/hub/set/edit", { ops: `track add A\nadd A clip ${WALK}` });
@@ -233,6 +253,11 @@ scene track "Boss fight" add Guard` });
     await hub.arrangements.refresh(runId);
     const script = calls.find((c) => c.action === "script_run")!;
     expect(script.args).toMatchObject({ script: DOOR, start_pie: true, keep_pie: true });
+    // A step waiting for a verdict is named on its instance, with the check id the verdict route takes.
+    scriptRuns.set("script_1", { run_id: "script_1", script: DOOR, script_name: "DoorOpens", state: "awaiting_verdict", steps: [{ index: 0, instruction: "Open it", judge: "manual", status: "awaiting_verdict" }], awaiting: [0] });
+    await hub.arrangements.refresh(runId);
+    const waiting = (await call("GET", `/hub/runs/${runId}`)).body.arrangement.instances[1];
+    expect(waiting).toMatchObject({ id: "i2", status: "awaiting_verdict", awaiting: [{ check: "0", instruction: "Open it" }] });
     scriptRuns.set("script_1", { run_id: "script_1", script: DOOR, script_name: "DoorOpens", state: "finished", steps: [{ index: 0, instruction: "Open it", judge: "auto", status: "failed" }], awaiting: [] });
     await hub.arrangements.refresh(runId);
     const second = calls.filter((c) => c.action === "clip_run")[1];
