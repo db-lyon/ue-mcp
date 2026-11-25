@@ -589,8 +589,9 @@ namespace MCPPIE
 		{
 			if (const UCharacterMovementComponent* Move = Ch->GetCharacterMovement()) S.Velocity = Move->Velocity;
 		}
-		// While holding, the clip stands still and the world does not: those frames are not compared.
-		if (Run.HoldingCheck == INDEX_NONE || Run.PawnTrack.Num() == 0 || !FMath::IsNearlyEqual(Run.PawnTrack.Last().Frame, S.Frame, 1e-6))
+		// One sample per clip frame. While holding, the clip stands still and the world does not, so those frames are
+		// not compared; when the world does not advance either, as in a long first frame, there is nothing new to keep.
+		if (Run.PawnTrack.Num() == 0 || !FMath::IsNearlyEqual(Run.PawnTrack.Last().Frame, S.Frame, 1e-6))
 		{
 			Run.PawnTrack.Add(S);
 			if (Run.bHasReference && Run.HoldingCheck == INDEX_NONE)
