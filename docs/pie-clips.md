@@ -1,12 +1,12 @@
 ---
-description: "Playtests as timelines on game time: input tracks, events, check notes and regions, written and edited as JSON or a compact text form."
+description: "Playtests as timelines on game time: input tracks, events, check notes and regions, written as data or recorded from play, then replayed and judged per region."
 ---
 
 # Playtest clips
 
 A playtest clip is a test laid out on a timeline of game time instead of an ordered list of steps. Input sits on one track per Input Action, setup and actions sit on an event track, and what the test checks sits on a check track as notes with a start, a length and a mode. Named regions divide the timeline, and results report against them.
 
-People and agents edit the same clip, as JSON or in a compact text form, through the actions on this page. [Test scripts](pie-scripts.md) keep working as they are: a clip is a separate asset, and nothing converts one into the other.
+People and agents edit the same clip. A person records input into it by playing; an agent writes and edits it as data through the actions on this page, plays it and adjusts it from the results. [Test scripts](pie-scripts.md) keep working as they are: a clip is a separate asset, and nothing converts one into the other.
 
 Every action on this page is in the `pie` category.
 
@@ -159,3 +159,79 @@ pie(action="clip_edit", path="/Game/PIEStudio/Clips/CL_Door",
          {"op": "add", "kind": "note", "track": "/Game/Input/IA_Jump", "start": 140, "length": 6}])
 ```
 
+## Playing a clip
+
+```text
+pie(action="clip_run", path="/Game/PIEStudio/Clips/CL_Door", start_pie=true, wait=true)
+```
+
+| Param | Default | Meaning |
+|---|---|---|
+| `path`, `clip` or `text` | | The clip asset, or an inline clip. Exactly one. |
+| `name` | the asset name, or `inline` | The run's name. |
+| `region` | | Judge only this region's checks and stop at its end. Playback still starts at frame 0, since the state at a region's start comes from playing what comes before it. |
+| `start_pie` | `false` | Start PIE when it is not running. The run ends PIE it started when it ends. |
+| `keep_pie` | `false` | Leave that session running. |
+| `fixed_timestep` | the clip's | Fixed frame deltas: to the next recorded frame where the clip has `frame_times`, else 1/`rate`. |
+| `lock_input` | `true` | Keep the person's keyboard, mouse and gamepad out of PIE while the clip plays. |
+| `pie_instance`, `client_id` | the editor's own player | The player the clip drives and observes. |
+| `wait`, `timeout_seconds` | `false`, 600 | Answer once the run finishes, stops or waits for a verdict. |
+
+How a run plays:
+
+- **Frame 0** is the first frame the observer samples after PIE's first, long frame, in a run and a recording alike. The pawn is teleported to the clip's `start`, the seed applied, and the fixed timestep switched on. Where the clip has recorded `frame_times`, each frame's delta takes the run to the next recorded frame, so every frame of a replayed take lands where the recorded one did.
+- **Every frame, before the actors tick,** the position moves on by that frame's game time, the events it passed fire, and each track's value at the position is fed to its action with `InjectInputForAction`, so the value is processed on its own frame.
+- **At the end of every frame** the check notes are judged against what the observer read, and the pawn's position and velocity are written to the run's track.
+- **The run finishes** once the position reaches the clip's length (or the region's end) with no check still waiting. It also ends when PIE ends, or with `clip_stop` (`reason?`), and any check still open then fails.
+
+`clip_status` (`run_id?`, `wait?`, `timeout_seconds?`) answers with the run; a finished run the editor no longer holds answers from its `clip_results.json`, under `<Project>/Saved/MCPObservations/<run_id>/`. `clip_verdict` (`check`, `verdict` of `pass`, `fail` or `skip`, `note?`, `source?` of `human` or `agent`, `evidence?` of `{note, captures?}`) answers the manual check a run is paused on. An agent verdict needs an evidence note.
+
+### Results
+
+| Field | Meaning |
+|---|---|
+| `run_id`, `clip`, `clip_name`, `mode` | The run, the clip, and `play` or `record`. |
+| `state`, `stop_reason` | `armed`, `running`, `finished` or `stopped`, and why it ended. |
+| `passed` | Finished, with at least one check passed and none failed or open. |
+| `position`, `length`, `game_ms`, `held_ms`, `frames` | Where playback is in frames, the clip's length, game ms since frame 0, ms spent standing at holds, frames played. |
+| `holding`, `awaiting` | The check playback stands at, and the manual checks waiting for a verdict. |
+| `summary` | `total`, `passed`, `failed`, `skipped`, `pending`, `awaiting`. |
+| `checks[]` | `id`, `mode`, `status` (`pending`, `running`, `passed`, `failed`, `awaiting_verdict`, `skipped`), `start`, `length`, `started_frame`, `ended_frame`, `started_ms`, `ended_ms`, `evidence` (`at_start`, `last`, `samples`, `reason`, and a verdict's `note` and `captures`), and on a hold `hold` (`held_ms`, `resolved_frame`, `resolved_ms`, `value`, and when the clip was recorded `recorded_ms` and `drift_ms`). |
+| `regions[]` | `id`, `name`, `start`, `end`, `status` (`passed`, `failed`, `pending` or `empty`), the `checks` that start in it, and with a reference `drift` (`max_position_cm`, `max_velocity_cms`, `frames_compared`, `first_over_frame`). |
+| `drift` | Against the clip's `reference` over the whole run: `compared`, `frames_compared`, `max_position_cm`, `max_velocity_cms`, `first_over_frame` (5 cm or 25 cm/s), or `error`. Frames spent standing at a hold are not compared. |
+| `events[]` | Each event fired: `id`, `frame`, `game_ms`, `ok`, `error`. |
+| `take` | On a recording: see below. |
+
+## Recording into a clip
+
+```text
+pie(action="clip_record", path="/Game/PIEStudio/Clips/CL_Door", region="r2")
+pie(action="clip_record_stop")
+```
+
+`clip_record` (`path`, `region?` or `from_check?`, `armed?`, `pie_instance?`, `client_id?`) starts PIE and plays the clip with the person's input locked out up to the punch-in, then stops feeding the armed tracks and records what the person does to them. The tracks that are not armed keep playing.
+
+- **Punch-in** is at a region's start, which also punches out at its end and ends the run there, or at a `hold` check's frame (`from_check`), which records until `clip_record_stop`. With neither, the take starts at frame 0 and runs until `clip_record_stop`. Input replayed before the punch-in does not reproduce physics, AI or random state from the middle of a region, so a punch-in anywhere else is not offered.
+- **Armed tracks** are the Input Actions in `armed`, or every action the player has a mapping for. To record a new clip, create an empty one with `clip_create` and record into it.
+- **Comping.** The take replaces every armed track over its range: the notes and keys there go into a new entry in `takes`, and the recording goes in their place. Takes are never mixed, since summing two takes would make input no player made.
+- **Timing.** The lead-in before the punch-in plays as `clip_run` would; from the punch-in, recording runs on variable delta time with `t.MaxFPS` pinned to the clip's rate, so the game does not slow down for the person when frames drop. Each frame's raw value is read as the engine computes it, on the frame it was played: a Boolean track becomes notes from its edges, and an axis track becomes a key on every frame, reduced with `FRichCurve` to within 0.0001. The frames go into `frame_times`, so a replay lands on them.
+- **Reference.** The take's run becomes the clip's `reference`, so later runs report drift against it. A take from frame 0 also sets the clip's `start` pose.
+- **Hold checks** record how they resolved, the frame, game ms and value, as `recorded`. A replay waits at that frame rather than the check's start, and reports `drift_ms` against it.
+
+`clip_record_stop` ends the take at the current frame and saves it. The answer, and `take` on the run, carries `take_id`, `punch_in`, `punch_out`, `punched_in`, `ended_at_frame`, `armed`, `samples`, `saved` and, when the clip did not save, `error`.
+
+## How closely a take replays
+
+Measured with the probe arena in the test project over 30 s of a character walking, jumping and steering with the stick, ten replays at a fixed timestep (`scripts/timeline-probe.mjs`):
+
+| Scene | Character, max drift | Things it touched |
+|---|---|---|
+| The character alone | 0.018 cm, the same in every replay | |
+| With a physics crate in its path and an AI chaser following it | 4.8 to 26.9 cm, from the frame it reached the crate | the crate ended 34 to 846 cm from where it did in the take; the chaser stayed within the character's own drift |
+
+Movement driven by input reproduces. Physics does not reproduce run to run, even at the same frame deltas, and whatever touches it inherits the difference. Check anything physics moves with a `hold` check, so playback waits for the state instead of assuming when it arrives.
+
+## Not covered
+
+- Remote players can be driven by an event's act entry, but not recorded.
+- `ui_input` cursor events are not on a clip: they run on real time, which conflicts with game time and with a paused hold.

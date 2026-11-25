@@ -8,6 +8,7 @@
 #include "Handlers/PIE/PIEPawnDrive.h"
 #include "Handlers/PIE/PIERemotePlayers.h"
 #include "Handlers/PIE/PIEScriptRunner.h"
+#include "Handlers/PIE/PIEClipPlayer.h"
 #include "Handlers/PIE/PIESessionLog.h"
 #include "Handlers/PIE/PIEUatRunner.h"
 #include "Handlers/PIE/PIEWorldResolver.h"
@@ -69,6 +70,7 @@ void FPIEHandlers::StartupSystems()
 	MCPPIE::FPIEObserver::Get().Init();
 	MCPPIE::FPIESessionLog::Get().Init();
 	MCPPIE::FPIEScriptRunner::Get().Init();
+	MCPPIE::FPIEClipPlayer::Get().Init();
 	MCPPIE::FPIEUatRunner::Get().Init();
 
 	if (IsSupersededPluginEnabled())
@@ -135,6 +137,7 @@ void FPIEHandlers::ShutdownSystems()
 	}
 	MCPPIE::PIEPawnDrive::Shutdown();
 	MCPPIE::FPIEScriptRunner::Get().Shutdown();
+	MCPPIE::FPIEClipPlayer::Get().Shutdown();
 	MCPPIE::FPIESessionLog::Get().Shutdown();
 	MCPPIE::FPIEObserver::Get().Shutdown();
 	MCPPIE::FPIEInputReplayer::Get().Shutdown();

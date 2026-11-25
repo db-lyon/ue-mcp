@@ -1,5 +1,5 @@
 {
-  "handlerCount": 1426,
+  "handlerCount": 1432,
   "handlers": {
     "acquire_lock": {
       "category": "lock",
@@ -29583,6 +29583,193 @@
         }
       ]
     },
+    "pie_clip_record": {
+      "category": "pie",
+      "params": [
+        {
+          "name": "path",
+          "type": "string",
+          "required": true,
+          "description": "Playtest clip asset path the take goes into; create an empty clip first to record a new one"
+        },
+        {
+          "name": "region",
+          "type": "string",
+          "required": false,
+          "description": "Punch in at this region's start and out at its end. The clip plays up to the punch-in with the person's input locked out"
+        },
+        {
+          "name": "from_check",
+          "type": "string",
+          "required": false,
+          "description": "Punch in at this hold check's frame instead, and record until clip_record_stop"
+        },
+        {
+          "name": "armed",
+          "type": "array",
+          "required": false,
+          "description": "Input Actions the take records (default every action the player has a mapping for). The take replaces these tracks over the range, and keeps what they held there as history",
+          "items": "string"
+        },
+        {
+          "name": "pie_instance",
+          "type": "integer",
+          "required": false,
+          "description": "FWorldContext PIEInstance of the player being recorded (default the editor's own player)",
+          "minimum": 0
+        },
+        {
+          "name": "client_id",
+          "type": "integer",
+          "required": false,
+          "description": "Local-player index inside that PIE world (default 0)",
+          "minimum": 0
+        }
+      ],
+      "contractExempt": "Starts PIE and records the person's input into the clip"
+    },
+    "pie_clip_record_stop": {
+      "category": "pie",
+      "params": []
+    },
+    "pie_clip_run": {
+      "category": "pie",
+      "params": [
+        {
+          "name": "path",
+          "type": "string",
+          "required": false,
+          "description": "Playtest clip asset path"
+        },
+        {
+          "name": "clip",
+          "type": "object",
+          "required": false,
+          "description": "An inline clip instead of an asset, as clip_create takes it"
+        },
+        {
+          "name": "text",
+          "type": "string",
+          "required": false,
+          "description": "An inline clip in its compact text form"
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "required": false,
+          "description": "The run's name (default the asset name, or inline)"
+        },
+        {
+          "name": "region",
+          "type": "string",
+          "required": false,
+          "description": "Region id: judge only its checks and stop at its end. Playback still starts at frame 0, since the state at a region's start comes from playing what comes before it"
+        },
+        {
+          "name": "start_pie",
+          "type": "boolean",
+          "required": false,
+          "description": "Start PIE when it is not running (default false). The run ends PIE it started when it ends"
+        },
+        {
+          "name": "keep_pie",
+          "type": "boolean",
+          "required": false,
+          "description": "Leave PIE the run started running when the run ends (default false)"
+        },
+        {
+          "name": "fixed_timestep",
+          "type": "boolean",
+          "required": false,
+          "description": "Fixed frame deltas: to the next recorded frame where the clip has frame_times, else 1/rate (default the clip's fixed_timestep, true unless set)"
+        },
+        {
+          "name": "lock_input",
+          "type": "boolean",
+          "required": false,
+          "description": "Keep the person's keyboard, mouse and gamepad out of PIE while the clip plays (default true)"
+        },
+        {
+          "name": "pie_instance",
+          "type": "integer",
+          "required": false,
+          "description": "FWorldContext PIEInstance whose player the clip drives and observes (default the editor's own player)",
+          "minimum": 0
+        },
+        {
+          "name": "client_id",
+          "type": "integer",
+          "required": false,
+          "description": "Local-player index inside that PIE world (default 0)",
+          "minimum": 0
+        },
+        {
+          "name": "wait",
+          "type": "boolean",
+          "required": false,
+          "description": "Answer once the run finishes, stops or awaits a verdict (default false)"
+        },
+        {
+          "name": "timeout_seconds",
+          "type": "number",
+          "required": false,
+          "description": "Most seconds wait holds the answer (default 600)",
+          "minimum": 0
+        }
+      ],
+      "choices": [
+        {
+          "mode": "exactlyOne",
+          "branches": [
+            [
+              "path"
+            ],
+            [
+              "clip"
+            ],
+            [
+              "text"
+            ]
+          ]
+        }
+      ],
+      "contractExempt": "Arms the observer and can start PIE"
+    },
+    "pie_clip_status": {
+      "category": "pie",
+      "params": [
+        {
+          "name": "run_id",
+          "type": "string",
+          "required": false,
+          "description": "Clip run id (default the current or last run)"
+        },
+        {
+          "name": "wait",
+          "type": "boolean",
+          "required": false,
+          "description": "Answer once the run finishes, stops or awaits a verdict"
+        },
+        {
+          "name": "timeout_seconds",
+          "type": "number",
+          "required": false,
+          "description": "Most seconds wait holds the answer (default 600)",
+          "minimum": 0
+        }
+      ]
+    },
+    "pie_clip_stop": {
+      "category": "pie",
+      "params": [
+        {
+          "name": "reason",
+          "type": "string",
+          "required": false,
+          "description": "Recorded as the run's stop reason"
+        }
+      ]
+    },
     "pie_clip_update": {
       "category": "pie",
       "params": [
@@ -29654,6 +29841,65 @@
             [
               "text"
             ]
+          ]
+        }
+      ]
+    },
+    "pie_clip_verdict": {
+      "category": "pie",
+      "params": [
+        {
+          "name": "check",
+          "type": "string",
+          "required": true,
+          "description": "Id of the manual check awaiting its verdict"
+        },
+        {
+          "name": "verdict",
+          "type": "string",
+          "required": true,
+          "description": "Verdict",
+          "enum": [
+            "pass",
+            "fail",
+            "skip"
+          ]
+        },
+        {
+          "name": "note",
+          "type": "string",
+          "required": false,
+          "description": "Tester's note"
+        },
+        {
+          "name": "source",
+          "type": "string",
+          "required": false,
+          "description": "Who judged it: human (default) or agent, which needs evidence and is refused on a check with agent_judgeable false",
+          "enum": [
+            "human",
+            "agent"
+          ]
+        },
+        {
+          "name": "evidence",
+          "type": "object",
+          "required": false,
+          "description": "What the verdict rests on; required when source is agent",
+          "fields": [
+            {
+              "name": "note",
+              "type": "string",
+              "required": true,
+              "description": "What was observed"
+            },
+            {
+              "name": "captures",
+              "type": "array",
+              "required": false,
+              "description": "Capture files that show it: absolute, or relative to the run's output_dir; each must exist",
+              "items": "string"
+            }
           ]
         }
       ]
