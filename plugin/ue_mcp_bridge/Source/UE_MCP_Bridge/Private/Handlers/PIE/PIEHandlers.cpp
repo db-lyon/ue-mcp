@@ -539,4 +539,5 @@ void FPIEHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	});
 
 	RegisterScriptHandlers(Registry);
+	RegisterClipHandlers(Registry);
 }

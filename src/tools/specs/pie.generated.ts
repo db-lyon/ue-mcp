@@ -92,6 +92,192 @@ export const handlerSpecs: HandlerSpecs = {
     "category": "pie",
     "params": []
   },
+  "pie_clip_create": {
+    "category": "pie",
+    "params": [
+      {
+        "name": "name",
+        "type": "string",
+        "required": true,
+        "description": "Asset name"
+      },
+      {
+        "name": "package_path",
+        "type": "string",
+        "required": false,
+        "description": "Package folder (default /Game/PIEStudio/Clips)"
+      },
+      {
+        "name": "clip",
+        "type": "object",
+        "required": false,
+        "description": "The clip as JSON: {rate (frames per second, default 60), length (frames, 0 ends at the last thing on it), grid (frame | 1/N | free), map, profile, description, fixed_timestep (default true), seed, hold_timeout (frames), regions: [{id?, name, start, end}], tracks: [{action (Input Action path), type: bool|axis1d|axis2d|axis3d, notes: [{id?, start, length, value? (axis tracks)}], keys: [{id?, t, v, interp?: linear|constant|cubic}] (axis tracks)}], events: [{id?, at, do (an act entry: place, console, capture, key, press, hold, tape, inject; or an arrange entry: {kind: spawn|set|call, ...})}], checks: [{id?, name?, start, length, mode: by_end|throughout|hold, expect: {value, op, target?} | manual: true with instruction}]}. Times are frames at rate. A track holds the raw value that reaches the Input Action, before its own modifiers and triggers"
+      },
+      {
+        "name": "text",
+        "type": "string",
+        "required": false,
+        "description": "The clip in its compact text form, one thing per line: clip rate=60 length=600 | region <id> <start> <end> \"name\" | track <action> <type> followed by indented note <id> <start> <length> [value] and key <id> <t> <value> [interp] lines | event <id> <at> {json} | check <id> <start> <length> <by_end|throughout|hold> <value> <op> [target] | check <id> <start> <length> manual \"question\". Use - for an id to have one assigned"
+      },
+      {
+        "name": "onConflict",
+        "type": "string",
+        "required": false,
+        "description": "When the asset exists: skip (default) returns it untouched, replace overwrites it, error refuses",
+        "enum": [
+          "skip",
+          "replace",
+          "error"
+        ]
+      }
+    ],
+    "choices": [
+      {
+        "mode": "exactlyOne",
+        "branches": [
+          [
+            "clip"
+          ],
+          [
+            "text"
+          ]
+        ]
+      }
+    ],
+    "contractExempt": "Creates and saves a clip asset"
+  },
+  "pie_clip_delete": {
+    "category": "pie",
+    "params": [
+      {
+        "name": "path",
+        "type": "string",
+        "required": true,
+        "description": "Playtest clip asset path"
+      },
+      {
+        "name": "confirm",
+        "type": "boolean",
+        "required": false,
+        "description": "Must be true to delete"
+      }
+    ]
+  },
+  "pie_clip_edit": {
+    "category": "pie",
+    "params": [
+      {
+        "name": "path",
+        "type": "string",
+        "required": true,
+        "description": "Playtest clip asset path"
+      },
+      {
+        "name": "ops",
+        "type": "array",
+        "required": true,
+        "description": "Edits applied in order, all or none: {op: add, kind: note|key|track|check|event|region, ...the thing's fields (track names the Input Action a note or key goes on)} | {op: move, id, to | by} | {op: trim, id, start?, length? | end?} | {op: set, id, ...fields} | {op: delete, id} (a track by its action) | {op: quantize, grid?, track? | ids?} | {op: set_clip, ...clip fields}. Times snap to the clip's grid",
+        "items": "object"
+      }
+    ]
+  },
+  "pie_clip_list": {
+    "category": "pie",
+    "params": [
+      {
+        "name": "directory",
+        "type": "string",
+        "required": false,
+        "description": "Content folder to list under (default /Game)"
+      }
+    ]
+  },
+  "pie_clip_read": {
+    "category": "pie",
+    "params": [
+      {
+        "name": "path",
+        "type": "string",
+        "required": true,
+        "description": "Playtest clip asset path"
+      }
+    ]
+  },
+  "pie_clip_update": {
+    "category": "pie",
+    "params": [
+      {
+        "name": "path",
+        "type": "string",
+        "required": true,
+        "description": "Playtest clip asset path"
+      },
+      {
+        "name": "clip",
+        "type": "object",
+        "required": false,
+        "description": "The whole clip as JSON, replacing the stored one"
+      },
+      {
+        "name": "text",
+        "type": "string",
+        "required": false,
+        "description": "The whole clip in its compact text form, replacing the stored one"
+      }
+    ],
+    "choices": [
+      {
+        "mode": "exactlyOne",
+        "branches": [
+          [
+            "clip"
+          ],
+          [
+            "text"
+          ]
+        ]
+      }
+    ]
+  },
+  "pie_clip_validate": {
+    "category": "pie",
+    "params": [
+      {
+        "name": "path",
+        "type": "string",
+        "required": false,
+        "description": "A stored clip to check"
+      },
+      {
+        "name": "clip",
+        "type": "object",
+        "required": false,
+        "description": "The clip as JSON: {rate (frames per second, default 60), length (frames, 0 ends at the last thing on it), grid (frame | 1/N | free), map, profile, description, fixed_timestep (default true), seed, hold_timeout (frames), regions: [{id?, name, start, end}], tracks: [{action (Input Action path), type: bool|axis1d|axis2d|axis3d, notes: [{id?, start, length, value? (axis tracks)}], keys: [{id?, t, v, interp?: linear|constant|cubic}] (axis tracks)}], events: [{id?, at, do (an act entry: place, console, capture, key, press, hold, tape, inject; or an arrange entry: {kind: spawn|set|call, ...})}], checks: [{id?, name?, start, length, mode: by_end|throughout|hold, expect: {value, op, target?} | manual: true with instruction}]}. Times are frames at rate. A track holds the raw value that reaches the Input Action, before its own modifiers and triggers"
+      },
+      {
+        "name": "text",
+        "type": "string",
+        "required": false,
+        "description": "The clip in its compact text form, one thing per line: clip rate=60 length=600 | region <id> <start> <end> \"name\" | track <action> <type> followed by indented note <id> <start> <length> [value] and key <id> <t> <value> [interp] lines | event <id> <at> {json} | check <id> <start> <length> <by_end|throughout|hold> <value> <op> [target] | check <id> <start> <length> manual \"question\". Use - for an id to have one assigned"
+      }
+    ],
+    "choices": [
+      {
+        "mode": "exactlyOne",
+        "branches": [
+          [
+            "path"
+          ],
+          [
+            "clip"
+          ],
+          [
+            "text"
+          ]
+        ]
+      }
+    ]
+  },
   "pie_console": {
     "category": "pie",
     "params": [
@@ -2591,6 +2777,7 @@ export const schema: Record<string, z.ZodType> = {
   channels: z.string().optional().describe("series: comma-separated columns (default: every t:* plus speed2d, gpu_ms, game_ms)"),
   client: z.number().int().optional().describe("Remote player 1..N (join order) (pie_console). 1..N relays to that remote player (join order) over the game connection, including separate-process clients; 0 or absent uses the local player (pie_inject_input, pie_inject_input_start, pie_inject_input_tape)"),
   client_id: z.number().int().min(0).optional().describe("Local-player index inside the selected PIE world (default 0) (pie_inject_input, pie_inject_input_start, pie_inject_input_tape, pie_observe_arm, pie_record_arm, pie_replay_arm, pie_replay_run, pie_script_replay, pie_send_key). With apply: local-player index inside that PIE world (default 0) (pie_replay_state). Local-player index inside that PIE world, for observing, client 0 act entries and client 0 triggered steps alike (default 0) (pie_script_run)"),
+  clip: z.record(z.string(), z.unknown()).optional().describe("The clip as JSON: {rate (frames per second, default 60), length (frames, 0 ends at the last thing on it), grid (frame | 1/N | free), map, profile, description, fixed_timestep (default true), seed, hold_timeout (frames), regions: [{id?, name, start, end}], tracks: [{action (Input Action path), type: bool|axis1d|axis2d|axis3d, notes: [{id?, start, length, value? (axis tracks)}], keys: [{id?, t, v, interp?: linear|constant|cubic}] (axis tracks)}], events: [{id?, at, do (an act entry: place, console, capture, key, press, hold, tape, inject; or an arrange entry: {kind: spawn|set|call, ...})}], checks: [{id?, name?, start, length, mode: by_end|throughout|hold, expect: {value, op, target?} | manual: true with instruction}]}. Times are frames at rate. A track holds the raw value that reaches the Input Action, before its own modifiers and triggers (pie_clip_create, pie_clip_validate). The whole clip as JSON, replacing the stored one (pie_clip_update)"),
   codec: z.enum(["H264","VP8","VP9","AV1"]).optional().describe("Video codec (default H264)"),
   command: z.string().optional().describe("Console command"),
   confirm: z.boolean().optional().describe("Must be true to delete"),
@@ -2600,7 +2787,7 @@ export const schema: Record<string, z.ZodType> = {
   default_within_ms: z.number().int().min(1).optional().describe("Default auto-step window in game ms (default 5000) (pie_script_create). Default auto-step window in game ms; overrides the script's (default 5000) (pie_script_run). Default auto-step window in game ms (pie_script_update)"),
   description: z.string().optional().describe("What the script tests"),
   direction: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("World direction to push movement input in every frame"),
-  directory: z.string().optional().describe("Content path prefix (default /Game) (pie_profile_list). Content folder to list under (default /Game) (pie_script_list)"),
+  directory: z.string().optional().describe("Content folder to list under (default /Game) (pie_clip_list, pie_script_list). Content path prefix (default /Game) (pie_profile_list)"),
   distance: z.number().optional().describe("Positive trace distance in cm (default 1000)"),
   drift_thresholds: z.record(z.string(), z.unknown()).optional().describe("{position_cm, rotation_deg, velocity_cms, tracked_default, tracked:{path: threshold}}"),
   driveId: z.string().optional().describe("Caller-chosen drive id (minted when absent) (pie_drive_pawn). Drive id from drive_pawn (default: the most recent drive) (pie_drive_status, pie_drive_stop)"),
@@ -2638,13 +2825,14 @@ export const schema: Record<string, z.ZodType> = {
   maxBitrateKbps: z.number().int().min(100).optional().describe("Ceiling on the WebRTC bitrate in kbps (default 4000)"),
   min_verbosity: z.string().optional().describe("Lowest severity kept (default warning) (pie_session_errors). Lowest severity kept (default log) (pie_session_log)"),
   mode: z.string().optional().describe("input (default): movement input on the pawn; navigate: a navmesh move from the player controller, needs targetLocation (pie_drive_pawn). replay drives input; monitor only samples (default replay) (pie_replay_arm, pie_replay_run). full (default) plays the script in PIE; manual starts no PIE, observer or recording, leaves auto steps unchecked and puts every manual step up for its verdict at once (pie_script_run)"),
-  name: z.string().optional().describe("Asset name (pie_profile_create, pie_script_create). Scenario name (default scenario) (pie_scenario_scaffold). Name for an inline run (default inline) (pie_script_run). Test name (default repro) (pie_test_run, pie_test_scaffold)"),
+  name: z.string().optional().describe("Asset name (pie_clip_create, pie_profile_create, pie_script_create). Scenario name (default scenario) (pie_scenario_scaffold). Name for an inline run (default inline) (pie_script_run). Test name (default repro) (pie_test_run, pie_test_scaffold)"),
   note: z.string().optional().describe("Tester's note"),
   offset: z.number().int().min(0).optional().describe("csv/tracked: first row (pie_observe_read). Rows to skip (pie_record_list). csv: first row (pie_record_read). First frames_over_threshold entry returned (pie_replay_analyze). First row (pie_session_log)"),
-  onConflict: z.string().optional().describe("What to do when the asset exists (default skip) (pie_profile_create). When the asset exists: skip (default), update or replace (overwrite it), error (pie_script_create)"),
+  onConflict: z.string().optional().describe("When the asset exists: skip (default) returns it untouched, replace overwrites it, error refuses (pie_clip_create). What to do when the asset exists (default skip) (pie_profile_create). When the asset exists: skip (default), update or replace (overwrite it), error (pie_script_create)"),
+  ops: z.array(z.record(z.string(), z.unknown())).optional().describe("Edits applied in order, all or none: {op: add, kind: note|key|track|check|event|region, ...the thing's fields (track names the Input Action a note or key goes on)} | {op: move, id, to | by} | {op: trim, id, start?, length? | end?} | {op: set, id, ...fields} | {op: delete, id} (a track by its action) | {op: quantize, grid?, track? | ids?} | {op: set_clip, ...clip fields}. Times snap to the clip's grid"),
   output_dir: z.string().optional().describe("Observation root (default Saved/MCPObservations)"),
-  package_path: z.string().optional().describe("Content folder (default /Game/Observation) (pie_profile_create). Package folder (default /Game/PIEStudio/Scripts) (pie_script_create)"),
-  path: z.string().optional().describe("Profile asset path (pie_profile_delete, pie_profile_read, pie_profile_update). Test script asset path (pie_script_delete, pie_script_read, pie_script_update). Scenario JSON file, relative to the project directory (pie_uat_run)"),
+  package_path: z.string().optional().describe("Package folder (default /Game/PIEStudio/Clips) (pie_clip_create). Content folder (default /Game/Observation) (pie_profile_create). Package folder (default /Game/PIEStudio/Scripts) (pie_script_create)"),
+  path: z.string().optional().describe("Playtest clip asset path (pie_clip_delete, pie_clip_edit, pie_clip_read, pie_clip_update). A stored clip to check (pie_clip_validate). Profile asset path (pie_profile_delete, pie_profile_read, pie_profile_update). Test script asset path (pie_script_delete, pie_script_read, pie_script_update). Scenario JSON file, relative to the project directory (pie_uat_run)"),
   pie_instance: z.number().int().min(0).optional().describe("FWorldContext::PIEInstance, a non-negative integer. Omitted picks the active PlayWorld, then the first PIE world with the player; an explicit value never falls back (pie_inject_input, pie_inject_input_start, pie_inject_input_tape, pie_observe_arm, pie_record_arm, pie_replay_arm, pie_replay_run). With apply: FWorldContext PIEInstance whose player to move (default the active PIE world) (pie_replay_state). FWorldContext PIEInstance to observe (default the active PIE world) (pie_script_replay). FWorldContext PIEInstance the run observes, and whose player act entries with no client drive and triggered steps on client 0 watch. Without it the observer takes the active PIE world and those entries take the editor's own player: the listen-server host, else the lowest PIE instance (pie_script_run). FWorldContext::PIEInstance of the client whose UI gets the key. Omitted picks the editor's own player: the listen-server host, else the lowest client PIE instance (pie_send_key)"),
   pieInstance: z.number().int().min(0).optional().describe("FWorldContext::PIEInstance, a non-negative integer. Omitted picks the active PlayWorld, then the first PIE world with the player; an explicit value never falls back (pie_drive_pawn). PIE instance id; omitted selects the active PIE world (pie_view_trace)"),
   pin_fps: z.number().int().optional().describe("Pin PIE fps while observing (pie_observe_arm). Pin PIE fps for reproducibility (default sample_hz) (pie_record_arm). Pin PIE fps during replay (pie_replay_arm, pie_replay_run)"),
@@ -2691,7 +2879,7 @@ export const schema: Record<string, z.ZodType> = {
   target: z.string().optional().describe("Actor class or Blueprint to report on: its actors in the level, and whether it is the player pawn"),
   targetLocation: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("World point to steer toward; the drive ends as arrived within acceptanceRadius"),
   test_path: z.string().optional().describe("Scenario json whose predicates block is evaluated when assertions is omitted (pie_assert_eval). Explicit test.json path (pie_test_run)"),
-  text: z.string().optional().describe("Characters to type into the focused widget, one character event each, instead of a key"),
+  text: z.string().optional().describe("The clip in its compact text form, one thing per line: clip rate=60 length=600 | region <id> <start> <end> \"name\" | track <action> <type> followed by indented note <id> <start> <length> [value] and key <id> <t> <value> [interp] lines | event <id> <at> {json} | check <id> <start> <length> <by_end|throughout|hold> <value> <op> [target] | check <id> <start> <length> manual \"question\". Use - for an id to have one assigned (pie_clip_create, pie_clip_validate). The whole clip in its compact text form, replacing the stored one (pie_clip_update). Characters to type into the focused widget, one character event each, instead of a key (pie_send_key)"),
   threshold: z.number().optional().describe("series: report the first frame where |value| exceeds this"),
   time_scale: z.number().optional().describe("Playback speed multiplier (default 1) (pie_replay_arm, pie_replay_run). Global time dilation during the replay (default 1) (pie_script_replay)"),
   timeout_seconds: z.number().min(0).optional().describe("Most seconds to wait when wait is set"),

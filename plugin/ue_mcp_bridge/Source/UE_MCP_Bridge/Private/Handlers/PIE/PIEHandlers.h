@@ -126,4 +126,14 @@ public:
 	static TSharedPtr<FJsonValue> PieScriptResults(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> PieScriptRuns(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> PieScriptReplay(const TSharedPtr<FJsonObject>& Params);
+
+	// Playtest clips: timelines of input tracks, events, check notes and regions (PIEHandlers_Clip.cpp)
+	static void RegisterClipHandlers(FMCPHandlerRegistry& Registry);
+	static TSharedPtr<FJsonValue> PieClipCreate(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> PieClipRead(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> PieClipUpdate(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> PieClipEdit(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> PieClipValidate(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> PieClipList(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> PieClipDelete(const TSharedPtr<FJsonObject>& Params);
 };

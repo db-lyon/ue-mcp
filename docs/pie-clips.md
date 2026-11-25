@@ -1,0 +1,161 @@
+---
+description: "Playtests as timelines on game time: input tracks, events, check notes and regions, written and edited as JSON or a compact text form."
+---
+
+# Playtest clips
+
+A playtest clip is a test laid out on a timeline of game time instead of an ordered list of steps. Input sits on one track per Input Action, setup and actions sit on an event track, and what the test checks sits on a check track as notes with a start, a length and a mode. Named regions divide the timeline, and results report against them.
+
+People and agents edit the same clip, as JSON or in a compact text form, through the actions on this page. [Test scripts](pie-scripts.md) keep working as they are: a clip is a separate asset, and nothing converts one into the other.
+
+Every action on this page is in the `pie` category.
+
+## The clip
+
+Times are frames at the clip's `rate`, frames per second of game time (default 60), and may be fractional. `clip_edit` snaps the times it writes to the clip's `grid`: `frame` (default), `1/N` for Nths of a second, or `free`, which keeps them as given. A recording keeps the exact frames it read input on.
+
+### Input tracks
+
+A track belongs to one Input Action and drives it for client 0, the editor's own player. It holds the raw value that reaches the action: the keys mapped to it combined, after each mapping's own modifiers (such as Negate on S for a move), before the action's own modifiers and triggers. Playback feeds that value to the action, so the action's modifiers and triggers run once, and rebinding a key does not change the clip.
+
+- A Boolean action is a row of notes, each a `start` and a `length`. The action is held down for the note.
+- An axis action (`axis1d`, `axis2d`, `axis3d`) is a curve of keys, each a time `t`, a value `v` and an `interp` of `linear` (default), `constant` or `cubic`. Before its first key the curve feeds nothing; after its last it holds the last value. Wherever the curve is zero nothing is fed, the same as no key being down.
+- An axis track can also carry notes, each with a `value` held over its span. A note wins over the curve where they overlap.
+- Notes on one track may not overlap.
+
+### Events
+
+An event fires once at its frame. Its `do` is a step's act entry (`place`, `console`, `capture`, `key`, `press`, `hold`, `tape`, `inject`) or an arrange entry (`{kind: spawn|set|call, ...}`), with the meanings [Arrange and act](pie-scripts.md#arrange-and-act) gives them. `wait_ms` is refused: on a timeline, the next event goes at a later frame instead. Menu keys go through `key`, which reaches the player's UI through Slate.
+
+### Check notes
+
+A check note judges an expectation, `expect: {value, op, target?}`, with the values and ops a step's `expect` takes ([Ops](pie-scripts.md#ops)). Check notes may overlap, and each takes the baseline of a `decreasing` or `increasing` op at its own start.
+
+| Mode | Passes when | Fails when |
+|---|---|---|
+| `by_end` | The condition holds on any frame from the note's start to its end. A zero-length note asserts on one frame. | The note ends first. |
+| `throughout` | The condition holds on every frame of the note. | One frame does not hold, or the value cannot be read. |
+| `hold` | The condition holds. Playback stops advancing at the note's start until then, and the game keeps running. | It has waited its `length` in frames of game time, or the clip's `hold_timeout` (default 600) when its length is 0. Playback then carries on. |
+
+A manual check (`manual: true` with an `instruction`) is a `hold` that pauses PIE until it has a verdict through `clip_verdict`. `agent_judgeable: false` takes only a person's verdict.
+
+While playback stands at a `hold`, every track keeps feeding the value it has at that frame: a key held across the hold stays held, so walking towards a door until the character reaches it is one note and one hold.
+
+### Regions
+
+Regions are named spans, each a `start` and an `end`. They may not overlap. Each has a stable `id`, which results, Studio and recordings refer to.
+
+## JSON and text
+
+A clip is JSON:
+
+```json
+{
+  "rate": 60,
+  "length": 260,
+  "regions": [{ "id": "r1", "name": "Walk forward", "start": 0, "end": 120 }],
+  "tracks": [
+    { "action": "/Game/Input/IA_Move.IA_Move", "type": "axis2d",
+      "keys": [{ "id": "k1", "t": 0, "v": [0, 1], "interp": "constant" }, { "id": "k2", "t": 90, "v": [0, 0] }] },
+    { "action": "/Game/Input/IA_Jump.IA_Jump", "type": "bool", "notes": [{ "id": "n1", "start": 40, "length": 6 }] }
+  ],
+  "events": [{ "id": "e1", "at": 0, "do": { "console": "stat fps" } }],
+  "checks": [
+    { "id": "c1", "start": 0, "length": 100, "mode": "by_end", "expect": { "value": "pos_x", "op": "increasing", "target": 200 } },
+    { "id": "c2", "start": 100, "length": 0, "mode": "hold", "expect": { "value": "speed2d", "op": "lt", "target": 1 } }
+  ]
+}
+```
+
+| Field | Default | Meaning |
+|---|---|---|
+| `rate` | 60 | Frames per second of game time. Also the fixed timestep of a replay and the rate a take is resampled at. |
+| `length` | 0 | Frames. 0 ends the clip at the last thing on it. |
+| `grid` | `frame` | `frame`, `1/N` or `free`. |
+| `map`, `profile`, `description` | | The level the clip plays in, the observation profile it arms, what it tests. |
+| `fixed_timestep` | `true` | Play every frame as exactly 1/`rate` of game time. |
+| `seed` | 0 | Applied with `FMath::RandInit` when playback starts; 0 leaves the random state alone. |
+| `hold_timeout` | 600 | Frames a `hold` check waits when its own length is 0. |
+| `start` | | `{location, rotation}`: where the player pawn is teleported before frame 0. A recording from frame 0 sets it. |
+| `reference` | | A run id whose pawn track drift is measured against. A recording sets it to its own run. |
+| `frame_times` | | Where a recording's frames landed, in frames, ascending. A fixed-timestep run takes each frame's delta from them over the range they cover, and 1/`rate` elsewhere. |
+| `takes` | | Notes and keys a recording replaced, kept as history. |
+
+Ids are filled in where missing (`n1`, `k1`, `c1`, `e1`, `r1`, after the highest of each already used). Input Actions may be given as package paths (`/Game/Input/IA_Jump`) and are stored as object paths.
+
+The same clip in its compact text form, which `clip_read` returns as `text` and every action that takes a clip accepts as `text`:
+
+```text
+clip rate=60 length=260 grid=frame fixed_timestep=true seed=0 hold_timeout=600
+region r1 0 120 "Walk forward"
+track /Game/Input/IA_Move.IA_Move axis2d
+  key k1 0 0,1 constant
+  key k2 90 0,0
+track /Game/Input/IA_Jump.IA_Jump bool
+  note n1 40 6
+event e1 0 {"console":"stat fps"}
+check c1 0 100 by_end pos_x increasing 200
+check c2 100 0 hold speed2d lt 1
+```
+
+| Line | Shape |
+|---|---|
+| `clip` | `clip key=value ...` with `rate`, `length`, `grid`, `fixed_timestep`, `seed`, `hold_timeout`. |
+| `map`, `profile`, `description`, `reference` | The word and its value. |
+| `start` | `start x,y,z [pitch,yaw,roll]` |
+| `region` | `region <id> <start> <end> "name"` |
+| `track` | `track <action> <bool\|axis1d\|axis2d\|axis3d>`, followed by its indented `note` and `key` lines. |
+| `note` | `note <id> <start> <length> [value]`. An axis note needs its value. |
+| `key` | `key <id> <t> <value> [linear\|constant\|cubic]` |
+| `event` | `event <id> <at> {json}`, the entry as JSON to the end of the line. |
+| `check` | `check <id> <start> <length> <by_end\|throughout\|hold> <value> <op> [target] [name="..."]`, or `check <id> <start> <length> manual "question" [agent_judgeable=false]`. |
+| `recorded` | `recorded <check id> <frame> <game_ms> <value>`: how a hold resolved when the clip was recorded. |
+| `timing` | `timing <frame>,<frame>,...`: the recorded frame times. |
+
+A value is comma-separated with no spaces. A string with spaces is quoted, with `\"` and `\\` escapes. `-` as an id has one assigned. Lines starting with `#` are comments.
+
+## Writing and checking a clip
+
+| Action | Params |
+|---|---|
+| `clip_create` | `name`, `clip` or `text`, `package_path?` (default `/Game/PIEStudio/Clips`), `onConflict?` (`skip` (default), `replace` or `error`) |
+| `clip_read` | `path`. Returns `clip`, `text` and `counts` (`tracks`, `notes`, `keys`, `events`, `checks`, `regions`, `takes`, `length`). |
+| `clip_update` | `path`, `clip` or `text`. Replaces the clip; its `takes` are kept when the new clip carries none. |
+| `clip_validate` | One of `path`, `clip` or `text`. Every finding in `errors`, `valid` when there are none and `saveable` when none of them stops a save. |
+| `clip_list` | `directory?` (default `/Game`). Returns `clips` (`path`, `object_path`, `name`, `map`) and `count`. |
+| `clip_delete` | `path`, `confirm=true`. |
+
+A clip is checked whenever it is saved, against the level open in the editor and the clip's profile:
+
+- **Structure.** Overlapping regions or notes, two keys on one frame, keys on a Boolean track, times before frame 0, duplicate ids, an event entry that does not parse, a `throughout` check on `triggered`.
+- **What it names.** Each track's Input Action has to exist and have the track's value type. Each check's value has to resolve and suit its op, and the actors, classes and Input Actions events name have to exist, by the rules [Checks when a script is saved](pie-scripts.md#checks-when-a-script-is-saved) gives. A clip whose `map` is not the open level leaves its actors for the run to resolve.
+
+Each finding is `{id, field, message, candidates?}`, where `id` names the note, key, check, event or region at fault, or the track's action. A structural problem refuses the save (`errorCode: "INVALID_CLIP"`, findings in `errors`); everything else saves and comes back as `warnings`, since a value may only resolve once PIE runs. `resolve_in_pie: true` on a check lets such a value through.
+
+## Editing a clip
+
+`clip_edit` (`path`, `ops`) applies operations in order, all or none. Times snap to the clip's grid.
+
+| Op | Fields | Effect |
+|---|---|---|
+| `add` | `kind: note`, `track`, `start`, `length`, `value?` | A note on the track for that Input Action. |
+| `add` | `kind: key`, `track`, `time`, `value`, `interp?` | A curve key. |
+| `add` | `kind: track`, `action`, `type` | A track. |
+| `add` | `kind: check`, and a check's fields | A check note. |
+| `add` | `kind: event`, `at`, `do` | An event. |
+| `add` | `kind: region`, `name`, `start`, `end` | A region. |
+| `move` | `id`, `to` or `by` | Moves a note, key, check, event or region. |
+| `trim` | `id`, `start?`, `length?` or `end?` | Changes a note's, check's or region's span. |
+| `set` | `id`, fields | Sets fields of what `id` names. On a check, `expect` fields are merged into its expectation. |
+| `delete` | `id` | Removes it. A track is named by its action. |
+| `quantize` | `grid?`, `track?` or `ids?` | Snaps times to the grid, or to `grid` when given. A note keeps at least one grid step. |
+| `set_clip` | clip fields | `rate`, `length`, `grid`, `description`, `map`, `profile`, `fixed_timestep`, `seed`, `hold_timeout`, `reference`. |
+
+The answer has `changed` (the ids added or changed, in order), the clip as `clip` and `text`, and `warnings`. An edit that names nothing on the clip, or leaves it unsaveable, changes nothing and answers `success: false` with the finding and candidates: an id that does not exist offers the closest ids, and a note on a track the clip does not have offers the closest tracks.
+
+```text
+pie(action="clip_edit", path="/Game/PIEStudio/Clips/CL_Door",
+    ops=[{"op": "move", "id": "k2", "to": 90},
+         {"op": "add", "kind": "note", "track": "/Game/Input/IA_Jump", "start": 140, "length": 6}])
+```
+

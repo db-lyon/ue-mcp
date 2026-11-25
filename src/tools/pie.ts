@@ -93,6 +93,13 @@ export const pieTool: ToolDef = categoryTool(
       ...specBp("mutate", "Replay a finished run's recording in the level it ran in and re-evaluate its auto steps at their recorded offsets; a triggered step re-anchors the windows after it to the replayed trigger. Manual steps keep their verdicts. Reports regressions.", "pie_script_replay"),
       followUp: scriptRunFollowUp,
     },
+    clip_create:          specBp("mutate", "Create a playtest clip: a timeline on game time of input tracks (one per Input Action: notes for a bool action, curve keys for an axis, holding the raw value before the action's own modifiers and triggers), events (act or arrange entries at a frame), check notes (by_end, throughout or hold, or manual with PIE paused) and regions. Give it as clip (JSON) or text (the compact form clip_read returns). Times are frames at the clip's rate. Refused (INVALID_CLIP) only when it cannot be saved; every other finding comes back as warnings [{id, field, message, candidates}].", "pie_clip_create"),
+    clip_read:            specBp("read", "Read a playtest clip as JSON and in its compact text form, with counts.", "pie_clip_read"),
+    clip_update:          specBp("mutate", "Replace a playtest clip with the clip or text given; its takes history is kept.", "pie_clip_update"),
+    clip_edit:            specBp("mutate", "Edit a playtest clip note by note, all or none: add, move, trim, set, delete and quantize notes, keys, checks, events, regions and tracks, by id. Times snap to the clip's grid. Returns the ids changed, the clip and warnings; a refused edit says why with candidates and changes nothing.", "pie_clip_edit"),
+    clip_validate:        specBp("read", "Check a clip without saving: every structural problem and every action, value, actor or class it names that does not resolve, each with candidates.", "pie_clip_validate"),
+    clip_list:            specBp("read", "List playtest clips with their maps.", "pie_clip_list"),
+    clip_delete:          { ...specBp("mutate", "Delete a playtest clip (confirm=true).", "pie_clip_delete"), destructive: true },
   },
   {
     // #1057: every key the pie handlers declare, generated from their C++ registrations.

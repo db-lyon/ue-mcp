@@ -1,5 +1,5 @@
 {
-  "handlerCount": 1419,
+  "handlerCount": 1426,
   "handlers": {
     "acquire_lock": {
       "category": "lock",
@@ -29471,6 +29471,192 @@
     "pie_clients": {
       "category": "pie",
       "params": []
+    },
+    "pie_clip_create": {
+      "category": "pie",
+      "params": [
+        {
+          "name": "name",
+          "type": "string",
+          "required": true,
+          "description": "Asset name"
+        },
+        {
+          "name": "package_path",
+          "type": "string",
+          "required": false,
+          "description": "Package folder (default /Game/PIEStudio/Clips)"
+        },
+        {
+          "name": "clip",
+          "type": "object",
+          "required": false,
+          "description": "The clip as JSON: {rate (frames per second, default 60), length (frames, 0 ends at the last thing on it), grid (frame | 1/N | free), map, profile, description, fixed_timestep (default true), seed, hold_timeout (frames), regions: [{id?, name, start, end}], tracks: [{action (Input Action path), type: bool|axis1d|axis2d|axis3d, notes: [{id?, start, length, value? (axis tracks)}], keys: [{id?, t, v, interp?: linear|constant|cubic}] (axis tracks)}], events: [{id?, at, do (an act entry: place, console, capture, key, press, hold, tape, inject; or an arrange entry: {kind: spawn|set|call, ...})}], checks: [{id?, name?, start, length, mode: by_end|throughout|hold, expect: {value, op, target?} | manual: true with instruction}]}. Times are frames at rate. A track holds the raw value that reaches the Input Action, before its own modifiers and triggers"
+        },
+        {
+          "name": "text",
+          "type": "string",
+          "required": false,
+          "description": "The clip in its compact text form, one thing per line: clip rate=60 length=600 | region <id> <start> <end> \"name\" | track <action> <type> followed by indented note <id> <start> <length> [value] and key <id> <t> <value> [interp] lines | event <id> <at> {json} | check <id> <start> <length> <by_end|throughout|hold> <value> <op> [target] | check <id> <start> <length> manual \"question\". Use - for an id to have one assigned"
+        },
+        {
+          "name": "onConflict",
+          "type": "string",
+          "required": false,
+          "description": "When the asset exists: skip (default) returns it untouched, replace overwrites it, error refuses",
+          "enum": [
+            "skip",
+            "replace",
+            "error"
+          ]
+        }
+      ],
+      "choices": [
+        {
+          "mode": "exactlyOne",
+          "branches": [
+            [
+              "clip"
+            ],
+            [
+              "text"
+            ]
+          ]
+        }
+      ],
+      "contractExempt": "Creates and saves a clip asset"
+    },
+    "pie_clip_delete": {
+      "category": "pie",
+      "params": [
+        {
+          "name": "path",
+          "type": "string",
+          "required": true,
+          "description": "Playtest clip asset path"
+        },
+        {
+          "name": "confirm",
+          "type": "boolean",
+          "required": false,
+          "description": "Must be true to delete"
+        }
+      ]
+    },
+    "pie_clip_edit": {
+      "category": "pie",
+      "params": [
+        {
+          "name": "path",
+          "type": "string",
+          "required": true,
+          "description": "Playtest clip asset path"
+        },
+        {
+          "name": "ops",
+          "type": "array",
+          "required": true,
+          "description": "Edits applied in order, all or none: {op: add, kind: note|key|track|check|event|region, ...the thing's fields (track names the Input Action a note or key goes on)} | {op: move, id, to | by} | {op: trim, id, start?, length? | end?} | {op: set, id, ...fields} | {op: delete, id} (a track by its action) | {op: quantize, grid?, track? | ids?} | {op: set_clip, ...clip fields}. Times snap to the clip's grid",
+          "items": "object"
+        }
+      ]
+    },
+    "pie_clip_list": {
+      "category": "pie",
+      "params": [
+        {
+          "name": "directory",
+          "type": "string",
+          "required": false,
+          "description": "Content folder to list under (default /Game)"
+        }
+      ]
+    },
+    "pie_clip_read": {
+      "category": "pie",
+      "params": [
+        {
+          "name": "path",
+          "type": "string",
+          "required": true,
+          "description": "Playtest clip asset path"
+        }
+      ]
+    },
+    "pie_clip_update": {
+      "category": "pie",
+      "params": [
+        {
+          "name": "path",
+          "type": "string",
+          "required": true,
+          "description": "Playtest clip asset path"
+        },
+        {
+          "name": "clip",
+          "type": "object",
+          "required": false,
+          "description": "The whole clip as JSON, replacing the stored one"
+        },
+        {
+          "name": "text",
+          "type": "string",
+          "required": false,
+          "description": "The whole clip in its compact text form, replacing the stored one"
+        }
+      ],
+      "choices": [
+        {
+          "mode": "exactlyOne",
+          "branches": [
+            [
+              "clip"
+            ],
+            [
+              "text"
+            ]
+          ]
+        }
+      ]
+    },
+    "pie_clip_validate": {
+      "category": "pie",
+      "params": [
+        {
+          "name": "path",
+          "type": "string",
+          "required": false,
+          "description": "A stored clip to check"
+        },
+        {
+          "name": "clip",
+          "type": "object",
+          "required": false,
+          "description": "The clip as JSON: {rate (frames per second, default 60), length (frames, 0 ends at the last thing on it), grid (frame | 1/N | free), map, profile, description, fixed_timestep (default true), seed, hold_timeout (frames), regions: [{id?, name, start, end}], tracks: [{action (Input Action path), type: bool|axis1d|axis2d|axis3d, notes: [{id?, start, length, value? (axis tracks)}], keys: [{id?, t, v, interp?: linear|constant|cubic}] (axis tracks)}], events: [{id?, at, do (an act entry: place, console, capture, key, press, hold, tape, inject; or an arrange entry: {kind: spawn|set|call, ...})}], checks: [{id?, name?, start, length, mode: by_end|throughout|hold, expect: {value, op, target?} | manual: true with instruction}]}. Times are frames at rate. A track holds the raw value that reaches the Input Action, before its own modifiers and triggers"
+        },
+        {
+          "name": "text",
+          "type": "string",
+          "required": false,
+          "description": "The clip in its compact text form, one thing per line: clip rate=60 length=600 | region <id> <start> <end> \"name\" | track <action> <type> followed by indented note <id> <start> <length> [value] and key <id> <t> <value> [interp] lines | event <id> <at> {json} | check <id> <start> <length> <by_end|throughout|hold> <value> <op> [target] | check <id> <start> <length> manual \"question\". Use - for an id to have one assigned"
+        }
+      ],
+      "choices": [
+        {
+          "mode": "exactlyOne",
+          "branches": [
+            [
+              "path"
+            ],
+            [
+              "clip"
+            ],
+            [
+              "text"
+            ]
+          ]
+        }
+      ]
     },
     "pie_console": {
       "category": "pie",
