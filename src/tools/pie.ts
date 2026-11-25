@@ -4,7 +4,7 @@ import { categoryTool } from "../surface/category-tool.js";
 import { specBp, schema as specSchema } from "./specs/pie.generated.js";
 import { scriptRunFollowUp, scriptStatusFollowUp } from "../pie/script-watch.js";
 import { driveFollowUp } from "../pie/drive-wait.js";
-import { clipWaitFollowUp } from "../pie/clip-wait.js";
+import { clipRunFollowUp } from "../pie/clip-watch.js";
 import { boundedRequestIds } from "../pie/remote-ids.js";
 
 export const pieTool: ToolDef = categoryTool(
@@ -103,13 +103,16 @@ export const pieTool: ToolDef = categoryTool(
     clip_delete:          { ...specBp("mutate", "Delete a playtest clip (confirm=true).", "pie_clip_delete"), destructive: true },
     clip_run: {
       ...specBp("mutate", "Play a playtest clip in PIE on game time, at a fixed 1/rate timestep by default: feeds each input track's raw value to its Input Action before the actors tick, fires events, judges check notes (a hold check stops the timeline until true or its timeout; a manual check pauses PIE for clip_verdict) and reports per check and per region, with pawn drift against the clip's reference take. region judges one region, still playing from frame 0. wait=true answers once it finishes or awaits a verdict.", "pie_clip_run"),
-      followUp: clipWaitFollowUp,
+      followUp: clipRunFollowUp,
     },
-    clip_record:          specBp("mutate", "Record a person's input into a playtest clip: starts PIE, plays the clip up to the punch-in (a region's start, or a hold check) with their input locked out, then records the armed tracks from what they play until the region ends or clip_record_stop. The take replaces those tracks over the range and keeps what they held as history.", "pie_clip_record"),
+    clip_record: {
+      ...specBp("mutate", "Record a person's input into a playtest clip: starts PIE, plays the clip up to the punch-in (a region's start, or a hold check) with their input locked out, then records the armed tracks from what they play until the region ends or clip_record_stop. The take replaces those tracks over the range and keeps what they held as history.", "pie_clip_record"),
+      followUp: clipRunFollowUp,
+    },
     clip_record_stop:     specBp("mutate", "End the recording in flight at the current frame and save the take into the clip.", "pie_clip_record_stop"),
     clip_status: {
       ...specBp("read", "A clip run's state, position, checks, regions with drift, events fired and, for a recording, the take. wait=true blocks until it finishes or awaits a verdict.", "pie_clip_status"),
-      followUp: clipWaitFollowUp,
+      followUp: clipRunFollowUp,
     },
     clip_stop:            specBp("mutate", "End the clip run in flight; unsettled checks fail and clip_results.json is written.", "pie_clip_stop"),
     clip_verdict:         specBp("mutate", "Answer a manual check a clip run is paused on: pass, fail or skip, with a note. source=agent needs evidence {note, captures?}.", "pie_clip_verdict"),
