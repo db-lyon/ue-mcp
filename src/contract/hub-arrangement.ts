@@ -36,11 +36,15 @@ export interface Instance {
   length?: number;
   /** A display name; the clip's own otherwise. */
   name?: string;
+  /** One of SET_COLORS (hub-set.ts). */
+  color?: string;
 }
 
 export interface Arrangement {
   rate: number;
   instances: Instance[];
+  /** The number the next instance id takes, so an id is never used twice on a track. */
+  next?: number;
 }
 
 /** One finding about an arrangement or a scene, in the shape clip_edit uses. */
@@ -130,6 +134,7 @@ export function arrangementOf(v: unknown): { arrangement: Arrangement; findings:
     if (num(v.rate) && v.rate >= 1 && v.rate <= 1000) out.rate = v.rate;
     else findings.push({ id: "arrangement", field: "rate", message: "rate is frames per second, 1 to 1000", blocks: true });
   }
+  if (num(v.next) && Number.isInteger(v.next) && v.next > 0) out.next = v.next;
   const list = v.instances ?? [];
   if (!Array.isArray(list)) return { arrangement: out, findings: [...findings, { id: "arrangement", field: "instances", message: "instances must be a list", blocks: true }] };
   list.forEach((raw, n) => {
@@ -146,6 +151,7 @@ export function arrangementOf(v: unknown): { arrangement: Arrangement; findings:
       else findings.push({ id: where, field: k, message: `${where}.${k} must be a frame number`, blocks: true });
     }
     if (typeof raw.name === "string" && raw.name.trim()) inst.name = raw.name.trim().slice(0, 200);
+    if (typeof raw.color === "string" && /^[a-z]{3,10}$/.test(raw.color)) inst.color = raw.color;
     out.instances.push(inst);
   });
   fillIds(out);
@@ -160,7 +166,7 @@ function fillIds(a: Arrangement): void {
 }
 
 function nextIdNumber(a: Arrangement): number {
-  let max = 0;
+  let max = (a.next ?? 1) - 1;
   for (const i of a.instances) {
     const m = /^i(\d+)$/.exec(i.id);
     if (m) max = Math.max(max, Number(m[1]));
@@ -280,6 +286,7 @@ export function arrangementToText(a: Arrangement): string {
     if (i.out !== undefined) line += ` out=${round(i.out)}`;
     if (i.length !== undefined) line += ` length=${round(i.length)}`;
     if (i.name) line += ` name=${quote(i.name)}`;
+    if (i.color) line += ` color=${i.color}`;
     lines.push(line);
   }
   return lines.join("\n");
@@ -340,7 +347,8 @@ export function arrangementFromText(text: string): { arrangement: Arrangement; f
       const v = eq > 0 ? kv.slice(eq + 1) : "";
       if ((k === "in" || k === "out" || k === "length") && v !== "" && Number.isFinite(Number(v))) inst[k] = Number(v);
       else if (k === "name") inst.name = v;
-      else findings.push({ id: inst.id || at, field: k, message: `${at}: '${kv}' is not one of in=, out=, length=, name=`, candidates: rankClipCandidates(k, ["in", "out", "length", "name"]), blocks: true });
+      else if (k === "color" && v) inst.color = v;
+      else findings.push({ id: inst.id || at, field: k, message: `${at}: '${kv}' is not one of in=, out=, length=, name=, color=`, candidates: rankClipCandidates(k, ["in", "out", "length", "name", "color"]), blocks: true });
     }
     a.instances.push(inst);
   });
@@ -441,7 +449,7 @@ export type ArrangementEditResult =
  * nearest free position.
  */
 export function applyArrangementOps(a: Arrangement, ops: readonly ArrangementOp[], o: ArrangementValidateOptions): ArrangementEditResult {
-  const work: Arrangement = { rate: a.rate, instances: a.instances.map((i) => ({ ...i })) };
+  const work: Arrangement = { rate: a.rate, instances: a.instances.map((i) => ({ ...i })), ...(a.next ? { next: a.next } : {}) };
   const changed: string[] = [];
   const snap = (n: number): number => Math.max(0, Math.round(n));
   const fail = (n: number, id: string, field: string, message: string, candidates?: string[]): ArrangementEditResult => {
@@ -463,6 +471,7 @@ export function applyArrangementOps(a: Arrangement, ops: readonly ArrangementOp[
           if (pool) return fail(n, target, "target", `no ${op.kind === "clip" ? "timeline clip" : "step-list playtest"} at ${target}`, rankClipCandidates(target, pool));
         }
         const id = `i${nextIdNumber(work)}`;
+        work.next = nextIdNumber(work) + 1;
         const inst: Instance = { id, kind: op.kind, target, start: 0 };
         if (num(op.in)) inst.in = op.in;
         if (num(op.out)) inst.out = op.out;
@@ -477,6 +486,7 @@ export function applyArrangementOps(a: Arrangement, ops: readonly ArrangementOp[
         const src = find(op.id);
         if (!src) return missing(op.id);
         const id = `i${nextIdNumber(work)}`;
+        work.next = nextIdNumber(work) + 1;
         const l = layout();
         const len = l.find((x) => x.id === src.id)!.length;
         const copy: Instance = { ...src, id, start: num(op.at) ? snap(op.at) : freeSlot(l, len, undefined, l.find((x) => x.id === src.id)!.end) };

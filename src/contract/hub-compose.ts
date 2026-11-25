@@ -357,6 +357,34 @@ export interface InstanceResult {
   reason?: string | null;
 }
 
+/**
+ * A track or scene run as clients draw it: each instance's result at its
+ * place, each track's in a scene, and the segments, so a client can follow a
+ * segment's clip.position events and draw the cursor at offset + position.
+ */
+export type ArrangementRunKind = "track" | "arrangement" | "scene" | "slot";
+
+export interface ArrangementRun {
+  /** track: one timeline; arrangement: every timeline; scene: a Session row; slot: one Session slot. */
+  kind: ArrangementRunKind;
+  /** The track or scene; "arrangement" for an arrangement run; "<scene>/<track>" for a slot. */
+  goalId: string;
+  rate: number;
+  length: number;
+  instances: InstanceResult[];
+  /** A scene: each track's status, passed when every instance on it passed. */
+  tracks?: Array<{ goalId: string; title: string; player: number; status: InstanceStatus }>;
+  segments: Array<{ index: number; kind: "clip" | "script"; runId: string | null; offset: number; length: number; state: SegmentState["state"] }>;
+}
+
+/** A track's status from its instances: failed on any failure, passed when all passed or were skipped. */
+export function rollUpInstances(list: readonly Pick<InstanceResult, "status">[]): InstanceStatus {
+  if (list.some((i) => i.status === "failed")) return "failed";
+  if (list.some((i) => i.status === "awaiting_verdict")) return "awaiting_verdict";
+  if (list.length > 0 && list.every((i) => i.status === "passed" || i.status === "skipped")) return "passed";
+  return list.some((i) => i.status !== "pending") ? "running" : "pending";
+}
+
 const SETTLED_OK = ["passed", "skipped"];
 
 /** Every instance's result from its segment's state. */
