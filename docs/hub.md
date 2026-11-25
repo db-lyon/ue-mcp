@@ -92,6 +92,64 @@ The `hub` category:
 
 `run_plan` starts nothing while the editor is held, and returns the queued plan at once. The category needs the project's daemon; a server running in process has no hub.
 
+## The arrangement
+
+The hub arranges clips the way Ableton Live's Arrangement view does (#2113). A track is a timeline of clip instances with empty space between them, and a scene is a set of tracks played together. On the wire a track is a goal and a scene is a milestone, so the goal routes above keep working on them.
+
+- **Instances.** An instance places a clip on a track at a start frame (60 frames a second by default): a [timeline clip](pie-clips.md), trimmed with `in` and `out` in its own frames, or a [step-list playtest](pie-scripts.md), which settles by condition and so reserves a `length` instead. An instance refers to its clip, so editing the clip changes every instance of it; making an instance unique copies the clip asset and points the instance at the copy. Instances on a track may not overlap, and their ids are never reused on it.
+- **Tracks** have an order, a color, a player (0, the editor's own player, by default; N for remote client N), and mute and solo. A run leaves muted tracks out, and while any track is soloed only soloed tracks play.
+- **Scenes** have an order, a color and the tracks they play, in order.
+
+### Runs
+
+A run plays in one PIE session. The daemon reads each clip and composes the timelines into one inline clip for the [clip player](pie-clips.md#playing-a-clip), each instance's lanes, events, check notes and regions offset to its start, cut to its trim and prefixed with its key (`i2.c1` on one track, `2-i2.c1` when several tracks play). Each lane drives its track's player. A step-list instance splits the run: the clips before it play, the script plays with `pie(script_run)` in the same session, and the timeline resumes at its end. A hold check holds the whole run.
+
+| Run | Plays | Record |
+|---|---|---|
+| Track | One track's timeline | `kind: "track"`, target the track |
+| Scene | The scene's tracks together | `kind: "scene"`, target the scene |
+| Arrangement | Every track together | `kind: "arrangement"`, target `arrangement` |
+
+Each run is one record whose `arrangement` gives every instance's result at its place (`instances[]`: track, id, start and end frames, status, checks passed), each track's status (`tracks[]`), and the segments it played as (`segments[]`), so a client can draw the playhead at a segment's `offset` plus the `position` of its clip run's `clip.position` events. A run passes when every instance passes. A track's status comes from its track and arrangement runs, and a scene's from its scene runs; before the first one, each rolls up from its playtests and tracks as before.
+
+Each goal that existed before became a track once, its playtests laid end to end, each reserving its newest run's duration. Each milestone became a scene that plays the goals it required. Nothing else changed, so an older client reads the same records.
+
+### Routes
+
+| Route | Purpose |
+|---|---|
+| `GET /v1/hub/set` | Every track (fields, timeline, `layout` with each instance's resolved length, status) and scene (tracks, status), the text form, and findings |
+| `POST /v1/hub/set/edit` | `{ ops }`, as op objects or text lines, all or none. A name or clip that matches nothing answers 400 with `finding.candidates` |
+| `GET`, `PUT /v1/hub/goals/<id>/arrangement`, `POST .../arrangement/edit` | One track's timeline, replaced or edited with instance ops |
+| `GET /v1/hub/clips?q=&kind=` | Timeline clips and step-list playtests, for a browser |
+| `POST /v1/hub/run` | `{ scope: { kind: "track" \| "scene", goalId } \| { kind: "arrangement" }, next? }`: queue one run |
+| `POST /v1/hub/runs/<id>/verdict` | `{ check, verdict, note? }`: a manual check's verdict in a running track, scene or arrangement |
+
+A daemon that has these lists `hub.arrangement` in `/v1/health`.
+
+### Text form and ops
+
+```text
+set rate=60
+track walk-k3f9 Walk color=green player=0
+  clip i1 /Game/PIEStudio/Clips/CL_Walk 0 out=240
+  script i2 /Game/Tests/PT_OpenDoor 240 length=600
+track guard-x81a Guard color=red player=1 mute
+scene boss-0p2d "Boss fight" tracks=walk-k3f9,guard-x81a
+```
+
+Ops, one per line; a track or scene is named by its id or its exact name, and an instance as `<track>/<id>`:
+
+| Ops | |
+|---|---|
+| Tracks | `track add "Name" [color=C] [player=N] [at=N]`, `track delete`, `rename`, `color`, `move <t> to <N>`, `mute <t> on\|off`, `solo <t> on\|off`, `player <t> <N>` |
+| Scenes | `scene add "Name"`, `scene insert "Name" at <N>`, `scene delete`, `rename`, `color`, `duplicate`, `move <s> to <N>`, `scene track <s> add\|remove <t>` |
+| Instances | `add <t> <clip\|script> <path> [at <frame>]`, `duplicate <t>/<i> [at <frame>]`, `copy <t>/<i> to <t2> [at <frame>]`, `move <t>/<i> to <frame>`, `by <frames>` or `to <t2> [at <frame>]`, `trim <t>/<i> in=N out=N` or `length=N`, `rename <t>/<i> "Name"`, `color <t>/<i> <C>`, `delete <t>/<i>`, `unique <t>/<i>` |
+
+Colors are `red`, `orange`, `yellow`, `lime`, `green`, `teal`, `cyan`, `blue`, `indigo`, `violet`, `pink` and `gray`. The set model also carries Session view slots (`slot ...` ops and `slot` runs) for the grid that comes later; no view shows them yet.
+
+The `hub` MCP category has the same through `read_set`, `edit_set` (`ops`), `run` (`scope`: `track <t>`, `scene <s>` or `arrangement`) and `read_run`.
+
 ## Clients
 
 A client with ideas ue-mcp has none of, such as chat sessions and run cards, brings them through `api.hub.configure(options)` in the extension API (feature `hub`): its own way of starting and following runs (`broker`), a fix loop (`fixer`), a flow that writes playtests (`writePlaytests`), the account a sign-off is from (`signer`), whether an agent may start a plan (`playtestRuns`), an on and off switch (`enabled`) and how long the desktop has been idle (`inputAgeMs`). Every member has a default, and the daemon rebuilds the hub around what a client configures, with its files and queue unchanged.

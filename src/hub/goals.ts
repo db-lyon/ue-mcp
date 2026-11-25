@@ -26,6 +26,13 @@ import {
   GOAL_PRIORITIES,
   HUB_EXPORT_FORMAT,
   HUB_SCHEMA,
+  SET_PLAYER_MAX,
+  setColorOf,
+  slotOf,
+  SCRIPT_RESERVE_FRAMES,
+  arrangementFromChecks,
+  arrangementOf,
+  blockingFindings,
   checkId,
   goalLoops,
   goalSlug,
@@ -36,6 +43,9 @@ import {
   uniqueLinks,
   type AcceptanceRule,
   type AnyHubRecord,
+  type Arrangement,
+  type SetModel,
+  type Slot,
   type CheckMeta,
   type CheckMetaRecord,
   type CheckRef,
@@ -150,6 +160,12 @@ export function readGoal(raw: unknown, id: string): ReadGoal | { problem: string
     }
     if (!requires.some((x) => x.goal === rid)) requires.push({ goal: rid, ...((r as Record<string, unknown>).required === false ? { required: false } : {}) });
   }
+  let arrangement: Arrangement | undefined;
+  if (raw.arrangement !== undefined) {
+    const a = arrangementOf(raw.arrangement);
+    for (const f of blockingFindings(a.findings)) problems.push(`arrangement: ${f.message}`);
+    arrangement = a.arrangement;
+  }
   if (raw.priority !== undefined && !GOAL_PRIORITIES.includes(raw.priority as GoalPriority)) problems.push(`priority is one of ${GOAL_PRIORITIES.join(", ")}`);
   if (raw.due !== undefined && raw.due !== null && !(typeof raw.due === "string" && GOAL_DUE.test(raw.due))) problems.push("due is a date, YYYY-MM-DD");
   const parent = typeof raw.parent === "string" && GOAL_ID.test(raw.parent) && raw.parent !== id ? raw.parent : undefined;
@@ -168,8 +184,48 @@ export function readGoal(raw: unknown, id: string): ReadGoal | { problem: string
     checks: uniqueChecks(checks),
     ...(unsupported.length ? { unsupported } : {}),
     ...(raw.archived === true ? { archived: true } : {}),
+    ...(arrangement ? { arrangement } : {}),
+    ...setFieldsOf(raw, raw.kind === "milestone" ? "milestone" : "goal"),
   };
   return { goal, problems, ...(parent ? { parent } : {}), metas };
+}
+
+/** A track's player from JSON: a whole number from 1 to SET_PLAYER_MAX, or 0 (left out) otherwise. */
+function playerOf(v: unknown): number {
+  return typeof v === "number" && Number.isInteger(v) && v > 0 && v <= SET_PLAYER_MAX ? v : 0;
+}
+
+/** The set fields a goal record holds (order, color, player, mute, solo, slots), read leniently. */
+function setFieldsOf(raw: Record<string, unknown>, kind: Goal["kind"]): Partial<Goal> {
+  const out: Partial<Goal> = {};
+  if (typeof raw.order === "number" && Number.isFinite(raw.order)) out.order = raw.order;
+  const color = setColorOf(raw.color);
+  if (color) out.color = color;
+  if (kind === "goal") {
+    const player = playerOf(raw.player);
+    if (player) out.player = player;
+    if (raw.mute === true) out.mute = true;
+    if (raw.solo === true) out.solo = true;
+  } else if (Array.isArray(raw.slots)) {
+    const slots: Slot[] = [];
+    for (const s of raw.slots) {
+      const slot = slotOf(s);
+      if (slot && !slots.some((x) => x.track === slot.track)) slots.push(slot);
+    }
+    if (slots.length) out.slots = slots;
+  }
+  return out;
+}
+
+/** A goal's checks from its arrangement: the step-list playtests it uses, in order, keeping what each said of required. */
+function checksFromArrangement(a: Arrangement, had: readonly CheckRef[]): CheckRef[] {
+  const out: CheckRef[] = [];
+  for (const i of [...a.instances].sort((x, y) => x.start - y.start)) {
+    if (i.kind !== "script" || out.some((c) => c.target === i.target)) continue;
+    const before = had.find((c) => c.target === i.target);
+    out.push({ kind: "script", target: i.target, ...(before?.required === false ? { required: false } : {}) });
+  }
+  return out;
 }
 
 /** A check's own record from JSON, or why it is not one. */
@@ -235,6 +291,8 @@ export interface GoalsOptions {
   /** Records changed here. */
   changed?: (goalId?: string) => void;
   now?: () => string;
+  /** Where a track's arrangement ends, its clips' lengths known; a rough end otherwise. */
+  arrangementEnd?: (a: Arrangement) => number;
 }
 
 export class Goals {
@@ -519,7 +577,9 @@ export class Goals {
     const known = new Set(had.checks.map(checkId));
     const fresh = add.filter((c) => !known.has(checkId(c)));
     if (fresh.length === 0) return had;
-    this.save([{ ...had, checks: [...had.checks, ...fresh] }]);
+    // A track places each new playtest after its last instance, so a client that adds checks keeps working.
+    const arrangement = had.arrangement ? appendScripts(had.arrangement, fresh.map((c) => c.target), this.o.arrangementEnd?.(had.arrangement) ?? roughEnd(had.arrangement)) : undefined;
+    this.save([{ ...had, checks: [...had.checks, ...fresh], ...(arrangement ? { arrangement } : {}) }]);
     return this.must(id);
   }
 
@@ -527,8 +587,90 @@ export class Goals {
     const had = this.must(id);
     const checks = had.checks.filter((c) => checkId(c) !== check);
     if (checks.length === had.checks.length) throw notFound(`goal ${id} has no check ${check}`);
-    this.save([{ ...had, checks }]);
+    const gone = had.checks.find((c) => checkId(c) === check)!;
+    const arrangement = had.arrangement ? { ...had.arrangement, instances: had.arrangement.instances.filter((i) => !(i.kind === "script" && i.target === gone.target)) } : undefined;
+    this.save([{ ...had, checks, ...(arrangement ? { arrangement } : {}) }]);
     return this.must(id);
+  }
+
+  /** A track's arrangement replaced, already validated; its checks follow the step-list playtests it uses. */
+  setArrangement(id: string, arrangement: Arrangement): Goal {
+    const had = this.must(id);
+    this.save([{ ...had, arrangement, checks: checksFromArrangement(arrangement, had.checks) }]);
+    return this.must(id);
+  }
+
+  /**
+   * Lay every goal that has no arrangement out from its checks, end to end,
+   * each reserving its newest run's duration. Done once per goal: a goal with
+   * an arrangement, even an empty one, is never laid out again. Scenes keep
+   * their requires as their tracks and need nothing. Returns how many changed.
+   */
+  migrateArrangements(durationMs: (target: string) => number | null | undefined): number {
+    const all = this.list();
+    const tracks = all.filter((g) => g.kind === "goal");
+    const scenes = all.filter((g) => g.kind === "milestone");
+    const next: Goal[] = [];
+    // Tracks and scenes without a place take the next one, in the store's order.
+    const place = (list: Goal[]) => {
+      let at = list.reduce((m, g) => Math.max(m, (g.order ?? -1) + 1), 0);
+      for (const g of list) {
+        const n = g.order === undefined ? at++ : g.order;
+        const a = g.kind === "goal" && !g.arrangement ? arrangementFromChecks(g.checks.map((c) => c.target), durationMs) : undefined;
+        if (g.order === undefined || a) next.push({ ...g, order: n, ...(a ? { arrangement: a } : {}) });
+      }
+    };
+    place(tracks);
+    place(scenes);
+    if (next.length) this.save(next);
+    return next.length;
+  }
+
+  /** The set: every live track and scene, in order. Archived ones are left out. */
+  setModel(): SetModel {
+    const live = this.list().filter((g) => !g.archived);
+    const byOrder = (a: Goal, b: Goal) => (a.order ?? 0) - (b.order ?? 0);
+    return {
+      tracks: live.filter((g) => g.kind === "goal").sort(byOrder).map((g) => ({ id: g.id, title: g.title, order: g.order ?? 0, ...(g.color ? { color: g.color } : {}), player: g.player ?? 0, mute: g.mute === true, solo: g.solo === true, arrangement: g.arrangement ?? { rate: 60, instances: [] } })),
+      scenes: live.filter((g) => g.kind === "milestone").sort(byOrder).map((g) => ({ id: g.id, title: g.title, order: g.order ?? 0, ...(g.color ? { color: g.color } : {}), tracks: requiresOf(g).map((r) => r.goal).filter((id) => live.some((x) => x.id === id && x.kind === "goal")), slots: g.slots ?? [] })),
+    };
+  }
+
+  /** A fresh goal id for a new track or scene. */
+  newId(title: string): string {
+    return this.freshId(undefined, title);
+  }
+
+  /**
+   * Write a set back, as applySetOps left it: new tracks and scenes created,
+   * gone ones deleted (each as delete() does), the rest updated with their
+   * set fields. Nothing else on a goal changes.
+   */
+  applySet(next: SetModel): void {
+    const had = new Map(this.list().map((g) => [g.id, g]));
+    const before = this.setModel();
+    const keep = new Set([...next.tracks.map((t) => t.id), ...next.scenes.map((s) => s.id)]);
+    for (const x of [...before.tracks, ...before.scenes]) if (!keep.has(x.id)) this.delete(x.id);
+    const writes: Goal[] = [];
+    const now = new Map(this.list().map((g) => [g.id, g]));
+    const strip = (g: Goal): Goal => {
+      const out = { ...g };
+      for (const k of ["color", "player", "mute", "solo", "slots"] as const) delete out[k];
+      return out;
+    };
+    for (const t of next.tracks) {
+      const base = now.get(t.id) ?? had.get(t.id) ?? ({ schema: HUB_SCHEMA, id: t.id, kind: "goal", title: t.title, acceptance: { ...DEFAULT_ACCEPTANCE }, checks: [] } as Goal);
+      writes.push({ ...strip(base), title: t.title, order: t.order, ...(t.color ? { color: t.color } : {}), ...(t.player ? { player: t.player } : {}), ...(t.mute ? { mute: true } : {}), ...(t.solo ? { solo: true } : {}), arrangement: t.arrangement, checks: checksFromArrangement(t.arrangement, base.checks) });
+    }
+    for (const s of next.scenes) {
+      const base = now.get(s.id) ?? had.get(s.id) ?? ({ schema: HUB_SCHEMA, id: s.id, kind: "milestone", title: s.title, acceptance: { ...DEFAULT_ACCEPTANCE }, checks: [] } as Goal);
+      // Its tracks are its requires; what else it required (another scene) stays after them.
+      const kept = requiresOf(base).filter((r) => now.get(r.goal)?.kind !== "goal" && !s.tracks.includes(r.goal));
+      const requires = [...s.tracks.map((t) => requiresOf(base).find((r) => r.goal === t) ?? { goal: t }), ...kept];
+      writes.push({ ...strip(base), title: s.title, order: s.order, ...(s.color ? { color: s.color } : {}), ...(s.slots.length ? { slots: s.slots } : {}), requires });
+    }
+    const changed = writes.filter((g) => canonical(clean(g)) !== canonical(clean(now.get(g.id) ?? ({} as Goal))));
+    if (changed.length) this.save(changed);
   }
 
   /** Whether the goal requires one of its checks (GoalCheckUpdate). */
@@ -795,6 +937,25 @@ function checksOf(v: unknown): CheckRef[] {
   }));
 }
 
+/** An arrangement's end without its clips' lengths: a clip instance with no out counts as ten seconds. */
+function roughEnd(a: Arrangement): number {
+  const reserve = Math.round((SCRIPT_RESERVE_FRAMES * a.rate) / 60);
+  return a.instances.reduce((m, i) => Math.max(m, i.start + (i.kind === "script" ? i.length ?? reserve : i.out !== undefined ? i.out - (i.in ?? 0) : reserve)), 0);
+}
+
+/** Step-list instances for scripts, laid end to end after the arrangement's last instance. */
+function appendScripts(a: Arrangement, targets: readonly string[], end: number): Arrangement {
+  let next = a.instances.reduce((m, i) => Math.max(m, /^i(\d+)$/.test(i.id) ? Number(i.id.slice(1)) : 0), 0) + 1;
+  let at = end;
+  const length = Math.round((SCRIPT_RESERVE_FRAMES * a.rate) / 60);
+  const added = targets.map((target) => {
+    const inst = { id: `i${next++}`, kind: "script" as const, target, start: at, length };
+    at += length;
+    return inst;
+  });
+  return { ...a, instances: [...a.instances, ...added] };
+}
+
 /** A new order from body { order }: every id in `have` once, nothing else. */
 function orderOf(body: unknown, have: string[], what: string): string[] {
   const order = isObject(body) ? body.order : undefined;
@@ -810,7 +971,8 @@ const metaOf = (r: CheckMetaRecord): CheckMeta => ({ ...(r.title ? { title: r.ti
 function clean(g: Goal): Goal {
   const out = { ...g } as Record<string, unknown>;
   for (const k of ["description", "owner", "due", "priority"]) if (out[k] === null || out[k] === undefined || out[k] === "") delete out[k];
-  for (const k of ["requires", "links", "unsupported"]) if (Array.isArray(out[k]) && (out[k] as unknown[]).length === 0) delete out[k];
-  if (out.archived === false) delete out.archived;
+  for (const k of ["requires", "links", "unsupported", "slots"]) if (Array.isArray(out[k]) && (out[k] as unknown[]).length === 0) delete out[k];
+  for (const k of ["archived", "mute", "solo"]) if (out[k] === false) delete out[k];
+  if (out.player === 0) delete out.player;
   return out as unknown as Goal;
 }

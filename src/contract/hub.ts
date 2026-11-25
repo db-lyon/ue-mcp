@@ -22,6 +22,9 @@
  * publishes `hub.changed` with a HubChanged body.
  */
 import { qaEnded, type QaRun, type QaStep, type QaStepStatus, type QaSummary } from "./hub-qa.js";
+import type { Arrangement, ArrangementFinding, InstanceLayout } from "./hub-arrangement.js";
+import type { ArrangementRun } from "./hub-compose.js";
+import type { SetColor, Slot } from "./hub-set.js";
 
 export const HUB_SCHEMA = 1 as const;
 
@@ -31,8 +34,13 @@ export const HUB_SCHEMA = 1 as const;
  * What a check is: a ue-mcp PIE test script, a playtest. The only kind the
  * schema has; a kind returns with its runner, as a schema version. Goals
  * imported with another kind keep those entries apart (Goal.unsupported).
+ *
+ * "track", "scene", "slot" and "arrangement" name a run of a track's
+ * timeline, a scene's row, one slot or every timeline (#2113): a plan item
+ * and a run record carry them, a goal's own checks never do. Their target is
+ * the goal's id, "<scene id>/<track id>" for a slot, "arrangement" for all.
  */
-export type CheckKind = "script";
+export type CheckKind = "script" | "track" | "scene" | "slot" | "arrangement";
 
 // ---------- Tracker links ----------
 
@@ -279,6 +287,23 @@ export interface Goal {
   /** Checks it was imported with that this ue-mcp cannot run. */
   unsupported?: UnsupportedCheck[];
   archived?: boolean;
+  /**
+   * A track's timeline (#2113): instances of clips placed on it. A goal that
+   * has none is laid out from its checks once, when the store loads. `checks`
+   * keeps the step-list playtests the instances use, for clients that read it.
+   */
+  arrangement?: Arrangement;
+  /** The track's column, or the scene's row, in the set. */
+  order?: number;
+  color?: SetColor;
+  /** A track: the player it drives, 0 (the editor's own) when absent, N for remote client N. */
+  player?: number;
+  /** A track: left out of every run. */
+  mute?: boolean;
+  /** A track: while any track is soloed, only soloed tracks play. */
+  solo?: boolean;
+  /** A scene: its clip slots, at most one per track. */
+  slots?: Slot[];
 }
 
 /**
@@ -383,6 +408,8 @@ export interface RunRecord {
   tainted?: boolean;
   /** Tracker items this run refers to, such as the issue filed from it. Per machine, as the run is. */
   links?: TrackerLink[];
+  /** A track or scene run: each instance's result at its place on the timeline. */
+  arrangement?: ArrangementRun;
 }
 
 /** A run's trigger, for records kept before triggers were too. */
@@ -435,6 +462,8 @@ export interface RunDetail {
   /** Steps whose result differs from lastPass. */
   changedSteps?: number[];
   resultsUrl?: string | null;
+  /** A track or scene run: the live or recorded result of each instance, and the segments it played as. */
+  arrangement?: ArrangementRun;
 }
 
 // ---------- Health and status (computed) ----------
@@ -993,6 +1022,10 @@ export interface HubImportReport {
 
 export type PlanScope =
   | { kind: "goal"; goalId: string }
+  | { kind: "track"; goalId: string }
+  | { kind: "scene"; goalId: string }
+  | { kind: "slot"; sceneId: string; trackId: string }
+  | { kind: "arrangement" }
   | { kind: "checks"; checks: CheckRef[] }
   | { kind: "failing"; goalId?: string }
   | { kind: "stale"; goalId?: string }
@@ -1328,7 +1361,45 @@ export const HUB_ROUTES = {
   release: "POST /hub/release -> QueueState (stops what the hub holds on the editor and pauses the queue)",
   fix: "POST /hub/fix FixRequest -> { queued: number, plan: PlanRun | null, placement?: PlanPlacement } (a fix plan: one chat session per check)",
   runCheck: "POST /hub/checks/:checkId/run { replay?, next? } -> { plan: PlanRun, placement: PlanPlacement }",
+  arrangement: "GET /hub/goals/:id/arrangement -> ArrangementView",
+  putArrangement: "PUT /hub/goals/:id/arrangement { arrangement } | { text } -> ArrangementView (400 { error, findings })",
+  editArrangement: "POST /hub/goals/:id/arrangement/edit { ops } -> ArrangementView & { changed } (400 { error, finding, findings })",
+  set: "GET /hub/set -> SetView",
+  editSet: "POST /hub/set/edit { ops } -> SetView & { changed } (400 { error, finding })",
+  clips: "GET /hub/clips?q=&kind= -> { clips: ClipEntry[] }",
+  runSet: "POST /hub/run { scope: track | scene | slot | arrangement, next? } -> { plan: PlanRun, placement: PlanPlacement }",
+  runVerdict: "POST /hub/runs/:runId/verdict { check, verdict, note? } -> { ok: true } (a manual check in a track or scene run)",
 } as const;
+
+/** A track's arrangement as a client edits it (GET /hub/goals/:id/arrangement). */
+export interface ArrangementView {
+  arrangement: Arrangement;
+  /** The compact text form agents read and write. */
+  text: string;
+  layout: InstanceLayout[];
+  findings: ArrangementFinding[];
+}
+
+/** The set as both views draw it (GET /hub/set): tracks and scenes in order, with their status. */
+export interface SetView {
+  tracks: Array<{ id: string; title: string; order: number; color?: SetColor; player: number; mute: boolean; solo: boolean; arrangement: Arrangement; layout: InstanceLayout[]; status: GoalStatus }>;
+  scenes: Array<{ id: string; title: string; order: number; color?: SetColor; slots: Array<Slot & { length: number | null }>; status: GoalStatus }>;
+  /** The compact text form agents read. */
+  text: string;
+  findings: ArrangementFinding[];
+}
+
+/** One clip a browser lists (GET /hub/clips): a timeline clip or a step-list playtest. */
+export interface ClipEntry {
+  kind: "clip" | "script";
+  target: string;
+  name: string;
+  map: string | null;
+  /** Frames at `rate`: a timeline clip's length, or a step-list playtest's newest run at 60. Null when not known. */
+  length: number | null;
+  rate: number;
+  lastRun: { runId: string; outcome: string; at: string } | null;
+}
 
 // ---------- What else holds the editor ----------
 
