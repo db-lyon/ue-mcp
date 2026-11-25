@@ -597,6 +597,13 @@ TSharedPtr<FJsonValue> FPIEHandlers::PieClipRun(const TSharedPtr<FJsonObject>& P
 	Cfg.RegionId = OptionalString(Params, TEXT("region"));
 	Cfg.bStartPIE = OptionalBool(Params, TEXT("start_pie"), false);
 	Cfg.bKeepPIE = OptionalBool(Params, TEXT("keep_pie"), false);
+	// A clip drives the player itself, so nobody is going to press Play for it: without a session to play in, or
+	// one on its way, the run would wait for one that never comes (#2126).
+	if (!Cfg.bStartPIE && GEditor && !GEditor->PlayWorld && !GEditor->IsPlaySessionInProgress() && !GEditor->IsPlaySessionRequestQueued())
+	{
+		return MCPError(TEXT("PIE is not running, so the clip has nothing to play in. Pass start_pie: true to start PIE for this run (it ends PIE when the run ends; keep_pie: true leaves it running), or ")
+			+ MCPStartPlayInEditorStep().Replace(TEXT("Start one"), TEXT("start one first"), ESearchCase::CaseSensitive));
+	}
 	bool bFixed = true;
 	if (TryGetBoolParam(Params, TEXT("fixed_timestep"), bFixed)) Cfg.FixedTimestep = bFixed ? 1 : 0;
 	Cfg.bLockInput = OptionalBool(Params, TEXT("lock_input"), true);
