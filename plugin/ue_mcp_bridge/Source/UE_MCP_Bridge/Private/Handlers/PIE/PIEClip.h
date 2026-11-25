@@ -71,6 +71,8 @@ namespace MCPPIE
 		// Input Action object path, /Game/Input/IA_Jump.IA_Jump.
 		FString Action;
 		EClipValueType Type = EClipValueType::Bool;
+		// The player the lane drives: 0 the run's own player, N remote client N through its remote control (#2113).
+		int32 Client = 0;
 		TArray<FClipNote> Notes;
 		TArray<FClipKey> Keys;
 	};

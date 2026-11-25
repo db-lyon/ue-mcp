@@ -193,6 +193,7 @@ namespace MCPPIE
 			TSharedRef<FJsonObject> O = MakeShared<FJsonObject>();
 			O->SetStringField(TEXT("action"), T.Action);
 			O->SetStringField(TEXT("type"), ClipValueTypeToString(T.Type));
+			if (T.Client > 0) O->SetNumberField(TEXT("client"), T.Client);
 			TArray<TSharedPtr<FJsonValue>> Notes;
 			for (const FClipNote& N : T.Notes)
 			{
@@ -236,6 +237,19 @@ namespace MCPPIE
 			{
 				Issues.Add(MakeIssue(Out.Action, TEXT("type"), FString::Printf(TEXT("%s.type '%s' is unknown (bool, axis1d, axis2d, axis3d)"), *Where, *Type), true));
 				bOk = false;
+			}
+			double Client = 0.0;
+			if (O->TryGetNumberField(TEXT("client"), Client))
+			{
+				if (Client < 0.0 || Client != FMath::FloorToDouble(Client))
+				{
+					Issues.Add(MakeIssue(Out.Action, TEXT("client"), FString::Printf(TEXT("%s.client must be a whole number, 0 or more"), *Where), true));
+					bOk = false;
+				}
+				else
+				{
+					Out.Client = static_cast<int32>(Client);
+				}
 			}
 			const TArray<TSharedPtr<FJsonValue>>* Notes = nullptr;
 			if (O->TryGetArrayField(TEXT("notes"), Notes) && Notes)
@@ -828,7 +842,7 @@ namespace MCPPIE
 		}
 		for (const FClipTrack& T : Clip.Tracks)
 		{
-			L.Add(FString::Printf(TEXT("track %s %s"), *T.Action, *ClipValueTypeToString(T.Type)));
+			L.Add(FString::Printf(TEXT("track %s %s"), *T.Action, *ClipValueTypeToString(T.Type)) + (T.Client > 0 ? FString::Printf(TEXT(" client=%d"), T.Client) : FString()));
 			for (const FClipKey& K : T.Keys)
 			{
 				FString Line = FString::Printf(TEXT("  key %s %s %s"), *K.Id, *FormatNumber(K.Time), *VectorToText(K.Value, T.Type));
@@ -1006,10 +1020,16 @@ namespace MCPPIE
 				FClipTrack Tr;
 				if (T.Num() < 3 || !ParseClipValueType(T[2], Tr.Type))
 				{
-					LineIssue(LineNo, TEXT("track"), TEXT("expected: track <Input Action path> <bool|axis1d|axis2d|axis3d>"));
+					LineIssue(LineNo, TEXT("track"), TEXT("expected: track <Input Action path> <bool|axis1d|axis2d|axis3d> [client=N]"));
 					continue;
 				}
 				Tr.Action = NormalizeScriptInputActionPath(T[1]);
+				for (int32 j = 3; j < T.Num(); ++j)
+				{
+					FString K, V;
+					if (KeyValue(T[j], K, V) && K == TEXT("client") && V.IsNumeric() && FCString::Atoi(*V) >= 0) Tr.Client = FCString::Atoi(*V);
+					else LineIssue(LineNo, T[j], FString::Printf(TEXT("'%s' is not client=N"), *T[j]));
+				}
 				Out.Tracks.Add(Tr);
 				Current = &Out.Tracks.Last();
 			}
@@ -1238,11 +1258,15 @@ namespace MCPPIE
 		TSet<FString> Actions;
 		for (const FClipTrack& T : Clip.Tracks)
 		{
-			if (Actions.Contains(T.Action))
+			// One lane per Input Action and player: a scene drives the same action for two players (#2113).
+			const FString Lane = T.Client > 0 ? FString::Printf(TEXT("%s@%d"), *T.Action, T.Client) : T.Action;
+			if (Actions.Contains(Lane))
 			{
-				OutIssues.Add(MakeIssue(T.Action, TEXT("action"), FString::Printf(TEXT("%s has two tracks; one track per Input Action"), *T.Action), true));
+				OutIssues.Add(MakeIssue(T.Action, TEXT("action"), T.Client > 0
+					? FString::Printf(TEXT("%s has two tracks for client %d; one track per Input Action and player"), *T.Action, T.Client)
+					: FString::Printf(TEXT("%s has two tracks; one track per Input Action"), *T.Action), true));
 			}
-			Actions.Add(T.Action);
+			Actions.Add(Lane);
 			if (T.Type == EClipValueType::Bool && T.Keys.Num() > 0)
 			{
 				OutIssues.Add(MakeIssue(T.Action, TEXT("keys"), FString::Printf(TEXT("%s is a bool track: it takes notes, not curve keys"), *T.Action), true));

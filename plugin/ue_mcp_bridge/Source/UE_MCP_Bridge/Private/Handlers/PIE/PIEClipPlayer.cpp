@@ -8,6 +8,7 @@
 #include "Handlers/PIE/PIESequenceFormat.h"
 #include "Handlers/PIE/PIELog.h"
 #include "MCPPIEActionTrigger.h"
+#include "MCPPIERemoteControl.h"
 #include "HandlerWorld.h"
 #include "HandlerPlaySession.h"
 #include "HandlerPackageSave.h"
@@ -101,6 +102,7 @@ namespace MCPPIE
 		RestoreFixedTimestep();
 		FPSPin.Restore();
 		Taps.Remove();
+		StopRemoteLanes();
 		Runner.Reset();
 		bHasRun = false;
 	}
@@ -390,12 +392,17 @@ namespace MCPPIE
 	void FPIEClipPlayer::FeedInput(UWorld* World)
 	{
 		UEnhancedInputLocalPlayerSubsystem* Sub = InputOf(TargetLocalPlayer());
-		if (!Sub) return;
 		for (const FClipTrack& T : Run.Clip.Tracks)
 		{
-			if (Run.bPunchedIn && Run.PunchedOutAt < 0.0 && Run.Armed.Contains(T.Action)) continue;
 			bool bActive = false;
 			const FVector V = EvaluateClipTrack(T, Run.Position, bActive);
+			if (T.Client > 0)
+			{
+				FeedRemoteLane(T, bActive, V);
+				continue;
+			}
+			if (!Sub) continue;
+			if (Run.bPunchedIn && Run.PunchedOutAt < 0.0 && Run.Armed.Contains(T.Action)) continue;
 			if (!bActive) continue;
 			TWeakObjectPtr<UInputAction>& Weak = Actions.FindOrAdd(T.Action);
 			UInputAction* A = Weak.Get();
@@ -406,6 +413,60 @@ namespace MCPPIE
 			}
 			if (A) Sub->InjectInputForAction(A, ToActionValue(A, V), {}, {});
 		}
+	}
+
+	void FPIEClipPlayer::FeedRemoteLane(const FClipTrack& T, bool bActive, const FVector& V)
+	{
+		// A remote client's lane is a hold on that client, started when the lane takes a value, updated when the
+		// value changes and stopped when it feeds nothing: the client injects the held value on each of its own
+		// frames, so the lane keeps feeding through a hold check as the run's own player's lanes do.
+		const FString Key = FString::Printf(TEXT("%d|%s"), T.Client, *T.Action);
+		FRemoteLaneHold* Hold = RemoteHolds.Find(Key);
+		if (!bActive)
+		{
+			if (Hold)
+			{
+				if (UMCPPIERemoteControl* Remote = PIERemotePlayers::FindById(Hold->Id)) Remote->SendStop(Hold->Id);
+				RemoteHolds.Remove(Key);
+			}
+			return;
+		}
+		if (Hold)
+		{
+			if (Hold->Value.Equals(V, 1e-4)) return;
+			if (UMCPPIERemoteControl* Remote = PIERemotePlayers::FindById(Hold->Id))
+			{
+				Remote->SendUpdateHold(Hold->Id, V);
+				Hold->Value = V;
+				return;
+			}
+			RemoteHolds.Remove(Key);
+		}
+		FString Err;
+		UMCPPIERemoteControl* Remote = PIERemotePlayers::Find(T.Client, Err);
+		if (!Remote)
+		{
+			if (!RemoteLaneErrors.Contains(Key))
+			{
+				RemoteLaneErrors.Add(Key);
+				UE_LOG(LogMCPPIE, Warning, TEXT("[PIE-CLIP] the lane for %s on client %d feeds nothing: %s"), *T.Action, T.Client, *Err);
+			}
+			return;
+		}
+		const FString Id = PIERemotePlayers::NewId(TEXT("clip"));
+		PIERemotePlayers::RememberId(Id, Remote);
+		Remote->SendStartHold(Id, FSoftObjectPath(T.Action), V);
+		RemoteHolds.Add(Key, { Id, V });
+	}
+
+	void FPIEClipPlayer::StopRemoteLanes()
+	{
+		for (const TPair<FString, FRemoteLaneHold>& H : RemoteHolds)
+		{
+			if (UMCPPIERemoteControl* Remote = PIERemotePlayers::FindById(H.Value.Id)) Remote->SendStop(H.Value.Id);
+		}
+		RemoteHolds.Reset();
+		RemoteLaneErrors.Reset();
 	}
 
 	void FPIEClipPlayer::OnPreActorTick(UWorld* World, ELevelTick /*TickType*/, float /*DeltaSeconds*/)
@@ -847,6 +908,7 @@ namespace MCPPIE
 		RestoreFixedTimestep();
 		FPSPin.Restore();
 		Taps.Remove();
+		StopRemoteLanes();
 		if (Runner.IsValid()) Runner->Reset();
 		FPIEObserver::Get().StopRun(Run.RunId);
 		if (PreActorTickHandle.IsValid()) FWorldDelegates::OnWorldPreActorTick.Remove(PreActorTickHandle);
