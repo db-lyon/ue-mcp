@@ -9,6 +9,9 @@ import {
   arrangementToText,
   arrangementLayout as layoutOf,
   arrangementOpsFromText as opsFromText,
+  repairMigratedArrangement,
+  scriptReserveMs,
+  SCRIPT_RESERVE_FRAMES,
   validateArrangement,
   type Arrangement,
   type ClipFacts,
@@ -149,6 +152,25 @@ add script /Game/Tests/PT_Door`);
     ]);
     expect(arrangementRefs(track("clip i1 /Game/Clips/CL_Walk 0\nclip i2 /Game/Clips/CL_Walk 200"))).toEqual([{ kind: "clip", target: "/Game/Clips/CL_Walk" }]);
   });
+
+  it("reserves a step list only what a run that settled on its own took, ten minutes at most (#2127)", () => {
+    expect(scriptReserveMs([{ outcome: "failed", durationMs: 48476687 }, { outcome: "needs_you", durationMs: 5000 }, { outcome: "unjudged", durationMs: 24269 }, { outcome: "passed", durationMs: 4500 }])).toBe(4500);
+    expect(scriptReserveMs([{ outcome: "failed", durationMs: 48476687 }])).toBeNull();
+    const a = arrangementFromChecks(["/Game/Tests/A", "/Game/Tests/B"], (t) => (t.endsWith("A") ? 48476687 : 4500));
+    expect(a.instances.map((i) => [i.start, i.length])).toEqual([[0, SCRIPT_RESERVE_FRAMES], [SCRIPT_RESERVE_FRAMES, 270]]);
+  });
+
+  it("lays out again a track an older migration reserved hours for, and nothing else (#2127)", () => {
+    const targets = ["/Game/Tests/TS_Double_Jump", "/Game/Tests/TS_Sprint_Speed"];
+    const ms = (t: string) => (t.endsWith("Sprint_Speed") ? 4500 : null);
+    const old: Arrangement = { rate: 60, instances: [{ id: "i1", kind: "script", target: targets[0], start: 0, length: 2908601 }, { id: "i2", kind: "script", target: targets[1], start: 2908601, length: 270 }] };
+    expect(repairMigratedArrangement(old, targets, ms)?.instances.map((i) => [i.id, i.start, i.length])).toEqual([["i1", 0, 600], ["i2", 600, 270]]);
+    // Sane lengths, or a track someone edited, stay as they are.
+    expect(repairMigratedArrangement(arrangementFromChecks(targets, ms), targets, ms)).toBeNull();
+    expect(repairMigratedArrangement({ ...old, next: 3 }, targets, ms)).toBeNull();
+    expect(repairMigratedArrangement({ ...old, instances: [old.instances[0], { ...old.instances[1], start: 3000000 }] }, targets, ms)).toBeNull();
+    expect(repairMigratedArrangement({ ...old, instances: [{ ...old.instances[0], name: "Mine" }, old.instances[1]] }, targets, ms)).toBeNull();
+  });
 });
 
 describe("composition", () => {
@@ -205,7 +227,24 @@ describe("composition", () => {
     const clash = compose([{ goalId: "a", arrangement: a, player: 0 }, { goalId: "b", arrangement: a, player: 0 }], { clip, facts, scene: true });
     expect(clash.findings[0]).toMatchObject({ id: "2-i1", field: "player", blocks: true });
     const beside = compose([{ goalId: "a", arrangement: track("script i1 /Game/Tests/PT_Door 0"), player: 0 }, { goalId: "b", arrangement: a, player: 1 }], { clip, facts, scene: true });
-    expect(beside.findings[0]).toMatchObject({ id: "2-i1", field: "start", blocks: true });
+    expect(beside.findings).toEqual([expect.objectContaining({ id: "2-i1", field: "start", blocks: false })]);
+    expect(beside.instances.map((i) => [i.key, i.start, i.end])).toEqual([["1-i1", 0, 300], ["2-i1", 300, 360]]);
+  });
+
+  it("plays every step list alone, in the order they would start, whatever players the tracks drive (#2127)", () => {
+    const steps = track("script i1 /Game/Tests/PT_Door 0\nscript i2 /Game/Tests/PT_Door 300");
+    const after = track("script i1 /Game/Tests/PT_Door 0\nclip i2 /Game/Clips/CL_Jump 300");
+    for (const player of [0, 1]) {
+      const c = compose([{ goalId: "a", arrangement: steps, player: 0 }, { goalId: "b", arrangement: after, player }], { clip, facts, scene: true });
+      expect(c.findings.filter((f) => f.blocks)).toEqual([]);
+      expect(c.instances.map((i) => [i.key, i.start, i.end])).toEqual([["1-i1", 0, 300], ["2-i1", 300, 600], ["1-i2", 600, 900], ["2-i2", 900, 960]]);
+      expect(c.segments.map((s) => [s.kind, s.offset])).toEqual([["script", 0], ["script", 300], ["script", 600], ["clip", 900]]);
+      expect(c.length).toBe(960);
+    }
+    // A step list waits for another track's clip to end.
+    const c = compose([{ goalId: "a", arrangement: track("clip i1 /Game/Clips/CL_Walk 0"), player: 0 }, { goalId: "b", arrangement: track("script i1 /Game/Tests/PT_Door 50"), player: 1 }], { clip, facts, scene: true });
+    expect(c.findings).toEqual([expect.objectContaining({ id: "2-i1", blocks: false })]);
+    expect(c.instances.map((i) => [i.key, i.start])).toEqual([["1-i1", 0], ["2-i1", 120]]);
   });
 
   it("gives remote players' act entries their client", () => {

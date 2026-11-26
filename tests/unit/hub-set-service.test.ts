@@ -152,6 +152,22 @@ describe("the hub's set", () => {
     expect(hub.goals.get("door-aaaa")!.arrangement?.instances).toEqual([]);
   });
 
+  it("repairs a scene an older migration left unplayable, on load (#2127)", async () => {
+    const files = new GoalFiles(path.join(root, "data"), () => new Date().toISOString());
+    const script = (id: string, start: number, length: number) => ({ id, kind: "script" as const, target: DOOR, start, length });
+    files.write([
+      { type: "goal", id: "move-aaaa", data: { schema: 1, id: "move-aaaa", kind: "goal", title: "Move", order: 0, acceptance: { stableRuns: 1, signOff: false }, checks: [{ kind: "script", target: DOOR }], arrangement: { rate: 60, instances: [script("i1", 0, 23)] } } },
+      { type: "goal", id: "jump-bbbb", data: { schema: 1, id: "jump-bbbb", kind: "goal", title: "Jump", order: 1, acceptance: { stableRuns: 1, signOff: false }, checks: [{ kind: "script", target: DOOR }], arrangement: { rate: 60, instances: [script("i1", 0, 2908601)] } } },
+      { type: "goal", id: "fp-cccc", data: { schema: 1, id: "fp-cccc", kind: "milestone", title: "First Playable", order: 0, acceptance: { stableRuns: 1, signOff: false }, checks: [], requires: [{ goal: "move-aaaa" }, { goal: "jump-bbbb" }] } },
+    ]);
+    hub = setup();
+    expect(hub.goals.get("jump-bbbb")!.arrangement?.instances).toEqual([script("i1", 0, 600)]);
+    expect(hub.goals.get("move-aaaa")!.arrangement?.instances).toEqual([script("i1", 0, 23)]);
+    const plan = hub.set.compose("scene", "fp-cccc");
+    expect(plan.composition.findings.filter((f) => f.blocks)).toEqual([]);
+    expect(plan.composition.segments.map((s) => [s.kind, s.offset, s.length])).toEqual([["script", 0, 23], ["script", 23, 600]]);
+  });
+
   it("edits the set with op lines and answers a bad name with candidates", async () => {
     hub = setup();
     const r = await call("POST", "/hub/set/edit", { ops: `track add Walker color=green

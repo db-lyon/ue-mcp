@@ -16,6 +16,13 @@
 export const ARRANGEMENT_RATE = 60;
 /** Frames a step-list instance takes up on its track before it has run: ten seconds. */
 export const SCRIPT_RESERVE_FRAMES = 600;
+/**
+ * The most a step-list instance reserves from its runs: ten minutes, the
+ * longest a waited script run holds. A run that took longer waited on a person
+ * or was closed late (a restart ends a stale run hours after it began), so its
+ * duration says nothing about the playtest.
+ */
+export const SCRIPT_RESERVE_MAX_FRAMES = 36000;
 /** The most instances one track holds. */
 export const ARRANGEMENT_MAX_INSTANCES = 500;
 
@@ -584,15 +591,53 @@ export function arrangementRefs(a: Arrangement): Array<{ kind: InstanceKind; tar
   return out;
 }
 
+/**
+ * The duration a step-list playtest reserves, from its runs newest first: the
+ * newest that passed or failed on its own within SCRIPT_RESERVE_MAX_FRAMES. A
+ * run that waited on a verdict, was stopped, or ran longer than that is left
+ * out. Null when none qualifies.
+ */
+export function scriptReserveMs(runs: ReadonlyArray<{ outcome?: string | null; durationMs?: number | null }>): number | null {
+  const most = (SCRIPT_RESERVE_MAX_FRAMES / ARRANGEMENT_RATE) * 1000;
+  return runs.find((r) => (r.outcome === "passed" || r.outcome === "failed") && !!r.durationMs && r.durationMs > 0 && r.durationMs <= most)?.durationMs ?? null;
+}
+
+/** Frames a step-list instance reserves for a duration, at `rate`; the default reserve when the duration is unknown or longer than SCRIPT_RESERVE_MAX_FRAMES. */
+function reserveFrames(ms: number | null | undefined, rate: number): number {
+  const frames = ms && ms > 0 ? Math.max(1, Math.round((ms / 1000) * rate)) : 0;
+  return frames > 0 && frames <= Math.round((SCRIPT_RESERVE_MAX_FRAMES * rate) / ARRANGEMENT_RATE) ? frames : Math.round((SCRIPT_RESERVE_FRAMES * rate) / ARRANGEMENT_RATE);
+}
+
 /** A goal's script checks laid end to end from frame 0, each reserving its newest run's duration: how goals become tracks. */
 export function arrangementFromChecks(targets: readonly string[], durationMs: (target: string) => number | null | undefined, rate = ARRANGEMENT_RATE): Arrangement {
   const a: Arrangement = { rate, instances: [] };
   let at = 0;
   targets.forEach((target, n) => {
-    const ms = durationMs(target);
-    const length = ms && ms > 0 ? Math.max(1, Math.round((ms / 1000) * rate)) : Math.round((SCRIPT_RESERVE_FRAMES * rate) / ARRANGEMENT_RATE);
+    const length = reserveFrames(durationMs(target), rate);
     a.instances.push({ id: `i${n + 1}`, kind: "script", target, start: at, length });
     at += length;
   });
   return a;
+}
+
+/**
+ * A track the goal migration laid out with a reservation longer than
+ * SCRIPT_RESERVE_MAX_FRAMES (1.4.16-beta.4 reserved whatever the newest run
+ * took, hours for a run closed late), laid out again from its checks. Only a
+ * track still exactly as the migration left it is touched: step lists only,
+ * ids i1 to iN in check order, end to end from 0. Null when there is nothing to
+ * repair.
+ */
+export function repairMigratedArrangement(a: Arrangement, targets: readonly string[], durationMs: (target: string) => number | null | undefined): Arrangement | null {
+  const most = Math.round((SCRIPT_RESERVE_MAX_FRAMES * a.rate) / ARRANGEMENT_RATE);
+  if (a.next !== undefined || a.instances.length === 0 || a.instances.length !== targets.length) return null;
+  let at = 0;
+  for (let n = 0; n < a.instances.length; n++) {
+    const i = a.instances[n];
+    const plain = Object.keys(i).every((k) => ["id", "kind", "target", "start", "length"].includes(k));
+    if (!plain || i.kind !== "script" || i.id !== `i${n + 1}` || i.target !== targets[n] || i.start !== at || !i.length) return null;
+    at += i.length;
+  }
+  if (!a.instances.some((i) => i.length! > most)) return null;
+  return arrangementFromChecks(targets, durationMs, a.rate);
 }

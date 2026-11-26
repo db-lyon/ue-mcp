@@ -32,6 +32,7 @@ import {
   SCRIPT_RESERVE_FRAMES,
   arrangementFromChecks,
   arrangementOf,
+  repairMigratedArrangement,
   blockingFindings,
   checkId,
   goalLoops,
@@ -603,7 +604,9 @@ export class Goals {
   /**
    * Lay every goal that has no arrangement out from its checks, end to end,
    * each reserving its newest run's duration. Done once per goal: a goal with
-   * an arrangement, even an empty one, is never laid out again. Scenes keep
+   * an arrangement, even an empty one, is never laid out again, except a
+   * track still exactly as an older migration left it with a reservation of
+   * hours (#2127), which is laid out again with sane lengths. Scenes keep
    * their requires as their tracks and need nothing. Returns how many changed.
    */
   migrateArrangements(durationMs: (target: string) => number | null | undefined): number {
@@ -611,12 +614,18 @@ export class Goals {
     const tracks = all.filter((g) => g.kind === "goal");
     const scenes = all.filter((g) => g.kind === "milestone");
     const next: Goal[] = [];
+    const layout = (g: Goal): Arrangement | undefined => {
+      if (g.kind !== "goal") return undefined;
+      const targets = g.checks.map((c) => c.target);
+      if (!g.arrangement) return arrangementFromChecks(targets, durationMs);
+      return repairMigratedArrangement(g.arrangement, targets, durationMs) ?? undefined;
+    };
     // Tracks and scenes without a place take the next one, in the store's order.
     const place = (list: Goal[]) => {
       let at = list.reduce((m, g) => Math.max(m, (g.order ?? -1) + 1), 0);
       for (const g of list) {
         const n = g.order === undefined ? at++ : g.order;
-        const a = g.kind === "goal" && !g.arrangement ? arrangementFromChecks(g.checks.map((c) => c.target), durationMs) : undefined;
+        const a = layout(g);
         if (g.order === undefined || a) next.push({ ...g, order: n, ...(a ? { arrangement: a } : {}) });
       }
     };

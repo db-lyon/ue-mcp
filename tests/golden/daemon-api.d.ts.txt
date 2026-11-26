@@ -2654,6 +2654,7 @@ export declare const InstanceLayout: any;
 export declare const InstanceResult: any;
 export declare const InstanceStatus: any;
 export declare const SCRIPT_RESERVE_FRAMES: 600;
+export declare const SCRIPT_RESERVE_MAX_FRAMES: 36000;
 export declare const SET_COLORS: readonly ["red", "orange", "yellow", "lime", "green", "teal", "cyan", "blue", "indigo", "violet", "pink", "gray"];
 export declare const SET_PLAYER_MAX: 15;
 export declare const SegmentState: any;
@@ -2693,8 +2694,10 @@ export declare const parseContextMeasurement: (value: unknown) => ContextMeasure
 export declare const rankClipCandidates: (word: string, pool: readonly string[], n?: number) => string[];
 export declare const readDiscovery: (projectDir: string) => DaemonDiscovery | null;
 export declare const readLiveDiscovery: (projectDir: string, isAlive?: (pid: number) => boolean) => DaemonDiscovery | null;
+export declare const repairMigratedArrangement: (a: Arrangement, targets: readonly string[], durationMs: (target: string) => number | null | undefined) => Arrangement | null;
 export declare const rollUpInstances: (list: readonly Pick<InstanceResult, "status">[]) => InstanceStatus;
 export declare const scopeBucket: (categoryCount: number) => ContextScopeBucket;
+export declare const scriptReserveMs: (runs: readonly { outcome?: string | null | undefined; durationMs?: number | null | undefined; }[]) => number | null;
 export declare const setColorOf: (v: unknown) => "red" | "orange" | "yellow" | "lime" | "green" | "teal" | "cyan" | "blue" | "indigo" | "violet" | "pink" | "gray" | undefined;
 export declare const setOpsFromText: (text: string) => { ops: SetOp[]; findings: ArrangementFinding[]; };
 export declare const setOpsOf: (v: unknown) => { ops: SetOp[]; findings: ArrangementFinding[]; };
