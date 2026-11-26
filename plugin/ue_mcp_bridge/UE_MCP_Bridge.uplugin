@@ -111,6 +111,11 @@
 		{
 			"Name": "StateTree",
 			"Enabled": true
+		},
+		{
+			"Name": "ModelViewViewModel",
+			"Enabled": false,
+			"Optional": true
 		}
 	]
 }

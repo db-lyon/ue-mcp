@@ -9,9 +9,12 @@ using UnrealBuildTool;
 // ModelViewViewModel enabled. It registers its backend with UE_MCP_Bridge
 // (Public/HandlerMVVMBackend.h) and the handlers call it through that.
 //
-// The descriptor does not list ModelViewViewModel as a plugin dependency on
-// purpose: listing it would enable the plugin in every project that has the
-// bridge. UBT notes the unlisted dependency with a warning.
+// The descriptor lists ModelViewViewModel as a disabled, optional reference:
+// UBT's plugin dependency validation matches by name and the Optional flag
+// alone, so the unlisted-dependency warning is silenced, while Enabled:
+// false keeps the reference inert at build and runtime. A real (Enabled:
+// true) reference would enable the plugin in every project that has the
+// bridge, so the module stays loaded on demand only.
 public class UE_MCP_BridgeMVVM : ModuleRules
 {
 	public UE_MCP_BridgeMVVM(ReadOnlyTargetRules Target) : base(Target)
