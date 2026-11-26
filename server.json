@@ -3,7 +3,7 @@
   "name": "io.github.db-lyon/ue-mcp",
   "title": "UE-MCP",
   "description": "Unreal Engine MCP server - 32 tools, 3758+ actions for AI-driven editor control",
-  "version": "1.4.16-beta.4",
+  "version": "1.4.16-beta.5",
   "websiteUrl": "https://ue-mcp.com",
   "repository": {
     "url": "https://github.com/db-lyon/ue-mcp",
@@ -14,7 +14,7 @@
       "registryType": "npm",
       "registryBaseUrl": "https://registry.npmjs.org",
       "identifier": "ue-mcp",
-      "version": "1.4.16-beta.4",
+      "version": "1.4.16-beta.5",
       "runtimeHint": "npx",
       "transport": {
         "type": "stdio"
