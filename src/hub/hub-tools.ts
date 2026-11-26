@@ -10,7 +10,7 @@
  * Error) with the reason when it cannot, so a category handler lets the
  * dispatcher turn it into an error result.
  */
-import { checkId, type PlanRun, type PlanScope, type QueueState, type SetView, type TrackerLink, TRACKER_LINKS_MAX } from "./contract.js";
+import { arrangementOfRunTarget, checkId, type PlanRun, type PlanScope, type QueueState, type SetView, type TrackerLink, TRACKER_LINKS_MAX } from "./contract.js";
 import { FindingError } from "./set-service.js";
 import type { Hub } from "./hub.js";
 import { HubError, bad, checkRefOf, linkOf, notFound } from "./util.js";
@@ -109,9 +109,10 @@ function scopeOfInput(i: Record<string, unknown>): PlanScope {
   return { kind: "checks", checks };
 }
 
-/** The set as an agent reads it: the text form, findings and each track's and scene's status. */
+/** The set as an agent reads it: the arrangement, the text form, findings and each track's and scene's status. */
 function setAnswer(v: SetView): Record<string, unknown> {
   return {
+    ...(v.arrangement ? { arrangement: { id: v.arrangement.id, title: v.arrangement.title, ...(v.arrangement.level ? { level: v.arrangement.level } : {}) } } : {}),
     text: v.text,
     status: Object.fromEntries([...v.tracks, ...v.scenes].map((x) => [x.id, x.status])),
     ...(v.findings.length ? { findings: v.findings.map((f) => `${f.blocks ? "error" : "warning"} ${f.id}: ${f.message}${f.candidates?.length ? ` (candidates: ${f.candidates.join(", ")})` : ""}`) } : {}),
@@ -128,7 +129,7 @@ function setScopeOf(input: string, v: SetView): PlanScope {
   const [kind, ...rest] = text.trim().split(/\s+/);
   const name = rest.join(" ").replace(/^"|"$/g, "");
   const find = (list: Array<{ id: string; title: string }>, n: string) => list.find((x) => x.id === n) ?? list.find((x) => x.title.toLowerCase() === n.toLowerCase());
-  if (kind === "arrangement") return { kind: "arrangement", ...at };
+  if (kind === "arrangement") return { kind: "arrangement", ...at, ...(v.arrangement ? { arrangementId: v.arrangement.id } : {}) };
   if (kind === "track" || kind === "scene") {
     const list = kind === "track" ? v.tracks : v.scenes;
     const x = find(list, name);
@@ -270,13 +271,14 @@ export async function runHubAction(hub: HubToolTarget, action: string, input: Re
       return queueAnswer(hub.queueView());
     case "read_set": {
       if (!hub.set) throw new HubError(409, "this hub has no set");
-      const v = await hub.set.view();
-      return setAnswer(v);
+      const v = await hub.set.view(input.arrangement);
+      // Every arrangement, so an agent can name another one.
+      return { ...setAnswer(v), arrangements: g.arrangements().map((a) => `${a.id} "${a.title}"${a.level ? ` level=${a.level}` : ""}`) };
     }
     case "edit_set": {
       if (!hub.set) throw new HubError(409, "this hub has no set");
       try {
-        const v = await hub.set.edit({ ops: input.ops });
+        const v = await hub.set.edit({ ops: input.ops, ...(input.arrangement !== undefined ? { arrangement: input.arrangement } : {}) });
         return { changed: v.changed, ...setAnswer(v) };
       } catch (e) {
         if (e instanceof FindingError) throw new HubError(400, `${e.finding.message}${e.finding.candidates?.length ? ` (did you mean: ${e.finding.candidates.join(", ")})` : ""}`);
@@ -285,7 +287,7 @@ export async function runHubAction(hub: HubToolTarget, action: string, input: Re
     }
     case "run": {
       if (!hub.runSet || !hub.set) throw new HubError(409, "this hub cannot run plans");
-      const view = await hub.set.view();
+      const view = await hub.set.view(input.arrangement);
       const scope = setScopeOf(String(input.scope), view);
       const { plan, runId } = await hub.runSet({ scope, ...(input.attended !== undefined ? { options: { attended: input.attended } } : {}) }, "agent");
       // The run id, once it started, is what read_run takes.
@@ -294,12 +296,16 @@ export async function runHubAction(hub: HubToolTarget, action: string, input: Re
     case "read_run": {
       if (!hub.run) throw new HubError(409, "this hub has no runs");
       const d = hub.run(String(input.run_id));
+      // A run of a track, scene or arrangement belongs to one arrangement: one named that is not it is a mistake to say.
+      const of = d.record.kind === "arrangement" ? arrangementOfRunTarget(d.record.target) : d.record.kind === "script" ? null : g.arrangementOfGoal(d.record.target.split("/")[0]);
+      if (str(input.arrangement) && of && g.resolveArrangement(input.arrangement) !== of) throw bad(`run ${d.record.runId} was made in the arrangement ${of}, not ${input.arrangement}`);
       const a = d.arrangement;
       if (!a) return { runId: d.record.runId, outcome: d.record.outcome, steps: d.steps.map((s) => `${s.index + 1} ${s.status} ${s.instruction}`) };
       const sec = (f: number) => `${(f / a.rate).toFixed(1)}s`;
       return {
         runId: d.record.runId,
         outcome: d.record.outcome,
+        ...(of ? { arrangement: of } : {}),
         ...(d.run?.stopReason ? { stopReason: d.run.stopReason } : {}),
         tracks: a.tracks?.map((t) => `${t.goalId} ${t.status} player=${t.player}`),
         instances: a.instances.map((i) => `${i.goalId}/${i.id} ${i.status} ${sec(i.start)}-${sec(i.end)} ${i.name} checks ${i.checks.passed}/${i.checks.total} passed${i.checks.failed ? `, ${i.checks.failed} failed` : ""}${i.reason ? ` (${i.reason})` : ""}`),

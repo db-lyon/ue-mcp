@@ -40,6 +40,8 @@ let k: number;
 /** While set, the editor's clip and script reads wait for it: an editor busy elsewhere. */
 let held: Promise<void> | null;
 let clock: number;
+/** The map the editor has open, as level(get_current) answers. */
+let openMap: string | null;
 
 const host = () => ({
   projectDir: path.join(root, "project"),
@@ -84,6 +86,11 @@ const host = () => ({
       case "play_in_editor":
         if (args.pieAction === "stop") pie = false;
         return ok({});
+      case "get_current":
+        return ok(openMap ? { mapPackagePath: openMap } : {});
+      case "load":
+        openMap = String(args.levelPath);
+        return ok({ levelPath: openMap });
       default:
         return ok({});
     }
@@ -126,6 +133,7 @@ beforeEach(() => {
   k = 0;
   held = null;
   clock = Date.now();
+  openMap = null;
 });
 
 afterEach(() => {
@@ -353,5 +361,106 @@ scene track "Boss fight" add Guard` });
     expect(detail.segments[0].offset).toBe(90);
     const agent = (await runHubAction(hub, "run", { scope: "track A from 1.5s" })) as { plan: { title: string } };
     expect(agent.plan.title).toBe("Run A from 1.5 s");
+  });
+});
+
+describe("a project's arrangements", () => {
+  it("keeps the tracks made before as the first arrangement, Main, and gives each new one its own set", async () => {
+    const files = new GoalFiles(path.join(root, "data"), () => new Date().toISOString());
+    files.write([{ type: "goal", id: "door-aaaa", data: { schema: 1, id: "door-aaaa", kind: "goal", title: "Door", acceptance: { stableRuns: 1, signOff: false }, checks: [{ kind: "script", target: DOOR }] } }]);
+    hub = setup();
+    const first = (await call("GET", "/hub/arrangements")).body;
+    expect(first).toMatchObject({ default: "main", arrangements: [{ id: "main", title: "Main", level: null, tracks: 1, scenes: 0 }] });
+    const made = await call("POST", "/hub/arrangements", { title: "Boss rush", level: "/Game/Maps/Arena.Arena" });
+    expect(made.body.arrangement).toMatchObject({ title: "Boss rush", level: "/Game/Maps/Arena" });
+    const boss = made.body.arrangement.id as string;
+    const edited = await call("POST", "/hub/set/edit", { arrangement: "Boss rush", ops: `track add Walker\nadd Walker clip ${WALK}\nscene add Fight\nscene track Fight add Walker` });
+    expect(edited.status).toBe(200);
+    expect(edited.body.arrangement).toMatchObject({ id: boss, title: "Boss rush" });
+    expect(edited.body.tracks.map((t: { title: string }) => t.title)).toEqual(["Walker"]);
+    // Main is unchanged, and stays the default for a request that names none.
+    expect((await call("GET", "/hub/set")).body.tracks.map((t: { title: string }) => t.title)).toEqual(["Door"]);
+    expect((await call("GET", `/hub/set?arrangement=${boss}`)).body.scenes[0].title).toBe("Fight");
+    // A name that matches no arrangement is a 404 that lists them.
+    const missing = await call("GET", "/hub/set?arrangement=Nope");
+    expect(missing.status).toBe(404);
+    expect(missing.body.error).toContain('main "Main"');
+    // The first arrangement's id stays main when it is renamed.
+    expect((await call("PUT", "/hub/arrangements/main", { title: "Story" })).body.arrangement).toMatchObject({ id: "main", title: "Story" });
+    expect((await call("PUT", `/hub/arrangements/${boss}`, { level: null })).body.arrangement.level).toBeNull();
+    expect((await call("PUT", `/hub/arrangements/${boss}`, { level: "Arena" })).status).toBe(400);
+    const list = (await call("GET", "/hub/arrangements")).body.arrangements;
+    expect(list.map((a: { title: string; tracks: number; scenes: number }) => [a.title, a.tracks, a.scenes])).toEqual([["Story", 1, 0], ["Boss rush", 1, 1]]);
+  });
+
+  it("duplicates an arrangement's tracks, scenes and instances, sharing the clips, and deletes one without its clips", async () => {
+    hub = setup();
+    await call("POST", "/hub/set/edit", { ops: `track add A color=red player=1\nadd A clip ${WALK}\nadd A clip ${JUMP} at 300\nscene add S\nscene track S add A` });
+    const copy = (await call("POST", "/hub/arrangements/main/duplicate", {})).body.arrangement;
+    expect(copy).toMatchObject({ title: "Main copy", order: 1 });
+    const a = (await call("GET", "/hub/set")).body;
+    const b = (await call("GET", `/hub/set?arrangement=${copy.id}`)).body;
+    expect(b.tracks[0].id).not.toBe(a.tracks[0].id);
+    expect(b.tracks[0]).toMatchObject({ title: "A", color: "red", player: 1 });
+    expect(b.tracks[0].arrangement.instances).toEqual(a.tracks[0].arrangement.instances);
+    expect(b.scenes[0].tracks).toEqual([b.tracks[0].id]);
+    // Editing the copy leaves the original alone.
+    await call("POST", "/hub/set/edit", { arrangement: copy.id, ops: "delete A/i1" });
+    expect((await call("GET", "/hub/set")).body.tracks[0].arrangement.instances).toHaveLength(2);
+    // Deleting the original takes its tracks and scenes; the clips are never touched.
+    expect((await call("DELETE", "/hub/arrangements/main")).status).toBe(204);
+    expect(hub.goals.get(a.tracks[0].id)).toBeUndefined();
+    expect(calls.some((c) => c.action === "delete")).toBe(false);
+    const after = (await call("GET", "/hub/arrangements")).body;
+    expect(after).toMatchObject({ default: copy.id, arrangements: [{ id: copy.id }] });
+    // The last arrangement stays, and the refusal says what to do instead.
+    const last = await call("DELETE", `/hub/arrangements/${copy.id}`);
+    expect(last.status).toBe(409);
+    expect(last.body.error).toContain("Create another arrangement first");
+  });
+
+  it("runs one arrangement at a time, opening its level first, and keeps its queue and history apart", async () => {
+    hub = setup();
+    await call("POST", "/hub/set/edit", { ops: `track add A\nadd A clip ${JUMP}` });
+    const boss = (await call("POST", "/hub/arrangements", { title: "Boss", level: "/Game/Maps/Arena" })).body.arrangement.id as string;
+    await call("POST", "/hub/set/edit", { arrangement: boss, ops: `track add B\nadd B clip ${WALK}` });
+    const r = await call("POST", "/hub/run", { scope: { kind: "arrangement", arrangementId: boss } });
+    expect(r.body.plan).toMatchObject({ title: "Run Boss", arrangementId: boss, items: [{ check: { kind: "arrangement", target: boss } }] });
+    await settle();
+    expect(calls.find((c) => c.action === "load")?.args).toEqual({ levelPath: "/Game/Maps/Arena" });
+    const clip = calls.find((c) => c.action === "clip_run")!.args.clip as { tracks: Array<{ action: string }> };
+    expect(clip.tracks.map((t) => t.action.split(".").pop())).toEqual(["IA_Move"]);
+    const runId = r.body.runId as string;
+    // Queued behind it, Main's run is Main's alone.
+    const main = await call("POST", "/hub/run", { scope: { kind: "arrangement" } });
+    expect(main.body.plan).toMatchObject({ title: "Run Main", arrangementId: "main", items: [{ check: { target: "arrangement" } }] });
+    expect((await call("GET", `/hub/queue?arrangement=${boss}`)).body.queued).toEqual([]);
+    expect((await call("GET", "/hub/queue?arrangement=main")).body.queued.map((p: { id: string }) => p.id)).toEqual([main.body.plan.id]);
+    await call("POST", `/hub/plans/${main.body.plan.id}/cancel`);
+    clipRuns.set("clip_0", { run_id: "clip_0", state: "finished", position: 120, checks: [{ id: "1-i1.c1", status: "passed" }] });
+    await hub.arrangements.refresh(runId);
+    await settle();
+    expect((await call("GET", `/hub/runs?arrangement=${boss}`)).body.runs.map((x: { runId: string }) => x.runId)).toEqual([runId]);
+    expect((await call("GET", "/hub/runs?arrangement=main")).body.runs).toEqual([]);
+    const list = (await call("GET", "/hub/arrangements")).body.arrangements;
+    expect(list.find((x: { id: string }) => x.id === boss).lastRun).toMatchObject({ runId });
+    // A track run is its arrangement's too, and an agent names the arrangement.
+    const agent = (await runHubAction(hub, "read_set", { arrangement: "Boss" })) as { arrangement: { id: string }; arrangements: string[]; text: string };
+    expect(agent.arrangement.id).toBe(boss);
+    expect(agent.arrangements).toEqual(['main "Main"', `${boss} "Boss" level=/Game/Maps/Arena`]);
+    expect(agent.text).toContain("track b-");
+    await expect(runHubAction(hub, "run", { scope: "track A", arrangement: "Boss" })).rejects.toThrow(/no track A/);
+    await expect(runHubAction(hub, "read_run", { run_id: runId, arrangement: "main" })).rejects.toThrow(/made in the arrangement/);
+  });
+
+  it("does not open the level when the editor has it open", async () => {
+    hub = setup();
+    const boss = (await call("POST", "/hub/arrangements", { title: "Boss", level: "/Game/Maps/Arena" })).body.arrangement.id as string;
+    await call("POST", "/hub/set/edit", { arrangement: boss, ops: `track add B\nadd B clip ${WALK}` });
+    openMap = "/Game/Maps/Arena";
+    await call("POST", "/hub/run", { scope: { kind: "arrangement", arrangementId: boss } });
+    await settle();
+    expect(calls.some((c) => c.action === "load")).toBe(false);
+    expect(calls.some((c) => c.action === "clip_run")).toBe(true);
   });
 });

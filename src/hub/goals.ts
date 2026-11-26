@@ -26,6 +26,8 @@ import {
   GOAL_PRIORITIES,
   HUB_EXPORT_FORMAT,
   HUB_SCHEMA,
+  MAIN_ARRANGEMENT_ID,
+  MAIN_ARRANGEMENT_TITLE,
   SET_PLAYER_MAX,
   setColorOf,
   slotOf,
@@ -45,6 +47,8 @@ import {
   type AcceptanceRule,
   type AnyHubRecord,
   type Arrangement,
+  type ArrangementInfo,
+  type ArrangementRecord,
   type SetModel,
   type Slot,
   type CheckMeta,
@@ -65,7 +69,7 @@ import {
   type UnsupportedCheck,
 } from "./contract.js";
 import type { GoalStore, GoalStoreChange } from "./goal-store.js";
-import { bad, canonical, checkRefOf, isObject, linksOf, notFound, readLinks } from "./util.js";
+import { bad, canonical, checkRefOf, conflict, isObject, linksOf, notFound, readLinks } from "./util.js";
 
 /** Where an older Studio kept goals in the project, one JSON file each. */
 export const LEGACY_GOALS_DIR = "QA/Goals";
@@ -80,7 +84,7 @@ const MAX_TEXT = 20_000;
 /** A new id's random ending: four base-36 characters after a dash. */
 const SUFFIX = 4;
 /** The types an export carries; the import record stays with the store it describes. */
-const EXPORTED: readonly HubRecordType[] = ["goal", "check", "signoff", "rules"];
+const EXPORTED: readonly HubRecordType[] = ["goal", "check", "signoff", "rules", "arrangement"];
 /** A loop in words: "a > b > a". */
 const loopText = (p: string[]): string => p.join(" > ");
 
@@ -200,6 +204,7 @@ function playerOf(v: unknown): number {
 function setFieldsOf(raw: Record<string, unknown>, kind: Goal["kind"]): Partial<Goal> {
   const out: Partial<Goal> = {};
   if (typeof raw.order === "number" && Number.isFinite(raw.order)) out.order = raw.order;
+  if (typeof raw.arrangementId === "string" && GOAL_ID.test(raw.arrangementId) && raw.arrangementId !== MAIN_ARRANGEMENT_ID) out.arrangementId = raw.arrangementId;
   const color = setColorOf(raw.color);
   if (color) out.color = color;
   if (kind === "goal") {
@@ -269,7 +274,29 @@ function recordDataOf(r: AnyHubRecord): AnyHubRecord | string {
     }
     case "import":
       return r;
+    case "arrangement": {
+      const a = arrangementRecordOf(r.data);
+      return typeof a === "string" ? a : { ...r, data: a };
+    }
   }
+}
+
+/** An arrangement's record from JSON, or why it does not read. */
+function arrangementRecordOf(raw: unknown): ArrangementRecord | string {
+  if (!isObject(raw)) return "it is not a JSON object";
+  const title = str(raw.title, MAX_TITLE);
+  if (!title) return "it has no title";
+  const level = levelOf(raw.level);
+  return { title, order: typeof raw.order === "number" && Number.isFinite(raw.order) ? raw.order : 0, ...(level ? { level } : {}) };
+}
+
+/** A level as a map's package path, "/Game/Maps/Arena" from "/Game/Maps/Arena.Arena" too; undefined when it is not one. */
+export function levelOf(v: unknown): string | undefined {
+  if (typeof v !== "string") return undefined;
+  const s = v.trim();
+  if (!s.startsWith("/") || /\s/.test(s) || s.length > 400) return undefined;
+  const dot = s.lastIndexOf(".");
+  return dot > s.lastIndexOf("/") ? s.slice(0, dot) : s;
 }
 
 /** A record from an import file: its envelope and data, normalized, or why it does not read. */
@@ -496,7 +523,9 @@ export class Goals {
     const f = this.fields(d, null);
     const id = this.freshId(d.id, f.title!);
     if (f.requires?.some((r) => r.goal === id)) throw bad("a track cannot require itself");
-    const goal: Goal = { ...f, schema: HUB_SCHEMA, id, kind: d.kind ?? "goal", title: f.title!, acceptance: f.acceptance ?? { ...DEFAULT_ACCEPTANCE }, checks: f.checks ?? [] };
+    // A track made outside the set goes to the arrangement named, else the first one.
+    const arrangementId = this.resolveArrangement(d.arrangementId);
+    const goal: Goal = { ...f, schema: HUB_SCHEMA, id, kind: d.kind ?? "goal", title: f.title!, acceptance: f.acceptance ?? { ...DEFAULT_ACCEPTANCE }, checks: f.checks ?? [], ...(arrangementId !== MAIN_ARRANGEMENT_ID ? { arrangementId } : {}) };
     const parents = d.parents !== undefined ? this.parentsOf(d.parents, null) : [];
     const changes = this.parentChanges(id, parents);
     this.refuseLoops([goal, ...changes]);
@@ -635,9 +664,172 @@ export class Goals {
     return next.length;
   }
 
-  /** The set: every live track and scene, in order. Archived ones are left out. */
-  setModel(): SetModel {
-    const live = this.list().filter((g) => !g.archived);
+  // ── Arrangements ──────────────────────────────────────────────────
+
+  /**
+   * Every arrangement, in order. The first one, "main", needs no record until
+   * it is renamed or given a level; a project never has none, so with every
+   * record removed "main" stands again.
+   */
+  arrangements(): ArrangementInfo[] {
+    const out: ArrangementInfo[] = this.live("arrangement").map((r) => ({ id: r.id, title: r.data!.title, order: r.data!.order, level: r.data!.level ?? null }));
+    if (!out.some((a) => a.id === MAIN_ARRANGEMENT_ID) && (!this.store.held("arrangement", MAIN_ARRANGEMENT_ID) || out.length === 0)) out.push({ id: MAIN_ARRANGEMENT_ID, title: MAIN_ARRANGEMENT_TITLE, order: 0, level: null });
+    return out.sort((a, b) => a.order - b.order || a.title.localeCompare(b.title));
+  }
+
+  /** The arrangement a request that names none gets: the first one. */
+  defaultArrangement(): string {
+    return this.arrangements()[0].id;
+  }
+
+  /** An arrangement by id, else by exact title ignoring case; the first one when none is asked for. 404 when none matches. */
+  resolveArrangement(asked: unknown): string {
+    const list = this.arrangements();
+    if (asked === undefined || asked === null || asked === "") return list[0].id;
+    if (typeof asked !== "string") throw bad("arrangement must be an arrangement's id or name");
+    const hit = list.find((a) => a.id === asked) ?? list.find((a) => a.title.toLowerCase() === asked.trim().toLowerCase());
+    if (!hit) throw notFound(`no arrangement ${asked} (arrangements: ${list.map((a) => `${a.id} "${a.title}"`).join(", ")})`);
+    return hit.id;
+  }
+
+  arrangementInfo(id: string): ArrangementInfo {
+    const a = this.arrangements().find((x) => x.id === id);
+    if (!a) throw notFound(`no arrangement ${id}`);
+    return a;
+  }
+
+  /** The arrangement a track or scene plays in. One naming an arrangement that is gone shows in the first one, so nothing is lost. */
+  arrangementOf(g: Pick<Goal, "arrangementId">, known: ReadonlySet<string> = new Set(this.arrangements().map((a) => a.id))): string {
+    const id = g.arrangementId ?? MAIN_ARRANGEMENT_ID;
+    return known.has(id) ? id : this.defaultArrangement();
+  }
+
+  /** The arrangement of the track or scene with this id, or null when there is none. */
+  arrangementOfGoal(id: string): string | null {
+    const g = this.get(id);
+    return g ? this.arrangementOf(g) : null;
+  }
+
+  private freshArrangementId(title: string): string {
+    const base = goalSlug(title, 64 - SUFFIX - 1) || "arrangement";
+    for (;;) {
+      const id = `${base}-${(crypto.randomBytes(4).readUInt32BE(0) % 36 ** SUFFIX).toString(36).padStart(SUFFIX, "0")}`;
+      if (!this.store.held("arrangement", id) && id !== MAIN_ARRANGEMENT_ID) return id;
+    }
+  }
+
+  private writeArrangement(a: ArrangementInfo, extra: GoalStoreChange[] = []): void {
+    this.store.write([{ type: "arrangement", id: a.id, data: { title: a.title, order: a.order, ...(a.level ? { level: a.level } : {}) } }, ...extra]);
+    this.o.changed?.();
+  }
+
+  private arrangementFields(body: Record<string, unknown>): { title?: string; level?: string | null } {
+    const out: { title?: string; level?: string | null } = {};
+    if (body.title !== undefined) {
+      const t = str(body.title, MAX_TITLE);
+      if (!t) throw bad("title must be a non-empty string");
+      out.title = t;
+    }
+    if (body.level !== undefined) {
+      if (body.level === null || body.level === "") out.level = null;
+      else {
+        const level = levelOf(body.level);
+        if (!level) throw bad("level must be a map's asset path, such as /Game/Maps/Arena, or null to clear it");
+        out.level = level;
+      }
+    }
+    return out;
+  }
+
+  /** A new, empty arrangement at the end of the list. */
+  createArrangement(body: unknown): ArrangementInfo {
+    if (!isObject(body)) throw bad("body must be { title, level? }");
+    const f = this.arrangementFields(body);
+    if (!f.title) throw bad("title must be a non-empty string");
+    const order = this.arrangements().reduce((m, a) => Math.max(m, a.order + 1), 0);
+    const a: ArrangementInfo = { id: this.freshArrangementId(f.title), title: f.title, order, level: f.level ?? null };
+    this.writeArrangement(a);
+    return this.arrangementInfo(a.id);
+  }
+
+  /** Rename an arrangement or set its level; null clears the level. */
+  updateArrangement(id: string, body: unknown): ArrangementInfo {
+    const had = this.arrangementInfo(id);
+    if (!isObject(body)) throw bad("body must be { title?, level? }");
+    const f = this.arrangementFields(body);
+    this.writeArrangement({ ...had, ...(f.title ? { title: f.title } : {}), ...(f.level !== undefined ? { level: f.level } : {}) });
+    return this.arrangementInfo(id);
+  }
+
+  /**
+   * A copy of an arrangement just after it: its tracks and scenes with new
+   * ids, each track's instances as they are, each scene playing the copies of
+   * its tracks. Clips are shared, never copied; sign-offs and links stay with
+   * the originals.
+   */
+  duplicateArrangement(id: string, body: unknown): ArrangementInfo {
+    const src = this.arrangementInfo(id);
+    if (body !== undefined && body !== null && !isObject(body)) throw bad("body must be { title? }");
+    const f = isObject(body) ? this.arrangementFields({ title: body.title }) : {};
+    const title = f.title ?? `${src.title} copy`.slice(0, MAX_TITLE);
+    // It goes right after the original: the ones after move down one.
+    const after = this.arrangements().filter((a) => a.order > src.order);
+    const copy: ArrangementInfo = { id: this.freshArrangementId(title), title, order: src.order + 1, level: src.level };
+    const m = this.setModel(id);
+    const taken = new Set<string>();
+    const fresh = (t: string): string => {
+      for (;;) {
+        const n = this.newId(t);
+        if (!taken.has(n)) {
+          taken.add(n);
+          return n;
+        }
+      }
+    };
+    const ids = new Map<string, string>([...m.tracks, ...m.scenes].map((x) => [x.id, fresh(x.title)]));
+    const goals: Goal[] = [];
+    for (const t of m.tracks) {
+      const base = this.get(t.id)!;
+      const arrangement: Arrangement = { rate: t.arrangement.rate, instances: t.arrangement.instances.map((i) => ({ ...i })) };
+      goals.push({ schema: HUB_SCHEMA, id: ids.get(t.id)!, kind: "goal", title: t.title, ...(base.description ? { description: base.description } : {}), acceptance: { ...base.acceptance }, checks: checksFromArrangement(arrangement, base.checks), arrangement, order: t.order, ...(t.color ? { color: t.color } : {}), ...(t.player ? { player: t.player } : {}), ...(t.mute ? { mute: true } : {}), ...(t.solo ? { solo: true } : {}), arrangementId: copy.id });
+    }
+    for (const s of m.scenes) {
+      const base = this.get(s.id)!;
+      const requires = requiresOf(base).filter((r) => ids.has(r.goal)).map((r) => ({ ...r, goal: ids.get(r.goal)! }));
+      const slots = s.slots.filter((x) => ids.has(x.track)).map((x) => ({ ...x, track: ids.get(x.track)! }));
+      goals.push({ schema: HUB_SCHEMA, id: ids.get(s.id)!, kind: "milestone", title: s.title, ...(base.description ? { description: base.description } : {}), acceptance: { ...base.acceptance }, checks: [], order: s.order, ...(s.color ? { color: s.color } : {}), ...(requires.length ? { requires } : {}), ...(slots.length ? { slots } : {}), arrangementId: copy.id });
+    }
+    const moved = after.map((a): GoalStoreChange => ({ type: "arrangement", id: a.id, data: { title: a.title, order: a.order + 1, ...(a.level ? { level: a.level } : {}) } }));
+    this.writeArrangement(copy, [...moved, ...goals.map((g): GoalStoreChange => ({ type: "goal", id: g.id, data: clean(g) }))]);
+    return this.arrangementInfo(copy.id);
+  }
+
+  /** The ids of the tracks and scenes an arrangement holds, archived ones included. */
+  arrangementGoals(id: string): string[] {
+    const known = new Set(this.arrangements().map((a) => a.id));
+    return this.list().filter((g) => this.arrangementOf(g, known) === id).map((g) => g.id);
+  }
+
+  /**
+   * Delete an arrangement with its tracks and scenes (each as delete() does).
+   * Clips are never deleted. The last arrangement stays: a project always has
+   * one to open.
+   */
+  deleteArrangement(id: string): void {
+    const a = this.arrangementInfo(id);
+    if (this.arrangements().length <= 1) throw conflict(`"${a.title}" is the project's only arrangement. Create another arrangement first, then delete this one.`);
+    for (const g of this.arrangementGoals(id)) if (this.get(g)) this.delete(g);
+    // Main may have no record yet: one is written first, so its removal is held and it does not stand again.
+    if (!this.store.get("arrangement", id)) this.store.write([{ type: "arrangement", id, data: { title: a.title, order: a.order } }]);
+    this.store.write([{ type: "arrangement", id, data: null }]);
+    this.o.changed?.();
+  }
+
+  /** The set of one arrangement (the first one when none is named): its live tracks and scenes, in order. Archived ones are left out. */
+  setModel(arrangementId?: string): SetModel {
+    const aid = arrangementId ?? this.defaultArrangement();
+    const known = new Set(this.arrangements().map((a) => a.id));
+    const live = this.list().filter((g) => !g.archived && this.arrangementOf(g, known) === aid);
     const byOrder = (a: Goal, b: Goal) => (a.order ?? 0) - (b.order ?? 0);
     return {
       tracks: live.filter((g) => g.kind === "goal").sort(byOrder).map((g) => ({ id: g.id, title: g.title, order: g.order ?? 0, ...(g.color ? { color: g.color } : {}), player: g.player ?? 0, mute: g.mute === true, solo: g.solo === true, arrangement: g.arrangement ?? { rate: 60, instances: [] } })),
@@ -655,9 +847,11 @@ export class Goals {
    * gone ones deleted (each as delete() does), the rest updated with their
    * set fields. Nothing else on a goal changes.
    */
-  applySet(next: SetModel): void {
+  applySet(next: SetModel, arrangementId: string = this.defaultArrangement()): void {
     const had = new Map(this.list().map((g) => [g.id, g]));
-    const before = this.setModel();
+    const before = this.setModel(arrangementId);
+    // A new track or scene joins the arrangement being edited.
+    const mine = arrangementId === MAIN_ARRANGEMENT_ID ? {} : { arrangementId };
     const keep = new Set([...next.tracks.map((t) => t.id), ...next.scenes.map((s) => s.id)]);
     for (const x of [...before.tracks, ...before.scenes]) if (!keep.has(x.id)) this.delete(x.id);
     const writes: Goal[] = [];
@@ -668,11 +862,11 @@ export class Goals {
       return out;
     };
     for (const t of next.tracks) {
-      const base = now.get(t.id) ?? had.get(t.id) ?? ({ schema: HUB_SCHEMA, id: t.id, kind: "goal", title: t.title, acceptance: { ...DEFAULT_ACCEPTANCE }, checks: [] } as Goal);
+      const base = now.get(t.id) ?? had.get(t.id) ?? ({ schema: HUB_SCHEMA, id: t.id, kind: "goal", title: t.title, acceptance: { ...DEFAULT_ACCEPTANCE }, checks: [], ...mine } as Goal);
       writes.push({ ...strip(base), title: t.title, order: t.order, ...(t.color ? { color: t.color } : {}), ...(t.player ? { player: t.player } : {}), ...(t.mute ? { mute: true } : {}), ...(t.solo ? { solo: true } : {}), arrangement: t.arrangement, checks: checksFromArrangement(t.arrangement, base.checks) });
     }
     for (const s of next.scenes) {
-      const base = now.get(s.id) ?? had.get(s.id) ?? ({ schema: HUB_SCHEMA, id: s.id, kind: "milestone", title: s.title, acceptance: { ...DEFAULT_ACCEPTANCE }, checks: [] } as Goal);
+      const base = now.get(s.id) ?? had.get(s.id) ?? ({ schema: HUB_SCHEMA, id: s.id, kind: "milestone", title: s.title, acceptance: { ...DEFAULT_ACCEPTANCE }, checks: [], ...mine } as Goal);
       // Its tracks are its requires; what else it required (another scene) stays after them.
       const kept = requiresOf(base).filter((r) => now.get(r.goal)?.kind !== "goal" && !s.tracks.includes(r.goal));
       const requires = [...s.tracks.map((t) => requiresOf(base).find((r) => r.goal === t) ?? { goal: t }), ...kept];
@@ -835,6 +1029,7 @@ export class Goals {
       case "signoff": return `Sign-off of ${this.get(r.data!.goalId)?.title ?? r.data!.goalId}`;
       case "rules": return "Health rule";
       case "import": return "Import of QA/Goals";
+      case "arrangement": return `Arrangement ${r.data!.title}`;
     }
   }
 

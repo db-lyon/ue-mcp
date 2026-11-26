@@ -102,6 +102,24 @@ The hub arranges clips the way Ableton Live's Arrangement view does (#2113). A t
 - **Tracks** have an order, a color, a player (0, the editor's own player, by default; N for remote client N), and mute and solo. A run leaves muted tracks out, and while any track is soloed only soloed tracks play.
 - **Scenes** have an order, a color and the tracks they play, in order.
 
+### Arrangements
+
+A project holds any number of named arrangements, the way a folder holds several Ableton Live Sets. Each has its own tracks and scenes and, optionally, a level: a map that its runs open before Play In Editor starts. A run that finds the map open already starts without reloading it, and a run whose map has unsaved changes does not start; the run says why. Clips stay one library, and every arrangement's instances refer to the same clip assets.
+
+The tracks and scenes a project had before it held several arrangements are its first one, Main, whose id stays `main` when it is renamed. Duplicating an arrangement copies its tracks, scenes and instances under new ids, right after the original; the copies refer to the same clips. Deleting one deletes its tracks and scenes as `DELETE /v1/hub/goals/<id>` does, never a clip, and is refused for a project's last arrangement and while a run made in it is queued or running.
+
+Runs, the queue, schedules, history and status belong to one arrangement. A request that names none gets the first arrangement, so a client that predates them keeps working on Main.
+
+| Route | Purpose |
+|---|---|
+| `GET /v1/hub/arrangements` | Every arrangement in order, with its track and scene counts, level, status and newest run, and `default`, the one a request that names none gets |
+| `POST /v1/hub/arrangements` | `{ title, level? }`: a new, empty arrangement at the end |
+| `PUT /v1/hub/arrangements/<id>` | `{ title?, level? }`: rename it or set its level; `level: null` clears it |
+| `POST /v1/hub/arrangements/<id>/duplicate` | `{ title? }`: a copy named "<title> copy" unless one is given |
+| `DELETE /v1/hub/arrangements/<id>` | Delete it with its tracks and scenes |
+
+`GET /v1/hub/set`, `GET /v1/hub/queue` and `GET /v1/hub/runs` take `?arrangement=` (an id or exact name), `POST /v1/hub/set/edit` takes `arrangement` in its body, and the arrangement run scope takes `arrangementId`. The set answers with the `arrangement` it shows, and plans and schedules carry their `arrangementId`. A daemon that has these lists `hub.arrangements` in `/v1/health`.
+
 ### Runs
 
 A run plays in one PIE session. The daemon reads each clip and composes the timelines into one inline clip for the [clip player](pie-clips.md#playing-a-clip), each instance's lanes, events, check notes and regions offset to its start, cut to its trim and prefixed with its key (`i2.c1` on one track, `2-i2.c1` when several tracks play). Each lane drives its track's player. A step-list instance splits the run: the clips before it play, the script plays with `pie(script_run)` in the same session, and the timeline resumes at its end. A hold check holds the whole run.
@@ -110,7 +128,7 @@ A run plays in one PIE session. The daemon reads each clip and composes the time
 |---|---|---|
 | Track | One track's timeline | `kind: "track"`, target the track |
 | Scene | The scene's tracks together | `kind: "scene"`, target the scene |
-| Arrangement | Every track together | `kind: "arrangement"`, target `arrangement` |
+| Arrangement | Every track of the arrangement together | `kind: "arrangement"`, target `arrangement` for Main and the arrangement's id for the others |
 
 Each run is one record whose `arrangement` gives every instance's result at its place (`instances[]`: track, id, start and end frames, status, checks passed, and `awaiting`: each manual check waiting for a verdict as `{ check, instruction }`, where `check` is what the verdict route takes), each track's status (`tracks[]`), and the segments it played as (`segments[]`), so a client can draw the playhead at a segment's `offset` plus the `position` of its clip run's `clip.position` events. A run passes when every instance passes. A track's status comes from its track and arrangement runs, and a scene's from its scene runs; before the first one, each rolls up from its clips and tracks as before.
 
@@ -154,7 +172,7 @@ Colors are `red`, `orange`, `yellow`, `lime`, `green`, `teal`, `cyan`, `blue`, `
 
 `track delete` and `scene delete` remove the record as `DELETE /v1/hub/goals/<id>` does, its sign-off included, and are refused the same way while a run made for it is queued or running. A track's slots go with it; its clips stay.
 
-The `hub` MCP category has the same through `read_set`, `edit_set` (`ops`), `run` (`scope`: `track <t>`, `scene <s>` or `arrangement`, each optionally followed by `from <seconds>s` or `from <frame>`) and `read_run`.
+The `hub` MCP category has the same through `read_set`, `edit_set` (`ops`), `run` (`scope`: `track <t>`, `scene <s>` or `arrangement`, each optionally followed by `from <seconds>s` or `from <frame>`) and `read_run`. Each takes `arrangement`, an id or exact name, and works on the first arrangement without it; `read_set` lists every arrangement.
 
 ## Clients
 

@@ -41,6 +41,8 @@ export interface ArrangementStart {
   tracks?: Array<{ goalId: string; title: string; player: number }>;
   /** The frame the timelines played from (at 60 per second); the composition counts from there. */
   from?: number;
+  /** The map to open before Play In Editor starts, when the editor has another one open: the arrangement's level. */
+  level?: string;
 }
 
 interface Live {
@@ -114,6 +116,10 @@ export class ArrangementRunner {
       version: crypto.createHash("sha256").update(JSON.stringify(segments)).digest("hex").slice(0, 16),
     };
     live.run = this.toRun(live);
+    if (s.level) {
+      const why = await this.openLevel(s.level);
+      if (why) return { error: why };
+    }
     const first = await this.startSegment(live, 0);
     if (first) return { error: first };
     this.runs.set(runId, live);
@@ -121,6 +127,20 @@ export class ArrangementRunner {
     live.timer.unref?.();
     this.save(live);
     return { run: live.run };
+  }
+
+  /**
+   * Open the arrangement's level unless the editor has it open already. It
+   * never drops unsaved work: a map with unsaved changes refuses the switch,
+   * and the run does not start, saying why.
+   */
+  private async openLevel(level: string): Promise<string | null> {
+    const current = answerOf(await this.host.callAction("level", "get_current", {}).catch(() => null));
+    const open = typeof current?.mapPackagePath === "string" ? current.mapPackagePath : typeof current?.levelPath === "string" ? current.levelPath.replace(/\.[^/]*$/, "") : null;
+    if (open === level) return null;
+    const r = await this.host.callAction("level", "load", { levelPath: level });
+    const error = failureOf(r);
+    return error ? `the arrangement's level ${level} did not open: ${error}` : null;
   }
 
   /** Start segment n. Returns why it did not start, or null. */
