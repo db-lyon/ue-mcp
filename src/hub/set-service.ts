@@ -21,6 +21,7 @@ import {
   audibleTracks,
   blockingFindings,
   composeArrangement,
+  laneFindings,
   setOpsOf,
   setToText,
   targetKey,
@@ -129,7 +130,14 @@ export class SetService {
   private viewOf(m: SetModel, statuses: Map<string, GoalStatus>, aid: string): SetView {
     const o = this.opts();
     const findings: ArrangementFinding[] = [];
-    for (const t of m.tracks) findings.push(...validateArrangement(t.arrangement, o).map((f) => ({ ...f, id: `${t.id}/${f.id}` })));
+    for (const t of m.tracks) {
+      findings.push(...validateArrangement(t.arrangement, o).map((f) => ({ ...f, id: `${t.id}/${f.id}` })));
+      // A clip with a lane its track's performer does not take, said on the instance before any run is refused.
+      for (const i of t.arrangement.instances) {
+        const clip = i.kind === "clip" ? this.o.library.clip(i.target) : undefined;
+        if (clip) findings.push(...laneFindings(`${t.id}/${i.id}`, clip, t.performer));
+      }
+    }
     for (const s of m.scenes) findings.push(...this.compose("scene", s.id, m).composition.findings.map((f) => ({ ...f, id: `${s.id}/${f.id}` })));
     return {
       tracks: m.tracks.map((t) => ({ ...t, layout: arrangementLayout(t.arrangement, o.factsOf), status: statuses.get(t.id) ?? "not_started" })),
