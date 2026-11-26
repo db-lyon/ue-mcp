@@ -1,10 +1,10 @@
 ---
-description: "Clips as timelines on game time: input lanes, events, check notes and regions, written as data or recorded from play, then replayed and judged per region."
+description: "Clips as timelines on game time: input lanes, lanes that drive actors, events, check notes and regions, written as data or recorded from play, then replayed and judged per region."
 ---
 
 # Timeline clips
 
-A timeline clip is a test laid out on a timeline of game time instead of an ordered list of steps. Input sits on one lane per Input Action, setup and actions sit on an event lane, and what the test checks sits on a check lane as notes with a start, a length and a mode. Named regions divide the timeline, and results report against them. In the JSON and text forms a lane is a `track`.
+A timeline clip is a test laid out on a timeline of game time instead of an ordered list of steps. Input sits on one lane per Input Action, what an actor in the level does sits on move, action and value lanes, setup and actions sit on an event lane, and what the test checks sits on a check lane as notes with a start, a length and a mode. Named regions divide the timeline, and results report against them. In the JSON and text forms a lane is a `track`.
 
 People and agents edit the same clip. A person records input into it by playing; an agent writes and edits it as data through the actions on this page, plays it and adjusts it from the results. [Test scripts](pie-scripts.md) keep working as they are: a clip is a separate asset, and nothing converts one into the other.
 
@@ -23,6 +23,20 @@ A lane belongs to one Input Action and drives it for client 0, the editor's own 
 - An axis lane can also carry notes, each with a `value` held over its span. A note wins over the curve where they overlap.
 - Notes on one lane may not overlap.
 - `client` (default 0) makes the lane drive remote client N instead, through that client's remote control: the lane's value is held on the client while it is not zero, so it keeps feeding through a `hold` check. One Input Action may then have one lane per player. In the text form it is `client=N` at the end of the `track` line. The Playtest Hub's scenes use it to play several tracks for several players in one run.
+
+### Actor lanes
+
+Move, action and value lanes drive a performer: the run's own player, remote client N, or any actor in the level, named by its label, object name or path. A lane drives its own `performer` when it names one, otherwise the clip's `performer`, otherwise the run's own player. On the wire a performer is `{kind: "player", client}` or `{kind: "actor", actor}`, and in the text form `player:N` or `actor:<name>`.
+
+| Lane | Holds | During a run |
+|---|---|---|
+| `move` | `points`, each a time `t`, a location `at` and an optional `radius` in centimetres | From each point's frame the performer walks to it through its AI controller, by its navigation mesh when the level has one and straight at the point when it does not. A pawn with no controller has its default one spawned. A frame that passes two points walks to the second. |
+| `action` | `calls`, each a time `t`, a function `fn` (or `Component.Function`) and `args`, imported in order as a script's `call` imports them | Each call runs once, at its frame. |
+| `value` | a `target`, a property path (`Health`, `Stats.Stamina`) or `bb:<Key>` on the performer's AI blackboard; a `type` of `axis1d` or `bool`; and curve `keys` | The curve's value is written to the target on every frame from the first key to the last, then the lane lets go of it. |
+
+Each performer kind takes some lanes: a player takes input, action and value lanes, the last two acting on the pawn it possesses; an actor takes move, action and value lanes. A lane its performer does not take is a warning when the clip is saved and is skipped when it plays. Two move lanes for one performer, or two value lanes for one target, may not span the same frames. The run hands each lane to a driver for its performer's kind and reports each lane in `lanes[]`.
+
+The [Playtest Hub](hub.md#performers) gives a track a performer, and a clip on that track drives it.
 
 ### Events
 
@@ -80,9 +94,11 @@ A clip is JSON:
 | `start` | | `{location, rotation}`: where the player pawn is teleported before frame 0. A recording from frame 0 sets it. |
 | `reference` | | A run id whose pawn path drift is measured against. A recording sets it to its own run. |
 | `frame_times` | | Where a recording's frames landed, in frames, ascending. A fixed-timestep run takes each frame's delta from them over the range they cover, and 1/`rate` elsewhere. |
-| `takes` | | Notes and keys a recording replaced, kept as history. |
+| `performer` | the run's own player | What lanes drive when they name nothing. |
+| `lanes` | | [Actor lanes](#actor-lanes): `{id, kind: move\|action\|value, performer?, ...}`. |
+| `takes` | | Notes, keys, points, calls and curve keys a recording replaced, kept as history. |
 
-Ids are filled in where missing (`n1`, `k1`, `c1`, `e1`, `r1`, after the highest of each already used). Input Actions may be given as package paths (`/Game/Input/IA_Jump`) and are stored as object paths.
+Ids are filled in where missing (`n1`, `k1`, `c1`, `e1`, `r1`, and `l1`, `p1` and `a1` for lanes, points and calls, after the highest of each already used). Input Actions may be given as package paths (`/Game/Input/IA_Jump`) and are stored as object paths.
 
 The same clip in its compact text form, which `clip_read` returns as `text` and every action that takes a clip accepts as `text`:
 
@@ -107,7 +123,11 @@ check c2 100 0 hold speed2d lt 1
 | `region` | `region <id> <start> <end> "name"` |
 | `track` | A lane: `track <action> <bool\|axis1d\|axis2d\|axis3d>`, followed by its indented `note` and `key` lines. |
 | `note` | `note <id> <start> <length> [value]`. An axis note needs its value. |
-| `key` | `key <id> <t> <value> [linear\|constant\|cubic]` |
+| `key` | `key <id> <t> <value> [linear\|constant\|cubic]`, on an input lane or a value lane. |
+| `performer` | `performer player:N` or `performer actor:<name>`, quoted when the name holds a space. |
+| `lane` | `lane <id> move\|action [performer=...] [watch=Fn,Fn]` or `lane <id> value <target> <axis1d\|bool> [performer=...]`, followed by its indented lines. |
+| `point` | `point <id> <t> <x,y,z> [radius=N]` |
+| `call` | `call <id> <t> <function> [args]`, the arguments as a JSON array to the end of the line. |
 | `event` | `event <id> <at> {json}`, the entry as JSON to the end of the line. |
 | `check` | `check <id> <start> <length> <by_end\|throughout\|hold> <value> <op> [target] [name="..."]`, or `check <id> <start> <length> manual "question" [agent_judgeable=false]`. |
 | `recorded` | `recorded <check id> <frame> <game_ms> <value>`: how a hold resolved when the clip was recorded. |
@@ -145,12 +165,16 @@ Each finding is `{id, field, message, candidates?}`, where `id` names the note, 
 | `add` | `kind: check`, and a check's fields | A check note. |
 | `add` | `kind: event`, `at`, `do` | An event. |
 | `add` | `kind: region`, `name`, `start`, `end` | A region. |
-| `move` | `id`, `to` or `by` | Moves a note, key, check, event or region. |
+| `add` | `kind: lane`, `capability` (`move`, `action` or `value`), `performer?`, `target?` and `type?` (value), `watch?` (action) | A move, action or value lane. |
+| `add` | `kind: point`, `lane`, `time`, `at`, `radius?` | A point on a move lane. |
+| `add` | `kind: call`, `lane`, `time`, `fn`, `args?` | A call on an action lane. |
+| `add` | `kind: key`, `lane`, `time`, `value`, `interp?` | A key on a value lane. |
+| `move` | `id`, `to` or `by` | Moves a note, key, point, call, check, event or region. |
 | `trim` | `id`, `start?`, `length?` or `end?` | Changes a note's, check's or region's span. |
 | `set` | `id`, fields | Sets fields of what `id` names. On a check, `expect` fields are merged into its expectation. |
-| `delete` | `id` | Removes it. A lane is named by its action. |
-| `quantize` | `grid?`, `track?` or `ids?` | Snaps times to the grid, or to `grid` when given. A note keeps at least one grid step. |
-| `set_clip` | clip fields | `rate`, `length`, `grid`, `description`, `map`, `profile`, `fixed_timestep`, `seed`, `hold_timeout`, `reference`. |
+| `delete` | `id` | Removes it. An input lane is named by its action, any other lane by its id. |
+| `quantize` | `grid?`, `track?` or `ids?` | Snaps times to the grid, or to `grid` when given. A note keeps at least one grid step. `track` names an input lane's action or another lane's id. |
+| `set_clip` | clip fields | `rate`, `length`, `grid`, `description`, `map`, `profile`, `fixed_timestep`, `seed`, `hold_timeout`, `reference`, and `performer` (`null` clears it). |
 
 The answer has `changed` (the ids added or changed, in order), the clip as `clip` and `text`, and `warnings`. An edit that names nothing on the clip, or leaves it unsaveable, changes nothing and answers `success: false` with the finding and candidates: an id that does not exist offers the closest ids, and a note on a lane the clip does not have offers the closest lanes.
 
@@ -181,7 +205,7 @@ pie(action="clip_run", path="/Game/PIEStudio/Clips/CL_Door", start_pie=true, wai
 How a run plays:
 
 - **Frame 0** is the first frame the observer samples after PIE's first, long frame, in a run and a recording alike. The pawn is teleported to the clip's `start`, the seed applied, and the fixed timestep switched on. Where the clip has recorded `frame_times`, each frame's delta takes the run to the next recorded frame, so every frame of a replayed take lands where the recorded one did.
-- **Every frame, before the actors tick,** the position moves on by that frame's game time, the events it passed fire, and each lane's value at the position is fed to its action with `InjectInputForAction`, so the value is processed on its own frame.
+- **Every frame, before the actors tick,** the position moves on by that frame's game time, the events it passed fire, each input lane's value at the position is fed to its action with `InjectInputForAction`, so the value is processed on its own frame, and each actor lane's points, calls and values at the position go to its performer.
 - **At the end of every frame** the check notes are judged against what the observer read, and the pawn's position and velocity are written to the run's pawn path.
 - **The run finishes** once the position reaches the clip's length (or the region's end) with no check still waiting. It also ends when PIE ends, or with `clip_stop` (`reason?`), and any check still open then fails.
 
@@ -203,6 +227,7 @@ How a run plays:
 | `regions[]` | `id`, `name`, `start`, `end`, `status` (`passed`, `failed`, `pending`, `skipped` when every check in it was skipped, as outside the region a run played, or `empty`), the `checks` that start in it, from its start up to the next region's start (the last region includes its end), and with a reference `drift` (`max_position_cm`, `max_velocity_cms`, `frames_compared`, `first_over_frame`). |
 | `drift` | Against the clip's `reference` over the whole run: `compared`, `frames_compared`, `max_position_cm`, `max_velocity_cms`, `first_over_frame` (5 cm or 25 cm/s), or `error`. Frames spent standing at a hold are not compared. |
 | `events[]` | Each event fired: `id`, `frame`, `game_ms`, `ok`, `error`. |
+| `lanes[]` | Each move, action and value lane: `id`, `kind`, the `performer` it drove, `fired` (points walked to, calls made or frames written), `armed` on a recording, and `errors`, the first few distinct things that went wrong, such as an actor the level does not have. |
 | `take` | On a recording: see below. |
 
 ### Daemon events
@@ -234,13 +259,14 @@ pie(action="clip_record_stop")
 `clip_record` (`path`, `region?` or `from_check?`, `armed?`, `pie_instance?`, `client_id?`) starts PIE and plays the clip with the person's input locked out up to the punch-in, then stops feeding the armed lanes and records what the person does to them. The lanes that are not armed keep playing.
 
 - **Punch-in** is at a region's start, which also punches out at its end and ends the run there, or at a `hold` check's frame (`from_check`), which records until `clip_record_stop`. With neither, the take starts at frame 0 and runs until `clip_record_stop`. Input replayed before the punch-in does not reproduce physics, AI or random state from the middle of a region, so a punch-in anywhere else is not offered.
-- **Armed lanes** are the Input Actions in `armed`, or every action the player has a mapping for. To record a new clip, create an empty one with `clip_create` and record into it.
+- **Armed lanes** are the Input Actions and lane ids in `armed`, or every action the player has a mapping for when `armed` is empty. To record a new clip, create an empty one with `clip_create` and record into it.
+- **Actor lanes.** An armed move, action or value lane is not driven from the punch-in, and the take records what its performer actually did. A move lane becomes the route it walked: the stretches it stood still collapse to the moment it left them, corners are kept to within 25 cm, and each point is set at the frame it left the one before, so a replay sets off when the take did. A value lane becomes the values its target held, reduced with `FRichCurve`. An action lane takes the calls its actor received to the functions its calls name or its `watch` lists, with their arguments when the call carried them. A call reaches the recording through `ProcessEvent` or a Blueprint calling a native function; a Blueprint function one Blueprint graph calls inside itself does not.
 - **Comping.** The take replaces every armed lane over its range: the notes and keys there go into a new entry in `takes`, and the recording goes in their place. Takes are never mixed, since summing two takes would make input no player made.
 - **Timing.** The lead-in before the punch-in plays as `clip_run` would; from the punch-in, recording runs on variable delta time with `t.MaxFPS` pinned to the clip's rate, so the game does not slow down for the person when frames drop. Each frame's raw value is read as the engine computes it, on the frame it was played: a Boolean lane becomes notes from its edges, and an axis lane becomes a key on every frame, reduced with `FRichCurve` to within 0.0001. The frames go into `frame_times`, so a replay lands on them.
 - **Reference.** The take's run becomes the clip's `reference`, so later runs report drift against it. A take from frame 0 also sets the clip's `start` pose.
 - **Hold checks** record how they resolved, the frame, game ms and value, as `recorded`. A replay waits at that frame rather than the check's start, and reports `drift_ms` against it.
 
-`clip_record_stop` ends the take at the current frame and saves it. The answer, and `take` on the run, carries `take_id`, `punch_in`, `punch_out`, `punched_in`, `ended_at_frame`, `armed`, `samples`, `saved` and, when the clip did not save, `error`.
+`clip_record_stop` ends the take at the current frame and saves it. The answer, and `take` on the run, carries `take_id`, `punch_in`, `punch_out`, `punched_in`, `ended_at_frame`, `armed`, `armed_lanes`, `samples`, `saved` and, when the clip did not save, `error`. A recording's actor lanes appear in the clip once the take is saved; `clip.take_progress` carries input lanes only.
 
 ## How closely a take replays
 

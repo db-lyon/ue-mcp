@@ -117,7 +117,7 @@ namespace MCPPIE
 			{
 				while (i < N && FChar::IsWhitespace(Line[i])) ++i;
 				if (i >= N) break;
-				if (bJsonTail && (Line[i] == TEXT('{')))
+				if (bJsonTail && (Line[i] == TEXT('{') || Line[i] == TEXT('[')))
 				{
 					Out.Add(Line.Mid(i).TrimEnd());
 					break;
@@ -417,6 +417,15 @@ namespace MCPPIE
 			for (int32 i = 0; i < Clip.Checks.Num(); ++i) if (Clip.Checks[i].Id == Id) { OutKind = TEXT("check"); OutTrack = INDEX_NONE; OutIndex = i; return true; }
 			for (int32 i = 0; i < Clip.Events.Num(); ++i) if (Clip.Events[i].Id == Id) { OutKind = TEXT("event"); OutTrack = INDEX_NONE; OutIndex = i; return true; }
 			for (int32 i = 0; i < Clip.Regions.Num(); ++i) if (Clip.Regions[i].Id == Id) { OutKind = TEXT("region"); OutTrack = INDEX_NONE; OutIndex = i; return true; }
+			// A lane, or a point, call or key on one: OutTrack is the lane's index.
+			for (int32 l = 0; l < Clip.Lanes.Num(); ++l)
+			{
+				const FClipLane& L = Clip.Lanes[l];
+				if (L.Id == Id) { OutKind = TEXT("lane"); OutTrack = l; OutIndex = INDEX_NONE; return true; }
+				for (int32 i = 0; i < L.Points.Num(); ++i) if (L.Points[i].Id == Id) { OutKind = TEXT("point"); OutTrack = l; OutIndex = i; return true; }
+				for (int32 i = 0; i < L.Calls.Num(); ++i) if (L.Calls[i].Id == Id) { OutKind = TEXT("call"); OutTrack = l; OutIndex = i; return true; }
+				for (int32 i = 0; i < L.Keys.Num(); ++i) if (L.Keys[i].Id == Id) { OutKind = TEXT("lane_key"); OutTrack = l; OutIndex = i; return true; }
+			}
 			const FString Action = NormalizeScriptInputActionPath(Id);
 			for (int32 t = 0; t < Clip.Tracks.Num(); ++t)
 			{
@@ -436,6 +445,13 @@ namespace MCPPIE
 			for (const FClipCheck& C : Clip.Checks) Out.Add(C.Id);
 			for (const FClipEvent& E : Clip.Events) Out.Add(E.Id);
 			for (const FClipRegion& R : Clip.Regions) Out.Add(R.Id);
+			for (const FClipLane& L : Clip.Lanes)
+			{
+				Out.Add(L.Id);
+				for (const FClipMovePoint& P : L.Points) Out.Add(P.Id);
+				for (const FClipActionCall& C : L.Calls) Out.Add(C.Id);
+				for (const FClipKey& K : L.Keys) Out.Add(K.Id);
+			}
 			return Out;
 		}
 
@@ -448,6 +464,12 @@ namespace MCPPIE
 		void SortClip(FClip& Clip)
 		{
 			for (FClipTrack& T : Clip.Tracks) SortTrack(T);
+			for (FClipLane& L : Clip.Lanes)
+			{
+				L.Points.StableSort([](const FClipMovePoint& A, const FClipMovePoint& B) { return A.Time < B.Time; });
+				L.Calls.StableSort([](const FClipActionCall& A, const FClipActionCall& B) { return A.Time < B.Time; });
+				L.Keys.StableSort([](const FClipKey& A, const FClipKey& B) { return A.Time < B.Time; });
+			}
 			Clip.Checks.StableSort([](const FClipCheck& A, const FClipCheck& B) { return A.Start < B.Start; });
 			Clip.Events.StableSort([](const FClipEvent& A, const FClipEvent& B) { return A.At < B.At; });
 			Clip.Regions.StableSort([](const FClipRegion& A, const FClipRegion& B) { return A.Start < B.Start; });
@@ -462,10 +484,10 @@ namespace MCPPIE
 			return 1.0;
 		}
 
-		FRichCurve BuildCurve(const FClipTrack& T, int32 Axis)
+		FRichCurve BuildKeyCurve(const TArray<FClipKey>& Keys, int32 Axis)
 		{
 			FRichCurve Curve;
-			for (const FClipKey& K : T.Keys)
+			for (const FClipKey& K : Keys)
 			{
 				const FKeyHandle H = Curve.AddKey(static_cast<float>(K.Time), static_cast<float>(K.Value[Axis]));
 				Curve.SetKeyInterpMode(H, K.Interp == EClipInterp::Constant ? RCIM_Constant : K.Interp == EClipInterp::Cubic ? RCIM_Cubic : RCIM_Linear);
@@ -473,6 +495,206 @@ namespace MCPPIE
 			}
 			Curve.AutoSetTangents();
 			return Curve;
+		}
+
+		FRichCurve BuildCurve(const FClipTrack& T, int32 Axis) { return BuildKeyCurve(T.Keys, Axis); }
+
+		// ── Lanes (#2137) ──────────────────────────────────────────────
+
+		TSharedRef<FJsonObject> KeyToJson(const FClipKey& K, EClipValueType Type)
+		{
+			TSharedRef<FJsonObject> KO = MakeShared<FJsonObject>();
+			KO->SetStringField(TEXT("id"), K.Id);
+			KO->SetNumberField(TEXT("t"), K.Time);
+			KO->SetField(TEXT("v"), VectorToJson(K.Value, Type));
+			if (K.Interp != EClipInterp::Linear) KO->SetStringField(TEXT("interp"), ClipInterpToString(K.Interp));
+			return KO;
+		}
+
+		TSharedRef<FJsonObject> LaneToJson(const FClipLane& L)
+		{
+			TSharedRef<FJsonObject> O = MakeShared<FJsonObject>();
+			O->SetStringField(TEXT("id"), L.Id);
+			O->SetStringField(TEXT("kind"), ClipLaneCapabilityToString(L.Capability));
+			if (L.bHasPerformer) O->SetObjectField(TEXT("performer"), ClipPerformerToJson(L.Performer));
+			switch (L.Capability)
+			{
+			case EClipLaneCapability::Move:
+			{
+				TArray<TSharedPtr<FJsonValue>> Points;
+				for (const FClipMovePoint& P : L.Points)
+				{
+					TSharedRef<FJsonObject> PO = MakeShared<FJsonObject>();
+					PO->SetStringField(TEXT("id"), P.Id);
+					PO->SetNumberField(TEXT("t"), P.Time);
+					PO->SetField(TEXT("at"), VectorToJson(P.Location, EClipValueType::Axis3D));
+					if (P.Radius >= 0.0) PO->SetNumberField(TEXT("radius"), P.Radius);
+					Points.Add(MakeShared<FJsonValueObject>(PO));
+				}
+				O->SetArrayField(TEXT("points"), Points);
+				break;
+			}
+			case EClipLaneCapability::Action:
+			{
+				TArray<TSharedPtr<FJsonValue>> Calls;
+				for (const FClipActionCall& C : L.Calls)
+				{
+					TSharedRef<FJsonObject> CO = MakeShared<FJsonObject>();
+					CO->SetStringField(TEXT("id"), C.Id);
+					CO->SetNumberField(TEXT("t"), C.Time);
+					CO->SetStringField(TEXT("fn"), C.Function);
+					if (C.Args.Num() > 0) CO->SetArrayField(TEXT("args"), C.Args);
+					Calls.Add(MakeShared<FJsonValueObject>(CO));
+				}
+				O->SetArrayField(TEXT("calls"), Calls);
+				if (L.Watch.Num() > 0)
+				{
+					TArray<TSharedPtr<FJsonValue>> W;
+					for (const FString& F : L.Watch) W.Add(MakeShared<FJsonValueString>(F));
+					O->SetArrayField(TEXT("watch"), W);
+				}
+				break;
+			}
+			case EClipLaneCapability::Value:
+			{
+				O->SetStringField(TEXT("target"), L.Target);
+				O->SetStringField(TEXT("type"), ClipValueTypeToString(L.Type));
+				TArray<TSharedPtr<FJsonValue>> Keys;
+				for (const FClipKey& K : L.Keys) Keys.Add(MakeShared<FJsonValueObject>(KeyToJson(K, L.Type)));
+				O->SetArrayField(TEXT("keys"), Keys);
+				break;
+			}
+			default: break;
+			}
+			return O;
+		}
+
+		bool LaneFromJson(const TSharedPtr<FJsonObject>& O, int32 Index, FClipLane& Out, TArray<FClipIssue>& Issues)
+		{
+			const FString Where = FString::Printf(TEXT("lanes[%d]"), Index);
+			O->TryGetStringField(TEXT("id"), Out.Id);
+			const FString Id = Out.Id.IsEmpty() ? Where : Out.Id;
+			FString Kind;
+			if (!O->TryGetStringField(TEXT("kind"), Kind) || !ParseClipLaneCapability(Kind, Out.Capability) || Out.Capability == EClipLaneCapability::Input)
+			{
+				FClipIssue I = MakeIssue(Id, TEXT("kind"), FString::Printf(TEXT("%s.kind '%s' is not move, action or value (Input Action lanes go in tracks)"), *Where, *Kind), true);
+				I.Candidates = { TEXT("move"), TEXT("action"), TEXT("value") };
+				Issues.Add(I);
+				return false;
+			}
+			bool bOk = true;
+			const TSharedPtr<FJsonValue> Perf = O->TryGetField(TEXT("performer"));
+			if (Perf.IsValid() && Perf->Type != EJson::Null)
+			{
+				FString Err;
+				if (ClipPerformerFromJson(Perf, Out.Performer, Err)) Out.bHasPerformer = true;
+				else { Issues.Add(MakeIssue(Id, TEXT("performer"), FString::Printf(TEXT("%s.performer: %s"), *Where, *Err), true)); bOk = false; }
+			}
+			const TArray<TSharedPtr<FJsonValue>>* Arr = nullptr;
+			if (Out.Capability == EClipLaneCapability::Move && O->TryGetArrayField(TEXT("points"), Arr) && Arr)
+			{
+				for (int32 i = 0; i < Arr->Num(); ++i)
+				{
+					const TSharedPtr<FJsonObject>* PO = nullptr;
+					FClipMovePoint P;
+					int32 Dims = 0;
+					if (!(*Arr)[i]->TryGetObject(PO) || !PO || !(*PO)->TryGetNumberField(TEXT("t"), P.Time) || !VectorFromJson((*PO)->TryGetField(TEXT("at")), P.Location, Dims) || Dims != 3)
+					{
+						Issues.Add(MakeIssue(Id, FString::Printf(TEXT("points[%d]"), i), FString::Printf(TEXT("%s.points[%d] needs t (frames) and at [x, y, z]"), *Where, i), true));
+						bOk = false;
+						continue;
+					}
+					(*PO)->TryGetStringField(TEXT("id"), P.Id);
+					(*PO)->TryGetNumberField(TEXT("radius"), P.Radius);
+					Out.Points.Add(P);
+				}
+			}
+			if (Out.Capability == EClipLaneCapability::Action)
+			{
+				if (O->TryGetArrayField(TEXT("calls"), Arr) && Arr)
+				{
+					for (int32 i = 0; i < Arr->Num(); ++i)
+					{
+						const TSharedPtr<FJsonObject>* CO = nullptr;
+						FClipActionCall C;
+						if (!(*Arr)[i]->TryGetObject(CO) || !CO || !(*CO)->TryGetNumberField(TEXT("t"), C.Time) || !(*CO)->TryGetStringField(TEXT("fn"), C.Function))
+						{
+							Issues.Add(MakeIssue(Id, FString::Printf(TEXT("calls[%d]"), i), FString::Printf(TEXT("%s.calls[%d] needs t (frames) and fn (the function)"), *Where, i), true));
+							bOk = false;
+							continue;
+						}
+						(*CO)->TryGetStringField(TEXT("id"), C.Id);
+						const TArray<TSharedPtr<FJsonValue>>* Args = nullptr;
+						if ((*CO)->TryGetArrayField(TEXT("args"), Args) && Args) C.Args = *Args;
+						Out.Calls.Add(C);
+					}
+				}
+				if (O->TryGetArrayField(TEXT("watch"), Arr) && Arr)
+				{
+					for (const TSharedPtr<FJsonValue>& V : *Arr) if (V.IsValid() && V->Type == EJson::String) Out.Watch.AddUnique(V->AsString());
+				}
+			}
+			if (Out.Capability == EClipLaneCapability::Value)
+			{
+				if (!O->TryGetStringField(TEXT("target"), Out.Target) || Out.Target.TrimStartAndEnd().IsEmpty())
+				{
+					Issues.Add(MakeIssue(Id, TEXT("target"), FString::Printf(TEXT("%s.target is required: a property path on the performer, or bb:<Key> on its blackboard"), *Where), true));
+					bOk = false;
+				}
+				FString Type;
+				if (O->TryGetStringField(TEXT("type"), Type) && (!ParseClipValueType(Type, Out.Type) || (Out.Type != EClipValueType::Axis1D && Out.Type != EClipValueType::Bool)))
+				{
+					FClipIssue I = MakeIssue(Id, TEXT("type"), FString::Printf(TEXT("%s.type '%s' is not axis1d or bool"), *Where, *Type), true);
+					I.Candidates = { TEXT("axis1d"), TEXT("bool") };
+					Issues.Add(I);
+					bOk = false;
+				}
+				if (O->TryGetArrayField(TEXT("keys"), Arr) && Arr)
+				{
+					for (int32 i = 0; i < Arr->Num(); ++i)
+					{
+						const TSharedPtr<FJsonObject>* KO = nullptr;
+						FClipKey K;
+						int32 Dims = 0;
+						if (!(*Arr)[i]->TryGetObject(KO) || !KO || !(*KO)->TryGetNumberField(TEXT("t"), K.Time) || !VectorFromJson((*KO)->TryGetField(TEXT("v")), K.Value, Dims))
+						{
+							Issues.Add(MakeIssue(Id, FString::Printf(TEXT("keys[%d]"), i), FString::Printf(TEXT("%s.keys[%d] needs t (frames) and v (the value)"), *Where, i), true));
+							bOk = false;
+							continue;
+						}
+						(*KO)->TryGetStringField(TEXT("id"), K.Id);
+						FString Interp;
+						if ((*KO)->TryGetStringField(TEXT("interp"), Interp) && !ParseClipInterp(Interp, K.Interp))
+						{
+							Issues.Add(MakeIssue(K.Id.IsEmpty() ? Id : K.Id, TEXT("interp"), FString::Printf(TEXT("%s.keys[%d].interp '%s' is unknown (linear, constant, cubic)"), *Where, i, *Interp), true));
+							bOk = false;
+						}
+						Out.Keys.Add(K);
+					}
+				}
+			}
+			return bOk;
+		}
+
+		FString ArgsToCondensed(const TArray<TSharedPtr<FJsonValue>>& Args)
+		{
+			FString Out;
+			TSharedRef<TJsonWriter<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>> W = TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&Out);
+			FJsonSerializer::Serialize(Args, W);
+			return Out;
+		}
+
+		// A lane's span in frames: its first and last point, call or key. False when it is empty.
+		bool LaneSpan(const FClipLane& L, double& OutFrom, double& OutTo)
+		{
+			TArray<double> T;
+			for (const FClipMovePoint& P : L.Points) T.Add(P.Time);
+			for (const FClipActionCall& C : L.Calls) T.Add(C.Time);
+			for (const FClipKey& K : L.Keys) T.Add(K.Time);
+			if (T.Num() == 0) return false;
+			OutFrom = FMath::Min(T);
+			OutTo = FMath::Max(T);
+			return true;
 		}
 	}
 
@@ -512,6 +734,137 @@ namespace MCPPIE
 	}
 	FString ClipCheckStatusToString(EClipCheckStatus Status) { return ClipCheckStatusNames[static_cast<int32>(Status)]; }
 
+	// ── Performers ─────────────────────────────────────────────────────
+
+	namespace
+	{
+		const TCHAR* const ClipLaneCapabilityNames[] = { TEXT("input"), TEXT("move"), TEXT("action"), TEXT("value") };
+		const TCHAR* const ClipPerformerKindNames[] = { TEXT("player"), TEXT("actor") };
+		constexpr int32 kClipPerformerClientMax = 15;
+	}
+
+	FString ClipLaneCapabilityToString(EClipLaneCapability Capability) { return ClipLaneCapabilityNames[static_cast<int32>(Capability)]; }
+	bool ParseClipLaneCapability(const FString& Str, EClipLaneCapability& Out)
+	{
+		const FString S = Str.TrimStartAndEnd().ToLower();
+		for (int32 i = 0; i < 4; ++i) if (S == ClipLaneCapabilityNames[i]) { Out = static_cast<EClipLaneCapability>(i); return true; }
+		return false;
+	}
+	FString ClipPerformerKindToString(EClipPerformerKind Kind) { return ClipPerformerKindNames[static_cast<int32>(Kind)]; }
+
+	FString FClipPerformer::Key() const
+	{
+		return Kind == EClipPerformerKind::Player ? FString::Printf(TEXT("player:%d"), Client) : TEXT("actor:") + Actor.ToLower();
+	}
+
+	FString FClipPerformer::ToText() const
+	{
+		if (Kind == EClipPerformerKind::Player) return FString::Printf(TEXT("player:%d"), Client);
+		return Actor.Contains(TEXT(" ")) || Actor.Contains(TEXT("\"")) ? TEXT("actor:") + QuoteText(Actor) : TEXT("actor:") + Actor;
+	}
+
+	FString FClipPerformer::Label() const
+	{
+		if (Kind == EClipPerformerKind::Actor) return Actor;
+		return Client == 0 ? FString(TEXT("the run's own player")) : FString::Printf(TEXT("client %d"), Client);
+	}
+
+	TArray<EClipLaneCapability> ClipPerformerCapabilities(EClipPerformerKind Kind)
+	{
+		if (Kind == EClipPerformerKind::Actor) return { EClipLaneCapability::Move, EClipLaneCapability::Action, EClipLaneCapability::Value };
+		return { EClipLaneCapability::Input, EClipLaneCapability::Action, EClipLaneCapability::Value };
+	}
+
+	bool ClipPerformerAccepts(EClipPerformerKind Kind, EClipLaneCapability Capability)
+	{
+		return ClipPerformerCapabilities(Kind).Contains(Capability);
+	}
+
+	bool ClipPerformerFromJson(const TSharedPtr<FJsonValue>& Value, FClipPerformer& Out, FString& OutError)
+	{
+		if (Value.IsValid() && Value->Type == EJson::String)
+		{
+			if (ClipPerformerFromText(Value->AsString(), Out)) return true;
+			OutError = FString::Printf(TEXT("'%s' is not a performer: player:N or actor:<label, name or path>"), *Value->AsString());
+			return false;
+		}
+		const TSharedPtr<FJsonObject>* O = nullptr;
+		if (!Value.IsValid() || !Value->TryGetObject(O) || !O)
+		{
+			OutError = TEXT("a performer is {kind: player, client} or {kind: actor, actor}");
+			return false;
+		}
+		FString Kind;
+		(*O)->TryGetStringField(TEXT("kind"), Kind);
+		if (Kind == TEXT("player"))
+		{
+			double Client = 0.0;
+			(*O)->TryGetNumberField(TEXT("client"), Client);
+			if (Client < 0.0 || Client > kClipPerformerClientMax || Client != FMath::FloorToDouble(Client))
+			{
+				OutError = FString::Printf(TEXT("a player performer's client is 0 (the run's own player) or a remote client from 1 to %d"), kClipPerformerClientMax);
+				return false;
+			}
+			Out = FClipPerformer::Player(static_cast<int32>(Client));
+			return true;
+		}
+		if (Kind == TEXT("actor"))
+		{
+			FString Actor;
+			(*O)->TryGetStringField(TEXT("actor"), Actor);
+			Actor.TrimStartAndEndInline();
+			if (Actor.IsEmpty())
+			{
+				OutError = TEXT("an actor performer names the actor: its label, object name or path");
+				return false;
+			}
+			Out = FClipPerformer::ForActor(Actor.Left(200));
+			return true;
+		}
+		OutError = FString::Printf(TEXT("performer kind '%s' is not player or actor"), *Kind);
+		return false;
+	}
+
+	TSharedRef<FJsonObject> ClipPerformerToJson(const FClipPerformer& Performer)
+	{
+		TSharedRef<FJsonObject> O = MakeShared<FJsonObject>();
+		O->SetStringField(TEXT("kind"), ClipPerformerKindToString(Performer.Kind));
+		if (Performer.Kind == EClipPerformerKind::Player) O->SetNumberField(TEXT("client"), Performer.Client);
+		else O->SetStringField(TEXT("actor"), Performer.Actor);
+		return O;
+	}
+
+	bool ClipPerformerFromText(const FString& Text, FClipPerformer& Out)
+	{
+		const FString T = Text.TrimStartAndEnd();
+		if (T.IsNumeric())
+		{
+			const int32 C = FCString::Atoi(*T);
+			if (C < 0 || C > kClipPerformerClientMax) return false;
+			Out = FClipPerformer::Player(C);
+			return true;
+		}
+		FString Kind, Rest;
+		if (!T.Split(TEXT(":"), &Kind, &Rest)) return false;
+		Kind = Kind.ToLower();
+		if (Kind == TEXT("player") && Rest.IsNumeric())
+		{
+			const int32 C = FCString::Atoi(*Rest);
+			if (C < 0 || C > kClipPerformerClientMax) return false;
+			Out = FClipPerformer::Player(C);
+			return true;
+		}
+		if (Kind == TEXT("actor"))
+		{
+			Rest.TrimStartAndEndInline();
+			if (Rest.Len() >= 2 && Rest.StartsWith(TEXT("\"")) && Rest.EndsWith(TEXT("\""))) Rest = Rest.Mid(1, Rest.Len() - 2);
+			if (Rest.IsEmpty()) return false;
+			Out = FClipPerformer::ForActor(Rest.Left(200));
+			return true;
+		}
+		return false;
+	}
+
 	// ── Clip ───────────────────────────────────────────────────────────
 
 	double FClip::EffectiveLength() const
@@ -526,7 +879,28 @@ namespace MCPPIE
 		for (const FClipCheck& C : Checks) End = FMath::Max(End, C.Mode == EClipCheckMode::Hold ? C.Start : C.End());
 		for (const FClipEvent& E : Events) End = FMath::Max(End, E.At);
 		for (const FClipRegion& R : Regions) End = FMath::Max(End, R.End);
+		for (const FClipLane& L : Lanes)
+		{
+			double From = 0.0, To = 0.0;
+			if (LaneSpan(L, From, To)) End = FMath::Max(End, To);
+		}
 		return End;
+	}
+
+	FClipLane* FClip::FindLane(const FString& Id)
+	{
+		return Lanes.FindByPredicate([&Id](const FClipLane& L) { return L.Id == Id; });
+	}
+
+	const FClipLane* FClip::FindLane(const FString& Id) const
+	{
+		return const_cast<FClip*>(this)->FindLane(Id);
+	}
+
+	FClipPerformer FClip::LanePerformer(const FClipLane& Lane) const
+	{
+		if (Lane.bHasPerformer) return Lane.Performer;
+		return bHasPerformer ? Performer : FClipPerformer::Player(0);
 	}
 
 	double FClip::NextFrameDelta(double Position) const
@@ -679,6 +1053,27 @@ namespace MCPPIE
 				if (!T.Action.IsEmpty()) Out.Tracks.Add(MoveTemp(T));
 			}
 		}
+		const TSharedPtr<FJsonValue> Perf = Obj->TryGetField(TEXT("performer"));
+		if (Perf.IsValid() && Perf->Type != EJson::Null)
+		{
+			FString Err;
+			if (ClipPerformerFromJson(Perf, Out.Performer, Err)) Out.bHasPerformer = true;
+			else OutIssues.Add(MakeIssue(FString(), TEXT("performer"), FString::Printf(TEXT("performer: %s"), *Err), true));
+		}
+		if (Obj->TryGetArrayField(TEXT("lanes"), Arr) && Arr)
+		{
+			for (int32 i = 0; i < Arr->Num(); ++i)
+			{
+				const TSharedPtr<FJsonObject>* LO = nullptr;
+				if (!(*Arr)[i]->TryGetObject(LO) || !LO)
+				{
+					OutIssues.Add(MakeIssue(FString::Printf(TEXT("lanes[%d]"), i), FString(), FString::Printf(TEXT("lanes[%d] must be an object {id, kind, ...}"), i), true));
+					continue;
+				}
+				FClipLane L;
+				if (LaneFromJson(*LO, i, L, OutIssues)) Out.Lanes.Add(MoveTemp(L));
+			}
+		}
 		if (Obj->TryGetArrayField(TEXT("events"), Arr) && Arr)
 		{
 			for (int32 i = 0; i < Arr->Num(); ++i)
@@ -732,6 +1127,17 @@ namespace MCPPIE
 						if ((*Tracks)[i]->TryGetObject(TrO) && TrO && TrackFromJson(*TrO, i, T, Ignored)) Take.Tracks.Add(MoveTemp(T));
 					}
 				}
+				const TArray<TSharedPtr<FJsonValue>>* Lanes = nullptr;
+				if ((*TO)->TryGetArrayField(TEXT("lanes"), Lanes) && Lanes)
+				{
+					TArray<FClipIssue> Ignored;
+					for (int32 i = 0; i < Lanes->Num(); ++i)
+					{
+						const TSharedPtr<FJsonObject>* LO = nullptr;
+						FClipLane L;
+						if ((*Lanes)[i]->TryGetObject(LO) && LO && LaneFromJson(*LO, i, L, Ignored)) Take.Lanes.Add(MoveTemp(L));
+					}
+				}
 				Out.Takes.Add(MoveTemp(Take));
 			}
 		}
@@ -782,6 +1188,13 @@ namespace MCPPIE
 		TArray<TSharedPtr<FJsonValue>> Tracks;
 		for (const FClipTrack& T : Clip.Tracks) Tracks.Add(MakeShared<FJsonValueObject>(TrackToJson(T)));
 		O->SetArrayField(TEXT("tracks"), Tracks);
+		if (Clip.bHasPerformer) O->SetObjectField(TEXT("performer"), ClipPerformerToJson(Clip.Performer));
+		if (Clip.Lanes.Num() > 0)
+		{
+			TArray<TSharedPtr<FJsonValue>> Lanes;
+			for (const FClipLane& L : Clip.Lanes) Lanes.Add(MakeShared<FJsonValueObject>(LaneToJson(L)));
+			O->SetArrayField(TEXT("lanes"), Lanes);
+		}
 		TArray<TSharedPtr<FJsonValue>> Events;
 		for (const FClipEvent& E : Clip.Events)
 		{
@@ -806,6 +1219,12 @@ namespace MCPPIE
 			TArray<TSharedPtr<FJsonValue>> TT;
 			for (const FClipTrack& T : Take.Tracks) TT.Add(MakeShared<FJsonValueObject>(TrackToJson(T)));
 			TO->SetArrayField(TEXT("tracks"), TT);
+			if (Take.Lanes.Num() > 0)
+			{
+				TArray<TSharedPtr<FJsonValue>> TL;
+				for (const FClipLane& L : Take.Lanes) TL.Add(MakeShared<FJsonValueObject>(LaneToJson(L)));
+				TO->SetArrayField(TEXT("lanes"), TL);
+			}
 			Takes.Add(MakeShared<FJsonValueObject>(TO));
 		}
 		O->SetArrayField(TEXT("takes"), Takes);
@@ -856,6 +1275,36 @@ namespace MCPPIE
 				L.Add(Line);
 			}
 		}
+		if (Clip.bHasPerformer) L.Add(TEXT("performer ") + Clip.Performer.ToText());
+		for (const FClipLane& Lane : Clip.Lanes)
+		{
+			FString Head = FString::Printf(TEXT("lane %s %s"), *Lane.Id, *ClipLaneCapabilityToString(Lane.Capability));
+			if (Lane.Capability == EClipLaneCapability::Value)
+			{
+				Head += TEXT(" ") + (Lane.Target.Contains(TEXT(" ")) ? QuoteText(Lane.Target) : Lane.Target) + TEXT(" ") + ClipValueTypeToString(Lane.Type);
+			}
+			if (Lane.bHasPerformer) Head += TEXT(" performer=") + Lane.Performer.ToText();
+			if (Lane.Watch.Num() > 0) Head += TEXT(" watch=") + FString::Join(Lane.Watch, TEXT(","));
+			L.Add(Head);
+			for (const FClipMovePoint& P : Lane.Points)
+			{
+				FString Line = FString::Printf(TEXT("  point %s %s %s"), *P.Id, *FormatNumber(P.Time), *VectorToText(P.Location, EClipValueType::Axis3D));
+				if (P.Radius >= 0.0) Line += TEXT(" radius=") + FormatNumber(P.Radius);
+				L.Add(Line);
+			}
+			for (const FClipActionCall& C : Lane.Calls)
+			{
+				FString Line = FString::Printf(TEXT("  call %s %s %s"), *C.Id, *FormatNumber(C.Time), *C.Function);
+				if (C.Args.Num() > 0) Line += TEXT(" ") + ArgsToCondensed(C.Args);
+				L.Add(Line);
+			}
+			for (const FClipKey& K : Lane.Keys)
+			{
+				FString Line = FString::Printf(TEXT("  key %s %s %s"), *K.Id, *FormatNumber(K.Time), *VectorToText(K.Value, Lane.Type));
+				if (K.Interp != EClipInterp::Linear) Line += TEXT(" ") + ClipInterpToString(K.Interp);
+				L.Add(Line);
+			}
+		}
 		for (const FClipEvent& E : Clip.Events)
 		{
 			L.Add(FString::Printf(TEXT("event %s %s %s"), *E.Id, *FormatNumber(E.At), *JsonObjectToCondensed(E.Do)));
@@ -900,6 +1349,7 @@ namespace MCPPIE
 		TArray<FString> Lines;
 		Text.ParseIntoArrayLines(Lines, false);
 		FClipTrack* Current = nullptr;
+		FClipLane* CurrentLane = nullptr;
 		auto LineIssue = [&OutIssues](int32 LineNo, const FString& Field, const FString& Msg)
 		{
 			OutIssues.Add(MakeIssue(FString::Printf(TEXT("line %d"), LineNo), Field, FString::Printf(TEXT("line %d: %s"), LineNo, *Msg), true));
@@ -913,8 +1363,78 @@ namespace MCPPIE
 			const FString Trimmed = Raw.TrimStartAndEnd();
 			if (Trimmed.IsEmpty() || Trimmed.StartsWith(TEXT("#"))) continue;
 			const bool bIndented = FChar::IsWhitespace(Raw[0]);
-			const TArray<FString> T = TokenizeClipLine(Trimmed, Trimmed.StartsWith(TEXT("event ")));
+			const TArray<FString> T = TokenizeClipLine(Trimmed, Trimmed.StartsWith(TEXT("event ")) || Trimmed.StartsWith(TEXT("call ")));
 			const FString Word = T[0].ToLower();
+
+			if (bIndented && CurrentLane && (Word == TEXT("point") || Word == TEXT("call") || Word == TEXT("key")))
+			{
+				FClipLane& Lane = *CurrentLane;
+				const EClipLaneCapability Want = Word == TEXT("point") ? EClipLaneCapability::Move : Word == TEXT("call") ? EClipLaneCapability::Action : EClipLaneCapability::Value;
+				if (Lane.Capability != Want)
+				{
+					LineIssue(LineNo, Word, FString::Printf(TEXT("a %s goes on a %s lane, and lane %s is a %s lane"), *Word, *ClipLaneCapabilityToString(Want), *Lane.Id, *ClipLaneCapabilityToString(Lane.Capability)));
+					continue;
+				}
+				if (Word == TEXT("point"))
+				{
+					FClipMovePoint P;
+					int32 Dims = 0;
+					if (T.Num() < 4 || !ParseFrames(T[2], P.Time) || !VectorFromText(T[3], P.Location, Dims) || Dims != 3)
+					{
+						LineIssue(LineNo, TEXT("point"), TEXT("expected: point <id> <time> <x,y,z> [radius=N]"));
+						continue;
+					}
+					P.Id = T[1] == TEXT("-") ? FString() : T[1];
+					for (int32 j = 4; j < T.Num(); ++j)
+					{
+						FString K, V;
+						if (KeyValue(T[j], K, V) && K == TEXT("radius") && V.IsNumeric()) P.Radius = FCString::Atod(*V);
+						else LineIssue(LineNo, T[j], FString::Printf(TEXT("'%s' is not radius=N"), *T[j]));
+					}
+					Lane.Points.Add(P);
+				}
+				else if (Word == TEXT("call"))
+				{
+					FClipActionCall C;
+					if (T.Num() < 4 || !ParseFrames(T[2], C.Time))
+					{
+						LineIssue(LineNo, TEXT("call"), TEXT("expected: call <id> <time> <function> [[args as JSON]]"));
+						continue;
+					}
+					C.Id = T[1] == TEXT("-") ? FString() : T[1];
+					C.Function = T[3];
+					if (T.Num() >= 5)
+					{
+						TArray<TSharedPtr<FJsonValue>> Args;
+						TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(T[4]);
+						if (!FJsonSerializer::Deserialize(Reader, Args))
+						{
+							LineIssue(LineNo, TEXT("args"), TEXT("the call's arguments are not a JSON array"));
+							continue;
+						}
+						C.Args = Args;
+					}
+					Lane.Calls.Add(C);
+				}
+				else
+				{
+					FClipKey K;
+					int32 Dims = 0;
+					if (T.Num() < 4 || !ParseFrames(T[2], K.Time) || !VectorFromText(T[3], K.Value, Dims))
+					{
+						LineIssue(LineNo, TEXT("key"), TEXT("expected: key <id> <time> <value> [linear|constant|cubic]"));
+						continue;
+					}
+					K.Id = T[1] == TEXT("-") ? FString() : T[1];
+					if (T.Num() >= 5 && !ParseClipInterp(T[4], K.Interp))
+					{
+						LineIssue(LineNo, TEXT("interp"), FString::Printf(TEXT("'%s' is not linear, constant or cubic"), *T[4]));
+						continue;
+					}
+					Lane.Keys.Add(K);
+				}
+				continue;
+			}
 
 			if (bIndented && (Word == TEXT("note") || Word == TEXT("key")))
 			{
@@ -963,6 +1483,7 @@ namespace MCPPIE
 				continue;
 			}
 			Current = nullptr;
+			CurrentLane = nullptr;
 
 			if (Word == TEXT("clip"))
 			{
@@ -1032,6 +1553,49 @@ namespace MCPPIE
 				}
 				Out.Tracks.Add(Tr);
 				Current = &Out.Tracks.Last();
+			}
+			else if (Word == TEXT("performer"))
+			{
+				if (T.Num() < 2 || !ClipPerformerFromText(T[1], Out.Performer))
+				{
+					LineIssue(LineNo, TEXT("performer"), TEXT("expected: performer player:N | actor:<label, name or path>"));
+					continue;
+				}
+				Out.bHasPerformer = true;
+			}
+			else if (Word == TEXT("lane"))
+			{
+				FClipLane Lane;
+				if (T.Num() < 3 || !ParseClipLaneCapability(T[2], Lane.Capability) || Lane.Capability == EClipLaneCapability::Input)
+				{
+					FClipIssue Issue = MakeIssue(FString::Printf(TEXT("line %d"), LineNo), TEXT("lane"), FString::Printf(TEXT("line %d: expected: lane <id> move|action|value ... (Input Action lanes are track lines)"), LineNo), true);
+					Issue.Candidates = { TEXT("move"), TEXT("action"), TEXT("value") };
+					OutIssues.Add(Issue);
+					continue;
+				}
+				Lane.Id = T[1] == TEXT("-") ? FString() : T[1];
+				int32 j = 3;
+				if (Lane.Capability == EClipLaneCapability::Value)
+				{
+					if (T.Num() < 5 || !ParseClipValueType(T[4], Lane.Type) || (Lane.Type != EClipValueType::Axis1D && Lane.Type != EClipValueType::Bool))
+					{
+						LineIssue(LineNo, TEXT("lane"), TEXT("expected: lane <id> value <property path | bb:Key> <axis1d|bool> [performer=...]"));
+						continue;
+					}
+					Lane.Target = T[3];
+					j = 5;
+				}
+				bool bBad = false;
+				for (; j < T.Num(); ++j)
+				{
+					FString K, V;
+					if (KeyValue(T[j], K, V) && K == TEXT("performer") && ClipPerformerFromText(V, Lane.Performer)) Lane.bHasPerformer = true;
+					else if (KeyValue(T[j], K, V) && K == TEXT("watch") && Lane.Capability == EClipLaneCapability::Action) V.ParseIntoArray(Lane.Watch, TEXT(","), true);
+					else { LineIssue(LineNo, T[j], FString::Printf(TEXT("'%s' is not performer=player:N|actor:<name>%s"), *T[j], Lane.Capability == EClipLaneCapability::Action ? TEXT(" or watch=Fn,Fn") : TEXT(""))); bBad = true; }
+				}
+				if (bBad) continue;
+				Out.Lanes.Add(MoveTemp(Lane));
+				CurrentLane = &Out.Lanes.Last();
 			}
 			else if (Word == TEXT("event"))
 			{
@@ -1133,7 +1697,7 @@ namespace MCPPIE
 			else
 			{
 				FClipIssue Issue = MakeIssue(FString::Printf(TEXT("line %d"), LineNo), Word, FString::Printf(TEXT("line %d: '%s' is not a clip line"), LineNo, *T[0]), true);
-				Issue.Candidates = RankScriptCandidates(Word, { TEXT("clip"), TEXT("map"), TEXT("profile"), TEXT("description"), TEXT("start"), TEXT("reference"), TEXT("timing"), TEXT("region"), TEXT("track"), TEXT("note"), TEXT("key"), TEXT("event"), TEXT("check"), TEXT("recorded") }, 3);
+				Issue.Candidates = RankScriptCandidates(Word, { TEXT("clip"), TEXT("map"), TEXT("profile"), TEXT("description"), TEXT("start"), TEXT("reference"), TEXT("timing"), TEXT("region"), TEXT("track"), TEXT("note"), TEXT("key"), TEXT("performer"), TEXT("lane"), TEXT("point"), TEXT("call"), TEXT("event"), TEXT("check"), TEXT("recorded") }, 3);
 				OutIssues.Add(Issue);
 			}
 		}
@@ -1163,6 +1727,13 @@ namespace MCPPIE
 		{
 			for (FClipNote& N : T.Notes) if (N.Id.IsEmpty()) N.Id = Next(TEXT("n"));
 			for (FClipKey& K : T.Keys) if (K.Id.IsEmpty()) K.Id = Next(TEXT("k"));
+		}
+		for (FClipLane& L : Clip.Lanes)
+		{
+			if (L.Id.IsEmpty()) L.Id = Next(TEXT("l"));
+			for (FClipMovePoint& P : L.Points) if (P.Id.IsEmpty()) P.Id = Next(TEXT("p"));
+			for (FClipActionCall& C : L.Calls) if (C.Id.IsEmpty()) C.Id = Next(TEXT("a"));
+			for (FClipKey& K : L.Keys) if (K.Id.IsEmpty()) K.Id = Next(TEXT("k"));
 		}
 		for (FClipCheck& C : Clip.Checks) if (C.Id.IsEmpty()) C.Id = Next(TEXT("c"));
 		for (FClipEvent& E : Clip.Events) if (E.Id.IsEmpty()) E.Id = Next(TEXT("e"));
@@ -1295,6 +1866,65 @@ namespace MCPPIE
 			}
 		}
 
+		// Lanes (#2137): their times and shapes, and each against the performer it drives.
+		TMap<FString, TArray<TPair<double, double>>> MovedOrValued;
+		for (const FClipLane& Lane : Clip.Lanes)
+		{
+			const FClipPerformer P = Clip.LanePerformer(Lane);
+			if (!ClipPerformerAccepts(P.Kind, Lane.Capability))
+			{
+				TArray<FString> Takes;
+				for (EClipLaneCapability C : ClipPerformerCapabilities(P.Kind)) Takes.Add(ClipLaneCapabilityToString(C));
+				FClipIssue I = MakeIssue(Lane.Id, TEXT("performer"), FString::Printf(TEXT("lane %s is a %s lane, and %s takes %s lanes; a run skips it"),
+					*Lane.Id, *ClipLaneCapabilityToString(Lane.Capability), *P.Label(), *FString::Join(Takes, TEXT(", "))), false);
+				I.Candidates = Takes;
+				OutIssues.Add(I);
+			}
+			// Two move lanes for one performer, or two value lanes for one target, would fight over it while both span
+			// the same frames. One after the other is fine: that is how a track's instances compose.
+			const FString Owner = Lane.Capability == EClipLaneCapability::Move ? P.Key() + TEXT("|move")
+				: Lane.Capability == EClipLaneCapability::Value ? P.Key() + TEXT("|") + Lane.Target : FString();
+			double From = 0.0, To = 0.0;
+			if (!Owner.IsEmpty() && LaneSpan(Lane, From, To))
+			{
+				TArray<TPair<double, double>>& Spans = MovedOrValued.FindOrAdd(Owner);
+				if (Spans.ContainsByPredicate([From, To](const TPair<double, double>& S) { return From <= S.Value + 1e-6 && S.Key <= To + 1e-6; }))
+				{
+					OutIssues.Add(MakeIssue(Lane.Id, Lane.Capability == EClipLaneCapability::Move ? TEXT("kind") : TEXT("target"), Lane.Capability == EClipLaneCapability::Move
+						? FString::Printf(TEXT("lane %s moves %s over frames another move lane does; one move lane drives a performer at a time"), *Lane.Id, *P.Label())
+						: FString::Printf(TEXT("lane %s drives %s on %s over frames another value lane does; one value lane drives a target at a time"), *Lane.Id, *Lane.Target, *P.Label()), true));
+				}
+				Spans.Add(TPair<double, double>(From, To));
+			}
+			auto Times = [&](const FString& Id, double T, double Prev, bool bHasPrev, const TCHAR* What)
+			{
+				if (T < 0.0) OutIssues.Add(MakeIssue(Id, TEXT("t"), FString::Printf(TEXT("%s %s is before frame 0"), What, *Id), true));
+				if (bHasPrev && FMath::IsNearlyEqual(T, Prev, 1e-6)) OutIssues.Add(MakeIssue(Id, TEXT("t"), FString::Printf(TEXT("%s %s is on frame %s with the one before it on lane %s"), What, *Id, *FormatNumber(T), *Lane.Id), Lane.Capability == EClipLaneCapability::Value));
+				Past(Id, TEXT("t"), T);
+			};
+			for (int32 i = 0; i < Lane.Points.Num(); ++i)
+			{
+				const FClipMovePoint& Pt = Lane.Points[i];
+				Times(Pt.Id, Pt.Time, i > 0 ? Lane.Points[i - 1].Time : 0.0, i > 0, TEXT("point"));
+				if (Pt.Radius >= 0.0 && Pt.Radius < 1.0) OutIssues.Add(MakeIssue(Pt.Id, TEXT("radius"), FString::Printf(TEXT("point %s's radius %s cm is too small to arrive within"), *Pt.Id, *FormatNumber(Pt.Radius)), false));
+			}
+			for (int32 i = 0; i < Lane.Calls.Num(); ++i)
+			{
+				const FClipActionCall& C = Lane.Calls[i];
+				if (C.Time < 0.0) OutIssues.Add(MakeIssue(C.Id, TEXT("t"), FString::Printf(TEXT("call %s is before frame 0"), *C.Id), true));
+				Past(C.Id, TEXT("t"), C.Time);
+				if (C.Function.TrimStartAndEnd().IsEmpty()) OutIssues.Add(MakeIssue(C.Id, TEXT("fn"), FString::Printf(TEXT("call %s names no function"), *C.Id), true));
+			}
+			for (int32 i = 0; i < Lane.Keys.Num(); ++i) Times(Lane.Keys[i].Id, Lane.Keys[i].Time, i > 0 ? Lane.Keys[i - 1].Time : 0.0, i > 0, TEXT("key"));
+			if (Lane.Capability == EClipLaneCapability::Value && Lane.Target.TrimStartAndEnd().IsEmpty())
+			{
+				OutIssues.Add(MakeIssue(Lane.Id, TEXT("target"), FString::Printf(TEXT("value lane %s names no target: a property path on the performer, or bb:<Key>"), *Lane.Id), true));
+			}
+			if (Lane.Capability != EClipLaneCapability::Move && Lane.Points.Num() > 0) OutIssues.Add(MakeIssue(Lane.Id, TEXT("points"), FString::Printf(TEXT("lane %s is a %s lane: it takes no points"), *Lane.Id, *ClipLaneCapabilityToString(Lane.Capability)), true));
+			if (Lane.Capability != EClipLaneCapability::Action && Lane.Calls.Num() > 0) OutIssues.Add(MakeIssue(Lane.Id, TEXT("calls"), FString::Printf(TEXT("lane %s is a %s lane: it takes no calls"), *Lane.Id, *ClipLaneCapabilityToString(Lane.Capability)), true));
+			if (Lane.Capability != EClipLaneCapability::Value && Lane.Keys.Num() > 0) OutIssues.Add(MakeIssue(Lane.Id, TEXT("keys"), FString::Printf(TEXT("lane %s is a %s lane: it takes no keys"), *Lane.Id, *ClipLaneCapabilityToString(Lane.Capability)), true));
+		}
+
 		for (const FClipEvent& E : Clip.Events)
 		{
 			if (E.At < 0.0) OutIssues.Add(MakeIssue(E.Id, TEXT("at"), FString::Printf(TEXT("event %s is before frame 0"), *E.Id), true));
@@ -1367,6 +1997,57 @@ namespace MCPPIE
 				FClipIssue I = MakeIssue(T.Action, TEXT("type"), FString::Printf(TEXT("%s is %s, but its track says %s"), *T.Action, *ClipValueTypeToString(Type), *ClipValueTypeToString(T.Type)), false);
 				I.Candidates = { ClipValueTypeToString(Type) };
 				OutIssues.Add(I);
+			}
+		}
+
+		// Lanes against the level: each actor performer is there, a move lane's is a pawn, an action lane's functions
+		// and a value lane's property are on it. A blackboard key is read in PIE, where the controller has one.
+		TSet<FString> Seen;
+		for (const FClipLane& Lane : Clip.Lanes)
+		{
+			const FClipPerformer P = Clip.LanePerformer(Lane);
+			if (P.Kind != EClipPerformerKind::Actor || !ClipPerformerAccepts(P.Kind, Lane.Capability)) continue;
+			if (Ctx.ResolveActor)
+			{
+				const FScriptLookup A = Ctx.ResolveActor(P.Actor);
+				if (!A.bFound)
+				{
+					if (!Seen.Contains(P.Actor))
+					{
+						FClipIssue I = MakeIssue(Lane.Id, TEXT("performer"), FString::Printf(TEXT("lane %s drives %s, and no actor in the level is named that%s"), *Lane.Id, *P.Actor, A.Message.IsEmpty() ? TEXT("") : *(TEXT(": ") + A.Message)), false);
+						I.Candidates = A.Candidates;
+						OutIssues.Add(I);
+						Seen.Add(P.Actor);
+					}
+					continue;
+				}
+			}
+			if (!Ctx.ResolveActorMember) continue;
+			auto Member = [&](const FString& Id, const FString& Field, const FString& Kind, const FString& Name, const FString& Why)
+			{
+				const FScriptLookup L = Ctx.ResolveActorMember(P.Actor, Kind, Name);
+				if (L.bFound) return;
+				FClipIssue I = MakeIssue(Id, Field, Why + (L.Message.IsEmpty() ? FString() : TEXT(": ") + L.Message), false);
+				I.Candidates = L.Candidates;
+				OutIssues.Add(I);
+			};
+			if (Lane.Capability == EClipLaneCapability::Move)
+			{
+				Member(Lane.Id, TEXT("performer"), TEXT("pawn"), FString(), FString::Printf(TEXT("move lane %s walks %s through its controller, and it is not a pawn"), *Lane.Id, *P.Actor));
+			}
+			else if (Lane.Capability == EClipLaneCapability::Action)
+			{
+				TSet<FString> Fns;
+				for (const FClipActionCall& C : Lane.Calls)
+				{
+					if (Fns.Contains(C.Function)) continue;
+					Fns.Add(C.Function);
+					Member(C.Id, TEXT("fn"), TEXT("function"), C.Function, FString::Printf(TEXT("call %s: %s has no function %s"), *C.Id, *P.Actor, *C.Function));
+				}
+			}
+			else if (Lane.Capability == EClipLaneCapability::Value && !Lane.Target.StartsWith(TEXT("bb:")))
+			{
+				Member(Lane.Id, TEXT("target"), TEXT("value"), Lane.Target, FString::Printf(TEXT("value lane %s: %s has no property %s"), *Lane.Id, *P.Actor, *Lane.Target));
 			}
 		}
 
@@ -1450,6 +2131,91 @@ namespace MCPPIE
 					Changed.Add(T.Action);
 					continue;
 				}
+				if (Kind == TEXT("lane"))
+				{
+					FClipLane L;
+					L.Id = Id;
+					FString Cap;
+					if (!O->TryGetStringField(TEXT("capability"), Cap) || !ParseClipLaneCapability(Cap, L.Capability) || L.Capability == EClipLaneCapability::Input)
+					{
+						return Fail(OpIndex, Id, TEXT("capability"), FString::Printf(TEXT("add lane needs capability move, action or value (an Input Action lane is {op: add, kind: track}), got '%s'"), *Cap), { TEXT("move"), TEXT("action"), TEXT("value") });
+					}
+					if (!Id.IsEmpty() && Work.FindLane(Id)) return Fail(OpIndex, Id, TEXT("id"), FString::Printf(TEXT("the clip already has a lane %s"), *Id));
+					const TSharedPtr<FJsonValue> Perf = O->TryGetField(TEXT("performer"));
+					if (Perf.IsValid() && Perf->Type != EJson::Null)
+					{
+						FString Err;
+						if (!ClipPerformerFromJson(Perf, L.Performer, Err)) return Fail(OpIndex, Id, TEXT("performer"), Err);
+						L.bHasPerformer = true;
+					}
+					if (L.Capability == EClipLaneCapability::Value)
+					{
+						if (!O->TryGetStringField(TEXT("target"), L.Target) || L.Target.TrimStartAndEnd().IsEmpty()) return Fail(OpIndex, Id, TEXT("target"), TEXT("add lane value needs target: a property path on the performer, or bb:<Key>"));
+						FString Type;
+						if (O->TryGetStringField(TEXT("type"), Type) && (!ParseClipValueType(Type, L.Type) || (L.Type != EClipValueType::Axis1D && L.Type != EClipValueType::Bool))) return Fail(OpIndex, Id, TEXT("type"), FString::Printf(TEXT("a value lane is axis1d or bool, not '%s'"), *Type), { TEXT("axis1d"), TEXT("bool") });
+					}
+					const TArray<TSharedPtr<FJsonValue>>* Watch = nullptr;
+					if (O->TryGetArrayField(TEXT("watch"), Watch) && Watch) for (const TSharedPtr<FJsonValue>& V : *Watch) if (V.IsValid() && V->Type == EJson::String) L.Watch.AddUnique(V->AsString());
+					Work.Lanes.Add(L);
+					AssignClipIds(Work);
+					Changed.Add(Work.Lanes.Last().Id);
+					continue;
+				}
+				FString LaneId;
+				if ((Kind == TEXT("point") || Kind == TEXT("call") || Kind == TEXT("key")) && O->TryGetStringField(TEXT("lane"), LaneId))
+				{
+					FClipLane* L = Work.FindLane(LaneId);
+					if (!L)
+					{
+						TArray<FString> Pool;
+						for (const FClipLane& X : Work.Lanes) Pool.Add(X.Id);
+						return Fail(OpIndex, LaneId, TEXT("lane"), FString::Printf(TEXT("the clip has no lane %s; add it first with {op: add, kind: lane, capability}"), *LaneId), RankScriptCandidates(LaneId, Pool, 3));
+					}
+					const EClipLaneCapability Want = Kind == TEXT("point") ? EClipLaneCapability::Move : Kind == TEXT("call") ? EClipLaneCapability::Action : EClipLaneCapability::Value;
+					if (L->Capability != Want) return Fail(OpIndex, LaneId, TEXT("lane"), FString::Printf(TEXT("a %s goes on a %s lane, and %s is a %s lane"), *Kind, *ClipLaneCapabilityToString(Want), *LaneId, *ClipLaneCapabilityToString(L->Capability)));
+					double Time = 0.0;
+					if (!O->TryGetNumberField(TEXT("time"), Time) && !O->TryGetNumberField(TEXT("t"), Time)) return Fail(OpIndex, Id, TEXT("time"), FString::Printf(TEXT("add %s needs time (frames)"), *Kind));
+					Time = Snap(Time);
+					if (Kind == TEXT("point"))
+					{
+						FClipMovePoint P;
+						P.Id = Id;
+						P.Time = Time;
+						int32 Dims = 0;
+						if (!VectorFromJson(O->TryGetField(TEXT("at")), P.Location, Dims) || Dims != 3) return Fail(OpIndex, Id, TEXT("at"), TEXT("add point needs at: [x, y, z] in centimetres"));
+						O->TryGetNumberField(TEXT("radius"), P.Radius);
+						L->Points.Add(P);
+						AssignClipIds(Work);
+						Changed.Add(Work.FindLane(LaneId)->Points.Last().Id);
+					}
+					else if (Kind == TEXT("call"))
+					{
+						FClipActionCall C;
+						C.Id = Id;
+						C.Time = Time;
+						if (!O->TryGetStringField(TEXT("fn"), C.Function) || C.Function.TrimStartAndEnd().IsEmpty()) return Fail(OpIndex, Id, TEXT("fn"), TEXT("add call needs fn: a function on the performer, or Component.Function"));
+						const TArray<TSharedPtr<FJsonValue>>* Args = nullptr;
+						if (O->TryGetArrayField(TEXT("args"), Args) && Args) C.Args = *Args;
+						L->Calls.Add(C);
+						AssignClipIds(Work);
+						Changed.Add(Work.FindLane(LaneId)->Calls.Last().Id);
+					}
+					else
+					{
+						FClipKey K;
+						K.Id = Id;
+						K.Time = Time;
+						int32 Dims = 0;
+						if (!VectorFromJson(O->TryGetField(TEXT("value")), K.Value, Dims) && !VectorFromJson(O->TryGetField(TEXT("v")), K.Value, Dims)) return Fail(OpIndex, Id, TEXT("value"), TEXT("add key needs value"));
+						FString Interp;
+						if (O->TryGetStringField(TEXT("interp"), Interp) && !ParseClipInterp(Interp, K.Interp)) return Fail(OpIndex, Id, TEXT("interp"), FString::Printf(TEXT("interp '%s' is unknown"), *Interp), { TEXT("linear"), TEXT("constant"), TEXT("cubic") });
+						L->Keys.Add(K);
+						AssignClipIds(Work);
+						Changed.Add(Work.FindLane(LaneId)->Keys.Last().Id);
+					}
+					continue;
+				}
+				if (Kind == TEXT("point") || Kind == TEXT("call")) return Fail(OpIndex, Id, TEXT("lane"), FString::Printf(TEXT("add %s needs lane, the id of the lane it goes on"), *Kind));
 				if (Kind == TEXT("note") || Kind == TEXT("key"))
 				{
 					FString Action;
@@ -1534,7 +2300,7 @@ namespace MCPPIE
 					Changed.Add(Work.Regions.Last().Id);
 					continue;
 				}
-				return Fail(OpIndex, Id, TEXT("kind"), FString::Printf(TEXT("add kind '%s' is unknown"), *Kind), { TEXT("note"), TEXT("key"), TEXT("track"), TEXT("check"), TEXT("event"), TEXT("region") });
+				return Fail(OpIndex, Id, TEXT("kind"), FString::Printf(TEXT("add kind '%s' is unknown"), *Kind), { TEXT("note"), TEXT("key"), TEXT("track"), TEXT("lane"), TEXT("point"), TEXT("call"), TEXT("check"), TEXT("event"), TEXT("region") });
 			}
 
 			if (Op == TEXT("set_clip"))
@@ -1550,6 +2316,17 @@ namespace MCPPIE
 				if (O->TryGetNumberField(TEXT("seed"), Num)) Work.Seed = static_cast<int64>(Num);
 				O->TryGetNumberField(TEXT("hold_timeout"), Work.HoldTimeout);
 				O->TryGetStringField(TEXT("reference"), Work.Reference);
+				if (O->HasField(TEXT("performer")))
+				{
+					const TSharedPtr<FJsonValue> Perf = O->TryGetField(TEXT("performer"));
+					if (!Perf.IsValid() || Perf->Type == EJson::Null) Work.bHasPerformer = false;
+					else
+					{
+						FString Err;
+						if (!ClipPerformerFromJson(Perf, Work.Performer, Err)) return Fail(OpIndex, Id, TEXT("performer"), Err);
+						Work.bHasPerformer = true;
+					}
+				}
 				Changed.Add(TEXT("clip"));
 				continue;
 			}
@@ -1591,6 +2368,15 @@ namespace MCPPIE
 					for (FClipEvent& E : Work.Events) if (Only.Num() == 0 || Only.Contains(E.Id)) { E.At = SnapClipTime(GridClip, E.At); Changed.Add(E.Id); }
 					for (FClipRegion& R : Work.Regions) if (Only.Num() == 0 || Only.Contains(R.Id)) { R.Start = SnapClipTime(GridClip, R.Start); R.End = SnapClipTime(GridClip, R.End); Changed.Add(R.Id); }
 				}
+				// A lane is named by its id in track, as an Input Action lane is by its action.
+				for (FClipLane& L : Work.Lanes)
+				{
+					if (!Track.IsEmpty() && Track != L.Id) continue;
+					auto Q = [&](const FString& ThingId, double& T) { if (Only.Num() == 0 || Only.Contains(ThingId)) { T = SnapClipTime(GridClip, T); Changed.Add(ThingId); } };
+					for (FClipMovePoint& P : L.Points) Q(P.Id, P.Time);
+					for (FClipActionCall& C : L.Calls) Q(C.Id, C.Time);
+					for (FClipKey& K : L.Keys) Q(K.Id, K.Time);
+				}
 				continue;
 			}
 
@@ -1610,6 +2396,10 @@ namespace MCPPIE
 				else if (Kind == TEXT("event")) Work.Events.RemoveAt(Ii);
 				else if (Kind == TEXT("region")) Work.Regions.RemoveAt(Ii);
 				else if (Kind == TEXT("track")) Work.Tracks.RemoveAt(Ti);
+				else if (Kind == TEXT("lane")) Work.Lanes.RemoveAt(Ti);
+				else if (Kind == TEXT("point")) Work.Lanes[Ti].Points.RemoveAt(Ii);
+				else if (Kind == TEXT("call")) Work.Lanes[Ti].Calls.RemoveAt(Ii);
+				else if (Kind == TEXT("lane_key")) Work.Lanes[Ti].Keys.RemoveAt(Ii);
 				Changed.Add(Id);
 				continue;
 			}
@@ -1625,6 +2415,9 @@ namespace MCPPIE
 				else if (Kind == TEXT("key")) Move(Work.Tracks[Ti].Keys[Ii].Time);
 				else if (Kind == TEXT("check")) Move(Work.Checks[Ii].Start);
 				else if (Kind == TEXT("event")) Move(Work.Events[Ii].At);
+				else if (Kind == TEXT("point")) Move(Work.Lanes[Ti].Points[Ii].Time);
+				else if (Kind == TEXT("call")) Move(Work.Lanes[Ti].Calls[Ii].Time);
+				else if (Kind == TEXT("lane_key")) Move(Work.Lanes[Ti].Keys[Ii].Time);
 				else if (Kind == TEXT("region"))
 				{
 					FClipRegion& R = Work.Regions[Ii];
@@ -1632,7 +2425,7 @@ namespace MCPPIE
 					Move(R.Start);
 					R.End = R.Start + Len;
 				}
-				else return Fail(OpIndex, Id, TEXT("id"), TEXT("a track does not move; move its notes or keys"));
+				else return Fail(OpIndex, Id, TEXT("id"), Kind == TEXT("lane") ? FString(TEXT("a lane does not move; move its points, calls or keys")) : FString(TEXT("a track does not move; move its notes or keys")));
 				Changed.Add(Id);
 				continue;
 			}
@@ -1734,6 +2527,59 @@ namespace MCPPIE
 					FString Type;
 					if (O->TryGetStringField(TEXT("type"), Type) && !ParseClipValueType(Type, Work.Tracks[Ti].Type)) return Fail(OpIndex, Id, TEXT("type"), FString::Printf(TEXT("type '%s' is unknown"), *Type));
 				}
+				else if (Kind == TEXT("lane"))
+				{
+					FClipLane& L = Work.Lanes[Ti];
+					if (O->HasField(TEXT("performer")))
+					{
+						const TSharedPtr<FJsonValue> Perf = O->TryGetField(TEXT("performer"));
+						if (!Perf.IsValid() || Perf->Type == EJson::Null) L.bHasPerformer = false;
+						else
+						{
+							FString Err;
+							if (!ClipPerformerFromJson(Perf, L.Performer, Err)) return Fail(OpIndex, Id, TEXT("performer"), Err);
+							L.bHasPerformer = true;
+						}
+					}
+					if (O->HasField(TEXT("target")))
+					{
+						if (L.Capability != EClipLaneCapability::Value) return Fail(OpIndex, Id, TEXT("target"), FString::Printf(TEXT("lane %s is a %s lane: only a value lane has a target"), *Id, *ClipLaneCapabilityToString(L.Capability)));
+						L.Target = O->GetStringField(TEXT("target"));
+					}
+					FString Type;
+					if (O->TryGetStringField(TEXT("type"), Type) && (L.Capability != EClipLaneCapability::Value || !ParseClipValueType(Type, L.Type) || (L.Type != EClipValueType::Axis1D && L.Type != EClipValueType::Bool))) return Fail(OpIndex, Id, TEXT("type"), FString::Printf(TEXT("a value lane is axis1d or bool, not '%s'"), *Type), { TEXT("axis1d"), TEXT("bool") });
+					const TArray<TSharedPtr<FJsonValue>>* Watch = nullptr;
+					if (O->TryGetArrayField(TEXT("watch"), Watch) && Watch)
+					{
+						L.Watch.Reset();
+						for (const TSharedPtr<FJsonValue>& V : *Watch) if (V.IsValid() && V->Type == EJson::String) L.Watch.AddUnique(V->AsString());
+					}
+				}
+				else if (Kind == TEXT("point"))
+				{
+					FClipMovePoint& P = Work.Lanes[Ti].Points[Ii];
+					int32 Dims = 0;
+					if (O->HasField(TEXT("time"))) P.Time = Snap(O->GetNumberField(TEXT("time")));
+					if (O->HasField(TEXT("at")) && (!VectorFromJson(O->TryGetField(TEXT("at")), P.Location, Dims) || Dims != 3)) return Fail(OpIndex, Id, TEXT("at"), TEXT("at must be [x, y, z]"));
+					O->TryGetNumberField(TEXT("radius"), P.Radius);
+				}
+				else if (Kind == TEXT("call"))
+				{
+					FClipActionCall& C = Work.Lanes[Ti].Calls[Ii];
+					if (O->HasField(TEXT("time"))) C.Time = Snap(O->GetNumberField(TEXT("time")));
+					O->TryGetStringField(TEXT("fn"), C.Function);
+					const TArray<TSharedPtr<FJsonValue>>* Args = nullptr;
+					if (O->TryGetArrayField(TEXT("args"), Args) && Args) C.Args = *Args;
+				}
+				else if (Kind == TEXT("lane_key"))
+				{
+					FClipKey& K = Work.Lanes[Ti].Keys[Ii];
+					int32 Dims = 0;
+					if (O->HasField(TEXT("time"))) K.Time = Snap(O->GetNumberField(TEXT("time")));
+					if (O->HasField(TEXT("value")) && !VectorFromJson(O->TryGetField(TEXT("value")), K.Value, Dims)) return Fail(OpIndex, Id, TEXT("value"), TEXT("value must be a number or a boolean"));
+					FString Interp;
+					if (O->TryGetStringField(TEXT("interp"), Interp) && !ParseClipInterp(Interp, K.Interp)) return Fail(OpIndex, Id, TEXT("interp"), FString::Printf(TEXT("interp '%s' is unknown"), *Interp), { TEXT("linear"), TEXT("constant"), TEXT("cubic") });
+				}
 				Changed.Add(Id);
 				continue;
 			}
@@ -1786,6 +2632,18 @@ namespace MCPPIE
 		}
 		bOutActive = !V.IsNearlyZero(1e-6);
 		return V;
+	}
+
+	double EvaluateClipValueLane(const FClipLane& Lane, double Frame, bool& bOutActive)
+	{
+		bOutActive = false;
+		if (Lane.Keys.Num() == 0 || Frame < Lane.Keys[0].Time - 1e-6) return 0.0;
+		// Past the last key the lane lets go, so a later lane or the game can set the value; a lone key writes once.
+		const double Last = Lane.Keys.Last().Time;
+		if (Frame > Last + 1.0 - 1e-6) return 0.0;
+		bOutActive = true;
+		const double V = Lane.Keys.Num() == 1 ? Lane.Keys[0].Value.X : BuildKeyCurve(Lane.Keys, 0).Eval(static_cast<float>(FMath::Min(Frame, Last)));
+		return Lane.Type == EClipValueType::Bool ? (V >= 0.5 ? 1.0 : 0.0) : V;
 	}
 
 	// ── Recording ──────────────────────────────────────────────────────
@@ -1942,6 +2800,132 @@ namespace MCPPIE
 				if (Clip.FrameTimes[i] - Clip.FrameTimes[i - 1] < 1e-4) Clip.FrameTimes.RemoveAt(i);
 			}
 		}
+		if (Clip.Length > 0.0 && End > Clip.Length) Clip.Length = End;
+	}
+
+	TArray<FClipMovePoint> ReduceClipMoveSamples(const TArray<FClipLaneSample>& Samples)
+	{
+		constexpr double StillCm = 5.0;
+		constexpr double ToleranceCm = 25.0;
+		// The moment the performer left each stretch it stood still in: the last sample of the stretch.
+		TArray<FClipLaneSample> Path;
+		for (const FClipLaneSample& S : Samples)
+		{
+			if (!S.bHasLocation) continue;
+			if (Path.Num() > 0 && FVector::Dist(Path.Last().Location, S.Location) < StillCm) Path.Last() = S;
+			else Path.Add(S);
+		}
+		if (Path.Num() < 2) return {};
+		// Douglas-Peucker over the path, keeping the corners.
+		TArray<bool> Keep;
+		Keep.Init(false, Path.Num());
+		Keep[0] = Keep.Last() = true;
+		TArray<TPair<int32, int32>> Stack = { TPair<int32, int32>(0, Path.Num() - 1) };
+		while (Stack.Num() > 0)
+		{
+			const TPair<int32, int32> Span = Stack.Pop();
+			const FVector A = Path[Span.Key].Location;
+			const FVector B = Path[Span.Value].Location;
+			double Worst = 0.0;
+			int32 At = INDEX_NONE;
+			for (int32 i = Span.Key + 1; i < Span.Value; ++i)
+			{
+				const double D = FMath::PointDistToSegment(Path[i].Location, A, B);
+				if (D > Worst) { Worst = D; At = i; }
+			}
+			if (At != INDEX_NONE && Worst > ToleranceCm)
+			{
+				Keep[At] = true;
+				Stack.Add(TPair<int32, int32>(Span.Key, At));
+				Stack.Add(TPair<int32, int32>(At, Span.Value));
+			}
+		}
+		TArray<int32> Kept;
+		for (int32 i = 0; i < Path.Num(); ++i) if (Keep[i]) Kept.Add(i);
+		// Each point is set off for when the performer left the one before it.
+		TArray<FClipMovePoint> Out;
+		for (int32 n = 1; n < Kept.Num(); ++n)
+		{
+			FClipMovePoint P;
+			P.Time = Path[Kept[n - 1]].Frame;
+			P.Location = Path[Kept[n]].Location;
+			if (Out.Num() > 0 && FMath::IsNearlyEqual(Out.Last().Time, P.Time, 1e-6)) Out.Last() = P;
+			else Out.Add(P);
+		}
+		return Out;
+	}
+
+	void CompClipLaneTakes(FClip& Clip, const TArray<FClipLaneRecording>& Recordings, double Start, double End,
+		const FString& TakeId, const FString& RecordedAt)
+	{
+		if (Recordings.Num() == 0) return;
+		FClipTake* Take = Clip.Takes.FindByPredicate([&TakeId](const FClipTake& T) { return T.Id == TakeId; });
+		FClipTake Fresh;
+		if (!Take)
+		{
+			Fresh.Id = TakeId;
+			Fresh.RecordedAt = RecordedAt;
+			Fresh.Start = Start;
+			Fresh.End = End;
+		}
+		FClipTake& Into = Take ? *Take : Fresh;
+		const double Rate = FMath::Max(1, Clip.Rate);
+		auto In = [Start, End](double T) { return T >= Start - 1e-6 && T < End - 1e-6; };
+		for (const FClipLaneRecording& R : Recordings)
+		{
+			FClipLane* Lane = Clip.FindLane(R.LaneId);
+			if (!Lane) continue;
+			// What the range held goes into the take, whole.
+			FClipLane Old = *Lane;
+			Old.Points = Lane->Points.FilterByPredicate([&](const FClipMovePoint& P) { return In(P.Time); });
+			Old.Calls = Lane->Calls.FilterByPredicate([&](const FClipActionCall& C) { return In(C.Time); });
+			Old.Keys = Lane->Keys.FilterByPredicate([&](const FClipKey& K) { return In(K.Time); });
+			Lane->Points.RemoveAll([&](const FClipMovePoint& P) { return In(P.Time); });
+			Lane->Calls.RemoveAll([&](const FClipActionCall& C) { return In(C.Time); });
+			Lane->Keys.RemoveAll([&](const FClipKey& K) { return In(K.Time); });
+			if (Old.Points.Num() + Old.Calls.Num() + Old.Keys.Num() > 0) Into.Lanes.Add(MoveTemp(Old));
+
+			if (Lane->Capability == EClipLaneCapability::Move)
+			{
+				for (FClipMovePoint& P : ReduceClipMoveSamples(R.Samples)) if (In(P.Time)) Lane->Points.Add(P);
+			}
+			else if (Lane->Capability == EClipLaneCapability::Action)
+			{
+				for (const FClipActionCall& C : R.Calls) if (In(C.Time)) Lane->Calls.Add(C);
+			}
+			else if (Lane->Capability == EClipLaneCapability::Value)
+			{
+				TArray<double> Frames;
+				TArray<double> Values;
+				for (const FClipLaneSample& S : R.Samples)
+				{
+					if (!S.bHasValue || !In(S.Frame)) continue;
+					Frames.Add(S.Frame);
+					Values.Add(S.Value);
+				}
+				if (Frames.Num() > 0)
+				{
+					FRichCurve Curve;
+					for (int32 i = 0; i < Frames.Num(); ++i) Curve.SetKeyInterpMode(Curve.AddKey(static_cast<float>(Frames[i]), static_cast<float>(Values[i])), Lane->Type == EClipValueType::Bool ? RCIM_Constant : RCIM_Linear);
+					Curve.RemoveRedundantKeys(1e-3f, FFrameRate(static_cast<int32>(Rate), 1));
+					for (auto It = Curve.GetKeyIterator(); It; ++It)
+					{
+						FClipKey K;
+						K.Time = It->Time;
+						// The value read on the frame nearest the kept key, exactly.
+						int32 Best = 0;
+						for (int32 i = 1; i < Frames.Num(); ++i) if (FMath::Abs(Frames[i] - It->Time) < FMath::Abs(Frames[Best] - It->Time)) Best = i;
+						K.Time = Frames[Best];
+						K.Value = FVector(Values[Best], 0.0, 0.0);
+						K.Interp = Lane->Type == EClipValueType::Bool ? EClipInterp::Constant : EClipInterp::Linear;
+						if (!Lane->Keys.ContainsByPredicate([&K](const FClipKey& X) { return FMath::IsNearlyEqual(X.Time, K.Time, 1e-6); })) Lane->Keys.Add(K);
+					}
+				}
+			}
+		}
+		AssignClipIds(Clip);
+		SortClip(Clip);
+		if (!Take && Fresh.Lanes.Num() > 0) Clip.Takes.Add(MoveTemp(Fresh));
 		if (Clip.Length > 0.0 && End > Clip.Length) Clip.Length = End;
 	}
 
