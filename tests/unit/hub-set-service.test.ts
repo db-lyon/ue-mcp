@@ -205,6 +205,17 @@ scene track "Boss fight" add Guard` });
     expect(unknown.body.finding.candidates[0]).toBe(JUMP);
   });
 
+  it("says on the instance when a clip has a lane its track's performer does not take (#2137)", async () => {
+    hub = setup();
+    const r = await call("POST", "/hub/set/edit", { ops: `track add Guard performer=actor:BP_Guard\nadd Guard clip ${JUMP}` });
+    expect(r.status).toBe(200);
+    const guard = r.body.tracks.find((t: { title: string }) => t.title === "Guard");
+    expect(guard.performer).toEqual({ kind: "actor", actor: "BP_Guard" });
+    expect(r.body.findings).toEqual([expect.objectContaining({ id: `${guard.id}/i1`, field: "performer", blocks: true, candidates: ["move", "action", "value"] })]);
+    const fixed = await call("POST", "/hub/set/edit", { ops: "track performer Guard player:0" });
+    expect(fixed.body.findings).toEqual([]);
+  });
+
   it("deletes tracks and scenes through ops, refusing one a queued or running run was made for", async () => {
     hub = setup();
     const e = await call("POST", "/hub/set/edit", { ops: `track add A\ntrack add B\nadd A clip ${WALK}\nscene add S\nscene track S add A\nscene add T` });

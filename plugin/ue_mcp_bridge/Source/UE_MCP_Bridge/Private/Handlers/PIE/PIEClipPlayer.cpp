@@ -54,17 +54,6 @@ namespace MCPPIE
 			}
 		}
 
-		FInputActionValue ToActionValue(const UInputAction* Action, const FVector& V)
-		{
-			switch (Action->ValueType)
-			{
-			case EInputActionValueType::Boolean: return FInputActionValue(V.X != 0.0);
-			case EInputActionValueType::Axis1D: return FInputActionValue(static_cast<float>(V.X));
-			case EInputActionValueType::Axis2D: return FInputActionValue(FVector2D(V.X, V.Y));
-			default: return FInputActionValue(V);
-			}
-		}
-
 		UEnhancedInputLocalPlayerSubsystem* InputOf(ULocalPlayer* LocalPlayer)
 		{
 			return LocalPlayer ? LocalPlayer->GetSubsystem<UEnhancedInputLocalPlayerSubsystem>() : nullptr;
@@ -102,7 +91,8 @@ namespace MCPPIE
 		RestoreFixedTimestep();
 		FPSPin.Restore();
 		Taps.Remove();
-		StopRemoteLanes();
+		StopDrivers();
+		if (FClipCallRecorder::Get().IsWatching()) FClipCallRecorder::Get().Finish();
 		Runner.Reset();
 		bHasRun = false;
 	}
@@ -172,6 +162,7 @@ namespace MCPPIE
 		Run.PunchIn = Cfg.PunchIn;
 		Run.PunchOut = Cfg.PunchOut;
 		Run.TakeId = Run.RunId;
+		Run.Lanes.SetNum(Run.Clip.Lanes.Num());
 		for (const FClipCheck& C : Run.Clip.Checks)
 		{
 			FClipCheckRun CR;
@@ -214,6 +205,7 @@ namespace MCPPIE
 
 		Actions.Reset();
 		TriggerWatches.Reset();
+		StopDrivers();
 		Reference.Reset();
 		LoadReference();
 		Runner = MakeShared<FStepActionRunner>();
@@ -231,8 +223,8 @@ namespace MCPPIE
 		if (!PreActorTickHandle.IsValid()) PreActorTickHandle = FWorldDelegates::OnWorldPreActorTick.AddRaw(this, &FPIEClipPlayer::OnPreActorTick);
 		if (!EndFrameHandle.IsValid()) EndFrameHandle = FCoreDelegates::OnEndFrame.AddRaw(this, &FPIEClipPlayer::OnEndFrame);
 
-		OutMessage = FString::Printf(TEXT("Clip run %s armed: %d tracks, %d events, %d checks, %s frames at %d fps%s"),
-			*Run.RunId, Run.Clip.Tracks.Num(), Run.Clip.Events.Num(), Run.Clip.Checks.Num(),
+		OutMessage = FString::Printf(TEXT("Clip run %s armed: %d tracks, %d lanes, %d events, %d checks, %s frames at %d fps%s"),
+			*Run.RunId, Run.Clip.Tracks.Num(), Run.Clip.Lanes.Num(), Run.Clip.Events.Num(), Run.Clip.Checks.Num(),
 			*FString::SanitizeFloat(Run.Clip.EffectiveLength()), Run.Clip.Rate, Run.bRecording ? TEXT(", recording") : TEXT(""));
 		UE_LOG(LogMCPPIE, Log, TEXT("[PIE-CLIP] %s"), *OutMessage);
 		return true;
@@ -322,6 +314,7 @@ namespace MCPPIE
 		if (Config.bLockInput && !(Run.bRecording && Run.PunchIn <= 0.0)) ReplayInputLock::Start(World);
 		if (Run.bRecording && Run.PunchIn <= 0.0) PunchIn(World);
 		FireEvents(World, 0.0);
+		DriveLanes(World);
 		UE_LOG(LogMCPPIE, Log, TEXT("[PIE-CLIP] %s started at game %.3f s%s"), *Run.RunId, Run.StartGameSeconds, Run.bFixedTimestep ? TEXT(", fixed timestep") : TEXT(""));
 	}
 
@@ -336,6 +329,7 @@ namespace MCPPIE
 		UEnhancedPlayerInput* PlayerInput = Sub ? Sub->GetPlayerInput() : nullptr;
 		Run.Armed.Reset();
 		Run.ArmedTypes.Reset();
+		Run.LaneRecordings.Reset();
 		auto Arm = [this](const UInputAction* A)
 		{
 			const FString Path = A->GetPathName();
@@ -343,14 +337,43 @@ namespace MCPPIE
 			Run.ArmedTypes.Add(Path, ClipTypeOf(A));
 			Actions.Add(Path, const_cast<UInputAction*>(A));
 		};
-		if (Config.Armed.Num() > 0)
+		// Lanes the take records: from here their performers act on their own, and the take reads what they did.
+		bool bArmedLane = false;
+		for (const FString& P : Config.Armed)
 		{
-			for (const FString& P : Config.Armed)
+			const int32 L = Run.Clip.Lanes.IndexOfByPredicate([&P](const FClipLane& X) { return X.Id == P; });
+			if (L == INDEX_NONE) continue;
+			bArmedLane = true;
+			const FClipLane& Lane = Run.Clip.Lanes[L];
+			Run.Lanes[L].bArmed = true;
+			FClipLaneRecording Rec;
+			Rec.LaneId = Lane.Id;
+			Run.LaneRecordings.Add(Rec);
+			if (Lane.Capability != EClipLaneCapability::Action) continue;
+			FClipPerformerDriver* Driver = DriverFor(Run.Clip.LanePerformer(Lane));
+			FString Err;
+			AActor* Actor = Driver ? Driver->ResolveActor(World, Err) : nullptr;
+			if (!Actor)
 			{
-				if (const UInputAction* A = LoadObject<UInputAction>(nullptr, *NormalizeScriptInputActionPath(P))) Arm(A);
+				LaneError(L, FString::Printf(TEXT("the take records nothing on lane %s: %s"), *Lane.Id, *Err));
+				continue;
+			}
+			TArray<FString> Fns = Lane.Watch;
+			for (const FClipActionCall& C : Lane.Calls) Fns.AddUnique(C.Function);
+			if (Fns.Num() == 0) LaneError(L, FString::Printf(TEXT("lane %s names no function to record: give it watch, or a call"), *Lane.Id));
+			for (const FString& Missing : FClipCallRecorder::Get().Watch(Lane.Id, Actor, Fns))
+			{
+				LaneError(L, FString::Printf(TEXT("%s has no function %s to record"), *Actor->GetName(), *Missing));
 			}
 		}
-		else if (PlayerInput)
+		bool bArmedAction = false;
+		for (const FString& P : Config.Armed)
+		{
+			if (Run.Clip.FindLane(P)) continue;
+			bArmedAction = true;
+			if (const UInputAction* A = LoadObject<UInputAction>(nullptr, *NormalizeScriptInputActionPath(P))) Arm(A);
+		}
+		if (!bArmedAction && !bArmedLane && PlayerInput)
 		{
 			// Every action the player has instance data for: the actions its mapping contexts map.
 			for (TObjectIterator<UInputAction> It; It; ++It)
@@ -358,7 +381,90 @@ namespace MCPPIE
 				if (*It && PlayerInput->FindActionInstanceData(*It)) Arm(*It);
 			}
 		}
-		UE_LOG(LogMCPPIE, Log, TEXT("[PIE-CLIP] %s punched in at frame %.1f, recording %d actions"), *Run.RunId, Run.Position, Run.Armed.Num());
+		UE_LOG(LogMCPPIE, Log, TEXT("[PIE-CLIP] %s punched in at frame %.1f, recording %d actions and %d lanes"), *Run.RunId, Run.Position, Run.Armed.Num(), Run.LaneRecordings.Num());
+	}
+
+	FClipPerformerDriver* FPIEClipPlayer::DriverFor(const FClipPerformer& Performer)
+	{
+		const FString Key = Performer.Key();
+		if (TUniquePtr<FClipPerformerDriver>* Found = Drivers.Find(Key)) return Found->Get();
+		FClipDriverContext Ctx;
+		Ctx.PIEInstance = Config.PIEInstance;
+		Ctx.OwnClientId = Config.ClientId;
+		TUniquePtr<FClipPerformerDriver> Driver = MakeClipPerformerDriver(Performer, Ctx);
+		FClipPerformerDriver* Raw = Driver.Get();
+		Drivers.Add(Key, MoveTemp(Driver));
+		return Raw;
+	}
+
+	void FPIEClipPlayer::StopDrivers()
+	{
+		for (TPair<FString, TUniquePtr<FClipPerformerDriver>>& D : Drivers)
+		{
+			if (D.Value.IsValid()) D.Value->Stop();
+		}
+		Drivers.Reset();
+	}
+
+	void FPIEClipPlayer::LaneError(int32 LaneIndex, const FString& Error)
+	{
+		if (!Run.Lanes.IsValidIndex(LaneIndex)) return;
+		TArray<FString>& Errors = Run.Lanes[LaneIndex].Errors;
+		// The first few distinct ones: a lane that fails every frame says so once.
+		if (Errors.Num() >= 5 || Errors.Contains(Error)) return;
+		Errors.Add(Error);
+		UE_LOG(LogMCPPIE, Warning, TEXT("[PIE-CLIP] lane %s: %s"), *Run.Clip.Lanes[LaneIndex].Id, *Error);
+	}
+
+	void FPIEClipPlayer::DriveLanes(UWorld* World)
+	{
+		for (int32 L = 0; L < Run.Clip.Lanes.Num(); ++L)
+		{
+			const FClipLane& Lane = Run.Clip.Lanes[L];
+			FClipLaneState& State = Run.Lanes[L];
+			// An armed lane plays its lead-in like any other, and from the punch-in its performer acts on its own.
+			if (State.bArmed && Run.bPunchedIn && Run.PunchedOutAt < 0.0) continue;
+			const FClipPerformer Performer = Run.Clip.LanePerformer(Lane);
+			FClipPerformerDriver* Driver = DriverFor(Performer);
+			if (!Driver)
+			{
+				LaneError(L, FString::Printf(TEXT("no driver plays a %s performer"), *ClipPerformerKindToString(Performer.Kind)));
+				continue;
+			}
+			if (!Driver->Accepts(Lane.Capability))
+			{
+				LaneError(L, FString::Printf(TEXT("%s takes no %s lanes, so the lane was skipped"), *Performer.Label(), *ClipLaneCapabilityToString(Lane.Capability)));
+				continue;
+			}
+			FString Err;
+			if (Lane.Capability == EClipLaneCapability::Move)
+			{
+				// The newest point passed this frame: a frame that skips two points walks to the second.
+				int32 Due = INDEX_NONE;
+				while (State.Next < Lane.Points.Num() && Lane.Points[State.Next].Time <= Run.Position + 1e-6) Due = State.Next++;
+				if (Due == INDEX_NONE) continue;
+				if (Driver->MoveTo(World, Lane.Points[Due], Err)) ++State.Fired;
+				else LaneError(L, FString::Printf(TEXT("point %s: %s"), *Lane.Points[Due].Id, *Err));
+			}
+			else if (Lane.Capability == EClipLaneCapability::Action)
+			{
+				while (State.Next < Lane.Calls.Num() && Lane.Calls[State.Next].Time <= Run.Position + 1e-6)
+				{
+					const FClipActionCall& C = Lane.Calls[State.Next++];
+					FString CallErr;
+					if (Driver->Call(World, C, CallErr)) ++State.Fired;
+					else LaneError(L, FString::Printf(TEXT("call %s (%s): %s"), *C.Id, *C.Function, *CallErr));
+				}
+			}
+			else if (Lane.Capability == EClipLaneCapability::Value)
+			{
+				bool bActive = false;
+				const double V = EvaluateClipValueLane(Lane, Run.Position, bActive);
+				if (!bActive) continue;
+				if (Driver->SetValue(World, Lane, V, Err)) ++State.Fired;
+				else LaneError(L, FString::Printf(TEXT("%s: %s"), *Lane.Target, *Err));
+			}
+		}
 	}
 
 	void FPIEClipPlayer::FireEvents(UWorld* World, double UpTo)
@@ -389,84 +495,17 @@ namespace MCPPIE
 		}
 	}
 
-	void FPIEClipPlayer::FeedInput(UWorld* World)
+	void FPIEClipPlayer::FeedInput(UWorld* /*World*/)
 	{
-		UEnhancedInputLocalPlayerSubsystem* Sub = InputOf(TargetLocalPlayer());
+		// Each Input Action lane goes to the driver of the player it drives: the run's own, or remote client N.
 		for (const FClipTrack& T : Run.Clip.Tracks)
 		{
 			bool bActive = false;
 			const FVector V = EvaluateClipTrack(T, Run.Position, bActive);
-			if (T.Client > 0)
-			{
-				FeedRemoteLane(T, bActive, V);
-				continue;
-			}
-			if (!Sub) continue;
-			if (Run.bPunchedIn && Run.PunchedOutAt < 0.0 && Run.Armed.Contains(T.Action)) continue;
-			if (!bActive) continue;
-			TWeakObjectPtr<UInputAction>& Weak = Actions.FindOrAdd(T.Action);
-			UInputAction* A = Weak.Get();
-			if (!A)
-			{
-				A = LoadObject<UInputAction>(nullptr, *T.Action);
-				Weak = A;
-			}
-			if (A) Sub->InjectInputForAction(A, ToActionValue(A, V), {}, {});
+			// An armed lane of the run's own player is the person's from the punch-in.
+			if (T.Client == 0 && Run.bPunchedIn && Run.PunchedOutAt < 0.0 && Run.Armed.Contains(T.Action)) continue;
+			if (FClipPerformerDriver* Driver = DriverFor(FClipPerformer::Player(T.Client))) Driver->FeedInput(T, bActive, V);
 		}
-	}
-
-	void FPIEClipPlayer::FeedRemoteLane(const FClipTrack& T, bool bActive, const FVector& V)
-	{
-		// A remote client's lane is a hold on that client, started when the lane takes a value, updated when the
-		// value changes and stopped when it feeds nothing: the client injects the held value on each of its own
-		// frames, so the lane keeps feeding through a hold check as the run's own player's lanes do.
-		const FString Key = FString::Printf(TEXT("%d|%s"), T.Client, *T.Action);
-		FRemoteLaneHold* Hold = RemoteHolds.Find(Key);
-		if (!bActive)
-		{
-			if (Hold)
-			{
-				if (UMCPPIERemoteControl* Remote = PIERemotePlayers::FindById(Hold->Id)) Remote->SendStop(Hold->Id);
-				RemoteHolds.Remove(Key);
-			}
-			return;
-		}
-		if (Hold)
-		{
-			if (Hold->Value.Equals(V, 1e-4)) return;
-			if (UMCPPIERemoteControl* Remote = PIERemotePlayers::FindById(Hold->Id))
-			{
-				Remote->SendUpdateHold(Hold->Id, V);
-				Hold->Value = V;
-				return;
-			}
-			RemoteHolds.Remove(Key);
-		}
-		FString Err;
-		UMCPPIERemoteControl* Remote = PIERemotePlayers::Find(T.Client, Err);
-		if (!Remote)
-		{
-			if (!RemoteLaneErrors.Contains(Key))
-			{
-				RemoteLaneErrors.Add(Key);
-				UE_LOG(LogMCPPIE, Warning, TEXT("[PIE-CLIP] the lane for %s on client %d feeds nothing: %s"), *T.Action, T.Client, *Err);
-			}
-			return;
-		}
-		const FString Id = PIERemotePlayers::NewId(TEXT("clip"));
-		PIERemotePlayers::RememberId(Id, Remote);
-		Remote->SendStartHold(Id, FSoftObjectPath(T.Action), V);
-		RemoteHolds.Add(Key, { Id, V });
-	}
-
-	void FPIEClipPlayer::StopRemoteLanes()
-	{
-		for (const TPair<FString, FRemoteLaneHold>& H : RemoteHolds)
-		{
-			if (UMCPPIERemoteControl* Remote = PIERemotePlayers::FindById(H.Value.Id)) Remote->SendStop(H.Value.Id);
-		}
-		RemoteHolds.Reset();
-		RemoteLaneErrors.Reset();
 	}
 
 	void FPIEClipPlayer::OnPreActorTick(UWorld* World, ELevelTick /*TickType*/, float /*DeltaSeconds*/)
@@ -525,6 +564,9 @@ namespace MCPPIE
 
 		FireEvents(World, Run.Position);
 		FeedInput(World);
+		DriveLanes(World);
+		// A call an armed action lane's actor takes this frame lands on it.
+		FClipCallRecorder::Get().SetFrame(FMath::RoundToDouble(Run.Position * 1000.0) / 1000.0);
 		if (Runner.IsValid()) Runner->TickStops(FPlatformTime::Seconds());
 	}
 
@@ -680,6 +722,27 @@ namespace MCPPIE
 	void FPIEClipPlayer::SampleTake(UWorld* World)
 	{
 		if (!Run.bRecording || !Run.bPunchedIn || Run.PunchedOutAt >= 0.0) return;
+		// Armed move and value lanes: where each performer stands, and the value its target holds, this frame.
+		const double At = FMath::RoundToDouble(Run.Position * 1000.0) / 1000.0;
+		for (FClipLaneRecording& Rec : Run.LaneRecordings)
+		{
+			const int32 L = Run.Clip.Lanes.IndexOfByPredicate([&Rec](const FClipLane& X) { return X.Id == Rec.LaneId; });
+			if (L == INDEX_NONE || Run.Clip.Lanes[L].Capability == EClipLaneCapability::Action) continue;
+			const FClipLane& Lane = Run.Clip.Lanes[L];
+			FClipPerformerDriver* Driver = DriverFor(Run.Clip.LanePerformer(Lane));
+			if (!Driver) continue;
+			FClipLaneSample S;
+			S.Frame = At;
+			FString Err;
+			if (Lane.Capability == EClipLaneCapability::Move) S.bHasLocation = Driver->ReadLocation(World, S.Location, Err);
+			else S.bHasValue = Driver->ReadValue(World, Lane, S.Value, Err);
+			if (!S.bHasLocation && !S.bHasValue)
+			{
+				LaneError(L, FString::Printf(TEXT("the take could not read lane %s: %s"), *Lane.Id, *Err));
+				continue;
+			}
+			if (Rec.Samples.Num() == 0 || !FMath::IsNearlyEqual(Rec.Samples.Last().Frame, S.Frame, 1e-6)) Rec.Samples.Add(S);
+		}
 		UEnhancedInputLocalPlayerSubsystem* Sub = InputOf(TargetLocalPlayer());
 		UEnhancedPlayerInput* PlayerInput = Sub ? Sub->GetPlayerInput() : nullptr;
 		if (!PlayerInput) return;
@@ -702,7 +765,18 @@ namespace MCPPIE
 		if (!Run.bRecording || Run.bTakeSaved) return;
 		Taps.Remove();
 		const double End = Run.PunchedOutAt >= 0.0 ? Run.PunchedOutAt : Run.Position;
-		CompClipTake(Run.Clip, Run.Armed, Run.ArmedTypes, Run.PunchIn, End, Run.Samples, Run.TakeId, ClipNowIso());
+		const FString RecordedAt = ClipNowIso();
+		CompClipTake(Run.Clip, Run.Armed, Run.ArmedTypes, Run.PunchIn, End, Run.Samples, Run.TakeId, RecordedAt);
+		// The armed lanes: the calls their actors took come off the recorder, with its function wrappers.
+		if (Run.LaneRecordings.Num() > 0)
+		{
+			TMap<FString, TArray<FClipActionCall>> Calls = FClipCallRecorder::Get().Finish();
+			for (FClipLaneRecording& Rec : Run.LaneRecordings)
+			{
+				if (TArray<FClipActionCall>* Seen = Calls.Find(Rec.LaneId)) Rec.Calls = MoveTemp(*Seen);
+			}
+			CompClipLaneTakes(Run.Clip, Run.LaneRecordings, Run.PunchIn, End, Run.TakeId, RecordedAt);
+		}
 		// The take's run is the clip as it now stands, played and recorded: the replayed lead-in, the take, and what
 		// played after the punch-out. Its pawn track is what later runs are measured against.
 		Run.Clip.Reference = Run.RunId;
@@ -908,7 +982,8 @@ namespace MCPPIE
 		RestoreFixedTimestep();
 		FPSPin.Restore();
 		Taps.Remove();
-		StopRemoteLanes();
+		StopDrivers();
+		if (FClipCallRecorder::Get().IsWatching()) FClipCallRecorder::Get().Finish();
 		if (Runner.IsValid()) Runner->Reset();
 		FPIEObserver::Get().StopRun(Run.RunId);
 		if (PreActorTickHandle.IsValid()) FWorldDelegates::OnWorldPreActorTick.Remove(PreActorTickHandle);
@@ -1045,6 +1120,26 @@ namespace MCPPIE
 		}
 		O->SetArrayField(TEXT("events"), Events);
 
+		// Each move, action and value lane: the performer it drove, how many points, calls or frames it fired, and
+		// the first few things that went wrong.
+		TArray<TSharedPtr<FJsonValue>> Lanes;
+		for (int32 L = 0; L < Run.Clip.Lanes.Num(); ++L)
+		{
+			const FClipLane& Lane = Run.Clip.Lanes[L];
+			TSharedRef<FJsonObject> LO = MakeShared<FJsonObject>();
+			LO->SetStringField(TEXT("id"), Lane.Id);
+			LO->SetStringField(TEXT("kind"), ClipLaneCapabilityToString(Lane.Capability));
+			LO->SetObjectField(TEXT("performer"), ClipPerformerToJson(Run.Clip.LanePerformer(Lane)));
+			const FClipLaneState* State = Run.Lanes.IsValidIndex(L) ? &Run.Lanes[L] : nullptr;
+			LO->SetNumberField(TEXT("fired"), State ? State->Fired : 0);
+			if (State && State->bArmed) LO->SetBoolField(TEXT("armed"), true);
+			TArray<TSharedPtr<FJsonValue>> Errors;
+			if (State) for (const FString& E : State->Errors) Errors.Add(MakeShared<FJsonValueString>(E));
+			LO->SetArrayField(TEXT("errors"), Errors);
+			Lanes.Add(MakeShared<FJsonValueObject>(LO));
+		}
+		O->SetArrayField(TEXT("lanes"), Lanes);
+
 		if (Run.bRecording)
 		{
 			TSharedRef<FJsonObject> R = MakeShared<FJsonObject>();
@@ -1056,6 +1151,9 @@ namespace MCPPIE
 			TArray<TSharedPtr<FJsonValue>> Armed;
 			for (const FString& A : Run.Armed) Armed.Add(MakeShared<FJsonValueString>(A));
 			R->SetArrayField(TEXT("armed"), Armed);
+			TArray<TSharedPtr<FJsonValue>> ArmedLanes;
+			for (const FClipLaneRecording& Rec : Run.LaneRecordings) ArmedLanes.Add(MakeShared<FJsonValueString>(Rec.LaneId));
+			R->SetArrayField(TEXT("armed_lanes"), ArmedLanes);
 			R->SetNumberField(TEXT("samples"), Run.Samples.Num());
 			if (bLive && Run.bPunchedIn && !Run.bTakeSaved)
 			{

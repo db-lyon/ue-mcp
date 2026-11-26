@@ -6,6 +6,7 @@
 #include "Handlers/PIE/PIESequenceFormat.h"
 #include "Handlers/PIE/PIERawInputTap.h"
 
+class UObject;
 class UInputAction;
 class UEnhancedPlayerInput;
 class UEnhancedInputComponent;
@@ -32,6 +33,11 @@ class UWorld;
  */
 namespace MCPPIE
 {
+	// Walk a dotted path from a root UObject down to a leaf FProperty and return its numeric value as a double. A
+	// head segment that is no property may name one of the actor's components. Returns true on success; on failure
+	// OutWhy (when given) names the segment that stopped the walk. Shared by the sampler and the clip's value lanes.
+	bool ResolvePathToDouble(UObject* Root, const FString& Path, double& OutValue, FString* OutWhy = nullptr);
+
 	class FPIEFrameSampler
 	{
 	public:

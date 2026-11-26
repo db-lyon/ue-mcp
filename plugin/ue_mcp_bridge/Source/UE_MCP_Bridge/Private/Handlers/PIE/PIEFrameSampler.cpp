@@ -41,11 +41,9 @@ namespace MCPPIE
 			}
 			return EActionValueType::Boolean;
 		}
+	}
 
-		// Walk a dotted path from a root UObject down to a leaf FProperty and
-		// return its numeric value as a double. Returns true on success; on
-		// failure OutWhy (when given) names the segment that stopped the walk.
-		bool ResolvePathToDouble(UObject* Root, const FString& Path, double& OutValue, FString* OutWhy = nullptr)
+		bool ResolvePathToDouble(UObject* Root, const FString& Path, double& OutValue, FString* OutWhy)
 		{
 			auto Fail = [OutWhy](const FString& Why) { if (OutWhy) *OutWhy = Why; return false; };
 			if (!Root) return Fail(TEXT("no object to read from"));
@@ -140,6 +138,8 @@ namespace MCPPIE
 			return Fail(FString::Printf(TEXT("ends at %s, which is not numeric"), *Property->GetCPPType()));
 		}
 
+	namespace
+	{
 		// pie-studio#4 (ue-mcp#756): sample one channel of a named bone or socket
 		// transform per frame. ue-mcp's read_bone_transforms is a point-in-time
 		// read by design; a bounded frame range with timestamps is observation,

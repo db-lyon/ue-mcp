@@ -229,8 +229,8 @@ void FPIEHandlers::RegisterClipHandlers(FMCPHandlerRegistry& Registry)
 {
 	using EType = EMCPParamType;
 	const TCHAR* const PathDoc = TEXT("Playtest clip asset path");
-	const TCHAR* const ClipDoc = TEXT("The clip as JSON: {rate (frames per second, default 60), length (frames, 0 ends at the last thing on it), grid (frame | 1/N | free), map, profile, description, fixed_timestep (default true), seed, hold_timeout (frames), regions: [{id?, name, start, end}], tracks: [{action (Input Action path), type: bool|axis1d|axis2d|axis3d, notes: [{id?, start, length, value? (axis tracks)}], keys: [{id?, t, v, interp?: linear|constant|cubic}] (axis tracks)}], events: [{id?, at, do (an act entry: place, console, capture, key, press, hold, tape, inject; or an arrange entry: {kind: spawn|set|call, ...})}], checks: [{id?, name?, start, length, mode: by_end|throughout|hold, expect: {value, op, target?} | manual: true with instruction}]}. Times are frames at rate. A track holds the raw value that reaches the Input Action, before its own modifiers and triggers");
-	const TCHAR* const TextDoc = TEXT("The clip in its compact text form, one thing per line: clip rate=60 length=600 | region <id> <start> <end> \"name\" | track <action> <type> followed by indented note <id> <start> <length> [value] and key <id> <t> <value> [interp] lines | event <id> <at> {json} | check <id> <start> <length> <by_end|throughout|hold> <value> <op> [target] | check <id> <start> <length> manual \"question\". Use - for an id to have one assigned");
+	const TCHAR* const ClipDoc = TEXT("The clip as JSON: {rate (frames per second, default 60), length (frames, 0 ends at the last thing on it), grid (frame | 1/N | free), map, profile, description, fixed_timestep (default true), seed, hold_timeout (frames), regions: [{id?, name, start, end}], tracks: [{action (Input Action path), type: bool|axis1d|axis2d|axis3d, notes: [{id?, start, length, value? (axis tracks)}], keys: [{id?, t, v, interp?: linear|constant|cubic}] (axis tracks)}], performer ({kind: player, client} | {kind: actor, actor}: what lanes drive when they name nothing; the run's own player by default), lanes: [{id?, kind: move, performer?, points: [{id?, t, at: [x,y,z], radius?}]} | {id?, kind: action, performer?, calls: [{id?, t, fn (a function, or Component.Function), args?: []}], watch?: [functions a recording captures]} | {id?, kind: value, performer?, target (a property path, or bb:<Key>), type: axis1d|bool, keys: [{id?, t, v, interp?}]}] (a player takes action and value lanes on its pawn, an actor move, action and value lanes), events: [{id?, at, do (an act entry: place, console, capture, key, press, hold, tape, inject; or an arrange entry: {kind: spawn|set|call, ...})}], checks: [{id?, name?, start, length, mode: by_end|throughout|hold, expect: {value, op, target?} | manual: true with instruction}]}. Times are frames at rate. A track holds the raw value that reaches the Input Action, before its own modifiers and triggers");
+	const TCHAR* const TextDoc = TEXT("The clip in its compact text form, one thing per line: clip rate=60 length=600 | region <id> <start> <end> \"name\" | track <action> <type> followed by indented note <id> <start> <length> [value] and key <id> <t> <value> [interp] lines | performer player:N|actor:<name> | lane <id> move|action [performer=...] [watch=Fn,Fn] or lane <id> value <target> <axis1d|bool> [performer=...], followed by indented point <id> <t> <x,y,z> [radius=N], call <id> <t> <fn> [[args JSON]] or key <id> <t> <value> [interp] lines | event <id> <at> {json} | check <id> <start> <length> <by_end|throughout|hold> <value> <op> [target] | check <id> <start> <length> manual \"question\". Use - for an id to have one assigned");
 	const TCHAR* const RunIdDoc = TEXT("Clip run id (default the current or last run)");
 
 	Registry.RegisterHandler(TEXT("pie_clip_create"), &PieClipCreate, {
@@ -251,7 +251,7 @@ void FPIEHandlers::RegisterClipHandlers(FMCPHandlerRegistry& Registry)
 	}, MCPSpec::ExactlyOne({ { TEXT("clip") }, { TEXT("text") } }));
 	Registry.RegisterHandler(TEXT("pie_clip_edit"), &PieClipEdit, {
 		MCPParam::Required(TEXT("path"), EType::String, PathDoc),
-		MCPParam::Required(TEXT("ops"), EType::Array, TEXT("Edits applied in order, all or none: {op: add, kind: note|key|track|check|event|region, ...the thing's fields (track names the Input Action a note or key goes on)} | {op: move, id, to | by} | {op: trim, id, start?, length? | end?} | {op: set, id, ...fields} | {op: delete, id} (a track by its action) | {op: quantize, grid?, track? | ids?} | {op: set_clip, ...clip fields}. Times snap to the clip's grid")).Items(EType::Object),
+		MCPParam::Required(TEXT("ops"), EType::Array, TEXT("Edits applied in order, all or none: {op: add, kind: note|key|track|check|event|region, ...the thing's fields (track names the Input Action a note or key goes on)} | {op: add, kind: lane, capability: move|action|value, performer?, target?, type?, watch?} | {op: add, kind: point|call|key, lane (the lane's id), time, at | fn, args? | value} | {op: move, id, to | by} | {op: trim, id, start?, length? | end?} | {op: set, id, ...fields} | {op: delete, id} (a track by its action) | {op: quantize, grid?, track? | ids?} | {op: set_clip, ...clip fields, performer?: performer | null}. Times snap to the clip's grid")).Items(EType::Object),
 	});
 	Registry.RegisterHandler(TEXT("pie_clip_validate"), &PieClipValidate, {
 		MCPParam::Optional(TEXT("path"), EType::String, TEXT("A stored clip to check")),
@@ -284,7 +284,7 @@ void FPIEHandlers::RegisterClipHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Required(TEXT("path"), EType::String, TEXT("Playtest clip asset path the take goes into; create an empty clip first to record a new one")),
 		MCPParam::Optional(TEXT("region"), EType::String, TEXT("Punch in at this region's start and out at its end. The clip plays up to the punch-in with the person's input locked out")),
 		MCPParam::Optional(TEXT("from_check"), EType::String, TEXT("Punch in at this hold check's frame instead, and record until clip_record_stop")),
-		MCPParam::Optional(TEXT("armed"), EType::Array, TEXT("Input Actions the take records (default every action the player has a mapping for). The take replaces these tracks over the range, and keeps what they held there as history")).Items(EType::String),
+		MCPParam::Optional(TEXT("armed"), EType::Array, TEXT("Input Actions and lane ids the take records (default every action the player has a mapping for). An armed move, action or value lane is not driven from the punch-in; the take records where its performer walked, the calls it took (the functions the lane names or watches) or the value its target held. The take replaces what these held over the range, and keeps it as history")).Items(EType::String),
 		MCPParam::Optional(TEXT("pie_instance"), EType::Integer, TEXT("FWorldContext PIEInstance of the player being recorded (default the editor's own player)")).Min(0),
 		MCPParam::Optional(TEXT("client_id"), EType::Integer, TEXT("Local-player index inside that PIE world (default 0)")).Min(0),
 	}, MCPSpec::ContractExempt(TEXT("Starts PIE and records the person's input into the clip")));
@@ -664,8 +664,20 @@ TSharedPtr<FJsonValue> FPIEHandlers::PieClipRecord(const TSharedPtr<FJsonObject>
 	{
 		for (const TSharedPtr<FJsonValue>& V : *Armed)
 		{
+			// A lane id arms that move, action or value lane: the take records what its performer does.
+			if (Cfg.Clip.FindLane(V->AsString()))
+			{
+				Cfg.Armed.Add(V->AsString());
+				continue;
+			}
 			const FString A = NormalizeScriptInputActionPath(V->AsString());
-			if (!LoadObject<UInputAction>(nullptr, *A)) return MCPError(FString::Printf(TEXT("armed: no Input Action loads from %s"), *A));
+			if (!LoadObject<UInputAction>(nullptr, *A))
+			{
+				TArray<FString> Lanes;
+				for (const FClipLane& L : Cfg.Clip.Lanes) Lanes.Add(L.Id);
+				return MCPError(FString::Printf(TEXT("armed: %s is no lane of the clip%s, and no Input Action loads from %s"), *V->AsString(),
+					Lanes.Num() ? *FString::Printf(TEXT(" (lanes: %s)"), *FString::Join(Lanes, TEXT(", "))) : TEXT(""), *A));
+			}
 			Cfg.Armed.Add(A);
 		}
 	}

@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Handlers/PIE/PIEClip.h"
+#include "Handlers/PIE/PIEClipDrivers.h"
 #include "Handlers/PIE/PIERawInputTap.h"
 #include "Handlers/PIE/PIEStepActions.h"
 #include "Handlers/PIE/PIEMaxFPSPin.h"
@@ -26,6 +27,11 @@ class ULocalPlayer;
  * Recording plays the clip up to the punch-in frame with the player's own input locked out, then stops feeding the
  * armed tracks and reads what the person does to them instead, until the punch-out frame or clip_record_stop. The
  * take replaces the armed tracks over that range (FClip::CompClipTake) and the clip is saved.
+ *
+ * Every lane goes to the driver of the performer it drives (PIEClipDrivers.h), one driver per performer for the
+ * run: Input Action lanes to the player's, move, action and value lanes to their performer's. An armed move, value
+ * or action lane is not driven from the punch-in; the take reads where its performer walked, the value it held and
+ * the calls it took instead (FClip::CompClipLaneTakes).
  */
 namespace MCPPIE
 {
@@ -50,7 +56,8 @@ namespace MCPPIE
 		int32 ClientId = 0;
 
 		bool bRecord = false;
-		// Input Actions the take records. Empty records every action the player has a mapping for.
+		// Input Actions and lane ids the take records. With no Input Action among them, and no lane either, every
+		// action the player has a mapping for.
 		TArray<FString> Armed;
 		double PunchIn = 0.0;
 		// -1 records until clip_record_stop or PIE ends.
@@ -64,6 +71,15 @@ namespace MCPPIE
 		double GameMs = 0.0;
 		bool bOk = true;
 		FString Error;
+	};
+
+	// How one move, action or value lane is playing: what it has fired and what went wrong, by lane index.
+	struct FClipLaneState
+	{
+		int32 Next = 0;
+		int32 Fired = 0;
+		bool bArmed = false;
+		TArray<FString> Errors;
 	};
 
 	struct FClipRun
@@ -95,6 +111,7 @@ namespace MCPPIE
 		TArray<FClipCheckRun> Checks;
 		TArray<FClipFiredEvent> FiredEvents;
 		int32 NextEvent = 0;
+		TArray<FClipLaneState> Lanes;
 		// Pawn per frame: frame, location, velocity. Written as track.json; a later run measures drift against it.
 		struct FPawnSample { double Frame; FVector Location; FVector Velocity; };
 		TArray<FPawnSample> PawnTrack;
@@ -113,6 +130,8 @@ namespace MCPPIE
 		TArray<FString> Armed;
 		TMap<FString, EClipValueType> ArmedTypes;
 		TArray<FClipTakeSample> Samples;
+		// Armed move and value lanes' samples, by lane id; an armed action lane's calls come from FClipCallRecorder.
+		TArray<FClipLaneRecording> LaneRecordings;
 		FString TakeId;
 		bool bTakeSaved = false;
 		FString TakeError;
@@ -144,8 +163,10 @@ namespace MCPPIE
 		void StartClock(UWorld* World);
 		void FireEvents(UWorld* World, double UpTo);
 		void FeedInput(UWorld* World);
-		void FeedRemoteLane(const FClipTrack& Track, bool bActive, const FVector& Value);
-		void StopRemoteLanes();
+		void DriveLanes(UWorld* World);
+		void LaneError(int32 LaneIndex, const FString& Error);
+		FClipPerformerDriver* DriverFor(const FClipPerformer& Performer);
+		void StopDrivers();
 		void JudgeChecks(UWorld* World);
 		bool ReadCheckValue(int32 Index, double& OutValue);
 		void SamplePawnAndDrift(UWorld* World);
@@ -169,10 +190,8 @@ namespace MCPPIE
 		struct FTriggerWatch { TWeakObjectPtr<const UInputAction> Action; bool bReleased = false; };
 		TMap<int32, FTriggerWatch> TriggerWatches;
 		FPIERawInputTaps Taps;
-		// Remote clients' lanes, as holds on those clients, by "<client>|<action>".
-		struct FRemoteLaneHold { FString Id; FVector Value; };
-		TMap<FString, FRemoteLaneHold> RemoteHolds;
-		TSet<FString> RemoteLaneErrors;
+		// One driver per performer the run drives, by FClipPerformer::Key.
+		TMap<FString, TUniquePtr<FClipPerformerDriver>> Drivers;
 		TSharedPtr<FStepActionRunner> Runner;
 
 		FPIEMaxFPSPin FPSPin;

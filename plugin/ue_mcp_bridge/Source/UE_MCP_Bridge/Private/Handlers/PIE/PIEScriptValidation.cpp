@@ -955,6 +955,57 @@ namespace MCPPIE
 			if (!L.bFound) L.Message = Err;
 			return L;
 		};
+		Ctx.ResolveActorMember = [WeakWorld](const FString& ActorId, const FString& Kind, const FString& Name) -> FScriptLookup
+		{
+			FScriptLookup L;
+			AActor* Actor = FindActorById(WeakWorld.Get(), ActorId);
+			if (!Actor)
+			{
+				// A spawned actor is checked in PIE; here there is nothing to read it from.
+				L.bFound = true;
+				return L;
+			}
+			if (Kind == TEXT("pawn"))
+			{
+				L.bFound = Actor->IsA<APawn>();
+				if (!L.bFound) L.Message = FString::Printf(TEXT("%s is a %s"), *ActorId, *Actor->GetClass()->GetName());
+				return L;
+			}
+			if (Kind == TEXT("function"))
+			{
+				FString CompName, FnName = Name;
+				UObject* Target = Actor;
+				if (Name.Split(TEXT("."), &CompName, &FnName))
+				{
+					Target = nullptr;
+					for (UActorComponent* C : Actor->GetComponents())
+					{
+						if (C && C->GetName() == CompName) { Target = C; break; }
+					}
+					if (!Target)
+					{
+						TArray<FString> Comps;
+						for (UActorComponent* C : Actor->GetComponents()) if (C) Comps.Add(C->GetName());
+						L.Message = FString::Printf(TEXT("it has no component %s"), *CompName);
+						L.Candidates = RankScriptCandidates(CompName, Comps);
+						return L;
+					}
+				}
+				L.bFound = Target->FindFunction(FName(*FnName)) != nullptr;
+				if (!L.bFound)
+				{
+					TArray<FString> Fns;
+					for (TFieldIterator<UFunction> It(Target->GetClass()); It; ++It)
+					{
+						if (It->HasAnyFunctionFlags(FUNC_BlueprintCallable | FUNC_BlueprintEvent | FUNC_Exec)) Fns.AddUnique(It->GetName());
+					}
+					L.Candidates = RankScriptCandidates(FnName, Fns);
+				}
+				return L;
+			}
+			L = ResolveScriptPathOnClass(Actor->GetClass(), Actor, Name);
+			return L;
+		};
 		return Ctx;
 	}
 

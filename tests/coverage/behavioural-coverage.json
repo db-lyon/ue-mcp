@@ -16947,6 +16947,21 @@
       "tests": [
         {
           "suite": "live",
+          "file": "tests/live/pie-clip-actor-lanes.test.ts",
+          "test": "drives an AI pawn through move, action and value lanes, and the checks on it pass"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/pie-clip-actor-lanes.test.ts",
+          "test": "plays a clip that names no performer on a hub track that drives the pawn"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/pie-clip-actor-lanes.test.ts",
+          "test": "records where the pawn went and the calls it took into armed lanes"
+        },
+        {
+          "suite": "live",
           "file": "tests/live/pie-clip-format.test.ts",
           "test": "clip_create saves the text form, clip_read gives it back as JSON and text, and clip_list finds it"
         },
@@ -17019,6 +17034,16 @@
       "tests": [
         {
           "suite": "live",
+          "file": "tests/live/pie-clip-actor-lanes.test.ts",
+          "test": "drives an AI pawn through move, action and value lanes, and the checks on it pass"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/pie-clip-actor-lanes.test.ts",
+          "test": "records where the pawn went and the calls it took into armed lanes"
+        },
+        {
+          "suite": "live",
           "file": "tests/live/pie-clip-format.test.ts",
           "test": "clip_create saves the text form, clip_read gives it back as JSON and text, and clip_list finds it"
         },
@@ -17052,6 +17077,11 @@
       "tests": [
         {
           "suite": "live",
+          "file": "tests/live/pie-clip-actor-lanes.test.ts",
+          "test": "records where the pawn went and the calls it took into armed lanes"
+        },
+        {
+          "suite": "live",
           "file": "tests/live/pie-clip-record.test.ts",
           "test": "a take over one region replaces only that region's armed tracks and keeps the old notes as history"
         },
@@ -17081,6 +17111,11 @@
       "registeredIn": "PIEHandlers_Clip.cpp",
       "status": "covered",
       "tests": [
+        {
+          "suite": "live",
+          "file": "tests/live/pie-clip-actor-lanes.test.ts",
+          "test": "drives an AI pawn through move, action and value lanes, and the checks on it pass"
+        },
         {
           "suite": "live",
           "file": "tests/live/pie-clip-record.test.ts",
@@ -17124,6 +17159,16 @@
       "registeredIn": "PIEHandlers_Clip.cpp",
       "status": "covered",
       "tests": [
+        {
+          "suite": "live",
+          "file": "tests/live/pie-clip-actor-lanes.test.ts",
+          "test": "drives an AI pawn through move, action and value lanes, and the checks on it pass"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/pie-clip-actor-lanes.test.ts",
+          "test": "records where the pawn went and the calls it took into armed lanes"
+        },
         {
           "suite": "live",
           "file": "tests/live/pie-clip-record.test.ts",
@@ -17501,6 +17546,21 @@
           "suite": "live",
           "file": "tests/live/pie-client-ui-navigation.test.ts",
           "test": "each client's menu takes focus and keys on its own, and the server is never the target"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/pie-clip-actor-lanes.test.ts",
+          "test": "drives an AI pawn through move, action and value lanes, and the checks on it pass"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/pie-clip-actor-lanes.test.ts",
+          "test": "plays a clip that names no performer on a hub track that drives the pawn"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/pie-clip-actor-lanes.test.ts",
+          "test": "records where the pawn went and the calls it took into armed lanes"
         },
         {
           "suite": "live",

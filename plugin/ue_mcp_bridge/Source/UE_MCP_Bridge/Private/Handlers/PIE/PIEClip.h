@@ -30,6 +30,16 @@
  *                  a hold with PIE paused until it has a verdict.
  *   Regions        Named spans that tile the timeline without overlapping. Results
  *                  report against them.
+ *   Lanes          What a clip drives besides Input Actions (#2137): move lanes
+ *                  (points an actor walks to through its controller), action lanes
+ *                  (function calls at a frame) and value lanes (a property or
+ *                  blackboard value over time). Each drives a performer.
+ *
+ * A performer is a tagged union on its kind: a player (the run's own, or remote
+ * client N) or an actor in the level. Lanes are typed by capability (input,
+ * move, action, value) and each performer kind declares the capabilities it
+ * takes. The clip player hands each lane to a driver for its performer's kind
+ * (PIEClipDrivers.h), so a new kind is a new driver.
  */
 namespace MCPPIE
 {
@@ -46,6 +56,41 @@ namespace MCPPIE
 	FString ClipCheckModeToString(EClipCheckMode Mode);
 	bool ParseClipCheckMode(const FString& Str, EClipCheckMode& Out);
 	int32 ClipValueDims(EClipValueType Type);
+
+	// ── Performers and capabilities (#2137) ─────────────────────────────
+
+	enum class EClipLaneCapability : uint8 { Input, Move, Action, Value };
+	enum class EClipPerformerKind : uint8 { Player, Actor };
+
+	FString ClipLaneCapabilityToString(EClipLaneCapability Capability);
+	bool ParseClipLaneCapability(const FString& Str, EClipLaneCapability& Out);
+	FString ClipPerformerKindToString(EClipPerformerKind Kind);
+
+	/** What a lane drives. A player: Client 0 the run's own, N remote client N. An actor: named by label, object name or path. */
+	struct FClipPerformer
+	{
+		EClipPerformerKind Kind = EClipPerformerKind::Player;
+		int32 Client = 0;
+		FString Actor;
+
+		static FClipPerformer Player(int32 InClient) { FClipPerformer P; P.Client = InClient; return P; }
+		static FClipPerformer ForActor(const FString& InActor) { FClipPerformer P; P.Kind = EClipPerformerKind::Actor; P.Actor = InActor; return P; }
+		/** One key per performer: two references to the same one are equal. */
+		FString Key() const;
+		/** player:N or actor:<name>, quoted when the name holds a space. */
+		FString ToText() const;
+		/** "client 2", or the actor's name, for messages. */
+		FString Label() const;
+		bool operator==(const FClipPerformer& Other) const { return Key() == Other.Key(); }
+	};
+
+	/** The capabilities a performer kind takes: a player input, action and value; an actor move, action and value. */
+	TArray<EClipLaneCapability> ClipPerformerCapabilities(EClipPerformerKind Kind);
+	bool ClipPerformerAccepts(EClipPerformerKind Kind, EClipLaneCapability Capability);
+	bool ClipPerformerFromJson(const TSharedPtr<FJsonValue>& Value, FClipPerformer& Out, FString& OutError);
+	TSharedRef<FJsonObject> ClipPerformerToJson(const FClipPerformer& Performer);
+	/** player:N, actor:<name>, or a bare number for a player. */
+	bool ClipPerformerFromText(const FString& Text, FClipPerformer& Out);
 
 	struct FClipNote
 	{
@@ -74,6 +119,47 @@ namespace MCPPIE
 		// The player the lane drives: 0 the run's own player, N remote client N through its remote control (#2113).
 		int32 Client = 0;
 		TArray<FClipNote> Notes;
+		TArray<FClipKey> Keys;
+	};
+
+	// A move lane's point: from frame Time the performer walks to Location through its controller.
+	struct FClipMovePoint
+	{
+		FString Id;
+		double Time = 0.0;
+		FVector Location = FVector::ZeroVector;
+		// How close counts as there, in centimetres; below 0 the controller's own acceptance radius.
+		double Radius = -1.0;
+	};
+
+	// An action lane's call: Function on the performer (or "Component.Function") at frame Time, Args imported in order.
+	struct FClipActionCall
+	{
+		FString Id;
+		double Time = 0.0;
+		FString Function;
+		TArray<TSharedPtr<FJsonValue>> Args;
+	};
+
+	/**
+	 * A lane that is not an Input Action lane: move, action or value (Input Action lanes are FClipTrack). Its
+	 * performer is its own when bHasPerformer, else the clip's.
+	 */
+	struct FClipLane
+	{
+		FString Id;
+		EClipLaneCapability Capability = EClipLaneCapability::Move;
+		bool bHasPerformer = false;
+		FClipPerformer Performer;
+		// Move.
+		TArray<FClipMovePoint> Points;
+		// Action. Watch names more functions a recording captures besides those its calls name.
+		TArray<FClipActionCall> Calls;
+		TArray<FString> Watch;
+		// Value: a property path on the performer ("Health", "Stats.Stamina") or "bb:<Key>" on its AI controller's
+		// blackboard, axis1d (a number) or bool, as curve keys written from the first key through the last.
+		FString Target;
+		EClipValueType Type = EClipValueType::Axis1D;
 		TArray<FClipKey> Keys;
 	};
 
@@ -134,6 +220,7 @@ namespace MCPPIE
 		double Start = 0.0;
 		double End = 0.0;
 		TArray<FClipTrack> Tracks;
+		TArray<FClipLane> Lanes;
 	};
 
 	struct FClip
@@ -165,6 +252,10 @@ namespace MCPPIE
 		TArray<double> FrameTimes;
 		TArray<FClipRegion> Regions;
 		TArray<FClipTrack> Tracks;
+		// The performer the lanes drive when a lane names none; the run's own player when absent.
+		bool bHasPerformer = false;
+		FClipPerformer Performer;
+		TArray<FClipLane> Lanes;
 		TArray<FClipEvent> Events;
 		TArray<FClipCheck> Checks;
 		TArray<FClipTake> Takes;
@@ -178,6 +269,10 @@ namespace MCPPIE
 		double SnapToFrameTime(double Position) const;
 		FClipTrack* FindTrack(const FString& Action);
 		const FClipTrack* FindTrack(const FString& Action) const;
+		FClipLane* FindLane(const FString& Id);
+		const FClipLane* FindLane(const FString& Id) const;
+		// The performer a lane drives: its own, else the clip's, else the run's own player.
+		FClipPerformer LanePerformer(const FClipLane& Lane) const;
 	};
 
 	// ── Issues ──────────────────────────────────────────────────────────
@@ -225,6 +320,14 @@ namespace MCPPIE
 	 *   check c3 200 60 throughout speed2d lt 700
 	 *   check c4 300 0 manual "Did the door open smoothly?" agent_judgeable=false
 	 *   recorded c2 140 2333.3 81.5
+	 *   performer actor:BP_Guard_2
+	 *   lane l1 move
+	 *     point p1 0 900,0,90 radius=30
+	 *   lane l2 action watch=Alert
+	 *     call a1 120 Attack [2]
+	 *   lane l3 value bb:Alert axis1d performer=actor:"Gate Guard"
+	 *     key k9 0 0
+	 *     key k10 60 1 constant
 	 *
 	 * A value is comma-separated with no spaces. A string with spaces is quoted, with \" and \\ escapes.
 	 * Takes are history and are not written.
@@ -290,6 +393,40 @@ namespace MCPPIE
 	 */
 	void CompClipTake(FClip& Clip, const TArray<FString>& ArmedActions, const TMap<FString, EClipValueType>& Types,
 		double Start, double End, const TArray<FClipTakeSample>& Samples, const FString& TakeId, const FString& RecordedAt);
+
+	// One frame of an armed move or value lane: where its performer stood, or the value it held.
+	struct FClipLaneSample
+	{
+		double Frame = 0.0;
+		bool bHasLocation = false;
+		FVector Location = FVector::ZeroVector;
+		bool bHasValue = false;
+		double Value = 0.0;
+	};
+
+	// What an armed lane recorded: per-frame samples for a move or value lane, the calls seen for an action lane.
+	struct FClipLaneRecording
+	{
+		FString LaneId;
+		TArray<FClipLaneSample> Samples;
+		TArray<FClipActionCall> Calls;
+	};
+
+	/**
+	 * Replaces the armed lanes over [Start, End) with what their performers did there, keeping what the range held
+	 * as a take. A move lane becomes the route the performer walked: stationary stretches collapse to the moment it
+	 * left, corners are kept (Douglas-Peucker, 25 cm), and each point is set at the frame the performer left the
+	 * point before, so a replay sets off when the recording did. A value lane becomes keys reduced with FRichCurve.
+	 * An action lane takes the calls seen, at the frames they were seen on.
+	 */
+	void CompClipLaneTakes(FClip& Clip, const TArray<FClipLaneRecording>& Recordings, double Start, double End,
+		const FString& TakeId, const FString& RecordedAt);
+
+	// The points a move lane recording reduces to, by the rule above. Exposed for the automation tests.
+	TArray<FClipMovePoint> ReduceClipMoveSamples(const TArray<FClipLaneSample>& Samples);
+
+	// A value lane's value at a frame: the curve between its first and last key, inactive outside it.
+	double EvaluateClipValueLane(const FClipLane& Lane, double Frame, bool& bOutActive);
 
 	// ── Runs ────────────────────────────────────────────────────────────
 

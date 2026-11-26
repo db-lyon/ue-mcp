@@ -74,6 +74,10 @@ namespace MCPPIE
 		// Arrange and act: the Input Action an input entry drives, and the actor class a spawn names.
 		TFunction<FScriptLookup(const FString& ActionPath)> ResolveInputAction;
 		TFunction<FScriptLookup(const FString& ClassPath)> ResolveActorClass;
+		// Clip lanes (#2137): what a level actor offers its lanes. Kind "pawn" asks whether it is a pawn (a move lane
+		// needs one), "function" whether Name (or Component.Function) is a function on it, "value" whether Name is a
+		// property path on it. Null leaves lanes unchecked against the level.
+		TFunction<FScriptLookup(const FString& ActorId, const FString& Kind, const FString& Name)> ResolveActorMember;
 	};
 
 	// The Pool entries closest to Needle, best first, ignoring case.
