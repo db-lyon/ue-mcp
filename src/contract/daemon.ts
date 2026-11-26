@@ -87,6 +87,7 @@ export const DAEMON_FEATURES = [
   "events.clip",
   "events.clip.take",
   "hub.arrangements",
+  "hub.performers",
 ] as const;
 
 export type DaemonFeature = (typeof DAEMON_FEATURES)[number];
@@ -272,6 +273,7 @@ export const DAEMON_ROUTES = routeTable({
   "hub.arrangements.update": { method: "PUT", path: "/v1/hub/arrangements/:id", feature: "hub.arrangements", summary: "{ title?, level? }: rename an arrangement or set the map its runs open; level null clears it ({ arrangement })" },
   "hub.arrangements.duplicate": { method: "POST", path: "/v1/hub/arrangements/:id/duplicate", feature: "hub.arrangements", summary: "{ title? }: copy an arrangement's tracks, scenes and instances right after it; clips stay shared ({ arrangement })" },
   "hub.arrangements.delete": { method: "DELETE", path: "/v1/hub/arrangements/:id", feature: "hub.arrangements", summary: "delete an arrangement with its tracks and scenes; clips stay (204; 409 for the last one, or while a run made in it is queued or running)" },
+  "hub.performers": { method: "GET", path: "/v1/hub/performers", feature: "hub.performers", summary: "?arrangement: what a track can drive, the editor's player, remote clients and the open level's actors, each with the lane capabilities it takes (PerformersView)" },
   "hub.rules": { method: "PUT", path: "/v1/hub/rules", feature: "hub", summary: "Partial<HealthRule>: the project's flaky and stale rule ({ rules })" },
   "hub.store.export": { method: "GET", path: "/v1/hub/store", feature: "hub", summary: "every goal, check record, sign-off and rule (HubExport)" },
   "hub.store.import": { method: "POST", path: "/v1/hub/store", feature: "hub", summary: "HubExport: merge by id (HubImportReport; 400 naming every record that does not read)" },

@@ -101,7 +101,7 @@ describe("the daemon contract", () => {
     for (const file of hubContractFiles) {
       const sf = ts.createSourceFile(file, fs.readFileSync(file, "utf8"), ts.ScriptTarget.Latest);
       const from = sf.statements.flatMap((s) => (ts.isImportDeclaration(s) || (ts.isExportDeclaration(s) && s.moduleSpecifier) ? [(s.moduleSpecifier as ts.StringLiteral).text] : []));
-      expect(from.filter((m) => !/^\.\/(daemon|hub|hub-qa|hub-attention|hub-arrangement|hub-compose|hub-set|hub-ports)\.js$/.test(m)), path.basename(file)).toEqual([]);
+      expect(from.filter((m) => !/^\.\/(daemon|hub|hub-qa|hub-attention|hub-arrangement|hub-compose|hub-set|hub-performers|hub-ports)\.js$/.test(m)), path.basename(file)).toEqual([]);
     }
   });
 
@@ -109,7 +109,7 @@ describe("the daemon contract", () => {
     const entry = path.join(repo, "src", "hub-api.ts");
     const sf = ts.createSourceFile(entry, fs.readFileSync(entry, "utf8"), ts.ScriptTarget.Latest);
     const from = sf.statements.flatMap((s) => (ts.isImportDeclaration(s) || (ts.isExportDeclaration(s) && s.moduleSpecifier) ? [(s.moduleSpecifier as ts.StringLiteral).text] : []));
-    expect(from.filter((m) => !/^\.\/contract\/(hub|hub-qa|hub-attention|hub-arrangement|hub-compose|hub-set|hub-ports)\.js$/.test(m))).toEqual([]);
+    expect(from.filter((m) => !/^\.\/contract\/(hub|hub-qa|hub-attention|hub-arrangement|hub-compose|hub-set|hub-performers|hub-ports)\.js$/.test(m))).toEqual([]);
     const pkg = JSON.parse(fs.readFileSync(path.join(repo, "package.json"), "utf8")) as { exports: Record<string, unknown> };
     expect(pkg.exports["./hub"]).toEqual({ types: "./dist/hub-api.d.ts", default: "./dist/hub-api.js" });
   });

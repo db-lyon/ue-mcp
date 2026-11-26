@@ -25,6 +25,7 @@ import { qaEnded, type QaRun, type QaStep, type QaStepStatus, type QaSummary } f
 import type { Arrangement, ArrangementFinding, InstanceLayout } from "./hub-arrangement.js";
 import type { ArrangementRun } from "./hub-compose.js";
 import type { SetColor, Slot } from "./hub-set.js";
+import type { Performer } from "./hub-performers.js";
 
 export const HUB_SCHEMA = 1 as const;
 
@@ -298,6 +299,8 @@ export interface Goal {
   color?: SetColor;
   /** A track: the player it drives, 0 (the editor's own) when absent, N for remote client N. */
   player?: number;
+  /** A track that drives something other than a player (#2137): an actor. A player track keeps `player` alone. */
+  performer?: Performer;
   /** A track: left out of every run. */
   mute?: boolean;
   /** A track: while any track is soloed, only soloed tracks play. */
@@ -1438,6 +1441,7 @@ export const HUB_ROUTES = {
   set: "GET /hub/set?arrangement= -> SetView",
   editSet: "POST /hub/set/edit { ops, arrangement? } -> SetView & { changed } (400 { error, finding })",
   clips: "GET /hub/clips?q=&kind= -> { clips: ClipEntry[] }",
+  performers: "GET /hub/performers?arrangement= -> PerformersView (what a track can drive, with the lanes each takes)",
   runSet: "POST /hub/run { scope: track | scene | slot | arrangement, next? } -> { plan: PlanRun, placement: PlanPlacement, runId: string | null } (runId once a plan that started at once has its run)",
   arrangements: "GET /hub/arrangements -> ArrangementsView",
   createArrangement: "POST /hub/arrangements { title, level? } -> { arrangement: ArrangementInfo }",
@@ -1458,7 +1462,7 @@ export interface ArrangementView {
 
 /** The set as both views draw it (GET /hub/set): tracks and scenes in order, with their status. */
 export interface SetView {
-  tracks: Array<{ id: string; title: string; order: number; color?: SetColor; player: number; mute: boolean; solo: boolean; arrangement: Arrangement; layout: InstanceLayout[]; status: GoalStatus }>;
+  tracks: Array<{ id: string; title: string; order: number; color?: SetColor; player: number; performer: Performer; mute: boolean; solo: boolean; arrangement: Arrangement; layout: InstanceLayout[]; status: GoalStatus }>;
   /** `tracks`: the tracks a scene plays, by id, in order. */
   scenes: Array<{ id: string; title: string; order: number; color?: SetColor; tracks: string[]; slots: Array<Slot & { length: number | null }>; status: GoalStatus }>;
   /** The compact text form agents read. */

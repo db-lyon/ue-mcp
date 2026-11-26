@@ -22,6 +22,7 @@ import {
   type ArrangementRun,
   type ArrangementRunKind,
   type InstanceResult,
+  type Performer,
   type QaRun,
   type QaStepStatus,
   type SegmentState,
@@ -38,7 +39,7 @@ export interface ArrangementStart {
   title: string;
   composition: ArrangementComposition;
   /** A scene's tracks, for their titles and players in the results. */
-  tracks?: Array<{ goalId: string; title: string; player: number }>;
+  tracks?: Array<{ goalId: string; title: string; player: number; performer?: Performer }>;
   /** The frame the timelines played from (at 60 per second); the composition counts from there. */
   from?: number;
   /** The map to open before Play In Editor starts, when the editor has another one open: the arrangement's level. */

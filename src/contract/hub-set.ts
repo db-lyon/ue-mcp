@@ -19,12 +19,22 @@ import {
   type ArrangementValidateOptions,
   type InstanceKind,
 } from "./hub-arrangement.js";
+import {
+  PERFORMER_CLIENT_MAX,
+  performerFromText,
+  performerOf,
+  performerPlayer,
+  performerProblem,
+  performerToText,
+  trackPerformer,
+  type Performer,
+} from "./hub-performers.js";
 
 /** The colors a track, scene, slot or instance may take, like Ableton's clip palette. */
 export const SET_COLORS = ["red", "orange", "yellow", "lime", "green", "teal", "cyan", "blue", "indigo", "violet", "pink", "gray"] as const;
 export type SetColor = (typeof SET_COLORS)[number];
 /** The most remote clients a track may drive. */
-export const SET_PLAYER_MAX = 15;
+export const SET_PLAYER_MAX = PERFORMER_CLIENT_MAX;
 
 /** One cell of the Session grid that holds a clip. */
 export interface Slot {
@@ -40,8 +50,10 @@ export interface SetTrack {
   title: string;
   order: number;
   color?: SetColor;
-  /** 0 the editor's own player, N remote client N. */
+  /** 0 the editor's own player, N remote client N; 0 when the track drives an actor. Kept for clients that read it. */
   player: number;
+  /** What the track drives (#2137): a player, or an actor in the level. */
+  performer: Performer;
   mute: boolean;
   solo: boolean;
   arrangement: Arrangement;
@@ -97,7 +109,8 @@ export function setToText(m: SetModel, rate = ARRANGEMENT_RATE): string {
   for (const t of [...m.tracks].sort((a, b) => a.order - b.order)) {
     let line = `track ${t.id} ${quote(t.title)}`;
     if (t.color) line += ` color=${t.color}`;
-    line += ` player=${t.player}`;
+    const p = t.performer ?? trackPerformer(t);
+    line += p.kind === "player" ? ` player=${p.client}` : ` performer=${performerToText(p)}`;
     if (t.mute) line += " mute";
     if (t.solo) line += " solo";
     lines.push(line);
@@ -147,13 +160,15 @@ export function setWords(line: string): string[] {
 
 /** A set op. `track`, `scene` and `toTrack` name a track or scene by id or by its exact title. */
 export type SetOp =
-  | { op: "track.add"; title: string; color?: string; player?: number; at?: number }
+  | { op: "track.add"; title: string; color?: string; player?: number; performer?: Performer | string; at?: number }
   | { op: "track.delete" | "scene.delete" | "scene.duplicate"; track?: string; scene?: string }
   | { op: "track.rename" | "scene.rename"; track?: string; scene?: string; title: string }
   | { op: "track.color" | "scene.color"; track?: string; scene?: string; color: string | null }
   | { op: "track.move" | "scene.move"; track?: string; scene?: string; to: number }
   | { op: "track.mute" | "track.solo"; track: string; on: boolean }
   | { op: "track.player"; track: string; player: number }
+  /** What the track drives: a performer, or its text form (player:N, actor:<name>). */
+  | { op: "track.performer"; track: string; performer: Performer | string }
   | { op: "scene.add"; title: string; color?: string; at?: number }
   | { op: "scene.capture"; scene: string; at?: number }
   | { op: "scene.track"; scene: string; track: string; remove?: boolean; at?: number }
@@ -199,8 +214,8 @@ export function setOpsFromText(text: string): { ops: SetOp[]; findings: Arrangem
       switch (v) {
         case "add": {
           const o = kv(3);
-          if (!w[2] || w[2].includes("=")) return bad('track add "Name" [color=..] [player=N] [at=N]');
-          return void ops.push({ op: "track.add", title: w[2], ...(o.color ? { color: o.color } : {}), ...(num(o.player) !== undefined ? { player: num(o.player) } : {}), ...(num(o.at) !== undefined ? { at: num(o.at) } : {}) });
+          if (!w[2] || w[2].includes("=")) return bad('track add "Name" [color=..] [player=N | performer=player:N|actor:<name>] [at=N]');
+          return void ops.push({ op: "track.add", title: w[2], ...(o.color ? { color: o.color } : {}), ...(num(o.player) !== undefined ? { player: num(o.player) } : {}), ...(o.performer ? { performer: o.performer } : {}), ...(num(o.at) !== undefined ? { at: num(o.at) } : {}) });
         }
         case "delete":
           return t ? void ops.push({ op: "track.delete", track: t }) : bad("track delete <track>");
@@ -215,8 +230,10 @@ export function setOpsFromText(text: string): { ops: SetOp[]; findings: Arrangem
           return t && (w[3] === "on" || w[3] === "off" || w[3] === undefined) ? void ops.push({ op: v === "mute" ? "track.mute" : "track.solo", track: t, on: w[3] !== "off" }) : bad(`track ${v} <track> on|off`);
         case "player":
           return t && num(w[3]) !== undefined ? void ops.push({ op: "track.player", track: t, player: num(w[3])! }) : bad("track player <track> <N>");
+        case "performer":
+          return t && w[3] ? void ops.push({ op: "track.performer", track: t, performer: w.slice(3).join(" ") }) : bad("track performer <track> player:N|actor:<name>");
         default:
-          return bad("track add|delete|rename|color|move|mute|solo|player ...", rankClipCandidates(v ?? "", ["add", "delete", "rename", "color", "move", "mute", "solo", "player"]));
+          return bad("track add|delete|rename|color|move|mute|solo|player|performer ...", rankClipCandidates(v ?? "", ["add", "delete", "rename", "color", "move", "mute", "solo", "player", "performer"]));
       }
     }
     if (head === "scene") {
@@ -341,7 +358,7 @@ export type SetEditResult =
  */
 export function applySetOps(m: SetModel, ops: readonly SetOp[], o: SetEditOptions): SetEditResult {
   const set: SetModel = {
-    tracks: m.tracks.map((t) => ({ ...t, arrangement: { rate: t.arrangement.rate, instances: t.arrangement.instances.map((i) => ({ ...i })) } })),
+    tracks: m.tracks.map((t) => ({ ...t, performer: t.performer ?? trackPerformer(t), arrangement: { rate: t.arrangement.rate, instances: t.arrangement.instances.map((i) => ({ ...i })) } })),
     scenes: m.scenes.map((s) => ({ ...s, tracks: [...s.tracks], slots: s.slots.map((x) => ({ ...x })) })),
   };
   const changed: string[] = [];
@@ -368,7 +385,9 @@ export function applySetOps(m: SetModel, ops: readonly SetOp[], o: SetEditOption
         if (op.op === "track.add") {
           const player = typeof op.player === "number" ? op.player : 0;
           if (!validPlayer(player)) return fail(id, "player", `player must be 0 or a remote client from 1 to ${SET_PLAYER_MAX}`);
-          insertAt(set.tracks, at, { id, title, order: 0, ...(c ? { color: c } : {}), player, mute: false, solo: false, arrangement: { rate: ARRANGEMENT_RATE, instances: [] } });
+          const performer = op.performer === undefined ? ({ kind: "player", client: player } as Performer) : readPerformer(op.performer);
+          if (!performer) return fail(id, "performer", badPerformer(op.performer));
+          insertAt(set.tracks, at, { id, title, order: 0, ...(c ? { color: c } : {}), player: performerPlayer(performer), performer, mute: false, solo: false, arrangement: { rate: ARRANGEMENT_RATE, instances: [] } });
         } else insertAt(set.scenes, at, { id, title, order: 0, ...(c ? { color: c } : {}), tracks: [], slots: [] });
         changed.push(id);
         break;
@@ -446,6 +465,17 @@ export function applySetOps(m: SetModel, ops: readonly SetOp[], o: SetEditOption
         if (!t) return noT(op.track);
         if (!validPlayer(op.player)) return fail(t.id, "player", `player must be 0 (the editor's own player) or a remote client from 1 to ${SET_PLAYER_MAX}`);
         t.player = op.player as number;
+        t.performer = { kind: "player", client: t.player };
+        changed.push(t.id);
+        break;
+      }
+      case "track.performer": {
+        const t = findT(op.track);
+        if (!t) return noT(op.track);
+        const p = readPerformer(op.performer);
+        if (!p) return fail(t.id, "performer", badPerformer(op.performer));
+        t.performer = p;
+        t.player = performerPlayer(p);
         changed.push(t.id);
         break;
       }
@@ -601,6 +631,11 @@ export function applySetOps(m: SetModel, ops: readonly SetOp[], o: SetEditOption
 }
 
 const validPlayer = (p: unknown): p is number => typeof p === "number" && Number.isInteger(p) && p >= 0 && p <= SET_PLAYER_MAX;
+
+/** A performer an op gives, as JSON or as its text form. */
+const readPerformer = (v: unknown): Performer | null => (typeof v === "string" ? performerFromText(v) : performerOf(v));
+const badPerformer = (v: unknown): string =>
+  typeof v === "string" ? `'${v}' is not a performer: player:N (0 the editor's own player, N a remote client up to ${SET_PLAYER_MAX}) or actor:<label, name or path>` : performerProblem(v);
 
 function sorted<T extends { order: number }>(list: readonly T[]): T[] {
   return [...list].sort((a, b) => a.order - b.order);

@@ -17,6 +17,21 @@ import {
   type ClipFacts,
   type InstanceKind,
 } from "./hub-arrangement.js";
+import {
+  DEFAULT_PERFORMER,
+  PERFORMER_CAPABILITIES,
+  clipLaneOf,
+  laneSpan,
+  laneSubject,
+  performerAccepts,
+  performerKey,
+  performerLabel,
+  performerOf,
+  performerPlayer,
+  trackPerformer,
+  type ClipLane,
+  type Performer,
+} from "./hub-performers.js";
 
 /** A clip as pie(clip_read) answers it: the fields composition reads. */
 export interface ClipJson {
@@ -32,9 +47,52 @@ export interface ClipJson {
   start?: unknown;
   frame_times?: number[];
   regions?: Array<{ id: string; name?: string; start: number; end: number }>;
+  /** Input Action lanes (capability input), each for player `client`. */
   tracks?: Array<{ action: string; type: string; client?: number; notes?: ClipNote[]; keys?: ClipKey[] }>;
+  /** The performer the clip's lanes drive when neither the lane nor the track names one (#2137). */
+  performer?: unknown;
+  /** Move, action and value lanes (#2137). */
+  lanes?: unknown[];
   events?: Array<{ id: string; at: number; do: Record<string, unknown> }>;
   checks?: ClipCheck[];
+}
+
+/** A clip's move, action and value lanes, read leniently. */
+export function clipLanes(c: ClipJson): ClipLane[] {
+  return (c.lanes ?? []).map(clipLaneOf).filter((l): l is ClipLane => !!l);
+}
+
+/**
+ * The performer a lane drives when its clip plays on a track: the track's
+ * performer when it names anyone but the editor's own player (as a track's
+ * player has always overridden its clips' client), else the lane's own, else
+ * the clip's, else the editor's player.
+ */
+export function lanePerformer(track: Performer, lane: ClipLane | undefined, clip: ClipJson): Performer {
+  if (track.kind !== "player" || track.client > 0) return track;
+  return lane?.performer ?? performerOf(clip.performer) ?? DEFAULT_PERFORMER;
+}
+
+/**
+ * A clip's lanes checked against the performer of the track it is on: each
+ * lane whose capability that performer does not take is a finding that
+ * refuses the run, with the capabilities it does take as candidates.
+ */
+export function laneFindings(id: string, clip: ClipJson, track: Performer): ArrangementFinding[] {
+  const out: ArrangementFinding[] = [];
+  const takes = (p: Performer) => PERFORMER_CAPABILITIES[p.kind];
+  // An Input Action lane always drives a player, so only a track that drives something else refuses it.
+  if (!performerAccepts(track, "input")) {
+    for (const tr of clip.tracks ?? []) {
+      out.push({ id, field: "performer", message: `${id}: ${performerLabel(track)} takes ${takes(track).join(", ")} lanes, and the clip has an Input Action lane for ${tr.action.slice(tr.action.lastIndexOf(".") + 1)}`, candidates: [...takes(track)], blocks: true });
+    }
+  }
+  for (const lane of clipLanes(clip)) {
+    const p = lanePerformer(track, lane, clip);
+    if (performerAccepts(p, lane.kind)) continue;
+    out.push({ id, field: "performer", message: `${id}: ${performerLabel(p)} takes ${takes(p).join(", ")} lanes, and ${laneSubject(lane)} is a ${lane.kind} lane`, candidates: [...takes(p)], blocks: true });
+  }
+  return out;
 }
 interface ClipNote { id: string; start: number; length: number; value?: unknown }
 interface ClipKey { id: string; t: number; v: unknown; interp?: string }
@@ -66,8 +124,10 @@ export interface ComposeTrack {
   goalId: string;
   title?: string;
   arrangement: Arrangement;
-  /** The player the track drives: 0 the run's own, N remote client N. */
+  /** The player the track drives: 0 the run's own, N remote client N. Read when `performer` is absent. */
   player: number;
+  /** What the track drives (#2137); player `player` when absent. */
+  performer?: Performer;
 }
 
 export interface ComposedInstance {
@@ -79,6 +139,8 @@ export interface ComposedInstance {
   target: string;
   name: string;
   player: number;
+  /** What its track drives. */
+  performer: Performer;
   /** Frames on the run's timeline. */
   start: number;
   end: number;
@@ -148,12 +210,16 @@ export function composeArrangement(tracks: readonly ComposeTrack[], o: ComposeOp
   const trackOf = new Map<ComposedInstance, number>();
   tracks.forEach((t, tn) => {
     const scale = rate / (t.arrangement.rate || rate);
+    const performer = t.performer ?? trackPerformer(t);
     for (const i of t.arrangement.instances) {
       const f = o.facts(i.target, i.kind);
       const len = instanceLength(i, f, t.arrangement.rate) * scale;
       const key = o.scene ? `${tn + 1}-${i.id}` : i.id;
       const clip = i.kind === "clip" ? o.clip(i.target) : undefined;
       if (i.kind === "clip" && !clip) findings.push({ id: key, field: "target", message: `${key}: the timeline clip ${i.target} could not be read, so the run cannot play it`, blocks: true });
+      if (clip) findings.push(...laneFindings(key, clip, performer));
+      // A step list drives the run's own player whatever its track drives: said, not refused.
+      if (i.kind === "script" && performer.kind !== "player") findings.push({ id: key, field: "performer", message: `${key}: a step-list clip plays as the editor's player, not as ${performerLabel(performer)}`, blocks: false });
       const inst: ComposedInstance = {
         key,
         goalId: t.goalId,
@@ -161,7 +227,8 @@ export function composeArrangement(tracks: readonly ComposeTrack[], o: ComposeOp
         kind: i.kind,
         target: i.target,
         name: i.name ?? f?.name ?? i.target.slice(i.target.lastIndexOf("/") + 1),
-        player: t.player,
+        player: performerPlayer(performer),
+        performer,
         start: round(i.start * scale),
         end: round((i.start + len / scale) * scale),
         segment: -1,
@@ -218,6 +285,7 @@ export function composeArrangement(tracks: readonly ComposeTrack[], o: ComposeOp
 /** Compose the clip instances that start in [from, to) into one inline clip whose frame 0 is `from`. */
 function composeClip(list: readonly ComposedInstance[], from: number, to: number, rate: number, o: ComposeOptions, first: boolean): Record<string, unknown> {
   const lanes = new Map<string, { action: string; type: string; client?: number; notes: ClipNote[]; keys: ClipKey[] }>();
+  const others: Array<Record<string, unknown>> = [];
   const events: Array<{ id: string; at: number; do: Record<string, unknown> }> = [];
   const checks: ClipCheck[] = [];
   const regions: Array<{ id: string; name?: string; start: number; end: number }> = [];
@@ -235,8 +303,32 @@ function composeClip(list: readonly ComposedInstance[], from: number, to: number
     const at = (f: number): number => round(inst.start - from + (f - cin) * s);
     const end = at(cout);
     const id = (x: string) => `${inst.key}.${x}`;
+    // Move, action and value lanes: each instance's own, offset and cut to its trim, naming the performer it drives.
+    for (const lane of clipLanes(c)) {
+      const performer = lanePerformer(inst.performer, lane, c);
+      const inside = (t: number) => t >= cin - EPS && t < cout - EPS;
+      const head = { id: id(lane.id), kind: lane.kind, performer };
+      if (lane.kind === "move") {
+        const points = lane.points.filter((p) => inside(p.t)).map((p) => ({ ...p, id: id(p.id), t: at(p.t) }));
+        if (points.length) others.push({ ...head, points });
+      } else if (lane.kind === "action") {
+        const calls = lane.calls.filter((k) => inside(k.t)).map((k) => ({ ...k, id: id(k.id), t: at(k.t) }));
+        if (calls.length) others.push({ ...head, calls, ...(lane.watch ? { watch: lane.watch } : {}) });
+      } else {
+        const keys = [...lane.keys].sort((a, b) => a.t - b.t);
+        const into = keys.filter((k) => inside(k.t)).map((k) => ({ ...k, id: id(k.id), t: at(k.t) }));
+        // A trim that starts inside the curve begins on its value there.
+        const before = keys.filter((k) => k.t < cin - EPS).pop();
+        const after = keys.find((k) => k.t >= cin - EPS);
+        if (before && (!after || after.t > cin + EPS) && after) {
+          const v = typeof before.v === "number" && typeof after.v === "number" && before.interp !== "constant" ? before.v + (after.v - before.v) * ((cin - before.t) / (after.t - before.t)) : before.v;
+          into.unshift({ id: id(`in-${lane.id}`), t: at(cin), v, interp: before.interp ?? "linear" });
+        }
+        if (into.length) others.push({ ...head, target: lane.target, type: lane.type, keys: into });
+      }
+    }
     for (const tr of c.tracks ?? []) {
-      const client = inst.player > 0 ? inst.player : tr.client ?? 0;
+      const client = inst.performer.kind === "player" && inst.performer.client > 0 ? inst.performer.client : tr.client ?? 0;
       const laneKey = `${tr.action}@${client}`;
       let lane = lanes.get(laneKey);
       if (!lane) {
@@ -312,6 +404,7 @@ function composeClip(list: readonly ComposedInstance[], from: number, to: number
     grid: "free",
     fixed_timestep: lead?.fixed_timestep ?? true,
     tracks: [...lanes.values()].map((l) => (l.type === "bool" ? { action: l.action, type: l.type, ...(l.client ? { client: l.client } : {}), notes: l.notes } : l)),
+    ...(others.length ? { lanes: others } : {}),
     events: events.sort((a, b) => a.at - b.at),
     checks: checks.sort((a, b) => a.start - b.start),
     regions: regions.sort((a, b) => a.start - b.start),
@@ -362,6 +455,8 @@ export interface InstanceResult {
   target: string;
   name: string;
   player: number;
+  /** What its track drives (#2137). */
+  performer?: Performer;
   start: number;
   end: number;
   status: InstanceStatus;
@@ -394,7 +489,7 @@ export interface ArrangementRun {
   version?: string;
   instances: InstanceResult[];
   /** A scene: each track's status, passed when every instance on it passed. */
-  tracks?: Array<{ goalId: string; title: string; player: number; status: InstanceStatus }>;
+  tracks?: Array<{ goalId: string; title: string; player: number; performer?: Performer; status: InstanceStatus }>;
   segments: Array<{ index: number; kind: "clip" | "script"; runId: string | null; offset: number; length: number; state: SegmentState["state"] }>;
 }
 
@@ -444,7 +539,7 @@ export function instanceResults(c: ArrangementComposition, segs: readonly Segmen
       else if (st.state === "running" && pos >= inst.start - EPS) status = "running";
       if (status === "pending" && (st.state === "stopped" || st.state === "finished")) reason ??= "the run ended before this instance played through";
     }
-    return { key: inst.key, goalId: inst.goalId, id: inst.id, kind: inst.kind, target: inst.target, name: inst.name, player: inst.player, start: inst.start, end: inst.end, status, checks: counts, awaiting, segmentRunId: st.runId, ...(reason ? { reason } : {}) };
+    return { key: inst.key, goalId: inst.goalId, id: inst.id, kind: inst.kind, target: inst.target, name: inst.name, player: inst.player, performer: inst.performer, start: inst.start, end: inst.end, status, checks: counts, awaiting, segmentRunId: st.runId, ...(reason ? { reason } : {}) };
   });
 }
 
@@ -495,23 +590,35 @@ function playStepListsAlone(instances: readonly ComposedInstance[], trackOf: Rea
   return out;
 }
 
-/** A scene's overlaps: one player's action driven by two tracks at once. */
+/**
+ * A scene's overlaps: one performer's input, move or value driven by two
+ * tracks at once. Action lanes never clash: two calls are two calls.
+ */
 function sceneFindings(tracks: readonly ComposeTrack[], instances: readonly ComposedInstance[], o: ComposeOptions): ArrangementFinding[] {
   const out: ArrangementFinding[] = [];
-  const uses: Array<{ inst: ComposedInstance; action: string; from: number; to: number }> = [];
+  // What one instance drives over its span: an Input Action, a move, or a value target, on a performer.
+  const uses: Array<{ inst: ComposedInstance; what: string; label: string; performer: string; who: string; from: number; to: number }> = [];
   for (const inst of instances) {
     if (inst.kind !== "clip") continue;
     const c = o.clip(inst.target);
     if (!c) continue;
-    for (const tr of c.tracks ?? []) uses.push({ inst, action: tr.action, from: inst.start, to: inst.end });
+    for (const tr of c.tracks ?? []) {
+      const client = inst.performer.kind === "player" && inst.performer.client > 0 ? inst.performer.client : tr.client ?? 0;
+      uses.push({ inst, what: `input ${tr.action}`, label: tr.action.slice(tr.action.lastIndexOf("/") + 1), performer: `player:${client}`, who: `player ${client}`, from: inst.start, to: inst.end });
+    }
+    for (const lane of clipLanes(c)) {
+      if (lane.kind === "action" || !laneSpan(lane)) continue;
+      const p = lanePerformer(inst.performer, lane, c);
+      uses.push({ inst, what: lane.kind === "move" ? "move" : `value ${lane.target}`, label: lane.kind === "move" ? "its moves" : lane.target, performer: performerKey(p), who: performerLabel(p), from: inst.start, to: inst.end });
+    }
   }
   for (let a = 0; a < uses.length; a++) {
     for (let b = a + 1; b < uses.length; b++) {
       const x = uses[a];
       const y = uses[b];
-      if (x.inst.goalId === y.inst.goalId || x.action !== y.action || x.inst.player !== y.inst.player) continue;
+      if (x.inst.goalId === y.inst.goalId || x.what !== y.what || x.performer !== y.performer) continue;
       if (x.from < y.to - EPS && y.from < x.to - EPS) {
-        out.push({ id: y.inst.key, field: "player", message: `${x.inst.key} and ${y.inst.key} both drive ${x.action.slice(x.action.lastIndexOf("/") + 1)} for player ${x.inst.player} between ${round(Math.max(x.from, y.from))} and ${round(Math.min(x.to, y.to))}; give one track another player, or move one instance`, blocks: true });
+        out.push({ id: y.inst.key, field: "player", message: `${x.inst.key} and ${y.inst.key} both drive ${x.label} for ${x.who} between ${round(Math.max(x.from, y.from))} and ${round(Math.min(x.to, y.to))}; give one track another performer, or move one instance`, blocks: true });
       }
     }
   }
