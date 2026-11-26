@@ -29,6 +29,9 @@ import {
   MAIN_ARRANGEMENT_ID,
   MAIN_ARRANGEMENT_TITLE,
   SET_PLAYER_MAX,
+  performerOf,
+  performerPlayer,
+  trackPerformer,
   setColorOf,
   slotOf,
   SCRIPT_RESERVE_FRAMES,
@@ -49,6 +52,7 @@ import {
   type Arrangement,
   type ArrangementInfo,
   type ArrangementRecord,
+  type Performer,
   type SetModel,
   type Slot,
   type CheckMeta,
@@ -195,6 +199,13 @@ export function readGoal(raw: unknown, id: string): ReadGoal | { problem: string
   return { goal, problems, ...(parent ? { parent } : {}), metas };
 }
 
+/** How a track's performer is stored: a player as `player` (left out for 0), anything else as `performer`. */
+function storedPerformer(t: { player?: number; performer?: Performer }): Partial<Goal> {
+  const p = t.performer ?? trackPerformer(t);
+  if (p.kind !== "player") return { performer: p };
+  return p.client ? { player: p.client } : {};
+}
+
 /** A track's player from JSON: a whole number from 1 to SET_PLAYER_MAX, or 0 (left out) otherwise. */
 function playerOf(v: unknown): number {
   return typeof v === "number" && Number.isInteger(v) && v > 0 && v <= SET_PLAYER_MAX ? v : 0;
@@ -210,6 +221,12 @@ function setFieldsOf(raw: Record<string, unknown>, kind: Goal["kind"]): Partial<
   if (kind === "goal") {
     const player = playerOf(raw.player);
     if (player) out.player = player;
+    // A performer that is not a player is stored as one; a player stays in `player`, as every track before #2137 was.
+    const performer = performerOf(raw.performer);
+    if (performer && performer.kind !== "player") {
+      out.performer = performer;
+      delete out.player;
+    } else if (performer?.kind === "player" && performer.client > 0) out.player = performer.client;
     if (raw.mute === true) out.mute = true;
     if (raw.solo === true) out.solo = true;
   } else if (Array.isArray(raw.slots)) {
@@ -791,7 +808,7 @@ export class Goals {
     for (const t of m.tracks) {
       const base = this.get(t.id)!;
       const arrangement: Arrangement = { rate: t.arrangement.rate, instances: t.arrangement.instances.map((i) => ({ ...i })) };
-      goals.push({ schema: HUB_SCHEMA, id: ids.get(t.id)!, kind: "goal", title: t.title, ...(base.description ? { description: base.description } : {}), acceptance: { ...base.acceptance }, checks: checksFromArrangement(arrangement, base.checks), arrangement, order: t.order, ...(t.color ? { color: t.color } : {}), ...(t.player ? { player: t.player } : {}), ...(t.mute ? { mute: true } : {}), ...(t.solo ? { solo: true } : {}), arrangementId: copy.id });
+      goals.push({ schema: HUB_SCHEMA, id: ids.get(t.id)!, kind: "goal", title: t.title, ...(base.description ? { description: base.description } : {}), acceptance: { ...base.acceptance }, checks: checksFromArrangement(arrangement, base.checks), arrangement, order: t.order, ...(t.color ? { color: t.color } : {}), ...storedPerformer(t), ...(t.mute ? { mute: true } : {}), ...(t.solo ? { solo: true } : {}), arrangementId: copy.id });
     }
     for (const s of m.scenes) {
       const base = this.get(s.id)!;
@@ -832,7 +849,7 @@ export class Goals {
     const live = this.list().filter((g) => !g.archived && this.arrangementOf(g, known) === aid);
     const byOrder = (a: Goal, b: Goal) => (a.order ?? 0) - (b.order ?? 0);
     return {
-      tracks: live.filter((g) => g.kind === "goal").sort(byOrder).map((g) => ({ id: g.id, title: g.title, order: g.order ?? 0, ...(g.color ? { color: g.color } : {}), player: g.player ?? 0, mute: g.mute === true, solo: g.solo === true, arrangement: g.arrangement ?? { rate: 60, instances: [] } })),
+      tracks: live.filter((g) => g.kind === "goal").sort(byOrder).map((g) => ({ id: g.id, title: g.title, order: g.order ?? 0, ...(g.color ? { color: g.color } : {}), player: performerPlayer(trackPerformer(g)), performer: trackPerformer(g), mute: g.mute === true, solo: g.solo === true, arrangement: g.arrangement ?? { rate: 60, instances: [] } })),
       scenes: live.filter((g) => g.kind === "milestone").sort(byOrder).map((g) => ({ id: g.id, title: g.title, order: g.order ?? 0, ...(g.color ? { color: g.color } : {}), tracks: requiresOf(g).map((r) => r.goal).filter((id) => live.some((x) => x.id === id && x.kind === "goal")), slots: g.slots ?? [] })),
     };
   }
@@ -858,12 +875,12 @@ export class Goals {
     const now = new Map(this.list().map((g) => [g.id, g]));
     const strip = (g: Goal): Goal => {
       const out = { ...g };
-      for (const k of ["color", "player", "mute", "solo", "slots"] as const) delete out[k];
+      for (const k of ["color", "player", "performer", "mute", "solo", "slots"] as const) delete out[k];
       return out;
     };
     for (const t of next.tracks) {
       const base = now.get(t.id) ?? had.get(t.id) ?? ({ schema: HUB_SCHEMA, id: t.id, kind: "goal", title: t.title, acceptance: { ...DEFAULT_ACCEPTANCE }, checks: [], ...mine } as Goal);
-      writes.push({ ...strip(base), title: t.title, order: t.order, ...(t.color ? { color: t.color } : {}), ...(t.player ? { player: t.player } : {}), ...(t.mute ? { mute: true } : {}), ...(t.solo ? { solo: true } : {}), arrangement: t.arrangement, checks: checksFromArrangement(t.arrangement, base.checks) });
+      writes.push({ ...strip(base), title: t.title, order: t.order, ...(t.color ? { color: t.color } : {}), ...storedPerformer(t), ...(t.mute ? { mute: true } : {}), ...(t.solo ? { solo: true } : {}), arrangement: t.arrangement, checks: checksFromArrangement(t.arrangement, base.checks) });
     }
     for (const s of next.scenes) {
       const base = now.get(s.id) ?? had.get(s.id) ?? ({ schema: HUB_SCHEMA, id: s.id, kind: "milestone", title: s.title, acceptance: { ...DEFAULT_ACCEPTANCE }, checks: [], ...mine } as Goal);

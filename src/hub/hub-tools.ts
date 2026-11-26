@@ -10,7 +10,7 @@
  * Error) with the reason when it cannot, so a category handler lets the
  * dispatcher turn it into an error result.
  */
-import { arrangementOfRunTarget, checkId, type PlanRun, type PlanScope, type QueueState, type SetView, type TrackerLink, TRACKER_LINKS_MAX } from "./contract.js";
+import { arrangementOfRunTarget, checkId, performerToText, type PlanRun, type PlanScope, type QueueState, type SetView, type TrackerLink, TRACKER_LINKS_MAX } from "./contract.js";
 import { FindingError } from "./set-service.js";
 import type { Hub } from "./hub.js";
 import { HubError, bad, checkRefOf, linkOf, notFound } from "./util.js";
@@ -29,6 +29,7 @@ export const HUB_ACTIONS = [
   "read_queue",
   "read_set",
   "edit_set",
+  "list_performers",
   "run",
   "read_run",
 ] as const;
@@ -74,6 +75,7 @@ export function validateHub(action: string, i: Record<string, unknown>): string 
     }
     case "read_queue":
     case "read_set":
+    case "list_performers":
       return null;
     case "edit_set":
       return str(i.ops) || (Array.isArray(i.ops) && i.ops.length > 0) ? null : "edit_set needs ops: op lines as text (one per line), or a list of op objects";
@@ -285,6 +287,15 @@ export async function runHubAction(hub: HubToolTarget, action: string, input: Re
         throw e;
       }
     }
+    case "list_performers": {
+      if (!hub.set) throw new HubError(409, "this hub has no set");
+      const v = await hub.set.performers(input.arrangement);
+      return {
+        level: v.level,
+        ...(v.reason ? { reason: v.reason } : {}),
+        performers: v.performers.map((p) => `${performerToText(p.performer)}${p.className ? ` ${p.className}` : ""}${p.pawn ? " pawn" : ""} takes ${p.capabilities.join(",")}`),
+      };
+    }
     case "run": {
       if (!hub.runSet || !hub.set) throw new HubError(409, "this hub cannot run plans");
       const view = await hub.set.view(input.arrangement);
@@ -307,7 +318,7 @@ export async function runHubAction(hub: HubToolTarget, action: string, input: Re
         outcome: d.record.outcome,
         ...(of ? { arrangement: of } : {}),
         ...(d.run?.stopReason ? { stopReason: d.run.stopReason } : {}),
-        tracks: a.tracks?.map((t) => `${t.goalId} ${t.status} player=${t.player}`),
+        tracks: a.tracks?.map((t) => `${t.goalId} ${t.status} ${t.performer && t.performer.kind !== "player" ? `performer=${performerToText(t.performer)}` : `player=${t.player}`}`),
         instances: a.instances.map((i) => `${i.goalId}/${i.id} ${i.status} ${sec(i.start)}-${sec(i.end)} ${i.name} checks ${i.checks.passed}/${i.checks.total} passed${i.checks.failed ? `, ${i.checks.failed} failed` : ""}${i.reason ? ` (${i.reason})` : ""}`),
       };
     }

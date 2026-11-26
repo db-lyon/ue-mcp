@@ -34,6 +34,11 @@ import {
   type ComposeTrack,
   type GoalStatus,
   type InstanceKind,
+  PERFORMER_CAPABILITIES,
+  performerLabel,
+  type Performer,
+  type PerformerCandidate,
+  type PerformersView,
   type PlanScope,
   type SetModel,
   type SetOp,
@@ -43,6 +48,11 @@ import type { Goals } from "./goals.js";
 import type { ClipLibrary } from "./clip-library.js";
 import type { HubHost } from "./ports.js";
 import { answerOf, bad, failureOf, isObject, notFound } from "./util.js";
+
+/** The most actors GET /hub/performers reads from the level. */
+const PERFORMER_ACTOR_LIMIT = 500;
+/** Actor classes a level keeps for itself, which no track drives. */
+const LEVEL_INFRASTRUCTURE = /^(WorldSettings|WorldDataLayers|WorldPartitionMiniMap|Brush|LevelBounds|.*Volume|.*Light|SkyAtmosphere|SkyLight|ExponentialHeightFog|VolumetricCloud|AtmosphericFog|RecastNavMesh.*|AbstractNavData|NavigationData|NavMeshBoundsVolume|GameplayDebuggerPlayerManager|ChaosDebugDrawActor|LandscapeGizmoActiveActor|PlayerStart|InstancedFoliageActor|ReflectionCapture.*|.*ReflectionCapture|SphereReflectionCapture|BoxReflectionCapture|PlanarReflection|HLOD.*|LandscapeStreamingProxy)$/;
 
 /** An answer that carries a finding: 400 with { error, finding, findings }. */
 export class FindingError extends Error {
@@ -57,7 +67,7 @@ export interface SetRunPlan {
   goalId: string;
   title: string;
   composition: ArrangementComposition;
-  tracks: Array<{ goalId: string; title: string; player: number }>;
+  tracks: Array<{ goalId: string; title: string; player: number; performer?: Performer }>;
   /** The frame the timelines play from (at 60 per second); the composition counts from there. */
   from?: number;
   /** The arrangement it plays in. */
@@ -272,6 +282,45 @@ export class SetService {
     return arrangementEnd(arrangementLayout(a, (t, k) => this.o.library.facts(t, k)));
   }
 
+  /**
+   * GET /hub/performers: what a track in the arrangement can drive. The
+   * editor's player and the first remote clients always; the actors of the
+   * level the editor has open, pawns first, when an editor answers. Actors the
+   * level keeps for itself (world settings, lights, volumes, navigation) are
+   * left out.
+   */
+  async performers(arrangement?: unknown): Promise<PerformersView> {
+    const aid = this.o.goals.resolveArrangement(arrangement);
+    const level = this.o.goals.arrangementInfo(aid).level ?? null;
+    const players: PerformerCandidate[] = [0, 1, 2, 3].map((client) => {
+      const performer: Performer = { kind: "player", client };
+      return { performer, label: performerLabel(performer), capabilities: [...PERFORMER_CAPABILITIES.player] };
+    });
+    let thrown: string | null = null;
+    const r = await this.o.host.callAction("level", "get_outliner", { limit: PERFORMER_ACTOR_LIMIT }).catch((e: unknown) => {
+      thrown = e instanceof Error ? e.message : String(e);
+      return null;
+    });
+    const error = r ? failureOf(r) : thrown;
+    const body = r ? answerOf(r) : null;
+    if (error || !body) return { level, performers: players, reason: `the level's actors could not be read: ${error ?? "no editor answered"}` };
+    const rows = Array.isArray(body.actors) ? (body.actors as Array<Record<string, unknown>>) : [];
+    const actors: PerformerCandidate[] = [];
+    for (const row of rows) {
+      const cls = typeof row.class === "string" ? row.class : "";
+      const name = typeof row.label === "string" && row.label ? row.label : typeof row.name === "string" ? row.name : "";
+      if (!name || LEVEL_INFRASTRUCTURE.test(cls)) continue;
+      const comps = Array.isArray(row.components) ? (row.components as Array<{ class?: unknown }>).map((c) => String(c.class ?? "")) : [];
+      const pawn = /Character|Pawn/.test(cls) || comps.some((c) => /(Character|Pawn)Movement|FloatingPawnMovement/.test(c));
+      const performer: Performer = { kind: "actor", actor: name };
+      actors.push({ performer, label: name, className: cls, pawn, capabilities: [...PERFORMER_CAPABILITIES.actor] });
+    }
+    actors.sort((a, b) => Number(b.pawn) - Number(a.pawn) || a.label.localeCompare(b.label));
+    const open = typeof body.worldName === "string" ? body.worldName : null;
+    const elsewhere = level && open && !level.endsWith(`/${open}`) ? `the editor has ${open} open, not the arrangement's level ${level}; these are ${open}'s actors` : undefined;
+    return { level, performers: [...players, ...actors], ...(elsewhere ? { reason: elsewhere } : actors.length === 0 ? { reason: "the open level has no actors to drive" } : {}) };
+  }
+
   /** GET /hub/clips. */
   clips(q: { q?: unknown; kind?: unknown }): Promise<ClipEntry[]> {
     const kind = q.kind === "clip" || q.kind === "script" ? q.kind : undefined;
@@ -288,7 +337,7 @@ export class SetService {
     const level = this.o.goals.arrangementInfo(at.arrangementId).level;
     // Timelines play from `from`; a slot always plays its clip from the start.
     const start = kind === "slot" ? 0 : from;
-    const asTrack = (t: SetModel["tracks"][number], arrangement: Arrangement): ComposeTrack => ({ goalId: t.id, title: t.title, arrangement: arrangementFrom(arrangement, start, o.factsOf), player: t.player });
+    const asTrack = (t: SetModel["tracks"][number], arrangement: Arrangement): ComposeTrack => ({ goalId: t.id, title: t.title, arrangement: arrangementFrom(arrangement, start, o.factsOf), player: t.player, performer: t.performer });
     let tracks: ComposeTrack[];
     let title: string;
     if (kind === "track") {
@@ -321,7 +370,7 @@ export class SetService {
     const composition = composeArrangement(tracks, { clip: (t) => this.o.library.clip(t), facts: o.factsOf, scene: tracks.length > 1 || kind !== "track" });
     if (tracks.length === 0) composition.findings.push({ id: goalId, field: "tracks", message: kind === "arrangement" ? "no track plays: every track is muted, or none is soloed that has clips" : "nothing in it plays", blocks: true });
     else if (start > 0 && composition.segments.length === 0) composition.findings.push({ id: goalId, field: "from", message: `nothing plays from ${(start / ARRANGEMENT_RATE).toFixed(2).replace(/\.?0+$/, "")} s: every clip ends before it`, blocks: true });
-    return { kind, goalId, title, composition, tracks: tracks.map((t) => ({ goalId: t.goalId, title: t.title ?? t.goalId, player: t.player })), ...(start > 0 ? { from: start } : {}), arrangementId: at.arrangementId, ...(level ? { level } : {}) };
+    return { kind, goalId, title, composition, tracks: tracks.map((t) => ({ goalId: t.goalId, title: t.title ?? t.goalId, player: t.player, ...(t.performer ? { performer: t.performer } : {}) })), ...(start > 0 ? { from: start } : {}), arrangementId: at.arrangementId, ...(level ? { level } : {}) };
   }
 
   /** Compose a plan item's run with the clips it uses read fresh. */

@@ -80,6 +80,7 @@ export function hubRoutes(hub: () => Hub, projectDir: string): Pick<RouteHandler
     "hub.arrangement.put": async (r) => findings(async () => hub().set.putArrangement(param(r.params, "id"), await r.body())),
     "hub.arrangement.edit": async (r) => findings(async () => hub().set.editArrangement(param(r.params, "id"), await r.body())),
     "hub.clips": async ({ query }) => ok({ clips: await hub().set.clips(q(query)) }),
+    "hub.performers": async ({ query }) => ok(await hub().set.performers(query.get("arrangement") ?? undefined)),
     "hub.set.run": async (r) => ok(await hub().runSet(await r.body(), "person")),
     "hub.run.verdict": async (r) => ok(await hub().runVerdict(param(r.params, "runId"), await r.body())),
     "hub.arrangements": async () => ok(await hub().arrangementsView()),

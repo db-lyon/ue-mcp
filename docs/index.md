@@ -4,7 +4,7 @@ description: "What ue-mcp is, what its category tools cover, and where to start 
 
 # UE-MCP
 
-**Unreal Engine Model Context Protocol Server.** It lets AI assistants drive the Unreal Editor through <!-- count:tools -->32<!-- /count --> category tools covering <!-- count:actions -->3758+<!-- /count --> actions.
+**Unreal Engine Model Context Protocol Server.** It lets AI assistants drive the Unreal Editor through <!-- count:tools -->32<!-- /count --> category tools covering <!-- count:actions -->3759+<!-- /count --> actions.
 
 An MCP client (Claude Code, Claude Desktop, Cursor and others) launches `ue-mcp` for your project. By default that process relays to the project's daemon, a background Node.js process that holds the WebSocket connection to the C++ bridge plugin inside the editor. The daemon outlives editor restarts, serves every MCP client of the project, and serves UE-MCP Studio, the in-editor agent.
 

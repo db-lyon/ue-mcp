@@ -832,6 +832,11 @@
       "summary": "The /v1/hub/arrangements routes, advertised as hub.arrangements: the tracks made before are the first arrangement, Main; arrangements are created, renamed, given a level, duplicated and deleted, each set edited and run apart, the queue read per arrangement, and the last one refused deletion"
     },
     {
+      "id": "daemon.hub.performers",
+      "group": "daemon",
+      "summary": "Actor performers, advertised as hub.performers: a track is given an actor or a player to drive by set op and keeps it across reads, a performer that is neither is refused with a finding, and GET /v1/hub/performers lists the players with the reason no actor is listed while no editor answers"
+    },
+    {
       "id": "package.dist-server",
       "group": "daemon",
       "summary": "the compiled package, laid out as npm installs it, starts from dist/index.js and serves what the source does"

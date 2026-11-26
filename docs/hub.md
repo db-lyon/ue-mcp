@@ -99,8 +99,23 @@ The `hub` category:
 The hub arranges clips the way Ableton Live's Arrangement view does (#2113). A track is a timeline of clip instances with empty space between them, and a scene is a set of tracks played together. On the wire a track is a goal and a scene is a milestone, so the goal routes above keep working on them.
 
 - **Instances.** An instance places a clip on a track at a start frame (60 frames a second by default): a [timeline clip](pie-clips.md), trimmed with `in` and `out` in its own frames, or a [step-list clip](pie-scripts.md), which settles by condition and so reserves a `length` instead. An instance refers to its clip, so editing the clip changes every instance of it; making an instance unique copies the clip asset and points the instance at the copy. Instances on a track may not overlap, and their ids are never reused on it.
-- **Tracks** have an order, a color, a player (0, the editor's own player, by default; N for remote client N), and mute and solo. A run leaves muted tracks out, and while any track is soloed only soloed tracks play.
+- **Tracks** have an order, a color, a performer, and mute and solo. A run leaves muted tracks out, and while any track is soloed only soloed tracks play.
 - **Scenes** have an order, a color and the tracks they play, in order.
+
+### Performers
+
+A track drives one performer: the editor's own player, a remote client, or any actor in the level. On the wire `performer` is `{ kind: "player", client }` (0 the editor's player, N remote client N) or `{ kind: "actor", actor }`, where `actor` is the actor's label, object name or path. A track that names no performer drives the editor's player, so every track made before performers is a player track and keeps its `player` field. The set also answers `player` on every track for clients that read it, 0 for an actor track.
+
+A clip's lanes each have a capability, and a performer takes some of them:
+
+| Performer | Input | Move | Action | Value |
+|---|---|---|---|---|
+| Player | Yes | No | Yes, on its pawn | Yes, on its pawn |
+| Actor | No | Yes | Yes | Yes |
+
+Each lane of a clip drives its track's performer when the track names anyone but the editor's player, and otherwise the lane's own performer, then the clip's, then the editor's player. A run that would play a lane its performer does not take is refused, with a finding naming the lane and the capabilities the performer does take. In a scene, two tracks that move the same actor, or drive one of its values, at the same time are refused as two tracks driving one player's Input Action are; two tracks may call the same actor's functions. The [clip page](pie-clips.md) describes the lanes.
+
+`GET /v1/hub/performers?arrangement=` lists what a track can drive, each with its `label` and the `capabilities` it takes: the editor's player and remote clients 1 to 3, then the actors of the level the editor has open, pawns first, without the actors a level keeps for itself, such as lights, volumes and navigation data. Without an editor it lists only the players and says why in `reason`. A daemon that has this lists `hub.performers` in `/v1/health`.
 
 ### Arrangements
 
@@ -122,7 +137,7 @@ Runs, the queue, schedules, history and status belong to one arrangement. A requ
 
 ### Runs
 
-A run plays in one PIE session. The daemon reads each clip and composes the timelines into one inline clip for the [clip player](pie-clips.md#playing-a-clip), each instance's lanes, events, check notes and regions offset to its start, cut to its trim and prefixed with its key (`i2.c1` on one track, `2-i2.c1` when several tracks play). Each lane drives its track's player. A step-list instance splits the run: the clips before it play, the script plays with `pie(script_run)` in the same session, and the timeline resumes at its end. A hold check holds the whole run.
+A run plays in one PIE session. The daemon reads each clip and composes the timelines into one inline clip for the [clip player](pie-clips.md#playing-a-clip), each instance's lanes, events, check notes and regions offset to its start, cut to its trim and prefixed with its key (`i2.c1` on one track, `2-i2.c1` when several tracks play). Each lane drives its track's performer, which the composed lane names. A step-list instance splits the run: the clips before it play, the script plays with `pie(script_run)` in the same session, and the timeline resumes at its end. A hold check holds the whole run.
 
 | Run | Plays | Record |
 |---|---|---|
@@ -155,6 +170,8 @@ track walk-k3f9 Walk color=green player=0
   clip i1 /Game/PIEStudio/Clips/CL_Walk 0 out=240
   script i2 /Game/Tests/PT_OpenDoor 240 length=600
 track guard-x81a Guard color=red player=1 mute
+track sentry-2b7c Sentry performer=actor:BP_Sentry_2
+  clip i1 /Game/PIEStudio/Clips/CL_Patrol 0
 scene boss-0p2d "Boss fight" tracks=walk-k3f9,guard-x81a
 ```
 
@@ -162,7 +179,7 @@ Ops, one per line; a track or scene is named by its id or its exact name, and an
 
 | Ops | |
 |---|---|
-| Tracks | `track add "Name" [color=C] [player=N] [at=N]`, `track delete`, `rename`, `color`, `move <t> to <N>`, `mute <t> on\|off`, `solo <t> on\|off`, `player <t> <N>` |
+| Tracks | `track add "Name" [color=C] [player=N \| performer=player:N\|actor:<name>] [at=N]`, `track delete`, `rename`, `color`, `move <t> to <N>`, `mute <t> on\|off`, `solo <t> on\|off`, `player <t> <N>`, `performer <t> player:N\|actor:<name>` |
 | Scenes | `scene add "Name"`, `scene insert "Name" at <N>`, `scene delete`, `rename`, `color`, `duplicate`, `move <s> to <N>`, `scene track <s> add\|remove <t>` |
 | Instances | `add <t> <clip\|script> <path> [at <frame>]`, `duplicate <t>/<i> [at <frame>]`, `copy <t>/<i> to <t2> [at <frame>]`, `move <t>/<i> to <frame>`, `by <frames>` or `to <t2> [at <frame>]`, `trim <t>/<i> in=N out=N` or `length=N`, `rename <t>/<i> "Name"`, `color <t>/<i> <C>`, `delete <t>/<i>`, `unique <t>/<i>`, `retarget <t>/<i> [clip\|script] <path>` |
 
@@ -172,7 +189,7 @@ Colors are `red`, `orange`, `yellow`, `lime`, `green`, `teal`, `cyan`, `blue`, `
 
 `track delete` and `scene delete` remove the record as `DELETE /v1/hub/goals/<id>` does, its sign-off included, and are refused the same way while a run made for it is queued or running. A track's slots go with it; its clips stay.
 
-The `hub` MCP category has the same through `read_set`, `edit_set` (`ops`), `run` (`scope`: `track <t>`, `scene <s>` or `arrangement`, each optionally followed by `from <seconds>s` or `from <frame>`) and `read_run`. Each takes `arrangement`, an id or exact name, and works on the first arrangement without it; `read_set` lists every arrangement.
+The `hub` MCP category has the same through `read_set`, `edit_set` (`ops`), `list_performers`, `run` (`scope`: `track <t>`, `scene <s>` or `arrangement`, each optionally followed by `from <seconds>s` or `from <frame>`) and `read_run`. Each takes `arrangement`, an id or exact name, and works on the first arrangement without it; `read_set` lists every arrangement.
 
 ## Clients
 
