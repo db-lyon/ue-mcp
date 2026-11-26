@@ -17,6 +17,10 @@
  * --from-test-build packages the engine tests/ue_mcp builds against from that build, when it is
  * current, instead of compiling the plugin for it a second time (the release runner passes it).
  *
+ * --serial, or UE_MCP_BINARY_SERIAL=1 (which reaches it through the release runner), compiles one
+ * engine at a time instead of all at once, for a machine whose memory will not hold two engine
+ * compiles beside the release's editors.
+ *
  * upload attaches the zips and the manifest to the draft GitHub release for the
  * version in package.json. It refuses a published release: binaries ship with
  * the release that carries them, never after it.
@@ -278,8 +282,14 @@ async function build() {
   fs.mkdirSync(out, { recursive: true });
 
   // Engines in parallel: each is one editor target, and an incremental one is mostly linking.
+  // --serial builds them one at a time where memory is short.
   const fromTestBuild = process.argv.includes("--from-test-build");
-  const assets = (await Promise.all(found.map(async (e) => (fromTestBuild ? await packageFromTestBuild(e) : null) ?? buildEngine(e)))).filter(Boolean);
+  const one = async (e) => (fromTestBuild ? await packageFromTestBuild(e) : null) ?? buildEngine(e);
+  const serial = process.argv.includes("--serial") || process.env.UE_MCP_BINARY_SERIAL === "1";
+  const built = [];
+  if (serial) for (const e of found) built.push(await one(e));
+  else built.push(...(await Promise.all(found.map(one))));
+  const assets = built.filter(Boolean);
 
   // Merge with a manifest from an earlier run of the same version, so engines can be built one at a time.
   const manifestPath = path.join(out, manifestName());
