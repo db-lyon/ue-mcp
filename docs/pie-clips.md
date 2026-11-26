@@ -171,7 +171,7 @@ pie(action="clip_run", path="/Game/PIEStudio/Clips/CL_Door", start_pie=true, wai
 | `path`, `clip` or `text` | | The clip asset, or an inline clip. Exactly one. |
 | `name` | the asset name, or `inline` | The run's name. |
 | `region` | | Judge only this region's checks and stop at its end. Playback still starts at frame 0, since the state at a region's start comes from playing what comes before it. |
-| `start_pie` | `false` | Start PIE when it is not running. The run ends PIE it started when it ends. |
+| `start_pie` | `false` | Start PIE when it is not running. The run ends PIE it started when it ends. Without it, a run is refused while no PIE session is running or starting. |
 | `keep_pie` | `false` | Leave that session running. |
 | `fixed_timestep` | the clip's | Fixed frame deltas: to the next recorded frame where the clip has `frame_times`, else 1/`rate`. |
 | `lock_input` | `true` | Keep the person's keyboard, mouse and gamepad out of PIE while the clip plays. |

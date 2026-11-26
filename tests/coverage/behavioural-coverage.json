@@ -17109,6 +17109,11 @@
         {
           "suite": "live",
           "file": "tests/live/pie-clip-run.test.ts",
+          "test": "refuses at once without start_pie when PIE is not running, saying how to proceed, and arms nothing (#2126)"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/pie-clip-run.test.ts",
           "test": "region plays from frame 0 but judges only that region and stops at its end"
         }
       ]
@@ -17148,6 +17153,11 @@
           "suite": "live",
           "file": "tests/live/pie-clip-run.test.ts",
           "test": "plays on a fixed timestep and every check passes, region by region, each action's trigger and modifier run once"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/pie-clip-run.test.ts",
+          "test": "refuses at once without start_pie when PIE is not running, saying how to proceed, and arms nothing (#2126)"
         },
         {
           "suite": "live",
@@ -17521,6 +17531,11 @@
           "suite": "live",
           "file": "tests/live/pie-clip-run.test.ts",
           "test": "plays on a fixed timestep and every check passes, region by region, each action's trigger and modifier run once"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/pie-clip-run.test.ts",
+          "test": "refuses at once without start_pie when PIE is not running, saying how to proceed, and arms nothing (#2126)"
         },
         {
           "suite": "live",
