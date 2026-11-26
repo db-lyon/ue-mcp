@@ -40,6 +40,7 @@
     "tests/integration/hub-arrangement.test.ts": 0.1,
     "tests/integration/hub-arrangements.test.ts": 0.1,
     "tests/integration/hub-goal-delete.test.ts": 0.1,
+    "tests/integration/hub-performers.test.ts": 0.1,
     "tests/integration/init-interactive.test.ts": 27.5,
     "tests/integration/inline-image.test.ts": 5.8,
     "tests/integration/journal.test.ts": 29.7,
