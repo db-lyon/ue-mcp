@@ -304,7 +304,7 @@ function pendingMB(running) {
  * later one waits until it fits beside the headroom and what the editors still
  * starting will take.
  *
- * @param {{ repoRoot: string, headless?: number|null, render: number, interactive: number, scm: number,
+ * @param {{ repoRoot: string, headless?: number|null, maxEditors?: number|null, render: number, interactive: number, scm: number,
  *   files?: string[]|null, kinds?: string[]|null, onlyShard?: string|null, stagedBuild?: boolean,
  *   recordTiming: boolean, exeKind: "editor"|"cmd" }} opts
  */
@@ -502,7 +502,8 @@ export async function runSharded(opts) {
       // On a machine with room for two editors, fixed shards first left the pool waiting until they were done.
       const { kind, poolFirst, done } = nextLaunch({ wantPool, poolEditors: poolEditors.size, fixedKind: fixedQueue[0]?.kind ?? null, running: running.size });
       if (done) break;
-      if (!kind) {
+      // --max-editors caps every kind together, for a machine whose memory reading runs ahead of what it can hold.
+      if (!kind || (opts.maxEditors && running.size >= opts.maxEditors)) {
         await nap();
         continue;
       }
