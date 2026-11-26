@@ -28,7 +28,7 @@ import { HUB_SCHEMA, type AnyHubRecord, type HubRecord, type HubRecordType } fro
 import { writeFileAtomic } from "./atomic-write.js";
 import type { GoalStore, GoalStoreChange } from "./goal-store.js";
 
-const FOLDERS: Record<HubRecordType, string> = { goal: "goals", check: "checks", signoff: "signoffs", rules: "rules", import: "imports" };
+const FOLDERS: Record<HubRecordType, string> = { goal: "goals", check: "checks", signoff: "signoffs", rules: "rules", import: "imports", arrangement: "arrangements" };
 const TYPES = Object.keys(FOLDERS) as HubRecordType[];
 
 const fileName = (id: string): string => `${encodeURIComponent(id)}.json`;

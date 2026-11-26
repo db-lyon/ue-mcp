@@ -46,6 +46,11 @@ import {
   requirementsKey,
   rollUpGoals,
   scriptReserveMs,
+  arrangementOfRunTarget,
+  arrangementRunTarget,
+  rollUpStatuses,
+  type ArrangementInfo,
+  type ArrangementsView,
   type CheckDetail,
   type CheckMeta,
   type CheckRef,
@@ -737,7 +742,7 @@ export class Hub {
   private setRuns(g: Goal): RunRecord[] {
     if (g.kind === "milestone") return this.runs.byCheck(checkId({ kind: "scene", target: g.id }));
     const own = this.runs.byCheck(checkId({ kind: "track", target: g.id }));
-    const all = this.runs.byCheck(checkId({ kind: "arrangement", target: "arrangement" })).filter((r) => r.arrangement?.instances.some((i) => i.goalId === g.id));
+    const all = this.runs.byCheck(checkId({ kind: "arrangement", target: arrangementRunTarget(this.goals.arrangementOf(g)) })).filter((r) => r.arrangement?.instances.some((i) => i.goalId === g.id));
     if (all.length === 0) return own;
     // An arrangement run speaks for the track by its own instances in it.
     const mine = all.map((r): RunRecord => {
@@ -814,14 +819,16 @@ export class Hub {
     return { state, runs: page.runs, more: page.more, script };
   }
 
-  runsPage(q: { check?: unknown; limit?: unknown; before?: unknown }): { runs: RunRecord[]; more: boolean } {
+  runsPage(q: { check?: unknown; limit?: unknown; before?: unknown; arrangement?: unknown }): { runs: RunRecord[]; more: boolean } {
     let check: string | null = null;
     if (q.check !== undefined && q.check !== "") {
       const ref = typeof q.check === "string" ? checkOfId(q.check) : null;
       if (!ref) throw bad("check is a check id, <kind>:<target>");
       check = checkId(ref);
     }
-    return this.runs.page({ check, limit: limitOf(q.limit, 50), before: typeof q.before === "string" ? q.before : null });
+    // One arrangement's history: its track, scene, slot and arrangement runs, and the clip runs its plans started.
+    const aid = q.arrangement !== undefined && q.arrangement !== "" ? this.goals.resolveArrangement(q.arrangement) : null;
+    return this.runs.page({ check, limit: limitOf(q.limit, 50), before: typeof q.before === "string" ? q.before : null, ...(aid ? { filter: (r: RunRecord) => this.arrangementOfRun(r) === aid } : {}) });
   }
 
   run(runId: string): RunDetail {
@@ -977,8 +984,21 @@ export class Hub {
 
   // ── Plans ─────────────────────────────────────────────────────────
 
-  queueView(): QueueState {
-    return this.queue.state();
+  /**
+   * The queue. With `arrangement`, what waits, what finished and the
+   * schedules are that arrangement's, plans of clips every arrangement shares
+   * included; the plan on the editor shows whichever arrangement it is from,
+   * since it holds the editor for all of them.
+   */
+  queueView(q: { arrangement?: unknown } = {}): QueueState {
+    const state = this.queue.state();
+    if (q.arrangement === undefined || q.arrangement === "") return state;
+    const aid = this.goals.resolveArrangement(q.arrangement);
+    const mine = (p: { arrangementId?: string; scope: PlanScope }) => {
+      const of = p.arrangementId ?? this.arrangementOfScope(p.scope);
+      return of === undefined || of === aid;
+    };
+    return { ...state, queued: state.queued.filter(mine), recent: state.recent.filter(mine), schedules: state.schedules.filter(mine) };
   }
 
   /** The checks a scope stands for, in order, each once. */
@@ -1027,7 +1047,7 @@ export class Hub {
 
   /** A playtest's name as people read it: its own title, the script's name, or the asset's. */
   private nameOf(ref: CheckRef, cat: Catalog): string {
-    if (ref.kind === "arrangement") return "Arrangement";
+    if (ref.kind === "arrangement") return this.arrangementTitle(arrangementOfRunTarget(ref.target));
     if (ref.kind === "slot") {
       const [s, t] = ref.target.split("/");
       return `${this.goals.get(s)?.title ?? s}: ${this.goals.get(t)?.title ?? t}`;
@@ -1048,7 +1068,7 @@ export class Hub {
       case "slot":
         return `Run ${refs[0] ? this.nameOf(refs[0], cat) : "a slot"}`;
       case "arrangement":
-        return `Run the arrangement${from}`;
+        return this.goals.arrangements().length > 1 ? `Run ${this.arrangementTitle(this.goals.resolveArrangement(scope.arrangementId))}${from}` : `Run the arrangement${from}`;
       case "failing":
         return goal ? `Run what is failing in ${goal}` : "Run what is failing";
       case "stale":
@@ -1089,6 +1109,7 @@ export class Hub {
     if (refs.length === 0) throw conflict("nothing to run: the plan's scope has no clips");
     const cat = await this.catalog();
     const items: PlanItem[] = refs.map((ref) => ({ check: ref, name: this.nameOf(ref, cat), state: "queued" as const }));
+    const arrangementId = this.arrangementOfScope(scope);
     const plan: PlanRun = {
       id: newId("plan"),
       title: typeof body.title === "string" ? body.title.trim().slice(0, 200) : this.titleOf(scope, refs, cat),
@@ -1098,6 +1119,7 @@ export class Hub {
       items,
       trigger,
       ...(scheduleId ? { scheduleId } : {}),
+      ...(arrangementId ? { arrangementId } : {}),
       createdAt: new Date(this.now()).toISOString(),
     };
     const placement = this.queue.add(plan, { person: trigger === "person", next: body.next === true });
@@ -1158,7 +1180,7 @@ export class Hub {
   createSchedule(body: unknown): Schedule {
     const d = scheduleDraftOf(body);
     if (d.scope.kind === "goal" && !this.goals.get(d.scope.goalId)) throw bad(`no track ${d.scope.goalId}`);
-    const s = withNext({ id: newId("schedule"), ...d, lastRunAt: null, lastSkipped: null, waiting: null, nextRunAt: null }, new Date(this.now()));
+    const s = withNext(this.pinned({ id: newId("schedule"), ...d, lastRunAt: null, lastSkipped: null, waiting: null, nextRunAt: null }), new Date(this.now()));
     this.queue.putSchedule(s);
     return s;
   }
@@ -1166,9 +1188,99 @@ export class Hub {
   updateSchedule(id: string, body: unknown): Schedule {
     const had = this.queue.schedules().find((s) => s.id === id);
     if (!had) throw notFound(`no schedule ${id}`);
-    const s = withNext(scheduleUpdated(had, body), new Date(this.now()));
+    const s = withNext(this.pinned(scheduleUpdated(had, body)), new Date(this.now()));
     this.queue.putSchedule(s);
     return s;
+  }
+
+  /** A schedule held to the arrangement it was made in: an arrangement scope names it, and the schedule says which it belongs to. */
+  private pinned(s: Schedule): Schedule {
+    const scope: PlanScope = s.scope.kind === "arrangement" ? { ...s.scope, arrangementId: this.goals.resolveArrangement(s.scope.arrangementId) } : s.scope;
+    const { arrangementId: _had, ...rest } = s;
+    const arrangementId = this.arrangementOfScope(scope);
+    return { ...rest, scope, ...(arrangementId ? { arrangementId } : {}) };
+  }
+
+  // ── Arrangements ──────────────────────────────────────────────────
+
+  private arrangementTitle(id: string): string {
+    return this.goals.arrangements().find((a) => a.id === id)?.title ?? id;
+  }
+
+  /** The arrangement a scope belongs to: its track's, scene's or arrangement's; undefined for a scope of clips, which every arrangement shares. */
+  arrangementOfScope(scope: PlanScope): string | undefined {
+    switch (scope.kind) {
+      case "arrangement":
+        return this.goals.resolveArrangement(scope.arrangementId);
+      case "goal":
+      case "track":
+      case "scene":
+        return this.goals.arrangementOfGoal(scope.goalId) ?? undefined;
+      case "failing":
+      case "stale":
+        return scope.goalId ? this.goals.arrangementOfGoal(scope.goalId) ?? undefined : undefined;
+      case "slot":
+        return this.goals.arrangementOfGoal(scope.sceneId) ?? undefined;
+      default:
+        return undefined;
+    }
+  }
+
+  /** The arrangement a run belongs to, from what it ran; undefined for a clip's own run. */
+  private arrangementOfRun(r: RunRecord): string | undefined {
+    switch (r.kind) {
+      case "arrangement":
+        return arrangementOfRunTarget(r.target);
+      case "track":
+      case "scene":
+        return this.goals.arrangementOfGoal(r.target) ?? undefined;
+      case "slot":
+        return this.goals.arrangementOfGoal(r.target.split("/")[0]) ?? undefined;
+      default:
+        return r.planRunId ? this.queue.state().recent.find((p) => p.id === r.planRunId)?.arrangementId : undefined;
+    }
+  }
+
+  /** GET /hub/arrangements: each arrangement with what it holds, its status and its newest run. */
+  async arrangementsView(): Promise<ArrangementsView> {
+    const list = this.goals.arrangements();
+    const known = new Set(list.map((a) => a.id));
+    const states = this.goalStates(await this.catalog()).filter((s) => !s.goal.archived);
+    return {
+      arrangements: list.map((a) => {
+        const mine = states.filter((s) => this.goals.arrangementOf(s.goal, known) === a.id);
+        const last = this.runs.byCheck(checkId({ kind: "arrangement", target: arrangementRunTarget(a.id) }))[0];
+        return {
+          ...a,
+          tracks: mine.filter((s) => s.goal.kind === "goal").length,
+          scenes: mine.filter((s) => s.goal.kind === "milestone").length,
+          status: rollUpStatuses(mine.map((s) => s.status)),
+          lastRun: last ? { runId: last.runId, outcome: last.outcome, at: last.startedAt } : null,
+        };
+      }),
+      default: list[0].id,
+    };
+  }
+
+  createArrangement(body: unknown): ArrangementInfo {
+    return this.goals.createArrangement(body);
+  }
+
+  updateArrangement(id: string, body: unknown): ArrangementInfo {
+    return this.goals.updateArrangement(id, body);
+  }
+
+  duplicateArrangement(id: string, body: unknown): ArrangementInfo {
+    return this.goals.duplicateArrangement(id, body);
+  }
+
+  /** Delete an arrangement with its tracks and scenes, refused while a run made in it is queued or running. Clips stay. */
+  deleteArrangement(id: string): void {
+    const a = this.goals.arrangementInfo(id);
+    const q = this.queue.state();
+    const plans = [q.current, ...q.queued].filter((p): p is PlanRun => !!p && (p.arrangementId ?? this.arrangementOfScope(p.scope)) === id);
+    if (plans.length) throw conflict(`"${a.title}" can't be deleted while ${plans.length === 1 ? "a run made in it is" : "runs made in it are"} queued or running: ${plans.map((p) => `"${p.title}"`).join(", ")}. Cancel ${plans.length === 1 ? "that run" : "those runs"} or let ${plans.length === 1 ? "it" : "them"} finish, then try again.`);
+    this.goals.deleteArrangement(id);
   }
 
   deleteSchedule(id: string): void {
@@ -1241,7 +1353,7 @@ export class Hub {
     const stop = p.composition.findings.find((f) => f.blocks);
     if (stop) return { error: stop.message };
     if (!plan.options.attended && p.composition.manual) return { skipped: NEEDS_PERSON };
-    const r = await this.arrangements.start({ kind, goalId: item.check.target, title: p.title, composition: p.composition, tracks: p.tracks, ...(p.from ? { from: p.from } : {}) });
+    const r = await this.arrangements.start({ kind, goalId: item.check.target, title: p.title, composition: p.composition, tracks: p.tracks, ...(p.from ? { from: p.from } : {}), ...(p.level ? { level: p.level } : {}) });
     if ("error" in r) return { error: r.error };
     this.runs.tag(r.run.runId, { source: "plan", planRunId: plan.id });
     this.saw(r.run);

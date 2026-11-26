@@ -426,8 +426,9 @@ export class RunIndex implements EvidenceStore {
    * A page of runs, newest first: of one check, or of all. `before` is a run
    * id (runs after it in the list) or an ISO time (runs that started earlier).
    */
-  page(o: { check?: string | null; limit: number; before?: string | null }): { runs: RunRecord[]; more: boolean } {
-    const list = o.check ? this.byCheck(o.check) : this.all();
+  page(o: { check?: string | null; limit: number; before?: string | null; filter?: (r: RunRecord) => boolean }): { runs: RunRecord[]; more: boolean } {
+    const all = o.check ? this.byCheck(o.check) : this.all();
+    const list = o.filter ? all.filter(o.filter) : all;
     let start = 0;
     if (o.before) {
       const at = list.findIndex((r) => r.runId === o.before);

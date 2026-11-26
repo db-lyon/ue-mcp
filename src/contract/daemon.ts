@@ -86,6 +86,7 @@ export const DAEMON_FEATURES = [
   "hub.arrangement",
   "events.clip",
   "events.clip.take",
+  "hub.arrangements",
 ] as const;
 
 export type DaemonFeature = (typeof DAEMON_FEATURES)[number];
@@ -106,6 +107,8 @@ export const DAEMON_FEATURES_BEYOND_ROUTES: { readonly [F in DaemonFeature]?: st
     "DELETE /v1/hub/goals/:id removes the goal or milestone and its sign-off and drops its id from every other goal's requires; playtests, their records and past runs are left as they are; it answers 409 { error } naming the plan while a plan whose scope is that goal is queued or running",
   "events.clip":
     "GET /v1/events carries clip.run_started, clip.position, clip.check, clip.region, clip.event_fired, clip.verdict_requested and clip.run_finished (ClipEventData) while a playtest clip run started through pie(clip_run) or pie(clip_record) plays, and after pie(clip_status) of a run that is still playing",
+  "hub.arrangements":
+    "a project holds named arrangements: GET /v1/hub/set and GET /v1/hub/queue take ?arrangement=<id or name>, POST /v1/hub/set/edit takes { arrangement }, the arrangement run scope takes arrangementId, and GET /v1/hub/runs takes ?arrangement; each defaults to the first arrangement. SetView carries arrangement, PlanRun and Schedule carry arrangementId, and a goal carries arrangementId when it is not the first arrangement's",
   "events.clip.take":
     "GET /v1/events carries clip.take_progress while a recording's take is in flight: each armed track's notes so far (the last one open while held) and the axis keys added since the previous event; pie(clip_status) of that run carries the take so far as take.live_take",
 };
@@ -264,6 +267,11 @@ export const DAEMON_ROUTES = routeTable({
   "hub.clips": { method: "GET", path: "/v1/hub/clips", feature: "hub.arrangement", summary: "?q&kind: timeline clips and step-list clips for the browser ({ clips: ClipEntry[] })" },
   "hub.set.run": { method: "POST", path: "/v1/hub/run", feature: "hub.arrangement", summary: "{ scope: track | scene | slot | arrangement, next? }: queue one run of it ({ plan, placement })" },
   "hub.run.verdict": { method: "POST", path: "/v1/hub/runs/:runId/verdict", feature: "hub.arrangement", summary: "{ check, verdict, note? }: a manual check's verdict in a set run ({ ok })" },
+  "hub.arrangements": { method: "GET", path: "/v1/hub/arrangements", feature: "hub.arrangements", summary: "every arrangement in order with its tracks, scenes, level, status and newest run, and the default one (ArrangementsView)" },
+  "hub.arrangements.create": { method: "POST", path: "/v1/hub/arrangements", feature: "hub.arrangements", summary: "{ title, level? }: a new, empty arrangement at the end ({ arrangement: ArrangementInfo })" },
+  "hub.arrangements.update": { method: "PUT", path: "/v1/hub/arrangements/:id", feature: "hub.arrangements", summary: "{ title?, level? }: rename an arrangement or set the map its runs open; level null clears it ({ arrangement })" },
+  "hub.arrangements.duplicate": { method: "POST", path: "/v1/hub/arrangements/:id/duplicate", feature: "hub.arrangements", summary: "{ title? }: copy an arrangement's tracks, scenes and instances right after it; clips stay shared ({ arrangement })" },
+  "hub.arrangements.delete": { method: "DELETE", path: "/v1/hub/arrangements/:id", feature: "hub.arrangements", summary: "delete an arrangement with its tracks and scenes; clips stay (204; 409 for the last one, or while a run made in it is queued or running)" },
   "hub.rules": { method: "PUT", path: "/v1/hub/rules", feature: "hub", summary: "Partial<HealthRule>: the project's flaky and stale rule ({ rules })" },
   "hub.store.export": { method: "GET", path: "/v1/hub/store", feature: "hub", summary: "every goal, check record, sign-off and rule (HubExport)" },
   "hub.store.import": { method: "POST", path: "/v1/hub/store", feature: "hub", summary: "HubExport: merge by id (HubImportReport; 400 naming every record that does not read)" },

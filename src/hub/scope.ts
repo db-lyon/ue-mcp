@@ -3,7 +3,7 @@
 import { GOAL_ID, QA_VERDICT_WAIT_CHOICES, qaVerdictWaitValid, type PlanOptions, type PlanScope } from "./contract.js";
 import { bad, checkRefOf, isObject } from "./util.js";
 
-const SCOPE_HELP = "scope must be { kind: goal | track | scene, goalId, from? } | { kind: slot, sceneId, trackId } | { kind: arrangement, from? } | { kind: checks, checks } | { kind: failing | stale, goalId? } | { kind: all }";
+const SCOPE_HELP = "scope must be { kind: goal | track | scene, goalId, from? } | { kind: slot, sceneId, trackId } | { kind: arrangement, from?, arrangementId? } | { kind: checks, checks } | { kind: failing | stale, goalId? } | { kind: all }";
 
 export function scopeOf(v: unknown): PlanScope {
   if (!isObject(v)) throw bad(SCOPE_HELP);
@@ -26,8 +26,10 @@ export function scopeOf(v: unknown): PlanScope {
     case "slot":
       if (typeof v.sceneId !== "string" || !GOAL_ID.test(v.sceneId) || typeof v.trackId !== "string" || !GOAL_ID.test(v.trackId)) throw bad("a slot scope is { kind: slot, sceneId, trackId }");
       return { kind: "slot", sceneId: v.sceneId, trackId: v.trackId };
-    case "arrangement":
-      return { kind: "arrangement", ...from() };
+    case "arrangement": {
+      if (v.arrangementId !== undefined && v.arrangementId !== null && (typeof v.arrangementId !== "string" || !GOAL_ID.test(v.arrangementId))) throw bad("arrangementId must be an arrangement's id");
+      return { kind: "arrangement", ...from(), ...(typeof v.arrangementId === "string" ? { arrangementId: v.arrangementId } : {}) };
+    }
     case "failing":
     case "stale": {
       const g = goalId(false);

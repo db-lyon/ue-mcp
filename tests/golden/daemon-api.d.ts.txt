@@ -12,7 +12,7 @@ export declare function apiVersionsOverlap(a: ApiVersionRange, b: ApiVersionRang
 export declare const DAEMON_API_RANGE: ApiVersionRange;
 export declare const EXTENSION_API_RANGE: ApiVersionRange;
 export declare function extensionApiSupported(min: number, max: number): boolean;
-export declare const DAEMON_FEATURES: readonly ["checkpoints", "checkpoints.assetDiff", "skills", "context.projection", "actions.effects", "install.pendingBuild", "editor.rebuild", "ui.scopedKeys", "ui.extensions", "flows.stepApproval", "sessions.access", "journal", "tools.categories", "leases", "dialogs.native", "events.pie", "install.engineMismatch", "editor.consent", "hub", "hub.goalDelete", "hub.arrangement", "events.clip", "events.clip.take"];
+export declare const DAEMON_FEATURES: readonly ["checkpoints", "checkpoints.assetDiff", "skills", "context.projection", "actions.effects", "install.pendingBuild", "editor.rebuild", "ui.scopedKeys", "ui.extensions", "flows.stepApproval", "sessions.access", "journal", "tools.categories", "leases", "dialogs.native", "events.pie", "install.engineMismatch", "editor.consent", "hub", "hub.goalDelete", "hub.arrangement", "events.clip", "events.clip.take", "hub.arrangements"];
 export type DaemonFeature = (typeof DAEMON_FEATURES)[number];
 export declare const DAEMON_FEATURES_BEYOND_ROUTES: {
     readonly [F in DaemonFeature]?: string;
@@ -429,6 +429,36 @@ export declare const DAEMON_ROUTES: {
     readonly "hub.run.verdict": {
         readonly method: "POST";
         readonly path: "/v1/hub/runs/:runId/verdict";
+        readonly feature?: DaemonFeature;
+        readonly summary: string;
+    };
+    readonly "hub.arrangements": {
+        readonly method: "GET";
+        readonly path: "/v1/hub/arrangements";
+        readonly feature?: DaemonFeature;
+        readonly summary: string;
+    };
+    readonly "hub.arrangements.create": {
+        readonly method: "POST";
+        readonly path: "/v1/hub/arrangements";
+        readonly feature?: DaemonFeature;
+        readonly summary: string;
+    };
+    readonly "hub.arrangements.update": {
+        readonly method: "PUT";
+        readonly path: "/v1/hub/arrangements/:id";
+        readonly feature?: DaemonFeature;
+        readonly summary: string;
+    };
+    readonly "hub.arrangements.duplicate": {
+        readonly method: "POST";
+        readonly path: "/v1/hub/arrangements/:id/duplicate";
+        readonly feature?: DaemonFeature;
+        readonly summary: string;
+    };
+    readonly "hub.arrangements.delete": {
+        readonly method: "DELETE";
+        readonly path: "/v1/hub/arrangements/:id";
         readonly feature?: DaemonFeature;
         readonly summary: string;
     };
@@ -1973,7 +2003,38 @@ export interface Goal {
     mute?: boolean;
     solo?: boolean;
     slots?: Slot[];
+    arrangementId?: string;
 }
+export declare const MAIN_ARRANGEMENT_ID = "main";
+export declare const MAIN_ARRANGEMENT_TITLE = "Main";
+export interface ArrangementRecord {
+    title: string;
+    order: number;
+    level?: string;
+}
+export interface ArrangementInfo {
+    id: string;
+    title: string;
+    order: number;
+    level: string | null;
+}
+export interface ArrangementSummary extends ArrangementInfo {
+    tracks: number;
+    scenes: number;
+    status: GoalStatus;
+    lastRun: {
+        runId: string;
+        outcome: RunOutcome;
+        at: string;
+    } | null;
+}
+export interface ArrangementsView {
+    arrangements: ArrangementSummary[];
+    default: string;
+}
+export declare const arrangementRunTarget: (id: string) => string;
+export declare const arrangementOfRunTarget: (target: string) => string;
+export declare function rollUpStatuses(list: readonly GoalStatus[]): GoalStatus;
 export interface GoalParents {
     parents?: string[];
 }
@@ -2153,7 +2214,7 @@ export declare function rollUpGoals(goals: readonly Goal[], checksOf: (g: Goal) 
     runs: RunRecord[];
 }>, current?: CurrentProvenance, signOffs?: ReadonlyMap<string, SignOff>): GoalState[];
 export declare const leafName: (path: string) => string;
-export type HubRecordType = "goal" | "check" | "signoff" | "rules" | "import";
+export type HubRecordType = "goal" | "check" | "signoff" | "rules" | "import" | "arrangement";
 export interface GoalImport {
     from: string;
     at: string;
@@ -2166,6 +2227,7 @@ export interface HubRecordData {
     signoff: SignOff;
     rules: HealthRule;
     import: GoalImport;
+    arrangement: ArrangementRecord;
 }
 export interface HubRecord<T extends HubRecordType = HubRecordType> {
     schema: typeof HUB_SCHEMA;
@@ -2215,6 +2277,7 @@ export type PlanScope = {
 } | {
     kind: "arrangement";
     from?: number;
+    arrangementId?: string;
 } | {
     kind: "checks";
     checks: CheckRef[];
@@ -2262,6 +2325,7 @@ export interface PlanRun {
     items: PlanItem[];
     trigger: PlanTrigger;
     scheduleId?: string | null;
+    arrangementId?: string;
     createdAt: string;
     startedAt?: string | null;
     endedAt?: string | null;
@@ -2291,8 +2355,9 @@ export interface Schedule {
     lastSkipped?: string | null;
     waiting?: string | null;
     nextRunAt?: string | null;
+    arrangementId?: string;
 }
-export type ScheduleDraft = Omit<Schedule, "id" | "lastRunAt" | "lastSkipped" | "waiting" | "nextRunAt">;
+export type ScheduleDraft = Omit<Schedule, "id" | "lastRunAt" | "lastSkipped" | "waiting" | "nextRunAt" | "arrangementId">;
 export interface FixRequest {
     goalId?: string;
     checkId?: string;
@@ -2418,10 +2483,15 @@ export declare const HUB_ROUTES: {
     readonly arrangement: "GET /hub/goals/:id/arrangement -> ArrangementView";
     readonly putArrangement: "PUT /hub/goals/:id/arrangement { arrangement } | { text } -> ArrangementView (400 { error, findings })";
     readonly editArrangement: "POST /hub/goals/:id/arrangement/edit { ops } -> ArrangementView & { changed } (400 { error, finding, findings })";
-    readonly set: "GET /hub/set -> SetView";
-    readonly editSet: "POST /hub/set/edit { ops } -> SetView & { changed } (400 { error, finding })";
+    readonly set: "GET /hub/set?arrangement= -> SetView";
+    readonly editSet: "POST /hub/set/edit { ops, arrangement? } -> SetView & { changed } (400 { error, finding })";
     readonly clips: "GET /hub/clips?q=&kind= -> { clips: ClipEntry[] }";
     readonly runSet: "POST /hub/run { scope: track | scene | slot | arrangement, next? } -> { plan: PlanRun, placement: PlanPlacement, runId: string | null } (runId once a plan that started at once has its run)";
+    readonly arrangements: "GET /hub/arrangements -> ArrangementsView";
+    readonly createArrangement: "POST /hub/arrangements { title, level? } -> { arrangement: ArrangementInfo }";
+    readonly updateArrangement: "PUT /hub/arrangements/:id { title?, level? } -> { arrangement: ArrangementInfo } (level null clears it)";
+    readonly duplicateArrangement: "POST /hub/arrangements/:id/duplicate { title? } -> { arrangement: ArrangementInfo } (tracks, scenes and instances copied; clips shared)";
+    readonly deleteArrangement: "DELETE /hub/arrangements/:id -> 204 (its tracks and scenes go; clips stay; 409 for the last one or while its runs are queued)";
     readonly runVerdict: "POST /hub/runs/:runId/verdict { check, verdict, note? } -> { ok: true } (a manual check in a track or scene run)";
 };
 export interface ArrangementView {
@@ -2456,6 +2526,7 @@ export interface SetView {
     }>;
     text: string;
     findings: ArrangementFinding[];
+    arrangement?: ArrangementInfo;
 }
 export interface ClipEntry {
     kind: "clip" | "script";

@@ -60,7 +60,7 @@ export function hubRoutes(hub: () => Hub, projectDir: string): Pick<RouteHandler
     },
     "hub.run.addLink": async (r) => ok({ record: hub().addRunLink(param(r.params, "runId"), await r.body()) }),
     "hub.run.removeLink": ({ params, query }) => ok({ record: hub().removeRunLink(param(params, "runId"), query.get("url")) }),
-    "hub.queue": () => ok(hub().queueView()),
+    "hub.queue": ({ query }) => ok(hub().queueView(q(query))),
     "hub.queue.pause": async (r) => ok(hub().setPaused(await r.body())),
     "hub.lease": () => ok(hub().leaseView()),
     "hub.release": async () => ok(await hub().release()),
@@ -74,7 +74,7 @@ export function hubRoutes(hub: () => Hub, projectDir: string): Pick<RouteHandler
       return noContent;
     },
     "hub.fix": async (r) => ok(await hub().fix(await r.body())),
-    "hub.set": async () => ok(await hub().set.view()),
+    "hub.set": async ({ query }) => ok(await hub().set.view(query.get("arrangement") ?? undefined)),
     "hub.set.edit": async (r) => findings(async () => hub().set.edit(await r.body())),
     "hub.arrangement": async ({ params }) => ok(await hub().set.arrangement(param(params, "id"))),
     "hub.arrangement.put": async (r) => findings(async () => hub().set.putArrangement(param(r.params, "id"), await r.body())),
@@ -82,6 +82,14 @@ export function hubRoutes(hub: () => Hub, projectDir: string): Pick<RouteHandler
     "hub.clips": async ({ query }) => ok({ clips: await hub().set.clips(q(query)) }),
     "hub.set.run": async (r) => ok(await hub().runSet(await r.body(), "person")),
     "hub.run.verdict": async (r) => ok(await hub().runVerdict(param(r.params, "runId"), await r.body())),
+    "hub.arrangements": async () => ok(await hub().arrangementsView()),
+    "hub.arrangements.create": async (r) => ok({ arrangement: hub().createArrangement(await r.body()) }),
+    "hub.arrangements.update": async (r) => ok({ arrangement: hub().updateArrangement(param(r.params, "id"), await r.body()) }),
+    "hub.arrangements.duplicate": async (r) => ok({ arrangement: hub().duplicateArrangement(param(r.params, "id"), await r.body()) }),
+    "hub.arrangements.delete": ({ params }) => {
+      hub().deleteArrangement(param(params, "id"));
+      return noContent;
+    },
   };
 }
 

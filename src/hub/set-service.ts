@@ -7,6 +7,8 @@
  */
 import {
   ARRANGEMENT_RATE,
+  arrangementOfRunTarget,
+  arrangementRunTarget,
   applyArrangementOps,
   arrangementFrom,
   applySetOps,
@@ -58,6 +60,10 @@ export interface SetRunPlan {
   tracks: Array<{ goalId: string; title: string; player: number }>;
   /** The frame the timelines play from (at 60 per second); the composition counts from there. */
   from?: number;
+  /** The arrangement it plays in. */
+  arrangementId: string;
+  /** The map the run opens first: its arrangement's level. */
+  level?: string;
 }
 
 export class SetService {
@@ -83,11 +89,12 @@ export class SetService {
     return [...m.tracks.flatMap((t) => t.arrangement.instances), ...m.scenes.flatMap((s) => s.slots)].map((x) => ({ kind: x.kind, target: x.target }));
   }
 
-  /** GET /hub/set. */
-  async view(): Promise<SetView> {
-    const m = this.o.goals.setModel();
+  /** GET /hub/set: one arrangement's set, by id or name, the first one when none is asked for. */
+  async view(arrangement?: unknown): Promise<SetView> {
+    const aid = this.o.goals.resolveArrangement(arrangement);
+    const m = this.o.goals.setModel(aid);
     await this.o.library.load(this.refsOf(m));
-    return this.viewOf(m, await this.statuses(false));
+    return this.viewOf(m, await this.statuses(false), aid);
   }
 
   /** Every goal's status as last read. An edit takes it without reading again, since no op changes a status; a new track is not started. */
@@ -109,7 +116,7 @@ export class SetService {
     return read;
   }
 
-  private viewOf(m: SetModel, statuses: Map<string, GoalStatus>): SetView {
+  private viewOf(m: SetModel, statuses: Map<string, GoalStatus>, aid: string): SetView {
     const o = this.opts();
     const findings: ArrangementFinding[] = [];
     for (const t of m.tracks) findings.push(...validateArrangement(t.arrangement, o).map((f) => ({ ...f, id: `${t.id}/${f.id}` })));
@@ -119,15 +126,28 @@ export class SetService {
       scenes: m.scenes.map((s) => ({ ...s, slots: s.slots.map((sl) => ({ ...sl, length: o.factsOf(sl.target, sl.kind)?.length ?? null })), status: statuses.get(s.id) ?? "not_started" })),
       text: setToText(m),
       findings,
+      arrangement: this.o.goals.arrangementInfo(aid),
     };
+  }
+
+  /** The set a run of this kind plays from: the arrangement the track, scene or arrangement run names. */
+  private modelFor(kind: ArrangementRunKind, goalId: string): { model: SetModel; arrangementId: string } {
+    const g = this.o.goals;
+    let aid: string | null;
+    if (kind === "arrangement") aid = g.resolveArrangement(arrangementOfRunTarget(goalId));
+    else aid = g.arrangementOfGoal(kind === "slot" ? goalId.split("/")[0] : goalId);
+    // A track or scene that is gone: the first arrangement, where compose answers 404 for it.
+    const arrangementId = aid ?? g.defaultArrangement();
+    return { model: g.setModel(arrangementId), arrangementId };
   }
 
   /** POST /hub/set/edit: ops applied in order, all or none. */
   async edit(body: unknown): Promise<SetView & { changed: string[] }> {
-    if (!isObject(body)) throw bad("body must be { ops }");
+    if (!isObject(body)) throw bad("body must be { ops, arrangement? }");
     const parsed = setOpsOf(body.ops);
     if (parsed.findings.length) throw new FindingError(parsed.findings[0], parsed.findings);
-    const m = this.o.goals.setModel();
+    const aid = this.o.goals.resolveArrangement(body.arrangement);
+    const m = this.o.goals.setModel(aid);
     const targetsOf = (list: readonly SetOp[]) => list.flatMap((op): Array<{ kind: InstanceKind; target: string }> => {
       const x = op as SetOp & { edit?: { kind?: unknown; target?: unknown }; kind?: unknown; target?: unknown; track?: unknown; id?: unknown };
       // A retarget keeps its instance's kind unless it names one.
@@ -150,8 +170,8 @@ export class SetService {
       const why = kept.has(x.id) ? null : this.o.deleteBlocked?.(x.id);
       if (why) throw new FindingError({ id: x.id, field: "delete", message: why, blocks: true });
     }
-    this.o.goals.applySet(r.set);
-    return { ...this.viewOf(this.o.goals.setModel(), await this.statuses(true)), changed: r.changed };
+    this.o.goals.applySet(r.set, aid);
+    return { ...this.viewOf(this.o.goals.setModel(aid), await this.statuses(true), aid), changed: r.changed };
   }
 
   /**
@@ -205,7 +225,8 @@ export class SetService {
   // ── One track's timeline ─────────────────────────────────────────
 
   private track(id: string) {
-    const t = this.o.goals.setModel().tracks.find((x) => x.id === id);
+    const aid = this.o.goals.arrangementOfGoal(id);
+    const t = aid ? this.o.goals.setModel(aid).tracks.find((x) => x.id === id) : undefined;
     if (!t) throw notFound(`no track ${id}`);
     return t;
   }
@@ -260,8 +281,11 @@ export class SetService {
   // ── Runs ─────────────────────────────────────────────────────────
 
   /** What a scope plays, from the set as it is now. Throws 404 for a track or scene that is gone. */
-  compose(kind: ArrangementRunKind, goalId: string, m: SetModel = this.o.goals.setModel(), from = 0): SetRunPlan {
+  compose(kind: ArrangementRunKind, goalId: string, model?: SetModel, from = 0): SetRunPlan {
     const o = this.opts();
+    const at = this.modelFor(kind, goalId);
+    const m = model ?? at.model;
+    const level = this.o.goals.arrangementInfo(at.arrangementId).level;
     // Timelines play from `from`; a slot always plays its clip from the start.
     const start = kind === "slot" ? 0 : from;
     const asTrack = (t: SetModel["tracks"][number], arrangement: Arrangement): ComposeTrack => ({ goalId: t.id, title: t.title, arrangement: arrangementFrom(arrangement, start, o.factsOf), player: t.player });
@@ -274,7 +298,7 @@ export class SetService {
       title = t.title;
     } else if (kind === "arrangement") {
       tracks = audibleTracks(m.tracks).map((t) => asTrack(t, t.arrangement));
-      title = "Arrangement";
+      title = this.o.goals.arrangementInfo(at.arrangementId).title;
     } else if (kind === "scene") {
       // Phase 1: a scene is a composition of tracks, each playing its timeline.
       const s = m.scenes.find((x) => x.id === goalId);
@@ -297,14 +321,14 @@ export class SetService {
     const composition = composeArrangement(tracks, { clip: (t) => this.o.library.clip(t), facts: o.factsOf, scene: tracks.length > 1 || kind !== "track" });
     if (tracks.length === 0) composition.findings.push({ id: goalId, field: "tracks", message: kind === "arrangement" ? "no track plays: every track is muted, or none is soloed that has clips" : "nothing in it plays", blocks: true });
     else if (start > 0 && composition.segments.length === 0) composition.findings.push({ id: goalId, field: "from", message: `nothing plays from ${(start / ARRANGEMENT_RATE).toFixed(2).replace(/\.?0+$/, "")} s: every clip ends before it`, blocks: true });
-    return { kind, goalId, title, composition, tracks: tracks.map((t) => ({ goalId: t.goalId, title: t.title ?? t.goalId, player: t.player })), ...(start > 0 ? { from: start } : {}) };
+    return { kind, goalId, title, composition, tracks: tracks.map((t) => ({ goalId: t.goalId, title: t.title ?? t.goalId, player: t.player })), ...(start > 0 ? { from: start } : {}), arrangementId: at.arrangementId, ...(level ? { level } : {}) };
   }
 
   /** Compose a plan item's run with the clips it uses read fresh. */
   async plan(kind: ArrangementRunKind, goalId: string, from = 0): Promise<SetRunPlan> {
-    const m = this.o.goals.setModel();
-    await this.o.library.load(this.refsOf(m), true);
-    return this.compose(kind, goalId, m, from);
+    const { model } = this.modelFor(kind, goalId);
+    await this.o.library.load(this.refsOf(model), true);
+    return this.compose(kind, goalId, model, from);
   }
 }
 
@@ -317,7 +341,7 @@ export function setItemOf(scope: PlanScope, goals: Goals): { kind: ArrangementRu
     case "slot":
       return { kind: "slot", target: `${scope.sceneId}/${scope.trackId}` };
     case "arrangement":
-      return { kind: "arrangement", target: "arrangement" };
+      return { kind: "arrangement", target: arrangementRunTarget(goals.resolveArrangement(scope.arrangementId)) };
     case "goal": {
       const g = goals.get(scope.goalId);
       if (g?.kind === "goal" && g.arrangement && g.arrangement.instances.some((i) => i.kind === "clip")) return { kind: "track", target: g.id };

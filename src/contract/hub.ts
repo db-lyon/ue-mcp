@@ -304,6 +304,69 @@ export interface Goal {
   solo?: boolean;
   /** A scene: its clip slots, at most one per track. */
   slots?: Slot[];
+  /**
+   * The arrangement a track or scene belongs to (ArrangementInfo). Absent:
+   * the project's first arrangement, "main", which every track made before
+   * a project could hold several arrangements belongs to.
+   */
+  arrangementId?: string;
+}
+
+// ---------- Arrangements ----------
+
+/** The arrangement every track and scene made before a project held several belongs to. */
+export const MAIN_ARRANGEMENT_ID = "main";
+export const MAIN_ARRANGEMENT_TITLE = "Main";
+
+/**
+ * One named arrangement of a project, like an Ableton Live Set: its own
+ * tracks and scenes, and the level its runs open. Clips stay one library
+ * across every arrangement; an instance refers to its clip.
+ */
+export interface ArrangementRecord {
+  title: string;
+  /** Its place in the project's list. */
+  order: number;
+  /** The map its runs open first, as a package path such as /Game/Maps/Arena. */
+  level?: string;
+}
+
+/** An arrangement as clients read it. */
+export interface ArrangementInfo {
+  id: string;
+  title: string;
+  order: number;
+  level: string | null;
+}
+
+/** One row of GET /hub/arrangements. */
+export interface ArrangementSummary extends ArrangementInfo {
+  tracks: number;
+  scenes: number;
+  /** Rolled up from its tracks and scenes. */
+  status: GoalStatus;
+  /** Its newest arrangement run. */
+  lastRun: { runId: string; outcome: RunOutcome; at: string } | null;
+}
+
+/** GET /hub/arrangements: every arrangement in order, and the one a request that names none gets. */
+export interface ArrangementsView {
+  arrangements: ArrangementSummary[];
+  default: string;
+}
+
+/** The check target of an arrangement's own run: "arrangement" for the first one, as before, its id for the rest. */
+export const arrangementRunTarget = (id: string): string => (id === MAIN_ARRANGEMENT_ID ? "arrangement" : id);
+/** The arrangement an arrangement run's target names. */
+export const arrangementOfRunTarget = (target: string): string => (target === "arrangement" ? MAIN_ARRANGEMENT_ID : target);
+
+/** One status for a list of them: running or failing first, met only when all are. */
+export function rollUpStatuses(list: readonly GoalStatus[]): GoalStatus {
+  if (list.length === 0) return "not_started";
+  for (const s of ["running", "failing", "at_risk", "ready_to_sign_off"] as const) if (list.includes(s)) return s;
+  if (list.every((s) => s === "met")) return "met";
+  if (list.every((s) => s === "not_started")) return "not_started";
+  return "in_progress";
 }
 
 /**
@@ -936,10 +999,11 @@ export const leafName = (path: string): string => {
 /**
  * What the goal store keeps, one kind of record each: goals (milestones
  * included), what a check says about itself (id: the check id), sign-offs,
- * the project's health rule (id "health"), and the one-time import of an
- * older Studio's QA/Goals files (id "qa-goals").
+ * the project's health rule (id "health"), the one-time import of an
+ * older Studio's QA/Goals files (id "qa-goals"), and the project's named
+ * arrangements.
  */
-export type HubRecordType = "goal" | "check" | "signoff" | "rules" | "import";
+export type HubRecordType = "goal" | "check" | "signoff" | "rules" | "import" | "arrangement";
 
 /**
  * The import of a project's QA/Goals files, where an older Studio kept
@@ -962,6 +1026,7 @@ export interface HubRecordData {
   signoff: SignOff;
   rules: HealthRule;
   import: GoalImport;
+  arrangement: ArrangementRecord;
 }
 
 /**
@@ -1026,7 +1091,8 @@ export type PlanScope =
   | { kind: "track"; goalId: string; from?: number }
   | { kind: "scene"; goalId: string; from?: number }
   | { kind: "slot"; sceneId: string; trackId: string }
-  | { kind: "arrangement"; from?: number }
+  /** `arrangementId`: which arrangement plays; the project's first one when absent. */
+  | { kind: "arrangement"; from?: number; arrangementId?: string }
   | { kind: "checks"; checks: CheckRef[] }
   | { kind: "failing"; goalId?: string }
   | { kind: "stale"; goalId?: string }
@@ -1102,6 +1168,8 @@ export interface PlanRun {
   trigger: PlanTrigger;
   /** The schedule that queued it. */
   scheduleId?: string | null;
+  /** The arrangement its scope belongs to; absent for a scope of clips, which every arrangement shares. */
+  arrangementId?: string;
   createdAt: string;
   startedAt?: string | null;
   endedAt?: string | null;
@@ -1166,8 +1234,10 @@ export interface Schedule {
   /** Due now, and why it has not started yet. */
   waiting?: string | null;
   nextRunAt?: string | null;
+  /** The arrangement its scope belongs to, as PlanRun.arrangementId. */
+  arrangementId?: string;
 }
-export type ScheduleDraft = Omit<Schedule, "id" | "lastRunAt" | "lastSkipped" | "waiting" | "nextRunAt">;
+export type ScheduleDraft = Omit<Schedule, "id" | "lastRunAt" | "lastSkipped" | "waiting" | "nextRunAt" | "arrangementId">;
 
 /** POST /hub/fix: a fix plan for every failing check of a goal (or of the project), or for one check. */
 export interface FixRequest {
@@ -1365,10 +1435,15 @@ export const HUB_ROUTES = {
   arrangement: "GET /hub/goals/:id/arrangement -> ArrangementView",
   putArrangement: "PUT /hub/goals/:id/arrangement { arrangement } | { text } -> ArrangementView (400 { error, findings })",
   editArrangement: "POST /hub/goals/:id/arrangement/edit { ops } -> ArrangementView & { changed } (400 { error, finding, findings })",
-  set: "GET /hub/set -> SetView",
-  editSet: "POST /hub/set/edit { ops } -> SetView & { changed } (400 { error, finding })",
+  set: "GET /hub/set?arrangement= -> SetView",
+  editSet: "POST /hub/set/edit { ops, arrangement? } -> SetView & { changed } (400 { error, finding })",
   clips: "GET /hub/clips?q=&kind= -> { clips: ClipEntry[] }",
   runSet: "POST /hub/run { scope: track | scene | slot | arrangement, next? } -> { plan: PlanRun, placement: PlanPlacement, runId: string | null } (runId once a plan that started at once has its run)",
+  arrangements: "GET /hub/arrangements -> ArrangementsView",
+  createArrangement: "POST /hub/arrangements { title, level? } -> { arrangement: ArrangementInfo }",
+  updateArrangement: "PUT /hub/arrangements/:id { title?, level? } -> { arrangement: ArrangementInfo } (level null clears it)",
+  duplicateArrangement: "POST /hub/arrangements/:id/duplicate { title? } -> { arrangement: ArrangementInfo } (tracks, scenes and instances copied; clips shared)",
+  deleteArrangement: "DELETE /hub/arrangements/:id -> 204 (its tracks and scenes go; clips stay; 409 for the last one or while its runs are queued)",
   runVerdict: "POST /hub/runs/:runId/verdict { check, verdict, note? } -> { ok: true } (a manual check in a track or scene run)",
 } as const;
 
@@ -1389,6 +1464,8 @@ export interface SetView {
   /** The compact text form agents read. */
   text: string;
   findings: ArrangementFinding[];
+  /** The arrangement these tracks and scenes belong to. */
+  arrangement?: ArrangementInfo;
 }
 
 /** One clip a browser lists (GET /hub/clips): a timeline clip or a step-list playtest. */
