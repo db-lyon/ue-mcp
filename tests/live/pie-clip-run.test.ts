@@ -136,6 +136,18 @@ describe("fixing a failing clip", () => {
     expect(pass.passed).toBe(true);
   }, 240_000);
 
+  it("refuses at once without start_pie when PIE is not running, saying how to proceed, and arms nothing (#2126)", async () => {
+    await stopPie();
+    const before = body(await callBridge(bridge, "pie_clip_status", {}));
+    const refused = await callBridge(bridge, "pie_clip_run", { path: CLIP });
+    expect(succeeded(refused)).toBe(false);
+    expect(refused.error ?? JSON.stringify(refused.result)).toMatch(/PIE is not running.*start_pie: true/);
+    const after = body(await callBridge(bridge, "pie_clip_status", {}));
+    expect(after.run_id).toBe(before.run_id);
+    expect(after.active).toBe(false);
+    expect(await pieRunning()).toBe(false);
+  }, 60_000);
+
   it("region plays from frame 0 but judges only that region and stops at its end", async () => {
     const s = await play(CLIP, { region: "r1" });
     expect(s.region).toBe("r1");
