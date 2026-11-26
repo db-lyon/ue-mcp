@@ -37,12 +37,16 @@ let scriptRuns: Map<string, Record<string, unknown>>;
 let pie: boolean;
 let hub: Hub;
 let k: number;
+/** While set, the editor's clip and script reads wait for it: an editor busy elsewhere. */
+let held: Promise<void> | null;
+let clock: number;
 
 const host = () => ({
   projectDir: path.join(root, "project"),
   dataDir: path.join(root, "data"),
   callAction: async (_category: string, action: string, args: Record<string, unknown> = {}) => {
     calls.push({ action, args });
+    if (held && (action === "clip_read" || action === "clip_list" || action === "script_list")) await held;
     switch (action) {
       case "script_list":
         return ok({ scripts: [{ path: DOOR, name: "DoorOpens" }], count: 1 });
@@ -89,9 +93,9 @@ const host = () => ({
   log: { info() {}, warn() {} },
 });
 
-function setup(): Hub {
+function setup(now?: () => number): Hub {
   const h = host();
-  return new Hub({ host: h, broker: new ScriptRunBroker(h), index: new ScriptIndex(h), timers: false, workspace: async () => ({ vcs: "none", revision: null, dirty: 0 }), editor: { pie: () => pie, dialogs: () => 0, busy: () => ({ now: Date.now(), calls: [] }), inputAgeMs: () => null }, pieWaits: { startMs: 50, inUseMs: 50 } });
+  return new Hub({ host: h, broker: new ScriptRunBroker(h), index: new ScriptIndex(h, now), timers: false, ...(now ? { now } : {}), workspace: async () => ({ vcs: "none", revision: null, dirty: 0 }), editor: { pie: () => pie, dialogs: () => 0, busy: () => ({ now: Date.now(), calls: [] }), inputAgeMs: () => null }, pieWaits: { startMs: 50, inUseMs: 50 } });
 }
 
 async function call(method: string, url: string, body?: unknown): Promise<{ status: number; body: any }> {
@@ -120,6 +124,8 @@ beforeEach(() => {
   scriptRuns = new Map();
   pie = false;
   k = 0;
+  held = null;
+  clock = Date.now();
 });
 
 afterEach(() => {
@@ -209,6 +215,36 @@ scene track "Boss fight" add Guard` });
     expect(hub.goals.get(b)).toBeUndefined();
     const agent = (await runHubAction(hub, "edit_set", { ops: "scene delete T" })) as { text: string };
     expect(agent.text).not.toContain("scene ");
+  });
+
+  it("answers a move without waiting on the editor, and the next read sees the clips read again", async () => {
+    hub = setup(() => clock);
+    await call("POST", "/hub/set/edit", { ops: `track add A\nadd A clip ${WALK}` });
+    await call("GET", "/hub/set");
+    // Long after every clip was read, the editor is busy: its reads do not answer until released.
+    clock += 60_000;
+    let release!: () => void;
+    held = new Promise((r) => (release = r));
+    calls = [];
+    const timer = new Promise<"timeout">((r) => setTimeout(() => r("timeout"), 500));
+    const r = await Promise.race([call("POST", "/hub/set/edit", { ops: "move A/i1 to 90" }), timer]);
+    expect(r).not.toBe("timeout");
+    const moved = (r as { status: number; body: SetView }).body;
+    expect((r as { status: number }).status).toBe(200);
+    // The layout kept the clip's length from the earlier read.
+    expect(moved.tracks[0].layout[0]).toMatchObject({ id: "i1", start: 90, end: 210, known: true });
+    // The reads it started run behind the answer, once each.
+    expect(calls.filter((c) => c.action === "clip_read")).toHaveLength(1);
+    // A read of the set waits for them, so a clip changed in the piano roll shows.
+    clips[WALK] = { ...clips[WALK], length: 240 };
+    let read = false;
+    const view = call("GET", "/hub/set").then((v) => ((read = true), v));
+    await settle();
+    expect(read).toBe(false);
+    release();
+    held = null;
+    expect((await view).body.tracks[0].layout[0]).toMatchObject({ start: 90, end: 330 });
+    clips[WALK] = { ...clips[WALK], length: 120 };
   });
 
   it("makes an instance unique by copying its clip", async () => {

@@ -87,7 +87,26 @@ export class SetService {
   async view(): Promise<SetView> {
     const m = this.o.goals.setModel();
     await this.o.library.load(this.refsOf(m));
-    return this.viewOf(m, await this.o.statuses());
+    return this.viewOf(m, await this.statuses(false));
+  }
+
+  /** Every goal's status as last read. An edit takes it without reading again, since no op changes a status; a new track is not started. */
+  private lastStatuses: Map<string, GoalStatus> | null = null;
+  private statusRead: Promise<Map<string, GoalStatus>> | null = null;
+
+  /** Statuses read now, or with `stale` the last reading, read again behind the answer. */
+  private async statuses(stale: boolean): Promise<Map<string, GoalStatus>> {
+    const read = (this.statusRead ??= this.o.statuses().then((s) => (this.lastStatuses = s), (e) => {
+      if (this.lastStatuses) return this.lastStatuses;
+      throw e;
+    }).finally(() => {
+      this.statusRead = null;
+    }));
+    if (stale && this.lastStatuses) {
+      read.catch(() => {});
+      return this.lastStatuses;
+    }
+    return read;
   }
 
   private viewOf(m: SetModel, statuses: Map<string, GoalStatus>): SetView {
@@ -117,7 +136,8 @@ export class SetService {
       const t = x.edit?.target ?? x.target;
       return (k === "clip" || k === "script") && typeof t === "string" ? [{ kind: k, target: t }] : [];
     });
-    await this.o.library.load([...this.refsOf(m), ...targetsOf(parsed.ops)]);
+    // Clips read before stand as they are: a move or a trim waits on no editor round trip, only a clip never read does.
+    await this.o.library.load([...this.refsOf(m), ...targetsOf(parsed.ops)], true, true);
     const ops = await this.uniques(parsed.ops, m);
     // The copies make unique just made are read like any clip an op names, and taken as clips even before the editor lists them.
     const copies = targetsOf(ops.filter((op) => !parsed.ops.includes(op)));
@@ -131,7 +151,7 @@ export class SetService {
       if (why) throw new FindingError({ id: x.id, field: "delete", message: why, blocks: true });
     }
     this.o.goals.applySet(r.set);
-    return { ...this.viewOf(this.o.goals.setModel(), await this.o.statuses()), changed: r.changed };
+    return { ...this.viewOf(this.o.goals.setModel(), await this.statuses(true)), changed: r.changed };
   }
 
   /**
@@ -219,7 +239,7 @@ export class SetService {
     const parsed = arrangementOpsOf(body.ops);
     if (parsed.findings.length) throw new FindingError(parsed.findings[0], parsed.findings);
     const added = parsed.ops.flatMap((op) => (op.op === "add" && (op.kind === "clip" || op.kind === "script") && typeof op.target === "string" ? [{ kind: op.kind, target: op.target }] : []));
-    await this.o.library.load([...t.arrangement.instances, ...added]);
+    await this.o.library.load([...t.arrangement.instances, ...added], true, true);
     const r = applyArrangementOps(t.arrangement, parsed.ops, this.opts());
     if (!r.ok) throw new FindingError(r.finding, r.findings);
     this.o.goals.setArrangement(id, r.arrangement);

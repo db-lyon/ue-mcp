@@ -30,6 +30,10 @@ export class ClipLibrary {
   private readonly clips = new Map<string, Read>();
   private clipList: { at: number; list: Array<{ path: string; name: string; map: string | null }> | null } | null = null;
   private scriptList: { at: number; list: Array<{ path: string; name: string; map: string | null }> | null } | null = null;
+  /** Reads under way, so two loads at once ask the editor once. */
+  private readonly reading = new Map<string, Promise<void>>();
+  private clipListRead: Promise<void> | null = null;
+  private scriptListRead: Promise<void> | null = null;
 
   constructor(
     private readonly o: {
@@ -46,11 +50,18 @@ export class ClipLibrary {
     return this.o.now?.() ?? Date.now();
   }
 
-  /** Read every clip named here that is not fresh, and the lists. Offline, what was read stands. */
-  async load(refs: ReadonlyArray<{ kind: InstanceKind; target: string }>, lists = true): Promise<void> {
+  /**
+   * Read every clip named here that is not fresh, and the lists. Offline, what
+   * was read stands. With `stale`, anything read before stands too, however
+   * old: only what was never read is waited for, and the rest is read again
+   * behind the answer. An edit loads this way, so moving a block answers
+   * without a round trip to the editor; the read after it sees the refresh.
+   */
+  async load(refs: ReadonlyArray<{ kind: InstanceKind; target: string }>, lists = true, stale = false): Promise<void> {
     if (!this.o.connected()) return;
-    const jobs: Array<Promise<unknown>> = [];
-    if (lists) jobs.push(this.lists());
+    const wait: Array<Promise<unknown>> = [];
+    const behind: Array<Promise<unknown>> = [];
+    if (lists) this.lists(stale, wait, behind);
     const seen = new Set<string>();
     for (const r of refs) {
       if (r.kind !== "clip") continue;
@@ -59,38 +70,49 @@ export class ClipLibrary {
       seen.add(t);
       const had = this.clips.get(t);
       if (had && this.now() - had.at < FRESH_MS) continue;
-      jobs.push(this.readClip(t));
+      (had && stale ? behind : wait).push(this.readClip(t));
     }
-    await Promise.all(jobs);
+    await Promise.all(wait);
   }
 
-  private async readClip(target: string): Promise<void> {
-    const r = await this.o.host.callAction("pie", "clip_read", { path: target }).catch(() => null);
-    const body = r ? answerOf(r) : null;
-    const clip = body && !failureOf(r!) && body.clip && typeof body.clip === "object" ? (body.clip as ClipJson) : null;
-    this.clips.set(target, { at: this.now(), clip, name: target.slice(target.lastIndexOf("/") + 1) });
+  /** One read per clip at a time: a load that finds a read under way waits for it. */
+  private readClip(target: string): Promise<void> {
+    const going = this.reading.get(target);
+    if (going) return going;
+    const job = (async () => {
+      const r = await this.o.host.callAction("pie", "clip_read", { path: target }).catch(() => null);
+      const body = r ? answerOf(r) : null;
+      const clip = body && !failureOf(r!) && body.clip && typeof body.clip === "object" ? (body.clip as ClipJson) : null;
+      this.clips.set(target, { at: this.now(), clip, name: target.slice(target.lastIndexOf("/") + 1) });
+    })().finally(() => this.reading.delete(target));
+    this.reading.set(target, job);
+    return job;
   }
 
-  private async lists(): Promise<void> {
+  private lists(stale: boolean, wait: Array<Promise<unknown>>, behind: Array<Promise<unknown>>): void {
     const fresh = (x: { at: number } | null) => !!x && this.now() - x.at < FRESH_MS;
-    const jobs: Array<Promise<void>> = [];
     if (!fresh(this.clipList)) {
-      jobs.push((async () => {
+      this.clipListRead ??= (async () => {
         const r = await this.o.host.callAction("pie", "clip_list", { directory: "/Game" }).catch(() => null);
         const body = r ? answerOf(r) : null;
         const list = body && Array.isArray(body.clips)
           ? (body.clips as Array<Record<string, unknown>>).filter((c) => typeof c.path === "string").map((c) => ({ path: targetKey(String(c.path)), name: typeof c.name === "string" ? c.name : leaf(String(c.path)), map: typeof c.map === "string" && c.map ? c.map : null }))
           : null;
         this.clipList = { at: this.now(), list };
-      })());
+      })().finally(() => {
+        this.clipListRead = null;
+      });
+      (stale && this.clipList ? behind : wait).push(this.clipListRead);
     }
     if (!fresh(this.scriptList)) {
-      jobs.push((async () => {
+      this.scriptListRead ??= (async () => {
         const list = await this.o.index.listScripts().catch(() => null);
         this.scriptList = { at: this.now(), list: list ? list.map((s) => ({ path: s.path, name: s.name, map: s.map ?? null })) : null };
-      })());
+      })().finally(() => {
+        this.scriptListRead = null;
+      });
+      (stale && this.scriptList ? behind : wait).push(this.scriptListRead);
     }
-    await Promise.all(jobs);
   }
 
   /** A clip's JSON as last read, or undefined. */
