@@ -16,6 +16,8 @@
  *
  * Flags:
  *   --shards <n>      Most headless editors; fewer start when memory is short.
+ *   --max-editors <n> Most editors of every kind at once (or UE_MCP_LIVE_MAX_EDITORS, which reaches
+ *                     it through the release runner).
  *   --shard <name>    Run one shard of the plan (r1, i1, b1, s1), or `headless` for the headless pool.
  *   --kinds a,b       Run only the files of these kinds (headless, none, base, render, interactive, scm).
  *   --stage-build     Snapshot tests/ue_mcp's build output for the shards to copy, and exit.
@@ -82,6 +84,9 @@ const ATTACH = argv.includes("--attach") || LIFECYCLE || RECORD_GOLDEN || ONLY !
 // The most headless shards to run; fewer start when free memory says so.
 const SHARDS_FLAG = flagValue("--shards") ?? process.env.UE_MCP_LIVE_SHARDS ?? null;
 const HEADLESS_SHARDS = SHARDS_FLAG === null ? null : Number(SHARDS_FLAG);
+// The most editors of every kind at once; unset, memory alone decides.
+const MAX_EDITORS_FLAG = flagValue("--max-editors") ?? process.env.UE_MCP_LIVE_MAX_EDITORS ?? null;
+const MAX_EDITORS = MAX_EDITORS_FLAG === null ? null : Math.max(1, Number(MAX_EDITORS_FLAG));
 
 if (argv.includes("--stage-build")) {
   const { stageBuildOutput, STAGED_BUILD_DIR } = await import("./live-sharded-run.mjs");
@@ -96,6 +101,7 @@ if (!ATTACH) {
     process.exit(await runSharded({
       repoRoot: REPO_ROOT,
       headless: HEADLESS_SHARDS,
+      maxEditors: MAX_EDITORS,
       kinds: flagValue("--kinds")?.split(",").filter(Boolean) ?? null,
       stagedBuild: argv.includes("--staged-build"),
       render: Number(flagValue("--render-shards") ?? 1),
