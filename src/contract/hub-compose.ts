@@ -145,6 +145,7 @@ export function composeArrangement(tracks: readonly ComposeTrack[], o: ComposeOp
   const rate = tracks[0]?.arrangement.rate || 60;
   const findings: ArrangementFinding[] = [];
   const instances: ComposedInstance[] = [];
+  const trackOf = new Map<ComposedInstance, number>();
   tracks.forEach((t, tn) => {
     const scale = rate / (t.arrangement.rate || rate);
     for (const i of t.arrangement.instances) {
@@ -153,7 +154,7 @@ export function composeArrangement(tracks: readonly ComposeTrack[], o: ComposeOp
       const key = o.scene ? `${tn + 1}-${i.id}` : i.id;
       const clip = i.kind === "clip" ? o.clip(i.target) : undefined;
       if (i.kind === "clip" && !clip) findings.push({ id: key, field: "target", message: `${key}: the timeline clip ${i.target} could not be read, so the run cannot play it`, blocks: true });
-      instances.push({
+      const inst: ComposedInstance = {
         key,
         goalId: t.goalId,
         id: i.id,
@@ -168,13 +169,17 @@ export function composeArrangement(tracks: readonly ComposeTrack[], o: ComposeOp
         manual: i.kind === "clip" ? (clip?.checks ?? []).some((c) => c.manual === true) : f?.manual === true,
         ...(i.in !== undefined ? { in: i.in } : {}),
         ...(i.out !== undefined ? { out: i.out } : {}),
-      });
+      };
+      instances.push(inst);
+      trackOf.set(inst, tn);
     }
   });
+  // A scene: a step list plays alone, so what would play beside one waits for it.
+  if (o.scene) findings.push(...playStepListsAlone(instances, trackOf, tracks.length));
   instances.sort((a, b) => a.start - b.start || a.key.localeCompare(b.key));
   const length = instances.reduce((m, i) => Math.max(m, i.end), 0);
 
-  // A scene: the same action on one player at once, and anything beside a step-list instance.
+  // A scene: the same action on one player at once.
   if (o.scene) findings.push(...sceneFindings(tracks, instances, o));
 
   // Split at the step-list instances.
@@ -443,7 +448,54 @@ export function instanceResults(c: ArrangementComposition, segs: readonly Segmen
   });
 }
 
-/** A scene's overlaps: one player's action driven by two tracks at once, and anything beside a step-list instance. */
+/**
+ * Lay a scene's tracks out so a step-list instance plays alone (#2127). A step
+ * list takes the whole PIE session and settles by condition, so its length is
+ * a reservation, not a promise; two tracks' step lists, or a step list and
+ * another track's timeline clip, cannot play at once whichever players the
+ * tracks drive. Taking instances in the order they would start, one that
+ * would start while another track's step list plays (or a step list while
+ * another track's clip plays) moves to where that ends, and everything after
+ * it on its track moves with it. Each move is a note, not a stop.
+ */
+function playStepListsAlone(instances: readonly ComposedInstance[], trackOf: ReadonlyMap<ComposedInstance, number>, trackCount: number): ArrangementFinding[] {
+  const out: ArrangementFinding[] = [];
+  const queues: ComposedInstance[][] = Array.from({ length: trackCount }, () => []);
+  for (const i of instances) queues[trackOf.get(i)!].push(i);
+  for (const q of queues) q.sort((a, b) => a.start - b.start);
+  const shift = new Array<number>(trackCount).fill(0);
+  const head = new Array<number>(trackCount).fill(0);
+  let script: { until: number; key: string } = { until: 0, key: "" };
+  let clip: { until: number; key: string } = { until: 0, key: "" };
+  for (;;) {
+    let t = -1;
+    for (let n = 0; n < trackCount; n++) {
+      const i = queues[n][head[n]];
+      if (!i) continue;
+      const best = t < 0 ? undefined : queues[t][head[t]];
+      if (!best || i.start + shift[n] < best.start + shift[t] - EPS) t = n;
+    }
+    if (t < 0) break;
+    const i = queues[t][head[t]++];
+    const at = i.start + shift[t];
+    const wait = i.kind === "script" && clip.until > script.until ? clip : script;
+    const need = i.kind === "script" ? Math.max(at, script.until, clip.until) : Math.max(at, script.until);
+    const len = i.end - i.start;
+    shift[t] += need - at;
+    const was = round(i.start);
+    i.start = round(need);
+    i.end = round(need + len);
+    if (need - at > EPS) {
+      const why = wait === script ? `it waits for the step list ${wait.key}, which plays alone` : `a step list plays alone, so it waits for ${wait.key} to end`;
+      out.push({ id: i.key, field: "start", message: `${i.key} plays from ${i.start}, not ${was}: ${why}. The rest of its track moves with it`, blocks: false });
+    }
+    if (i.kind === "script") script = i.end > script.until ? { until: i.end, key: i.key } : script;
+    else clip = i.end > clip.until ? { until: i.end, key: i.key } : clip;
+  }
+  return out;
+}
+
+/** A scene's overlaps: one player's action driven by two tracks at once. */
 function sceneFindings(tracks: readonly ComposeTrack[], instances: readonly ComposedInstance[], o: ComposeOptions): ArrangementFinding[] {
   const out: ArrangementFinding[] = [];
   const uses: Array<{ inst: ComposedInstance; action: string; from: number; to: number }> = [];
@@ -461,12 +513,6 @@ function sceneFindings(tracks: readonly ComposeTrack[], instances: readonly Comp
       if (x.from < y.to - EPS && y.from < x.to - EPS) {
         out.push({ id: y.inst.key, field: "player", message: `${x.inst.key} and ${y.inst.key} both drive ${x.action.slice(x.action.lastIndexOf("/") + 1)} for player ${x.inst.player} between ${round(Math.max(x.from, y.from))} and ${round(Math.min(x.to, y.to))}; give one track another player, or move one instance`, blocks: true });
       }
-    }
-  }
-  for (const s of instances.filter((i) => i.kind === "script")) {
-    for (const i of instances) {
-      if (i === s || i.goalId === s.goalId) continue;
-      if (i.start < s.end - EPS && s.start < i.end - EPS) out.push({ id: i.key, field: "start", message: `${i.key} overlaps the step-list instance ${s.key} (${s.start} to ${s.end}), and the scene stops for it; move one of them`, blocks: true });
     }
   }
   if (tracks.length === 0) out.push({ id: "scene", field: "requires", message: "the scene has no tracks to play", blocks: true });

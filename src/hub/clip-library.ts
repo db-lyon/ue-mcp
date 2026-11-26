@@ -10,6 +10,7 @@
  */
 import {
   clipFacts,
+  scriptReserveMs,
   targetKey,
   type ClipEntry,
   type ClipFacts,
@@ -110,7 +111,7 @@ export class ClipLibrary {
     const runs = this.o.runsOf(t);
     if (listed && !entry) return undefined;
     if (!listed && runs.length === 0) return undefined;
-    const ms = runs.find((r) => r.durationMs && r.durationMs > 0)?.durationMs ?? null;
+    const ms = scriptReserveMs(runs);
     return { kind: "script", target: t, name: entry?.name ?? runs[0]?.name ?? leaf(t), length: ms ? Math.max(1, Math.round((ms / 1000) * 60)) : null, rate: 60, map: entry?.map ?? runs[0]?.map ?? null };
   }
 
