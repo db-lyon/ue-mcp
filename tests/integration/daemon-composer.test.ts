@@ -146,7 +146,7 @@ describe("playtest mode", () => {
     expect((await call(d, "PUT", "/v1/ext/composer/modes/playtest", { mode: "manual" })).body).toEqual({ mode: "manual", project: true });
 
     // Manual refuses an MCP session's run; an extension's callAction reaches dispatch as before.
-    const r = await call(d, "POST", "/v1/ext/composer/action", { category: "pie", action: "script_run", args: { script: "Scripts/smoke.yaml" } });
+    const r = await call(d, "POST", "/v1/ext/composer/action", { category: "pie", action: "arrangement_play", args: { runId: "smoke", arrangement: { id: "smoke", rate: 60, tracks: [], checks: [], regions: [] }, clips: {} } });
     expect(r.status, r.text).toBe(200);
     expect(JSON.stringify(r.body.content)).not.toContain("playtestMode");
 

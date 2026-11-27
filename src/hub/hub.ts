@@ -1,1470 +1,1008 @@
-// @session per-session: One project's hub: its goals, evidence, queue and lease, over that project's editor.
+// @session per-session: One project's hub: its files, this machine's runs and queue, and the runners that play them.
 /**
- * The Playtest Hub's service: goals and what goes with them (goals.ts over a
- * GoalStore, kept on this computer by goal-files.ts), the runs and what each
- * tested (an EvidenceStore, kept on this computer by run-index.ts), the plan
- * queue (queue.ts) and the Needs attention list (shared buildAttention), put
- * together into the answers HUB_ROUTES name. Status is worked out on every
- * read with the shared rules (checkHealth, goalStatus), never stored.
+ * The Playtest Hub's service (#2146): the one owner of the hub's data,
+ * validation, runs and runners. Agents (the hub category) and Studio (the
+ * daemon's /v1/hub routes) call the same methods.
  *
- * Checks are every check a goal names, and every script the editor lists
- * that no goal names yet. A script check whose asset the editor does not
- * list is missing on this checkout, but only while the editor is connected
- * and its list is fresh: offline, nothing is flagged. Before it counts as
- * missing, a redirector at its path is looked for through ue-mcp
- * (asset(fixup_redirectors) with dryRun, which reads and changes nothing):
- * a script that moved is followed to its new path, and the evidence store's
- * alias carries its history there. The goal keeps the path it names, so a
- * checkout where the script has not moved still finds it.
+ * Clips, arrangements and suites are the project's text files (store.ts).
+ * Runs, the queue and schedules are this machine's (machine.ts). Health is
+ * worked out from the runs on every read, never stored.
  *
- * Runs go through a HubBroker (ports.ts), so a client's cards, players and
- * verdict routing keep working: a plan item runs with broker.startScript
- * (ue-mcp's own ScriptRunBroker by default; a client's broker may run it on
- * the script's card in a chat session).
+ * A queue item plays one test on one runner: the open editor, under the
+ * hub's lease, only while nothing else holds it (lease.ts); or a headless
+ * editor a client supplies. The runner gets the arrangement whole with the
+ * clips it places (PlayRequest) and is polled until it ends.
  */
-import * as path from "node:path";
-import type { ActionResult } from "../contract/daemon.js";
+import * as crypto from "node:crypto";
 import {
-  DEFAULT_PLAN_OPTIONS,
-  planOptionsFor,
+  DEFAULT_PERFORMER,
   HUB_CHANGED,
+  HUB_ID,
   HUB_LEASE,
-  NEEDS_PERSON,
-  buildAttention,
-  needsPerson,
-  TRACKER_LINKS_MAX,
-  checkId,
-  checkStateOf,
-  goalChecksDeep,
-  goalParents,
-  requiresOf,
-  isResult,
-  leafName,
-  qaEnded,
-  qaIsDraft,
-  qaScriptKey,
-  requirementsKey,
-  rollUpGoals,
-  scriptReserveMs,
-  arrangementOfRunTarget,
-  arrangementRunTarget,
-  rollUpStatuses,
-  type ArrangementInfo,
-  type ArrangementsView,
-  type CheckDetail,
-  type CheckMeta,
-  type CheckRef,
-  type CheckState,
+  SCHEDULE_TIME,
+  arrangementLength,
+  arrangementOf,
+  audibleTracks,
+  clipOf,
+  flakiness,
+  instanceFindings,
+  parseTestId,
+  passRate,
+  passRateHistory,
+  performerLabel,
+  performerOf,
+  performerProblem,
+  rank,
+  runEnded,
+  slugOf,
+  stateFromChecks,
+  suiteHealth,
+  suiteLoop,
+  suiteOf,
+  suiteTests,
+  testChecks,
+  testHealth,
+  testIdOf,
+  testsOf,
+  type Arrangement,
+  type ArrangementSummary,
+  type ArrangementView,
+  type CheckResult,
+  type Clip,
+  type ClipSummary,
   type CurrentProvenance,
-  type Goal,
-  type GoalState,
-  type HubChanged,
+  type EditorLease as LeaseView,
   type HubChangedWhat,
   type HubOverview,
-  type PlanItem,
-  type PlanPlacement,
-  type PlanRun,
-  type PlanScope,
-  type PlanTrigger,
-  type QaRun,
-  type QueueState,
-  type Schedule,
-  type EditorLease as EditorLeaseView,
   type OccupancyReason,
-  type RunDetail,
+  type AuditionState,
+  type Performer,
+  type PerformersView,
+  type PlayRequest,
+  type QueueItem,
+  type QueueState,
+  type RecordingState,
   type RunRecord,
-  type RunStepSpan,
-  type SignOff,
+  type RunSource,
+  type RunnerKind,
+  type Schedule,
+  type Suite,
+  type SuiteState,
+  type TestDetail,
+  type TestState,
 } from "./contract.js";
-import type { HubBroker, HubFixer, HubHost, HubPolicy, HubScriptIndex, HubWritePlaytests, ListedScript } from "./ports.js";
-import { Goals } from "./goals.js";
-import { GoalFiles } from "./goal-files.js";
-import type { GoalStore } from "./goal-store.js";
-import type { EvidenceStore } from "./evidence-store.js";
-import { RunIndex } from "./run-index.js";
-import { PlanQueue, newId, type ItemStart } from "./queue.js";
-import { EditorLease, ON_EDITOR, occupancyOf, type OccupancySignals } from "./lease.js";
-import { ProjectWatch } from "./project-watch.js";
-import { readProvenanceFile, readResults, readResultsFile, readSeries } from "./evidence.js";
-import { provenanceAtStart, scriptHashOf, ueMcpProvenance, withUeMcp, workspaceNow } from "./provenance.js";
-import { fromOf, planOptionsOf, scopeOf } from "./scope.js";
-import { scheduleDraftOf, scheduleTurn, scheduleUpdated, withNext } from "./schedules.js";
-import { answerOf, bad, checkOfId, conflict, failureOf, isObject, linkOf, notFound } from "./util.js";
-import { ArrangementRunner } from "./arrangement-runner.js";
-import { ClipLibrary } from "./clip-library.js";
-import { SetService, setItemOf } from "./set-service.js";
+import type { HubHost, HubRunner } from "./ports.js";
+import { EditorLease, occupancyOf, type OccupancySignals } from "./lease.js";
+import { HubFiles } from "./store.js";
+import { MachineState } from "./machine.js";
+import { EditorRunner } from "./runner.js";
+import { workspaceNow } from "./provenance.js";
+import { FindingError, answerOf, bad, conflict, failureOf, isObject, notFound } from "./util.js";
 
-/** How often the queue and the runs the hub may have missed are looked at. */
-export const TICK_MS = 30_000;
-/** How long hub.changed waits to gather the changes that come together, such as a run's steps. */
-const PUBLISH_MS = 200;
-/** How many runs the first backfill reads, and how many each one after. */
-const FIRST_BACKFILL = 5000;
-const BACKFILL = 300;
-/** How long a backfill stands before an overview asks for another. */
-const BACKFILL_MS = 60_000;
-/** The most runs a page answers. */
-const MAX_PAGE = 200;
-/** How long a reading of the workspace stands for the overview; a run's start always reads it afresh. */
-const WORKSPACE_MS = 10_000;
-/** How long the hub waits for PIE its run asked for to come up, so it can end it. */
-const PIE_START_WAIT_MS = 20_000;
-/** How long the hub lets another session's PIE call finish before it ends PIE its run started. */
-const PIE_IN_USE_WAIT_MS = 60_000;
-/** How often those waits look again. */
-const PIE_POLL_MS = 250;
-
-export type { HubHost } from "./ports.js";
-
-export interface HubOptions extends HubPolicy {
+export interface HubOptions {
   host: HubHost;
-  /** Starts, follows and stops script runs. Injection point: ScriptRunBroker is the daemon's default. */
-  broker: HubBroker;
-  /**
-   * What is using the editor beside the hub's runs, for the occupancy
-   * answer: PIE, open dialogs, calls in flight and editor operations, and
-   * how long since someone used this computer. Without it, only the runs the
-   * broker knows count. The daemon supplies the first four from its events.
-   */
-  editor?: Omit<OccupancySignals, "connected" | "runs"> & {
-    /** Hear when PIE starts or stops. Returns the unsubscribe. */
-    onPie?(listener: (running: boolean) => void): () => void;
-  };
-  /** Watches project files during runs, for tainted runs; one of the project's own otherwise. */
-  watch?: ProjectWatch;
-  index: HubScriptIndex;
-  /**
-   * Fix with an agent. Injection point: ue-mcp has no agent loop, so without
-   * a fixer a fix request answers 409. A client with an agent loop supplies one.
-   */
-  fixer?: HubFixer;
-  /** A replay that gives the run a client's card: pie(script_replay) with these args. Default: the call, directly. */
-  replay?: (script: string, args: Record<string, unknown>) => Promise<ActionResult>;
-  /** Write playtests for a goal. Injection point: a client supplies it, such as a flow in a chat session. Without it, write-playtests answers 409. */
-  writePlaytests?: HubWritePlaytests;
-  /** The project's engine version, major.minor, for what a run tested. */
-  engine?: () => string | null;
-  /** The workspace's source control state now; read from the project's source control otherwise. */
+  /** What the daemon knows about the editor, beyond whether it is connected. */
+  editor: Omit<OccupancySignals, "connected">;
+  enabled?: () => boolean;
+  headless?: () => HubRunner | undefined;
+  /** The open editor's runner; ue-mcp's own over pie(arrangement_*) by default. */
+  editorRunner?: HubRunner;
   workspace?: () => Promise<CurrentProvenance>;
-  /** Where goals are kept; this computer's files under the data directory otherwise. */
-  goalStore?: GoalStore;
-  now?: () => number;
+  now?: () => Date;
+  pollMs?: number;
   /** Start the timers; tests drive tick() themselves. */
   timers?: boolean;
-  /** How long ending the run's PIE waits for it to come up, and for another session's PIE call; tests shorten them. */
-  pieWaits?: { startMs?: number; inUseMs?: number };
 }
 
-interface Catalog {
-  /** Every check by its id: a goal's checks by where they are now (a moved script by its new path), and scripts no goal names. */
-  checks: Map<string, { ref: CheckRef; goalIds: string[]; name?: string; map?: string | null; renamedFrom?: string }>;
-  listed: Map<string, ListedScript> | null;
-  connected: boolean;
-  /** The workspace runs are compared with. */
-  current: CurrentProvenance;
-  /** What each check says about itself, by check id. */
-  metas: Map<string, CheckMeta>;
+/** How often a live run is read and the queue looked at. */
+export const HUB_TICK_MS = 500;
+
+interface Live {
+  item: QueueItem;
+  runner: HubRunner;
+  polling: boolean;
 }
 
-/** What the editor is told while the hub holds it. */
-export const LEASE_NOTICE = "UE-MCP is running a playtest";
-/** How long a path found to have no redirector is left before it is asked about again. */
-const REDIRECT_RETRY_MS = 10 * 60_000;
-/** The most moves followed from one path. */
-const REDIRECT_HOPS = 4;
+const id8 = (): string => crypto.randomBytes(4).toString("hex");
 
 export class Hub {
-  readonly goals: Goals;
-  /** The runs behind every status: this computer's own (RunIndex), the one store built so far. */
-  readonly runs: EvidenceStore;
-  readonly queue: PlanQueue;
-  /** The set the Session and Arrangement views edit (#2113). */
-  readonly set: SetService;
-  /** Plays track, scene, slot and arrangement runs. */
-  readonly arrangements: ArrangementRunner;
-  private readonly library: ClipLibrary;
-  private readonly now: () => number;
-  private readonly unsubscribe: Array<() => void> = [];
+  readonly files: HubFiles;
+  readonly machine: MachineState;
+  private readonly lease: EditorLease;
+  private readonly editorRunner: HubRunner;
+  private readonly live = new Map<string, Live>();
   private timer: NodeJS.Timeout | null = null;
-  private pending: { what: Set<HubChangedWhat>; goalIds: Set<string>; runIds: Set<string>; planIds: Set<string> } | null = null;
-  private publishTimer: NodeJS.Timeout | null = null;
-  private backfilled = -Infinity;
-  private backfilling: Promise<void> | null = null;
-  private firstBackfill = true;
-  /** The developer's editor's lease: the hub's hold on it while an item runs (lease.ts). */
-  readonly lease: EditorLease;
-  /** Project files changed during a run: the run is tainted. */
-  private readonly watch: ProjectWatch;
-  /** Runs the editor no longer knows (a status read answered idle): they hold nothing. */
-  private readonly gone = new Set<string>();
-  /** The plan the editor was last told about, so a plan's items do not each show a notification. */
-  private toldPlan: string | null = null;
-  /** Sessions writing playtests for a goal: each script drafted there joins the goal. */
-  private readonly linking = new Map<string, string>();
-  /** What went wrong in the background, newest last, shown with the overview's warnings. */
-  private readonly notes: string[] = [];
-  /** The last reading of the workspace, for the overview. */
-  private workspaceRead: { at: number; value: Promise<CurrentProvenance> } | null = null;
-  /** PIE was seen running while the lease is held, so PIE not running now means it ended rather than that it has not come up yet. */
-  private pieUp = false;
-  /** Runs whose start provenance is being read; the read at their end waits for it. */
-  private readonly capturing = new Map<string, Promise<void>>();
-  /** Paths asked about for a redirector, and when, so a missing script is not asked about on every read. */
-  private readonly redirectAsked = new Map<string, number>();
+  private lastScheduleMinute = "";
+  private recording: RecordingState | null = null;
+  private audition: { playId: string; test: string; startedAt: string; from: number; loop: boolean; last: AuditionState | null } | null = null;
+  private ticking = false;
+  private pumping: Promise<void> | null = null;
 
   constructor(private readonly o: HubOptions) {
-    this.now = o.now ?? Date.now;
-    const iso = () => new Date(this.now()).toISOString();
-    this.goals = new Goals({ store: o.goalStore ?? new GoalFiles(o.host.dataDir, iso), projectDir: o.host.projectDir, legacySignOffs: path.join(o.host.dataDir, "hub", "sign-offs.json"), now: iso, changed: (goalId) => this.changed(["goals", "checks", "attention"], { goalId }), arrangementEnd: (a) => this.set.end(a) });
-    this.runs = new RunIndex({ dataDir: o.host.dataDir, now: iso, changed: (runId) => this.changed(["runs", "checks", "goals", "attention"], { runId }), log: o.host.log });
-    this.library = new ClipLibrary({ host: o.host, index: o.index, runsOf: (t) => this.runs.byCheck(checkId({ kind: "script", target: t })), connected: () => this.connected(), now: () => this.now() });
-    this.set = new SetService({
-      goals: this.goals,
-      library: this.library,
-      host: o.host,
-      statuses: async () => new Map(this.goalStates(await this.catalog()).map((s) => [s.goal.id, s.status])),
-      lastRun: (kind, target) => {
-        const r = kind === "script" ? this.runs.byCheck(checkId({ kind: "script", target }))[0] : undefined;
-        return r ? { runId: r.runId, outcome: r.outcome, at: r.startedAt } : null;
-      },
-      deleteBlocked: (id) => this.deleteBlocked(id),
-    });
-    this.arrangements = new ArrangementRunner(o.host, { now: iso });
-    // Goals become tracks once, each playtest reserving its newest run's length (#2113); tracks an older migration over-reserved are laid out again (#2127).
-    this.goals.migrateArrangements((t) => scriptReserveMs(this.runs.byCheck(checkId({ kind: "script", target: t }))));
-    this.watch = o.watch ?? new ProjectWatch(o.host.projectDir, o.host.log);
-    this.lease = new EditorLease(undefined, (lease) => this.leaseChanged(lease));
-    this.queue = new PlanQueue({
-      dataDir: o.host.dataDir,
-      now: iso,
-      lease: this.lease,
-      runner: {
-        connected: () => this.connected(),
-        occupied: (plan) => this.occupancy(!plan.options.attended)[0]?.text ?? null,
-        start: (item, plan) => (plan.work === "fix" ? this.startFix(item, plan) : this.startItem(item, plan)),
-        run: (runId) => this.arrangements.get(runId) ?? o.broker.get(runId),
-        stop: (runId, reason) => this.stopRun(runId, reason),
-        refresh: async (runId) => void (this.arrangements.owns(runId) ? await this.arrangements.refresh(runId) : await o.broker.status(runId)),
-        stopFix: async (item) => this.stopFix(item),
-        endPie: () => this.endPie(),
-      },
-      changed: (planRunId) => this.changed(["queue"], { planRunId }),
-      finished: (plan) => {
-        if (plan.state === "failed") this.changed(["attention"], { planRunId: plan.id });
-      },
-      enabled: () => this.enabled(),
-      log: o.host.log,
-    });
-    // A plan's own verdict wait applies to the runs it starts.
-    o.broker.setPlanWait?.((run) => this.queue.planOf(run.runId)?.options.verdictWaitMinutes);
-    // Every run the broker holds now, so history starts with what a client shows.
-    for (const run of o.broker.all()) this.runs.record(run);
-    this.unsubscribe.push(o.broker.onSaved((run) => this.saw(run)));
-    this.unsubscribe.push(this.arrangements.onSaved((run) => this.saw(run)));
-    this.unsubscribe.push(o.host.events.subscribe((e) => {
-      // With the experiment off the hub asks the editor for nothing.
-      if (!this.enabled()) return;
-      if (e.type === "editor.connected") {
-        // Back after a restart or a crash: queued work waits for a person to resume it.
-        this.queue.reconnected();
-        void this.backfill(true);
-      } else if (e.type === "editor.disconnected") {
-        const cause = typeof e.data.cause === "string" ? e.data.cause : undefined;
-        // Every run on a crashed editor ended with it, though no event will say so.
-        if (cause === "crashed") for (const r of o.broker.all()) if (ON_EDITOR.has(r.state)) this.gone.add(r.runId);
-        this.queue.editorLost(cause);
-      } else if (e.type === "call.finished" || e.type === "editor.operation" || e.type === "dialog.closed" || e.type === "dialog.answered") {
-        // An operation, a call or a dialog ended: the queue may be free to go on.
-        void this.queue.pump();
-      }
-    }));
-    const offPie = o.editor?.onPie?.((running) => {
-      if (running && this.lease.get()) this.pieUp = true;
-      // The hub's PIE ended: a session started from now on is the developer's.
-      if (!running) this.lease.update({ pie: false });
-      if (this.enabled()) void this.queue.pump();
-    });
-    if (offPie) this.unsubscribe.push(offPie);
-    this.refreshSchedules();
+    this.files = new HubFiles(o.host.projectDir);
+    this.machine = new MachineState(o.host.dataDir, o.host.log);
+    this.lease = new EditorLease(undefined, (lease) => o.host.events.publish(HUB_LEASE, { lease }));
+    this.editorRunner = o.editorRunner ?? new EditorRunner(o.host);
+    // A run that was live when the daemon last stopped never reported its end.
+    for (const item of this.machine.queueItems()) {
+      if (item.state !== "running") continue;
+      const r = item.runId ? this.machine.run(item.runId) : undefined;
+      if (r && !runEnded(r.state)) this.machine.putRun({ ...r, state: "stopped", endedAt: this.now(), error: "the daemon stopped while it ran" });
+      this.machine.removeItem(item.id);
+    }
     if (o.timers !== false) {
-      this.timer = setInterval(() => void this.tick(), TICK_MS);
+      this.timer = setInterval(() => void this.tick(), o.pollMs ?? HUB_TICK_MS);
       this.timer.unref?.();
-      if (this.enabled()) {
-        this.watch.start();
-        void this.backfill(true);
-        void this.queue.pump();
-      }
     }
   }
 
   dispose(): void {
-    for (const u of this.unsubscribe) u();
-    this.unsubscribe.length = 0;
-    this.arrangements.dispose();
     if (this.timer) clearInterval(this.timer);
-    if (this.publishTimer) clearTimeout(this.publishTimer);
     this.timer = null;
-    this.publishTimer = null;
-    this.watch.stop();
   }
 
-  /** The experiment switch a client supplies; on by default. */
-  private enabled(): boolean {
-    return this.o.enabled?.() ?? true;
+  private now(): string {
+    return (this.o.now?.() ?? new Date()).toISOString();
+  }
+
+  private changed(what: HubChangedWhat[], ids: { id?: string; runId?: string } = {}): void {
+    this.o.host.events.publish(HUB_CHANGED, { what, ...ids });
   }
 
   private connected(): boolean {
-    try {
-      return this.o.host.editors().some((e) => e.connected);
-    } catch {
-      return false;
-    }
+    return this.o.host.editors().some((e) => e.connected);
   }
 
-  /**
-   * Why the editor is not free for the hub now, most decisive first (lease.ts
-   * occupancyOf); empty when it is. What the lease holds never counts. Runs
-   * the editor said it no longer knows hold nothing.
-   */
-  occupancy(unattended = false, scheduled = false): OccupancyReason[] {
-    const e = this.o.editor;
-    const signals: OccupancySignals = {
-      connected: () => this.connected(),
-      pie: () => e?.pie() ?? false,
-      dialogs: () => e?.dialogs() ?? 0,
-      busy: () => e?.busy() ?? { now: this.now(), calls: [] },
-      runs: () => this.o.broker.all().filter((r) => !this.gone.has(r.runId)),
-      inputAgeMs: () => e?.inputAgeMs() ?? null,
-      sessions: () => e?.sessions?.() ?? [],
-      disruptions: () => e?.disruptions?.() ?? [],
+  // ---------- Clips ----------
+
+  private clipMap(): Map<string, Clip> {
+    return this.files.list("clip").items;
+  }
+
+  clips(): ClipSummary[] {
+    const arrangements = [...this.files.list("arrangement").items.values()];
+    return [...this.clipMap().values()].map((c) => ({
+      id: c.id,
+      title: c.title,
+      performer: c.performer,
+      rate: c.rate,
+      length: c.length,
+      lanes: c.input.length,
+      usedBy: arrangements.filter((a) => a.tracks.some((t) => t.instances.some((i) => i.clip === c.id))).map((a) => a.id),
+    }));
+  }
+
+  clip(id: string): Clip {
+    const got = this.files.get("clip", id);
+    if (!got) throw notFound(`no clip ${id}`);
+    if (!got.value) throw new FindingError(got.findings);
+    return got.value;
+  }
+
+  private newId(kind: "clip" | "arrangement" | "suite", body: unknown): string {
+    const o = isObject(body) ? body : {};
+    if (typeof o.id === "string") {
+      if (!HUB_ID.test(o.id)) throw bad("id is lowercase letters, digits and dashes, at most 64");
+      if (this.files.exists(kind, o.id)) throw conflict(`a ${kind} ${o.id} already exists; PUT it to change it`);
+      return o.id;
+    }
+    return this.files.freeId(kind, slugOf(typeof o.title === "string" ? o.title : kind));
+  }
+
+  createClip(body: unknown): Clip {
+    return this.putClip(this.newId("clip", body), body);
+  }
+
+  putClip(id: string, body: unknown): Clip {
+    if (!HUB_ID.test(id)) throw bad("a clip id is lowercase letters, digits and dashes");
+    const { clip, findings } = clipOf(body, id);
+    if (findings.some((f) => f.blocks)) throw new FindingError(findings);
+    this.files.write("clip", clip);
+    this.changed(["clips"], { id });
+    return clip;
+  }
+
+  deleteClip(id: string): void {
+    if (!this.files.exists("clip", id)) throw notFound(`no clip ${id}`);
+    const users = [...this.files.list("arrangement").items.values()].filter((a) => a.tracks.some((t) => t.instances.some((i) => i.clip === id)));
+    if (users.length) throw conflict(`clip ${id} is placed in ${users.map((a) => a.id).join(", ")}; remove its instances there first`);
+    this.files.delete("clip", id);
+    this.changed(["clips"], { id });
+  }
+
+  // ---------- Arrangements ----------
+
+  private summary(a: Arrangement, clips: Map<string, Clip>): ArrangementSummary {
+    return {
+      id: a.id,
+      title: a.title,
+      level: a.level,
+      tracks: a.tracks.length,
+      checks: a.checks.length,
+      regions: a.regions.map((r) => ({ id: r.id, name: r.name })),
+      length: arrangementLength(a, (c) => clips.get(c)),
+      findings: instanceFindings(a, (c) => clips.get(c), [...clips.keys()]),
     };
-    return occupancyOf(signals, this.lease.held(), { unattended, scheduled });
   }
 
-  /**
-   * Read again every run the broker thinks is on the editor and the hub did not
-   * start, so a run whose end was missed does not hold the queue for ever:
-   * one the editor answers idle for is gone.
-   */
-  private async refreshOthers(): Promise<void> {
-    const mine = this.lease.held().runId;
-    for (const r of this.o.broker.all()) {
-      if (r.runId === mine || this.gone.has(r.runId) || r.manual || !ON_EDITOR.has(r.state)) continue;
-      const read = await this.o.broker.status(r.runId).catch(() => null);
-      if (read && "answer" in read && read.answer.state === "idle") this.gone.add(r.runId);
-    }
+  arrangements(): ArrangementSummary[] {
+    const clips = this.clipMap();
+    return [...this.files.list("arrangement").items.values()].map((a) => this.summary(a, clips));
   }
 
-  /** The lease changed: clients hear of it, and the editor is told once per plan that the hub holds it. */
-  private leaseChanged(lease: EditorLeaseView | null): void {
-    if (!lease) this.pieUp = false;
-    this.o.host.events.publish(HUB_LEASE, { lease } as unknown as Record<string, unknown>);
-    this.changed(["queue"], lease ? { planRunId: lease.planRunId } : {});
-    if (!lease || lease.planRunId === this.toldPlan) return;
-    this.toldPlan = lease.planRunId;
-    // Best effort: the hub.lease event clients hear is the signal; a bridge without show_notification changes nothing.
-    void Promise.resolve()
-      .then(() => this.o.host.callAction("editor", "show_notification", { text: LEASE_NOTICE, subText: lease.purpose, severity: "info" }))
-      .catch(() => undefined);
+  private arrangementValue(id: string): Arrangement {
+    const got = this.files.get("arrangement", id);
+    if (!got) throw notFound(`no arrangement ${id}`);
+    if (!got.value) throw new FindingError(got.findings);
+    return got.value;
   }
 
-  /** GET /hub/lease. */
-  leaseView(): { lease: EditorLeaseView | null } {
-    return { lease: this.lease.get() };
-  }
-
-  /**
-   * Release the editor: the queue pauses, the run or fix loop the hub has on
-   * the editor stops, Play In Editor that run started ends, and the lease is
-   * released. Everything else on the editor is left alone.
-   */
-  async release(): Promise<QueueState> {
-    await this.queue.release();
-    return this.queueView();
-  }
-
-  /**
-   * The daemon is stopping: the run the hub has on the editor stops and the
-   * PIE it started ends, so neither outlives the daemon. A rebuild of the hub
-   * (a client configuring it) is dispose(), which leaves both running.
-   */
-  async shutdown(): Promise<void> {
-    await this.queue.shutdown();
-  }
-
-  /**
-   * End Play In Editor, only while the hub's run started the session. PIE the
-   * run asked for that has not come up yet is waited for, since a queued
-   * start lands after the run that asked for it may have ended. Another
-   * session's PIE call still in flight is let finish first; one that outlasts
-   * the wait keeps PIE, which is then that session's.
-   */
-  private async endPie(): Promise<void> {
-    if (!this.lease.held().pie) return;
-    const e = this.o.editor;
-    if (e && !e.pie()) {
-      // PIE was up under the lease and is not now: it has ended already, and the hub has nothing to stop.
-      if (this.pieUp || !(await this.until(() => e.pie() || !this.lease.held().pie, this.o.pieWaits?.startMs ?? PIE_START_WAIT_MS))) {
-        this.lease.update({ pie: false });
-        return;
-      }
-    }
-    // PIE ended meanwhile, by itself or by someone else: nothing is left to end.
-    if (!this.lease.held().pie) return;
-    if (!(await this.until(() => !this.pieInUse(), this.o.pieWaits?.inUseMs ?? PIE_IN_USE_WAIT_MS))) {
-      this.note("Play In Editor the hub's run started was left running: another session's call is still using it");
-      this.lease.update({ pie: false });
-      return;
-    }
-    const r = await this.o.host.callAction("editor", "play_in_editor", { pieAction: "stop" });
-    const error = failureOf(r);
-    if (error && !/already/i.test(error)) throw new Error(error);
-    this.lease.update({ pie: false });
-  }
-
-  /** A call another session has in flight on PIE: a pie action, or play_in_editor. The hub's own calls are not in busy(). */
-  private pieInUse(): boolean {
-    const mine = this.lease.held().sessionId;
-    const calls = this.o.editor?.busy().calls ?? [];
-    return calls.some((c) => (c.category === "pie" || (c.category === "editor" && c.action.startsWith("play_in_editor"))) && !(c.source === "agent" && !!mine && c.sessionId === mine));
-  }
-
-  /** Wait until a condition holds, looking every PIE_POLL_MS, at most `ms`. Returns whether it held. */
-  private async until(cond: () => boolean, ms: number): Promise<boolean> {
-    // The wall clock, not this.now(): a test's fixed clock would never pass the end.
-    const end = Date.now() + ms;
-    while (!cond()) {
-      if (Date.now() >= end) return false;
-      await new Promise((r) => setTimeout(r, Math.min(PIE_POLL_MS, Math.max(1, ms))));
-    }
-    return true;
-  }
-
-  private note(text: string): void {
-    this.notes.push(text);
-    if (this.notes.length > 10) this.notes.shift();
-    this.o.host.log.warn(`hub: ${text}`);
-  }
-
-  // ── Events ────────────────────────────────────────────────────────
-
-  /** Gather a change into the next studio.hub.changed. */
-  private changed(what: HubChangedWhat[], ids: { goalId?: string; runId?: string; planRunId?: string } = {}): void {
-    const p = this.pending ?? (this.pending = { what: new Set(), goalIds: new Set(), runIds: new Set(), planIds: new Set() });
-    for (const w of what) p.what.add(w);
-    if (ids.goalId) p.goalIds.add(ids.goalId);
-    if (ids.runId) p.runIds.add(ids.runId);
-    if (ids.planRunId) p.planIds.add(ids.planRunId);
-    if (this.publishTimer) return;
-    this.publishTimer = setTimeout(() => this.flush(), PUBLISH_MS);
-    this.publishTimer.unref?.();
-  }
-
-  /** Publish what was gathered; an id is named only when the change was about that one thing. */
-  flush(): void {
-    if (this.publishTimer) clearTimeout(this.publishTimer);
-    this.publishTimer = null;
-    const p = this.pending;
-    this.pending = null;
-    if (!p || p.what.size === 0) return;
-    const body: HubChanged = {
-      what: [...p.what],
-      ...(p.goalIds.size === 1 ? { goalId: [...p.goalIds][0] } : {}),
-      ...(p.runIds.size === 1 ? { runId: [...p.runIds][0] } : {}),
-      ...(p.planIds.size === 1 ? { planRunId: [...p.planIds][0] } : {}),
+  arrangement(id: string): ArrangementView {
+    const a = this.arrangementValue(id);
+    const all = this.clipMap();
+    const clips: Record<string, Clip> = {};
+    for (const t of a.tracks) for (const i of t.instances) if (all.has(i.clip)) clips[i.clip] = all.get(i.clip)!;
+    const states = this.testStates();
+    return {
+      arrangement: a,
+      length: arrangementLength(a, (c) => all.get(c)),
+      findings: instanceFindings(a, (c) => all.get(c), [...all.keys()]),
+      clips,
+      tests: testsOf(a).map((t) => states.get(testIdOf(t))!).filter(Boolean),
     };
-    this.o.host.events.publish(HUB_CHANGED, body as unknown as Record<string, unknown>);
   }
 
-  /** A run the broker saved: its history and what it tested, the queue's item, the fix-loop line, and links to a goal. */
-  private saw(run: QaRun): void {
-    if (this.lease.get() && this.o.editor?.pie()) this.pieUp = true;
-    const had = this.runs.get(run.runId);
-    const rec = this.runs.record(run);
-    if (rec && !had && !qaEnded(run.state)) this.captureStart(run);
-    if (rec && had && !had.endedAt && rec.endedAt) this.captureEnd(run.runId);
-    this.queue.observe(run);
-    const goalId = run.sessionId ? this.linking.get(run.sessionId) : undefined;
-    if (goalId && qaIsDraft(run) && !run.deleted && run.script !== "inline") {
-      const goal = this.goals.get(goalId);
-      if (goal && !goal.checks.some((c) => c.kind === "script" && c.target === qaScriptKey(run.script))) {
-        try {
-          this.goals.addChecks(goalId, [{ kind: "script", target: qaScriptKey(run.script) }]);
-        } catch (e) {
-          this.note(`the clip written for ${goalId} could not be added to it: ${e instanceof Error ? e.message : String(e)}`);
-        }
-      }
-    }
-    this.taint(run);
-    // Drafts and loops change the list without a run record changing.
-    if (qaIsDraft(run) || run.assignment) this.changed(["attention", "checks"], { runId: run.runId });
-    // Something that held the editor let it go: the queue may go on.
-    if ((run.assignment && run.assignment.state !== "running") || qaEnded(run.state)) void this.queue.pump();
+  createArrangement(body: unknown): ArrangementView {
+    return this.putArrangement(this.newId("arrangement", body), body);
   }
 
-  /** A run seen starting is followed for project file changes; when it ends having seen one, it is tainted. */
-  private taint(run: QaRun): void {
-    if (qaIsDraft(run) || run.manual || run.script === "inline") return;
-    if (!qaEnded(run.state)) {
-      if (run.state !== "idle") this.watch.runStarted(run.runId);
-      return;
-    }
-    if (this.watch.runEnded(run.runId)) this.runs.setTainted(run.runId);
+  putArrangement(id: string, body: unknown): ArrangementView {
+    if (!HUB_ID.test(id)) throw bad("an arrangement id is lowercase letters, digits and dashes");
+    const all = this.clipMap();
+    const { arrangement, findings } = arrangementOf(body, id, (c) => all.get(c));
+    const known = [...all.keys()];
+    for (const f of findings) if (f.message.includes(": no clip ") && !f.candidates) f.candidates = rank(f.message.slice(f.message.lastIndexOf(" ") + 1), known);
+    if (findings.some((f) => f.blocks)) throw new FindingError(findings);
+    this.files.write("arrangement", arrangement);
+    this.changed(["arrangements"], { id });
+    return this.arrangement(id);
   }
 
-  /** The periodic look: the queue, runs the hub may have missed the end of, backfill. */
-  async tick(): Promise<void> {
-    try {
-      // Off: no plan starts and the editor is not asked; a due schedule waits, then gives up.
-      if (!this.enabled()) {
-        this.watch.stop();
-        return await this.runSchedules();
-      }
-      this.watch.start();
-      if (this.connected()) await this.refreshOthers();
-      await this.queue.tick();
-      await this.runSchedules();
-      if (this.now() - this.backfilled > 5 * BACKFILL_MS) void this.backfill();
-    } catch (e) {
-      this.o.host.log.warn("hub: a tick failed", e);
-    }
+  deleteArrangement(id: string): void {
+    if (!this.files.exists("arrangement", id)) throw notFound(`no arrangement ${id}`);
+    const users = [...this.files.list("suite").items.values()].filter((s) => s.items.some((it) => "test" in it && parseTestId(it.test)?.arrangement === id));
+    if (users.length) throw conflict(`arrangement ${id} is tested in suite ${users.map((s) => s.id).join(", ")}; take its tests out of them first`);
+    if (this.machine.queueItems().some((i) => parseTestId(i.test)?.arrangement === id)) throw conflict(`arrangement ${id} is in the queue; remove it there or let it run first`);
+    this.files.delete("arrangement", id);
+    this.changed(["arrangements"], { id });
   }
 
-  // ── History ───────────────────────────────────────────────────────
+  // ---------- Tests ----------
 
-  /** The workspace now: read afresh, or the last reading while it is recent. */
-  private workspace(fresh = false): Promise<CurrentProvenance> {
-    if (!fresh && this.workspaceRead && this.now() - this.workspaceRead.at < WORKSPACE_MS) return this.workspaceRead.value;
-    const read = this.o.workspace ?? (() => workspaceNow(this.o.host.projectDir));
-    const value = read().catch((): CurrentProvenance => ({ vcs: null, revision: null, dirty: null }));
-    this.workspaceRead = { at: this.now(), value };
-    return value;
+  /** A test's arrangement and region, or why there is none. */
+  private resolveTest(id: string): { a: Arrangement; region?: string; title: string } | { missing: string } {
+    const ref = parseTestId(id);
+    if (!ref) return { missing: `${id} is not a test id: <arrangement> or <arrangement>:<region>` };
+    const got = this.files.get("arrangement", ref.arrangement);
+    if (!got) return { missing: `no arrangement ${ref.arrangement}` };
+    if (!got.value) return { missing: `arrangement ${ref.arrangement} does not read: ${got.findings.map((f) => f.message).join("; ")}` };
+    const a = got.value;
+    if (!ref.region) return { a, title: a.title };
+    const r = a.regions.find((x) => x.id === ref.region);
+    if (!r) return { missing: `arrangement ${a.id} has no region ${ref.region}` };
+    return { a, region: r.id, title: `${a.title} / ${r.name}` };
   }
 
-  /**
-   * What a run tests, read as the hub first sees it running: the workspace,
-   * the script's version as pie(script_read) gives it, the engine and the
-   * players the client set. A run first seen after it ended gets none, since
-   * nothing here knows what it tested.
-   */
-  private captureStart(run: QaRun): void {
-    const job = (async () => {
-      const [workspace, read] = await Promise.all([
-        this.workspace(true),
-        // A track, scene, slot or arrangement run has no one script to read.
-        this.arrangements.owns(run.runId) ? Promise.resolve(null) : this.o.host.callAction("pie", "script_read", { path: qaScriptKey(run.script) }).catch(() => null),
-      ]);
-      // The run as it is now: the call that started it may have landed after its first events, with the PIE setup.
-      const provenance = provenanceAtStart({ workspace, scriptHash: run.arrangement?.version ?? scriptHashOf(read ? answerOf(read) : null), engine: this.o.engine?.() ?? null, run: this.o.broker.get(run.runId) ?? run });
-      this.runs.setProvenance(run.runId, provenance);
-    })()
-      .catch((e: unknown) => this.o.host.log.warn("hub: what a run tested could not be read", e))
-      .finally(() => this.capturing.delete(run.runId));
-    this.capturing.set(run.runId, job);
-  }
-
-  /** A run that ended: the fields ue-mcp records itself in its results.json, where present, laid over the hub's. */
-  private captureEnd(runId: string): void {
-    void (this.capturing.get(runId) ?? Promise.resolve()).then(() => {
-      const provenance = withUeMcp(this.runs.get(runId)?.provenance, ueMcpProvenance(readResultsFile(this.o.host.projectDir, runId), readProvenanceFile(this.o.host.projectDir, runId)));
-      if (provenance) this.runs.setProvenance(runId, provenance);
-    });
-  }
-
-  /** Read ue-mcp's record of runs into the history. At most one at a time. */
-  backfill(force = false): Promise<void> {
-    if (this.backfilling) return this.backfilling;
-    if (!force && this.now() - this.backfilled < BACKFILL_MS) return Promise.resolve();
-    const limit = this.firstBackfill ? FIRST_BACKFILL : BACKFILL;
-    this.backfilling = (async () => {
-      try {
-        const recorded = await this.o.index.recorded(limit);
-        for (const { run, times } of recorded) {
-          // A run the broker holds is recorded when the broker saves it.
-          if (this.o.broker.get(run.runId)) continue;
-          this.runs.backfill(run, times);
-        }
-        this.firstBackfill = false;
-      } catch (e) {
-        this.o.host.log.warn("hub: the run history could not be backfilled", e);
-      } finally {
-        this.backfilled = this.now();
-        this.backfilling = null;
-      }
-    })();
-    return this.backfilling;
-  }
-
-  // ── Checks and goals ──────────────────────────────────────────────
-
-  private async catalog(fresh = false): Promise<Catalog> {
-    const connected = this.connected();
-    const current = await this.workspace();
-    let list: ListedScript[] | null = null;
-    try {
-      list = await this.o.index.listScripts(fresh);
-    } catch {
-      list = null;
-    }
-    const listed = list ? new Map(list.map((s) => [s.path, s])) : null;
-    const checks: Catalog["checks"] = new Map();
-    const unresolved = new Set<string>();
-    for (const goal of this.goals.list()) {
-      for (const named of goal.checks) {
-        const ref = this.resolve(named, listed);
-        const id = checkId(ref);
-        if (connected && listed && !listed.has(ref.target)) unresolved.add(ref.target);
-        const had = checks.get(id);
-        if (had) {
-          if (!goal.archived) had.goalIds.push(goal.id);
-        } else {
-          checks.set(id, { ref: { kind: ref.kind, target: ref.target }, goalIds: goal.archived ? [] : [goal.id], ...(ref.target !== named.target ? { renamedFrom: named.target } : {}) });
-        }
-      }
-    }
-    if (unresolved.size && this.enabled()) void this.followRedirects([...unresolved]);
-    for (const s of listed?.values() ?? []) {
-      const id = checkId({ kind: "script", target: s.path });
-      if (!checks.has(id)) checks.set(id, { ref: { kind: "script", target: s.path }, goalIds: [] });
-    }
-    // Without the editor's list, the scripts the history knows stand in for it.
-    if (!listed) {
-      for (const id of this.runs.checkIds()) {
-        const r = this.runs.byCheck(id)[0];
-        if (r && !checks.has(id)) checks.set(id, { ref: { kind: r.kind, target: r.target }, goalIds: [] });
-      }
-    }
-    for (const c of checks.values()) {
-      const s = listed?.get(c.ref.target);
-      if (s) Object.assign(c, { name: s.name, map: s.map ?? null });
-    }
-    return { checks, listed, connected, current, metas: this.goals.metas() };
-  }
-
-  /**
-   * Where a script a goal names is on this checkout: its own path when the
-   * editor lists it (or no list is known), else where the evidence store's
-   * aliases say it moved, when that is listed. Otherwise its own path, missing.
-   */
-  private resolve(ref: CheckRef, listed: Map<string, ListedScript> | null): CheckRef {
-    if (!listed || listed.has(ref.target) || ref.kind !== "script") return ref;
-    const aliases = this.runs.aliases();
-    let id = checkId(ref);
-    for (let hop = 0; hop < REDIRECT_HOPS; hop++) {
-      const next = aliases.get(id);
-      const to = next ? checkOfId(next) : null;
-      if (!to) break;
-      if (listed.has(to.target)) return { ...to, ...(ref.required === false ? { required: false } : {}) };
-      id = next!;
-    }
-    return ref;
-  }
-
-  /**
-   * Ask ue-mcp whether a redirector stands at each path the editor does not
-   * list (asset(fixup_redirectors) with dryRun: it reports and changes
-   * nothing). A script that moved gets an alias in the evidence store, so its
-   * history follows it; a path with none is asked about again later.
-   */
-  private async followRedirects(targets: string[]): Promise<void> {
-    let moved = false;
-    for (const from of targets) {
-      const asked = this.redirectAsked.get(from);
-      if (asked !== undefined && this.now() - asked < REDIRECT_RETRY_MS) continue;
-      this.redirectAsked.set(from, this.now());
-      const r = await this.o.host.callAction("asset", "fixup_redirectors", { paths: [from], dryRun: true }).catch(() => null);
-      const found = (answerOf(r)?.redirectors as Array<{ destinationPath?: unknown }> | undefined)?.find((x) => typeof x?.destinationPath === "string");
-      const to = found ? checkOfId(`script:${String(found.destinationPath)}`) : null;
-      if (!to || to.target === from) continue;
-      this.runs.alias(checkId({ kind: "script", target: from }), checkId(to));
-      moved = true;
-    }
-    if (moved) this.changed(["checks", "goals", "runs"]);
-  }
-
-  /** The script is not on this checkout: only said while the editor is connected and has listed its scripts. */
-  private missing(ref: CheckRef, cat: Catalog): boolean {
-    return ref.kind === "script" && cat.connected && cat.listed !== null && !cat.listed.has(ref.target);
-  }
-
-  /** A check's state from the ref a goal (or the catalog) names: health follows the script to where it is now, under the project's one rule. */
-  private stateOf(named: CheckRef, cat: Catalog, goalIds?: string[]): { state: CheckState; runs: RunRecord[] } {
-    const at = this.resolve(named, cat.listed);
-    const id = checkId(at);
-    const entry = cat.checks.get(id);
-    const runs = this.runs.byCheck(id);
+  private testState(id: string, o: { quarantined?: boolean; marked?: boolean } = {}): TestState {
+    const ref = parseTestId(id) ?? { arrangement: id };
+    const t = this.resolveTest(id);
+    const runs = this.machine.runsOf(id);
+    const fl = flakiness(runs);
     const last = runs[0];
-    const renamedFrom = at.target !== named.target ? named.target : entry?.renamedFrom;
-    const state = checkStateOf({
-      check: { kind: at.kind, target: at.target, ...(named.required === false ? { required: false } : {}) },
-      runs,
-      missing: this.missing(at, cat),
-      rule: this.goals.rules(),
-      current: cat.current,
-      now: this.now(),
-      goalIds: goalIds ?? entry?.goalIds ?? [],
-      meta: cat.metas.get(id) ?? (renamedFrom ? cat.metas.get(checkId({ kind: "script", target: renamedFrom })) : undefined),
-      name: entry?.name ?? last?.name ?? leafName(at.target),
-      map: entry?.map ?? last?.map ?? null,
-      steps: last?.summary?.total ?? null,
-      ...(renamedFrom ? { renamedFrom } : {}),
-    });
-    return { state, runs };
-  }
-
-  /** Every goal's state, rolled up through the goals each requires (shared rollUpGoals), with the store's sign-offs. */
-  private goalStates(cat: Catalog): GoalState[] {
-    const list = this.goals.list();
-    // A track with track or arrangement runs, or a scene with scene runs, is judged by them (#2113): the
-    // roll-up sees it as one check whose runs are those. Before its first such run it rolls up as before.
-    const views = list.map((g): Goal => {
-      const ref: CheckRef = { kind: g.kind === "milestone" ? "scene" : "track", target: g.id };
-      if (this.setRuns(g).length === 0) return g;
-      return { ...g, checks: [ref], ...(g.kind === "milestone" ? { requires: requiresOf(g).filter((r) => this.goals.get(r.goal)?.kind === "milestone") } : {}) };
-    });
-    const states = rollUpGoals(views, (goal) => goal.checks.map((ref) => (ref.kind === "script" ? this.stateOf(ref, cat) : this.setStateOf(goal, ref, cat))), cat.current, this.goals.signOffs());
-    const byId = new Map(states.map((s) => [s.goal.id, s]));
-    const parents = goalParents(list);
-    return states.map((s, n) => {
-      const g = list[n];
-      if (views[n] === g) return s;
-      const ps = parents.get(g.id) ?? [];
-      return {
-        ...s,
-        goal: g,
-        parents: ps,
-        requires: requiresOf(g).map((r) => ({ goal: r.goal, required: r.required !== false, status: byId.get(r.goal) && !byId.get(r.goal)!.goal.archived ? byId.get(r.goal)!.status : null })),
-      };
-    });
-  }
-
-  /** The runs that judge a track or a scene: its own, and for a track every arrangement run it played in. */
-  private setRuns(g: Goal): RunRecord[] {
-    if (g.kind === "milestone") return this.runs.byCheck(checkId({ kind: "scene", target: g.id }));
-    const own = this.runs.byCheck(checkId({ kind: "track", target: g.id }));
-    const all = this.runs.byCheck(checkId({ kind: "arrangement", target: arrangementRunTarget(this.goals.arrangementOf(g)) })).filter((r) => r.arrangement?.instances.some((i) => i.goalId === g.id));
-    if (all.length === 0) return own;
-    // An arrangement run speaks for the track by its own instances in it.
-    const mine = all.map((r): RunRecord => {
-      const inst = r.arrangement!.instances.filter((i) => i.goalId === g.id);
-      const failed = inst.some((i) => i.status === "failed");
-      const open = inst.some((i) => i.status !== "passed" && i.status !== "skipped");
-      return { ...r, outcome: r.outcome === "passed" || r.outcome === "failed" ? (failed ? "failed" : open ? r.outcome : "passed") : r.outcome };
-    });
-    return [...own, ...mine].sort((a, b) => (a.startedAt < b.startedAt ? 1 : -1));
-  }
-
-  private setStateOf(goal: Goal, ref: CheckRef, cat: Catalog): { state: CheckState; runs: RunRecord[] } {
-    const runs = this.setRuns(goal);
-    const state = checkStateOf({ check: ref, runs, missing: false, rule: this.goals.rules(), current: cat.current, now: this.now(), goalIds: [goal.id], name: goal.title, map: null, steps: runs[0]?.summary?.total ?? null });
-    return { state, runs };
-  }
-
-  async overview(): Promise<HubOverview> {
-    if (this.now() - this.backfilled > BACKFILL_MS) void this.backfill();
-    const cat = await this.catalog();
-    const goals = this.goalStates(cat);
-    const checks = [...cat.checks.values()].map((c) => this.stateOf(c.ref, cat).state);
     return {
-      goals,
-      checks,
-      attention: buildAttention({ runs: this.o.broker.all(), goals, checks, plans: this.queue.state().recent, now: this.now() }),
-      queue: this.queueView(),
-      recent: this.runs.all().slice(0, 30),
-      evidence: { store: this.runs.scope, current: cat.current },
-      rules: this.goals.rules(),
-      imported: this.goals.imported(),
-      editor: { connected: cat.connected },
-      warnings: [...this.goals.warnings(), ...this.notes],
+      id,
+      arrangement: ref.arrangement,
+      ...(ref.region ? { region: ref.region } : {}),
+      title: "missing" in t ? id : t.title,
+      health: testHealth(runs, { missing: "missing" in t }),
+      checks: "missing" in t ? 0 : testChecks(t.a, t.region).length,
+      passRate: passRate(runs),
+      flaky: { detected: fl.flaky, marked: o.marked === true, checks: fl.checks },
+      quarantined: o.quarantined === true,
+      ...(last ? { last: { runId: last.runId, state: last.state, startedAt: last.startedAt, endedAt: last.endedAt } } : {}),
     };
   }
 
-  async goal(id: string): Promise<GoalState> {
-    if (!this.goals.get(id)) throw notFound(`no track ${id}`);
-    const cat = await this.catalog();
-    return this.goalStates(cat).find((g) => g.goal.id === id)!;
+  /** Every test of every arrangement, and every test a suite names that is missing, quarantined or marked flaky where any suite says so. */
+  private testStates(): Map<string, TestState> {
+    const suites = [...this.files.list("suite").items.values()];
+    const quarantined = new Set(suites.flatMap((s) => s.quarantined));
+    const marked = new Set(suites.flatMap((s) => s.flaky));
+    const ids = new Set<string>();
+    for (const a of this.files.list("arrangement").items.values()) for (const t of testsOf(a)) ids.add(testIdOf(t));
+    for (const s of suites) for (const it of s.items) if ("test" in it) ids.add(it.test);
+    return new Map([...ids].map((id) => [id, this.testState(id, { quarantined: quarantined.has(id), marked: marked.has(id) })]));
   }
 
-  /**
-   * The id a goal holds a check under, from the id a client shows: a moved
-   * script shows by its new path, while the goal still names the old one.
-   */
-  async goalCheckId(goalId: string, id: string): Promise<string> {
-    const goal = this.goals.get(goalId);
-    if (!goal || goal.checks.some((c) => checkId(c) === id)) return id;
-    const cat = await this.catalog();
-    return goal.checks.map(checkId).find((c) => checkId(this.resolve(checkOfId(c)!, cat.listed)) === id) ?? id;
+  tests(): TestState[] {
+    return [...this.testStates().values()];
   }
 
-  /** Change what a check says about itself. */
-  updateCheckMeta(id: string, body: unknown): CheckMeta {
-    const ref = checkOfId(id);
-    if (!ref) throw bad("a check id is <kind>:<target>");
-    return this.goals.updateMeta(ref, body);
+  test(id: string, limit = 20): TestDetail {
+    const t = this.resolveTest(id);
+    if ("missing" in t) throw notFound(t.missing);
+    return { test: this.testStates().get(id) ?? this.testState(id), checks: testChecks(t.a, t.region), runs: this.machine.runsOf(id).slice(0, Math.min(Math.max(1, limit), 200)) };
   }
 
-  async check(id: string, q: { limit?: unknown; before?: unknown }): Promise<CheckDetail> {
-    const ref = checkOfId(id);
-    if (!ref) throw bad("a check id is <kind>:<target>");
-    const cat = await this.catalog();
-    const known = cat.checks.get(checkId(ref));
-    if (!known && this.runs.byCheck(checkId(ref)).length === 0) throw notFound(`no check ${id}`);
-    const { state } = this.stateOf(known?.ref ?? ref, cat);
-    const page = this.runs.page({ check: checkId(ref), limit: limitOf(q.limit, 50), before: typeof q.before === "string" ? q.before : null });
-    let script: QaRun | null = null;
-    if (ref.kind === "script") {
-      const r = cat.connected && !state.missing ? await this.o.broker.readScriptAt(ref.target).catch(() => null) : null;
-      script = r && "run" in r ? r.run : this.o.broker.all().filter((x) => qaScriptKey(x.script) === ref.target).sort((a, b) => (a.seenAt < b.seenAt ? 1 : -1))[0] ?? null;
-    }
-    return { state, runs: page.runs, more: page.more, script };
-  }
+  // ---------- Suites ----------
 
-  runsPage(q: { check?: unknown; limit?: unknown; before?: unknown; arrangement?: unknown }): { runs: RunRecord[]; more: boolean } {
-    let check: string | null = null;
-    if (q.check !== undefined && q.check !== "") {
-      const ref = typeof q.check === "string" ? checkOfId(q.check) : null;
-      if (!ref) throw bad("check is a check id, <kind>:<target>");
-      check = checkId(ref);
-    }
-    // One arrangement's history: its track, scene, slot and arrangement runs, and the clip runs its plans started.
-    const aid = q.arrangement !== undefined && q.arrangement !== "" ? this.goals.resolveArrangement(q.arrangement) : null;
-    return this.runs.page({ check, limit: limitOf(q.limit, 50), before: typeof q.before === "string" ? q.before : null, ...(aid ? { filter: (r: RunRecord) => this.arrangementOfRun(r) === aid } : {}) });
-  }
-
-  run(runId: string): RunDetail {
-    const whole = this.arrangements.get(runId);
-    const rec = this.runs.get(runId);
-    if (whole || rec?.arrangement) {
-      const record = rec ?? this.runs.record(whole!)!;
-      const steps: RunStepSpan[] = (whole?.steps ?? []).map((s) => ({ index: s.index, instruction: s.instruction, status: s.status, judge: s.judge, startMs: null, endMs: null }));
-      return { record, run: whole ?? null, steps, arrangement: this.arrangements.detail(runId) ?? record.arrangement, resultsUrl: null };
-    }
-    const live = this.o.broker.get(runId);
-    const run = live && !qaIsDraft(live) ? live : readResults(this.o.host.projectDir, runId);
-    const record = this.runs.get(runId) ?? (run ? this.runs.record(run) : null);
-    if (!record) throw notFound(`no run ${runId}`);
-    const steps: RunStepSpan[] = (run?.steps ?? []).map((s) => ({ index: s.index, instruction: s.instruction, status: s.status, judge: s.judge, startMs: s.startedAtMs ?? null, endMs: s.endedAtMs ?? null }));
-    const history = this.runs.byCheck(checkId(record));
-    // Only a pass of the same script version compares step by step: across versions, step 3 may be another step.
-    const version = record.provenance?.scriptHash;
-    const lastPass = version ? history.find((r) => r.runId !== runId && isResult(r) && r.outcome === "passed" && r.startedAt < record.startedAt && r.provenance?.scriptHash === version) ?? null : null;
-    const series = readSeries(this.o.host.projectDir, runId);
-    let changedSteps: number[] | undefined;
-    if (lastPass) {
-      const now = new Set(record.failedSteps ?? []);
-      const then = new Set(lastPass.failedSteps ?? []);
-      changedSteps = [...new Set([...now, ...then])].filter((i) => now.has(i) !== then.has(i)).sort((a, b) => a - b);
-    }
+  private suiteState(s: Suite, suites: Map<string, Suite>): SuiteState {
+    const walk = suiteTests(suites, s.id);
+    const scope = new Set<string>([s.id]);
+    const visit = (id: string) => {
+      for (const it of suites.get(id)?.items ?? []) if ("suite" in it && !scope.has(it.suite)) (scope.add(it.suite), visit(it.suite));
+    };
+    visit(s.id);
+    const quarantined = new Set([...scope].flatMap((id) => suites.get(id)?.quarantined ?? []));
+    const marked = new Set([...scope].flatMap((id) => suites.get(id)?.flaky ?? []));
+    const tests = walk.tests.map((id) => this.testState(id, { quarantined: quarantined.has(id), marked: marked.has(id) }));
+    const counted = new Set(tests.filter((t) => !t.quarantined).map((t) => t.id));
+    const results = tests.filter((t) => !t.quarantined && t.passRate !== null);
     return {
-      record,
-      run: run ?? null,
-      steps,
-      ...(series ? { series } : {}),
-      lastPass,
-      ...(changedSteps ? { changedSteps } : {}),
-      resultsUrl: `/v1/hub/runs/${encodeURIComponent(runId)}/results`,
+      id: s.id,
+      title: s.title,
+      ...(s.description ? { description: s.description } : {}),
+      items: s.items,
+      health: suiteHealth(tests),
+      passRate: results.length ? Math.round((results.reduce((n, t) => n + t.passRate!, 0) / results.length) * 1000) / 1000 : null,
+      history: passRateHistory(counted, this.machine.allRuns()),
+      tests,
+      quarantined: s.quarantined,
+      flaky: s.flaky,
+      missing: [...tests.filter((t) => t.health === "missing").map((t) => t.id), ...walk.missingSuites],
     };
   }
 
-  /** A run's record: from the history, else from its results.json, kept from then on. */
-  private recordFor(runId: string): RunRecord {
-    const had = this.runs.get(runId);
-    if (had) return had;
-    const live = this.o.broker.get(runId);
-    const run = live && !qaIsDraft(live) ? live : readResults(this.o.host.projectDir, runId);
-    const record = run ? this.runs.record(run) : null;
-    if (!record) throw notFound(`no run ${runId}`);
-    return record;
+  suites(): SuiteState[] {
+    const suites = this.files.list("suite").items;
+    return [...suites.values()].map((s) => this.suiteState(s, suites));
   }
 
-  /** Link a run to a tracker item. A link to a URL the run already has replaces it. */
-  addRunLink(runId: string, body: unknown): RunRecord {
-    const link = linkOf(isObject(body) && body.link !== undefined ? body.link : body);
-    const had = this.recordFor(runId);
-    const rest = (had.links ?? []).filter((l) => l.url !== link.url);
-    if (rest.length >= TRACKER_LINKS_MAX) throw bad(`a run holds at most ${TRACKER_LINKS_MAX} links`);
-    return this.runs.setLinks(runId, [...rest, link])!;
+  private suiteValue(id: string): Suite {
+    const got = this.files.get("suite", id);
+    if (!got) throw notFound(`no suite ${id}`);
+    if (!got.value) throw new FindingError(got.findings);
+    return got.value;
   }
 
-  /** Remove a run's link to this URL. */
-  removeRunLink(runId: string, url: unknown): RunRecord {
-    if (typeof url !== "string" || !url) throw bad("url is the link to remove");
-    const had = this.recordFor(runId);
-    const links = had.links ?? [];
-    if (!links.some((l) => l.url === url)) throw notFound(`run ${runId} has no link to ${url}`);
-    return this.runs.setLinks(runId, links.filter((l) => l.url !== url))!;
+  suite(id: string): SuiteState {
+    const s = this.suiteValue(id);
+    return this.suiteState(s, this.files.list("suite").items);
   }
 
-  // ── Goals ─────────────────────────────────────────────────────────
-
-  /**
-   * Sign a goal off as the signed-in account, from this computer or from the
-   * paired browser named by `via`. It records the revision, the results of
-   * each required check the acceptance rule looks at, and the goal's
-   * requirements, so it lapses once those no longer hold (signOffLapse).
-   */
-  async signOff(id: string, body: unknown, via?: string): Promise<SignOff> {
-    const goal = this.goals.get(id);
-    if (!goal) throw notFound(`no track ${id}`);
-    if (body !== undefined && body !== null && !isObject(body)) throw bad("body must be { note? }");
-    const note = isObject(body) ? body.note : undefined;
-    if (note !== undefined && typeof note !== "string") throw bad("note must be a string");
-    const by = (await this.o.signer?.()) ?? null;
-    if (!by) throw conflict("Sign in to your ue-mcp account to sign off a track: a sign-off records who gave it.");
-    const current = await this.workspace(true);
-    const need = Math.max(1, goal.acceptance.stableRuns);
-    const cat = await this.catalog();
-    const runIds = goal.checks
-      .filter((c) => c.required !== false)
-      .flatMap((c) => this.runs.byCheck(checkId(this.resolve(c, cat.listed))).filter(isResult).slice(0, need).map((r) => r.runId));
-    const s: SignOff = {
-      goalId: id,
-      by,
-      ...(via ? { via } : {}),
-      at: new Date(this.now()).toISOString(),
-      ...(note?.trim() ? { note: note.trim().slice(0, 2000) } : {}),
-      revision: current.revision,
-      runIds,
-      requirements: requirementsKey(goal),
-    };
-    this.goals.signOff(s);
-    return s;
+  createSuite(body: unknown): SuiteState {
+    return this.putSuite(this.newId("suite", body), body);
   }
 
-  clearSignOff(id: string): void {
-    if (!this.goals.get(id)) throw notFound(`no track ${id}`);
-    this.goals.clearSignOff(id);
-  }
-
-  /**
-   * Delete a goal or milestone, with its sign-off. Goals that required it stop
-   * requiring it. Its playtests stay as they are: their own records, the other
-   * goals that name them, and every past run. While a plan made for it is
-   * queued or running, the delete is refused (409) and names the plan, since
-   * that plan was started from the goal.
-   */
-  deleteGoal(id: string): void {
-    if (!this.goals.get(id)) throw notFound(`no track ${id}`);
-    const why = this.deleteBlocked(id);
-    if (why) throw conflict(why);
-    this.goals.delete(id);
-  }
-
-  /** Why a goal cannot be deleted now: a plan made for it is queued or running. Null when it can. */
-  private deleteBlocked(id: string): string | null {
-    const goal = this.goals.get(id);
-    if (!goal) return null;
-    const q = this.queue.state();
-    const plans = [q.current, ...q.queued].filter((p): p is PlanRun => !!p && (("goalId" in p.scope && p.scope.goalId === id) || (p.scope.kind === "slot" && (p.scope.sceneId === id || p.scope.trackId === id))));
-    if (!plans.length) return null;
-    const names = plans.map((p) => `"${p.title}"`).join(", ");
-    // A person reads plans as runs: Studio's queue lists them under Runs.
-    return `"${goal.title}" can't be deleted while ${plans.length === 1 ? "a run made for it is" : "runs made for it are"} queued or running: ${names}. Cancel ${plans.length === 1 ? "that run" : "those runs"} or let ${plans.length === 1 ? "it" : "them"} finish, then try again.`;
-  }
-
-  /**
-   * Write playtests for this goal: a session of its own runs the /playtest
-   * flow, seeded with the goal's words and the checks it has, and each script
-   * drafted in that session joins the goal.
-   */
-  writePlaytests(id: string, body: unknown): { sessionId: string } {
-    const goal = this.goals.get(id);
-    if (!goal) throw notFound(`no track ${id}`);
-    if (body !== undefined && body !== null && !isObject(body)) throw bad("body must be { text? }");
-    const asked = isObject(body) ? body.text : undefined;
-    if (asked !== undefined && typeof asked !== "string") throw bad("text must be a string");
-    const write = this.o.writePlaytests;
-    if (!write) throw conflict("no client is connected that can write clips: it needs a playtest flow of its own");
-    const text = (asked as string | undefined)?.trim() || playtestBrief(goal, this.goals.metas());
-    const started = write({ title: `Clips for ${goal.title}`.slice(0, 80), text });
-    this.linking.set(started.sessionId, goal.id);
-    void started.done.catch((e: unknown) => this.note(`writing clips for ${goal.id} failed: ${e instanceof Error ? e.message : String(e)}`));
-    return { sessionId: started.sessionId };
-  }
-
-  // ── Plans ─────────────────────────────────────────────────────────
-
-  /**
-   * The queue. With `arrangement`, what waits, what finished and the
-   * schedules are that arrangement's, plans of clips every arrangement shares
-   * included; the plan on the editor shows whichever arrangement it is from,
-   * since it holds the editor for all of them.
-   */
-  queueView(q: { arrangement?: unknown } = {}): QueueState {
-    const state = this.queue.state();
-    if (q.arrangement === undefined || q.arrangement === "") return state;
-    const aid = this.goals.resolveArrangement(q.arrangement);
-    const mine = (p: { arrangementId?: string; scope: PlanScope }) => {
-      const of = p.arrangementId ?? this.arrangementOfScope(p.scope);
-      return of === undefined || of === aid;
-    };
-    return { ...state, queued: state.queued.filter(mine), recent: state.recent.filter(mine), schedules: state.schedules.filter(mine) };
-  }
-
-  /** The checks a scope stands for, in order, each once. */
-  private async expand(scope: PlanScope): Promise<CheckRef[]> {
-    const cat = await this.catalog();
-    // A goal stands for its required goals' checks, at any depth, then its own.
-    const goalChecks = (goalId: string): CheckRef[] => {
-      if (!this.goals.get(goalId)) throw notFound(`no track ${goalId}`);
-      return goalChecksDeep(this.goals.list(), goalId);
-    };
-    let refs: CheckRef[];
-    switch (scope.kind) {
-      case "goal":
-        refs = goalChecks(scope.goalId);
-        break;
-      case "checks":
-        refs = scope.checks;
-        break;
-      case "track":
-      case "scene":
-      case "slot":
-      case "arrangement":
-        refs = [];
-        break;
-      case "all":
-        refs = [...cat.checks.values()].map((c) => c.ref).filter((r) => !this.missing(r, cat));
-        break;
-      case "failing":
-      case "stale": {
-        const pool = scope.goalId ? goalChecks(scope.goalId) : [...cat.checks.values()].map((c) => c.ref);
-        // Stale takes the never run too: both lack recent evidence.
-        const wanted = scope.kind === "failing" ? ["failing"] : ["stale", "never_run"];
-        refs = pool.filter((r) => wanted.includes(this.stateOf(r, cat).state.health));
-        break;
-      }
+  putSuite(id: string, body: unknown): SuiteState {
+    if (!HUB_ID.test(id)) throw bad("a suite id is lowercase letters, digits and dashes");
+    const { suite, findings } = suiteOf(body, id);
+    const suites = new Map(this.files.list("suite").items);
+    const testIds = [...this.testStates().keys()].filter((t) => !("missing" in this.resolveTest(t)));
+    for (const [i, it] of suite.items.entries()) {
+      if ("suite" in it && !suites.has(it.suite)) findings.push({ path: `items[${i}]`, message: `no suite ${it.suite}`, blocks: true, candidates: rank(it.suite, [...suites.keys()]) });
+      if ("test" in it && "missing" in this.resolveTest(it.test)) findings.push({ path: `items[${i}]`, message: (this.resolveTest(it.test) as { missing: string }).missing, blocks: true, candidates: rank(it.test, testIds) });
     }
-    const seen = new Set<string>();
-    // A script that moved runs where it is now.
-    return refs.map((r) => this.resolve(r, cat.listed)).filter((r) => {
-      const id = checkId(r);
-      if (seen.has(id)) return false;
-      seen.add(id);
-      return true;
-    });
+    suites.set(id, suite);
+    const loop = suiteLoop(suites, id);
+    if (loop) findings.push({ path: "items", message: `suites would contain each other: ${loop.join(" > ")}`, blocks: true });
+    if (findings.some((f) => f.blocks)) throw new FindingError(findings);
+    this.files.write("suite", suite);
+    this.changed(["suites"], { id });
+    return this.suiteState(suite, suites);
   }
 
-  /** A playtest's name as people read it: its own title, the script's name, or the asset's. */
-  private nameOf(ref: CheckRef, cat: Catalog): string {
-    if (ref.kind === "arrangement") return this.arrangementTitle(arrangementOfRunTarget(ref.target));
-    if (ref.kind === "slot") {
-      const [s, t] = ref.target.split("/");
-      return `${this.goals.get(s)?.title ?? s}: ${this.goals.get(t)?.title ?? t}`;
+  deleteSuite(id: string): void {
+    if (!this.files.exists("suite", id)) throw notFound(`no suite ${id}`);
+    const parents = [...this.files.list("suite").items.values()].filter((s) => s.items.some((it) => "suite" in it && it.suite === id));
+    if (parents.length) throw conflict(`suite ${id} is inside ${parents.map((s) => s.id).join(", ")}; take it out of them first`);
+    if (this.machine.allSchedules().some((s) => s.suite === id)) throw conflict(`a schedule runs suite ${id}; delete the schedule or point it elsewhere first`);
+    this.files.delete("suite", id);
+    this.changed(["suites"], { id });
+  }
+
+  /** Quarantine a test in a suite, or let it count again. */
+  quarantine(id: string, body: unknown): SuiteState {
+    return this.toggle(id, body, "quarantined");
+  }
+
+  /** Mark a test flaky in a suite, or clear the mark. */
+  markFlaky(id: string, body: unknown): SuiteState {
+    return this.toggle(id, body, "flaky");
+  }
+
+  private toggle(id: string, body: unknown, list: "quarantined" | "flaky"): SuiteState {
+    const o = isObject(body) ? body : {};
+    if (typeof o.test !== "string" || !parseTestId(o.test)) throw bad("test is a test id: <arrangement> or <arrangement>:<region>");
+    const on = o.on !== false;
+    const s = this.suiteValue(id);
+    const suites = this.files.list("suite").items;
+    if (on && !suiteTests(suites, id).tests.includes(o.test)) throw conflict(`suite ${id} does not hold ${o.test}; add it to the suite first`);
+    const set = new Set(s[list]);
+    if (on) set.add(o.test);
+    else set.delete(o.test);
+    const next: Suite = { ...s, [list]: [...set].sort() };
+    this.files.write("suite", next);
+    this.changed(["suites"], { id });
+    return this.suiteState(next, new Map(suites).set(id, next));
+  }
+
+  // ---------- Runs ----------
+
+  runs(q: { test?: unknown; suite?: unknown; limit?: unknown; before?: unknown } = {}): { runs: RunRecord[]; more: boolean } {
+    let list: readonly RunRecord[] = this.machine.allRuns();
+    if (typeof q.test === "string" && q.test) list = list.filter((r) => r.test === q.test);
+    if (typeof q.suite === "string" && q.suite) {
+      const tests = new Set(suiteTests(this.files.list("suite").items, q.suite).tests);
+      list = list.filter((r) => tests.has(r.test));
     }
-    if (ref.kind !== "script") return this.goals.get(ref.target)?.title ?? ref.target;
-    const id = checkId(ref);
-    return cat.metas.get(id)?.title ?? cat.checks.get(id)?.name ?? leafName(ref.target);
+    if (typeof q.before === "string" && q.before) list = list.filter((r) => r.startedAt < (q.before as string));
+    const limit = Math.min(Math.max(Number(q.limit) || 50, 1), 500);
+    return { runs: list.slice(0, limit), more: list.length > limit };
   }
 
-  private titleOf(scope: PlanScope, refs: CheckRef[], cat: Catalog): string {
-    const goal = "goalId" in scope && scope.goalId ? this.goals.get(scope.goalId)?.title : undefined;
-    const from = fromOf(scope) ? ` from ${(fromOf(scope) / 60).toFixed(2).replace(/\.?0+$/, "")} s` : "";
-    switch (scope.kind) {
-      case "goal":
-      case "track":
-      case "scene":
-        return `Run ${goal ?? scope.goalId}${from}`;
-      case "slot":
-        return `Run ${refs[0] ? this.nameOf(refs[0], cat) : "a slot"}`;
-      case "arrangement":
-        return this.goals.arrangements().length > 1 ? `Run ${this.arrangementTitle(this.goals.resolveArrangement(scope.arrangementId))}${from}` : `Run the arrangement${from}`;
-      case "failing":
-        return goal ? `Run what is failing in ${goal}` : "Run what is failing";
-      case "stale":
-        return goal ? `Run what is stale in ${goal}` : "Run what is stale";
-      case "all":
-        return "Run all clips";
-      case "checks":
-        return refs.length === 1 ? `Run ${this.nameOf(refs[0], cat)}` : `Run ${refs.length} clips`;
-    }
-  }
-
-  /** A plan run queued: its scope expanded to items now, so what it runs does not change under it. */
-  async plan(body: unknown, trigger: PlanTrigger = "person"): Promise<PlanRun> {
-    return (await this.queuePlan(body, trigger)).plan;
-  }
-
-  /**
-   * A plan queued, and where it went. A person's plan resumes a paused queue
-   * and starts at once when nothing is on the editor (PlanQueue.enqueue).
-   */
-  async queuePlan(body: unknown, trigger: PlanTrigger = "person", scheduleId?: string): Promise<{ plan: PlanRun; placement: PlanPlacement }> {
-    if (!isObject(body)) throw bad("body must be { title?, scope, options?, next? }");
-    if (body.next !== undefined && typeof body.next !== "boolean") throw bad("next must be a boolean");
-    if (body.title !== undefined && (typeof body.title !== "string" || !body.title.trim())) throw bad("title must be a non-empty string");
-    // A person's plan is the user's run; an agent's only under Automatic.
-    if (trigger === "agent" && (this.o.playtestRuns?.() ?? "automatic") === "manual") throw conflict("Playtest runs are set to Manual: an agent cannot start a plan");
-    const scope = scopeOf(body.scope);
-    const options = planOptionsOf(body.options, planOptionsFor(trigger));
-    // A track, scene, slot or the arrangement is one item: one run in one PIE session (#2113).
-    const whole = setItemOf(scope, this.goals);
-    if (whole) {
-      const plan = await this.set.plan(whole.kind, whole.target, fromOf(scope));
-      // A clip this daemon could not read now (the editor away) is the run's to settle.
-      const stop = plan.composition.findings.find((f) => f.blocks && f.field !== "target");
-      if (stop) throw conflict(`${plan.title} cannot run: ${stop.message}`);
-    }
-    const refs = whole ? [{ kind: whole.kind, target: whole.target }] : await this.expand(scope);
-    if (refs.length === 0) throw conflict("nothing to run: the plan's scope has no clips");
-    const cat = await this.catalog();
-    const items: PlanItem[] = refs.map((ref) => ({ check: ref, name: this.nameOf(ref, cat), state: "queued" as const }));
-    const arrangementId = this.arrangementOfScope(scope);
-    const plan: PlanRun = {
-      id: newId("plan"),
-      title: typeof body.title === "string" ? body.title.trim().slice(0, 200) : this.titleOf(scope, refs, cat),
-      scope,
-      options,
-      state: "queued",
-      items,
-      trigger,
-      ...(scheduleId ? { scheduleId } : {}),
-      ...(arrangementId ? { arrangementId } : {}),
-      createdAt: new Date(this.now()).toISOString(),
-    };
-    const placement = this.queue.add(plan, { person: trigger === "person", next: body.next === true });
-    return { plan, placement };
-  }
-
-  /**
-   * POST /hub/run: a track, scene, slot or the arrangement as one run. When
-   * it starts at once, the answer waits for the start and carries the run's
-   * id; queued or waiting, `runId` is null and the queue says when it starts.
-   */
-  async runSet(body: unknown, trigger: PlanTrigger = "person"): Promise<{ plan: PlanRun; placement: PlanPlacement; runId: string | null }> {
-    if (!isObject(body)) throw bad("body must be { scope, next? }");
-    const scope = scopeOf(body.scope);
-    if (!setItemOf(scope, this.goals) || scope.kind === "goal") throw bad("scope must be { kind: track | scene, goalId } | { kind: slot, sceneId, trackId } | { kind: arrangement }");
-    const queued = await this.queuePlan({ scope, ...(body.next !== undefined ? { next: body.next } : {}), ...(body.options !== undefined ? { options: body.options } : {}) }, trigger);
-    const runId = queued.placement.state === "started" ? await this.queue.startedRun(queued.plan.id) : null;
-    return { ...queued, runId };
-  }
-
-  /** POST /hub/runs/:id/verdict: a manual check's verdict in a set run. */
-  async runVerdict(runId: string, body: unknown): Promise<{ ok: true }> {
-    if (!isObject(body) || typeof body.check !== "string" || !["pass", "fail", "skip"].includes(String(body.verdict))) throw bad("body must be { check, verdict: pass | fail | skip, note? }");
-    if (body.note !== undefined && typeof body.note !== "string") throw bad("note must be text");
-    if (!this.arrangements.owns(runId)) throw notFound(`no track, scene or arrangement run ${runId} is going`);
-    const r = await this.arrangements.verdict(runId, body.check, String(body.verdict), body.note as string | undefined);
-    if ("error" in r) throw conflict(r.error);
+  run(runId: string): RunRecord {
+    const r = this.machine.run(runId);
+    if (!r) throw notFound(`no run ${runId}`);
     return r;
   }
 
-  /** A person's Run on one playtest: a plan of that one check. */
-  async runCheck(id: string, body: unknown): Promise<{ plan: PlanRun; placement: PlanPlacement }> {
-    const ref = checkOfId(id);
-    if (!ref) throw bad("a check id is <kind>:<target>");
-    if (body !== undefined && body !== null && !isObject(body)) throw bad("body must be { replay?, next? }");
-    const replay = isObject(body) ? body.replay : undefined;
-    const next = isObject(body) ? body.next : undefined;
-    if (replay !== undefined && typeof replay !== "boolean") throw bad("replay must be a boolean");
-    return this.queuePlan({ scope: { kind: "checks", checks: [ref] }, options: { replay: replay === true }, ...(next !== undefined ? { next } : {}) });
+  /** A manual check's verdict, from a person or an agent. */
+  async verdict(runId: string, body: unknown, by: "person" | "agent"): Promise<RunRecord> {
+    const o = isObject(body) ? body : {};
+    const r = this.run(runId);
+    const live = this.live.get(runId);
+    if (!live || runEnded(r.state)) throw conflict(`run ${runId} is not playing; a verdict goes to a run that is waiting for one`);
+    if (typeof o.check !== "string") throw bad("check is the id of the manual check");
+    if (o.verdict !== "pass" && o.verdict !== "fail") throw bad("verdict is pass or fail");
+    const t = this.resolveTest(r.test);
+    const check = "missing" in t ? undefined : testChecks(t.a, t.region).find((c) => c.id === o.check);
+    if (!check || check.mode !== "manual") throw bad(`${o.check} is not a manual check of ${r.test}`);
+    if (check.personOnly && by === "agent") throw conflict(`${check.title} takes a person's verdict only; ask the person to give it in Studio`);
+    const note = typeof o.note === "string" ? o.note.slice(0, 2000) : undefined;
+    await live.runner.verdict(runId, check.id, o.verdict, note);
+    const checks = r.checks.map((c) => (c.id === check.id ? { ...c, status: o.verdict === "pass" ? ("passed" as const) : ("failed" as const), verdict: { by, ...(note ? { note } : {}), at: this.now() } } : c));
+    const next = { ...r, checks };
+    this.machine.putRun(next);
+    this.changed(["runs"], { runId });
+    return next;
   }
 
-  async cancelPlan(id: string): Promise<PlanRun> {
-    return this.queue.cancel(id);
+  /** Stop a run the hub is playing. */
+  async stopRun(runId: string, reason = "stopped by a person"): Promise<RunRecord> {
+    const live = this.live.get(runId);
+    if (!live) throw conflict(`run ${runId} is not playing`);
+    await live.runner.stop(runId, reason).catch((e: unknown) => this.o.host.log.warn(`hub: run ${runId} did not stop cleanly`, e));
+    return this.finish(runId, { state: "stopped", error: reason });
   }
 
-  // ── Schedules ─────────────────────────────────────────────────────
+  // ---------- Queue ----------
 
-  /** Each schedule's next run worked out again, except one due now, which keeps waiting. */
-  private refreshSchedules(): void {
-    const now = new Date(this.now());
-    for (const s of this.queue.schedules()) {
-      if (s.nextRunAt && Date.parse(s.nextRunAt) <= now.getTime()) continue;
-      const next = withNext(s, now);
-      if (next.nextRunAt !== s.nextRunAt) this.queue.putSchedule(next);
-    }
+  private occupancy(scheduled: boolean): OccupancyReason[] {
+    return occupancyOf({ connected: () => this.connected(), ...this.o.editor }, this.lease.held(), { scheduled });
   }
 
-  createSchedule(body: unknown): Schedule {
-    const d = scheduleDraftOf(body);
-    if (d.scope.kind === "goal" && !this.goals.get(d.scope.goalId)) throw bad(`no track ${d.scope.goalId}`);
-    const s = withNext(this.pinned({ id: newId("schedule"), ...d, lastRunAt: null, lastSkipped: null, waiting: null, nextRunAt: null }), new Date(this.now()));
-    this.queue.putSchedule(s);
-    return s;
-  }
-
-  updateSchedule(id: string, body: unknown): Schedule {
-    const had = this.queue.schedules().find((s) => s.id === id);
-    if (!had) throw notFound(`no schedule ${id}`);
-    const s = withNext(this.pinned(scheduleUpdated(had, body)), new Date(this.now()));
-    this.queue.putSchedule(s);
-    return s;
-  }
-
-  /** A schedule held to the arrangement it was made in: an arrangement scope names it, and the schedule says which it belongs to. */
-  private pinned(s: Schedule): Schedule {
-    const scope: PlanScope = s.scope.kind === "arrangement" ? { ...s.scope, arrangementId: this.goals.resolveArrangement(s.scope.arrangementId) } : s.scope;
-    const { arrangementId: _had, ...rest } = s;
-    const arrangementId = this.arrangementOfScope(scope);
-    return { ...rest, scope, ...(arrangementId ? { arrangementId } : {}) };
-  }
-
-  // ── Arrangements ──────────────────────────────────────────────────
-
-  private arrangementTitle(id: string): string {
-    return this.goals.arrangements().find((a) => a.id === id)?.title ?? id;
-  }
-
-  /** The arrangement a scope belongs to: its track's, scene's or arrangement's; undefined for a scope of clips, which every arrangement shares. */
-  arrangementOfScope(scope: PlanScope): string | undefined {
-    switch (scope.kind) {
-      case "arrangement":
-        return this.goals.resolveArrangement(scope.arrangementId);
-      case "goal":
-      case "track":
-      case "scene":
-        return this.goals.arrangementOfGoal(scope.goalId) ?? undefined;
-      case "failing":
-      case "stale":
-        return scope.goalId ? this.goals.arrangementOfGoal(scope.goalId) ?? undefined : undefined;
-      case "slot":
-        return this.goals.arrangementOfGoal(scope.sceneId) ?? undefined;
-      default:
-        return undefined;
-    }
-  }
-
-  /** The arrangement a run belongs to, from what it ran; undefined for a clip's own run. */
-  private arrangementOfRun(r: RunRecord): string | undefined {
-    switch (r.kind) {
-      case "arrangement":
-        return arrangementOfRunTarget(r.target);
-      case "track":
-      case "scene":
-        return this.goals.arrangementOfGoal(r.target) ?? undefined;
-      case "slot":
-        return this.goals.arrangementOfGoal(r.target.split("/")[0]) ?? undefined;
-      default:
-        return r.planRunId ? this.queue.state().recent.find((p) => p.id === r.planRunId)?.arrangementId : undefined;
-    }
-  }
-
-  /** GET /hub/arrangements: each arrangement with what it holds, its status and its newest run. */
-  async arrangementsView(): Promise<ArrangementsView> {
-    const list = this.goals.arrangements();
-    const known = new Set(list.map((a) => a.id));
-    const states = this.goalStates(await this.catalog()).filter((s) => !s.goal.archived);
+  queueView(): QueueState {
+    const items = this.machine.queueItems();
+    const nextEditor = items.find((i) => i.state === "queued" && i.runner === "editor");
+    const editorBusy = [...this.live.values()].some((l) => l.runner.kind === "editor");
+    const nextHeadless = items.some((i) => i.state === "queued" && i.runner === "headless") && ![...this.live.values()].some((l) => l.runner.kind === "headless");
+    const headlessWhy = nextHeadless ? (this.o.headless?.()?.unavailable() ?? (this.o.headless?.() ? null : "no headless runner is set up on this machine")) : null;
     return {
-      arrangements: list.map((a) => {
-        const mine = states.filter((s) => this.goals.arrangementOf(s.goal, known) === a.id);
-        const last = this.runs.byCheck(checkId({ kind: "arrangement", target: arrangementRunTarget(a.id) }))[0];
-        return {
-          ...a,
-          tracks: mine.filter((s) => s.goal.kind === "goal").length,
-          scenes: mine.filter((s) => s.goal.kind === "milestone").length,
-          status: rollUpStatuses(mine.map((s) => s.status)),
-          lastRun: last ? { runId: last.runId, outcome: last.outcome, at: last.startedAt } : null,
-        };
-      }),
-      default: list[0].id,
+      paused: this.machine.paused(),
+      ...(headlessWhy ? { waitingHeadless: headlessWhy } : {}),
+      waiting: nextEditor && !editorBusy ? this.occupancy(nextEditor.source === "schedule") : [],
+      running: items.filter((i) => i.state === "running"),
+      queued: items.filter((i) => i.state === "queued"),
     };
   }
 
-  createArrangement(body: unknown): ArrangementInfo {
-    return this.goals.createArrangement(body);
-  }
-
-  updateArrangement(id: string, body: unknown): ArrangementInfo {
-    return this.goals.updateArrangement(id, body);
-  }
-
-  duplicateArrangement(id: string, body: unknown): ArrangementInfo {
-    return this.goals.duplicateArrangement(id, body);
-  }
-
-  /** Delete an arrangement with its tracks and scenes, refused while a run made in it is queued or running. Clips stay. */
-  deleteArrangement(id: string): void {
-    const a = this.goals.arrangementInfo(id);
-    const q = this.queue.state();
-    const plans = [q.current, ...q.queued].filter((p): p is PlanRun => !!p && (p.arrangementId ?? this.arrangementOfScope(p.scope)) === id);
-    if (plans.length) throw conflict(`"${a.title}" can't be deleted while ${plans.length === 1 ? "a run made in it is" : "runs made in it are"} queued or running: ${plans.map((p) => `"${p.title}"`).join(", ")}. Cancel ${plans.length === 1 ? "that run" : "those runs"} or let ${plans.length === 1 ? "it" : "them"} finish, then try again.`);
-    this.goals.deleteArrangement(id);
-  }
-
-  deleteSchedule(id: string): void {
-    if (!this.queue.deleteSchedule(id)) throw notFound(`no schedule ${id}`);
+  private runnerFor(kind: RunnerKind): HubRunner {
+    if (kind === "editor") return this.editorRunner;
+    const h = this.o.headless?.();
+    if (!h) throw conflict("no headless runner is set up on this machine; queue it with runner editor to play it on the open editor");
+    return h;
   }
 
   /**
-   * Why a due schedule's plan cannot start now, or null when it can. It takes
-   * nothing from anyone: the queue idle and running, the editor free by the
-   * occupancy answer (the consent ledger included), and every other session
-   * and the desktop quiet.
+   * Where a test plays when no runner was asked for: a hidden editor when one
+   * is set up and fits in memory, else the open editor, with the reason. A
+   * test with manual checks plays on the open editor, where a person judges.
    */
-  private scheduleBlocked(s: Schedule): string | null {
-    if (!this.enabled()) return "the Playtest Hub is off";
-    if (this.queue.paused()) return "the queue is paused";
-    if (!this.queue.idle()) return "other runs are queued";
-    return this.occupancy(!s.options.attended, true)[0]?.text ?? null;
+  private chooseRunner(a: Arrangement, region?: string): { kind: RunnerKind; reason: string } {
+    if (testChecks(a, region).some((c) => c.mode === "manual")) return { kind: "editor", reason: "it has manual checks, which a person judges in the open editor" };
+    const h = this.o.headless?.();
+    if (!h) return { kind: "editor", reason: "no headless runner is set up on this machine" };
+    const why = h.unavailable();
+    if (why) return { kind: "editor", reason: `it cannot run headless now: ${why}` };
+    return { kind: "headless", reason: "a hidden editor fits in memory" };
   }
 
-  /** Each due schedule runs its plan when nothing else needs the editor; otherwise it waits, then gives up, saying why. */
-  async runSchedules(): Promise<void> {
-    const now = new Date(this.now());
-    for (const s of [...this.queue.schedules()]) {
-      const turn = scheduleTurn(s, now, () => this.scheduleBlocked(s));
-      if (!turn) continue;
-      if ("wait" in turn) {
-        if (s.waiting !== turn.wait) this.queue.putSchedule({ ...s, waiting: turn.wait });
+  /** Queue one test, or every test of a suite. Answers what was queued and what was left out and why. */
+  enqueue(body: unknown, source: RunSource): { batch: string; queued: QueueItem[]; skipped: Array<{ test: string; reason: string }>; queue: QueueState } {
+    const o = isObject(body) ? body : {};
+    if (o.runner !== undefined && o.runner !== "editor" && o.runner !== "headless") throw bad("runner is editor or headless; leave it out to run headless when a hidden editor fits");
+    const asked: RunnerKind | undefined = o.runner === "headless" || o.runner === "editor" ? o.runner : undefined;
+    if (asked) this.runnerFor(asked);
+    const hasTest = typeof o.test === "string" && !!o.test;
+    const hasSuite = typeof o.suite === "string" && !!o.suite;
+    if (hasTest === hasSuite) throw bad("give exactly one of test (a test id) and suite (a suite id)");
+    const batch = `b_${Date.now().toString(36)}_${id8()}`;
+    const skipped: Array<{ test: string; reason: string }> = [];
+    let ids: string[];
+    if (hasSuite) {
+      this.suiteValue(o.suite as string);
+      ids = suiteTests(this.files.list("suite").items, o.suite as string).tests;
+    } else ids = [o.test as string];
+    const queued: QueueItem[] = [];
+    for (const id of ids) {
+      const t = this.resolveTest(id);
+      if ("missing" in t) {
+        if (!hasSuite) throw notFound(t.missing);
+        skipped.push({ test: id, reason: t.missing });
         continue;
       }
-      let next: Schedule = { ...s };
-      if ("skip" in turn) {
-        next.lastSkipped = turn.skip;
-      } else {
-        try {
-          await this.queuePlan({ title: s.title, scope: s.scope, options: s.options }, "schedule", s.id);
-          next = { ...next, lastRunAt: now.toISOString(), lastSkipped: null };
-        } catch (e) {
-          next.lastSkipped = e instanceof Error ? e.message : String(e);
-        }
+      if (!testChecks(t.a, t.region).length) {
+        const reason = `${t.title} has no checks: add one to the arrangement's Checks track${t.region ? " inside the region" : ""}`;
+        if (!hasSuite) throw conflict(reason);
+        skipped.push({ test: id, reason });
+        continue;
       }
-      this.queue.putSchedule(withNext(next, now));
+      const findings = instanceFindings(t.a, (c) => this.files.get("clip", c)?.value ?? undefined).filter((f) => f.blocks);
+      if (findings.length) {
+        const reason = `${t.a.title} cannot play: ${findings.map((f) => f.message).join("; ")}`;
+        if (!hasSuite) throw conflict(reason);
+        skipped.push({ test: id, reason });
+        continue;
+      }
+      if (asked === "headless" && testChecks(t.a, t.region).some((c) => c.mode === "manual")) {
+        const reason = `${t.title} has manual checks, which a person judges in the open editor; run it with runner editor`;
+        if (!hasSuite) throw conflict(reason);
+        skipped.push({ test: id, reason });
+        continue;
+      }
+      const choice = asked ? null : this.chooseRunner(t.a, t.region);
+      const runner = asked ?? choice!.kind;
+      queued.push({ id: `q_${id8()}`, test: id, title: t.title, runner, source, batch, ...(hasSuite ? { suite: o.suite as string } : {}), queuedAt: this.now(), state: "queued", ...(choice ? { runnerReason: choice.reason } : {}) });
     }
+    if (queued.length) {
+      this.machine.enqueue(queued, o.next === true);
+      if (source !== "schedule" && this.machine.paused()) this.machine.setPaused(false);
+      this.changed(["queue"]);
+      void this.pump();
+    }
+    return { batch, queued, skipped, queue: this.queueView() };
   }
 
-  /** Reorder the queue: a queued plan to { to }, 0 for next. */
-  movePlan(id: string, body: unknown): QueueState {
-    const to = isObject(body) ? body.to : undefined;
-    if (!Number.isInteger(to) || (to as number) < 0) throw bad("body must be { to: a position from 0 }");
-    this.queue.move(id, to as number);
+  removeQueued(id: string): QueueState {
+    const item = this.machine.queueItems().find((i) => i.id === id);
+    if (!item) throw notFound(`no queue item ${id}`);
+    if (item.state === "running") throw conflict(`${item.title} is playing; stop its run ${item.runId} instead`);
+    this.machine.removeItem(id);
+    this.changed(["queue"]);
     return this.queueView();
   }
 
   setPaused(body: unknown): QueueState {
-    const paused = isObject(body) ? body.paused : undefined;
-    if (typeof paused !== "boolean") throw bad("body must be { paused: boolean }");
-    this.queue.setPaused(paused);
+    const o = isObject(body) ? body : {};
+    if (typeof o.paused !== "boolean") throw bad("paused is true or false");
+    this.machine.setPaused(o.paused);
+    this.changed(["queue"]);
+    if (!o.paused) void this.pump();
     return this.queueView();
   }
 
-  /** Start one plan item on the editor: its script's card run, or a replay of its last recording. */
-  /** Start a track, scene, slot or arrangement item: compose it from the set as it is now and play it. */
-  private async startSetItem(item: PlanItem, plan: PlanRun): Promise<ItemStart> {
-    const kind = item.check.kind as "track" | "scene" | "slot" | "arrangement";
-    let p;
+  leaseView(): { lease: LeaseView | null } {
+    return { lease: this.lease.get() };
+  }
+
+  /** Give the editor back: stop the hub's run on it and pause the queue. */
+  async release(): Promise<QueueState> {
+    this.machine.setPaused(true);
+    for (const [runId, l] of this.live) if (l.runner.kind === "editor") await this.stopRun(runId, "a person released the editor").catch(() => undefined);
+    this.lease.release();
+    this.changed(["queue"]);
+    return this.queueView();
+  }
+
+  /** The daemon is stopping: stop every run the hub plays and the audition. */
+  async shutdown(): Promise<void> {
+    this.dispose();
+    for (const runId of [...this.live.keys()]) await this.stopRun(runId, "the daemon stopped").catch(() => undefined);
+    if (this.auditionLive()) await this.stopPlay().catch(() => undefined);
+    // A hidden editor the headless runner started closes with the daemon.
+    await this.o.headless?.()?.close?.("the daemon stopped");
+  }
+
+  // ---------- Auditions ----------
+
+  private auditionLive(): boolean {
+    return !!this.audition && !this.audition.last?.state.match(/^(finished|stopped|error)$/);
+  }
+
+  private auditionView(): AuditionState | null {
+    const a = this.audition;
+    if (!a) return null;
+    return a.last ?? { playId: a.playId, test: a.test, from: a.from, loop: a.loop, startedAt: a.startedAt, state: "starting", checks: [] };
+  }
+
+  /**
+   * Play an arrangement or one region on the open editor to watch it: from
+   * the playhead (`from`) and looping when asked, until it ends or
+   * stopPlay. Checks are judged so they show; manual ones are left out.
+   * Nothing goes into the run history.
+   */
+  async play(body: unknown): Promise<{ play: AuditionState }> {
+    const o = isObject(body) ? body : {};
+    if (typeof o.test !== "string" || !o.test) throw bad("test is what to play: <arrangement> or <arrangement>:<region>");
+    const t = this.resolveTest(o.test);
+    if ("missing" in t) throw notFound(t.missing);
+    if (o.from !== undefined && (typeof o.from !== "number" || !Number.isFinite(o.from) || o.from < 0)) throw bad("from is the playhead, a frame of 0 or more");
+    const from = typeof o.from === "number" ? o.from : 0;
+    const loop = o.loop === true;
+    if (this.recording) throw conflict("a recording is under way; stop it first");
+    if (this.auditionLive()) throw conflict(`an audition of ${this.audition!.test} is playing; stop it first`);
+    if ([...this.live.values()].some((l) => l.runner.kind === "editor")) throw conflict("a hub run is playing on the editor; stop it or let it finish first");
+    const busy = this.occupancy(false);
+    if (busy.length) throw conflict(`the editor is in use: ${busy.map((r) => r.text).join("; ")}`);
+    const findings = instanceFindings(t.a, (c) => this.files.get("clip", c)?.value ?? undefined).filter((f) => f.blocks);
+    if (findings.length) throw conflict(`${t.a.title} cannot play: ${findings.map((f) => f.message).join("; ")}`);
+    const playId = `play_${Date.now().toString(36)}_${id8()}`;
+    const audible = audibleTracks(t.a.tracks);
+    const clips: Record<string, Clip> = {};
+    for (const tr of audible) for (const i of tr.instances) {
+      const c = this.files.get("clip", i.clip)?.value;
+      if (c) clips[c.id] = c;
+    }
+    const arrangement: Arrangement = { ...t.a, tracks: audible, checks: t.a.checks.filter((c) => c.mode !== "manual") };
+    this.lease.take({ purpose: `Audition ${t.title}`, item: playId, runId: playId });
     try {
-      p = await this.set.plan(kind, item.check.target, fromOf(plan.scope));
+      const started = await this.editorRunner.play({ runId: playId, arrangement, clips, ...(t.region ? { region: t.region } : {}), ...(from > 0 ? { from } : {}), ...(loop ? { loop } : {}) });
+      if (started.pieStarted) this.lease.update({ pie: true });
     } catch (e) {
-      return { skipped: e instanceof Error ? e.message : String(e) };
+      this.lease.release();
+      throw conflict(`the audition did not start: ${e instanceof Error ? e.message : String(e)}`);
     }
-    const stop = p.composition.findings.find((f) => f.blocks);
-    if (stop) return { error: stop.message };
-    if (!plan.options.attended && p.composition.manual) return { skipped: NEEDS_PERSON };
-    const r = await this.arrangements.start({ kind, goalId: item.check.target, title: p.title, composition: p.composition, tracks: p.tracks, ...(p.from ? { from: p.from } : {}), ...(p.level ? { level: p.level } : {}) });
-    if ("error" in r) return { error: r.error };
-    this.runs.tag(r.run.runId, { source: "plan", planRunId: plan.id });
-    this.saw(r.run);
-    return { runId: r.run.runId, pieStarted: r.run.pieStarted === true };
+    this.audition = { playId, test: o.test, startedAt: this.now(), from, loop, last: null };
+    this.changed(["play"]);
+    return { play: this.auditionView()! };
   }
 
-  private async startItem(item: PlanItem, plan: PlanRun): Promise<ItemStart> {
-    if (item.check.kind !== "script") return this.startSetItem(item, plan);
-    const script = item.check.target;
-    const listed = this.connected() ? await this.o.index.listScripts().catch(() => null) : null;
-    if (listed && !listed.some((s) => s.path === script)) return { skipped: "the clip is not on this checkout" };
-    // A manual step needs someone watching it play. A replay is no way around that: it would copy an old run's verdict.
-    if (!plan.options.attended) {
-      const read = await this.o.broker.readScriptAt(script);
-      if ("error" in read) return { error: `the script could not be read: ${read.error}` };
-      if (needsPerson(read.run.steps)) return { skipped: NEEDS_PERSON };
-    }
-    const tag = { source: "plan" as const, planRunId: plan.id };
-    const src = plan.options.replay ? this.runs.byCheck(checkId(item.check)).find((r) => r.recordingId && r.outcome !== "running" && r.outcome !== "needs_you") : undefined;
-    if (src) {
-      const args = { run_id: src.recordingId ?? src.runId };
-      const r = await (this.o.replay ? this.o.replay(script, args) : this.o.host.callAction("pie", "script_replay", args));
-      const body = answerOf(r);
-      if (!body || typeof body.run_id !== "string") return { error: `the replay did not start: ${failureOf(r) ?? "ue-mcp started no run"}` };
-      this.runs.tag(body.run_id, tag);
-      // pie(script_replay) always starts PIE. A current bridge ends it however the replay ends; an older one only when it finishes, so the hub still ends it after a stop.
-      return { runId: body.run_id, pieStarted: body.pie_started === true };
-    }
-    const r = await this.o.broker.startScript(script, { planRunId: plan.id, title: plan.title });
-    if ("error" in r) return { error: r.error };
-    this.runs.tag(r.run.runId, tag);
-    return { runId: r.run.runId, pieStarted: r.run.pieStarted === true };
+  /** The audition playing, or the last one, read fresh from the editor while it plays. */
+  async readPlay(): Promise<{ play: AuditionState | null }> {
+    await this.pollAudition();
+    return { play: this.auditionView() };
   }
 
-  /** Stop a run the hub started through the broker, so a verdict hold is released with it (and PIE, when the run started it). */
-  private async stopRun(runId: string, reason: string): Promise<void> {
-    const r = this.arrangements.owns(runId) ? await this.arrangements.stop(runId, reason) : await this.o.broker.stopRun(runId, reason);
-    if ("error" in r && !/already|only a run that is going/i.test(r.error)) throw new Error(r.error);
+  /** Stop the audition. */
+  async stopPlay(): Promise<{ play: AuditionState }> {
+    const a = this.audition;
+    if (!a || !this.auditionLive()) throw conflict("no audition is playing");
+    await this.editorRunner.stop(a.playId, "stopped").catch((e: unknown) => this.o.host.log.warn(`hub: audition ${a.playId} did not stop cleanly`, e));
+    await this.pollAudition();
+    if (this.auditionLive()) a.last = { ...this.auditionView()!, state: "stopped" };
+    this.lease.release();
+    this.changed(["play"]);
+    return { play: this.auditionView()! };
   }
 
-  // ── Fix with an agent ─────────────────────────────────────────────
+  private async pollAudition(): Promise<void> {
+    const a = this.audition;
+    if (!a || !this.auditionLive()) return;
+    try {
+      const s = await this.editorRunner.status(a.playId);
+      const next: AuditionState = { playId: a.playId, test: a.test, from: a.from, loop: a.loop, startedAt: a.startedAt, state: s.state, checks: s.checks, ...(s.frame !== undefined ? { frame: s.frame } : {}), ...(s.pass !== undefined ? { pass: s.pass } : {}), ...(s.error ? { error: s.error } : {}) };
+      const was = JSON.stringify(a.last);
+      a.last = next;
+      if (s.pieStarted) this.lease.update({ pie: true });
+      if (!this.auditionLive()) this.lease.release();
+      if (JSON.stringify(next) !== was) this.changed(["play"]);
+    } catch (e) {
+      a.last = { ...this.auditionView()!, state: "error", error: `the audition could not be read: ${e instanceof Error ? e.message : String(e)}` };
+      this.lease.release();
+      this.changed(["play"]);
+    }
+  }
 
-  /**
-   * Fix with an agent (FixRequest): a fix plan in the queue, one item per
-   * failing playtest of a goal or of the project, or for one playtest, each
-   * a fix loop a client runs (HubFixer), one at a time under the editor's
-   * lease like any plan. A playtest already queued for a fix, or whose loop
-   * runs, is left out. Returns how many were queued. Without a fixer there
-   * is no agent to run a loop: 409.
-   */
-  async fix(body: unknown): Promise<{ queued: number; plan: PlanRun | null; placement?: PlanPlacement }> {
-    if (body !== undefined && body !== null && !isObject(body)) throw bad("body must be { goalId?, checkId? }");
-    const goalId = isObject(body) ? body.goalId : undefined;
-    const one = isObject(body) ? body.checkId : undefined;
-    if (goalId !== undefined && typeof goalId !== "string") throw bad("goalId must be a track's id");
-    if (one !== undefined && (typeof one !== "string" || !checkOfId(one))) throw bad("checkId must be a clip's id, script:<asset path>");
-    if (goalId !== undefined && one !== undefined) throw bad("give goalId or checkId, not both");
-    if (!this.o.fixer) throw conflict("no client is connected that can fix clips: a fix loop needs an agent of its own");
-    const refs = typeof one === "string" ? [checkOfId(one)!] : await this.expand(goalId ? { kind: "failing", goalId } : { kind: "failing" });
-    const q = this.queue.state();
-    const queued = new Set([q.current, ...q.queued].filter((p): p is PlanRun => p?.work === "fix").flatMap((p) => p.items.filter((i) => i.state === "queued" || i.state === "running").map((i) => i.check.target)));
-    const running = this.o.fixer.running();
-    const fresh = refs.filter((r) => !queued.has(r.target) && !running.has(r.target));
-    if (fresh.length === 0) return { queued: 0, plan: null };
-    const cat = await this.catalog();
-    const goal = typeof goalId === "string" ? this.goals.get(goalId)?.title : undefined;
-    const plan: PlanRun = {
-      id: newId("plan"),
-      title: typeof one === "string" ? `Fix ${this.nameOf(fresh[0], cat)}` : goal ? `Fix what is failing in ${goal}` : "Fix what is failing",
-      work: "fix",
-      scope: typeof one === "string" ? { kind: "checks", checks: fresh } : goalId ? { kind: "failing", goalId } : { kind: "failing" },
-      options: { ...DEFAULT_PLAN_OPTIONS },
-      state: "queued",
-      items: fresh.map((ref) => ({ check: ref, name: this.nameOf(ref, cat), state: "queued" as const })),
-      trigger: "person",
-      createdAt: new Date(this.now()).toISOString(),
+  /** Read the live runs, start what the queue may start, run due schedules. */
+  async tick(): Promise<void> {
+    if (this.ticking) return;
+    this.ticking = true;
+    try {
+      for (const runId of [...this.live.keys()]) await this.poll(runId);
+      await this.pollAudition();
+      await this.pump();
+      this.runSchedules();
+    } finally {
+      this.ticking = false;
+    }
+  }
+
+  /** Start what the queue may start; one pass at a time, so an item never starts twice. */
+  private pump(): Promise<void> {
+    return (this.pumping ??= this.pumpOnce().finally(() => {
+      this.pumping = null;
+    }));
+  }
+
+  private async pumpOnce(): Promise<void> {
+    if (this.o.enabled && !this.o.enabled()) return;
+    if (this.machine.paused()) return;
+    const busy = new Set([...this.live.values()].map((l) => l.runner.kind));
+    for (const kind of ["editor", "headless"] as const) {
+      if (busy.has(kind)) continue;
+      const item = this.machine.queueItems().find((i) => i.state === "queued" && i.runner === kind);
+      if (!item) continue;
+      if (kind === "editor" && (this.auditionLive() || this.recording || this.occupancy(item.source === "schedule").length)) continue;
+      let runner: HubRunner;
+      try {
+        runner = this.runnerFor(kind);
+      } catch {
+        continue;
+      }
+      if (runner.unavailable()) continue;
+      busy.add(kind);
+      await this.start(item, runner);
+    }
+  }
+
+  private async start(item: QueueItem, runner: HubRunner): Promise<void> {
+    const runId = `run_${Date.now().toString(36)}_${id8()}`;
+    const t = this.resolveTest(item.test);
+    const ws = await (this.o.workspace?.() ?? workspaceNow(this.o.host.projectDir)).catch((): CurrentProvenance => ({ vcs: null, revision: null, dirty: null }));
+    const record: RunRecord = {
+      runId,
+      test: item.test,
+      title: item.title,
+      runner: runner.kind,
+      source: item.source,
+      batch: item.batch,
+      ...(item.suite ? { suite: item.suite } : {}),
+      startedAt: this.now(),
+      endedAt: null,
+      state: "starting",
+      checks: "missing" in t ? [] : testChecks(t.a, t.region).map((c) => ({ id: c.id, status: "pending" as const })),
+      revision: ws.revision,
+      dirty: ws.dirty,
     };
-    this.changed(["attention"]);
-    // A person asked for it: it resumes a paused queue like their Run.
-    const placement = this.queue.add(plan, { person: true });
-    return { queued: fresh.length, plan, placement };
+    this.machine.putRun(record);
+    this.machine.updateItem(item.id, { state: "running", runId });
+    this.live.set(runId, { item: { ...item, state: "running", runId }, runner, polling: false });
+    if ("missing" in t) {
+      this.finish(runId, { state: "error", error: t.missing });
+      return;
+    }
+    if (runner.kind === "editor") this.lease.take({ purpose: `Run ${item.title}`, item: item.id, runId });
+    this.changed(["queue", "runs"], { runId });
+    const audible = audibleTracks(t.a.tracks);
+    const clips: Record<string, Clip> = {};
+    for (const tr of audible) for (const i of tr.instances) {
+      const c = this.files.get("clip", i.clip)?.value;
+      if (c) clips[c.id] = c;
+    }
+    const request: PlayRequest = { runId, arrangement: { ...t.a, tracks: audible }, clips, ...(t.region ? { region: t.region } : {}) };
+    try {
+      const started = await runner.play(request);
+      if (started.pieStarted && runner.kind === "editor") this.lease.update({ pie: true });
+      const r = this.machine.run(runId);
+      if (r && r.state === "starting") this.machine.putRun({ ...r, state: "running" });
+    } catch (e) {
+      this.finish(runId, { state: "error", error: e instanceof Error ? e.message : String(e) });
+    }
+  }
+
+  private async poll(runId: string): Promise<void> {
+    const live = this.live.get(runId);
+    if (!live || live.polling) return;
+    live.polling = true;
+    try {
+      const s = await live.runner.status(runId);
+      const r = this.machine.run(runId);
+      if (!r) return;
+      const had = new Map(r.checks.map((c) => [c.id, c]));
+      const checks: CheckResult[] = r.checks.map((c) => {
+        const got = s.checks.find((x) => x.id === c.id);
+        return got ? { ...got, ...(had.get(c.id)?.verdict ? { verdict: had.get(c.id)!.verdict } : {}) } : c;
+      });
+      if (s.pieStarted && live.runner.kind === "editor") this.lease.update({ pie: true });
+      if (s.state === "finished") return void this.finish(runId, { checks, state: stateFromChecks(checks), frame: s.frame });
+      if (s.state === "stopped" || s.state === "error") return void this.finish(runId, { checks, state: s.state, frame: s.frame, error: s.error ?? (s.state === "stopped" ? "the editor stopped the run" : "the run failed on the editor") });
+      const state = s.state === "awaiting_verdict" ? "awaiting_verdict" : s.state === "starting" ? "starting" : "running";
+      const next = { ...r, checks, state, ...(s.frame !== undefined ? { frame: s.frame } : {}) } as RunRecord;
+      if (JSON.stringify(next) !== JSON.stringify(r)) {
+        this.machine.putRun(next);
+        this.changed(["runs"], { runId });
+      }
+    } catch (e) {
+      this.finish(runId, { state: "error", error: `the run could not be read: ${e instanceof Error ? e.message : String(e)}` });
+    } finally {
+      live.polling = false;
+    }
+  }
+
+  private finish(runId: string, end: Partial<Pick<RunRecord, "checks" | "state" | "frame" | "error">>): RunRecord {
+    const live = this.live.get(runId);
+    this.live.delete(runId);
+    const r = this.machine.run(runId)!;
+    const checks = (end.checks ?? r.checks).map((c) => (c.status === "passed" || c.status === "failed" ? c : { ...c, status: "skipped" as const }));
+    const next: RunRecord = { ...r, ...end, checks, endedAt: this.now() };
+    if (end.state === "passed" || end.state === "failed") next.state = stateFromChecks(checks);
+    this.machine.putRun(next);
+    if (live) this.machine.removeItem(live.item.id);
+    if (live?.runner.kind === "editor") this.lease.release();
+    this.changed(["runs", "queue"], { runId });
+    void this.pump();
+    return next;
+  }
+
+  // ---------- Schedules ----------
+
+  schedules(): readonly Schedule[] {
+    return this.machine.allSchedules();
+  }
+
+  private scheduleOf(body: unknown, had?: Schedule): Schedule {
+    const o = isObject(body) ? body : {};
+    const s: Schedule = had ? { ...had } : { id: `s_${id8()}`, title: "", runner: "editor", days: [1, 2, 3, 4, 5], time: "03:00", enabled: true, lastRunAt: null };
+    if (o.title !== undefined) s.title = String(o.title).trim().slice(0, 200);
+    if (o.suite !== undefined || o.test !== undefined) {
+      delete s.suite;
+      delete s.test;
+      if (typeof o.suite === "string" && o.suite) s.suite = o.suite;
+      if (typeof o.test === "string" && o.test) s.test = o.test;
+    }
+    if (o.runner !== undefined) s.runner = o.runner === "headless" ? "headless" : "editor";
+    if (o.days !== undefined) {
+      if (!Array.isArray(o.days) || !o.days.every((d) => Number.isInteger(d) && d >= 0 && d <= 6) || !o.days.length) throw bad("days is a list of weekdays, 0 Sunday to 6 Saturday");
+      s.days = [...new Set(o.days as number[])].sort();
+    }
+    if (o.time !== undefined) {
+      if (typeof o.time !== "string" || !SCHEDULE_TIME.test(o.time)) throw bad("time is HH:MM, local");
+      s.time = o.time;
+    }
+    if (o.enabled !== undefined) s.enabled = o.enabled === true;
+    if (!!s.suite === !!s.test) throw bad("a schedule runs exactly one of suite and test");
+    if (s.suite && !this.files.exists("suite", s.suite)) throw notFound(`no suite ${s.suite}`);
+    if (s.test && "missing" in this.resolveTest(s.test)) throw notFound((this.resolveTest(s.test) as { missing: string }).missing);
+    if (!s.title) s.title = s.suite ?? s.test!;
+    return s;
+  }
+
+  createSchedule(body: unknown): Schedule {
+    const s = this.scheduleOf(body);
+    this.machine.putSchedule(s);
+    this.changed(["schedules"], { id: s.id });
+    return s;
+  }
+
+  updateSchedule(id: string, body: unknown): Schedule {
+    const had = this.machine.allSchedules().find((s) => s.id === id);
+    if (!had) throw notFound(`no schedule ${id}`);
+    const s = this.scheduleOf(body, had);
+    this.machine.putSchedule(s);
+    this.changed(["schedules"], { id });
+    return s;
+  }
+
+  deleteSchedule(id: string): void {
+    if (!this.machine.deleteSchedule(id)) throw notFound(`no schedule ${id}`);
+    this.changed(["schedules"], { id });
+  }
+
+  private runSchedules(): void {
+    const now = this.o.now?.() ?? new Date();
+    const minute = `${now.getFullYear()}-${now.getMonth()}-${now.getDate()} ${now.getHours()}:${now.getMinutes()}`;
+    if (minute === this.lastScheduleMinute) return;
+    this.lastScheduleMinute = minute;
+    const hhmm = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+    for (const s of this.machine.allSchedules()) {
+      if (!s.enabled || s.time !== hhmm || !s.days.includes(now.getDay())) continue;
+      try {
+        this.enqueue({ ...(s.suite ? { suite: s.suite } : { test: s.test }), runner: s.runner }, "schedule");
+      } catch (e) {
+        this.o.host.log.warn(`hub: schedule ${s.title} could not queue its runs`, e);
+      }
+      this.machine.putSchedule({ ...s, lastRunAt: now.toISOString() });
+      this.changed(["schedules"], { id: s.id });
+    }
+  }
+
+  // ---------- Performers and recording ----------
+
+  /** What a track can drive: the editor's player and the first remote clients. */
+  performers(): PerformersView {
+    return {
+      performers: [0, 1, 2, 3].map((client) => {
+        const performer: Performer = { kind: "player", client };
+        return { performer, label: performerLabel(performer) };
+      }),
+    };
   }
 
   /**
-   * Start one fix item: the client's loop for the script (HubFixer.start).
-   * The item follows the loop until it passes, stops for the person, or ends.
+   * Start recording a performance into a clip: the pie action clip_record_start with the
+   * performer, and for a punch-in the clip and the frames to replace.
    */
-  private async startFix(item: PlanItem, plan: PlanRun): Promise<ItemStart> {
-    if (!this.o.fixer) return { error: "no client is connected that can fix clips" };
-    return this.o.fixer.start(item, plan);
+  async recordStart(body: unknown): Promise<{ recording: true }> {
+    const o = isObject(body) ? body : {};
+    if (this.recording) throw conflict("a recording is already under way; stop it first");
+    const performer = o.performer === undefined ? DEFAULT_PERFORMER : performerOf(o.performer);
+    if (!performer) throw bad(performerProblem(o.performer));
+    if (performer.client !== 0) throw bad("a recording reads the editor's own player (client 0); record a remote client from its own editor");
+    if (this.auditionLive()) throw conflict(`an audition of ${this.audition!.test} is playing; stop it first`);
+    if ([...this.live.values()].some((l) => l.runner.kind === "editor")) throw conflict("a hub run is playing on the editor; stop it or let it finish first");
+    const args: Record<string, unknown> = { performer };
+    const state: RecordingState = { performer, startedAt: "" };
+    if (typeof o.clip === "string") {
+      const clip = this.clip(o.clip);
+      const from = typeof o.from === "number" ? o.from : 0;
+      const to = typeof o.to === "number" ? o.to : clip.length;
+      if (from < 0 || to <= from) throw bad("a punch-in records from `from` to a later `to`, in the clip's frames");
+      args.punch = { clip, from, to };
+      args.rate = clip.rate;
+      Object.assign(state, { clip: o.clip, from, to, rate: clip.rate });
+    } else if (typeof o.rate === "number") {
+      args.rate = o.rate;
+      state.rate = o.rate;
+    }
+    for (const k of ["arrangement", "track"] as const) if (typeof o[k] === "string" && o[k]) state[k] = o[k];
+    for (const k of ["at", "seconds"] as const) if (typeof o[k] === "number" && Number.isFinite(o[k]) && o[k] >= 0) state[k] = o[k];
+    const r = await this.o.host.callAction("pie", "clip_record_start", args);
+    const failed = failureOf(r);
+    if (failed) throw conflict(`the recording did not start: ${failed}`);
+    this.recording = { ...state, startedAt: this.now() };
+    this.changed(["recording"]);
+    return { recording: true };
   }
 
-  /** Stop a fix item's loop: its running attempt stops, and is checkpointed so it can be reverted. */
-  private stopFix(item: PlanItem): void {
-    const error = this.o.fixer?.stop(item);
-    if (error) this.note(`the fix loop for ${item.name} could not be stopped: ${error}`);
+  /** The recording under way, kept here so a client that reloads mid-take can read it back. */
+  readRecording(): { recording: RecordingState | null } {
+    return { recording: this.recording };
   }
-}
 
-/** A page size from a query: a whole number up to MAX_PAGE, else the default. */
-function limitOf(v: unknown, fallback: number): number {
-  const n = Number(v);
-  return Number.isInteger(n) && n > 0 ? Math.min(MAX_PAGE, n) : fallback;
-}
+  /** Stop recording and save the take: into the punched clip, or as a new clip (id or title from the body). */
+  async recordStop(body: unknown): Promise<Clip> {
+    const o = isObject(body) ? body : {};
+    const rec = this.recording;
+    if (!rec) throw conflict("nothing is recording; start a recording first");
+    this.recording = null;
+    this.changed(["recording"]);
+    const r = await this.o.host.callAction("pie", "clip_record_stop", {});
+    const failed = failureOf(r);
+    const answer = answerOf(r);
+    if (failed || !answer || !isObject(answer.clip)) throw conflict(`the take could not be read: ${failed ?? "the editor answered no clip"}`);
+    const id = rec.clip ?? this.newId("clip", { ...(typeof o.id === "string" ? { id: o.id } : {}), title: typeof o.title === "string" ? o.title : "Take" });
+    const had = rec.clip ? this.clip(rec.clip) : null;
+    const title = typeof o.title === "string" && o.title.trim() ? o.title : had?.title ?? "Take";
+    return this.putClip(id, { ...answer.clip, performer: rec.performer.kind, title, ...(had?.description ? { description: had.description } : {}) });
+  }
 
-/** What the /playtest flow is told for Write playtests: the goal's words and the playtests it already has, by name. */
-export function playtestBrief(goal: Goal, metas: ReadonlyMap<string, CheckMeta> = new Map()): string {
-  const have = goal.checks.map((c) => metas.get(checkId(c))?.title ?? leafName(c.target));
-  return [
-    `Write a clip (a PIE test script) for the track "${goal.title}".`,
-    goal.description ? `What the track means: ${goal.description}` : "",
-    have.length ? `It already has these clips: ${have.join(", ")}. Check something they do not.` : "",
-  ].filter(Boolean).join("\n\n");
+  // ---------- Overview ----------
+
+  overview(): HubOverview {
+    const clips = this.files.list("clip");
+    const arrangements = this.files.list("arrangement");
+    const suites = this.files.list("suite");
+    return {
+      clips: this.clips(),
+      arrangements: this.arrangements(),
+      suites: this.suites(),
+      tests: this.tests(),
+      queue: this.queueView(),
+      lease: this.lease.get(),
+      recent: this.machine.allRuns().slice(0, 20),
+      schedules: [...this.machine.allSchedules()],
+      problems: [...clips.problems, ...arrangements.problems, ...suites.problems],
+    };
+  }
 }

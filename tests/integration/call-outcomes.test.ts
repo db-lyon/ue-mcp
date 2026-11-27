@@ -118,7 +118,7 @@ async function categoryMatrix(call: Caller): Promise<Record<string, unknown>> {
   out.invalidParams = record(await call("level", "get_outliner", { limit: "many" }));
   out.undeclaredKey = record(await call("level", "get_outliner", { notAParam: 1 }));
   out.disabled = record(await call("foliage", "list_types"));
-  out.playtest = record(await call("pie", "script_run", { script: "Smoke" }));
+  out.playtest = record(await call("pie", "arrangement_play", { runId: "smoke", arrangement: { id: "smoke", rate: 60, tracks: [], checks: [], regions: [] }, clips: {} }));
   out.staleEditor = record(await call("level", "get_outliner", { editor: "Nowhere" }));
   dialogUp = true;
   try {

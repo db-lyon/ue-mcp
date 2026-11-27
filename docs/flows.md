@@ -50,7 +50,7 @@ The response carries a `summary` line per step, a `steps` array with what each s
 
 ## Tasks
 
-Every action is a task named `<category>.<action>`: `level.place_actor`, `asset.list`, `project.build`. There are <!-- count:actions -->3759+<!-- /count --> across <!-- count:tools -->32<!-- /count --> categories. A few more are built in:
+Every action is a task named `<category>.<action>`: `level.place_actor`, `asset.list`, `project.build`. There are <!-- count:actions -->3751+<!-- /count --> across <!-- count:tools -->32<!-- /count --> categories. A few more are built in:
 
 | Task | What it does |
 |------|--------------|
@@ -435,38 +435,12 @@ Each event is one JSON object per `data:` line:
 | `beacon` | 56 | Builds a shrine scene from individual actions: level, four materials, geometry, lights and camera, under `/Game/Flows/Beacon`. A reference for a long flow. |
 | `neon_shrine` | 19 | The [Neon Shrine demo](neon-shrine-demo.md), one `demo(action="step", stepIndex=N)` per step. Leaves the editor on `/Game/Demo/DemoLevel`. |
 | `neon_shrine_cleanup` | 1 | Removes the Neon Shrine content and switches the editor to `/Game/MCP_Home`. |
-| `playtest` | 8 | Drafts a PIE test script for a target with a model and saves it once the editor accepts it. See [Playtest](#playtest). |
 
 A flow of the same name in your `ue-mcp.yml` overrides a built-in one.
 
 ### Beacon
 
 `beacon` is the long-form example: 56 steps, each one action. Steps 1 to 4 create the level and atmosphere, 5 to 28 author `M_Floor`, `M_Pillar`, `M_Pedestal` and the parameterized emissive `M_Glow`, 29 to 36 place the floor, pedestal, orb and five pillars, 37 to 55 add the sun, pillar lights, spotlight and fill lights, and 56 frames the viewport. Material steps address created nodes with references such as `${steps.10.expressionIndex}`. `flow(action="plan", flowName="beacon")` lists every step.
-
-### Playtest
-
-Drafts a [test script](pie-scripts.md) for a target:
-
-```
-flow(action="run", flowName="playtest", params={ "target": "/Game/Hero/BP_Hero", "context": "the jump lands on the ledge" })
-```
-
-| Param | |
-|---|---|
-| `target` | Required. An asset or class path, or a description matched against the project's Blueprints. |
-| `context` | What to test. |
-| `profile` | The `pie(script_values)` profile whose values the script may watch. |
-| `name`, `package_path` | Where the script is saved. Default `TS_Playtest_<target>` under `/Game/PIEStudio/Scripts`. |
-
-| Step | Task | |
-|---|---|---|
-| 1 | `playtest.gather` | Reads the target Blueprint, the project's input mapping contexts, and `pie(script_values)`. |
-| 2 | `playtest.draft` | An [agent step](#agent-steps) that answers in the script step schema. |
-| 3 | `playtest.check` | `pie(script_validate)` on the draft. A refusal's errors become the next prompt. |
-| 4 to 7 | `playtest.draft`, `playtest.check` | Two more rounds, each only when the last draft was refused. |
-| 8 | `playtest.save` | `pie(script_create)` with the draft that passed. |
-
-When the third draft is refused, the flow fails with its errors and nothing is saved.
 
 ## Agent steps
 

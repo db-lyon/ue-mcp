@@ -11,7 +11,6 @@ import { ShellTask, type OptionSpecs, type TaskConstructor, type TaskRegistry } 
 import { BridgeTask } from "./bridge-task.js";
 import { editorOperationTask } from "./editor-op-task.js";
 import { AGENT_BUILTIN_TASKS } from "./agent-step.js";
-import { PLAYTEST_BUILTIN_TASKS, playtestFlow } from "./playtest/index.js";
 
 /** One built-in task class. */
 export interface BuiltinTask {
@@ -40,7 +39,6 @@ export const BUILTIN_TASKS: readonly BuiltinTask[] = [
   { name: "editor.restart", task: editorOperationTask("restart") },
   { name: "editor.rebuild", task: editorOperationTask("rebuild") },
   ...AGENT_BUILTIN_TASKS,
-  ...PLAYTEST_BUILTIN_TASKS,
 ];
 
 export function registerBuiltinTasks(registry: TaskRegistry): void {
@@ -64,5 +62,5 @@ const FLOW_DATA = createRequire(import.meta.url)("./builtin-flows.json") as Reco
 
 /** Built-in flows that ship with ue-mcp. */
 export function builtinFlows(): Record<string, unknown> {
-  return { ...structuredClone(FLOW_DATA), ...playtestFlow() };
+  return structuredClone(FLOW_DATA);
 }

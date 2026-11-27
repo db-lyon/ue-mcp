@@ -37,6 +37,8 @@ export interface LiveServerOptions {
   host?: string;
   /** Extra environment for the server process. */
   env?: Record<string, string>;
+  /** Run through the stdio shim and a daemon of the sandbox's own, which a case about the daemon's services needs. */
+  daemon?: boolean;
 }
 
 /** One running server plus the client attached to it. */
@@ -78,7 +80,7 @@ export class LiveServer {
     env.UE_MCP_CONTEXT_STRATEGY = "full";
     // In process by default; UE_MCP_LIVE_VIA_DAEMON=1 runs every case through
     // the stdio shim and a per-sandbox daemon instead.
-    if (process.env.UE_MCP_LIVE_VIA_DAEMON === "1") {
+    if (options.daemon || process.env.UE_MCP_LIVE_VIA_DAEMON === "1") {
       env.UE_MCP_SERVER_MODE = "daemon";
       env.UE_MCP_DAEMON_DIR = path.join(sandbox, "daemons");
     } else {

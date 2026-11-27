@@ -36,7 +36,7 @@ export type FeedbackMode = (typeof FEEDBACK_MODES)[number];
  */
 export type DialogMode = (typeof DIALOG_MODES)[number];
 
-/** Who starts playtest runs (pie script_run and script_replay); playtest-mode.ts enforces manual. */
+/** Who starts playtest runs (pie arrangement_play and clip_record_start); playtest-mode.ts enforces manual. */
 export type PlaytestMode = (typeof PLAYTEST_MODES)[number];
 
 /** The words that clear a mode, in every mode's CLI. The first is the one help shows. */
@@ -167,9 +167,9 @@ export const PLAYTEST_MODE = defineScopedMode<PlaytestMode>({
   values: PLAYTEST_MODES,
   cli: {
     title: "Playtest mode",
-    summary: "Who starts playtest runs (pie script_run and script_replay).",
+    summary: "Who starts playtest runs (pie arrangement_play and clip_record_start).",
     describe: {
-      manual: "a person starts playtests; an MCP agent's script_run and script_replay are refused",
+      manual: "a person starts playtests; an MCP agent's arrangement_play and clip_record_start are refused",
       automatic: "an agent may start them",
     },
     unsetEffective: "not set (each client decides)",

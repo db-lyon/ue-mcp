@@ -53,6 +53,7 @@ export const CLI_COMMANDS: readonly CliCommand[] = [
   { name: "build", summary: "Build a project's editor target", load: () => import("./build-cli.js") },
   { name: "editor", summary: "Read, approve or deny requests to stop, restart or rebuild a shared editor", load: () => import("./editor-cli.js") },
   { name: "flow", summary: "List, plan or run a project's flows", load: () => import("./flow-cli.js") },
+  { name: "hub", summary: "Run a Playtest Hub test or suite and wait for it (--headless, --report)", load: () => import("./hub-cli.js") },
   { name: "plugin", summary: "Install, create and publish plugins", load: () => import("./plugin-cli.js") },
   { name: "context", summary: "Read or set the context strategy", load: () => import("./context-cli.js"), ownHelp: true },
   { name: "tools", summary: "List, enable or disable categories and Unreal toolsets", load: () => import("./tools-cli.js") },

@@ -206,18 +206,6 @@ describe("flow inputs", () => {
 describe("flow inputs of the shipped flows", () => {
   const defaults = buildDefaults(ALL_TOOLS);
 
-  it("playtest takes a target and the optional context, profile, name and package_path", async () => {
-    const cfg = FlowConfigSchema.parse(defaults);
-    const inputs = await inputsOf(cfg, "playtest", ALL_TOOLS);
-    expect(inputs.map((i) => [i.name, i.type, i.required, i.steps.map((s) => s.path)])).toEqual([
-      ["target", "string", true, ["1"]],
-      ["context", "string", false, ["1"]],
-      ["profile", "string", false, ["1"]],
-      ["name", "string", false, ["1"]],
-      ["package_path", "string", false, ["8"]],
-    ]);
-  });
-
   it("every built-in flow derives without a conflict or a routing parameter", async () => {
     const cfg = FlowConfigSchema.parse(defaults);
     for (const flowName of Object.keys(cfg.flows)) {

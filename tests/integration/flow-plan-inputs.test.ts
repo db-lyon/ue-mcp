@@ -80,15 +80,15 @@ describe("flow plan inputs over the daemon", () => {
 
   it("derives a built-in flow's inputs", async () => {
     covers("flow.plan.inputs");
-    const plan = await call(d, "GET", "/v1/flows/playtest/plan");
+    const plan = await call(d, "GET", "/v1/flows/niagara_fire/plan");
     expect(plan.status, plan.text).toBe(200);
     const inputs = plan.body.inputs as Input[];
     expect(inputs.map((i) => [i.name, i.required])).toEqual([
-      ["target", true],
-      ["context", false],
-      ["profile", false],
-      ["name", false],
-      ["package_path", false],
+      ["inherit", false],
+      ["onConflict", false],
+      ["templatePath", false],
+      ["emitterIndex", false],
+      ["emitterName", false],
     ]);
   });
 });

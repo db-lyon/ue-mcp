@@ -7,6 +7,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { covers } from "../helpers/covers.js";
+import { DAEMON_API_VERSION } from "../../src/contract/daemon.js";
 import { PACKAGE_VERSION, plain, runCli, Sandbox } from "./harness.js";
 
 let sb: Sandbox;
@@ -44,7 +45,7 @@ beforeAll(async () => {
   const live = await runCli(sb, ["projects", "--json"], { env });
   const foundKey = (JSON.parse(live.stdout).projects as Array<{ key: string; name: string }>).find((p) => p.name === "Found")!.key;
   fs.writeFileSync(path.join(daemons, `${foundKey}.json`), JSON.stringify({
-    pid: process.pid, port: 1, token: "f".repeat(64), version: PACKAGE_VERSION, apiVersion: 1,
+    pid: process.pid, port: 1, token: "f".repeat(64), version: PACKAGE_VERSION, apiVersion: DAEMON_API_VERSION,
     projectRoot: path.dirname(found).replace(/\\/g, "/").toLowerCase(), startedAt: "2026-11-08T00:00:00.000Z",
   }));
 });

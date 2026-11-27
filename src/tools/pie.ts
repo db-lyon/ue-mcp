@@ -2,15 +2,12 @@
 import type { ToolDef } from "../surface/tool-types.js";
 import { categoryTool } from "../surface/category-tool.js";
 import { specBp, schema as specSchema } from "./specs/pie.generated.js";
-import { scriptRunFollowUp, scriptStatusFollowUp } from "../pie/script-watch.js";
 import { driveFollowUp } from "../pie/drive-wait.js";
-import { clipRunFollowUp } from "../pie/clip-watch.js";
-import { clipListFollowUp, clipRuns } from "../pie/clip-runs.js";
 import { boundedRequestIds } from "../pie/remote-ids.js";
 
 export const pieTool: ToolDef = categoryTool(
   "pie",
-  "PIE testing: record, replay and observe Play-In-Editor sessions, diff runs, inject input, drive remote players, and run test scripts with auto and manual steps. Starting PIE itself is editor(play_in_editor).",
+  "PIE testing: record, replay and observe Play-In-Editor sessions, diff runs, inject input, drive remote players, and play Playtest Hub arrangements. Starting PIE itself is editor(play_in_editor).",
   {
     view_trace: specBp("read", "Trace the live PIE player viewpoint. Returns viewLocation, viewRotation, viewDirection and line; sweepRadius also returns a sphere sweep. Each hit includes component collision state, channel response, blocksVisibility and owner label/class. Ignores the viewing pawn by default; requires running PIE.", "pie_view_trace"),
     inject_input:         specBp("mutate", "Inject one frame of an Enhanced Input action into a PIE player. client 1..N relays to a remote player.", "pie_inject_input"),
@@ -27,7 +24,7 @@ export const pieTool: ToolDef = categoryTool(
     stream_start:         specBp("mutate", "Stream PIE (default), the active level viewport or the whole editor live over Pixel Streaming 2: the editor's streamer connects to signallingUrl as streamerId and sends each viewer that joins there a WebRTC offer, so a browser or phone watches and plays with peer-to-peer video. Needs the PixelStreaming2 plugin enabled and an editor that renders (window offscreen is fine, -nullrhi is not). signallingUrl is passed through exactly as given. With source pie the streamer is connected only while PIE runs: with no PIE running it returns armed: true and streaming: false, then connects when PIE starts and disconnects when it ends, every session until stream_stop. A second call replaces the running stream. Rolls back with stream_stop.", "pie_stream_start"),
     stream_stop:          specBp("mutate", "Stop the stream and disarm it; alreadyStopped when nothing was streaming. Rolls back with stream_start and the stopped stream's settings.", "pie_stream_stop"),
     stream_status:        specBp("read", "Whether streaming is available (pluginEnabled, available), and the running stream: streaming, armed, signallingConnected, connectedPeers and peerIds, with the streamerId, signallingUrl, source, codec, fps and resolution it was started with.", "pie_stream_status"),
-    clients:              specBp("read", "List a networked PIE session's players: client 0 is the editor's own player, 1..N remote players in join order with ready and log_file. pie_worlds lists each PIE world's pie_instance, net_mode and local players, the numbers script_run and inject_input take as pie_instance and client_id.", "pie_clients"),
+    clients:              specBp("read", "List a networked PIE session's players: client 0 is the editor's own player, 1..N remote players in join order with ready and log_file. pie_worlds lists each PIE world's pie_instance, net_mode and local players, the numbers inject_input takes as pie_instance and client_id.", "pie_clients"),
     send_key:             specBp("mutate", "Send a key (an FKey name such as Right, Enter, Tab, Gamepad_DPad_Down) or typed text through Slate to one PIE player's UI, as that player's Slate user. This is the path that moves focus and presses buttons in a menu in UI-only input mode, which inject_input never reaches. event is press (default, down then up), down or up. pie_instance and client_id pick the player as inject_input takes them; omitted, the editor's own player. Returns the key's down and up handled flags and the focus before and after, with the UMG widget name. Every PIE window in one process shares one Slate user, so focus the target client's widget with widget(set_runtime_focus, pieInstance) first.", "pie_send_key"),
     console:              specBp("mutate", "Run a console command in a remote player's own process (client 1..N). The editor's own PIE player is editor(execute_command, world=\"pie\").", "pie_console"),
     remote_result:        boundedRequestIds(specBp("read", "Whether a request relayed to a remote player ran: reported, ok, finished, error.", "pie_remote_result")),
@@ -72,65 +69,15 @@ export const pieTool: ToolDef = categoryTool(
     session_errors:       specBp("read", "Deduped errors and warnings logged during a PIE session, with Blueprint exceptions.", "pie_session_errors"),
     session_log:          specBp("read", "Paged Output Log lines captured during a PIE session, with filters.", "pie_session_log"),
     perf_summary:         specBp("read", "A recording's frametime avg/p50/p99/max, game/render/gpu ms, peak memory and worst hitches.", "pie_perf_summary"),
-    script_create:        specBp("mutate", "Create a test script asset: steps of {instruction, judge auto|manual, arrange, act, expect {value, op decreasing|increasing|eq|gt|lt|visible|exists|triggered, target, within_ms, client}}. arrange takes a scenario's spawn|set|call entries and act takes uat_run's step actions (place, press, inject, hold, tape, console, capture, key, wait_ms); they run in that order before the expect window, which counts from the end of act. op triggered waits for the person playing to fire the Input Action value names (e.g. /Game/Input/IA_Interact) on player client (0 or absent the editor's own player, 1..N a remote player): only a fresh trigger after act ends counts, not input still held when the window opens, the evidence records triggered_at_ms and action_value, and within_ms 0 or absent waits with no timeout until it fires or script_stop. Always saves, returning what the check finds as warnings [{step, field, message, candidates}]: an expect.value the level, player pawn and profile do not resolve, an op or target the value's type cannot meet, an actor, actor class or Input Action arrange, act or a triggered expect name that does not exist, or no auto step without manual_only=true. resolve_in_pie=true on a step defers a value that only exists in PIE. Refused (INVALID_SCRIPT_STEPS, errors in the same shape) only when the script cannot be written: no steps, a step that does not parse, or a map (e.g. /Game/Maps/L_Arena) that is not a level.", "pie_script_create"),
-    script_read:          specBp("read", "Read a test script.", "pie_script_read"),
-    script_update:        specBp("mutate", "Update a test script; steps given replace the stored ones. Checks the result like script_create when steps, profile, map or manual_only change, and saves with its findings as warnings; refuses only what cannot be written.", "pie_script_update"),
-    script_validate:      specBp("read", "Check steps the way script_create does without saving anything: valid, and errors [{step, field, message, candidates}] for every finding script_create would return as a warning or refuse.", "pie_script_validate"),
-    script_values:        specBp("read", "What a script can name in the open level: the player pawn's readable value paths with kind and type, pawn_channels read off the sampled pawn with no profile (pos_x, vel_z, rot_yaw, speed2d, ...), level actors, classes the game mode spawns, Widget Blueprints and the profile's tracked values. target adds which actors are of that class and whether it is the player pawn.", "pie_script_values"),
-    script_delete:        { ...specBp("mutate", "Delete a test script (confirm=true).", "pie_script_delete"), destructive: true },
-    script_list:          specBp("read", "List test scripts, each with map and last_run: its newest run's run_id, state, started_at, ended_at, summary and results_path, or null.", "pie_script_list"),
-    script_run: {
-      ...specBp("mutate", "Run a test script in PIE: opens the script's map first when another level is open, refusing when that level has unsaved changes or PIE is running elsewhere; arms the observer and, unless record=false, the recorder; mode=manual instead starts no PIE, observer or recording, leaves auto steps unchecked and puts every manual step up for its verdict at once; evaluates auto steps live and marks each pass or fail; waits on manual steps for verdicts, asked through an elicitation form when the client supports one, otherwise through verdict. Writes results.json beside the observation. wait=true returns once the run finishes.", "pie_script_run"),
-      followUp: scriptRunFollowUp,
-    },
-    script_status: {
-      ...specBp("read", "A script run's state, steps and events since since_seq. wait=true blocks until it finishes or needs a verdict.", "pie_script_status"),
-      followUp: scriptStatusFollowUp,
-    },
-    script_stop:          specBp("mutate", "End a script run now; unsettled steps stay pending and results.json is written.", "pie_script_stop"),
-    verdict:              specBp("mutate", "Record a manual step's verdict: pass, fail or skip, with a note. source=agent marks the calling agent's own judgement and needs evidence {note, captures?}; a step with agent_judgeable=false takes only a person's verdict.", "pie_script_verdict"),
-    script_results:       specBp("read", "Read a finished run's results.json.", "pie_script_results"),
-    script_runs:          specBp("read", "List script runs newest first, the active one included: run_id, script, started_at, ended_at, state, summary, per-step results and results_path. script narrows to one script's runs.", "pie_script_runs"),
-    script_replay: {
-      ...specBp("mutate", "Replay a finished run's recording in the level it ran in and re-evaluate its auto steps at their recorded offsets; a triggered step re-anchors the windows after it to the replayed trigger. Manual steps keep their verdicts. Reports regressions.", "pie_script_replay"),
-      followUp: scriptRunFollowUp,
-    },
-    clip_create:          specBp("mutate", "Create a timeline clip: a timeline on game time of input lanes (tracks in the JSON, one per Input Action: notes for a bool action, curve keys for an axis, holding the raw value before the action's own modifiers and triggers), lanes that drive a performer (the run's own player, a remote client, or any level actor by label, name or path): move lanes (points the actor walks to through its controller), action lanes (function calls at a frame) and value lanes (a property or bb:<Key> blackboard value over time), events (act or arrange entries at a frame), check notes (by_end, throughout or hold, or manual with PIE paused) and regions. Give it as clip (JSON) or text (the compact form clip_read returns). Times are frames at the clip's rate. Refused (INVALID_CLIP) only when it cannot be saved; every other finding comes back as warnings [{id, field, message, candidates}].", "pie_clip_create"),
-    clip_read:            specBp("read", "Read a timeline clip as JSON and in its compact text form, with counts.", "pie_clip_read"),
-    clip_update:          specBp("mutate", "Replace a timeline clip with the clip or text given; its takes history is kept.", "pie_clip_update"),
-    clip_edit:            specBp("mutate", "Edit a timeline clip note by note, all or none: add, move, trim, set, delete and quantize notes, keys, checks, events, regions, Input Action lanes (kind track), move, action and value lanes (kind lane) and their points, calls and keys, by id. Times snap to the clip's grid. Returns the ids changed, the clip and warnings; a refused edit says why with candidates and changes nothing.", "pie_clip_edit"),
-    clip_validate:        specBp("read", "Check a clip without saving: every structural problem and every action, value, actor or class it names that does not resolve, each with candidates.", "pie_clip_validate"),
-    clip_list: {
-      ...specBp("read", "List timeline clips with their maps, and each clip's newest run as last_run (run_id, state, passed, summary, started_at, ended_at).", "pie_clip_list"),
-      followUp: clipListFollowUp,
-    },
-    clip_runs: {
-      kind: "handler",
-      effect: "read",
-      offline: "Reads the clip_results.json files runs left in the project's Saved/MCPObservations.",
-      params: { optional: ["path", "limit"], notes: { path: "only this clip's runs", limit: "most runs, newest first (default 50)" } },
-      description: "Run history of timeline clips, newest first, from the clip_results.json each run writes: run_id, clip, mode (play or record), state, passed, stop_reason, region, started_at, ended_at, summary, drift, each check's status and frames, and each region's status and drift.",
-      handler: async (ctx, p) => clipRuns(ctx, p),
-    },
-    clip_delete:          { ...specBp("mutate", "Delete a timeline clip (confirm=true).", "pie_clip_delete"), destructive: true },
-    clip_run: {
-      ...specBp("mutate", "Play a timeline clip in PIE on game time, at a fixed 1/rate timestep by default: feeds each input lane's raw value to its Input Action before the actors tick, hands each move, action and value lane to the driver of the performer it drives (reported per lane with what it fired and what failed), fires events, judges check notes (a hold check stops the timeline until true or its timeout; a manual check pauses PIE for clip_verdict) and reports per check and per region, with pawn drift against the clip's reference take. region judges one region, still playing from frame 0. wait=true answers once it finishes or awaits a verdict.", "pie_clip_run"),
-      followUp: clipRunFollowUp,
-    },
-    clip_record: {
-      ...specBp("mutate", "Record a person's input into a timeline clip: starts PIE, plays the clip up to the punch-in (a region's start, or a hold check) with their input locked out, then records the armed lanes from what they play until the region ends or clip_record_stop. An armed move, action or value lane (by lane id) records what its actor actually did: where it walked, the calls it took and the value it held. The take replaces those lanes over the range and keeps what they held as history.", "pie_clip_record"),
-      followUp: clipRunFollowUp,
-    },
-    clip_record_stop:     specBp("mutate", "End the recording in flight at the current frame and save the take into the clip.", "pie_clip_record_stop"),
-    clip_status: {
-      ...specBp("read", "A clip run's state, position, checks, regions with drift, events fired and, for a recording, the take. wait=true blocks until it finishes or awaits a verdict.", "pie_clip_status"),
-      followUp: clipRunFollowUp,
-    },
-    clip_stop:            specBp("mutate", "End the clip run in flight; unsettled checks fail and clip_results.json is written.", "pie_clip_stop"),
-    clip_verdict:         specBp("mutate", "Answer a manual check a clip run is paused on: pass, fail or skip, with a note. source=agent needs evidence {note, captures?}.", "pie_clip_verdict"),
+    arrangement_play:     specBp("mutate", "Play a Playtest Hub arrangement, or one region of it, in one PIE session: the hub hands over the arrangement with every clip its tracks place. Loads its level, starts PIE (pieStarted), and feeds each track's Input Action lanes to its player (the editor's own or a remote client). Judges the Checks track: by_end, throughout, hold (playback stands until true or its timeout) and manual (PIE pauses for arrangement_verdict). A region plays from frame 0 to its end and judges the checks that start inside it. from starts at the playhead, skipping checks before it; loop goes back to the loop start (from, else the region's start, else 0) at the end until arrangement_stop, reporting pass. Ends the PIE session it started when it finishes. The hub's own tools queue and record runs; this is what they call.", "pie_arrangement_play"),
+    arrangement_status:   specBp("read", "A play's state (starting, running, awaiting_verdict, finished, stopped or error), frame, each check's status, frame and message, and pieStarted.", "pie_arrangement_status"),
+    arrangement_stop:     specBp("mutate", "End a play now: unsettled checks fail, pending ones are skipped, and the PIE session it started ends.", "pie_arrangement_stop"),
+    arrangement_verdict:  specBp("mutate", "Answer a manual check a play is paused on: pass or fail, with a note. PIE resumes once no check waits.", "pie_arrangement_verdict"),
+    clip_record_start:    specBp("mutate", "Record a performance into a clip: starts PIE and records the editor's player's Input Actions. With punch it plays the clip from frame 0 with the person's input locked out and records from `from` to `to`, replacing that range.", "pie_clip_record_start"),
+    clip_record_stop:     specBp("mutate", "End the recording and answer the clip {rate, length, input} with the take merged in. Nothing is saved; the hub saves it.", "pie_clip_record_stop"),
   },
   {
     // #1057: every key the pie handlers declare, generated from their C++ registrations.
     ...specSchema,
-  }, { label: { text: "pie testing", description: "record, replay and diff PIE sessions, input injection, test scripts", keywords: ["play in editor"] } },
+  }, { label: { text: "pie testing", description: "record, replay and diff PIE sessions, input injection, Playtest Hub arrangements", keywords: ["play in editor"] } },
 );

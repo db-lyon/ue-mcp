@@ -29,12 +29,6 @@ export class HubHolder {
     return (this.current ??= this.build(() => this.merged())).hub;
   }
 
-  /** The daemon's own default broker, whose runs a hold can act on. */
-  daemon(): DaemonHub {
-    this.get();
-    return this.current!;
-  }
-
   /** A client brings its own pieces. Returns the function that takes them back. */
   configure(options: HubClientOptions): () => void {
     const mine = { ...options };

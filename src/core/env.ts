@@ -133,6 +133,8 @@ export const ENV_VARS = {
   npmRegistry: "UE_MCP_NPM_REGISTRY",
   /** `1` skips the npm registry check for a newer release. */
   disableUpdateCheck: "UE_MCP_DISABLE_UPDATE_CHECK",
+  /** `0` turns off the Playtest Hub's own headless runner, so every run plays on the open editor. */
+  hubHeadless: "UE_MCP_HUB_HEADLESS",
   /** Path of the cached update-check result. */
   versionCache: "UE_MCP_VERSION_CACHE",
 

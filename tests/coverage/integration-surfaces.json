@@ -122,6 +122,11 @@
       "summary": "ue-mcp build runs the engine's build script for the project's editor target and reports its exit"
     },
     {
+      "id": "cli.hub",
+      "group": "cli",
+      "summary": "ue-mcp hub run <test|suite> queues the runs through the project's daemon, on a hidden editor with --headless or the open one with --editor, waits for them, writes a JSON report and exits 0 only when every run passed"
+    },
+    {
       "id": "cli.editor",
       "group": "cli",
       "summary": "ue-mcp editor requests lists the daemon's requests to stop, restart or rebuild the editor with every session's answer, and approve or deny decides one as a person"
@@ -597,11 +602,6 @@
       "summary": "flow(run) runs a built-in flow against an editor"
     },
     {
-      "id": "flow.playtest",
-      "group": "flow",
-      "summary": "flow(run, playtest) drafts a test script with the flow model, checks it with pie(script_validate), returns refusals to the model and saves it with pie(script_create)"
-    },
-    {
       "id": "flow.agent.env-model",
       "group": "flow",
       "summary": "a flow agent step with no registered provider runs on ANTHROPIC_API_KEY"
@@ -680,16 +680,6 @@
       "id": "daemon.native-dialogs",
       "group": "daemon",
       "summary": "the daemon reports native Win32 dialogs of the editor process on /v1/events and GET /v1/dialogs/native, and POST /v1/dialogs/native/press presses one by window handle"
-    },
-    {
-      "id": "daemon.script-events",
-      "group": "daemon",
-      "summary": "the daemon streams PIE test script step events on /v1/events"
-    },
-    {
-      "id": "daemon.clip-events",
-      "group": "daemon",
-      "summary": "the daemon streams a playtest clip run's position, checks, regions, events fired and end on /v1/events as clip.*"
     },
     {
       "id": "daemon.pie-events",
@@ -817,24 +807,24 @@
       "summary": "stopping, restarting, rebuilding or patching a shared editor waits for consent: a lone session attests to its own subagents, other sessions are told in their next response and answer go, wait or block, holds and releases, external participants over /v1/disruptions, POST /v1/editor/* answering 409 until agreed, and people approving or denying"
     },
     {
-      "id": "daemon.hub.goal-delete",
+      "id": "daemon.hub.files",
       "group": "daemon",
-      "summary": "DELETE /v1/hub/goals/:id, advertised as hub.goalDelete, removes a goal or milestone and drops it from every goal's requires, leaves its playtests and their records alone, and answers 409 naming a queued plan made for it until that plan is cancelled"
+      "summary": "The /v1/hub clip, arrangement and suite routes write text files under PlaytestHub/ in the project with stable formatting, refuse a clip with checks or with anything but Input Action lanes, a performer that is not a player and a suite loop with findings, refuse deleting what is still referenced, and list a hand-broken file as a problem without touching it"
     },
     {
-      "id": "daemon.hub.arrangement",
+      "id": "daemon.hub.queue",
       "group": "daemon",
-      "summary": "The /v1/hub set routes, advertised as hub.arrangement: set ops build tracks, clip instances and scenes all or none with candidates for a bad name, goals are tracks, a scene queues as one run, and a deleted track leaves its scenes"
-    },
-    {
-      "id": "daemon.hub.arrangements",
-      "group": "daemon",
-      "summary": "The /v1/hub/arrangements routes, advertised as hub.arrangements: the tracks made before are the first arrangement, Main; arrangements are created, renamed, given a level, duplicated and deleted, each set edited and run apart, the queue read per arrangement, and the last one refused deletion"
+      "summary": "POST /v1/hub/queue queues a test or a suite's tests on this machine, skipping tests with no checks and refusing a headless run when no headless runner is set up; queued items wait while no editor is connected and can be taken out, and suites report quarantine and flaky marks"
     },
     {
       "id": "daemon.hub.performers",
       "group": "daemon",
-      "summary": "Actor performers, advertised as hub.performers: a track is given an actor or a player to drive by set op and keeps it across reads, a performer that is neither is refused with a finding, and GET /v1/hub/performers lists the players with the reason no actor is listed while no editor answers"
+      "summary": "GET /v1/hub/performers lists the editor's player and remote clients a track can drive"
+    },
+    {
+      "id": "daemon.hub.play",
+      "group": "daemon",
+      "summary": "POST /v1/hub/play auditions an arrangement or region on the open editor from a playhead and looping, refused with the reason while the editor is in use; GET /v1/hub/play reads it and POST /v1/hub/play/stop stops it"
     },
     {
       "id": "package.dist-server",

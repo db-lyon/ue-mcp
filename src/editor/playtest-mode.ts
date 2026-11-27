@@ -6,17 +6,17 @@ import { getUserStatePath } from "../config/state-store.js";
  * Who starts playtest runs: a person (manual) or an agent (automatic).
  *
  * Unset is left to each client, and the server changes nothing. Manual is
- * enforced for MCP sessions only: their pie(script_run) and pie(script_replay)
- * calls are refused, not run. A daemon extension calling through
- * api.callAction is not gated here, because it reads the mode itself
- * (modes.get) and enforces its own rules.
+ * enforced for MCP sessions only: their pie(arrangement_play) and
+ * pie(clip_record_start) calls are refused, not run. The hub and a daemon
+ * extension calling through api.callAction are not gated here, because they
+ * read the mode themselves (modes.get) and enforce their own rules.
  *
  * Stored like every scoped mode (config/modes.ts), per project (--editor) or
  * per user in ~/.ue-mcp/state.json.
  */
 
 /** The task names a manual mode refuses. */
-export const PLAYTEST_GATED_TASKS: ReadonlySet<string> = new Set(["pie.script_run", "pie.script_replay"]);
+export const PLAYTEST_GATED_TASKS: ReadonlySet<string> = new Set(["pie.arrangement_play", "pie.clip_record_start"]);
 
 export interface ResolvedPlaytestMode {
   /** null when nothing is set: each client decides. */

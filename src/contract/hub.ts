@@ -1,1493 +1,807 @@
-// @session independent: The hub contract: types, constants and pure rules over their arguments. Imports only sibling contract files.
+// @session independent: The Playtest Hub's contract: types and pure functions over their arguments. No state.
 /**
- * The Playtest Hub: goals a game must meet, the playtests that prove them,
- * the runs that are their evidence, and the queue that runs them on the
- * editor.
+ * The Playtest Hub's core (#2146). Composing and testing are separate:
  *
- * Goals and milestones are tracked like issues: in one place, not versioned
- * per branch. They live in the project's goal store, outside the game repo
- * (HubRecord below; on this computer under the extension's data directory),
- * with their graph, owner, priority and due date, what each playtest says
- * about itself, sign-offs and the health rule. The repo holds only the
- * playtest scripts, which goals name by asset path; a script missing on the
- * current checkout shows as missing and the goal never forks. Run history
- * and the queue are per machine too. Status is always computed, never
- * stored: these rules are the one place it is worked out, for the agent and
- * both clients.
+ * - A clip is a reusable performance for a player: Input Action lanes only.
+ *   A clip never asserts.
+ * - A track is one performer (a player) and a timeline of clip instances.
+ * - An arrangement is the scenario: a level, its tracks, one Checks track and
+ *   named regions. It plays in one PIE session.
+ * - A test is an arrangement or one of its regions. It passes when all of its
+ *   checks pass.
+ * - A suite is a named list of tests and suites. It owns health, pass-rate
+ *   history, flaky marking and quarantine.
  *
- * In code a playtest is a "check", the general word, kept for when a second
- * kind runs; people only ever read "playtest".
+ * Clips, arrangements and suites are text files in the project (HUB_DIR),
+ * written by fileText so the same value always gives the same bytes. Runs,
+ * the queue and schedules stay on the machine that ran them.
  *
- * Routes are under /v1/hub on the daemon (see HUB_ROUTES below); every change
- * publishes `hub.changed` with a HubChanged body.
+ * Imports only its siblings, so `ue-mcp/hub` loads in a browser.
  */
-import { qaEnded, type QaRun, type QaStep, type QaStepStatus, type QaSummary } from "./hub-qa.js";
-import type { Arrangement, ArrangementFinding, InstanceLayout } from "./hub-arrangement.js";
-import type { ArrangementRun } from "./hub-compose.js";
-import type { SetColor, Slot } from "./hub-set.js";
-import type { Performer } from "./hub-performers.js";
+import { PERFORMER_KINDS, performerLabel, performerOf, performerProblem, type Performer, type PerformerKind } from "./hub-performers.js";
 
-export const HUB_SCHEMA = 1 as const;
+/** The version of the files under HUB_DIR. */
+export const HUB_SCHEMA = 2 as const;
+/** The project folder that holds the hub's files: clips/, arrangements/ and suites/ under it. */
+export const HUB_DIR = "PlaytestHub";
+export const HUB_KINDS = ["clip", "arrangement", "suite"] as const;
+export type HubKind = (typeof HUB_KINDS)[number];
+/** The folder of each kind under HUB_DIR. */
+export const HUB_FOLDERS: { readonly [K in HubKind]: string } = { clip: "clips", arrangement: "arrangements", suite: "suites" };
 
-// ---------- Goals and checks ----------
+/** The frame rate an arrangement counts in unless it says otherwise. */
+export const DEFAULT_RATE = 60;
+/** A clip, arrangement or suite id: also its file name. */
+export const HUB_ID = /^[a-z0-9][a-z0-9-]{0,63}$/;
+/** A track, instance, check or region id inside a file. */
+export const PART_ID = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
+export const TITLE_MAX = 200;
+export const MAX_INSTANCES = 500;
+export const MAX_CHECKS = 200;
+export const MAX_TRACKS = 32;
 
-/**
- * What a check is: a ue-mcp PIE test script, a playtest. The only kind the
- * schema has; a kind returns with its runner, as a schema version. Goals
- * imported with another kind keep those entries apart (Goal.unsupported).
- *
- * "track", "scene", "slot" and "arrangement" name a run of a track's
- * timeline, a scene's row, one slot or every timeline (#2113): a plan item
- * and a run record carry them, a goal's own checks never do. Their target is
- * the goal's id, "<scene id>/<track id>" for a slot, "arrangement" for all.
- */
-export type CheckKind = "script" | "track" | "scene" | "slot" | "arrangement";
+const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
+const r3 = (n: number): number => Math.round(n * 1000) / 1000;
+const num = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : null);
+const str = (v: unknown, max = TITLE_MAX): string => (typeof v === "string" ? v.trim().slice(0, max) : "");
 
-// ---------- Tracker links ----------
-
-/**
- * A link from a goal, a check or a run to an item elsewhere: an issue, a
- * ticket, a card, a document. Any tracker: the hub keeps the URL and never
- * contacts it, so there is no provider list.
- */
-export interface TrackerLink {
-  url: string;
-  title?: string;
-  /** How the item relates, free text. TRACKER_LINK_RELS are the usual ones, offered by clients and never enforced. */
-  rel?: string;
+/** An id made from a title: lowercase words joined by dashes. */
+export function slugOf(title: string, max = 48): string {
+  const s = title.toLowerCase().normalize("NFKD").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, max).replace(/-+$/, "");
+  return s || "untitled";
 }
 
-/** Relationships clients suggest for a link. Any other text is as valid. */
-export const TRACKER_LINK_RELS = ["counterpart", "related", "filed-from-run", "blocks"] as const;
-/** The most links one goal, check or run keeps. */
-export const TRACKER_LINKS_MAX = 20;
-export const TRACKER_URL_MAX = 2048;
-export const TRACKER_TITLE_MAX = 200;
-export const TRACKER_REL_MAX = 40;
-/** Schemes a link may never use: they run code or read local data where it opens. */
-export const TRACKER_BLOCKED_SCHEMES: readonly string[] = ["javascript", "data", "vbscript", "file", "blob", "about"];
-const URL_SCHEME = /^([a-z][a-z0-9+.-]*):/i;
-
-/** Why a URL cannot be a link, or null when it can: http, https, mailto, or an app's own scheme such as jira://. */
-export function trackerUrlProblem(url: unknown): string | null {
-  if (typeof url !== "string" || !url.trim()) return "a link needs a url";
-  const u = url.trim();
-  if (u.length > TRACKER_URL_MAX) return `a link's url is at most ${TRACKER_URL_MAX} characters`;
-  if (/\s/.test(u)) return "a link's url has no spaces";
-  const scheme = URL_SCHEME.exec(u)?.[1]?.toLowerCase();
-  if (!scheme) return "a link's url starts with its scheme, such as https://";
-  if (TRACKER_BLOCKED_SCHEMES.includes(scheme)) return `${scheme}: links are not allowed`;
-  if ((scheme === "http" || scheme === "https") && !/^https?:\/\/[^/?#\s]+/i.test(u)) return "a web link needs a host, such as https://example.com/issue/1";
-  if (u.length <= scheme.length + 1) return "a link's url has nothing after its scheme";
-  return null;
+/** Something in a body or a file that is wrong, at a path such as `tracks[0].instances[2]`. A blocking one refuses the save or the run. */
+export interface HubFinding {
+  path: string;
+  message: string;
+  blocks: boolean;
+  /** Ids that would fit, for an unknown one. */
+  candidates?: string[];
 }
 
-/** A link from a body or a file, normalized; or why it is not one. */
-export function trackerLinkOf(v: unknown): { link: TrackerLink } | { problem: string } {
-  if (!v || typeof v !== "object" || Array.isArray(v)) return { problem: "a link is { url, title?, rel? }" };
-  const o = v as Record<string, unknown>;
-  const problem = trackerUrlProblem(o.url);
-  if (problem) return { problem };
-  if (o.title !== undefined && o.title !== null && typeof o.title !== "string") return { problem: "a link's title is text" };
-  if (o.rel !== undefined && o.rel !== null && typeof o.rel !== "string") return { problem: "a link's rel is text" };
-  const title = typeof o.title === "string" ? o.title.trim().slice(0, TRACKER_TITLE_MAX) : "";
-  const rel = typeof o.rel === "string" ? o.rel.trim().slice(0, TRACKER_REL_MAX) : "";
-  return { link: { url: (o.url as string).trim(), ...(title ? { title } : {}), ...(rel ? { rel } : {}) } };
-}
+// ---------- Clips ----------
 
-/** Links without a second one to the same URL, the first kept, at most TRACKER_LINKS_MAX. */
-export function uniqueLinks(links: readonly TrackerLink[]): TrackerLink[] {
-  const seen = new Set<string>();
-  return links.filter((l) => {
-    if (seen.has(l.url)) return false;
-    seen.add(l.url);
-    return true;
-  }).slice(0, TRACKER_LINKS_MAX);
-}
+export const INPUT_TYPES = ["bool", "axis1d", "axis2d", "axis3d"] as const;
+export type InputType = (typeof INPUT_TYPES)[number];
+export const INTERPS = ["linear", "constant", "cubic"] as const;
 
-/**
- * What a link is shown as when it has no title: the host of a web link
- * (without www.), the address of a mail link, the scheme of an app link
- * ("jira"). Empty when the URL does not parse.
- */
-export function linkHost(url: string): string {
-  const u = url.trim();
-  const scheme = URL_SCHEME.exec(u)?.[1]?.toLowerCase();
-  if (!scheme) return "";
-  if (scheme === "mailto") {
-    const to = u.slice("mailto:".length).split("?")[0] ?? "";
-    try {
-      return decodeURIComponent(to);
-    } catch {
-      return to;
-    }
-  }
-  if (scheme === "http" || scheme === "https") {
-    const m = /^https?:\/\/(?:[^@/?#]*@)?(\[[^\]]+\]|[^:/?#]+)/i.exec(u);
-    return m ? m[1].toLowerCase().replace(/^www\./, "") : "";
-  }
-  return scheme;
-}
-
-/** A check as a goal lists it: which one, and whether the goal needs it. Nothing about the check itself (that is its CheckMeta). */
-export interface CheckRef {
-  kind: CheckKind;
-  /** The script's asset path without the object name, such as /Game/Tests/PT_Jump. */
-  target: string;
-  /** A goal is met only when its required checks pass. Default true. */
-  required?: boolean;
-}
-
-/** PUT /hub/goals/:id/checks/:checkId: what the goal says of the check. */
-export interface GoalCheckUpdate {
-  required?: boolean;
-}
-
-/**
- * A check a goal was imported with whose kind this ue-mcp cannot run (a UAT
- * scenario, an automation filter, a manual checklist item). Kept as it came,
- * shown as unsupported, and never counted toward the goal.
- */
-export interface UnsupportedCheck {
-  kind: string;
-  target: string;
-  required?: boolean;
-}
-
-/** What a check says about itself, wherever it is listed: its one home, one record in the goal store. */
-export interface CheckMeta {
-  /** A display name; the script's own name otherwise. */
-  title?: string;
-  /** Tracker items the check refers to. */
-  links?: TrackerLink[];
-}
-
-/** PUT /hub/checks/:checkId. Given fields change; null clears the title, an empty list the links. */
-export interface CheckMetaUpdate {
-  title?: string | null;
-  links?: TrackerLink[];
-}
-
-/** A check's CheckMeta as the goal store keeps it: it names its check. */
-export interface CheckMetaRecord extends CheckMeta {
-  check: Pick<CheckRef, "kind" | "target">;
-}
-
-/** A check's identity across goals and runs: "<kind>:<target>". */
-export const checkId = (c: Pick<CheckRef, "kind" | "target">): string => `${c.kind}:${c.target}`;
-export function parseCheckId(id: string): Pick<CheckRef, "kind" | "target"> | null {
-  const i = id.indexOf(":");
-  if (i <= 0 || id.slice(0, i) !== "script") return null;
-  const target = id.slice(i + 1);
-  return target ? { kind: "script", target } : null;
-}
-
-export interface AcceptanceRule {
-  /** How many consecutive passes of each required check count when the goal rolls up. 1 to 10, default 1. */
-  stableRuns: number;
-  /** A person signs the goal off before it is met. */
-  signOff: boolean;
-}
-export const DEFAULT_ACCEPTANCE: AcceptanceRule = { stableRuns: 1, signOff: false };
-
-/**
- * The project's one rule for a check's health, whichever goal lists it: when
- * a passing check is flaky or stale. Kept in the goal store, a project
- * setting.
- */
-export interface HealthRule {
-  /** A passing check not run for this many days is stale, where no dependency fingerprints say more. Null: never stale by age. */
-  staleAfterDays: number | null;
-  /** Flaky: mixed results among this many latest results on the same provenance. 2 to 20. */
-  flakyWindow: number;
-}
-export const DEFAULT_HEALTH_RULE: HealthRule = { staleAfterDays: null, flakyWindow: 3 };
-export const FLAKY_WINDOW_MIN = 2;
-export const FLAKY_WINDOW_MAX = 20;
-export const STALE_DAYS_MAX = 365;
-
-/** Why a body cannot be a health rule, or null when it can. */
-export function healthRuleProblem(v: unknown): string | null {
-  if (!v || typeof v !== "object" || Array.isArray(v)) return "the rule is { staleAfterDays, flakyWindow }";
-  const o = v as Record<string, unknown>;
-  const d = o.staleAfterDays;
-  if (d !== undefined && d !== null && !(typeof d === "number" && Number.isInteger(d) && d >= 1 && d <= STALE_DAYS_MAX)) return `staleAfterDays is a whole number of days from 1 to ${STALE_DAYS_MAX}, or null for never`;
-  const w = o.flakyWindow;
-  if (w !== undefined && !(typeof w === "number" && Number.isInteger(w) && w >= FLAKY_WINDOW_MIN && w <= FLAKY_WINDOW_MAX)) return `flakyWindow is a whole number from ${FLAKY_WINDOW_MIN} to ${FLAKY_WINDOW_MAX}`;
-  return null;
-}
-
-export type GoalKind = "milestone" | "goal";
-export type GoalPriority = "p0" | "p1" | "p2" | "p3";
-export const GOAL_PRIORITIES: readonly GoalPriority[] = ["p0", "p1", "p2", "p3"];
-/** A due date: YYYY-MM-DD. */
-export const GOAL_DUE = /^\d{4}-\d{2}-\d{2}$/;
-
-/**
- * A person's sign-off of a goal, a record in the goal store beside the goal.
- * It records what was signed so it can lapse (signOffLapse) when that no
- * longer describes the game.
- */
-export interface SignOff {
-  goalId: string;
-  /** The signed-in ue-mcp account that gave it. */
-  by: string;
-  /** The paired browser or phone it came from, by the name it paired with; absent when given at this computer. */
-  via?: string;
-  at: string;
-  note?: string;
-  /** The revision the workspace was at (RunProvenance.revision's kind of value); null when the project has no source control the hub can read. */
-  revision: string | null;
-  /** The runs it was given against: each required check's results the acceptance rule looked at. */
-  runIds: string[];
-  /** The goal's requirements when it was given (requirementsKey). */
-  requirements: string;
-}
-
-/** Why a sign-off no longer counts: a required check failed after it, the goal's requirements changed, or the workspace moved to another revision. */
-export type SignOffLapse = "failed" | "requirements" | "revision";
-
-/** A goal's sign-off as status reads it. A lapsed one is history: the goal waits for a new one. */
-export interface SignOffState {
-  record: SignOff;
-  lapsed: SignOffLapse | null;
-}
-
-/**
- * One goal another goal requires, held by the goal that requires. A goal may
- * be required by any number of goals and milestones; the edge lives only on
- * the goal that requires, so adding a goal to a milestone changes only the
- * milestone.
- */
-export interface GoalRequirement {
-  goal: string;
-  /** False: the requiring goal is met without this one. True when absent. */
-  required?: boolean;
-}
-
-/** One goal, a record in the goal store. Ids are the title's slug and a random ending, so ids made on two computers never meet. */
-export interface Goal {
-  schema: typeof HUB_SCHEMA;
+export interface InputNote {
   id: string;
-  /** A milestone is a goal with a label: any goal may require goals, milestones usually do. */
-  kind: GoalKind;
+  start: number;
+  length: number;
+  /** An axis lane's value held over the note. */
+  value?: number | number[];
+}
+export interface InputKey {
+  id: string;
+  t: number;
+  v: number | number[];
+  interp?: (typeof INTERPS)[number];
+}
+/** One Input Action's lane: the raw value that reaches the action. A player's capability `input`. */
+export interface InputLane {
+  action: string;
+  type: InputType;
+  notes: InputNote[];
+  keys: InputKey[];
+}
+
+/** A clip: a performance for a player, in frames at its rate. It has no checks. */
+export interface Clip {
+  id: string;
   title: string;
-  /** What "done" means, in the team's words. Markdown. */
+  performer: PerformerKind;
+  rate: number;
+  /** Frames. */
+  length: number;
   description?: string;
-  /** Who owns the goal, as the team names people. */
-  owner?: string | null;
-  priority?: GoalPriority;
-  /** YYYY-MM-DD. */
-  due?: string | null;
-  /** Tracker items this goal refers to: its issue, a design document. Optional, and never synced. */
-  links?: TrackerLink[];
-  acceptance: AcceptanceRule;
-  /** The goals this one requires, in its own order. A goal is met only when its required goals are. */
-  requires?: GoalRequirement[];
-  checks: CheckRef[];
-  /** Checks it was imported with that this ue-mcp cannot run. */
-  unsupported?: UnsupportedCheck[];
-  archived?: boolean;
-  /**
-   * A track's timeline (#2113): instances of clips placed on it. A goal that
-   * has none is laid out from its checks once, when the store loads. `checks`
-   * keeps the step-list playtests the instances use, for clients that read it.
-   */
-  arrangement?: Arrangement;
-  /** The track's column, or the scene's row, in the set. */
-  order?: number;
-  color?: SetColor;
-  /** A track: the player it drives, 0 (the editor's own) when absent, N for remote client N. */
-  player?: number;
-  /** A track that drives something other than a player (#2137): an actor. A player track keeps `player` alone. */
-  performer?: Performer;
-  /** A track: left out of every run. */
-  mute?: boolean;
-  /** A track: while any track is soloed, only soloed tracks play. */
-  solo?: boolean;
-  /** A scene: its clip slots, at most one per track. */
-  slots?: Slot[];
-  /**
-   * The arrangement a track or scene belongs to (ArrangementInfo). Absent:
-   * the project's first arrangement, "main", which every track made before
-   * a project could hold several arrangements belongs to.
-   */
-  arrangementId?: string;
+  /** Input Action lanes. */
+  input: InputLane[];
+}
+
+export type ClipDraft = Partial<Omit<Clip, "id">> & { id?: string };
+
+const vec = (v: unknown): number | number[] | null => (num(v) !== null ? r3(v as number) : Array.isArray(v) && v.length >= 1 && v.length <= 3 && v.every((x) => num(x) !== null) ? (v as number[]).map(r3) : null);
+
+function inputLaneOf(v: unknown, path: string, out: HubFinding[]): InputLane | null {
+  if (!isObj(v) || typeof v.action !== "string" || !v.action.startsWith("/")) {
+    out.push({ path, message: `${path} needs action, an Input Action's asset path`, blocks: true });
+    return null;
+  }
+  const type = (INPUT_TYPES as readonly string[]).includes(String(v.type)) ? (v.type as InputType) : null;
+  if (!type) {
+    out.push({ path: `${path}.type`, message: `${path}.type is one of ${INPUT_TYPES.join(", ")}`, blocks: true });
+    return null;
+  }
+  const notes: InputNote[] = [];
+  for (const [i, n] of (Array.isArray(v.notes) ? v.notes : []).entries()) {
+    const start = isObj(n) ? num(n.start) : null;
+    const length = isObj(n) ? num(n.length) : null;
+    if (!isObj(n) || typeof n.id !== "string" || start === null || length === null || length < 0) {
+      out.push({ path: `${path}.notes[${i}]`, message: `${path}.notes[${i}] needs id, start and a length of 0 or more`, blocks: true });
+      continue;
+    }
+    const value = n.value === undefined ? null : vec(n.value);
+    notes.push({ id: n.id, start: r3(start), length: r3(length), ...(value !== null ? { value } : {}) });
+  }
+  const keys: InputKey[] = [];
+  for (const [i, k] of (Array.isArray(v.keys) ? v.keys : []).entries()) {
+    const t = isObj(k) ? num(k.t) : null;
+    const val = isObj(k) ? vec(k.v) : null;
+    if (!isObj(k) || typeof k.id !== "string" || t === null || val === null) {
+      out.push({ path: `${path}.keys[${i}]`, message: `${path}.keys[${i}] needs id, t and a numeric v`, blocks: true });
+      continue;
+    }
+    const interp = (INTERPS as readonly string[]).includes(String(k.interp)) ? (k.interp as InputKey["interp"]) : undefined;
+    keys.push({ id: k.id, t: r3(t), v: val, ...(interp && interp !== "linear" ? { interp } : {}) });
+  }
+  notes.sort((a, b) => a.start - b.start || a.id.localeCompare(b.id));
+  keys.sort((a, b) => a.t - b.t || a.id.localeCompare(b.id));
+  for (let i = 1; i < notes.length; i++) {
+    if (notes[i]!.start < notes[i - 1]!.start + notes[i - 1]!.length) out.push({ path: `${path}.notes`, message: `${path}: notes ${notes[i - 1]!.id} and ${notes[i]!.id} overlap`, blocks: true });
+  }
+  return { action: v.action, type, notes, keys };
+}
+
+/**
+ * A clip from a body or a file, normalized, with what is wrong with it. A
+ * `checks` field is refused (checks live on an arrangement's Checks track),
+ * and so is a non-empty `lanes` field: a clip holds Input Action lanes only.
+ * `performer` defaults to player, the one kind there is.
+ */
+export function clipOf(v: unknown, id: string): { clip: Clip; findings: HubFinding[] } {
+  const out: HubFinding[] = [];
+  const o = isObj(v) ? v : {};
+  if (!isObj(v)) out.push({ path: "", message: "a clip is a JSON object", blocks: true });
+  if (o.checks !== undefined) out.push({ path: "checks", message: "a clip has no checks: put them on the arrangement's Checks track", blocks: true });
+  if (Array.isArray(o.lanes) && o.lanes.length) out.push({ path: "lanes", message: "a clip holds Input Action lanes (input) only; move, action and value lanes are not part of the hub", blocks: true });
+  const performer = o.performer === undefined ? "player" : (PERFORMER_KINDS as readonly string[]).includes(String(o.performer)) ? (o.performer as PerformerKind) : null;
+  if (!performer) out.push({ path: "performer", message: `performer is the kind the clip is for: ${PERFORMER_KINDS.join(" or ")}`, blocks: true });
+  const rate = num(o.rate) ?? DEFAULT_RATE;
+  if (rate <= 0 || rate > 1000) out.push({ path: "rate", message: "rate is frames per second, more than 0 and at most 1000", blocks: true });
+  const input = (Array.isArray(o.input) ? o.input : []).map((l, i) => inputLaneOf(l, `input[${i}]`, out)).filter((l): l is InputLane => !!l);
+  const ends = input.flatMap((l) => [...l.notes.map((n) => n.start + n.length), ...l.keys.map((k) => k.t)]);
+  const content = ends.length ? Math.max(...ends) : 0;
+  const given = num(o.length);
+  const length = r3(given !== null && given > 0 ? Math.max(given, content) : content);
+  const description = str(o.description, 4000);
+  return {
+    clip: { id, title: str(o.title) || id, performer: performer ?? "player", rate: r3(rate), length, ...(description ? { description } : {}), input },
+    findings: out,
+  };
 }
 
 // ---------- Arrangements ----------
 
-/** The arrangement every track and scene made before a project held several belongs to. */
-export const MAIN_ARRANGEMENT_ID = "main";
-export const MAIN_ARRANGEMENT_TITLE = "Main";
-
-/**
- * One named arrangement of a project, like an Ableton Live Set: its own
- * tracks and scenes, and the level its runs open. Clips stay one library
- * across every arrangement; an instance refers to its clip.
- */
-export interface ArrangementRecord {
-  title: string;
-  /** Its place in the project's list. */
-  order: number;
-  /** The map its runs open first, as a package path such as /Game/Maps/Arena. */
-  level?: string;
+export interface ClipInstance {
+  id: string;
+  clip: string;
+  /** The frame it starts on, at the arrangement's rate. */
+  at: number;
 }
 
-/** An arrangement as clients read it. */
-export interface ArrangementInfo {
+export interface Track {
   id: string;
   title: string;
-  order: number;
+  performer: Performer;
+  mute: boolean;
+  solo: boolean;
+  instances: ClipInstance[];
+}
+
+/**
+ * How a check judges, from its start to its end:
+ * - by_end: passes once the condition holds on any frame before the end.
+ * - throughout: passes when it holds on every frame.
+ * - hold: playback waits at the start until it holds, failing after its
+ *   length (or `timeout` frames when the length is 0).
+ * - manual: a person or an agent gives the verdict; PIE pauses until then.
+ */
+export const CHECK_MODES = ["by_end", "throughout", "hold", "manual"] as const;
+export type CheckMode = (typeof CHECK_MODES)[number];
+
+/** What a check reads: a value (as a script step's expect names them), an op and a target; `subject` an actor, the run's player when absent. */
+export interface CheckExpect {
+  value: string;
+  op: string;
+  target?: unknown;
+  subject?: string;
+}
+
+export interface Check {
+  id: string;
+  title: string;
+  at: number;
+  length: number;
+  mode: CheckMode;
+  expect?: CheckExpect;
+  /** A manual check: what to look at. */
+  instruction?: string;
+  /** A manual check only a person may judge. */
+  personOnly?: boolean;
+  /** A hold of length 0: the most frames it waits. */
+  timeout?: number;
+}
+
+export interface Region {
+  id: string;
+  name: string;
+  start: number;
+  end: number;
+}
+
+export interface Arrangement {
+  id: string;
+  title: string;
+  /** The map to play in, a package path; null plays the open one. */
   level: string | null;
+  rate: number;
+  description?: string;
+  tracks: Track[];
+  /** The Checks track. */
+  checks: Check[];
+  regions: Region[];
 }
 
-/** One row of GET /hub/arrangements. */
-export interface ArrangementSummary extends ArrangementInfo {
-  tracks: number;
-  scenes: number;
-  /** Rolled up from its tracks and scenes. */
-  status: GoalStatus;
-  /** Its newest arrangement run. */
-  lastRun: { runId: string; outcome: RunOutcome; at: string } | null;
+export type ArrangementDraft = Partial<Omit<Arrangement, "id">> & { id?: string };
+
+/** How many arrangement frames a clip instance lasts. */
+export const instanceLength = (clip: Pick<Clip, "length" | "rate"> | undefined, rate: number): number => (clip ? r3((clip.length * rate) / clip.rate) : 0);
+
+function partId(v: unknown, fallback: string): string {
+  return typeof v === "string" && PART_ID.test(v) ? v : fallback;
 }
 
-/** GET /hub/arrangements: every arrangement in order, and the one a request that names none gets. */
-export interface ArrangementsView {
-  arrangements: ArrangementSummary[];
-  default: string;
-}
-
-/** The check target of an arrangement's own run: "arrangement" for the first one, as before, its id for the rest. */
-export const arrangementRunTarget = (id: string): string => (id === MAIN_ARRANGEMENT_ID ? "arrangement" : id);
-/** The arrangement an arrangement run's target names. */
-export const arrangementOfRunTarget = (target: string): string => (target === "arrangement" ? MAIN_ARRANGEMENT_ID : target);
-
-/** One status for a list of them: running or failing first, met only when all are. */
-export function rollUpStatuses(list: readonly GoalStatus[]): GoalStatus {
-  if (list.length === 0) return "not_started";
-  for (const s of ["running", "failing", "at_risk", "ready_to_sign_off"] as const) if (list.includes(s)) return s;
-  if (list.every((s) => s === "met")) return "met";
-  if (list.every((s) => s === "not_started")) return "not_started";
-  return "in_progress";
-}
-
-/**
- * The goals that require this one, as a draft or update gives them: each
- * named goal gains the requirement, and on an update each goal that required
- * it and is not named loses it. Never stored on this goal.
- */
-export interface GoalParents {
-  parents?: string[];
-}
-
-/** POST /hub/goals. The agent fills id (the title's slug and a random suffix, unless one is given), schema and defaults. */
-export type GoalDraft = Pick<Goal, "title"> & Partial<Omit<Goal, "schema">> & GoalParents;
-/** PUT /hub/goals/:id. Given fields change; checks and requires, when given, replace the list; null clears owner, priority and due. */
-export type GoalUpdate = Partial<Omit<Goal, "schema" | "id" | "priority">> & { priority?: GoalPriority | null } & GoalParents;
-
-/** A goal id's readable part from a title: lowercase ASCII words joined by dashes, at most `max` characters. */
-export function goalSlug(title: string, max = 64): string {
-  const s = title
-    .toLowerCase()
-    .normalize("NFKD")
-    .replace(/[̀-ͯ]/g, "")
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, max)
-    .replace(/-+$/g, "");
-  return s || "goal";
-}
-export const GOAL_ID = /^[a-z0-9][a-z0-9-]{0,63}$/;
-
-// ---------- Runs (per machine) ----------
-
-export type RunOutcome = "passed" | "failed" | "needs_you" | "running" | "incomplete" | "unjudged" | "stopped" | "error";
-export type RunSource = "person" | "agent" | "plan" | "outside";
-
-/**
- * Why a run happened, beside who started it (RunRecord.source): a run of
- * the check, a replay of an earlier run's recorded input, or an attempt in a
- * fix loop, which runs a project in the middle of being changed. Only "run"
- * counts toward health, acceptance and pass rate; the others stay in history.
- */
-export type RunTrigger = "run" | "replay" | "loop";
-
-/** The source control a project is under; "none" when the hub sees none. */
-export type RunVcs = "git" | "perforce" | "plastic" | "svn" | "none";
-
-/**
- * What a run tested, read when the hub first saw it running, with the fields
- * ue-mcp records itself taken from results.json once it ends, where present.
- * Null is always "not known", never a value: unknown matches nothing.
- */
-export interface RunProvenance {
-  /** The project's source control, null when it could not be read. */
-  vcs: RunVcs | null;
-  /** The commit, changelist, revision or changeset the workspace was at. */
-  revision: string | null;
-  /** Files changed or opened in source control when the run started: 0 is a clean workspace. */
-  dirty: number | null;
-  /** The script's version: "sha256:<hex>" of its definition as pie(script_read) gave it, or "ue-mcp:<hash>" when results.json carries ue-mcp's own. */
-  scriptHash: string | null;
-  /** The engine version: major.minor from the project file, or ue-mcp's full version when results.json has it. */
-  engine: string | null;
-  /** The players the client set PIE to before the run, or ue-mcp's record of them. Null: PIE ran as it was left. */
-  players: { count: number; netMode: "standalone" | "listen" | "client" } | null;
-  /** Fingerprints of the assets the script reaches, by package path, when results.json has them. */
-  dependencies?: Record<string, string>;
-}
-
-/** Where the workspace is now, for the rules that compare runs with it. */
-export interface CurrentProvenance {
-  vcs: RunVcs | null;
-  revision: string | null;
-  dirty: number | null;
-  /** Current fingerprints of what a check depends on, when ue-mcp can tell without a run. */
-  dependencies?: Record<string, string>;
-}
-
-/** One run of one check, as the hub's run index keeps it. */
-export interface RunRecord {
-  runId: string;
-  kind: CheckKind;
-  target: string;
-  name: string;
-  outcome: RunOutcome;
-  startedAt: string;
-  endedAt?: string | null;
-  durationMs?: number | null;
-  summary?: QaSummary | null;
-  /** Step indexes that failed, for comparing runs. */
-  failedSteps?: number[];
-  source: RunSource;
-  /** Absent on records kept before triggers were: a replay then says so by replayOf. */
-  trigger?: RunTrigger;
-  sessionId?: string | null;
-  planRunId?: string | null;
-  replayOf?: string | null;
-  recordingId?: string | null;
-  map?: string | null;
-  /** Absent for a run the hub did not see start (backfilled, or kept before provenance was): it tested an unknown revision. */
-  provenance?: RunProvenance;
-  /** Project files changed while the run played (anyone's saves): it tested a project that changed under it. */
-  tainted?: boolean;
-  /** Tracker items this run refers to, such as the issue filed from it. Per machine, as the run is. */
-  links?: TrackerLink[];
-  /** A track or scene run: each instance's result at its place on the timeline. */
-  arrangement?: ArrangementRun;
-}
-
-/** A run's trigger, for records kept before triggers were too. */
-export const triggerOf = (r: Pick<RunRecord, "trigger" | "replayOf">): RunTrigger => r.trigger ?? (r.replayOf ? "replay" : "run");
-
-/**
- * A run's outcome from its QaRun, judged by its steps. A live run waiting on
- * a verdict is "needs_you". Once ended, a failed step makes it "failed"; a
- * step the run reached but nobody judged (the wait ran out, or the run was
- * stopped while it waited) makes it "unjudged", no result, since a person's
- * absence says nothing about the game. A run that ended on its own with
- * steps never reached (PIE or the observation ended) is "incomplete"; a
- * stopped one is "stopped".
- */
-export function outcomeOf(run: Pick<QaRun, "state" | "steps" | "summary">): RunOutcome {
-  const steps = run.steps ?? [];
-  const failed = run.summary?.failed ?? steps.filter((s) => s.status === "failed").length;
-  const ended = qaEnded(run.state);
-  if (!ended && (run.state === "awaiting_verdict" || steps.some((s) => s.status === "awaiting_verdict"))) return "needs_you";
-  if (run.state === "armed" || run.state === "running") return failed > 0 ? "failed" : "running";
-  if (failed > 0) return "failed";
-  if (steps.some((s) => s.status === "awaiting_verdict")) return "unjudged";
-  const open: QaStepStatus[] = ["pending", "running"];
-  if (steps.length === 0 || steps.some((s) => open.includes(s.status))) return run.state === "stopped" ? "stopped" : "incomplete";
-  return "passed";
-}
-
-/** Timeline of a run for the run screen: one bar per step on the run's clock. */
-export interface RunStepSpan {
-  index: number;
-  instruction: string;
-  status: QaStepStatus;
-  judge: "auto" | "manual";
-  startMs: number | null;
-  endMs: number | null;
-}
-
-/** GET /hub/runs/:runId. Everything the run screen draws. */
-export interface RunDetail {
-  record: RunRecord;
-  /** The live or last-known QaRun, when the hub has it. */
-  run: QaRun | null;
-  steps: RunStepSpan[];
-  /** Values the observer tracked, sampled for charts: series name to [ms, value] points. */
-  series?: Record<string, Array<[number, number]>>;
-  /** Warnings and errors the PIE session logged during the run. */
-  log?: Array<{ atMs: number; level: "warning" | "error"; text: string }>;
-  /** The newest earlier passing run of the same check, to compare with. */
-  lastPass?: RunRecord | null;
-  /** Steps whose result differs from lastPass. */
-  changedSteps?: number[];
-  resultsUrl?: string | null;
-  /** A track or scene run: the live or recorded result of each instance, and the segments it played as. */
-  arrangement?: ArrangementRun;
-}
-
-// ---------- Health and status (computed) ----------
-
-/**
- * A check's health. A run holding for a live verdict is "running": the
- * verdict itself is asked for in the app bar and on the Run screen, never
- * as a status. "missing": the script is not on this checkout, which says
- * nothing about the goal (another branch may have it), so it never makes a
- * goal fail.
- */
-export type CheckHealth = "failing" | "running" | "flaky" | "stale" | "passing" | "never_run" | "missing";
-/**
- * A goal's status. "ready_to_sign_off": everything passes and only a
- * person's sign-off is missing. "at_risk": met, but a required check is
- * flaky or stale. "in_progress": some evidence, not all of it yet, which
- * the goal's progress counts.
- */
-export type GoalStatus = "failing" | "ready_to_sign_off" | "at_risk" | "running" | "in_progress" | "not_started" | "met";
-
-/** Worst first: what every list sorts by, and the order the status ladder is drawn in. */
-export const CHECK_HEALTH_ORDER: readonly CheckHealth[] = ["failing", "running", "flaky", "stale", "never_run", "missing", "passing"];
-export const GOAL_STATUS_ORDER: readonly GoalStatus[] = ["failing", "ready_to_sign_off", "at_risk", "running", "in_progress", "not_started", "met"];
-
-export interface CheckState {
-  id: string;
-  check: CheckRef;
-  /** The check's title when its CheckMeta has one, else the script's name. */
-  name: string;
-  /** Tracker items the check refers to (CheckMeta.links). */
-  links?: TrackerLink[];
-  /** Goals that list this check. Empty for a script no goal names yet. */
-  goalIds: string[];
-  health: CheckHealth;
-  last: RunRecord | null;
-  /** Outcomes of the latest results (isResult), newest first, at most 20. */
-  recent: RunOutcome[];
-  /** Passed share of `recent`, or null with no results. */
-  passRate: number | null;
-  /** The script's map and step count, when known. */
-  map?: string | null;
-  steps?: number | null;
-  /** The script is not on this checkout. */
-  missing?: boolean;
-  /** The path goals name, when the script moved and is followed to `check.target` (a redirector ue-mcp reported). */
-  renamedFrom?: string;
-  /** No goal lists this check, so nothing it proves counts anywhere. */
-  unused?: boolean;
-  /** The newest result differs from the one before it, and they tested different things (checkChange). */
-  change?: CheckChange;
-}
-
-/**
- * A result that turned between two runs that tested different things: a
- * pass after a fail is "fixed", a fail after a pass "regressed". The same
- * turn on the same provenance is flakiness, not a change.
- */
-export interface CheckChange {
-  kind: "fixed" | "regressed";
-  /** The newest result, the run that turned. */
-  runId: string;
-  at: string;
-}
-
-/** One goal a goal requires, with that goal's status. */
-export interface RequiredGoalState {
-  goal: string;
-  required: boolean;
-  /** Null for a goal that is not in the project or is archived: it counts for nothing. */
-  status: GoalStatus | null;
-}
-
-export interface GoalState {
-  goal: Goal;
-  status: GoalStatus;
-  checks: CheckState[];
-  /** Required checks currently satisfying the acceptance rule, out of all required checks. */
-  progress: { met: number; total: number };
-  /** The goals and milestones that require this one, archived ones left out, in file order. */
-  parents: string[];
-  /** The goals this one requires, in its order. */
-  requires: RequiredGoalState[];
-  /** Not a milestone, and nothing requires it: it is part of no milestone and no goal. */
-  unused?: boolean;
-  /** The goal's newest sign-off, current or lapsed. */
-  signOff?: SignOffState;
-}
-
-/**
- * Outcomes that say something about the game: what health, acceptance, pass
- * rates and regressions count. "stopped" and "unjudged" are not: the run was
- * ended before its steps were reached, or nobody gave a manual step its
- * verdict, which proves nothing about the game either way, so the run before
- * it speaks for the check. "incomplete" and "error" are: the game could not
- * get through the run's steps on its own.
- */
-export const RESULT_OUTCOMES: readonly RunOutcome[] = ["passed", "failed", "incomplete", "error"];
-const DAY = 86_400_000;
-
-/**
- * Whether a run is a result: an outcome that says something about the game
- * (RESULT_OUTCOMES) from a plain run of the check. Replays and fix-loop
- * attempts never are, whatever they show; they stay in history, marked.
- */
-export const isResult = (r: RunRecord): boolean => RESULT_OUTCOMES.includes(r.outcome) && triggerOf(r) === "run";
-
-/** The run tested uncommitted changes. */
-export const ranDirty = (r: Pick<RunRecord, "provenance">): boolean => (r.provenance?.dirty ?? 0) > 0;
-
-/** Whether a run tested this workspace's revision, or both are under no source control. Unknown never did. */
-export function onRevision(p: RunProvenance | undefined, current: Pick<CurrentProvenance, "vcs" | "revision">): boolean {
-  if (!p?.vcs || !current.vcs || p.vcs !== current.vcs) return false;
-  return p.vcs === "none" || (p.revision !== null && p.revision === current.revision);
-}
-
-/**
- * Whether two runs tested the same thing: the same revision, the same script
- * version, and neither over uncommitted changes, which may differ between
- * them. Unknown never matches.
- */
-export function sameProvenance(a: Pick<RunRecord, "provenance">, b: Pick<RunRecord, "provenance">): boolean {
-  const p = a.provenance;
-  const q = b.provenance;
-  const clean = (x: RunProvenance): boolean => x.vcs === "none" || x.dirty === 0;
-  return !!p && !!q && clean(p) && clean(q) && !!p.scriptHash && p.scriptHash === q.scriptHash && onRevision(p, q);
-}
-
-export interface HealthInput {
-  check: CheckRef;
-  /** Runs of this check, newest first. */
-  runs: RunRecord[];
-  missing?: boolean;
-  /** The project's health rule; DEFAULT_HEALTH_RULE without one. */
-  rule?: HealthRule;
-  /** The workspace now, for staleness by dependency fingerprints. */
-  current?: CurrentProvenance;
-  now?: number;
-}
-
-/**
- * Stale since a check's last pass: an asset it depends on changed, where the
- * pass and the workspace both have fingerprints for it; otherwise older than
- * the rule's age.
- */
-function staleSince(pass: RunRecord, rule: HealthRule, current: CurrentProvenance | undefined, now: number): boolean {
-  const then = pass.provenance?.dependencies;
-  const deps = current?.dependencies;
-  const known = then && deps ? Object.keys(then).filter((k) => k in deps) : [];
-  if (known.length) return known.some((k) => deps![k] !== then![k]);
-  if (rule.staleAfterDays === null) return false;
-  const at = Date.parse(pass.endedAt ?? pass.startedAt);
-  return Number.isFinite(at) && now - at > rule.staleAfterDays * DAY;
-}
-
-/**
- * A check's health from its results (isResult), the same wherever it is
- * listed: stopped, unjudged, replayed and fix-loop runs leave the health the
- * result before them gave.
- *
- * - Running: a run of it plays now, or holds for a verdict.
- * - Failing: the newest result did not pass.
- * - Flaky: it passed, and the rule's flakyWindow latest results on the same
- *   provenance are mixed. Mixed results across revisions or script versions
- *   are a fix or a regression (checkChange), not flakiness.
- * - Stale: staleSince the pass.
- *
- * A run over uncommitted changes is the newest word on the check, so a person
- * changing the game sees what their last run said, but it never shows
- * flakiness (sameProvenance) and never counts toward acceptance.
- */
-export function checkHealth(input: HealthInput): CheckHealth {
-  const { runs, rule = DEFAULT_HEALTH_RULE, now = Date.now() } = input;
-  if (input.missing) return "missing";
-  const live = runs[0];
-  if (live?.outcome === "running" || live?.outcome === "needs_you") return "running";
-  const done = runs.filter(isResult);
-  if (done.length === 0) return "never_run";
-  const newest = done[0];
-  if (newest.outcome !== "passed") return "failing";
-  const same = done.filter((r) => sameProvenance(r, newest)).slice(0, rule.flakyWindow);
-  if (same.some((r) => r.outcome !== "passed")) return "flaky";
-  if (staleSince(newest, rule, input.current, now)) return "stale";
-  return "passing";
-}
-
-/**
- * Whether a check satisfies the acceptance rule: its latest stableRuns
- * results on the current revision and the script's newest version all
- * passed. Runs over uncommitted changes and runs of an unknown revision
- * never count.
- */
-export function checkSatisfied(runs: RunRecord[], acceptance: AcceptanceRule, current?: CurrentProvenance): boolean {
-  const need = Math.max(1, acceptance.stableRuns);
-  const counted = runs.filter((r) => isResult(r) && !!r.provenance && !ranDirty(r) && (!current || onRevision(r.provenance, current)));
-  const version = counted[0]?.provenance?.scriptHash;
-  if (!version) return false;
-  const done = counted.filter((r) => r.provenance!.scriptHash === version).slice(0, need);
-  return done.length >= need && done.every((r) => r.outcome === "passed");
-}
-
-/** The newest result's turn from the one before it, when they tested different things. */
-export function checkChange(runs: RunRecord[]): CheckChange | undefined {
-  const [n, p] = runs.filter(isResult);
-  if (!n || !p) return undefined;
-  const passed = (r: RunRecord): boolean => r.outcome === "passed";
-  if (passed(n) === passed(p) || sameProvenance(n, p)) return undefined;
-  return { kind: passed(n) ? "fixed" : "regressed", runId: n.runId, at: n.endedAt ?? n.startedAt };
-}
-
-export function checkStateOf(input: HealthInput & { goalIds: string[]; meta?: CheckMeta; name?: string; map?: string | null; steps?: number | null; renamedFrom?: string }): CheckState {
-  const done = input.runs.filter(isResult).slice(0, 20);
-  const change = checkChange(input.runs);
-  const links = input.meta?.links ?? [];
-  return {
-    id: checkId(input.check),
-    check: input.check,
-    name: input.meta?.title ?? input.name ?? leafName(input.check.target),
-    ...(links.length ? { links } : {}),
-    goalIds: input.goalIds,
-    health: checkHealth(input),
-    last: input.runs[0] ?? null,
-    recent: done.map((r) => r.outcome),
-    passRate: done.length ? done.filter((r) => r.outcome === "passed").length / done.length : null,
-    map: input.map ?? null,
-    steps: input.steps ?? null,
-    ...(input.missing ? { missing: true } : {}),
-    ...(input.renamedFrom ? { renamedFrom: input.renamedFrom } : {}),
-    ...(input.goalIds.length === 0 ? { unused: true } : {}),
-    ...(change ? { change } : {}),
-  };
-}
-
-/** Whether a goal is met only once a person signs it off. */
-export const needsSignOff = (goal: Pick<Goal, "acceptance">): boolean => goal.acceptance.signOff;
-
-/**
- * A goal's status from its checks' health and acceptance (stableRuns counted
- * here, at the roll-up, never in a check's own health) and the statuses of
- * the goals it requires. An optional goal (required: false) never blocks:
- * only a run in it shows, as an optional check's would. A required check
- * missing on this checkout is not met, and is no failure either: the goal
- * waits for it. `current` is the workspace acceptance compares revisions
- * with (checkSatisfied). `signedOff`: the goal has a sign-off that has not
- * lapsed.
- */
-export function goalStatus(goal: Goal, checks: Array<{ state: CheckState; runs: RunRecord[] }>, childStatuses: GoalStatus[] = [], optionalStatuses: GoalStatus[] = [], current?: CurrentProvenance, signedOff = false): { status: GoalStatus; progress: { met: number; total: number } } {
-  const required = checks.filter((c) => c.state.check.required !== false);
-  const met = required.filter((c) => !c.state.missing && checkSatisfied(c.runs, goal.acceptance, current)).length;
-  // At risk is met, with a flaky or stale check under it.
-  const childMet = (s: GoalStatus): boolean => s === "met" || s === "at_risk";
-  // Required goals count as one each beside the checks, so a milestone made of goals shows how many are met.
-  const progress = { met: met + childStatuses.filter(childMet).length, total: required.length + childStatuses.length };
-  const hs = checks.map((c) => c.state.health);
-  const reqHs = required.map((c) => c.state.health);
-  if (reqHs.includes("failing") || childStatuses.includes("failing")) return { status: "failing", progress };
-  if (hs.includes("running") || childStatuses.includes("running") || optionalStatuses.includes("running")) return { status: "running", progress };
-  if (required.length === 0 && childStatuses.length === 0) return { status: "not_started", progress };
-  const everyChildMet = childStatuses.every(childMet);
-  if (met === required.length && everyChildMet) {
-    // Everything is in and only a person's sign-off is missing.
-    if (goal.acceptance.signOff && !signedOff) return { status: "ready_to_sign_off", progress };
-    if (reqHs.some((h) => h === "flaky" || h === "stale") || childStatuses.includes("at_risk")) return { status: "at_risk", progress };
-    return { status: "met", progress };
+function checkOf(v: unknown, i: number, out: HubFinding[]): Check | null {
+  const path = `checks[${i}]`;
+  if (!isObj(v)) {
+    out.push({ path, message: `${path} is an object`, blocks: true });
+    return null;
   }
-  if (reqHs.every((h) => h === "never_run" || h === "missing") && childStatuses.every((s) => s === "not_started")) return { status: "not_started", progress };
-  // Some evidence, not all of it yet (a check never run, too few passes in a row, a required goal not met): the progress says how far.
-  return { status: "in_progress", progress };
-}
-
-// ---------- Sign-off ----------
-
-/** What a sign-off accepts of a goal: its acceptance rule, required checks and required goals, in a form that ignores their order. */
-export function requirementsKey(goal: Pick<Goal, "acceptance" | "checks" | "requires">): string {
-  const { stableRuns, signOff } = goal.acceptance;
-  return JSON.stringify({
-    acceptance: { stableRuns, signOff },
-    checks: goal.checks.filter((c) => c.required !== false).map(checkId).sort(),
-    requires: requiresOf(goal).filter((r) => r.required !== false).map((r) => r.goal).sort(),
-  });
+  const mode = (CHECK_MODES as readonly string[]).includes(String(v.mode)) ? (v.mode as CheckMode) : null;
+  if (!mode) out.push({ path: `${path}.mode`, message: `${path}.mode is one of ${CHECK_MODES.join(", ")}`, blocks: true });
+  const at = num(v.at) ?? 0;
+  const length = num(v.length) ?? 0;
+  if (at < 0 || length < 0) out.push({ path, message: `${path}: at and length are 0 or more`, blocks: true });
+  const id = partId(v.id, `c${i + 1}`);
+  const c: Check = { id, title: str(v.title) || id, at: r3(at), length: r3(length), mode: mode ?? "by_end" };
+  if (mode === "manual") {
+    const instruction = str(v.instruction, 2000);
+    if (!instruction) out.push({ path: `${path}.instruction`, message: `${path}: a manual check needs an instruction saying what to look at`, blocks: true });
+    c.instruction = instruction;
+    if (v.personOnly === true) c.personOnly = true;
+  } else if (mode) {
+    const e = isObj(v.expect) ? v.expect : null;
+    if (!e || typeof e.value !== "string" || !e.value || typeof e.op !== "string" || !e.op) out.push({ path: `${path}.expect`, message: `${path}: a ${mode} check needs expect { value, op, target? }`, blocks: true });
+    else c.expect = { value: e.value, op: e.op, ...(e.target !== undefined ? { target: e.target } : {}), ...(typeof e.subject === "string" && e.subject ? { subject: e.subject } : {}) };
+    const timeout = num(v.timeout);
+    if (mode === "hold" && timeout !== null && timeout > 0) c.timeout = r3(timeout);
+  }
+  return c;
 }
 
 /**
- * Why a sign-off no longer describes the goal, or null while it does:
- *
- * - "requirements": the goal's requirements changed since (requirementsKey).
- * - "failed": a required check has a failing result since.
- * - "revision": the workspace is at another revision, and a required check's
- *   newest result there tested another script version or map than the run
- *   the sign-off was given against, or there is no result there yet to say.
- *
- * Without `current` the revision is not compared, as in checkSatisfied.
+ * An arrangement from a body or a file, normalized, with what is wrong with
+ * it. `clips` finds a clip by id; given, instances are checked against it
+ * (an unknown clip, a clip for another performer kind, overlap on a track).
  */
-export function signOffLapse(s: SignOff, goal: Goal, checks: Array<{ state: CheckState; runs: RunRecord[] }>, current?: CurrentProvenance): SignOffLapse | null {
-  if (requirementsKey(goal) !== s.requirements) return "requirements";
-  const required = checks.filter((c) => c.state.check.required !== false);
-  const failedSince = (r: RunRecord): boolean => isResult(r) && r.outcome !== "passed" && (r.endedAt ?? r.startedAt) > s.at;
-  if (required.some((c) => c.runs.some(failedSince))) return "failed";
-  if (!current || current.revision === s.revision) return null;
-  const sameTest = (c: { runs: RunRecord[] }): boolean => {
-    const signed = c.runs.find((r) => s.runIds.includes(r.runId));
-    const now = c.runs.find((r) => isResult(r) && onRevision(r.provenance, current));
-    return !!signed?.provenance?.scriptHash && !!now?.provenance && now.provenance.scriptHash === signed.provenance.scriptHash && (now.map ?? null) === (signed.map ?? null);
+export function arrangementOf(v: unknown, id: string, clips?: (id: string) => Clip | undefined): { arrangement: Arrangement; findings: HubFinding[] } {
+  const out: HubFinding[] = [];
+  const o = isObj(v) ? v : {};
+  if (!isObj(v)) out.push({ path: "", message: "an arrangement is a JSON object", blocks: true });
+  const rate = num(o.rate) ?? DEFAULT_RATE;
+  if (rate <= 0 || rate > 1000) out.push({ path: "rate", message: "rate is frames per second, more than 0 and at most 1000", blocks: true });
+  const level = typeof o.level === "string" && o.level.trim() ? o.level.trim() : null;
+  if (level && !level.startsWith("/")) out.push({ path: "level", message: "level is a map's package path, such as /Game/Maps/Arena", blocks: true });
+  const tracks: Track[] = [];
+  const rawTracks = Array.isArray(o.tracks) ? o.tracks : [];
+  if (rawTracks.length > MAX_TRACKS) out.push({ path: "tracks", message: `an arrangement holds at most ${MAX_TRACKS} tracks`, blocks: true });
+  let instanceCount = 0;
+  for (const [ti, t] of rawTracks.entries()) {
+    const tp = `tracks[${ti}]`;
+    if (!isObj(t)) {
+      out.push({ path: tp, message: `${tp} is an object`, blocks: true });
+      continue;
+    }
+    const performer = performerOf(t.performer);
+    if (!performer) out.push({ path: `${tp}.performer`, message: `${tp}.performer: ${performerProblem(t.performer)}`, blocks: true });
+    const tid = partId(t.id, `t${ti + 1}`);
+    const instances: ClipInstance[] = [];
+    for (const [ii, inst] of (Array.isArray(t.instances) ? t.instances : []).entries()) {
+      const ip = `${tp}.instances[${ii}]`;
+      const at = isObj(inst) ? num(inst.at) : null;
+      if (!isObj(inst) || typeof inst.clip !== "string" || at === null || at < 0) {
+        out.push({ path: ip, message: `${ip} needs clip (an id) and at (a frame, 0 or more)`, blocks: true });
+        continue;
+      }
+      instances.push({ id: partId(inst.id, `i${ii + 1}`), clip: inst.clip, at: r3(at) });
+    }
+    instanceCount += instances.length;
+    instances.sort((a, b) => a.at - b.at || a.id.localeCompare(b.id));
+    tracks.push({ id: tid, title: str(t.title) || tid, performer: performer ?? { kind: "player", client: 0 }, mute: t.mute === true, solo: t.solo === true, instances });
+  }
+  if (instanceCount > MAX_INSTANCES) out.push({ path: "tracks", message: `an arrangement holds at most ${MAX_INSTANCES} clip instances`, blocks: true });
+  const rawChecks = Array.isArray(o.checks) ? o.checks : [];
+  if (rawChecks.length > MAX_CHECKS) out.push({ path: "checks", message: `the Checks track holds at most ${MAX_CHECKS} checks`, blocks: true });
+  const checks = rawChecks.map((c, i) => checkOf(c, i, out)).filter((c): c is Check => !!c).sort((a, b) => a.at - b.at || a.id.localeCompare(b.id));
+  const regions: Region[] = [];
+  for (const [ri, r] of (Array.isArray(o.regions) ? o.regions : []).entries()) {
+    const rp = `regions[${ri}]`;
+    const start = isObj(r) ? num(r.start) : null;
+    const end = isObj(r) ? num(r.end) : null;
+    if (!isObj(r) || start === null || end === null || start < 0 || end <= start) {
+      out.push({ path: rp, message: `${rp} needs start and an end after it`, blocks: true });
+      continue;
+    }
+    const rid = partId(r.id, `r${ri + 1}`);
+    regions.push({ id: rid, name: str(r.name) || rid, start: r3(start), end: r3(end) });
+  }
+  regions.sort((a, b) => a.start - b.start || a.id.localeCompare(b.id));
+  for (let i = 1; i < regions.length; i++) if (regions[i]!.start < regions[i - 1]!.end) out.push({ path: "regions", message: `regions ${regions[i - 1]!.id} and ${regions[i]!.id} overlap`, blocks: true });
+  const dupes = (what: string, ids: string[]) => {
+    const seen = new Set<string>();
+    for (const x of ids) {
+      if (seen.has(x)) out.push({ path: what, message: `two ${what} have the id ${x}`, blocks: true });
+      seen.add(x);
+    }
   };
-  return required.every(sameTest) ? null : "revision";
+  dupes("tracks", tracks.map((t) => t.id));
+  dupes("instances", tracks.flatMap((t) => t.instances.map((i) => i.id)));
+  dupes("checks", checks.map((c) => c.id));
+  dupes("regions", regions.map((r) => r.id));
+  const description = str(o.description, 4000);
+  const arrangement: Arrangement = { id, title: str(o.title) || id, level, rate: r3(rate), ...(description ? { description } : {}), tracks, checks, regions };
+  if (clips) out.push(...instanceFindings(arrangement, clips));
+  return { arrangement, findings: out };
 }
 
-// ---------- The relationship graph ----------
-
-type GraphGoal = Pick<Goal, "id" | "requires">;
-
-/** The goals a goal requires, in its order. */
-export const requiresOf = (g: Pick<Goal, "requires">): GoalRequirement[] => g.requires ?? [];
-
-/** Each goal's parents: the goals that require it, archived ones left out, in the order the goals are given. */
-export function goalParents(goals: readonly Pick<Goal, "id" | "requires" | "archived">[]): Map<string, string[]> {
-  const out = new Map<string, string[]>();
-  for (const g of goals) {
-    if (g.archived) continue;
-    for (const r of requiresOf(g)) {
-      const list = out.get(r.goal) ?? [];
-      if (!list.includes(g.id)) list.push(g.id);
-      out.set(r.goal, list);
+/** Instances checked against their clips: each must exist, suit its track's performer and not overlap the one before it. */
+export function instanceFindings(a: Arrangement, clips: (id: string) => Clip | undefined, known?: readonly string[]): HubFinding[] {
+  const out: HubFinding[] = [];
+  for (const [ti, t] of a.tracks.entries()) {
+    let end = -Infinity;
+    let prev = "";
+    for (const [ii, inst] of t.instances.entries()) {
+      const p = `tracks[${ti}].instances[${ii}]`;
+      const clip = clips(inst.clip);
+      if (!clip) {
+        out.push({ path: p, message: `${t.title}: no clip ${inst.clip}`, blocks: true, ...(known ? { candidates: rank(inst.clip, known) } : {}) });
+        continue;
+      }
+      if (clip.performer !== t.performer.kind) out.push({ path: p, message: `${t.title}: clip ${clip.id} is for a ${clip.performer}, and the track drives ${performerLabel(t.performer)}`, blocks: true });
+      if (inst.at < end) out.push({ path: p, message: `${t.title}: ${inst.id} starts at ${inst.at}, before ${prev} ends at ${end}`, blocks: true });
+      end = inst.at + instanceLength(clip, a.rate);
+      prev = inst.id;
     }
   }
   return out;
 }
 
-/**
- * Loops of goals that require each other, each as a path that starts and
- * ends on the same goal (["a", "b", "a"]), and the edges ("from>to") that
- * close them. Found depth first from the goals in id order, so the same goals
- * always give the same answer; without those edges the goals form no loop.
- */
-export function goalLoops(goals: readonly GraphGoal[]): { cycles: string[][]; edges: Set<string> } {
-  const byId = new Map(goals.map((g) => [g.id, g]));
-  const state = new Map<string, 1 | 2>();
-  const stack: string[] = [];
-  const cycles: string[][] = [];
-  const edges = new Set<string>();
-  const visit = (id: string): void => {
-    state.set(id, 1);
-    stack.push(id);
-    for (const r of requiresOf(byId.get(id)!)) {
-      if (!byId.has(r.goal)) continue;
-      const s = state.get(r.goal);
-      if (s === 1) {
-        cycles.push([...stack.slice(stack.indexOf(r.goal)), r.goal]);
-        edges.add(`${id}>${r.goal}`);
-      } else if (s === undefined) {
-        visit(r.goal);
-      }
-    }
-    stack.pop();
-    state.set(id, 2);
+/** The ids in `pool` closest to `word`, best first. */
+export function rank(word: string, pool: readonly string[], n = 3): string[] {
+  const w = word.toLowerCase();
+  const score = (c: string) => {
+    const s = c.toLowerCase();
+    if (s === w) return 0;
+    if (s.startsWith(w) || w.startsWith(s)) return 1;
+    if (s.includes(w) || w.includes(s)) return 2;
+    return 3 + Math.abs(s.length - w.length);
   };
-  for (const id of [...byId.keys()].sort()) if (!state.has(id)) visit(id);
-  return { cycles, edges };
+  return [...pool].sort((a, b) => score(a) - score(b) || a.localeCompare(b)).slice(0, n);
 }
 
-/** A path of requirements from one goal to another ([from, ..., to]), or null when there is none. */
-export function requirePath(goals: readonly GraphGoal[], from: string, to: string): string[] | null {
-  const byId = new Map(goals.map((g) => [g.id, g]));
+/** The frame an arrangement ends on: its last instance, check or region. */
+export function arrangementLength(a: Arrangement, clips: (id: string) => Clip | undefined): number {
+  let end = 0;
+  for (const t of a.tracks) for (const i of t.instances) end = Math.max(end, i.at + instanceLength(clips(i.clip), a.rate));
+  for (const c of a.checks) end = Math.max(end, c.at + c.length);
+  for (const r of a.regions) end = Math.max(end, r.end);
+  return r3(end);
+}
+
+/** The tracks a run plays: none muted, and only the soloed ones when any is. */
+export function audibleTracks<T extends Pick<Track, "mute" | "solo">>(tracks: readonly T[]): T[] {
+  const solo = tracks.some((t) => t.solo);
+  return tracks.filter((t) => (solo ? t.solo : !t.mute));
+}
+
+// ---------- Tests ----------
+
+/** A test: an arrangement, or one region of it. */
+export interface TestRef {
+  arrangement: string;
+  region?: string;
+}
+
+/** A test's id: the arrangement's id, or `<arrangement>:<region>`. */
+export const testIdOf = (t: TestRef): string => (t.region ? `${t.arrangement}:${t.region}` : t.arrangement);
+
+export function parseTestId(id: string): TestRef | null {
+  const [arrangement, region, more] = id.split(":");
+  if (more !== undefined || !arrangement || !HUB_ID.test(arrangement)) return null;
+  if (region === undefined) return { arrangement };
+  return PART_ID.test(region) ? { arrangement, region } : null;
+}
+
+/** The checks a test judges: all of an arrangement's, or those that start inside the region. */
+export function testChecks(a: Arrangement, region?: string): Check[] {
+  if (!region) return a.checks;
+  const r = a.regions.find((x) => x.id === region);
+  return r ? a.checks.filter((c) => c.at >= r.start && c.at < r.end) : [];
+}
+
+/** Every test an arrangement makes: itself, then each region. */
+export const testsOf = (a: Pick<Arrangement, "id" | "regions">): TestRef[] => [{ arrangement: a.id }, ...a.regions.map((r) => ({ arrangement: a.id, region: r.id }))];
+
+// ---------- Suites ----------
+
+export type SuiteItem = { test: string } | { suite: string };
+
+export interface Suite {
+  id: string;
+  title: string;
+  description?: string;
+  /** Tests (by test id) and suites (by id), in order. */
+  items: SuiteItem[];
+  /** Tests that run but do not count toward the suite's health. */
+  quarantined: string[];
+  /** Tests a person marked flaky, whatever their runs say. */
+  flaky: string[];
+}
+
+export type SuiteDraft = Partial<Omit<Suite, "id">> & { id?: string };
+
+/** A suite from a body or a file, normalized, with what is wrong with it. */
+export function suiteOf(v: unknown, id: string): { suite: Suite; findings: HubFinding[] } {
+  const out: HubFinding[] = [];
+  const o = isObj(v) ? v : {};
+  if (!isObj(v)) out.push({ path: "", message: "a suite is a JSON object", blocks: true });
+  const items: SuiteItem[] = [];
   const seen = new Set<string>();
-  const walk = (id: string, path: string[]): string[] | null => {
-    if (id === to) return path;
-    if (seen.has(id)) return null;
-    seen.add(id);
-    const g = byId.get(id);
-    for (const r of g ? requiresOf(g) : []) {
-      const found = walk(r.goal, [...path, r.goal]);
+  for (const [i, it] of (Array.isArray(o.items) ? o.items : []).entries()) {
+    const p = `items[${i}]`;
+    if (isObj(it) && typeof it.test === "string" && parseTestId(it.test)) {
+      if (!seen.has(`t:${it.test}`)) items.push({ test: it.test });
+      seen.add(`t:${it.test}`);
+    } else if (isObj(it) && typeof it.suite === "string" && HUB_ID.test(it.suite)) {
+      if (it.suite === id) out.push({ path: p, message: "a suite cannot contain itself", blocks: true });
+      else if (!seen.has(`s:${it.suite}`)) items.push({ suite: it.suite });
+      seen.add(`s:${it.suite}`);
+    } else out.push({ path: p, message: `${p} is { test: "<arrangement>[:<region>]" } or { suite: "<id>" }`, blocks: true });
+  }
+  const ids = (k: string) => [...new Set((Array.isArray(o[k]) ? o[k] : []).filter((x): x is string => typeof x === "string" && !!parseTestId(x)))].sort();
+  const description = str(o.description, 4000);
+  return { suite: { id, title: str(o.title) || id, ...(description ? { description } : {}), items, quarantined: ids("quarantined"), flaky: ids("flaky") }, findings: out };
+}
+
+/** A loop of suites through `id`, as the ids along it, or null. */
+export function suiteLoop(suites: ReadonlyMap<string, Pick<Suite, "items">>, id: string): string[] | null {
+  const walk = (at: string, path: string[]): string[] | null => {
+    for (const it of suites.get(at)?.items ?? []) {
+      if (!("suite" in it)) continue;
+      if (it.suite === id) return [...path, id];
+      if (path.includes(it.suite)) continue;
+      const found = walk(it.suite, [...path, it.suite]);
       if (found) return found;
     }
     return null;
   };
-  return walk(from, [from]);
+  return walk(id, [id]);
 }
 
-/** The loop `parent` requiring `child` would close ([parent, child, ..., parent]), or null when it closes none. */
-export function loopIfRequired(goals: readonly GraphGoal[], parent: string, child: string): string[] | null {
-  if (parent === child) return [parent, parent];
-  const back = requirePath(goals, child, parent);
-  return back ? [parent, ...back] : null;
-}
-
-/**
- * The goals a goal stands for, itself last: every goal reachable through
- * its requirements, depth first in each goal's order, each once. Archived
- * and unknown goals are left out, and a loop is followed only once.
- */
-export function goalTree(goals: readonly Pick<Goal, "id" | "requires" | "archived">[], id: string): string[] {
-  const byId = new Map(goals.map((g) => [g.id, g]));
-  const out: string[] = [];
+/** Every test a suite holds, its own and its suites', once each in first-seen order, and the suite ids it could not find. */
+export function suiteTests(suites: ReadonlyMap<string, Pick<Suite, "items">>, id: string): { tests: string[]; missingSuites: string[] } {
+  const tests: string[] = [];
+  const missing: string[] = [];
   const seen = new Set<string>();
-  const visit = (gid: string): void => {
-    const g = byId.get(gid);
-    if (!g || seen.has(gid) || (g.archived && gid !== id)) return;
-    seen.add(gid);
-    for (const r of requiresOf(g)) visit(r.goal);
-    out.push(gid);
-  };
-  visit(id);
-  return out;
-}
-
-/**
- * The checks running a goal runs: those of every goal it requires, depth
- * first in order, then its own, each check once, in that order.
- */
-export function goalChecksDeep(goals: readonly Pick<Goal, "id" | "requires" | "archived" | "checks">[], id: string): CheckRef[] {
-  const byId = new Map(goals.map((g) => [g.id, g]));
-  const seen = new Set<string>();
-  const out: CheckRef[] = [];
-  for (const gid of goalTree(goals, id)) {
-    for (const c of byId.get(gid)!.checks) {
-      const cid = checkId(c);
-      if (seen.has(cid)) continue;
-      seen.add(cid);
-      out.push(c);
+  const walk = (at: string) => {
+    if (seen.has(at)) return;
+    seen.add(at);
+    const s = suites.get(at);
+    if (!s) {
+      missing.push(at);
+      return;
     }
-  }
-  return out;
-}
-
-/**
- * Every goal's state: its own checks' status rolled up through the goals it
- * requires, each worked out once. An edge that closes a loop is left out of
- * the roll-up (goalLoops says which), so status never goes round forever;
- * archived and unknown goals count for nothing. `current` as for goalStatus.
- * `signOffs`: the goal store's current sign-off of each goal, by goal id,
- * each counted unless it lapsed (signOffLapse).
- */
-export function rollUpGoals(goals: readonly Goal[], checksOf: (g: Goal) => Array<{ state: CheckState; runs: RunRecord[] }>, current?: CurrentProvenance, signOffs?: ReadonlyMap<string, SignOff>): GoalState[] {
-  const byId = new Map(goals.map((g) => [g.id, g]));
-  const { edges } = goalLoops(goals);
-  const parents = goalParents(goals);
-  const done = new Map<string, GoalState>();
-  const one = (g: Goal): GoalState => {
-    const had = done.get(g.id);
-    if (had) return had;
-    const kids = requiresOf(g)
-      .map((r) => ({ r, child: byId.get(r.goal) }))
-      .filter((x): x is { r: GoalRequirement; child: Goal } => !!x.child && !x.child.archived && !edges.has(`${g.id}>${x.r.goal}`))
-      .map((x) => ({ required: x.r.required !== false, status: one(x.child).status }));
-    const checks = checksOf(g);
-    const record = signOffs?.get(g.id);
-    const signOff: SignOffState | undefined = record ? { record, lapsed: signOffLapse(record, g, checks, current) } : undefined;
-    const { status, progress } = goalStatus(g, checks, kids.filter((k) => k.required).map((k) => k.status), kids.filter((k) => !k.required).map((k) => k.status), current, !!signOff && !signOff.lapsed);
-    const ps = parents.get(g.id) ?? [];
-    const state: GoalState = { goal: g, status, checks: checks.map((c) => c.state), progress, parents: ps, requires: [], ...(g.kind !== "milestone" && !g.archived && ps.length === 0 ? { unused: true } : {}), ...(signOff ? { signOff } : {}) };
-    done.set(g.id, state);
-    return state;
+    for (const it of s.items) {
+      if ("test" in it) {
+        if (!tests.includes(it.test)) tests.push(it.test);
+      } else walk(it.suite);
+    }
   };
-  const all = goals.map(one);
-  for (const s of all) {
-    s.requires = requiresOf(s.goal).map((r) => {
-      const c = done.get(r.goal);
-      return { goal: r.goal, required: r.required !== false, status: c && !c.goal.archived ? c.status : null };
-    });
+  walk(id);
+  return { tests, missingSuites: missing };
+}
+
+// ---------- Files ----------
+
+function clipFile(c: Clip): Record<string, unknown> {
+  return {
+    schema: HUB_SCHEMA,
+    title: c.title,
+    performer: c.performer,
+    rate: c.rate,
+    length: c.length,
+    ...(c.description ? { description: c.description } : {}),
+    input: c.input.map((l) => ({ action: l.action, type: l.type, notes: l.notes.map((n) => ({ id: n.id, start: n.start, length: n.length, ...(n.value !== undefined ? { value: n.value } : {}) })), keys: l.keys.map((k) => ({ id: k.id, t: k.t, v: k.v, ...(k.interp ? { interp: k.interp } : {}) })) })),
+  };
+}
+
+function arrangementFile(a: Arrangement): Record<string, unknown> {
+  return {
+    schema: HUB_SCHEMA,
+    title: a.title,
+    level: a.level,
+    rate: a.rate,
+    ...(a.description ? { description: a.description } : {}),
+    tracks: a.tracks.map((t) => ({ id: t.id, title: t.title, performer: { kind: t.performer.kind, client: t.performer.client }, mute: t.mute, solo: t.solo, instances: t.instances.map((i) => ({ id: i.id, clip: i.clip, at: i.at })) })),
+    checks: a.checks.map((c) => ({ id: c.id, title: c.title, at: c.at, length: c.length, mode: c.mode, ...(c.expect ? { expect: c.expect } : {}), ...(c.instruction ? { instruction: c.instruction } : {}), ...(c.personOnly ? { personOnly: true } : {}), ...(c.timeout ? { timeout: c.timeout } : {}) })),
+    regions: a.regions.map((r) => ({ id: r.id, name: r.name, start: r.start, end: r.end })),
+  };
+}
+
+function suiteFile(s: Suite): Record<string, unknown> {
+  return { schema: HUB_SCHEMA, title: s.title, ...(s.description ? { description: s.description } : {}), items: s.items.map((it) => ("test" in it ? { test: it.test } : { suite: it.suite })), quarantined: s.quarantined, flaky: s.flaky };
+}
+
+/**
+ * A file's text: fixed key order, two-space indent, LF, a final newline. The
+ * id is the file name and is not repeated inside. Unordered lists (notes,
+ * keys, instances, checks, regions) are sorted, so two people's edits merge
+ * line by line.
+ */
+export function fileText(kind: "clip", v: Clip): string;
+export function fileText(kind: "arrangement", v: Arrangement): string;
+export function fileText(kind: "suite", v: Suite): string;
+export function fileText(kind: HubKind, v: Clip | Arrangement | Suite): string {
+  const body = kind === "clip" ? clipFile(v as Clip) : kind === "arrangement" ? arrangementFile(v as Arrangement) : suiteFile(v as Suite);
+  return `${JSON.stringify(body, null, 2)}\n`;
+}
+
+// ---------- Runs (per machine) ----------
+
+export type RunnerKind = "editor" | "headless";
+export type RunSource = "person" | "agent" | "schedule";
+export type CheckStatus = "pending" | "running" | "passed" | "failed" | "awaiting_verdict" | "skipped";
+export type RunState = "starting" | "running" | "awaiting_verdict" | "passed" | "failed" | "error" | "stopped";
+export const ENDED_STATES: readonly RunState[] = ["passed", "failed", "error", "stopped"];
+export const runEnded = (s: RunState): boolean => ENDED_STATES.includes(s);
+
+export interface CheckResult {
+  id: string;
+  status: CheckStatus;
+  /** The frame it settled on. */
+  frame?: number;
+  message?: string;
+  verdict?: { by: "person" | "agent"; note?: string; at: string };
+}
+
+/** The source control a project is under; "none" when the hub sees none. */
+export type RunVcs = "git" | "perforce" | "plastic" | "svn" | "none";
+
+/** Where the workspace is now. */
+export interface CurrentProvenance {
+  vcs: RunVcs | null;
+  revision: string | null;
+  dirty: number | null;
+}
+
+/** One run of one test, as this machine keeps it. */
+export interface RunRecord {
+  runId: string;
+  test: string;
+  title: string;
+  runner: RunnerKind;
+  source: RunSource;
+  /** The queueing it came from: one per test, or one for every test of a suite. */
+  batch: string;
+  /** The suite queued, when it came from one. */
+  suite?: string;
+  startedAt: string;
+  endedAt: string | null;
+  state: RunState;
+  checks: CheckResult[];
+  frame?: number;
+  error?: string;
+  revision: string | null;
+  dirty: number | null;
+}
+
+/** A finished run's state from its checks: any failed fails it, all passed passes it. */
+export function stateFromChecks(checks: readonly Pick<CheckResult, "status">[]): RunState {
+  if (checks.some((c) => c.status === "failed")) return "failed";
+  if (checks.length > 0 && checks.every((c) => c.status === "passed" || c.status === "skipped")) return "passed";
+  return "error";
+}
+
+// ---------- Health ----------
+
+export type TestHealth = "running" | "failing" | "flaky" | "passing" | "never_run" | "missing";
+export type SuiteHealth = "running" | "failing" | "flaky" | "never_run" | "passing" | "empty";
+export const TEST_HEALTH_ORDER: readonly TestHealth[] = ["running", "failing", "missing", "flaky", "never_run", "passing"];
+
+/** Flaky: mixed results among this many latest results on one revision. */
+export const FLAKY_WINDOW = 5;
+/** Pass rate: over this many latest results. */
+export const PASS_RATE_WINDOW = 20;
+
+const isResult = (r: Pick<RunRecord, "state">): boolean => r.state === "passed" || r.state === "failed";
+
+/** Whether a test's latest results flip, and which checks flip between them. `runs` newest first. */
+export function flakiness(runs: readonly RunRecord[], window = FLAKY_WINDOW): { flaky: boolean; checks: string[] } {
+  const results = runs.filter(isResult);
+  const rev = results[0]?.revision ?? null;
+  const same = results.filter((r) => rev === null || r.revision === rev).slice(0, window);
+  const flaky = same.some((r) => r.state === "passed") && same.some((r) => r.state === "failed");
+  const statuses = new Map<string, Set<string>>();
+  for (const r of same) for (const c of r.checks) if (c.status === "passed" || c.status === "failed") (statuses.get(c.id) ?? statuses.set(c.id, new Set()).get(c.id)!).add(c.status);
+  return { flaky, checks: flaky ? [...statuses].filter(([, s]) => s.size > 1).map(([id]) => id).sort() : [] };
+}
+
+export function passRate(runs: readonly RunRecord[], window = PASS_RATE_WINDOW): number | null {
+  const results = runs.filter(isResult).slice(0, window);
+  return results.length ? r3(results.filter((r) => r.state === "passed").length / results.length) : null;
+}
+
+/** A test's health from its runs, newest first. */
+export function testHealth(runs: readonly RunRecord[], o: { missing?: boolean; window?: number } = {}): TestHealth {
+  if (o.missing) return "missing";
+  if (runs[0] && !runEnded(runs[0].state)) return "running";
+  const last = runs.find(isResult);
+  if (!last) return "never_run";
+  if (last.state === "failed") return "failing";
+  return flakiness(runs, o.window).flaky ? "flaky" : "passing";
+}
+
+export interface RunSummary {
+  runId: string;
+  state: RunState;
+  startedAt: string;
+  endedAt: string | null;
+}
+
+export interface TestState {
+  id: string;
+  arrangement: string;
+  region?: string;
+  title: string;
+  health: TestHealth;
+  checks: number;
+  passRate: number | null;
+  flaky: { detected: boolean; marked: boolean; checks: string[] };
+  /** Quarantined in some suite that holds it. */
+  quarantined: boolean;
+  last?: RunSummary;
+}
+
+/** One queueing of tests the suite holds: how many passed. */
+export interface PassRatePoint {
+  batch: string;
+  at: string;
+  passed: number;
+  total: number;
+  rate: number;
+}
+
+export interface SuiteState {
+  id: string;
+  title: string;
+  description?: string;
+  items: SuiteItem[];
+  health: SuiteHealth;
+  /** Over the counted tests' latest results. */
+  passRate: number | null;
+  /** Oldest first. */
+  history: PassRatePoint[];
+  /** Every test it holds, nested suites' included, in order. */
+  tests: TestState[];
+  quarantined: string[];
+  flaky: string[];
+  /** Tests and suites it names that do not exist. */
+  missing: string[];
+}
+
+/** A suite's health over the tests that count (not quarantined): running, then failing, flaky, never run, passing. */
+export function suiteHealth(tests: readonly Pick<TestState, "health" | "quarantined" | "flaky">[]): SuiteHealth {
+  const counted = tests.filter((t) => !t.quarantined);
+  if (!counted.length) return "empty";
+  if (counted.some((t) => t.health === "running")) return "running";
+  if (counted.some((t) => t.health === "failing" || t.health === "missing")) return "failing";
+  if (counted.some((t) => t.health === "flaky" || t.flaky.marked)) return "flaky";
+  if (counted.some((t) => t.health === "never_run")) return "never_run";
+  return "passing";
+}
+
+/** The pass-rate history of a set of tests: one point per batch that ran any of them, oldest first. `runs` any order. */
+export function passRateHistory(tests: ReadonlySet<string>, runs: readonly RunRecord[], max = 50): PassRatePoint[] {
+  const by = new Map<string, PassRatePoint>();
+  for (const r of runs) {
+    if (!tests.has(r.test) || !isResult(r)) continue;
+    const p = by.get(r.batch) ?? { batch: r.batch, at: r.startedAt, passed: 0, total: 0, rate: 0 };
+    p.total++;
+    if (r.state === "passed") p.passed++;
+    if (r.startedAt < p.at) p.at = r.startedAt;
+    by.set(r.batch, p);
   }
-  return all;
+  return [...by.values()].map((p) => ({ ...p, rate: r3(p.passed / p.total) })).sort((a, b) => a.at.localeCompare(b.at)).slice(-max);
 }
 
-export const leafName = (path: string): string => {
-  const last = path.split("/").filter(Boolean).pop() ?? path;
-  return last.replace(/\.[^.]*$/, "");
-};
+// ---------- Queue and schedules (per machine) ----------
 
-// ---------- The goal store ----------
-
-/**
- * What the goal store keeps, one kind of record each: goals (milestones
- * included), what a check says about itself (id: the check id), sign-offs,
- * the project's health rule (id "health"), the one-time import of an
- * older Studio's QA/Goals files (id "qa-goals"), and the project's named
- * arrangements.
- */
-export type HubRecordType = "goal" | "check" | "signoff" | "rules" | "import" | "arrangement";
-
-/**
- * The import of a project's QA/Goals files, where an older Studio kept
- * goals, into an empty store. It happens once: the files are read, never
- * changed, and never read again.
- */
-export interface GoalImport {
-  /** The folder read, relative to the project. */
-  from: string;
-  at: string;
-  /** The goals it brought. */
-  goals: string[];
-  /** Files and fields it could not read, each named. */
-  problems: string[];
-}
-
-export interface HubRecordData {
-  goal: Goal;
-  check: CheckMetaRecord;
-  signoff: SignOff;
-  rules: HealthRule;
-  import: GoalImport;
-  arrangement: ArrangementRecord;
-}
-
-/**
- * One version of one record. A store never rewrites a version: a change is a
- * new version (rev one more), and a removal is a version with `deleted` and
- * no data. The newest version of each (type, id) is the record. The same
- * records move to a hosted store unchanged: ids are unique across computers
- * (goal ids end in a random part, sign-off ids are random) and each version
- * names the store it was written in.
- */
-export interface HubRecord<T extends HubRecordType = HubRecordType> {
-  schema: typeof HUB_SCHEMA;
-  type: T;
+export interface QueueItem {
   id: string;
-  /** This version's number: 1 for the first. */
-  rev: number;
-  at: string;
-  /** The store this version was written in: a random id each project's store takes on each computer. */
-  origin: string;
-  deleted?: true;
-  data?: HubRecordData[T];
-}
-
-/** Any record, its data typed by its type. */
-export type AnyHubRecord = { [T in HubRecordType]: HubRecord<T> }[HubRecordType];
-
-/** The format a goals file names, so an import knows it for one. */
-export const HUB_EXPORT_FORMAT = "ue-mcp.goals";
-
-/**
- * GET /hub/store: the whole goal store as one file, to move it to another
- * computer. Every live record at its newest version, the import marker
- * left out.
- */
-export interface HubExport {
-  format: typeof HUB_EXPORT_FORMAT;
-  schema: typeof HUB_SCHEMA;
-  exportedAt: string;
-  /** The store it came from. */
-  origin: string;
-  records: AnyHubRecord[];
-}
-
-/**
- * POST /hub/store: what importing a HubExport did. The rule is merge by id,
- * and nothing here changes: a record this store lacks is added as it is in
- * the file; one it holds with the same content is unchanged; one it holds
- * with other content keeps this store's version and is listed in conflicts.
- * A file with any record that does not read is refused whole.
- */
-export interface HubImportReport {
-  added: number;
-  unchanged: number;
-  conflicts: Array<{ type: HubRecordType; id: string; title: string }>;
-}
-
-// ---------- Plans and the queue (per machine) ----------
-
-export type PlanScope =
-  | { kind: "goal"; goalId: string }
-  /** `from`: play the timelines from this frame (at 60 per second) instead of their start, as from the Arrangement's playhead. */
-  | { kind: "track"; goalId: string; from?: number }
-  | { kind: "scene"; goalId: string; from?: number }
-  | { kind: "slot"; sceneId: string; trackId: string }
-  /** `arrangementId`: which arrangement plays; the project's first one when absent. */
-  | { kind: "arrangement"; from?: number; arrangementId?: string }
-  | { kind: "checks"; checks: CheckRef[] }
-  | { kind: "failing"; goalId?: string }
-  | { kind: "stale"; goalId?: string }
-  | { kind: "all" };
-
-export interface PlanOptions {
-  /**
-   * A person is there to judge manual steps while they play. Without one, a
-   * check whose script has a manual step is skipped (NEEDS_PERSON) rather
-   * than started.
-   */
-  attended: boolean;
-  /** How long each run waits for a verdict, one of QA_VERDICT_WAIT_CHOICES. Absent: the "Wait for a verdict" setting. */
-  verdictWaitMinutes?: number;
-  stopOnFailure: boolean;
-  /** Replay each check's last recording instead of a live run, where it has one. */
-  replay: boolean;
-}
-/** The options a plan starts from when its request gives none: someone is there to judge. */
-export const DEFAULT_PLAN_OPTIONS: PlanOptions = { attended: true, stopOnFailure: false, replay: false };
-/** The options a plan starts from by what queued it: a schedule's runs are unattended. */
-export const planOptionsFor = (trigger: PlanTrigger): PlanOptions => ({ ...DEFAULT_PLAN_OPTIONS, attended: trigger !== "schedule" });
-
-/** Why an unattended plan skips a check. */
-export const NEEDS_PERSON = "needs a person";
-
-/**
- * Whether a script needs someone at the editor: it has a manual step. A step
- * an agent may judge counts too, since a plan run has no agent assigned to
- * judge it.
- */
-export const needsPerson = (steps: readonly Pick<QaStep, "judge">[]): boolean => steps.some((s) => s.judge === "manual");
-
-export type PlanItemState = "queued" | "running" | "passed" | "failed" | "needs_you" | "unjudged" | "skipped" | "error" | "crashed" | "cancelled";
-export interface PlanItem {
-  check: CheckRef;
-  name: string;
-  /**
-   * needs_you: its run holds at a manual step, PIE paused, until a verdict.
-   * unjudged: the run ended without that verdict, no result (reason "no verdict").
-   * error: the run could not get through its steps (reason says why).
-   * crashed: the editor crashed during it. Recorded once and never retried; it counts as failing.
-   */
-  state: PlanItemState;
-  runId?: string | null;
-  /** A fix item's chat session, where its loop's agents work. */
-  sessionId?: string | null;
-  reason?: string | null;
-  startedAt?: string | null;
-  endedAt?: string | null;
-}
-
-/** Plan item states that count as failing. */
-export const FAILING_ITEM_STATES: readonly PlanItemState[] = ["failed", "error", "crashed"];
-
-/** A plan item's state once its run ended: a stopped run is a cancelled item; one that ended before its steps settled is an error. */
-export function itemStateOf(outcome: RunOutcome): PlanItemState {
-  return outcome === "passed" || outcome === "failed" || outcome === "unjudged" ? outcome : outcome === "stopped" ? "cancelled" : "error";
-}
-
-export type PlanState = "queued" | "running" | "paused" | "done" | "cancelled" | "failed";
-export type PlanTrigger = "person" | "schedule" | "agent";
-
-export interface PlanRun {
-  id: string;
+  test: string;
   title: string;
-  /** What each item does: "run" runs its check (the default), "fix" hands it to a fix loop in a chat session of its own. */
-  work?: "run" | "fix";
-  scope: PlanScope;
-  options: PlanOptions;
-  state: PlanState;
-  items: PlanItem[];
-  trigger: PlanTrigger;
-  /** The schedule that queued it. */
-  scheduleId?: string | null;
-  /** The arrangement its scope belongs to; absent for a scope of clips, which every arrangement shares. */
-  arrangementId?: string;
-  createdAt: string;
-  startedAt?: string | null;
-  endedAt?: string | null;
+  runner: RunnerKind;
+  source: RunSource;
+  batch: string;
+  suite?: string;
+  queuedAt: string;
+  state: "queued" | "running";
+  runId?: string;
+  /** Why it plays on this runner when none was asked for: headless by default, the open editor when that does not fit or a test needs a person. */
+  runnerReason?: string;
 }
 
-/** POST /hub/plans. */
-export interface PlanRequest {
-  title?: string;
-  scope: PlanScope;
-  options?: Partial<PlanOptions>;
-  /** Run next: ahead of every other queued plan, behind only the one on the editor. */
+/** Queue one test or every test of a suite. */
+export interface QueueRequest {
+  test?: string;
+  suite?: string;
+  /** Where it plays. Unset: a hidden editor when one fits in memory and the test has no manual checks, else the open editor. */
+  runner?: RunnerKind;
+  /** Put it at the front. */
   next?: boolean;
-}
-
-/**
- * Where a person's Run put its plan (POST /hub/plans, POST
- * /hub/checks/:checkId/run), so the client can say so where they clicked.
- *
- * A person's Run is a person resuming: when the queue was paused (by a
- * person, Release the editor, or a reconnect) it resumes, and with nothing
- * on the editor the plan starts ahead of whatever waited behind the pause.
- * An agent's plan never resumes a paused queue.
- *
- * - started: its first item is on the editor (or starting).
- * - waiting: it is next, but the editor is not free (`reason`).
- * - queued: other work is ahead of it (`ahead`, `position`), or the queue is paused (`reason`).
- */
-export interface PlanPlacement {
-  state: "started" | "waiting" | "queued";
-  /** Its place among the queued plans, 1 for next; 0 once started. */
-  position: number;
-  /** Plans ahead of it, the one on the editor included. */
-  ahead: number;
-  /** Why it does not start now. */
-  reason?: string | null;
-  /** The queue was paused and this Run resumed it. */
-  resumed?: boolean;
-}
-
-/**
- * A plan run at a local time on chosen days of the week, such as "nightly
- * at 02:00". A schedule is a person's standing instruction, so it runs under
- * the Manual playtest-runs setting too, but it never takes the editor from
- * anyone: when it is due it waits while the queue is paused or busy, or the
- * editor is held (the occupancy answer, the consent ledger included, and
- * every other session quiet), and gives up with the reason in `lastSkipped`
- * once it has waited an hour. Kept with the queue.
- */
-export interface Schedule {
-  id: string;
-  title: string;
-  scope: PlanScope;
-  options: PlanOptions;
-  /** Local time HH:MM. */
-  at: string;
-  /** Days of the week it runs, 0 Sunday to 6 Saturday. */
-  days: number[];
-  enabled: boolean;
-  lastRunAt?: string | null;
-  /** Why the last due run did not start. */
-  lastSkipped?: string | null;
-  /** Due now, and why it has not started yet. */
-  waiting?: string | null;
-  nextRunAt?: string | null;
-  /** The arrangement its scope belongs to, as PlanRun.arrangementId. */
-  arrangementId?: string;
-}
-export type ScheduleDraft = Omit<Schedule, "id" | "lastRunAt" | "lastSkipped" | "waiting" | "nextRunAt" | "arrangementId">;
-
-/** POST /hub/fix: a fix plan for every failing check of a goal (or of the project), or for one check. */
-export interface FixRequest {
-  goalId?: string;
-  checkId?: string;
 }
 
 export interface QueueState {
   paused: boolean;
-  /** Why the queue is paused: a person paused it, Release the editor paused it, or the editor reconnected. A person resumes it either way. */
-  pausedBy?: QueuePause | null;
-  current: PlanRun | null;
-  queued: PlanRun[];
-  /** Finished plans, newest first, at most 20. */
-  recent: PlanRun[];
-  schedules: Schedule[];
-  editor: { connected: boolean };
-  /** The hub's hold on the editor while it starts or runs an item. */
-  lease?: EditorLease | null;
-  /** Why the next item waits although the queue is not paused, such as "Play In Editor is in use". */
-  waiting?: string | null;
+  /** Why the next editor item waits; empty when it does not. */
+  waiting: OccupancyReason[];
+  /** Why the next headless item waits, when it does: no hidden editor fits in memory now, say. */
+  waitingHeadless?: string;
+  running: QueueItem[];
+  queued: QueueItem[];
 }
 
-export type QueuePause = "person" | "release" | "reconnect";
+/** Run a suite or a test on chosen weekdays (0 Sunday) at a local time. */
+export interface Schedule {
+  id: string;
+  title: string;
+  suite?: string;
+  test?: string;
+  runner: RunnerKind;
+  days: number[];
+  /** HH:MM, local. */
+  time: string;
+  enabled: boolean;
+  lastRunAt: string | null;
+}
 
-// ---------- The editor lease (per machine) ----------
+export type ScheduleDraft = Partial<Omit<Schedule, "id" | "lastRunAt">>;
+export const SCHEDULE_TIME = /^([01]\d|2[0-3]):[0-5]\d$/;
 
-/**
- * What else holds the editor, one signal each, from what the daemon already
- * knows: the editor not connected, an editor operation (restart, rebuild),
- * an open modal dialog, Play In Editor the hub did not start, a playtest the
- * hub did not start, a chat or fix loop with editor calls in flight, another
- * MCP client's calls, and someone using this computer. From the consent
- * ledger (editor(hold), disruption requests): another session holding the
- * editor or with an editor transaction open ("session"), and a request to
- * stop, restart or rebuild the editor still open ("consent").
- */
-export type OccupancyKind = "disconnected" | "operation" | "dialog" | "pie" | "run" | "agent" | "client" | "input" | "session" | "consent";
+// ---------- What else holds the editor ----------
+
+export type OccupancyKind = "disconnected" | "operation" | "dialog" | "pie" | "agent" | "client" | "input" | "session" | "consent";
 export interface OccupancyReason {
   kind: OccupancyKind;
   text: string;
 }
 
-/**
- * The hub's explicit hold on one editor: taken before it starts a plan item
- * or a fix loop, released when that ends or when a person releases the
- * editor. Only the hub acts on what it holds: the run it started, and Play In
- * Editor when that run started it. `editor` names which editor; today the
- * developer's own ("workspace") is the only one.
- */
+/** The hub's hold on one editor while a queue item plays on it. Only the hub acts on what it holds: its run, and PIE when that run started it. */
 export interface EditorLease {
   editor: string;
-  /** What the hub is doing, such as "Run Tutorial: Door opens". */
   purpose: string;
-  planRunId: string;
-  /** The item's position in its plan. */
-  item: number;
-  work: "run" | "fix";
-  /** The run the item started, once it has one. */
+  item: string;
   runId?: string | null;
-  /** The fix loop's chat session. */
-  sessionId?: string | null;
-  /** The item's run started Play In Editor, so ending that session is the hub's to do. */
   pie?: boolean;
   since: string;
 }
 
-/** The body of `hub.lease` (HUB_LEASE): the lease as it is now, null when the hub holds nothing. */
 export interface HubLeaseEvent {
   lease: EditorLease | null;
 }
 export const HUB_LEASE = "hub.lease";
-
-// ---------- Needs attention (computed) ----------
-
-/**
- * What waits for a person and does not depend on a game playing now. A
- * verdict is not one: it is given live, while its step plays (the run's
- * held verdict, QaHeld).
- */
-export type AttentionKind = "loop_blocked" | "regression" | "sign_off" | "plan_failed";
-
-export interface AttentionItem {
-  /** Stable while the thing it points at waits: "<kind>:<id>" and the like. */
-  id: string;
-  kind: AttentionKind;
-  at: string;
-  title: string;
-  detail?: string;
-  goalIds: string[];
-  runId?: string;
-  step?: number;
-  checkId?: string;
-  planRunId?: string;
-  /** A blocked fix loop's chat session: where the agent work, and its blocker, are. */
-  sessionId?: string;
-}
-
-export const ATTENTION_ORDER: readonly AttentionKind[] = ["loop_blocked", "sign_off", "regression", "plan_failed"];
-
-// ---------- Overview ----------
-
-/**
- * Where the runs behind every status come from. "local": this computer's
- * own runs only, so two people can see two statuses for the same goal; a
- * shared store would answer for more than one computer.
- */
-export interface EvidenceScope {
-  store: "local";
-  current: CurrentProvenance;
-}
-
-/** GET /hub. Everything the overview and library draw, in one answer. */
-export interface HubOverview {
-  goals: GoalState[];
-  /** Every known check: those goals name and scripts in the project no goal names yet. */
-  checks: CheckState[];
-  attention: AttentionItem[];
-  queue: QueueState;
-  /** Newest runs across the project, at most 30. */
-  recent: RunRecord[];
-  /** Whose evidence every status here is worked out from, and the workspace it is compared with. */
-  evidence: EvidenceScope;
-  /** The project's rule for flaky and stale. */
-  rules: HealthRule;
-  /** The goals imported from an older Studio's QA/Goals files, when that happened. */
-  imported: GoalImport | null;
-  editor: { connected: boolean };
-  /** Goals that require each other in a loop, goals required but gone, and what went wrong in the background. */
-  warnings: string[];
-}
-
-/** GET /hub/checks/:checkId. */
-export interface CheckDetail {
-  state: CheckState;
-  /** Runs newest first, a page. */
-  runs: RunRecord[];
-  more: boolean;
-  /** The script's steps as ue-mcp has them, when it is a script. */
-  script?: QaRun | null;
-}
-
-export type HubChangedWhat = "goals" | "runs" | "queue" | "attention" | "checks";
-/** The body of `studio.hub.changed`. */
-export interface HubChanged {
-  what: HubChangedWhat[];
-  goalId?: string;
-  runId?: string;
-  planRunId?: string;
-}
-export const HUB_CHANGED = "hub.changed";
-
-/**
- * The hub's routes, each relative to /v1 (so `GET /hub` is `GET /v1/hub`).
- * Ids in paths are encodeURIComponent'd. DAEMON_ROUTES names each one as
- * `hub.<name>`. Verdicts and stop go through pie(verdict) and pie(script_stop).
- */
-export const HUB_ROUTES = {
-  overview: "GET /hub",
-  goal: "GET /hub/goals/:id -> GoalState",
-  createGoal: "POST /hub/goals GoalDraft -> { goal: Goal }",
-  updateGoal: "PUT /hub/goals/:id GoalUpdate -> { goal: Goal }",
-  deleteGoal: "DELETE /hub/goals/:id -> 204",
-  addChecks: "POST /hub/goals/:id/checks { checks: CheckRef[] } -> { goal }",
-  removeCheck: "DELETE /hub/goals/:id/checks/:checkId -> { goal }",
-  updateGoalCheck: "PUT /hub/goals/:id/checks/:checkId GoalCheckUpdate -> { goal }",
-  orderChecks: "PUT /hub/goals/:id/checks/order { order: checkIds } -> { goal }",
-  addRequire: "POST /hub/goals/:id/requires { goal, required? } -> { goal } (an existing entry takes the new required)",
-  removeRequire: "DELETE /hub/goals/:id/requires/:goalId -> { goal }",
-  orderRequires: "PUT /hub/goals/:id/requires { order: goalIds } -> { goal }",
-  signOff: "POST /hub/goals/:id/sign-off { note? } -> { signOff: SignOff } (409 without a signed-in account)",
-  clearSignOff: "DELETE /hub/goals/:id/sign-off -> 204",
-  writePlaytests: "POST /hub/goals/:id/write-playtests { text? } -> 202 { sessionId }",
-  check: "GET /hub/checks/:checkId?limit=&before= -> CheckDetail",
-  updateCheck: "PUT /hub/checks/:checkId CheckMetaUpdate -> { meta: CheckMeta }",
-  rules: "PUT /hub/rules Partial<HealthRule> -> { rules: HealthRule }",
-  exportStore: "GET /hub/store -> HubExport",
-  importStore: "POST /hub/store HubExport -> HubImportReport (merge by id; 400 naming every record that does not read)",
-  runs: "GET /hub/runs?check=&limit=&before= -> { runs: RunRecord[], more: boolean }",
-  run: "GET /hub/runs/:runId -> RunDetail",
-  addRunLink: "POST /hub/runs/:runId/links { link: TrackerLink } -> { record: RunRecord }",
-  removeRunLink: "DELETE /hub/runs/:runId/links?url= -> { record: RunRecord }",
-  queue: "GET /hub/queue -> QueueState",
-  plan: "POST /hub/plans PlanRequest -> { plan: PlanRun, placement: PlanPlacement } (a person's Run resumes a paused queue)",
-  cancelPlan: "POST /hub/plans/:id/cancel -> { plan }",
-  movePlan: "POST /hub/plans/:id/move { to: number } -> QueueState (0 is next)",
-  createSchedule: "POST /hub/schedules ScheduleDraft -> { schedule }",
-  updateSchedule: "PUT /hub/schedules/:id Partial<ScheduleDraft> -> { schedule }",
-  deleteSchedule: "DELETE /hub/schedules/:id -> 204",
-  pause: "PUT /hub/queue/paused { paused: boolean } -> QueueState",
-  lease: "GET /hub/lease -> HubLeaseEvent",
-  release: "POST /hub/release -> QueueState (stops what the hub holds on the editor and pauses the queue)",
-  fix: "POST /hub/fix FixRequest -> { queued: number, plan: PlanRun | null, placement?: PlanPlacement } (a fix plan: one chat session per check)",
-  runCheck: "POST /hub/checks/:checkId/run { replay?, next? } -> { plan: PlanRun, placement: PlanPlacement }",
-  arrangement: "GET /hub/goals/:id/arrangement -> ArrangementView",
-  putArrangement: "PUT /hub/goals/:id/arrangement { arrangement } | { text } -> ArrangementView (400 { error, findings })",
-  editArrangement: "POST /hub/goals/:id/arrangement/edit { ops } -> ArrangementView & { changed } (400 { error, finding, findings })",
-  set: "GET /hub/set?arrangement= -> SetView",
-  editSet: "POST /hub/set/edit { ops, arrangement? } -> SetView & { changed } (400 { error, finding })",
-  clips: "GET /hub/clips?q=&kind= -> { clips: ClipEntry[] }",
-  performers: "GET /hub/performers?arrangement= -> PerformersView (what a track can drive, with the lanes each takes)",
-  runSet: "POST /hub/run { scope: track | scene | slot | arrangement, next? } -> { plan: PlanRun, placement: PlanPlacement, runId: string | null } (runId once a plan that started at once has its run)",
-  arrangements: "GET /hub/arrangements -> ArrangementsView",
-  createArrangement: "POST /hub/arrangements { title, level? } -> { arrangement: ArrangementInfo }",
-  updateArrangement: "PUT /hub/arrangements/:id { title?, level? } -> { arrangement: ArrangementInfo } (level null clears it)",
-  duplicateArrangement: "POST /hub/arrangements/:id/duplicate { title? } -> { arrangement: ArrangementInfo } (tracks, scenes and instances copied; clips shared)",
-  deleteArrangement: "DELETE /hub/arrangements/:id -> 204 (its tracks and scenes go; clips stay; 409 for the last one or while its runs are queued)",
-  runVerdict: "POST /hub/runs/:runId/verdict { check, verdict, note? } -> { ok: true } (a manual check in a track or scene run)",
-} as const;
-
-/** A track's arrangement as a client edits it (GET /hub/goals/:id/arrangement). */
-export interface ArrangementView {
-  arrangement: Arrangement;
-  /** The compact text form agents read and write. */
-  text: string;
-  layout: InstanceLayout[];
-  findings: ArrangementFinding[];
-}
-
-/** The set as both views draw it (GET /hub/set): tracks and scenes in order, with their status. */
-export interface SetView {
-  tracks: Array<{ id: string; title: string; order: number; color?: SetColor; player: number; performer: Performer; mute: boolean; solo: boolean; arrangement: Arrangement; layout: InstanceLayout[]; status: GoalStatus }>;
-  /** `tracks`: the tracks a scene plays, by id, in order. */
-  scenes: Array<{ id: string; title: string; order: number; color?: SetColor; tracks: string[]; slots: Array<Slot & { length: number | null }>; status: GoalStatus }>;
-  /** The compact text form agents read. */
-  text: string;
-  findings: ArrangementFinding[];
-  /** The arrangement these tracks and scenes belong to. */
-  arrangement?: ArrangementInfo;
-}
-
-/** One clip a browser lists (GET /hub/clips): a timeline clip or a step-list playtest. */
-export interface ClipEntry {
-  kind: "clip" | "script";
-  target: string;
-  name: string;
-  map: string | null;
-  /** Frames at `rate`: a timeline clip's length, or a step-list playtest's newest run at 60. Null when not known. */
-  length: number | null;
-  rate: number;
-  lastRun: { runId: string; outcome: string; at: string } | null;
-}
-
-// ---------- What else holds the editor ----------
-
-/** Whether an agent's plan may start without a person: a client's setting. */
-export type PlaytestRunsMode = "manual" | "automatic";
 
 /** An editor call in flight, for the occupancy answer. */
 export interface BusyCall {
@@ -1496,11 +810,10 @@ export interface BusyCall {
   action: string;
   /** Daemon clock, epoch ms. */
   startedAt: number;
-  /** agent: a client's own agent made it, named by sessionId (HubClientOptions.agentCalls); client: an MCP client did. */
+  /** agent: a client's own agent made it (HubClientOptions.agentCalls); client: an MCP client did. */
   source: "agent" | "client";
   sessionId?: string;
   client?: string;
-  /** The turn waiting on it was stopped; the editor finishes the call regardless. */
   stopped: boolean;
 }
 
@@ -1508,18 +821,14 @@ export interface BusyCall {
 export interface EditorOperation {
   op: "start" | "stop" | "restart" | "rebuild";
   step: string;
-  /** Daemon clock, epoch ms. */
   startedAt: number;
   stepStartedAt: number;
 }
 
-/** How the last editor operation ended when it did not bring the editor back. */
 export interface EditorOperationFailure {
   op: EditorOperation["op"];
   step: string;
-  /** What went wrong, in one or two sentences. */
   reason: string;
-  /** Daemon clock, epoch ms. */
   at: number;
 }
 
@@ -1527,8 +836,155 @@ export interface EditorOperationFailure {
 export interface BusyState {
   now: number;
   calls: BusyCall[];
-  /** The editor operation in progress, when there is one. */
   operation?: EditorOperation;
-  /** The last operation's failure, until the editor connects or another operation starts. */
   failure?: EditorOperationFailure;
 }
+
+// ---------- Views ----------
+
+export interface ClipSummary {
+  id: string;
+  title: string;
+  performer: PerformerKind;
+  rate: number;
+  length: number;
+  lanes: number;
+  /** Arrangements that place it. */
+  usedBy: string[];
+}
+
+export interface ArrangementSummary {
+  id: string;
+  title: string;
+  level: string | null;
+  tracks: number;
+  checks: number;
+  regions: Array<Pick<Region, "id" | "name">>;
+  length: number;
+  findings: HubFinding[];
+}
+
+/** A file under HUB_DIR that does not read. */
+export interface FileProblem {
+  kind: HubKind;
+  id: string;
+  file: string;
+  findings: HubFinding[];
+}
+
+export interface HubOverview {
+  clips: ClipSummary[];
+  arrangements: ArrangementSummary[];
+  suites: SuiteState[];
+  /** Every test: each arrangement and each of its regions. */
+  tests: TestState[];
+  queue: QueueState;
+  lease: EditorLease | null;
+  recent: RunRecord[];
+  schedules: Schedule[];
+  problems: FileProblem[];
+}
+
+export interface ArrangementView {
+  arrangement: Arrangement;
+  length: number;
+  findings: HubFinding[];
+  /** The clips it places, by id. */
+  clips: Record<string, Clip>;
+  tests: TestState[];
+}
+
+export interface TestDetail {
+  test: TestState;
+  checks: Check[];
+  runs: RunRecord[];
+}
+
+/**
+ * What the editor plugin plays (the pie action arrangement_play): the arrangement with
+ * the audible tracks only and every clip they place, so the plugin reads no
+ * hub file. `region` plays one region and judges the checks inside it.
+ */
+export interface PlayRequest {
+  runId: string;
+  arrangement: Arrangement;
+  clips: Record<string, Clip>;
+  region?: string;
+  /** The playhead: start at this frame; checks that start before it are skipped. An audition only. */
+  from?: number;
+  /** Go back to the loop start at the end, until stopped. An audition only. */
+  loop?: boolean;
+}
+
+/** What the pie action arrangement_status answers. */
+export interface PlayStatus {
+  runId: string;
+  state: "starting" | "running" | "awaiting_verdict" | "finished" | "stopped" | "error";
+  frame?: number;
+  checks: CheckResult[];
+  error?: string;
+  /** The run started Play In Editor. */
+  pieStarted?: boolean;
+  /** A looping play: which time through the loop, from 1. */
+  pass?: number;
+}
+
+/**
+ * Playing an arrangement or one region to watch it while composing, on the
+ * open editor (POST /v1/hub/play): from the playhead, and looping when asked.
+ * An audition is not a test run: it judges the checks it passes so they show,
+ * skips manual ones, and keeps nothing in the run history.
+ */
+export interface AuditionRequest {
+  /** A test id: <arrangement> or <arrangement>:<region>. */
+  test: string;
+  from?: number;
+  loop?: boolean;
+}
+
+export interface AuditionState {
+  playId: string;
+  test: string;
+  from: number;
+  loop: boolean;
+  startedAt: string;
+  state: PlayStatus["state"];
+  frame?: number;
+  pass?: number;
+  checks: CheckResult[];
+  error?: string;
+}
+
+/**
+ * The recording under way on the open editor (GET /v1/hub/record), kept by
+ * the daemon from record_start to record_stop so a client that reloads
+ * mid-take can show it and stop it.
+ */
+export interface RecordingState {
+  performer: Performer;
+  /** A punch-in: the clip being recorded into, and the frames it replaces. */
+  clip?: string;
+  from?: number;
+  to?: number;
+  /** Frames per second of the take. */
+  rate?: number;
+  startedAt: string;
+  /**
+   * Where the client means the take to land, as it said at record_start: an
+   * arrangement, a track in it and the frame the take starts at, and how many
+   * seconds it means the take to run. Echoed back so a client that reloads
+   * can place the take and stop it on time; the hub does not act on them.
+   */
+  arrangement?: string;
+  track?: string;
+  at?: number;
+  seconds?: number;
+}
+
+export type HubChangedWhat = "clips" | "arrangements" | "suites" | "runs" | "queue" | "schedules" | "play" | "recording";
+export interface HubChanged {
+  what: HubChangedWhat[];
+  id?: string;
+  runId?: string;
+}
+export const HUB_CHANGED = "hub.changed";

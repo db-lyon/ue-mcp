@@ -52,7 +52,7 @@ describe("actionEffectInfo", () => {
     expect(of("project", "drop_editor")).toMatchObject({ destructive: false, destructiveSource: "declared" });
     expect(of("level", "restore_component_transform")).toMatchObject({ destructive: false, destructiveSource: "declared" });
     expect(of("audio", "metasound_remove_node")).toMatchObject({ destructive: true, destructiveSource: "declared" });
-    expect(of("pie", "script_delete")).toMatchObject({ destructive: true, destructiveSource: "declared" });
+    expect(of("pie", "profile_delete")).toMatchObject({ destructive: true, destructiveSource: "declared" });
     expect(of("source_control", "mark_for_delete")).toMatchObject({ destructive: true, destructiveSource: "declared" });
   });
 

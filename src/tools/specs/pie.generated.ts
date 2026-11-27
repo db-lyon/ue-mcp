@@ -39,6 +39,112 @@ export const handlerSpecs: HandlerSpecs = {
       }
     ]
   },
+  "pie_arrangement_play": {
+    "category": "pie",
+    "params": [
+      {
+        "name": "runId",
+        "type": "string",
+        "required": true,
+        "description": "The hub's id for the run"
+      },
+      {
+        "name": "arrangement",
+        "type": "object",
+        "required": true,
+        "description": "The arrangement as the hub stores it: {id, level, rate, tracks: [{id, performer, mute, solo, instances: [{id, clip, at}]}], checks: [{id, at, length, mode: by_end|throughout|hold|manual, expect?: {value, op, target?, subject?}, instruction?, timeout?}], regions: [{id, start, end}]}"
+      },
+      {
+        "name": "clips",
+        "type": "object",
+        "required": true,
+        "description": "Every clip the tracks place, by id: {rate, length, performer, input}"
+      },
+      {
+        "name": "region",
+        "type": "string",
+        "required": false,
+        "description": "Play from frame 0 to this region's end and judge only the checks that start inside it"
+      },
+      {
+        "name": "from",
+        "type": "number",
+        "required": false,
+        "description": "The playhead: start playback at this frame; checks that start before it are skipped",
+        "minimum": 0
+      },
+      {
+        "name": "loop",
+        "type": "boolean",
+        "required": false,
+        "description": "At the end go back to the loop start (from, else the region's start, else 0) and judge the checks there again, until arrangement_stop"
+      }
+    ],
+    "contractExempt": "Loads the arrangement's level, starts PIE and plays it"
+  },
+  "pie_arrangement_status": {
+    "category": "pie",
+    "params": [
+      {
+        "name": "runId",
+        "type": "string",
+        "required": true,
+        "description": "The hub's id for the run"
+      }
+    ]
+  },
+  "pie_arrangement_stop": {
+    "category": "pie",
+    "params": [
+      {
+        "name": "runId",
+        "type": "string",
+        "required": true,
+        "description": "The hub's id for the run"
+      },
+      {
+        "name": "reason",
+        "type": "string",
+        "required": false,
+        "description": "Why it stopped, for the unsettled checks"
+      }
+    ],
+    "contractExempt": "Ends the run and the PIE session it started"
+  },
+  "pie_arrangement_verdict": {
+    "category": "pie",
+    "params": [
+      {
+        "name": "runId",
+        "type": "string",
+        "required": true,
+        "description": "The hub's id for the run"
+      },
+      {
+        "name": "check",
+        "type": "string",
+        "required": true,
+        "description": "Id of the manual check awaiting its verdict"
+      },
+      {
+        "name": "verdict",
+        "type": "string",
+        "required": true,
+        "description": "The verdict",
+        "enum": [
+          "pass",
+          "fail"
+        ]
+      },
+      {
+        "name": "note",
+        "type": "string",
+        "required": false,
+        "description": "What the verdict rests on"
+      }
+    ],
+    "contractExempt": "Settles a check in a running play and resumes PIE"
+  },
   "pie_assert_eval": {
     "category": "pie",
     "params": [
@@ -92,437 +198,55 @@ export const handlerSpecs: HandlerSpecs = {
     "category": "pie",
     "params": []
   },
-  "pie_clip_create": {
+  "pie_clip_record_start": {
     "category": "pie",
     "params": [
       {
-        "name": "name",
-        "type": "string",
-        "required": true,
-        "description": "Asset name"
-      },
-      {
-        "name": "package_path",
-        "type": "string",
-        "required": false,
-        "description": "Package folder (default /Game/PIEStudio/Clips)"
-      },
-      {
-        "name": "clip",
+        "name": "performer",
         "type": "object",
-        "required": false,
-        "description": "The clip as JSON: {rate (frames per second, default 60), length (frames, 0 ends at the last thing on it), grid (frame | 1/N | free), map, profile, description, fixed_timestep (default true), seed, hold_timeout (frames), regions: [{id?, name, start, end}], tracks: [{action (Input Action path), type: bool|axis1d|axis2d|axis3d, notes: [{id?, start, length, value? (axis tracks)}], keys: [{id?, t, v, interp?: linear|constant|cubic}] (axis tracks)}], performer ({kind: player, client} | {kind: actor, actor}: what lanes drive when they name nothing; the run's own player by default), lanes: [{id?, kind: move, performer?, points: [{id?, t, at: [x,y,z], radius?}]} | {id?, kind: action, performer?, calls: [{id?, t, fn (a function, or Component.Function), args?: []}], watch?: [functions a recording captures]} | {id?, kind: value, performer?, target (a property path, or bb:<Key>), type: axis1d|bool, keys: [{id?, t, v, interp?}]}] (a player takes action and value lanes on its pawn, an actor move, action and value lanes), events: [{id?, at, do (an act entry: place, console, capture, key, press, hold, tape, inject; or an arrange entry: {kind: spawn|set|call, ...})}], checks: [{id?, name?, start, length, mode: by_end|throughout|hold, expect: {value, op, target?} | manual: true with instruction}]}. Times are frames at rate. A track holds the raw value that reaches the Input Action, before its own modifiers and triggers"
-      },
-      {
-        "name": "text",
-        "type": "string",
-        "required": false,
-        "description": "The clip in its compact text form, one thing per line: clip rate=60 length=600 | region <id> <start> <end> \"name\" | track <action> <type> followed by indented note <id> <start> <length> [value] and key <id> <t> <value> [interp] lines | performer player:N|actor:<name> | lane <id> move|action [performer=...] [watch=Fn,Fn] or lane <id> value <target> <axis1d|bool> [performer=...], followed by indented point <id> <t> <x,y,z> [radius=N], call <id> <t> <fn> [[args JSON]] or key <id> <t> <value> [interp] lines | event <id> <at> {json} | check <id> <start> <length> <by_end|throughout|hold> <value> <op> [target] | check <id> <start> <length> manual \"question\". Use - for an id to have one assigned"
-      },
-      {
-        "name": "onConflict",
-        "type": "string",
-        "required": false,
-        "description": "When the asset exists: skip (default) returns it untouched, replace overwrites it, error refuses",
-        "enum": [
-          "skip",
-          "replace",
-          "error"
-        ]
-      }
-    ],
-    "choices": [
-      {
-        "mode": "exactlyOne",
-        "branches": [
-          [
-            "clip"
-          ],
-          [
-            "text"
-          ]
-        ]
-      }
-    ],
-    "contractExempt": "Creates and saves a clip asset"
-  },
-  "pie_clip_delete": {
-    "category": "pie",
-    "params": [
-      {
-        "name": "path",
-        "type": "string",
         "required": true,
-        "description": "Playtest clip asset path"
+        "description": "Who to record: {kind: player, client: 0}, the editor's own player"
       },
       {
-        "name": "confirm",
-        "type": "boolean",
-        "required": false,
-        "description": "Must be true to delete"
-      }
-    ]
-  },
-  "pie_clip_edit": {
-    "category": "pie",
-    "params": [
-      {
-        "name": "path",
-        "type": "string",
-        "required": true,
-        "description": "Playtest clip asset path"
-      },
-      {
-        "name": "ops",
-        "type": "array",
-        "required": true,
-        "description": "Edits applied in order, all or none: {op: add, kind: note|key|track|check|event|region, ...the thing's fields (track names the Input Action a note or key goes on)} | {op: add, kind: lane, capability: move|action|value, performer?, target?, type?, watch?} | {op: add, kind: point|call|key, lane (the lane's id), time, at | fn, args? | value} | {op: move, id, to | by} | {op: trim, id, start?, length? | end?} | {op: set, id, ...fields} | {op: delete, id} (a track by its action) | {op: quantize, grid?, track? | ids?} | {op: set_clip, ...clip fields, performer?: performer | null}. Times snap to the clip's grid",
-        "items": "object"
-      }
-    ]
-  },
-  "pie_clip_list": {
-    "category": "pie",
-    "params": [
-      {
-        "name": "directory",
-        "type": "string",
-        "required": false,
-        "description": "Content folder to list under (default /Game)"
-      }
-    ]
-  },
-  "pie_clip_read": {
-    "category": "pie",
-    "params": [
-      {
-        "name": "path",
-        "type": "string",
-        "required": true,
-        "description": "Playtest clip asset path"
-      }
-    ]
-  },
-  "pie_clip_record": {
-    "category": "pie",
-    "params": [
-      {
-        "name": "path",
-        "type": "string",
-        "required": true,
-        "description": "Playtest clip asset path the take goes into; create an empty clip first to record a new one"
-      },
-      {
-        "name": "region",
-        "type": "string",
-        "required": false,
-        "description": "Punch in at this region's start and out at its end. The clip plays up to the punch-in with the person's input locked out"
-      },
-      {
-        "name": "from_check",
-        "type": "string",
-        "required": false,
-        "description": "Punch in at this hold check's frame instead, and record until clip_record_stop"
-      },
-      {
-        "name": "armed",
-        "type": "array",
-        "required": false,
-        "description": "Input Actions and lane ids the take records (default every action the player has a mapping for). An armed move, action or value lane is not driven from the punch-in; the take records where its performer walked, the calls it took (the functions the lane names or watches) or the value its target held. The take replaces what these held over the range, and keeps it as history",
-        "items": "string"
-      },
-      {
-        "name": "pie_instance",
-        "type": "integer",
-        "required": false,
-        "description": "FWorldContext PIEInstance of the player being recorded (default the editor's own player)",
-        "minimum": 0
-      },
-      {
-        "name": "client_id",
-        "type": "integer",
-        "required": false,
-        "description": "Local-player index inside that PIE world (default 0)",
-        "minimum": 0
-      }
-    ],
-    "contractExempt": "Starts PIE and records the person's input into the clip"
-  },
-  "pie_clip_record_stop": {
-    "category": "pie",
-    "params": []
-  },
-  "pie_clip_run": {
-    "category": "pie",
-    "params": [
-      {
-        "name": "path",
-        "type": "string",
-        "required": false,
-        "description": "Playtest clip asset path"
-      },
-      {
-        "name": "clip",
-        "type": "object",
-        "required": false,
-        "description": "An inline clip instead of an asset, as clip_create takes it"
-      },
-      {
-        "name": "text",
-        "type": "string",
-        "required": false,
-        "description": "An inline clip in its compact text form"
-      },
-      {
-        "name": "name",
-        "type": "string",
-        "required": false,
-        "description": "The run's name (default the asset name, or inline)"
-      },
-      {
-        "name": "region",
-        "type": "string",
-        "required": false,
-        "description": "Region id: judge only its checks and stop at its end. Playback still starts at frame 0, since the state at a region's start comes from playing what comes before it"
-      },
-      {
-        "name": "start_pie",
-        "type": "boolean",
-        "required": false,
-        "description": "Start PIE when it is not running (default false). The run ends PIE it started when it ends"
-      },
-      {
-        "name": "keep_pie",
-        "type": "boolean",
-        "required": false,
-        "description": "Leave PIE the run started running when the run ends (default false)"
-      },
-      {
-        "name": "fixed_timestep",
-        "type": "boolean",
-        "required": false,
-        "description": "Fixed frame deltas: to the next recorded frame where the clip has frame_times, else 1/rate (default the clip's fixed_timestep, true unless set)"
-      },
-      {
-        "name": "lock_input",
-        "type": "boolean",
-        "required": false,
-        "description": "Keep the person's keyboard, mouse and gamepad out of PIE while the clip plays (default true)"
-      },
-      {
-        "name": "pie_instance",
-        "type": "integer",
-        "required": false,
-        "description": "FWorldContext PIEInstance whose player the clip drives and observes (default the editor's own player)",
-        "minimum": 0
-      },
-      {
-        "name": "client_id",
-        "type": "integer",
-        "required": false,
-        "description": "Local-player index inside that PIE world (default 0)",
-        "minimum": 0
-      },
-      {
-        "name": "wait",
-        "type": "boolean",
-        "required": false,
-        "description": "Answer once the run finishes, stops or awaits a verdict (default false)"
-      },
-      {
-        "name": "timeout_seconds",
+        "name": "rate",
         "type": "number",
         "required": false,
-        "description": "Most seconds wait holds the answer (default 600)",
-        "minimum": 0
-      }
-    ],
-    "choices": [
-      {
-        "mode": "exactlyOne",
-        "branches": [
-          [
-            "path"
-          ],
-          [
-            "clip"
-          ],
-          [
-            "text"
-          ]
-        ]
-      }
-    ],
-    "contractExempt": "Arms the observer and can start PIE"
-  },
-  "pie_clip_status": {
-    "category": "pie",
-    "params": [
-      {
-        "name": "run_id",
-        "type": "string",
-        "required": false,
-        "description": "Clip run id (default the current or last run)"
+        "description": "Frames per second of a new clip (default 60)",
+        "minimum": 1
       },
       {
-        "name": "wait",
-        "type": "boolean",
-        "required": false,
-        "description": "Answer once the run finishes, stops or awaits a verdict"
-      },
-      {
-        "name": "timeout_seconds",
-        "type": "number",
-        "required": false,
-        "description": "Most seconds wait holds the answer (default 600)",
-        "minimum": 0
-      }
-    ]
-  },
-  "pie_clip_stop": {
-    "category": "pie",
-    "params": [
-      {
-        "name": "reason",
-        "type": "string",
-        "required": false,
-        "description": "Recorded as the run's stop reason"
-      }
-    ]
-  },
-  "pie_clip_update": {
-    "category": "pie",
-    "params": [
-      {
-        "name": "path",
-        "type": "string",
-        "required": true,
-        "description": "Playtest clip asset path"
-      },
-      {
-        "name": "clip",
+        "name": "punch",
         "type": "object",
         "required": false,
-        "description": "The whole clip as JSON, replacing the stored one"
-      },
-      {
-        "name": "text",
-        "type": "string",
-        "required": false,
-        "description": "The whole clip in its compact text form, replacing the stored one"
-      }
-    ],
-    "choices": [
-      {
-        "mode": "exactlyOne",
-        "branches": [
-          [
-            "clip"
-          ],
-          [
-            "text"
-          ]
-        ]
-      }
-    ]
-  },
-  "pie_clip_validate": {
-    "category": "pie",
-    "params": [
-      {
-        "name": "path",
-        "type": "string",
-        "required": false,
-        "description": "A stored clip to check"
-      },
-      {
-        "name": "clip",
-        "type": "object",
-        "required": false,
-        "description": "The clip as JSON: {rate (frames per second, default 60), length (frames, 0 ends at the last thing on it), grid (frame | 1/N | free), map, profile, description, fixed_timestep (default true), seed, hold_timeout (frames), regions: [{id?, name, start, end}], tracks: [{action (Input Action path), type: bool|axis1d|axis2d|axis3d, notes: [{id?, start, length, value? (axis tracks)}], keys: [{id?, t, v, interp?: linear|constant|cubic}] (axis tracks)}], performer ({kind: player, client} | {kind: actor, actor}: what lanes drive when they name nothing; the run's own player by default), lanes: [{id?, kind: move, performer?, points: [{id?, t, at: [x,y,z], radius?}]} | {id?, kind: action, performer?, calls: [{id?, t, fn (a function, or Component.Function), args?: []}], watch?: [functions a recording captures]} | {id?, kind: value, performer?, target (a property path, or bb:<Key>), type: axis1d|bool, keys: [{id?, t, v, interp?}]}] (a player takes action and value lanes on its pawn, an actor move, action and value lanes), events: [{id?, at, do (an act entry: place, console, capture, key, press, hold, tape, inject; or an arrange entry: {kind: spawn|set|call, ...})}], checks: [{id?, name?, start, length, mode: by_end|throughout|hold, expect: {value, op, target?} | manual: true with instruction}]}. Times are frames at rate. A track holds the raw value that reaches the Input Action, before its own modifiers and triggers"
-      },
-      {
-        "name": "text",
-        "type": "string",
-        "required": false,
-        "description": "The clip in its compact text form, one thing per line: clip rate=60 length=600 | region <id> <start> <end> \"name\" | track <action> <type> followed by indented note <id> <start> <length> [value] and key <id> <t> <value> [interp] lines | performer player:N|actor:<name> | lane <id> move|action [performer=...] [watch=Fn,Fn] or lane <id> value <target> <axis1d|bool> [performer=...], followed by indented point <id> <t> <x,y,z> [radius=N], call <id> <t> <fn> [[args JSON]] or key <id> <t> <value> [interp] lines | event <id> <at> {json} | check <id> <start> <length> <by_end|throughout|hold> <value> <op> [target] | check <id> <start> <length> manual \"question\". Use - for an id to have one assigned"
-      }
-    ],
-    "choices": [
-      {
-        "mode": "exactlyOne",
-        "branches": [
-          [
-            "path"
-          ],
-          [
-            "clip"
-          ],
-          [
-            "text"
-          ]
-        ]
-      }
-    ]
-  },
-  "pie_clip_verdict": {
-    "category": "pie",
-    "params": [
-      {
-        "name": "check",
-        "type": "string",
-        "required": true,
-        "description": "Id of the manual check awaiting its verdict"
-      },
-      {
-        "name": "verdict",
-        "type": "string",
-        "required": true,
-        "description": "Verdict",
-        "enum": [
-          "pass",
-          "fail",
-          "skip"
-        ]
-      },
-      {
-        "name": "note",
-        "type": "string",
-        "required": false,
-        "description": "Tester's note"
-      },
-      {
-        "name": "source",
-        "type": "string",
-        "required": false,
-        "description": "Who judged it: human (default) or agent, which needs evidence and is refused on a check with agent_judgeable false",
-        "enum": [
-          "human",
-          "agent"
-        ]
-      },
-      {
-        "name": "evidence",
-        "type": "object",
-        "required": false,
-        "description": "What the verdict rests on; required when source is agent",
+        "description": "Punch in: play clip from frame 0 with the person's input locked out, record from `from` to `to` (the clip's frames), and replace that range",
         "fields": [
           {
-            "name": "note",
-            "type": "string",
+            "name": "clip",
+            "type": "object",
             "required": true,
-            "description": "What was observed"
+            "description": "The clip as the hub stores it"
           },
           {
-            "name": "captures",
-            "type": "array",
-            "required": false,
-            "description": "Capture files that show it: absolute, or relative to the run's output_dir; each must exist",
-            "items": "string"
+            "name": "from",
+            "type": "number",
+            "required": true,
+            "description": "The frame the take starts on"
+          },
+          {
+            "name": "to",
+            "type": "number",
+            "required": true,
+            "description": "The frame the take ends on"
           }
         ]
       }
-    ]
+    ],
+    "contractExempt": "Starts PIE and records a performance"
+  },
+  "pie_clip_record_stop": {
+    "category": "pie",
+    "params": [],
+    "contractExempt": "Ends the recording and the PIE session it started"
   },
   "pie_console": {
     "category": "pie",
@@ -2026,549 +1750,6 @@ export const handlerSpecs: HandlerSpecs = {
       }
     ]
   },
-  "pie_script_create": {
-    "category": "pie",
-    "params": [
-      {
-        "name": "name",
-        "type": "string",
-        "required": true,
-        "description": "Asset name"
-      },
-      {
-        "name": "package_path",
-        "type": "string",
-        "required": false,
-        "description": "Package folder (default /Game/PIEStudio/Scripts)"
-      },
-      {
-        "name": "steps",
-        "type": "array",
-        "required": true,
-        "description": "Steps, run in order: {instruction, judge: auto|manual (default auto), agent_judgeable (manual steps: false means only a person gives the verdict, default true), resolve_in_pie (true: expect.value and the actors arrange and act name only resolve once PIE runs, so script_create and script_update do not check them), arrange: [{kind: spawn, class, at?, rotation?, scale?} | {kind: set, target, path, value} | {kind: call, target, func, args?}] (run when the step starts), act: [{client?, place: {at, offset?, face?} | {location, yaw?} (location and offset as [x, y, z] or {x, y, z})} | {client?, press: {action, frames?}} | {client?, inject: {action, value}} | {client?, hold: {action, value, ms}} | {client?, tape: {action, values, hz?}} | {client?, console} | {client?, capture} | {key: {key | text, event?}} | {wait_ms}] (run after arrange, as uat_run runs a step's do; within_ms counts from its end), expect: {value (tracked value path or last segment, actor id for exists, widget for visible, Input Action asset path for triggered), op: decreasing|increasing|eq|gt|lt|visible|exists|triggered, target (number for eq/gt/lt, boolean for visible/exists, default true, optional least change for decreasing/increasing; none for triggered), within_ms (triggered: 0 or absent waits with no timeout), client (triggered only: the player whose input is watched, 0 the editor's own player (default), 1..N a remote player, as act counts them)}}. triggered passes on the first fresh trigger of the action after act ends (input still held when the window opens does not count) and records triggered_at_ms and action_value as evidence",
-        "items": "object"
-      },
-      {
-        "name": "description",
-        "type": "string",
-        "required": false,
-        "description": "What the script tests"
-      },
-      {
-        "name": "profile",
-        "type": "string",
-        "required": false,
-        "description": "Observation profile asset path"
-      },
-      {
-        "name": "map",
-        "type": "string",
-        "required": false,
-        "description": "Level the script plays in, as a package or object path such as /Game/Maps/L_Arena. A run opens it before PIE and refuses when the open level has unsaved changes; empty plays whatever level is open"
-      },
-      {
-        "name": "default_within_ms",
-        "type": "integer",
-        "required": false,
-        "description": "Default auto-step window in game ms (default 5000)",
-        "minimum": 1
-      },
-      {
-        "name": "manual_only",
-        "type": "boolean",
-        "required": false,
-        "description": "Every step is judged by a verdict: allows a script with no auto step that has an expect (default false)"
-      },
-      {
-        "name": "onConflict",
-        "type": "string",
-        "required": false,
-        "description": "When the asset exists: skip (default), update or replace (overwrite it), error",
-        "enum": [
-          "skip",
-          "update",
-          "replace",
-          "error"
-        ]
-      }
-    ],
-    "contractExempt": "Creates and saves a script asset"
-  },
-  "pie_script_delete": {
-    "category": "pie",
-    "params": [
-      {
-        "name": "path",
-        "type": "string",
-        "required": true,
-        "description": "Test script asset path"
-      },
-      {
-        "name": "confirm",
-        "type": "boolean",
-        "required": false,
-        "description": "Must be true to delete"
-      }
-    ]
-  },
-  "pie_script_list": {
-    "category": "pie",
-    "params": [
-      {
-        "name": "directory",
-        "type": "string",
-        "required": false,
-        "description": "Content folder to list under (default /Game)"
-      }
-    ]
-  },
-  "pie_script_read": {
-    "category": "pie",
-    "params": [
-      {
-        "name": "path",
-        "type": "string",
-        "required": true,
-        "description": "Test script asset path"
-      }
-    ]
-  },
-  "pie_script_replay": {
-    "category": "pie",
-    "params": [
-      {
-        "name": "run_id",
-        "type": "string",
-        "required": false,
-        "description": "Finished run to replay (default the last run)"
-      },
-      {
-        "name": "results_path",
-        "type": "string",
-        "required": false,
-        "description": "results.json of the run to replay, instead of a run id"
-      },
-      {
-        "name": "time_scale",
-        "type": "number",
-        "required": false,
-        "description": "Global time dilation during the replay (default 1)",
-        "minimum": 0
-      },
-      {
-        "name": "auto_stop_pie",
-        "type": "boolean",
-        "required": false,
-        "description": "End PIE when the replay ends, finished or stopped (default true)"
-      },
-      {
-        "name": "pie_instance",
-        "type": "integer",
-        "required": false,
-        "description": "FWorldContext PIEInstance to observe (default the active PIE world)",
-        "minimum": 0
-      },
-      {
-        "name": "client_id",
-        "type": "integer",
-        "required": false,
-        "description": "Local-player index inside the selected PIE world (default 0)",
-        "minimum": 0
-      },
-      {
-        "name": "wait",
-        "type": "boolean",
-        "required": false,
-        "description": "Block until the run finishes or awaits a verdict"
-      },
-      {
-        "name": "timeout_seconds",
-        "type": "number",
-        "required": false,
-        "description": "Most seconds to wait when wait is set",
-        "minimum": 0
-      }
-    ],
-    "contractExempt": "Arms the replayer and observer and starts PIE"
-  },
-  "pie_script_results": {
-    "category": "pie",
-    "params": [
-      {
-        "name": "run_id",
-        "type": "string",
-        "required": false,
-        "description": "Script run id (default the current or last run)"
-      },
-      {
-        "name": "results_path",
-        "type": "string",
-        "required": false,
-        "description": "results.json path, instead of a run id"
-      }
-    ]
-  },
-  "pie_script_run": {
-    "category": "pie",
-    "params": [
-      {
-        "name": "script",
-        "type": "string",
-        "required": false,
-        "description": "Test script asset path"
-      },
-      {
-        "name": "steps",
-        "type": "array",
-        "required": false,
-        "description": "Inline steps instead of a script asset: {instruction, judge: auto|manual (default auto), agent_judgeable (manual steps: false means only a person gives the verdict, default true), resolve_in_pie (true: expect.value and the actors arrange and act name only resolve once PIE runs, so script_create and script_update do not check them), arrange: [{kind: spawn, class, at?, rotation?, scale?} | {kind: set, target, path, value} | {kind: call, target, func, args?}] (run when the step starts), act: [{client?, place: {at, offset?, face?} | {location, yaw?} (location and offset as [x, y, z] or {x, y, z})} | {client?, press: {action, frames?}} | {client?, inject: {action, value}} | {client?, hold: {action, value, ms}} | {client?, tape: {action, values, hz?}} | {client?, console} | {client?, capture} | {key: {key | text, event?}} | {wait_ms}] (run after arrange, as uat_run runs a step's do; within_ms counts from its end), expect: {value (tracked value path or last segment, actor id for exists, widget for visible, Input Action asset path for triggered), op: decreasing|increasing|eq|gt|lt|visible|exists|triggered, target (number for eq/gt/lt, boolean for visible/exists, default true, optional least change for decreasing/increasing; none for triggered), within_ms (triggered: 0 or absent waits with no timeout), client (triggered only: the player whose input is watched, 0 the editor's own player (default), 1..N a remote player, as act counts them)}}. triggered passes on the first fresh trigger of the action after act ends (input still held when the window opens does not count) and records triggered_at_ms and action_value as evidence",
-        "items": "object"
-      },
-      {
-        "name": "name",
-        "type": "string",
-        "required": false,
-        "description": "Name for an inline run (default inline)"
-      },
-      {
-        "name": "profile",
-        "type": "string",
-        "required": false,
-        "description": "Observation profile asset path; overrides the script's"
-      },
-      {
-        "name": "map",
-        "type": "string",
-        "required": false,
-        "description": "Level to open before PIE; overrides the script's. Mode manual leaves the open level as it is"
-      },
-      {
-        "name": "record",
-        "type": "boolean",
-        "required": false,
-        "description": "Record input so pie_script_replay can rerun it (default true)"
-      },
-      {
-        "name": "start_pie",
-        "type": "boolean",
-        "required": false,
-        "description": "Start PIE when it is not running (default false). The run ends PIE it started when it ends, however it ends; PIE already playing is left running"
-      },
-      {
-        "name": "keep_pie",
-        "type": "boolean",
-        "required": false,
-        "description": "Leave PIE the run started running when the run ends, to inspect its end state (default false)"
-      },
-      {
-        "name": "block_on_manual",
-        "type": "boolean",
-        "required": false,
-        "description": "Hold the run at each manual block until every step in it has a verdict (default true)"
-      },
-      {
-        "name": "mode",
-        "type": "string",
-        "required": false,
-        "description": "full (default) plays the script in PIE; manual starts no PIE, observer or recording, leaves auto steps unchecked and puts every manual step up for its verdict at once",
-        "enum": [
-          "full",
-          "manual"
-        ]
-      },
-      {
-        "name": "default_within_ms",
-        "type": "integer",
-        "required": false,
-        "description": "Default auto-step window in game ms; overrides the script's (default 5000)",
-        "minimum": 1
-      },
-      {
-        "name": "pie_instance",
-        "type": "integer",
-        "required": false,
-        "description": "FWorldContext PIEInstance the run observes, and whose player act entries with no client drive and triggered steps on client 0 watch. Without it the observer takes the active PIE world and those entries take the editor's own player: the listen-server host, else the lowest PIE instance",
-        "minimum": 0
-      },
-      {
-        "name": "client_id",
-        "type": "integer",
-        "required": false,
-        "description": "Local-player index inside that PIE world, for observing, client 0 act entries and client 0 triggered steps alike (default 0)",
-        "minimum": 0
-      },
-      {
-        "name": "wait",
-        "type": "boolean",
-        "required": false,
-        "description": "Block until the run finishes or awaits a verdict"
-      },
-      {
-        "name": "timeout_seconds",
-        "type": "number",
-        "required": false,
-        "description": "Most seconds to wait when wait is set",
-        "minimum": 0
-      }
-    ],
-    "choices": [
-      {
-        "mode": "exactlyOne",
-        "branches": [
-          [
-            "script"
-          ],
-          [
-            "steps"
-          ]
-        ]
-      }
-    ],
-    "contractExempt": "Arms the observer and recorder and can start PIE"
-  },
-  "pie_script_runs": {
-    "category": "pie",
-    "params": [
-      {
-        "name": "script",
-        "type": "string",
-        "required": false,
-        "description": "Test script asset path: only that script's runs"
-      },
-      {
-        "name": "limit",
-        "type": "integer",
-        "required": false,
-        "description": "Most runs, newest first (default 50)",
-        "minimum": 1
-      },
-      {
-        "name": "include_steps",
-        "type": "boolean",
-        "required": false,
-        "description": "Each run's per-step results (default true)"
-      }
-    ]
-  },
-  "pie_script_status": {
-    "category": "pie",
-    "params": [
-      {
-        "name": "run_id",
-        "type": "string",
-        "required": false,
-        "description": "Script run id (default the current or last run)"
-      },
-      {
-        "name": "since_seq",
-        "type": "integer",
-        "required": false,
-        "description": "Only events with a larger seq (default 0, every event)",
-        "minimum": 0
-      },
-      {
-        "name": "wait",
-        "type": "boolean",
-        "required": false,
-        "description": "Block until the run finishes or awaits a verdict"
-      },
-      {
-        "name": "timeout_seconds",
-        "type": "number",
-        "required": false,
-        "description": "Most seconds to wait when wait is set",
-        "minimum": 0
-      }
-    ]
-  },
-  "pie_script_stop": {
-    "category": "pie",
-    "params": [
-      {
-        "name": "run_id",
-        "type": "string",
-        "required": false,
-        "description": "Run to stop; must be the active run when given"
-      },
-      {
-        "name": "reason",
-        "type": "string",
-        "required": false,
-        "description": "Recorded as the run's stop reason"
-      }
-    ]
-  },
-  "pie_script_update": {
-    "category": "pie",
-    "params": [
-      {
-        "name": "path",
-        "type": "string",
-        "required": true,
-        "description": "Test script asset path"
-      },
-      {
-        "name": "steps",
-        "type": "array",
-        "required": false,
-        "description": "Replacement steps: {instruction, judge: auto|manual (default auto), agent_judgeable (manual steps: false means only a person gives the verdict, default true), resolve_in_pie (true: expect.value and the actors arrange and act name only resolve once PIE runs, so script_create and script_update do not check them), arrange: [{kind: spawn, class, at?, rotation?, scale?} | {kind: set, target, path, value} | {kind: call, target, func, args?}] (run when the step starts), act: [{client?, place: {at, offset?, face?} | {location, yaw?} (location and offset as [x, y, z] or {x, y, z})} | {client?, press: {action, frames?}} | {client?, inject: {action, value}} | {client?, hold: {action, value, ms}} | {client?, tape: {action, values, hz?}} | {client?, console} | {client?, capture} | {key: {key | text, event?}} | {wait_ms}] (run after arrange, as uat_run runs a step's do; within_ms counts from its end), expect: {value (tracked value path or last segment, actor id for exists, widget for visible, Input Action asset path for triggered), op: decreasing|increasing|eq|gt|lt|visible|exists|triggered, target (number for eq/gt/lt, boolean for visible/exists, default true, optional least change for decreasing/increasing; none for triggered), within_ms (triggered: 0 or absent waits with no timeout), client (triggered only: the player whose input is watched, 0 the editor's own player (default), 1..N a remote player, as act counts them)}}. triggered passes on the first fresh trigger of the action after act ends (input still held when the window opens does not count) and records triggered_at_ms and action_value as evidence",
-        "items": "object"
-      },
-      {
-        "name": "description",
-        "type": "string",
-        "required": false,
-        "description": "What the script tests"
-      },
-      {
-        "name": "profile",
-        "type": "string",
-        "required": false,
-        "description": "Observation profile asset path; empty clears it"
-      },
-      {
-        "name": "map",
-        "type": "string",
-        "required": false,
-        "description": "Level the script plays in; empty clears it"
-      },
-      {
-        "name": "default_within_ms",
-        "type": "integer",
-        "required": false,
-        "description": "Default auto-step window in game ms",
-        "minimum": 1
-      },
-      {
-        "name": "manual_only",
-        "type": "boolean",
-        "required": false,
-        "description": "Every step is judged by a verdict: allows a script with no auto step that has an expect (default false)"
-      }
-    ]
-  },
-  "pie_script_validate": {
-    "category": "pie",
-    "params": [
-      {
-        "name": "steps",
-        "type": "array",
-        "required": true,
-        "description": "Steps to check, as script_create takes them: {instruction, judge: auto|manual (default auto), agent_judgeable (manual steps: false means only a person gives the verdict, default true), resolve_in_pie (true: expect.value and the actors arrange and act name only resolve once PIE runs, so script_create and script_update do not check them), arrange: [{kind: spawn, class, at?, rotation?, scale?} | {kind: set, target, path, value} | {kind: call, target, func, args?}] (run when the step starts), act: [{client?, place: {at, offset?, face?} | {location, yaw?} (location and offset as [x, y, z] or {x, y, z})} | {client?, press: {action, frames?}} | {client?, inject: {action, value}} | {client?, hold: {action, value, ms}} | {client?, tape: {action, values, hz?}} | {client?, console} | {client?, capture} | {key: {key | text, event?}} | {wait_ms}] (run after arrange, as uat_run runs a step's do; within_ms counts from its end), expect: {value (tracked value path or last segment, actor id for exists, widget for visible, Input Action asset path for triggered), op: decreasing|increasing|eq|gt|lt|visible|exists|triggered, target (number for eq/gt/lt, boolean for visible/exists, default true, optional least change for decreasing/increasing; none for triggered), within_ms (triggered: 0 or absent waits with no timeout), client (triggered only: the player whose input is watched, 0 the editor's own player (default), 1..N a remote player, as act counts them)}}. triggered passes on the first fresh trigger of the action after act ends (input still held when the window opens does not count) and records triggered_at_ms and action_value as evidence",
-        "items": "object"
-      },
-      {
-        "name": "profile",
-        "type": "string",
-        "required": false,
-        "description": "Observation profile asset path the script would use"
-      },
-      {
-        "name": "map",
-        "type": "string",
-        "required": false,
-        "description": "Level the script would play in"
-      },
-      {
-        "name": "manual_only",
-        "type": "boolean",
-        "required": false,
-        "description": "Every step is judged by a verdict: allows a script with no auto step that has an expect (default false)"
-      }
-    ]
-  },
-  "pie_script_values": {
-    "category": "pie",
-    "params": [
-      {
-        "name": "target",
-        "type": "string",
-        "required": false,
-        "description": "Actor class or Blueprint to report on: its actors in the level, and whether it is the player pawn"
-      },
-      {
-        "name": "profile",
-        "type": "string",
-        "required": false,
-        "description": "Observation profile asset path whose tracked values to list"
-      },
-      {
-        "name": "limit",
-        "type": "integer",
-        "required": false,
-        "description": "Most entries per list (default 400)",
-        "minimum": 1
-      }
-    ]
-  },
-  "pie_script_verdict": {
-    "category": "pie",
-    "params": [
-      {
-        "name": "step",
-        "type": "integer",
-        "required": true,
-        "description": "Manual step index, 0-based",
-        "minimum": 0
-      },
-      {
-        "name": "verdict",
-        "type": "string",
-        "required": true,
-        "description": "Verdict",
-        "enum": [
-          "pass",
-          "fail",
-          "skip"
-        ]
-      },
-      {
-        "name": "note",
-        "type": "string",
-        "required": false,
-        "description": "Tester's note"
-      },
-      {
-        "name": "run_id",
-        "type": "string",
-        "required": false,
-        "description": "Run the step belongs to (default the current or last run)"
-      },
-      {
-        "name": "source",
-        "type": "string",
-        "required": false,
-        "description": "Who judged the step: human (default) or agent. An agent verdict needs evidence and is refused on a step with agent_judgeable false. elicitation is the verdict form's human channel, action an alias of human",
-        "enum": [
-          "human",
-          "agent",
-          "elicitation",
-          "action"
-        ]
-      },
-      {
-        "name": "evidence",
-        "type": "object",
-        "required": false,
-        "description": "What the verdict rests on; required when source is agent",
-        "fields": [
-          {
-            "name": "note",
-            "type": "string",
-            "required": true,
-            "description": "What was observed"
-          },
-          {
-            "name": "captures",
-            "type": "array",
-            "required": false,
-            "description": "Capture files that show it: absolute, or relative to the run's output_dir; each must exist",
-            "items": "string"
-          }
-        ]
-      }
-    ]
-  },
   "pie_send_key": {
     "category": "pie",
     "params": [
@@ -3006,15 +2187,14 @@ export const schema: Record<string, z.ZodType> = {
   align: z.enum(["auto","index"]).optional().describe("auto (default) pairs a's rows with b's shifted by the row offset that best matches the two trajectories, so input landing a few frames later is not read as drift; index pairs rows by index. The result's alignment reports the offset"),
   apply: z.boolean().optional().describe("Teleport the live PIE pawn to the recorded pose (default false). On a net client the server's pawn for that player moves too, so the server does not correct it back"),
   apply_rng_seed: z.boolean().optional().describe("Re-apply the recorded seed (default true)"),
-  armed: z.array(z.string()).optional().describe("Input Actions and lane ids the take records (default every action the player has a mapping for). An armed move, action or value lane is not driven from the punch-in; the take records where its performer walked, the calls it took (the functions the lane names or watches) or the value its target held. The take replaces what these held over the range, and keeps it as history"),
+  arrangement: z.record(z.string(), z.unknown()).optional().describe("The arrangement as the hub stores it: {id, level, rate, tracks: [{id, performer, mute, solo, instances: [{id, clip, at}]}], checks: [{id, at, length, mode: by_end|throughout|hold|manual, expect?: {value, op, target?, subject?}, instruction?, timeout?}], regions: [{id, start, end}]}"),
   assertions: z.array(z.record(z.string(), z.unknown())).optional().describe("Predicates {name, channel|event, op, value|min+max|tol, hold, from_s, to_s, within_s, after_event, severity}; omitted reads test_path's predicates"),
   at_frame: z.number().int().min(0).optional().describe("Frame index to sample, instead of at_time"),
   at_time: z.number().optional().describe("Seconds to sample, interpolated (default: the last frame)"),
   auto_run: z.boolean().optional().describe("Drive the replay when no drift.json exists yet (default true)"),
-  auto_stop_pie: z.boolean().optional().describe("End PIE when the replay completes (replay_arm default false, replay_run default true) (pie_replay_arm, pie_replay_run). End PIE when the replay ends, finished or stopped (default true) (pie_script_replay)"),
+  auto_stop_pie: z.boolean().optional().describe("End PIE when the replay completes (replay_arm default false, replay_run default true)"),
   axis_threshold: z.number().optional().describe("Axis change deadzone (default 0.15)"),
   b_id: z.string().optional().describe("Second recording id"),
-  block_on_manual: z.boolean().optional().describe("Hold the run at each manual block until every step in it has a verdict (default true)"),
   capture_frame_every: z.number().int().min(0).optional().describe("Capture a viewport JPEG every N steps and build a contact sheet"),
   capture_montage: z.boolean().optional().describe("Sample the active montage (pie_profile_create, pie_profile_update). Sample the active montage (default true) (pie_record_arm)"),
   capture_pawn_state: z.boolean().optional().describe("Sample the pawn transform and movement (pie_profile_create, pie_profile_update). Sample the pawn transform and movement (default true) (pie_record_arm)"),
@@ -3024,18 +2204,16 @@ export const schema: Record<string, z.ZodType> = {
   channels: z.string().optional().describe("series: comma-separated columns (default: every t:* plus speed2d, gpu_ms, game_ms)"),
   check: z.string().optional().describe("Id of the manual check awaiting its verdict"),
   client: z.number().int().optional().describe("Remote player 1..N (join order) (pie_console). 1..N relays to that remote player (join order) over the game connection, including separate-process clients; 0 or absent uses the local player (pie_inject_input, pie_inject_input_start, pie_inject_input_tape)"),
-  client_id: z.number().int().min(0).optional().describe("Local-player index inside that PIE world (default 0) (pie_clip_record, pie_clip_run). Local-player index inside the selected PIE world (default 0) (pie_inject_input, pie_inject_input_start, pie_inject_input_tape, pie_observe_arm, pie_record_arm, pie_replay_arm, pie_replay_run, pie_script_replay, pie_send_key). With apply: local-player index inside that PIE world (default 0) (pie_replay_state). Local-player index inside that PIE world, for observing, client 0 act entries and client 0 triggered steps alike (default 0) (pie_script_run)"),
-  clip: z.record(z.string(), z.unknown()).optional().describe("The clip as JSON: {rate (frames per second, default 60), length (frames, 0 ends at the last thing on it), grid (frame | 1/N | free), map, profile, description, fixed_timestep (default true), seed, hold_timeout (frames), regions: [{id?, name, start, end}], tracks: [{action (Input Action path), type: bool|axis1d|axis2d|axis3d, notes: [{id?, start, length, value? (axis tracks)}], keys: [{id?, t, v, interp?: linear|constant|cubic}] (axis tracks)}], performer ({kind: player, client} | {kind: actor, actor}: what lanes drive when they name nothing; the run's own player by default), lanes: [{id?, kind: move, performer?, points: [{id?, t, at: [x,y,z], radius?}]} | {id?, kind: action, performer?, calls: [{id?, t, fn (a function, or Component.Function), args?: []}], watch?: [functions a recording captures]} | {id?, kind: value, performer?, target (a property path, or bb:<Key>), type: axis1d|bool, keys: [{id?, t, v, interp?}]}] (a player takes action and value lanes on its pawn, an actor move, action and value lanes), events: [{id?, at, do (an act entry: place, console, capture, key, press, hold, tape, inject; or an arrange entry: {kind: spawn|set|call, ...})}], checks: [{id?, name?, start, length, mode: by_end|throughout|hold, expect: {value, op, target?} | manual: true with instruction}]}. Times are frames at rate. A track holds the raw value that reaches the Input Action, before its own modifiers and triggers (pie_clip_create, pie_clip_validate). An inline clip instead of an asset, as clip_create takes it (pie_clip_run). The whole clip as JSON, replacing the stored one (pie_clip_update)"),
+  client_id: z.number().int().min(0).optional().describe("Local-player index inside the selected PIE world (default 0) (pie_inject_input, pie_inject_input_start, pie_inject_input_tape, pie_observe_arm, pie_record_arm, pie_replay_arm, pie_replay_run, pie_send_key). With apply: local-player index inside that PIE world (default 0) (pie_replay_state)"),
+  clips: z.record(z.string(), z.unknown()).optional().describe("Every clip the tracks place, by id: {rate, length, performer, input}"),
   codec: z.enum(["H264","VP8","VP9","AV1"]).optional().describe("Video codec (default H264)"),
   command: z.string().optional().describe("Console command"),
   confirm: z.boolean().optional().describe("Must be true to delete"),
   contains: z.string().optional().describe("Substring the message must contain"),
   control_rotation: z.object({ pitch: z.number(), yaw: z.number(), roll: z.number() }).optional().describe("Player controller control rotation, re-applied every frame while the hold runs. Local player only (pie_inject_input_start). New control rotation the hold re-applies every frame; sent alone it keeps the hold's value (pie_inject_input_update)"),
   csv_path: z.string().optional().describe("Explicit per-frame series CSV"),
-  default_within_ms: z.number().int().min(1).optional().describe("Default auto-step window in game ms (default 5000) (pie_script_create). Default auto-step window in game ms; overrides the script's (default 5000) (pie_script_run). Default auto-step window in game ms (pie_script_update)"),
-  description: z.string().optional().describe("What the script tests"),
   direction: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("World direction to push movement input in every frame"),
-  directory: z.string().optional().describe("Content folder to list under (default /Game) (pie_clip_list, pie_script_list). Content path prefix (default /Game) (pie_profile_list)"),
+  directory: z.string().optional().describe("Content path prefix (default /Game)"),
   distance: z.number().optional().describe("Positive trace distance in cm (default 1000)"),
   drift_thresholds: z.record(z.string(), z.unknown()).optional().describe("{position_cm, rotation_deg, velocity_cms, tracked_default, tracked:{path: threshold}}"),
   driveId: z.string().optional().describe("Caller-chosen drive id (minted when absent) (pie_drive_pawn). Drive id from drive_pawn (default: the most recent drive) (pie_drive_status, pie_drive_stop)"),
@@ -3044,26 +2222,22 @@ export const schema: Record<string, z.ZodType> = {
   eject: z.boolean().optional().describe("Eject to a spectator camera during replay"),
   encode_gif: z.boolean().optional().describe("Also encode an animated GIF (default false)"),
   event: z.enum(["press","down","up"]).optional().describe("press (default: down then up) | down | up"),
-  evidence: z.object({ note: z.string().describe("What was observed"), captures: z.array(z.string()).optional().describe("Capture files that show it: absolute, or relative to the run's output_dir; each must exist") }).optional().describe("What the verdict rests on; required when source is agent"),
   file: z.string().optional().describe("Artifact to read; series returns per-channel time series (default manifest) (pie_observe_read). Artifact to read (default manifest) (pie_record_read)"),
-  fixed_timestep: z.boolean().optional().describe("Fixed frame deltas: to the next recorded frame where the clip has frame_times, else 1/rate (default the clip's fixed_timestep, true unless set) (pie_clip_run). Fixed 1/pin_fps delta during replay (default false) (pie_replay_arm, pie_replay_run)"),
+  fixed_timestep: z.boolean().optional().describe("Fixed 1/pin_fps delta during replay (default false)"),
   fps: z.number().int().min(1).optional().describe("Encoded frame rate (default 30)"),
-  from_check: z.string().optional().describe("Punch in at this hold check's frame instead, and record until clip_record_stop"),
+  from: z.number().min(0).optional().describe("The playhead: start playback at this frame; checks that start before it are skipped"),
   hz: z.number().optional().describe("Playback rate (default 60)"),
   id: z.string().optional().describe("Recording id (default: a timestamp) (pie_record_arm). Recording id (pie_record_delete, pie_record_read)"),
   ignoreActors: z.array(z.string()).optional().describe("Actor labels or paths to skip"),
   ignorePawn: z.boolean().optional().describe("Ignore the viewing player's pawn (default true)"),
-  include_steps: z.boolean().optional().describe("Each run's per-step results (default true)"),
   include_values: z.boolean().optional().describe("series: include the downsampled values (default false)"),
   includeSamples: z.boolean().optional().describe("Include the sampled track (default true)"),
   injection_id: z.string().optional().describe("Caller-chosen hold id (minted when absent) (pie_inject_input_start). Hold or tape id to stop (pie_inject_input_stop). Caller-chosen tape id (minted when absent) (pie_inject_input_tape). Hold id from inject_input_start (pie_inject_input_update). Alias for request_id (pie_remote_result)"),
-  keep_pie: z.boolean().optional().describe("Leave PIE the run started running when the run ends (default false) (pie_clip_run). Leave PIE the run started running when the run ends, to inspect its end state (default false) (pie_script_run)"),
   key: z.string().optional().describe("FKey name: Right, Left, Up, Down, Tab, Enter, SpaceBar, Escape, Gamepad_DPad_Down, Gamepad_FaceButton_Bottom..."),
   label: z.string().optional().describe("Marker label"),
-  limit: z.number().int().optional().describe("Most rows (default 200) (pie_observe_list, pie_record_list, pie_session_log). csv/tracked: most rows (default 1000) (pie_observe_read). csv: most rows (default 1000) (pie_record_read). Most frames_over_threshold entries returned (default 50) (pie_replay_analyze). Most runs, newest first (default 50) (pie_script_runs). Most entries per list (default 400) (pie_script_values)"),
-  lock_input: z.boolean().optional().describe("Keep the person's keyboard, mouse and gamepad out of PIE while the clip plays (default true) (pie_clip_run). Block the user's keyboard, mouse and gamepad from the PIE game while the replay runs, so only the recording drives the player; Esc, Shift+F1 and F8 still work, and monitor mode ignores it (default false) (pie_replay_arm, pie_replay_run)"),
-  manual_only: z.boolean().optional().describe("Every step is judged by a verdict: allows a script with no auto step that has an expect (default false)"),
-  map: z.string().optional().describe("Level the script plays in, as a package or object path such as /Game/Maps/L_Arena. A run opens it before PIE and refuses when the open level has unsaved changes; empty plays whatever level is open (pie_script_create). Level to open before PIE; overrides the script's. Mode manual leaves the open level as it is (pie_script_run). Level the script plays in; empty clears it (pie_script_update). Level the script would play in (pie_script_validate)"),
+  limit: z.number().int().optional().describe("Most rows (default 200) (pie_observe_list, pie_record_list, pie_session_log). csv/tracked: most rows (default 1000) (pie_observe_read). csv: most rows (default 1000) (pie_record_read). Most frames_over_threshold entries returned (default 50) (pie_replay_analyze)"),
+  lock_input: z.boolean().optional().describe("Block the user's keyboard, mouse and gamepad from the PIE game while the replay runs, so only the recording drives the player; Esc, Shift+F1 and F8 still work, and monitor mode ignores it (default false)"),
+  loop: z.boolean().optional().describe("At the end go back to the loop start (from, else the region's start, else 0) and judge the checks there again, until arrangement_stop"),
   max_errors: z.number().int().min(0).optional().describe("no-errors predicate threshold (default 0) (pie_scenario_scaffold). Most errors logged during the run (default 0) (pie_test_scaffold)"),
   max_message_chars: z.number().int().min(0).optional().describe("Longest message returned; longer ones are cut and marked truncated (default 500, 0 for no limit)"),
   max_offset_rows: z.number().int().min(0).optional().describe("align=auto: largest shift tried, in rows either way (default 30)"),
@@ -3073,66 +2247,61 @@ export const schema: Record<string, z.ZodType> = {
   max_velocity_drift_cms: z.number().optional().describe("Most velocity drift allowed (default 50)"),
   maxBitrateKbps: z.number().int().min(100).optional().describe("Ceiling on the WebRTC bitrate in kbps (default 4000)"),
   min_verbosity: z.string().optional().describe("Lowest severity kept (default warning) (pie_session_errors). Lowest severity kept (default log) (pie_session_log)"),
-  mode: z.string().optional().describe("input (default): movement input on the pawn; navigate: a navmesh move from the player controller, needs targetLocation (pie_drive_pawn). replay drives input; monitor only samples (default replay) (pie_replay_arm, pie_replay_run). full (default) plays the script in PIE; manual starts no PIE, observer or recording, leaves auto steps unchecked and puts every manual step up for its verdict at once (pie_script_run)"),
-  name: z.string().optional().describe("Asset name (pie_clip_create, pie_profile_create, pie_script_create). The run's name (default the asset name, or inline) (pie_clip_run). Scenario name (default scenario) (pie_scenario_scaffold). Name for an inline run (default inline) (pie_script_run). Test name (default repro) (pie_test_run, pie_test_scaffold)"),
-  note: z.string().optional().describe("Tester's note"),
+  mode: z.string().optional().describe("input (default): movement input on the pawn; navigate: a navmesh move from the player controller, needs targetLocation (pie_drive_pawn). replay drives input; monitor only samples (default replay) (pie_replay_arm, pie_replay_run)"),
+  name: z.string().optional().describe("Asset name (pie_profile_create). Scenario name (default scenario) (pie_scenario_scaffold). Test name (default repro) (pie_test_run, pie_test_scaffold)"),
+  note: z.string().optional().describe("What the verdict rests on"),
   offset: z.number().int().min(0).optional().describe("csv/tracked: first row (pie_observe_read). Rows to skip (pie_record_list). csv: first row (pie_record_read). First frames_over_threshold entry returned (pie_replay_analyze). First row (pie_session_log)"),
-  onConflict: z.string().optional().describe("When the asset exists: skip (default) returns it untouched, replace overwrites it, error refuses (pie_clip_create). What to do when the asset exists (default skip) (pie_profile_create). When the asset exists: skip (default), update or replace (overwrite it), error (pie_script_create)"),
-  ops: z.array(z.record(z.string(), z.unknown())).optional().describe("Edits applied in order, all or none: {op: add, kind: note|key|track|check|event|region, ...the thing's fields (track names the Input Action a note or key goes on)} | {op: add, kind: lane, capability: move|action|value, performer?, target?, type?, watch?} | {op: add, kind: point|call|key, lane (the lane's id), time, at | fn, args? | value} | {op: move, id, to | by} | {op: trim, id, start?, length? | end?} | {op: set, id, ...fields} | {op: delete, id} (a track by its action) | {op: quantize, grid?, track? | ids?} | {op: set_clip, ...clip fields, performer?: performer | null}. Times snap to the clip's grid"),
+  onConflict: z.enum(["skip","replace"]).optional().describe("What to do when the asset exists (default skip)"),
   output_dir: z.string().optional().describe("Observation root (default Saved/MCPObservations)"),
-  package_path: z.string().optional().describe("Package folder (default /Game/PIEStudio/Clips) (pie_clip_create). Content folder (default /Game/Observation) (pie_profile_create). Package folder (default /Game/PIEStudio/Scripts) (pie_script_create)"),
-  path: z.string().optional().describe("Playtest clip asset path (pie_clip_delete, pie_clip_edit, pie_clip_read, pie_clip_run, pie_clip_update). Playtest clip asset path the take goes into; create an empty clip first to record a new one (pie_clip_record). A stored clip to check (pie_clip_validate). Profile asset path (pie_profile_delete, pie_profile_read, pie_profile_update). Test script asset path (pie_script_delete, pie_script_read, pie_script_update). Scenario JSON file, relative to the project directory (pie_uat_run)"),
-  pie_instance: z.number().int().min(0).optional().describe("FWorldContext PIEInstance of the player being recorded (default the editor's own player) (pie_clip_record). FWorldContext PIEInstance whose player the clip drives and observes (default the editor's own player) (pie_clip_run). FWorldContext::PIEInstance, a non-negative integer. Omitted picks the active PlayWorld, then the first PIE world with the player; an explicit value never falls back (pie_inject_input, pie_inject_input_start, pie_inject_input_tape, pie_observe_arm, pie_record_arm, pie_replay_arm, pie_replay_run). With apply: FWorldContext PIEInstance whose player to move (default the active PIE world) (pie_replay_state). FWorldContext PIEInstance to observe (default the active PIE world) (pie_script_replay). FWorldContext PIEInstance the run observes, and whose player act entries with no client drive and triggered steps on client 0 watch. Without it the observer takes the active PIE world and those entries take the editor's own player: the listen-server host, else the lowest PIE instance (pie_script_run). FWorldContext::PIEInstance of the client whose UI gets the key. Omitted picks the editor's own player: the listen-server host, else the lowest client PIE instance (pie_send_key)"),
+  package_path: z.string().optional().describe("Content folder (default /Game/Observation)"),
+  path: z.string().optional().describe("Profile asset path (pie_profile_delete, pie_profile_read, pie_profile_update). Scenario JSON file, relative to the project directory (pie_uat_run)"),
+  performer: z.record(z.string(), z.unknown()).optional().describe("Who to record: {kind: player, client: 0}, the editor's own player"),
+  pie_instance: z.number().int().min(0).optional().describe("FWorldContext::PIEInstance, a non-negative integer. Omitted picks the active PlayWorld, then the first PIE world with the player; an explicit value never falls back (pie_inject_input, pie_inject_input_start, pie_inject_input_tape, pie_observe_arm, pie_record_arm, pie_replay_arm, pie_replay_run). With apply: FWorldContext PIEInstance whose player to move (default the active PIE world) (pie_replay_state). FWorldContext::PIEInstance of the client whose UI gets the key. Omitted picks the editor's own player: the listen-server host, else the lowest client PIE instance (pie_send_key)"),
   pieInstance: z.number().int().min(0).optional().describe("FWorldContext::PIEInstance, a non-negative integer. Omitted picks the active PlayWorld, then the first PIE world with the player; an explicit value never falls back (pie_drive_pawn). PIE instance id; omitted selects the active PIE world (pie_view_trace)"),
   pin_fps: z.number().int().optional().describe("Pin PIE fps while observing (pie_observe_arm). Pin PIE fps for reproducibility (default sample_hz) (pie_record_arm). Pin PIE fps during replay (pie_replay_arm, pie_replay_run)"),
   planar: z.boolean().optional().describe("Steer and measure arrival on the XY plane (default true); false for flying or swimming pawns"),
   playerIndex: z.number().int().optional().describe("Local player index in the PIE world (default 0) (pie_drive_pawn). Local player index in the selected PIE world (default 0) (pie_view_trace)"),
   position_cm: z.number().optional().describe("Position drift threshold (default 5)"),
   position_threshold_cm: z.number().optional().describe("Position drift threshold"),
-  profile: z.string().optional().describe("Observation profile asset path (pie_observe_arm, pie_script_create). Observation profile asset path; overrides the script's (pie_script_run). Observation profile asset path; empty clears it (pie_script_update). Observation profile asset path the script would use (pie_script_validate). Observation profile asset path whose tracked values to list (pie_script_values)"),
+  profile: z.string().optional().describe("Observation profile asset path"),
   propertyNames: z.array(z.string()).optional().describe("Property names to read (default: all)"),
-  reason: z.string().optional().describe("Recorded as the run's stop reason (pie_clip_stop, pie_script_stop). Why the run is ended, recorded in the report (pie_uat_abort)"),
-  record: z.boolean().optional().describe("Record input so pie_script_replay can rerun it (default true)"),
+  punch: z.object({ clip: z.record(z.string(), z.unknown()).describe("The clip as the hub stores it"), from: z.number().describe("The frame the take starts on"), to: z.number().describe("The frame the take ends on") }).optional().describe("Punch in: play clip from frame 0 with the person's input locked out, record from `from` to `to` (the clip's frames), and replace that range"),
+  rate: z.number().min(1).optional().describe("Frames per second of a new clip (default 60)"),
+  reason: z.string().optional().describe("Why it stopped, for the unsettled checks (pie_arrangement_stop). Why the run is ended, recorded in the report (pie_uat_abort)"),
   record_drift: z.boolean().optional().describe("Record drift against the source (default true)"),
   recording_dir: z.string().optional().describe("Recording or replay folder (resolves recording.csv) (pie_assert_eval). Recordings root, or with no id the recording folder itself (default Saved/MCPRecordings) (pie_perf_summary, pie_replay_analyze, pie_replay_arm, pie_replay_run, pie_replay_state, pie_scenario_scaffold, pie_test_list, pie_test_run, pie_test_scaffold). Recordings root (default Saved/MCPRecordings) (pie_record_arm, pie_record_delete, pie_record_diff, pie_record_list, pie_record_read)"),
   recording_id: z.string().optional().describe("Recording id under the recordings root (pie_assert_eval, pie_replay_analyze, pie_replay_arm, pie_replay_run, pie_replay_state, pie_scenario_scaffold, pie_test_list, pie_test_run, pie_test_scaffold). Recording id under the recordings root (default: the newest recording) (pie_perf_summary)"),
-  region: z.string().optional().describe("Punch in at this region's start and out at its end. The clip plays up to the punch-in with the person's input locked out (pie_clip_record). Region id: judge only its checks and stop at its end. Playback still starts at frame 0, since the state at a region's start comes from playing what comes before it (pie_clip_run)"),
+  region: z.string().optional().describe("Play from frame 0 to this region's end and judge only the checks that start inside it"),
   request_id: z.string().optional().describe("injection_id or request_id a relayed call returned"),
   resolution: z.string().optional().describe("WIDTHxHEIGHT such as 1280x720. Resizes the offscreen editor's window, or fixes the level viewport's size"),
-  results_path: z.string().optional().describe("results.json of the run to replay, instead of a run id (pie_script_replay). results.json path, instead of a run id (pie_script_results)"),
   rng_seed: z.number().optional().describe("Seed the stream RNG for reproducible runs (pie_record_arm). Inline steps: RNG seed (pie_replay_arm, pie_replay_run)"),
   rotation_deg: z.number().optional().describe("Rotation drift threshold (default 2)"),
   rotation_threshold_deg: z.number().optional().describe("Rotation drift threshold"),
   run_gap_frames: z.number().int().optional().describe("Idle frames that split input runs (default 6)"),
-  run_id: z.string().optional().describe("Observation run id (resolves observation.csv under output_dir) (pie_assert_eval). Clip run id (default the current or last run) (pie_clip_status). Observation run id (pie_observe_read). Finished run to replay (default the last run) (pie_script_replay). Script run id (default the current or last run) (pie_script_results, pie_script_status). Run to stop; must be the active run when given (pie_script_stop). Run the step belongs to (default the current or last run) (pie_script_verdict)"),
+  run_id: z.string().optional().describe("Observation run id (resolves observation.csv under output_dir) (pie_assert_eval). Observation run id (pie_observe_read)"),
+  runId: z.string().optional().describe("The hub's id for the run"),
   sample_hz: z.number().int().min(1).optional().describe("Sample rate (default 60) (pie_observe_arm, pie_record_arm). Inline steps: sample rate (default 60) (pie_replay_arm, pie_replay_run)"),
   sampleEvery: z.number().min(0).optional().describe("Seconds between track samples; 0 samples every frame (default 0.1)"),
   scale: z.number().min(-1).max(1).optional().describe("Movement input scale (default 1)"),
   scenario: z.record(z.string(), z.unknown()).optional().describe("Inline scenario object (pie_scenario_validate). Scenario object: {name, map, pie:{players, net_mode, one_process, windowless, client_fps}, join_timeout_s, settle_ms, steps:[{name, do[], expect[{log host|client:N, pattern (regex), min, max, since step|run}], forbid[], window_ms}]}. A rule reads only lines logged after its step began unless since is run; see docs/pie.md (pie_uat_run)"),
   scenario_path: z.string().optional().describe("Path to a scenario.json"),
-  script: z.string().optional().describe("Test script asset path (pie_script_run). Test script asset path: only that script's runs (pie_script_runs)"),
   sequence_path: z.string().optional().describe("Explicit sequence.json path"),
   session: z.string().optional().describe("Session id under Saved/MCPSessions (default: the live or most recent session)"),
   session_dir: z.string().optional().describe("Absolute session folder, overriding session"),
   settle_ms: z.number().int().min(0).optional().describe("Settle delay before playback (default 500)"),
   signallingUrl: z.string().optional().describe("ws:// or wss:// URL of the signalling server the editor's streamer connects to"),
-  since_seq: z.number().int().min(0).optional().describe("Only events with a larger seq (default 0, every event)"),
-  source: z.string().optional().describe("Who judged it: human (default) or agent, which needs evidence and is refused on a check with agent_judgeable false (pie_clip_verdict). Who judged the step: human (default) or agent. An agent verdict needs evidence and is refused on a step with agent_judgeable false. elicitation is the verdict form's human channel, action an alias of human (pie_script_verdict). pie (default): the PIE viewport, armed until PIE starts; level_viewport: the active level viewport; editor: the whole editor (pie_stream_start)"),
-  start_pie: z.boolean().optional().describe("Start PIE when it is not running (default false). The run ends PIE it started when it ends (pie_clip_run). Start PIE when it is not running (default false). The run ends PIE it started when it ends, however it ends; PIE already playing is left running (pie_script_run)"),
+  source: z.enum(["pie","level_viewport","editor"]).optional().describe("pie (default): the PIE viewport, armed until PIE starts; level_viewport: the active level viewport; editor: the whole editor"),
   start_when: z.record(z.string(), z.unknown()).optional().describe("Hold the steps until the player can act, then resume at the matching point of the recording: {pawn_at_rest (default true: speed <= max_speed_cms, default 5, and on the ground), hold_ms (default 500), log_contains, timeout_ms (default 60000)}. Replaces settle_ms (pie_replay_arm, pie_replay_run). Replay gate test_run uses, as replay_run's start_when (pie_test_scaffold)"),
-  step: z.number().int().min(0).optional().describe("Manual step index, 0-based"),
-  steps: z.array(z.record(z.string(), z.unknown())).optional().describe("Inline step array, instead of a recording (pie_replay_arm, pie_replay_run). Steps, run in order: {instruction, judge: auto|manual (default auto), agent_judgeable (manual steps: false means only a person gives the verdict, default true), resolve_in_pie (true: expect.value and the actors arrange and act name only resolve once PIE runs, so script_create and script_update do not check them), arrange: [{kind: spawn, class, at?, rotation?, scale?} | {kind: set, target, path, value} | {kind: call, target, func, args?}] (run when the step starts), act: [{client?, place: {at, offset?, face?} | {location, yaw?} (location and offset as [x, y, z] or {x, y, z})} | {client?, press: {action, frames?}} | {client?, inject: {action, value}} | {client?, hold: {action, value, ms}} | {client?, tape: {action, values, hz?}} | {client?, console} | {client?, capture} | {key: {key | text, event?}} | {wait_ms}] (run after arrange, as uat_run runs a step's do; within_ms counts from its end), expect: {value (tracked value path or last segment, actor id for exists, widget for visible, Input Action asset path for triggered), op: decreasing|increasing|eq|gt|lt|visible|exists|triggered, target (number for eq/gt/lt, boolean for visible/exists, default true, optional least change for decreasing/increasing; none for triggered), within_ms (triggered: 0 or absent waits with no timeout), client (triggered only: the player whose input is watched, 0 the editor's own player (default), 1..N a remote player, as act counts them)}}. triggered passes on the first fresh trigger of the action after act ends (input still held when the window opens does not count) and records triggered_at_ms and action_value as evidence (pie_script_create). Inline steps instead of a script asset: {instruction, judge: auto|manual (default auto), agent_judgeable (manual steps: false means only a person gives the verdict, default true), resolve_in_pie (true: expect.value and the actors arrange and act name only resolve once PIE runs, so script_create and script_update do not check them), arrange: [{kind: spawn, class, at?, rotation?, scale?} | {kind: set, target, path, value} | {kind: call, target, func, args?}] (run when the step starts), act: [{client?, place: {at, offset?, face?} | {location, yaw?} (location and offset as [x, y, z] or {x, y, z})} | {client?, press: {action, frames?}} | {client?, inject: {action, value}} | {client?, hold: {action, value, ms}} | {client?, tape: {action, values, hz?}} | {client?, console} | {client?, capture} | {key: {key | text, event?}} | {wait_ms}] (run after arrange, as uat_run runs a step's do; within_ms counts from its end), expect: {value (tracked value path or last segment, actor id for exists, widget for visible, Input Action asset path for triggered), op: decreasing|increasing|eq|gt|lt|visible|exists|triggered, target (number for eq/gt/lt, boolean for visible/exists, default true, optional least change for decreasing/increasing; none for triggered), within_ms (triggered: 0 or absent waits with no timeout), client (triggered only: the player whose input is watched, 0 the editor's own player (default), 1..N a remote player, as act counts them)}}. triggered passes on the first fresh trigger of the action after act ends (input still held when the window opens does not count) and records triggered_at_ms and action_value as evidence (pie_script_run). Replacement steps: {instruction, judge: auto|manual (default auto), agent_judgeable (manual steps: false means only a person gives the verdict, default true), resolve_in_pie (true: expect.value and the actors arrange and act name only resolve once PIE runs, so script_create and script_update do not check them), arrange: [{kind: spawn, class, at?, rotation?, scale?} | {kind: set, target, path, value} | {kind: call, target, func, args?}] (run when the step starts), act: [{client?, place: {at, offset?, face?} | {location, yaw?} (location and offset as [x, y, z] or {x, y, z})} | {client?, press: {action, frames?}} | {client?, inject: {action, value}} | {client?, hold: {action, value, ms}} | {client?, tape: {action, values, hz?}} | {client?, console} | {client?, capture} | {key: {key | text, event?}} | {wait_ms}] (run after arrange, as uat_run runs a step's do; within_ms counts from its end), expect: {value (tracked value path or last segment, actor id for exists, widget for visible, Input Action asset path for triggered), op: decreasing|increasing|eq|gt|lt|visible|exists|triggered, target (number for eq/gt/lt, boolean for visible/exists, default true, optional least change for decreasing/increasing; none for triggered), within_ms (triggered: 0 or absent waits with no timeout), client (triggered only: the player whose input is watched, 0 the editor's own player (default), 1..N a remote player, as act counts them)}}. triggered passes on the first fresh trigger of the action after act ends (input still held when the window opens does not count) and records triggered_at_ms and action_value as evidence (pie_script_update). Steps to check, as script_create takes them: {instruction, judge: auto|manual (default auto), agent_judgeable (manual steps: false means only a person gives the verdict, default true), resolve_in_pie (true: expect.value and the actors arrange and act name only resolve once PIE runs, so script_create and script_update do not check them), arrange: [{kind: spawn, class, at?, rotation?, scale?} | {kind: set, target, path, value} | {kind: call, target, func, args?}] (run when the step starts), act: [{client?, place: {at, offset?, face?} | {location, yaw?} (location and offset as [x, y, z] or {x, y, z})} | {client?, press: {action, frames?}} | {client?, inject: {action, value}} | {client?, hold: {action, value, ms}} | {client?, tape: {action, values, hz?}} | {client?, console} | {client?, capture} | {key: {key | text, event?}} | {wait_ms}] (run after arrange, as uat_run runs a step's do; within_ms counts from its end), expect: {value (tracked value path or last segment, actor id for exists, widget for visible, Input Action asset path for triggered), op: decreasing|increasing|eq|gt|lt|visible|exists|triggered, target (number for eq/gt/lt, boolean for visible/exists, default true, optional least change for decreasing/increasing; none for triggered), within_ms (triggered: 0 or absent waits with no timeout), client (triggered only: the player whose input is watched, 0 the editor's own player (default), 1..N a remote player, as act counts them)}}. triggered passes on the first fresh trigger of the action after act ends (input still held when the window opens does not count) and records triggered_at_ms and action_value as evidence (pie_script_validate)"),
+  steps: z.array(z.record(z.string(), z.unknown())).optional().describe("Inline step array, instead of a recording"),
   stopOnMapChange: z.boolean().optional().describe("End the drive as map_changed when the player arrives in another level (default false: keep driving there)"),
   streamerId: z.string().optional().describe("Id the streamer identifies itself with at the signalling server (default ue-mcp)"),
   sweepRadius: z.number().optional().describe("Also sweep a sphere of this radius in cm when positive"),
   take_record: z.boolean().optional().describe("Also drive Take Recorder (default false)"),
-  target: z.string().optional().describe("Actor class or Blueprint to report on: its actors in the level, and whether it is the player pawn"),
   targetLocation: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("World point to steer toward; the drive ends as arrived within acceptanceRadius"),
   test_path: z.string().optional().describe("Scenario json whose predicates block is evaluated when assertions is omitted (pie_assert_eval). Explicit test.json path (pie_test_run)"),
-  text: z.string().optional().describe("The clip in its compact text form, one thing per line: clip rate=60 length=600 | region <id> <start> <end> \"name\" | track <action> <type> followed by indented note <id> <start> <length> [value] and key <id> <t> <value> [interp] lines | performer player:N|actor:<name> | lane <id> move|action [performer=...] [watch=Fn,Fn] or lane <id> value <target> <axis1d|bool> [performer=...], followed by indented point <id> <t> <x,y,z> [radius=N], call <id> <t> <fn> [[args JSON]] or key <id> <t> <value> [interp] lines | event <id> <at> {json} | check <id> <start> <length> <by_end|throughout|hold> <value> <op> [target] | check <id> <start> <length> manual \"question\". Use - for an id to have one assigned (pie_clip_create, pie_clip_validate). An inline clip in its compact text form (pie_clip_run). The whole clip in its compact text form, replacing the stored one (pie_clip_update). Characters to type into the focused widget, one character event each, instead of a key (pie_send_key)"),
+  text: z.string().optional().describe("Characters to type into the focused widget, one character event each, instead of a key"),
   threshold: z.number().optional().describe("series: report the first frame where |value| exceeds this"),
-  time_scale: z.number().optional().describe("Playback speed multiplier (default 1) (pie_replay_arm, pie_replay_run). Global time dilation during the replay (default 1) (pie_script_replay)"),
-  timeout_seconds: z.number().min(0).optional().describe("Most seconds wait holds the answer (default 600) (pie_clip_run, pie_clip_status). Most seconds to wait when wait is set (pie_script_replay, pie_script_run, pie_script_status)"),
+  time_scale: z.number().optional().describe("Playback speed multiplier (default 1)"),
   timeoutSeconds: z.number().min(0).optional().describe("Longest wait=true waits (default durationSeconds + 30)"),
   traceComplex: z.boolean().optional().describe("Trace per-triangle collision (default false)"),
   track_actors: z.array(z.string()).optional().describe("Actor ids sampled for position, rotation and velocity"),
@@ -3149,8 +2318,8 @@ export const schema: Record<string, z.ZodType> = {
   values: z.array(z.unknown()).optional().describe("Per-frame values: numbers or [x,y,z] arrays"),
   velocity_cms: z.number().optional().describe("Velocity drift threshold (default 25)"),
   velocity_threshold_cms: z.number().optional().describe("Velocity drift threshold"),
-  verdict: z.enum(["pass","fail","skip"]).optional().describe("Verdict"),
-  wait: z.boolean().optional().describe("Answer once the run finishes, stops or awaits a verdict (default false) (pie_clip_run). Answer once the run finishes, stops or awaits a verdict (pie_clip_status). Return only when the drive ends, with its whole track (default true) (pie_drive_pawn). Block until the run finishes or awaits a verdict (pie_script_replay, pie_script_run, pie_script_status)"),
+  verdict: z.enum(["pass","fail"]).optional().describe("The verdict"),
+  wait: z.boolean().optional().describe("Return only when the drive ends, with its whole track (default true)"),
 };
 
 /** Declare an action for a spec'd bridge method: effect, summary, method. */
