@@ -22,8 +22,7 @@ A lane belongs to one Input Action and drives it for client 0, the editor's own 
 - An axis action (`axis1d`, `axis2d`, `axis3d`) is a curve of keys, each a time `t`, a value `v` and an `interp` of `linear` (default), `constant` or `cubic`. Before its first key the curve feeds nothing; after its last it holds the last value. Wherever the curve is zero nothing is fed, the same as no key being down.
 - An axis lane can also carry notes, each with a `value` held over its span. A note wins over the curve where they overlap.
 - Notes on one lane may not overlap.
-- `client` (default 0) makes the lane drive remote client N instead, through that client's remote control: the lane's value is held on the client while it is not zero, so it keeps feeding through a `hold` check. One Input Action may then have one lane per player. In the text form it is `client=N` at the end of the `track` line. The Playtest Hub's scenes use it to play several tracks for several players in one run.
-
+- `client` (default 0) makes the lane drive remote client N instead, through that client's remote control: the lane's value is held on the client while it is not zero, so it keeps feeding through a `hold` check. One Input Action may then have one lane per player. In the text form it is `client=N` at the end of the `track` line.
 ### Actor lanes
 
 Move, action and value lanes drive a performer: the run's own player, remote client N, or any actor in the level, named by its label, object name or path. A lane drives its own `performer` when it names one, otherwise the clip's `performer`, otherwise the run's own player. On the wire a performer is `{kind: "player", client}` or `{kind: "actor", actor}`, and in the text form `player:N` or `actor:<name>`.

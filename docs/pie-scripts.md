@@ -6,8 +6,7 @@ description: "Writing, storing and running PIE test scripts: steps, manual verdi
 
 A test script is an ordered list of steps run against a Play In Editor session. Each step is an instruction for the person playing, and either an expectation the bridge checks against observed values (`judge: "auto"`) or a question the person answers (`judge: "manual"`). A run arms the observer and the recorder under one run id, so a finished run can be replayed later and its auto steps checked again against the same input.
 
-Every action on this page is in the `pie` category. A test can also be laid out on a timeline of game time: see [Timeline clips](pie-clips.md). The [Playtest Hub](hub.md) calls the tests it tracks clips.
-
+Every action on this page is in the `pie` category. A test can also be laid out on a timeline of game time: see [Timeline clips](pie-clips.md).
 ## Steps
 
 ```json
