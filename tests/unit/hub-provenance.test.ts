@@ -1,13 +1,12 @@
 /**
- * What a run tested: the script's version from its definition, the workspace
- * from source control, and the fields ue-mcp records in results.json, each
- * read only when present.
+ * What a run tested: the script's version from its definition and the
+ * workspace from source control.
  */
 import { describe, expect, it } from "vitest";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { provenanceAtStart, scriptHashOf, ueMcpProvenance, withUeMcp, workspaceNow } from "../../src/hub/provenance.js";
+import { scriptHashOf, workspaceNow } from "../../src/hub/provenance.js";
 import { canonical } from "../../src/hub/util.js";
 import type { Run } from "../../src/hub/vcs.js";
 
@@ -61,26 +60,5 @@ describe("the workspace", () => {
       fs.rmSync(plain, { recursive: true, force: true });
       fs.rmSync(dir, { recursive: true, force: true });
     }
-  });
-});
-
-describe("provenance", () => {
-  const start = provenanceAtStart({ workspace: { vcs: "git", revision: "abc", dirty: 0 }, scriptHash: "sha256:1", engine: "5.5", run: { pieSetup: { players: 2, netMode: "listen" } } });
-
-  it("at the start: the workspace, the script's version, the engine and the players Studio set", () => {
-    expect(start).toEqual({ vcs: "git", revision: "abc", dirty: 0, scriptHash: "sha256:1", engine: "5.5", players: { count: 2, netMode: "listen" } });
-    expect(provenanceAtStart({ workspace: { vcs: "none", revision: null, dirty: null }, scriptHash: null, engine: null, run: {} }).players).toBeNull();
-  });
-
-  it("takes ue-mcp's own fields from results.json only where present, over Studio's", () => {
-    expect(ueMcpProvenance({ run_id: "r", steps: [] })).toEqual({});
-    expect(ueMcpProvenance({ provenance: { script_hash: 42, dependencies: [] } })).toEqual({});
-    const ue = ueMcpProvenance({ provenance: { script_hash: "f00d", dependencies: { "/Game/BP_Door": "aa", bad: 3 }, environment: { engine_version: "5.5.1-0+++UE5", net_mode: "client", clients: 3 } } });
-    expect(ue).toEqual({ scriptHash: "ue-mcp:f00d", dependencies: { "/Game/BP_Door": "aa" }, engine: "5.5.1-0+++UE5", players: { count: 3, netMode: "client" } });
-    expect(withUeMcp(start, ue)).toEqual({ vcs: "git", revision: "abc", dirty: 0, ...ue });
-    expect(withUeMcp(start, {})).toBe(start);
-    // A run Studio did not see start learns only what ue-mcp recorded: its revision stays unknown.
-    expect(withUeMcp(undefined, ue)).toMatchObject({ vcs: null, revision: null, dirty: null, scriptHash: "ue-mcp:f00d" });
-    expect(withUeMcp(undefined, {})).toBeUndefined();
   });
 });

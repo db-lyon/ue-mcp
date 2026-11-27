@@ -680,11 +680,6 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
     editors: () => rt.sessions.list().map((s) => ({ connected: s.bridge.isConnected })),
     dialogs: () => rt.sessions.list().filter((s) => existingGuard(s)?.current).length,
     log: { warn: (message, detail) => warn("hub", message, detail) },
-    signer: async () => (await readRegistryAuth())?.login ?? null,
-    engine: () => {
-      const assoc = rt.project.engineAssociation;
-      return assoc && /^\d+\.\d+/.test(assoc) ? assoc.match(/^\d+\.\d+/)![0] : null;
-    },
     // The consent ledger: the hub defers to other sessions' holds and transactions, and to an open request to stop, restart or rebuild.
     consent: {
       sessions: () => {
@@ -1128,7 +1123,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
     ...disruptionRoutes,
     ...checkpointRoutes(rt.sessions),
     ...journalRoutes(rt.sessions),
-    ...hubRoutes(() => hubHolder.get(), projectDir),
+    ...hubRoutes(() => hubHolder.get()),
     ...toolsRoutes(rt),
     // The project's ue-mcp plugins: list, registry catalog, install, update, uninstall.
     ...pluginRoutes({ projectDir, onChanged: () => events.publish("plugins.changed", {}) }),

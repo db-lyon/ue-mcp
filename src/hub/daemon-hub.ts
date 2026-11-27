@@ -1,28 +1,23 @@
 // @session per-session: Builds the one hub of the project a daemon serves, over that project's editors and event log.
 /**
  * The daemon's hub: a Hub over the daemon's own machinery. It reaches ue-mcp's
- * actions through the runtime (callAction), keeps its files under the
- * project's data folder (~/.ue-mcp/data/<project>/hub), publishes hub.changed
- * and hub.lease on the daemon's event log, and works out what else is using
- * the editor from the events the daemon already publishes: pie.started and
- * pie.ended, call.started and call.finished (other MCP clients), and
- * editor.operation.
+ * actions through the runtime (callAction), keeps this machine's runs, queue
+ * and schedules under the project's data folder (~/.ue-mcp/data/<project>/hub),
+ * publishes hub.changed and hub.lease on the daemon's event log, and works out
+ * what else is using the editor from the events the daemon already publishes:
+ * pie.started and pie.ended, call.started and call.finished (other MCP
+ * clients), and editor.operation.
  *
- * Everything a client brings (an agent that fixes playtests, a flow that
- * writes them, run cards, the experiment switch, the Manual/Automatic
- * setting) arrives as HubClientOptions through api.hub.configure
- * (hub-client.ts). The hub reads them live, so a client that configures
- * after the hub started is heard; with none, the defaults here stand.
+ * What a client brings (the switch, its agents' calls, the desktop's input
+ * age, a headless runner) arrives as HubClientOptions through
+ * api.hub.configure (hub-client.ts).
  */
 import * as path from "node:path";
 import type { DaemonEvent, DaemonEventType, ActionResult } from "../contract/daemon.js";
 import type { BusyCall, BusyState, EditorOperation } from "./contract.js";
 import { Hub } from "./hub.js";
 import type { OccupancySignals } from "./lease.js";
-import type { HubClientOptions, HubPolicy } from "./ports.js";
-import { ScriptIndex } from "./script-index.js";
-import { ScriptRunBroker } from "./script-broker.js";
-import { VerdictHold } from "./verdict-hold.js";
+import type { HubClientOptions } from "./ports.js";
 
 /** What the daemon gives the hub. */
 export interface DaemonHubDeps {
@@ -38,10 +33,6 @@ export interface DaemonHubDeps {
   /** Modal dialogs open in the project's editors now. */
   dialogs(): number;
   log: { warn(message: string, detail?: unknown): void };
-  /** The signed-in ue-mcp account's login, who a sign-off is from. */
-  signer?: HubPolicy["signer"];
-  /** The project's engine version, major.minor. */
-  engine?: () => string | null;
   /** Start the hub's timers; tests drive tick() themselves. */
   timers?: boolean;
   /** The consent ledger's view (src/dispatch/disruption.ts): other sessions' holds and work, and open requests to stop, restart or rebuild the editor. */
@@ -50,7 +41,6 @@ export interface DaemonHubDeps {
 
 export interface DaemonHub {
   readonly hub: Hub;
-  readonly broker: ScriptRunBroker;
   dispose(): void;
 }
 
@@ -141,22 +131,9 @@ export function createDaemonHub(deps: DaemonHubDeps, client: () => HubClientOpti
       subscribe: (listener: (e: { type: string; data: Record<string, unknown> }) => void) => deps.events.subscribe(listener),
     },
   };
-  const own = new ScriptRunBroker(host);
-  // A hold on the runs the broker started: PIE paused at a manual step until a verdict, then stopped with no verdict.
-  const hold = new VerdictHold({
-    callAction: deps.callAction,
-    publish: (type, data) => deps.events.publish(`hub.${type === "qa.held" ? "held" : type}` as DaemonEventType, data),
-    log: deps.log,
-    stop: (runId, reason) => own.stopRun(runId, reason),
-    waitMinutes: (run) => own.waitMinutesOf(run) ?? 10,
-    owns: (run) => own.owns(run),
-  });
-  own.attachHold(hold);
   const c = client();
   const hub = new Hub({
     host,
-    broker: c.broker ?? own,
-    index: new ScriptIndex(host),
     editor: {
       pie: () => signals.pie(),
       dialogs: () => deps.dialogs(),
@@ -167,24 +144,16 @@ export function createDaemonHub(deps: DaemonHubDeps, client: () => HubClientOpti
       inputAgeMs: () => c.inputAgeMs?.() ?? null,
       sessions: () => deps.consent?.sessions?.() ?? [],
       disruptions: () => deps.consent?.disruptions?.() ?? [],
-      onPie: (l) => signals.onPie(l),
     },
-    signer: c.signer ?? deps.signer,
-    ...(c.playtestRuns ? { playtestRuns: c.playtestRuns } : {}),
     ...(c.enabled ? { enabled: c.enabled } : {}),
-    ...(c.fixer ? { fixer: c.fixer } : {}),
-    ...(c.writePlaytests ? { writePlaytests: c.writePlaytests } : {}),
-    ...(c.replay ? { replay: c.replay } : {}),
-    ...(deps.engine ? { engine: deps.engine } : {}),
+    headless: () => c.headless,
     ...(deps.timers === false ? { timers: false } : {}),
   });
   return {
     hub,
-    broker: own,
     dispose: () => {
       offSignals();
       hub.dispose();
-      hold.dispose();
     },
   };
 }

@@ -82,12 +82,8 @@ export const DAEMON_FEATURES = [
   "install.engineMismatch",
   "editor.consent",
   "hub",
-  "hub.goalDelete",
-  "hub.arrangement",
   "events.clip",
   "events.clip.take",
-  "hub.arrangements",
-  "hub.performers",
 ] as const;
 
 export type DaemonFeature = (typeof DAEMON_FEATURES)[number];
@@ -104,12 +100,8 @@ export const DAEMON_FEATURES_BEYOND_ROUTES: { readonly [F in DaemonFeature]?: st
     "GET /v1/install reports the problem bridge_engine_mismatch, with action `rebuild` and engineMismatch naming the BuildIds, when the bridge or the project's UE_MCP_Studio plugin is built for another engine build, their module manifests disagree, or the install marker names another release than the descriptor",
   "editor.consent":
     "POST /v1/editor/{stop,restart,rebuild} answers 409 { error, request: EditorDisruptionRequest } while other sessions using the editor have not agreed, and takes { requestId?, force?, requester?, reason? }; GET /v1/events carries disruption.requested, disruption.updated and disruption.hold",
-  "hub.goalDelete":
-    "DELETE /v1/hub/goals/:id removes the goal or milestone and its sign-off and drops its id from every other goal's requires; playtests, their records and past runs are left as they are; it answers 409 { error } naming the plan while a plan whose scope is that goal is queued or running",
   "events.clip":
     "GET /v1/events carries clip.run_started, clip.position, clip.check, clip.region, clip.event_fired, clip.verdict_requested and clip.run_finished (ClipEventData) while a playtest clip run started through pie(clip_run) or pie(clip_record) plays, and after pie(clip_status) of a run that is still playing",
-  "hub.arrangements":
-    "a project holds named arrangements: GET /v1/hub/set and GET /v1/hub/queue take ?arrangement=<id or name>, POST /v1/hub/set/edit takes { arrangement }, the arrangement run scope takes arrangementId, and GET /v1/hub/runs takes ?arrangement; each defaults to the first arrangement. SetView carries arrangement, PlanRun and Schedule carry arrangementId, and a goal carries arrangementId when it is not the first arrangement's",
   "events.clip.take":
     "GET /v1/events carries clip.take_progress while a recording's take is in flight: each armed track's notes so far (the last one open while held) and the axis keys added since the previous event; pie(clip_status) of that run carries the take so far as take.live_take",
 };
@@ -242,57 +234,43 @@ export const DAEMON_ROUTES = routeTable({
   "journal.setGroup": { method: "PUT", path: "/v1/journal/group", feature: "journal", summary: "{ editor?, group: string | null }" },
   "journal.revert": { method: "POST", path: "/v1/journal/revert", feature: "journal", summary: "{ editor?, group }: revert one group" },
   "journal.revertAfter": { method: "POST", path: "/v1/journal/revert-after", feature: "journal", summary: "{ editor?, group }: revert every later group" },
-  "hub.overview": { method: "GET", path: "/v1/hub", feature: "hub", summary: "the Playtest Hub: goals with their status, checks, attention, queue, recent runs (HubOverview)" },
-  "hub.goal": { method: "GET", path: "/v1/hub/goals/:id", feature: "hub", summary: "one goal with its status and checks (GoalState)" },
-  "hub.goal.create": { method: "POST", path: "/v1/hub/goals", feature: "hub", summary: "GoalDraft: create a goal or milestone ({ goal })" },
-  "hub.goal.update": { method: "PUT", path: "/v1/hub/goals/:id", feature: "hub", summary: "GoalUpdate: change fields ({ goal })" },
-  "hub.goal.delete": { method: "DELETE", path: "/v1/hub/goals/:id", feature: "hub", summary: "delete a goal or milestone; goals that required it stop requiring it, its playtests stay (204; 409 while a plan for it is queued or running)" },
-  "hub.goal.addChecks": { method: "POST", path: "/v1/hub/goals/:id/checks", feature: "hub", summary: "{ checks: CheckRef[] }: add playtests to a goal ({ goal })" },
-  "hub.goal.orderChecks": { method: "PUT", path: "/v1/hub/goals/:id/checks/order", feature: "hub", summary: "{ order: checkIds }: reorder a goal's playtests ({ goal })" },
-  "hub.goal.removeCheck": { method: "DELETE", path: "/v1/hub/goals/:id/checks/:checkId", feature: "hub", summary: "remove a playtest from a goal ({ goal })" },
-  "hub.goal.updateCheck": { method: "PUT", path: "/v1/hub/goals/:id/checks/:checkId", feature: "hub", summary: "GoalCheckUpdate: whether the playtest is required ({ goal })" },
-  "hub.goal.addRequire": { method: "POST", path: "/v1/hub/goals/:id/requires", feature: "hub", summary: "{ goal, required? }: make a goal require another ({ goal })" },
-  "hub.goal.orderRequires": { method: "PUT", path: "/v1/hub/goals/:id/requires", feature: "hub", summary: "{ order: goalIds }: reorder the goals a goal requires ({ goal })" },
-  "hub.goal.removeRequire": { method: "DELETE", path: "/v1/hub/goals/:id/requires/:goalId", feature: "hub", summary: "stop a goal requiring another ({ goal })" },
-  "hub.goal.signOff": { method: "POST", path: "/v1/hub/goals/:id/sign-off", feature: "hub", summary: "{ note? }: sign a goal off as the signed-in account ({ signOff }; 409 without one)" },
-  "hub.goal.clearSignOff": { method: "DELETE", path: "/v1/hub/goals/:id/sign-off", feature: "hub", summary: "clear a goal's sign-off (204)" },
-  "hub.goal.writePlaytests": { method: "POST", path: "/v1/hub/goals/:id/write-playtests", feature: "hub", summary: "{ text? }: ask a client that can write playtests to write them for the goal (202 { sessionId }; 409 when none can)" },
-  "hub.check": { method: "GET", path: "/v1/hub/checks/:checkId", feature: "hub", summary: "?limit&before: one playtest with its health and runs (CheckDetail)" },
-  "hub.check.update": { method: "PUT", path: "/v1/hub/checks/:checkId", feature: "hub", summary: "CheckMetaUpdate: what a playtest says about itself ({ meta })" },
-  "hub.check.run": { method: "POST", path: "/v1/hub/checks/:checkId/run", feature: "hub", summary: "{ replay?, next? }: a person's Run of one playtest; resumes a paused queue ({ plan, placement })" },
-  "hub.set": { method: "GET", path: "/v1/hub/set", feature: "hub.arrangement", summary: "the set: tracks and scenes in order, with slots, timelines, layout, status and findings (SetView)" },
-  "hub.set.edit": { method: "POST", path: "/v1/hub/set/edit", feature: "hub.arrangement", summary: "{ ops }: set ops as objects or text lines, all or none (SetView and changed; 400 { error, finding })" },
-  "hub.arrangement": { method: "GET", path: "/v1/hub/goals/:id/arrangement", feature: "hub.arrangement", summary: "one track's timeline (ArrangementView)" },
-  "hub.arrangement.put": { method: "PUT", path: "/v1/hub/goals/:id/arrangement", feature: "hub.arrangement", summary: "{ arrangement } or { text }: replace a track's timeline (ArrangementView; 400 { error, finding, findings })" },
-  "hub.arrangement.edit": { method: "POST", path: "/v1/hub/goals/:id/arrangement/edit", feature: "hub.arrangement", summary: "{ ops }: instance ops on one track, all or none (ArrangementView and changed)" },
-  "hub.clips": { method: "GET", path: "/v1/hub/clips", feature: "hub.arrangement", summary: "?q&kind: timeline clips and step-list clips for the browser ({ clips: ClipEntry[] })" },
-  "hub.set.run": { method: "POST", path: "/v1/hub/run", feature: "hub.arrangement", summary: "{ scope: track | scene | slot | arrangement, next? }: queue one run of it ({ plan, placement })" },
-  "hub.run.verdict": { method: "POST", path: "/v1/hub/runs/:runId/verdict", feature: "hub.arrangement", summary: "{ check, verdict, note? }: a manual check's verdict in a set run ({ ok })" },
-  "hub.arrangements": { method: "GET", path: "/v1/hub/arrangements", feature: "hub.arrangements", summary: "every arrangement in order with its tracks, scenes, level, status and newest run, and the default one (ArrangementsView)" },
-  "hub.arrangements.create": { method: "POST", path: "/v1/hub/arrangements", feature: "hub.arrangements", summary: "{ title, level? }: a new, empty arrangement at the end ({ arrangement: ArrangementInfo })" },
-  "hub.arrangements.update": { method: "PUT", path: "/v1/hub/arrangements/:id", feature: "hub.arrangements", summary: "{ title?, level? }: rename an arrangement or set the map its runs open; level null clears it ({ arrangement })" },
-  "hub.arrangements.duplicate": { method: "POST", path: "/v1/hub/arrangements/:id/duplicate", feature: "hub.arrangements", summary: "{ title? }: copy an arrangement's tracks, scenes and instances right after it; clips stay shared ({ arrangement })" },
-  "hub.arrangements.delete": { method: "DELETE", path: "/v1/hub/arrangements/:id", feature: "hub.arrangements", summary: "delete an arrangement with its tracks and scenes; clips stay (204; 409 for the last one, or while a run made in it is queued or running)" },
-  "hub.performers": { method: "GET", path: "/v1/hub/performers", feature: "hub.performers", summary: "?arrangement: what a track can drive, the editor's player, remote clients and the open level's actors, each with the lane capabilities it takes (PerformersView)" },
-  "hub.rules": { method: "PUT", path: "/v1/hub/rules", feature: "hub", summary: "Partial<HealthRule>: the project's flaky and stale rule ({ rules })" },
-  "hub.store.export": { method: "GET", path: "/v1/hub/store", feature: "hub", summary: "every goal, check record, sign-off and rule (HubExport)" },
-  "hub.store.import": { method: "POST", path: "/v1/hub/store", feature: "hub", summary: "HubExport: merge by id (HubImportReport; 400 naming every record that does not read)" },
-  "hub.runs": { method: "GET", path: "/v1/hub/runs", feature: "hub", summary: "?check&limit&before: run history, newest first ({ runs, more })" },
-  "hub.run": { method: "GET", path: "/v1/hub/runs/:runId", feature: "hub", summary: "one run with its steps, series and the last pass (RunDetail)" },
-  "hub.run.results": { method: "GET", path: "/v1/hub/runs/:runId/results", feature: "hub", summary: "the run's results.json as ue-mcp wrote it" },
-  "hub.run.addLink": { method: "POST", path: "/v1/hub/runs/:runId/links", feature: "hub", summary: "{ link }: link a run to a tracker item ({ record })" },
-  "hub.run.removeLink": { method: "DELETE", path: "/v1/hub/runs/:runId/links", feature: "hub", summary: "?url: remove a run's link ({ record })" },
-  "hub.queue": { method: "GET", path: "/v1/hub/queue", feature: "hub", summary: "the plan queue (QueueState)" },
+  "hub.overview": { method: "GET", path: "/v1/hub", feature: "hub", summary: "the Playtest Hub: clips, arrangements, suites with health, tests, queue, lease, recent runs, schedules and files that do not read (HubOverview)" },
+  "hub.clips": { method: "GET", path: "/v1/hub/clips", feature: "hub", summary: "every clip ({ clips: ClipSummary[] })" },
+  "hub.clip": { method: "GET", path: "/v1/hub/clips/:id", feature: "hub", summary: "one clip ({ clip: Clip })" },
+  "hub.clip.create": { method: "POST", path: "/v1/hub/clips", feature: "hub", summary: "ClipDraft: a new clip file; its id from the title unless given ({ clip }; 400 { error, findings })" },
+  "hub.clip.put": { method: "PUT", path: "/v1/hub/clips/:id", feature: "hub", summary: "ClipDraft: write a clip whole ({ clip }; 400 { error, findings })" },
+  "hub.clip.delete": { method: "DELETE", path: "/v1/hub/clips/:id", feature: "hub", summary: "delete a clip (204; 409 while an arrangement places it)" },
+  "hub.record.start": { method: "POST", path: "/v1/hub/record/start", feature: "hub", summary: "{ performer, clip?, from?, to?, rate? }: record a performance; with clip, punch in from..to ({ recording })" },
+  "hub.record.stop": { method: "POST", path: "/v1/hub/record/stop", feature: "hub", summary: "{ id?, title? }: stop recording and save the take, into the punched clip or a new one ({ clip })" },
+  "hub.arrangements": { method: "GET", path: "/v1/hub/arrangements", feature: "hub", summary: "every arrangement ({ arrangements: ArrangementSummary[] })" },
+  "hub.arrangement": { method: "GET", path: "/v1/hub/arrangements/:id", feature: "hub", summary: "one arrangement with its clips, length, findings and tests (ArrangementView)" },
+  "hub.arrangement.create": { method: "POST", path: "/v1/hub/arrangements", feature: "hub", summary: "ArrangementDraft: a new arrangement file (ArrangementView; 400 { error, findings })" },
+  "hub.arrangement.put": { method: "PUT", path: "/v1/hub/arrangements/:id", feature: "hub", summary: "ArrangementDraft: write an arrangement whole: tracks, the Checks track and regions (ArrangementView; 400 { error, findings })" },
+  "hub.arrangement.delete": { method: "DELETE", path: "/v1/hub/arrangements/:id", feature: "hub", summary: "delete an arrangement (204; 409 while a suite tests it or the queue holds it)" },
+  "hub.performers": { method: "GET", path: "/v1/hub/performers", feature: "hub", summary: "?arrangement: what a track can drive, the editor's player, remote clients and the open level's actors, each with the lane capabilities it takes (PerformersView)" },
+  "hub.tests": { method: "GET", path: "/v1/hub/tests", feature: "hub", summary: "every test, each arrangement and each region, with health ({ tests: TestState[] })" },
+  "hub.test": { method: "GET", path: "/v1/hub/tests/:id", feature: "hub", summary: "?limit: one test, <arrangement> or <arrangement>:<region>, with its checks and runs (TestDetail)" },
+  "hub.suites": { method: "GET", path: "/v1/hub/suites", feature: "hub", summary: "every suite with health and pass-rate history ({ suites: SuiteState[] })" },
+  "hub.suite": { method: "GET", path: "/v1/hub/suites/:id", feature: "hub", summary: "one suite (SuiteState)" },
+  "hub.suite.create": { method: "POST", path: "/v1/hub/suites", feature: "hub", summary: "SuiteDraft: a new suite file (SuiteState; 400 { error, findings })" },
+  "hub.suite.put": { method: "PUT", path: "/v1/hub/suites/:id", feature: "hub", summary: "SuiteDraft: write a suite whole (SuiteState; 400 { error, findings })" },
+  "hub.suite.delete": { method: "DELETE", path: "/v1/hub/suites/:id", feature: "hub", summary: "delete a suite (204; 409 while another suite or a schedule names it)" },
+  "hub.suite.quarantine": { method: "POST", path: "/v1/hub/suites/:id/quarantine", feature: "hub", summary: "{ test, on? }: quarantine a test in the suite, or with on false let it count again (SuiteState)" },
+  "hub.suite.flaky": { method: "POST", path: "/v1/hub/suites/:id/flaky", feature: "hub", summary: "{ test, on? }: mark a test flaky in the suite, or with on false clear it (SuiteState)" },
+  "hub.runs": { method: "GET", path: "/v1/hub/runs", feature: "hub", summary: "?test&suite&limit&before: this machine's runs, newest first ({ runs, more })" },
+  "hub.run": { method: "GET", path: "/v1/hub/runs/:runId", feature: "hub", summary: "one run with its checks (RunRecord)" },
+  "hub.run.verdict": { method: "POST", path: "/v1/hub/runs/:runId/verdict", feature: "hub", summary: "{ check, verdict: pass | fail, note? }: a manual check's verdict (RunRecord)" },
+  "hub.run.stop": { method: "POST", path: "/v1/hub/runs/:runId/stop", feature: "hub", summary: "stop a run the hub is playing (RunRecord)" },
+  "hub.queue": { method: "GET", path: "/v1/hub/queue", feature: "hub", summary: "the queue and why its next item waits (QueueState)" },
+  "hub.queue.add": { method: "POST", path: "/v1/hub/queue", feature: "hub", summary: "QueueRequest: queue a test or every test of a suite; resumes a paused queue ({ batch, queued, skipped, queue })" },
+  "hub.queue.remove": { method: "DELETE", path: "/v1/hub/queue/:id", feature: "hub", summary: "take a queued item out (QueueState; 409 while it plays)" },
   "hub.queue.pause": { method: "PUT", path: "/v1/hub/queue/paused", feature: "hub", summary: "{ paused: boolean } (QueueState)" },
   "hub.lease": { method: "GET", path: "/v1/hub/lease", feature: "hub", summary: "the hub's hold on the editor ({ lease })" },
-  "hub.release": { method: "POST", path: "/v1/hub/release", feature: "hub", summary: "Release the editor: stop what the hub holds on it and pause the queue (QueueState)" },
-  "hub.plan": { method: "POST", path: "/v1/hub/plans", feature: "hub", summary: "PlanRequest: a person's Run; resumes a paused queue and starts at once when the editor is free ({ plan, placement })" },
-  "hub.plan.cancel": { method: "POST", path: "/v1/hub/plans/:id/cancel", feature: "hub", summary: "cancel a plan ({ plan })" },
-  "hub.plan.move": { method: "POST", path: "/v1/hub/plans/:id/move", feature: "hub", summary: "{ to }: move a queued plan, 0 for next (QueueState)" },
-  "hub.schedule.create": { method: "POST", path: "/v1/hub/schedules", feature: "hub", summary: "ScheduleDraft: run a plan on chosen days at a local time ({ schedule })" },
-  "hub.schedule.update": { method: "PUT", path: "/v1/hub/schedules/:id", feature: "hub", summary: "Partial<ScheduleDraft>: change a schedule ({ schedule })" },
+  "hub.release": { method: "POST", path: "/v1/hub/release", feature: "hub", summary: "Release the editor: stop the hub's run on it and pause the queue (QueueState)" },
+  "hub.schedules": { method: "GET", path: "/v1/hub/schedules", feature: "hub", summary: "this machine's schedules ({ schedules })" },
+  "hub.schedule.create": { method: "POST", path: "/v1/hub/schedules", feature: "hub", summary: "ScheduleDraft: run a suite or a test on chosen days at a local time ({ schedule })" },
+  "hub.schedule.update": { method: "PUT", path: "/v1/hub/schedules/:id", feature: "hub", summary: "ScheduleDraft: change a schedule ({ schedule })" },
   "hub.schedule.delete": { method: "DELETE", path: "/v1/hub/schedules/:id", feature: "hub", summary: "delete a schedule (204)" },
-  "hub.fix": { method: "POST", path: "/v1/hub/fix", feature: "hub", summary: "FixRequest: queue fix loops for failing playtests ({ queued, plan, placement? }; 409 when no client can run a fix loop)" },
   "tools.list": { method: "GET", path: "/v1/tools", feature: "tools.categories", summary: "project(list_categories)" },
   "tools.categories": { method: "POST", path: "/v1/tools/categories", feature: "tools.categories", summary: "{ category, enabled, scope?, editor? }: project(set_category_enabled)" },
   "tools.toolsets": { method: "POST", path: "/v1/tools/toolsets", feature: "tools.categories", summary: "{ toolsets, enabled, editor? }: project(set_toolset_enabled)" },
@@ -425,7 +403,6 @@ export const DAEMON_EVENT_TYPES = [
   "disruption.hold",
   "hub.changed",
   "hub.lease",
-  "hub.held",
 ] as const;
 
 /** The Play session states the editor pushes, each published as `pie.<state>`. */
@@ -1851,13 +1828,11 @@ export interface DaemonExtensionApi {
   setBusy(busy: () => boolean): void;
 
   /**
-   * The Playtest Hub's injection point (feature "hub"). The hub itself runs in
-   * the daemon; a client with concepts ue-mcp has none of, such as chat
-   * sessions and run cards, supplies them here: its own way of starting and
-   * following runs, a fix loop, a flow that writes playtests, the experiment
-   * and Manual/Automatic settings, and the account a sign-off is from. Every
-   * member is optional and has a default. Returns the function that takes the
-   * client's options back out, which activate's dispose should call.
+   * The Playtest Hub's injection point (feature "hub"). The hub and all its
+   * data run in the daemon; a client supplies only what it alone knows: the
+   * switch, its agents' editor calls, the desktop's input age and a headless
+   * runner. Every member is optional and has a default. Returns the function
+   * that takes the client's options back out, which activate's dispose should call.
    */
   hub?: {
     configure(options: import("./hub-ports.js").HubClientOptions): () => void;

@@ -1,22 +1,14 @@
 // @live-editor headless
 /**
  * Actor performers (#2137): an agent drives an AI-controlled pawn through a clip's move, action and value lanes and
- * its checks pass, a hub track whose performer is that pawn plays a clip that names no performer and passes, and a
- * recording captures what the pawn actually did: where it went and the calls it took. The pawn is a DefaultPawn
- * placed in the probe arena, which an AI controller possesses in PIE. PIE is stopped after every run.
+ * its checks pass, and a recording captures what the pawn actually did: where it went and the calls it took. The
+ * pawn is a DefaultPawn placed in the probe arena, which an AI controller possesses in PIE. PIE is stopped after
+ * every run. Playing a hub arrangement whose track drives the pawn is covered with the hub core (#2146).
  * Refs #2137
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import * as fs from "node:fs";
-import * as os from "node:os";
-import * as path from "node:path";
 import { callBridge, disconnectBridge, getBridge, type TestResult } from "../setup.js";
 import type { EditorBridge } from "../../src/bridge/bridge.js";
-import type { ActionResult } from "../../src/contract/daemon.js";
-import { Hub } from "../../src/hub/hub.js";
-import { runHubAction } from "../../src/hub/hub-tools.js";
-import { ScriptIndex } from "../../src/hub/script-index.js";
-import { ScriptRunBroker } from "../../src/hub/script-broker.js";
 import { setupProbeArena, teardownProbeArena } from "./clip-fixture.js";
 
 const DIR = "/Game/MCPTest/ActorLanes";
@@ -31,8 +23,6 @@ const rows = (v: unknown): Json[] => (Array.isArray(v) ? (v as Json[]) : []);
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 let bridge: EditorBridge;
-let hub: Hub | undefined;
-let root = "";
 
 async function call(method: string, params: Json = {}): Promise<Json> {
   const r = await callBridge(bridge, method, params);
@@ -51,14 +41,6 @@ async function stopPie(): Promise<void> {
   }
 }
 
-/** A pie or editor action, as the server would forward it to the bridge. */
-async function forward(category: string, action: string, args: Json = {}): Promise<ActionResult> {
-  const method = category === "level" && action === "get_current" ? "get_current_level" : category === "level" && action === "load" ? "load_level" : `pie_${action}`;
-  const r = await callBridge(bridge, method, args);
-  const b = r.result && typeof r.result === "object" ? (r.result as Json) : {};
-  return { isError: !r.ok, content: [{ type: "text", text: JSON.stringify(r.ok ? b : { success: false, error: r.error }) }] };
-}
-
 beforeAll(async () => {
   bridge = await getBridge();
   await stopPie();
@@ -71,12 +53,10 @@ beforeAll(async () => {
 afterAll(async () => {
   if (!bridge) return;
   try {
-    hub?.dispose();
     await callBridge(bridge, "pie_clip_stop", {});
     await stopPie();
   } finally {
     await teardownProbeArena(bridge, DIR);
-    if (root) fs.rmSync(root, { recursive: true, force: true });
     disconnectBridge();
   }
 }, 120_000);
@@ -122,40 +102,6 @@ describe("actor lanes", () => {
     expect(run.passed).toBe(true);
     await stopPie();
   }, 240_000);
-
-  it("plays a clip that names no performer on a hub track that drives the pawn", async () => {
-    const patrol = ["clip rate=60 length=180", "lane l1 move", `  point p1 0 ${START.x},${START.y + 500},${START.z} radius=20`, `check c1 0 180 by_end ${GUARD}.RootComponent.RelativeLocation.Y increasing 250`].join("\n");
-    await call("pie_clip_create", { name: "CL_Patrol", package_path: DIR, text: patrol, onConflict: "replace" });
-    root = fs.mkdtempSync(path.join(os.tmpdir(), "hub-actor-live-"));
-    const host = {
-      projectDir: path.join(root, "project"),
-      dataDir: path.join(root, "data"),
-      callAction: forward,
-      editors: () => [{ connected: true }],
-      events: { publish: () => undefined, subscribe: () => () => undefined },
-      log: { info() {}, warn() {} },
-    };
-    fs.mkdirSync(host.projectDir, { recursive: true });
-    hub = new Hub({ host, broker: new ScriptRunBroker(host), index: new ScriptIndex(host), timers: false, playtestRuns: () => "automatic", workspace: async () => ({ vcs: "none", revision: null, dirty: 0 }), editor: { pie: () => false, dialogs: () => 0, busy: () => ({ now: Date.now(), calls: [] }), inputAgeMs: () => null }, pieWaits: { startMs: 100, inUseMs: 100 } });
-    const set = (await runHubAction(hub, "edit_set", { ops: `track add Guard performer=actor:${GUARD}\nadd Guard clip ${DIR}/CL_Patrol` })) as { text: string; findings?: string[] };
-    expect(set.findings ?? []).toEqual([]);
-    expect(set.text).toContain(`performer=actor:${GUARD}`);
-
-    const queued = (await runHubAction(hub, "run", { scope: "track Guard" })) as { plan: { id: string } };
-    let runId: string | null | undefined;
-    for (let i = 0; i < 600; i++) {
-      const plan = [hub.queue.state().current, ...hub.queue.state().recent].find((p) => p?.id === queued.plan.id);
-      runId = plan?.items[0].runId;
-      if (plan && plan.state !== "running" && plan.state !== "queued") break;
-      if (runId) await hub.arrangements.refresh(runId);
-      await sleep(250);
-    }
-    expect(runId).toBeTruthy();
-    const result = (await runHubAction(hub, "read_run", { run_id: runId })) as { outcome: string; instances: string[]; tracks: string[] };
-    expect(result.outcome, JSON.stringify(result)).toBe("passed");
-    expect(result.tracks, JSON.stringify(result)).toEqual([expect.stringContaining(`performer=actor:${GUARD}`)]);
-    await stopPie();
-  }, 300_000);
 
   it("records where the pawn went and the calls it took into armed lanes", async () => {
     const at = `"(X=${START.x + 500},Y=${START.y},Z=${START.z})"`;

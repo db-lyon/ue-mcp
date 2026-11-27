@@ -186,12 +186,12 @@ console.log(JSON.stringify({ exports: Object.keys(daemon).sort(), api: daemon.EX
       `import { register } from "node:module";
 register("data:text/javascript," + encodeURIComponent(\`export async function resolve(s, c, next) { const r = await next(s, c); if (r.url.startsWith("node:")) throw new Error("ue-mcp/hub loaded " + r.url); return r; }\`));
 const hub = await import("ue-mcp/hub");
-console.log(JSON.stringify({ slug: hub.goalSlug("Open the Door!"), ended: hub.qaEnded("finished") }));
+console.log(JSON.stringify({ slug: hub.slugOf("Open the Door!"), ended: hub.runEnded("passed"), test: hub.parseTestId("door:open") }));
 `,
     );
     const r = spawnSync(process.execPath, [consumer], { cwd: sb.path("global"), encoding: "utf8", windowsHide: true });
     expect(r.status, r.stderr).toBe(0);
-    expect(JSON.parse(r.stdout.trim())).toEqual({ slug: "open-the-door", ended: true });
+    expect(JSON.parse(r.stdout.trim())).toEqual({ slug: "open-the-door", ended: true, test: { arrangement: "door", region: "open" } });
   });
 });
 

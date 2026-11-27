@@ -817,24 +817,19 @@
       "summary": "stopping, restarting, rebuilding or patching a shared editor waits for consent: a lone session attests to its own subagents, other sessions are told in their next response and answer go, wait or block, holds and releases, external participants over /v1/disruptions, POST /v1/editor/* answering 409 until agreed, and people approving or denying"
     },
     {
-      "id": "daemon.hub.goal-delete",
+      "id": "daemon.hub.files",
       "group": "daemon",
-      "summary": "DELETE /v1/hub/goals/:id, advertised as hub.goalDelete, removes a goal or milestone and drops it from every goal's requires, leaves its playtests and their records alone, and answers 409 naming a queued plan made for it until that plan is cancelled"
+      "summary": "The /v1/hub clip, arrangement and suite routes write text files under PlaytestHub/ in the project with stable formatting, refuse a clip with checks, an instance for another performer kind and a suite loop with findings, refuse deleting what is still referenced, and list a hand-broken file as a problem without touching it"
     },
     {
-      "id": "daemon.hub.arrangement",
+      "id": "daemon.hub.queue",
       "group": "daemon",
-      "summary": "The /v1/hub set routes, advertised as hub.arrangement: set ops build tracks, clip instances and scenes all or none with candidates for a bad name, goals are tracks, a scene queues as one run, and a deleted track leaves its scenes"
-    },
-    {
-      "id": "daemon.hub.arrangements",
-      "group": "daemon",
-      "summary": "The /v1/hub/arrangements routes, advertised as hub.arrangements: the tracks made before are the first arrangement, Main; arrangements are created, renamed, given a level, duplicated and deleted, each set edited and run apart, the queue read per arrangement, and the last one refused deletion"
+      "summary": "POST /v1/hub/queue queues a test or a suite's tests on this machine, skipping tests with no checks and refusing a headless run with no headless runner; queued items wait while no editor is connected and can be taken out, and suites report quarantine and flaky marks"
     },
     {
       "id": "daemon.hub.performers",
       "group": "daemon",
-      "summary": "Actor performers, advertised as hub.performers: a track is given an actor or a player to drive by set op and keeps it across reads, a performer that is neither is refused with a finding, and GET /v1/hub/performers lists the players with the reason no actor is listed while no editor answers"
+      "summary": "GET /v1/hub/performers lists the editor's player and remote clients with the lanes each takes, and the reason no actor is listed while no editor answers"
     },
     {
       "id": "package.dist-server",
