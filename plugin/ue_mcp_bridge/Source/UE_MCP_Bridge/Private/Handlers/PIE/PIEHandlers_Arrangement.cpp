@@ -56,8 +56,8 @@ TSharedPtr<FJsonValue> FPIEHandlers::PieArrangementPlay(const TSharedPtr<FJsonOb
 	if (TSharedPtr<FJsonValue> Err = RequireString(Params, TEXT("runId"), RunId)) return Err;
 	const TSharedPtr<FJsonObject>* Arrangement = nullptr;
 	const TSharedPtr<FJsonObject>* Clips = nullptr;
-	if (!Params->TryGetObjectField(TEXT("arrangement"), Arrangement) || !Arrangement) return MCPError(TEXT("arrangement is the arrangement to play, as an object"));
-	if (!Params->TryGetObjectField(TEXT("clips"), Clips) || !Clips) return MCPError(TEXT("clips holds every clip the arrangement places, by id"));
+	if (!TryGetObjectParam(Params, TEXT("arrangement"), Arrangement) || !Arrangement) return MCPError(TEXT("arrangement is the arrangement to play, as an object"));
+	if (!TryGetObjectParam(Params, TEXT("clips"), Clips) || !Clips) return MCPError(TEXT("clips holds every clip the arrangement places, by id"));
 	FArrangementPlayConfig Cfg;
 	Cfg.RunId = RunId;
 	FString Error;
@@ -67,6 +67,7 @@ TSharedPtr<FJsonValue> FPIEHandlers::PieArrangementPlay(const TSharedPtr<FJsonOb
 	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("runId"), RunId);
 	if (bStartedPIE) Result->SetBoolField(TEXT("pieStarted"), true);
+	MCPSetCreated(Result);
 	MCPSetNoRollback(Result, TEXT("Stop the run with arrangement_stop; it ends the PIE session it started."));
 	return MCPResult(Result);
 }
@@ -78,9 +79,8 @@ TSharedPtr<FJsonValue> FPIEHandlers::PieArrangementStatus(const TSharedPtr<FJson
 	if (TSharedPtr<FJsonValue> Err = RequireString(Params, TEXT("runId"), RunId)) return Err;
 	TSharedPtr<FJsonObject> Status = FPIEArrangementPlayer::Get().Status(RunId);
 	if (!Status.IsValid()) return MCPError(FString::Printf(TEXT("no run %s: the editor holds only the last run it played"), *RunId));
-	auto Result = MCPSuccess();
-	for (const TPair<FString, TSharedPtr<FJsonValue>>& F : Status->Values) Result->SetField(F.Key, F.Value);
-	return MCPResult(Result);
+	Status->SetBoolField(TEXT("success"), true);
+	return MCPResult(Status);
 }
 
 TSharedPtr<FJsonValue> FPIEHandlers::PieArrangementStop(const TSharedPtr<FJsonObject>& Params)
@@ -91,6 +91,7 @@ TSharedPtr<FJsonValue> FPIEHandlers::PieArrangementStop(const TSharedPtr<FJsonOb
 	if (!FPIEArrangementPlayer::Get().Stop(RunId, OptionalString(Params, TEXT("reason")), Error)) return MCPError(Error);
 	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("runId"), RunId);
+	MCPSetUpdated(Result);
 	MCPSetNoRollback(Result, TEXT("A stopped run cannot be resumed; play it again."));
 	return MCPResult(Result);
 }
@@ -106,6 +107,7 @@ TSharedPtr<FJsonValue> FPIEHandlers::PieArrangementVerdict(const TSharedPtr<FJso
 	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("runId"), RunId);
 	Result->SetStringField(TEXT("check"), Check);
+	MCPSetUpdated(Result);
 	MCPSetNoRollback(Result, TEXT("A verdict is final for the run; play it again to judge again."));
 	return MCPResult(Result);
 }
@@ -115,15 +117,15 @@ TSharedPtr<FJsonValue> FPIEHandlers::PieClipRecordStart(const TSharedPtr<FJsonOb
 	MCP_CHECK_GAME_THREAD();
 	FClipRecordConfig Cfg;
 	FString Error, Kind;
-	if (!ClipPerformerFromJson(Params->TryGetField(TEXT("performer")), Cfg.Performer, Error)) return MCPError(Error);
-	if (Params->TryGetStringField(TEXT("kind"), Kind) && Kind != ClipPerformerKindToString(Cfg.Performer.Kind))
+	if (!ClipPerformerFromJson(TryGetParam(Params, TEXT("performer")), Cfg.Performer, Error)) return MCPError(Error);
+	if (TryGetStringParam(Params, TEXT("kind"), Kind) && Kind != ClipPerformerKindToString(Cfg.Performer.Kind))
 	{
 		return MCPError(FString::Printf(TEXT("kind is %s, and the performer is a %s"), *Kind, *ClipPerformerKindToString(Cfg.Performer.Kind)));
 	}
-	Params->TryGetNumberField(TEXT("rate"), Cfg.Rate);
+	Cfg.Rate = OptionalNumber(Params, TEXT("rate"), 60.0);
 	if (Cfg.Rate <= 0.0 || Cfg.Rate > 1000.0) return MCPError(TEXT("rate is frames per second, more than 0 and at most 1000"));
 	const TSharedPtr<FJsonObject>* Punch = nullptr;
-	if (Params->TryGetObjectField(TEXT("punch"), Punch) && Punch)
+	if (TryGetObjectParam(Params, TEXT("punch"), Punch) && Punch)
 	{
 		const TSharedPtr<FJsonObject>* Clip = nullptr;
 		if (!(*Punch)->TryGetObjectField(TEXT("clip"), Clip) || !Clip || !(*Punch)->TryGetNumberField(TEXT("from"), Cfg.PunchFrom) || !(*Punch)->TryGetNumberField(TEXT("to"), Cfg.PunchTo))
@@ -137,6 +139,7 @@ TSharedPtr<FJsonValue> FPIEHandlers::PieClipRecordStart(const TSharedPtr<FJsonOb
 	if (!FPIEArrangementPlayer::Get().StartRecording(Cfg, Error)) return MCPError(Error);
 	auto Result = MCPSuccess();
 	Result->SetBoolField(TEXT("recording"), true);
+	MCPSetCreated(Result);
 	MCPSetNoRollback(Result, TEXT("End the recording with clip_record_stop."));
 	return MCPResult(Result);
 }
@@ -149,6 +152,7 @@ TSharedPtr<FJsonValue> FPIEHandlers::PieClipRecordStop(const TSharedPtr<FJsonObj
 	if (!FPIEArrangementPlayer::Get().StopRecording(Clip, Error)) return MCPError(Error);
 	auto Result = MCPSuccess();
 	Result->SetObjectField(TEXT("clip"), ClipToJson(Clip));
+	MCPSetUpdated(Result);
 	MCPSetNoRollback(Result, TEXT("The take is answered, not saved; the hub saves it into the clip."));
 	return MCPResult(Result);
 }
