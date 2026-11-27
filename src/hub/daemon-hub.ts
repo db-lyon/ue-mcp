@@ -38,7 +38,7 @@ export interface DaemonHubDeps {
   /** The consent ledger's view (src/dispatch/disruption.ts): other sessions' holds and work, and open requests to stop, restart or rebuild the editor. */
   consent?: Pick<OccupancySignals, "sessions" | "disruptions">;
   /** The headless runner when no client brings one: the daemon hands ue-mcp's own (src/daemon/hub-headless.ts). Its close, when it has one, runs on dispose. */
-  headless?: HubRunner & { close?(reason: string): void };
+  headless?: HubRunner;
 }
 
 export interface DaemonHub {
@@ -157,7 +157,7 @@ export function createDaemonHub(deps: DaemonHubDeps, client: () => HubClientOpti
     dispose: () => {
       offSignals();
       hub.dispose();
-      own?.close?.("the hub stopped");
+      void own?.close?.("the hub stopped");
     },
   };
 }

@@ -132,7 +132,7 @@ describe("hub playback through the shipped server", () => {
   it("plays one region and judges only its checks", async () => {
     const [run] = await runToEnd({ test: "door:walk", runner: "editor" });
     expect(run!.state, JSON.stringify(run)).toBe("passed");
-    expect((run!.checks as Json[]).map((c) => [c.id, c.status])).toEqual([["walked", "passed"]]);
+    expect((run!.checks as Json[]).map((c) => [c.id, c.status])).toEqual([["walked", "passed"], ["still", "passed"]]);
     expect(await waitPieStopped()).toBe(true);
   }, 240_000);
 

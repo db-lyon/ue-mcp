@@ -620,6 +620,8 @@ export class Hub {
     this.dispose();
     for (const runId of [...this.live.keys()]) await this.stopRun(runId, "the daemon stopped").catch(() => undefined);
     if (this.auditionLive()) await this.stopPlay().catch(() => undefined);
+    // A hidden editor the headless runner started closes with the daemon.
+    await this.o.headless?.()?.close?.("the daemon stopped");
   }
 
   // ---------- Auditions ----------

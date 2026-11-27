@@ -35,6 +35,8 @@ export interface HubRunner {
   status(runId: string): Promise<PlayStatus>;
   stop(runId: string, reason: string): Promise<void>;
   verdict(runId: string, check: string, verdict: "pass" | "fail", note?: string): Promise<void>;
+  /** Close what the runner started (a hidden editor); the hub awaits it when the daemon stops. */
+  close?(reason: string): Promise<void>;
 }
 
 /** What a client such as Studio brings to the hub (api.hub.configure). Each member is optional and has a default. */

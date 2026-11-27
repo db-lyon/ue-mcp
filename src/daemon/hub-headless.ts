@@ -28,7 +28,8 @@ import type { HubRunner } from "../hub/ports.js";
 import { EditorRunner } from "../hub/runner.js";
 import { KIND_FLAGS, awaitEditorStartup, editorFits, EDITOR_PEAK_MB, headroomMB, mirror, pidAlive, projectCopyFilter } from "../editor/editor-copy.js";
 import { ProjectContext } from "../config/project.js";
-import { findEditorExecutable } from "../editor/editor-control.js";
+import { findEditorExecutable, stopEditor, waitForEditorReady } from "../editor/editor-control.js";
+import { EditorBridge } from "../bridge/bridge.js";
 import { readEnv } from "../core/env.js";
 
 /** The editor flags every hidden editor takes besides its kind's: no source-code accessor, no background throttling. */
@@ -155,12 +156,12 @@ export class HeadlessRunner implements HubRunner {
       if (this.child === child) this.dropEditor();
     });
     try {
-      const waitReady = this.o.waitReady ?? (await import("../editor/editor-control.js")).waitForEditorReady;
+      const waitReady = this.o.waitReady ?? waitForEditorReady;
       const timeoutS = this.o.readyTimeoutS ?? HEADLESS_READY_TIMEOUT_S;
       await awaitEditorStartup({ child, wait: (signal) => waitReady(uproject, copy, timeoutS, { launchedAtMs, signal }), readyTimeoutS: timeoutS, projectDir: copy, launchedAtMs });
       const lock = JSON.parse(fs.readFileSync(path.join(copy, "Saved", "UE_MCP_Bridge", "port.json"), "utf8")) as { port?: unknown };
       if (typeof lock.port !== "number") throw new Error("the hidden editor reported ready but published no port");
-      const bridge = this.o.bridge ? this.o.bridge(lock.port) : new (await import("../bridge/bridge.js")).EditorBridge("127.0.0.1", lock.port);
+      const bridge = this.o.bridge ? this.o.bridge(lock.port) : new EditorBridge("127.0.0.1", lock.port);
       await bridge.connect(15_000);
       const answer = JSON.stringify(await bridge.call("execute_python", { code: PROJECT_IDENTITY_PYTHON }, 60_000));
       const reported = /MCP_PROJECT_DIR:([^"\\]+(?:\\\\[^"\\]+)*)/.exec(answer)?.[1]?.replace(/\\\\/g, "\\").trim();
@@ -185,15 +186,32 @@ export class HeadlessRunner implements HubRunner {
   }
 
   /** Ask the hidden editor this runner started to close, addressed to the copy's project. Nothing else is ever stopped. */
-  close(reason: string): void {
+  close(reason: string): Promise<void> {
     const child = this.child;
+    const bridge = this.bridge;
+    this.bridge = null;
     this.dropEditor();
-    if (!child?.pid || !pidAlive(child.pid)) return;
+    if (!child?.pid || !pidAlive(child.pid)) {
+      bridge?.disconnect();
+      return Promise.resolve();
+    }
     const stop = this.o.stop ?? (async (dir: string) => {
-      const r = await (await import("../editor/editor-control.js")).stopEditor(dir, { discardTransient: true });
+      // The copy holds nothing to save, so the quit goes over the bridge already open to it, which answers at once;
+      // without one, stopEditor addressed to the copy's project.
+      if (bridge) {
+        try {
+          await bridge.call("request_editor_shutdown", { requireClean: false, endPIE: true }, 10_000);
+          return;
+        } catch {
+          // Fall through to stopEditor.
+        } finally {
+          bridge.disconnect();
+        }
+      }
+      const r = await stopEditor(dir, { discardTransient: true });
       if (!r.success && !r.alreadyStopped) throw new Error(r.message);
     });
-    void stop(this.copyDir, child.pid).catch((e: unknown) => this.o.log.warn(`hub: the hidden editor (pid ${child.pid}) did not close after ${reason}`, e));
+    return stop(this.copyDir, child.pid).catch((e: unknown) => this.o.log.warn(`hub: the hidden editor (pid ${child.pid}) did not close after ${reason}`, e));
   }
 
   play(request: PlayRequest): Promise<{ pieStarted?: boolean }> {
