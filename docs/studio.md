@@ -121,7 +121,7 @@ Type `/` at the start of a message for the command menu.
 
 - `/action` runs one ue-mcp action directly, named as `category.method`, for example `/action level.get_outliner`. The menu completes the name, and a form asks for its parameters. Your approval settings still apply, so an action that deletes or overwrites can stop at an approval card.
 - `/flow` runs one of the project's [flows](flows.md), with a form for its inputs.
-- `/playtest` drafts a playtest of what the conversation is about. See [Playtests](#playtests).
+- `/compact` summarizes the conversation to free context; the transcript stays as it is.
 
 ### Subagents and the Worker
 
@@ -142,7 +142,7 @@ Reads, searches and fetches run without asking. **Settings > Approvals & review 
 
 **In project** runs shell commands that only name paths inside the project folder, and writes and edits files inside it, without asking; anything else asks. **Anywhere** never asks. A new install asks for all four kinds. The choices are kept per project and apply to every agent. All other ue-mcp actions run without asking.
 
-<img src="images/studio-settings-approvals.webp" alt="Studio Settings on Approvals and review: the Ask first rows for shell commands, file changes, restarting the editor, ue-mcp actions that delete or overwrite, and starting playtests; Feedback reports; Editor dialogs; and the Review each turn switch" style="max-width:100%">
+<img src="images/studio-settings-approvals.webp" alt="Studio Settings on Approvals and review: the Ask first rows for shell commands, file changes, restarting the editor and ue-mcp actions that delete or overwrite; Feedback reports; Editor dialogs; and the Review each turn switch" style="max-width:100%">
 
 A call that asks waits in the chat, showing the command, the diff or the action, until you choose:
 
@@ -179,15 +179,16 @@ The checkpoints are ue-mcp's. See [Checkpoints](checkpoints.md) for where they a
 
 ## Playtests
 
-A playtest is a [Playtest Hub](hub.md) test: an arrangement of clips that plays in one Play In Editor session, with checks the game's values settle or you judge.
+Studio draws the [Playtest Hub](hub.md) on its **Playtests** tab, which shows once **Settings > Experiments > Playtest Hub** is on. The hub's clips, arrangements and suites are files in the project, and Studio reads and writes them through the daemon, so an agent working with the hub actions and you in Studio change the same files.
 
-- `/playtest`, with what to test or nothing, drafts a playtest of what the conversation is about. After a turn that changed something, **Make playtest** drafts one of what that turn changed.
-- The draft appears as a card in the chat. **Edit** changes its steps, and **Start playtest** runs it. A step you judge waits on the card with **Pass**, **Fail** and **Skip**.
-- **Assign to subagent** hands the playtest to a subagent. It runs the playtest, changes the project to fix what fails, and runs it again until every step passes or it needs you. Each attempt shows what it changed, with **Undo its changes**, **See what it did** and **Revert every attempt**. When it needs you, the card says why, with **Assign again** and **End loop**. Assigning needs turn review on.
+- **Arrangements** lists every arrangement with its level, tracks, checks, regions and how its test did last. An arrangement opens as a timeline: the named regions above the tracks, one track per player (the editor's player or a remote client) with its clips, and the Checks track below them. Drag clips from the **Clips** drawer onto a track, and drag a clip, check or region to move it.
+- The Checks track holds checks in four modes: **By the end**, **Throughout**, **Hold until true** and **Manual verdict**. Select one to edit what it reads or, for a manual check, what to look at.
+- **Run** plays the arrangement, and a region plays on its own from its inspector. While it runs, each check shows its result and a manual check waits with **Pass** and **Fail**.
+- A clip opens as a piano roll of its Input Action lanes. A clip has no checks: they belong on an arrangement's Checks track.
+- **Suites** groups tests, an arrangement or one of its regions, and nests suites. Each shows its health, pass rate and pass-rate history, with **Run suite**. A test can be marked flaky, or quarantined so it runs without counting toward the suite's health.
+- **Runs** shows what plays now, the queue behind it, and the recent runs.
 
-<img src="images/studio-playtest-loop.webp" alt="A playtest assigned to a subagent that needs you: the reason, two attempts with Undo its changes and See what it did, Revert every attempt, and the five steps with their observer or person checks and results" style="max-width:100%">
-
-**Settings > Approvals & review > Starting playtests** sets whether playtests run only when you start or assign them (**Manual**, the default) or agents start them when needed (**Automatic**).
+While the hub holds the editor, a bar on every tab says so, with **Release the editor**. Studio for Android does not show the Playtests tab.
 
 ## Docked or window
 
@@ -215,7 +216,7 @@ The prompt shows the reply, with **Continue this thread**, which opens the sessi
 | **Remote control** | The switch, pairing codes, paired devices and the PIN lock. See [Remote control](remote-control.md). |
 | **Agents** | The main agent's model and effort, the screenshot size shown to agents, the **Worker**, and **Project agent files**: whether agents read the instructions, subagents and skills in the project and your home folder, with a read-only list of them. |
 | **Models & accounts** | Sign-ins, API keys, custom endpoints and the route order. |
-| **Approvals & review** | **Ask first**, **Starting playtests**, **Feedback reports**, **Editor dialogs** and **Review each turn**. |
+| **Approvals & review** | **Ask first**, **Feedback reports**, **Editor dialogs** and **Review each turn**. |
 | **Project** | Whether the project's ue-mcp setup is ready, with what needs attention; the context strategy other MCP clients load; the MCP clients configured; the setup pages; the bridge plugin's version and install; and `ue-mcp.yml` under **Advanced**. |
 | **Diagnostics** | The editor and daemon status, and recent daemon events. |
 
