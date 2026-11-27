@@ -24,7 +24,7 @@ export interface HubHost {
 
 /**
  * Something that plays arrangements: the open editor (ue-mcp's own, over
- * pie(arrangement_play)) or a headless editor a client launches. Each method
+ * the pie action arrangement_play) or a headless editor a client launches. Each method
  * answers or throws with a message a person can act on.
  */
 export interface HubRunner {

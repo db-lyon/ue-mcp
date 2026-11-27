@@ -934,7 +934,7 @@ export interface TestDetail {
 }
 
 /**
- * What the editor plugin plays (pie(arrangement_play)): the arrangement with
+ * What the editor plugin plays (the pie action arrangement_play): the arrangement with
  * the audible tracks only and every clip they place, so the plugin reads no
  * hub file. `region` plays one region and judges the checks inside it.
  */
@@ -945,7 +945,7 @@ export interface PlayRequest {
   region?: string;
 }
 
-/** What pie(arrangement_status) answers. */
+/** What the pie action arrangement_status answers. */
 export interface PlayStatus {
   runId: string;
   state: "starting" | "running" | "awaiting_verdict" | "finished" | "stopped" | "error";

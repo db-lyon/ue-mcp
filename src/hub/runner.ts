@@ -4,10 +4,10 @@
  * one region of it, handed whole with the clips it places (PlayRequest), so
  * it reads no hub file:
  *
- *   pie(arrangement_play)    PlayRequest                      -> { pieStarted? }
- *   pie(arrangement_status)  { runId }                        -> PlayStatus
- *   pie(arrangement_stop)    { runId, reason }
- *   pie(arrangement_verdict) { runId, check, verdict, note? }  verdict "pass" | "fail"
+ *   pie arrangement_play     PlayRequest                      -> { pieStarted? }
+ *   pie arrangement_status   { runId }                        -> PlayStatus
+ *   pie arrangement_stop     { runId, reason }
+ *   pie arrangement_verdict  { runId, check, verdict, note? }  verdict "pass" | "fail"
  */
 import type { CheckResult, CheckStatus, PlayRequest, PlayStatus } from "./contract.js";
 import type { HubHost, HubRunner } from "./ports.js";

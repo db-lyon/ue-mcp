@@ -833,7 +833,7 @@ export class Hub {
   }
 
   /**
-   * Start recording a performance into a clip: pie(clip_record_start) with the
+   * Start recording a performance into a clip: the pie action clip_record_start with the
    * performer, and for a punch-in the clip and the frames to replace.
    */
   async recordStart(body: unknown): Promise<{ recording: true }> {
