@@ -2084,6 +2084,7 @@ export interface HubRunner {
     status(runId: string): Promise<PlayStatus>;
     stop(runId: string, reason: string): Promise<void>;
     verdict(runId: string, check: string, verdict: "pass" | "fail", note?: string): Promise<void>;
+    close?(reason: string): Promise<void>;
 }
 export interface HubClientOptions {
     enabled?: () => boolean;
