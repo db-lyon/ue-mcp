@@ -68,7 +68,7 @@ ${b.stderr}`).toEqual([0, 0]);
     const shardRoot = fs.mkdtempSync(path.join(os.tmpdir(), "ue-mcp-stage-"));
     try {
       for (const name of ["_tracked", "_tracked-111", "_tracked-222", "_build", "h1"]) fs.mkdirSync(path.join(shardRoot, name));
-      const removed = sweepStaleTrackedStages(shardRoot, (pid: number) => pid === 222);
+      const removed = sweepStaleTrackedStages(shardRoot, (pid: number | undefined) => pid === 222);
       expect(removed.sort()).toEqual(["_tracked", "_tracked-111"]);
       expect(fs.readdirSync(shardRoot).sort()).toEqual(["_build", "_tracked-222", "h1"]);
     } finally {

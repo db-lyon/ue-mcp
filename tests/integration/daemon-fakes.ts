@@ -9,6 +9,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { projectKey } from "../../src/daemon/discovery.js";
 import { signBundle } from "../../src/daemon/ui-bundles.js";
+import { DAEMON_API_VERSION } from "../../src/contract/daemon.js";
 import { ENTRY, runCli, TSX, waitFor, type Sandbox } from "./harness.js";
 
 export interface Discovery {
@@ -187,7 +188,7 @@ export function signedBundle(dir: string, version: string, marker: string, pem =
   fs.mkdirSync(path.join(dir, "assets"), { recursive: true });
   fs.writeFileSync(path.join(dir, "index.html"), `<!doctype html><title>${marker}</title>`);
   fs.writeFileSync(path.join(dir, "assets", "app.js"), `console.log(${JSON.stringify(marker)})`);
-  signBundle(dir, { name: "integ-ui", version, api: { min: 1, max: 1 } }, pem);
+  signBundle(dir, { name: "integ-ui", version, api: { min: DAEMON_API_VERSION, max: DAEMON_API_VERSION } }, pem);
   return dir;
 }
 

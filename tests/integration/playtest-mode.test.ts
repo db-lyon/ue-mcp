@@ -83,7 +83,7 @@ describe("ue-mcp playtest mode", () => {
         const body = json(refused);
         expect(body).toMatchObject({ success: false, refusedMethod: "pie.arrangement_play", playtestMode: "manual" });
         expect(String(body.reason)).toContain("ue-mcp playtest mode automatic");
-        const record = json(await full.call("pie", { action: "clip_record_start", args: { performer: { kind: "player", client: 0 }, kind: "player" } }));
+        const record = json(await full.call("pie", { action: "clip_record_start", args: { performer: { kind: "player", client: 0 } } }));
         expect(record).toMatchObject({ success: false, refusedMethod: "pie.clip_record_start" });
         // Anything else in pie is untouched.
         expect(json(await full.call("pie", { action: "arrangement_status", args: { runId: "run-1" } }))).not.toHaveProperty("playtestMode");

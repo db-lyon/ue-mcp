@@ -127,7 +127,7 @@ describe("the contract", () => {
 });
 
 class FakeRunner implements HubRunner {
-  readonly kind = "editor" as const;
+  kind: HubRunner["kind"] = "editor";
   played: PlayRequest[] = [];
   status_: PlayStatus | null = null;
   verdicts: string[] = [];
@@ -316,7 +316,7 @@ describe("the Hub service", () => {
   it("keeps the recording under way readable until it stops, so a reloaded client can show it", async () => {
     const calls: string[] = [];
     const recEvents: Array<{ type: string; data?: Record<string, unknown> }> = [];
-    const answer = (v: unknown) => ({ content: [{ type: "text", text: JSON.stringify(v) }] });
+    const answer = (v: unknown) => ({ isError: false, content: [{ type: "text", text: JSON.stringify(v) }] });
     const h = new Hub({
       host: {
         projectDir: path.join(dir, "project"),
