@@ -16953,11 +16953,6 @@
         {
           "suite": "live",
           "file": "tests/live/pie-clip-actor-lanes.test.ts",
-          "test": "plays a clip that names no performer on a hub track that drives the pawn"
-        },
-        {
-          "suite": "live",
-          "file": "tests/live/pie-clip-actor-lanes.test.ts",
           "test": "records where the pawn went and the calls it took into armed lanes"
         },
         {
@@ -17404,11 +17399,6 @@
         },
         {
           "suite": "live",
-          "file": "tests/live/hub-arrangement.test.ts",
-          "test": "places, duplicates and trims instances, builds a scene, and runs it to a pass"
-        },
-        {
-          "suite": "live",
           "file": "tests/live/map-switch-play-session.test.ts",
           "test": "create_new_level refuses, creates nothing, and leaves the session running"
         },
@@ -17551,11 +17541,6 @@
           "suite": "live",
           "file": "tests/live/pie-clip-actor-lanes.test.ts",
           "test": "drives an AI pawn through move, action and value lanes, and the checks on it pass"
-        },
-        {
-          "suite": "live",
-          "file": "tests/live/pie-clip-actor-lanes.test.ts",
-          "test": "plays a clip that names no performer on a hub track that drives the pawn"
         },
         {
           "suite": "live",
