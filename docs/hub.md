@@ -67,6 +67,8 @@ A run plays the audible tracks: none muted, and only the soloed ones when any tr
 
 `POST /v1/hub/record/start` records the editor's player's Input Actions into a new clip on the open editor. With `clip`, `from` and `to`, it punches in: the clip plays up to `from` with the person's input locked out, then only that span is replaced. `POST /v1/hub/record/stop` saves the take.
 
+`GET /v1/hub/record` (the agent's `read_recording`) answers the recording under way, or null. The daemon keeps it from start to stop, so a client that reloads mid-take can show the take and stop it. A client may pass `arrangement`, `track`, `at` and `seconds` to `record/start` to say where the take lands and how long it runs; the daemon keeps them and hands them back here, and does not act on them.
+
 ## Tests and suites
 
 A test's id is its arrangement's id, or `<arrangement>:<region>` for a region. A region test plays that region and judges the checks that start inside it. A test with no checks cannot be queued.
@@ -100,7 +102,7 @@ Each answers JSON. A body that does not read answers 400 with `findings`, each a
 |---|---|
 | `GET /v1/hub` | Everything: clips, arrangements, suites, tests, queue, lease, recent runs, schedules, problems |
 | `GET/POST /v1/hub/clips`, `GET/PUT/DELETE /v1/hub/clips/:id` | Clips |
-| `POST /v1/hub/record/start`, `POST /v1/hub/record/stop` | Record a performance into a new clip, or punch into one (`clip`, `from`, `to`) |
+| `POST /v1/hub/record/start`, `GET /v1/hub/record`, `POST /v1/hub/record/stop` | Record a performance into a new clip, or punch into one (`clip`, `from`, `to`); read the recording under way |
 | `GET/POST /v1/hub/arrangements`, `GET/PUT/DELETE /v1/hub/arrangements/:id` | Arrangements |
 | `GET /v1/hub/performers` | What a track can drive |
 | `POST /v1/hub/play`, `GET /v1/hub/play`, `POST /v1/hub/play/stop` | Audition an arrangement or region from the playhead, looping when asked |

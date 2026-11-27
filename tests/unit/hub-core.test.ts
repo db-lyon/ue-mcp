@@ -312,6 +312,39 @@ describe("the Hub service", () => {
     await hub.tick();
     expect(runner.played.map((p) => p.region)).toEqual([undefined, "walk"]);
   });
+
+  it("keeps the recording under way readable until it stops, so a reloaded client can show it", async () => {
+    const calls: string[] = [];
+    const recEvents: Array<{ type: string; data?: Record<string, unknown> }> = [];
+    const answer = (v: unknown) => ({ content: [{ type: "text", text: JSON.stringify(v) }] });
+    const h = new Hub({
+      host: {
+        projectDir: path.join(dir, "project"),
+        dataDir: path.join(dir, "data3"),
+        callAction: async (_tool: string, action: string) => (calls.push(action), action === "clip_record_stop" ? answer({ clip: { ...walk, rate: 60, length: 120 } }) : answer({ success: true })),
+        editors: () => [{ connected: true }],
+        events: { publish: (type, data) => recEvents.push({ type, data }), subscribe: () => () => undefined },
+        log: { warn: () => undefined },
+      },
+      editor: { pie: () => false, dialogs: () => 0, busy: () => ({ now: 0, calls: [] }), inputAgeMs: () => null },
+      editorRunner: runner,
+      workspace: async () => ({ vcs: null, revision: null, dirty: null }),
+      timers: false,
+    });
+    try {
+      expect(h.readRecording()).toEqual({ recording: null });
+      h.createClip(walk);
+      await h.recordStart({ clip: "walk", from: 30, to: 90, arrangement: "door", track: "hero", at: 30, seconds: 1, junk: 1 });
+      expect(h.readRecording().recording).toEqual({ performer: { kind: "player", client: 0 }, clip: "walk", from: 30, to: 90, rate: 60, arrangement: "door", track: "hero", at: 30, seconds: 1, startedAt: expect.any(String) });
+      expect(await runHubAction(h, "read_recording", {})).toMatchObject({ recording: { clip: "walk" } });
+      expect(recEvents.some((e) => e.type === "hub.changed" && (e.data?.what as string[]).includes("recording"))).toBe(true);
+      await h.recordStop({});
+      expect(calls).toEqual(["clip_record_start", "clip_record_stop"]);
+      expect(h.readRecording()).toEqual({ recording: null });
+    } finally {
+      h.dispose();
+    }
+  });
 });
 
 describe("the headless runner", () => {

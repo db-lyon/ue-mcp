@@ -324,6 +324,12 @@ export declare const DAEMON_ROUTES: {
         readonly feature?: DaemonFeature;
         readonly summary: string;
     };
+    readonly "hub.record.state": {
+        readonly method: "GET";
+        readonly path: "/v1/hub/record";
+        readonly feature?: DaemonFeature;
+        readonly summary: string;
+    };
     readonly "hub.arrangements": {
         readonly method: "GET";
         readonly path: "/v1/hub/arrangements";
@@ -2016,7 +2022,19 @@ export interface AuditionState {
     checks: CheckResult[];
     error?: string;
 }
-export type HubChangedWhat = "clips" | "arrangements" | "suites" | "runs" | "queue" | "schedules" | "play";
+export interface RecordingState {
+    performer: Performer;
+    clip?: string;
+    from?: number;
+    to?: number;
+    rate?: number;
+    startedAt: string;
+    arrangement?: string;
+    track?: string;
+    at?: number;
+    seconds?: number;
+}
+export type HubChangedWhat = "clips" | "arrangements" | "suites" | "runs" | "queue" | "schedules" | "play" | "recording";
 export interface HubChanged {
     what: HubChangedWhat[];
     id?: string;

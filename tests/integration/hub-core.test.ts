@@ -127,6 +127,8 @@ describe("the hub's files", () => {
     expect((await call(d, "POST", "/v1/hub/play", { test: "door", from: -2 })).status).toBe(400);
     expect((await call(d, "GET", "/v1/hub/play")).body).toEqual({ play: null });
     expect((await call(d, "POST", "/v1/hub/play/stop")).status).toBe(409);
+    expect((await call(d, "GET", "/v1/hub/record")).body).toEqual({ recording: null });
+    expect((await call(d, "POST", "/v1/hub/record/stop", {})).status).toBe(409);
   }, 60_000);
 
   it("runs a test from the command line, writes the report and exits non-zero when it does not pass", async () => {

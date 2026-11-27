@@ -955,7 +955,33 @@ export interface AuditionState {
   error?: string;
 }
 
-export type HubChangedWhat = "clips" | "arrangements" | "suites" | "runs" | "queue" | "schedules" | "play";
+/**
+ * The recording under way on the open editor (GET /v1/hub/record), kept by
+ * the daemon from record_start to record_stop so a client that reloads
+ * mid-take can show it and stop it.
+ */
+export interface RecordingState {
+  performer: Performer;
+  /** A punch-in: the clip being recorded into, and the frames it replaces. */
+  clip?: string;
+  from?: number;
+  to?: number;
+  /** Frames per second of the take. */
+  rate?: number;
+  startedAt: string;
+  /**
+   * Where the client means the take to land, as it said at record_start: an
+   * arrangement, a track in it and the frame the take starts at, and how many
+   * seconds it means the take to run. Echoed back so a client that reloads
+   * can place the take and stop it on time; the hub does not act on them.
+   */
+  arrangement?: string;
+  track?: string;
+  at?: number;
+  seconds?: number;
+}
+
+export type HubChangedWhat = "clips" | "arrangements" | "suites" | "runs" | "queue" | "schedules" | "play" | "recording";
 export interface HubChanged {
   what: HubChangedWhat[];
   id?: string;

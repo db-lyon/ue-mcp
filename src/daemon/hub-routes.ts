@@ -40,6 +40,7 @@ export function hubRoutes(hub: () => Hub): Pick<RouteHandlers, HubRouteName> {
     "hub.clip.delete": ({ params }) => (hub().deleteClip(id(params)), noContent),
     "hub.record.start": async (r) => ok(await hub().recordStart(await r.body())),
     "hub.record.stop": async (r) => findings(async () => ({ clip: await hub().recordStop(await r.body()) })),
+    "hub.record.state": () => ok(hub().readRecording()),
     "hub.arrangements": () => ok({ arrangements: hub().arrangements() }),
     "hub.arrangement": ({ params }) => findings(() => hub().arrangement(id(params))),
     "hub.arrangement.create": async (r) => findings(async () => hub().createArrangement(await r.body())),

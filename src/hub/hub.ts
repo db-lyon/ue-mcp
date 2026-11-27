@@ -57,11 +57,11 @@ import {
   type OccupancyReason,
   type AuditionState,
   type Performer,
-  type PerformerKind,
   type PerformersView,
   type PlayRequest,
   type QueueItem,
   type QueueState,
+  type RecordingState,
   type RunRecord,
   type RunSource,
   type RunnerKind,
@@ -113,7 +113,7 @@ export class Hub {
   private readonly live = new Map<string, Live>();
   private timer: NodeJS.Timeout | null = null;
   private lastScheduleMinute = "";
-  private recording: { kind: PerformerKind; clip?: string } | null = null;
+  private recording: RecordingState | null = null;
   private audition: { playId: string; test: string; startedAt: string; from: number; loop: boolean; last: AuditionState | null } | null = null;
   private ticking = false;
   private pumping: Promise<void> | null = null;
@@ -942,6 +942,7 @@ export class Hub {
     if (this.auditionLive()) throw conflict(`an audition of ${this.audition!.test} is playing; stop it first`);
     if ([...this.live.values()].some((l) => l.runner.kind === "editor")) throw conflict("a hub run is playing on the editor; stop it or let it finish first");
     const args: Record<string, unknown> = { performer };
+    const state: RecordingState = { performer, startedAt: "" };
     if (typeof o.clip === "string") {
       const clip = this.clip(o.clip);
       const from = typeof o.from === "number" ? o.from : 0;
@@ -949,12 +950,24 @@ export class Hub {
       if (from < 0 || to <= from) throw bad("a punch-in records from `from` to a later `to`, in the clip's frames");
       args.punch = { clip, from, to };
       args.rate = clip.rate;
-    } else if (typeof o.rate === "number") args.rate = o.rate;
+      Object.assign(state, { clip: o.clip, from, to, rate: clip.rate });
+    } else if (typeof o.rate === "number") {
+      args.rate = o.rate;
+      state.rate = o.rate;
+    }
+    for (const k of ["arrangement", "track"] as const) if (typeof o[k] === "string" && o[k]) state[k] = o[k];
+    for (const k of ["at", "seconds"] as const) if (typeof o[k] === "number" && Number.isFinite(o[k]) && o[k] >= 0) state[k] = o[k];
     const r = await this.o.host.callAction("pie", "clip_record_start", args);
     const failed = failureOf(r);
     if (failed) throw conflict(`the recording did not start: ${failed}`);
-    this.recording = { kind: performer.kind, ...(typeof o.clip === "string" ? { clip: o.clip } : {}) };
+    this.recording = { ...state, startedAt: this.now() };
+    this.changed(["recording"]);
     return { recording: true };
+  }
+
+  /** The recording under way, kept here so a client that reloads mid-take can read it back. */
+  readRecording(): { recording: RecordingState | null } {
+    return { recording: this.recording };
   }
 
   /** Stop recording and save the take: into the punched clip, or as a new clip (id or title from the body). */
@@ -963,6 +976,7 @@ export class Hub {
     const rec = this.recording;
     if (!rec) throw conflict("nothing is recording; start a recording first");
     this.recording = null;
+    this.changed(["recording"]);
     const r = await this.o.host.callAction("pie", "clip_record_stop", {});
     const failed = failureOf(r);
     const answer = answerOf(r);
@@ -970,7 +984,7 @@ export class Hub {
     const id = rec.clip ?? this.newId("clip", { ...(typeof o.id === "string" ? { id: o.id } : {}), title: typeof o.title === "string" ? o.title : "Take" });
     const had = rec.clip ? this.clip(rec.clip) : null;
     const title = typeof o.title === "string" && o.title.trim() ? o.title : had?.title ?? "Take";
-    return this.putClip(id, { ...answer.clip, performer: rec.kind, title, ...(had?.description ? { description: had.description } : {}) });
+    return this.putClip(id, { ...answer.clip, performer: rec.performer.kind, title, ...(had?.description ? { description: had.description } : {}) });
   }
 
   // ---------- Overview ----------
