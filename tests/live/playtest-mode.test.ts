@@ -40,7 +40,7 @@ describe("playtest mode manual", () => {
     const run = await server.call("pie", { action: "arrangement_play", args: play });
     expect(run.isError).toBe(true);
     expect(resultJson(run)).toMatchObject({ success: false, refusedMethod: "pie.arrangement_play", playtestMode: "manual" });
-    const record = await server.call("pie", { action: "clip_record_start", args: { performer: { kind: "player", client: 0 }, kind: "player" } });
+    const record = await server.call("pie", { action: "clip_record_start", args: { performer: { kind: "player", client: 0 } } });
     expect(resultJson(record)).toMatchObject({ success: false, refusedMethod: "pie.clip_record_start" });
   });
 
