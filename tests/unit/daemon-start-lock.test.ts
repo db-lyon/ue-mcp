@@ -16,7 +16,7 @@ import { isPidAlive } from "../../src/bridge/editor-target.js";
 import {
   daemonDir, discoveryIsStale, discoveryPath, projectKey, readAnsweringDiscovery, readLiveDiscovery, writeDiscovery,
 } from "../../src/daemon/discovery.js";
-import type { DaemonDiscovery } from "../../src/contract/daemon.js";
+import { DAEMON_API_VERSION, type DaemonDiscovery } from "../../src/contract/daemon.js";
 import { compareVersions } from "../../src/core/semver.js";
 import { ensureDaemon } from "../../src/daemon/shim.js";
 import { packageVersion } from "../../src/core/package-root.js";
@@ -43,7 +43,7 @@ afterEach(() => {
 
 const project = path.join(os.tmpdir(), "Some", "LockedProject");
 const record = (pid: number, version: string): DaemonDiscovery => ({
-  pid, port: 1000 + pid, token: "t", version, apiVersion: 1,
+  pid, port: 1000 + pid, token: "t", version, apiVersion: DAEMON_API_VERSION,
   projectRoot: normalizeProjectRoot(project), startedAt: "now",
 });
 const sameOrNewer = (version: string) => (d: DaemonDiscovery) => compareVersions(d.version, version) >= 0;

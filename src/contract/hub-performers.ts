@@ -171,7 +171,7 @@ export interface ClipValueKey {
   interp?: string;
 }
 
-/** A clip lane that is not an Input Action lane: a move, action or value lane, as pie(clip_read) answers it. */
+/** A clip lane that is not an Input Action lane: a move, action or value lane, as a clip file and pie(clip_record_stop) hold it. */
 export type ClipLane =
   | { id: string; kind: "move"; performer?: Performer; points: ClipMovePoint[] }
   | { id: string; kind: "action"; performer?: Performer; calls: ClipActionCall[]; watch?: string[] }

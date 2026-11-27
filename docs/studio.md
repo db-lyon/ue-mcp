@@ -179,7 +179,7 @@ The checkpoints are ue-mcp's. See [Checkpoints](checkpoints.md) for where they a
 
 ## Playtests
 
-A playtest is a Play In Editor test script of steps, each checked automatically by an observer or judged by you. Playtests are ue-mcp [test scripts](pie-scripts.md).
+A playtest is a [Playtest Hub](hub.md) test: an arrangement of clips that plays in one Play In Editor session, with checks the game's values settle or you judge.
 
 - `/playtest`, with what to test or nothing, drafts a playtest of what the conversation is about. After a turn that changed something, **Make playtest** drafts one of what that turn changed.
 - The draft appears as a card in the chat. **Edit** changes its steps, and **Start playtest** runs it. A step you judge waits on the card with **Pass**, **Fail** and **Skip**.

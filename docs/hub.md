@@ -35,7 +35,7 @@ Runs, the queue and schedules belong to the machine that ran them, under `~/.ue-
 
 ## Clips
 
-A clip names the performer kind it is for (`player` or `actor`), its `rate` in frames per second (60 by default) and its `length` in frames. Input lanes (`input`) hold an Input Action's raw value as notes or curve keys, as [Timeline clips](pie-clips.md) describes. Move, action and value lanes (`lanes`) drive an actor or the player's pawn. A lane its performer kind does not take refuses the clip, and so does a `checks` field.
+A clip names the performer kind it is for (`player` or `actor`), its `rate` in frames per second (60 by default) and its `length` in frames. Input lanes (`input`) hold an Input Action's raw value, after its mapping's modifiers and before its own: notes for a Boolean action, and curve keys or notes holding a value for an axis. Move, action and value lanes (`lanes`) drive an actor or the player's pawn. A lane its performer kind does not take refuses the clip, and so does a `checks` field.
 
 ## Arrangements
 

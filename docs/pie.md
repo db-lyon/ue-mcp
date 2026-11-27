@@ -8,9 +8,9 @@ The `pie` tool records, replays and observes Play-In-Editor sessions, drives inp
 
 ## Where PIE plays
 
-Every PIE launch the bridge makes (`editor(play_in_editor)`, `replay_run`, `test_run`, script runs, acceptance runs and the PIE Studio panel buttons) plays where the editor's Play button would: the play mode last chosen in the Play menu, which is the active level viewport by default. `editor(configure_pie, playMode=viewport|new_window|standalone)` changes it for the Play button and the bridge alike, and `editor(get_pie_config)` reads it. With no visible level viewport the engine opens a new window instead. Standalone runs the game as a separate process with no PIE world in the editor, so actions that drive the PIE world play in the viewport when it is set. Each launch reports `playMode`, `playModeRequested` and, when they differ, `playModeNote`.
+Every PIE launch the bridge makes (`editor(play_in_editor)`, `replay_run`, `test_run`, Playtest Hub runs, acceptance runs and the PIE Studio panel buttons) plays where the editor's Play button would: the play mode last chosen in the Play menu, which is the active level viewport by default. `editor(configure_pie, playMode=viewport|new_window|standalone)` changes it for the Play button and the bridge alike, and `editor(get_pie_config)` reads it. With no visible level viewport the engine opens a new window instead. Standalone runs the game as a separate process with no PIE world in the editor, so actions that drive the PIE world play in the viewport when it is set. Each launch reports `playMode`, `playModeRequested` and, when they differ, `playModeNote`.
 
-For step-by-step test scripts with automatic and manual verdicts, see [Test scripts](pie-scripts.md).
+For playtests built from recorded clips, with automatic and manual checks, see [Playtest Hub](hub.md).
 
 Three systems run independently and can all run in the same PIE session:
 
@@ -236,7 +236,7 @@ Unreal Insights traces are `editor(start_trace)` and `editor(stop_trace)`.
 
 A predicate binds a channel or event to an operator under a temporal quantifier: `{name, channel|event, op, value|min+max|tol, hold, from_s, to_s, within_s, after_event, severity}`. Operators are `eq`, `ne`, `lt`, `lte`, `gt`, `gte`, `approx`, `between`, `changed`, `increased`, `decreased` and `crossed`. `hold` is `always`, `never`, `eventually`, `at_end` or `once_then_always`. Channels are series columns (`pos_z`, `speed2d`, `game_ms`), tracked values by path (`t:Boss.Health`) and the pseudo-channels `$errors`, `$warnings`, `$frame` and `$time`. Events are `montage`, `marker` and `error`.
 
-A scenario file's `act` list (kinds `replay`, `inject_tape`, `drive`, `goto`, `face`, `follow` and `call`) is written by `scenario_scaffold` and checked by `scenario_validate`, but no action runs it. Its arrange entries (`spawn`, `set`, `call`) run as a test script step's `arrange`, and `uat_run`'s step actions as its `act`. See [Arrange and act](pie-scripts.md#arrange-and-act).
+A scenario file's `act` list (kinds `replay`, `inject_tape`, `drive`, `goto`, `face`, `follow` and `call`) is written by `scenario_scaffold` and checked by `scenario_validate`, but no action runs it.
 
 ### Observation profiles
 

@@ -1,8 +1,8 @@
 /**
  * `ue-mcp playtest mode`, spawned: what it stores, and that an MCP session
- * started afterwards has its pie(script_run) and pie(script_replay) refused
- * under manual, directly and through the micro gateway, without the editor
- * being called, and run under automatic.
+ * started afterwards has its pie(arrangement_play) and pie(clip_record_start)
+ * refused under manual, directly and through the micro gateway, without the
+ * editor being called, and run under automatic.
  */
 import * as fs from "node:fs";
 import * as path from "node:path";
@@ -13,6 +13,8 @@ import { json, McpServer, plain, runCli, Sandbox, type CliResult } from "./harne
 
 let sb: Sandbox;
 let uproject: string;
+
+const PLAY = { runId: "run-1", arrangement: { id: "smoke", rate: 60, tracks: [], checks: [], regions: [] }, clips: {} };
 
 const statePath = () => path.join(sb.home, ".ue-mcp", "state.json");
 const state = () => (fs.existsSync(statePath()) ? JSON.parse(fs.readFileSync(statePath(), "utf8")) : {}) as {
@@ -67,32 +69,32 @@ describe("ue-mcp playtest mode", () => {
     const bridge = await FakeBridge.start({
       projectDir,
       handlers: {
-        pie_script_run: () => ({ success: true, run_id: "run-1", status: "running" }),
-        pie_script_replay: () => ({ success: true, run_id: "run-1", status: "running" }),
+        pie_arrangement_play: () => ({ success: true, runId: "run-1" }),
+        pie_clip_record_start: () => ({ success: true, recording: true }),
       },
     });
-    const ran = () => bridge.calls.filter((c) => c.method === "pie_script_run" || c.method === "pie_script_replay").length;
+    const ran = () => bridge.calls.filter((c) => c.method === "pie_arrangement_play" || c.method === "pie_clip_record_start").length;
     try {
       expect((await playtest(["mode", "manual", "--editor", uproject])).code).toBe(0);
       const full = await McpServer.start(sb, { projects: [uproject], strategy: "full", port: null });
       try {
-        const refused = await full.call("pie", { action: "script_run", args: { script: "Scripts/smoke.yaml" } });
+        const refused = await full.call("pie", { action: "arrangement_play", args: PLAY });
         expect(refused.isError).toBe(true);
         const body = json(refused);
-        expect(body).toMatchObject({ success: false, refusedMethod: "pie.script_run", playtestMode: "manual" });
+        expect(body).toMatchObject({ success: false, refusedMethod: "pie.arrangement_play", playtestMode: "manual" });
         expect(String(body.reason)).toContain("ue-mcp playtest mode automatic");
-        const replay = json(await full.call("pie", { action: "script_replay", args: { run_id: "run-1" } }));
-        expect(replay).toMatchObject({ success: false, refusedMethod: "pie.script_replay" });
+        const record = json(await full.call("pie", { action: "clip_record_start", args: { performer: { kind: "player", client: 0 }, kind: "player" } }));
+        expect(record).toMatchObject({ success: false, refusedMethod: "pie.clip_record_start" });
         // Anything else in pie is untouched.
-        expect(json(await full.call("pie", { action: "script_status", args: { run_id: "run-1" } }))).not.toHaveProperty("playtestMode");
+        expect(json(await full.call("pie", { action: "arrangement_status", args: { runId: "run-1" } }))).not.toHaveProperty("playtestMode");
       } finally {
         await full.close();
       }
 
       const micro = await McpServer.start(sb, { projects: [uproject], strategy: "micro", port: null });
       try {
-        const viaGateway = json(await micro.call("tools", { action: "call", category: "pie", method: "script_run", args: { script: "Scripts/smoke.yaml" } }));
-        expect(viaGateway).toMatchObject({ success: false, refusedMethod: "pie.script_run" });
+        const viaGateway = json(await micro.call("tools", { action: "call", category: "pie", method: "arrangement_play", args: PLAY }));
+        expect(viaGateway).toMatchObject({ success: false, refusedMethod: "pie.arrangement_play" });
       } finally {
         await micro.close();
       }
@@ -101,7 +103,7 @@ describe("ue-mcp playtest mode", () => {
       expect((await playtest(["mode", "automatic", "--editor", uproject])).code).toBe(0);
       const allowed = await McpServer.start(sb, { projects: [uproject], strategy: "full", port: null });
       try {
-        const r = await allowed.call("pie", { action: "script_run", args: { script: "Scripts/smoke.yaml" } });
+        const r = await allowed.call("pie", { action: "arrangement_play", args: PLAY });
         expect(r.text).not.toContain("playtestMode");
         expect(ran()).toBe(1);
       } finally {

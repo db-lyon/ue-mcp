@@ -99,10 +99,6 @@ import { applyUpdate, checkForUpdate, readPendingUpdate, repinClientConfigs, set
 import { subscribeFlowEvents } from "../flow/events.js";
 import { registerModelProvider } from "../flow/model-provider.js";
 import { registerFlowStepApprover } from "../flow/step-approval.js";
-import { subscribeScriptEvents } from "../pie/script-events.js";
-import { stopAllScriptWatches } from "../pie/script-watch.js";
-import { subscribeClipEvents } from "../pie/clip-events.js";
-import { stopAllClipWatches } from "../pie/clip-watch.js";
 import { pluginRoutes } from "./plugin-routes.js";
 import { releaseStartLock, waitForStartTurn } from "./start-lock.js";
 import { checkpointRoutes } from "./checkpoint-routes.js";
@@ -394,13 +390,6 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
   // Flow progress joins the same resumable stream the UI reads.
   const unsubscribeFlows = subscribeFlowEvents((e) => {
     events.publish(`flow.${e.type}`, { ...(e as unknown as Record<string, unknown>) });
-  });
-  // PIE test script progress, as the script watcher reads it off the bridge.
-  const unsubscribeScripts = subscribeScriptEvents(({ type, ...data }) => {
-    events.publish(`script.${type}`, data as unknown as Record<string, unknown>);
-  });
-  const unsubscribeClips = subscribeClipEvents(({ type, ...data }) => {
-    events.publish(`clip.${type}`, data as unknown as Record<string, unknown>);
   });
   // Checkpoints: checkpoint.created and checkpoint.restored for one checkpoint, checkpoints.* for the history.
   const unsubscribeCheckpoints = subscribeCheckpointEvents((e) => {
@@ -1246,12 +1235,8 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
       clearInterval(stallTimer);
       for (const t of updateTimers) clearTimeout(t);
       unsubscribeFlows();
-      unsubscribeScripts();
-      unsubscribeClips();
-      stopAllClipWatches();
       unsubscribeCheckpoints();
       unsubscribeDisruptions();
-      stopAllScriptWatches();
       unregisterHub();
       hubHolder.dispose();
       unsubscribeDialogs();

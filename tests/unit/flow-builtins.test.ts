@@ -24,11 +24,12 @@ describe("built-in tasks are declared once", () => {
     }
   });
 
-  it("ships the demo flows from the data file beside the playtest flow", () => {
+  it("ships the demo flows from the data file", () => {
     const flows = Object.keys(builtinFlows());
     expect(flows).toEqual(
-      expect.arrayContaining(["beacon", "neon_shrine", "neon_shrine_cleanup", "texture_bomb", "niagara_fire", "blockout_to_assets", "playtest"]),
+      expect.arrayContaining(["beacon", "neon_shrine", "neon_shrine_cleanup", "texture_bomb", "niagara_fire", "blockout_to_assets"]),
     );
+    expect(flows).not.toContain("playtest");
   });
 
   it("hands out a copy of the flow data, so a layer that edits a flow cannot change the next load", () => {

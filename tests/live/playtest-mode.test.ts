@@ -1,8 +1,8 @@
 // @live-editor headless
 /**
  * Playtest mode manual against a real editor: the shipped server refuses an
- * MCP client's pie(script_run) and pie(script_replay) before the editor is
- * called, and the rest of pie still answers from the editor.
+ * MCP client's pie(arrangement_play) and pie(clip_record_start) before the
+ * editor is called, and the rest of pie still answers from the editor.
  *
  * The server's user state file is this test's own, holding playtest mode
  * manual for the target project.
@@ -35,16 +35,17 @@ afterAll(async () => {
 });
 
 describe("playtest mode manual", () => {
-  it("refuses script_run and script_replay without starting a run", async () => {
-    const run = await server.call("pie", { action: "script_run", args: { steps: [{ id: "noop", check: "true" }], wait: false } });
+  it("refuses arrangement_play and clip_record_start without starting a run", async () => {
+    const play = { runId: "live-refused", arrangement: { id: "noop", rate: 60, tracks: [], checks: [], regions: [] }, clips: {} };
+    const run = await server.call("pie", { action: "arrangement_play", args: play });
     expect(run.isError).toBe(true);
-    expect(resultJson(run)).toMatchObject({ success: false, refusedMethod: "pie.script_run", playtestMode: "manual" });
-    const replay = await server.call("pie", { action: "script_replay", args: {} });
-    expect(resultJson(replay)).toMatchObject({ success: false, refusedMethod: "pie.script_replay" });
+    expect(resultJson(run)).toMatchObject({ success: false, refusedMethod: "pie.arrangement_play", playtestMode: "manual" });
+    const record = await server.call("pie", { action: "clip_record_start", args: { performer: { kind: "player", client: 0 }, kind: "player" } });
+    expect(resultJson(record)).toMatchObject({ success: false, refusedMethod: "pie.clip_record_start" });
   });
 
   it("leaves the rest of pie answering from the editor", async () => {
-    const listed = await server.call("pie", { action: "script_list", args: {} });
+    const listed = await server.call("pie", { action: "profile_list", args: {} });
     expect(listed.text).not.toContain("playtestMode");
   });
 });

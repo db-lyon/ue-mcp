@@ -3,8 +3,8 @@
  * Slate focus and key events aimed at one PIE client's UI (#2018, #1928).
  *
  * A menu in UI-only input mode does not take Enhanced Input, so pie(send_key) sends the key through Slate as the
- * player's Slate user. The same client choice reaches add_to_viewport, stage_game_input and the two focus actions,
- * and a script's `key` act. Two buttons sit side by side: Right moves focus from the first to the second, Left
+ * player's Slate user. The same client choice reaches add_to_viewport, stage_game_input and the two focus actions.
+ * Two buttons sit side by side: Right moves focus from the first to the second, Left
  * back. Run once in a single-player session, then on each client of a dedicated server, where the first world
  * context is the server and has no viewport.
  *
@@ -161,24 +161,6 @@ describe("one player in UI-only input mode", () => {
     await focusButton(instance, "Btn_A");
   }, 60_000);
 
-  it("a script's key act sends the key to the run's player", async () => {
-    const started = await call("pie_script_run", {
-      name: "client_ui_key",
-      record: false,
-      steps: [{ instruction: "Move focus right", act: [{ key: { key: "Right" } }], expect: { value: "Btn_B", op: "exists" } }],
-    });
-    let status: Json = {};
-    for (let i = 0; i < 160 && status.state !== "finished"; i++) {
-      status = await call("pie_script_status", { run_id: String(started.run_id) });
-      if (status.state !== "finished") await sleep(250);
-    }
-    const act = obj(rows(status.steps)[0]?.act_result);
-    expect(act.status, JSON.stringify(act)).toBe("done");
-    expect(String(rows(act.actions)[0]?.target)).toMatch(new RegExp(`^pie_instance ${instance} `));
-    const path = await call("get_runtime_focus_path", { pieInstance: instance });
-    expect(path.focusedWidgetName).toBe("Btn_B");
-  }, 90_000);
-
   it("a bad key and a missing client are refused with a way forward", async () => {
     const bad = await callBridge(bridge, "pie_send_key", { key: "NotAKey" });
     expect(succeeded(bad)).toBe(false);
@@ -219,27 +201,6 @@ describe("two clients of a dedicated server", () => {
     expect(sent.pie_instance).toBe(first);
     expect(String(sent.target)).toMatch(/\(client\)$/);
     expect(widgetOf(sent.focus_after)).toBe("Btn_A");
-  }, 60_000);
-
-  it("a script aimed at the second client moves that client's focus", async () => {
-    await focusButton(second, "Btn_A");
-    const started = await call("pie_script_run", {
-      name: "client_ui_key_second",
-      record: false,
-      pie_instance: second,
-      steps: [{ instruction: "Move focus right", act: [{ key: { key: "Right" } }], expect: { value: "Btn_B", op: "exists" } }],
-    });
-    let status: Json = {};
-    for (let i = 0; i < 160 && status.state !== "finished"; i++) {
-      status = await call("pie_script_status", { run_id: String(started.run_id) });
-      if (status.state !== "finished") await sleep(250);
-    }
-    const act = obj(rows(status.steps)[0]?.act_result);
-    expect(act.status, JSON.stringify(act)).toBe("done");
-    expect(String(rows(act.actions)[0]?.target)).toMatch(new RegExp(`^pie_instance ${second} .*\\(client\\)$`));
-    const path = await call("get_runtime_focus_path", { pieInstance: second });
-    expect(path.focusedWidgetName).toBe("Btn_B");
-    expect(path.inTargetViewport).toBe(true);
     await stopPie();
-  }, 120_000);
+  }, 60_000);
 });

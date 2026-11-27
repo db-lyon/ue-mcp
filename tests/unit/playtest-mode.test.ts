@@ -1,6 +1,6 @@
 /**
  * The playtest mode: stored per user or per project like the dialog mode, and
- * the refusal manual gives pie(script_run) and pie(script_replay).
+ * the refusal manual gives pie(arrangement_play) and pie(clip_record_start).
  */
 import * as fs from "node:fs";
 import * as os from "node:os";
@@ -58,27 +58,27 @@ describe("the stored playtest mode", () => {
 });
 
 describe("playtestRefusal", () => {
-  it("gates exactly script_run and script_replay", () => {
-    expect([...PLAYTEST_GATED_TASKS].sort()).toEqual(["pie.script_replay", "pie.script_run"]);
+  it("gates exactly arrangement_play and clip_record_start", () => {
+    expect([...PLAYTEST_GATED_TASKS].sort()).toEqual(["pie.arrangement_play", "pie.clip_record_start"]);
   });
 
   it("lets everything through when the mode is unset or automatic", () => {
-    expect(playtestRefusal("pie.script_run", project)).toBeNull();
+    expect(playtestRefusal("pie.arrangement_play", project)).toBeNull();
     setPlaytestMode("automatic", project);
-    expect(playtestRefusal("pie.script_replay", project)).toBeNull();
+    expect(playtestRefusal("pie.clip_record_start", project)).toBeNull();
   });
 
   it("refuses under manual, naming the setting and how to change it", () => {
     setPlaytestMode("manual");
-    expect(playtestRefusal("pie.script_status", project)).toBeNull();
-    const user = playtestRefusal("pie.script_run", project)!;
-    expect(user).toMatchObject({ success: false, refusedMethod: "pie.script_run", playtestMode: "manual" });
+    expect(playtestRefusal("pie.arrangement_status", project)).toBeNull();
+    const user = playtestRefusal("pie.arrangement_play", project)!;
+    expect(user).toMatchObject({ success: false, refusedMethod: "pie.arrangement_play", playtestMode: "manual" });
     expect(user.reason).toContain("set to manual for this user");
     expect(user.reason).toContain("`ue-mcp playtest mode automatic`");
 
     setPlaytestMode("manual", project);
-    const scoped = playtestRefusal("pie.script_replay", project)!;
-    expect(scoped.refusedMethod).toBe("pie.script_replay");
+    const scoped = playtestRefusal("pie.clip_record_start", project)!;
+    expect(scoped.refusedMethod).toBe("pie.clip_record_start");
     expect(scoped.reason).toContain("set to manual for this project");
     expect(scoped.reason).toContain("ue-mcp playtest mode automatic --editor");
   });

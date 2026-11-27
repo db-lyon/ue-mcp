@@ -411,26 +411,6 @@ describe("a held event loop", () => {
   }, 15_000);
 });
 
-describe("test script events", () => {
-  it("advertises the script events and republishes the bus as script.<type>", async () => {
-    const res = await (await fetch(`${base}/v1/ext/sample/features`, { headers: auth })).json();
-    expect(res.features).toEqual(expect.arrayContaining(["events.script"]));
-
-    const { emitScriptEvent } = await import("../../src/pie/script-events.js");
-    const before = daemon.events.lastId;
-    const common = { runId: "run-x", script: "/Game/PIEStudio/Scripts/Door", at: "2026-10-23T10:00:00.000Z" };
-    emitScriptEvent({ ...common, type: "step_passed", atMs: 1200, seq: 3, step: { index: 0, instruction: "Open the door", judge: "auto", status: "passed" } });
-    emitScriptEvent({ ...common, type: "verdict_requested", atMs: 1500, seq: 4, awaiting: [{ index: 1, instruction: "The door opens smoothly" }] });
-    emitScriptEvent({ ...common, type: "run_finished", atMs: 9000, seq: 7, state: "finished", summary: { total: 2, passed: 2, failed: 0, skipped: 0, pending: 0 } });
-    const seen = daemon.events.since(before).events;
-    expect(seen.map((e) => e.type)).toEqual(["script.step_passed", "script.verdict_requested", "script.run_finished"]);
-    expect(seen[0].data).toEqual({ ...common, atMs: 1200, seq: 3, step: { index: 0, instruction: "Open the door", judge: "auto", status: "passed" } });
-    expect(seen[1].data).toMatchObject({ runId: "run-x", awaiting: [{ index: 1 }] });
-    expect(seen[2].data).toMatchObject({ seq: 7, summary: { passed: 2 } });
-    expect(seen.every((e) => !("type" in e.data))).toBe(true);
-  });
-});
-
 describe("extension services", () => {
   it("lets one extension use what another provides, whichever activates first", async () => {
     const res = await (await fetch(`${base}/v1/ext/consumer/greet`, { headers: auth })).json();

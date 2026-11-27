@@ -108,11 +108,9 @@ const BASELINE = {
   // load_region would make a new region rather than put the old one back.
   // 192: level(resave_mesh_users) rebuilds collision copies from the current mesh and overwrites actor packages
   // on disk, and the bridge has no action that restores a previous package file.
-  // 194: pie(clip_stop) ends a clip run, which cannot be resumed, and pie(clip_verdict) answers a manual check the
-  // run has already moved on from, as pie(script_stop) and pie(verdict) already count here.
-  // 195: pie(clip_record_stop) saves a take into its clip; the clip keeps what the take replaced in its takes, and
-  // putting it back is a clip_update with the old notes, not an inverse of the stop.
-  mutationsWithoutRollback: 195,
+  // 196: the Playtest Hub's player (#2146) replaced step-list scripts and clip assets. A play, a recording, a stop
+  // and a verdict move a PIE session on, which nothing reverses; the hub plays again instead.
+  mutationsWithoutRollback: 196,
   // Zero, and held there by a flat assertion. Every mutation with no inverse
   // now says so in its own result body with the reason, which is the half a
   // caller can act on.

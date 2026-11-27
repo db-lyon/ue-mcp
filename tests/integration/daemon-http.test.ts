@@ -9,6 +9,7 @@ import * as path from "node:path";
 import WebSocket from "ws";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { covers } from "../helpers/covers.js";
+import { DAEMON_API_VERSION } from "../../src/contract/daemon.js";
 import { writeBridgeTree } from "../helpers/bridge-tree-fixture.js";
 import { FakeBridge } from "../fake-bridge.js";
 import { FakeHttp, McpServer, PACKAGE_VERSION, Sandbox, stopSandboxDaemons, waitFor } from "./harness.js";
@@ -90,7 +91,7 @@ function rawGet(port: number, route: string, headers: Record<string, string>): P
 describe("discovery and auth", () => {
   it("publishes where it listens and refuses anyone without the token or from another origin", async () => {
     covers("daemon.discovery-auth");
-    expect(d).toMatchObject({ version: PACKAGE_VERSION, apiVersion: 1 });
+    expect(d).toMatchObject({ version: PACKAGE_VERSION, apiVersion: DAEMON_API_VERSION });
     expect(d.token).toMatch(/^[0-9a-f]{64}$/);
     if (process.platform !== "win32") expect(fs.statSync(discoveryFile(sb, project)).mode & 0o777).toBe(0o600);
 

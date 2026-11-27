@@ -597,11 +597,6 @@
       "summary": "flow(run) runs a built-in flow against an editor"
     },
     {
-      "id": "flow.playtest",
-      "group": "flow",
-      "summary": "flow(run, playtest) drafts a test script with the flow model, checks it with pie(script_validate), returns refusals to the model and saves it with pie(script_create)"
-    },
-    {
       "id": "flow.agent.env-model",
       "group": "flow",
       "summary": "a flow agent step with no registered provider runs on ANTHROPIC_API_KEY"
@@ -680,16 +675,6 @@
       "id": "daemon.native-dialogs",
       "group": "daemon",
       "summary": "the daemon reports native Win32 dialogs of the editor process on /v1/events and GET /v1/dialogs/native, and POST /v1/dialogs/native/press presses one by window handle"
-    },
-    {
-      "id": "daemon.script-events",
-      "group": "daemon",
-      "summary": "the daemon streams PIE test script step events on /v1/events"
-    },
-    {
-      "id": "daemon.clip-events",
-      "group": "daemon",
-      "summary": "the daemon streams a playtest clip run's position, checks, regions, events fired and end on /v1/events as clip.*"
     },
     {
       "id": "daemon.pie-events",

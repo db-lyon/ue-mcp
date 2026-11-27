@@ -18,9 +18,9 @@
 // ── Versions and the compatibility rule ───────────────────────────
 
 /** Version of the daemon's HTTP API, event stream and shim protocol. Bump on a breaking change. */
-export const DAEMON_API_VERSION = 1;
+export const DAEMON_API_VERSION = 2;
 
-export const EXTENSION_API_VERSION = 3;
+export const EXTENSION_API_VERSION = 4;
 
 /**
  * The oldest extension API this daemon still serves. Versions up to EXTENSION_API_VERSION
@@ -82,8 +82,6 @@ export const DAEMON_FEATURES = [
   "install.engineMismatch",
   "editor.consent",
   "hub",
-  "events.clip",
-  "events.clip.take",
 ] as const;
 
 export type DaemonFeature = (typeof DAEMON_FEATURES)[number];
@@ -100,10 +98,6 @@ export const DAEMON_FEATURES_BEYOND_ROUTES: { readonly [F in DaemonFeature]?: st
     "GET /v1/install reports the problem bridge_engine_mismatch, with action `rebuild` and engineMismatch naming the BuildIds, when the bridge or the project's UE_MCP_Studio plugin is built for another engine build, their module manifests disagree, or the install marker names another release than the descriptor",
   "editor.consent":
     "POST /v1/editor/{stop,restart,rebuild} answers 409 { error, request: EditorDisruptionRequest } while other sessions using the editor have not agreed, and takes { requestId?, force?, requester?, reason? }; GET /v1/events carries disruption.requested, disruption.updated and disruption.hold",
-  "events.clip":
-    "GET /v1/events carries clip.run_started, clip.position, clip.check, clip.region, clip.event_fired, clip.verdict_requested and clip.run_finished (ClipEventData) while a playtest clip run started through pie(clip_run) or pie(clip_record) plays, and after pie(clip_status) of a run that is still playing",
-  "events.clip.take":
-    "GET /v1/events carries clip.take_progress while a recording's take is in flight: each armed track's notes so far (the last one open while held) and the axis keys added since the previous event; pie(clip_status) of that run carries the take so far as take.live_take",
 };
 
 /** What the extension API offers beyond EXTENSION_API_VERSION, in the order `api.features` lists them. */
@@ -115,7 +109,6 @@ export const EXTENSION_FEATURES = [
   "checkpoints",
   "checkpoints.assetDiff",
   "events.dialog",
-  "events.script",
   "models.provider",
   "modes",
   "modes.playtest",
@@ -146,7 +139,6 @@ export const EXTENSION_FEATURE_MEMBERS: { readonly [F in ExtensionFeature]: keyo
   checkpoints: "checkpoints",
   "checkpoints.assetDiff": "checkpoints",
   "events.dialog": "events",
-  "events.script": "events",
   "models.provider": "models",
   modes: "modes",
   "modes.playtest": "modes",
@@ -374,22 +366,6 @@ export const DAEMON_EVENT_TYPES = [
   "flow.step_completed",
   "flow.step_failed",
   "flow.run_completed",
-  "script.run_started",
-  "script.step_started",
-  "script.step_acted",
-  "script.step_passed",
-  "script.step_failed",
-  "script.verdict_requested",
-  "script.verdict",
-  "script.run_finished",
-  "clip.run_started",
-  "clip.position",
-  "clip.check",
-  "clip.region",
-  "clip.event_fired",
-  "clip.take_progress",
-  "clip.verdict_requested",
-  "clip.run_finished",
   "checkpoint.created",
   "checkpoint.restored",
   "checkpoints.toggled",
@@ -422,60 +398,6 @@ export interface PieEventData {
   at: string;
   resync?: boolean;
   paused?: boolean;
-}
-
-/**
- * The data of a `clip.*` event (feature `events.clip`), what changed between two answers of pie(clip_status) while
- * a playtest clip run plays. Frames are at the clip's rate. `check`, `region` and `event` are the entries of
- * clip_status as the editor reports them (docs/pie-clips.md, Results).
- */
-export interface ClipEventData {
-  runId: string;
-  /** The clip's asset path, or "inline". */
-  clip: string;
-  at: string;
-  /** Increasing within a run. */
-  seq: number;
-  /** run_started and position: where playback stands. run_finished: finished, stopped or unreachable. */
-  state?: string;
-  position?: number;
-  length?: number;
-  gameMs?: number;
-  heldMs?: number;
-  frames?: number;
-  /** The hold check playback stands at. */
-  holding?: string;
-  /** run_started: play or record, the region judged alone, the clip's rate and name. */
-  mode?: string;
-  region?: string | Record<string, unknown>;
-  rate?: number;
-  clipName?: string;
-  check?: Record<string, unknown>;
-  event?: Record<string, unknown>;
-  /**
-   * take_progress (feature events.clip.take): the take in flight. `tracks[].notes` replace what the client drew for
-   * that track; `tracks[].keys` append at index `keysFrom`. `samples` counts the frames read since the punch-in,
-   * `frame` is the newest one's.
-   */
-  takeId?: string;
-  punchIn?: number;
-  samples?: number;
-  frame?: number;
-  tracks?: Array<{
-    action: string;
-    type: string;
-    notes: Array<{ start: number; length: number; open?: boolean }>;
-    keys: Array<{ t: number; v: number | number[] }>;
-    keysFrom: number;
-  }>;
-  /** verdict_requested: the manual checks waiting for pie(clip_verdict). */
-  awaiting?: string[];
-  /** run_finished. */
-  stopReason?: string;
-  passed?: boolean;
-  summary?: Record<string, unknown>;
-  drift?: Record<string, unknown>;
-  resultsPath?: string;
 }
 
 export type DaemonEventType = (typeof DAEMON_EVENT_TYPES)[number];
@@ -1671,9 +1593,6 @@ export interface DaemonExtensionApi {
    *   "events.dialog"            dialog.opened, dialog.updated, dialog.answered, dialog.delegated
    *                              and dialog.closed on the event stream (see DialogEventData)
    *   "models.provider"          `models.register` supplies the model flow agent steps run on
-   *   "events.script"            script.run_started, script.step_started, script.step_acted,
-   *                              script.step_passed, script.step_failed, script.verdict_requested,
-   *                              script.verdict and script.run_finished on the event stream
    *   "checkpoints"              `checkpoints` drives each session's shadow history, and
    *                              checkpoint.created, checkpoint.restored, checkpoints.toggled and
    *                              checkpoints.cleared are on the event stream (API 3)
@@ -1881,7 +1800,7 @@ export interface DaemonExtensionApi {
       /**
        * Who starts playtest runs (feature "modes.playtest"), as `ue-mcp playtest
        * mode` sets it. null is unset: each client decides. Under manual, an MCP
-       * session's pie(script_run) and pie(script_replay) are refused; calls made
+       * session's pie(arrangement_play) and pie(clip_record_start) are refused; calls made
        * through callAction are not, so an extension applies its own rule.
        */
       playtest: { mode: "manual" | "automatic" | null; project: boolean };

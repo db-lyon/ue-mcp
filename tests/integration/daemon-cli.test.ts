@@ -8,6 +8,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { normalizeProjectRoot } from "../../src/bridge/wire-contract.js";
+import { DAEMON_API_VERSION } from "../../src/contract/daemon.js";
 import { covers } from "../helpers/covers.js";
 import { FakeHttp, PACKAGE_VERSION, plain, runCli, Sandbox, stopSandboxDaemons, waitFor } from "./harness.js";
 import {
@@ -166,7 +167,7 @@ describe("handoff", () => {
       port: Number(new URL(fake.origin).port),
       token: "older-daemon-token",
       version,
-      apiVersion: 1,
+      apiVersion: DAEMON_API_VERSION,
       projectRoot: normalizeProjectRoot(path.dirname(project)),
       startedAt: new Date().toISOString(),
     }));
