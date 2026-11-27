@@ -1,5 +1,5 @@
-// The Playtest Hub's arrangement player as plain data (#2146): placing clips on tracks for each performer kind, the
-// Checks track's four modes, a region, a punch-in take, and the per-kind drivers against a disposable world.
+// The Playtest Hub's arrangement player as plain data (#2146): placing player clips on tracks, the Checks track's four
+// modes, a region, the playhead and a loop, and a punch-in take.
 
 #if WITH_DEV_AUTOMATION_TESTS
 
@@ -7,16 +7,9 @@
 #include "Handlers/PIE/PIEArrangement.h"
 #include "Handlers/PIE/PIEClip.h"
 #include "Handlers/PIE/PIEClipDrivers.h"
-#include "HandlerWorld.h"
 #include "Dom/JsonObject.h"
-#include "Editor.h"
-#include "Engine/StaticMeshActor.h"
-#include "Engine/World.h"
-#include "GameFramework/Actor.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
-#include "UObject/Package.h"
-#include "UObject/UnrealType.h"
 
 namespace MCPPIEArrangementTests
 {
@@ -30,23 +23,20 @@ namespace MCPPIEArrangementTests
 		return Out;
 	}
 
-	// A player clip at 60 fps: jump held from frame 0 for 30 frames, a stick pushed from frame 0 to 60.
+	// Player clips: jump held from frame 0 for 30 frames and a stick pushed from 0 to 60 at 60 fps; a 30 fps strafe.
 	const TCHAR* const Clips = TEXT(R"({
 		"jump": {"performer": "player", "rate": 60, "length": 60, "input": [
 			{"action": "/Game/Input/IA_Jump", "type": "bool", "notes": [{"id": "n1", "start": 0, "length": 30}], "keys": []},
-			{"action": "/Game/Input/IA_Move", "type": "axis2d", "notes": [], "keys": [{"id": "k1", "t": 0, "v": [0, 1]}, {"id": "k2", "t": 60, "v": [0, 0]}]}],
-			"lanes": [{"id": "hp", "kind": "value", "target": "Health", "type": "axis1d", "keys": [{"id": "k1", "t": 0, "v": 100}]}]},
-		"patrol": {"performer": "actor", "rate": 30, "length": 30, "input": [], "lanes": [
-			{"id": "walk", "kind": "move", "points": [{"id": "p1", "t": 0, "at": [100, 0, 0]}, {"id": "p2", "t": 15, "at": [400, 0, 0], "radius": 30}]},
-			{"id": "hit", "kind": "action", "calls": [{"id": "a1", "t": 20, "fn": "Attack", "args": [2]}]},
-			{"id": "alert", "kind": "value", "target": "bb:Alert", "type": "bool", "keys": [{"id": "k1", "t": 0, "v": false}, {"id": "k2", "t": 10, "v": true}]}]}
+			{"action": "/Game/Input/IA_Move", "type": "axis2d", "notes": [], "keys": [{"id": "k1", "t": 0, "v": [0, 1]}, {"id": "k2", "t": 60, "v": [0, 0]}]}]},
+		"strafe": {"performer": "player", "rate": 30, "length": 30, "input": [
+			{"action": "/Game/Input/IA_Move", "type": "axis2d", "notes": [{"id": "n1", "start": 0, "length": 15, "value": [1, 0]}], "keys": []}]}
 	})");
 
 	FString Arrangement(const FString& Checks, const FString& Regions = TEXT("[]"), const FString& ExtraTracks = FString())
 	{
 		return FString::Printf(TEXT(R"({"id": "door", "level": null, "rate": 60, "tracks": [
 			{"id": "p", "performer": {"kind": "player", "client": 0}, "mute": false, "solo": false, "instances": [{"id": "i1", "clip": "jump", "at": 30}]},
-			{"id": "g", "performer": {"kind": "actor", "actor": "Gate Guard"}, "mute": false, "solo": false, "instances": [{"id": "i1", "clip": "patrol", "at": 0}, {"id": "i2", "clip": "patrol", "at": 120}]}%s],
+			{"id": "c1", "performer": {"kind": "player", "client": 1}, "mute": false, "solo": false, "instances": [{"id": "i1", "clip": "strafe", "at": 0}, {"id": "i2", "clip": "strafe", "at": 120}]}%s],
 			"checks": %s, "regions": %s})"), *ExtraTracks, *Checks, *Regions);
 	}
 
@@ -70,6 +60,7 @@ namespace MCPPIEArrangementTests
 		{
 			T.Judge([&](const FHubCheckRun&, double& V) { V = Value(T.Position); return true; });
 			if (T.AwaitingVerdict()) return;
+			T.Wrap();
 			T.Advance(1.0);
 		}
 	}
@@ -83,40 +74,43 @@ bool FPIEArrangementCompileTest::RunTest(const FString& /*Parameters*/)
 	FArrangementPlan Plan;
 	FString Err;
 	if (!TestTrue(TEXT("compiles"), CompileArrangement(Json(Arrangement(TEXT("[]"))), Json(Clips), FString(), Plan, Err))) return false;
-	TestEqual(TEXT("two performers, one of each kind"), Plan.Performers.Num(), 2);
+	TestEqual(TEXT("two performers, the editor's player and client 1"), Plan.Performers.Num(), 2);
 
-	// The player track: input lanes at the instance's frame, driven as client 0.
-	if (!TestEqual(TEXT("the player clip's two input lanes"), Plan.Input.Num(), 2)) return false;
+	// The editor's player track: input lanes at the instance's frame, driven as client 0.
+	if (!TestEqual(TEXT("two input lanes from jump, one from each strafe"), Plan.Input.Num(), 4)) return false;
 	const FPlacedInput& Jump = Plan.Input[0];
 	TestEqual(TEXT("the action path is normalized"), Jump.Track.Action, FString(TEXT("/Game/Input/IA_Jump.IA_Jump")));
 	TestEqual(TEXT("the note starts at the instance"), Jump.Track.Notes[0].Start, 30.0);
 	TestEqual(TEXT("the instance spans its clip"), Jump.To, 90.0);
+	TestEqual(TEXT("driven as the editor's own player"), Jump.Track.Client, 0);
 	bool bActive = false;
 	EvaluateClipTrack(Jump.Track, 45.0, bActive);
 	TestTrue(TEXT("jump is held inside the note"), bActive);
 	EvaluateClipTrack(Jump.Track, 70.0, bActive);
 	TestFalse(TEXT("and released after it"), bActive);
 
-	// The actor track: a 30 fps clip placed twice on a 60 fps arrangement, each lane taking the track's performer.
-	const FClipLane* Walk2 = Plan.Lanes.FindByPredicate([](const FClipLane& L) { return L.Id == TEXT("g/i2/walk"); });
-	if (!TestNotNull(TEXT("the second instance's move lane"), Walk2)) return false;
-	TestTrue(TEXT("it drives the actor"), Walk2->Performer.Kind == EClipPerformerKind::Actor && Walk2->Performer.Actor == TEXT("Gate Guard"));
-	TestEqual(TEXT("scaled to the arrangement's rate and moved to its instance"), Walk2->Points[1].Time, 150.0);
-	const FClipLane* Hit = Plan.Lanes.FindByPredicate([](const FClipLane& L) { return L.Id == TEXT("g/i1/hit"); });
-	TestTrue(TEXT("an action lane's call lands on its frame"), Hit && FMath::IsNearlyEqual(Hit->Calls[0].Time, 40.0));
-	const FClipLane* Hp = Plan.Lanes.FindByPredicate([](const FClipLane& L) { return L.Id == TEXT("p/i1/hp"); });
-	TestTrue(TEXT("a player's value lane acts on its pawn"), Hp && Hp->Performer.Kind == EClipPerformerKind::Player);
+	// Client 1's track: a 30 fps clip placed twice on a 60 fps arrangement.
+	const FPlacedInput* Second = Plan.Input.FindByPredicate([](const FPlacedInput& P) { return P.Track.Client == 1 && P.From == 120.0; });
+	if (!TestNotNull(TEXT("the second strafe"), Second)) return false;
+	TestEqual(TEXT("scaled to the arrangement's rate and moved to its instance"), Second->Track.Notes[0].Start, 120.0);
+	TestEqual(TEXT("its length scaled too"), Second->Track.Notes[0].Length, 30.0);
 	TestEqual(TEXT("the play ends with the last instance"), Plan.End, 180.0);
 
-	// A clip for the wrong kind of performer, a missing clip, and mute and solo.
-	const FString Wrong = TEXT(R"(, {"id": "w", "performer": {"kind": "actor", "actor": "Door"}, "mute": false, "solo": false, "instances": [{"id": "i1", "clip": "jump", "at": 0}]})");
-	TestFalse(TEXT("a player clip on an actor track is refused"), CompileArrangement(Json(Arrangement(TEXT("[]"), TEXT("[]"), Wrong)), Json(Clips), FString(), Plan, Err));
-	TestTrue(TEXT("saying which"), Err.Contains(TEXT("clip jump is for a player")));
-	const FString Missing = TEXT(R"(, {"id": "m", "performer": {"kind": "player", "client": 1}, "mute": false, "solo": false, "instances": [{"id": "i1", "clip": "nope", "at": 0}]})");
+	// What a clip may not hold, a missing clip, and mute and solo.
+	FClip Clip;
+	TestFalse(TEXT("a clip with lanes is refused"), ClipFromJson(Json(TEXT(R"({"rate": 60, "input": [], "lanes": [{"id": "l1", "kind": "move", "points": []}]})")), Clip, Err));
+	TestTrue(TEXT("saying a clip holds Input Action lanes only"), Err.Contains(TEXT("Input Action lanes")));
+	FClipPerformer Performer;
+	TestFalse(TEXT("an actor performer is refused"), ClipPerformerFromJson(MakeShared<FJsonValueObject>(Json(TEXT(R"({"kind": "actor", "actor": "Door"})"))), Performer, Err));
+	const FString Missing = TEXT(R"(, {"id": "m", "performer": {"kind": "player", "client": 2}, "mute": false, "solo": false, "instances": [{"id": "i1", "clip": "nope", "at": 0}]})");
 	TestFalse(TEXT("a clip clips does not hold is refused"), CompileArrangement(Json(Arrangement(TEXT("[]"), TEXT("[]"), Missing)), Json(Clips), FString(), Plan, Err));
 	const FString Soloed = TEXT(R"(, {"id": "s", "performer": {"kind": "player", "client": 2}, "mute": false, "solo": true, "instances": []})");
 	TestTrue(TEXT("compiles with a soloed track"), CompileArrangement(Json(Arrangement(TEXT("[]"), TEXT("[]"), Soloed)), Json(Clips), FString(), Plan, Err));
-	TestTrue(TEXT("only the soloed track plays"), Plan.Input.Num() == 0 && Plan.Lanes.Num() == 0 && Plan.Performers.Num() == 1);
+	TestTrue(TEXT("only the soloed track plays"), Plan.Input.Num() == 0 && Plan.Performers.Num() == 1);
+
+	// One driver per performer kind.
+	FClipDriverContext Ctx;
+	TestTrue(TEXT("a player has a driver"), MakeClipPerformerDriver(FClipPerformer::Player(0), Ctx).IsValid());
 	return true;
 }
 
@@ -213,6 +207,61 @@ bool FPIEArrangementRegionTest::RunTest(const FString& /*Parameters*/)
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FPIEArrangementPlayheadTest, "UE.MCP.PIE.Arrangement.Playhead", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FPIEArrangementPlayheadTest::RunTest(const FString& /*Parameters*/)
+{
+	using namespace MCPPIEArrangementTests;
+	const FString Checks = TEXT(R"([
+		{"id": "early", "at": 10, "length": 10, "mode": "by_end", "expect": {"value": "pos_x", "op": "gt", "target": 5}},
+		{"id": "late", "at": 100, "length": 20, "mode": "by_end", "expect": {"value": "pos_x", "op": "gt", "target": 105}}])");
+	FString Err;
+
+	// From the playhead: playback starts there, and a check that starts before it is skipped.
+	FArrangementTimeline P = Timeline(*this, Checks);
+	if (!TestTrue(TEXT("the playhead is set"), SetPlayhead(P.Plan, 90.0, false, Err))) return false;
+	TestEqual(TEXT("an earlier check is skipped"), CheckOf(P, TEXT("early")).Status, EHubCheckStatus::Skipped);
+	TestTrue(TEXT("saying it starts before the playhead"), CheckOf(P, TEXT("early")).Message.Contains(TEXT("playhead")));
+	P.Position = P.Plan.Start;
+	Play(P, 1000, [](double F) { return F; });
+	TestEqual(TEXT("a later check is judged"), CheckOf(P, TEXT("late")).Status, EHubCheckStatus::Passed);
+	TestTrue(TEXT("and the play ends"), P.Done());
+	FArrangementTimeline Bad = Timeline(*this, Checks);
+	TestFalse(TEXT("a playhead past the end is refused"), SetPlayhead(Bad.Plan, 500.0, false, Err));
+
+	// A loop: at the end playback goes back to the loop start and judges the checks there again.
+	FArrangementTimeline L = Timeline(*this, Checks);
+	if (!TestTrue(TEXT("a loop from frame 90"), SetPlayhead(L.Plan, 90.0, true, Err))) return false;
+	L.Position = L.Plan.Start;
+	int32 Seen = 0;
+	for (int32 i = 0; i < 400; ++i)
+	{
+		L.Judge([&](const FHubCheckRun&, double& V) { V = L.Position; return true; });
+		const int32 Before = L.Pass;
+		L.Wrap();
+		if (L.Pass != Before)
+		{
+			++Seen;
+			TestEqual(TEXT("back at the loop start"), L.Position, 90.0);
+			TestEqual(TEXT("its checks pending again"), CheckOf(L, TEXT("late")).Status, EHubCheckStatus::Pending);
+			TestEqual(TEXT("the skipped check stays skipped"), CheckOf(L, TEXT("early")).Status, EHubCheckStatus::Skipped);
+		}
+		L.Advance(1.0);
+	}
+	TestTrue(TEXT("it looped more than once"), Seen >= 2 && L.Pass == Seen + 1);
+	TestFalse(TEXT("a loop is never done"), L.Done());
+
+	// A region loop goes back to the region's start, and checks outside it stay skipped.
+	const FString Regions = TEXT(R"([{"id": "walk", "name": "Walk", "start": 0, "end": 60}, {"id": "fight", "name": "Fight", "start": 60, "end": 140}])");
+	FArrangementTimeline R = Timeline(*this, Checks, TEXT("fight"), Regions);
+	if (!TestTrue(TEXT("a region loop"), SetPlayhead(R.Plan, 0.0, true, Err))) return false;
+	TestEqual(TEXT("loops from the region's start"), R.Plan.LoopStart, 60.0);
+	Play(R, 200, [](double F) { return F; });
+	TestTrue(TEXT("it looped"), R.Pass > 1);
+	TestEqual(TEXT("a check before the region stays skipped"), CheckOf(R, TEXT("early")).Status, EHubCheckStatus::Skipped);
+	return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FPIEArrangementRecordTest, "UE.MCP.PIE.Arrangement.Record", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
 bool FPIEArrangementRecordTest::RunTest(const FString& /*Parameters*/)
@@ -223,8 +272,7 @@ bool FPIEArrangementRecordTest::RunTest(const FString& /*Parameters*/)
 	FString Err;
 	if (!TestTrue(TEXT("the clip reads"), ClipFromJson(Json(TEXT(R"({"rate": 60, "length": 60, "input": [
 		{"action": "/Game/Input/IA_Jump.IA_Jump", "type": "bool", "notes": [{"id": "n1", "start": 10, "length": 40}], "keys": []},
-		{"action": "/Game/Input/IA_Move.IA_Move", "type": "axis1d", "notes": [], "keys": [{"id": "k1", "t": 0, "v": 0.5}, {"id": "k2", "t": 30, "v": 0.5}, {"id": "k3", "t": 59, "v": 0.5}]}],
-		"lanes": [{"id": "hp", "kind": "value", "target": "Health", "type": "axis1d", "keys": [{"id": "k1", "t": 0, "v": 100}, {"id": "k2", "t": 30, "v": 100}]}]})")), Clip, Err))) return false;
+		{"action": "/Game/Input/IA_Move.IA_Move", "type": "axis1d", "notes": [], "keys": [{"id": "k1", "t": 0, "v": 0.5}, {"id": "k2", "t": 30, "v": 0.5}, {"id": "k3", "t": 59, "v": 0.5}]}]})")), Clip, Err))) return false;
 	TArray<FClipTakeSample> Samples;
 	for (int32 F = 20; F < 40; ++F)
 	{
@@ -254,99 +302,13 @@ bool FPIEArrangementRecordTest::RunTest(const FString& /*Parameters*/)
 	TestTrue(TEXT("the stick reads the take inside the range"), Move && FMath::IsNearlyEqual(EvaluateClipTrack(*Move, 30.0, bActive).X, -1.0, 1e-3));
 	TestTrue(TEXT("and its old curve outside it"), Move && FMath::IsNearlyEqual(EvaluateClipTrack(*Move, 10.0, bActive).X, 0.5, 1e-3));
 
-	// A value lane punched by what its performer held.
-	FClipLaneRecording Hp;
-	Hp.LaneId = TEXT("hp");
-	for (int32 F = 20; F < 40; ++F) { FClipLaneSample S; S.Frame = F; S.bHasValue = true; S.Value = 100.0 - (F - 20) * 2.0; Hp.Samples.Add(S); }
-	PunchClipLanes(Clip, { Hp }, 20.0, 40.0);
-	TestTrue(TEXT("the value lane holds the fall"), Clip.FindLane(TEXT("hp"))->Keys.ContainsByPredicate([](const FClipKey& K) { return FMath::IsNearlyEqual(K.Value.X, 62.0, 0.01); }));
-	TestFalse(TEXT("and not the old key inside the range"), Clip.FindLane(TEXT("hp"))->Keys.ContainsByPredicate([](const FClipKey& K) { return FMath::IsNearlyEqual(K.Time, 30.0); }));
-
-	// A move lane recording reduces to the route walked.
-	TArray<FClipLaneSample> Walk;
-	for (int32 F = 0; F <= 100; ++F)
-	{
-		FClipLaneSample S;
-		S.Frame = F;
-		S.bHasLocation = true;
-		S.Location = F <= 20 ? FVector::ZeroVector : F <= 50 ? FVector((F - 20) * 10.0, 0, 0) : F <= 80 ? FVector(300, (F - 50) * 10.0, 0) : FVector(300, 300, 0);
-		Walk.Add(S);
-	}
-	const TArray<FClipMovePoint> Points = ReduceClipMoveSamples(Walk);
-	TestTrue(TEXT("the walk reduces to its two legs, set off when it left each"), Points.Num() == 2 && Points[0].Time == 20.0 && Points[1].Time == 50.0);
-
 	// The answer clip_record_stop gives: the hub's shape, which reads back as it was.
 	const TSharedRef<FJsonObject> Out = ClipToJson(Clip);
-	TestTrue(TEXT("rate, length, input and lanes"), Out->HasField(TEXT("rate")) && Out->HasField(TEXT("length")) && Out->HasField(TEXT("input")) && Out->HasField(TEXT("lanes")));
-	TestFalse(TEXT("and no checks"), Out->HasField(TEXT("checks")));
+	TestTrue(TEXT("rate, length and input"), Out->HasField(TEXT("rate")) && Out->HasField(TEXT("length")) && Out->HasField(TEXT("input")));
+	TestFalse(TEXT("and no lanes or checks"), Out->HasField(TEXT("lanes")) || Out->HasField(TEXT("checks")));
 	FClip Back;
-	TestTrue(TEXT("reads back"), ClipFromJson(Out, Back, Err) && Back.Input.Num() == 2 && Back.Lanes.Num() == 1);
+	TestTrue(TEXT("reads back"), ClipFromJson(Out, Back, Err) && Back.Input.Num() == 2);
 	TestTrue(TEXT("with every note given an id"), Back.Input[0].Notes.Num() > 0 && !Back.Input[0].Notes.ContainsByPredicate([](const FClipNote& N) { return N.Id.IsEmpty(); }));
-	return true;
-}
-
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FPIEArrangementDriversTest, "UE.MCP.PIE.Arrangement.Drivers", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
-
-bool FPIEArrangementDriversTest::RunTest(const FString& /*Parameters*/)
-{
-	using namespace MCPPIEArrangementTests;
-	// One driver per kind, each declaring what it takes.
-	FClipDriverContext Ctx;
-	TUniquePtr<FClipPerformerDriver> Player = MakeClipPerformerDriver(FClipPerformer::Player(0), Ctx);
-	TUniquePtr<FClipPerformerDriver> Actor = MakeClipPerformerDriver(FClipPerformer::ForActor(TEXT("UEMCP_HubActor")), Ctx);
-	if (!TestTrue(TEXT("a driver for each kind"), Player.IsValid() && Actor.IsValid())) return false;
-	TestTrue(TEXT("the player driver takes input"), Player->Accepts(EClipLaneCapability::Input));
-	TestFalse(TEXT("the player driver takes no move"), Player->Accepts(EClipLaneCapability::Move));
-	TestTrue(TEXT("the actor driver takes move"), Actor->Accepts(EClipLaneCapability::Move));
-	TestFalse(TEXT("the actor driver takes no input"), Actor->Accepts(EClipLaneCapability::Input));
-	FString Err;
-	FClipMovePoint Pt;
-	TestFalse(TEXT("a player refuses a move"), Player->MoveTo(nullptr, Pt, Err));
-
-	if (!GEditor) return true;
-	UWorld* World = UWorld::CreateWorld(EWorldType::Editor, false,
-		MakeUniqueObjectName(GetTransientPackage(), UWorld::StaticClass(), TEXT("UEMCP_HubDriverTest")), GetTransientPackage());
-	if (!TestNotNull(TEXT("a disposable world"), World)) return false;
-	AActor* Target = World->SpawnActor<AStaticMeshActor>(FVector(10, 20, 30), FRotator::ZeroRotator);
-	if (!TestNotNull(TEXT("an actor to drive"), Target)) { MCPDestroyDisposableWorld(World); return false; }
-	Target->SetActorLabel(TEXT("UEMCP_HubActor"));
-
-	TestTrue(TEXT("the actor driver finds its actor by label"), Actor->ResolveActor(World, Err) == Target);
-	FVector Where;
-	TestTrue(TEXT("it reads where the actor stands"), Actor->ReadLocation(World, Where, Err) && Where.Equals(FVector(10, 20, 30), 0.01));
-	FClipLane Dilation;
-	Dilation.Capability = EClipLaneCapability::Value;
-	Dilation.Target = TEXT("CustomTimeDilation");
-	TestTrue(TEXT("a value lane writes the property"), Actor->SetValue(World, Dilation, 0.25, Err));
-	double Read = 0.0;
-	TestTrue(TEXT("and reads it back"), Actor->ReadValue(World, Dilation, Read, Err) && FMath::IsNearlyEqual(Read, 0.25, 1e-4));
-	FClipActionCall Hide;
-	Hide.Function = TEXT("SetActorHiddenInGame");
-	Hide.Args.Add(MakeShared<FJsonValueBoolean>(true));
-	TestTrue(TEXT("an action lane calls the function"), Actor->Call(World, Hide, Err));
-	TestTrue(TEXT("and the call took effect"), Target->IsHidden());
-	TestFalse(TEXT("a move lane needs a pawn"), Actor->MoveTo(World, Pt, Err));
-
-	// Recording an action lane: a call through ProcessEvent is seen on its frame, and the function is as it was after.
-	UFunction* Fn = Target->FindFunction(TEXT("SetActorHiddenInGame"));
-	const FNativeFuncPtr Original = Fn ? Fn->GetNativeFunc() : nullptr;
-	FClipCallRecorder& Recorder = FClipCallRecorder::Get();
-	TestEqual(TEXT("a missing function is named"), Recorder.Watch(TEXT("l1"), Target, { TEXT("SetActorHiddenInGame"), TEXT("NoSuchFunction") }), TArray<FString>{ TEXT("NoSuchFunction") });
-	Recorder.SetFrame(12.0);
-	if (Fn)
-	{
-		TArray<uint8> Parms;
-		Parms.SetNumZeroed(Fn->ParmsSize);
-		if (FBoolProperty* B = CastField<FBoolProperty>(Fn->FindPropertyByName(TEXT("bNewHidden")))) B->SetPropertyValue_InContainer(Parms.GetData(), false);
-		FEditorScriptExecutionGuard Guard;
-		Target->ProcessEvent(Fn, Parms.GetData());
-	}
-	const TMap<FString, TArray<FClipActionCall>> Seen = Recorder.Finish();
-	const TArray<FClipActionCall>* Calls = Seen.Find(TEXT("l1"));
-	TestTrue(TEXT("the call was seen on its frame"), Calls && Calls->Num() == 1 && FMath::IsNearlyEqual((*Calls)[0].Time, 12.0));
-	TestTrue(TEXT("the function is as it was"), Fn && Fn->GetNativeFunc() == Original);
-	TestFalse(TEXT("nothing is watched after the take"), Recorder.IsWatching());
-	MCPDestroyDisposableWorld(World);
 	return true;
 }
 

@@ -22,14 +22,7 @@ namespace MCPPIE
 			Run.Message = Message;
 		}
 
-		// A lane's times moved to the instance's frame and scaled to the arrangement's rate.
-		void PlaceLane(FClipLane& L, double At, double Scale)
-		{
-			for (FClipMovePoint& P : L.Points) P.Time = At + P.Time * Scale;
-			for (FClipActionCall& C : L.Calls) C.Time = At + C.Time * Scale;
-			for (FClipKey& K : L.Keys) K.Time = At + K.Time * Scale;
-		}
-
+		// An input lane's times moved to the instance's frame and scaled to the arrangement's rate.
 		void PlaceInput(FClipTrack& T, double At, double Scale)
 		{
 			for (FClipNote& N : T.Notes) { N.Start = At + N.Start * Scale; N.Length *= Scale; }
@@ -318,11 +311,6 @@ namespace MCPPIE
 					ContentEnd = FMath::Max(ContentEnd, InstEnd);
 					for (FClipTrack& Track : Clip.Input)
 					{
-						if (!ClipPerformerAccepts(Performer.Kind, EClipLaneCapability::Input))
-						{
-							OutError = FString::Printf(TEXT("track %s: %s takes no Input Action lanes, and clip %s has some"), *TrackId, *Performer.Label(), *ClipId);
-							return false;
-						}
 						FPlacedInput P;
 						P.Track = MoveTemp(Track);
 						P.Track.Client = Performer.Client;
@@ -330,18 +318,6 @@ namespace MCPPIE
 						P.From = At;
 						P.To = InstEnd;
 						Out.Input.Add(MoveTemp(P));
-					}
-					for (FClipLane& Lane : Clip.Lanes)
-					{
-						if (!ClipPerformerAccepts(Performer.Kind, Lane.Capability))
-						{
-							OutError = FString::Printf(TEXT("track %s: %s takes no %s lanes, and clip %s's lane %s is one"), *TrackId, *Performer.Label(), *ClipLaneCapabilityToString(Lane.Capability), *ClipId, *Lane.Id);
-							return false;
-						}
-						Lane.Id = FString::Printf(TEXT("%s/%s/%s"), *TrackId, *InstId, *Lane.Id);
-						Lane.Performer = Performer;
-						PlaceLane(Lane, At, Scale);
-						Out.Lanes.Add(MoveTemp(Lane));
 					}
 				}
 			}
@@ -360,6 +336,7 @@ namespace MCPPIE
 				{
 					Run.Status = EHubCheckStatus::Skipped;
 					Run.Message = FString::Printf(TEXT("outside region %s, the one played"), *Region);
+					Run.bOutOfPlay = true;
 				}
 				else ChecksEnd = FMath::Max(ChecksEnd, Run.Def.Mode == EHubCheckMode::Hold || Run.Def.Mode == EHubCheckMode::Manual ? Run.Def.At : Run.Def.End());
 				Out.Checks.Add(MoveTemp(Run));
@@ -367,6 +344,31 @@ namespace MCPPIE
 			Out.Checks.StableSort([](const FHubCheckRun& A, const FHubCheckRun& B) { return A.Def.At < B.Def.At; });
 		}
 		Out.End = Region.IsEmpty() ? FMath::Max3(ContentEnd, ChecksEnd, RegionsEnd) : FMath::Max(RegionEnd, ChecksEnd);
+		Out.RegionStart = Region.IsEmpty() ? 0.0 : RegionStart;
+		Out.LoopStart = Out.RegionStart;
+		return true;
+	}
+
+	bool SetPlayhead(FArrangementPlan& Plan, double From, bool bLoop, FString& OutError)
+	{
+		if (From < 0.0 || (From > 0.0 && From >= Plan.End - TimelineEps))
+		{
+			OutError = FString::Printf(TEXT("from is a frame from 0 up to the end at %s, not %s"), *Num(Plan.End), *Num(From));
+			return false;
+		}
+		Plan.Start = From;
+		Plan.bLoop = bLoop;
+		Plan.LoopStart = From > 0.0 ? From : Plan.RegionStart;
+		if (bLoop && Plan.End - Plan.LoopStart < 1.0)
+		{
+			OutError = FString::Printf(TEXT("a loop needs at least one frame between its start at %s and the end at %s"), *Num(Plan.LoopStart), *Num(Plan.End));
+			return false;
+		}
+		for (FHubCheckRun& C : Plan.Checks)
+		{
+			if (C.IsSettled() || C.Def.At >= From - TimelineEps) continue;
+			Settle(C, EHubCheckStatus::Skipped, -1.0, FString::Printf(TEXT("starts before the playhead at frame %s"), *Num(From)));
+		}
 		return true;
 	}
 
@@ -467,8 +469,24 @@ namespace MCPPIE
 
 	bool FArrangementTimeline::Done() const
 	{
-		if (Position < Plan.End - TimelineEps || Holding != INDEX_NONE) return false;
+		if (Plan.bLoop || Position < Plan.End - TimelineEps || Holding != INDEX_NONE) return false;
 		return !Plan.Checks.ContainsByPredicate([](const FHubCheckRun& C) { return C.Status == EHubCheckStatus::AwaitingVerdict; });
+	}
+
+	bool FArrangementTimeline::Wrap()
+	{
+		if (!Plan.bLoop || Position < Plan.End - TimelineEps || Holding != INDEX_NONE || AwaitingVerdict()) return false;
+		// A check the region play skips stays skipped; every other one from the loop start is judged again.
+		for (FHubCheckRun& C : Plan.Checks)
+		{
+			if (C.bOutOfPlay || C.Def.At < Plan.LoopStart - TimelineEps) continue;
+			FHubCheckRun Fresh;
+			Fresh.Def = C.Def;
+			C = MoveTemp(Fresh);
+		}
+		Position = Plan.LoopStart;
+		++Pass;
+		return true;
 	}
 
 	bool FArrangementTimeline::Verdict(const FString& CheckId, const FString& InVerdict, const FString& Note, FString& OutError)

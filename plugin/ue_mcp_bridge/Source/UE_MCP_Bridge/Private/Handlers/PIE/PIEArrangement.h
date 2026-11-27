@@ -10,9 +10,11 @@
  * all of it without PIE. The daemon hands over the arrangement with the clips it places (pie arrangement_play); the
  * plugin reads no hub file.
  *
- * CompileArrangement places every clip instance on its track's timeline: each lane is moved to the instance's frame
- * and scaled from the clip's rate to the arrangement's, and takes the track's performer. A region plays from frame 0
- * to the region's end and judges only the checks that start inside it.
+ * CompileArrangement places every clip instance on its track's timeline: each Input Action lane is moved to the
+ * instance's frame, scaled from the clip's rate to the arrangement's, and drives the track's player. A region plays
+ * from frame 0 to the region's end and judges only the checks that start inside it. SetPlayhead starts playback at a
+ * later frame (checks that start before it are skipped) and turns on looping: at the end playback goes back to the
+ * loop start (the playhead, else the region's start, else 0) and judges the checks there again, until stopped.
  *
  * FArrangementTimeline moves a play on frame by frame. A check judges from its start:
  *   by_end      passes once the condition holds on any frame before its end, fails at its end.
@@ -86,6 +88,8 @@ namespace MCPPIE
 		// hold: the frames of game time playback has stood at it.
 		double HeldFrames = 0.0;
 		FString Note;
+		// Outside the region played: skipped on every pass of a loop.
+		bool bOutOfPlay = false;
 
 		bool IsSettled() const { return Status == EHubCheckStatus::Passed || Status == EHubCheckStatus::Failed || Status == EHubCheckStatus::Skipped; }
 	};
@@ -107,11 +111,16 @@ namespace MCPPIE
 		FString Level;
 		double Rate = 60.0;
 		FString RegionId;
+		// The region played's start, or 0.
+		double RegionStart = 0.0;
 		// The frame playback ends on: the region's end, or the arrangement's last instance, check or region.
 		double End = 0.0;
+		// The frame playback starts on: the playhead, or 0.
+		double Start = 0.0;
+		// Looping: at End playback goes back to LoopStart and judges the checks from there again.
+		bool bLoop = false;
+		double LoopStart = 0.0;
 		TArray<FPlacedInput> Input;
-		// Move, action and value lanes, each with its track's performer, ids <track>/<instance>/<lane>.
-		TArray<FClipLane> Lanes;
 		TArray<FHubCheckRun> Checks;
 		// Every performer the tracks drive.
 		TArray<FClipPerformer> Performers;
@@ -126,6 +135,12 @@ namespace MCPPIE
 	bool CompileArrangement(const TSharedPtr<FJsonObject>& Arrangement, const TSharedPtr<FJsonObject>& Clips,
 		const FString& Region, FArrangementPlan& Out, FString& OutError);
 
+	/**
+	 * Starts playback at From (frames, 0 for the start) and turns looping on or off. Checks that start before From are
+	 * skipped. False with why when From is at or past the end.
+	 */
+	bool SetPlayhead(FArrangementPlan& Plan, double From, bool bLoop, FString& OutError);
+
 	/** A play moving on frame by frame, without PIE. */
 	struct FArrangementTimeline
 	{
@@ -133,6 +148,8 @@ namespace MCPPIE
 		double Position = 0.0;
 		// The hold or manual check playback is standing at, or INDEX_NONE.
 		int32 Holding = INDEX_NONE;
+		// Which time through the loop this is, from 1.
+		int32 Pass = 1;
 
 		/**
 		 * Moves the position on by Frames of game time, stopping at the start of the first hold or manual check that
@@ -143,8 +160,13 @@ namespace MCPPIE
 		void Judge(TFunctionRef<bool(const FHubCheckRun&, double&)> Read);
 		/** A manual check waits for its verdict. */
 		bool AwaitingVerdict() const;
-		/** The position reached the end and nothing holds it. */
+		/** The position reached the end and nothing holds it. A looping play is never done. */
 		bool Done() const;
+		/**
+		 * A looping play at its end: goes back to the loop start, sets the checks from there pending again and counts
+		 * the pass. False when the play does not loop or has not reached its end.
+		 */
+		bool Wrap();
 		/** Settles a manual check awaiting its verdict: pass or fail, with a note. */
 		bool Verdict(const FString& CheckId, const FString& Verdict, const FString& Note, FString& OutError);
 		/** Settles what is still open when the play ends: running and awaiting checks fail, pending ones are skipped. */

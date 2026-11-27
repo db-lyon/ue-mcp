@@ -20,8 +20,10 @@ void FPIEHandlers::RegisterArrangementHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("pie_arrangement_play"), &PieArrangementPlay, {
 		MCPParam::Required(TEXT("runId"), EType::String, RunIdDoc),
 		MCPParam::Required(TEXT("arrangement"), EType::Object, TEXT("The arrangement as the hub stores it: {id, level, rate, tracks: [{id, performer, mute, solo, instances: [{id, clip, at}]}], checks: [{id, at, length, mode: by_end|throughout|hold|manual, expect?: {value, op, target?, subject?}, instruction?, timeout?}], regions: [{id, start, end}]}")),
-		MCPParam::Required(TEXT("clips"), EType::Object, TEXT("Every clip the tracks place, by id: {rate, length, performer, input, lanes}")),
+		MCPParam::Required(TEXT("clips"), EType::Object, TEXT("Every clip the tracks place, by id: {rate, length, performer, input}")),
 		MCPParam::Optional(TEXT("region"), EType::String, TEXT("Play from frame 0 to this region's end and judge only the checks that start inside it")),
+		MCPParam::Optional(TEXT("from"), EType::Number, TEXT("The playhead: start playback at this frame; checks that start before it are skipped")).Min(0),
+		MCPParam::Optional(TEXT("loop"), EType::Boolean, TEXT("At the end go back to the loop start (from, else the region's start, else 0) and judge the checks there again, until arrangement_stop")),
 	}, MCPSpec::ContractExempt(TEXT("Loads the arrangement's level, starts PIE and plays it")));
 	Registry.RegisterHandler(TEXT("pie_arrangement_status"), &PieArrangementStatus, {
 		MCPParam::Required(TEXT("runId"), EType::String, RunIdDoc),
@@ -37,8 +39,7 @@ void FPIEHandlers::RegisterArrangementHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("note"), EType::String, TEXT("What the verdict rests on")),
 	}, MCPSpec::ContractExempt(TEXT("Settles a check in a running play and resumes PIE")));
 	Registry.RegisterHandler(TEXT("pie_clip_record_start"), &PieClipRecordStart, {
-		MCPParam::Required(TEXT("performer"), EType::Object, TEXT("Who to record: {kind: player, client: 0} or {kind: actor, actor}")),
-		MCPParam::Required(TEXT("kind"), EType::String, TEXT("The performer's kind")).Enum({ TEXT("player"), TEXT("actor") }),
+		MCPParam::Required(TEXT("performer"), EType::Object, TEXT("Who to record: {kind: player, client: 0}, the editor's own player")),
 		MCPParam::Optional(TEXT("rate"), EType::Number, TEXT("Frames per second of a new clip (default 60)")).Min(1),
 		MCPParam::Optional(TEXT("punch"), EType::Object, TEXT("Punch in: play clip from frame 0 with the person's input locked out, record from `from` to `to` (the clip's frames), and replace that range")).WithFields({
 			MCPParam::RequiredField(TEXT("clip"), EType::Object, TEXT("The clip as the hub stores it")),
@@ -62,6 +63,7 @@ TSharedPtr<FJsonValue> FPIEHandlers::PieArrangementPlay(const TSharedPtr<FJsonOb
 	Cfg.RunId = RunId;
 	FString Error;
 	if (!CompileArrangement(*Arrangement, *Clips, OptionalString(Params, TEXT("region")), Cfg.Plan, Error)) return MCPError(Error);
+	if (!SetPlayhead(Cfg.Plan, OptionalNumber(Params, TEXT("from"), 0.0), OptionalBool(Params, TEXT("loop"), false), Error)) return MCPError(Error);
 	bool bStartedPIE = false;
 	if (!FPIEArrangementPlayer::Get().Play(Cfg, bStartedPIE, Error)) return MCPError(Error);
 	auto Result = MCPSuccess();
@@ -116,12 +118,8 @@ TSharedPtr<FJsonValue> FPIEHandlers::PieClipRecordStart(const TSharedPtr<FJsonOb
 {
 	MCP_CHECK_GAME_THREAD();
 	FClipRecordConfig Cfg;
-	FString Error, Kind;
+	FString Error;
 	if (!ClipPerformerFromJson(TryGetParam(Params, TEXT("performer")), Cfg.Performer, Error)) return MCPError(Error);
-	if (TryGetStringParam(Params, TEXT("kind"), Kind) && Kind != ClipPerformerKindToString(Cfg.Performer.Kind))
-	{
-		return MCPError(FString::Printf(TEXT("kind is %s, and the performer is a %s"), *Kind, *ClipPerformerKindToString(Cfg.Performer.Kind)));
-	}
 	Cfg.Rate = OptionalNumber(Params, TEXT("rate"), 60.0);
 	if (Cfg.Rate <= 0.0 || Cfg.Rate > 1000.0) return MCPError(TEXT("rate is frames per second, more than 0 and at most 1000"));
 	const TSharedPtr<FJsonObject>* Punch = nullptr;

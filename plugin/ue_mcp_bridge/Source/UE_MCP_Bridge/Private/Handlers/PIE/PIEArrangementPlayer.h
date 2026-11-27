@@ -14,17 +14,18 @@ class ULocalPlayer;
 /**
  * Plays one arrangement, or one region of it, in one PIE session (#2146), and records a performance into a clip.
  *
- * Frame 0 is the first steady frame once the observer samples the editor's player. Before the actors tick on each
- * frame the player moves the position on by that frame's game time (a fixed 1/rate timestep while it plays), and
- * hands every lane at the new position to the driver of its track's performer (PIEClipDrivers.h): Input Action
- * lanes to a player's, move lanes to an actor's, action and value lanes to either. At the end of the frame it judges
- * the Checks track (FArrangementTimeline). A hold check stops the position until it is true or times out; a manual
- * check pauses PIE until it has a verdict. A play that started PIE ends it when it finishes or stops.
+ * The play starts at the plan's Start (the playhead, 0 by default) on the first steady frame once the observer samples
+ * the editor's player. Before the actors tick on each frame the player moves the position on by that frame's game
+ * time (a fixed 1/rate timestep while it plays), and hands every Input Action lane at the new position to the driver
+ * of its track's player (PIEClipDrivers.h). At the end of the frame it judges the Checks track (FArrangementTimeline).
+ * A hold check stops the position until it is true or times out; a manual check pauses PIE until it has a verdict. A
+ * looping play goes back to its loop start at the end, until stopped. A play that started PIE ends it when it
+ * finishes or stops.
  *
- * A recording plays the punched clip up to the punch-in with the person's input locked out, then stops driving what
- * it records and reads what the performer does instead, until the punch-out or clip_record_stop. The take replaces
- * that range of the clip (PunchClipInput, PunchClipLanes). Without a punch it records from frame 0: a player's Input
- * Actions, or the route an actor walks.
+ * A recording plays the punched clip up to the punch-in with the person's input locked out, then stops driving the
+ * actions it records and reads what the person does instead, until the punch-out or clip_record_stop. The take
+ * replaces that range of the clip (PunchClipInput). Without a punch it records the editor's player's Input Actions
+ * from frame 0.
  */
 namespace MCPPIE
 {
@@ -76,7 +77,6 @@ namespace MCPPIE
 		void OnEndPIE(bool bIsSimulating);
 		void StartClock(UWorld* World);
 		void Drive(UWorld* World);
-		void LaneError(const FString& LaneId, const FString& Error);
 		FClipPerformerDriver* DriverFor(const FClipPerformer& Performer);
 		bool ReadCheck(const FHubCheckRun& Check, double& OutValue);
 		void PunchIn(UWorld* World);
@@ -98,9 +98,6 @@ namespace MCPPIE
 		bool bPaused = false;
 		double LastGameSeconds = 0.0;
 		int32 SteadyFrames = 0;
-		// Move, action and value lanes: the next point or call each fires, by index into the plan's lanes.
-		TArray<int32> LaneNext;
-		TArray<FString> LaneErrors;
 
 		// Recording.
 		bool bRecording = false;
@@ -113,7 +110,6 @@ namespace MCPPIE
 		TMap<FString, EClipValueType> ArmedTypes;
 		TMap<FString, TWeakObjectPtr<UInputAction>> ArmedActions;
 		TArray<FClipTakeSample> Samples;
-		TArray<FClipLaneRecording> LaneRecordings;
 
 		TMap<FString, TUniquePtr<FClipPerformerDriver>> Drivers;
 		struct FTriggerWatch { TWeakObjectPtr<const UInputAction> Action; bool bReleased = false; };

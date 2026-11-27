@@ -2,6 +2,7 @@
 #include "Handlers/PIE/PIEObserver.h"
 #include "Handlers/PIE/PIERemotePlayers.h"
 #include "Handlers/PIE/PIEReplayInputLock.h"
+#include "Handlers/PIE/PIESequenceFormat.h"
 #include "Handlers/PIE/PIELog.h"
 #include "MCPPIEActionTrigger.h"
 #include "HandlerWorld.h"
@@ -104,8 +105,6 @@ namespace MCPPIE
 	{
 		Drivers.Reset();
 		TriggerWatches.Reset();
-		LaneErrors.Reset();
-		LaneNext.Init(0, Timeline.Plan.Lanes.Num());
 		Error.Reset();
 		bClockStarted = false;
 		bPaused = false;
@@ -165,10 +164,11 @@ namespace MCPPIE
 
 		Begin(/*bStartPIE=*/true);
 		bOutStartedPIE = bStartedPIE;
-		UE_LOG(LogMCPPIE, Log, TEXT("[PIE-HUB] %s armed: %s, %d input lanes, %d lanes, %d checks, %s frames at %s fps%s"),
-			*RunId, *Timeline.Plan.Id, Timeline.Plan.Input.Num(), Timeline.Plan.Lanes.Num(), Timeline.Plan.Checks.Num(),
-			*FString::SanitizeFloat(Timeline.Plan.End), *FString::SanitizeFloat(Timeline.Plan.Rate),
-			Timeline.Plan.RegionId.IsEmpty() ? TEXT("") : *FString::Printf(TEXT(", region %s"), *Timeline.Plan.RegionId));
+		UE_LOG(LogMCPPIE, Log, TEXT("[PIE-HUB] %s armed: %s, %d input lanes, %d checks, frames %s..%s at %s fps%s%s"),
+			*RunId, *Timeline.Plan.Id, Timeline.Plan.Input.Num(), Timeline.Plan.Checks.Num(),
+			*FString::SanitizeFloat(Timeline.Plan.Start), *FString::SanitizeFloat(Timeline.Plan.End), *FString::SanitizeFloat(Timeline.Plan.Rate),
+			Timeline.Plan.RegionId.IsEmpty() ? TEXT("") : *FString::Printf(TEXT(", region %s"), *Timeline.Plan.RegionId),
+			Timeline.Plan.bLoop ? *FString::Printf(TEXT(", looping from %s"), *FString::SanitizeFloat(Timeline.Plan.LoopStart)) : TEXT(""));
 		return true;
 	}
 
@@ -185,7 +185,7 @@ namespace MCPPIE
 			OutError = TEXT("recording needs the editor");
 			return false;
 		}
-		if (Cfg.Performer.Kind == EClipPerformerKind::Player && Cfg.Performer.Client != 0)
+		if (Cfg.Performer.Client != 0)
 		{
 			OutError = TEXT("a recording reads the editor's own player (client 0); record a remote client from its own editor");
 			return false;
@@ -201,7 +201,6 @@ namespace MCPPIE
 		bTakeDone = false;
 		PunchedOutAt = -1.0;
 		Samples.Reset();
-		LaneRecordings.Reset();
 		Armed.Reset();
 		ArmedTypes.Reset();
 		ArmedActions.Reset();
@@ -225,18 +224,6 @@ namespace MCPPIE
 				P.To = Take.EffectiveLength();
 				Timeline.Plan.Input.Add(MoveTemp(P));
 			}
-			for (FClipLane L : Take.Lanes)
-			{
-				L.Performer = Cfg.Performer;
-				Timeline.Plan.Lanes.Add(MoveTemp(L));
-			}
-		}
-		else if (Cfg.Performer.Kind == EClipPerformerKind::Actor)
-		{
-			FClipLane Move;
-			Move.Id = TEXT("move");
-			Move.Capability = EClipLaneCapability::Move;
-			Take.Lanes.Add(Move);
 		}
 		Begin(/*bStartPIE=*/true);
 		UE_LOG(LogMCPPIE, Log, TEXT("[PIE-HUB] recording %s%s"), *Cfg.Performer.Label(),
@@ -274,7 +261,7 @@ namespace MCPPIE
 		bClockStarted = true;
 		State = EArrangementState::Running;
 		LastGameSeconds = World->GetTimeSeconds();
-		Timeline.Position = 0.0;
+		Timeline.Position = bRecording ? 0.0 : Timeline.Plan.Start;
 		const bool bLiveFromStart = bRecording && (!RecordCfg.bPunch || RecordCfg.PunchFrom <= 0.0);
 		// A play and a punch's lead-in run on a fixed 1/rate step; the person plays a take on variable time.
 		if (!bLiveFromStart) ApplyFixedTimestep();
@@ -295,16 +282,7 @@ namespace MCPPIE
 		return Raw;
 	}
 
-	void FPIEArrangementPlayer::LaneError(const FString& LaneId, const FString& InError)
-	{
-		const FString Line = FString::Printf(TEXT("lane %s: %s"), *LaneId, *InError);
-		// The first few distinct ones: a lane that fails every frame says so once.
-		if (LaneErrors.Num() >= 10 || LaneErrors.Contains(Line)) return;
-		LaneErrors.Add(Line);
-		UE_LOG(LogMCPPIE, Warning, TEXT("[PIE-HUB] %s"), *Line);
-	}
-
-	void FPIEArrangementPlayer::Drive(UWorld* World)
+	void FPIEArrangementPlayer::Drive(UWorld* /*World*/)
 	{
 		const double Pos = Timeline.Position;
 		const bool bTaking = bRecording && bPunchedIn && PunchedOutAt < 0.0;
@@ -327,42 +305,6 @@ namespace MCPPIE
 			if (bTaking && Armed.Contains(F.Value.Track->Action)) continue;
 			if (FClipPerformerDriver* D = DriverFor(FClipPerformer::Player(F.Value.Track->Client))) D->FeedInput(*F.Value.Track, F.Value.bActive, F.Value.Value);
 		}
-		// Move, action and value lanes, each to its performer's driver.
-		for (int32 L = 0; L < Timeline.Plan.Lanes.Num(); ++L)
-		{
-			const FClipLane& Lane = Timeline.Plan.Lanes[L];
-			if (bTaking && LaneRecordings.ContainsByPredicate([&Lane](const FClipLaneRecording& R) { return R.LaneId == Lane.Id; })) continue;
-			FClipPerformerDriver* Driver = DriverFor(Lane.Performer);
-			if (!Driver)
-			{
-				LaneError(Lane.Id, FString::Printf(TEXT("no driver plays a %s performer"), *ClipPerformerKindToString(Lane.Performer.Kind)));
-				continue;
-			}
-			FString Err;
-			int32& Next = LaneNext[L];
-			if (Lane.Capability == EClipLaneCapability::Move)
-			{
-				// The newest point passed this frame: a frame that skips two points walks to the second.
-				int32 Due = INDEX_NONE;
-				while (Next < Lane.Points.Num() && Lane.Points[Next].Time <= Pos + PlayerEps) Due = Next++;
-				if (Due != INDEX_NONE && !Driver->MoveTo(World, Lane.Points[Due], Err)) LaneError(Lane.Id, FString::Printf(TEXT("point %s: %s"), *Lane.Points[Due].Id, *Err));
-			}
-			else if (Lane.Capability == EClipLaneCapability::Action)
-			{
-				while (Next < Lane.Calls.Num() && Lane.Calls[Next].Time <= Pos + PlayerEps)
-				{
-					const FClipActionCall& C = Lane.Calls[Next++];
-					if (!Driver->Call(World, C, Err)) LaneError(Lane.Id, FString::Printf(TEXT("call %s (%s): %s"), *C.Id, *C.Function, *Err));
-				}
-			}
-			else if (Lane.Capability == EClipLaneCapability::Value)
-			{
-				bool bActive = false;
-				const double V = EvaluateClipValueLane(Lane, Pos, bActive);
-				if (bActive && !Driver->SetValue(World, Lane, V, Err)) LaneError(Lane.Id, FString::Printf(TEXT("%s: %s"), *Lane.Target, *Err));
-			}
-		}
-		FClipCallRecorder::Get().SetFrame(FMath::RoundToDouble(Pos * 1000.0) / 1000.0);
 	}
 
 	void FPIEArrangementPlayer::OnPreActorTick(UWorld* World, ELevelTick /*TickType*/, float /*DeltaSeconds*/)
@@ -419,81 +361,45 @@ namespace MCPPIE
 		}
 		if (IsPawnChannelName(E.Value))
 		{
-			// Off the pawn the player possesses now, or the subject actor, found as an actor track finds it.
+			// Off the pawn the player possesses now, or the subject actor, by its label, object name or path.
 			ULocalPlayer* LP = OwnLocalPlayer();
 			const AActor* Actor = PawnOf(LP);
-			if (!E.Subject.IsEmpty())
-			{
-				FString Err;
-				FClipPerformerDriver* D = DriverFor(FClipPerformer::ForActor(E.Subject));
-				Actor = D && LP ? D->ResolveActor(LP->GetWorld(), Err) : nullptr;
-			}
+			if (!E.Subject.IsEmpty()) Actor = LP ? FindActorById(LP->GetWorld(), E.Subject) : nullptr;
 			return Actor && ReadPawnChannel(RowFor(Actor), E.Value, OutValue);
 		}
 		return Obs.ReadTrackedValue(ObserverRunId, E.Path(), OutValue);
 	}
 
-	void FPIEArrangementPlayer::PunchIn(UWorld* World)
+	void FPIEArrangementPlayer::PunchIn(UWorld* /*World*/)
 	{
 		bPunchedIn = true;
 		ReplayInputLock::Stop();
 		RestoreFixedTimestep();
 		FPSPin.Apply(FMath::RoundToInt(Take.Rate));
-		if (RecordCfg.Performer.Kind == EClipPerformerKind::Player)
+		ULocalPlayer* LP = OwnLocalPlayer();
+		UEnhancedInputLocalPlayerSubsystem* Sub = LP ? LP->GetSubsystem<UEnhancedInputLocalPlayerSubsystem>() : nullptr;
+		UEnhancedPlayerInput* PlayerInput = Sub ? Sub->GetPlayerInput() : nullptr;
+		auto Arm = [this](const UInputAction* A)
 		{
-			ULocalPlayer* LP = OwnLocalPlayer();
-			UEnhancedInputLocalPlayerSubsystem* Sub = LP ? LP->GetSubsystem<UEnhancedInputLocalPlayerSubsystem>() : nullptr;
-			UEnhancedPlayerInput* PlayerInput = Sub ? Sub->GetPlayerInput() : nullptr;
-			auto Arm = [this](const UInputAction* A)
-			{
-				const FString Path = A->GetPathName();
-				Armed.AddUnique(Path);
-				ArmedTypes.Add(Path, ClipTypeOf(A));
-				ArmedActions.Add(Path, const_cast<UInputAction*>(A));
-			};
-			// The punched clip's actions, or every action the player's mapping contexts map.
-			for (const FClipTrack& T : Take.Input) if (const UInputAction* A = LoadObject<UInputAction>(nullptr, *T.Action)) Arm(A);
-			if (Armed.Num() == 0 && PlayerInput)
-			{
-				for (TObjectIterator<UInputAction> It; It; ++It) if (*It && PlayerInput->FindActionInstanceData(*It)) Arm(*It);
-			}
-		}
-		// Lanes the take records: from here their performer acts on its own, and the take reads what it did.
-		for (const FClipLane& Lane : Take.Lanes)
+			const FString Path = A->GetPathName();
+			Armed.AddUnique(Path);
+			ArmedTypes.Add(Path, ClipTypeOf(A));
+			ArmedActions.Add(Path, const_cast<UInputAction*>(A));
+		};
+		// The punched clip's actions, or every action the player's mapping contexts map.
+		for (const FClipTrack& T : Take.Input) if (const UInputAction* A = LoadObject<UInputAction>(nullptr, *T.Action)) Arm(A);
+		if (Armed.Num() == 0 && PlayerInput)
 		{
-			FClipLaneRecording Rec;
-			Rec.LaneId = Lane.Id;
-			LaneRecordings.Add(Rec);
-			if (Lane.Capability != EClipLaneCapability::Action) continue;
-			FString Err;
-			FClipPerformerDriver* Driver = DriverFor(RecordCfg.Performer);
-			AActor* Actor = Driver ? Driver->ResolveActor(World, Err) : nullptr;
-			if (!Actor) { LaneError(Lane.Id, FString::Printf(TEXT("the take records nothing: %s"), *Err)); continue; }
-			TArray<FString> Fns = Lane.Watch;
-			for (const FClipActionCall& C : Lane.Calls) Fns.AddUnique(C.Function);
-			for (const FString& Missing : FClipCallRecorder::Get().Watch(Lane.Id, Actor, Fns)) LaneError(Lane.Id, FString::Printf(TEXT("%s has no function %s to record"), *Actor->GetName(), *Missing));
+			for (TObjectIterator<UInputAction> It; It; ++It) if (*It && PlayerInput->FindActionInstanceData(*It)) Arm(*It);
 		}
-		UE_LOG(LogMCPPIE, Log, TEXT("[PIE-HUB] punched in at frame %.1f, recording %d actions and %d lanes"), Timeline.Position, Armed.Num(), LaneRecordings.Num());
+		UE_LOG(LogMCPPIE, Log, TEXT("[PIE-HUB] punched in at frame %.1f, recording %d actions"), Timeline.Position, Armed.Num());
 	}
 
-	void FPIEArrangementPlayer::SampleTake(UWorld* World)
+	void FPIEArrangementPlayer::SampleTake(UWorld* /*World*/)
 	{
 		if (!bRecording || !bPunchedIn || PunchedOutAt >= 0.0) return;
 		// To a thousandth of a frame, the precision a clip keeps its times in.
 		const double At = FMath::RoundToDouble(Timeline.Position * 1000.0) / 1000.0;
-		FClipPerformerDriver* Driver = DriverFor(RecordCfg.Performer);
-		for (FClipLaneRecording& Rec : LaneRecordings)
-		{
-			const FClipLane* Lane = Take.FindLane(Rec.LaneId);
-			if (!Lane || Lane->Capability == EClipLaneCapability::Action || !Driver) continue;
-			FClipLaneSample S;
-			S.Frame = At;
-			FString Err;
-			if (Lane->Capability == EClipLaneCapability::Move) S.bHasLocation = Driver->ReadLocation(World, S.Location, Err);
-			else S.bHasValue = Driver->ReadValue(World, *Lane, S.Value, Err);
-			if (!S.bHasLocation && !S.bHasValue) { LaneError(Lane->Id, FString::Printf(TEXT("the take could not read it: %s"), *Err)); continue; }
-			if (Rec.Samples.Num() == 0 || !FMath::IsNearlyEqual(Rec.Samples.Last().Frame, S.Frame, PlayerEps)) Rec.Samples.Add(S);
-		}
 		if (Armed.Num() == 0) return;
 		ULocalPlayer* LP = OwnLocalPlayer();
 		UEnhancedInputLocalPlayerSubsystem* Sub = LP ? LP->GetSubsystem<UEnhancedInputLocalPlayerSubsystem>() : nullptr;
@@ -520,12 +426,6 @@ namespace MCPPIE
 		const double End = PunchedOutAt >= 0.0 ? PunchedOutAt : Timeline.Position;
 		if (!bPunchedIn) return;
 		PunchClipInput(Take, Armed, ArmedTypes, Start, End, Samples);
-		if (FClipCallRecorder::Get().IsWatching())
-		{
-			TMap<FString, TArray<FClipActionCall>> Calls = FClipCallRecorder::Get().Finish();
-			for (FClipLaneRecording& Rec : LaneRecordings) if (TArray<FClipActionCall>* Seen = Calls.Find(Rec.LaneId)) Rec.Calls = MoveTemp(*Seen);
-		}
-		PunchClipLanes(Take, LaneRecordings, Start, End);
 		UE_LOG(LogMCPPIE, Log, TEXT("[PIE-HUB] take recorded: %d samples, frames %.1f..%.1f"), Samples.Num(), Start, End);
 	}
 
@@ -553,6 +453,15 @@ namespace MCPPIE
 			const bool bAwaiting = Timeline.AwaitingVerdict();
 			SetPaused(World, bAwaiting);
 			State = bAwaiting ? EArrangementState::AwaitingVerdict : EArrangementState::Running;
+			if (Timeline.Wrap())
+			{
+				// Back to the loop start: what a lane holds lets go, and a trigger check needs a fresh release again.
+				for (TPair<FString, TUniquePtr<FClipPerformerDriver>>& D : Drivers) if (D.Value.IsValid()) D.Value->Stop();
+				TriggerWatches.Reset();
+				UE_LOG(LogMCPPIE, Log, TEXT("[PIE-HUB] %s looped to frame %s, pass %d"), *RunId, *FString::SanitizeFloat(Timeline.Position), Timeline.Pass);
+				Drive(World);
+				return;
+			}
 			if (Timeline.Done())
 			{
 				Finish(EArrangementState::Finished, Timeline.Plan.RegionId.IsEmpty() ? FString(TEXT("arrangement played")) : FString::Printf(TEXT("region %s played"), *Timeline.Plan.RegionId));
@@ -609,11 +518,9 @@ namespace MCPPIE
 		TArray<TSharedPtr<FJsonValue>> Checks;
 		for (const FHubCheckRun& C : Timeline.Plan.Checks) Checks.Add(MakeShared<FJsonValueObject>(HubCheckRunToJson(C)));
 		O->SetArrayField(TEXT("checks"), Checks);
-		FString Err = Error;
-		if (LaneErrors.Num() > 0 && State == EArrangementState::Error) Err += TEXT(" (") + FString::Join(LaneErrors, TEXT("; ")) + TEXT(")");
-		if (!Err.IsEmpty()) O->SetStringField(TEXT("error"), Err);
-		if (LaneErrors.Num() > 0) O->SetStringField(TEXT("laneErrors"), FString::Join(LaneErrors, TEXT("; ")));
+		if (!Error.IsEmpty()) O->SetStringField(TEXT("error"), Error);
 		if (bStartedPIE) O->SetBoolField(TEXT("pieStarted"), true);
+		if (Timeline.Plan.bLoop) O->SetNumberField(TEXT("pass"), Timeline.Pass);
 		return O;
 	}
 
@@ -660,7 +567,6 @@ namespace MCPPIE
 		Taps.Remove();
 		for (TPair<FString, TUniquePtr<FClipPerformerDriver>>& D : Drivers) if (D.Value.IsValid()) D.Value->Stop();
 		Drivers.Reset();
-		if (FClipCallRecorder::Get().IsWatching()) FClipCallRecorder::Get().Finish();
 		if (!ObserverRunId.IsEmpty()) FPIEObserver::Get().StopRun(ObserverRunId);
 		if (PreActorTickHandle.IsValid()) FWorldDelegates::OnWorldPreActorTick.Remove(PreActorTickHandle);
 		PreActorTickHandle.Reset();
