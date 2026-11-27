@@ -16837,12 +16837,22 @@
         {
           "suite": "live",
           "file": "tests/live/hub-arrangement-player.test.ts",
-          "test": "drives a player and an AI pawn, judges every check mode, waits on a manual verdict and ends its PIE"
+          "test": "drives the player, judges every check mode, waits on a manual verdict and ends its PIE"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/hub-arrangement-player.test.ts",
+          "test": "loops a region until stopped, judging its checks again on each pass"
         },
         {
           "suite": "live",
           "file": "tests/live/hub-arrangement-player.test.ts",
           "test": "plays one region alone and skips the checks outside it"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/hub-arrangement-player.test.ts",
+          "test": "starts at the playhead, skipping the checks before it"
         },
         {
           "suite": "live",
@@ -16865,12 +16875,22 @@
         {
           "suite": "live",
           "file": "tests/live/hub-arrangement-player.test.ts",
-          "test": "drives a player and an AI pawn, judges every check mode, waits on a manual verdict and ends its PIE"
+          "test": "drives the player, judges every check mode, waits on a manual verdict and ends its PIE"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/hub-arrangement-player.test.ts",
+          "test": "loops a region until stopped, judging its checks again on each pass"
         },
         {
           "suite": "live",
           "file": "tests/live/hub-arrangement-player.test.ts",
           "test": "plays one region alone and skips the checks outside it"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/hub-arrangement-player.test.ts",
+          "test": "starts at the playhead, skipping the checks before it"
         },
         {
           "suite": "live",
@@ -16888,6 +16908,11 @@
         {
           "suite": "live",
           "file": "tests/live/hub-arrangement-player.test.ts",
+          "test": "loops a region until stopped, judging its checks again on each pass"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/hub-arrangement-player.test.ts",
           "test": "stops a play on request and fails what had not settled"
         }
       ]
@@ -16901,7 +16926,7 @@
         {
           "suite": "live",
           "file": "tests/live/hub-arrangement-player.test.ts",
-          "test": "drives a player and an AI pawn, judges every check mode, waits on a manual verdict and ends its PIE"
+          "test": "drives the player, judges every check mode, waits on a manual verdict and ends its PIE"
         }
       ]
     },
@@ -17054,7 +17079,12 @@
         {
           "suite": "live",
           "file": "tests/live/hub-arrangement-player.test.ts",
-          "test": "drives a player and an AI pawn, judges every check mode, waits on a manual verdict and ends its PIE"
+          "test": "drives the player, judges every check mode, waits on a manual verdict and ends its PIE"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/hub-arrangement-player.test.ts",
+          "test": "loops a region until stopped, judging its checks again on each pass"
         },
         {
           "suite": "live",
@@ -17069,7 +17099,47 @@
         {
           "suite": "live",
           "file": "tests/live/hub-arrangement-player.test.ts",
+          "test": "starts at the playhead, skipping the checks before it"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/hub-arrangement-player.test.ts",
           "test": "stops a play on request and fails what had not settled"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/hub-playback.test.ts",
+          "test": "auditions from the playhead without touching the run history"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/hub-playback.test.ts",
+          "test": "loops a region until stopped"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/hub-playback.test.ts",
+          "test": "plays a clip on its own and passes"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/hub-playback.test.ts",
+          "test": "plays one region and judges only its checks"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/hub-playback.test.ts",
+          "test": "plays the whole arrangement, waits for a manual verdict and records it"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/hub-playback.test.ts",
+          "test": "records a punch-in over a clip's range and keeps what lies outside it"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/hub-playback.test.ts",
+          "test": "runs a suite and rolls its health up"
         },
         {
           "suite": "live",

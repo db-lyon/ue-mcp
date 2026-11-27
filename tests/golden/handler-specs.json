@@ -29438,13 +29438,26 @@
           "name": "clips",
           "type": "object",
           "required": true,
-          "description": "Every clip the tracks place, by id: {rate, length, performer, input, lanes}"
+          "description": "Every clip the tracks place, by id: {rate, length, performer, input}"
         },
         {
           "name": "region",
           "type": "string",
           "required": false,
           "description": "Play from frame 0 to this region's end and judge only the checks that start inside it"
+        },
+        {
+          "name": "from",
+          "type": "number",
+          "required": false,
+          "description": "The playhead: start playback at this frame; checks that start before it are skipped",
+          "minimum": 0
+        },
+        {
+          "name": "loop",
+          "type": "boolean",
+          "required": false,
+          "description": "At the end go back to the loop start (from, else the region's start, else 0) and judge the checks there again, until arrangement_stop"
         }
       ],
       "contractExempt": "Loads the arrangement's level, starts PIE and plays it"
@@ -29572,17 +29585,7 @@
           "name": "performer",
           "type": "object",
           "required": true,
-          "description": "Who to record: {kind: player, client: 0} or {kind: actor, actor}"
-        },
-        {
-          "name": "kind",
-          "type": "string",
-          "required": true,
-          "description": "The performer's kind",
-          "enum": [
-            "player",
-            "actor"
-          ]
+          "description": "Who to record: {kind: player, client: 0}, the editor's own player"
         },
         {
           "name": "rate",
