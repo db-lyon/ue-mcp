@@ -110,36 +110,12 @@ public:
 	static TSharedPtr<FJsonValue> PieObserveList(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> PieObserveRead(const TSharedPtr<FJsonObject>& Params);
 
-	// Test scripts
-	static void RegisterScriptHandlers(FMCPHandlerRegistry& Registry);
-	static TSharedPtr<FJsonValue> PieScriptCreate(const TSharedPtr<FJsonObject>& Params);
-	static TSharedPtr<FJsonValue> PieScriptRead(const TSharedPtr<FJsonObject>& Params);
-	static TSharedPtr<FJsonValue> PieScriptUpdate(const TSharedPtr<FJsonObject>& Params);
-	static TSharedPtr<FJsonValue> PieScriptDelete(const TSharedPtr<FJsonObject>& Params);
-	static TSharedPtr<FJsonValue> PieScriptValidate(const TSharedPtr<FJsonObject>& Params);
-	static TSharedPtr<FJsonValue> PieScriptValues(const TSharedPtr<FJsonObject>& Params);
-	static TSharedPtr<FJsonValue> PieScriptList(const TSharedPtr<FJsonObject>& Params);
-	static TSharedPtr<FJsonValue> PieScriptRun(const TSharedPtr<FJsonObject>& Params);
-	static TSharedPtr<FJsonValue> PieScriptStatus(const TSharedPtr<FJsonObject>& Params);
-	static TSharedPtr<FJsonValue> PieScriptStop(const TSharedPtr<FJsonObject>& Params);
-	static TSharedPtr<FJsonValue> PieScriptVerdict(const TSharedPtr<FJsonObject>& Params);
-	static TSharedPtr<FJsonValue> PieScriptResults(const TSharedPtr<FJsonObject>& Params);
-	static TSharedPtr<FJsonValue> PieScriptRuns(const TSharedPtr<FJsonObject>& Params);
-	static TSharedPtr<FJsonValue> PieScriptReplay(const TSharedPtr<FJsonObject>& Params);
-
-	// Playtest clips: timelines of input tracks, events, check notes and regions (PIEHandlers_Clip.cpp)
-	static void RegisterClipHandlers(FMCPHandlerRegistry& Registry);
-	static TSharedPtr<FJsonValue> PieClipCreate(const TSharedPtr<FJsonObject>& Params);
-	static TSharedPtr<FJsonValue> PieClipRead(const TSharedPtr<FJsonObject>& Params);
-	static TSharedPtr<FJsonValue> PieClipUpdate(const TSharedPtr<FJsonObject>& Params);
-	static TSharedPtr<FJsonValue> PieClipEdit(const TSharedPtr<FJsonObject>& Params);
-	static TSharedPtr<FJsonValue> PieClipValidate(const TSharedPtr<FJsonObject>& Params);
-	static TSharedPtr<FJsonValue> PieClipList(const TSharedPtr<FJsonObject>& Params);
-	static TSharedPtr<FJsonValue> PieClipDelete(const TSharedPtr<FJsonObject>& Params);
-	static TSharedPtr<FJsonValue> PieClipRun(const TSharedPtr<FJsonObject>& Params);
-	static TSharedPtr<FJsonValue> PieClipRecord(const TSharedPtr<FJsonObject>& Params);
+	// Playtest Hub: play an arrangement or a region, record into a clip (PIEHandlers_Arrangement.cpp)
+	static void RegisterArrangementHandlers(FMCPHandlerRegistry& Registry);
+	static TSharedPtr<FJsonValue> PieArrangementPlay(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> PieArrangementStatus(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> PieArrangementStop(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> PieArrangementVerdict(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> PieClipRecordStart(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> PieClipRecordStop(const TSharedPtr<FJsonObject>& Params);
-	static TSharedPtr<FJsonValue> PieClipStatus(const TSharedPtr<FJsonObject>& Params);
-	static TSharedPtr<FJsonValue> PieClipStop(const TSharedPtr<FJsonObject>& Params);
-	static TSharedPtr<FJsonValue> PieClipVerdict(const TSharedPtr<FJsonObject>& Params);
 };

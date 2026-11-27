@@ -60,15 +60,6 @@ bool FPIEReadPathGuardTest::RunTest(const FString& /*Parameters*/)
 		TestTrue(TEXT("pie_record_diff refuses an id that climbs out of the root"), Refused(FPIEHandlers::PieRecordDiff(P)));
 	}
 
-	TestTrue(TEXT("script results refuse a results_path outside"),
-		Refused(FPIEHandlers::PieScriptResults(ParamsWith(TEXT("results_path"), Outside / TEXT("results.json")))));
-	TestTrue(TEXT("script results refuse a run_id that climbs out"),
-		Refused(FPIEHandlers::PieScriptResults(ParamsWith(TEXT("run_id"), TEXT("../../../ue-mcp-escape")))));
-	TestTrue(TEXT("script replay refuses a results_path outside"),
-		Refused(FPIEHandlers::PieScriptReplay(ParamsWith(TEXT("results_path"), Outside / TEXT("results.json")))));
-	TestTrue(TEXT("script replay refuses a run_id that climbs out"),
-		Refused(FPIEHandlers::PieScriptReplay(ParamsWith(TEXT("run_id"), TEXT("../../../ue-mcp-escape")))));
-
 	TestTrue(TEXT("replay refuses a sequence_path outside"),
 		Refused(FPIEHandlers::PieReplayArm(ParamsWith(TEXT("sequence_path"), Outside / TEXT("sequence.json")))));
 	FPIEHandlers::PieReplayDisarm(MakeShared<FJsonObject>());

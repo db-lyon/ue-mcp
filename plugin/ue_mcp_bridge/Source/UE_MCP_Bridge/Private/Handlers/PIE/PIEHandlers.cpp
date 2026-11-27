@@ -7,8 +7,7 @@
 #include "Handlers/PIE/PIEObserver.h"
 #include "Handlers/PIE/PIEPawnDrive.h"
 #include "Handlers/PIE/PIERemotePlayers.h"
-#include "Handlers/PIE/PIEScriptRunner.h"
-#include "Handlers/PIE/PIEClipPlayer.h"
+#include "Handlers/PIE/PIEArrangementPlayer.h"
 #include "Handlers/PIE/PIESessionLog.h"
 #include "Handlers/PIE/PIEUatRunner.h"
 #include "Handlers/PIE/PIEWorldResolver.h"
@@ -69,8 +68,7 @@ void FPIEHandlers::StartupSystems()
 	MCPPIE::FPIEInputReplayer::Get().Init();
 	MCPPIE::FPIEObserver::Get().Init();
 	MCPPIE::FPIESessionLog::Get().Init();
-	MCPPIE::FPIEScriptRunner::Get().Init();
-	MCPPIE::FPIEClipPlayer::Get().Init();
+	MCPPIE::FPIEArrangementPlayer::Get().Init();
 	MCPPIE::FPIEUatRunner::Get().Init();
 
 	if (IsSupersededPluginEnabled())
@@ -110,7 +108,7 @@ void FPIEHandlers::StartupSystems()
 				|| MCPPIE::FPIEInputReplayer::Get().IsActive()
 				|| MCPPIE::FPIEObserver::Get().IsActive()
 				|| MCPPIE::FPIEUatRunner::Get().IsRunning()
-				|| MCPPIE::FPIEScriptRunner::Get().IsActive()
+				|| MCPPIE::FPIEArrangementPlayer::Get().IsActive()
 				|| MCPPIE::PIEPawnDrive::IsActive();
 		});
 		GEditor->ShouldDisableCPUThrottlingDelegates.Add(Suppress);
@@ -136,8 +134,7 @@ void FPIEHandlers::ShutdownSystems()
 		GPanelRegistered = false;
 	}
 	MCPPIE::PIEPawnDrive::Shutdown();
-	MCPPIE::FPIEScriptRunner::Get().Shutdown();
-	MCPPIE::FPIEClipPlayer::Get().Shutdown();
+	MCPPIE::FPIEArrangementPlayer::Get().Shutdown();
 	MCPPIE::FPIESessionLog::Get().Shutdown();
 	MCPPIE::FPIEObserver::Get().Shutdown();
 	MCPPIE::FPIEInputReplayer::Get().Shutdown();
@@ -541,6 +538,5 @@ void FPIEHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("recording_dir"), EType::String, RecordingDirDoc),
 	});
 
-	RegisterScriptHandlers(Registry);
-	RegisterClipHandlers(Registry);
+	RegisterArrangementHandlers(Registry);
 }
