@@ -106,6 +106,7 @@ import { journalRoutes } from "./journal-routes.js";
 import { hubRoutes } from "./hub-routes.js";
 import { HubHolder, registerHub } from "../hub/hub-client.js";
 import { createDaemonHub } from "../hub/daemon-hub.js";
+import { ownHeadlessRunner } from "./hub-headless.js";
 import { toolsRoutes } from "./tools-routes.js";
 import { checkpointsFor, subscribeCheckpointEvents } from "../checkpoints/service.js";
 import { listDaemonSkills } from "../extensions/skills-list.js";
@@ -669,6 +670,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
     editors: () => rt.sessions.list().map((s) => ({ connected: s.bridge.isConnected })),
     dialogs: () => rt.sessions.list().filter((s) => existingGuard(s)?.current).length,
     log: { warn: (message, detail) => warn("hub", message, detail) },
+    headless: ownHeadlessRunner({ projectDir, dataDir: path.join(userDir(), "data", projectKey(projectDir)), log: { warn: (message, detail) => warn("hub", message, detail) } }),
     // The consent ledger: the hub defers to other sessions' holds and transactions, and to an open request to stop, restart or rebuild.
     consent: {
       sessions: () => {

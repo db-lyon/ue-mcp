@@ -757,6 +757,8 @@ export interface QueueState {
   paused: boolean;
   /** Why the next editor item waits; empty when it does not. */
   waiting: OccupancyReason[];
+  /** Why the next headless item waits, when it does: no hidden editor fits in memory now, say. */
+  waitingHeadless?: string;
   running: QueueItem[];
   queued: QueueItem[];
 }

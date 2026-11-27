@@ -58,13 +58,26 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "clips",
         "type": "object",
         "required": true,
-        "description": "Every clip the tracks place, by id: {rate, length, performer, input, lanes}"
+        "description": "Every clip the tracks place, by id: {rate, length, performer, input}"
       },
       {
         "name": "region",
         "type": "string",
         "required": false,
         "description": "Play from frame 0 to this region's end and judge only the checks that start inside it"
+      },
+      {
+        "name": "from",
+        "type": "number",
+        "required": false,
+        "description": "The playhead: start playback at this frame; checks that start before it are skipped",
+        "minimum": 0
+      },
+      {
+        "name": "loop",
+        "type": "boolean",
+        "required": false,
+        "description": "At the end go back to the loop start (from, else the region's start, else 0) and judge the checks there again, until arrangement_stop"
       }
     ],
     "contractExempt": "Loads the arrangement's level, starts PIE and plays it"
@@ -192,17 +205,7 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "performer",
         "type": "object",
         "required": true,
-        "description": "Who to record: {kind: player, client: 0} or {kind: actor, actor}"
-      },
-      {
-        "name": "kind",
-        "type": "string",
-        "required": true,
-        "description": "The performer's kind",
-        "enum": [
-          "player",
-          "actor"
-        ]
+        "description": "Who to record: {kind: player, client: 0}, the editor's own player"
       },
       {
         "name": "rate",
@@ -2202,7 +2205,7 @@ export const schema: Record<string, z.ZodType> = {
   check: z.string().optional().describe("Id of the manual check awaiting its verdict"),
   client: z.number().int().optional().describe("Remote player 1..N (join order) (pie_console). 1..N relays to that remote player (join order) over the game connection, including separate-process clients; 0 or absent uses the local player (pie_inject_input, pie_inject_input_start, pie_inject_input_tape)"),
   client_id: z.number().int().min(0).optional().describe("Local-player index inside the selected PIE world (default 0) (pie_inject_input, pie_inject_input_start, pie_inject_input_tape, pie_observe_arm, pie_record_arm, pie_replay_arm, pie_replay_run, pie_send_key). With apply: local-player index inside that PIE world (default 0) (pie_replay_state)"),
-  clips: z.record(z.string(), z.unknown()).optional().describe("Every clip the tracks place, by id: {rate, length, performer, input, lanes}"),
+  clips: z.record(z.string(), z.unknown()).optional().describe("Every clip the tracks place, by id: {rate, length, performer, input}"),
   codec: z.enum(["H264","VP8","VP9","AV1"]).optional().describe("Video codec (default H264)"),
   command: z.string().optional().describe("Console command"),
   confirm: z.boolean().optional().describe("Must be true to delete"),
@@ -2222,6 +2225,7 @@ export const schema: Record<string, z.ZodType> = {
   file: z.string().optional().describe("Artifact to read; series returns per-channel time series (default manifest) (pie_observe_read). Artifact to read (default manifest) (pie_record_read)"),
   fixed_timestep: z.boolean().optional().describe("Fixed 1/pin_fps delta during replay (default false)"),
   fps: z.number().int().min(1).optional().describe("Encoded frame rate (default 30)"),
+  from: z.number().min(0).optional().describe("The playhead: start playback at this frame; checks that start before it are skipped"),
   hz: z.number().optional().describe("Playback rate (default 60)"),
   id: z.string().optional().describe("Recording id (default: a timestamp) (pie_record_arm). Recording id (pie_record_delete, pie_record_read)"),
   ignoreActors: z.array(z.string()).optional().describe("Actor labels or paths to skip"),
@@ -2230,10 +2234,10 @@ export const schema: Record<string, z.ZodType> = {
   includeSamples: z.boolean().optional().describe("Include the sampled track (default true)"),
   injection_id: z.string().optional().describe("Caller-chosen hold id (minted when absent) (pie_inject_input_start). Hold or tape id to stop (pie_inject_input_stop). Caller-chosen tape id (minted when absent) (pie_inject_input_tape). Hold id from inject_input_start (pie_inject_input_update). Alias for request_id (pie_remote_result)"),
   key: z.string().optional().describe("FKey name: Right, Left, Up, Down, Tab, Enter, SpaceBar, Escape, Gamepad_DPad_Down, Gamepad_FaceButton_Bottom..."),
-  kind: z.enum(["player","actor"]).optional().describe("The performer's kind"),
   label: z.string().optional().describe("Marker label"),
   limit: z.number().int().optional().describe("Most rows (default 200) (pie_observe_list, pie_record_list, pie_session_log). csv/tracked: most rows (default 1000) (pie_observe_read). csv: most rows (default 1000) (pie_record_read). Most frames_over_threshold entries returned (default 50) (pie_replay_analyze)"),
   lock_input: z.boolean().optional().describe("Block the user's keyboard, mouse and gamepad from the PIE game while the replay runs, so only the recording drives the player; Esc, Shift+F1 and F8 still work, and monitor mode ignores it (default false)"),
+  loop: z.boolean().optional().describe("At the end go back to the loop start (from, else the region's start, else 0) and judge the checks there again, until arrangement_stop"),
   max_errors: z.number().int().min(0).optional().describe("no-errors predicate threshold (default 0) (pie_scenario_scaffold). Most errors logged during the run (default 0) (pie_test_scaffold)"),
   max_message_chars: z.number().int().min(0).optional().describe("Longest message returned; longer ones are cut and marked truncated (default 500, 0 for no limit)"),
   max_offset_rows: z.number().int().min(0).optional().describe("align=auto: largest shift tried, in rows either way (default 30)"),
@@ -2251,7 +2255,7 @@ export const schema: Record<string, z.ZodType> = {
   output_dir: z.string().optional().describe("Observation root (default Saved/MCPObservations)"),
   package_path: z.string().optional().describe("Content folder (default /Game/Observation)"),
   path: z.string().optional().describe("Profile asset path (pie_profile_delete, pie_profile_read, pie_profile_update). Scenario JSON file, relative to the project directory (pie_uat_run)"),
-  performer: z.record(z.string(), z.unknown()).optional().describe("Who to record: {kind: player, client: 0} or {kind: actor, actor}"),
+  performer: z.record(z.string(), z.unknown()).optional().describe("Who to record: {kind: player, client: 0}, the editor's own player"),
   pie_instance: z.number().int().min(0).optional().describe("FWorldContext::PIEInstance, a non-negative integer. Omitted picks the active PlayWorld, then the first PIE world with the player; an explicit value never falls back (pie_inject_input, pie_inject_input_start, pie_inject_input_tape, pie_observe_arm, pie_record_arm, pie_replay_arm, pie_replay_run). With apply: FWorldContext PIEInstance whose player to move (default the active PIE world) (pie_replay_state). FWorldContext::PIEInstance of the client whose UI gets the key. Omitted picks the editor's own player: the listen-server host, else the lowest client PIE instance (pie_send_key)"),
   pieInstance: z.number().int().min(0).optional().describe("FWorldContext::PIEInstance, a non-negative integer. Omitted picks the active PlayWorld, then the first PIE world with the player; an explicit value never falls back (pie_drive_pawn). PIE instance id; omitted selects the active PIE world (pie_view_trace)"),
   pin_fps: z.number().int().optional().describe("Pin PIE fps while observing (pie_observe_arm). Pin PIE fps for reproducibility (default sample_hz) (pie_record_arm). Pin PIE fps during replay (pie_replay_arm, pie_replay_run)"),

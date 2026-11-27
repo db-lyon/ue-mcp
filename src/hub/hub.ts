@@ -496,8 +496,11 @@ export class Hub {
     const items = this.machine.queueItems();
     const nextEditor = items.find((i) => i.state === "queued" && i.runner === "editor");
     const editorBusy = [...this.live.values()].some((l) => l.runner.kind === "editor");
+    const nextHeadless = items.some((i) => i.state === "queued" && i.runner === "headless") && ![...this.live.values()].some((l) => l.runner.kind === "headless");
+    const headlessWhy = nextHeadless ? (this.o.headless?.()?.unavailable() ?? (this.o.headless?.() ? null : "no headless runner is set up on this machine")) : null;
     return {
       paused: this.machine.paused(),
+      ...(headlessWhy ? { waitingHeadless: headlessWhy } : {}),
       waiting: nextEditor && !editorBusy ? this.occupancy(nextEditor.source === "schedule") : [],
       running: items.filter((i) => i.state === "running"),
       queued: items.filter((i) => i.state === "queued"),

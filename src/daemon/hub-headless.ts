@@ -23,10 +23,13 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import type { ActionResult } from "../contract/daemon.js";
-import type { PlayRequest, PlayStatus } from "./contract.js";
-import type { HubRunner } from "./ports.js";
-import { EditorRunner } from "./runner.js";
+import type { PlayRequest, PlayStatus } from "../hub/contract.js";
+import type { HubRunner } from "../hub/ports.js";
+import { EditorRunner } from "../hub/runner.js";
 import { KIND_FLAGS, awaitEditorStartup, editorFits, EDITOR_PEAK_MB, headroomMB, mirror, pidAlive, projectCopyFilter } from "../editor/editor-copy.js";
+import { ProjectContext } from "../config/project.js";
+import { findEditorExecutable } from "../editor/editor-control.js";
+import { readEnv } from "../core/env.js";
 
 /** The editor flags every hidden editor takes besides its kind's: no source-code accessor, no background throttling. */
 const HIDDEN_EDITOR_ARGS = [
@@ -219,4 +222,29 @@ export function uprojectIn(projectDir: string): string | null {
   } catch {
     return null;
   }
+}
+
+/** ue-mcp's own headless runner for the project, or undefined when it has no .uproject or UE_MCP_HUB_HEADLESS=0. */
+export function ownHeadlessRunner(o: { projectDir: string; dataDir: string; log: HeadlessRunnerOptions["log"] }): HeadlessRunner | undefined {
+  const projectPath = uprojectIn(o.projectDir);
+  if (!projectPath || readEnv("hubHeadless") === "0") return undefined;
+  let exe: string | null | undefined;
+  return new HeadlessRunner({
+    projectDir: o.projectDir,
+    projectPath,
+    workDir: path.join(o.dataDir, "hub", "headless"),
+    editorExe: () => {
+      if (exe === undefined) {
+        try {
+          const project = new ProjectContext();
+          project.setProject(projectPath);
+          exe = findEditorExecutable(project);
+        } catch {
+          exe = null;
+        }
+      }
+      return exe;
+    },
+    log: o.log,
+  });
 }

@@ -49,7 +49,7 @@ export interface HubClientOptions {
    * api.callAction, which publishes no call events. Default: none.
    */
   agentCalls?: () => BusyCall[];
-  /** A runner that plays on a headless editor. Default: ue-mcp's own, a hidden editor it launches on a copy of the project (src/hub/headless.ts). */
+  /** A runner that plays on a headless editor. Default: ue-mcp's own, a hidden editor it launches on a copy of the project (src/daemon/hub-headless.ts). */
   headless?: HubRunner;
 }
 

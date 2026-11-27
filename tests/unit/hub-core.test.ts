@@ -30,7 +30,7 @@ import {
 } from "../../src/contract/hub.js";
 import { spawn, type ChildProcess } from "node:child_process";
 import { Hub } from "../../src/hub/hub.js";
-import { HeadlessRunner, type HeadlessRunnerOptions } from "../../src/hub/headless.js";
+import { HeadlessRunner, type HeadlessRunnerOptions } from "../../src/daemon/hub-headless.js";
 import { runHubAction } from "../../src/hub/hub-tools.js";
 import type { HubRunner } from "../../src/hub/ports.js";
 

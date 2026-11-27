@@ -612,6 +612,7 @@ Each wins over the matching config key. The full list, with the ones tests and s
 | `UE_MCP_INSTALL_INDEX` | A JSON file or http(s) URL of the names `ue-mcp install` knows, `{ "<name>": { "title": "...", "manifest": "<url>" } }`, replacing the published index. `{version}` in a manifest URL is the installed ue-mcp version |
 | `UE_MCP_RECENT_PROJECTS_DIR` | The folder `ue-mcp projects` reads Unreal's recent-project lists from. Unset means `%LOCALAPPDATA%\UnrealEngine` on Windows |
 | `UE_MCP_DISABLE_UPDATE_CHECK` | `1` skips the check for a newer release |
+| `UE_MCP_HUB_HEADLESS` | `0` turns off the Playtest Hub's own hidden editor, so every run plays on the open editor |
 | `UE_MCP_DAEMON_IDLE_MS` | How long an idle daemon waits before exiting |
 | `UE_MCP_PARENT_SESSION` | The daemon session id of the agent that started this client, so a subagent with its own connection is attributed to it |
 | `UE_MCP_DAEMON_DIR`, `UE_MCP_EXTENSIONS_DIR`, `UE_MCP_PENDING_DIR`, `UE_MCP_AUTH_DIR` | Move the daemon, extension, deferred-feedback and token directories |

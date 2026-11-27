@@ -2,7 +2,7 @@
 /**
  * A hidden editor on a copy of a project: what the sharded live run
  * (scripts/live-shards.mjs, which re-exports these) and the Playtest Hub's
- * headless runner (src/hub/headless.ts) both need.
+ * headless runner (src/daemon/hub-headless.ts) both need.
  *
  * - mirror: copy a project into its copy, only what changed since last time.
  * - the memory gate: how much an editor takes at its peak, and whether one
