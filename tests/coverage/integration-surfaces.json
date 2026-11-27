@@ -122,6 +122,11 @@
       "summary": "ue-mcp build runs the engine's build script for the project's editor target and reports its exit"
     },
     {
+      "id": "cli.hub",
+      "group": "cli",
+      "summary": "ue-mcp hub run <test|suite> queues the runs through the project's daemon, on a hidden editor with --headless or the open one with --editor, waits for them, writes a JSON report and exits 0 only when every run passed"
+    },
+    {
       "id": "cli.editor",
       "group": "cli",
       "summary": "ue-mcp editor requests lists the daemon's requests to stop, restart or rebuild the editor with every session's answer, and approve or deny decides one as a person"
@@ -804,17 +809,22 @@
     {
       "id": "daemon.hub.files",
       "group": "daemon",
-      "summary": "The /v1/hub clip, arrangement and suite routes write text files under PlaytestHub/ in the project with stable formatting, refuse a clip with checks, an instance for another performer kind and a suite loop with findings, refuse deleting what is still referenced, and list a hand-broken file as a problem without touching it"
+      "summary": "The /v1/hub clip, arrangement and suite routes write text files under PlaytestHub/ in the project with stable formatting, refuse a clip with checks or with anything but Input Action lanes, a performer that is not a player and a suite loop with findings, refuse deleting what is still referenced, and list a hand-broken file as a problem without touching it"
     },
     {
       "id": "daemon.hub.queue",
       "group": "daemon",
-      "summary": "POST /v1/hub/queue queues a test or a suite's tests on this machine, skipping tests with no checks and refusing a headless run with no headless runner; queued items wait while no editor is connected and can be taken out, and suites report quarantine and flaky marks"
+      "summary": "POST /v1/hub/queue queues a test or a suite's tests on this machine, skipping tests with no checks and refusing a headless run when no headless runner is set up; queued items wait while no editor is connected and can be taken out, and suites report quarantine and flaky marks"
     },
     {
       "id": "daemon.hub.performers",
       "group": "daemon",
-      "summary": "GET /v1/hub/performers lists the editor's player and remote clients with the lanes each takes, and the reason no actor is listed while no editor answers"
+      "summary": "GET /v1/hub/performers lists the editor's player and remote clients a track can drive"
+    },
+    {
+      "id": "daemon.hub.play",
+      "group": "daemon",
+      "summary": "POST /v1/hub/play auditions an arrangement or region on the open editor from a playhead and looping, refused with the reason while the editor is in use; GET /v1/hub/play reads it and POST /v1/hub/play/stop stops it"
     },
     {
       "id": "package.dist-server",

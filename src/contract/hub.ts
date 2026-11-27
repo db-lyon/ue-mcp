@@ -2,9 +2,9 @@
 /**
  * The Playtest Hub's core (#2146). Composing and testing are separate:
  *
- * - A clip is a reusable performance for one performer kind: input lanes for
- *   a player; move, action and value lanes for an actor. A clip never asserts.
- * - A track is one performer and a timeline of clip instances.
+ * - A clip is a reusable performance for a player: Input Action lanes only.
+ *   A clip never asserts.
+ * - A track is one performer (a player) and a timeline of clip instances.
  * - An arrangement is the scenario: a level, its tracks, one Checks track and
  *   named regions. It plays in one PIE session.
  * - A test is an arrangement or one of its regions. It passes when all of its
@@ -18,16 +18,7 @@
  *
  * Imports only its siblings, so `ue-mcp/hub` loads in a browser.
  */
-import {
-  PERFORMER_CAPABILITIES,
-  PERFORMER_KINDS,
-  clipLaneOf,
-  performerLabel,
-  performerOf,
-  type ClipLane,
-  type Performer,
-  type PerformerKind,
-} from "./hub-performers.js";
+import { PERFORMER_KINDS, performerLabel, performerOf, performerProblem, type Performer, type PerformerKind } from "./hub-performers.js";
 
 /** The version of the files under HUB_DIR. */
 export const HUB_SCHEMA = 2 as const;
@@ -96,7 +87,7 @@ export interface InputLane {
   keys: InputKey[];
 }
 
-/** A clip: a performance for one performer kind, in frames at its rate. It has no checks. */
+/** A clip: a performance for a player, in frames at its rate. It has no checks. */
 export interface Clip {
   id: string;
   title: string;
@@ -105,10 +96,8 @@ export interface Clip {
   /** Frames. */
   length: number;
   description?: string;
-  /** Input Action lanes; a player clip only. */
+  /** Input Action lanes. */
   input: InputLane[];
-  /** Move, action and value lanes. The track's performer drives them, so a lane names none. */
-  lanes: ClipLane[];
 }
 
 export type ClipDraft = Partial<Omit<Clip, "id">> & { id?: string };
@@ -155,56 +144,30 @@ function inputLaneOf(v: unknown, path: string, out: HubFinding[]): InputLane | n
   return { action: v.action, type, notes, keys };
 }
 
-/** A lane's own times rounded and sorted, its performer dropped: the track names the performer. */
-function laneNormal(l: ClipLane): ClipLane {
-  if (l.kind === "move") return { id: l.id, kind: "move", points: l.points.map((p) => ({ ...p, t: r3(p.t), at: p.at.map(r3) as [number, number, number] })).sort((a, b) => a.t - b.t || a.id.localeCompare(b.id)) };
-  if (l.kind === "action") return { id: l.id, kind: "action", calls: l.calls.map((c) => ({ ...c, t: r3(c.t) })).sort((a, b) => a.t - b.t || a.id.localeCompare(b.id)), ...(l.watch?.length ? { watch: l.watch } : {}) };
-  return { id: l.id, kind: "value", target: l.target, type: l.type, keys: l.keys.map((k) => ({ ...k, t: r3(k.t) })).sort((a, b) => a.t - b.t || a.id.localeCompare(b.id)) };
-}
-
 /**
  * A clip from a body or a file, normalized, with what is wrong with it. A
- * `checks` field is refused: checks live on an arrangement's Checks track.
- * A lane its performer kind does not take refuses the clip.
+ * `checks` field is refused (checks live on an arrangement's Checks track),
+ * and so is a non-empty `lanes` field: a clip holds Input Action lanes only.
+ * `performer` defaults to player, the one kind there is.
  */
 export function clipOf(v: unknown, id: string): { clip: Clip; findings: HubFinding[] } {
   const out: HubFinding[] = [];
   const o = isObj(v) ? v : {};
   if (!isObj(v)) out.push({ path: "", message: "a clip is a JSON object", blocks: true });
   if (o.checks !== undefined) out.push({ path: "checks", message: "a clip has no checks: put them on the arrangement's Checks track", blocks: true });
-  const performer = (PERFORMER_KINDS as readonly string[]).includes(String(o.performer)) ? (o.performer as PerformerKind) : null;
+  if (Array.isArray(o.lanes) && o.lanes.length) out.push({ path: "lanes", message: "a clip holds Input Action lanes (input) only; move, action and value lanes are not part of the hub", blocks: true });
+  const performer = o.performer === undefined ? "player" : (PERFORMER_KINDS as readonly string[]).includes(String(o.performer)) ? (o.performer as PerformerKind) : null;
   if (!performer) out.push({ path: "performer", message: `performer is the kind the clip is for: ${PERFORMER_KINDS.join(" or ")}`, blocks: true });
-  const kind = performer ?? "player";
   const rate = num(o.rate) ?? DEFAULT_RATE;
   if (rate <= 0 || rate > 1000) out.push({ path: "rate", message: "rate is frames per second, more than 0 and at most 1000", blocks: true });
   const input = (Array.isArray(o.input) ? o.input : []).map((l, i) => inputLaneOf(l, `input[${i}]`, out)).filter((l): l is InputLane => !!l);
-  const lanes: ClipLane[] = [];
-  for (const [i, raw] of (Array.isArray(o.lanes) ? o.lanes : []).entries()) {
-    const lane = clipLaneOf(raw);
-    if (!lane) {
-      out.push({ path: `lanes[${i}]`, message: `lanes[${i}] is a move, action or value lane with an id`, blocks: true });
-      continue;
-    }
-    lanes.push(laneNormal(lane));
-  }
-  const takes = PERFORMER_CAPABILITIES[kind];
-  if (input.length && !takes.includes("input")) out.push({ path: "input", message: `an ${kind} clip takes ${takes.join(", ")} lanes, not Input Action lanes`, blocks: true });
-  for (const [i, l] of lanes.entries()) if (!takes.includes(l.kind)) out.push({ path: `lanes[${i}]`, message: `a ${kind} clip takes ${takes.join(", ")} lanes, and lane ${l.id} is a ${l.kind} lane`, blocks: true });
-  const ids = new Set<string>();
-  for (const l of lanes) {
-    if (ids.has(l.id)) out.push({ path: "lanes", message: `two lanes have the id ${l.id}`, blocks: true });
-    ids.add(l.id);
-  }
-  const ends = [
-    ...input.flatMap((l) => [...l.notes.map((n) => n.start + n.length), ...l.keys.map((k) => k.t)]),
-    ...lanes.flatMap((l) => (l.kind === "move" ? l.points.map((p) => p.t) : l.kind === "action" ? l.calls.map((c) => c.t) : l.keys.map((k) => k.t))),
-  ];
+  const ends = input.flatMap((l) => [...l.notes.map((n) => n.start + n.length), ...l.keys.map((k) => k.t)]);
   const content = ends.length ? Math.max(...ends) : 0;
   const given = num(o.length);
   const length = r3(given !== null && given > 0 ? Math.max(given, content) : content);
   const description = str(o.description, 4000);
   return {
-    clip: { id, title: str(o.title) || id, performer: kind, rate: r3(rate), length, ...(description ? { description } : {}), input, lanes },
+    clip: { id, title: str(o.title) || id, performer: performer ?? "player", rate: r3(rate), length, ...(description ? { description } : {}), input },
     findings: out,
   };
 }
@@ -342,7 +305,7 @@ export function arrangementOf(v: unknown, id: string, clips?: (id: string) => Cl
       continue;
     }
     const performer = performerOf(t.performer);
-    if (!performer) out.push({ path: `${tp}.performer`, message: `${tp}.performer is {kind: "player", client} or {kind: "actor", actor}`, blocks: true });
+    if (!performer) out.push({ path: `${tp}.performer`, message: `${tp}.performer: ${performerProblem(t.performer)}`, blocks: true });
     const tid = partId(t.id, `t${ti + 1}`);
     const instances: ClipInstance[] = [];
     for (const [ii, inst] of (Array.isArray(t.instances) ? t.instances : []).entries()) {
@@ -561,7 +524,6 @@ function clipFile(c: Clip): Record<string, unknown> {
     length: c.length,
     ...(c.description ? { description: c.description } : {}),
     input: c.input.map((l) => ({ action: l.action, type: l.type, notes: l.notes.map((n) => ({ id: n.id, start: n.start, length: n.length, ...(n.value !== undefined ? { value: n.value } : {}) })), keys: l.keys.map((k) => ({ id: k.id, t: k.t, v: k.v, ...(k.interp ? { interp: k.interp } : {}) })) })),
-    lanes: c.lanes,
   };
 }
 
@@ -572,7 +534,7 @@ function arrangementFile(a: Arrangement): Record<string, unknown> {
     level: a.level,
     rate: a.rate,
     ...(a.description ? { description: a.description } : {}),
-    tracks: a.tracks.map((t) => ({ id: t.id, title: t.title, performer: t.performer.kind === "player" ? { kind: "player", client: t.performer.client } : { kind: "actor", actor: t.performer.actor }, mute: t.mute, solo: t.solo, instances: t.instances.map((i) => ({ id: i.id, clip: i.clip, at: i.at })) })),
+    tracks: a.tracks.map((t) => ({ id: t.id, title: t.title, performer: { kind: t.performer.kind, client: t.performer.client }, mute: t.mute, solo: t.solo, instances: t.instances.map((i) => ({ id: i.id, clip: i.clip, at: i.at })) })),
     checks: a.checks.map((c) => ({ id: c.id, title: c.title, at: c.at, length: c.length, mode: c.mode, ...(c.expect ? { expect: c.expect } : {}), ...(c.instruction ? { instruction: c.instruction } : {}), ...(c.personOnly ? { personOnly: true } : {}), ...(c.timeout ? { timeout: c.timeout } : {}) })),
     regions: a.regions.map((r) => ({ id: r.id, name: r.name, start: r.start, end: r.end })),
   };
@@ -777,12 +739,15 @@ export interface QueueItem {
   queuedAt: string;
   state: "queued" | "running";
   runId?: string;
+  /** Why it plays on this runner when none was asked for: headless by default, the open editor when that does not fit or a test needs a person. */
+  runnerReason?: string;
 }
 
 /** Queue one test or every test of a suite. */
 export interface QueueRequest {
   test?: string;
   suite?: string;
+  /** Where it plays. Unset: a hidden editor when one fits in memory and the test has no manual checks, else the open editor. */
   runner?: RunnerKind;
   /** Put it at the front. */
   next?: boolean;
@@ -943,6 +908,10 @@ export interface PlayRequest {
   arrangement: Arrangement;
   clips: Record<string, Clip>;
   region?: string;
+  /** The playhead: start at this frame; checks that start before it are skipped. An audition only. */
+  from?: number;
+  /** Go back to the loop start at the end, until stopped. An audition only. */
+  loop?: boolean;
 }
 
 /** What the pie action arrangement_status answers. */
@@ -954,9 +923,37 @@ export interface PlayStatus {
   error?: string;
   /** The run started Play In Editor. */
   pieStarted?: boolean;
+  /** A looping play: which time through the loop, from 1. */
+  pass?: number;
 }
 
-export type HubChangedWhat = "clips" | "arrangements" | "suites" | "runs" | "queue" | "schedules";
+/**
+ * Playing an arrangement or one region to watch it while composing, on the
+ * open editor (POST /v1/hub/play): from the playhead, and looping when asked.
+ * An audition is not a test run: it judges the checks it passes so they show,
+ * skips manual ones, and keeps nothing in the run history.
+ */
+export interface AuditionRequest {
+  /** A test id: <arrangement> or <arrangement>:<region>. */
+  test: string;
+  from?: number;
+  loop?: boolean;
+}
+
+export interface AuditionState {
+  playId: string;
+  test: string;
+  from: number;
+  loop: boolean;
+  startedAt: string;
+  state: PlayStatus["state"];
+  frame?: number;
+  pass?: number;
+  checks: CheckResult[];
+  error?: string;
+}
+
+export type HubChangedWhat = "clips" | "arrangements" | "suites" | "runs" | "queue" | "schedules" | "play";
 export interface HubChanged {
   what: HubChangedWhat[];
   id?: string;

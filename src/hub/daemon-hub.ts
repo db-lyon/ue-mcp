@@ -17,7 +17,11 @@ import type { DaemonEvent, DaemonEventType, ActionResult } from "../contract/dae
 import type { BusyCall, BusyState, EditorOperation } from "./contract.js";
 import { Hub } from "./hub.js";
 import type { OccupancySignals } from "./lease.js";
-import type { HubClientOptions } from "./ports.js";
+import type { HubClientOptions, HubRunner } from "./ports.js";
+import { HeadlessRunner, uprojectIn } from "./headless.js";
+import { ProjectContext } from "../config/project.js";
+import { findEditorExecutable } from "../editor/editor-control.js";
+import { readEnv } from "../core/env.js";
 
 /** What the daemon gives the hub. */
 export interface DaemonHubDeps {
@@ -37,6 +41,8 @@ export interface DaemonHubDeps {
   timers?: boolean;
   /** The consent ledger's view (src/dispatch/disruption.ts): other sessions' holds and work, and open requests to stop, restart or rebuild the editor. */
   consent?: Pick<OccupancySignals, "sessions" | "disruptions">;
+  /** The headless runner when no client brings one: ue-mcp's own, a hidden editor on a copy of the project. False turns it off. */
+  headless?: HubRunner | false;
 }
 
 export interface DaemonHub {
@@ -132,6 +138,7 @@ export function createDaemonHub(deps: DaemonHubDeps, client: () => HubClientOpti
     },
   };
   const c = client();
+  const own = deps.headless === undefined ? ownHeadlessRunner(deps) : deps.headless || undefined;
   const hub = new Hub({
     host,
     editor: {
@@ -146,7 +153,7 @@ export function createDaemonHub(deps: DaemonHubDeps, client: () => HubClientOpti
       disruptions: () => deps.consent?.disruptions?.() ?? [],
     },
     ...(c.enabled ? { enabled: c.enabled } : {}),
-    headless: () => c.headless,
+    headless: () => c.headless ?? own,
     ...(deps.timers === false ? { timers: false } : {}),
   });
   return {
@@ -154,8 +161,34 @@ export function createDaemonHub(deps: DaemonHubDeps, client: () => HubClientOpti
     dispose: () => {
       offSignals();
       hub.dispose();
+      if (own instanceof HeadlessRunner) own.close("the hub stopped");
     },
   };
+}
+
+/** ue-mcp's own headless runner for the project, or undefined when the project has no .uproject. */
+function ownHeadlessRunner(deps: DaemonHubDeps): HubRunner | undefined {
+  const projectPath = uprojectIn(deps.projectDir);
+  if (!projectPath || readEnv("hubHeadless") === "0") return undefined;
+  let exe: string | null | undefined;
+  return new HeadlessRunner({
+    projectDir: deps.projectDir,
+    projectPath,
+    workDir: path.join(deps.dataDir, "hub", "headless"),
+    editorExe: () => {
+      if (exe === undefined) {
+        try {
+          const project = new ProjectContext();
+          project.setProject(projectPath);
+          exe = findEditorExecutable(project);
+        } catch {
+          exe = null;
+        }
+      }
+      return exe;
+    },
+    log: deps.log,
+  });
 }
 
 /** The project's data folder as the daemon names it for extensions, without the extension's own folder. */

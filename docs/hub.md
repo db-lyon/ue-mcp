@@ -8,8 +8,8 @@ The Playtest Hub composes playtests and grades them, and keeps the two apart. Co
 
 | Composing | What it is |
 |---|---|
-| **Clip** | A reusable performance for one performer kind: input lanes for a player; move, action and value lanes for an actor. A clip has no checks. |
-| **Track** | One performer and a timeline of clip instances. |
+| **Clip** | A reusable performance for a player: Input Action lanes. A clip has no checks. |
+| **Track** | One player and a timeline of clip instances. |
 | **Arrangement** | The scenario: a level, its tracks, one Checks track and named regions. It plays in one Play In Editor session. |
 
 | Testing | What it is |
@@ -35,13 +35,13 @@ Runs, the queue and schedules belong to the machine that ran them, under `~/.ue-
 
 ## Clips
 
-A clip names the performer kind it is for (`player` or `actor`), its `rate` in frames per second (60 by default) and its `length` in frames. Input lanes (`input`) hold an Input Action's raw value, after its mapping's modifiers and before its own: notes for a Boolean action, and curve keys or notes holding a value for an axis. Move, action and value lanes (`lanes`) drive an actor or the player's pawn. A lane its performer kind does not take refuses the clip, and so does a `checks` field.
+A clip has a `rate` in frames per second (60 by default), a `length` in frames and Input Action lanes (`input`). Each lane holds an Input Action's raw value, after its mapping's modifiers and before its own: notes for a Boolean action, and curve keys or notes holding a value for an axis. `performer` is `player`, the one kind there is, and may be left out. A `checks` field refuses the clip, and so does any other kind of lane.
 
 ## Arrangements
 
 An arrangement has a `level` (a map's package path), a `rate`, and:
 
-- **tracks**, each with a `performer` (`{kind: "player", client}` or `{kind: "actor", actor}`), `mute`, `solo` and `instances` (`{ id, clip, at }`, `at` in the arrangement's frames). An instance's clip must exist and be for its track's performer kind, and instances on one track may not overlap.
+- **tracks**, each with a `performer` (`{kind: "player", client}`: client 0 is the editor's own player, 1 to 15 a remote client), `mute`, `solo` and `instances` (`{ id, clip, at }`, `at` in the arrangement's frames). An instance's clip must exist, and instances on one track may not overlap.
 - **checks**, the Checks track. Each has an `at`, a `length` and a `mode`:
 
 | Mode | Passes when |
@@ -57,7 +57,15 @@ A run plays the audible tracks: none muted, and only the soloed ones when any tr
 
 ### Performers
 
-`GET /v1/hub/performers` lists what a track can drive: the editor's player and the first remote clients, then the actors of the open level, pawns first, each with the lane capabilities it takes. With no editor attached, only the players are listed, with the reason.
+`GET /v1/hub/performers` lists what a track can drive: the editor's player and the first remote clients.
+
+### Auditions
+
+`POST /v1/hub/play` with `{ test, from?, loop? }` plays an arrangement or one region on the open editor so you can watch it while composing. `from` starts at that frame, the playhead, and skips checks that start before it. `loop` goes back to the loop start at the end until stopped: the playhead, else the region's start, else frame 0. Checks are judged so they show, manual ones are left out, and nothing goes into the run history. It is refused while the editor is in use. `GET /v1/hub/play` reads it, with the loop's `pass`, and `POST /v1/hub/play/stop` stops it.
+
+### Recording
+
+`POST /v1/hub/record/start` records the editor's player's Input Actions into a new clip on the open editor. With `clip`, `from` and `to`, it punches in: the clip plays up to `from` with the person's input locked out, then only that span is replaced. `POST /v1/hub/record/stop` saves the take.
 
 ## Tests and suites
 
@@ -69,10 +77,20 @@ A suite's `items` are `{ test }` and `{ suite }` entries; suites may nest but ne
 
 Queueing a test or a suite adds one item per test. Each plays on a runner:
 
-- **The open editor** (default), under the hub's lease. An item starts only while nothing else holds the editor: Play In Editor the hub did not start, a dialog, an editor operation, another session's hold or transaction, or another client's calls. A scheduled item also waits for this computer and every other session to go quiet. `POST /v1/hub/release` stops the hub's run and pauses the queue.
-- **A headless editor**, when a client supplies one through `api.hub.configure({ headless })`. Without one, a headless request is refused.
+- **A hidden editor** (the default when it fits). ue-mcp launches an editor with `-nullrhi -unattended` and no window on its own copy of the project, under `~/.ue-mcp/data/<project>/hub/headless`, mirrored from the project before each launch without `Saved`, `Intermediate` or caches. It starts only when it fits in memory beside the headroom kept for the rest of the machine (at least 4 GB, or 12%), and before anything is sent it asks the editor which project it has open and refuses to go on unless it is the copy. It stays up between runs and closes after ten idle minutes or when the daemon stops.
+- **The open editor**, under the hub's lease: when the hidden editor does not fit, when the test has manual checks (a person judges them in the open editor), or when `runner: "editor"` is asked for. Each queued item's `runnerReason` says why it went where it did. An item starts only while nothing else holds the editor: Play In Editor the hub did not start, a dialog, an editor operation, another session's hold or transaction, or another client's calls. A scheduled item also waits for this computer and every other session to go quiet. `POST /v1/hub/release` stops the hub's run and pauses the queue.
 
-A run records its test, the source control revision it ran on, each check's status, frame and message, and any verdict with who gave it.
+A client may bring its own headless runner through `api.hub.configure({ headless })`. `UE_MCP_HUB_HEADLESS=0` turns ue-mcp's own off.
+
+A run records its test, the runner, the source control revision it ran on, each check's status, frame and message, and any verdict with who gave it. Headless and editor runs go into the same history.
+
+### From the command line
+
+```
+ue-mcp hub run <test|suite> [--headless | --editor] [--report <file>] [--timeout <seconds>]
+```
+
+queues the test or every test of the suite through the project's daemon, waits for the runs to end and writes a JSON report (`hub-report.json` by default) with every run, what was skipped and why, and `ok`. It exits 0 only when every run passed, 1 otherwise, and 2 on a bad command.
 
 ## Routes
 
@@ -85,6 +103,7 @@ Each answers JSON. A body that does not read answers 400 with `findings`, each a
 | `POST /v1/hub/record/start`, `POST /v1/hub/record/stop` | Record a performance into a new clip, or punch into one (`clip`, `from`, `to`) |
 | `GET/POST /v1/hub/arrangements`, `GET/PUT/DELETE /v1/hub/arrangements/:id` | Arrangements |
 | `GET /v1/hub/performers` | What a track can drive |
+| `POST /v1/hub/play`, `GET /v1/hub/play`, `POST /v1/hub/play/stop` | Audition an arrangement or region from the playhead, looping when asked |
 | `GET /v1/hub/tests`, `GET /v1/hub/tests/:id` | Tests with health, checks and runs |
 | `GET/POST /v1/hub/suites`, `GET/PUT/DELETE /v1/hub/suites/:id` | Suites |
 | `POST /v1/hub/suites/:id/quarantine`, `POST /v1/hub/suites/:id/flaky` | `{ test, on? }` |
@@ -98,4 +117,4 @@ Every change publishes `hub.changed` (`{ what, id?, runId? }`) on `GET /v1/event
 
 ## MCP tools
 
-The `hub` category has one action per route above: `write_clip`, `write_arrangement` and `write_suite` take the file's JSON as `body`; `run` queues a test or a suite; `verdict` and `stop_run` act on a run. Every action reads and writes the same files and runs as the routes.
+The `hub` category has one action per route above: `write_clip`, `write_arrangement` and `write_suite` take the file's JSON as `body`; `run` queues a test or a suite; `verdict` and `stop_run` act on a run; `play`, `read_play` and `stop_play` audition one. Every action reads and writes the same files and runs as the routes.

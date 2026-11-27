@@ -32,6 +32,7 @@ export function playStatusOf(runId: string, body: Record<string, unknown>): Play
     checks,
     ...(typeof body.error === "string" && body.error ? { error: body.error } : state === "error" && !STATES.has(String(body.state)) ? { error: `the editor answered state ${String(body.state)}` } : {}),
     ...(body.pieStarted === true ? { pieStarted: true } : {}),
+    ...(typeof body.pass === "number" ? { pass: body.pass } : {}),
   };
 }
 

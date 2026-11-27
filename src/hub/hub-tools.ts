@@ -37,6 +37,9 @@ export const HUB_ACTIONS = [
   "read_run",
   "verdict",
   "stop_run",
+  "play",
+  "read_play",
+  "stop_play",
 ] as const;
 export type HubAction = (typeof HUB_ACTIONS)[number];
 
@@ -72,7 +75,7 @@ const ACTIONS: { [A in HubAction]: (hub: Hub, p: Record<string, unknown>) => unk
   read_arrangement: (hub, p) => hub.arrangement(str(p, "id")),
   write_arrangement: (hub, p) => (typeof p.id === "string" && p.id ? hub.putArrangement(p.id, bodyOf(p)) : hub.createArrangement(bodyOf(p))),
   delete_arrangement: (hub, p) => (hub.deleteArrangement(str(p, "id")), { deleted: p.id }),
-  list_performers: (hub, p) => hub.performers(typeof p.id === "string" && p.id ? p.id : undefined),
+  list_performers: (hub) => hub.performers(),
   list_tests: (hub) => ({ tests: hub.tests() }),
   read_test: (hub, p) => hub.test(str(p, "test"), typeof p.limit === "number" ? p.limit : undefined),
   list_suites: (hub) => ({ suites: hub.suites() }),
@@ -87,6 +90,9 @@ const ACTIONS: { [A in HubAction]: (hub: Hub, p: Record<string, unknown>) => unk
   read_run: (hub, p) => hub.run(str(p, "run_id")),
   verdict: (hub, p) => hub.verdict(str(p, "run_id"), { check: p.check, verdict: p.verdict, note: p.note }, "agent"),
   stop_run: (hub, p) => hub.stopRun(str(p, "run_id"), "stopped by an agent"),
+  play: (hub, p) => hub.play({ test: p.test, from: p.from, loop: p.loop }),
+  read_play: (hub) => hub.readPlay(),
+  stop_play: (hub) => hub.stopPlay(),
 };
 
 export async function runHubAction(hub: Hub, action: string, p: Record<string, unknown>): Promise<unknown> {

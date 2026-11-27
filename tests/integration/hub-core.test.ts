@@ -9,7 +9,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { covers } from "../helpers/covers.js";
-import { Sandbox, stopSandboxDaemons } from "./harness.js";
+import { Sandbox, runCli, stopSandboxDaemons } from "./harness.js";
 import { call, startDaemonCli, type Discovery } from "./daemon-fakes.js";
 
 let sb: Sandbox;
@@ -17,6 +17,7 @@ let d: Discovery;
 let projectDir: string;
 
 const walk = { title: "Walk", performer: "player", rate: 60, input: [{ action: "/Game/Input/IA_Move.IA_Move", type: "axis2d", keys: [{ id: "k1", t: 0, v: [0, 1] }, { id: "k2", t: 120, v: [0, 0] }] }] };
+const strafe = { title: "Strafe", performer: "player", input: [{ action: "/Game/Input/IA_Move.IA_Move", type: "axis2d", notes: [{ id: "n1", start: 0, length: 90, value: [1, 0] }] }] };
 const patrol = { title: "Patrol", performer: "actor", lanes: [{ id: "m", kind: "move", points: [{ id: "p1", t: 0, at: [0, 0, 0] }, { id: "p2", t: 90, at: [500, 0, 0] }] }] };
 
 beforeAll(async () => {
@@ -38,7 +39,10 @@ describe("the hub's files", () => {
     expect(health.body.features).toEqual(expect.arrayContaining(["hub"]));
 
     expect((await call(d, "POST", "/v1/hub/clips", walk)).body.clip).toMatchObject({ id: "walk", length: 120 });
-    expect((await call(d, "POST", "/v1/hub/clips", patrol)).status).toBe(200);
+    expect((await call(d, "POST", "/v1/hub/clips", strafe)).status).toBe(200);
+    const actorClip = await call(d, "POST", "/v1/hub/clips", patrol);
+    expect(actorClip.status).toBe(400);
+    expect(actorClip.body.findings.map((f: { path: string }) => f.path)).toEqual(expect.arrayContaining(["lanes", "performer"]));
     const withChecks = await call(d, "POST", "/v1/hub/clips", { ...walk, checks: [] });
     expect(withChecks.status).toBe(400);
     expect(withChecks.body.findings[0]).toMatchObject({ path: "checks", blocks: true });
@@ -54,7 +58,7 @@ describe("the hub's files", () => {
       level: "/Game/Maps/Door",
       tracks: [
         { id: "hero", title: "Hero", performer: { kind: "player", client: 0 }, instances: [{ id: "i1", clip: "walk", at: 0 }] },
-        { id: "guard", title: "Guard", performer: { kind: "actor", actor: "Guard_2" }, instances: [{ id: "i2", clip: "patrol", at: 30 }] },
+        { id: "guest", title: "Guest", performer: { kind: "player", client: 1 }, instances: [{ id: "i2", clip: "strafe", at: 30 }] },
       ],
       checks: [
         { id: "moved", title: "Hero moved", at: 0, length: 120, mode: "by_end", expect: { value: "pos_x", op: "increasing" } },
@@ -62,9 +66,9 @@ describe("the hub's files", () => {
       ],
       regions: [{ id: "walk", name: "Walk in", start: 0, end: 140 }],
     };
-    const wrongKind = await call(d, "POST", "/v1/hub/arrangements", { ...arrangement, tracks: [{ ...arrangement.tracks[1], instances: [{ id: "x", clip: "walk", at: 0 }] }] });
-    expect(wrongKind.status).toBe(400);
-    expect(wrongKind.body.error).toMatch(/for a player/);
+    const actorTrack = await call(d, "POST", "/v1/hub/arrangements", { ...arrangement, tracks: [{ id: "g", title: "Guard", performer: { kind: "actor", actor: "Guard_2" }, instances: [] }] });
+    expect(actorTrack.status).toBe(400);
+    expect(actorTrack.body.error).toMatch(/performer kind 'actor' is not one of player/);
     const unknown = await call(d, "POST", "/v1/hub/arrangements", { ...arrangement, tracks: [{ ...arrangement.tracks[0], instances: [{ id: "x", clip: "wlak", at: 0 }] }] });
     expect(unknown.body.findings[0].candidates).toContain("walk");
 
@@ -107,12 +111,37 @@ describe("the hub's files", () => {
     expect(JSON.parse(fs.readFileSync(path.join(projectDir, "PlaytestHub", "suites", "smoke.json"), "utf8"))).toMatchObject({ quarantined: ["door"], flaky: ["door:walk"] });
   }, 60_000);
 
-  it("lists what a track can drive while no editor answers", async () => {
+  it("lists the players a track can drive", async () => {
     covers("daemon.hub.performers");
     const list = await call(d, "GET", "/v1/hub/performers");
     expect(list.status, list.text).toBe(200);
     expect(list.body.performers.map((p: { performer: unknown }) => p.performer)).toEqual([0, 1, 2, 3].map((client) => ({ kind: "player", client })));
-    expect(list.body.performers[0]).toMatchObject({ capabilities: ["input", "action", "value"] });
-    expect(list.body.reason).toMatch(/could not be read/);
+    expect(list.body.performers.map((p: { label: string }) => p.label)).toEqual(["Editor player", "Client 1", "Client 2", "Client 3"]);
   }, 60_000);
+
+  it("refuses an audition while no editor answers, and has none to read or stop", async () => {
+    covers("daemon.hub.play");
+    const play = await call(d, "POST", "/v1/hub/play", { test: "door:walk", from: 30, loop: true });
+    expect(play.status).toBe(409);
+    expect(play.body.error).toMatch(/the editor is in use/);
+    expect((await call(d, "POST", "/v1/hub/play", { test: "door", from: -2 })).status).toBe(400);
+    expect((await call(d, "GET", "/v1/hub/play")).body).toEqual({ play: null });
+    expect((await call(d, "POST", "/v1/hub/play/stop")).status).toBe(409);
+  }, 60_000);
+
+  it("runs a test from the command line, writes the report and exits non-zero when it does not pass", async () => {
+    covers("cli.hub");
+    const report = sb.path("report.json");
+    const r = await runCli(sb, ["hub", "run", "door:walk", "--editor", "--timeout", "2", "--report", report, "--project", path.join(projectDir, "HubCore.uproject")], { timeoutMs: 60_000 });
+    expect(r.code, r.stdout + r.stderr).toBe(1);
+    const written = JSON.parse(fs.readFileSync(report, "utf8"));
+    expect(written).toMatchObject({ target: "door:walk", kind: "test", ok: false, error: expect.stringMatching(/did not all end within 2s/) });
+    expect(written.batch).toMatch(/^b_/);
+    const suite = await runCli(sb, ["hub", "run", "nightly", "--headless", "--report", report, "--project", path.join(projectDir, "HubCore.uproject"), "--json"], { timeoutMs: 60_000 });
+    expect(suite.code).toBe(1);
+    expect(JSON.parse(suite.stdout)).toMatchObject({ kind: "suite", ok: false, error: expect.stringMatching(/headless/) });
+    expect((await runCli(sb, ["hub", "run"])).code).toBe(2);
+    const queue = await call(d, "GET", "/v1/hub/queue");
+    for (const q of queue.body.queued as Array<{ id: string }>) await call(d, "DELETE", `/v1/hub/queue/${q.id}`);
+  }, 120_000);
 });
